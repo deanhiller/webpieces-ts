@@ -3,7 +3,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { ReviewJsonService } from './review-json';
 import { InformAiError } from '@webpieces/tooling-common';
-import { toError } from '@webpieces/tooling-common';
+import { toError } from '@webpieces/tooling-common/to-error';
 import { specTempDirs } from './spec-temp-dirs';
 
 /**

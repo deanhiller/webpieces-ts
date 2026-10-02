@@ -3,7 +3,7 @@ import * as path from 'path';
 import { injectable, bindingScopeValues } from 'inversify';
 
 import { DotWebpieces, dotWebpieces } from '@webpieces/tooling-common';
-import { toError } from '@webpieces/tooling-common';
+import { toError } from '@webpieces/tooling-common/to-error';
 
 // The BRANCH-MUTATION log — an audit trail for every workflow verb that RENAMES or MOVES branches.
 // Records START / each phase boundary / END-with-outcome so the next agent (or a human) can

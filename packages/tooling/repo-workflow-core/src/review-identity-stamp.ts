@@ -2,7 +2,7 @@ import * as fs from 'fs';
 import { injectable, bindingScopeValues } from 'inversify';
 import { AtomicFile } from '@webpieces/tooling-common';
 import { DotWebpieces, dotWebpieces } from '@webpieces/tooling-common';
-import { toError } from '@webpieces/tooling-common';
+import { toError } from '@webpieces/tooling-common/to-error';
 
 /** The ONE sanctioned way a reviewer submits a checklist verdict (issue #863). */
 export const WRITE_REVIEW_BIN = 'wp-write-review';

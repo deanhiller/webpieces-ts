@@ -3,7 +3,8 @@ import * as path from 'path';
 
 import { describe, it, expect, beforeEach } from 'vitest';
 import { CliExitError, DevDeployConfig, RepoRootFinder, specTempDirs } from '@webpieces/rules-config';
-import { DotWebpieces, toError } from '@webpieces/tooling-common';
+import { DotWebpieces } from '@webpieces/tooling-common';
+import { toError } from '@webpieces/tooling-common/to-error';
 
 import { DevResolveRunner } from './dev-resolve-runner';
 import { DevDeployRefs } from './dev-deploy-refs';

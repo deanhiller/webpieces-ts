@@ -10,7 +10,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { ProjectMode, detectBase, getChangedFiles } from '@webpieces/rules-config';
-import { toError } from '@webpieces/tooling-common';
+import { toError } from '@webpieces/tooling-common/to-error';
 import { ExecutorResult } from './code-validator';
 import { shouldSkipRule } from './resolve-mode';
 

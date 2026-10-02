@@ -10,7 +10,7 @@ describe('repo-workflow-core production boundary', () => {
             if (!file.endsWith('.ts') || file.endsWith('.spec.ts')) continue;
             const source = fs.readFileSync(path.join(__dirname, file), 'utf8');
             for (const match of source.matchAll(/from\s+['"](@webpieces\/[^'"]+)['"]/g)) {
-                imports.push(match[1]!);
+                imports.push(match[1]!.split('/').slice(0, 2).join('/'));
             }
         }
         expect([...new Set(imports)]).toEqual(['@webpieces/tooling-common']);

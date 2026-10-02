@@ -10,7 +10,7 @@ import { CONFIG_POLICY_DOC, formatConfigErrorsBanner } from './config-error-bann
 import { HomeConfigService } from './home-config';
 import { loadTemplate } from './load-template';
 import { RETIRED_CONFIG_KEYS, RETIRED_SCOPE_RULE, retiredKeyError } from './retired-config-keys';
-import { toError } from '@webpieces/tooling-common';
+import { toError } from '@webpieces/tooling-common/to-error';
 import { validateWebpiecesConfig } from './validate-config';
 import { specTempDirs } from './spec-temp-dirs';
 

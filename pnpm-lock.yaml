@@ -561,6 +561,9 @@ importers:
       '@webpieces/pr-gate':
         specifier: workspace:*
         version: link:../pr-gate
+      '@webpieces/repo-workflow-core':
+        specifier: workspace:*
+        version: link:../repo-workflow-core
       '@webpieces/rules-config':
         specifier: workspace:*
         version: link:../rules-config

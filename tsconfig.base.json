@@ -69,6 +69,7 @@
             "@webpieces/ai-hook-rules": [
                 "packages/tooling/ai-hook-rules/src/index.ts"
             ],
+            "@webpieces/tooling-common/to-error": ["packages/tooling/tooling-common/src/to-error.ts"],
             "@webpieces/tooling-common": ["packages/tooling/tooling-common/src/index.ts"],
             "@webpieces/repo-workflow-core": ["packages/tooling/repo-workflow-core/src/index.ts"],
             "@webpieces/hook-runtime": [

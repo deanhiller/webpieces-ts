@@ -12,7 +12,7 @@ import { ChildProcess, spawn } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 
-import { toError } from '@webpieces/tooling-common';
+import { toError } from '@webpieces/tooling-common/to-error';
 import { GracePeriod, ProcessGroupKiller, SurvivorReporter, SurvivorWatchdog } from './wp-ci-survivors';
 
 export class NxStepRunner {

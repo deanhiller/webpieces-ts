@@ -1,7 +1,8 @@
 import * as fs from 'fs';
 
 import { CliExitError, PUSH_DEV_STATE_FILE, WP_FINISH_PUSH_DEV, WP_PUSH_DEV } from '@webpieces/rules-config';
-import { DotWebpieces, toError } from '@webpieces/tooling-common';
+import { DotWebpieces } from '@webpieces/tooling-common';
+import { toError } from '@webpieces/tooling-common/to-error';
 import { injectable, bindingScopeValues } from 'inversify';
 
 const SEP = '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n';

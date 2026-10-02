@@ -5,7 +5,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 
 import { RuleFailError } from './rule-fail-error';
 import { shouldSkipRule, SkipRuleResult } from './skip-rule';
-import { toError } from '@webpieces/tooling-common';
+import { toError } from '@webpieces/tooling-common/to-error';
 import { specTempDirs } from './spec-temp-dirs';
 
 // What `git rev-parse --abbrev-ref HEAD` reports. "HEAD" is what a real detached CI checkout of

@@ -4,7 +4,7 @@ import { injectable, bindingScopeValues } from 'inversify';
 
 import { OrphanCandidate } from './orphan-dir-scan';
 import { dotWebpieces } from '@webpieces/tooling-common';
-import { toError } from '@webpieces/tooling-common';
+import { toError } from '@webpieces/tooling-common/to-error';
 
 /** Where every sweep's archive lands, under the repo-wide `.webpieces/` — never under a worktree's own. */
 export const TRASH_STATE_DIR = 'trash';

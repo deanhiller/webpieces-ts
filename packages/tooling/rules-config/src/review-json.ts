@@ -4,7 +4,7 @@ import { injectable, bindingScopeValues } from 'inversify';
 import { PR_REVIEW_DIR } from '@webpieces/tooling-common';
 import { DotWebpieces, dotWebpieces } from '@webpieces/tooling-common';
 import { InformAiError } from '@webpieces/tooling-common';
-import { toError } from '@webpieces/tooling-common';
+import { toError } from '@webpieces/tooling-common/to-error';
 import { SummaryJsonSchemaRenderer } from './summary-json-schema-renderer';
 import { VerdictSchemaRenderer } from './verdict-schema-renderer';
 import { ChecklistOverride, ChecklistOverrideService, checklistOverrideService } from './checklist-override';

@@ -1,5 +1,5 @@
 import { RuleFailError, formatFixOptions } from '@webpieces/rules-config';
-import { toError } from '@webpieces/tooling-common';
+import { toError } from '@webpieces/tooling-common/to-error';
 import { injectable, bindingScopeValues } from 'inversify';
 
 import { RuleRun, ExecutorResult } from './code-validator';

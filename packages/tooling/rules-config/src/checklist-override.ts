@@ -1,7 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { injectable, bindingScopeValues } from 'inversify';
-import { toError } from '@webpieces/tooling-common';
+import { toError } from '@webpieces/tooling-common/to-error';
 
 // The literal the printed command leaves for the human's words. Named so the message, and any test that
 // asserts the command is still a fill-in rather than a pre-filled excuse, agree on one spelling.

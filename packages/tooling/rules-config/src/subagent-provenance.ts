@@ -3,7 +3,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { injectable, bindingScopeValues } from 'inversify';
 import { claudeConfigDir } from '@webpieces/tooling-common';
-import { toError } from '@webpieces/tooling-common';
+import { toError } from '@webpieces/tooling-common/to-error';
 import { dotWebpieces } from '@webpieces/tooling-common';
 import { reviewIdentityStamps } from '@webpieces/repo-workflow-core';
 

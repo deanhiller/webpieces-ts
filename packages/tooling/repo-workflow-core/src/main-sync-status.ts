@@ -12,7 +12,7 @@ import {
     PullRequestIndex,
 } from './main-sync-file';
 import { DotWebpieces, dotWebpieces } from '@webpieces/tooling-common';
-import { toError } from '@webpieces/tooling-common';
+import { toError } from '@webpieces/tooling-common/to-error';
 import { WorktreeService } from './worktrees';
 
 // The on-disk shape lives in main-sync-file.ts; re-exported so every existing importer of

@@ -4,7 +4,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as ts from 'typescript';
 import { DiffScope, RequiredTypeSuffixConfig, RequiredTypeSuffixEntry, RuleFailError, specTempDirs } from '@webpieces/rules-config';
-import { toError } from '@webpieces/tooling-common';
+import { toError } from '@webpieces/tooling-common/to-error';
 
 import { ApiLibFile, ApiLibSite } from './api-lib-source-rule';
 import { ProjectRoleResolver } from './project-role-resolver';

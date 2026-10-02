@@ -7,7 +7,7 @@ import { injectable, bindingScopeValues } from 'inversify';
 
 import { DotWebpieces } from '@webpieces/tooling-common';
 import { HOME_CONFIG_DIR } from './home-config';
-import { toError } from '@webpieces/tooling-common';
+import { toError } from '@webpieces/tooling-common/to-error';
 
 /**
  * `~/.webpieces/builds.log` — the MACHINE-WIDE, append-only ledger of every build this box has started.

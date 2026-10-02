@@ -1,5 +1,6 @@
 import { execSync, spawnSync } from 'child_process';
-import { InformAiError, toError } from '@webpieces/tooling-common';
+import { InformAiError } from '@webpieces/tooling-common';
+import { toError } from '@webpieces/tooling-common/to-error';
 import { RepoRootFinder, MERGE_MODE_AUTO, loadAndValidate } from '@webpieces/rules-config';
 import { BranchArchiver, BRANCH_RETENTION_ARCHIVE_TAG, BRANCH_RETENTION_KEEP } from '@webpieces/repo-workflow-core';
 import { injectable, bindingScopeValues } from 'inversify';

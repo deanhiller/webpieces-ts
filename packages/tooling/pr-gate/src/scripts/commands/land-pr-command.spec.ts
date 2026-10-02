@@ -3,7 +3,8 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { BranchArchiver, WorktreeService } from '@webpieces/repo-workflow-core';
-import { InformAiError, toError } from '@webpieces/tooling-common';
+import { InformAiError } from '@webpieces/tooling-common';
+import { toError } from '@webpieces/tooling-common/to-error';
 import { RepoRootFinder, specTempDirs, RepoScratchDirs } from '@webpieces/rules-config';
 
 import { LandPrCommand, LandPrRequest } from './land-pr-command';

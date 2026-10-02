@@ -34,3 +34,9 @@ Pure config + schema + shared utilities with no execution engine — this is why
 Do not add a fallback because rejection "would deadlock the consumer" — it cannot. Editing `webpieces.config.json` is permitted even while it is invalid, and `pnpm install` is always permitted, so a rejected config is always repairable in place.
 
 Note this is about config SHAPE, not release ordering: published validators still lag local source by a release, so a new key and the config that uses it must ship in separate PRs (see `.claude/rules/published-vs-local-source.md`).
+
+## Shared mechanics extraction (#1072)
+
+Generic `AtomicFile`, `InformAiError`, `DotWebpieces`, state-path constants, state-dir migration, and harness config-directory resolution now live in `@webpieces/tooling-common`. The eager-load-free `toError` leaf is `@webpieces/tooling-common/to-error`. Branch identity, main-sync files/status/cache, merged-branch classification, worktree discovery/locks, branch reaping/archiving/mutation logs, and review-identity stamps now live in `@webpieces/repo-workflow-core`. Import these APIs from their owning package; this package does not re-export them.
+
+Review JSON, provenance, checklists, gate tokens, build ledgers, home configuration, and orphan/tmp sweeps retain their existing ownership. Cross-package integration specifications remain here when they exercise config/PR consumers as well as shared mechanics.

@@ -7,7 +7,7 @@ import { prDirFor, summaryJsonPath, summaryJsonSchemaHint, RequiredChecklist, Ch
 import { ChecklistInstructionsService } from './checklist-instructions';
 import { WEBPIECES_TMP_DIR, PR_REVIEW_DIR } from '@webpieces/tooling-common';
 import { InformAiError } from '@webpieces/tooling-common';
-import { toError } from '@webpieces/tooling-common';
+import { toError } from '@webpieces/tooling-common/to-error';
 import { REVIEWER_AGENTS_PLACEHOLDER, ReviewerAgentPolicy } from './checklist-config';
 import { specTempDirs } from './spec-temp-dirs';
 const agentPolicy = (name: string): ReviewerAgentPolicy => new ReviewerAgentPolicy(name, REVIEWER_AGENTS_PLACEHOLDER);

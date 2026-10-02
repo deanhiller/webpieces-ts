@@ -11,7 +11,7 @@ import * as fs from 'fs';
 import { InformAiError } from '@webpieces/tooling-common';
 import { RuleFailError } from './rule-fail-error';
 import { Option } from './fix-option';
-import { toError } from '@webpieces/tooling-common';
+import { toError } from '@webpieces/tooling-common/to-error';
 
 // Universal "should this rule be skipped right now?" logic, shared by code-rules,
 // ai-hook-rules and the Nx executors so every rule honors the same two escape

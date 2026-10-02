@@ -1,6 +1,7 @@
 import { execSync } from 'child_process';
 import { injectable, bindingScopeValues } from 'inversify';
-import { InformAiError, toError } from '@webpieces/tooling-common';
+import { InformAiError } from '@webpieces/tooling-common';
+import { toError } from '@webpieces/tooling-common/to-error';
 
 // The actual checked-out branch. The grab bag of ambient env vars (BRANCH_NAME, GIT_BRANCH,
 // CI_COMMIT_BRANCH, …) was intentionally REMOVED and must stay removed: a stray GIT_BRANCH=main

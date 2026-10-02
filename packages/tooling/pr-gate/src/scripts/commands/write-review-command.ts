@@ -1,5 +1,6 @@
 import * as fs from 'fs';
-import { InformAiError, toError } from '@webpieces/tooling-common';
+import { InformAiError } from '@webpieces/tooling-common';
+import { toError } from '@webpieces/tooling-common/to-error';
 import { RepoRootFinder, ReviewJsonService, VERDICT_ORANGE, VERDICT_RED, VERDICT_STATUSES, checklistOverrideService, summaryJsonPath } from '@webpieces/rules-config';
 import { WRITE_REVIEW_BIN } from '@webpieces/repo-workflow-core';
 import { injectable, bindingScopeValues } from 'inversify';

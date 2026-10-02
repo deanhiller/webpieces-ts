@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
 import { RuleFailError, renderRuleFailForHuman, specTempDirs } from '@webpieces/rules-config';
-import { toError } from '@webpieces/tooling-common';
+import { toError } from '@webpieces/tooling-common/to-error';
 import { ConsumerBinRequest, ConsumerBinResolver } from './consumer-bin-resolver';
 import { OPENAPI_GENERATOR } from './generator-package';
 

@@ -1,7 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { BriefedFile, ContextEntry, PrGateConfig, RequiredChecklist, ReviewerBriefing, ReviewJsonService } from '@webpieces/rules-config';
-import { toError } from '@webpieces/tooling-common';
+import { toError } from '@webpieces/tooling-common/to-error';
 import { injectable, bindingScopeValues } from 'inversify';
 import { DiffManifest, DiffManifestEntry } from './diff-materializer';
 import { ChecklistScan } from './checklist-scanner';

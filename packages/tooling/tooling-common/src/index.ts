@@ -1,5 +1,4 @@
 export * from './atomic-file';
-export * from './to-error';
 export * from './state-dir';
 export * from './state-dir-migration';
 export * from './inform-ai-error';

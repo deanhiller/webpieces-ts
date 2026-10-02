@@ -12,7 +12,8 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { DiffScope, ProjectScanMode } from '@webpieces/rules-config';
-import { InformAiError, toError } from '@webpieces/tooling-common';
+import { InformAiError } from '@webpieces/tooling-common';
+import { toError } from '@webpieces/tooling-common/to-error';
 import { injectable, bindingScopeValues } from 'inversify';
 import { ProjectCatalog, ProjectEntry, ScanRestriction } from './scan-scope';
 

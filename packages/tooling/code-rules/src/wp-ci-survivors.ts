@@ -18,7 +18,7 @@
 import { spawnSync } from 'child_process';
 import * as fs from 'fs';
 
-import { toError } from '@webpieces/tooling-common';
+import { toError } from '@webpieces/tooling-common/to-error';
 
 /** One process that is still alive after the step that spawned it has already finished. */
 export class SurvivingProcess {
