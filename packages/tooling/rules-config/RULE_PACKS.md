@@ -11,16 +11,16 @@ built-in packs:
 
 ```ts
 import { RulePackDeclaration } from '@webpieces/rules-sdk';
-import { NodeRulePackModuleLoader, RulePackRegistry } from '@webpieces/rules-config';
+import { NodeRulePackModuleLoader, RulePackDiscovery } from '@webpieces/rules-config';
 
-const registry = RulePackRegistry.discover([
+const registry = new RulePackDiscovery(new NodeRulePackModuleLoader(process.cwd())).discover([
     new RulePackDeclaration('@webpieces/code-rules/rule-pack'),
     new RulePackDeclaration('@webpieces/ai-hook-rules/rule-pack'),
     new RulePackDeclaration('@webpieces/agent-workflow-rules/rule-pack'),
     new RulePackDeclaration('@webpieces/nx-webpieces-rules/rule-pack'),
     new RulePackDeclaration('@webpieces/eslint-rules/rule-pack'),
     new RulePackDeclaration('./client-policy.cjs'),
-], new NodeRulePackModuleLoader(process.cwd()));
+]);
 ```
 
 The loader resolves from the client's package.json, with no static imports of execution packages and

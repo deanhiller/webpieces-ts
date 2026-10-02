@@ -445,5 +445,4 @@ export { TmpScratchSweeper, TMP_SCRATCH_RETENTION_DAYS, TMP_SCRATCH_PREFIX } fro
 
 export * from './hook-fault-codes';
 export * from './hook-config-diagnostics';
-export { RulePackRegistry, NodeRulePackModuleLoader } from './rule-pack-registry';
-export type { RulePackModuleLoader } from './rule-pack-registry';
+export { RulePackRegistry, NodeRulePackModuleLoader, RulePackDiscovery, RulePackModuleLoader } from './rule-pack-registry';

@@ -3,7 +3,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { FieldDef, OwnedRuleDefinition, RuleContribution, RulePackManifest, RulePackDeclaration } from '@webpieces/rules-sdk';
 import { specTempDirs } from '@webpieces/tooling-testkit';
-import { RulePackRegistry, NodeRulePackModuleLoader } from '@webpieces/rules-config';
+import { RulePackRegistry, NodeRulePackModuleLoader, RulePackDiscovery } from '@webpieces/rules-config';
 
 class Packs {
     static owner(name = 'client-policy'): RulePackManifest {
@@ -23,7 +23,7 @@ describe('explicit rule pack registry', () => {
                 entries: { type: 'object[]', elementSchema: { suffix: { type: 'string' } } }
             }}], contributions: [{ ruleId: 'client-rule', ownerPack: 'client-policy', executionKind: 'build' }]
         };`);
-        const registry = RulePackRegistry.discover([new RulePackDeclaration('./client-pack.cjs')], new NodeRulePackModuleLoader(root));
+        const registry = new RulePackDiscovery(new NodeRulePackModuleLoader(root)).discover([new RulePackDeclaration('./client-pack.cjs')]);
         expect(registry.ownerOf('client-rule')).toBe('client-policy');
         expect(registry.validateRuleConfig('client-rule', { mode: 'ON', paths: ['src/**'], entries: [{ suffix: 'Dto' }] })).toEqual([]);
         expect(registry.validateRuleConfig('client-rule', { mode: 'ON', paths: [], entries: [{}], typo: true })).toEqual([
@@ -77,9 +77,9 @@ describe('explicit rule pack registry', () => {
             ownedRules: [{ id: 'broken', schemaApiVersion: 1, schema: { entries: { type: 'object[]' } } }],
             contributions: []
         };`);
-        expect(() => RulePackRegistry.discover([new RulePackDeclaration('./invalid.cjs')], new NodeRulePackModuleLoader(root))).toThrow('Invalid schema');
+        expect(() => new RulePackDiscovery(new NodeRulePackModuleLoader(root)).discover([new RulePackDeclaration('./invalid.cjs')])).toThrow('Invalid schema');
         fs.writeFileSync(path.join(root, 'missing.cjs'), 'module.exports = {};');
-        expect(() => RulePackRegistry.discover([new RulePackDeclaration('./missing.cjs')], new NodeRulePackModuleLoader(root))).toThrow('must export rulePackManifest');
+        expect(() => new RulePackDiscovery(new NodeRulePackModuleLoader(root)).discover([new RulePackDeclaration('./missing.cjs')])).toThrow('must export rulePackManifest');
     });
 
 });

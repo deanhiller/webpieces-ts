@@ -249,7 +249,11 @@
             "mode": "NEW_AND_MODIFIED_CODE",
             "disableAllowed": true,
             "turnOffRuleUntilEpoch": 0,
-            "turnOffRuleWhileOnBranch": null
+            "turnOffRuleWhileOnBranch": null,
+            "allowGlobs": [
+                "architecture/dependencies.html",
+                "architecture/runtime-dependencies.html"
+            ]
         },
         "no-client-creation-outside-server-or-client": {
             "mode": "NEW_AND_MODIFIED_CODE",

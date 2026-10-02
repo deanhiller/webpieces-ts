@@ -1,3 +1,4 @@
+import { injectable, bindingScopeValues } from 'inversify';
 import { createRequire } from 'node:module';
 import * as path from 'node:path';
 import {
@@ -6,18 +7,19 @@ import {
 } from '@webpieces/rules-sdk';
 
 /** Loading is the only impure boundary; callers may supply an alternative module transport. */
-export interface RulePackModuleLoader {
-    load(moduleName: string): RulePackManifest;
+export abstract class RulePackModuleLoader {
+    abstract load(moduleName: string): RulePackManifest;
 }
 
-export class NodeRulePackModuleLoader implements RulePackModuleLoader {
+export class NodeRulePackModuleLoader extends RulePackModuleLoader {
     private readonly requireModule: NodeRequire;
 
     constructor(clientRoot: string) {
+        super();
         this.requireModule = createRequire(path.join(clientRoot, 'package.json'));
     }
 
-    load(moduleName: string): RulePackManifest {
+    override load(moduleName: string): RulePackManifest {
         // webpieces-disable no-any-unknown -- external module boundary; registry validates its exported data before use
         const exports: unknown = this.requireModule(moduleName);
         if (typeof exports !== 'object' || exports === null || !('rulePackManifest' in exports)) {
@@ -62,10 +64,6 @@ export class RulePackRegistry {
                 executions.add(execution);
             }
         }
-    }
-
-    static discover(declarations: readonly RulePackDeclaration[], loader: RulePackModuleLoader): RulePackRegistry {
-        return new RulePackRegistry(declarations.map(declaration => loader.load(declaration.module)));
     }
 
     ownerOf(ruleId: string): string {
@@ -145,5 +143,15 @@ export class RulePackRegistry {
             }
         }
         return errors;
+    }
+}
+
+/** Inject the selected module transport; discovery never names a built-in owner package. */
+@injectable(bindingScopeValues.Singleton)
+export class RulePackDiscovery {
+    constructor(private readonly loader: RulePackModuleLoader) {}
+
+    discover(declarations: readonly RulePackDeclaration[]): RulePackRegistry {
+        return new RulePackRegistry(declarations.map(declaration => this.loader.load(declaration.module)));
     }
 }

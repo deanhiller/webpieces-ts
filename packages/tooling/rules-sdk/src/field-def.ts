@@ -23,6 +23,7 @@ export class FieldDef {
     ) {}
 
     /** Marks a field as optional (omittable) in the config schema. */
+    // webpieces-disable no-function-outside-class -- pure schema value factory, matching the sibling FieldDef factories; the SDK intentionally has no DI
     static optional(type: FieldType, enumValues?: readonly string[]): FieldDef {
         return new FieldDef(type, enumValues, true);
     }
