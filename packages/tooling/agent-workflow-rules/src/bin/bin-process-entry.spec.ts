@@ -71,7 +71,7 @@ function compileDependency(tsc: string, name: string): void {
 
 function compileBin(entry: string): string {
     const tsc = path.join(REPO_ROOT, 'node_modules', '.bin', 'tsc');
-    for (const name of ['tooling-common', 'repo-workflow-core', 'rules-config', 'hook-runtime']) {
+    for (const name of ['rules-sdk', 'tooling-common', 'repo-workflow-core', 'rules-config', 'hook-runtime']) {
         compileDependency(tsc, name);
     }
     const result = spawnSync(tsc, [

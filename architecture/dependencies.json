@@ -448,8 +448,18 @@
             "responsibilitiesFile": "packages/tooling/rules-config/responsibilities.md",
             "designFile": "packages/tooling/rules-config/design.json",
             "dependsOn": [
-                "repo-workflow-core"
+                "repo-workflow-core",
+                "rules-sdk",
+                "tooling-testkit"
             ]
+        },
+        "rules-sdk": {
+            "level": 0,
+            "framework": ["node"],
+            "role": "lib",
+            "shortDescription": "Own the pure, versioned rule-pack data contracts and universal schema/value definitions. No filesystem, Git, Nx, dependency injection, execution engine, or concrete rule implementation belongs here. Keep API and schema versions independent from release versions.",
+            "responsibilitiesFile": "packages/tooling/rules-sdk/responsibilities.md",
+            "dependsOn": []
         },
         "server2": {
             "level": 6,
@@ -493,6 +503,17 @@
             "shortDescription": "Generic file operations, error normalization, harness config paths, and repository state path primitives. No config loader, rule policy, or workflow classification.",
             "responsibilitiesFile": "packages/tooling/tooling-common/responsibilities.md",
             "dependsOn": []
+        },
+        "tooling-testkit": {
+            "level": 1,
+            "framework": ["node"],
+            "role": "lib",
+            "drawOnGraph": false,
+            "shortDescription": "Own shared development fixtures, including scratch directory creation and cleanup. Consumers declare this package through devDependencies.",
+            "responsibilitiesFile": "packages/tooling/tooling-testkit/responsibilities.md",
+            "dependsOn": [
+                "tooling-common"
+            ]
         },
         "webpieces-tooling": {
             "level": 5,

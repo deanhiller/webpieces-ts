@@ -6,18 +6,29 @@
     "targets": {
         "test": {
             "executor": "nx:run-commands",
-            "options": { "command": "vitest run packages/tooling/tooling-testkit/" }
+            "options": {
+                "command": "vitest run packages/tooling/tooling-testkit/"
+            }
         },
         "build": {
             "executor": "@nx/js:tsc",
-            "outputs": ["{options.outputPath}"],
+            "outputs": [
+                "{options.outputPath}"
+            ],
             "options": {
                 "outputPath": "dist/packages/tooling/tooling-testkit",
                 "main": "packages/tooling/tooling-testkit/src/index.ts",
                 "tsConfig": "packages/tooling/tooling-testkit/tsconfig.lib.json",
-                "assets": ["packages/tooling/tooling-testkit/package.json"]
+                "assets": [
+                    "packages/tooling/tooling-testkit/package.json"
+                ]
             }
         }
     },
-    "tags": ["type:tooling", "framework:node", "role:lib"]
+    "tags": [
+        "type:tooling",
+        "framework:node",
+        "role:lib",
+        "drawOnGraph:false"
+    ]
 }
