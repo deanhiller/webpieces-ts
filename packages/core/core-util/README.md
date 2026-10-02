@@ -105,26 +105,44 @@ This package has zero dependencies and works in all modern browsers and Node.js 
 
 ## Typed streaming contracts
 
-`@WpStream(() => RequestEvent, () => ResponseEvent)` marks one API method with the shared duplex
-contract. The server receives request events through the returned `RequestStream`; callers receive
-response events through the `ResponseStream` passed to the method. The same declaration drives the
-HTTP server, Node and browser clients, and in-process feature client.
+`@WpStream(StreamDirection.RESPONSE | REQUEST | FULL)` makes the direction part of the shared API
+contract. The method signature is the only declaration of the initial request/response and later
+event types; generated schema wiring registers the four derived schemas separately from the
+decorator.
 
-Every `event`, `fail`, and `complete` call awaits its next transport/consumer boundary. Events are
-therefore ordered and backpressured rather than accumulated in an unbounded framework buffer.
-`complete` and terminal `fail` permanently close that direction, writes after termination reject, and
-`cancel` runs registered cancellation work once. Failures are terminal by default. A non-terminal
-failure continues only on an adapter that explicitly supports it; otherwise it is promoted to
-terminal. `StreamCorrelation` is an explicit stable application key and never relies on object
-identity or event arrival order.
+`RESPONSE` is the browser-safe shape:
 
-The generic HTTP request direction uses NDJSON: each `StreamEnvelope` is one JSON record followed by
-`\n`. The response direction uses SSE: `event: message`, one or more `data:` lines, then a blank line.
-Blank lines (`\n\n` or `\r\n\r\n`) dispatch an event, multiple `data:` lines join with `\n`, and a
-leading `:` is a comment/keepalive. Generic SSE does not use `id` or `Last-Event-ID` for resumption.
-Open failures use the ordinary typed Webpieces HTTP error/status mapping. Legal in-band failures carry
-the standard `ApiErrorPayload`; disconnects, malformed frames, and failures that cannot be written are
-reported locally as `StreamTransportError` with their cause and available correlation metadata.
+```ts
+@WpStream(StreamDirection.RESPONSE)
+abstract watch(
+    request: WatchRequest,
+    responses: ResponseStream<WatchEvent>,
+): Promise<WatchAccepted>;
+```
+
+The finite request body contains the initial request and closes. The promise resolves after the
+initial response has arrived and validated; later response records are delivered incrementally.
+Browser clients reject `REQUEST` and `FULL` at bind time because Fetch cannot consume a response
+while keeping a streaming upload open.
+
+Every `event` and `close` call awaits its next transport/consumer boundary. Events are ordered and
+backpressured. `close()` ends only that direction; `cancel(error?)` terminates the whole exchange
+and delivers cancellation to the peer once. There are no non-terminal failures, `fail`, `complete`,
+or `onCancel` methods. Business correlation belongs in the application's own DTO.
+
+`FULL` returns `Promise<RequestStream<InitialResponse, RequestEvent>>` and accepts a
+`ResponseStream<ResponseEvent>` second parameter. `REQUEST` returns the same request-stream shape
+but has no response-stream parameter. Install the build-generated `stream-Contract-schemas.json`
+using `registerStreamingCatalog(Contract, catalog)` before binding a contract; `wp-openapi` derives
+all required schema slots from these signatures and diagnoses mismatched forms.
+
+The HTTP media type is `application/x-webpieces-jsonl`. Initial values and ordinary events are raw
+application-owned JSON records followed by `\n`; Webpieces never wraps them in a `kind` or `payload`
+object. An abnormal post-open cancellation is the reserved sideband record
+`0x1E + {"control":"error","response":<HttpResponseDto>} + \n`. This reuses the configured
+`ErrorTranslator` in both directions without making an error look like an application event.
+Graceful `close()` remains ordinary directional EOF. Transport loss where no control record can cross
+is reported locally as `StreamTransportError`.
 
 ## Related Packages
 

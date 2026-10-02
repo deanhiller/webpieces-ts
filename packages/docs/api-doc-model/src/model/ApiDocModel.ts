@@ -1,4 +1,5 @@
 import { TypeRef } from './TypeRef';
+import type { DocumentedStreaming } from '../extract/StreamingSignature';
 
 /**
  * The model classes. Every one of them is a CLASS with an explicit constructor per `CLAUDE.md` §1 —
@@ -122,7 +123,11 @@ export class DocumentedType {
      * `<package>:<name>` for every other one, so two packages' same-named types are two entries.
      */
     // webpieces-disable no-function-outside-class -- static helper on the class whose key it computes
-    static keyOf(name: string, packageName: string | undefined, homePackage: string | undefined): string {
+    static keyOf(
+        name: string,
+        packageName: string | undefined,
+        homePackage: string | undefined,
+    ): string {
         return packageName === homePackage ? name : `${packageName ?? '<no package>'}:${name}`;
     }
 }
@@ -282,6 +287,7 @@ export class DocumentedEndpoint {
         readonly mcpDescription: string | undefined,
         readonly request: TypeRef | undefined,
         readonly response: TypeRef | undefined,
+        readonly streaming?: DocumentedStreaming,
     ) {}
 }
 

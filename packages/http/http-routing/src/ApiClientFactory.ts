@@ -6,6 +6,7 @@ import {
     HttpContractMapper,
     RequestStream,
     ResponseStream,
+    StreamDirection,
     RouteMetadata,
     RouteMetadataFactory,
     StreamEnvelope,
@@ -13,13 +14,18 @@ import {
     StreamTransportError,
     StreamWriter,
 } from '@webpieces/core-util';
-import { provideFrameworkSingleton, RequestContext } from '@webpieces/core-context';
+import {
+    provideFrameworkSingleton,
+    RequestContext,
+    StreamEventContext,
+} from '@webpieces/core-context';
 import { MethodMeta } from './MethodMeta';
 import { Service } from '@webpieces/core-util';
 import { WpResponse } from './WpResponse';
 import { RouteBuilderImpl } from './RouteBuilderImpl';
 import { ApiClient, ApiClientProxy } from './ApiClient';
 import { ClassType } from './ApiRoutingFactory';
+import { InProcessStreamExchange } from './InProcessStreamExchange';
 
 /**
  * Every call through the proxy needs an ambient RequestContext, established ABOVE the api boundary.
@@ -159,69 +165,126 @@ export class ApiClientFactory {
     // webpieces-disable no-any-unknown -- stream event DTOs are erased at the routing boundary
     private async runStreamingMethod(
         routeMeta: RouteMetadata,
+        // webpieces-disable no-any-unknown -- stream event DTOs are erased at the routing boundary
         requestArgs: readonly unknown[],
+        // webpieces-disable no-any-unknown -- filter service carries arbitrary contract responses
         service: Service<MethodMeta, WpResponse<unknown>>,
-    ): Promise<RequestStream<DtoValue>> {
+        // webpieces-disable no-any-unknown -- one of the three streaming contract return shapes
+    ): Promise<unknown> {
         const streaming = routeMeta.streaming;
         if (!streaming) throw new Error('Streaming route metadata is required.');
-        const clientResponse = this.requireResponseStream(routeMeta, requestArgs[0]);
+        if (streaming.direction === StreamDirection.RESPONSE) {
+            return this.runResponseStreamingMethod(routeMeta, requestArgs, service);
+        }
+        if (streaming.direction === StreamDirection.REQUEST) {
+            return this.runRequestStreamingMethod(routeMeta, requestArgs, service);
+        }
+        if (streaming.initialRequestSchema) {
+            new StreamEventValidator().validate(
+                streaming.initialRequestSchema,
+                requestArgs[0],
+                'request',
+            );
+        }
+        const clientResponse = this.requireResponseStream(routeMeta, requestArgs[1]);
         const validator = new StreamEventValidator();
-        const serverResponse = new StreamWriter<DtoValue>(
-            async (envelope: StreamEnvelope<DtoValue>): Promise<void> =>
-                this.deliverResponseEnvelope(clientResponse, envelope),
-            (value: DtoValue): void =>
-                validator.validate(streaming.responseSchema, value, 'response'),
-            streaming.supportsNonTerminalFailures,
-        );
+        const exchange = new InProcessStreamExchange(clientResponse, streaming.responseSchema!);
+        const serverResponse = exchange.response;
 
         // A rejected invocation is the open/handshake failure. It deliberately escapes unchanged,
         // matching unary in-process calls and allowing an HTTP adapter to apply its normal mapper.
         const responseWrapper = await service.invoke(
-            new MethodMeta(routeMeta, undefined, undefined, [serverResponse]),
+            new MethodMeta(routeMeta, requestArgs[0], undefined, [requestArgs[0], serverResponse]),
         );
         const serverRequest = this.requireRequestStream(routeMeta, responseWrapper.response);
+        const initialResponse = serverRequest.getInitialResponse();
+        const events = new StreamEventContext();
+        if (streaming.initialResponseSchema) {
+            validator.validate(streaming.initialResponseSchema, initialResponse, 'response');
+        }
+        exchange.accept(serverRequest);
         const clientRequest = new StreamWriter<DtoValue>(
             async (envelope: StreamEnvelope<DtoValue>): Promise<void> =>
-                this.deliverRequestEnvelope(serverRequest, envelope),
+                events.run(
+                    (): Promise<void> => this.deliverRequestEnvelope(serverRequest, envelope),
+                ),
             (value: DtoValue): void =>
-                validator.validate(streaming.requestSchema, value, 'request'),
-            streaming.supportsNonTerminalFailures,
+                validator.validate(streaming.requestSchema!, value, 'request'),
+            initialResponse,
+            (error?: Error): Promise<void> => exchange.cancel(error),
         );
-        // webpieces-disable no-any-unknown -- cancellation reasons are deliberately transport-neutral
-        clientRequest.onCancel(async (reason?: unknown): Promise<void> => {
-            // Both sides observe one cancellation. Promise.all ensures a faulty callback on one
-            // half cannot prevent the other half from being notified.
-            await Promise.all([serverResponse.cancel(reason), serverRequest.cancel(reason)]);
-        });
+        exchange.clientRequest = clientRequest;
         return clientRequest;
     }
 
-    private async deliverResponseEnvelope(
-        destination: ResponseStream<DtoValue>,
-        envelope: StreamEnvelope<DtoValue>,
-    ): Promise<void> {
-        switch (envelope.kind) {
-            case 'event':
-                if (envelope.value === undefined) {
-                    throw new StreamTransportError('Response event envelope has no value.');
-                }
-                return destination.event(envelope.value, envelope.correlation);
-            case 'failure':
-                if (!envelope.error) {
-                    throw new StreamTransportError('Response failure envelope has no error.');
-                }
-                return destination.fail(
-                    ApiErrorCodec.decode(envelope.error),
-                    envelope.correlation,
-                    { terminal: envelope.terminal },
-                );
-            case 'complete':
-                return destination.complete();
+    // webpieces-disable no-any-unknown -- stream DTOs are erased at the routing boundary
+    private async runRequestStreamingMethod(
+        routeMeta: RouteMetadata,
+        // webpieces-disable no-any-unknown -- stream initial DTO is erased at the routing boundary
+        requestArgs: readonly unknown[],
+        // webpieces-disable no-any-unknown -- filter service carries arbitrary contract responses
+        service: Service<MethodMeta, WpResponse<unknown>>,
+    ): Promise<RequestStream<DtoValue, DtoValue>> {
+        const streaming = routeMeta.streaming!;
+        const validator = new StreamEventValidator();
+        if (streaming.initialRequestSchema) {
+            validator.validate(streaming.initialRequestSchema, requestArgs[0], 'request');
         }
+        const wrapper = await service.invoke(
+            new MethodMeta(routeMeta, requestArgs[0], undefined, [requestArgs[0]]),
+        );
+        const serverRequest = this.requireRequestStream(routeMeta, wrapper.response);
+        const initialResponse = serverRequest.getInitialResponse();
+        const events = new StreamEventContext();
+        if (streaming.initialResponseSchema) {
+            validator.validate(streaming.initialResponseSchema, initialResponse, 'response');
+        }
+        return new StreamWriter<DtoValue>(
+            async (envelope: StreamEnvelope<DtoValue>): Promise<void> =>
+                events.run(
+                    (): Promise<void> => this.deliverRequestEnvelope(serverRequest, envelope),
+                ),
+            (value: DtoValue): void =>
+                validator.validate(streaming.requestSchema!, value, 'request'),
+            initialResponse,
+            (error?: Error): Promise<void> => serverRequest.cancel(error),
+        );
+    }
+
+    // webpieces-disable no-any-unknown -- stream DTOs are erased at the routing boundary
+    private async runResponseStreamingMethod(
+        routeMeta: RouteMetadata,
+        // webpieces-disable no-any-unknown -- stream event DTOs are erased at the routing boundary
+        requestArgs: readonly unknown[],
+        // webpieces-disable no-any-unknown -- filter service carries arbitrary contract responses
+        service: Service<MethodMeta, WpResponse<unknown>>,
+        // webpieces-disable no-any-unknown -- response initial DTO is contract-erased
+    ): Promise<unknown> {
+        if (requestArgs.length !== 2) {
+            throw new StreamTransportError(
+                `${routeMeta.apiName}.${routeMeta.methodName} RESPONSE streaming requires (InitialRequest, ResponseStream).`,
+            );
+        }
+        const streaming = routeMeta.streaming!;
+        const validator = new StreamEventValidator();
+        if (streaming.initialRequestSchema) {
+            validator.validate(streaming.initialRequestSchema, requestArgs[0], 'request');
+        }
+        const clientResponse = this.requireResponseStream(routeMeta, requestArgs[1]);
+        const exchange = new InProcessStreamExchange(clientResponse, streaming.responseSchema!);
+        const serverResponse = exchange.response;
+        const wrapper = await service.invoke(
+            new MethodMeta(routeMeta, requestArgs[0], undefined, [requestArgs[0], serverResponse]),
+        );
+        if (streaming.initialResponseSchema) {
+            validator.validate(streaming.initialResponseSchema, wrapper.response, 'response');
+        }
+        exchange.accept();
+        return wrapper.response;
     }
 
     private async deliverRequestEnvelope(
-        destination: RequestStream<DtoValue>,
+        destination: RequestStream<DtoValue, DtoValue>,
         envelope: StreamEnvelope<DtoValue>,
     ): Promise<void> {
         switch (envelope.kind) {
@@ -234,13 +297,9 @@ export class ApiClientFactory {
                 if (!envelope.error) {
                     throw new StreamTransportError('Request failure envelope has no error.');
                 }
-                return destination.fail(
-                    ApiErrorCodec.decode(envelope.error),
-                    envelope.correlation,
-                    { terminal: envelope.terminal },
-                );
+                return destination.cancel(ApiErrorCodec.decode(envelope.error));
             case 'complete':
-                return destination.complete();
+                return destination.close();
         }
     }
 
@@ -253,9 +312,8 @@ export class ApiClientFactory {
             typeof candidate === 'object' &&
             candidate !== null &&
             typeof Reflect.get(candidate, 'event') === 'function' &&
-            typeof Reflect.get(candidate, 'fail') === 'function' &&
-            typeof Reflect.get(candidate, 'complete') === 'function' &&
-            typeof Reflect.get(candidate, 'onCancel') === 'function'
+            typeof Reflect.get(candidate, 'close') === 'function' &&
+            typeof Reflect.get(candidate, 'cancel') === 'function'
         ) {
             return candidate as ResponseStream<DtoValue>;
         }
@@ -268,16 +326,16 @@ export class ApiClientFactory {
     private requireRequestStream(
         routeMeta: RouteMetadata,
         candidate: unknown,
-    ): RequestStream<DtoValue> {
+    ): RequestStream<DtoValue, DtoValue> {
         if (
             typeof candidate === 'object' &&
             candidate !== null &&
             typeof Reflect.get(candidate, 'event') === 'function' &&
-            typeof Reflect.get(candidate, 'fail') === 'function' &&
-            typeof Reflect.get(candidate, 'complete') === 'function' &&
+            typeof Reflect.get(candidate, 'getInitialResponse') === 'function' &&
+            typeof Reflect.get(candidate, 'close') === 'function' &&
             typeof Reflect.get(candidate, 'cancel') === 'function'
         ) {
-            return candidate as RequestStream<DtoValue>;
+            return candidate as RequestStream<DtoValue, DtoValue>;
         }
         throw new StreamTransportError(
             `${routeMeta.controllerClassName}.${routeMeta.methodName} did not return a RequestStream.`,

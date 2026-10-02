@@ -10,7 +10,9 @@ import {
     ResponseStream,
     StreamTransportError,
     StreamWriter,
+    StreamDirection,
     WpStream,
+    registerStreamingSchemas,
 } from '../StreamingContract';
 
 class InputEvent {
@@ -30,11 +32,21 @@ const outputEventSchema = new ObjectSchemaBuilder()
     .build();
 
 abstract class StreamingApi {
-    @WpStream(inputEventSchema, outputEventSchema)
-    exchange(_response: ResponseStream<OutputEvent>): Promise<RequestStream<InputEvent>> {
+    @WpStream(StreamDirection.FULL)
+    exchange(
+        _request: InputEvent,
+        _response: ResponseStream<OutputEvent>,
+    ): Promise<RequestStream<OutputEvent, InputEvent>> {
         throw new Error('contract only');
     }
 }
+
+registerStreamingSchemas(StreamingApi, 'exchange', {
+    initialRequestSchema: inputEventSchema,
+    initialResponseSchema: outputEventSchema,
+    requestSchema: inputEventSchema,
+    responseSchema: outputEventSchema,
+});
 
 describe('typed streaming contract', () => {
     it('publishes request and response event schemas from one method declaration', () => {
@@ -74,69 +86,36 @@ describe('typed streaming contract', () => {
         expect(settled).toBe(true);
     });
 
-    it('supports correlated non-terminal failures and rejects writes after terminal completion', async () => {
+    it('closes directionally after queued data and rejects later writes', async () => {
         const envelopes: StreamEnvelope<InputEvent>[] = [];
         const writer = new StreamWriter<InputEvent>(
             async (envelope: StreamEnvelope<InputEvent>) => {
                 envelopes.push(envelope);
             },
         );
-
-        await writer.fail(new ApiBadRequestError('private detail'), new StreamCorrelation(2), {
-            terminal: false,
-        });
-        await writer.event({ value: 'still-open' });
-        await writer.complete();
-
+        await writer.event({ value: 'one' });
+        await writer.close();
         expect(envelopes.map((envelope: StreamEnvelope<InputEvent>) => envelope.kind)).toEqual([
-            'failure',
             'event',
             'complete',
         ]);
-        expect(envelopes[0].terminal).toBe(false);
-        expect(envelopes[0].error).toMatchObject({ kind: 'bad-request', message: 'Bad Request' });
         await expect(writer.event({ value: 'late' })).rejects.toBeInstanceOf(StreamTransportError);
     });
 
-    /**
-     * #961: `fail` takes `Error`, never `ApiError`. `ApiError` is a CONVENIENCE taxonomy webpieces
-     * ships so the common cases are easy — it is not something the framework may DEMAND from an
-     * application, which is free to subclass `Error` and nothing else.
-     */
-    it("streams an app's own Error subclass, published generically as kind implementation", async () => {
-        class MyLibError extends Error {
-            constructor(message: string) {
-                super(message);
-                this.name = 'MyLibError';
-            }
-        }
-        const envelopes: StreamEnvelope<InputEvent>[] = [];
+    it('delivers cancellation exactly once through the peer implementation', async () => {
+        const cancelled = vi.fn(async (): Promise<void> => undefined);
         const writer = new StreamWriter<InputEvent>(
-            async (envelope: StreamEnvelope<InputEvent>) => {
-                envelopes.push(envelope);
-            },
+            async () => undefined,
+            undefined,
+            undefined,
+            cancelled,
         );
-
-        await writer.fail(new MyLibError('connection string with a password in it'));
-
-        expect(envelopes[0].error).toMatchObject({
-            kind: 'implementation',
-            message: 'Internal Error',
-        });
-        expect(JSON.stringify(envelopes[0])).not.toContain('password');
-    });
-
-    it('notifies cancellation exactly once and makes it terminal', async () => {
-        const writer = new StreamWriter<InputEvent>(async () => undefined);
-        const cancelled = vi.fn();
-        writer.onCancel(cancelled);
-
-        await writer.cancel('client disconnected');
-        await writer.cancel('again');
-
+        const error = new ApiBadRequestError('disconnected');
+        await writer.cancel(error);
+        await writer.cancel(new Error('again'));
         expect(cancelled).toHaveBeenCalledOnce();
-        expect(cancelled).toHaveBeenCalledWith('client disconnected');
-        await expect(writer.complete()).rejects.toBeInstanceOf(StreamTransportError);
+        expect(cancelled).toHaveBeenCalledWith(error);
+        await expect(writer.close()).rejects.toBe(error);
     });
 
     it('serializes concurrent writes and preserves a failed sink as a transport cause', async () => {
@@ -168,43 +147,5 @@ describe('typed streaming contract', () => {
         expect(failure).toBeInstanceOf(StreamTransportError);
         expect(failure.cause).toMatchObject({ message: 'socket reset' });
         expect(failure.correlation).toMatchObject({ key: 'second', requestId: 'req-2' });
-    });
-
-    it('correlates one non-terminal failure while surrounding events are in flight', async () => {
-        const delivered: StreamEnvelope<InputEvent>[] = [];
-        const releases: Array<() => void> = [];
-        const writer = new StreamWriter<InputEvent>(
-            (envelope: StreamEnvelope<InputEvent>) =>
-                new Promise<void>((resolve: () => void) => {
-                    delivered.push(envelope);
-                    releases.push(resolve);
-                }),
-        );
-        const first = writer.event({ value: 'one' }, new StreamCorrelation('one'));
-        const failed = writer.fail(
-            new ApiBadRequestError('bad second event'),
-            new StreamCorrelation('two'),
-            { terminal: false },
-        );
-        const third = writer.event({ value: 'three' }, new StreamCorrelation('three'));
-
-        await Promise.resolve();
-        expect(
-            delivered.map((envelope: StreamEnvelope<InputEvent>) => envelope.correlation?.key),
-        ).toEqual(['one']);
-        releases.shift()?.();
-        await first;
-        await Promise.resolve();
-        expect(delivered[1]).toMatchObject({
-            kind: 'failure',
-            terminal: false,
-            correlation: { key: 'two' },
-        });
-        releases.shift()?.();
-        await failed;
-        await Promise.resolve();
-        expect(delivered[2]).toMatchObject({ kind: 'event', correlation: { key: 'three' } });
-        releases.shift()?.();
-        await third;
     });
 });

@@ -1,22 +1,23 @@
 import 'reflect-metadata';
 import { AddressInfo, createServer, IncomingMessage, Server, ServerResponse } from 'node:http';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
     ApiJsonSchema,
     ObjectSchemaBuilder,
     ApiPath,
     ClientRegistry,
     DestinationTrust,
-    DtoValue,
     Endpoint,
-    RequestStream,
     ResponseStream,
+    RequestStream,
     Rpc,
     StreamEnvelope,
+    StreamDirection,
     StreamWriter,
     TestCaseRecorder,
     WpAuthPublic,
     WpStream,
+    registerStreamingSchemas,
     POST,
     READ,
     RPC,
@@ -50,11 +51,50 @@ const serverEventSchema = new ObjectSchemaBuilder()
 abstract class StreamingApi {
     @Endpoint(POST, '/exchange', READ, RPC)
     @WpAuthPublic('integration test')
-    @WpStream(clientEventSchema, serverEventSchema)
-    exchange(_response: ResponseStream<ServerEvent>): Promise<RequestStream<ClientEvent>> {
+    @WpStream(StreamDirection.RESPONSE)
+    exchange(_request: ClientEvent, _response: ResponseStream<ServerEvent>): Promise<ServerEvent> {
         throw new Error('contract only');
     }
 }
+
+registerStreamingSchemas(StreamingApi, 'exchange', {
+    initialRequestSchema: clientEventSchema,
+    initialResponseSchema: serverEventSchema,
+    responseSchema: serverEventSchema,
+});
+
+@Rpc()
+@ApiPath('/stream')
+abstract class DuplexApi {
+    @Endpoint(POST, '/full', READ, RPC)
+    @WpAuthPublic('integration test')
+    @WpStream(StreamDirection.FULL)
+    full(
+        _request: ClientEvent,
+        _response: ResponseStream<ServerEvent>,
+    ): Promise<RequestStream<ServerEvent, ClientEvent>> {
+        throw new Error('contract only');
+    }
+
+    @Endpoint(POST, '/upload', READ, RPC)
+    @WpAuthPublic('integration test')
+    @WpStream(StreamDirection.REQUEST)
+    upload(_request: ClientEvent): Promise<RequestStream<ServerEvent, ClientEvent>> {
+        throw new Error('contract only');
+    }
+}
+
+registerStreamingSchemas(DuplexApi, 'full', {
+    initialRequestSchema: clientEventSchema,
+    initialResponseSchema: serverEventSchema,
+    requestSchema: clientEventSchema,
+    responseSchema: serverEventSchema,
+});
+registerStreamingSchemas(DuplexApi, 'upload', {
+    initialRequestSchema: clientEventSchema,
+    initialResponseSchema: serverEventSchema,
+    requestSchema: clientEventSchema,
+});
 
 class StubHeaders {
     buildOutboundHeaders(_destination: DestinationTrust): Map<string, string> {
@@ -115,13 +155,12 @@ class StreamingTestServer {
     private handle(request: IncomingMessage, response: ServerResponse): void {
         this.receivedHeaders = request.headers;
         response.writeHead(200, {
-            'Content-Type': 'text/event-stream',
+            'Content-Type': 'application/x-webpieces-jsonl',
             'X-Accel-Buffering': 'no',
         });
-        response.flushHeaders();
-        request.once('aborted', this.markDisconnected);
         response.once('close', this.markDisconnected);
         let buffered = '';
+        let first = true;
         request.setEncoding('utf8');
         request.on('data', (chunk: string) => {
             buffered += chunk;
@@ -129,26 +168,27 @@ class StreamingTestServer {
             while (newline >= 0) {
                 const line = buffered.slice(0, newline);
                 buffered = buffered.slice(newline + 1);
-                if (line !== '') this.dispatch(line, response);
+                if (line !== '') {
+                    if (request.url === '/stream/exchange') this.dispatch(line, response);
+                    else if (first) response.write('{"result":"accepted"}\n');
+                    else if (request.url === '/stream/full') {
+                        const event = JSON.parse(line) as ClientEvent;
+                        response.write(`${JSON.stringify({ result: `echo:${event.value}` })}\n`);
+                    }
+                    first = false;
+                }
                 newline = buffered.indexOf('\n');
             }
+        });
+        request.on('end', (): void => {
+            if (request.url !== '/stream/exchange') response.end();
         });
     }
 
     private dispatch(line: string, response: ServerResponse): void {
-        const envelope = JSON.parse(line) as StreamEnvelope<DtoValue>;
-        if (envelope.kind === 'event') {
-            response.write(
-                `event: message\r\ndata: ${JSON.stringify({
-                    kind: 'event',
-                    value: { result: `echo:${String(envelope.value?.['value'])}` },
-                    correlation: envelope.correlation,
-                })}\r\n\r\n`,
-            );
-        }
-        if (envelope.kind === 'complete') {
-            response.end('data: {"kind":"complete"}\n\n');
-        }
+        const initial = JSON.parse(line) as ClientEvent;
+        response.write('{"result":"accepted"}\n');
+        response.end(`${JSON.stringify({ result: `echo:${initial.value}` })}\n`);
     }
 }
 
@@ -161,7 +201,55 @@ afterEach(async () => {
 });
 
 describe('Node generated typed streaming client', () => {
-    it('uses live NDJSON upload and SSE download concurrently with correlation and completion', async () => {
+    it('receives FULL response events while the request upload remains open', async () => {
+        fixture = new StreamingTestServer();
+        ClientRegistry.addUrlMapping('stream-service', await fixture.start());
+        const proxy = new NodeProxyClient(
+            new StubHeaders() as unknown as RequestContextHeaders,
+            new StubOidc() as unknown as GcpOidc,
+            new NeverResolveAddress(),
+        );
+        proxy.init(DuplexApi, new ClientConfig('stream-service'), []);
+        const client = buildClientProxy(DuplexApi, proxy);
+        const received: ServerEvent[] = [];
+        let completed!: () => void;
+        const done = new Promise<void>((resolve: () => void): void => {
+            completed = resolve;
+        });
+        const responses = new StreamWriter<ServerEvent>(
+            async (write: StreamEnvelope<ServerEvent>): Promise<void> => {
+                if (write.value) received.push(write.value);
+                if (write.kind === 'complete') completed();
+            },
+        );
+        await RequestContext.run(async (): Promise<void> => {
+            const requests = await client.full({ value: 'open' }, responses);
+            expect(requests.getInitialResponse()).toEqual({ result: 'accepted' });
+            await requests.event({ value: 'one' });
+            await vi.waitFor(() => expect(received).toEqual([{ result: 'echo:one' }]));
+            await requests.close();
+            await done;
+        });
+    });
+
+    it('supports REQUEST with one argument and a control-only response after acknowledgement', async () => {
+        fixture = new StreamingTestServer();
+        ClientRegistry.addUrlMapping('stream-service', await fixture.start());
+        const proxy = new NodeProxyClient(
+            new StubHeaders() as unknown as RequestContextHeaders,
+            new StubOidc() as unknown as GcpOidc,
+            new NeverResolveAddress(),
+        );
+        proxy.init(DuplexApi, new ClientConfig('stream-service'), []);
+        const client = buildClientProxy(DuplexApi, proxy);
+        await RequestContext.run(async (): Promise<void> => {
+            const requests = await client.upload({ value: 'open' });
+            expect(requests.getInitialResponse()).toEqual({ result: 'accepted' });
+            await requests.event({ value: 'one' });
+            await requests.close();
+        });
+    });
+    it('uses a finite JSONL request and incrementally consumes the JSONL response', async () => {
         fixture = new StreamingTestServer();
         ClientRegistry.addUrlMapping('stream-service', await fixture.start());
 
@@ -183,9 +271,9 @@ describe('Node generated typed streaming client', () => {
         const client = buildClientProxy(StreamingApi, proxy);
 
         await RequestContext.run(async () => {
-            const request = await client.exchange(responses);
-            await request.event({ value: 'one' }, { key: 'event-1', requestId: 'request-1' });
-            await request.complete();
+            await expect(client.exchange({ value: 'one' }, responses)).resolves.toEqual({
+                result: 'accepted',
+            });
             await done;
         });
 
@@ -193,18 +281,17 @@ describe('Node generated typed streaming client', () => {
             expect.objectContaining({
                 kind: 'event',
                 value: { result: 'echo:one' },
-                correlation: { key: 'event-1', requestId: 'request-1' },
             }),
             expect.objectContaining({ kind: 'complete' }),
         ]);
         expect(fixture.receivedHeaders).toMatchObject({
-            accept: 'text/event-stream',
-            'content-type': 'application/x-ndjson',
+            accept: 'application/x-webpieces-jsonl',
+            'content-type': 'application/x-webpieces-jsonl',
             'x-context-test': 'propagated',
         });
     });
 
-    it('turns request-stream cancellation into an immediate socket disconnect', async () => {
+    it('rejects invalid initial request events before opening a socket', async () => {
         fixture = new StreamingTestServer();
         ClientRegistry.addUrlMapping('stream-service', await fixture.start());
         const proxy = new NodeProxyClient(
@@ -217,9 +304,9 @@ describe('Node generated typed streaming client', () => {
         const responses = new StreamWriter<ServerEvent>(async () => undefined);
 
         await RequestContext.run(async () => {
-            const request = await client.exchange(responses);
-            await request.cancel('caller stopped');
-            await fixture.disconnected;
+            await expect(
+                client.exchange({ value: 7 } as unknown as ClientEvent, responses),
+            ).rejects.toThrow(/Invalid request stream event/);
         });
     });
 });

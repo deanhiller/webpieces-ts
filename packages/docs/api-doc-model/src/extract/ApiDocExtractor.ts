@@ -46,6 +46,7 @@ import { assertApiTypeMatchesMcpTools } from './McpMembership';
 import { ComponentsExtractor } from './ComponentsExtractor';
 import { PackageOfFile } from './PackageOfFile';
 import { TypeResolver } from './TypeResolver';
+import { StreamingSignature } from './StreamingSignature';
 
 /**
  * The decorator names this extractor matches on, taken from the REAL SYMBOLS rather than re-typed as
@@ -378,6 +379,7 @@ export class ApiDocExtractor {
 
         const doc = JsDoc.read(member);
         const mcpTool = ApiDocExtractor.mcpToolOf(member, folder);
+        const streaming = new StreamingSignature().read(member, folder, resolver);
         return new DocumentedEndpoint(
             methodName,
             httpMethod,
@@ -399,7 +401,8 @@ export class ApiDocExtractor {
             doc.description,
             doc.mcp,
             this.requestOf(member, methodName, resolver),
-            this.responseOf(member, methodName, resolver),
+            streaming?.initialResponse ?? this.responseOf(member, methodName, resolver),
+            streaming,
         );
     }
 
@@ -608,10 +611,7 @@ export class ApiDocExtractor {
      * as a cross-module constant would silently put the endpoint back in the candidate set.
      */
     // webpieces-disable no-function-outside-class -- private static reader of this class
-    private static invalidForMcpOf(
-        member: ts.Node,
-        folder: ConstantFolder,
-    ): string | undefined {
+    private static invalidForMcpOf(member: ts.Node, folder: ConstantFolder): string | undefined {
         const call = ApiDocExtractor.decoratorCall(member, MCP_INVALID);
         if (call === undefined) {
             return undefined;

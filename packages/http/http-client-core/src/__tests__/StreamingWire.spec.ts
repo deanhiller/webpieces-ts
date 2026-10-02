@@ -3,42 +3,39 @@ import { describe, expect, it, vi } from 'vitest';
 import {
     ApiJsonSchema,
     ObjectSchemaBuilder,
-    ApiBadRequestError,
     DtoValue,
-    StreamCorrelation,
-    StreamEnvelope,
+    RouteMetadata,
+    StreamDirection,
     StreamingEndpointMetadata,
     StreamTransportError,
-    StreamWriter,
+    WRITE,
 } from '@webpieces/core-util';
-import { NdjsonRequestStream } from '../NdjsonRequestStream';
+import { JsonlRequestStream } from '../JsonlRequestStream';
+import { JsonlResponseStream } from '../JsonlResponseStream';
 import { SseEventParser } from '../SseEventParser';
-import { SseResponseStream } from '../SseResponseStream';
-import { StreamEnvelopeCodec } from '../StreamEnvelopeCodec';
 import { Utf8Codec } from '../Utf8Codec';
 
-class InputEvent {
-    value!: string;
-}
+const schema = new ObjectSchemaBuilder().required('value', new ApiJsonSchema('string')).build();
+const route = new RouteMetadata(
+    'POST',
+    '/stream',
+    'exchange',
+    WRITE,
+    undefined,
+    undefined,
+    'StreamApi',
+    false,
+    undefined,
+    false,
+    [],
+    0,
+    'body',
+    new StreamingEndpointMetadata(StreamDirection.FULL, schema, schema, schema, schema),
+);
 
-const inputEventSchema = new ObjectSchemaBuilder()
-    .required('value', new ApiJsonSchema('string'))
-    .build();
-
-class OutputEvent {
-    result!: string;
-}
-
-const outputEventSchema = new ObjectSchemaBuilder()
-    .required('result', new ApiJsonSchema('string'))
-    .build();
-
-const metadata = new StreamingEndpointMetadata(inputEventSchema, outputEventSchema);
-
-describe('streaming HTTP wire primitives', () => {
-    it('parses LF and CRLF separators, multiline data, comments, boundaries, and multiple events', () => {
+describe('streaming wire invariants', () => {
+    it('keeps SSE protocol parsing available to protocol-specific adapters', () => {
         const parser = new SseEventParser();
-
         expect(parser.feed(': keepalive\r')).toEqual([]);
         expect(parser.feed('\n\r\nevent: mes')).toEqual([]);
         expect(parser.feed('sage\ndata: {"a":\ndata: 1}\n\ndata: two\r\n\r\n')).toEqual([
@@ -48,116 +45,43 @@ describe('streaming HTTP wire primitives', () => {
         expect(parser.finish()).toEqual([]);
     });
 
-    it('rejects a response that ends mid-event', () => {
-        const parser = new SseEventParser();
-        parser.feed('data: unfinished');
-        expect(() => parser.finish()).toThrow(StreamTransportError);
-    });
-
-    it('preserves UTF-8 characters split across transport chunks without platform codecs', () => {
+    it('preserves split UTF-8 bytes without platform-specific codecs', () => {
         const codec = new Utf8Codec();
-        const encoded = codec.encode('data: {"value":"🙂"}\n\n');
+        const encoded = codec.encode('{"value":"🙂"}\n');
         const split = encoded.indexOf(0xf0) + 2;
-        const parser = new SseEventParser();
-
-        expect(parser.feed(encoded.slice(0, split))).toEqual([]);
-        expect(parser.feed(encoded.slice(split))).toEqual([
-            { event: undefined, data: '{"value":"🙂"}' },
-        ]);
+        expect(
+            codec.decode(encoded.slice(0, split), true) + codec.decode(encoded.slice(split), false),
+        ).toBe('{"value":"🙂"}\n');
     });
 
-    it('round trips explicit failure correlation and disposition', () => {
-        const frame = new StreamEnvelope<DtoValue>(
-            'failure',
-            undefined,
-            { kind: 'bad-request', message: 'Bad Request' },
-            new StreamCorrelation('input-4', 'request-9'),
-            false,
-        );
-
-        expect(StreamEnvelopeCodec.decode(StreamEnvelopeCodec.encode(frame))).toMatchObject({
-            kind: 'failure',
-            terminal: false,
-            correlation: { key: 'input-4', requestId: 'request-9' },
-            error: { kind: 'bad-request' },
-        });
-    });
-
-    it('writes NDJSON one acknowledged frame at a time and closes deterministically', async () => {
-        const abort = vi.fn();
-        const stream = new NdjsonRequestStream(metadata, abort);
+    it('writes untouched application records and graceful request EOF', async () => {
+        const stream = new JsonlRequestStream(route, { value: 'initial' }, vi.fn());
         const reader = stream.body.getReader();
-        expect(new TextDecoder().decode((await reader.read()).value)).toBe('\n');
-        const pending = stream.event(
-            { value: 'first' },
-            new StreamCorrelation('input-1', 'request-2'),
-        );
-        let acknowledged = false;
-        void pending.then(() => (acknowledged = true));
-        await Promise.resolve();
-        expect(acknowledged).toBe(false);
-
-        const first = await reader.read();
+        const codec = new Utf8Codec();
+        expect(codec.decode((await reader.read()).value, false)).toBe('{"value":"initial"}\n');
+        stream.setInitialResponse({ value: 'accepted' });
+        expect(stream.getInitialResponse()).toEqual({ value: 'accepted' });
+        const pending = stream.event({ value: 'later' });
+        expect(codec.decode((await reader.read()).value, false)).toBe('{"value":"later"}\n');
         await pending;
-        expect(acknowledged).toBe(true);
-        expect(new TextDecoder().decode(first.value)).toContain('"key":"input-1"');
-
-        const completion = stream.complete();
-        const last = await reader.read();
-        await completion;
-        expect(new TextDecoder().decode(last.value)).toBe('{"kind":"complete"}\n');
+        await stream.close();
         expect(await reader.read()).toMatchObject({ done: true });
         await expect(stream.event({ value: 'late' })).rejects.toBeInstanceOf(StreamTransportError);
     });
 
-    it('writes non-terminal standard Webpieces failures without closing the upload', async () => {
-        const stream = new NdjsonRequestStream(metadata, vi.fn());
-        const reader = stream.body.getReader();
-        expect(new TextDecoder().decode((await reader.read()).value)).toBe('\n');
-        const failed = stream.fail(new ApiBadRequestError('private'), new StreamCorrelation(7), {
-            terminal: false,
+    it('rejects incomplete response records rather than silently accepting EOF', async () => {
+        const cancelled: Error[] = [];
+        const response = new Response('{"value":"accepted"}\n{"value":"truncated"', {
+            headers: { 'content-type': 'application/x-webpieces-jsonl' },
         });
-        const failureFrame = await reader.read();
-        await failed;
-        expect(new TextDecoder().decode(failureFrame.value)).toContain('"terminal":false');
-
-        const event = stream.event({ value: 'continues' });
-        const eventFrame = await reader.read();
-        await event;
-        expect(new TextDecoder().decode(eventFrame.value)).toContain('"kind":"event"');
-        await stream.cancel('done');
-    });
-
-    it('turns malformed SSE frames into a terminal typed transport failure with cause', async () => {
-        const abort = vi.fn();
-        const upload = new NdjsonRequestStream(metadata, abort);
-        const reader = upload.body.getReader();
-        await reader.read();
-        reader.releaseLock();
-        const received: StreamEnvelope<OutputEvent>[] = [];
-        const destination = new StreamWriter<OutputEvent>(
-            async (envelope: StreamEnvelope<OutputEvent>) => {
-                received.push(envelope);
+        const initial = await new JsonlResponseStream().consume(route, response, {
+            event: async (_value: DtoValue): Promise<void> => undefined,
+            close: async (): Promise<void> => undefined,
+            cancel: async (error?: Error): Promise<void> => {
+                if (error) cancelled.push(error);
             },
-        );
-        const response = new Response('data: {not-json}\n\n', {
-            headers: { 'Content-Type': 'text/event-stream' },
         });
-
-        await new SseResponseStream().consume(response, destination, metadata, upload);
-
-        expect(received).toEqual([
-            expect.objectContaining({
-                kind: 'failure',
-                terminal: true,
-                error: expect.objectContaining({ kind: 'connection' }),
-            }),
-        ]);
-        expect(abort).toHaveBeenCalledWith(
-            expect.objectContaining({
-                name: 'StreamTransportError',
-                cause: expect.objectContaining({ name: 'SyntaxError' }),
-            }),
-        );
+        expect(initial).toEqual({ value: 'accepted' });
+        await vi.waitFor(() => expect(cancelled[0]).toBeInstanceOf(StreamTransportError));
     });
 });

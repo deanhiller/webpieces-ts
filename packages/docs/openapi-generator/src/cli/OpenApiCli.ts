@@ -1,12 +1,13 @@
 import * as path from 'node:path';
 import { MCP, McpToolCatalogFile } from '@webpieces/core-util';
-import { McpCatalogRender, McpSchemaRenderer, SkippedMcpTool } from '@webpieces/api-doc-model';
-import { ArtifactWriter, GeneratedArtifact, OutputFormat } from '../emit/ArtifactWriter';
 import {
-    ContractModel,
-    GeneratedDocuments,
-    GenerationInputs,
-} from '../generate/GenerationInputs';
+    McpCatalogRender,
+    McpSchemaRenderer,
+    SkippedMcpTool,
+    StreamingSchemaRenderer,
+} from '@webpieces/api-doc-model';
+import { ArtifactWriter, GeneratedArtifact, OutputFormat } from '../emit/ArtifactWriter';
+import { ContractModel, GeneratedDocuments, GenerationInputs } from '../generate/GenerationInputs';
 import { OpenApiGenerator } from '../generate/OpenApiGenerator';
 import { InputsLoader } from '../load/InputsLoader';
 import { OpenApiGenerationError } from '../OpenApiGenerationError';
@@ -33,7 +34,7 @@ export const USAGE = [
     'and has an @WpMcpTool: the RUNTIME catalogs WpMcpServer boots from. They are not documents, so',
     '--format does not apply.',
     '',
-    'Those documents are SPLIT: a schema another package declares is a $ref into that package\'s',
+    "Those documents are SPLIT: a schema another package declares is a $ref into that package's",
     'components.openapi.json, and generation FAILS when that package publishes none. Each one also',
     'gets a <name>.bundled.json sibling with every schema defined locally and no external reference.',
     'mcp-openapi and the MCP tool catalogs stay fully inlined and require no components document.',
@@ -101,12 +102,28 @@ export class OpenApiCli {
         const artifacts = [
             ...this.writer.artifacts(documents, this.formatOf(argv)),
             ...mcp.artifacts,
+            ...this.streamingCatalogs(inputs),
         ];
         return new CliResult(
             this.writer.write(path.resolve(cwd, out), artifacts),
             artifacts,
             mcp.skipped,
         );
+    }
+
+    private streamingCatalogs(inputs: GenerationInputs): readonly GeneratedArtifact[] {
+        const artifacts: GeneratedArtifact[] = [];
+        for (const contract of inputs.contracts) {
+            const catalog = new StreamingSchemaRenderer().render(contract.model);
+            if (Object.keys(catalog.methods).length === 0) continue;
+            artifacts.push(
+                new GeneratedArtifact(
+                    `stream-${catalog.contractName}-schemas.json`,
+                    JSON.stringify(catalog, null, 2) + '\n',
+                ),
+            );
+        }
+        return artifacts;
     }
 
     /**
@@ -155,7 +172,8 @@ export class OpenApiCli {
         }
         const rendered: McpCatalogRender = McpSchemaRenderer.catalogOf(models);
         const artifacts = rendered.catalogs.map(
-            (catalog: McpToolCatalogFile) => new GeneratedArtifact(catalog.fileName, catalog.toJsonText()),
+            (catalog: McpToolCatalogFile) =>
+                new GeneratedArtifact(catalog.fileName, catalog.toJsonText()),
         );
         return new McpArtifacts(artifacts, rendered.skipped);
     }

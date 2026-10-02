@@ -1,7 +1,6 @@
 import {
     isApiPath,
     getEndpoints,
-    AuthMeta,
     DestinationTrust,
     RouteMetadata,
     LogApiCallImpl,
@@ -15,9 +14,7 @@ import {
     CallDeadline,
     CallContext,
     DtoValue,
-    RequestStream,
-    ResponseStream,
-    StreamTransportError,
+    StreamDirection,
 } from '@webpieces/core-util';
 import { ApiPrototype } from './ApiPrototype';
 import { ClientFilterDefinition } from './ClientFilter';
@@ -27,17 +24,10 @@ import { HttpResponseDtoFactory } from './HttpResponseDtoFactory';
 import { RequestOutcome } from './RequestOutcome';
 import { RequestBodySerializer } from './RequestBodySerializer';
 import { ResponseBodyReader } from './ResponseBodyReader';
-import { NdjsonRequestStream } from './NdjsonRequestStream';
-import { SseResponseStream } from './SseResponseStream';
 import { StreamingCapabilityError } from './StreamingCapabilityError';
 import { ByteReadableStream } from './ByteStream';
-
-class OpenedStreamingTransport {
-    constructor(
-        readonly response: Response,
-        readonly upload: NdjsonRequestStream,
-    ) {}
-}
+import { ResponseStreamingCall } from './ResponseStreamingCall';
+import { DuplexStreamingCall } from './DuplexStreamingCall';
 
 /**
  * ProxyClient - the HTTP call engine behind one API contract's client proxy.
@@ -162,7 +152,7 @@ export abstract class ProxyClient {
      * mint the OIDC token an @WpAuthOidc endpoint demands. Surfacing it here beats failing on the
      * first call in production. The default accepts everything.
      */
-    protected assertEndpointSupported(_authMeta: AuthMeta | undefined, _methodName: string): void {}
+    protected assertEndpointSupported(_route: RouteMetadata): void {}
 
     /**
      * The FRAMEWORK filters this environment installs on every client it builds, BENEATH whatever
@@ -265,8 +255,7 @@ export abstract class ProxyClient {
             // One shared factory joins and validates method/path/query/body metadata for every
             // transport, rather than letting each generated client reinterpret the decorators.
             const route = RouteMetadataFactory.create(apiPrototype, methodName);
-            const authMeta = route.authMeta;
-            this.assertEndpointSupported(authMeta, methodName);
+            this.assertEndpointSupported(route);
             this.routeMap.set(methodName, route);
         }
 
@@ -340,7 +329,6 @@ export abstract class ProxyClient {
         // mirror of the inbound WebhookAuthCallback that verifies one.
     }
 
-    /** One logical call: one lifecycle pair and log entry across all strategy attempts. */
     // webpieces-disable no-any-unknown -- request and response DTOs are erased at the proxy boundary
     async makeRequest(route: RouteMetadata, args: unknown[]): Promise<unknown> {
         this.refuseEndpointNoClientCanCall(route);
@@ -355,49 +343,52 @@ export abstract class ProxyClient {
         return this.execute(route, logValue, () => this.executeCall(route, args));
     }
 
-    /** Open a typed stream without bypassing the ordinary context/auth/filter request pipeline. */
     // webpieces-disable no-any-unknown -- generated proxy arguments are runtime-validated here
     private async makeStreamingRequest(route: RouteMetadata, args: unknown[]): Promise<unknown> {
+        if (route.streaming?.direction === StreamDirection.RESPONSE) {
+            return this.makeResponseStreamingRequest(route, args);
+        }
         if (!this.supportsConcurrentDuplexFetch()) {
             throw new StreamingCapabilityError(
                 'browser',
                 'Fetch request streaming is half-duplex and has no protocol-compatible full-duplex fallback.',
             );
         }
-        const destination = this.responseStream(args);
-        return this.execute(route, 'stream-open', () =>
-            this.executeStreamingCall(route, destination),
-        );
+        return this.execute(route, args[0], () => this.executeStreamingCall(route, args));
     }
 
-    // webpieces-disable no-any-unknown -- generated proxy arguments are runtime-validated here
-    private responseStream(args: unknown[]): ResponseStream<DtoValue> {
-        const candidate = args[0];
-        if (args.length !== 1 || typeof candidate !== 'object' || candidate === null) {
-            throw new StreamTransportError(
-                `${this.apiName} streaming methods require exactly one ResponseStream argument.`,
-            );
-        }
-        // webpieces-disable no-any-unknown -- reflected method argument is narrowed by the method checks below
-        const record = candidate as Record<string, unknown>;
-        if (
-            typeof record['event'] !== 'function' ||
-            typeof record['fail'] !== 'function' ||
-            typeof record['complete'] !== 'function' ||
-            typeof record['onCancel'] !== 'function'
-        ) {
-            throw new StreamTransportError(
-                `${this.apiName} streaming method argument does not implement ResponseStream.`,
-            );
-        }
-        return candidate as ResponseStream<DtoValue>;
+    // webpieces-disable no-any-unknown -- proxy arguments are validated at this boundary
+    private async makeResponseStreamingRequest(
+        route: RouteMetadata,
+        // webpieces-disable no-any-unknown -- proxy arguments are validated at this boundary
+        args: unknown[],
+        // webpieces-disable no-any-unknown -- contract initial response is erased at the proxy boundary
+    ): Promise<unknown> {
+        const call = new ResponseStreamingCall(
+            this.apiName,
+            (): Promise<string> => this.resolveBaseUrl(),
+            (current: RouteMetadata): Map<string, string> =>
+                this.outboundContextHeaders(DestinationTrust.forAuthMode(current.authMeta?.mode)),
+            (request: ClientRequest, signal: AbortSignal): Promise<Response> =>
+                this.chain.execute(request, () => this.sendOnce(request, signal)),
+            (response: Response, current: RouteMetadata): Promise<DtoValue> =>
+                this.readResponse(response, current) as Promise<DtoValue>,
+            (current: RouteMetadata, response?: Response): void =>
+                this.readResponseContext(current, response),
+            (current: RouteMetadata): void => this.onRequestStart(current),
+            (current: RouteMetadata, outcome: RequestOutcome): void =>
+                this.onRequestEnd(current, outcome),
+        );
+        return this.execute(route, args[0], () => call.open(route, args));
     }
 
     /** One streaming handshake. Subsequent events stay on this established transport. */
+    // webpieces-disable no-any-unknown -- generated proxy arguments are runtime-validated here
     private async executeStreamingCall(
         route: RouteMetadata,
-        destination: ResponseStream<DtoValue>,
-    ): Promise<RequestStream<DtoValue>> {
+        args: unknown[],
+        // webpieces-disable no-any-unknown -- contract request stream types are erased here
+    ): Promise<unknown> {
         this.onRequestStart(route);
         let response: Response | undefined;
         // eslint-disable-next-line @webpieces/no-unmanaged-exceptions -- lifecycle reports the original handshake failure
@@ -410,11 +401,36 @@ export abstract class ProxyClient {
                         timeoutMs,
                         new CallContext(this.apiName, route.methodName),
                         async (deadlineSignal: AbortSignal) => {
-                            const result = await this.openStreamingTransport(
-                                route,
-                                destination,
-                                deadlineSignal,
+                            const call = new DuplexStreamingCall(
+                                this.apiName,
+                                (): Promise<string> => this.resolveBaseUrl(),
+                                (current: RouteMetadata): Map<string, string> =>
+                                    this.outboundContextHeaders(
+                                        DestinationTrust.forAuthMode(current.authMeta?.mode),
+                                    ),
+                                (
+                                    request: ClientRequest,
+                                    signal: AbortSignal,
+                                    body: ByteReadableStream,
+                                ): Promise<Response> =>
+                                    this.chain
+                                        .execute(request, () =>
+                                            this.sendStreamingOnce(request, signal, body),
+                                        )
+                                        .then((received: Response): Response => {
+                                            response = received;
+                                            return received;
+                                        }),
+                                (
+                                    currentResponse: Response,
+                                    current: RouteMetadata,
+                                ): Promise<DtoValue> =>
+                                    this.readResponse(
+                                        currentResponse,
+                                        current,
+                                    ) as Promise<DtoValue>,
                             );
+                            const result = await call.open(route, args, deadlineSignal);
                             response = result.response;
                             return result.upload;
                         },
@@ -438,12 +454,7 @@ export abstract class ProxyClient {
         }
     }
 
-    /**
-     * Hand a settled response's headers to {@link acceptResponseContext}, with the SAME
-     * {@link DestinationTrust} the request was built with. One private helper rather than the same
-     * four lines on each of the four settle paths, because a path that forgot it would silently stop
-     * propagating context upward with nothing failing.
-     */
+    /** Hand settled response headers to the context using the request's destination trust. */
     private readResponseContext(route: RouteMetadata, response: Response | undefined): void {
         if (response === undefined) {
             return;
@@ -452,60 +463,6 @@ export abstract class ProxyClient {
             response.headers,
             DestinationTrust.forAuthMode(route.authMeta?.mode),
         );
-    }
-
-    private async openStreamingTransport(
-        route: RouteMetadata,
-        destination: ResponseStream<DtoValue>,
-        deadlineSignal: AbortSignal,
-    ): Promise<OpenedStreamingTransport> {
-        const metadata = route.streaming;
-        if (!metadata) throw new StreamTransportError('Streaming metadata disappeared.');
-        const request = await this.prepareStreamingRequest(route);
-        const controller = new AbortController();
-        deadlineSignal.addEventListener('abort', (): void => controller.abort(), { once: true });
-        const upload = new NdjsonRequestStream(
-            metadata,
-            // webpieces-disable no-any-unknown -- AbortController accepts a platform-defined cancellation reason
-            (reason?: unknown) => controller.abort(reason),
-        );
-        const response = await this.chain.execute(request, () =>
-            this.sendStreamingOnce(request, controller.signal, upload.body),
-        );
-        if (!response.ok) {
-            await upload.transportFailed(
-                new StreamTransportError(
-                    `Streaming handshake failed with HTTP ${response.status}.`,
-                ),
-            );
-            await this.readResponse(response, route);
-            throw new StreamTransportError('Streaming handshake was rejected.');
-        }
-        const contentType = response.headers.get('content-type') ?? '';
-        if (!contentType.toLowerCase().startsWith('text/event-stream')) {
-            const error = new StreamTransportError(
-                `Streaming response requires text/event-stream, received '${contentType || 'missing'}'.`,
-            );
-            await upload.transportFailed(error);
-            throw error;
-        }
-        void new SseResponseStream()
-            .consume(response, destination, metadata, upload)
-            .catch(() => undefined);
-        return new OpenedStreamingTransport(response, upload);
-    }
-
-    /** Fresh filter-visible request metadata; the live request body is transport-owned. */
-    private async prepareStreamingRequest(route: RouteMetadata): Promise<ClientRequest> {
-        const baseUrl = await this.resolveBaseUrl();
-        const headers = new Map<string, string>();
-        headers.set('Content-Type', 'application/x-ndjson');
-        headers.set('Accept', 'text/event-stream');
-        const context = this.outboundContextHeaders(
-            DestinationTrust.forAuthMode(route.authMeta?.mode),
-        );
-        for (const entry of context.entries()) headers.set(entry[0], entry[1]);
-        return new ClientRequest(route, this.apiName, baseUrl, headers, undefined, undefined);
     }
 
     // webpieces-disable no-any-unknown -- response DTO is erased at the proxy boundary
@@ -594,7 +551,7 @@ export abstract class ProxyClient {
      * genuine bug passes through untouched) so that filters above see the same typed error the caller
      * will, rather than a raw platform reject.
      */
-    private async sendOnce(request: ClientRequest, signal: AbortSignal): Promise<Response> {
+    protected async sendOnce(request: ClientRequest, signal: AbortSignal): Promise<Response> {
         CallDeadline.throwIfAborted(signal);
         const options: RequestInit = {
             method: request.route.httpMethod,

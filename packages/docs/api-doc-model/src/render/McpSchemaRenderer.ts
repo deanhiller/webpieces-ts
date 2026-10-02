@@ -76,7 +76,15 @@ export class McpCatalogRender {
  *   schemas are inline and have no `$ref`.
  */
 export class McpSchemaRenderer {
-    constructor(private readonly model: ApiDocModel) {}
+    constructor(
+        private readonly model: ApiDocModel,
+        private readonly requireDescriptions = true,
+    ) {}
+
+    /** The shared inline runtime schema projection, also used by streaming catalog generation. */
+    schemaFor(ref: TypeRef, where: string): ApiJsonSchema {
+        return this.typeSchema(ref, where, new Set<string>());
+    }
 
     /** Every `@WpMcpTool` method of the contract, in declaration order. */
     render(): readonly McpToolDefinition[] {
@@ -410,7 +418,7 @@ export class McpSchemaRenderer {
         const where = `${owner.name}.${field.name}`;
         const schema = this.typeSchema(field.type, where, parents);
         const description = field.mcpDescription ?? field.description;
-        if (description.trim() === '') {
+        if (this.requireDescriptions && description.trim() === '') {
             throw new McpRenderError(
                 'a published DTO field has no documentation',
                 where,

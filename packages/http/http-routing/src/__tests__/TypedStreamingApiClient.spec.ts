@@ -16,8 +16,10 @@ import {
     StreamEnvelope,
     StreamTransportError,
     StreamWriter,
+    StreamDirection,
     WpAuthPublic,
     WpStream,
+    registerStreamingSchemas,
     POST,
     READ,
     RPC,
@@ -56,12 +58,22 @@ const serverEventSchema = new ObjectSchemaBuilder()
 @ApiPath('/typed')
 abstract class TypedStreamApi {
     @WpAuthPublic('Typed stream test fixture')
-    @WpStream(clientEventSchema, serverEventSchema)
+    @WpStream(StreamDirection.FULL)
     @Endpoint(POST, '/stream', READ, RPC)
-    stream(_response: ResponseStream<ServerEvent>): Promise<RequestStream<ClientEvent>> {
+    stream(
+        _request: ClientEvent,
+        _response: ResponseStream<ServerEvent>,
+    ): Promise<RequestStream<ServerEvent, ClientEvent>> {
         throw new Error('subclass');
     }
 }
+
+registerStreamingSchemas(TypedStreamApi, 'stream', {
+    initialRequestSchema: clientEventSchema,
+    initialResponseSchema: serverEventSchema,
+    requestSchema: clientEventSchema,
+    responseSchema: serverEventSchema,
+});
 
 class LifecycleFilter extends Filter<MethodMeta, WpResponse<unknown>> {
     calls = 0;
@@ -86,21 +98,21 @@ class TypedStreamController extends TypedStreamApi {
     requestAck?: Promise<void>;
 
     override async stream(
+        _request: ClientEvent,
         response: ResponseStream<ServerEvent>,
-    ): Promise<RequestStream<ClientEvent>> {
+    ): Promise<RequestStream<ServerEvent, ClientEvent>> {
         this.response = response;
-        response.onCancel((reason?: unknown): void => {
-            this.responseCancellation = reason;
-        });
-        const request = new StreamWriter<ClientEvent>(
+        const request = new StreamWriter<ClientEvent, ServerEvent>(
             async (envelope: StreamEnvelope<ClientEvent>): Promise<void> => {
                 this.requests.push(envelope);
                 await this.requestAck;
             },
+            undefined,
+            new ServerEvent('accepted'),
+            async (error?: Error): Promise<void> => {
+                this.requestCancellation = error;
+            },
         );
-        request.onCancel((reason?: unknown): void => {
-            this.requestCancellation = reason;
-        });
         return request;
     }
 }
@@ -123,10 +135,12 @@ class StreamingFixture {
         this.client = new ApiClientFactory(this.builder).createApiClient(TypedStreamApi);
     }
 
-    async open(response: ResponseStream<ServerEvent>): Promise<RequestStream<ClientEvent>> {
-        return RequestContext.run(async (): Promise<RequestStream<ClientEvent>> => {
+    async open(
+        response: ResponseStream<ServerEvent>,
+    ): Promise<RequestStream<ServerEvent, ClientEvent>> {
+        return RequestContext.run(async (): Promise<RequestStream<ServerEvent, ClientEvent>> => {
             RequestContext.setRequest(new HttpRequest('POST', '/typed/stream', new Map()));
-            return this.client.stream(response);
+            return this.client.stream(new ClientEvent('open'), response);
         });
     }
 }
@@ -203,7 +217,7 @@ describe('ApiClientFactory typed in-process streams', () => {
         expect(fixture.controller.requests).toEqual([]);
     });
 
-    it('preserves correlation and non-terminal failures, then enforces termination', async () => {
+    it('keeps graceful request EOF independent of the response direction', async () => {
         const fixture = new StreamingFixture();
         const responses: Array<StreamEnvelope<ServerEvent>> = [];
         const response = new StreamWriter<ServerEvent>(
@@ -212,45 +226,59 @@ describe('ApiClientFactory typed in-process streams', () => {
             },
         );
         const request = await fixture.open(response);
-        const correlation = new StreamCorrelation('event-7', 'request-22');
-
-        await request.fail(new ApiBadRequestError('bad input'), correlation, { terminal: false });
-        await request.event(new ClientEvent('still-open'));
-        await fixture.controller.response?.fail(new ApiBadRequestError('bad output'), correlation, {
-            terminal: false,
-        });
-        await fixture.controller.response?.event(new ServerEvent('still-open'));
-        expect(fixture.controller.requests[0].correlation).toEqual(correlation);
-        expect(fixture.controller.requests[0].error?.kind).toBe('bad-request');
-        expect(responses[0].correlation).toEqual(correlation);
-        expect(responses[0].error?.kind).toBe('bad-request');
-
-        await request.complete();
+        expect(request.getInitialResponse()).toEqual(new ServerEvent('accepted'));
+        await request.event(new ClientEvent('one'));
+        await request.close();
+        await fixture.controller.response?.event(new ServerEvent('after request EOF'));
+        expect(responses[0].value).toEqual(new ServerEvent('after request EOF'));
         await expect(request.event(new ClientEvent('late'))).rejects.toThrow(StreamTransportError);
-        await fixture.controller.response?.fail(new ApiBadRequestError('terminal'));
-        await expect(fixture.controller.response?.event(new ServerEvent('late'))).rejects.toThrow(
-            StreamTransportError,
-        );
     });
 
-    it('propagates cancellation exactly once to both server halves', async () => {
+    it('propagates cancellation exactly once to peer implementations', async () => {
         const fixture = new StreamingFixture();
-        const response = new StreamWriter<ServerEvent>(async (): Promise<void> => undefined);
+        const cancelled: Error[] = [];
+        const response = new StreamWriter<ServerEvent>(
+            async (): Promise<void> => undefined,
+            undefined,
+            undefined,
+            async (error?: Error): Promise<void> => {
+                if (error) cancelled.push(error);
+            },
+        );
         const request = await fixture.open(response);
+        const error = new Error('client-left');
+        await request.cancel(error);
+        await request.cancel(new Error('ignored'));
+        expect(fixture.controller.requestCancellation).toBe(error);
+        expect(cancelled).toEqual([error]);
+        await expect(request.event(new ClientEvent('late'))).rejects.toBe(error);
+    });
 
-        await request.cancel('client-left');
-        await request.cancel('ignored');
-
-        expect(fixture.controller.requestCancellation).toBe('client-left');
-        expect(fixture.controller.responseCancellation).toBe('client-left');
-        await expect(request.event(new ClientEvent('late'))).rejects.toThrow(StreamTransportError);
+    it('terminates both halves when the server cancels after graceful request EOF', async () => {
+        const fixture = new StreamingFixture();
+        const cancellations: Error[] = [];
+        const response: ResponseStream<ServerEvent> = {
+            event: async (): Promise<void> => undefined,
+            close: async (): Promise<void> => undefined,
+            cancel: async (error?: Error): Promise<void> => {
+                if (error) cancellations.push(error);
+            },
+        };
+        const request = await fixture.open(response);
+        await request.close();
+        const error = new ApiBadRequestError('server cancelled');
+        await fixture.controller.response!.cancel(error);
+        expect(fixture.controller.requestCancellation).toBe(error);
+        expect(cancellations).toEqual([error]);
+        await expect(request.event(new ClientEvent('late'))).rejects.toBe(error);
     });
 
     it('surfaces controller rejection as an open failure before returning a writer', async () => {
         class FailingController extends TypedStreamApi {
             override async stream(
+                _request: ClientEvent,
                 _response: ResponseStream<ServerEvent>,
-            ): Promise<RequestStream<ClientEvent>> {
+            ): Promise<RequestStream<ServerEvent, ClientEvent>> {
                 throw new ApiBadRequestError('handshake rejected');
             }
         }
@@ -265,9 +293,9 @@ describe('ApiClientFactory typed in-process streams', () => {
         const response = new StreamWriter<ServerEvent>(async (): Promise<void> => undefined);
 
         await expect(
-            RequestContext.run(async (): Promise<RequestStream<ClientEvent>> => {
+            RequestContext.run(async (): Promise<RequestStream<ServerEvent, ClientEvent>> => {
                 RequestContext.setRequest(new HttpRequest('POST', '/typed/stream', new Map()));
-                return client.stream(response);
+                return client.stream(new ClientEvent('open'), response);
             }),
         ).rejects.toThrow(ApiBadRequestError);
     });
