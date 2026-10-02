@@ -1,5 +1,5 @@
-import { BaseRuleConfig } from '@webpieces/rules-sdk';
 #!/usr/bin/env node
+import { BaseRuleConfig } from '@webpieces/rules-sdk';
 /**
  * wp-ci — the universal webpieces CI entrypoint.
  *
