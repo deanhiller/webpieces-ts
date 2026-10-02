@@ -23,6 +23,20 @@ holds, for its checklist:
 
 Work only from those files. Nothing about any checklist is restated here, so nothing here can drift.
 
+## Before you review: the round budget
+
+For EACH checklist you were handed, run `pnpm wp-write-review --checklist <id> --check` first. It confirms
+the round is within the repository's `maxReviewerRounds` and that the checklist has no verdict yet in this
+round, and it says when this is the FINAL round. When it REFUSES, do not review that checklist and submit
+nothing for it: report its refusal verbatim to your caller ("I am not allowed to review <id>: …").
+`wp-write-review` refuses an over-budget verdict anyway, so a review past the budget is wasted work that
+cannot be recorded.
+
+On the FINAL round there is no re-review, so there is no red: mark anything that must be fixed ORANGE, with
+a concrete, actionable fix — the author applies it best effort and ships without another review, so put
+every finding in now. Before the final round, a must-fix is RED and the author's fix is reviewed again.
+Your instructions file says which round this is.
+
 ## How to review
 
 1. Handle each checklist SEPARATELY. Read its doc, then its in-scope diffs, then the full source of every

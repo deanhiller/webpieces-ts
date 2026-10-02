@@ -43,6 +43,16 @@ export class McpAuthorityCompileAssertions
             now + 60,
             ['tools'],
             now,
+            new AuthenticatedCaller('example-user'),
         );
+    }
+}
+
+/** Compiled hard-cut assertions; Vitest does not type-check specifications. */
+export class McpPrincipalCompileAssertions {
+    roles(credential: VerifiedMcpCredential): readonly string[] {
+        // @ts-expect-error listingRoles was replaced by principalRoles derived from the canonical caller
+        credential.listingRoles;
+        return credential.principalRoles;
     }
 }

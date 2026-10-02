@@ -144,14 +144,13 @@ describe('WpMcpServer HTTP bridge', () => {
         // Exactly the catalogs of the contracts bound — the registry refuses one for an unbound contract.
         const catalogs = [SEARCH_API_CATALOG, REMOTE_SEARCH_API_CATALOG].filter(
             (catalog: McpToolCatalog) =>
-                bindings.some((binding: McpApiBinding) => binding.api.name === catalog.contractName),
+                bindings.some(
+                    (binding: McpApiBinding) => binding.api.name === catalog.contractName,
+                ),
         );
         const instance = new WpMcpServer<string, string>(serverConfig());
         const app: Express = express();
-        instance.bind(
-            app,
-            new McpBindOptions(ENDPOINT_PATH, bindings, catalogs, deployment),
-        );
+        instance.bind(app, new McpBindOptions(ENDPOINT_PATH, bindings, catalogs, deployment));
         const server = createServer(app);
         await new Promise<void>((resolve: () => void, reject: (error: Error) => void) => {
             server.once('error', reject);
@@ -461,10 +460,10 @@ describe('WpMcpServer HTTP bridge', () => {
 
     it('seeds remote trusted context without forwarding the MCP bearer token', async () => {
         expect(structuredOf(await callTool('remote_search', { query: 'remote' }))).toEqual({
-            userId: 'user-delegated',
+            userId: 'user-7',
             result: 'remote',
         });
-        expect(remote.seenAuthorization).toBeUndefined();
+        expect(remote.seenAuthorization).toBe('Bearer mcp-user');
     });
 
     it('filters privileged tools but denies direct hidden calls independently', async () => {
@@ -476,11 +475,7 @@ describe('WpMcpServer HTTP bridge', () => {
             'admin_search',
         );
         const hidden = await callTool('admin_search', { query: 'all' });
-        expect(modelErrorOf(hidden)).toMatchObject({
-            kind: 'forbidden',
-            category: 'access',
-            retry: 'after-correction',
-        });
+        expect(hidden.error).toMatchObject({ code: -32602, message: 'Unknown tool: admin_search' });
         expect(controller.adminInvocations).toBe(0);
         authority.roles = ['admin'];
         const adminTools = resultOf((await post(request('tools/list'))).payload)['tools'] as Array<

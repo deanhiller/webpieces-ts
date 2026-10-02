@@ -23,6 +23,10 @@ class UnusedApiFactory implements ApiFactory {
     }
 
     // webpieces-disable no-any-unknown -- mirrors ApiFactory's abstract constructor signature
+    createInvocationApiClient<T>(): T {
+        throw new Error('Invocation authentication is not used by this fixture');
+    }
+
     createApiClient<T>(_apiPrototype: abstract new (...args: any[]) => T): T {
         throw new Error('a registry never invokes a binding');
     }
@@ -67,7 +71,10 @@ class Layout {
         layout.write('services/server/src/mountMcp.ts', '');
         layout.link('services/server/node_modules/@myorg/apis', 'libraries/apis');
         if (built) {
-            layout.write('dist/libraries/apis/package.json', JSON.stringify({ name: '@myorg/apis' }));
+            layout.write(
+                'dist/libraries/apis/package.json',
+                JSON.stringify({ name: '@myorg/apis' }),
+            );
             layout.catalog('dist/libraries/apis', SEARCH_API_CATALOG);
             layout.catalog('dist/libraries/apis', REMOTE_SEARCH_API_CATALOG);
         }
@@ -96,7 +103,8 @@ function track(layout: Layout): Layout {
 }
 
 afterEach(() => {
-    for (const layout of layouts.splice(0)) fs.rmSync(layout.root, { recursive: true, force: true });
+    for (const layout of layouts.splice(0))
+        fs.rmSync(layout.root, { recursive: true, force: true });
 });
 
 describe('McpToolCatalog.fromPackages', () => {
@@ -158,8 +166,13 @@ describe('McpToolCatalog.fromPackages', () => {
         const layout = track(Layout.source(API_PROJECT, false));
 
         expect(() =>
-            McpToolCatalog.fromPackages(['@myorg/apis'], path.join(layout.root, 'services/server/src')),
-        ).toThrow(/dist\/libraries\/apis — the directory does not exist[\s\S]*"dependsOn": \["\^openapi-generate"\]/);
+            McpToolCatalog.fromPackages(
+                ['@myorg/apis'],
+                path.join(layout.root, 'services/server/src'),
+            ),
+        ).toThrow(
+            /dist\/libraries\/apis — the directory does not exist[\s\S]*"dependsOn": \["\^openapi-generate"\]/,
+        );
     });
 
     it('names the missing dependsOn when openapi-generate does not say which target it writes into', () => {
@@ -168,7 +181,10 @@ describe('McpToolCatalog.fromPackages', () => {
         const layout = track(Layout.source(project, true));
 
         expect(() =>
-            McpToolCatalog.fromPackages(['@myorg/apis'], path.join(layout.root, 'services/server/src')),
+            McpToolCatalog.fromPackages(
+                ['@myorg/apis'],
+                path.join(layout.root, 'services/server/src'),
+            ),
         ).toThrow(/must dependsOn exactly ONE target[\s\S]*Set "dependsOn": \["build"\]/);
     });
 
@@ -177,7 +193,9 @@ describe('McpToolCatalog.fromPackages', () => {
 
         expect(() =>
             McpToolCatalog.fromPackages(['@myorg/nope'], path.join(layout.root, 'a', 'b')),
-        ).toThrow(new RegExp(`Searched:[\\s\\S]*${path.join(layout.root, 'a', 'b', 'node_modules')}`));
+        ).toThrow(
+            new RegExp(`Searched:[\\s\\S]*${path.join(layout.root, 'a', 'b', 'node_modules')}`),
+        );
     });
 
     it('refuses an empty package list rather than booting a server with no tools', () => {
@@ -234,6 +252,8 @@ describe('McpToolRegistry pairs each binding with ITS contract’s catalog', () 
     });
 
     it('refuses an empty catalog list, saying so', () => {
-        expect(() => new McpToolRegistry([search()], [])).toThrow(/\(none — toolCatalogs is empty\)/);
+        expect(() => new McpToolRegistry([search()], [])).toThrow(
+            /\(none — toolCatalogs is empty\)/,
+        );
     });
 });

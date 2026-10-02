@@ -452,27 +452,32 @@ describe('WpMcpServer error boundary (WpMcpErrorTranslator)', () => {
         expect(lines[0].message).toContain('McpEndpoint.serve');
     });
 
-    it('never leaks a raw tools/list exception and answers a generic JSON-RPC internal error', async () => {
+    it('the shared SDK callback catch safely translates list failures within the ingress context', async () => {
+        const original = Reflect.get(bridge, 'listTools');
+        Reflect.set(bridge, 'listTools', () => {
+            throw new Error('SECRET-sdk-list-failure');
+        });
+        try {
+            const reply = await post(request('tools/list'));
+            expect(reply.response.status).toBe(200);
+            expect(reply.payload.error).toMatchObject({ code: -32603, message: 'Internal Error' });
+            expect(reply.payload.error?.data?.['requestId']).toEqual(expect.stringMatching(/\S+/));
+            expect(JSON.stringify(reply.payload)).not.toContain('SECRET');
+        } finally {
+            Reflect.set(bridge, 'listTools', original);
+        }
+    });
+
+    it('propagates policy projection failures safely at ingress instead of hiding tools', async () => {
         logs.lines.length = 0;
         const reply = await post(request('tools/list'), 'list-bug');
-        expect(reply.response.status).toBe(200);
+        expect(reply.response.status).toBe(500);
         expect(reply.payload.error).toMatchObject({ code: -32_603, message: 'Internal Error' });
         expect(JSON.stringify(reply.payload)).not.toContain('SECRET');
         expect(reply.payload.error?.data?.['requestId']).toEqual(expect.stringMatching(/\S+/));
         const lines = logs.fromLogger('LogApiCall', 'SECRET-internal-detail');
         expect(lines).toHaveLength(1);
-        expect(lines[0].level).toBe('error');
-        expect(lines[0].message).toContain('McpEndpoint.tools/list');
-        // #1055: plus the MCP boundary's one line with the stack and the requestId the caller got.
-        const boundary = logs.fromLogger('WpMcpServer', 'SECRET-internal-detail');
-        expect(boundary).toHaveLength(1);
-        expect(boundary[0].level).toBe('error');
-        expect(boundary[0].message).toContain('MCP tools/list failed with an implementation error');
-        expect(boundary[0].message).toContain(
-            `requestId=${String(reply.payload.error?.data?.['requestId'])}`,
-        );
-        expect(boundary[0].error?.stack).toEqual(expect.stringMatching(/\S/));
-        expect(secretLines()).toHaveLength(2);
+        expect(lines[0].message).toContain('McpEndpoint.serve');
     });
 
     it('never leaks a raw tools/call exception; logs the filter line and ONE stack line with the requestId', async () => {

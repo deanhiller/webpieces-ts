@@ -1,3 +1,4 @@
+import { InvocationAuthentication } from './InvocationAuthentication';
 import { RouteMetadata } from '@webpieces/core-util';
 
 /**
@@ -51,6 +52,7 @@ export class MethodMeta {
         public readonly requestArgs: readonly unknown[] = requestDto === undefined
             ? []
             : [requestDto],
+        public readonly invocationAuthentication?: InvocationAuthentication,
     ) {
         this.routeMeta = routeMeta;
         this.requestDto = requestDto;

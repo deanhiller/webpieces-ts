@@ -33,6 +33,8 @@ import {
     NodeProxyClient,
 } from '@webpieces/http-client-node'; // eslint-disable-line @webpieces/enforce-architecture -- test-only end-to-end proof that the topology-neutral MCP binding accepts a real generated Node client
 import {
+    AuthenticatedCaller,
+    AuthenticatedCallerContext,
     FilterDefinition,
     JWT_HOOK,
     OIDC_HOOK,
@@ -341,18 +343,20 @@ describe('McpApiBinding.remote generated Node client integration', () => {
             'remote-call-1',
             tool.name,
             credential.subject,
-            credential.listingRoles,
+            credential.principalRoles,
             new AbortController().signal,
         );
-        const value = await RequestContext.run(async () =>
-            new McpApiDispatcher().call(
+        const value = await RequestContext.run(async () => {
+            new AuthenticatedCallerContext().publish(credential.caller);
+            return new McpApiDispatcher().call(
                 tool,
                 new RemoteRequest('hello'),
                 credential,
                 invocation,
-                LOCAL_ENDPOINT_JWT,
-            ),
-        );
+                new TestJwtHook(),
+                async () => LOCAL_ENDPOINT_JWT,
+            );
+        });
 
         expect(value).toEqual(
             new RemoteResponse('verified-user-7', 'reader,writer', 'remote:hello'),
@@ -504,11 +508,14 @@ function verifiedCredential(): VerifiedMcpCredential {
         now + 60,
         ['tools'],
         now,
-        ['reader', 'writer'],
-        [
-            new ContextTuple(REMOTE_USER, 'verified-user-7'),
-            new ContextTuple(REMOTE_ROLES, 'reader,writer'),
-        ],
+        new AuthenticatedCaller(
+            'mcp-user-7',
+            ['reader', 'writer'],
+            [
+                new ContextTuple(REMOTE_USER, 'verified-user-7'),
+                new ContextTuple(REMOTE_ROLES, 'reader,writer'),
+            ],
+        ),
     );
 }
 

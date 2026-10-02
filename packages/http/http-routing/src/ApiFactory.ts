@@ -1,3 +1,4 @@
+import { InvocationAuthentication } from './InvocationAuthentication';
 import { ApiClient } from './ApiClient';
 
 /**
@@ -17,6 +18,13 @@ import { ApiClient } from './ApiClient';
  */
 export interface ApiFactory {
     apiClients(): ApiClient[];
+
+    /** Internal transports supply an immutable credential to the ordinary route chain. */
+    // webpieces-disable no-any-unknown -- abstract API constructor signature
+    createInvocationApiClient<T>(
+        apiPrototype: abstract new (...args: any[]) => T,
+        authentication: InvocationAuthentication,
+    ): T;
 
     // webpieces-disable no-any-unknown -- abstract constructor signature requires any[] args
     createApiClient<T>(apiPrototype: abstract new (...args: any[]) => T): T;

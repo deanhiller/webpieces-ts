@@ -85,6 +85,8 @@ export { HttpRequest, RawHttpRequest, RawRequest } from '@webpieces/core-context
 // here: they moved to @webpieces/core-util so the outbound client chain is the SAME abstraction
 // rather than a second spelling of it. Import them from '@webpieces/core-util'.
 export { WpResponse } from './WpResponse';
+export { AuthenticatedCallerContext } from './AuthenticatedCallerContext';
+export { InvocationAuthentication } from './InvocationAuthentication';
 export { MethodMeta } from './MethodMeta';
 export { RouteHandler } from './RouteHandler';
 

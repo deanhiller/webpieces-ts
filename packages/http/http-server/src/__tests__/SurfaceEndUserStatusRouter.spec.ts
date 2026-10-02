@@ -59,6 +59,10 @@ class RefusingApiFactory implements ApiFactory {
         return [new ApiClient(RefusingApi, { report: refuse }, routes)];
     }
 
+    createInvocationApiClient<T>(): T {
+        throw new Error('Invocation authentication is not used by this fixture');
+    }
+
     createApiClient<T>(): T {
         throw new Error('not used by these tests');
     }

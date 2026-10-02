@@ -2,20 +2,20 @@
     "hooks": {
         "PreToolUse": [
             {
-                "matcher": "Write|Edit|MultiEdit|Bash|Read",
-                "hooks": [
-                    {
-                        "type": "command",
-                        "command": "sh \"$CLAUDE_PROJECT_DIR/.claude/webpieces/ai-hook.sh\" wp-ai-guards-hook"
-                    }
-                ]
-            },
-            {
                 "matcher": "Write|Edit|MultiEdit",
                 "hooks": [
                     {
                         "type": "command",
                         "command": "sh \"$CLAUDE_PROJECT_DIR/.claude/webpieces/ai-hook.sh\" wp-ai-rules-hook"
+                    }
+                ]
+            },
+            {
+                "matcher": "Write|Edit|MultiEdit|Bash|Read",
+                "hooks": [
+                    {
+                        "type": "command",
+                        "command": "sh \"$CLAUDE_PROJECT_DIR/.claude/webpieces/ai-hook.sh\" wp-ai-guards-hook"
                     }
                 ]
             }

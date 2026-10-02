@@ -1,5 +1,4 @@
-import { JwtHook } from '@webpieces/http-routing';
-import { ContextTuple } from '@webpieces/core-util';
+import { AuthenticatedCaller, JwtHook } from '@webpieces/http-routing';
 
 export const MAX_MCP_ACCESS_TOKEN_LIFETIME_SECONDS = 30 * 24 * 60 * 60;
 export const MAX_MCP_ACCOUNT_VALIDATION_AGE_SECONDS = 60 * 60;
@@ -31,7 +30,7 @@ export class MintedMcpAccessToken {
 }
 
 /**
- * Fresh, authoritative security facts resolved at the MCP resource boundary. Implementations must
+ * Fresh, authoritative security facts and an explicit application-owned caller mapping resolved at the MCP resource boundary. Implementations must
  * verify issuer, exact resource/audience, expiry, token type/version, key/algorithm policy, and
  * current account state. Opaque access tokens are fully supported.
  */
@@ -45,11 +44,14 @@ export class VerifiedMcpCredential {
         public readonly scopes: readonly string[],
         /** When current enabled/revoked state and roles were read from the authoritative source. */
         public readonly accountValidatedAtEpochSeconds: number,
-        /** Advisory tools/list filtering only. Endpoint authorization always runs again. */
-        public readonly listingRoles: readonly string[] = [],
-        /** Trusted delegated identity derived only by the access-token authority. */
-        public readonly trustedContext: readonly ContextTuple[] = [],
+        /** Application mapping of freshly verified account facts, shared with endpoint JWT issuance. */
+        public readonly caller: AuthenticatedCaller,
     ) {}
+
+    /** The canonical application's roles; there is no independent listing-role snapshot. */
+    get principalRoles(): readonly string[] {
+        return this.caller.roles;
+    }
 }
 
 /**
@@ -179,7 +181,7 @@ export class WpMcpServerConfig<TGrant, TMintRequest> {
         return this;
     }
 
-    /** REQUIRED. The `JwtHook` minting the short-lived per-endpoint JWT for local bindings. */
+    /** REQUIRED. The application policy for MCP tools and short-lived endpoint JWT issuer. */
     setEndpointJwtAuthority(authority: JwtHook<TMintRequest>): this {
         this.endpointJwtAuthorityValue = this.requirePresent(authority, 'setEndpointJwtAuthority');
         return this;

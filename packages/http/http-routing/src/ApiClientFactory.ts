@@ -1,3 +1,4 @@
+import { InvocationAuthentication } from './InvocationAuthentication';
 import { inject } from 'inversify';
 import {
     ApiErrorCodec,
@@ -75,6 +76,15 @@ export class ApiClientFactory {
         return this.buildProxy(apiPrototype) as T;
     }
 
+    /** In-process transport bridge; each proxy captures its own credential without ambient mutation. */
+    // webpieces-disable no-any-unknown -- abstract API constructor signature
+    createInvocationApiClient<T>(
+        apiPrototype: abstract new (...args: any[]) => T,
+        authentication: InvocationAuthentication,
+    ): T {
+        return this.buildProxy(apiPrototype, undefined, authentication) as T;
+    }
+
     /**
      * Reify every registered API as an {@link ApiClient} — the contract + its proxy (the
      * createApiClient object). The transport reads the api's decorators to bind each endpoint to
@@ -107,6 +117,7 @@ export class ApiClientFactory {
         // webpieces-disable no-any-unknown -- accepts any ClassType / abstract-constructor API prototype
         apiPrototype: any,
         registeredRoutes?: readonly RouteMetadata[],
+        authentication?: InvocationAuthentication,
     ): ApiClientProxy {
         const endpoints = getEndpoints(apiPrototype) || {};
         const proxy: ApiClientProxy = {};
@@ -135,7 +146,7 @@ export class ApiClientFactory {
             proxy[methodName] = async (...args: unknown[]): Promise<unknown> => {
                 requireActiveContext(routeMeta);
                 if (routeMeta.streaming) {
-                    return this.runStreamingMethod(routeMeta, args, service);
+                    return this.runStreamingMethod(routeMeta, args, service, authentication);
                 }
                 // Run the shared mapping even in-process. It validates the exact path/query/body
                 // shape production clients use, then the controller receives the original typed args.
@@ -150,6 +161,7 @@ export class ApiClientFactory {
                     mapped.body === undefined ? args : mapped.body,
                     args,
                     service,
+                    authentication,
                 );
             };
         }
@@ -169,15 +181,16 @@ export class ApiClientFactory {
         requestArgs: readonly unknown[],
         // webpieces-disable no-any-unknown -- filter service carries arbitrary contract responses
         service: Service<MethodMeta, WpResponse<unknown>>,
+        authentication?: InvocationAuthentication,
         // webpieces-disable no-any-unknown -- one of the three streaming contract return shapes
     ): Promise<unknown> {
         const streaming = routeMeta.streaming;
         if (!streaming) throw new Error('Streaming route metadata is required.');
         if (streaming.direction === StreamDirection.RESPONSE) {
-            return this.runResponseStreamingMethod(routeMeta, requestArgs, service);
+            return this.runResponseStreamingMethod(routeMeta, requestArgs, service, authentication);
         }
         if (streaming.direction === StreamDirection.REQUEST) {
-            return this.runRequestStreamingMethod(routeMeta, requestArgs, service);
+            return this.runRequestStreamingMethod(routeMeta, requestArgs, service, authentication);
         }
         if (streaming.initialRequestSchema) {
             new StreamEventValidator().validate(
@@ -194,7 +207,7 @@ export class ApiClientFactory {
         // A rejected invocation is the open/handshake failure. It deliberately escapes unchanged,
         // matching unary in-process calls and allowing an HTTP adapter to apply its normal mapper.
         const responseWrapper = await service.invoke(
-            new MethodMeta(routeMeta, requestArgs[0], undefined, [requestArgs[0], serverResponse]),
+            new MethodMeta(routeMeta, requestArgs[0], undefined, [requestArgs[0], serverResponse], authentication),
         );
         const serverRequest = this.requireRequestStream(routeMeta, responseWrapper.response);
         const initialResponse = serverRequest.getInitialResponse();
@@ -224,6 +237,7 @@ export class ApiClientFactory {
         requestArgs: readonly unknown[],
         // webpieces-disable no-any-unknown -- filter service carries arbitrary contract responses
         service: Service<MethodMeta, WpResponse<unknown>>,
+        authentication?: InvocationAuthentication,
     ): Promise<RequestStream<DtoValue, DtoValue>> {
         const streaming = routeMeta.streaming!;
         const validator = new StreamEventValidator();
@@ -231,7 +245,7 @@ export class ApiClientFactory {
             validator.validate(streaming.initialRequestSchema, requestArgs[0], 'request');
         }
         const wrapper = await service.invoke(
-            new MethodMeta(routeMeta, requestArgs[0], undefined, [requestArgs[0]]),
+            new MethodMeta(routeMeta, requestArgs[0], undefined, [requestArgs[0]], authentication),
         );
         const serverRequest = this.requireRequestStream(routeMeta, wrapper.response);
         const initialResponse = serverRequest.getInitialResponse();
@@ -258,6 +272,7 @@ export class ApiClientFactory {
         requestArgs: readonly unknown[],
         // webpieces-disable no-any-unknown -- filter service carries arbitrary contract responses
         service: Service<MethodMeta, WpResponse<unknown>>,
+        authentication?: InvocationAuthentication,
         // webpieces-disable no-any-unknown -- response initial DTO is contract-erased
     ): Promise<unknown> {
         if (requestArgs.length !== 2) {
@@ -274,7 +289,7 @@ export class ApiClientFactory {
         const exchange = new InProcessStreamExchange(clientResponse, streaming.responseSchema!);
         const serverResponse = exchange.response;
         const wrapper = await service.invoke(
-            new MethodMeta(routeMeta, requestArgs[0], undefined, [requestArgs[0], serverResponse]),
+            new MethodMeta(routeMeta, requestArgs[0], undefined, [requestArgs[0], serverResponse], authentication),
         );
         if (streaming.initialResponseSchema) {
             validator.validate(streaming.initialResponseSchema, wrapper.response, 'response');
@@ -349,10 +364,11 @@ export class ApiClientFactory {
         requestArgs: unknown[],
         // webpieces-disable no-any-unknown -- filter service carries arbitrary contract response DTOs
         service: Service<MethodMeta, WpResponse<unknown>>,
+        authentication?: InvocationAuthentication,
         // webpieces-disable no-any-unknown -- API return type is erased at the routing proxy boundary
     ): Promise<unknown> {
         const responseWrapper = await service.invoke(
-            new MethodMeta(routeMeta, requestDto, undefined, requestArgs),
+            new MethodMeta(routeMeta, requestDto, undefined, requestArgs, authentication),
         );
         return responseWrapper.response;
     }
