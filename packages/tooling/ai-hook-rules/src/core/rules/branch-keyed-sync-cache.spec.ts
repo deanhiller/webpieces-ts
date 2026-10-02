@@ -2,11 +2,12 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
 
-import { MainSyncFileStore, MainSyncStatus, MainSyncStatusFile, BranchStateGuardConfig, specTempDirs } from '@webpieces/rules-config';
+import { MainSyncFileStore, MainSyncStatus, MainSyncStatusFile } from '@webpieces/repo-workflow-core';
+import { BranchStateGuardConfig, specTempDirs } from '@webpieces/rules-config';
 
 import { BashContext, FileContext } from '../types';
 
-type RulesConfigModule = typeof import('@webpieces/rules-config');
+type RulesConfigModule = typeof import('@webpieces/repo-workflow-core');
 
 /**
  * THE regression this change exists for.
@@ -42,7 +43,7 @@ vi.mock('child_process', () => ({
 
 // readMainSyncStatus goes through the REAL file parse + branch lookup, over a REAL document on disk —
 // only the path resolution is replaced. That keeps the v1 adapter and the miss path under test.
-vi.mock('@webpieces/rules-config', async (importActual: () => Promise<RulesConfigModule>) => {
+vi.mock('@webpieces/repo-workflow-core', async (importActual: () => Promise<RulesConfigModule>) => {
     const actual = await importActual();
     const store = new actual.MainSyncFileStore();
     return {

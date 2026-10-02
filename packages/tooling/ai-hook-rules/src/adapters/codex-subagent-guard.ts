@@ -1,6 +1,8 @@
 import * as path from 'path';
 
-import { Option, PR_REVIEW_DIR, RuleFailError, WEBPIECES_TMP_DIR, WRITE_REVIEW_BIN, renderRuleFailForAi } from '@webpieces/rules-config';
+import { Option, RuleFailError, renderRuleFailForAi } from '@webpieces/rules-config';
+import { PR_REVIEW_DIR, WEBPIECES_TMP_DIR } from '@webpieces/tooling-common';
+import { WRITE_REVIEW_BIN } from '@webpieces/repo-workflow-core';
 
 import { AgentHookEvent, FileOperation } from '@webpieces/hook-runtime';
 import { BlockedResult } from '../core/types';

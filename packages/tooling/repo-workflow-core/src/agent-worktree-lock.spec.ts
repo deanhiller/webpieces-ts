@@ -6,7 +6,8 @@ import { join } from 'path';
 
 import { AgentWorktreeLockReader } from './agent-worktree-lock';
 import { branchMutationLogPath } from './branch-mutation-log';
-import { DeletableWorktree, MergedBranchesService } from './merged-branches';
+import { DeletableWorktree } from './merged-branch-verdicts';
+import { MergedBranchesService } from './merged-branches';
 import { WorktreeReaper } from './worktree-reaper';
 import { WorktreeService } from './worktrees';
 

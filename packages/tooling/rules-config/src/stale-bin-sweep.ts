@@ -1,6 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import { toError } from './to-error';
+import { toError } from '@webpieces/tooling-common/to-error';
 
 // ---------------------------------------------------------------------------
 // SWEEP DANGLING `node_modules/.bin/wp-*` SYMLINKS.

@@ -6,7 +6,7 @@ import {
     BuildsLog, BuildTicket, BuildTermination, BUILDS_LOG_GENERATIONS, BUILD_START,
     MAX_BUILDS_LOG_BYTES, MAX_ROW_BYTES,
 } from './builds-log';
-import { DotWebpieces } from './state-dir';
+import { DotWebpieces } from '@webpieces/tooling-common';
 import { specTempDirs } from './spec-temp-dirs';
 
 const dirs: string[] = [];

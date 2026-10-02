@@ -2,7 +2,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 
 import { ConfigFile, CONFIG_PARSE_ATTEMPTS } from './config-file';
-import { InformAiError } from './inform-ai-error';
+import { InformAiError } from '@webpieces/tooling-common';
 import { specTempDirs } from './spec-temp-dirs';
 
 /**

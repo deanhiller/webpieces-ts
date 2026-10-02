@@ -1,10 +1,8 @@
 import { execSync, spawnSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
-import {
-    MERGE_EXPLANATION_FILE, stampCleanMainSyncStatus, CliExitError,
-    MutationVerb, BranchMutationEvent, logBranchMutation,
-} from '@webpieces/rules-config';
+import { MERGE_EXPLANATION_FILE, CliExitError } from '@webpieces/rules-config';
+import { stampCleanMainSyncStatus, MutationVerb, BranchMutationEvent, logBranchMutation } from '@webpieces/repo-workflow-core';
 import { injectable, bindingScopeValues } from 'inversify';
 import { BranchNaming } from './branch-naming';
 import { CleanTmp } from './cleanTmp';

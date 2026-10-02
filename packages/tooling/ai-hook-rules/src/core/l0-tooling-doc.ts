@@ -1,4 +1,5 @@
-import { CONFIG_FILENAME, LOGS_STATE_DIR, WEBPIECES_TMP_DIR, WORKTREE_STATE_DIR } from '@webpieces/rules-config';
+import { CONFIG_FILENAME } from '@webpieces/rules-config';
+import { LOGS_STATE_DIR, WEBPIECES_TMP_DIR, WORKTREE_STATE_DIR } from '@webpieces/tooling-common';
 
 import {
     L0AllowEntry, L0_ALLOWLIST, RESTORE_SHIM_CMD, SHIM_LOG_FIELDS, SHIM_LOG_VERDICTS, ShimLogField,

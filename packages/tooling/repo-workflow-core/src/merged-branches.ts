@@ -2,9 +2,9 @@ import { spawnSync } from 'child_process';
 import * as fs from 'fs';
 import { injectable, bindingScopeValues } from 'inversify';
 
-import { AtomicFile } from './atomic-file';
-import { DotWebpieces, dotWebpieces } from './state-dir';
-import { toError } from './to-error';
+import { AtomicFile } from '@webpieces/tooling-common';
+import { DotWebpieces, dotWebpieces } from '@webpieces/tooling-common';
+import { toError } from '@webpieces/tooling-common/to-error';
 import { Worktree, WorktreeService } from './worktrees';
 import { LockDecision, WorktreeLockVerdicts } from './worktree-lock-verdicts';
 import {

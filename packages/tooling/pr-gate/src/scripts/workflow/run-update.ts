@@ -1,4 +1,4 @@
-import { MutationVerb, BranchMutationEvent, logBranchMutation } from '@webpieces/rules-config';
+import { MutationVerb, BranchMutationEvent, logBranchMutation } from '@webpieces/repo-workflow-core';
 import { injectable, bindingScopeValues } from 'inversify';
 import { AiBranchName } from './git-readAiBranchName';
 import { MergeState } from './merge-state';

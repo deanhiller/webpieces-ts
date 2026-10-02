@@ -12,7 +12,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { injectable, bindingScopeValues } from 'inversify';
 
-import { toError } from './to-error';
+import { toError } from '@webpieces/tooling-common/to-error';
 
 /** A git diff range: the base ref to compare against and an optional head (else the working tree). */
 export class DiffRange {

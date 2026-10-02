@@ -2,7 +2,8 @@ import { describe, it, expect } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
 
-import { LOGS_STATE_DIR, specTempDirs } from '@webpieces/rules-config';
+import { LOGS_STATE_DIR } from '@webpieces/tooling-common';
+import { specTempDirs } from '@webpieces/rules-config';
 
 import { InvocationLog, logGuardDecision, logL1Decision, GuardDecision, MatrixRef , MATRIX_L2_UNROWED } from './decision-log';
 import { logSyncEvent, SyncLogEvent, refresherChildStdioPath } from './main-sync-log';

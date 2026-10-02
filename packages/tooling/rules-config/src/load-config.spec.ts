@@ -4,7 +4,7 @@ import * as path from 'path';
 import { CONFIG_FILENAME } from './config-file';
 import { loadAndValidate } from './load-config';
 import { RETIRED_CONFIG_KEYS, RETIRED_SCOPE_RULE, RetiredConfigKey } from './retired-config-keys';
-import { toError } from './to-error';
+import { toError } from '@webpieces/tooling-common/to-error';
 import { defaultRules } from './default-rules';
 import { RULE_SCHEMAS } from './rule-schemas';
 import { HOOK_GUARD_NAMES as SHIPPED_HOOK_GUARD_NAMES } from './sections';

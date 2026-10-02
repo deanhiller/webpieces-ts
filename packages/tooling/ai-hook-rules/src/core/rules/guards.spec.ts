@@ -1,16 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
-import {
-    WEBPIECES_TMP_DIR,
-    MERGE_INFO_DIR,
-    MERGE_IN_PROGRESS_FILE,
-    PrLifecycleGuardConfig,
-    DEFAULT_UPSERT_PR_COMMAND,
-    DEFAULT_MERGE_COMPLETE_COMMAND,
-    allRuleNames,
-    specTempDirs,
-} from '@webpieces/rules-config';
+import { WEBPIECES_TMP_DIR } from '@webpieces/tooling-common';
+import { MERGE_INFO_DIR, MERGE_IN_PROGRESS_FILE, PrLifecycleGuardConfig, DEFAULT_UPSERT_PR_COMMAND, DEFAULT_MERGE_COMPLETE_COMMAND, allRuleNames, specTempDirs } from '@webpieces/rules-config';
 import { BashContext } from '../types';
 import { PrCreationOrPushGuardRule } from './pr-creation-or-push-guard';
 import { MergeInProgressGuardRule } from './merge-in-progress-guard';

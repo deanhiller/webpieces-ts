@@ -2,7 +2,8 @@ import { describe, it, expect } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
 
-import { writeMainSyncStatus, MainSyncStatus, CLAUDE_PROJECT_DIR_ENV, CLAUDE_PROJECT_DIR_UNSET, specTempDirs } from '@webpieces/rules-config';
+import { writeMainSyncStatus, MainSyncStatus } from '@webpieces/repo-workflow-core';
+import { CLAUDE_PROJECT_DIR_ENV, CLAUDE_PROJECT_DIR_UNSET, specTempDirs } from '@webpieces/rules-config';
 
 import { InvocationLog, logGuardDecision, GuardDecision, Verdict , MATRIX_L2_UNROWED } from './decision-log';
 

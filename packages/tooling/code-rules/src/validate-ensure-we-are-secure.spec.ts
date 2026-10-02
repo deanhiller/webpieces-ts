@@ -8,7 +8,8 @@ import {
     securityContractsError,
     SecurityContractViolation,
 } from './validate-ensure-we-are-secure';
-import { InformAiError, RuleFailError, specTempDirs } from '@webpieces/rules-config';
+import { InformAiError } from '@webpieces/tooling-common';
+import { RuleFailError, specTempDirs } from '@webpieces/rules-config';
 
 let root: string;
 

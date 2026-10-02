@@ -2,7 +2,8 @@ import { execSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 
-import { BranchStateGuardConfig, BRANCH_STATE_GUARD_KEY, DEFAULT_HANG_TIMEOUT_MINUTES, DEFAULT_MAX_COMMITS_BEHIND, readMainSyncStatus, MainSyncStatus, Option } from '@webpieces/rules-config';
+import { BranchStateGuardConfig, BRANCH_STATE_GUARD_KEY, DEFAULT_MAX_COMMITS_BEHIND, Option } from '@webpieces/rules-config';
+import { DEFAULT_HANG_TIMEOUT_MINUTES, readMainSyncStatus, MainSyncStatus } from '@webpieces/repo-workflow-core';
 
 import type { FileContext, Violation } from '../types';
 import { Violation as V } from '../types';

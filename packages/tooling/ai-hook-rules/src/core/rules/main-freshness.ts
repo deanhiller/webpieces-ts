@@ -1,6 +1,6 @@
 import { spawnSync } from 'child_process';
 
-import { MainSyncStatus } from '@webpieces/rules-config';
+import { MainSyncStatus } from '@webpieces/repo-workflow-core';
 
 /**
  * The two primitives every "is local `main` stale?" ladder is built out of: the ANCESTRY test, and the

@@ -1,7 +1,5 @@
-import {
-    loadAndValidate, WebpiecesRulesConfig, BranchStateGuardConfig, BRANCH_STATE_GUARD_KEY,
-    DEFAULT_HANG_TIMEOUT_MINUTES,
-} from '@webpieces/rules-config';
+import { loadAndValidate, WebpiecesRulesConfig, BranchStateGuardConfig, BRANCH_STATE_GUARD_KEY } from '@webpieces/rules-config';
+import { DEFAULT_HANG_TIMEOUT_MINUTES } from '@webpieces/repo-workflow-core';
 
 import { toError } from './to-error';
 import { triggerMainSyncRefresh } from './main-sync-refresh';

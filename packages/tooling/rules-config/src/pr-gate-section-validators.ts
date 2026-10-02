@@ -1,9 +1,4 @@
-import {
-    BRANCH_RETENTIONS,
-    BRANCH_RETENTION_ARCHIVE_TAG,
-    BRANCH_RETENTION_DELETE,
-    BRANCH_RETENTION_KEEP,
-} from './branch-archiver';
+import { BRANCH_RETENTIONS, BRANCH_RETENTION_ARCHIVE_TAG, BRANCH_RETENTION_DELETE, BRANCH_RETENTION_KEEP } from '@webpieces/repo-workflow-core';
 import { ChecklistValidator } from './checklist-validator';
 import {
     ChecklistDefinition, DEFAULT_REVIEWER_AGENT_NAME, RawChecklistItem, REVIEWER_AGENTS_PLACEHOLDER,

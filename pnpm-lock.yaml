@@ -480,9 +480,15 @@ importers:
       '@webpieces/hook-runtime':
         specifier: workspace:*
         version: link:../hook-runtime
+      '@webpieces/repo-workflow-core':
+        specifier: workspace:*
+        version: link:../repo-workflow-core
       '@webpieces/rules-config':
         specifier: workspace:*
         version: link:../rules-config
+      '@webpieces/tooling-common':
+        specifier: workspace:*
+        version: link:../tooling-common
       inversify:
         specifier: 7.10.4
         version: 7.10.4(reflect-metadata@0.2.2)
@@ -495,9 +501,15 @@ importers:
       '@inversifyjs/binding-decorators':
         specifier: 1.1.5
         version: 1.1.5(inversify@7.10.4(reflect-metadata@0.2.2))(reflect-metadata@0.2.2)
+      '@webpieces/repo-workflow-core':
+        specifier: workspace:*
+        version: link:../repo-workflow-core
       '@webpieces/rules-config':
         specifier: workspace:*
         version: link:../rules-config
+      '@webpieces/tooling-common':
+        specifier: workspace:*
+        version: link:../tooling-common
       inversify:
         specifier: 7.10.4
         version: 7.10.4(reflect-metadata@0.2.2)
@@ -549,9 +561,15 @@ importers:
       '@webpieces/pr-gate':
         specifier: workspace:*
         version: link:../pr-gate
+      '@webpieces/repo-workflow-core':
+        specifier: workspace:*
+        version: link:../repo-workflow-core
       '@webpieces/rules-config':
         specifier: workspace:*
         version: link:../rules-config
+      '@webpieces/tooling-common':
+        specifier: workspace:*
+        version: link:../tooling-common
       madge:
         specifier: 8.0.0
         version: 8.0.0(typescript@5.9.3)
@@ -564,9 +582,27 @@ importers:
       '@webpieces/hook-runtime':
         specifier: workspace:*
         version: link:../hook-runtime
+      '@webpieces/repo-workflow-core':
+        specifier: workspace:*
+        version: link:../repo-workflow-core
       '@webpieces/rules-config':
         specifier: workspace:*
         version: link:../rules-config
+      '@webpieces/tooling-common':
+        specifier: workspace:*
+        version: link:../tooling-common
+      inversify:
+        specifier: 7.10.4
+        version: 7.10.4(reflect-metadata@0.2.2)
+      reflect-metadata:
+        specifier: 0.2.2
+        version: 0.2.2
+
+  packages/tooling/repo-workflow-core:
+    dependencies:
+      '@webpieces/tooling-common':
+        specifier: workspace:*
+        version: link:../tooling-common
       inversify:
         specifier: 7.10.4
         version: 7.10.4(reflect-metadata@0.2.2)
@@ -579,12 +615,27 @@ importers:
       '@inversifyjs/binding-decorators':
         specifier: 1.1.5
         version: 1.1.5(inversify@7.10.4(reflect-metadata@0.2.2))(reflect-metadata@0.2.2)
+      '@webpieces/repo-workflow-core':
+        specifier: workspace:*
+        version: link:../repo-workflow-core
+      '@webpieces/tooling-common':
+        specifier: workspace:*
+        version: link:../tooling-common
       inversify:
         specifier: 7.10.4
         version: 7.10.4(reflect-metadata@0.2.2)
       minimatch:
         specifier: 10.0.1
         version: 10.0.1
+      reflect-metadata:
+        specifier: 0.2.2
+        version: 0.2.2
+
+  packages/tooling/tooling-common:
+    dependencies:
+      inversify:
+        specifier: 7.10.4
+        version: 7.10.4(reflect-metadata@0.2.2)
       reflect-metadata:
         specifier: 0.2.2
         version: 0.2.2

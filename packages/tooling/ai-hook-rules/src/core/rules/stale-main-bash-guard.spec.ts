@@ -1,10 +1,11 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 
-import { MainSyncStatus, BranchStateGuardConfig } from '@webpieces/rules-config';
+import { MainSyncStatus } from '@webpieces/repo-workflow-core';
+import { BranchStateGuardConfig } from '@webpieces/rules-config';
 
 import { BashContext } from '../types';
 
-type RulesConfigModule = typeof import('@webpieces/rules-config');
+type RulesConfigModule = typeof import('@webpieces/repo-workflow-core');
 
 // Mutable state the mocks read. vi.hoisted so the vi.mock factories can close over it.
 //   branch        — what `git rev-parse --abbrev-ref HEAD` reports
@@ -34,7 +35,7 @@ vi.mock('child_process', () => ({
     spawnSync: (): { status: number } => ({ status: state.containsExit }),
 }));
 
-vi.mock('@webpieces/rules-config', async (importActual: () => Promise<RulesConfigModule>) => {
+vi.mock('@webpieces/repo-workflow-core', async (importActual: () => Promise<RulesConfigModule>) => {
     const actual = await importActual();
     return {
         ...actual,

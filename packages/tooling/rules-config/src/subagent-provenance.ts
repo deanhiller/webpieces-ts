@@ -2,10 +2,10 @@ import { spawnSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 import { injectable, bindingScopeValues } from 'inversify';
-import { claudeConfigDir } from './claude-config-dir';
-import { toError } from './to-error';
-import { dotWebpieces } from './state-dir';
-import { reviewIdentityStamps } from './review-identity-stamp';
+import { claudeConfigDir } from '@webpieces/tooling-common';
+import { toError } from '@webpieces/tooling-common/to-error';
+import { dotWebpieces } from '@webpieces/tooling-common';
+import { reviewIdentityStamps } from '@webpieces/repo-workflow-core';
 
 // Outcome of a provenance check.
 export const PROVENANCE_OK = 'ok';           // a matching reviewer subagent demonstrably ran on this branch

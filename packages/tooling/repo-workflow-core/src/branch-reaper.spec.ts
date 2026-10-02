@@ -96,7 +96,7 @@ vi.mock('fs', () => ({
 
 import { BRANCH_RETENTION_DELETE, BRANCH_RETENTION_KEEP } from './branch-archiver';
 import { BranchReaper, ReapedBranch } from './branch-reaper';
-import { DeletableBranch } from './merged-branches';
+import { DeletableBranch } from './merged-branch-verdicts';
 
 const reaper = new BranchReaper();
 

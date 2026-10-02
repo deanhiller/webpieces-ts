@@ -1,6 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import { ReviewJsonService, toError } from '@webpieces/rules-config';
+import { ReviewJsonService } from '@webpieces/rules-config';
+import { toError } from '@webpieces/tooling-common/to-error';
 import { injectable, bindingScopeValues } from 'inversify';
 
 export const RECEIPT_FILE = 'review-stage.json';

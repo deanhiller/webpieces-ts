@@ -1,7 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import {
-    BranchIdentity, ChecklistInstructionsService, RequiredChecklist, ReviewerAgentPolicy, ReviewerBriefing, ReviewerInstructionsService, ReviewJsonService,
-} from '@webpieces/rules-config';
+import { BranchIdentity } from '@webpieces/repo-workflow-core';
+import { ChecklistInstructionsService, RequiredChecklist, ReviewerAgentPolicy, ReviewerBriefing, ReviewerInstructionsService, ReviewJsonService } from '@webpieces/rules-config';
 import { ChecklistNotice } from './checklist-notice';
 import { ReviewReport, ReviewReportInput } from './review-report';
 import { ReviewRoundText } from './review-round-text';

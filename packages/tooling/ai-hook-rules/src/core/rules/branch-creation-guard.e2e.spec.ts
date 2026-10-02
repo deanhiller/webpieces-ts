@@ -3,11 +3,8 @@ import { execSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 
-import {
-    BranchCreationGuardConfig,
-    DeletableWorktree,
-    MergedBranchesService,
-    WorktreeService, specTempDirs } from '@webpieces/rules-config';
+import { BranchCreationGuardConfig, specTempDirs } from '@webpieces/rules-config';
+import { DeletableWorktree, MergedBranchesService, WorktreeService } from '@webpieces/repo-workflow-core';
 
 import { BashContext } from '../types';
 import { BranchCreationGuardRule } from './branch-creation-guard';

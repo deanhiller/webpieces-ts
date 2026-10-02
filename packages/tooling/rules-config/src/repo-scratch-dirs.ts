@@ -1,7 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { injectable, bindingScopeValues } from 'inversify';
-import { DotWebpieces, dotWebpieces } from './state-dir';
+import { DotWebpieces, dotWebpieces } from '@webpieces/tooling-common';
 
 // ---------------------------------------------------------------------------
 // SHORT-LIVED RUNTIME SCRATCH FILES BELONG IN `.webpieces/`, NOT IN `$TMPDIR`.

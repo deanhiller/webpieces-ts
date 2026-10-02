@@ -1,12 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import {
-    DotWebpieces,
-    dotWebpieces,
-    MERGE_INFO_DIR,
-    MERGE_IN_PROGRESS_FILE,
-    MERGE_EXPLANATION_FILE,
-} from '@webpieces/rules-config';
+import { DotWebpieces, dotWebpieces } from '@webpieces/tooling-common';
+import { MERGE_INFO_DIR, MERGE_IN_PROGRESS_FILE, MERGE_EXPLANATION_FILE } from '@webpieces/rules-config';
 import { injectable, bindingScopeValues } from 'inversify';
 
 // Proof-obligation marker written when a 3-point squash-merge hits conflicts. Its mere

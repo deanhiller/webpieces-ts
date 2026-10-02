@@ -2,15 +2,15 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { injectable, bindingScopeValues } from 'inversify';
 
-import { DotWebpieces, dotWebpieces } from './state-dir';
-import { toError } from './to-error';
+import { DotWebpieces, dotWebpieces } from '@webpieces/tooling-common';
+import { toError } from '@webpieces/tooling-common/to-error';
 
 // The BRANCH-MUTATION log — an audit trail for every workflow verb that RENAMES or MOVES branches.
 // Records START / each phase boundary / END-with-outcome so the next agent (or a human) can
 // reconstruct what the tooling did to the branches. Writes to `.webpieces/logs/branch-mutations.log`
 // (in a linked worktree: `.webpieces/worktrees/<name>/logs/`) — see LOGS_STATE_DIR for why every
 // webpieces log lives under `logs/` and no longer beside the non-log state in `hooks/`.
-// Lives in rules-config (the shared dep of pr-gate) so the pr-gate scripts can call it directly.
+// Lives in repo-workflow-core (shared by guards and pr-gate) so the pr-gate scripts can call it directly.
 
 const LOG_FILE = 'branch-mutations.log';
 const LOG_FILE_PREV = 'branch-mutations.1.log';

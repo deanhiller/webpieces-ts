@@ -1,4 +1,5 @@
-import { InformAiError, ReviewIdentityStampService, WRITE_REVIEW_BIN } from '@webpieces/rules-config';
+import { InformAiError } from '@webpieces/tooling-common';
+import { ReviewIdentityStampService, WRITE_REVIEW_BIN } from '@webpieces/repo-workflow-core';
 import { injectable, bindingScopeValues } from 'inversify';
 import { HARNESS_TERMINAL } from './verdict-provenance';
 

@@ -4,10 +4,10 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 
-import { DotWebpieces, WORKTREE_STATE_DIR } from './state-dir';
-import { MergedBranchesService } from './merged-branches';
-import { MainSyncStatusService } from './main-sync-status';
-import { BranchMutationLog, BranchMutationEvent } from './branch-mutation-log';
+import { DotWebpieces, WORKTREE_STATE_DIR } from '@webpieces/tooling-common';
+import { MergedBranchesService } from '@webpieces/repo-workflow-core';
+import { MainSyncStatusService } from '@webpieces/repo-workflow-core';
+import { BranchMutationLog, BranchMutationEvent } from '@webpieces/repo-workflow-core';
 import { RepoRootFinder } from './repo-root';
 import { findConfigFile } from './config-file';
 import { specTempDirs } from './spec-temp-dirs';

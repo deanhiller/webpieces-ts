@@ -29,7 +29,7 @@
                     "className": "AgentWorktreeLockReader",
                     "kind": "class",
                     "scope": "singleton",
-                    "file": "packages/tooling/rules-config/src/agent-worktree-lock.ts",
+                    "file": "packages/tooling/repo-workflow-core/src/agent-worktree-lock.ts",
                     "level": 6
                 },
                 {
@@ -45,7 +45,7 @@
                     "className": "AtomicFile",
                     "kind": "class",
                     "scope": "singleton",
-                    "file": "packages/tooling/rules-config/src/atomic-file.ts",
+                    "file": "packages/tooling/tooling-common/src/atomic-file.ts",
                     "level": 5
                 },
                 {
@@ -85,7 +85,7 @@
                     "className": "BranchArchiver",
                     "kind": "class",
                     "scope": "singleton",
-                    "file": "packages/tooling/rules-config/src/branch-archiver.ts",
+                    "file": "packages/tooling/repo-workflow-core/src/branch-archiver.ts",
                     "level": 5
                 },
                 {
@@ -93,7 +93,7 @@
                     "className": "BranchIdentity",
                     "kind": "class",
                     "scope": "singleton",
-                    "file": "packages/tooling/rules-config/src/skip-rule.ts",
+                    "file": "packages/tooling/repo-workflow-core/src/branch-identity.ts",
                     "level": 4
                 },
                 {
@@ -101,7 +101,7 @@
                     "className": "BranchMutationLog",
                     "kind": "class",
                     "scope": "singleton",
-                    "file": "packages/tooling/rules-config/src/branch-mutation-log.ts",
+                    "file": "packages/tooling/repo-workflow-core/src/branch-mutation-log.ts",
                     "level": 5
                 },
                 {
@@ -117,7 +117,7 @@
                     "className": "BranchReaper",
                     "kind": "class",
                     "scope": "singleton",
-                    "file": "packages/tooling/rules-config/src/branch-reaper.ts",
+                    "file": "packages/tooling/repo-workflow-core/src/branch-reaper.ts",
                     "level": 3
                 },
                 {
@@ -309,7 +309,7 @@
                     "className": "DotWebpieces",
                     "kind": "class",
                     "scope": "singleton",
-                    "file": "packages/tooling/rules-config/src/state-dir.ts",
+                    "file": "packages/tooling/tooling-common/src/state-dir.ts",
                     "level": 7
                 },
                 {
@@ -413,7 +413,7 @@
                     "className": "HarnessAgentActivityReader",
                     "kind": "class",
                     "scope": "singleton",
-                    "file": "packages/tooling/rules-config/src/harness-agent-activity.ts",
+                    "file": "packages/tooling/repo-workflow-core/src/harness-agent-activity.ts",
                     "level": 6
                 },
                 {
@@ -493,7 +493,7 @@
                     "className": "MainSyncFileStore",
                     "kind": "class",
                     "scope": "singleton",
-                    "file": "packages/tooling/rules-config/src/main-sync-file.ts",
+                    "file": "packages/tooling/repo-workflow-core/src/main-sync-file.ts",
                     "level": 3
                 },
                 {
@@ -501,7 +501,7 @@
                     "className": "MainSyncStatusService",
                     "kind": "class",
                     "scope": "singleton",
-                    "file": "packages/tooling/rules-config/src/main-sync-status.ts",
+                    "file": "packages/tooling/repo-workflow-core/src/main-sync-status.ts",
                     "level": 2
                 },
                 {
@@ -549,7 +549,7 @@
                     "className": "MergedBranchesService",
                     "kind": "class",
                     "scope": "singleton",
-                    "file": "packages/tooling/rules-config/src/merged-branches.ts",
+                    "file": "packages/tooling/repo-workflow-core/src/merged-branches.ts",
                     "level": 4
                 },
                 {
@@ -677,7 +677,7 @@
                     "className": "ReviewIdentityStampService",
                     "kind": "class",
                     "scope": "singleton",
-                    "file": "packages/tooling/rules-config/src/review-identity-stamp.ts",
+                    "file": "packages/tooling/repo-workflow-core/src/review-identity-stamp.ts",
                     "level": 3
                 },
                 {
@@ -813,7 +813,7 @@
                     "className": "StateDirMigrator",
                     "kind": "class",
                     "scope": "singleton",
-                    "file": "packages/tooling/rules-config/src/state-dir-migration.ts",
+                    "file": "packages/tooling/tooling-common/src/state-dir-migration.ts",
                     "level": 8
                 },
                 {
@@ -877,7 +877,7 @@
                     "className": "WorktreeLockVerdicts",
                     "kind": "class",
                     "scope": "singleton",
-                    "file": "packages/tooling/rules-config/src/worktree-lock-verdicts.ts",
+                    "file": "packages/tooling/repo-workflow-core/src/worktree-lock-verdicts.ts",
                     "level": 5
                 },
                 {
@@ -885,7 +885,7 @@
                     "className": "WorktreeReaper",
                     "kind": "class",
                     "scope": "singleton",
-                    "file": "packages/tooling/rules-config/src/worktree-reaper.ts",
+                    "file": "packages/tooling/repo-workflow-core/src/worktree-reaper.ts",
                     "level": 4
                 },
                 {
@@ -893,7 +893,7 @@
                     "className": "WorktreeService",
                     "kind": "class",
                     "scope": "singleton",
-                    "file": "packages/tooling/rules-config/src/worktrees.ts",
+                    "file": "packages/tooling/repo-workflow-core/src/worktrees.ts",
                     "level": 6
                 },
                 {
@@ -1027,7 +1027,7 @@
                     "to": "DotWebpieces",
                     "injection": "type",
                     "token": "DotWebpieces",
-                    "tokenKey": "class:packages/tooling/rules-config/src/state-dir.ts#DotWebpieces",
+                    "tokenKey": "class:packages/tooling/tooling-common/src/state-dir.ts#DotWebpieces",
                     "paramName": "dotDir",
                     "paramType": "DotWebpieces"
                 },
@@ -1036,7 +1036,7 @@
                     "to": "BranchArchiver",
                     "injection": "type",
                     "token": "BranchArchiver",
-                    "tokenKey": "class:packages/tooling/rules-config/src/branch-archiver.ts#BranchArchiver",
+                    "tokenKey": "class:packages/tooling/repo-workflow-core/src/branch-archiver.ts#BranchArchiver",
                     "paramName": "archiver",
                     "paramType": "BranchArchiver"
                 },
@@ -1045,7 +1045,7 @@
                     "to": "BranchMutationLog",
                     "injection": "type",
                     "token": "BranchMutationLog",
-                    "tokenKey": "class:packages/tooling/rules-config/src/branch-mutation-log.ts#BranchMutationLog",
+                    "tokenKey": "class:packages/tooling/repo-workflow-core/src/branch-mutation-log.ts#BranchMutationLog",
                     "paramName": "mutationLog",
                     "paramType": "BranchMutationLog"
                 },
@@ -1054,7 +1054,7 @@
                     "to": "MergedBranchesService",
                     "injection": "type",
                     "token": "MergedBranchesService",
-                    "tokenKey": "class:packages/tooling/rules-config/src/merged-branches.ts#MergedBranchesService",
+                    "tokenKey": "class:packages/tooling/repo-workflow-core/src/merged-branches.ts#MergedBranchesService",
                     "paramName": "mergedBranches",
                     "paramType": "MergedBranchesService"
                 },
@@ -1063,7 +1063,7 @@
                     "to": "BranchIdentity",
                     "injection": "type",
                     "token": "BranchIdentity",
-                    "tokenKey": "class:packages/tooling/rules-config/src/skip-rule.ts#BranchIdentity",
+                    "tokenKey": "class:packages/tooling/repo-workflow-core/src/branch-identity.ts#BranchIdentity",
                     "paramName": "branchIdentity",
                     "paramType": "BranchIdentity"
                 },
@@ -1180,7 +1180,7 @@
                     "to": "DotWebpieces",
                     "injection": "type",
                     "token": "DotWebpieces",
-                    "tokenKey": "class:packages/tooling/rules-config/src/state-dir.ts#DotWebpieces",
+                    "tokenKey": "class:packages/tooling/tooling-common/src/state-dir.ts#DotWebpieces",
                     "paramName": "dotDir",
                     "paramType": "DotWebpieces"
                 },
@@ -1342,7 +1342,7 @@
                     "to": "DotWebpieces",
                     "injection": "type",
                     "token": "DotWebpieces",
-                    "tokenKey": "class:packages/tooling/rules-config/src/state-dir.ts#DotWebpieces",
+                    "tokenKey": "class:packages/tooling/tooling-common/src/state-dir.ts#DotWebpieces",
                     "paramName": "dotDir",
                     "paramType": "DotWebpieces"
                 },
@@ -1369,7 +1369,7 @@
                     "to": "BranchArchiver",
                     "injection": "type",
                     "token": "BranchArchiver",
-                    "tokenKey": "class:packages/tooling/rules-config/src/branch-archiver.ts#BranchArchiver",
+                    "tokenKey": "class:packages/tooling/repo-workflow-core/src/branch-archiver.ts#BranchArchiver",
                     "paramName": "archiver",
                     "paramType": "BranchArchiver"
                 },
@@ -1378,7 +1378,7 @@
                     "to": "BranchMutationLog",
                     "injection": "type",
                     "token": "BranchMutationLog",
-                    "tokenKey": "class:packages/tooling/rules-config/src/branch-mutation-log.ts#BranchMutationLog",
+                    "tokenKey": "class:packages/tooling/repo-workflow-core/src/branch-mutation-log.ts#BranchMutationLog",
                     "paramName": "mutationLog",
                     "paramType": "BranchMutationLog"
                 },
@@ -1387,7 +1387,7 @@
                     "to": "BranchReaper",
                     "injection": "type",
                     "token": "BranchReaper",
-                    "tokenKey": "class:packages/tooling/rules-config/src/branch-reaper.ts#BranchReaper",
+                    "tokenKey": "class:packages/tooling/repo-workflow-core/src/branch-reaper.ts#BranchReaper",
                     "paramName": "branchReaper",
                     "paramType": "BranchReaper"
                 },
@@ -1486,7 +1486,7 @@
                     "to": "StateDirMigrator",
                     "injection": "type",
                     "token": "StateDirMigrator",
-                    "tokenKey": "class:packages/tooling/rules-config/src/state-dir-migration.ts#StateDirMigrator",
+                    "tokenKey": "class:packages/tooling/tooling-common/src/state-dir-migration.ts#StateDirMigrator",
                     "paramName": "migrator",
                     "paramType": "StateDirMigrator"
                 },
@@ -1909,7 +1909,7 @@
                     "to": "BranchIdentity",
                     "injection": "type",
                     "token": "BranchIdentity",
-                    "tokenKey": "class:packages/tooling/rules-config/src/skip-rule.ts#BranchIdentity",
+                    "tokenKey": "class:packages/tooling/repo-workflow-core/src/branch-identity.ts#BranchIdentity",
                     "paramName": "branchIdentity",
                     "paramType": "BranchIdentity"
                 },
@@ -1927,7 +1927,7 @@
                     "to": "BranchIdentity",
                     "injection": "type",
                     "token": "BranchIdentity",
-                    "tokenKey": "class:packages/tooling/rules-config/src/skip-rule.ts#BranchIdentity",
+                    "tokenKey": "class:packages/tooling/repo-workflow-core/src/branch-identity.ts#BranchIdentity",
                     "paramName": "branchIdentity",
                     "paramType": "BranchIdentity"
                 },
@@ -1981,7 +1981,7 @@
                     "to": "MainSyncStatusService",
                     "injection": "type",
                     "token": "MainSyncStatusService",
-                    "tokenKey": "class:packages/tooling/rules-config/src/main-sync-status.ts#MainSyncStatusService",
+                    "tokenKey": "class:packages/tooling/repo-workflow-core/src/main-sync-status.ts#MainSyncStatusService",
                     "paramName": "mainSyncStatus",
                     "paramType": "MainSyncStatusService"
                 },
@@ -2035,7 +2035,7 @@
                     "to": "BranchArchiver",
                     "injection": "type",
                     "token": "BranchArchiver",
-                    "tokenKey": "class:packages/tooling/rules-config/src/branch-archiver.ts#BranchArchiver",
+                    "tokenKey": "class:packages/tooling/repo-workflow-core/src/branch-archiver.ts#BranchArchiver",
                     "paramName": "archiver",
                     "paramType": "BranchArchiver"
                 },
@@ -2107,7 +2107,7 @@
                     "to": "WorktreeService",
                     "injection": "type",
                     "token": "WorktreeService",
-                    "tokenKey": "class:packages/tooling/rules-config/src/worktrees.ts#WorktreeService",
+                    "tokenKey": "class:packages/tooling/repo-workflow-core/src/worktrees.ts#WorktreeService",
                     "paramName": "worktrees",
                     "paramType": "WorktreeService"
                 },
@@ -2125,7 +2125,7 @@
                     "to": "WorktreeService",
                     "injection": "type",
                     "token": "WorktreeService",
-                    "tokenKey": "class:packages/tooling/rules-config/src/worktrees.ts#WorktreeService",
+                    "tokenKey": "class:packages/tooling/repo-workflow-core/src/worktrees.ts#WorktreeService",
                     "paramName": "worktrees",
                     "paramType": "WorktreeService"
                 },
@@ -2134,7 +2134,7 @@
                     "to": "AtomicFile",
                     "injection": "type",
                     "token": "AtomicFile",
-                    "tokenKey": "class:packages/tooling/rules-config/src/atomic-file.ts#AtomicFile",
+                    "tokenKey": "class:packages/tooling/tooling-common/src/atomic-file.ts#AtomicFile",
                     "paramName": "atomicFile",
                     "paramType": "AtomicFile"
                 },
@@ -2143,7 +2143,7 @@
                     "to": "AtomicFile",
                     "injection": "type",
                     "token": "AtomicFile",
-                    "tokenKey": "class:packages/tooling/rules-config/src/atomic-file.ts#AtomicFile",
+                    "tokenKey": "class:packages/tooling/tooling-common/src/atomic-file.ts#AtomicFile",
                     "paramName": "atomicFile",
                     "paramType": "AtomicFile"
                 },
@@ -2152,7 +2152,7 @@
                     "to": "DotWebpieces",
                     "injection": "type",
                     "token": "DotWebpieces",
-                    "tokenKey": "class:packages/tooling/rules-config/src/state-dir.ts#DotWebpieces",
+                    "tokenKey": "class:packages/tooling/tooling-common/src/state-dir.ts#DotWebpieces",
                     "paramName": "dotDir",
                     "paramType": "DotWebpieces"
                 },
@@ -2161,7 +2161,7 @@
                     "to": "MainSyncFileStore",
                     "injection": "type",
                     "token": "MainSyncFileStore",
-                    "tokenKey": "class:packages/tooling/rules-config/src/main-sync-file.ts#MainSyncFileStore",
+                    "tokenKey": "class:packages/tooling/repo-workflow-core/src/main-sync-file.ts#MainSyncFileStore",
                     "paramName": "store",
                     "paramType": "MainSyncFileStore"
                 },
@@ -2170,7 +2170,7 @@
                     "to": "WorktreeService",
                     "injection": "type",
                     "token": "WorktreeService",
-                    "tokenKey": "class:packages/tooling/rules-config/src/worktrees.ts#WorktreeService",
+                    "tokenKey": "class:packages/tooling/repo-workflow-core/src/worktrees.ts#WorktreeService",
                     "paramName": "worktrees",
                     "paramType": "WorktreeService"
                 },
@@ -2233,7 +2233,7 @@
                     "to": "AtomicFile",
                     "injection": "type",
                     "token": "AtomicFile",
-                    "tokenKey": "class:packages/tooling/rules-config/src/atomic-file.ts#AtomicFile",
+                    "tokenKey": "class:packages/tooling/tooling-common/src/atomic-file.ts#AtomicFile",
                     "paramName": "atomicFile",
                     "paramType": "AtomicFile"
                 },
@@ -2287,7 +2287,7 @@
                     "to": "DotWebpieces",
                     "injection": "type",
                     "token": "DotWebpieces",
-                    "tokenKey": "class:packages/tooling/rules-config/src/state-dir.ts#DotWebpieces",
+                    "tokenKey": "class:packages/tooling/tooling-common/src/state-dir.ts#DotWebpieces",
                     "paramName": "dotDir",
                     "paramType": "DotWebpieces"
                 },
@@ -2296,7 +2296,7 @@
                     "to": "AtomicFile",
                     "injection": "type",
                     "token": "AtomicFile",
-                    "tokenKey": "class:packages/tooling/rules-config/src/atomic-file.ts#AtomicFile",
+                    "tokenKey": "class:packages/tooling/tooling-common/src/atomic-file.ts#AtomicFile",
                     "paramName": "atomicFile",
                     "paramType": "AtomicFile"
                 },
@@ -2305,7 +2305,7 @@
                     "to": "DotWebpieces",
                     "injection": "type",
                     "token": "DotWebpieces",
-                    "tokenKey": "class:packages/tooling/rules-config/src/state-dir.ts#DotWebpieces",
+                    "tokenKey": "class:packages/tooling/tooling-common/src/state-dir.ts#DotWebpieces",
                     "paramName": "dotDir",
                     "paramType": "DotWebpieces"
                 },
@@ -2314,7 +2314,7 @@
                     "to": "WorktreeLockVerdicts",
                     "injection": "type",
                     "token": "WorktreeLockVerdicts",
-                    "tokenKey": "class:packages/tooling/rules-config/src/worktree-lock-verdicts.ts#WorktreeLockVerdicts",
+                    "tokenKey": "class:packages/tooling/repo-workflow-core/src/worktree-lock-verdicts.ts#WorktreeLockVerdicts",
                     "paramName": "locks",
                     "paramType": "WorktreeLockVerdicts"
                 },
@@ -2323,7 +2323,7 @@
                     "to": "WorktreeService",
                     "injection": "type",
                     "token": "WorktreeService",
-                    "tokenKey": "class:packages/tooling/rules-config/src/worktrees.ts#WorktreeService",
+                    "tokenKey": "class:packages/tooling/repo-workflow-core/src/worktrees.ts#WorktreeService",
                     "paramName": "worktrees",
                     "paramType": "WorktreeService"
                 },
@@ -2683,7 +2683,7 @@
                     "to": "DotWebpieces",
                     "injection": "type",
                     "token": "DotWebpieces",
-                    "tokenKey": "class:packages/tooling/rules-config/src/state-dir.ts#DotWebpieces",
+                    "tokenKey": "class:packages/tooling/tooling-common/src/state-dir.ts#DotWebpieces",
                     "paramName": "dotWebpieces",
                     "paramType": "DotWebpieces"
                 },
@@ -2719,7 +2719,7 @@
                     "to": "WorktreeService",
                     "injection": "type",
                     "token": "WorktreeService",
-                    "tokenKey": "class:packages/tooling/rules-config/src/worktrees.ts#WorktreeService",
+                    "tokenKey": "class:packages/tooling/repo-workflow-core/src/worktrees.ts#WorktreeService",
                     "paramName": "worktrees",
                     "paramType": "WorktreeService"
                 },
@@ -2728,7 +2728,7 @@
                     "to": "DotWebpieces",
                     "injection": "type",
                     "token": "DotWebpieces",
-                    "tokenKey": "class:packages/tooling/rules-config/src/state-dir.ts#DotWebpieces",
+                    "tokenKey": "class:packages/tooling/tooling-common/src/state-dir.ts#DotWebpieces",
                     "paramName": "dotDir",
                     "paramType": "DotWebpieces"
                 },
@@ -2737,7 +2737,7 @@
                     "to": "DotWebpieces",
                     "injection": "type",
                     "token": "DotWebpieces",
-                    "tokenKey": "class:packages/tooling/rules-config/src/state-dir.ts#DotWebpieces",
+                    "tokenKey": "class:packages/tooling/tooling-common/src/state-dir.ts#DotWebpieces",
                     "paramName": "dotDir",
                     "paramType": "DotWebpieces"
                 },
@@ -2746,7 +2746,7 @@
                     "to": "AtomicFile",
                     "injection": "type",
                     "token": "AtomicFile",
-                    "tokenKey": "class:packages/tooling/rules-config/src/atomic-file.ts#AtomicFile",
+                    "tokenKey": "class:packages/tooling/tooling-common/src/atomic-file.ts#AtomicFile",
                     "paramName": "atomicFile",
                     "paramType": "AtomicFile"
                 },
@@ -2755,7 +2755,7 @@
                     "to": "DotWebpieces",
                     "injection": "type",
                     "token": "DotWebpieces",
-                    "tokenKey": "class:packages/tooling/rules-config/src/state-dir.ts#DotWebpieces",
+                    "tokenKey": "class:packages/tooling/tooling-common/src/state-dir.ts#DotWebpieces",
                     "paramName": "dotDir",
                     "paramType": "DotWebpieces"
                 },
@@ -2773,7 +2773,7 @@
                     "to": "DotWebpieces",
                     "injection": "type",
                     "token": "DotWebpieces",
-                    "tokenKey": "class:packages/tooling/rules-config/src/state-dir.ts#DotWebpieces",
+                    "tokenKey": "class:packages/tooling/tooling-common/src/state-dir.ts#DotWebpieces",
                     "paramName": "dotDir",
                     "paramType": "DotWebpieces"
                 },
@@ -2818,7 +2818,7 @@
                     "to": "AtomicFile",
                     "injection": "type",
                     "token": "AtomicFile",
-                    "tokenKey": "class:packages/tooling/rules-config/src/atomic-file.ts#AtomicFile",
+                    "tokenKey": "class:packages/tooling/tooling-common/src/atomic-file.ts#AtomicFile",
                     "paramName": "atomicFile",
                     "paramType": "AtomicFile"
                 },
@@ -3034,7 +3034,7 @@
                     "to": "ReviewIdentityStampService",
                     "injection": "type",
                     "token": "ReviewIdentityStampService",
-                    "tokenKey": "class:packages/tooling/rules-config/src/review-identity-stamp.ts#ReviewIdentityStampService",
+                    "tokenKey": "class:packages/tooling/repo-workflow-core/src/review-identity-stamp.ts#ReviewIdentityStampService",
                     "paramName": "stamps",
                     "paramType": "ReviewIdentityStampService"
                 },
@@ -3277,7 +3277,7 @@
                     "to": "BranchIdentity",
                     "injection": "type",
                     "token": "BranchIdentity",
-                    "tokenKey": "class:packages/tooling/rules-config/src/skip-rule.ts#BranchIdentity",
+                    "tokenKey": "class:packages/tooling/repo-workflow-core/src/branch-identity.ts#BranchIdentity",
                     "paramName": "branchIdentity",
                     "paramType": "BranchIdentity"
                 },
@@ -3403,7 +3403,7 @@
                     "to": "AtomicFile",
                     "injection": "type",
                     "token": "AtomicFile",
-                    "tokenKey": "class:packages/tooling/rules-config/src/atomic-file.ts#AtomicFile",
+                    "tokenKey": "class:packages/tooling/tooling-common/src/atomic-file.ts#AtomicFile",
                     "paramName": "atomicFile",
                     "paramType": "AtomicFile"
                 },
@@ -3421,7 +3421,7 @@
                     "to": "BranchMutationLog",
                     "injection": "type",
                     "token": "BranchMutationLog",
-                    "tokenKey": "class:packages/tooling/rules-config/src/branch-mutation-log.ts#BranchMutationLog",
+                    "tokenKey": "class:packages/tooling/repo-workflow-core/src/branch-mutation-log.ts#BranchMutationLog",
                     "paramName": "mutationLog",
                     "paramType": "BranchMutationLog"
                 },
@@ -3430,7 +3430,7 @@
                     "to": "MergedBranchesService",
                     "injection": "type",
                     "token": "MergedBranchesService",
-                    "tokenKey": "class:packages/tooling/rules-config/src/merged-branches.ts#MergedBranchesService",
+                    "tokenKey": "class:packages/tooling/repo-workflow-core/src/merged-branches.ts#MergedBranchesService",
                     "paramName": "mergedBranches",
                     "paramType": "MergedBranchesService"
                 },
@@ -3439,7 +3439,7 @@
                     "to": "WorktreeReaper",
                     "injection": "type",
                     "token": "WorktreeReaper",
-                    "tokenKey": "class:packages/tooling/rules-config/src/worktree-reaper.ts#WorktreeReaper",
+                    "tokenKey": "class:packages/tooling/repo-workflow-core/src/worktree-reaper.ts#WorktreeReaper",
                     "paramName": "reaper",
                     "paramType": "WorktreeReaper"
                 },
@@ -3448,7 +3448,7 @@
                     "to": "WorktreeService",
                     "injection": "type",
                     "token": "WorktreeService",
-                    "tokenKey": "class:packages/tooling/rules-config/src/worktrees.ts#WorktreeService",
+                    "tokenKey": "class:packages/tooling/repo-workflow-core/src/worktrees.ts#WorktreeService",
                     "paramName": "worktreeService",
                     "paramType": "WorktreeService"
                 },
@@ -3457,7 +3457,7 @@
                     "to": "AgentWorktreeLockReader",
                     "injection": "type",
                     "token": "AgentWorktreeLockReader",
-                    "tokenKey": "class:packages/tooling/rules-config/src/agent-worktree-lock.ts#AgentWorktreeLockReader",
+                    "tokenKey": "class:packages/tooling/repo-workflow-core/src/agent-worktree-lock.ts#AgentWorktreeLockReader",
                     "paramName": "agentLocks",
                     "paramType": "AgentWorktreeLockReader"
                 },
@@ -3466,7 +3466,7 @@
                     "to": "HarnessAgentActivityReader",
                     "injection": "type",
                     "token": "HarnessAgentActivityReader",
-                    "tokenKey": "class:packages/tooling/rules-config/src/harness-agent-activity.ts#HarnessAgentActivityReader",
+                    "tokenKey": "class:packages/tooling/repo-workflow-core/src/harness-agent-activity.ts#HarnessAgentActivityReader",
                     "paramName": "harness",
                     "paramType": "HarnessAgentActivityReader"
                 },
@@ -3475,7 +3475,7 @@
                     "to": "WorktreeService",
                     "injection": "type",
                     "token": "WorktreeService",
-                    "tokenKey": "class:packages/tooling/rules-config/src/worktrees.ts#WorktreeService",
+                    "tokenKey": "class:packages/tooling/repo-workflow-core/src/worktrees.ts#WorktreeService",
                     "paramName": "worktrees",
                     "paramType": "WorktreeService"
                 },
@@ -3484,7 +3484,7 @@
                     "to": "BranchArchiver",
                     "injection": "type",
                     "token": "BranchArchiver",
-                    "tokenKey": "class:packages/tooling/rules-config/src/branch-archiver.ts#BranchArchiver",
+                    "tokenKey": "class:packages/tooling/repo-workflow-core/src/branch-archiver.ts#BranchArchiver",
                     "paramName": "archiver",
                     "paramType": "BranchArchiver"
                 },
@@ -3493,7 +3493,7 @@
                     "to": "BranchMutationLog",
                     "injection": "type",
                     "token": "BranchMutationLog",
-                    "tokenKey": "class:packages/tooling/rules-config/src/branch-mutation-log.ts#BranchMutationLog",
+                    "tokenKey": "class:packages/tooling/repo-workflow-core/src/branch-mutation-log.ts#BranchMutationLog",
                     "paramName": "mutationLog",
                     "paramType": "BranchMutationLog"
                 },
@@ -3502,7 +3502,7 @@
                     "to": "WorktreeService",
                     "injection": "type",
                     "token": "WorktreeService",
-                    "tokenKey": "class:packages/tooling/rules-config/src/worktrees.ts#WorktreeService",
+                    "tokenKey": "class:packages/tooling/repo-workflow-core/src/worktrees.ts#WorktreeService",
                     "paramName": "worktrees",
                     "paramType": "WorktreeService"
                 },

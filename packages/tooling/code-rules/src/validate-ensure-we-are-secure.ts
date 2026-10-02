@@ -2,15 +2,8 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as ts from 'typescript';
-import {
-    EnsureWeAreSecureConfig,
-    getChangedFiles,
-    detectBase,
-    InformAiError,
-    Option,
-    RuleFailError,
-    RULE_NAMES,
-} from '@webpieces/rules-config';
+import { EnsureWeAreSecureConfig, getChangedFiles, detectBase, Option, RuleFailError, RULE_NAMES } from '@webpieces/rules-config';
+import { InformAiError } from '@webpieces/tooling-common';
 import { injectable, bindingScopeValues } from 'inversify';
 import { CodeValidator, ExecutorResult } from './code-validator';
 

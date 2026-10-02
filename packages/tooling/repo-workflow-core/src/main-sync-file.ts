@@ -1,8 +1,8 @@
 import * as fs from 'fs';
 import { injectable, bindingScopeValues } from 'inversify';
 
-import { AtomicFile } from './atomic-file';
-import { toError } from './to-error';
+import { AtomicFile } from '@webpieces/tooling-common';
+import { toError } from '@webpieces/tooling-common/to-error';
 
 /**
  * The ON-DISK SHAPE of `<primary>/.webpieces/main-sync-status.json`, and nothing else.

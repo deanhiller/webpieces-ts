@@ -1,17 +1,8 @@
 import { spawnSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
-import {
-    BranchIdentity,
-    CliExitError,
-    GateTokenService,
-    PrGateConfig,
-    PrSummary,
-    RepoRootFinder,
-    ReviewJsonService,
-    loadAndValidate,
-    writeTemplate,
-} from '@webpieces/rules-config';
+import { BranchIdentity } from '@webpieces/repo-workflow-core';
+import { CliExitError, GateTokenService, PrGateConfig, PrSummary, RepoRootFinder, ReviewJsonService, loadAndValidate, writeTemplate } from '@webpieces/rules-config';
 import { injectable, bindingScopeValues } from 'inversify';
 import { AiBranchName } from '../workflow/git-readAiBranchName';
 import { GitExec } from '../workflow/git-exec';

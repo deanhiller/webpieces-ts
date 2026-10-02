@@ -2,7 +2,7 @@ import { describe, it, expect, afterEach } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
 
-import { AtomicFile } from './atomic-file';
+import { AtomicFile } from '@webpieces/tooling-common';
 import { ConfigFile } from './config-file';
 import { ConfigPruner, PrunedKey, PruneResult } from './config-pruner';
 import { PRUNE_UNKNOWN_COMMAND } from './constants';
@@ -10,7 +10,7 @@ import { CONFIG_POLICY_DOC, formatConfigErrorsBanner } from './config-error-bann
 import { HomeConfigService } from './home-config';
 import { loadTemplate } from './load-template';
 import { RETIRED_CONFIG_KEYS, RETIRED_SCOPE_RULE, retiredKeyError } from './retired-config-keys';
-import { toError } from './to-error';
+import { toError } from '@webpieces/tooling-common/to-error';
 import { validateWebpiecesConfig } from './validate-config';
 import { specTempDirs } from './spec-temp-dirs';
 

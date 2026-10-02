@@ -2,8 +2,8 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { injectable, bindingScopeValues } from 'inversify';
 
-import { InformAiError } from './inform-ai-error';
-import { toError } from './to-error';
+import { InformAiError } from '@webpieces/tooling-common';
+import { toError } from '@webpieces/tooling-common/to-error';
 
 export const CONFIG_FILENAME = 'webpieces.config.json';
 

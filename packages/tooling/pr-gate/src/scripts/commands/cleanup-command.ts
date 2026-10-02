@@ -1,24 +1,6 @@
 import * as readline from 'readline';
-import {
-    BranchArchiver,
-    BranchMutationLog,
-    BranchReaper,
-    DeletableBranch,
-    DeletableWorktree,
-    ReapResult,
-    ReapedBranch,
-    RepoRootFinder,
-    loadAndValidate,
-    BRANCH_RETENTION_KEEP,
-    CLASSIFICATION_SUPERSEDED,
-    CLASSIFICATION_CONTENT_IN_MAIN,
-    CLASSIFICATION_NEVER_PROPOSED,
-    CLASSIFICATION_NO_COMMITS,
-    CLASSIFICATION_MERGED_PR,
-    CLASSIFICATION_BACKUP_OF_MERGED,
-    CLASSIFICATION_BACKUP_OF_LIVE,
-    ADJUDICATED_CLASSIFICATIONS,
-} from '@webpieces/rules-config';
+import { BranchArchiver, BranchMutationLog, BranchReaper, DeletableBranch, DeletableWorktree, ReapResult, ReapedBranch, BRANCH_RETENTION_KEEP, CLASSIFICATION_SUPERSEDED, CLASSIFICATION_CONTENT_IN_MAIN, CLASSIFICATION_NEVER_PROPOSED, CLASSIFICATION_NO_COMMITS, CLASSIFICATION_MERGED_PR, CLASSIFICATION_BACKUP_OF_MERGED, CLASSIFICATION_BACKUP_OF_LIVE, ADJUDICATED_CLASSIFICATIONS } from '@webpieces/repo-workflow-core';
+import { RepoRootFinder, loadAndValidate } from '@webpieces/rules-config';
 import { injectable, bindingScopeValues } from 'inversify';
 
 import { WorktreeCleanupSection } from './worktree-cleanup';

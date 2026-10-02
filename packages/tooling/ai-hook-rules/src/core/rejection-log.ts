@@ -1,7 +1,8 @@
 import * as fs from 'fs';
 import * as path from 'path';
 
-import { dotWebpieces, RepoRootFinder } from '@webpieces/rules-config';
+import { dotWebpieces } from '@webpieces/tooling-common';
+import { RepoRootFinder } from '@webpieces/rules-config';
 import { REJECTIONS_STREAM } from './log-streams';
 
 import type { ToolKind, NormalizedToolInput, BlockedResult } from './types';

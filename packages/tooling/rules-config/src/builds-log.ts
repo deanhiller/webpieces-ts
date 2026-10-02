@@ -5,9 +5,9 @@ import * as os from 'os';
 import * as path from 'path';
 import { injectable, bindingScopeValues } from 'inversify';
 
-import { DotWebpieces } from './state-dir';
+import { DotWebpieces } from '@webpieces/tooling-common';
 import { HOME_CONFIG_DIR } from './home-config';
-import { toError } from './to-error';
+import { toError } from '@webpieces/tooling-common/to-error';
 
 /**
  * `~/.webpieces/builds.log` — the MACHINE-WIDE, append-only ledger of every build this box has started.

@@ -1,6 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import { dotWebpieces, toError } from '@webpieces/rules-config';
+import { dotWebpieces } from '@webpieces/tooling-common';
+import { toError } from '@webpieces/tooling-common/to-error';
 import { injectable, bindingScopeValues } from 'inversify';
 
 // ─── Why this class exists ─────────────────────────────────────────────────────────────────────────────

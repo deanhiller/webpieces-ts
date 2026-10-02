@@ -2,8 +2,8 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { injectable, bindingScopeValues } from 'inversify';
 
-import { claudeConfigDir } from './claude-config-dir';
-import { toError } from './to-error';
+import { claudeConfigDir } from '@webpieces/tooling-common';
+import { toError } from '@webpieces/tooling-common/to-error';
 
 /**
  * THE ONE PLACE THAT KNOWS ANYTHING ABOUT CLAUDE CODE'S ON-DISK STATE.

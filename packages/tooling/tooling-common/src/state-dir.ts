@@ -3,7 +3,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { injectable, bindingScopeValues } from 'inversify';
 
-import { PR_REVIEW_DIR, WEBPIECES_TMP_DIR } from './constants';
+import { PR_REVIEW_DIR, WEBPIECES_TMP_DIR } from './state-path-constants';
 import { StateDirMigrator } from './state-dir-migration';
 
 // The per-worktree namespace inside the primary clone's `.webpieces/`. A LINKED worktree's local state

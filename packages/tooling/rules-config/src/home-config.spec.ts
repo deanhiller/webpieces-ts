@@ -1,8 +1,8 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
-import { InformAiError } from './inform-ai-error';
-import { toError } from './to-error';
+import { InformAiError } from '@webpieces/tooling-common';
+import { toError } from '@webpieces/tooling-common/to-error';
 import {
     DEFAULT_MAX_CONCURRENT_BUILDS, HomeConfig, HomeConfigService, RETIRED_HOME_CONFIG_KEYS,
     HOME_EXPERIMENTAL_SECTION, HOME_KEY_WHOLE_REPO_BUILD_GUARD,

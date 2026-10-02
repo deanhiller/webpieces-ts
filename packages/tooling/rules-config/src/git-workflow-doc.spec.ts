@@ -17,7 +17,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 
-import { BranchMutationLog } from './branch-mutation-log';
+import { BranchMutationLog } from '@webpieces/repo-workflow-core';
 import { GIT_WORKFLOW_DOC } from './instruct-ai-docs';
 import { TemplateWriter, loadTemplate } from './load-template';
 import { specTempDirs } from './spec-temp-dirs';

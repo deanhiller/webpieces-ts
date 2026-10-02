@@ -5,9 +5,9 @@ import { RepoRootFinder } from './repo-root';
 import { ConfigLoader } from './load-config';
 import { TemplateWriter } from './load-template';
 import { DiffScope } from './diff-scope';
-import { BranchMutationLog } from './branch-mutation-log';
+import { BranchMutationLog } from '@webpieces/repo-workflow-core';
 import { ReviewJsonService } from './review-json';
-import { MainSyncStatusService } from './main-sync-status';
+import { MainSyncStatusService } from '@webpieces/repo-workflow-core';
 
 /**
  * DI-design root for @webpieces/rules-config (role:designed-lib).

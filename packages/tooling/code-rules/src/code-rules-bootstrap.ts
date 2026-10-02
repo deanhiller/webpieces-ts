@@ -1,15 +1,7 @@
 import 'reflect-metadata';
 import { Container } from 'inversify';
-import {
-    BaseRuleConfig,
-    DiffScope,
-    InformAiError,
-    LoadedConfig,
-    MatchRuleConfig,
-    MODIFIED_CODE_MODES,
-    RULE_SCHEMAS,
-    loadAndValidate,
-} from '@webpieces/rules-config';
+import { BaseRuleConfig, DiffScope, LoadedConfig, MatchRuleConfig, MODIFIED_CODE_MODES, RULE_SCHEMAS, loadAndValidate } from '@webpieces/rules-config';
+import { InformAiError } from '@webpieces/tooling-common';
 
 import { ExecutorResult } from './code-validator';
 import { CodeRulesApp } from './code-rules-app';

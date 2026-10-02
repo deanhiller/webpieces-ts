@@ -19,7 +19,9 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
-import { ChangedFilesOptions, DiffScope, InformAiError, ModifiedCodeMode, toError } from '@webpieces/rules-config';
+import { ChangedFilesOptions, DiffScope, ModifiedCodeMode } from '@webpieces/rules-config';
+import { InformAiError } from '@webpieces/tooling-common';
+import { toError } from '@webpieces/tooling-common/to-error';
 import { injectable, bindingScopeValues } from 'inversify';
 
 /** One nx project: its name and its directory (repo-relative, '/'-separated, no trailing slash). */

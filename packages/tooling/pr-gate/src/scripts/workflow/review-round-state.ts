@@ -1,9 +1,9 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { spawnSync } from 'child_process';
-import {
-    AtomicFile, ChecklistResult, InformAiError, ReviewJsonService, VERDICT_ORANGE, VERDICT_RED, toError,
-} from '@webpieces/rules-config';
+import { AtomicFile, InformAiError } from '@webpieces/tooling-common';
+import { toError } from '@webpieces/tooling-common/to-error';
+import { ChecklistResult, ReviewJsonService, VERDICT_ORANGE, VERDICT_RED } from '@webpieces/rules-config';
 import { injectable, bindingScopeValues } from 'inversify';
 import { ReviewStageReceipt } from './review-stage-receipt';
 import { VerdictProvenanceService } from './verdict-provenance';

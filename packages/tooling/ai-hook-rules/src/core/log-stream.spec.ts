@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import * as path from 'path';
 
 import { LogStream, StreamIdentity } from './log-stream';
-import { dotWebpieces } from '@webpieces/rules-config';
+import { dotWebpieces } from '@webpieces/tooling-common';
 import { L1_LOCATION_STREAM, CALLS_STREAM } from './log-streams';
 
 /**

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { BranchIdentity, CliExitError } from '@webpieces/rules-config';
+import { BranchIdentity } from '@webpieces/repo-workflow-core';
+import { CliExitError } from '@webpieces/rules-config';
 import { HotfixRedirect } from './hotfix-redirect';
 
 class FixedBranch extends BranchIdentity {

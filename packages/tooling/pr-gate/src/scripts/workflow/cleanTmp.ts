@@ -1,9 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import {
-    AgedTreeSweeper, DotWebpieces, RETENTION_DAYS, RepoRootFinder, SweepCount,
-    TMP_SCRATCH_RETENTION_DAYS, TmpScratchSweeper, dotWebpieces,
-} from '@webpieces/rules-config';
+import { AgedTreeSweeper, RETENTION_DAYS, RepoRootFinder, SweepCount, TMP_SCRATCH_RETENTION_DAYS, TmpScratchSweeper } from '@webpieces/rules-config';
+import { DotWebpieces, dotWebpieces } from '@webpieces/tooling-common';
 import { injectable, bindingScopeValues } from 'inversify';
 
 const SEP = '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n';

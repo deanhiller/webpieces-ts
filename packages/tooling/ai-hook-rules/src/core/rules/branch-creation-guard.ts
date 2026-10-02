@@ -1,6 +1,7 @@
 import { execSync } from 'child_process';
 
-import { BranchCreationGuardConfig, BranchIdentity, DeletableBranch, MergedBranchesCache, MergedBranchesService, WorktreeService, readMainSyncStatus, Option } from '@webpieces/rules-config';
+import { BranchCreationGuardConfig, Option } from '@webpieces/rules-config';
+import { BranchIdentity, DeletableBranch, MergedBranchesCache, MergedBranchesService, WorktreeService, readMainSyncStatus } from '@webpieces/repo-workflow-core';
 
 import type { BashContext, Violation } from '../types';
 import { Violation as V } from '../types';

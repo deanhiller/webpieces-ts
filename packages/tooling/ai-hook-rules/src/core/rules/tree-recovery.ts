@@ -1,4 +1,5 @@
-import { WorktreeService, atRoot } from '@webpieces/rules-config';
+import { WorktreeService } from '@webpieces/repo-workflow-core';
+import { atRoot } from '@webpieces/rules-config';
 
 /**
  * Renders the "get onto a healthy tree" commands, in the flavour of the tree the AI is standing in.

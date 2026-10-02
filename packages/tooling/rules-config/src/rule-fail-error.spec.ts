@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 
 import { RuleFailError, renderRuleFailForAi, renderRuleFailForHuman } from './rule-fail-error';
 import { Option } from './fix-option';
-import { InformAiError } from './inform-ai-error';
+import { InformAiError } from '@webpieces/tooling-common';
 
 describe('RuleFailError', () => {
     it('is a standalone Error, NOT an InformAiError', () => {

@@ -83,7 +83,8 @@ describe('no module re-derives the config dir for itself', () => {
     const files = ['subagent-provenance.ts', 'review-provenance.ts', 'harness-agent-activity.ts'];
 
     it.each(files)('%s names no hardcoded .claude path', (file: string) => {
-        const source = fs.readFileSync(path.join(__dirname, file), 'utf8');
+        const owner = file === 'harness-agent-activity.ts' ? 'repo-workflow-core' : 'rules-config';
+        const source = fs.readFileSync(path.join(__dirname, '..', '..', owner, 'src', file), 'utf8');
         const code = source.split('\n')
             .filter((line: string): boolean => !line.trim().startsWith('*') && !line.trim().startsWith('//'))
             .join('\n');

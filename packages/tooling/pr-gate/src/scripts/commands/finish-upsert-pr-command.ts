@@ -1,7 +1,9 @@
 import { execSync, spawnSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
-import { loadAndValidate, prDirFor, summaryJsonPath, PrSummary, RequiredChecklist, ChecklistVerdict, writeTemplate, RepoRootFinder, ReviewJsonService, GateTokenService, InformAiError, toError } from '@webpieces/rules-config';
+import { loadAndValidate, prDirFor, summaryJsonPath, PrSummary, RequiredChecklist, ChecklistVerdict, writeTemplate, RepoRootFinder, ReviewJsonService, GateTokenService } from '@webpieces/rules-config';
+import { InformAiError } from '@webpieces/tooling-common';
+import { toError } from '@webpieces/tooling-common/to-error';
 import { injectable, bindingScopeValues } from 'inversify';
 import { AiBranchName } from '../workflow/git-readAiBranchName';
 import { BranchNaming } from '../workflow/branch-naming';
