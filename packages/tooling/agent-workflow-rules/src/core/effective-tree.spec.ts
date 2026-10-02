@@ -4,11 +4,11 @@ import * as os from 'os';
 import * as nodePath from 'path';
 import { vi, afterEach } from 'vitest';
 
-import { DEFAULT_MAX_CONCURRENT_BUILDS, HomeConfig, HomeConfigService, specTempDirs } from '@webpieces/rules-config';
+import { DEFAULT_MAX_CONCURRENT_BUILDS, HomeConfig, HomeConfigService, specTempDirs, atRoot } from '@webpieces/rules-config';
 import { migrate } from '../bin/setup-config';
 import { buildBashContext } from '@webpieces/hook-runtime';
 import { isAllowed } from '../bin/shim';
-import { EffectiveTreeResolver, atRoot } from '@webpieces/hook-runtime';
+import { EffectiveTreeResolver } from '@webpieces/hook-runtime';
 import { runBash } from './runner';
 import { BlockedResult } from '@webpieces/hook-runtime';
 

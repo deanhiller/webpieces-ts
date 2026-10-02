@@ -380,14 +380,6 @@ class TreeClassification {
     }
 }
 
-/**
- * The steering prefix every remedy needs, re-exported from @webpieces/rules-config so the guards, the
- * message builders and pr-gate's worktree notices all emit the IDENTICAL string — including the single
- * quotes that keep it runnable when the repo path contains a space. See atRoot's own header for why the
- * quotes are single and never double.
- */
-export { atRoot } from '@webpieces/rules-config';
-
 // Two absolute paths naming the same directory. There is no filesystem access here — both sides are
 // already git's own answers or a resolved root.
 // webpieces-disable no-function-outside-class -- sibling of atRoot(); this module is the resolver plus its pure helpers
