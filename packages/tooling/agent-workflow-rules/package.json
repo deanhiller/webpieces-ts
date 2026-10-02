@@ -1,0 +1,40 @@
+{
+    "name": "@webpieces/agent-workflow-rules",
+    "version": "0.0.0-dev",
+    "description": "Independent workflow guards, guard hook, installation and shim management for AI coding agents.",
+    "type": "commonjs",
+    "main": "./src/index.js",
+    "exports": {
+        ".": "./src/index.js",
+        "./package.json": "./package.json",
+        "./claude-code-guards": "./src/adapters/guards-hook.js"
+    },
+    "files": [
+        "src/**/*",
+        "templates/**/*",
+        "README.md"
+    ],
+    "author": "Dean Hiller",
+    "license": "Apache-2.0",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/deanhiller/webpieces-ts.git",
+        "directory": "packages/tooling/agent-workflow-rules"
+    },
+    "dependencies": {
+        "@webpieces/hook-runtime": "workspace:*",
+        "@webpieces/rules-config": "workspace:*",
+        "inversify": "7.10.4",
+        "reflect-metadata": "0.2.2",
+        "@webpieces/tooling-common": "workspace:*",
+        "@webpieces/repo-workflow-core": "workspace:*"
+    },
+    "publishConfig": {
+        "access": "public",
+        "bin": {
+            "wp-ai-guards-hook": "./src/adapters/guards-hook.js",
+            "wp-install-ai-hooks": "./src/bin/install-entry.js",
+            "wp-upgrade-shim": "./src/bin/upgrade-shim.js"
+        }
+    }
+}

@@ -1,6 +1,6 @@
 import { NoAnyUnknownConfig } from '@webpieces/rules-config';
 
-import { EditContext } from '../types';
+import { EditContext } from '@webpieces/hook-runtime';
 import { NoAnyUnknownRule } from './no-any-unknown';
 
 // A single `: any` line that a webpieces-disable comment would normally suppress.

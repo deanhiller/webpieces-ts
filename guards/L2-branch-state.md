@@ -11,10 +11,10 @@ One key makes that unconstructible. The four class NAMES are unchanged and still
 on every decision-log line, so `grep rule=stale-main-bash-guard` keeps working; only the switch
 merged. The four old keys are rejected by name with this destination — see `retired-config-keys.ts`.
 
-**Code:** `ai-hook-rules/src/core/rules/{feature-branch,read-stale,stale-main-bash,merged-branch-bash}-guard.ts` ·
-the rows in `ai-hook-rules/src/core/l2-rows.ts` · the shared cache in
+**Code:** `agent-workflow-rules/src/core/rules/{feature-branch,read-stale,stale-main-bash,merged-branch-bash}-guard.ts` ·
+the rows in `agent-workflow-rules/src/core/l2-rows.ts` · the shared cache in
 `rules-config/src/main-sync-status.ts` + `main-sync-file.ts` · the refresher in
-`ai-hook-rules/src/core/sync-main.ts`.
+`agent-workflow-rules/src/core/sync-main.ts`.
 
 ## The four classes, and why there are four
 
@@ -304,13 +304,13 @@ and the doc follows — it cannot rot into a list of things that were fixed year
 
 | section | file | symbol |
 |---|---|---|
-| the rows + the reason→row join | `ai-hook-rules/src/core/l2-rows.ts` | `L2_ROWS`, `l2RowForReason`, `NOT_DONE` |
-| write policy | `ai-hook-rules/src/core/rules/feature-branch-guard.ts` | `check` |
-| read policy | `ai-hook-rules/src/core/rules/read-stale-guard.ts` | `checkStaleMain`, `checkMergedBranch` |
-| stale-main Bash | `ai-hook-rules/src/core/rules/stale-main-bash-guard.ts` | `checkFreshness`, `bareCheckoutOfMain` |
-| the shared freshness predicate | `ai-hook-rules/src/core/rules/main-freshness.ts` | `containsOriginMain`, `summarize` |
-| merged-branch Bash | `ai-hook-rules/src/core/rules/merged-branch-bash-guard.ts` | `isFullyRecovery`, `ALLOWED_GIT_SUBCOMMANDS` |
+| the rows + the reason→row join | `agent-workflow-rules/src/core/l2-rows.ts` | `L2_ROWS`, `l2RowForReason`, `NOT_DONE` |
+| write policy | `agent-workflow-rules/src/core/rules/feature-branch-guard.ts` | `check` |
+| read policy | `agent-workflow-rules/src/core/rules/read-stale-guard.ts` | `checkStaleMain`, `checkMergedBranch` |
+| stale-main Bash | `agent-workflow-rules/src/core/rules/stale-main-bash-guard.ts` | `checkFreshness`, `bareCheckoutOfMain` |
+| the shared freshness predicate | `agent-workflow-rules/src/core/rules/main-freshness.ts` | `containsOriginMain`, `summarize` |
+| merged-branch Bash | `agent-workflow-rules/src/core/rules/merged-branch-bash-guard.ts` | `isFullyRecovery`, `ALLOWED_GIT_SUBCOMMANDS` |
 | the cache | `rules-config/src/main-sync-status.ts`, `main-sync-file.ts` | `readMainSyncStatus`, `MainSyncStatusFile`, `forgeReachable` |
-| the refresher | `ai-hook-rules/src/core/sync-main.ts` | `refreshMainSync` |
-| command scanning | `ai-hook-rules/src/core/rules/content-read-scan.ts`, `shell-segment-scan.ts` | `readsStaleContent`, `classify` |
+| the refresher | `agent-workflow-rules/src/core/sync-main.ts` | `refreshMainSync` |
+| command scanning | `agent-workflow-rules/src/core/rules/content-read-scan.ts`, `shell-segment-scan.ts` | `readsStaleContent`, `classify` |
 | the config key | `rules-config/src/main-sync-guard-configs.ts`, `sections.ts` | `BranchStateGuardConfig`, `BRANCH_STATE_GUARD_KEY` |

@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 
 import { NoDestructureConfig } from '@webpieces/rules-config';
 
-import { EditContext } from '../types';
+import { EditContext } from '@webpieces/hook-runtime';
 import { NoDestructureRule } from './no-destructure';
 
 function ctx(relativePath: string, content: string, disabledLines: number[] = []): EditContext {

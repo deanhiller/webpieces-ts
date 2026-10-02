@@ -1,0 +1,39 @@
+{
+    "name": "agent-workflow-rules",
+    "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+    "sourceRoot": "packages/tooling/agent-workflow-rules/src",
+    "projectType": "library",
+    "targets": {
+        "test": {
+            "executor": "nx:run-commands",
+            "options": {
+                "command": "vitest run packages/tooling/agent-workflow-rules/"
+            }
+        },
+        "build": {
+            "executor": "@nx/js:tsc",
+            "outputs": [
+                "{options.outputPath}"
+            ],
+            "options": {
+                "outputPath": "dist/packages/tooling/agent-workflow-rules",
+                "main": "packages/tooling/agent-workflow-rules/src/index.ts",
+                "tsConfig": "packages/tooling/agent-workflow-rules/tsconfig.lib.json",
+                "assets": [
+                    "packages/tooling/agent-workflow-rules/package.json",
+                    "packages/tooling/agent-workflow-rules/README.md",
+                    {
+                        "input": "packages/tooling/agent-workflow-rules/templates",
+                        "glob": "**/*",
+                        "output": "templates"
+                    }
+                ]
+            }
+        }
+    },
+    "tags": [
+        "type:tooling",
+        "framework:node",
+        "role:lib"
+    ]
+}

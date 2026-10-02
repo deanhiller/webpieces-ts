@@ -9,7 +9,8 @@
         ".": "./src/index.js",
         "./package.json": "./package.json",
         "./plugin": "./src/plugin.js",
-        "./executors.json": "./executors.json"
+        "./executors.json": "./executors.json",
+        "./openclaw-plugin": "./src/adapters/openclaw-plugin.js"
     },
     "files": [
         "src/**/*",
@@ -28,7 +29,8 @@
         "@webpieces/rules-config": "workspace:*",
         "madge": "8.0.0",
         "@webpieces/tooling-common": "workspace:*",
-        "@webpieces/repo-workflow-core": "workspace:*"
+        "@webpieces/repo-workflow-core": "workspace:*",
+        "@webpieces/agent-workflow-rules": "workspace:*"
     },
     "peerDependencies": {
         "@nx/devkit": ">=18.0.0"

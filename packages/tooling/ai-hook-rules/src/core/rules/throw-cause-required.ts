@@ -1,10 +1,10 @@
 import { ThrowCauseRequiredConfig, RULE_NAMES, Option } from '@webpieces/rules-config';
 
-import type { EditContext, Violation } from '../types';
-import { Violation as V } from '../types';
-import { EditRuleBase } from '../rule-base';
-import { FixHint, DisableEscape } from '../fix-hint';
-import { writeTemplateIfMissing } from '../instruct-ai-writer';
+import type { EditContext, Violation } from '@webpieces/hook-runtime';
+import { Violation as V } from '@webpieces/hook-runtime';
+import { EditRuleBase } from '@webpieces/hook-runtime';
+import { FixHint, DisableEscape } from '@webpieces/hook-runtime';
+import { writeTemplateIfMissing } from '@webpieces/rules-config';
 
 /**
  * Matches: throw new SomeClass(

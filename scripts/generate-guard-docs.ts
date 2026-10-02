@@ -1,15 +1,15 @@
 import * as fs from 'fs';
 import * as path from 'path';
 
-import { renderL1Doc } from '../packages/tooling/ai-hook-rules/src/core/l1-doc';
-import { renderL2Doc } from '../packages/tooling/ai-hook-rules/src/core/l2-doc';
-import { L0ToolingDoc } from '../packages/tooling/ai-hook-rules/src/core/l0-tooling-doc';
-import { LOCATION_MATRIX_DOC } from '../packages/tooling/ai-hook-rules/src/core/l1-matrix-doc';
-import { BRANCH_STATE_MATRIX_DOC } from '../packages/tooling/ai-hook-rules/src/core/l2-matrix-doc';
-import { GuardIndexDoc } from '../packages/tooling/ai-hook-rules/src/core/guard-index-doc';
-import { renderShim } from '../packages/tooling/ai-hook-rules/src/bin/shim';
-import { REVIEWER_AGENT_TEMPLATE, renderReviewerAgent } from '../packages/tooling/ai-hook-rules/src/bin/reviewer-agent';
-import { GUARD_MATRIX_DOC, renderGuardMatrixDoc } from '../packages/tooling/ai-hook-rules/src/core/l0-matrix';
+import { renderL1Doc } from '../packages/tooling/agent-workflow-rules/src/core/l1-doc';
+import { renderL2Doc } from '../packages/tooling/agent-workflow-rules/src/core/l2-doc';
+import { L0ToolingDoc } from '../packages/tooling/agent-workflow-rules/src/core/l0-tooling-doc';
+import { LOCATION_MATRIX_DOC } from '../packages/tooling/agent-workflow-rules/src/core/l1-matrix-doc';
+import { BRANCH_STATE_MATRIX_DOC } from '../packages/tooling/agent-workflow-rules/src/core/l2-matrix-doc';
+import { GuardIndexDoc } from '../packages/tooling/agent-workflow-rules/src/core/guard-index-doc';
+import { renderShim } from '../packages/tooling/agent-workflow-rules/src/bin/shim';
+import { REVIEWER_AGENT_TEMPLATE, renderReviewerAgent } from '../packages/tooling/agent-workflow-rules/src/bin/reviewer-agent';
+import { GUARD_MATRIX_DOC, renderGuardMatrixDoc } from '../packages/tooling/agent-workflow-rules/src/core/l0-matrix';
 
 /**
  * Rewrite every GENERATED guard artifact from the arrays and renderers the guards consult.
@@ -28,7 +28,7 @@ import { GUARD_MATRIX_DOC, renderGuardMatrixDoc } from '../packages/tooling/ai-h
  *             constants + SHIM_LOG_FIELDS; every byte outside it is hand-written prose and is preserved.
  *             That doc is the largest guard doc in the repo and the only hand-written one, and it is the
  *             only one that has ever gone stale — twice in one session.
- *   templates `packages/tooling/ai-hook-rules/templates/ai-hook.sh` — the POSIX-sh hook, rendered from
+ *   templates `packages/tooling/agent-workflow-rules/templates/ai-hook.sh` — the POSIX-sh hook, rendered from
  *             renderShim(). These used to have NO command at all: their
  *             byte-lock specs quoted a `fs.writeFileSync(...)` snippet in a comment for a human to
  *             paste. A regeneration step that only exists as a comment is one nobody runs, which is
@@ -94,7 +94,7 @@ function main(): void {
     fs.writeFileSync(matrix, renderGuardMatrixDoc(), 'utf8');
     wrote.push(matrix);
 
-    const templates = path.join(root, 'packages', 'tooling', 'ai-hook-rules', 'templates');
+    const templates = path.join(root, 'packages', 'tooling', 'agent-workflow-rules', 'templates');
     const shim = path.join(templates, 'ai-hook.sh');
     fs.writeFileSync(shim, renderShim(), { mode: 0o755 });
     wrote.push(shim);

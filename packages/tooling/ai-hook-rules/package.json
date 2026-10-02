@@ -1,20 +1,16 @@
 {
     "name": "@webpieces/ai-hook-rules",
     "version": "0.0.0-dev",
-    "description": "Pluggable write-time validation framework for AI coding agents (@webpieces/ai-hook-rules). Claude Code PreToolUse + openclaw before_tool_call adapters share one rule engine.",
+    "description": "Independent source edit rules and source hook for AI coding agents.",
     "type": "commonjs",
     "main": "./src/index.js",
     "exports": {
         ".": "./src/index.js",
         "./package.json": "./package.json",
-        "./claude-code-rules": "./src/adapters/rules-hook.js",
-        "./claude-code-guards": "./src/adapters/guards-hook.js",
-        "./openclaw-plugin": "./src/adapters/openclaw-plugin.js"
+        "./claude-code-rules": "./src/adapters/rules-hook.js"
     },
     "files": [
         "src/**/*",
-        "templates/**/*",
-        "openclaw.plugin.json",
         "README.md"
     ],
     "author": "Dean Hiller",
@@ -29,16 +25,12 @@
         "@webpieces/rules-config": "workspace:*",
         "inversify": "7.10.4",
         "reflect-metadata": "0.2.2",
-        "@webpieces/tooling-common": "workspace:*",
-        "@webpieces/repo-workflow-core": "workspace:*"
+        "@webpieces/tooling-common": "workspace:*"
     },
     "publishConfig": {
         "access": "public",
         "bin": {
-            "wp-ai-rules-hook": "./src/adapters/rules-hook.js",
-            "wp-ai-guards-hook": "./src/adapters/guards-hook.js",
-            "wp-install-ai-hooks": "./src/bin/install-entry.js",
-            "wp-upgrade-shim": "./src/bin/upgrade-shim.js"
+            "wp-ai-rules-hook": "./src/adapters/rules-hook.js"
         }
     }
 }

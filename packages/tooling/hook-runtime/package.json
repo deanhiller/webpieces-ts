@@ -4,11 +4,28 @@
     "description": "Agent hook protocol, normalized events, and fail-closed application boundary.",
     "type": "commonjs",
     "main": "./src/index.js",
-    "exports": { ".": "./src/index.js", "./package.json": "./package.json" },
-    "files": ["src/**/*"],
+    "exports": {
+        ".": "./src/index.js",
+        "./package.json": "./package.json",
+        "./harness-vocabulary": "./src/harness-vocabulary.js"
+    },
+    "files": [
+        "src/**/*"
+    ],
     "author": "Dean Hiller",
     "license": "Apache-2.0",
-    "repository": { "type": "git", "url": "https://github.com/deanhiller/webpieces-ts.git", "directory": "packages/tooling/hook-runtime" },
-    "dependencies": { "inversify": "7.10.4", "reflect-metadata": "0.2.2" },
-    "publishConfig": { "access": "public" }
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/deanhiller/webpieces-ts.git",
+        "directory": "packages/tooling/hook-runtime"
+    },
+    "dependencies": {
+        "inversify": "7.10.4",
+        "reflect-metadata": "0.2.2",
+        "@webpieces/rules-config": "workspace:*",
+        "@webpieces/tooling-common": "workspace:*"
+    },
+    "publishConfig": {
+        "access": "public"
+    }
 }

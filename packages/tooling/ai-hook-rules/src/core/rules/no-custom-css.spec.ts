@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 
 import { NoCustomCssConfig, NoCustomCssScope } from '@webpieces/rules-config';
 
-import { EditContext } from '../types';
+import { EditContext } from '@webpieces/hook-runtime';
 import { NoCustomCssRule } from './no-custom-css';
 
 function ctx(relativePath: string, content: string, disabledLines: number[] = []): EditContext {

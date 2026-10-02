@@ -1,21 +1,13 @@
 import * as fs from 'fs';
 import * as path from 'path';
 
-import {
-    BaseRuleConfig, RuleOptions, WebpiecesRulesConfig,
-    NoAnyUnknownConfig, NoImplicitAnyConfig, MaxFileLinesConfig, ValidateTsInSrcConfig,
-    NoDestructureConfig, RequireReturnTypeConfig, NoUnmanagedExceptionsConfig,
-    CatchErrorPatternConfig, ThrowCauseRequiredConfig,
-    NoSymbolDiTokensConfig, NoCustomCssConfig, NoProcessExitOutsideMainConfig, BranchCreationGuardConfig,
-    PrLifecycleGuardConfig, BranchStateGuardConfig,
-    NoJsFilesConfig, MatchRuleConfig,
-} from '@webpieces/rules-config';
+import { BaseRuleConfig, RuleOptions, WebpiecesRulesConfig, NoAnyUnknownConfig, NoImplicitAnyConfig, MaxFileLinesConfig, ValidateTsInSrcConfig, NoDestructureConfig, RequireReturnTypeConfig, NoUnmanagedExceptionsConfig, CatchErrorPatternConfig, ThrowCauseRequiredConfig, NoSymbolDiTokensConfig, NoCustomCssConfig, NoProcessExitOutsideMainConfig, NoJsFilesConfig, MatchRuleConfig } from '@webpieces/rules-config';
 
-import type { Rule, PlainRule } from './types';
-import { InformAiError } from './types';
-import { toError } from './to-error';
-import { EmptyRuleConfig } from './rule-base';
-import { CustomRuleAdapter } from './custom-rule-adapter';
+import type { Rule, PlainRule } from '@webpieces/hook-runtime';
+import { InformAiError } from '@webpieces/tooling-common';
+import { toError } from '@webpieces/tooling-common/to-error';
+import { EmptyRuleConfig } from '@webpieces/hook-runtime';
+import { CustomRuleAdapter } from '@webpieces/hook-runtime';
 import { builtInConfigKeys } from './rules/index';
 import { NoAnyUnknownRule } from './rules/no-any-unknown';
 import { NoImplicitAnyRule } from './rules/no-implicit-any';
@@ -29,20 +21,7 @@ import { ThrowCauseRequiredRule } from './rules/throw-cause-required';
 import { NoSymbolDiTokensRule } from './rules/no-symbol-di-tokens';
 import { NoCustomCssRule } from './rules/no-custom-css';
 import { NoProcessExitOutsideMainRule } from './rules/no-process-exit-outside-main';
-import { BranchCreationGuardRule } from './rules/branch-creation-guard';
-import { PrCreationOrPushGuardRule } from './rules/pr-creation-or-push-guard';
-import { MergeInProgressGuardRule } from './rules/merge-in-progress-guard';
-import { BuildOutputPipeGuardRule } from './rules/build-output-pipe-guard';
-import { WaitSpinGuardRule } from './rules/wait-spin-guard';
-import { PrMergeGuardRule } from './rules/pr-merge-guard';
-import { RedirectHowToMergeMainRule } from './rules/redirect-how-to-merge-main';
 import { NoJsFilesRule } from './rules/no-js-files';
-import { FeatureBranchGuardRule } from './rules/feature-branch-guard';
-import { ReadStaleGuardRule } from './rules/read-stale-guard';
-import { MergedBranchBashGuardRule } from './rules/merged-branch-bash-guard';
-import { StaleMainBashGuardRule } from './rules/stale-main-bash-guard';
-import { WholeRepoBuildGuardRule } from './rules/whole-repo-build-guard';
-import { CommitMessageSubstitutionGuardRule } from './rules/commit-message-substitution-guard';
 import { MatchRule } from './rules/match-rule';
 
 const REQUIRED_FIELDS: readonly string[] = ['name', 'description', 'scope', 'files', 'check'];
@@ -65,12 +44,7 @@ const VALID_SCOPES = new Set(['edit', 'file', 'bash']);
  * gated command. They arrive as a constructor argument rather than a config field, so there is exactly
  * one spelling of each command in the config (see PrLifecycleGuardConfig).
  */
-type RuleFactory = (config: BaseRuleConfig, guardHints: GuardHintCommands) => readonly Rule[];
-
-/** The two gated-command strings guards print, resolved from `commands.guardHints`. Data-only. */
-export class GuardHintCommands {
-    constructor(readonly upsertPr: string, readonly mergeComplete: string) {}
-}
+type RuleFactory = (config: BaseRuleConfig) => readonly Rule[];
 
 const BUILT_IN_RULE_MAP: Record<string, RuleFactory> = {
     'no-any-unknown': (c: BaseRuleConfig) => [new NoAnyUnknownRule(c as NoAnyUnknownConfig)],
@@ -86,21 +60,7 @@ const BUILT_IN_RULE_MAP: Record<string, RuleFactory> = {
     'no-custom-css': (c: BaseRuleConfig) => [new NoCustomCssRule(c as NoCustomCssConfig)],
     'no-process-exit-outside-main': (c: BaseRuleConfig) => [new NoProcessExitOutsideMainRule(c as NoProcessExitOutsideMainConfig)],
     'no-js-files': (c: BaseRuleConfig) => [new NoJsFilesRule(c as NoJsFilesConfig)],
-    'branch-creation-guard': (c: BaseRuleConfig) => [new BranchCreationGuardRule(c as BranchCreationGuardConfig)],
-    // THE TWO COLLAPSED POLICIES. Order inside each array is the order the rules run in, and it is the
-    // same order the previous per-key registry produced.
-    'pr-lifecycle-guard': (c: BaseRuleConfig, hints: GuardHintCommands) => [
-        new PrCreationOrPushGuardRule(c as PrLifecycleGuardConfig, hints.upsertPr),
-        new MergeInProgressGuardRule(c as PrLifecycleGuardConfig, hints.mergeComplete),
-        new PrMergeGuardRule(c as PrLifecycleGuardConfig),
-        new RedirectHowToMergeMainRule(c as PrLifecycleGuardConfig),
-    ],
-    'branch-state-guard': (c: BaseRuleConfig) => [
-        new FeatureBranchGuardRule(c as BranchStateGuardConfig),
-        new ReadStaleGuardRule(c as BranchStateGuardConfig),
-        new MergedBranchBashGuardRule(c as BranchStateGuardConfig),
-        new StaleMainBashGuardRule(c as BranchStateGuardConfig),
-    ],
+
 };
 
 // Index the typed config by rule name. Each value is the rule's *Config (a plain object from
@@ -114,50 +74,10 @@ function asConfigMap(config: WebpiecesRulesConfig): Record<string, BaseRuleConfi
 export function loadRules(
     config: WebpiecesRulesConfig,
     workspaceRoot: string,
-    guardHints: GuardHintCommands,
 ): readonly Rule[] {
-    const builtIns = loadBuiltInRules(config, guardHints);
+    const builtIns = loadBuiltInRules(config);
     const custom = loadCustomRules(config, workspaceRoot);
     return [...builtIns, ...custom];
-}
-
-/**
- * The KEYLESS bash guards: rules that have NO webpieces.config.json entry, and are therefore
- * deliberately kept out of `builtInConfigKeys`/`BUILT_IN_RULE_MAP` — so the config-sync check (fault Y,
- * "every built-in rule needs an entry, or every Bash call is blocked") can never see them. That
- * containment is the whole point: whole-repo-build-guard shipped inside the config-driven set once and
- * took every upgrading consumer's shell down with it.
- *
- * Each rule here decides for ITSELF whether it acts, and the two do it differently on purpose:
- *
- *  - `whole-repo-build-guard` is EXPERIMENTAL and inert unless the optional machine-local
- *    `~/.webpieces/config.json` opts IN with `experimental.whole-repo-build-guard: true`. Every
- *    experimental flag defaults OFF, and it takes no file and no key to be in that default state —
- *    which is the difference between this and the required-key release that blocked every upgrading
- *    consumer's shell.
- *  - `commit-message-substitution-guard` acts unconditionally. Nobody legitimately wants a backtick
- *    expanded inside a commit message, and its cure (`git commit -F <file>`) is available for every
- *    input and can never itself match the guard — so there is nothing for a switch to rescue.
- *  - `build-output-pipe-guard` acts unconditionally, on the same test. Piping `wp-build` /
- *    `wp-review-upsert-pr` / `wp-finish-upsert-pr` withholds their heartbeat until they exit and gets
- *    the build killed by the 600s watchdog; the cure is the SAME command with less typing, available
- *    for every input, and it cannot itself match the guard.
- *  - `wait-spin-guard` acts unconditionally, on the same test again. An `echo .` keep-alive spends a
- *    whole turn (~557k tokens) to do nothing, and its cure — `pnpm wp-await-reviews` /
- *    `pnpm wp-await-checks` for a worktree subagent, a Monitor or the backgrounded command itself for a
- *    main agent — is available for every input and can never itself match the guard.
- *
- * `affectedBuildCommand` is the project's gate command, passed through so a refusal quotes what THIS
- * repo's gate actually runs.
- */
-// webpieces-disable no-function-outside-class -- sibling of loadRules/loadMatchRules in this module; the whole loader is module-scope functions and a lone class for this one would break the file's shape
-export function loadKeylessBashRules(affectedBuildCommand: string): Rule[] {
-    return [
-        new WholeRepoBuildGuardRule(affectedBuildCommand),
-        new CommitMessageSubstitutionGuardRule(),
-        new BuildOutputPipeGuardRule(),
-        new WaitSpinGuardRule(),
-    ];
 }
 
 // One MatchRule per entry of the `match-rules` array. Kept separate from loadRules (built-ins/custom)
@@ -169,7 +89,7 @@ export function loadMatchRules(matchRules: readonly MatchRuleConfig[]): Rule[] {
 
 // Iterates CONFIG KEYS, not rule names — one entry can yield several rules (see BUILT_IN_RULE_MAP).
 // webpieces-disable no-function-outside-class -- the body of loadRules above, in the same module of loader functions
-function loadBuiltInRules(config: WebpiecesRulesConfig, guardHints: GuardHintCommands): Rule[] {
+export function loadBuiltInRules(config: WebpiecesRulesConfig): Rule[] {
     const map = asConfigMap(config);
     const rules: Rule[] = [];
     for (const configKey of builtInConfigKeys) {
@@ -179,12 +99,13 @@ function loadBuiltInRules(config: WebpiecesRulesConfig, guardHints: GuardHintCom
             continue;
         }
         const ruleConfig = map[configKey] ?? new EmptyRuleConfig();
-        rules.push(...factory(ruleConfig, guardHints));
+        rules.push(...factory(ruleConfig));
     }
     return rules;
 }
 
-function loadCustomRules(config: WebpiecesRulesConfig, workspaceRoot: string): Rule[] {
+// webpieces-disable no-function-outside-class -- existing source registry helper contributed to both source and umbrella runners
+export function loadCustomRules(config: WebpiecesRulesConfig, workspaceRoot: string): Rule[] {
     const dirs = config.rulesDir ?? [];
     // webpieces-disable no-any-unknown -- index the typed config by dynamic custom-rule name
     const map = config as unknown as Record<string, RuleOptions | undefined>;
@@ -256,41 +177,4 @@ function validateRule(rule: unknown): rule is PlainRule {
         return false;
     }
     return true;
-}
-
-export function globMatches(pattern: string, filePath: string): boolean {
-    const regex = globToRegex(pattern);
-    return regex.test(filePath);
-}
-
-function globToRegex(pattern: string): RegExp {
-    let re = '';
-    let i = 0;
-    while (i < pattern.length) {
-        const ch = pattern[i];
-        if (ch === '*') {
-            if (pattern[i + 1] === '*') {
-                re += '.*';
-                i += 2;
-                if (pattern[i] === '/') i += 1;
-                continue;
-            }
-            re += '[^/]*';
-            i += 1;
-            continue;
-        }
-        if (ch === '?') {
-            re += '[^/]';
-            i += 1;
-            continue;
-        }
-        if ('.+^$(){}|[]\\'.includes(ch)) {
-            re += '\\' + ch;
-            i += 1;
-            continue;
-        }
-        re += ch;
-        i += 1;
-    }
-    return new RegExp('^' + re + '$');
 }

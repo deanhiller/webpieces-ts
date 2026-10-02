@@ -2,9 +2,9 @@ import { describe, it, expect } from 'vitest';
 
 import { CatchErrorPatternConfig } from '@webpieces/rules-config';
 
-import { EditContext } from '../types';
-import { stripTsNoise } from '../strip-ts-noise';
-import { createIsLineDisabled } from '../disable-directives';
+import { EditContext } from '@webpieces/hook-runtime';
+import { stripTsNoise } from '@webpieces/hook-runtime';
+import { createIsLineDisabled } from '@webpieces/hook-runtime';
 import { CatchErrorPatternRule } from './catch-error-pattern';
 
 /**

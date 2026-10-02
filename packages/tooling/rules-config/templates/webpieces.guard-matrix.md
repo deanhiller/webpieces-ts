@@ -1,6 +1,6 @@
 # webpieces guard matrix — L0 (tooling integrity)
 
-GENERATED from `L0_FAULTS` + `L0_ALLOWLIST` in `@webpieces/ai-hook-rules`. Do not hand-edit —
+GENERATED from `L0_FAULTS` + `L0_ALLOWLIST` in `@webpieces/agent-workflow-rules`. Do not hand-edit —
 a unit test locks this file byte-identical to `renderGuardMatrixDoc()`, so the table below is
 the array the guard actually consults, not a description of it.
 
@@ -20,7 +20,7 @@ numbers from `L0_ROW_*`, both spelled in exactly one place (`core/l0-fault-codes
 |---|---|---|---|---|
 | `D` | `version-drift` | version drift — root package.json pin != installed version | sh, before the bin runs | sh |
 | `X` | `guard-bin-missing` | guard bin missing (fresh clone / new worktree / package removed) | sh, before the bin runs | sh |
-| `U` | `guard-pkg-undeclared` | guard bin missing AND @webpieces/ai-hook-rules is not declared in package.json | sh, before the bin runs | sh |
+| `U` | `guard-pkg-undeclared` | guard bin missing AND @webpieces/agent-workflow-rules is not declared in package.json | sh, before the bin runs | sh |
 | `K` | `guard-bin-crashed` | guard bin present but CRASHED (exit code not 0 or 2 — corrupt node_modules) | sh, before the bin runs | sh |
 | `S` | `managed-hook-surface` | a webpieces-managed hook file, one of the harness hook registrations (.claude/settings.json, .codex/hooks.json) or the managed env entry does not match this release | the guard bin | JS |
 | `C` | `config-missing` | webpieces.config.json missing | the guard bin | JS |
@@ -44,11 +44,11 @@ the option you pick EXACTLY as written and run nothing else on that line.
 
 - **Option 1 (preferred)**: `pnpm install`  ← pick this when this fault fires at all — nothing is installed in THIS tree, and a new git worktree copies no node_modules
 
-### `U` — guard bin missing AND @webpieces/ai-hook-rules is not declared in package.json
+### `U` — guard bin missing AND @webpieces/agent-workflow-rules is not declared in package.json
 
-- **Option 1 (preferred)**: `git checkout main && git pull origin main`  ← pick this when @webpieces/ai-hook-rules arrives WITH the umbrella, so a tree that is behind explains this without anything being mis-declared — sync first, then install
+- **Option 1 (preferred)**: `git checkout main && git pull origin main`  ← pick this when @webpieces/agent-workflow-rules arrives WITH the umbrella, so a tree that is behind explains this without anything being mis-declared — sync first, then install
 - **Option 2**: `pnpm install`  ← pick this when the sync (or a raised catalog pin in pnpm-workspace.yaml, which is editable while the block is up) gave the installer something new to do — a BARE install with nothing changed reports "Lockfile is up to date" and leaves the tree as broken as it found it
-- **Option 3**: `pnpm add -D @webpieces/ai-hook-rules`  ← pick this when nothing else worked and you need this session back — it is a session unblock, NOT a fix: revert it with 'pnpm remove @webpieces/ai-hook-rules' before committing, because a direct root dependency on it violates the umbrella rule
+- **Option 3**: `pnpm add -D @webpieces/agent-workflow-rules`  ← pick this when nothing else worked and you need this session back — it is a session unblock, NOT a fix: revert it with 'pnpm remove @webpieces/agent-workflow-rules' before committing, because a direct root dependency on it violates the umbrella rule
 
 ### `K` — guard bin present but CRASHED (exit code not 0 or 2 — corrupt node_modules)
 
@@ -56,8 +56,8 @@ the option you pick EXACTLY as written and run nothing else on that line.
 
 ### `S` — a webpieces-managed hook file, one of the harness hook registrations (.claude/settings.json, .codex/hooks.json) or the managed env entry does not match this release
 
-- **Option 1 (preferred)**: `pnpm exec wp-upgrade-shim`  ← pick this when this fault fires at all — it is the only cure that repairs EVERY managed surface (ai-hook.sh, each harness hook registration, the anchoring of the neighbour hook commands registered beside ours, and the Claude settings env entry), and it also deletes the retired guarantee-root.sh and any entry still naming it, and it touches no config; needs installed @webpieces/ai-hook-rules 0.4.408 or newer
-- **Option 2**: `cp node_modules/@webpieces/ai-hook-rules/templates/ai-hook.sh .claude/webpieces/ai-hook.sh`  ← pick this when the installed @webpieces/ai-hook-rules is OLDER than 0.4.408, so wp-upgrade-shim does not exist yet — it is PARTIAL (it repairs ai-hook.sh and NOTHING else), so upgrade @webpieces afterwards and run Option 1 to finish
+- **Option 1 (preferred)**: `pnpm exec wp-upgrade-shim`  ← pick this when this fault fires at all — it is the only cure that repairs EVERY managed surface (ai-hook.sh, each harness hook registration, the anchoring of the neighbour hook commands registered beside ours, and the Claude settings env entry), and it also deletes the retired guarantee-root.sh and any entry still naming it, and it touches no config; needs installed @webpieces/agent-workflow-rules 0.4.408 or newer
+- **Option 2**: `cp node_modules/@webpieces/agent-workflow-rules/templates/ai-hook.sh .claude/webpieces/ai-hook.sh`  ← pick this when the installed @webpieces/agent-workflow-rules is OLDER than 0.4.408, so wp-upgrade-shim does not exist yet — it is PARTIAL (it repairs ai-hook.sh and NOTHING else), so upgrade @webpieces afterwards and run Option 1 to finish
 
 ### `C` — webpieces.config.json missing
 
@@ -102,10 +102,10 @@ that denied `rm -rf node_modules && pnpm install` while allowing a bare `pnpm in
 | 7 | git fetch - a bare git pull and git merge are NOT on the list | ALLOW |
 | 8 | git checkout main && git pull origin main | ALLOW |
 | 9 | pnpm exec wp-upgrade-shim | ALLOW |
-| 10 | cp node_modules/@webpieces/ai-hook-rules/templates/ai-hook.sh .claude/webpieces/ai-hook.sh | ALLOW |
+| 10 | cp node_modules/@webpieces/agent-workflow-rules/templates/ai-hook.sh .claude/webpieces/ai-hook.sh | ALLOW |
 | 11 | pnpm wp-prune-unknown-config | ALLOW |
 | 12 | pnpm exec wp-install-ai-hooks (flags allowed, e.g. --target=project) | ALLOW |
-| 13 | pnpm add -D @webpieces/ai-hook-rules (an @version and extra flags allowed) | ALLOW |
+| 13 | pnpm add -D @webpieces/agent-workflow-rules (an @version and extra flags allowed) | ALLOW |
 | 14 | read-only orientation: pwd, git status/log/diff/show/branch/rev-parse, git worktree list | ALLOW |
 | 15 | CODEX ONLY - a read-shaped Bash command (the harness has no Read tool): cat, head, tail, less, more, bat, or sed -n '<range>p' | PASS |
 
@@ -134,5 +134,5 @@ PASS degenerates into a terminal allow — reads are unguarded during those thre
 
 ## Widening L0
 
-Add an entry to `L0_ALLOWLIST` in `packages/tooling/ai-hook-rules/src/bin/shim.ts`. That array is
+Add an entry to `L0_ALLOWLIST` in `packages/tooling/agent-workflow-rules/src/bin/shim.ts`. That array is
 the single source for the JS allowlist, the `grep -E` inside the rendered shim, and this file.

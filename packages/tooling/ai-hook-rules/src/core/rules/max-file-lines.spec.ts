@@ -4,7 +4,7 @@ import * as path from 'path';
 
 import { MaxFileLinesConfig, GENERATED_CODE_PATHS, isPathExcluded, NoFunctionOutsideClassConfig, specTempDirs } from '@webpieces/rules-config';
 
-import { FileContext } from '../types';
+import { FileContext } from '@webpieces/hook-runtime';
 import { MaxFileLinesRule } from './max-file-lines';
 
 // The incident this pins: a graphql-codegen client-preset output is ~42k lines because it embeds the

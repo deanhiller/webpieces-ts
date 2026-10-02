@@ -475,7 +475,7 @@ importers:
         specifier: 3.11.0
         version: 3.11.0
 
-  packages/tooling/ai-hook-rules:
+  packages/tooling/agent-workflow-rules:
     dependencies:
       '@webpieces/hook-runtime':
         specifier: workspace:*
@@ -483,6 +483,24 @@ importers:
       '@webpieces/repo-workflow-core':
         specifier: workspace:*
         version: link:../repo-workflow-core
+      '@webpieces/rules-config':
+        specifier: workspace:*
+        version: link:../rules-config
+      '@webpieces/tooling-common':
+        specifier: workspace:*
+        version: link:../tooling-common
+      inversify:
+        specifier: 7.10.4
+        version: 7.10.4(reflect-metadata@0.2.2)
+      reflect-metadata:
+        specifier: 0.2.2
+        version: 0.2.2
+
+  packages/tooling/ai-hook-rules:
+    dependencies:
+      '@webpieces/hook-runtime':
+        specifier: workspace:*
+        version: link:../hook-runtime
       '@webpieces/rules-config':
         specifier: workspace:*
         version: link:../rules-config
@@ -528,6 +546,12 @@ importers:
 
   packages/tooling/hook-runtime:
     dependencies:
+      '@webpieces/rules-config':
+        specifier: workspace:*
+        version: link:../rules-config
+      '@webpieces/tooling-common':
+        specifier: workspace:*
+        version: link:../tooling-common
       inversify:
         specifier: 7.10.4
         version: 7.10.4(reflect-metadata@0.2.2)
@@ -540,6 +564,9 @@ importers:
       '@nx/devkit':
         specifier: '>=18.0.0'
         version: 22.2.1(nx@22.2.1(@swc-node/register@1.9.1(@swc/core@1.15.30(@swc/helpers@0.5.17))(@swc/types@0.1.26)(typescript@5.9.3))(@swc/core@1.15.30(@swc/helpers@0.5.17)))
+      '@webpieces/agent-workflow-rules':
+        specifier: workspace:*
+        version: link:../agent-workflow-rules
       '@webpieces/ai-hook-rules':
         specifier: workspace:*
         version: link:../ai-hook-rules

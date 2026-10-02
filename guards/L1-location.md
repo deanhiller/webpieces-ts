@@ -10,14 +10,14 @@ run against the whole point. L0 has no key for the stronger version of the same 
 decides whether the tooling can be trusted cannot be configured by the file it has not validated yet.
 
 
-**Code:** `packages/tooling/ai-hook-rules/src/core/effective-tree.ts` (`EffectiveTreeResolver`,
-`TreeKind`) · `packages/tooling/ai-hook-rules/src/core/target-tree.ts` (`TargetTreeResolver`,
+**Code:** `packages/tooling/hook-runtime/src/core/effective-tree.ts` (`EffectiveTreeResolver`,
+`TreeKind`) · `packages/tooling/hook-runtime/src/core/target-tree.ts` (`TargetTreeResolver`,
 `GovernedPath` — the same question asked about a FILE) ·
-`packages/tooling/ai-hook-rules/src/core/runner.ts` (`l1LocationBlock`, the `foreign` check) ·
-`packages/tooling/ai-hook-rules/src/core/excluded-paths.ts` (`filterByExcludedPaths`) ·
+`packages/tooling/agent-workflow-rules/src/core/runner.ts` (`l1LocationBlock`, the `foreign` check) ·
+`packages/tooling/hook-runtime/src/core/excluded-paths.ts` (`filterByExcludedPaths`) ·
 `.../force-to-root.ts` (`ForceToRootGuard`) ·
-`packages/tooling/ai-hook-rules/src/core/missing-directory.ts` (`MissingDirectoryGuard`) ·
-`packages/tooling/ai-hook-rules/src/core/version-sync.ts` (`VersionSyncGuard`,
+`packages/tooling/agent-workflow-rules/src/core/missing-directory.ts` (`MissingDirectoryGuard`) ·
+`packages/tooling/agent-workflow-rules/src/core/version-sync.ts` (`VersionSyncGuard`,
 `WebpiecesVersions`).
 
 L1 answers four questions, and they are genuinely separate:
@@ -250,12 +250,12 @@ That resolver has three consumers — L1's K, L2's scope dimension, and `exclude
 
 | section | file | symbol |
 |---|---|---|
-| resolver, K | `ai-hook-rules/src/core/effective-tree.ts` | `EffectiveTreeResolver`, `TreeKind` |
-| the two structural blocks, in order | `ai-hook-rules/src/core/runner.ts` | `l1LocationBlock` |
-| trinary-version-skew (row 8), V, R | `ai-hook-rules/src/core/version-sync.ts` | `VersionSyncGuard`, `WebpiecesVersions` |
-| force-to-root (row 5) | `ai-hook-rules/src/core/force-to-root.ts` | `ForceToRootGuard` |
-| the directory is gone (row 7) | `ai-hook-rules/src/core/missing-directory.ts` | `MissingDirectoryGuard` |
-| the filter | `ai-hook-rules/src/core/excluded-paths.ts` | `filterByExcludedPaths` |
-| which tree owns a TARGET PATH | `ai-hook-rules/src/core/target-tree.ts` | `TargetTreeResolver`, `GovernedPath` |
+| resolver, K | `hook-runtime/src/core/effective-tree.ts` | `EffectiveTreeResolver`, `TreeKind` |
+| the two structural blocks, in order | `agent-workflow-rules/src/core/runner.ts` | `l1LocationBlock` |
+| trinary-version-skew (row 8), V, R | `agent-workflow-rules/src/core/version-sync.ts` | `VersionSyncGuard`, `WebpiecesVersions` |
+| force-to-root (row 5) | `agent-workflow-rules/src/core/force-to-root.ts` | `ForceToRootGuard` |
+| the directory is gone (row 7) | `agent-workflow-rules/src/core/missing-directory.ts` | `MissingDirectoryGuard` |
+| the filter | `hook-runtime/src/core/excluded-paths.ts` | `filterByExcludedPaths` |
+| which tree owns a TARGET PATH | `hook-runtime/src/core/target-tree.ts` | `TargetTreeResolver`, `GovernedPath` |
 | `excludePaths` shape | `rules-config/src/exclude-hook-paths.ts`, `validate-config.ts`, `retired-config-keys.ts` | `ExcludePaths`, `validateExcludePaths` |
 | the `.webpieces/` skip | `rules-config/src/exclude-hook-paths.ts` | `isWebpiecesStateDir` |
