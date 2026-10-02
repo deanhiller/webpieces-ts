@@ -369,7 +369,7 @@ export const INSTALL_HOOKS_ALLOW_JS =
 //
 // @webpieces/agent-workflow-rules reaches a consumer repo through its BINS (wp-ai-guards-hook, named in
 // .claude/settings.json), never through an import. For many releases it ALSO arrived as a transitive
-// dependency of @webpieces/nx-webpieces-rules, and a repo on a hoisting node-linker got its bins in
+// dependency of @webpieces/webpieces-tooling, and a repo on a hoisting node-linker got its bins in
 // node_modules/.bin for free — so no consumer ever declared it. When that dependency edge was pruned as
 // unused (correctly: nothing imports it), the package left the tree on the very next install and every
 // wp-ai-* bin went with it.

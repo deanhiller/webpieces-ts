@@ -73,6 +73,8 @@ export default defineConfig({
         '@webpieces/hook-runtime': path.resolve(__dirname, 'packages/tooling/hook-runtime/src/index.ts'),
             '@webpieces/eslint-rules': path.resolve(__dirname, 'packages/tooling/eslint-rules/src/index.ts'),
             '@webpieces/code-rules': path.resolve(__dirname, 'packages/tooling/code-rules/src/index.ts'),
+            '@webpieces/webpieces-tooling/openclaw-plugin': path.resolve(__dirname, 'packages/tooling/webpieces-tooling/src/adapters/openclaw-plugin.ts'),
+            '@webpieces/webpieces-tooling': path.resolve(__dirname, 'packages/tooling/webpieces-tooling/src/index.ts'),
             '@webpieces/nx-webpieces-rules': path.resolve(__dirname, 'packages/tooling/nx-webpieces-rules/src/index.ts'),
         },
     },

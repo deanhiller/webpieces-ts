@@ -51,7 +51,7 @@ describe('fault U — the guard package is not declared anywhere', () => {
      *
      * `pnpm add -D @webpieces/agent-workflow-rules` was Fix Option 1, labelled "(preferred)". It is also the
      * one cure that CANNOT be committed: a direct root dependency on the package violates the umbrella
-     * rule (the root manifest depends on @webpieces/nx-webpieces-rules ALONE), and nothing in the
+     * rule (the root manifest depends on @webpieces/webpieces-tooling ALONE), and nothing in the
      * message said to revert it. So it was followed exactly as written and the workaround landed in a
      * real package.json, where it then had to be found and removed by hand.
      *

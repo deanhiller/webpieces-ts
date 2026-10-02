@@ -9,7 +9,13 @@
 // │   2. Remove its import from eslint.config.mjs                          │
 // └─────────────────────────────────────────────────────────────────────────┘
 
-import webpiecesPlugin from '@webpieces/eslint-rules';
+import { createRequire } from 'node:module';
+
+// Resolve through this repo's declared published toolchain, independent of pnpm hoisting.
+const require = createRequire(import.meta.url);
+const webpiecesPlugin = require(require.resolve('@webpieces/eslint-rules', {
+    paths: [require.resolve('@webpieces/nx-webpieces-rules/package.json')],
+}));
 import angularTemplatePlugin from '@angular-eslint/eslint-plugin-template';
 import angularTemplateParser from '@angular-eslint/template-parser';
 

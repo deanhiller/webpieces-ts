@@ -23,10 +23,6 @@ import { specTempDirs } from '@webpieces/rules-config';
  * That can never observe a missing launcher. These tests spawn a PROCESS instead.
  *
  * WHAT THIS PROVES, precisely:
- *  - `binsDeclareALauncher` reads the REAL `publishConfig.bin` maps of every tooling package, maps each
- *    published `.js` target back to its `.ts` source, and asserts the source carries a
- *    `require.main === module` launcher. It covers all 18 declared bins and is the regression net for
- *    any bin added later. It is a source-shape assertion, so it does NOT prove the launcher runs.
  *  - the spawn tests below COMPILE the bin with the real `tsc` (rootDir `src/`, so the whole import
  *    graph is emitted exactly as the published package emits it) and then run the emitted `.js` with
  *    `node`, which is byte-for-byte the thing npm ships and `node_modules/.bin` links. This is the only
@@ -117,43 +113,6 @@ function childEnv(): NodeJS.ProcessEnv {
     delete env['CLAUDE_PROJECT_DIR'];
     return env;
 }
-
-describe('every declared bin has a process launcher', () => {
-    const packagesWithBins = ['agent-workflow-rules', 'agent-workflow-rules', 'code-rules', 'pr-gate', 'nx-webpieces-rules'];
-
-    it('maps every publishConfig.bin target back to a source file carrying `require.main === module`', () => {
-        const missing: string[] = [];
-        let checked = 0;
-        for (const pkg of packagesWithBins) {
-            const manifestPath = path.join(TOOLING, pkg, 'package.json');
-            const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8')) as {
-                bin?: Record<string, string>;
-                publishConfig?: { bin?: Record<string, string> };
-            };
-            // A top-level `bin` is itself banned here (see `.claude/rules/packaging-and-bins.md`), but if one
-            // ever appears it must
-            // still launch something, so both maps are audited.
-            const bins = { ...(manifest.publishConfig?.bin ?? {}), ...(manifest.bin ?? {}) };
-            for (const [name, target] of Object.entries(bins)) {
-                const source = path.join(TOOLING, pkg, target.replace(/^\.\//, '').replace(/\.js$/, '.ts'));
-                expect(fs.existsSync(source), `${name} -> ${source}`).toBe(true);
-                const text = fs.readFileSync(source, 'utf8');
-                checked++;
-                // The launcher spellings actually in use across the tooling packages: the
-                // dependency-free `require.main === module` guard (agent-workflow-rules bins, which may not
-                // import @webpieces/rules-config), a top-level `runMain(...)` (pr-gate's scripts), and a
-                // top-level `main()` / `void main()` (code-rules). Anything else is presumed missing —
-                // a new bin should copy one of these, not invent a fourth.
-                const launched = /require\.main\s*===\s*module/.test(text)
-                    || /^\s*(void\s+)?runMain\(/m.test(text)
-                    || /^\s*(void\s+)?main\(\);/m.test(text);
-                if (!launched) missing.push(`${pkg}:${name} (${target})`);
-            }
-        }
-        expect(checked).toBeGreaterThanOrEqual(17);   // agent-workflow-rules 4 + code-rules 2 + pr-gate 10 + nx 1
-        expect(missing).toEqual([]);
-    });
-});
 
 describe('wp-upgrade-shim, spawned as a process', () => {
     let compiled = '';

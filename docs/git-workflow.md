@@ -172,13 +172,13 @@ commit; you never `git commit` the merge yourself.
 
 ## Installing the webpieces rules in a new project
 
-Install the **one** bundle package — `@webpieces/nx-webpieces-rules`. It pulls in everything: the AI
+Install the **one** bundle package — `@webpieces/webpieces-tooling`. It pulls in everything: the AI
 hooks (`@webpieces/ai-hook-rules`), the code validators (`@webpieces/code-rules`), the ESLint rules
 (`@webpieces/eslint-rules`), the PR-gate commands (`@webpieces/pr-gate`), and the shared config
 (`@webpieces/rules-config`). Do not also add `@webpieces/ai-hook-rules` directly — it comes transitively.
 
 ```bash
-pnpm add -Dw @webpieces/nx-webpieces-rules   # -w for the monorepo root; drop -w in a single-package project
+pnpm add -Dw @webpieces/webpieces-tooling   # -w for the monorepo root; drop -w in a single-package project
 npx wp-install-ai-hooks                       # wire the hooks + seed webpieces.config.json
 # Restart your Claude Code session
 ```

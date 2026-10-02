@@ -1,7 +1,7 @@
 {
     "name": "@webpieces/nx-webpieces-rules",
     "version": "0.0.0-dev",
-    "description": "Nx-specific webpieces validation rules and graph tooling. Bundles all @webpieces rule packages with Nx graph validators and an inference plugin.",
+    "description": "Nx-specific webpieces validation rules, graph tooling, executors, and inference plugin.",
     "type": "commonjs",
     "main": "./src/index.js",
     "executors": "./executors.json",
@@ -9,8 +9,7 @@
         ".": "./src/index.js",
         "./package.json": "./package.json",
         "./plugin": "./src/plugin.js",
-        "./executors.json": "./executors.json",
-        "./openclaw-plugin": "./src/adapters/openclaw-plugin.js"
+        "./executors.json": "./executors.json"
     },
     "files": [
         "src/**/*",
@@ -19,18 +18,12 @@
         "README.md"
     ],
     "dependencies": {
-        "@webpieces/ai-hook-rules": "workspace:*",
-        "@webpieces/hook-runtime": "workspace:*",
         "@webpieces/api-doc-model": "workspace:*",
         "@webpieces/code-rules": "workspace:*",
         "@webpieces/core-util": "workspace:*",
         "@webpieces/eslint-rules": "workspace:*",
-        "@webpieces/pr-gate": "workspace:*",
         "@webpieces/rules-config": "workspace:*",
-        "madge": "8.0.0",
-        "@webpieces/tooling-common": "workspace:*",
-        "@webpieces/repo-workflow-core": "workspace:*",
-        "@webpieces/agent-workflow-rules": "workspace:*"
+        "madge": "8.0.0"
     },
     "peerDependencies": {
         "@nx/devkit": ">=18.0.0"

@@ -168,10 +168,9 @@
         "code-rules": {
             "level": 3,
             "framework": ["node"],
-            "role": "app",
+            "role": "lib",
             "shortDescription": "Build-time code validation gate. Standalone (no Nx dependency) CLI that validates new and modified code against the shared rule set over a git diff, enforcing method/file limits, return types, no-any, DI-token, exception, controller-naming and related rules in CI.",
             "responsibilitiesFile": "packages/tooling/code-rules/responsibilities.md",
-            "designFile": "packages/tooling/code-rules/design.json",
             "dependsOn": [
                 "rules-config"
             ]
@@ -380,18 +379,15 @@
             ]
         },
         "nx-webpieces-rules": {
-            "level": 5,
+            "level": 4,
             "framework": ["node"],
-            "role": "bundle",
+            "role": "lib",
             "shortDescription": "Nx inference plugin that auto-wires webpieces build gates with no manual project.json edits: architecture and runtime graph generators/validators, the Inversify DI design.json/design.md generator, a per-project circular-import gate, and many validate-* code-style and size executors.",
             "responsibilitiesFile": "packages/tooling/nx-webpieces-rules/responsibilities.md",
             "dependsOn": [
-                "agent-workflow-rules",
-                "ai-hook-rules",
                 "api-doc-model",
                 "code-rules",
-                "eslint-rules",
-                "pr-gate"
+                "eslint-rules"
             ]
         },
         "openapi-generator": {
@@ -497,6 +493,19 @@
             "shortDescription": "Generic file operations, error normalization, harness config paths, and repository state path primitives. No config loader, rule policy, or workflow classification.",
             "responsibilitiesFile": "packages/tooling/tooling-common/responsibilities.md",
             "dependsOn": []
+        },
+        "webpieces-tooling": {
+            "level": 5,
+            "framework": ["node"],
+            "role": "bundle",
+            "shortDescription": "Thin installation umbrella for the complete webpieces toolchain and the single combined OpenClaw write/edit hook. Owns package materialization and composition smoke checks.",
+            "responsibilitiesFile": "packages/tooling/webpieces-tooling/responsibilities.md",
+            "dependsOn": [
+                "agent-workflow-rules",
+                "ai-hook-rules",
+                "nx-webpieces-rules",
+                "pr-gate"
+            ]
         },
         "winston": {
             "level": 2,

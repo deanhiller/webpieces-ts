@@ -26,7 +26,7 @@ import * as path from 'path';
  *
  * So both constraints hold at once, with no trade:
  *   - tooling packages depend on each other with `workspace:*` → built against local source, and the
- *     architecture graph draws nx-webpieces-rules above its children,
+ *     architecture graph draws webpieces-tooling above its children,
  *   - `pnpm install` is silent, and there are NO shims to allow-list anywhere.
  */
 
@@ -177,7 +177,7 @@ describe('workspace bin targets', () => {
         expect(withShimDir).toEqual([]);
     });
 
-    // The tooling is built against local source, which is what puts nx-webpieces-rules above its six
+    // The tooling is built against local source, which is what puts webpieces-tooling above its
     // children in architecture/dependencies.json. If this goes empty, those edges went with it.
     it('keeps the tooling packages source-linked, so the build and the graph use local code', () => {
         const linked = scan.sourceLinkedPackages();

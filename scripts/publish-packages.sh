@@ -70,16 +70,10 @@ PUBLISH_RETRY_SLEEP="${PUBLISH_RETRY_SLEEP:-10}"
 # Dependency order. A package must appear AFTER everything it depends on: npm has no ordering
 # guarantee, and a consumer resolving a not-yet-published version fails.
 #
-# THE TOOLING FAMILY GOES FIRST, and that is a deliberate risk ordering, not tidiness. These seven are
-# the packages this repo GOVERNS ITSELF WITH — the eslint plugin, the nx executors, the PreToolUse
-# guards and every `wp-*` bin. Stranding them is strictly the worst outcome of a partial release: the
-# runtime packages just sit a build behind, but a half-published tooling family desynchronises the
-# umbrella from its children and can wedge an agent session (see
-# .claude/rules/published-vs-local-source.md). `rules-config` has no @webpieces dependency at all,
-# `hook-runtime` is a leaf, the middle four depend only on those foundations, and
-# `nx-webpieces-rules` bundles the other six — so
-# putting them at the front removes them as hostages of a transient failure on an unrelated package
-# like cloudtasks-client (entry 21 of 28, run 585).
+# THE TOOLING FAMILY GOES FIRST: these packages govern this repo's validation and workflow.
+# A partial release must not strand the umbrella behind unrelated runtime packages.
+# webpieces-tooling aggregates all tooling packages; nx-webpieces-rules owns only Nx behavior.
+# The foundation packages and concrete owners publish before the umbrella.
 #
 # `core-util` and `api-doc-model` are HOISTED INTO that front block for the same reason, not moved out
 # of the docs family for tidiness: since #1011 the umbrella declares `api-doc-model`, because
@@ -116,6 +110,7 @@ ORDER=(
     # until somebody has.
     packages/docs/api-doc-model
     packages/tooling/nx-webpieces-rules
+    packages/tooling/webpieces-tooling
     # The rest of the docs family publishes with the SERVER libs, and depends on core-util — it reads
     # its decorator symbols so a rename is a compile error rather than a silently empty document — so
     # it must follow it here. openapi-generator additionally depends on api-doc-model.

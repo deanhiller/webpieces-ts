@@ -4,14 +4,14 @@ import * as path from 'path';
 /**
  * THE UMBRELLA INVARIANT — a consumer declares ONE package and gets the whole toolchain.
  *
- * `@webpieces/nx-webpieces-rules` is tagged `role:bundle` for exactly this reason: a consumer repo puts
+ * `@webpieces/webpieces-tooling` is tagged `role:bundle` for exactly this reason: a consumer repo puts
  * one line in its package.json and every `wp-*` bin, every eslint rule and every nx executor arrives
  * with it. That aggregation IS the package's product, and it lives entirely in the `dependencies`
  * block — there is no import to point at.
  *
  * WHICH IS WHY THIS TEST EXISTS. A dependency nothing imports reads exactly like a phantom, and a
- * cleanup that trusted "no import ⇒ unused" deleted `@webpieces/ai-hook-rules` and `@webpieces/pr-gate`
- * from this manifest. Both were doing real work: `ai-hook-rules` ships `wp-ai-guards-hook`, which every
+ * historical cleanup of the former nx-webpieces-rules umbrella that trusted "no import ⇒ unused" deleted `@webpieces/ai-hook-rules` and `@webpieces/pr-gate`
+ * from its manifest. Those dependencies were doing real work: `agent-workflow-rules` ships `wp-ai-guards-hook`, which every
  * consumer's `.claude/settings.json` invokes on every tool call. On the next release the package left
  * every consumer's tree entirely, the bin vanished from `node_modules/.bin`, and the L0 shim blocked
  * every Bash/Write/Edit while prescribing a `pnpm install` that could not help — nothing asked for the
@@ -22,7 +22,7 @@ import * as path from 'path';
  * it, which is the correct default — a tooling package a consumer cannot reach is not shipped.
  */
 
-const UMBRELLA = '@webpieces/nx-webpieces-rules';
+const UMBRELLA = '@webpieces/webpieces-tooling';
 const TOOLING_DIR = 'packages/tooling';
 
 // webpieces-disable no-any-unknown -- opaque package.json; every field is narrowed at its use site
@@ -55,7 +55,7 @@ class ToolingScan {
     }
 
     umbrellaDependencies(): Record<string, string> {
-        const manifest = path.join(this.repoRoot, TOOLING_DIR, 'nx-webpieces-rules', 'package.json');
+        const manifest = path.join(this.repoRoot, TOOLING_DIR, 'webpieces-tooling', 'package.json');
         const deps = this.read(manifest)['dependencies'];
         return (typeof deps === 'object' && deps !== null) ? deps as Record<string, string> : {};
     }
@@ -95,8 +95,9 @@ describe('the umbrella package bundles the whole toolchain', () => {
     // someone moved them out of packages/tooling/ — and the incident is about these two specifically.
     it('bundles ai-hook-rules and pr-gate, whose bins are the product (nothing imports them)', () => {
         const declared = Object.keys(scan.umbrellaDependencies());
-        expect(declared, 'ships wp-ai-guards-hook, named in every consumer .claude/settings.json')
+        expect(declared, 'ships wp-ai-rules-hook, named in consumer hook registration')
             .toContain('@webpieces/ai-hook-rules');
+        expect(declared, 'ships wp-ai-guards-hook').toContain('@webpieces/agent-workflow-rules');
         expect(declared, 'ships wp-start-upsert-pr and the rest of the PR flow')
             .toContain('@webpieces/pr-gate');
     });
@@ -120,11 +121,15 @@ describe('the umbrella package bundles the whole toolchain', () => {
 
     /**
      * The catalog is for the release the repo is BUILT WITH, and one entry is all it needs: the umbrella
-     * drags its six children along, in lockstep, by construction. Listing them individually would be
-     * six more versions to keep in step for nothing — and inviting exactly the partial bump the L0
+     * drags its children along, in lockstep, by construction. Listing them individually would be
+     * more versions to keep in step for nothing — and inviting exactly the partial bump the L0
      * drift guard exists to catch.
      */
-    it('keeps the catalog to the umbrella alone', () => {
-        expect([...scan.catalogNames()]).toEqual([UMBRELLA]);
+    it('keeps the root catalog to its previously released toolchain alone', () => {
+        const root = scan.read(path.join(scan.repoRoot, 'package.json'));
+        const declared = root['devDependencies'] as Record<string, string>;
+        const installedToolchain = Object.keys(declared).filter((name: string): boolean => name.startsWith('@webpieces/') && declared[name] === 'catalog:');
+        expect([...scan.catalogNames()]).toEqual(installedToolchain);
+        expect(installedToolchain).toHaveLength(1);
     });
 });

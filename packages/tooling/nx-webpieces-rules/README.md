@@ -4,6 +4,8 @@ Nx inference plugin that auto-creates webpieces validation targets (architecture
 graph checks, code-size/style rules, and a per-project circular-import gate)
 without any manual `project.json` wiring.
 
+Install `@webpieces/webpieces-tooling` for the complete toolchain. This package implements the Nx plugin and executors; it does not aggregate hook or PR workflow packages.
+
 Add it to `nx.json`:
 
 ```jsonc

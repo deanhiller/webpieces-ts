@@ -1,0 +1,39 @@
+{
+    "name": "@webpieces/webpieces-tooling",
+    "version": "0.0.0-dev",
+    "description": "Complete webpieces tooling installation and the combined OpenClaw hook adapter.",
+    "type": "commonjs",
+    "main": "./src/index.js",
+    "exports": {
+        ".": "./src/index.js",
+        "./package.json": "./package.json",
+        "./openclaw-plugin": "./src/adapters/openclaw-plugin.js"
+    },
+    "files": [
+        "src/**/*",
+        "openclaw.plugin.json",
+        "README.md"
+    ],
+    "dependencies": {
+        "@webpieces/agent-workflow-rules": "workspace:*",
+        "@webpieces/ai-hook-rules": "workspace:*",
+        "@webpieces/code-rules": "workspace:*",
+        "@webpieces/eslint-rules": "workspace:*",
+        "@webpieces/hook-runtime": "workspace:*",
+        "@webpieces/nx-webpieces-rules": "workspace:*",
+        "@webpieces/pr-gate": "workspace:*",
+        "@webpieces/repo-workflow-core": "workspace:*",
+        "@webpieces/rules-config": "workspace:*",
+        "@webpieces/tooling-common": "workspace:*"
+    },
+    "author": "Dean Hiller",
+    "license": "Apache-2.0",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/deanhiller/webpieces-ts.git",
+        "directory": "packages/tooling/webpieces-tooling"
+    },
+    "publishConfig": {
+        "access": "public"
+    }
+}
