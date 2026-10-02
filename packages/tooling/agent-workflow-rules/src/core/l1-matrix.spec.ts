@@ -63,8 +63,8 @@ function stageSkew(worktreeVersion = '0.4.612'): { main: string; worktree: strin
     const main = path.join(base, 'main');
     const worktree = path.join(base, 'wt');
     for (const dir of [main, worktree]) fs.mkdirSync(dir, { recursive: true });
-    fs.writeFileSync(path.join(main, 'pnpm-workspace.yaml'), "catalog:\n  '@webpieces/nx-webpieces-rules': 0.4.616\n");
-    fs.writeFileSync(path.join(worktree, 'pnpm-workspace.yaml'), `catalog:\n  '@webpieces/nx-webpieces-rules': ${worktreeVersion}\n`);
+    fs.writeFileSync(path.join(main, 'pnpm-workspace.yaml'), "catalog:\n  '@webpieces/webpieces-tooling': 0.4.616\n");
+    fs.writeFileSync(path.join(worktree, 'pnpm-workspace.yaml'), `catalog:\n  '@webpieces/webpieces-tooling': ${worktreeVersion}\n`);
     return { main, worktree };
 }
 

@@ -9,12 +9,13 @@ class HookBoundaries {
             'agent-workflow-rules': ['ai-hook-rules'],
             'hook-runtime': ['ai-hook-rules', 'agent-workflow-rules', 'repo-workflow-core'],
             'pr-gate': ['ai-hook-rules'],
+            'nx-webpieces-rules': ['ai-hook-rules', 'agent-workflow-rules', 'hook-runtime', 'repo-workflow-core', 'tooling-common', 'pr-gate', 'webpieces-tooling'],
         };
         return (denied[owner] || []).includes(dependency);
     }
 
     validate(root) {
-        for (const owner of ['ai-hook-rules', 'agent-workflow-rules', 'hook-runtime', 'pr-gate']) {
+        for (const owner of ['ai-hook-rules', 'agent-workflow-rules', 'hook-runtime', 'pr-gate', 'nx-webpieces-rules']) {
             const directory = path.join(root, 'packages/tooling', owner);
             const manifest = JSON.parse(fs.readFileSync(path.join(directory, 'package.json'), 'utf8'));
             for (const dependency of Object.keys({ ...manifest.dependencies, ...manifest.devDependencies })) {
@@ -27,8 +28,11 @@ class HookBoundaries {
     walk(owner, directory) {
         for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
             const full = path.join(directory, entry.name);
-            if (entry.isDirectory()) this.walk(owner, full);
+            if (entry.isDirectory()) {
+                if (owner !== 'nx-webpieces-rules' || entry.name !== '__tests__') this.walk(owner, full);
+            }
             else if (entry.name.endsWith('.ts')) {
+                if (owner === 'nx-webpieces-rules' && /\.(spec|test)\.ts$/.test(entry.name)) continue;
                 const source = fs.readFileSync(full, 'utf8');
                 const imports = /(?:from\s*|import\s*\(|require\s*\()\s*['"]([^'"]+)['"]/g;
                 for (const match of source.matchAll(imports)) {

@@ -22,7 +22,7 @@ import { specTempDirs } from '@webpieces/rules-config';
  * come back "in sync", and make every assertion here vacuous.
  */
 
-const PKG = '@webpieces/nx-webpieces-rules';
+const PKG = '@webpieces/webpieces-tooling';
 
 function tmp(): string {
     return specTempDirs.make('wp-vsync-');
@@ -366,7 +366,7 @@ describe('VersionSyncGuard — the message', () => {
 
     it('names every version WITH the file it came from, so no grepping is needed', () => {
         expect(reportFor()).toContain('pnpm-workspace.yaml');
-        expect(reportFor()).toContain('node_modules/@webpieces/nx-webpieces-rules');
+        expect(reportFor()).toContain('node_modules/@webpieces/webpieces-tooling');
     });
 
     /**

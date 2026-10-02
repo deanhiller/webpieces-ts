@@ -495,6 +495,9 @@ importers:
       reflect-metadata:
         specifier: 0.2.2
         version: 0.2.2
+      tslib:
+        specifier: 2.8.1
+        version: 2.8.1
 
   packages/tooling/ai-hook-rules:
     dependencies:
@@ -558,18 +561,15 @@ importers:
       reflect-metadata:
         specifier: 0.2.2
         version: 0.2.2
+      tslib:
+        specifier: 2.8.1
+        version: 2.8.1
 
   packages/tooling/nx-webpieces-rules:
     dependencies:
       '@nx/devkit':
         specifier: '>=18.0.0'
         version: 22.2.1(nx@22.2.1(@swc-node/register@1.9.1(@swc/core@1.15.30(@swc/helpers@0.5.17))(@swc/types@0.1.26)(typescript@5.9.3))(@swc/core@1.15.30(@swc/helpers@0.5.17)))
-      '@webpieces/agent-workflow-rules':
-        specifier: workspace:*
-        version: link:../agent-workflow-rules
-      '@webpieces/ai-hook-rules':
-        specifier: workspace:*
-        version: link:../ai-hook-rules
       '@webpieces/api-doc-model':
         specifier: workspace:*
         version: link:../../docs/api-doc-model
@@ -582,21 +582,9 @@ importers:
       '@webpieces/eslint-rules':
         specifier: workspace:*
         version: link:../eslint-rules
-      '@webpieces/hook-runtime':
-        specifier: workspace:*
-        version: link:../hook-runtime
-      '@webpieces/pr-gate':
-        specifier: workspace:*
-        version: link:../pr-gate
-      '@webpieces/repo-workflow-core':
-        specifier: workspace:*
-        version: link:../repo-workflow-core
       '@webpieces/rules-config':
         specifier: workspace:*
         version: link:../rules-config
-      '@webpieces/tooling-common':
-        specifier: workspace:*
-        version: link:../tooling-common
       madge:
         specifier: 8.0.0
         version: 8.0.0(typescript@5.9.3)
@@ -636,6 +624,9 @@ importers:
       reflect-metadata:
         specifier: 0.2.2
         version: 0.2.2
+      tslib:
+        specifier: 2.8.1
+        version: 2.8.1
 
   packages/tooling/rules-config:
     dependencies:
@@ -666,6 +657,42 @@ importers:
       reflect-metadata:
         specifier: 0.2.2
         version: 0.2.2
+      tslib:
+        specifier: 2.8.1
+        version: 2.8.1
+
+  packages/tooling/webpieces-tooling:
+    dependencies:
+      '@webpieces/agent-workflow-rules':
+        specifier: workspace:*
+        version: link:../agent-workflow-rules
+      '@webpieces/ai-hook-rules':
+        specifier: workspace:*
+        version: link:../ai-hook-rules
+      '@webpieces/code-rules':
+        specifier: workspace:*
+        version: link:../code-rules
+      '@webpieces/eslint-rules':
+        specifier: workspace:*
+        version: link:../eslint-rules
+      '@webpieces/hook-runtime':
+        specifier: workspace:*
+        version: link:../hook-runtime
+      '@webpieces/nx-webpieces-rules':
+        specifier: workspace:*
+        version: link:../nx-webpieces-rules
+      '@webpieces/pr-gate':
+        specifier: workspace:*
+        version: link:../pr-gate
+      '@webpieces/repo-workflow-core':
+        specifier: workspace:*
+        version: link:../repo-workflow-core
+      '@webpieces/rules-config':
+        specifier: workspace:*
+        version: link:../rules-config
+      '@webpieces/tooling-common':
+        specifier: workspace:*
+        version: link:../tooling-common
 
 packages:
 

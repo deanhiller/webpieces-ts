@@ -268,7 +268,7 @@ describe('ORDER is a valid dependency order, re-derived from the real manifests'
         const lastTooling = ORDER.map((d: string): boolean => d.startsWith('packages/tooling/')).lastIndexOf(true);
         const front = ORDER.slice(0, lastTooling + 1);
 
-        expect(ORDER.filter((d: string): boolean => d.startsWith('packages/tooling/')).length).toBe(10);
+        expect(ORDER.filter((d: string): boolean => d.startsWith('packages/tooling/')).length).toBe(11);
         expect(front.filter((d: string): boolean => !d.startsWith('packages/tooling/')))
             .toEqual(['packages/core/core-util', 'packages/docs/api-doc-model']);
     });

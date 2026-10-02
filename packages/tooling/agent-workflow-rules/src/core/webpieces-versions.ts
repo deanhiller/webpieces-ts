@@ -5,7 +5,7 @@ import * as path from 'path';
 import { toError } from '@webpieces/tooling-common/to-error';
 
 /** The umbrella package every consumer pins. One `catalog:` entry pins its children in lockstep. */
-export const UMBRELLA_PACKAGE = '@webpieces/nx-webpieces-rules';
+export const UMBRELLA_PACKAGE = '@webpieces/webpieces-tooling';
 
 /** `pnpm-workspace.yaml`'s catalog is the ONE place a webpieces version is declared. */
 const WORKSPACE_FILE = 'pnpm-workspace.yaml';
@@ -102,12 +102,12 @@ export class WebpiecesVersions {
      * treating it as skew would block every consumer who pins loosely.
      *
      * ANCHORS AND ALIASES ARE NOT OPTIONAL TO SUPPORT. The scraper originally assumed one shape —
-     * `'@webpieces/nx-webpieces-rules': 0.4.616` — and a consumer repo that keeps the whole `@webpieces`
+     * `'@webpieces/webpieces-tooling': 0.4.616` — and a consumer repo that keeps the whole `@webpieces`
      * family in lockstep the obvious way writes the version ONCE and aliases it:
      *
      *     catalog:
      *       '@webpieces/core-context': &wp 0.4.634
-     *       '@webpieces/nx-webpieces-rules': *wp
+     *       '@webpieces/webpieces-tooling': *wp
      *
      * There the umbrella's own value is `*wp`, which does not start with a digit, so the pin read as
      * null and the whole TRINARY compare silently degraded to installed-vs-installed — the guard's third

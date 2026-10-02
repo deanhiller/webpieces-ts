@@ -26,6 +26,8 @@ Nx inference plugin that auto-wires webpieces build gates with no manual project
 
 ## Out of Scope
 
+- Toolchain installation, OpenClaw composition, and aggregate package tests — owned by webpieces-tooling.
+
 - The raw ESLint rule logic itself — defined in `eslint-rules`; here it is only invoked/wrapped as executors.
 - PR-gate workflow CLIs (`wp-*-upsert-pr`, merge dashboard) — those live in `pr-gate`.
 - Rule enable/disable config schema — owned by `@webpieces/rules-config`; this plugin reads `webpieces.config.json`, it does not define the token vocabulary.

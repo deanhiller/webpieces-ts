@@ -116,6 +116,12 @@
             ],
             "@webpieces/hook-runtime/harness-vocabulary": [
                 "packages/tooling/hook-runtime/src/harness-vocabulary.ts"
+            ],
+            "@webpieces/webpieces-tooling/openclaw-plugin": [
+                "packages/tooling/webpieces-tooling/src/adapters/openclaw-plugin.ts"
+            ],
+            "@webpieces/webpieces-tooling": [
+                "packages/tooling/webpieces-tooling/src/index.ts"
             ]
         }
     },

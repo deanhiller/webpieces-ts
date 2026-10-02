@@ -6,7 +6,13 @@
 // Base rules only — no Angular dependencies.
 // For Angular rules see eslint.webpieces-angular.config.mjs
 
-import webpiecesPlugin from '@webpieces/eslint-rules';
+import { createRequire } from 'node:module';
+
+// Resolve through this repo's declared published toolchain, independent of pnpm hoisting.
+const require = createRequire(import.meta.url);
+const webpiecesPlugin = require(require.resolve('@webpieces/eslint-rules', {
+    paths: [require.resolve('@webpieces/nx-webpieces-rules/package.json')],
+}));
 
 export default [
     {

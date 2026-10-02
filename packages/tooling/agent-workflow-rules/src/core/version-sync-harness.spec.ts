@@ -8,7 +8,7 @@ import { AiType } from '@webpieces/hook-runtime';
 import { EffectiveTree } from '@webpieces/hook-runtime';
 import { VersionSyncGuard } from './version-sync';
 
-const PKG = '@webpieces/nx-webpieces-rules';
+const PKG = '@webpieces/webpieces-tooling';
 
 // Real manifests: the guard reads files, so a fabricated path would read "in sync" and pass vacuously.
 function writePin(root: string, version: string): void {

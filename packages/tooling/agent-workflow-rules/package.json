@@ -27,7 +27,8 @@
         "inversify": "7.10.4",
         "reflect-metadata": "0.2.2",
         "@webpieces/tooling-common": "workspace:*",
-        "@webpieces/repo-workflow-core": "workspace:*"
+        "@webpieces/repo-workflow-core": "workspace:*",
+        "tslib": "2.8.1"
     },
     "publishConfig": {
         "access": "public",

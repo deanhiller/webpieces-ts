@@ -512,11 +512,11 @@ describe('runBash end-to-end — a linked worktree is governed, and steering nam
  * different releases for a whole session.
  *
  * Everything here is REAL: a real `git worktree add`, real `pnpm-workspace.yaml` catalogs, a real
- * `node_modules/@webpieces/nx-webpieces-rules/package.json` in each tree. The guard reads files, so a
+ * `node_modules/@webpieces/webpieces-tooling/package.json` in each tree. The guard reads files, so a
  * fabricated path would read nothing, come back "in sync", and make the assertions vacuous.
  */
 describe('runBash end-to-end — a RESIDENT agent in a skewed worktree (the measured hole)', () => {
-    const PKG = '@webpieces/nx-webpieces-rules';
+    const PKG = '@webpieces/webpieces-tooling';
 
     function writePin(root: string, version: string): void {
         fs.writeFileSync(nodePath.join(root, 'pnpm-workspace.yaml'), `catalog:\n  '${PKG}': ${version}\n`);

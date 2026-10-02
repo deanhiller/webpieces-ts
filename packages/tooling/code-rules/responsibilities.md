@@ -54,3 +54,5 @@ fixtures are excluded so negative contract tests remain possible. HTTP contracts
 annotations. Recognition follows imports from `@webpieces/core-util` / `@webpieces/core-util/ipc`,
 including aliases and namespace imports, so a local decorator with the same spelling cannot satisfy
 the rule. Only the universal branch/epoch turn-offs apply; there is no source annotation bypass.
+
+The role:lib tag reflects its exported validator APIs consumed directly by the Nx plugin. The standalone CLI is an entry point into that same library.

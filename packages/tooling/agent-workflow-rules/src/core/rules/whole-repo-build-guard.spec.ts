@@ -194,7 +194,7 @@ describe('whole-repo-build-guard leaves narrow work alone', () => {
     it('does not block a jq filter whose text merely contains test( — no build is in that command', () => {
         expect(blocked(`gh pr list --json title --jq '.[]|select(.title|test("x"))'`)).toBe(false);
         expect(blocked(
-            'for i in $(seq 1 170); do V=$(npm view @webpieces/nx-webpieces-rules version 2>/dev/null | tail -1); '
+            'for i in $(seq 1 170); do V=$(npm view @webpieces/webpieces-tooling version 2>/dev/null | tail -1); '
             + `M=$(gh pr list --state merged --limit 6 --json title --jq '[.[]|select(.title|test("whole-repo-build-guard";"i"))]|length' 2>/dev/null); `
             + 'if [ "$V" != "0.4.613" ] && [ -n "$V" ] && [ "$M" != "0" ]; then echo "..."; break; fi; sleep 60; done',
         )).toBe(false);

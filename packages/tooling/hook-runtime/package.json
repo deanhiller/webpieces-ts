@@ -23,7 +23,8 @@
         "inversify": "7.10.4",
         "reflect-metadata": "0.2.2",
         "@webpieces/rules-config": "workspace:*",
-        "@webpieces/tooling-common": "workspace:*"
+        "@webpieces/tooling-common": "workspace:*",
+        "tslib": "2.8.1"
     },
     "publishConfig": {
         "access": "public"

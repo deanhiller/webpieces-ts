@@ -37,8 +37,7 @@
                         "input": "packages/tooling/nx-webpieces-rules/bin",
                         "glob": "**/*",
                         "output": "bin"
-                    },
-                    "packages/tooling/nx-webpieces-rules/openclaw.plugin.json"
+                    }
                 ]
             }
         }
@@ -46,6 +45,6 @@
     "tags": [
         "type:tooling",
         "framework:node",
-        "role:bundle"
+        "role:lib"
     ]
 }

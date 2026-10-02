@@ -1,0 +1,46 @@
+{
+    "name": "webpieces-tooling",
+    "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+    "sourceRoot": "packages/tooling/webpieces-tooling/src",
+    "projectType": "library",
+    "targets": {
+        "test": {
+            "executor": "nx:run-commands",
+            "options": {
+                "command": "vitest run packages/tooling/webpieces-tooling/ --exclude \"**/publish-packages.spec.ts\""
+            }
+        },
+        "build": {
+            "executor": "@nx/js:tsc",
+            "outputs": [
+                "{options.outputPath}"
+            ],
+            "options": {
+                "outputPath": "dist/packages/tooling/webpieces-tooling",
+                "main": "packages/tooling/webpieces-tooling/src/index.ts",
+                "tsConfig": "packages/tooling/webpieces-tooling/tsconfig.lib.json",
+                "assets": [
+                    "packages/tooling/webpieces-tooling/package.json",
+                    "packages/tooling/webpieces-tooling/README.md",
+                    "packages/tooling/webpieces-tooling/openclaw.plugin.json"
+                ]
+            }
+        },
+        "release-test": {
+            "executor": "nx:run-commands",
+            "options": {
+                "command": "vitest run packages/tooling/webpieces-tooling/src/lib/__tests__/publish-packages.spec.ts"
+            },
+            "inputs": [
+                "default",
+                "{workspaceRoot}/scripts/publish-packages.sh"
+            ],
+            "cache": true
+        }
+    },
+    "tags": [
+        "type:tooling",
+        "framework:node",
+        "role:bundle"
+    ]
+}
