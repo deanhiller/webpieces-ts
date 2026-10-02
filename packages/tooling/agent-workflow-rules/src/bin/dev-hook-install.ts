@@ -42,13 +42,17 @@ function wireLocalRulesConfig(cwd: string, distRulesConfigPath: string): void {
 // webpieces-disable no-function-outside-class -- existing CLI/shim bootstrap function moved intact; it must remain callable without constructing a DI container
 export async function runDevHookInstall(): Promise<void> {
     const cwd = process.cwd();
-    const adaptersDir = join(cwd, 'dist', 'packages', 'tooling', 'agent-workflow-rules', 'src', 'adapters');
     // Mirror production .claude/settings.json: two independent PreToolUse hooks, one per category.
-    const rulesHookPath = join(adaptersDir, 'rules-hook.js');
-    const guardsHookPath = join(adaptersDir, 'guards-hook.js');
+    const rulesHookPath = join(cwd, 'dist', 'packages', 'tooling', 'ai-hook-rules', 'src', 'adapters', 'rules-hook.js');
+    const guardsHookPath = join(cwd, 'dist', 'packages', 'tooling', 'agent-workflow-rules', 'src', 'adapters', 'guards-hook.js');
 
-    if (!existsSync(rulesHookPath) || !existsSync(guardsHookPath)) {
-        console.error(`[dev-hook-install] Local build not found at: ${adaptersDir}`);
+    if (!existsSync(rulesHookPath)) {
+        console.error(`[dev-hook-install] Local build not found at: ${rulesHookPath}`);
+        console.error('  Run `pnpm nx run ai-hook-rules:build` first.');
+        throw new CliExitError(1, '');
+    }
+    if (!existsSync(guardsHookPath)) {
+        console.error(`[dev-hook-install] Local build not found at: ${guardsHookPath}`);
         console.error('  Run `pnpm nx run agent-workflow-rules:build` first.');
         throw new CliExitError(1, '');
     }
