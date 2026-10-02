@@ -34,15 +34,9 @@ const VALID_SCOPES = new Set(['edit', 'file', 'bash']);
  * config arrives as a plain object structurally typed as the *Config class, so the `as` narrows the
  * shared BaseRuleConfig param back to the concrete config the rule consumes.
  *
- * The map is keyed by CONFIG KEY and each factory returns an ARRAY, because a hookGuards key names a
- * POLICY and a policy may be implemented by several classes: `branch-state-guard` builds all four
- * branch-state guards from one entry, `pr-lifecycle-guard` all four PR-lifecycle guards. It used to be
- * `Record<string, (c) => Rule>` — one factory per key — which is precisely why four classes could not
- * share a key and why the config had to carry nine switches for three decisions.
- *
- * `guardHints` are the resolved `commands.guardHints` strings, handed to the two rules that print a
- * gated command. They arrive as a constructor argument rather than a config field, so there is exactly
- * one spelling of each command in the config (see PrLifecycleGuardConfig).
+ * This registry contains source-rule factories only. Each accepts BaseRuleConfig and returns an
+ * array of source rule instances for its config key. Workflow policies and command hints are owned
+ * by agent-workflow-rules and are not inputs to this loader.
  */
 type RuleFactory = (config: BaseRuleConfig) => readonly Rule[];
 

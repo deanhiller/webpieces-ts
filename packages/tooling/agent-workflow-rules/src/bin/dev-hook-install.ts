@@ -55,9 +55,7 @@ export async function runDevHookInstall(): Promise<void> {
 
     const distRulesConfigPath = join(cwd, 'dist', 'packages', 'tooling', 'rules-config');
     if (!existsSync(distRulesConfigPath)) {
-        console.error(`[dev-hook-install] Local rules-config build not found at: ${distRulesConfigPath}`);
-        console.error('  Run `pnpm nx run rules-config:build` first.');
-        throw new CliExitError(1, '');
+        throw new CliExitError(1, `[dev-hook-install] Local rules-config build not found at: ${distRulesConfigPath}\n  Run \`pnpm nx run rules-config:build\` first.`);
     }
 
     const homeDir = homedir();
@@ -66,9 +64,7 @@ export async function runDevHookInstall(): Promise<void> {
     const claudeSettingsPath = join(homeDir, '.claude', 'settings.json');
 
     if (existsSync(backupPath)) {
-        console.error('[dev-hook-install] Dev hook is already installed (backup file exists).');
-        console.error('  Run `node dist/packages/tooling/agent-workflow-rules/src/bin/dev-hook-uninstall.js` first to remove the current dev hook.');
-        throw new CliExitError(1, '');
+        throw new CliExitError(1, '[dev-hook-install] Dev hook is already installed (backup file exists).\n  Run `node dist/packages/tooling/agent-workflow-rules/src/bin/dev-hook-uninstall.js` first to remove the current dev hook.');
     }
 
     wireLocalRulesConfig(cwd, distRulesConfigPath);

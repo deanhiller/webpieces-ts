@@ -30,8 +30,7 @@ export async function runDevHookUninstall(): Promise<void> {
     const claudeSettingsPath = join(homeDir, '.claude', 'settings.json');
 
     if (!existsSync(backupPath)) {
-        console.error('[dev-hook-uninstall] No dev hook backup found — dev hook was not installed.');
-        throw new CliExitError(1, '');
+        throw new CliExitError(1, '[dev-hook-uninstall] No dev hook backup found — dev hook was not installed.');
     }
 
     const backup = JSON.parse(readFileSync(backupPath, 'utf8')) as DevHookBackup;

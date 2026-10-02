@@ -45,4 +45,28 @@ describe('development hook installation after separating source and workflow pac
 
         expect(error).not.toHaveBeenCalled();
     });
+
+    it.each(['rules-config', 'backup'])('carries the %s failure and cure in the thrown error', async (state: string) => {
+        const root = specTempDirs.make('wp-dev-hooks-state-');
+        fixture.home = join(root, 'home');
+        vi.spyOn(process, 'cwd').mockReturnValue(root);
+        const error = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+        for (const owner of ['ai-hook-rules', 'agent-workflow-rules']) {
+            const name = owner === 'ai-hook-rules' ? 'rules-hook.js' : 'guards-hook.js';
+            const file = join(root, 'dist/packages/tooling', owner, 'src/adapters', name);
+            mkdirSync(dirname(file), { recursive: true });
+            writeFileSync(file, '');
+        }
+        if (state === 'backup') {
+            mkdirSync(join(root, 'dist/packages/tooling/rules-config'), { recursive: true });
+            mkdirSync(join(fixture.home, '.webpieces'), { recursive: true });
+            writeFileSync(join(fixture.home, '.webpieces/dev-hook-backup.json'), 'preserve this backup');
+        }
+        const cure = state === 'backup' ? 'node dist/packages/tooling/agent-workflow-rules/src/bin/dev-hook-uninstall.js' : 'pnpm nx run rules-config:build';
+
+        await expect(runDevHookInstall()).rejects.toThrow(cure);
+
+        expect(error).not.toHaveBeenCalled();
+        if (state === 'backup') expect(readFileSync(join(fixture.home, '.webpieces/dev-hook-backup.json'), 'utf8')).toBe('preserve this backup');
+    });
 });

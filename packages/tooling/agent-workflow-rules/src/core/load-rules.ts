@@ -18,6 +18,10 @@ export class GuardHintCommands {
     constructor(readonly upsertPr: string, readonly mergeComplete: string) {}
 }
 
+/**
+ * Each workflow policy key can produce several guards. GuardHintCommands carries the resolved
+ * commands.guardHints strings to the guards that print gated commands, separately from BaseRuleConfig.
+ */
 type RuleFactory = (config: BaseRuleConfig, guardHints: GuardHintCommands) => readonly Rule[];
 const BUILT_IN_RULE_MAP: Record<string, RuleFactory> = {
     'branch-creation-guard': (c: BaseRuleConfig) => [new BranchCreationGuardRule(c as BranchCreationGuardConfig)],
@@ -56,4 +60,3 @@ export function loadKeylessBashRules(affectedBuildCommand: string): Rule[] {
         new WaitSpinGuardRule(),
     ];
 }
-
