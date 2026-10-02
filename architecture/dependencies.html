@@ -821,9 +821,12 @@
 <p>Tagged <code>framework:node</code> and <code>role:lib</code>. It is in <code>scripts/publish-packages.sh</code>'s ORDER; like <code>api-doc-model</code>, <code>core-mock</code> and <code>mcp-server</code> before it, the npm NAME has to be bootstrapped once by an authenticated manual publish, because trusted publishing can publish to an existing scoped name but cannot create one.</p>
 <p>The bin is declared in <code>publishConfig.bin</code> and never at the top level (<code>.claude/rules/packaging-and-bins.md</code>).</p>
 <p><code>apps/app-example/partner-api</code> is the worked example: a real contract, its manifest, and golden documents under <code>src/__tests__/goldens/</code>, with a spec that regenerates and diffs them. An app's real documents are build output, written into the outputPath of its <code>build</code> (tsc) target by the <code>openapi-generate</code> nx executor (inferred from the <code>generate:openapi</code> tag) and never committed.</p></div></details>
-<details class="wp-resp-card" data-node="rules-config"><summary><span class="wp-resp-level">L2</span> <strong>rules-config</strong> — Shared config/schema layer: loads and validates webpieces.config.json, defines every rule's typed config, mode unions, defaults, path-exclusion and diff-scope helpers, plus PR-gate review state. Single source of truth consumed by ai-hook-rules, code-rules, and nx-webpieces-rules.</summary><div class="wp-resp-body"><h4>Responsibilities — rules-config</h4>
-<p>Shared config/schema layer: loads and validates webpieces.config.json, defines every rule's typed config, mode unions, defaults, path-exclusion and diff-scope helpers, plus PR-gate review state. Single source of truth consumed by ai-hook-rules, code-rules, and nx-webpieces-rules.</p>
+<details class="wp-resp-card" data-node="rules-config"><summary><span class="wp-resp-level">L2</span> <strong>rules-config</strong> — Shared tooling configuration: validates webpieces.config.json, defines typed rule schemas and modes, supplies diagnostics, path and diff scoping, and owns PR-gate review state.</summary><div class="wp-resp-body"><h4>Responsibilities — rules-config</h4>
+<p>Shared tooling configuration: validates webpieces.config.json, defines typed rule schemas and modes, supplies diagnostics, path and diff scoping, and owns PR-gate review state.</p>
 <h5>In Scope</h5>
+<ul>
+<li>Shared hook configuration diagnostics, fault vocabulary and best-effort diagnostic template pointers.</li>
+</ul>
 <ul>
 <li>Loading, validating, and locating <code>webpieces.config.json</code> (<code>loadAndValidate</code>, <code>findConfigFile</code>, <code>validateWebpiecesConfig</code>).</li>
 <li>Schema field types (<code>FieldDef</code>): scalars, <code>string[]</code>, and an <code>object[]</code> (non-empty, or possibly empty</li>
@@ -848,7 +851,7 @@
 <h5>Out of Scope</h5>
 <ul>
 <li>Actually running rules at edit time (belongs in ai-hook-rules) or at build time (belongs in code-rules).</li>
-<li>Claude Code / openclaw hook wiring and adapters (ai-hook-rules).</li>
+<li>Harness normalization and protocol execution (hook-runtime), workflow hook installation (agent-workflow-rules), and OpenClaw composition (the umbrella package).</li>
 <li>CLI gate execution / CI orchestration (code-rules).</li>
 <li>Nx target wiring (nx-webpieces-rules).</li>
 <li>Generic errors and state-path utilities (tooling-common); main-sync and worktree status/locks (repo-workflow-core).</li>

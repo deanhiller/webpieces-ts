@@ -448,7 +448,7 @@
             "level": 2,
             "framework": ["node"],
             "role": "designed-lib",
-            "shortDescription": "Shared config/schema layer: loads and validates webpieces.config.json, defines every rule's typed config, mode unions, defaults, path-exclusion and diff-scope helpers, plus PR-gate review state. Single source of truth consumed by ai-hook-rules, code-rules, and nx-webpieces-rules.",
+            "shortDescription": "Shared tooling configuration: validates webpieces.config.json, defines typed rule schemas and modes, supplies diagnostics, path and diff scoping, and owns PR-gate review state.",
             "responsibilitiesFile": "packages/tooling/rules-config/responsibilities.md",
             "designFile": "packages/tooling/rules-config/design.json",
             "dependsOn": [

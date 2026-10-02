@@ -1,6 +1,6 @@
 # Responsibilities — rules-config
 
-Shared config/schema layer: loads and validates webpieces.config.json, defines every rule's typed config, mode unions, defaults, path-exclusion and diff-scope helpers, plus PR-gate review state. Single source of truth consumed by source rules, workflow guards, the neutral hook runtime, code-rules, and Nx tooling.
+Shared tooling configuration: validates webpieces.config.json, defines typed rule schemas and modes, supplies diagnostics, path and diff scoping, and owns PR-gate review state.
 
 ## In Scope
 
