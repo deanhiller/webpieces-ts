@@ -1,5 +1,6 @@
 import { injectable, bindingScopeValues } from 'inversify';
 import { createRequire } from 'node:module';
+import { InformAiError } from '@webpieces/tooling-common';
 import * as path from 'node:path';
 import {
     FieldDef, RulePackManifest, RulePackDeclaration, OwnedRuleDefinition,
@@ -23,7 +24,7 @@ export class NodeRulePackModuleLoader extends RulePackModuleLoader {
         // webpieces-disable no-any-unknown -- external module boundary; registry validates its exported data before use
         const exports: unknown = this.requireModule(moduleName);
         if (typeof exports !== 'object' || exports === null || !('rulePackManifest' in exports)) {
-            throw new Error(`Rule pack ${moduleName} must export rulePackManifest. Add the public manifest export.`);
+            throw new InformAiError(`Rule pack ${moduleName} must export rulePackManifest. Add the public manifest export.`);
         }
         return exports.rulePackManifest as RulePackManifest;
     }
@@ -38,10 +39,10 @@ export class RulePackRegistry {
         const packs = new Set<string>();
         for (const manifest of manifests) {
             this.validateManifest(manifest);
-            if (packs.has(manifest.packageName)) throw new Error(`Duplicate pack ${manifest.packageName}. Declare it once.`);
+            if (packs.has(manifest.packageName)) throw new InformAiError(`Duplicate pack ${manifest.packageName}. Declare it once.`);
             packs.add(manifest.packageName);
             for (const definition of manifest.ownedRules) {
-                if (this.owners.has(definition.id)) throw new Error(`Rule ${definition.id} has multiple owners. Keep exactly one owner.`);
+                if (this.owners.has(definition.id)) throw new InformAiError(`Rule ${definition.id} has multiple owners. Keep exactly one owner.`);
                 this.owners.set(definition.id, manifest.packageName);
                 this.definitions.set(definition.id, definition);
             }
@@ -50,17 +51,17 @@ export class RulePackRegistry {
         for (const manifest of manifests) {
             for (const contribution of manifest.contributions) {
                 if (!contribution || typeof contribution.ruleId !== 'string' || typeof contribution.ownerPack !== 'string') {
-                    throw new Error(`Invalid contribution in ${manifest.packageName}. Supply ruleId and ownerPack.`);
+                    throw new InformAiError(`Invalid contribution in ${manifest.packageName}. Supply ruleId and ownerPack.`);
                 }
                 const owner = this.owners.get(contribution.ruleId);
                 if (!owner || owner !== contribution.ownerPack) {
-                    throw new Error(`Unknown owner ${contribution.ownerPack} for ${contribution.ruleId}. Declare the owning pack and use its exact name.`);
+                    throw new InformAiError(`Unknown owner ${contribution.ownerPack} for ${contribution.ruleId}. Declare the owning pack and use its exact name.`);
                 }
                 if (!['build', 'source-hook', 'workflow-guard', 'lint'].includes(contribution.executionKind)) {
-                    throw new Error(`Invalid execution kind for ${contribution.ruleId}. Use build, source-hook, workflow-guard, or lint.`);
+                    throw new InformAiError(`Invalid execution kind for ${contribution.ruleId}. Use build, source-hook, workflow-guard, or lint.`);
                 }
                 const execution = `${contribution.ruleId}:${contribution.executionKind}`;
-                if (executions.has(execution)) throw new Error(`Duplicate execution-kind contribution ${execution}. Keep one implementation per execution kind.`);
+                if (executions.has(execution)) throw new InformAiError(`Duplicate execution-kind contribution ${execution}. Keep one implementation per execution kind.`);
                 executions.add(execution);
             }
         }
@@ -68,7 +69,7 @@ export class RulePackRegistry {
 
     ownerOf(ruleId: string): string {
         const owner = this.owners.get(ruleId);
-        if (!owner) throw new Error(`Unknown rule ${ruleId}. Declare its owning pack.`);
+        if (!owner) throw new InformAiError(`Unknown rule ${ruleId}. Declare its owning pack.`);
         return owner;
     }
 
@@ -90,33 +91,33 @@ export class RulePackRegistry {
         if (!manifest || typeof manifest.packageName !== 'string' || manifest.packageName.length === 0 ||
             typeof manifest.packageVersion !== 'string' || manifest.packageVersion.length === 0 ||
             !Array.isArray(manifest.ownedRules) || !Array.isArray(manifest.contributions)) {
-            throw new Error('Invalid rule pack manifest. Supply packageName, packageVersion, ownedRules, and contributions.');
+            throw new InformAiError('Invalid rule pack manifest. Supply packageName, packageVersion, ownedRules, and contributions.');
         }
         if (manifest.apiVersion !== RULE_PACK_API_VERSION) {
-            throw new Error(`Unsupported manifest API ${manifest.apiVersion} for ${manifest.packageName}. Use API ${RULE_PACK_API_VERSION}.`);
+            throw new InformAiError(`Unsupported manifest API ${manifest.apiVersion} for ${manifest.packageName}. Use API ${RULE_PACK_API_VERSION}.`);
         }
         for (const definition of manifest.ownedRules) {
             if (!definition || typeof definition.id !== 'string' || definition.id.length === 0) {
-                throw new Error(`Invalid owned rule in ${manifest.packageName}. Supply a nonempty id.`);
+                throw new InformAiError(`Invalid owned rule in ${manifest.packageName}. Supply a nonempty id.`);
             }
             if (definition.schemaApiVersion !== RULE_SCHEMA_API_VERSION) {
-                throw new Error(`Unsupported schema API for ${definition.id}. Use API ${RULE_SCHEMA_API_VERSION}.`);
+                throw new InformAiError(`Unsupported schema API for ${definition.id}. Use API ${RULE_SCHEMA_API_VERSION}.`);
             }
             this.validateSchema(definition.id, definition.schema);
         }
     }
 
     private validateSchema(location: string, schema: Readonly<Record<string, FieldDef>>): void {
-        if (!schema || typeof schema !== 'object' || Array.isArray(schema)) throw new Error(`Invalid schema for ${location}. Supply a field map.`);
+        if (!schema || typeof schema !== 'object' || Array.isArray(schema)) throw new InformAiError(`Invalid schema for ${location}. Supply a field map.`);
         for (const [key, field] of Object.entries(schema)) {
             if (!field || !['string', 'number', 'boolean', 'string[]', 'object[]'].includes(field.type)) {
-                throw new Error(`Invalid field ${location}.${key}. Supply a supported FieldDef type.`);
+                throw new InformAiError(`Invalid field ${location}.${key}. Supply a supported FieldDef type.`);
             }
             for (const flag of ['optional', 'nullable', 'nonEmpty'] as const) {
-                if (field[flag] !== undefined && typeof field[flag] !== 'boolean') throw new Error(`Invalid ${flag} for ${location}.${key}. Supply a boolean.`);
+                if (field[flag] !== undefined && typeof field[flag] !== 'boolean') throw new InformAiError(`Invalid ${flag} for ${location}.${key}. Supply a boolean.`);
             }
             if (field.enumValues !== undefined && (!Array.isArray(field.enumValues) || field.enumValues.some(item => typeof item !== 'string'))) {
-                throw new Error(`Invalid enum for ${location}.${key}. Supply string values.`);
+                throw new InformAiError(`Invalid enum for ${location}.${key}. Supply string values.`);
             }
             if (field.type === 'object[]') this.validateSchema(`${location}.${key}[]`, field.elementSchema!);
         }

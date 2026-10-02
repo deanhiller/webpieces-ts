@@ -3,6 +3,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { FieldDef, OwnedRuleDefinition, RuleContribution, RulePackManifest, RulePackDeclaration } from '@webpieces/rules-sdk';
 import { specTempDirs } from '@webpieces/tooling-testkit';
+import { InformAiError } from '@webpieces/tooling-common';
 import { RulePackRegistry, NodeRulePackModuleLoader, RulePackDiscovery } from '@webpieces/rules-config';
 
 class Packs {
@@ -41,6 +42,7 @@ describe('explicit rule pack registry', () => {
 
     it('rejects duplicate owners, including duplicate IDs within a pack', () => {
         expect(() => new RulePackRegistry([Packs.owner(), Packs.owner('other-owner')])).toThrow('multiple owners');
+        expect(() => new RulePackRegistry([Packs.owner(), Packs.owner('other-owner')])).toThrow(InformAiError);
         const owner = Packs.owner();
         expect(() => new RulePackRegistry([new RulePackManifest(owner.packageName, owner.packageVersion, 1, [...owner.ownedRules, ...owner.ownedRules], [])])).toThrow('multiple owners');
     });
@@ -61,7 +63,9 @@ describe('explicit rule pack registry', () => {
 
     it('rejects incompatible manifest and schema APIs without implicit upgrades', () => {
         expect(() => new RulePackRegistry([new RulePackManifest('future', '2.0.0', 2, [], [])])).toThrow('Unsupported manifest API');
+        expect(() => new RulePackRegistry([new RulePackManifest('future', '2.0.0', 2, [], [])])).toThrow(InformAiError);
         expect(() => new RulePackRegistry([new RulePackManifest('future', '2.0.0', 1, [new OwnedRuleDefinition('future-rule', {}, 2)], [])])).toThrow('Unsupported schema API');
+        expect(() => new RulePackRegistry([new RulePackManifest('future', '2.0.0', 1, [new OwnedRuleDefinition('future-rule', {}, 2)], [])])).toThrow(InformAiError);
     });
 
     it('rejects duplicate pack declarations and unknown rules', () => {
@@ -78,8 +82,10 @@ describe('explicit rule pack registry', () => {
             contributions: []
         };`);
         expect(() => new RulePackDiscovery(new NodeRulePackModuleLoader(root)).discover([new RulePackDeclaration('./invalid.cjs')])).toThrow('Invalid schema');
+        expect(() => new RulePackDiscovery(new NodeRulePackModuleLoader(root)).discover([new RulePackDeclaration('./invalid.cjs')])).toThrow(InformAiError);
         fs.writeFileSync(path.join(root, 'missing.cjs'), 'module.exports = {};');
         expect(() => new RulePackDiscovery(new NodeRulePackModuleLoader(root)).discover([new RulePackDeclaration('./missing.cjs')])).toThrow('must export rulePackManifest');
+        expect(() => new RulePackDiscovery(new NodeRulePackModuleLoader(root)).discover([new RulePackDeclaration('./missing.cjs')])).toThrow(InformAiError);
     });
 
 });
