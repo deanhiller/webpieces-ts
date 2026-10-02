@@ -1,6 +1,6 @@
 import { ReviewIdentityStamp, ReviewIdentityStampService, reviewIdentityStamps } from '@webpieces/rules-config';
 
-import { AgentHookEvent } from '../core/agent-event';
+import { AgentHookEvent } from '@webpieces/hook-runtime';
 
 /**
  * Tells `pnpm wp-write-review` WHO invoked it (issue #863).

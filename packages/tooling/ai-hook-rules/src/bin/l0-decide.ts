@@ -3,7 +3,7 @@ import * as path from 'path';
 
 import { CONFIG_FILENAME } from '@webpieces/rules-config';
 
-import { AiType } from '../core/agent-event';
+import { AiType } from '@webpieces/hook-runtime';
 import { L0_ALLOW_JS, MANIFEST_FILENAMES } from './l0-allowlist';
 import { L0_CODEX_ALLOW_JS } from './l0-codex-read';
 import { L0_IGNORED_TOOLS } from './l0-ignored-tools';

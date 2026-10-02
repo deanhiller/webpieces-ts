@@ -3,7 +3,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 
 import { EVERY_HARNESS, L0AllowEntry, L0_ALLOWLIST } from './shim';
-import { AI_TYPES, AiType } from '../core/agent-event';
+import { AI_TYPES, AiType } from '@webpieces/hook-runtime';
 
 /**
  * "EVERY HARNESS" IS A TOKEN, NOT AN ABSENCE — and this file is what keeps it that way.

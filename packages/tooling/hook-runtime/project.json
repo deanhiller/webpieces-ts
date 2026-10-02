@@ -1,0 +1,20 @@
+{
+    "name": "hook-runtime",
+    "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+    "sourceRoot": "packages/tooling/hook-runtime/src",
+    "projectType": "library",
+    "targets": {
+        "test": { "executor": "nx:run-commands", "options": { "command": "vitest run packages/tooling/hook-runtime/" } },
+        "build": {
+            "executor": "@nx/js:tsc",
+            "outputs": ["{options.outputPath}"],
+            "options": {
+                "outputPath": "dist/packages/tooling/hook-runtime",
+                "main": "packages/tooling/hook-runtime/src/index.ts",
+                "tsConfig": "packages/tooling/hook-runtime/tsconfig.lib.json",
+                "assets": ["packages/tooling/hook-runtime/package.json"]
+            }
+        }
+    },
+    "tags": ["type:tooling", "framework:node", "role:lib"]
+}

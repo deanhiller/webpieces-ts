@@ -177,11 +177,11 @@ describe('workspace bin targets', () => {
         expect(withShimDir).toEqual([]);
     });
 
-    // The tooling is built against local source, which is what puts nx-webpieces-rules above its five
+    // The tooling is built against local source, which is what puts nx-webpieces-rules above its six
     // children in architecture/dependencies.json. If this goes empty, those edges went with it.
     it('keeps the tooling packages source-linked, so the build and the graph use local code', () => {
         const linked = scan.sourceLinkedPackages();
-        for (const name of ['@webpieces/ai-hook-rules', '@webpieces/code-rules',
+        for (const name of ['@webpieces/ai-hook-rules', '@webpieces/hook-runtime', '@webpieces/code-rules',
             '@webpieces/eslint-rules', '@webpieces/pr-gate', '@webpieces/rules-config']) {
             expect(linked, `${name} must stay a workspace: dep of the umbrella`).toContain(name);
         }

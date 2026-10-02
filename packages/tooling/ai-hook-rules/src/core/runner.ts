@@ -19,7 +19,7 @@ import { toError } from './to-error';
 import { formatReport, READ_SUBJECT, BASH_SUBJECT } from './report';
 import { ReadOnlyInspectionScan } from './read-only-inspection';
 import { L0_CURE_ALLOW_JS, isAllowed, isRootManifest } from '../bin/shim';
-import { AiType } from './agent-event';
+import { AiType } from '@webpieces/hook-runtime';
 import { L0_FAULT_CONFIG_MISSING, L0_FAULT_CONFIG_OUT_OF_SYNC, L0_FAULT_NONE } from './l0-fault-codes';
 import { CONFIG_MISSING_REPORT, CONFIG_OUT_OF_SYNC_HEADER, writeGuardMatrixDoc, guardMatrixPointer } from './l0-matrix';
 import { L1Classification, firstMatchingL1Row, L1_PRESTAGE_ROW } from './l1-rows';

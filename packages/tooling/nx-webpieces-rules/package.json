@@ -19,6 +19,7 @@
     ],
     "dependencies": {
         "@webpieces/ai-hook-rules": "workspace:*",
+        "@webpieces/hook-runtime": "workspace:*",
         "@webpieces/api-doc-model": "workspace:*",
         "@webpieces/code-rules": "workspace:*",
         "@webpieces/core-util": "workspace:*",

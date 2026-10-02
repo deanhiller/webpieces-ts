@@ -1,7 +1,7 @@
 import { RepoRootFinder } from '@webpieces/rules-config';
 
 import { AgentPayload } from './agent-payload';
-import { AgentHookEvent, AgentEventKind } from '../core/agent-event';
+import { AgentHookEvent, AgentEventKind } from '@webpieces/hook-runtime';
 import { NormalizedBashInput } from '../core/types';
 import { ApplyPatchParser } from '../core/apply-patch-parse';
 import { ShellReadParity } from '../core/shell-read-parity';

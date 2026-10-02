@@ -1,4 +1,4 @@
-import { AI_TYPES, AI_TYPE_UNKNOWN, AiType } from '@webpieces/ai-hook-rules';
+import { AI_TYPES, AI_TYPE_UNKNOWN, AiType } from '@webpieces/hook-runtime';
 import { injectable, bindingScopeValues } from 'inversify';
 
 /** The coding harness observed by the gate, plus the model the author reported in summary.json. */

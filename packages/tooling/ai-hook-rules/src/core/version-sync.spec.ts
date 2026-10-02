@@ -4,7 +4,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 
 import { EffectiveTree } from './effective-tree';
-import { AiType } from './agent-event';
+import { AiType } from '@webpieces/hook-runtime';
 import { VersionSyncGuard } from './version-sync';
 import { WebpiecesVersions } from './webpieces-versions';
 import { renderBumpSkewReport } from './version-sync-harness.spec';

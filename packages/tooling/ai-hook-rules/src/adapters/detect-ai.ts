@@ -1,4 +1,4 @@
-import { AiType } from '../core/agent-event';
+import { AiType } from '@webpieces/hook-runtime';
 
 /**
  * THE discriminator, and the only one. Codex's PreToolUse envelope carries a REQUIRED `turn_id`;

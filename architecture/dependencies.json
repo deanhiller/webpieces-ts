@@ -23,6 +23,7 @@
             "shortDescription": "Edit-time validation engine for AI coding agents. Intercepts proposed file writes/edits (and Bash git/PR guards) before they land via Claude Code PreToolUse and openclaw before_tool_call adapters, running configurable rules and rejecting bad output with educational fix hints.",
             "responsibilitiesFile": "packages/tooling/ai-hook-rules/responsibilities.md",
             "dependsOn": [
+                "hook-runtime",
                 "rules-config"
             ]
         },
@@ -242,6 +243,14 @@
                 "core-context"
             ]
         },
+        "hook-runtime": {
+            "level": 0,
+            "framework": ["node"],
+            "role": "lib",
+            "shortDescription": "Protocol-only runtime shared by hook products and PR tooling. It owns the normalized agent-event contract, exact PreToolUse response bytes, and the fail-closed application boundary without importing a concrete rule registry.",
+            "responsibilitiesFile": "packages/tooling/hook-runtime/responsibilities.md",
+            "dependsOn": []
+        },
         "http-client-browser": {
             "level": 2,
             "framework": ["browser","react-native","node"],
@@ -360,12 +369,13 @@
             ]
         },
         "nx-webpieces-rules": {
-            "level": 3,
+            "level": 2,
             "framework": ["node"],
             "role": "bundle",
             "shortDescription": "Nx inference plugin that auto-wires webpieces build gates with no manual project.json edits: architecture and runtime graph generators/validators, the Inversify DI design.json/design.md generator, a per-project circular-import gate, and many validate-* code-style and size executors.",
             "responsibilitiesFile": "packages/tooling/nx-webpieces-rules/responsibilities.md",
             "dependsOn": [
+                "ai-hook-rules",
                 "api-doc-model",
                 "code-rules",
                 "eslint-rules",
@@ -394,14 +404,15 @@
             ]
         },
         "pr-gate": {
-            "level": 2,
+            "level": 1,
             "framework": ["node"],
             "role": "app",
             "shortDescription": "Standalone CLIs for the gated PR workflow — start/finish-upsert-pr, start/finish-update (update from main), merge start/end — plus the red/yellow/green PR dashboard that computes merge-gate results and counts newly added rule disables.",
             "responsibilitiesFile": "packages/tooling/pr-gate/responsibilities.md",
             "designFile": "packages/tooling/pr-gate/design.json",
             "dependsOn": [
-                "ai-hook-rules"
+                "hook-runtime",
+                "rules-config"
             ]
         },
         "rules-config": {

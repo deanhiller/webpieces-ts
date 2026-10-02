@@ -1,6 +1,6 @@
 import * as path from 'path';
 
-import { FileOperation } from './agent-event';
+import { FileOperation } from '@webpieces/hook-runtime';
 import { NormalizedEdit, NormalizedToolInput, InformAiError } from './types';
 
 const BEGIN_PATCH = '*** Begin Patch';

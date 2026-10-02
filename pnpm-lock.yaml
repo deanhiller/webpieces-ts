@@ -477,6 +477,9 @@ importers:
 
   packages/tooling/ai-hook-rules:
     dependencies:
+      '@webpieces/hook-runtime':
+        specifier: workspace:*
+        version: link:../hook-runtime
       '@webpieces/rules-config':
         specifier: workspace:*
         version: link:../rules-config
@@ -511,6 +514,15 @@ importers:
         specifier: '>=8.0.0'
         version: 9.39.1(jiti@1.21.7)
 
+  packages/tooling/hook-runtime:
+    dependencies:
+      inversify:
+        specifier: 7.10.4
+        version: 7.10.4(reflect-metadata@0.2.2)
+      reflect-metadata:
+        specifier: 0.2.2
+        version: 0.2.2
+
   packages/tooling/nx-webpieces-rules:
     dependencies:
       '@nx/devkit':
@@ -531,6 +543,9 @@ importers:
       '@webpieces/eslint-rules':
         specifier: workspace:*
         version: link:../eslint-rules
+      '@webpieces/hook-runtime':
+        specifier: workspace:*
+        version: link:../hook-runtime
       '@webpieces/pr-gate':
         specifier: workspace:*
         version: link:../pr-gate
@@ -546,9 +561,9 @@ importers:
       '@inversifyjs/binding-decorators':
         specifier: 1.1.5
         version: 1.1.5(inversify@7.10.4(reflect-metadata@0.2.2))(reflect-metadata@0.2.2)
-      '@webpieces/ai-hook-rules':
+      '@webpieces/hook-runtime':
         specifier: workspace:*
-        version: link:../ai-hook-rules
+        version: link:../hook-runtime
       '@webpieces/rules-config':
         specifier: workspace:*
         version: link:../rules-config

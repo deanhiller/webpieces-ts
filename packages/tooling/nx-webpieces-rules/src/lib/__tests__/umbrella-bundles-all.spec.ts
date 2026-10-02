@@ -120,8 +120,8 @@ describe('the umbrella package bundles the whole toolchain', () => {
 
     /**
      * The catalog is for the release the repo is BUILT WITH, and one entry is all it needs: the umbrella
-     * drags its five children along, in lockstep, by construction. Listing them individually would be
-     * five more versions to keep in step for nothing — and inviting exactly the partial bump the L0
+     * drags its six children along, in lockstep, by construction. Listing them individually would be
+     * six more versions to keep in step for nothing — and inviting exactly the partial bump the L0
      * drift guard exists to catch.
      */
     it('keeps the catalog to the umbrella alone', () => {

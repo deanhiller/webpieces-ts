@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 
 import { denyJson } from './agent-response';
 import { ClaudeCodeAdapter } from './claude-code-adapter';
-import { AgentHookEvent } from '../core/agent-event';
+import { AgentHookEvent } from '@webpieces/hook-runtime';
 
 /**
  * THE REGRESSION PIN FOR "CLAUDE CODE DID NOT MOVE".

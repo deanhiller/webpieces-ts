@@ -50,8 +50,28 @@ const REPO_ROOT = path.resolve(TOOLING, '..', '..');
 // A dir under os.tmpdir() would resolve nothing at all.
 const OUT_DIR = path.join(REPO_ROOT, `.spec-compiled-bins`);
 
+/** Materialize the extracted runtime exactly where the spawned, compiled package would resolve it. */
+function compileHookRuntime(tsc: string): void {
+    const packageRoot = path.join(TOOLING, 'hook-runtime');
+    const installed = path.join(OUT_DIR, 'node_modules', '@webpieces', 'hook-runtime');
+    const result = spawnSync(tsc, [
+        path.join(packageRoot, 'src', 'index.ts'),
+        '--outDir', installed,
+        '--rootDir', packageRoot,
+        '--module', 'commonjs', '--target', 'es2022', '--moduleResolution', 'node',
+        '--experimentalDecorators', '--emitDecoratorMetadata',
+        '--esModuleInterop', '--skipLibCheck', '--sourceMap', 'false',
+    ], { encoding: 'utf8', cwd: REPO_ROOT });
+    fs.mkdirSync(installed, { recursive: true });
+    fs.copyFileSync(path.join(packageRoot, 'package.json'), path.join(installed, 'package.json'));
+    if (!fs.existsSync(path.join(installed, 'src', 'index.js'))) {
+        throw new Error(`tsc emitted no hook-runtime dependency:\n${result.stdout}\n${result.stderr}`);
+    }
+}
+
 function compileBin(entry: string): string {
     const tsc = path.join(REPO_ROOT, 'node_modules', '.bin', 'tsc');
+    compileHookRuntime(tsc);
     const result = spawnSync(tsc, [
         entry,
         '--outDir', OUT_DIR,

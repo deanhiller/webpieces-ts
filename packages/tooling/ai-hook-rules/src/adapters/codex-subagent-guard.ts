@@ -2,7 +2,7 @@ import * as path from 'path';
 
 import { Option, PR_REVIEW_DIR, RuleFailError, WEBPIECES_TMP_DIR, WRITE_REVIEW_BIN, renderRuleFailForAi } from '@webpieces/rules-config';
 
-import { AgentHookEvent, FileOperation } from '../core/agent-event';
+import { AgentHookEvent, FileOperation } from '@webpieces/hook-runtime';
 import { BlockedResult } from '../core/types';
 
 export const CODEX_SUBAGENT_RULE = 'codex-subagent-no-write-in-shared-tree';

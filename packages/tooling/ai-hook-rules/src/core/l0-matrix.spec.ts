@@ -13,7 +13,7 @@ import { atRoot } from './effective-tree';
 import { L0_FAULT_NAMES, L0_JS_FAULT_CODES, L0_ROW_BLOCKED } from './l0-fault-codes';
 import { MATRIX_L0_BLOCK } from './decision-log';
 import { L0Cure, L0Fault, L0_FAULTS, GUARD_MATRIX_DOC, renderGuardMatrixDoc, guardMatrixPointer } from './l0-matrix';
-import { AiType } from './agent-event';
+import { AiType } from '@webpieces/hook-runtime';
 
 /**
  * WHICH HARNESS a sample must be judged as. An entry gated on one harness is unreachable from any other

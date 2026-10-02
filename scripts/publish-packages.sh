@@ -70,13 +70,14 @@ PUBLISH_RETRY_SLEEP="${PUBLISH_RETRY_SLEEP:-10}"
 # Dependency order. A package must appear AFTER everything it depends on: npm has no ordering
 # guarantee, and a consumer resolving a not-yet-published version fails.
 #
-# THE TOOLING FAMILY GOES FIRST, and that is a deliberate risk ordering, not tidiness. These six are
+# THE TOOLING FAMILY GOES FIRST, and that is a deliberate risk ordering, not tidiness. These seven are
 # the packages this repo GOVERNS ITSELF WITH — the eslint plugin, the nx executors, the PreToolUse
 # guards and every `wp-*` bin. Stranding them is strictly the worst outcome of a partial release: the
 # runtime packages just sit a build behind, but a half-published tooling family desynchronises the
 # umbrella from its children and can wedge an agent session (see
 # .claude/rules/published-vs-local-source.md). `rules-config` has no @webpieces dependency at all,
-# the middle four depend only on `rules-config`, and `nx-webpieces-rules` bundles the other five — so
+# `hook-runtime` is a leaf, the middle four depend only on those foundations, and
+# `nx-webpieces-rules` bundles the other six — so
 # putting them at the front removes them as hostages of a transient failure on an unrelated package
 # like cloudtasks-client (entry 21 of 28, run 585).
 #
@@ -92,11 +93,10 @@ PUBLISH_RETRY_SLEEP="${PUBLISH_RETRY_SLEEP:-10}"
 # dependency that invalidates the order fails a test rather than a release.
 ORDER=(
     packages/tooling/rules-config
+    packages/tooling/hook-runtime
     packages/tooling/eslint-rules
-    # ai-hook-rules is AHEAD of pr-gate because pr-gate's manifest declares it. Do not reorder this pair
-    # by reading the imports: publish-packages.spec.ts re-derives the order from the real MANIFESTS, which
-    # is what caught the inversion when the dependency was first added, and a manifest can declare a
-    # dependency no source file imports.
+    # Both hook products depend on the neutral runtime; pr-gate no longer depends on ai-hook-rules.
+    # publish-packages.spec.ts re-derives this order from the real manifests.
     packages/tooling/ai-hook-rules
     packages/tooling/pr-gate
     packages/tooling/code-rules
