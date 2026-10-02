@@ -47,14 +47,10 @@ export async function runDevHookInstall(): Promise<void> {
     const guardsHookPath = join(cwd, 'dist', 'packages', 'tooling', 'agent-workflow-rules', 'src', 'adapters', 'guards-hook.js');
 
     if (!existsSync(rulesHookPath)) {
-        console.error(`[dev-hook-install] Local build not found at: ${rulesHookPath}`);
-        console.error('  Run `pnpm nx run ai-hook-rules:build` first.');
-        throw new CliExitError(1, '');
+        throw new CliExitError(1, `[dev-hook-install] Local build not found at: ${rulesHookPath}\n  Run \`pnpm nx run ai-hook-rules:build\` first.`);
     }
     if (!existsSync(guardsHookPath)) {
-        console.error(`[dev-hook-install] Local build not found at: ${guardsHookPath}`);
-        console.error('  Run `pnpm nx run agent-workflow-rules:build` first.');
-        throw new CliExitError(1, '');
+        throw new CliExitError(1, `[dev-hook-install] Local build not found at: ${guardsHookPath}\n  Run \`pnpm nx run agent-workflow-rules:build\` first.`);
     }
 
     const distRulesConfigPath = join(cwd, 'dist', 'packages', 'tooling', 'rules-config');

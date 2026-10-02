@@ -41,9 +41,8 @@ describe('development hook installation after separating source and workflow pac
             writeFileSync(source, '');
         }
 
-        await expect(runDevHookInstall()).rejects.toThrow();
+        await expect(runDevHookInstall()).rejects.toThrow(`  Run \`pnpm nx run ${missing}:build\` first.`);
 
-        expect(error).toHaveBeenCalledWith(expect.stringContaining(`dist/packages/tooling/${missing}/src/adapters/`));
-        expect(error).toHaveBeenCalledWith(`  Run \`pnpm nx run ${missing}:build\` first.`);
+        expect(error).not.toHaveBeenCalled();
     });
 });
