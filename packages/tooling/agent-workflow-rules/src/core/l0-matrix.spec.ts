@@ -6,7 +6,7 @@ import { CONFIG_FILENAME, loadTemplate } from '@webpieces/rules-config';
 import { L0AllowEntry, L0Call, L0_ALLOWLIST, L0_ALLOW_ERE, L0_ALLOW_JS, L0_CURE_ALLOW_JS, CD_PREFIX_JS_SRC, CAPTURE_TAIL_JS_SRC, CODEX_READ_CMD, isAllowed, EVERY_HARNESS } from '../bin/shim';
 import { ShimTestkit } from '../bin/shim-testkit';
 import {  shimStaleRecoveryDecision  } from '../adapters/hook-core';
-import { atRoot } from '@webpieces/hook-runtime';
+import { atRoot } from '@webpieces/rules-config';
 import { L0_FAULT_NAMES, L0_JS_FAULT_CODES, L0_ROW_BLOCKED } from '@webpieces/rules-config';
 import { MATRIX_L0_BLOCK } from './decision-log';
 import { L0Cure, L0Fault, L0_FAULTS, GUARD_MATRIX_DOC, renderGuardMatrixDoc, guardMatrixPointer } from './l0-matrix';
