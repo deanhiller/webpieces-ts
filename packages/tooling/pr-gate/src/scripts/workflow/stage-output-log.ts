@@ -1,4 +1,6 @@
 import * as fs from 'fs';
+import { RuleFailError, renderRuleFailForHuman } from '@webpieces/rules-config';
+import { toError } from '@webpieces/tooling-common/to-error';
 import { injectable, bindingScopeValues } from 'inversify';
 
 import { GateLogFile } from './gate-log-file';
@@ -88,6 +90,14 @@ export class StageOutputLog {
         // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
         try {
             return await body();
+        // webpieces-disable no-any-unknown -- JavaScript may reject with any value; normalize for the diagnostic log
+        } catch (err: unknown) {
+            const error = toError(err);
+            // Match runMain's terminal rendering, including a rule refusal's actionable options.
+            const message =
+                error instanceof RuleFailError ? renderRuleFailForHuman(error) : error.message;
+            this.appendToLog(message + '\n');
+            throw err; // the global handler still owns terminal rendering and the exit status
         } finally {
             this.release();
         }

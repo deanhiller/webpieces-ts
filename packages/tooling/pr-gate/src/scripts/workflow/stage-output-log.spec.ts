@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { execSync } from 'child_process';
+import { execSync, spawnSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 import { GateLogFile } from './gate-log-file';
@@ -127,6 +127,7 @@ describe('StageOutputLog always restores stdout', () => {
         expect(process.stdout.write).toBe(before);
         expect(terminal).toContain(`FullLog : ${logPath(primary)}`);
         expect(readLog(primary)).toContain('work so far');
+        expect(readLog(primary)).toContain('build failed');
     });
 
     it('refuses to nest rather than silently restoring the wrong stdout', async () => {
@@ -175,5 +176,57 @@ describe('StageOutputLog file placement', () => {
         expect(readLog(primary)).toContain('second');
         expect(readLog(primary)).not.toContain('first');
         expect(fs.readFileSync(files.backupPathFor(logPath(primary)), 'utf8')).toContain('first');
+    });
+});
+
+// Exercise the real terminal boundary in a child: runMain exits, so a mocked exit would hide ordering.
+describe('stage failure diagnostics survive the global CLI handler', () => {
+    it.each([
+        'new Error("build failed")',
+        '"non-Error rejection"',
+        'new CliExitError(2, "terminal refusal")',
+        'new RuleFailError("test", "ai refusal", undefined, undefined, [new Option("repair this", true)], "human refusal")',
+    ])('records the normalized failure before closure: %s', (failure: string) => {
+        const entry = path.resolve(
+            'packages/tooling/pr-gate/src/scripts/workflow/stage-output-log.ts',
+        );
+        const gateFile = path.resolve(
+            'packages/tooling/pr-gate/src/scripts/workflow/gate-log-file.ts',
+        );
+        const script = `const {runMain, CliExitError, RuleFailError, Option} = require('@webpieces/rules-config');
+            const {StageOutputLog} = require(${JSON.stringify(entry)});
+            const {GateLogFile} = require(${JSON.stringify(gateFile)});
+            runMain(() => new StageOutputLog(new GateLogFile()).withCapture(${JSON.stringify(primary)},
+                'wp-review-upsert-pr.log', async () => { process.stdout.write('before failure\\n'); throw ${failure}; }));`;
+        const result = spawnSync(
+            process.execPath,
+            ['-r', '@swc-node/register', '-r', 'tsconfig-paths/register', '-e', script],
+            {
+                cwd: process.cwd(),
+                encoding: 'utf8',
+                env: { ...process.env, TS_NODE_PROJECT: path.resolve('tsconfig.base.json') },
+            },
+        );
+        expect(result.status).toBe(failure.startsWith('new CliExitError') ? 2 : 1);
+        // Nx sets both color variables; Node may prepend its unrelated color-warning banner.
+        const message = result.stderr.trim().split('\n').filter((line: string): boolean =>
+            !line.startsWith('(node:') && !line.startsWith('(Use `node --trace-warnings')).join('\n');
+        if (failure.startsWith('new RuleFailError')) {
+            expect(message).toContain('human refusal');
+            expect(message).toContain('repair this');
+        } else {
+            expect(message).toBe(
+                failure.startsWith('new Error')
+                    ? 'build failed'
+                    : failure.startsWith('new CliExitError')
+                      ? 'terminal refusal'
+                      : 'non-Error rejection',
+            );
+        }
+        expect(readLog(primary)).toContain(message);
+        expect(result.stdout).toContain(`FullLog : ${logPath(primary)}`);
+        expect(readLog(primary).indexOf('before failure')).toBeLessThan(
+            readLog(primary).indexOf(message),
+        );
     });
 });

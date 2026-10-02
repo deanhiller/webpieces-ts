@@ -1,5 +1,5 @@
 import * as fs from 'fs';
-import { loadAndValidate, writeTemplate, PrGateConfig, RepoRootFinder, RequiredChecklist, ReviewerBriefing, ReviewerInstructionsService, ReviewJsonService } from '@webpieces/rules-config';
+import { loadAndValidate, writeTemplate, PrGateConfig, RepoRootFinder, RequiredChecklist, ReviewerBriefing, ReviewerInstructionsService, ReviewJsonService, summaryJsonSchemaHint } from '@webpieces/rules-config';
 import { injectable, bindingScopeValues } from 'inversify';
 import { ActiveHatch, ActiveHatchReport } from '../workflow/active-hatches';
 import { AiBranchName } from '../workflow/git-readAiBranchName';
@@ -104,7 +104,13 @@ export class ReviewUpsertPrCommand {
         const scan = this.checklistScanner.scan(repoRoot, config.checklists, new ChecklistScanOptions(config.maxReviewerRounds, false, '')); // '' — THIS command writes the context itself, after materializing
         const previousReceipt = this.receipts.read(repoRoot, featureName);
         const plan = this.rounds.plan(repoRoot, scan.summaryPath, previousReceipt, config.maxReviewerRounds, scan.basis);
-        const shouldBrief = plan.action === ROUND_ACTION_REVIEW || plan.action === ROUND_ACTION_RESUME;
+        if (plan.action === ROUND_ACTION_RESUME && previousReceipt !== null) {
+            this.resumeRound(repoRoot, featureName, scan, previousReceipt, mergeValidated, buildPassedAt);
+            this.reportActiveHatches(repoRoot);
+            if (scan.reviewersDisabled) this.report(repoRoot, featureName, scan, [], plan, config);
+            return;
+        }
+        const shouldBrief = plan.action === ROUND_ACTION_REVIEW;
         const briefings = shouldBrief
             ? this.briefReviewers(repoRoot, featureName, scan, config, plan)
             : [];
@@ -119,9 +125,54 @@ export class ReviewUpsertPrCommand {
             receipt.round = recordedReviewers.length === 0 ? 0 : plan.round;
             receipt.maxReviewerRounds = plan.maxRounds;
             this.receipts.write(repoRoot, featureName, receipt);
+        } else if (previousReceipt !== null) {
+            previousReceipt.buildHeadSha = scan.basis.headSha;
+            previousReceipt.mergeValidated = mergeValidated;
+            previousReceipt.buildCommand = this.buildAffected.resolveBuildCommand(repoRoot);
+            previousReceipt.buildPassedAt = buildPassedAt;
+            this.receipts.write(repoRoot, featureName, previousReceipt);
         }
         this.reportActiveHatches(repoRoot);
         this.report(repoRoot, featureName, scan, briefings, plan, config);
+    }
+
+    /** Keep the original briefing, diff, roster and provenance intact while refreshing build evidence. */
+    // eslint-disable-next-line @typescript-eslint/max-params
+    private resumeRound(
+        repoRoot: string,
+        featureName: string,
+        scan: ChecklistScan,
+        receipt: ReviewStageReceipt,
+        mergeValidated: boolean,
+        buildPassedAt: string,
+    ): void {
+        receipt.buildHeadSha = scan.basis.headSha;
+        receipt.mergeValidated = mergeValidated;
+        receipt.buildCommand = this.buildAffected.resolveBuildCommand(repoRoot);
+        receipt.buildPassedAt = buildPassedAt;
+        this.receipts.write(repoRoot, featureName, receipt);
+        // The scanner owns reviewer suppression. Keep the historical roster for later recovery, but
+        // never instruct it to run while the existing opt-out is active.
+        if (scan.reviewersDisabled) return;
+        const pending = receipt.reviewersBriefed.filter(
+            (id: string): boolean =>
+                !receipt.optionalBriefed.includes(id) &&
+                !this.rounds.hasVerdict(scan.summaryPath, id, receipt.round),
+        );
+        this.stageConsole.say(
+            `\nResume the existing reviewer roster: round ${receipt.round} of ${receipt.maxReviewerRounds}.\n` +
+                `Build passed at ${receipt.buildHeadSha}; reviewers retain their briefing at ${receipt.headSha}.\n` +
+                'Continue the existing reviewer agents; do not respawn them for a SHA or fork-point change.\n' +
+                pending
+                    .map(
+                        (id: string): string =>
+                            `  REQUIRED ${id}: ${this.reviewerInstructions.pathFor(repoRoot, featureName, id)}\n` +
+                            `    Submit with: pnpm wp-write-review --checklist ${id} --file '<verdict JSON file>'\n`,
+                    )
+                    .join('') +
+                `\nAfter the remaining verdicts, write ${scan.summaryPath}:\n${summaryJsonSchemaHint(scan.summaryPath)}\n` +
+                'Then run: pnpm wp-review-upsert-pr (to plan any RED follow-up), followed by pnpm wp-finish-upsert-pr.\n',
+        );
     }
 
     /**

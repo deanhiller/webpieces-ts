@@ -10,7 +10,8 @@ export const RECEIPT_FILE = 'review-stage.json';
  * Proof that stage ② (`wp-review-upsert-pr`) actually ran, and on WHICH commit. Data-only (per CLAUDE.md).
  */
 export class ReviewStageReceipt {
-    headSha: string;          // the sha the merge was validated and the build was run against
+    headSha: string;          // historical SHA the fixed roster was briefed on
+    buildHeadSha: string;     // current SHA the merge validation and build evidence apply to
     mergeValidated: boolean;  // a 3-point merge was finalized here, or there was none to finalize
     buildCommand: string;
     buildPassedAt: string;    // ISO; '' when the gate was skipped (mode OFF / no command)
@@ -24,8 +25,8 @@ export class ReviewStageReceipt {
     optionalBriefed: string[];
     /**
      * checklist id → the hash of its in-scope diff at `headSha` (ChecklistScopeHasher). `wp-write-review`
-     * stamps a verdict's provenance with the hash its reviewer was BRIEFED on, and the next stage ② carries
-     * a green/yellow forward only while that hash is unchanged (issue #863). Assigned after construction.
+     * stamps a verdict's provenance with the hash its reviewer was BRIEFED on, and later stages retain
+     * that historical scope when carrying accepted verdicts (issue #1053). Assigned after construction.
      */
     scopeHashes: Record<string, string>;
     /**
@@ -41,6 +42,7 @@ export class ReviewStageReceipt {
     // eslint-disable-next-line @typescript-eslint/max-params
     constructor(headSha = '', mergeValidated = false, buildCommand = '', buildPassedAt = '', reviewersBriefed: string[] = []) {
         this.headSha = headSha;
+        this.buildHeadSha = headSha;
         this.mergeValidated = mergeValidated;
         this.buildCommand = buildCommand;
         this.buildPassedAt = buildPassedAt;
@@ -98,6 +100,7 @@ export class ReviewStageReceiptService {
                 typeof raw['buildPassedAt'] === 'string' ? (raw['buildPassedAt'] as string) : '',
                 Array.isArray(raw['reviewersBriefed']) ? (raw['reviewersBriefed'] as string[]) : [],
             );
+            receipt.buildHeadSha = typeof raw['buildHeadSha'] === 'string' ? raw['buildHeadSha'] as string : '';
             receipt.optionalBriefed = Array.isArray(raw['optionalBriefed'])
                 ? (raw['optionalBriefed'] as string[]).filter((id: string): boolean => typeof id === 'string') : [];
             receipt.scopeHashes = this.stringMap(raw['scopeHashes']);

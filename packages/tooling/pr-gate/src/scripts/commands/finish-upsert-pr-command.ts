@@ -328,12 +328,12 @@ export class FinishUpsertPrCommand {
                     '(then spawn the reviewers it names, write summary.json, and re-run this command)',
             );
         }
-        if (receipt.headSha === headSha) return true;
+        if (receipt.buildHeadSha === headSha) return true;
         // Not fatal, and never a re-review (issue #1053): a green or yellow verdict stands whatever changed
         // since, and only a RED with a round left ever opens another round. Suggesting a re-review here
         // would be an instruction the gate itself refuses. It is never silent either: the build re-runs.
         process.stderr.write(
-            `\n⚠️  HEAD moved since stage ② ran (reviewed ${receipt.headSha.slice(0, 8)}, now ${headSha.slice(0, 8)}).\n` +
+            `\n⚠️  HEAD moved since stage ② built (built ${receipt.buildHeadSha.slice(0, 8) || 'unknown'}, now ${headSha.slice(0, 8)}).\n` +
                 '   The build gate will re-run. No further review runs for this: every verdict is carried forward\n' +
                 '   from the reviewed tree, and the PR records that the reviewers judged an earlier commit.\n\n',
         );
