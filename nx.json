@@ -2,7 +2,7 @@
     "$schema": "./node_modules/nx/schemas/nx-schema.json",
     "defaultBase": "main",
     "namedInputs": {
-        "default": ["{projectRoot}/**/*", "sharedGlobals"],
+        "default": ["{projectRoot}/**/*"],
         "production": [
             "default",
             "!{projectRoot}/**/?(*.)+(spec|test).[jt]s?(x)?(.snap)",
@@ -10,7 +10,19 @@
             "!{projectRoot}/.eslintrc.json",
             "!{projectRoot}/eslint.config.js"
         ],
-        "sharedGlobals": ["{workspaceRoot}/webpieces.config.json"]
+        "rulesConfig": [
+            "{workspaceRoot}/nx.json",
+            "{workspaceRoot}/rules/project.json",
+            "{workspaceRoot}/webpieces.config.json",
+            "{workspaceRoot}/packages/tooling/nx-webpieces-rules/src/executors/validate-rules-config/**/*",
+            "{workspaceRoot}/packages/tooling/rules-config/src/*config*.ts",
+            "{workspaceRoot}/packages/tooling/rules-config/src/*schema*.ts",
+            "{workspaceRoot}/packages/tooling/rules-config/src/default-rules.ts",
+            "{workspaceRoot}/packages/tooling/rules-config/src/field-def.ts",
+            "{workspaceRoot}/packages/tooling/rules-config/src/seed-entry.ts",
+            "{workspaceRoot}/packages/tooling/rules-config/src/sections.ts",
+            "{workspaceRoot}/packages/tooling/rules-config/src/types.ts"
+        ]
     },
     "targetDefaults": {
         "@nx/js:tsc": {

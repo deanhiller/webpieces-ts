@@ -1,0 +1,8 @@
+{
+    "$schema": "http://json-schema.org/schema",
+    "title": "Validate Rules Config Executor",
+    "description": "Validates webpieces.config.json once through the scoped rules:check target.",
+    "type": "object",
+    "properties": {},
+    "required": []
+}

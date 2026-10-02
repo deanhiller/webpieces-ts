@@ -415,6 +415,14 @@
                 "rules-config"
             ]
         },
+        "rules": {
+            "level": 0,
+            "framework": ["node"],
+            "role": "app",
+            "shortDescription": "This project owns validation of the repository-level `webpieces.config.json` policy without making that configuration a shared input of product projects.",
+            "responsibilitiesFile": "rules/responsibilities.md",
+            "dependsOn": []
+        },
         "rules-config": {
             "level": 0,
             "framework": ["node"],
