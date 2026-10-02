@@ -55,10 +55,14 @@ export class JsonlResponseStream {
                         route,
                         destination,
                         onConsumerFailure,
+                        // eslint-disable-next-line @webpieces/no-unmanaged-exceptions -- post-open failures belong to the response consumer and are reported through cancel
                     ).catch(
                         // webpieces-disable no-any-unknown -- asynchronous transport failure is normalized at the boundary
                         async (err: unknown): Promise<void> => {
                             const error = toError(err);
+                            // The call has already resolved: cancel reports the primary failure.
+                            // A throwing cancellation callback cannot be reported back through
+                            // that same callback; contain it to avoid an unhandled background rejection.
                             await this.cancel(destination, error).catch((): void => undefined);
                         },
                     );
