@@ -83,6 +83,55 @@ describe('ReviewRoundStateService', () => {
         expect(plan.round).toBe(1);
     });
 
+    it.each([1, 2])(
+        'resumes a partially completed roster through repeated squash/main updates with cap %i',
+        (cap: number) => {
+            const dir = repo();
+            commitFix(dir, 2);
+            const receipt = receiptAt(dir);
+            receipt.maxReviewerRounds = cap;
+            receipt.reviewersBriefed = ['security', 'errors', 'pending'];
+            archive(dir, receipt, 'green', 'security');
+            archive(dir, receipt, 'yellow', 'errors');
+            const original = provenance.read(summary(dir), 'security', 1);
+            for (const value of [3, 4, 5]) {
+                // The sanctioned updater rewrites commits and moves the fork point, so historical HEAD is
+                // deliberately no longer an ancestor. Round accounting must not depend on either hash.
+                git(dir, 'reset', '-q', '--hard', 'HEAD~1');
+                commitFix(dir, value);
+                const plan = rounds.plan(dir, summary(dir), receipt, cap, basis(dir));
+                expect(plan.action).toBe(ROUND_ACTION_RESUME);
+                expect(plan.round).toBe(1);
+                expect(rounds.snapshot(summary(dir), receipt).roster).toEqual(
+                    receipt.reviewersBriefed,
+                );
+                expect(provenance.read(summary(dir), 'security', 1)).toEqual(original);
+            }
+            archive(dir, receipt, 'green', 'pending');
+            expect(rounds.plan(dir, summary(dir), receipt, cap, basis(dir)).action).toBe(
+                ROUND_ACTION_FINISH,
+            );
+            expect(rounds.highestRound(summary(dir))).toBe(1);
+        },
+    );
+
+    it.each([1, 2])(
+        'resumes an entirely pending roster across HEAD movement with cap %i',
+        (cap: number) => {
+            const dir = repo();
+            commitFix(dir, 2);
+            const receipt = receiptAt(dir);
+            receipt.maxReviewerRounds = cap;
+            for (const value of [3, 4]) {
+                commitFix(dir, value);
+                expect(rounds.plan(dir, summary(dir), receipt, cap, basis(dir)).action).toBe(
+                    ROUND_ACTION_RESUME,
+                );
+                expect(rounds.plan(dir, summary(dir), receipt, cap, basis(dir)).round).toBe(1);
+            }
+        },
+    );
+
     it('requires a SHA-bound remediation, then starts one focused round over every fix commit', () => {
         const dir = repo();
         commitFix(dir, 2);

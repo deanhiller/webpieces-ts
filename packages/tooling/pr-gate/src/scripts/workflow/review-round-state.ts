@@ -211,10 +211,8 @@ export class ReviewRoundStateService {
         const snap = this.snapshot(summaryPath, receipt);
         if (snap.round < 1) return new ReviewRoundPlan(ROUND_ACTION_REVIEW, 1, maxRounds, fullBasis);
         if (!snap.complete) {
-            if (snap.headSha !== fullBasis.headSha) {
-                throw new InformAiError(`Reviewer round ${snap.round} of ${maxRounds} is still active at `
-                    + `${snap.headSha.slice(0, 8)}. Finish that fixed roster before changing the reviewed HEAD.`);
-            }
+            // A sanctioned update changes the build basis, never the fixed roster or its historical
+            // briefing. Resume that roster without charging another round (issue #1087).
             return new ReviewRoundPlan(ROUND_ACTION_RESUME, snap.round, maxRounds, fullBasis);
         }
         const reds = this.checklistIdsWithStatus(summaryPath, snap, VERDICT_RED);

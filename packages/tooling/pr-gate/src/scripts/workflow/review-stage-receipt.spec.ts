@@ -28,9 +28,21 @@ describe('ReviewStageReceiptService', () => {
 
         const read = svc().read(repo, 'feat');
         expect(read?.headSha).toBe('abc123');
+        expect(read?.buildHeadSha).toBe('abc123');
         expect(read?.mergeValidated).toBe(true);
         expect(read?.buildPassedAt).toBe('2026-07-30T00:00:00.000Z');
         expect(read?.reviewersBriefed).toEqual(['db-reviewer']);
+    });
+
+    it('keeps current build evidence separate from the historical reviewer briefing', () => {
+        const repo = tmpRepo();
+        const receipt = new ReviewStageReceipt('reviewed', true, 'build', 'old', ['pending']);
+        receipt.buildHeadSha = 'built-current';
+        receipt.buildPassedAt = 'new';
+        svc().write(repo, 'feat', receipt);
+        expect(svc().read(repo, 'feat')?.headSha).toBe('reviewed');
+        expect(svc().read(repo, 'feat')?.buildHeadSha).toBe('built-current');
+        expect(svc().read(repo, 'feat')?.buildPassedAt).toBe('new');
     });
 
     // Issue #1062: which briefed checklists are OPTIONAL is what lets an unrun one stay off the round's roster.
