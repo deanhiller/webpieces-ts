@@ -17,6 +17,7 @@ import {
 } from './HttpContract';
 import { RouteMetadata } from './RouteMetadata';
 import { getStreamingEndpoint } from './StreamingContract';
+import { StreamDirection, StreamingEndpointMetadata } from './StreamingContract';
 
 /**
  * Build the one runtime route model consumed by incoming routing, in-process clients, and both
@@ -52,6 +53,7 @@ export class RouteMetadataFactory {
                   httpMethod,
                   parameterTypes,
                   declarations,
+                  streaming,
               )
             : this.validateParameters(
                   apiClass,
@@ -126,14 +128,36 @@ export class RouteMetadataFactory {
         httpMethod: HttpMethod,
         parameterTypes: readonly Function[],
         declarations: readonly HttpParameterDeclaration[],
-    ): undefined {
+        streaming: StreamingEndpointMetadata,
+    ): number | undefined {
         const label = `${apiClass.name || 'Unknown'}.${methodName}`;
+        if (
+            !streaming.initialRequestSchema ||
+            !streaming.initialResponseSchema ||
+            (streaming.direction !== StreamDirection.RESPONSE && !streaming.requestSchema) ||
+            (streaming.direction !== StreamDirection.REQUEST && !streaming.responseSchema)
+        ) {
+            throw new Error(
+                `${label} requires generated streaming schemas. Run wp-openapi and registerStreamingCatalog(${apiClass.name}, catalog) before binding.`,
+            );
+        }
         if (httpMethod !== 'POST') throw new Error(`${label} is streaming and must use POST.`);
         if (declarations.length > 0)
             throw new Error(`${label} is streaming and cannot declare path/query parameters.`);
-        if (parameterTypes.length !== 1)
-            throw new Error(`${label} must take exactly one ResponseStream parameter.`);
-        return undefined;
+        const expected = streaming.direction === StreamDirection.REQUEST ? 1 : 2;
+        if (parameterTypes.length !== expected) {
+            const form =
+                streaming.direction === StreamDirection.REQUEST
+                    ? '(InitialRequest) => Promise<RequestStream<InitialResponse, RequestEvent>>'
+                    : streaming.direction === StreamDirection.RESPONSE
+                      ? '(InitialRequest, ResponseStream<ResponseEvent>) => Promise<InitialResponse>'
+                      : '(InitialRequest, ResponseStream<ResponseEvent>) => Promise<RequestStream<InitialResponse, RequestEvent>>';
+            throw new Error(
+                `Invalid @WpStream(StreamDirection.${streaming.direction.toUpperCase()}) method ${label}: ` +
+                    `${streaming.direction.toUpperCase()} accepts exactly ${form}.`,
+            );
+        }
+        return 0;
     }
 
     /**

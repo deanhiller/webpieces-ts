@@ -113,6 +113,12 @@ export type { IpcApiType, IpcEndpointKind, IpcEndpointOptions } from './ipc/IpcD
 // The runtime representation of ONE route (split out of decorators.ts for file size only).
 export { RouteMetadata } from './http/RouteMetadata';
 export { RouteMetadataFactory } from './http/RouteMetadataFactory';
+export { StreamingSchemaCatalog, registerStreamingCatalog } from './http/StreamingSchemaCatalog';
+export {
+    StreamErrorControl,
+    StreamProtocolError,
+    StreamDisconnectedError,
+} from './http/StreamErrorControl';
 export {
     BoundHttpRequest,
     HttpContractMapper,
@@ -126,15 +132,12 @@ export {
     StreamEventValidator,
     StreamTransportError,
     StreamWriter,
+    StreamDirection,
     WpStream,
     getStreamingEndpoint,
+    registerStreamingSchemas,
 } from './http/StreamingContract';
-export type {
-    RequestStream,
-    ResponseStream,
-    StreamEnvelopeKind,
-    StreamFailureOptions,
-} from './http/StreamingContract';
+export type { RequestStream, ResponseStream, StreamEnvelopeKind } from './http/StreamingContract';
 export type {
     EndpointResponseType,
     HttpMethod,
@@ -169,14 +172,23 @@ export {
     ObjectSchemaBuilder,
 } from './mcp/DtoSchema';
 export type { ApiJsonSchemaType, DtoValue } from './mcp/DtoSchema';
-export { McpToolCatalogFile, McpToolCatalogError, McpToolDefinition } from './mcp/McpToolCatalogFile';
+export {
+    McpToolCatalogFile,
+    McpToolCatalogError,
+    McpToolDefinition,
+} from './mcp/McpToolCatalogFile';
 export {
     GeneratedApiDocsLayout,
     GenerateLayoutProblem,
     GenerateOutputLookup,
     GenerateOutputTarget,
 } from './mcp/GeneratedApiDocsLayout';
-export type { LayoutDependsOn, LayoutDependsOnObject, LayoutTarget, LayoutTargets } from './mcp/GeneratedApiDocsLayout';
+export type {
+    LayoutDependsOn,
+    LayoutDependsOnObject,
+    LayoutTarget,
+    LayoutTargets,
+} from './mcp/GeneratedApiDocsLayout';
 // The TYPE layer of the auth surface — likewise split out of decorators.ts for file size only.
 export { AuthMeta } from './http/auth-mode';
 export type {

@@ -44,6 +44,14 @@ export class WebpiecesCoreHeaders {
         /*responseMerge*/ 'first',
     );
 
+    /** Framework-minted identity for one inbound streaming event; never accepted from HTTP. */
+    static readonly STREAM_EVENT_ID = ContextKey.untrusted<string>(
+        'streamEventId',
+        undefined,
+        false,
+        true,
+    );
+
     /**
      * WHICH SERVICE MINTED {@link REQUEST_ID} — the name from {@link ServiceInfo}, stamped by
      * `RequestContextHeaders.fillFromRequest` ONLY on the branch that generates a new id (i.e. when
@@ -340,6 +348,7 @@ export class WebpiecesCoreHeaders {
      */
     static readonly ALL_HEADERS: AnyContextKey[] = [
         WebpiecesCoreHeaders.REQUEST_ID,
+        WebpiecesCoreHeaders.STREAM_EVENT_ID,
         WebpiecesCoreHeaders.REQUEST_ID_SOURCE,
         WebpiecesCoreHeaders.CLIENT_VERSION,
         WebpiecesCoreHeaders.ACTION_ID,

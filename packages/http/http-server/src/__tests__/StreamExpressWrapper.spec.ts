@@ -8,8 +8,10 @@ import {
     ApiBadRequestError,
     HeaderRegistry,
     RequestStream,
+    ResponseStream,
     RouteMetadata,
     StreamCorrelation,
+    StreamDirection,
     StreamEnvelope,
     StreamTransportError,
     StreamWriter,
@@ -99,7 +101,38 @@ function route(): RouteMetadata {
         [],
         undefined,
         'body',
-        new StreamingEndpointMetadata(inputEventSchema, outputEventSchema),
+        new StreamingEndpointMetadata(
+            StreamDirection.FULL,
+            inputEventSchema,
+            outputEventSchema,
+            inputEventSchema,
+            outputEventSchema,
+        ),
+    );
+}
+
+function responseStreamingRoute(): RouteMetadata {
+    return new RouteMetadata(
+        'POST',
+        '/watch',
+        'watch',
+        WRITE,
+        'StreamController',
+        undefined,
+        'StreamApi',
+        false,
+        undefined,
+        false,
+        [],
+        0,
+        'body',
+        new StreamingEndpointMetadata(
+            StreamDirection.RESPONSE,
+            inputEventSchema,
+            outputEventSchema,
+            undefined,
+            outputEventSchema,
+        ),
     );
 }
 
@@ -114,10 +147,13 @@ function configureRequest(stream: Readable): import('express').Request {
     // webpieces-disable no-any-unknown -- focused express request double
     (req as any).path = '/stream';
     // webpieces-disable no-any-unknown -- focused express request double
-    (req as any).headers = { 'content-type': 'application/x-ndjson', 'x-request-id': 'req-7' };
+    (req as any).headers = {
+        'content-type': 'application/x-webpieces-jsonl',
+        'x-request-id': 'req-7',
+    };
     // webpieces-disable no-any-unknown -- focused express request double
     (req as any).get = (name: string): string | undefined =>
-        name.toLowerCase() === 'content-type' ? 'application/x-ndjson' : undefined;
+        name.toLowerCase() === 'content-type' ? 'application/x-webpieces-jsonl' : undefined;
     return req;
 }
 
@@ -142,150 +178,134 @@ beforeAll(() => {
 });
 
 describe('StreamExpressWrapper', () => {
-    it('runs the handshake before SSE and streams correlated NDJSON events as framed SSE', async () => {
-        const seen: StreamEnvelope<InputEvent>[] = [];
-        const contextHeaders = headers();
+    it('serves a finite request and raw JSONL response stream without framework envelopes', async () => {
+        const responseRequest = configureRequest(Readable.from(['{"value":"open"}\n']));
+        // webpieces-disable no-any-unknown -- focused express request double
+        (responseRequest as any).headers['content-type'] = 'application/x-webpieces-jsonl';
+        // webpieces-disable no-any-unknown -- focused express request double
+        (responseRequest as any).get = (): string => 'application/x-webpieces-jsonl';
         const wrapper = new StreamExpressWrapper(
-            async (outbound): Promise<RequestStream<InputEvent>> => {
-                expect(
-                    contextHeaders.fillFromRequest as ReturnType<typeof vi.fn>,
-                ).toHaveBeenCalledOnce();
-                const responseStream = outbound as StreamWriter<OutputEvent>;
-                await responseStream.event({ result: 'ready' }, new StreamCorrelation('handshake'));
-                return new StreamWriter<InputEvent>(
-                    async (envelope: StreamEnvelope<InputEvent>) => {
-                        seen.push(envelope);
-                        if (envelope.kind === 'event') {
-                            await responseStream.event(
-                                { result: envelope.value!.value.toUpperCase() },
-                                envelope.correlation,
-                            );
-                        } else if (envelope.kind === 'complete') {
-                            await responseStream.complete();
-                        }
-                    },
-                );
+            async (initial, outbound): Promise<OutputEvent> => {
+                expect(initial).toEqual({ value: 'open' });
+                const responses = outbound as ResponseStream<OutputEvent>;
+                await responses.event({ result: 'later' });
+                await responses.close();
+                return { result: 'accepted' };
             },
-            route(),
-            contextHeaders,
-        );
-        const res = new FakeResponse();
-
-        await wrapper.execute(
-            request([
-                '{"kind":"event","value":{"value":"one"},"correlation":{"key":9,"requestId":"req-7"}}\n',
-                '{"kind":"complete"}\n',
-            ]),
-            response(res),
-            () => undefined,
-        );
-
-        expect(res.statusCode).toBe(200);
-        expect(res.headers.get('content-type')).toEqual(['text/event-stream; charset=utf-8']);
-        expect(res.headers.get('x-accel-buffering')).toEqual(['no']);
-        expect(res.chunks.join('')).toContain('data: {"kind":"event","value":{"result":"ready"}');
-        expect(res.chunks.join('')).toContain('"correlation":{"key":9,"requestId":"req-7"}');
-        expect(res.chunks.join('')).toContain('data: {"kind":"complete"}\n\n');
-        expect(seen.map((envelope: StreamEnvelope<InputEvent>) => envelope.kind)).toEqual([
-            'event',
-            'complete',
-        ]);
-    });
-
-    it('uses ordinary Webpieces status/error mapping when the handshake fails', async () => {
-        const wrapper = new StreamExpressWrapper(
-            async () => {
-                throw new ApiBadRequestError('private parse detail', 'value', 'Invalid value');
-            },
-            route(),
+            responseStreamingRoute(),
             headers(),
         );
         const res = new FakeResponse();
 
-        await wrapper.execute(request([]), response(res), () => undefined);
+        await wrapper.execute(responseRequest, response(res), () => undefined);
 
-        expect(res.statusCode).toBe(400);
-        expect(res.headers.get('content-type')).toEqual(['application/json']);
-        expect(res.chunks.join('')).toContain('"kind":"bad-request"');
-        expect(res.chunks.join('')).not.toContain('private parse detail');
+        expect(res.headers.get('content-type')).toEqual([
+            'application/x-webpieces-jsonl; charset=utf-8',
+        ]);
+        expect(res.chunks.join('')).toBe('{"result":"accepted"}\n{"result":"later"}\n');
+        expect(res.chunks.join('')).not.toContain('"kind"');
     });
 
-    it('turns malformed NDJSON into typed failures on both halves after SSE opens', async () => {
-        let inboundFailure: StreamTransportError | undefined;
+    it('opens atomically and delivers raw request events before directional EOF', async () => {
+        const seen: string[] = [];
         const wrapper = new StreamExpressWrapper(
-            async (outbound): Promise<RequestStream<InputEvent>> => {
-                const responseStream = outbound as StreamWriter<OutputEvent>;
+            async (initial, outbound): Promise<RequestStream<OutputEvent, InputEvent>> => {
+                expect(initial).toEqual({ value: 'open' });
+                const responses = outbound as ResponseStream<OutputEvent>;
+                await responses.event({ result: 'queued' });
                 return {
-                    event: async () => undefined,
-                    fail: async (error): Promise<void> => {
-                        inboundFailure = error as StreamTransportError;
+                    getInitialResponse: (): OutputEvent => ({ result: 'accepted' }),
+                    event: async (value: InputEvent): Promise<void> => {
+                        seen.push(value.value);
+                        await responses.event({ result: value.value.toUpperCase() });
                     },
-                    complete: async () => undefined,
-                    cancel: async () => undefined,
+                    close: async (): Promise<void> => {
+                        seen.push('EOF');
+                        await responses.close();
+                    },
+                    cancel: async (): Promise<void> => undefined,
                 };
             },
             route(),
             headers(),
         );
         const res = new FakeResponse();
-
-        await wrapper.execute(request(['not-json\n']), response(res), () => undefined);
-
-        expect(inboundFailure).toBeInstanceOf(StreamTransportError);
-        expect(inboundFailure?.message).toBe('Malformed NDJSON stream frame.');
-        expect(res.chunks.join('')).toContain('data: {"kind":"failure"');
+        await wrapper.execute(
+            request(['{"value":"open"}\n{"value":"one"}\n']),
+            response(res),
+            () => undefined,
+        );
+        expect(seen).toEqual(['one', 'EOF']);
+        expect(res.chunks.join('')).toBe(
+            '{"result":"accepted"}\n{"result":"queued"}\n{"result":"ONE"}\n',
+        );
         expect(res.writableEnded).toBe(true);
     });
 
-    it('awaits the response drain boundary before completing a write', async () => {
-        const res = new FakeResponse();
-        res.writeResult = false;
+    it('uses ordinary HTTP error mapping before the initial response', async () => {
         const wrapper = new StreamExpressWrapper(
-            async (outbound): Promise<RequestStream<InputEvent>> => {
-                const responseStream = outbound as StreamWriter<OutputEvent>;
-                void responseStream.complete();
-                return new StreamWriter<InputEvent>(async () => undefined);
+            async () => {
+                throw new ApiBadRequestError('private detail', 'value', 'Invalid value');
             },
             route(),
             headers(),
         );
-
-        let settled = false;
-        const executing = wrapper
-            .execute(request([]), response(res), () => undefined)
-            .then((): void => {
-                settled = true;
-            });
-        await new Promise<void>((resolve: () => void) => setImmediate(resolve));
-        expect(settled).toBe(false);
-
-        res.emit('drain');
-        await executing;
-        expect(settled).toBe(true);
+        const res = new FakeResponse();
+        await wrapper.execute(request(['{"value":"open"}\n']), response(res), () => undefined);
+        expect(res.statusCode).toBe(400);
+        expect(res.chunks.join('')).toContain('"kind":"bad-request"');
+        expect(res.chunks.join('')).not.toContain('private detail');
     });
 
-    it('propagates peer disconnect as immediate typed cancellation', async () => {
-        const input = new PassThrough();
-        const cancelled = vi.fn();
+    it('sends a sideband control and cancels the peer after malformed post-open JSON', async () => {
+        const cancelled: Error[] = [];
         const wrapper = new StreamExpressWrapper(
-            async (): Promise<RequestStream<InputEvent>> => ({
-                event: async () => undefined,
-                fail: async () => undefined,
-                complete: async () => undefined,
-                cancel: async (reason): Promise<void> => cancelled(reason),
+            async (): Promise<RequestStream<OutputEvent, InputEvent>> => ({
+                getInitialResponse: (): OutputEvent => ({ result: 'accepted' }),
+                event: async (): Promise<void> => undefined,
+                close: async (): Promise<void> => undefined,
+                cancel: async (error?: Error): Promise<void> => {
+                    if (error) cancelled.push(error);
+                },
             }),
             route(),
             headers(),
         );
         const res = new FakeResponse();
-        const executing = wrapper.execute(configureRequest(input), response(res), () => undefined);
+        await wrapper.execute(
+            request(['{"value":"open"}\nnot-json\n']),
+            response(res),
+            () => undefined,
+        );
+        expect(cancelled[0]).toBeInstanceOf(StreamTransportError);
+        expect(res.chunks[0]).toBe('{"result":"accepted"}\n');
+        expect(res.chunks[1].charCodeAt(0)).toBe(0x1e);
+        expect(res.writableEnded).toBe(true);
+    });
+
+    it('awaits the response drain boundary during the initial response', async () => {
+        const res = new FakeResponse();
+        res.writeResult = false;
+        const wrapper = new StreamExpressWrapper(
+            async (): Promise<RequestStream<OutputEvent, InputEvent>> => ({
+                getInitialResponse: (): OutputEvent => ({ result: 'accepted' }),
+                event: async (): Promise<void> => undefined,
+                close: async (): Promise<void> => undefined,
+                cancel: async (): Promise<void> => undefined,
+            }),
+            route(),
+            headers(),
+        );
+        let settled = false;
+        const executing = wrapper
+            .execute(request(['{"value":"open"}\n']), response(res), () => undefined)
+            .then((): void => {
+                settled = true;
+            });
         await new Promise<void>((resolve: () => void) => setImmediate(resolve));
-
-        res.emit('close');
-        input.destroy();
+        expect(settled).toBe(false);
+        res.emit('drain');
         await executing;
-
-        expect(cancelled).toHaveBeenCalledOnce();
-        expect(cancelled.mock.calls[0][0]).toBeInstanceOf(StreamTransportError);
+        expect(settled).toBe(true);
     });
 });

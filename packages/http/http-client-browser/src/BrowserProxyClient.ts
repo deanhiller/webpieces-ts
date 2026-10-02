@@ -1,10 +1,10 @@
 import {
-    AuthMeta,
     ContextMgr,
     ClientRegistry,
     DestinationTrust,
     LogApiCallImpl,
     RouteMetadata,
+    StreamDirection,
 } from '@webpieces/core-util';
 import { BrowserApiCallContext } from './BrowserApiCallContext';
 import {
@@ -120,7 +120,6 @@ export class BrowserProxyClient extends ProxyClient {
         this.lifecycleListener?.onRequestEnd(route, outcome);
     }
 
-
     /**
      * Reject a contract this browser cannot satisfy, at bind time rather than on the first call.
      * Both service-to-service modes need credentials only a server has: @WpAuthOidc needs a runtime
@@ -137,11 +136,15 @@ export class BrowserProxyClient extends ProxyClient {
      * Adding `local-only` is what surfaced it: the third reader of the union should fail to compile
      * on a NEW kind for the same reason the other two do.
      */
-    protected override assertEndpointSupported(
-        authMeta: AuthMeta | undefined,
-        methodName: string,
-    ): void {
-        const mode = authMeta?.mode;
+    protected override assertEndpointSupported(route: RouteMetadata): void {
+        const methodName = route.methodName;
+        if (route.streaming && route.streaming.direction !== StreamDirection.RESPONSE) {
+            throw new StreamingCapabilityError(
+                'browser',
+                `Browser Fetch supports only @WpStream(StreamDirection.RESPONSE); ${methodName} is ${route.streaming.direction}.`,
+            );
+        }
+        const mode = route.authMeta?.mode;
         if (mode === undefined) {
             return;
         }

@@ -13,66 +13,33 @@ export class StreamCorrelation {
     ) {}
 }
 
-export interface StreamFailureOptions {
-    /** Defaults to true. Wire adapters may promote false to true when continuation is unsafe. */
-    terminal?: boolean;
+/** Server-to-client half of a typed stream. Every write is an explicit backpressure boundary. */
+export enum StreamDirection {
+    RESPONSE = 'response',
+    REQUEST = 'request',
+    FULL = 'full',
 }
 
-/** Server-to-client half of a typed stream. Every write is an explicit backpressure boundary. */
 export interface ResponseStream<T> {
     event(value: T, correlation?: StreamCorrelation): Promise<void>;
-    /**
-     * Publish a failure on this stream. Takes `Error`, the parent of everything: `ApiError` is a
-     * CONVENIENCE taxonomy webpieces ships so the common cases are easy, never something the
-     * framework may demand from an application. An app's own `MyLibError extends Error` is
-     * published as kind `implementation` with generic text, exactly as on every other boundary.
-     *
-     * This is the FAITHFUL {@link ApiErrorCodec} encode, NOT `ApiErrorBoundary.encode`, and that is
-     * deliberate: a stream failure is delivered IN BAND to a peer that is reading the stream, so a
-     * {@link StreamTransportError} (an `ApiConnectionError`) must arrive as kind `connection` for
-     * the peer to reconstruct it as the transport failure it is. Republishing it as
-     * `implementation` — right at an HTTP/MCP edge, where the caller is asking us to do work — would
-     * tell the peer the wrong thing about a stream it is holding one end of.
-     */
-    fail(
-        error: Error,
-        correlation?: StreamCorrelation,
-        options?: StreamFailureOptions,
-    ): Promise<void>;
-    complete(): Promise<void>;
-    // webpieces-disable no-any-unknown -- cancellation reasons are deliberately transport-neutral
-    onCancel(handler: (reason?: unknown) => void | Promise<void>): void;
+    /** Graceful directional EOF after all queued records are acknowledged. */
+    close(): Promise<void>;
+    /** Abnormal terminal cancellation of the logical exchange. */
+    cancel(error?: Error): Promise<void>;
 }
 
 /** Client-to-server half. Cancellation exists immediately and is independent of writer readiness. */
-export interface RequestStream<T> {
+export interface RequestStream<TInitialResponse, T> {
+    /** The typed opening acknowledgement received before later request events are writable. */
+    getInitialResponse(): TInitialResponse;
     event(value: T, correlation?: StreamCorrelation): Promise<void>;
-    /**
-     * Publish a failure on this stream. Takes `Error`, the parent of everything: `ApiError` is a
-     * CONVENIENCE taxonomy webpieces ships so the common cases are easy, never something the
-     * framework may demand from an application. An app's own `MyLibError extends Error` is
-     * published as kind `implementation` with generic text, exactly as on every other boundary.
-     *
-     * This is the FAITHFUL {@link ApiErrorCodec} encode, NOT `ApiErrorBoundary.encode`, and that is
-     * deliberate: a stream failure is delivered IN BAND to a peer that is reading the stream, so a
-     * {@link StreamTransportError} (an `ApiConnectionError`) must arrive as kind `connection` for
-     * the peer to reconstruct it as the transport failure it is. Republishing it as
-     * `implementation` — right at an HTTP/MCP edge, where the caller is asking us to do work — would
-     * tell the peer the wrong thing about a stream it is holding one end of.
-     */
-    fail(
-        error: Error,
-        correlation?: StreamCorrelation,
-        options?: StreamFailureOptions,
-    ): Promise<void>;
-    complete(): Promise<void>;
-    // webpieces-disable no-any-unknown -- cancellation reasons are deliberately transport-neutral
-    cancel(reason?: unknown): Promise<void>;
+    close(): Promise<void>;
+    cancel(error?: Error): Promise<void>;
 }
 
 export type StreamEnvelopeKind = 'event' | 'failure' | 'complete';
 
-/** Transport-neutral record used by NDJSON and SSE adapters. */
+/** Internal acknowledgement records; these are never serialized around application JSONL DTOs. */
 export class StreamEnvelope<T = DtoValue> {
     constructor(
         public readonly kind: StreamEnvelopeKind,
@@ -98,41 +65,59 @@ export class StreamTransportError extends ApiConnectionError {
 /**
  * Runtime schema and wire-policy metadata for one streaming method.
  *
- * It holds the two event SCHEMAS rather than two DTO classes. Until #984 it held classes and built
- * their schemas from `@WpDtoField` at decoration time; that decorator is deleted, because the
- * compiler already knows every fact it restated (#983). A schema is the thing a boundary validates
- * against, so it is the thing the metadata carries.
+ * The build-time API model derives initial and event schemas independently from the signature.
  */
 export class StreamingEndpointMetadata {
     constructor(
-        public readonly requestSchema: ApiJsonSchema,
-        public readonly responseSchema: ApiJsonSchema,
-        /** Generic NDJSON/SSE supports non-terminal failures in both directions. */
-        public readonly supportsNonTerminalFailures = true,
+        public readonly direction: StreamDirection,
+        public readonly initialRequestSchema?: ApiJsonSchema,
+        public readonly initialResponseSchema?: ApiJsonSchema,
+        public readonly requestSchema?: ApiJsonSchema,
+        public readonly responseSchema?: ApiJsonSchema,
     ) {}
 }
 
 /**
- * Marks `(ResponseStream<ResponseEvent>) => Promise<RequestStream<RequestEvent>>`, with the two
- * event schemas the wire adapters validate against.
- *
- * Build them with {@link ObjectSchemaBuilder}, or read them out of the build's generated model.
+ * Declares direction; the method signature owns all four DTO types. Install its generated
+ * stream-Contract-schemas.json with registerStreamingCatalog before binding the contract.
  */
-// webpieces-disable no-function-outside-class -- decorator factory
-export function WpStream(
-    requestEventSchema: ApiJsonSchema,
-    responseEventSchema: ApiJsonSchema,
-): MethodDecorator {
+// webpieces-disable no-function-outside-class -- decorator factory is the public annotation API
+export function WpStream(direction: StreamDirection): MethodDecorator {
     return (target: object, propertyKey: string | symbol): void => {
         const apiClass = target.constructor;
         const methods: Record<string, StreamingEndpointMetadata> =
             Reflect.getMetadata(METADATA_KEYS.STREAM_ENDPOINTS, apiClass) ?? {};
-        methods[String(propertyKey)] = new StreamingEndpointMetadata(
-            requestEventSchema,
-            responseEventSchema,
-        );
+        methods[String(propertyKey)] = new StreamingEndpointMetadata(direction);
         Reflect.defineMetadata(METADATA_KEYS.STREAM_ENDPOINTS, methods, apiClass);
     };
+}
+
+/**
+ * Installs the schemas emitted by the build-time API model. Kept separate from `@WpStream` so the
+ * contract declaration has one source of truth: its TypeScript signature.
+ */
+// webpieces-disable no-function-outside-class -- generated wiring calls this metadata registration boundary
+export function registerStreamingSchemas(
+    apiClass: Function,
+    methodName: string,
+    schemas: Pick<
+        StreamingEndpointMetadata,
+        'initialRequestSchema' | 'initialResponseSchema' | 'requestSchema' | 'responseSchema'
+    >,
+): void {
+    const current = getStreamingEndpoint(apiClass, methodName);
+    if (!current)
+        throw new Error(`${apiClass.name}.${methodName} is not decorated with @WpStream.`);
+    const methods: Record<string, StreamingEndpointMetadata> =
+        Reflect.getMetadata(METADATA_KEYS.STREAM_ENDPOINTS, apiClass) ?? {};
+    methods[methodName] = new StreamingEndpointMetadata(
+        current.direction,
+        schemas.initialRequestSchema,
+        schemas.initialResponseSchema,
+        schemas.requestSchema,
+        schemas.responseSchema,
+    );
+    Reflect.defineMetadata(METADATA_KEYS.STREAM_ENDPOINTS, methods, apiClass);
 }
 
 // webpieces-disable no-function-outside-class -- metadata reader paired with WpStream
@@ -158,18 +143,25 @@ export class StreamEventValidator {
 }
 
 /** Awaiting the sink acknowledges the write, so adapters cannot outrun their consumer. */
-export class StreamWriter<T> implements RequestStream<T>, ResponseStream<T> {
+export class StreamWriter<T, TInitialResponse = T> implements ResponseStream<T> {
     private terminal = false;
     private cancelled = false;
+    private failure?: Error;
     private pending: Promise<void> = Promise.resolve();
-    // webpieces-disable no-any-unknown -- cancellation reasons are deliberately transport-neutral
-    private readonly cancelHandlers: Array<(reason?: unknown) => void | Promise<void>> = [];
 
     constructor(
         private readonly sink: (envelope: StreamEnvelope<T>) => Promise<void>,
         private readonly validateEvent?: (value: T) => void,
-        private readonly allowNonTerminalFailures = true,
+        private readonly initialResponse?: TInitialResponse,
+        private readonly cancelSink?: (error?: Error) => Promise<void>,
     ) {}
+
+    getInitialResponse(): TInitialResponse {
+        if (this.initialResponse === undefined) {
+            throw new StreamTransportError('RequestStream initial response is unavailable.');
+        }
+        return this.initialResponse;
+    }
 
     async event(value: T, correlation?: StreamCorrelation): Promise<void> {
         this.requireWritable();
@@ -177,56 +169,55 @@ export class StreamWriter<T> implements RequestStream<T>, ResponseStream<T> {
         await this.enqueue(new StreamEnvelope('event', value, undefined, correlation));
     }
 
-    async fail(
-        error: Error,
-        correlation?: StreamCorrelation,
-        options?: StreamFailureOptions,
-    ): Promise<void> {
-        this.requireWritable();
-        const terminal = (options?.terminal ?? true) || !this.allowNonTerminalFailures;
-        if (terminal) this.terminal = true;
-        await this.enqueue(
-            new StreamEnvelope<T>(
-                'failure',
-                undefined,
-                ApiErrorCodec.encode(error),
-                correlation,
-                terminal,
-            ),
-        );
-    }
-
-    async complete(): Promise<void> {
+    async close(): Promise<void> {
         this.requireWritable();
         this.terminal = true;
         await this.enqueue(new StreamEnvelope<T>('complete'));
     }
 
-    // webpieces-disable no-any-unknown -- cancellation reasons are deliberately transport-neutral
-    onCancel(handler: (reason?: unknown) => void | Promise<void>): void {
-        this.cancelHandlers.push(handler);
-    }
-
-    // webpieces-disable no-any-unknown -- cancellation reasons are deliberately transport-neutral
-    async cancel(reason?: unknown): Promise<void> {
-        if (this.cancelled || this.terminal) return;
+    async cancel(error?: Error): Promise<void> {
+        if (this.cancelled) return;
         this.cancelled = true;
+        this.failure = error;
         this.terminal = true;
-        for (const handler of this.cancelHandlers) await handler(reason);
+        if (this.cancelSink) {
+            await this.cancelSink(error);
+            return;
+        }
+        if (error) {
+            await this.enqueue(
+                new StreamEnvelope<T>(
+                    'failure',
+                    undefined,
+                    ApiErrorCodec.encode(error),
+                    undefined,
+                    true,
+                ),
+            );
+        }
     }
 
     private requireWritable(): void {
-        if (this.terminal || this.cancelled)
-            throw new StreamTransportError('Cannot write after stream termination.');
+        if (this.failure) throw this.failure;
+        if (this.terminal) throw new StreamTransportError('Cannot write after stream termination.');
     }
 
     private enqueue(envelope: StreamEnvelope<T>): Promise<void> {
-        const delivery = this.pending.then(async () => this.sink(envelope));
+        const delivery = this.pending.then(async () => {
+            if (this.failure && envelope.kind !== 'failure') throw this.failure;
+            await this.sink(envelope);
+        });
         this.pending = delivery.catch(() => undefined);
         // webpieces-disable no-any-unknown -- transport boundary normalizes arbitrary sink failures
         return delivery.catch((err: unknown) => {
             this.terminal = true;
             const error = toError(err);
+            this.failure = error;
+            if (this.cancelSink) {
+                return this.cancel(error).then((): never => {
+                    throw error;
+                });
+            }
             if (error instanceof StreamTransportError) throw error;
             throw new StreamTransportError(
                 'Stream transport could not acknowledge a write.',

@@ -302,6 +302,8 @@ describe('portable IPC JSON boundary', () => {
         );
     });
     it('isolates out-of-order concurrent calls and propagates parent identity explicitly', async () => {
+        // The 10ms protocol deadline must not depend on a loaded CI runner scheduling real timers.
+        vi.useFakeTimers();
         class Delayed extends EchoController {
             override async echo(request: Value): Promise<Value> {
                 await new Promise((resolve) =>
@@ -313,9 +315,12 @@ describe('portable IPC JSON boundary', () => {
         const pair = new Pair(new Delayed());
         const parent = new IpcCallContext('transaction', 'parent');
         const client = pair.clients.withContext(parent).createClient(TestApi);
-        expect(
-            await Promise.all([client.echo(new Value('slow')), client.echo(new Value('fast'))]),
-        ).toEqual([new Value('slow'), new Value('fast')]);
+        const replies = Promise.all([
+            client.echo(new Value('slow')),
+            client.echo(new Value('fast')),
+        ]);
+        await vi.advanceTimersByTimeAsync(3);
+        expect(await replies).toEqual([new Value('slow'), new Value('fast')]);
         const contexts = pair.a.sends.map((json) => JSON.parse(json).context);
         expect(contexts.map((c) => c.parentCallId)).toEqual(['parent', 'parent']);
         expect(contexts[0].callId).not.toBe(contexts[1].callId);
