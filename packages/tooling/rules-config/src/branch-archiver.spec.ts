@@ -1,10 +1,11 @@
+import { specTempDirs } from '@webpieces/tooling-testkit';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { execFileSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 
 import { ARCHIVE_TAG_PREFIX, BranchArchiver } from '@webpieces/repo-workflow-core';
-import { specTempDirs } from './spec-temp-dirs';
+
 
 /**
  * REAL git, not a fake. The entire claim of Part 1 is that a tag preserves the branch's objects

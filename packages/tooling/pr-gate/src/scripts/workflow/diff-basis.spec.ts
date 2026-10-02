@@ -1,3 +1,4 @@
+import { specTempDirs } from '@webpieces/tooling-testkit';
 import { describe, it, expect, afterAll, afterEach, beforeAll } from 'vitest';
 import { execSync } from 'child_process';
 import * as fs from 'fs';
@@ -6,7 +7,7 @@ import { BranchNaming } from './branch-naming';
 import { DiffBasis, DiffBasisResolver } from './diff-basis';
 import { ForkPoint } from './git-findForkPoint';
 import { GitStatusParser } from './git-status';
-import { specTempDirs } from '@webpieces/rules-config';
+
 
 const dirs: string[] = [];
 

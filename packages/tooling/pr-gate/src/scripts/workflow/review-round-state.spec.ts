@@ -1,9 +1,10 @@
+import { specTempDirs } from '@webpieces/tooling-testkit';
 import * as fs from 'fs';
 import * as path from 'path';
 import { execFileSync } from 'child_process';
 import { describe, expect, it } from 'vitest';
 import { AtomicFile } from '@webpieces/tooling-common';
-import { REVIEWER_AGENTS_PLACEHOLDER, RequiredChecklist, ReviewJsonService, ReviewerAgentPolicy, specTempDirs } from '@webpieces/rules-config';
+import { REVIEWER_AGENTS_PLACEHOLDER, RequiredChecklist, ReviewJsonService, ReviewerAgentPolicy } from '@webpieces/rules-config';
 import { DiffBasis } from './diff-basis';
 import { ReviewRoundStateService, ROUND_ACTION_FINISH, ROUND_ACTION_RECORD, ROUND_ACTION_RESUME, ROUND_ACTION_REVIEW } from './review-round-state';
 import { ReviewStageReceipt } from './review-stage-receipt';

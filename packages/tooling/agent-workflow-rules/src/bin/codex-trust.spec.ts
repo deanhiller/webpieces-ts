@@ -1,10 +1,11 @@
+import { specTempDirs } from '@webpieces/tooling-testkit';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
 
 import { CodexTrustProbe, CodexTrustStatus } from './codex-trust';
 import { CODEX_REGISTRATION, GUARDS_BIN, RULES_BIN, writeSettings } from './hook-registration';
-import { specTempDirs } from '@webpieces/rules-config';
+
 
 /**
  * CODEX TRUST IS READ, NEVER WRITTEN — and the second half of that sentence is the one worth testing.

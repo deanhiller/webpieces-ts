@@ -1,3 +1,4 @@
+import { specTempDirs } from '@webpieces/tooling-testkit';
 /**
  * Regression tests for the `excludePackages` escape hatch of the
  * no-file-import-cycles gate.
@@ -21,7 +22,7 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
 import { buildMadgeOptions } from './executor';
-import { specTempDirs } from '@webpieces/rules-config';
+
 
 // madge ships no types; require it the same way the executor's loadMadge does.
 // eslint-disable-next-line @typescript-eslint/no-var-requires

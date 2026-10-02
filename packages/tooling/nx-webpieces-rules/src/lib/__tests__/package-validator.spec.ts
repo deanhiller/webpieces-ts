@@ -1,3 +1,4 @@
+import { specTempDirs } from '@webpieces/tooling-testkit';
 import { vi } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -19,7 +20,7 @@ import {
     ProjectValidationResult,
     validatePackageJsonDependencies,
 } from '../package-validator';
-import { specTempDirs } from '@webpieces/rules-config';
+
 
 class PackageJsonSpec {
     name: string;

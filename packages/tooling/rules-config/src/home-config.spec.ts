@@ -1,3 +1,4 @@
+import { specTempDirs } from '@webpieces/tooling-testkit';
 import { describe, it, expect, afterEach } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -12,7 +13,7 @@ import {
     ALLOWED_EXPERIMENTAL, ALLOWED_EXPERIMENTAL_NUMBERS, ALLOWED_TOP_LEVEL,
     HOME_KEY_DOC, HOME_KEY_AI_DOC, DOCUMENTATION_KEYS,
 } from './home-config';
-import { specTempDirs } from './spec-temp-dirs';
+
 
 const dirs: string[] = [];
 

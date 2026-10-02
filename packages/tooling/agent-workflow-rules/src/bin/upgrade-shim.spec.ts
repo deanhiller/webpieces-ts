@@ -1,3 +1,4 @@
+import { specTempDirs } from '@webpieces/tooling-testkit';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -6,7 +7,7 @@ import { runUpgradeShim } from './upgrade-shim';
 import { renderShim, shimPath } from './shim';
 import { GUARDS_BIN, readSettings, writeSettings, CLAUDE_REGISTRATION } from './hook-registration';
 import { BASH_CWD_ENV_KEY, BASH_CWD_ENV_VALUE } from './managed-env';
-import { specTempDirs } from '@webpieces/rules-config';
+
 
 /**
  * wp-upgrade-shim — the cure the committed-shim self-guard allows through. It must rewrite an existing

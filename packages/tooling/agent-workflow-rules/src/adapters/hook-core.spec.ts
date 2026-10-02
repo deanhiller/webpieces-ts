@@ -1,3 +1,4 @@
+import { specTempDirs } from '@webpieces/tooling-testkit';
 import { describe, it, expect } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -5,7 +6,7 @@ import * as path from 'path';
 import {  shimStaleRecoveryDecision  } from './hook-core';
 import { INSTALL_HOOKS_CMD, UPGRADE_SHIM_CMD, RESTORE_SHIM_CMD } from '../bin/shim';
 import { CONFIG_FILENAME } from '@webpieces/rules-config';
-import { specTempDirs } from '@webpieces/rules-config';
+
 
 /**
  * shimStaleRecoveryDecision — what a STALE committed shim lets through. The carve-out is the whole

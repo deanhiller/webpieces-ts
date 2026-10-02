@@ -1,7 +1,8 @@
+import { specTempDirs } from '@webpieces/tooling-testkit';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
-import { AgedTreeSweeper, RepoRootFinder, specTempDirs, TmpScratchSweeper } from '@webpieces/rules-config';
+import { AgedTreeSweeper, RepoRootFinder, TmpScratchSweeper } from '@webpieces/rules-config';
 import { WEBPIECES_TMP_DIR } from '@webpieces/tooling-common';
 import { CleanTmp } from './cleanTmp';
 

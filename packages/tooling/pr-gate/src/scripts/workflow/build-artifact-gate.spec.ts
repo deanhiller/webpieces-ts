@@ -1,9 +1,10 @@
+import { specTempDirs } from '@webpieces/tooling-testkit';
 import { execSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
 import { BranchIdentity } from '@webpieces/repo-workflow-core';
-import { BuildsLog, RepoRootFinder, specTempDirs, RepoScratchDirs } from '@webpieces/rules-config';
+import { BuildsLog, RepoRootFinder, RepoScratchDirs } from '@webpieces/rules-config';
 import { DotWebpieces } from '@webpieces/tooling-common';
 import { toError } from '@webpieces/tooling-common/to-error';
 import { BuildAffected } from './build-affected';

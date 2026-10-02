@@ -1,9 +1,10 @@
+import { specTempDirs } from '@webpieces/tooling-testkit';
 import { describe, it, expect } from 'vitest';
 import { execSync } from 'child_process';
 import * as fs from 'fs';
 
 import { ReviewIdentityStamp, ReviewIdentityStampService, REVIEW_STAMP_MAX_AGE_MS } from '@webpieces/repo-workflow-core';
-import { specTempDirs } from './spec-temp-dirs';
+
 
 function gitRepo(): string {
     const root = specTempDirs.makeReal('wp-review-stamp-');

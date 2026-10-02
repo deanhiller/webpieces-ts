@@ -1,7 +1,8 @@
+import { specTempDirs } from '@webpieces/tooling-testkit';
 import * as fs from 'fs';
 import * as path from 'path';
 import { describe, it, expect } from 'vitest';
-import { matchesAnyGlob, specTempDirs, RepoScratchDirs } from '@webpieces/rules-config';
+import { matchesAnyGlob, RepoScratchDirs } from '@webpieces/rules-config';
 import {
     GeneratedArtifactRegistry, GeneratedArtifacts,
     ARTIFACT_SOURCE_FALLBACK, ARTIFACT_SOURCE_NX, FALLBACK_GENERATED_PATHS,

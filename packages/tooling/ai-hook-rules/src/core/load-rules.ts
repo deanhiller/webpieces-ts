@@ -1,7 +1,8 @@
+import { BaseRuleConfig } from '@webpieces/rules-sdk';
 import * as fs from 'fs';
 import * as path from 'path';
 
-import { BaseRuleConfig, RuleOptions, WebpiecesRulesConfig, NoAnyUnknownConfig, NoImplicitAnyConfig, MaxFileLinesConfig, ValidateTsInSrcConfig, NoDestructureConfig, RequireReturnTypeConfig, NoUnmanagedExceptionsConfig, CatchErrorPatternConfig, ThrowCauseRequiredConfig, NoSymbolDiTokensConfig, NoCustomCssConfig, NoProcessExitOutsideMainConfig, NoJsFilesConfig, MatchRuleConfig } from '@webpieces/rules-config';
+import { RuleOptions, WebpiecesRulesConfig, NoAnyUnknownConfig, NoImplicitAnyConfig, MaxFileLinesConfig, ValidateTsInSrcConfig, NoDestructureConfig, RequireReturnTypeConfig, NoUnmanagedExceptionsConfig, CatchErrorPatternConfig, ThrowCauseRequiredConfig, NoSymbolDiTokensConfig, NoCustomCssConfig, NoProcessExitOutsideMainConfig, NoJsFilesConfig, MatchRuleConfig } from '@webpieces/rules-config';
 
 import type { Rule, PlainRule } from '@webpieces/hook-runtime';
 import { InformAiError } from '@webpieces/tooling-common';

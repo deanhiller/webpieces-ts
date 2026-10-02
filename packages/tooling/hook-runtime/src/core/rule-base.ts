@@ -1,4 +1,5 @@
-import { AbstractRule, BaseRuleConfig, RuleOptions } from '@webpieces/rules-config';
+import { BaseRuleConfig } from '@webpieces/rules-sdk';
+import { AbstractRule, RuleOptions } from '@webpieces/rules-config';
 
 import type { EditContext, BashContext, FileContext, Violation, Rule } from './types';
 import type { FixHint } from './fix-hint';

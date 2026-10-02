@@ -1,3 +1,4 @@
+import { specTempDirs } from '@webpieces/tooling-testkit';
 import { describe, it, expect } from 'vitest';
 import { execSync } from 'child_process';
 import * as fs from 'fs';
@@ -9,7 +10,7 @@ import { WEBPIECES_TMP_DIR, PR_REVIEW_DIR } from '@webpieces/tooling-common';
 import { InformAiError } from '@webpieces/tooling-common';
 import { toError } from '@webpieces/tooling-common/to-error';
 import { REVIEWER_AGENTS_PLACEHOLDER, ReviewerAgentPolicy } from './checklist-config';
-import { specTempDirs } from './spec-temp-dirs';
+
 const agentPolicy = (name: string): ReviewerAgentPolicy => new ReviewerAgentPolicy(name, REVIEWER_AGENTS_PLACEHOLDER);
 function tmpFile(contents: string): string {
     const dir = specTempDirs.make('wp-review-');

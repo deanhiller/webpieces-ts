@@ -1,9 +1,10 @@
+import { specTempDirs } from '@webpieces/tooling-testkit';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
 
 import { MainSyncLock, MainSyncStatusService } from '@webpieces/repo-workflow-core';
-import { specTempDirs } from '@webpieces/rules-config';
+
 
 import { refreshMainSync } from './sync-main';
 

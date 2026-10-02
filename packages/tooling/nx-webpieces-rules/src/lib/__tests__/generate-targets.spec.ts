@@ -1,8 +1,9 @@
+import { specTempDirs } from '@webpieces/tooling-testkit';
 import { describe, it, expect } from 'vitest';
 import type { CreateNodesResult, ProjectConfiguration, TargetConfiguration } from '@nx/devkit';
 import * as fs from 'fs';
 import * as path from 'path';
-import { Option, specTempDirs } from '@webpieces/rules-config';
+import { Option } from '@webpieces/rules-config';
 import { createNodesV2 } from '../../plugin';
 import { ComponentsWiring } from '../api-docs/components-wiring';
 import {

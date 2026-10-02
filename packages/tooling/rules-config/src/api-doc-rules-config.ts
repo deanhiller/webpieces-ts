@@ -1,5 +1,6 @@
-import { FieldDef, SchemaShape } from './field-def';
-import { BaseRuleConfig, BASE_RULE_SCHEMA } from './rule-configs';
+import { FieldDef, SchemaShape, BaseRuleConfig, BASE_RULE_SCHEMA } from '@webpieces/rules-sdk';
+
+
 
 /**
  * The modes the two CONTRACT rules accept (#1017).

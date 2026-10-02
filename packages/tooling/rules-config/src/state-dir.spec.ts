@@ -1,3 +1,4 @@
+import { specTempDirs } from '@webpieces/tooling-testkit';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { execSync } from 'child_process';
 import * as fs from 'fs';
@@ -10,7 +11,7 @@ import { MainSyncStatusService } from '@webpieces/repo-workflow-core';
 import { BranchMutationLog, BranchMutationEvent } from '@webpieces/repo-workflow-core';
 import { RepoRootFinder } from './repo-root';
 import { findConfigFile } from './config-file';
-import { specTempDirs } from './spec-temp-dirs';
+
 
 // core.hooksPath=/dev/null: keep any machine-global git hooks out of the throwaway test repos.
 function git(cwd: string, cmd: string): string {

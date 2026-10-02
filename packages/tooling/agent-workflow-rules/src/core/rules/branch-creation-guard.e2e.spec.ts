@@ -1,9 +1,10 @@
+import { specTempDirs } from '@webpieces/tooling-testkit';
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { execSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 
-import { BranchCreationGuardConfig, specTempDirs } from '@webpieces/rules-config';
+import { BranchCreationGuardConfig } from '@webpieces/rules-config';
 import { DeletableWorktree, MergedBranchesService, WorktreeService } from '@webpieces/repo-workflow-core';
 
 import { BashContext } from '@webpieces/hook-runtime';

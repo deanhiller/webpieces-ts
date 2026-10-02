@@ -1,3 +1,4 @@
+import { specTempDirs } from '@webpieces/tooling-testkit';
 /**
  * The three graph rules that make a tag true (#1064): api-lib-dependencies (D2), api-lib-path (D10)
  * and framework-folder (D9). Each has a red case and a green case; the "missing config entry fails the
@@ -6,7 +7,7 @@
 import { describe, it, expect } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
-import { specTempDirs } from '@webpieces/rules-config';
+
 import type { EnhancedGraph } from '../graph-sorter';
 import { ProjectInfo } from '../project-info';
 import {

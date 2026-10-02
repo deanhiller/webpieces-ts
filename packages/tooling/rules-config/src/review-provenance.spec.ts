@@ -1,3 +1,4 @@
+import { specTempDirs } from '@webpieces/tooling-testkit';
 import { describe, it, expect, afterEach, beforeEach } from 'vitest';
 import * as fs from 'fs';
 import * as os from 'os';
@@ -7,7 +8,7 @@ import {
     ProvenanceWriteRequest, DEFAULT_RETENTION_DAYS,
 } from './review-provenance';
 import { ReviewerEvidence } from './subagent-provenance';
-import { specTempDirs } from './spec-temp-dirs';
+
 
 const svc = new ReviewProvenanceService();
 const savedHome = process.env['HOME'];

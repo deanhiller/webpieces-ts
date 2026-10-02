@@ -122,6 +122,12 @@
             ],
             "@webpieces/webpieces-tooling": [
                 "packages/tooling/webpieces-tooling/src/index.ts"
+            ],
+            "@webpieces/rules-sdk": [
+                "packages/tooling/rules-sdk/src/index.ts"
+            ],
+            "@webpieces/tooling-testkit": [
+                "packages/tooling/tooling-testkit/src/index.ts"
             ]
         }
     },

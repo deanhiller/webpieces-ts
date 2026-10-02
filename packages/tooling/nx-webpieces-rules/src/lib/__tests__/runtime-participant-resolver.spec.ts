@@ -1,3 +1,4 @@
+import { specTempDirs } from '@webpieces/tooling-testkit';
 /**
  * Which @webpieces runtime packages a project's OWN package.json declares — the per-project half of
  * "does this process even speak the webpieces runtime". The closure half lives in runtime-graph.ts
@@ -17,7 +18,7 @@ import {
     printAutoHiddenServers,
     WEBPIECES_RUNTIME_MARKERS,
 } from '../runtime-participant-resolver';
-import { specTempDirs } from '@webpieces/rules-config';
+
 
 let tmpRoot: string;
 

@@ -1,6 +1,7 @@
+import { FieldDef } from '@webpieces/rules-sdk';
 import * as fs from 'fs';
 import * as path from 'path';
-import { FieldDef } from './field-def';
+
 // Imported, never re-typed: the banner offers the bulk migrator only for errors it actually covers, and
 // this marker is how it recognizes a placement error. See config-error-banner.ts.
 import { SECTION_PLACEMENT_MARKER } from './config-error-banner';

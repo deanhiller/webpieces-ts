@@ -1,10 +1,11 @@
+import { specTempDirs } from '@webpieces/tooling-testkit';
 import { execSync } from 'child_process';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 
 import { HookMode } from '@webpieces/hook-runtime';
-import { specTempDirs } from '@webpieces/rules-config';
+
 
 /**
  * THE WIRE BYTES the golden tests drive, and the throwaway repo they are judged against.

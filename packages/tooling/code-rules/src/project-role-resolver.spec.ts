@@ -1,9 +1,10 @@
+import { specTempDirs } from '@webpieces/tooling-testkit';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
 
 import { ProjectRoleResolver } from './project-role-resolver';
-import { specTempDirs } from '@webpieces/rules-config';
+
 
 function writeFile(root: string, relPath: string, content: string): void {
     const fullPath = path.join(root, relPath);

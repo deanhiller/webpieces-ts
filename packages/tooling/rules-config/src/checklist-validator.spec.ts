@@ -1,3 +1,4 @@
+import { specTempDirs } from '@webpieces/tooling-testkit';
 import { describe, it, expect } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -7,7 +8,7 @@ import {
 } from './checklist-config';
 import { CONFIG_FILENAME } from './config-file';
 import { validateChecklistDocs } from './checklist-docs-validator';
-import { specTempDirs } from './spec-temp-dirs';
+
 
 const svc = new ChecklistValidator();
 const POLICY = new ReviewerAgentPolicy('webpieces-reviewer', REVIEWER_AGENTS_PLACEHOLDER);

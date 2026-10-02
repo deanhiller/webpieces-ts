@@ -1,8 +1,9 @@
+import { specTempDirs } from '@webpieces/tooling-testkit';
 import * as fs from 'fs';
 import * as path from 'path';
 import { spawnSync } from 'child_process';
 import { renderShim, shimPath } from './shim';
-import { specTempDirs } from '@webpieces/rules-config';
+
 
 /**
  * The shim's PreToolUse deny payload, as it prints it on stdout. Named (not an inline literal on the

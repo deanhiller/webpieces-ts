@@ -1,3 +1,4 @@
+import { specTempDirs } from '@webpieces/tooling-testkit';
 import { describe, it, expect, vi } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -8,7 +9,7 @@ import { renderShim, shimPath } from './shim';
 import { shimStaleDenyReason } from './shim-deny-reason';
 import { UPGRADE_SHIM_CMD } from './l0-allowlist';
 import { runUpgradeShim } from './upgrade-shim';
-import { specTempDirs } from '@webpieces/rules-config';
+
 
 function mktmp(): string {
     return specTempDirs.makeReal('wp-reviewer-agent-');

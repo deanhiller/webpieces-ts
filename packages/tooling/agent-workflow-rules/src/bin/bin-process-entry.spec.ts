@@ -1,3 +1,4 @@
+import { specTempDirs } from '@webpieces/tooling-testkit';
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { spawnSync } from 'child_process';
 import * as fs from 'fs';
@@ -6,7 +7,7 @@ import * as path from 'path';
 
 import { renderShim, shimPath, SHIM_MARKER } from './shim';
 import { managedEntries, readSettings, writeSettings } from './hook-registration';
-import { specTempDirs } from '@webpieces/rules-config';
+
 
 /**
  * DOES THE BIN DO ANYTHING WHEN SPAWNED — the question twenty-one green unit tests never asked.
@@ -70,7 +71,7 @@ function compileDependency(tsc: string, name: string): void {
 
 function compileBin(entry: string): string {
     const tsc = path.join(REPO_ROOT, 'node_modules', '.bin', 'tsc');
-    for (const name of ['tooling-common', 'repo-workflow-core', 'rules-config', 'hook-runtime']) {
+    for (const name of ['rules-sdk', 'tooling-common', 'repo-workflow-core', 'rules-config', 'hook-runtime']) {
         compileDependency(tsc, name);
     }
     const result = spawnSync(tsc, [

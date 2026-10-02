@@ -1,3 +1,4 @@
+import { specTempDirs } from '@webpieces/tooling-testkit';
 /**
  * Precondition tests for the `missing-design-annotation` build rule.
  *
@@ -12,7 +13,7 @@ import * as path from 'path';
 import { createProjectProgram } from '../di-graph/program';
 import { buildDiGraph } from '../di-graph/analyzer';
 import { DiGraph } from '../di-graph/model';
-import { specTempDirs } from '@webpieces/rules-config';
+
 
 const TSCONFIG = JSON.stringify({
     compilerOptions: {

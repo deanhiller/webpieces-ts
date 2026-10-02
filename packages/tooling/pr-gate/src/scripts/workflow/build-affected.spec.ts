@@ -1,10 +1,11 @@
+import { specTempDirs } from '@webpieces/tooling-testkit';
 import { describe, it, expect, afterEach } from 'vitest';
 import { execFileSync } from 'child_process';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { BranchIdentity } from '@webpieces/repo-workflow-core';
-import { BuildsLog, BuildTicket, BuildTermination, CliExitError, specTempDirs } from '@webpieces/rules-config';
+import { BuildsLog, BuildTicket, BuildTermination, CliExitError } from '@webpieces/rules-config';
 import { DotWebpieces } from '@webpieces/tooling-common';
 import { toError } from '@webpieces/tooling-common/to-error';
 import { BuildAffected, BuildGateOptions } from './build-affected';

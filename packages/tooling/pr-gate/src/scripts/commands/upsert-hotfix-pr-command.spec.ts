@@ -1,9 +1,10 @@
+import { specTempDirs } from '@webpieces/tooling-testkit';
 import { execFileSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { BranchIdentity } from '@webpieces/repo-workflow-core';
-import { CliExitError, GateTokenService, HOTFIX_BUILD_COMMAND, PrGateConfig, RepoRootFinder, ReviewJsonService, specTempDirs } from '@webpieces/rules-config';
+import { CliExitError, GateTokenService, HOTFIX_BUILD_COMMAND, PrGateConfig, RepoRootFinder, ReviewJsonService } from '@webpieces/rules-config';
 import { InformAiError } from '@webpieces/tooling-common';
 import { AiBranchName } from '../workflow/git-readAiBranchName';
 import { GitExec } from '../workflow/git-exec';

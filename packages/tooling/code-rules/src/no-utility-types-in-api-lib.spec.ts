@@ -1,9 +1,10 @@
+import { specTempDirs } from '@webpieces/tooling-testkit';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { execSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as ts from 'typescript';
-import { DiffScope, NoUtilityTypesInApiLibConfig, RuleFailError, specTempDirs } from '@webpieces/rules-config';
+import { DiffScope, NoUtilityTypesInApiLibConfig, RuleFailError } from '@webpieces/rules-config';
 
 import { ApiLibFile, ApiLibSite } from './api-lib-source-rule';
 import { NoUtilityTypesInApiLibValidator, UtilityTypeScanner } from './validate-no-utility-types-in-api-lib';

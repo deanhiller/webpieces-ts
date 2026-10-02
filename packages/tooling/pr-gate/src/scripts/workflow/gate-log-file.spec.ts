@@ -1,9 +1,10 @@
+import { specTempDirs } from '@webpieces/tooling-testkit';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { execSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 import { GateLogFile } from './gate-log-file';
-import { specTempDirs } from '@webpieces/rules-config';
+
 
 let tmp = '';
 let primary = '';

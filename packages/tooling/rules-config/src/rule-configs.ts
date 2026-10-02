@@ -1,4 +1,6 @@
-import { FieldDef, SchemaShape } from './field-def';
+import { BaseRuleConfig, BASE_RULE_SCHEMA } from '@webpieces/rules-sdk';
+import { FieldDef, SchemaShape } from '@webpieces/rules-sdk';
+
 
 // Mode const arrays — TypeScript union types derived from them, and FieldDef enum
 // values reference the same array. Impossible for the type and runtime check to diverge.
@@ -92,22 +94,6 @@ export type StructuralMode = typeof STRUCTURAL_MODES[number];
 // the validator rejects them with a "renamed to X" hint. RENAMED_FIELD_ALIASES in validate-config.ts is
 // the ONE place in src/ a dead spelling may still be written (see escape-hatch-key-spelling.spec.ts).
 // ---------------------------------------------------------------------------
-export abstract class BaseRuleConfig {
-    // `mode` is declared here (loosely typed) so the shared AbstractRule base can read it for
-    // on/off. Each concrete *Config narrows it to its own union (e.g. `mode?: ModifiedCodeMode`),
-    // which is an assignable (covariant) override.
-    mode?: string;
-    // TS-optional, but schema-REQUIRED (see BASE_RULE_SCHEMA) — same split as `mode`. Read directly by
-    // AbstractRule.shouldRun, RuleGate, and the code-rules validators.
-    turnOffRuleUntilEpoch?: number;
-    turnOffRuleWhileOnBranch?: string | null;
-}
-
-export const BASE_RULE_SCHEMA = {
-    turnOffRuleUntilEpoch: new FieldDef('number'),
-    turnOffRuleWhileOnBranch: FieldDef.nullableString(),
-};
-
 export class MaxMethodLinesConfig extends BaseRuleConfig {
     declare mode?: MethodLimitMode;
     limit?: number;

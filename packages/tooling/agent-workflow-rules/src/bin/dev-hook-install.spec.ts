@@ -1,7 +1,8 @@
+import { specTempDirs } from '@webpieces/tooling-testkit';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { mkdirSync, readFileSync, writeFileSync } from 'fs';
 import { dirname, join } from 'path';
-import { specTempDirs } from '@webpieces/rules-config';
+
 import { runDevHookInstall } from './dev-hook-install';
 
 const fixture = vi.hoisted(() => ({ home: '' }));

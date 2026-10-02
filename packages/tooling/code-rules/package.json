@@ -21,7 +21,8 @@
         "inversify": "7.10.4",
         "reflect-metadata": "0.2.2",
         "@webpieces/tooling-common": "workspace:*",
-        "@webpieces/repo-workflow-core": "workspace:*"
+        "@webpieces/repo-workflow-core": "workspace:*",
+        "@webpieces/rules-sdk": "workspace:*"
     },
     "publishConfig": {
         "bin": {
@@ -30,5 +31,12 @@
             "wp-prune-unknown-config": "./src/prune-unknown-config.js"
         },
         "access": "public"
+    },
+    "devDependencies": {
+        "@webpieces/tooling-testkit": "workspace:*"
+    },
+    "exports": {
+        ".": "./src/index.js",
+        "./rule-pack": "./src/rule-pack.js"
     }
 }

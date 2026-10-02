@@ -1,3 +1,4 @@
+import { specTempDirs } from '@webpieces/tooling-testkit';
 /**
  * `api-rules-for-openapi` and `api-rules-for-mcp` (#1011).
  *
@@ -34,13 +35,7 @@ import {
 } from '@webpieces/api-doc-model';
 import * as path from 'path';
 import * as ts from 'typescript';
-import {
-    allRuleNames,
-    sectionForRule,
-    seedEntryForRule,
-    CONFIG_FILENAME,
-    specTempDirs,
-} from '@webpieces/rules-config';
+import { allRuleNames, sectionForRule, seedEntryForRule, CONFIG_FILENAME } from '@webpieces/rules-config';
 import { ApiUsageScanner, buildApiContracts } from '../api-usage/api-scanner';
 import {
     ApiRulesForMcpError,

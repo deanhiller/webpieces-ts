@@ -1,9 +1,10 @@
+import { specTempDirs } from '@webpieces/tooling-testkit';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
 
 import { findFunctionsOutsideClassInSource, findFunctionsOutsideClassInFile } from '../validate-no-function-outside-class';
-import { specTempDirs } from '@webpieces/rules-config';
+
 
 // The AST detector is pure over (content, filePath, disableAllowed) — no git/disk needed. These tests
 // pin the module-scope predicate (parent === SourceFile) that keeps inline callbacks and nested

@@ -1,0 +1,23 @@
+{
+    "name": "rules-sdk",
+    "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+    "sourceRoot": "packages/tooling/rules-sdk/src",
+    "projectType": "library",
+    "targets": {
+        "test": {
+            "executor": "nx:run-commands",
+            "options": { "command": "vitest run packages/tooling/rules-sdk/" }
+        },
+        "build": {
+            "executor": "@nx/js:tsc",
+            "outputs": ["{options.outputPath}"],
+            "options": {
+                "outputPath": "dist/packages/tooling/rules-sdk",
+                "main": "packages/tooling/rules-sdk/src/index.ts",
+                "tsConfig": "packages/tooling/rules-sdk/tsconfig.lib.json",
+                "assets": ["packages/tooling/rules-sdk/package.json"]
+            }
+        }
+    },
+    "tags": ["type:tooling", "framework:node", "role:lib"]
+}

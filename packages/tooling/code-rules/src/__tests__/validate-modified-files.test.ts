@@ -1,8 +1,9 @@
+import { specTempDirs } from '@webpieces/tooling-testkit';
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
 
-import { MaxFileLinesConfig, GENERATED_CODE_PATHS, isPathExcluded, NoFunctionOutsideClassConfig, specTempDirs } from '@webpieces/rules-config';
+import { MaxFileLinesConfig, GENERATED_CODE_PATHS, isPathExcluded, NoFunctionOutsideClassConfig } from '@webpieces/rules-config';
 
 import { findViolations, exemptPathsFor, violationsError } from '../validate-modified-files';
 

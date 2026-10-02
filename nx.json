@@ -20,7 +20,7 @@
             "{workspaceRoot}/packages/tooling/rules-config/src/*config*.ts",
             "{workspaceRoot}/packages/tooling/rules-config/src/*schema*.ts",
             "{workspaceRoot}/packages/tooling/rules-config/src/default-rules.ts",
-            "{workspaceRoot}/packages/tooling/rules-config/src/field-def.ts",
+            "{workspaceRoot}/packages/tooling/rules-sdk/src/**/*.ts",
             "{workspaceRoot}/packages/tooling/rules-config/src/seed-entry.ts",
             "{workspaceRoot}/packages/tooling/rules-config/src/sections.ts",
             "{workspaceRoot}/packages/tooling/rules-config/src/types.ts"

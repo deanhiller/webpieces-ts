@@ -1,3 +1,4 @@
+import { specTempDirs } from '@webpieces/tooling-testkit';
 /**
  * Vendor seams: the contracts a repo calls that lead OUT of it (firestore, gmail, gcp-storage, ...).
  *
@@ -24,7 +25,7 @@ import {
     describeMismatchedEndpointKinds,
 } from '../api-usage/api-scanner';
 import { ApiRelation } from '../api-usage/api-relations';
-import { specTempDirs } from '@webpieces/rules-config';
+
 
 let root = '';
 

@@ -45,5 +45,8 @@
             "wp-await-checks": "./src/scripts/wp-await-checks.js"
         },
         "access": "public"
+    },
+    "devDependencies": {
+        "@webpieces/tooling-testkit": "workspace:*"
     }
 }

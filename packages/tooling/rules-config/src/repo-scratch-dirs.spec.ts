@@ -1,9 +1,10 @@
+import { specTempDirs } from '@webpieces/tooling-testkit';
 import { describe, it, expect, afterAll } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
 import { RepoScratchDirs, SCRATCH_DIR_NAME } from './repo-scratch-dirs';
 import { dotWebpieces } from '@webpieces/tooling-common';
-import { specTempDirs } from './spec-temp-dirs';
+
 
 const repoRoot = specTempDirs.makeReal('wp-scratchspec-');
 fs.mkdirSync(path.join(repoRoot, '.git'), { recursive: true });

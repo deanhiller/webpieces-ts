@@ -1,9 +1,10 @@
+import { specTempDirs } from '@webpieces/tooling-testkit';
 import * as fs from 'fs';
 import * as path from 'path';
 import { validateWebpiecesConfig, validatePrGateSection, validateSectionPlacement, validateMatchRulesSection, allRuleNames, recommendedSeedMode, recommendedSeedModeFor, seedEntryForRule } from './validate-config';
 import { HOOK_GUARD_NAMES } from './sections';
 import { defaultRules } from './default-rules';
-import { specTempDirs } from './spec-temp-dirs';
+
 import { MODIFIED_CODE_MODES } from './rule-configs';
 
 // A minimal valid match-rule entry, cloned + tweaked per test.

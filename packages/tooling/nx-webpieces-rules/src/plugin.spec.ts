@@ -1,3 +1,4 @@
+import { specTempDirs } from '@webpieces/tooling-testkit';
 import { describe, it, expect } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -5,7 +6,7 @@ import { isInsideNestedGitRepo, createCiTarget, createHotfixCiTarget, createNode
 import type { CreateNodesContextV2, CreateNodesResultV2, ProjectConfiguration } from '@nx/devkit';
 import { BRANCH_IDENTITY_INPUTS } from './branch-identity-inputs';
 import { ValidationTargets } from './validation-targets';
-import { specTempDirs } from '@webpieces/rules-config';
+
 
 function tmpRoot(): string {
     return specTempDirs.make('wp-plugin-');

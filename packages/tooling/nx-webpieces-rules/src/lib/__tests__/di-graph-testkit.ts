@@ -1,3 +1,4 @@
+import { specTempDirs } from '@webpieces/tooling-testkit';
 /**
  * Shared scaffolding for the DI-graph analyzer specs.
  *
@@ -14,7 +15,7 @@ import { createProjectProgram } from '../di-graph/program';
 import { buildDiGraph } from '../di-graph/analyzer';
 import { buildAngularDiGraph } from '../di-graph/angular-analyzer';
 import { DiDesign, DiGraph, DiEdge, DiNode } from '../di-graph/model';
-import { specTempDirs } from '@webpieces/rules-config';
+
 
 export const TSCONFIG = JSON.stringify({
     compilerOptions: {

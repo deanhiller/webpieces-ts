@@ -1,3 +1,4 @@
+import { specTempDirs } from '@webpieces/tooling-testkit';
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { execFileSync } from 'child_process';
 import * as fs from 'fs';
@@ -7,7 +8,7 @@ import * as nodePath from 'path';
 import fixtureConfig from '../adapters/__goldens__/fixture-webpieces.config.json';
 import { run } from './runner';
 import { BlockedResult, NormalizedToolInput, NormalizedEdit } from '@webpieces/hook-runtime';
-import { specTempDirs } from '@webpieces/rules-config';
+
 
 /**
  * `ToolKind` gained 'Delete' for Codex's `*** Delete File:` directive, and EVERY existing rule defaults

@@ -1,3 +1,4 @@
+import { specTempDirs } from '@webpieces/tooling-testkit';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -9,7 +10,7 @@ import {
     SecurityContractViolation,
 } from './validate-ensure-we-are-secure';
 import { InformAiError } from '@webpieces/tooling-common';
-import { RuleFailError, specTempDirs } from '@webpieces/rules-config';
+import { RuleFailError } from '@webpieces/rules-config';
 
 let root: string;
 

@@ -7,7 +7,8 @@
     "exports": {
         ".": "./src/index.js",
         "./package.json": "./package.json",
-        "./claude-code-guards": "./src/adapters/guards-hook.js"
+        "./claude-code-guards": "./src/adapters/guards-hook.js",
+        "./rule-pack": "./src/rule-pack.js"
     },
     "files": [
         "src/**/*",
@@ -28,7 +29,8 @@
         "reflect-metadata": "0.2.2",
         "@webpieces/tooling-common": "workspace:*",
         "@webpieces/repo-workflow-core": "workspace:*",
-        "tslib": "2.8.1"
+        "tslib": "2.8.1",
+        "@webpieces/rules-sdk": "workspace:*"
     },
     "publishConfig": {
         "access": "public",
@@ -37,5 +39,8 @@
             "wp-install-ai-hooks": "./src/bin/install-entry.js",
             "wp-upgrade-shim": "./src/bin/upgrade-shim.js"
         }
+    },
+    "devDependencies": {
+        "@webpieces/tooling-testkit": "workspace:*"
     }
 }

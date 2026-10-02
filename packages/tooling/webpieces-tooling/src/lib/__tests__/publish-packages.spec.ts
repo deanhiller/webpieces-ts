@@ -1,7 +1,8 @@
+import { specTempDirs } from '@webpieces/tooling-testkit';
 import { spawnSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
-import { specTempDirs } from '@webpieces/rules-config';
+
 
 /**
  * RELEASE RESILIENCE — scripts/publish-packages.sh, tested by RUNNING IT.
@@ -268,7 +269,7 @@ describe('ORDER is a valid dependency order, re-derived from the real manifests'
         const lastTooling = ORDER.map((d: string): boolean => d.startsWith('packages/tooling/')).lastIndexOf(true);
         const front = ORDER.slice(0, lastTooling + 1);
 
-        expect(ORDER.filter((d: string): boolean => d.startsWith('packages/tooling/')).length).toBe(11);
+        expect(ORDER.filter((d: string): boolean => d.startsWith('packages/tooling/')).length).toBe(13);
         expect(front.filter((d: string): boolean => !d.startsWith('packages/tooling/')))
             .toEqual(['packages/core/core-util', 'packages/docs/api-doc-model']);
     });

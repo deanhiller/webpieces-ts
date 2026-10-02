@@ -1,8 +1,9 @@
+import { specTempDirs } from '@webpieces/tooling-testkit';
 import { describe, it, expect } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
 import { ChecklistOverride, ChecklistOverrideService } from './checklist-override';
-import { specTempDirs } from './spec-temp-dirs';
+
 
 /**
  * `override-<id>.json` is the file that gave the human's ship-anyway decision a REACHABLE WRITER. While it

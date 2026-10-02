@@ -1,7 +1,8 @@
+import { specTempDirs } from '@webpieces/tooling-testkit';
 import * as fs from 'fs';
 import * as path from 'path';
 
-import { CONFIG_FILENAME, ConfigFile, specTempDirs } from '@webpieces/rules-config';
+import { CONFIG_FILENAME, ConfigFile } from '@webpieces/rules-config';
 import { describe, it, expect, beforeEach } from 'vitest';
 
 import { ActiveHatch, ActiveHatchReport } from './active-hatches';

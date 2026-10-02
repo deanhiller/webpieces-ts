@@ -1,3 +1,4 @@
+import { specTempDirs } from '@webpieces/tooling-testkit';
 import { execFileSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -5,7 +6,7 @@ import * as path from 'path';
 import fixtureConfig from '../../adapters/__goldens__/fixture-webpieces.config.json';
 import { run } from '../runner';
 import { BlockedResult, NormalizedEdit, NormalizedToolInput } from '@webpieces/hook-runtime';
-import { specTempDirs } from '@webpieces/rules-config';
+
 
 function gitIn(cwd: string, ...args: string[]): void {
     execFileSync('git', args, { cwd, stdio: 'pipe' });

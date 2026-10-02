@@ -1,3 +1,4 @@
+import { specTempDirs } from '@webpieces/tooling-testkit';
 /**
  * `framework-tsconfig` (D7) and `framework-packages` (D8) — the two PROJECT rules that make a
  * `framework:` tag true (#1064). Each has red and green cases; the "missing config entry fails the
@@ -6,7 +7,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
-import { FrameworkPackagesEntry, RuleFailError, renderRuleFailForHuman, specTempDirs } from '@webpieces/rules-config';
+import { FrameworkPackagesEntry, RuleFailError, renderRuleFailForHuman } from '@webpieces/rules-config';
 import { ScannedProject } from './project-scan-targets';
 import { FrameworkTsconfigAudit, RuntimeCompilerOptions, frameworkTsconfigError } from './validate-framework-tsconfig';
 import { FrameworkPackagesAudit, FrameworkPackageViolation, frameworkPackagesError } from './validate-framework-packages';

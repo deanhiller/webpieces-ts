@@ -1,3 +1,4 @@
+import { specTempDirs } from '@webpieces/tooling-testkit';
 import { execFileSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -5,7 +6,7 @@ import * as path from 'path';
 import { RepoRootFinder } from './repo-root';
 import { DotWebpieces } from '@webpieces/tooling-common';
 import { WorktreeService } from '@webpieces/repo-workflow-core';
-import { specTempDirs } from './spec-temp-dirs';
+
 
 /**
  * TWO named questions, and this file is what stops them being "helpfully" collapsed into one. Real git

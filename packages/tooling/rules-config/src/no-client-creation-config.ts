@@ -1,5 +1,6 @@
-import { FieldDef, SchemaShape } from './field-def';
-import { BaseRuleConfig, BASE_RULE_SCHEMA, ModifiedCodeMode, MODIFIED_CODE_MODES } from './rule-configs';
+import { FieldDef, SchemaShape, BaseRuleConfig, BASE_RULE_SCHEMA } from '@webpieces/rules-sdk';
+
+import { ModifiedCodeMode, MODIFIED_CODE_MODES } from './rule-configs';
 
 // no-client-creation-outside-server-or-client severity. Landed as a hard failure this rule would
 // break every existing Angular repo on upgrade (provideCoreClient-style helpers create the client

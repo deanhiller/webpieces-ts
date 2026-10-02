@@ -1,8 +1,9 @@
+import { specTempDirs } from '@webpieces/tooling-testkit';
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { execFileSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
-import { PrLifecycleGuardConfig, BranchStateGuardConfig, Option, specTempDirs } from '@webpieces/rules-config';
+import { PrLifecycleGuardConfig, BranchStateGuardConfig, Option } from '@webpieces/rules-config';
 import { BashContext } from '@webpieces/hook-runtime';
 import { RedirectHowToMergeMainRule } from './redirect-how-to-merge-main';
 import { StaleMainBashGuardRule } from './stale-main-bash-guard';

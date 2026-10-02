@@ -1,10 +1,11 @@
+import { specTempDirs } from '@webpieces/tooling-testkit';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { spawn, ChildProcess } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 
 import { AtomicFile } from '@webpieces/tooling-common';
-import { specTempDirs } from './spec-temp-dirs';
+
 
 /**
  * A separate OS PROCESS that hammers the file with reads and reports how many times it caught the file

@@ -7,7 +7,8 @@
     "exports": {
         ".": "./src/index.js",
         "./package.json": "./package.json",
-        "./claude-code-rules": "./src/adapters/rules-hook.js"
+        "./claude-code-rules": "./src/adapters/rules-hook.js",
+        "./rule-pack": "./src/rule-pack.js"
     },
     "files": [
         "src/**/*",
@@ -25,12 +26,16 @@
         "@webpieces/rules-config": "workspace:*",
         "inversify": "7.10.4",
         "reflect-metadata": "0.2.2",
-        "@webpieces/tooling-common": "workspace:*"
+        "@webpieces/tooling-common": "workspace:*",
+        "@webpieces/rules-sdk": "workspace:*"
     },
     "publishConfig": {
         "access": "public",
         "bin": {
             "wp-ai-rules-hook": "./src/adapters/rules-hook.js"
         }
+    },
+    "devDependencies": {
+        "@webpieces/tooling-testkit": "workspace:*"
     }
 }

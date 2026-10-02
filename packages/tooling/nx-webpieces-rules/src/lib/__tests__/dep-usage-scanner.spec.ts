@@ -1,7 +1,8 @@
+import { specTempDirs } from '@webpieces/tooling-testkit';
 import * as fs from 'fs';
 import * as path from 'path';
 import { DepUsageScanner } from '../dep-usage-scanner';
-import { specTempDirs } from '@webpieces/rules-config';
+
 
 function writeTree(files: Record<string, string>): string {
     const tmpDir = specTempDirs.make('depusage-');

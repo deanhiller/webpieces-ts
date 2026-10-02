@@ -1,3 +1,4 @@
+import { specTempDirs } from '@webpieces/tooling-testkit';
 /**
  * Tests for findRoleUntaggedProjects — the core of the role-tag rule: given a
  * set of changed files, every owning project.json must carry a `role:` tag.
@@ -7,7 +8,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
 import { findRoleUntaggedProjects } from '../validate-role-tag';
-import { specTempDirs } from '@webpieces/rules-config';
+
 
 let root: string;
 

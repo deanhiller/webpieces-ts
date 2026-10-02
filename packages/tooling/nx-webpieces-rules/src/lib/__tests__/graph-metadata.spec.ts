@@ -1,3 +1,4 @@
+import { specTempDirs } from '@webpieces/tooling-testkit';
 /**
  * Tests for the AI metadata enrichment of architecture/dependencies.json:
  * shortDescription extraction, framework resolution, and enrichGraph()
@@ -19,7 +20,7 @@ import {
 import { enrichGraph, MetadataValidationError, validateLibraryTypesMatch, validateRoleDependencies } from '../graph-metadata';
 import { resolveRole } from '../role-resolver';
 import { toError } from '../../toError';
-import { specTempDirs } from '@webpieces/rules-config';
+
 
 describe('extractShortDescription', () => {
     it('takes the first paragraph after the heading', () => {

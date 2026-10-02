@@ -1,9 +1,10 @@
+import { specTempDirs } from '@webpieces/tooling-testkit';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
 
 import { findDestructuringInFile } from '../validate-no-destructure';
-import { specTempDirs } from '@webpieces/rules-config';
+
 
 // allowedPaths is the ONLY escape when disableAllowed is false — that setting deliberately converts a
 // disabled violation back into a reported one — so every case below runs with disableAllowed: false.

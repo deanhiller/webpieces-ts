@@ -1,8 +1,9 @@
+import { SpecTempDirs, specTempDirs } from '@webpieces/tooling-testkit';
 import { describe, it, expect } from 'vitest';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { SpecTempDirs, specTempDirs } from './spec-temp-dirs';
+
 
 describe('SpecTempDirs', () => {
     it('creates a directory under os.tmpdir() carrying the prefix', () => {

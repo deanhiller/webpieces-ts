@@ -1,3 +1,4 @@
+import { specTempDirs } from '@webpieces/tooling-testkit';
 /**
  * `webpieces.git-workflow.md` names the branch-mutation log by PATH, and that path is per-worktree.
  *
@@ -20,7 +21,7 @@ import * as path from 'path';
 import { BranchMutationLog } from '@webpieces/repo-workflow-core';
 import { GIT_WORKFLOW_DOC } from './instruct-ai-docs';
 import { TemplateWriter, loadTemplate } from './load-template';
-import { specTempDirs } from './spec-temp-dirs';
+
 
 function git(cwd: string, cmd: string): string {
     return execSync(`git -c core.hooksPath=/dev/null ${cmd}`, {

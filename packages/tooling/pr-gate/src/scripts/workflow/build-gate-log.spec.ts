@@ -1,8 +1,9 @@
+import { specTempDirs } from '@webpieces/tooling-testkit';
 import { describe, it, expect, afterEach } from 'vitest';
 import { execFileSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
-import { BuildTermination, specTempDirs } from '@webpieces/rules-config';
+import { BuildTermination } from '@webpieces/rules-config';
 import {
     BuildGateLog,
     BuildLogHeartbeat,

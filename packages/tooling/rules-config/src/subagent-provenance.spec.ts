@@ -1,3 +1,4 @@
+import { specTempDirs } from '@webpieces/tooling-testkit';
 import { describe, it, expect, afterEach, beforeEach } from 'vitest';
 import { spawnSync } from 'child_process';
 import * as fs from 'fs';
@@ -7,7 +8,7 @@ import {
     SubagentProvenanceService, ReviewerContext, PROVENANCE_OK, PROVENANCE_MISSING, PROVENANCE_SKIPPED,
     ExpectedReviewer, ProvenanceResult, ReviewerEvidence,
 } from './subagent-provenance';
-import { specTempDirs } from './spec-temp-dirs';
+
 
 const svc = new SubagentProvenanceService();
 

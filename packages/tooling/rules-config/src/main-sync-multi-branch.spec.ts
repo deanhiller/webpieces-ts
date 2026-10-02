@@ -1,3 +1,4 @@
+import { specTempDirs } from '@webpieces/tooling-testkit';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { execSync } from 'child_process';
 import * as fs from 'fs';
@@ -5,7 +6,7 @@ import * as path from 'path';
 
 import { MainSyncStatusService } from '@webpieces/repo-workflow-core';
 import { MAIN_SYNC_STATUS_VERSION } from '@webpieces/repo-workflow-core';
-import { specTempDirs } from './spec-temp-dirs';
+
 
 /**
  * The refresher is single-flight across the whole repo — one `.git`, one `origin/main`, one lock — but

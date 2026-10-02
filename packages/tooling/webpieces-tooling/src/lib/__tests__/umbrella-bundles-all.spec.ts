@@ -28,6 +28,10 @@ const TOOLING_DIR = 'packages/tooling';
 // webpieces-disable no-any-unknown -- opaque package.json; every field is narrowed at its use site
 type Manifest = Record<string, unknown>;
 
+class ToolingMetadata {
+    developmentOnly?: boolean;
+}
+
 /** Reads the workspace's tooling manifests and answers what the umbrella must declare. */
 class ToolingScan {
     readonly repoRoot: string;
@@ -48,7 +52,10 @@ class ToolingScan {
             if (!entry.isDirectory()) continue;
             const manifest = path.join(dir, entry.name, 'package.json');
             if (!fs.existsSync(manifest)) continue;
-            const name = String(this.read(manifest)['name']);
+            const parsed = this.read(manifest);
+            const metadata = parsed['webpieces'] as ToolingMetadata | undefined;
+            if (metadata?.developmentOnly === true) continue;
+            const name = String(parsed['name']);
             if (name !== UMBRELLA) names.push(name);
         }
         return names.sort();

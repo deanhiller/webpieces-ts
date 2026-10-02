@@ -1,9 +1,10 @@
+import { specTempDirs } from '@webpieces/tooling-testkit';
 import * as fs from 'fs';
 import * as path from 'path';
 
 import { ConfigFile, CONFIG_PARSE_ATTEMPTS } from './config-file';
 import { InformAiError } from '@webpieces/tooling-common';
-import { specTempDirs } from './spec-temp-dirs';
+
 
 /**
  * A ConfigFile whose reads are scripted, so "another process was mid-write" is DETERMINISTIC instead

@@ -1,3 +1,4 @@
+import { specTempDirs } from '@webpieces/tooling-testkit';
 import { describe, it, expect, beforeEach } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -11,7 +12,7 @@ import { NormalizedToolInput, NormalizedEdit, BlockedResult } from '@webpieces/h
 import { L0_FAULT_NONE } from '@webpieces/rules-config';
 import { L1_LOCATION_STREAM, L2_DECISIONS_STREAM, CALLS_STREAM, REJECTIONS_STREAM } from './log-streams';
 import { SHIM_LOG_FIELDS, ShimLogField } from '../bin/shim';
-import { specTempDirs } from '@webpieces/rules-config';
+
 
 /**
  * `ai=` MUST SPAN THE WHOLE TRAIL, or it answers nothing.
