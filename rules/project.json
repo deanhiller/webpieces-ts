@@ -9,7 +9,7 @@
             "cache": true,
             "inputs": ["rulesConfig"],
             "options": {
-                "command": "node -e \"require('@webpieces/rules-config').loadAndValidate(process.cwd()); console.log('✅ webpieces.config.json is valid')\"",
+                "command": "node -e \"require(require.resolve('@webpieces/rules-config', { paths: [require.resolve('@webpieces/nx-webpieces-rules/package.json')] })).loadAndValidate(process.cwd()); console.log('✅ webpieces.config.json is valid')\"",
                 "cwd": "."
             }
         },
