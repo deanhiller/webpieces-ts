@@ -6,7 +6,7 @@ import { InvocationLog, logGuardDecision, logL1Decision, GuardDecision, MATRIX_L
 import { LogStream } from './log-stream';
 import { logRejection } from './rejection-log';
 import { aiTypeContext, AiTypeContext } from './ai-type-context';
-import { AI_TYPES, AI_TYPE_UNKNOWN, AiType } from './agent-event';
+import { AI_TYPES, AI_TYPE_UNKNOWN, AiType } from '@webpieces/hook-runtime';
 import { NormalizedToolInput, NormalizedEdit, BlockedResult } from './types';
 import { L0_FAULT_NONE } from './l0-fault-codes';
 import { L1_LOCATION_STREAM, L2_DECISIONS_STREAM, CALLS_STREAM, REJECTIONS_STREAM } from './log-streams';

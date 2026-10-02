@@ -1,5 +1,5 @@
 import { AgentPayload } from './agent-payload';
-import { AgentHookEvent } from '../core/agent-event';
+import { AgentHookEvent } from '@webpieces/hook-runtime';
 import { detectAiType } from './detect-ai';
 import { ClaudeCodeAdapter } from './claude-code-adapter';
 import { CodexAdapter } from './codex-adapter';

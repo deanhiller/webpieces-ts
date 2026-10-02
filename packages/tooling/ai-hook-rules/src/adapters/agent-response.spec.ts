@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 
 import { denyJson } from './agent-response';
 import { ClaudeCodeAdapter } from './claude-code-adapter';
-import { AgentHookEvent } from '../core/agent-event';
+import { AgentHookEvent } from '@webpieces/hook-runtime';
 
 // denyJson now takes the normalized EVENT rather than a tool-name string. Building it through the real
 // Claude Code adapter keeps this spec pinned to the actual mapping rather than to a hand-made shape.

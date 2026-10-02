@@ -1,4 +1,4 @@
-import { AiType } from './agent-event';
+import { AiType } from '@webpieces/hook-runtime';
 import { spawnSync } from 'child_process';
 import * as path from 'path';
 

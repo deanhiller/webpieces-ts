@@ -69,6 +69,9 @@
             "@webpieces/ai-hook-rules": [
                 "packages/tooling/ai-hook-rules/src/index.ts"
             ],
+            "@webpieces/hook-runtime": [
+                "packages/tooling/hook-runtime/src/index.ts"
+            ],
             "@webpieces/eslint-rules": [
                 "packages/tooling/eslint-rules/src/index.ts"
             ],

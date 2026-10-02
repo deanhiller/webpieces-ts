@@ -4,9 +4,11 @@ import { Container } from 'inversify';
 import * as fs from 'fs';
 import * as path from 'path';
 
-import { HookApp } from './hook-app';
-import { HookArgs, HookOutcome } from './hook-outcome';
-import { HookStdinSource, HookStdoutSink, HookProcessExit } from './hook-ports';
+import {
+    HookApp, HookArgs, HookEvaluator, HookOutcome,
+    HookStdinSource, HookStdoutSink, HookProcessExit,
+} from '@webpieces/hook-runtime';
+import { HookPipelineEvaluator } from './hook-pipeline-evaluator';
 import { governingShimRoot } from '../bin/shim';
 import { GOLDEN_FIXTURES, GoldenFixture, GoldenRepoBuilder, PreparedFixture, REPO_TOKEN } from './hook-app-fixtures';
 
@@ -150,6 +152,7 @@ async function runHook(fixture: GoldenFixture): Promise<HookOutcome> {
     const stdout = new CapturedStdout();
     const exit = new RecordedExit();
     const container = new Container({ autobind: true });
+    container.bind(HookEvaluator).to(HookPipelineEvaluator);
     container.bind(HookStdinSource).toConstantValue(new CannedStdin(prepared.stdin));
     container.bind(HookStdoutSink).toConstantValue(stdout);
     container.bind(HookProcessExit).toConstantValue(exit);
@@ -257,6 +260,7 @@ describe('HookApp golden bytes — the composed pipeline, end to end', () => {
         const stdout = new CapturedStdout();
         const exit = new RecordedExit();
         const container = new Container({ autobind: true });
+        container.bind(HookEvaluator).to(HookPipelineEvaluator);
         container.bind(HookStdinSource).toConstantValue(new FailingStdin());
         container.bind(HookStdoutSink).toConstantValue(stdout);
         container.bind(HookProcessExit).toConstantValue(exit);

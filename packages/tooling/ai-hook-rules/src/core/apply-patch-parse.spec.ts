@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 
 import { ApplyPatchParser } from './apply-patch-parse';
-import { FileOperation } from './agent-event';
+import { FileOperation } from '@webpieces/hook-runtime';
 import { InformAiError } from './types';
 
 const CWD = '/repo/sub';

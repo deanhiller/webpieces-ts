@@ -1,4 +1,4 @@
-import { AiType, AI_TYPE_UNKNOWN } from './agent-event';
+import { AiType, AI_TYPE_UNKNOWN } from '@webpieces/hook-runtime';
 
 /**
  * WHICH HARNESS this hook process is serving, for the four JS-side audit streams.

@@ -6,13 +6,14 @@
 // the two binaries is the HookArgs constructed here.
 import 'reflect-metadata';
 import { Container } from 'inversify';
+import { HookApp, HookArgs, HookBootFailure, HookEvaluator } from '@webpieces/hook-runtime';
 
-import { HookApp, HookBootFailure } from './hook-app';
-import { HookArgs } from './hook-outcome';
+import { HookPipelineEvaluator } from './hook-pipeline-evaluator';
 
 // webpieces-disable no-function-outside-class -- this IS the bin's process entry point, named in package.json `exports` as ./claude-code-guards / ./claude-code-rules; a class here would be a namespace around one call and could not be the module's callable entry.
 export async function main(): Promise<void> {
     const container = new Container({ autobind: true });
+    container.bind(HookEvaluator).to(HookPipelineEvaluator);
     const app = container.get(HookApp);
     await app.run(new HookArgs('rules'));
 }

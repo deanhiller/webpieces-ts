@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { execFileSync } from 'child_process';
 
 import { AI_TYPE_SH, detectAiType } from './detect-ai';
-import { AiType } from '../core/agent-event';
+import { AiType } from '@webpieces/hook-runtime';
 
 /**
  * The TWIN-AGREEMENT test, the same shape `l0-allowlist` uses for the L0 allowlist: the sh fragment and

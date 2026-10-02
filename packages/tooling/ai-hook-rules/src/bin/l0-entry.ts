@@ -10,7 +10,7 @@
  * module alongside the others.
  */
 
-import { AiType } from '../core/agent-event';
+import { AiType } from '@webpieces/hook-runtime';
 
 /**
  * The token an L0 entry uses to say it serves EVERY harness — SAID OUT LOUD.
@@ -93,5 +93,4 @@ export class L0AllowEntry {
         return [this.sample, ...this.extraSamples];
     }
 }
-
 

@@ -1,6 +1,6 @@
 import { LOGS_STATE_DIR, WORKTREE_STATE_DIR, WEBPIECES_TMP_DIR } from '@webpieces/rules-config';
 import { L0_SHIM_STREAM } from '../core/log-streams';
-import { AI_TYPES } from '../core/agent-event';
+import { AI_TYPES } from '@webpieces/hook-runtime';
 
 import {
     L0_FAULT_NONE, L0_LAYER, L0_SH_FAULT_CODES, L0_ROW_ALLOWLISTED, L0_ROW_BLOCKED, L0_ROW_HANDED_DOWN,

@@ -1,5 +1,5 @@
 import { AgentPayload, AgentToolInput, AgentEditEntry } from './agent-payload';
-import { AgentHookEvent, AgentEventKind, FileOperation } from '../core/agent-event';
+import { AgentHookEvent, AgentEventKind, FileOperation } from '@webpieces/hook-runtime';
 import { NormalizedBashInput, NormalizedEdit, NormalizedToolInput, ToolKind } from '../core/types';
 
 /**

@@ -6,7 +6,7 @@ import { AgentAdapters } from './agent-adapters';
 import { ClaudeCodeAdapter } from './claude-code-adapter';
 import { CodexAdapter } from './codex-adapter';
 import { CodexSubagentSharedTreeGuard } from './codex-subagent-guard';
-import { AgentHookEvent, FileOperation } from '../core/agent-event';
+import { AgentHookEvent, FileOperation } from '@webpieces/hook-runtime';
 import { NormalizedToolInput } from '../core/types';
 import { specTempDirs } from '@webpieces/rules-config';
 

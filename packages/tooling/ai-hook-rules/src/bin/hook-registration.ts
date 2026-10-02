@@ -2,7 +2,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 
 import { toError } from '../core/to-error';
-import { AiType } from '../core/agent-event';
+import { AiType } from '@webpieces/hook-runtime';
 import { SHIM_MARKER, committedShimStale } from './shim';
 import { REVIEWER_AGENT_MARKER, reviewerAgentStale } from './reviewer-agent';
 import { NEIGHBOUR_SURFACE_SUFFIX, anchorNeighbourHooks, neighbourHooksStale } from './neighbour-hooks';

@@ -4,7 +4,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 
 import { specTempDirs } from '@webpieces/rules-config';
-import { AiType } from './agent-event';
+import { AiType } from '@webpieces/hook-runtime';
 import { EffectiveTree } from './effective-tree';
 import { VersionSyncGuard } from './version-sync';
 

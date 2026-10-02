@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 
 import { ClaudeCodeAdapter } from './claude-code-adapter';
-import { FileOperation } from '../core/agent-event';
+import { FileOperation } from '@webpieces/hook-runtime';
 
 /**
  * The Claude Code mapping, pinned where it now lives.

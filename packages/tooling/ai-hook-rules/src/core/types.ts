@@ -1,7 +1,9 @@
 // ResolvedConfig / ResolvedRuleConfig / RuleOptions now live in @webpieces/rules-config
 // so ai-hooks and the Nx validate-code executor share one loader and one config file.
 import { RuleOptions } from '@webpieces/rules-config';
+import { HookMode, NormalizedBashInput, NormalizedEdit, NormalizedToolInput, ToolKind } from '@webpieces/hook-runtime';
 export { ResolvedConfig, ResolvedRuleConfig, RuleOptions, InformAiError, RuleFailError } from '@webpieces/rules-config';
+export { HookMode, NormalizedBashInput, NormalizedEdit, NormalizedToolInput, ToolKind } from '@webpieces/hook-runtime';
 import { FixHint } from './fix-hint';
 import { L0_FAULT_NONE } from './l0-fault-codes';
 
@@ -16,12 +18,10 @@ import { L0_FAULT_NONE } from './l0-fault-codes';
 // ./delete-scoped-rules.ts): a rule written to judge the bytes an edit ADDS has nothing to say about a file going
 // away, and inventing a verdict for it would be guessing. Rules for which a delete IS meaningful — a
 // barrel export disappearing, a doc that documents a deleted file — opt in there, deliberately.
-export type ToolKind = 'Write' | 'Edit' | 'MultiEdit' | 'Read' | 'Delete';
 export type RuleScope = 'edit' | 'file' | 'bash';
 // Which category of built-in rules a hook invocation runs: code-style 'rules', git/PR/branch
 // 'guards' (the hookGuards section), or 'all' (both categories — used by the openclaw plugin adapter,
 // which is a single before_tool_call hook rather than two split PreToolUse hooks).
-export type HookMode = 'rules' | 'guards' | 'all';
 export type IsLineDisabled = (lineNum: number, ruleName: string) => boolean;
 
 export class Violation {
@@ -40,34 +40,6 @@ export class Violation {
         this.message = message;
         this.editIndex = undefined;
         this.editCount = undefined;
-    }
-}
-
-export class NormalizedEdit {
-    readonly oldString: string;
-    readonly newString: string;
-
-    constructor(oldString: string, newString: string) {
-        this.oldString = oldString;
-        this.newString = newString;
-    }
-}
-
-export class NormalizedToolInput {
-    readonly filePath: string;
-    readonly edits: readonly NormalizedEdit[];
-
-    constructor(filePath: string, edits: readonly NormalizedEdit[]) {
-        this.filePath = filePath;
-        this.edits = edits;
-    }
-}
-
-export class NormalizedBashInput {
-    readonly command: string;
-
-    constructor(command: string) {
-        this.command = command;
     }
 }
 

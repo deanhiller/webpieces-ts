@@ -28,58 +28,8 @@
 
 import { invocationLog } from '../core/decision-log';
 import { L0_FAULT_NONE } from '../core/l0-fault-codes';
-import { AgentHookEvent } from '../core/agent-event';
-import { HookOutcome, HookTerminated } from './hook-outcome';
-
-// ANSI escape (0x1b) built at runtime so no raw ESC byte sits in source. ANSI red is a *bonus* — the
-// 🛑 prefix + reason stay meaningful if a future/CI renderer strips the color. One place = one escape.
-const ESC = String.fromCharCode(0x1b);
-
-/**
- * ONLY THE HEADLINE IS RED. The body is left plain, and that is a legibility decision, not an oversight.
- *
- * Every deny that reaches here is MULTI-LINE — formatReport()'s `[rule] (N violations)` / `→ why` /
- * `Fix Option N:` skeleton for L1 and L2, and now the same skeleton for L0. A whole page rendered in
- * bold red is harder to read than the paragraph it replaced: the indentation that carries the structure
- * stops registering when every line shouts. Red the first line so the block is unmissable in a scroll of
- * terminal output, then let the structure do the rest of the work.
- *
- * The reset (`[0m`) still closes the sequence on the same line it opened, so nothing leaks into the
- * body or into whatever the terminal prints next.
- */
-// webpieces-disable no-function-outside-class -- private helper of the PreToolUse protocol boundary below; this module must stay callable from a tree too broken to build a DI container
-function redSystemMessage(reason: string): string {
-    const nl = reason.indexOf('\n');
-    if (nl < 0) return `${ESC}[31;1m🛑 ${reason}${ESC}[0m`;
-    return `${ESC}[31;1m🛑 ${reason.slice(0, nl)}${ESC}[0m${reason.slice(nl)}`;
-}
-
-// Takes the EVENT rather than a tool-name string, because the one thing this decision needs is the
-// event's routing kind, and the harnesses spell their tool names differently (`Bash` vs `apply_patch`)
-// while agreeing on the kind. The emitted bytes are identical for both harnesses — Codex accepts the
-// same `permissionDecision: "deny"` + `permissionDecisionReason` + `systemMessage` fields, and rejects
-// nothing we emit. It does hard-reject an EMPTY `permissionDecisionReason` where Claude tolerates one,
-// which is why emitDeny below refuses to send one.
-// webpieces-disable no-function-outside-class -- the PreToolUse wire shape itself, module-scope beside emitDeny/emitAllow by design, and it must stay callable from a tree too broken to build a DI container
-export function denyJson(event: AgentHookEvent | null, reason: string): string {
-    // NEVER an empty reason, and the check lives HERE because this function owns the wire shape. Codex
-    // hard-rejects a deny whose permissionDecisionReason is empty (Claude tolerates it and shows the
-    // human nothing), so an empty one is not a cosmetic defect — it is a block that silently fails to
-    // block. Every call site passes prose; this is the backstop that keeps a future one from turning a
-    // deny into a protocol error.
-    const safe = reason.trim() === '' ? '[ai-hooks] blocked, but the guard produced no reason — failing closed.' : reason;
-    const hookSpecificOutput = {
-        hookEventName: 'PreToolUse',
-        permissionDecision: 'deny',
-        permissionDecisionReason: safe,
-    };
-    // Bash only: permissionDecisionReason is NOT user-visible, so add the red systemMessage.
-    if (event !== null && event.kind === 'Bash') {
-        return JSON.stringify({ systemMessage: redSystemMessage(safe), hookSpecificOutput });
-    }
-    // Write/Edit/MultiEdit (and anything else): reason renders red natively; no systemMessage.
-    return JSON.stringify({ hookSpecificOutput });
-}
+import { AgentHookEvent, HookOutcome, HookTerminated, denyJson } from '@webpieces/hook-runtime';
+export { denyJson } from '@webpieces/hook-runtime';
 
 // THE DENY, AS A VALUE. `reason` is surfaced to both the user (terminal UI) and the model; the event's
 // kind selects whether the red `systemMessage` is added (Bash) or omitted (file tools) — see denyJson.
