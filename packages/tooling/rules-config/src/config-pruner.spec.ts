@@ -237,7 +237,7 @@ describe('case 4 — a valid-but-newer key is never dropped without warning', ()
      */
     it('the shim decides drift before exec`ing the guard bin, so a stale tree never reaches the pruner', () => {
         const shim = fs.readFileSync(
-            path.join(__dirname, '..', '..', 'ai-hook-rules', 'templates', 'ai-hook.sh'), 'utf8');
+            path.join(__dirname, '..', '..', 'agent-workflow-rules', 'templates', 'ai-hook.sh'), 'utf8');
         expect(shim).toContain('DRIFT_PKG');
         // The guard bin only runs when there is no drift — the condition that makes `pnpm install` a no-op
         // by the time any validator message is on screen.

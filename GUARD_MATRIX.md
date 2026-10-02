@@ -6,9 +6,9 @@ wins, exactly like the if/else chains the code already is.
 This file is the index. Each layer has its own document, because one file grew past the point where
 anyone could find anything in it.
 
-<!-- BEGIN GENERATED — GuardIndexDoc.render() in ai-hook-rules/src/core/guard-index-doc.ts; run `pnpm guards:generate` -->
+<!-- BEGIN GENERATED — GuardIndexDoc.render() in agent-workflow-rules/src/core/guard-index-doc.ts; run `pnpm guards:generate` -->
 > **GENERATED — do not hand-edit between the markers.** Rendered by `GuardIndexDoc.render()`
-> from `LAYER_GENERATION` (`ai-hook-rules/src/core/guard-index-doc.ts`); regenerate with
+> from `LAYER_GENERATION` (`agent-workflow-rules/src/core/guard-index-doc.ts`); regenerate with
 > `pnpm guards:generate`. A spec byte-locks it.
 >
 > This block used to be prose, and it drifted about the one subject it exists to report: it

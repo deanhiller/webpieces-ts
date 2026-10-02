@@ -1,20 +1,16 @@
 # Responsibilities — ai-hook-rules
 
-Edit-time validation engine for AI coding agents. Intercepts proposed file writes/edits (and Bash git/PR guards) before they land via Claude Code PreToolUse and openclaw before_tool_call adapters, running configurable rules and rejecting bad output with educational fix hints.
+Source edit validation for AI coding agents, contributed independently to the shared hook runtime.
 
 ## In Scope
 
-- Write-time rule engine: `Rule`/`RuleGroup` model, scope-specific bases (`EditRuleBase`, `FileRuleBase`, `BashRuleBase`), runner, report/fix-hint formatting.
-- Built-in edit-time rule implementations (no-any, max-file-lines, no-destructure, require-return-type, controller-naming, DI-token, exception guards, etc.).
-- Harness adapters and hook binaries: Claude Code `PreToolUse` (`wp-ai-rules-hook`, `wp-ai-guards-hook`) and openclaw plugin; setup/install CLI (`wp-install-ai-hooks`).
-- Git/PR/branch guards fired on Bash and file edits (`hookGuards` section).
+- The thirteen source rule implementations, including the three source-only rules and ten edit contributions shared in concept with code-rules.
+- Source rule registration, custom source rules and match rules.
+- `wp-ai-rules-hook`, its source pipeline, and source fixtures and golden tests.
 
 ## Out of Scope
 
-- Config schema, mode unions, defaults, and `webpieces.config.json` loading (rules-config).
-- Build-time / CI gate validation over the committed diff (code-rules).
-- Nx target registration (nx-webpieces-rules).
-
-## Notes (optional)
-
-Runs pre-commit at edit time so the AI fixes its own output before a build ever runs; each built-in rule is constructed from its typed `*Config` in rules-config. Live hooks execute the PUBLISHED release from node_modules, not local source.
+- Workflow guards, state, logging and hook installation (agent-workflow-rules).
+- Protocol normalization and generic rule evaluation (hook-runtime).
+- Git and worktree primitives (repo-workflow-core).
+- Config validation (rules-config), committed-diff validation (code-rules), and aggregate packaging (nx-webpieces-rules).

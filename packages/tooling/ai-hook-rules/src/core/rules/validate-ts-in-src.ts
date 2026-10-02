@@ -3,10 +3,10 @@ import * as path from 'path';
 
 import { ValidateTsInSrcConfig, isPathExcluded, Option } from '@webpieces/rules-config';
 
-import type { FileContext, Violation } from '../types';
-import { Violation as V } from '../types';
-import { FileRuleBase } from '../rule-base';
-import { FixHint } from '../fix-hint';
+import type { FileContext, Violation } from '@webpieces/hook-runtime';
+import { Violation as V } from '@webpieces/hook-runtime';
+import { FileRuleBase } from '@webpieces/hook-runtime';
+import { FixHint } from '@webpieces/hook-runtime';
 
 const DEFAULT_EXCLUDE_PATHS = [
     'node_modules', 'dist', '.nx', '.git',

@@ -14,9 +14,9 @@ what you want if you are blocked right now. Everything after it is hand-written:
 and known gaps, which is the half a renderer would mangle. The markers say which is which, and nothing
 outside them is machine-owned.
 
-<!-- BEGIN GENERATED — L0ToolingDoc.render() in ai-hook-rules/src/core/l0-tooling-doc.ts; run `pnpm guards:generate` -->
+<!-- BEGIN GENERATED — L0ToolingDoc.render() in agent-workflow-rules/src/core/l0-tooling-doc.ts; run `pnpm guards:generate` -->
 > **GENERATED — do not hand-edit between the markers.** Rendered by `L0ToolingDoc.render()`
-> (`ai-hook-rules/src/core/l0-tooling-doc.ts`) from `L0_FAULTS`, `L0_ALLOWLIST`, the managed-surface
+> (`agent-workflow-rules/src/core/l0-tooling-doc.ts`) from `L0_FAULTS`, `L0_ALLOWLIST`, the managed-surface
 > constants and `SHIM_LOG_FIELDS` — the same arrays the guard consults. `pnpm guards:generate`
 > rewrites it; `l0-tooling-doc.spec.ts` locks it byte-for-byte. The prose outside the markers is
 > hand-written and stays that way.
@@ -27,7 +27,7 @@ outside them is machine-owned.
 |---|---|---|---|---|
 | `D` | `version-drift` | version drift — root package.json pin != installed version | sh, before the bin runs | sh |
 | `X` | `guard-bin-missing` | guard bin missing (fresh clone / new worktree / package removed) | sh, before the bin runs | sh |
-| `U` | `guard-pkg-undeclared` | guard bin missing AND @webpieces/ai-hook-rules is not declared in package.json | sh, before the bin runs | sh |
+| `U` | `guard-pkg-undeclared` | guard bin missing AND @webpieces/agent-workflow-rules is not declared in package.json | sh, before the bin runs | sh |
 | `K` | `guard-bin-crashed` | guard bin present but CRASHED (exit code not 0 or 2 — corrupt node_modules) | sh, before the bin runs | sh |
 | `S` | `managed-hook-surface` | a webpieces-managed hook file, one of the harness hook registrations (.claude/settings.json, .codex/hooks.json) or the managed env entry does not match this release | the guard bin | JS |
 | `C` | `config-missing` | webpieces.config.json missing | the guard bin | JS |
@@ -44,12 +44,12 @@ the guard bin runs — a stale, missing or broken validator cannot be trusted to
 | `D` | 1 (preferred) | `pnpm install` | node_modules is OLDER than the pin, OR you are on a feature branch and want YOUR branch pin (usually the case) — it always clears the drift |
 | `D` | 2 | `git checkout main && git pull origin main` | node_modules is NEWER than the pin AND you are on main — the PIN is the stale side, so sync first and install second; a bare install would downgrade you |
 | `X` | 1 (preferred) | `pnpm install` | this fault fires at all — nothing is installed in THIS tree, and a new git worktree copies no node_modules |
-| `U` | 1 (preferred) | `git checkout main && git pull origin main` | @webpieces/ai-hook-rules arrives WITH the umbrella, so a tree that is behind explains this without anything being mis-declared — sync first, then install |
+| `U` | 1 (preferred) | `git checkout main && git pull origin main` | @webpieces/agent-workflow-rules arrives WITH the umbrella, so a tree that is behind explains this without anything being mis-declared — sync first, then install |
 | `U` | 2 | `pnpm install` | the sync (or a raised catalog pin in pnpm-workspace.yaml, which is editable while the block is up) gave the installer something new to do — a BARE install with nothing changed reports "Lockfile is up to date" and leaves the tree as broken as it found it |
-| `U` | 3 | `pnpm add -D @webpieces/ai-hook-rules` | nothing else worked and you need this session back — it is a session unblock, NOT a fix: revert it with 'pnpm remove @webpieces/ai-hook-rules' before committing, because a direct root dependency on it violates the umbrella rule |
+| `U` | 3 | `pnpm add -D @webpieces/agent-workflow-rules` | nothing else worked and you need this session back — it is a session unblock, NOT a fix: revert it with 'pnpm remove @webpieces/agent-workflow-rules' before committing, because a direct root dependency on it violates the umbrella rule |
 | `K` | 1 (preferred) | `rm -rf node_modules && pnpm install` | this fault fires at all — a BARE pnpm install SKIPS the corrupt package, because pnpm sees the right version on disk and considers it installed; only the delete forces a rewrite |
-| `S` | 1 (preferred) | `pnpm exec wp-upgrade-shim` | this fault fires at all — it is the only cure that repairs EVERY managed surface (ai-hook.sh, each harness hook registration, the anchoring of the neighbour hook commands registered beside ours, and the Claude settings env entry), and it also deletes the retired guarantee-root.sh and any entry still naming it, and it touches no config; needs installed @webpieces/ai-hook-rules 0.4.408 or newer |
-| `S` | 2 | `cp node_modules/@webpieces/ai-hook-rules/templates/ai-hook.sh .claude/webpieces/ai-hook.sh` | the installed @webpieces/ai-hook-rules is OLDER than 0.4.408, so wp-upgrade-shim does not exist yet — it is PARTIAL (it repairs ai-hook.sh and NOTHING else), so upgrade @webpieces afterwards and run Option 1 to finish |
+| `S` | 1 (preferred) | `pnpm exec wp-upgrade-shim` | this fault fires at all — it is the only cure that repairs EVERY managed surface (ai-hook.sh, each harness hook registration, the anchoring of the neighbour hook commands registered beside ours, and the Claude settings env entry), and it also deletes the retired guarantee-root.sh and any entry still naming it, and it touches no config; needs installed @webpieces/agent-workflow-rules 0.4.408 or newer |
+| `S` | 2 | `cp node_modules/@webpieces/agent-workflow-rules/templates/ai-hook.sh .claude/webpieces/ai-hook.sh` | the installed @webpieces/agent-workflow-rules is OLDER than 0.4.408, so wp-upgrade-shim does not exist yet — it is PARTIAL (it repairs ai-hook.sh and NOTHING else), so upgrade @webpieces afterwards and run Option 1 to finish |
 | `C` | 1 (preferred) | edit `webpieces.config.json` yourself | this fault fires at all — it is the only cure that needs no other tool, and it is never denied |
 | `C` | 2 | `pnpm exec wp-install-ai-hooks` | you are at an INTERACTIVE terminal and can answer its two hook-target prompts |
 | `Y` | 1 (preferred) | edit `webpieces.config.json` yourself | this fault fires at all — it is the only cure that needs no other tool, and it is never denied |
@@ -78,10 +78,10 @@ the same coordinates every L0 deny opens with, so a deny, a log line and this ta
 | 7 | git fetch - a bare git pull and git merge are NOT on the list | ALLOW | yes — it REPAIRS the tooling |
 | 8 | git checkout main && git pull origin main | ALLOW | yes — it REPAIRS the tooling |
 | 9 | pnpm exec wp-upgrade-shim | ALLOW | yes — it REPAIRS the tooling |
-| 10 | cp node_modules/@webpieces/ai-hook-rules/templates/ai-hook.sh .claude/webpieces/ai-hook.sh | ALLOW | yes — it REPAIRS the tooling |
+| 10 | cp node_modules/@webpieces/agent-workflow-rules/templates/ai-hook.sh .claude/webpieces/ai-hook.sh | ALLOW | yes — it REPAIRS the tooling |
 | 11 | pnpm wp-prune-unknown-config | ALLOW | yes — it REPAIRS the tooling |
 | 12 | pnpm exec wp-install-ai-hooks (flags allowed, e.g. --target=project) | ALLOW | yes — it REPAIRS the tooling |
-| 13 | pnpm add -D @webpieces/ai-hook-rules (an @version and extra flags allowed) | ALLOW | yes — it REPAIRS the tooling |
+| 13 | pnpm add -D @webpieces/agent-workflow-rules (an @version and extra flags allowed) | ALLOW | yes — it REPAIRS the tooling |
 | 14 | read-only orientation: pwd, git status/log/diff/show/branch/rev-parse, git worktree list | ALLOW | no — it repairs nothing, so L1 still judges it |
 | 15 | CODEX ONLY - a read-shaped Bash command (the harness has no Read tool): cat, head, tail, less, more, bat, or sed -n '<range>p' | PASS | no — it repairs nothing, so L1 still judges it |
 
@@ -128,7 +128,7 @@ sh "$PWD/.claude/webpieces/ai-hook.sh" wp-ai-guards-hook
 sh "$PWD/.claude/webpieces/ai-hook.sh" wp-ai-rules-hook
 ```
 
-`pnpm exec wp-upgrade-shim` repairs all 7. `cp node_modules/@webpieces/ai-hook-rules/templates/ai-hook.sh .claude/webpieces/ai-hook.sh`
+`pnpm exec wp-upgrade-shim` repairs all 7. `cp node_modules/@webpieces/agent-workflow-rules/templates/ai-hook.sh .claude/webpieces/ai-hook.sh`
 repairs `.claude/webpieces/ai-hook.sh` and nothing else, so it is the fallback for an installed release too old
 to carry the first.
 

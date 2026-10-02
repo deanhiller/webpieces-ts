@@ -4,9 +4,9 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as nodePath from 'path';
 
-import { migrate } from '../bin/setup-config';
+import fixtureConfig from '../adapters/__goldens__/fixture-webpieces.config.json';
 import { run } from './runner';
-import { BlockedResult, NormalizedToolInput, NormalizedEdit } from './types';
+import { BlockedResult, NormalizedToolInput, NormalizedEdit } from '@webpieces/hook-runtime';
 import { specTempDirs } from '@webpieces/rules-config';
 
 /**
@@ -35,7 +35,7 @@ beforeAll(() => {
     gitIn(root, 'commit', '-m', 'init');
 
     // webpieces-disable no-any-unknown -- opaque JSON config shape, only mutated by known keys here
-    const config = migrate({}).config as Record<string, any>;
+    const config = JSON.parse(JSON.stringify(fixtureConfig)) as Record<string, any>;
     config.hookGuards['branch-creation-guard'].autoReapMergedBranches = false;
     for (const name of Object.keys(config.hookGuards)) config.hookGuards[name].mode = 'OFF';
     fs.writeFileSync(nodePath.join(root, 'webpieces.config.json'), JSON.stringify(config));

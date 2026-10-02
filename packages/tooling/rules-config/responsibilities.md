@@ -1,8 +1,10 @@
 # Responsibilities — rules-config
 
-Shared config/schema layer: loads and validates webpieces.config.json, defines every rule's typed config, mode unions, defaults, path-exclusion and diff-scope helpers, plus PR-gate review state. Single source of truth consumed by ai-hook-rules, code-rules, and nx-webpieces-rules.
+Shared tooling configuration: validates webpieces.config.json, defines typed rule schemas and modes, supplies diagnostics, path and diff scoping, and owns PR-gate review state.
 
 ## In Scope
+
+- Shared hook configuration diagnostics, fault vocabulary and best-effort diagnostic template pointers.
 
 - Loading, validating, and locating `webpieces.config.json` (`loadAndValidate`, `findConfigFile`, `validateWebpiecesConfig`).
 - Schema field types (`FieldDef`): scalars, `string[]`, and an `object[]` (non-empty, or possibly empty
@@ -21,7 +23,7 @@ Shared config/schema layer: loads and validates webpieces.config.json, defines e
 ## Out of Scope
 
 - Actually running rules at edit time (belongs in ai-hook-rules) or at build time (belongs in code-rules).
-- Claude Code / openclaw hook wiring and adapters (ai-hook-rules).
+- Harness normalization and protocol execution (hook-runtime), workflow hook installation (agent-workflow-rules), and OpenClaw composition (the umbrella package).
 - CLI gate execution / CI orchestration (code-rules).
 - Nx target wiring (nx-webpieces-rules).
 - Generic errors and state-path utilities (tooling-common); main-sync and worktree status/locks (repo-workflow-core).

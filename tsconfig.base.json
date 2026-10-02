@@ -69,9 +69,15 @@
             "@webpieces/ai-hook-rules": [
                 "packages/tooling/ai-hook-rules/src/index.ts"
             ],
-            "@webpieces/tooling-common/to-error": ["packages/tooling/tooling-common/src/to-error.ts"],
-            "@webpieces/tooling-common": ["packages/tooling/tooling-common/src/index.ts"],
-            "@webpieces/repo-workflow-core": ["packages/tooling/repo-workflow-core/src/index.ts"],
+            "@webpieces/tooling-common/to-error": [
+                "packages/tooling/tooling-common/src/to-error.ts"
+            ],
+            "@webpieces/tooling-common": [
+                "packages/tooling/tooling-common/src/index.ts"
+            ],
+            "@webpieces/repo-workflow-core": [
+                "packages/tooling/repo-workflow-core/src/index.ts"
+            ],
             "@webpieces/hook-runtime": [
                 "packages/tooling/hook-runtime/src/index.ts"
             ],
@@ -104,6 +110,12 @@
             ],
             "@webpieces/core-util/ipc": [
                 "packages/core/core-util/src/ipc/index.ts"
+            ],
+            "@webpieces/agent-workflow-rules": [
+                "packages/tooling/agent-workflow-rules/src/index.ts"
+            ],
+            "@webpieces/hook-runtime/harness-vocabulary": [
+                "packages/tooling/hook-runtime/src/harness-vocabulary.ts"
             ]
         }
     },

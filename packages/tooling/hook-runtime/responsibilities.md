@@ -1,22 +1,15 @@
 # Responsibilities — hook-runtime
 
-Protocol-only runtime shared by hook products and PR tooling. It owns the normalized agent-event contract, exact PreToolUse response bytes, and the fail-closed application boundary without importing a concrete rule registry.
+Neutral hook protocol, event normalization, contributed rule evaluation and fail-closed application boundary.
 
 ## In Scope
 
-- Neutral harness identity values and normalized agent event, file operation, Bash input, and hook mode data types.
-- Exact allow/deny outcome and PreToolUse JSON formatting, including Bash-only visible system messages.
-- Injectable stdin, stdout, process-exit, and evaluator ports.
-- `HookApp` orchestration and its last-resort fail-closed boot boundary.
-- Protocol-focused tests and dependency assertions that keep both hook products above this package.
+- Harness envelope parsing and normalization into agent events and file operations.
+- Rule contexts, scope-specific bases, exclusion and delete scoping, report formatting and generic evaluation of caller-provided rule sets.
+- HookApp, injected process ports and the decision wire protocol.
 
 ## Out of Scope
 
-- Concrete source rules, workflow guards, rule loading, and rule evaluation (`ai-hook-rules`).
-- Hook registration, installation, generated shims, and published hook binaries (`ai-hook-rules` at this stage).
-- Repository/PR workflow state and PR gate commands (`rules-config` and `pr-gate`).
-- Nx target registration and package bundling (`nx-webpieces-rules`).
-
-## Notes (optional)
-
-Hook products inject their evaluator implementation. Runtime changes therefore schedule both the hook product and PR gate, while source-rule-only changes do not pull PR gate into the affected graph.
+- Concrete source or workflow policy, registries and configuration schemas.
+- Workflow state, logging, sync, shim installation and setup.
+- Git/worktree primitives and PR orchestration.

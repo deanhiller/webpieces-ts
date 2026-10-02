@@ -100,6 +100,7 @@ ORDER=(
     # Both hook products depend on the neutral runtime; pr-gate no longer depends on ai-hook-rules.
     # publish-packages.spec.ts re-derives this order from the real manifests.
     packages/tooling/ai-hook-rules
+    packages/tooling/agent-workflow-rules
     packages/tooling/pr-gate
     packages/tooling/code-rules
     # core-util has no @webpieces dependency; core-context depends on it. These two were the wrong way

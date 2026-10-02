@@ -2,9 +2,9 @@ import { execFileSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 
-import { migrate } from '../../bin/setup-config';
+import fixtureConfig from '../../adapters/__goldens__/fixture-webpieces.config.json';
 import { run } from '../runner';
-import { BlockedResult, NormalizedEdit, NormalizedToolInput } from '../types';
+import { BlockedResult, NormalizedEdit, NormalizedToolInput } from '@webpieces/hook-runtime';
 import { specTempDirs } from '@webpieces/rules-config';
 
 function gitIn(cwd: string, ...args: string[]): void {
@@ -13,7 +13,7 @@ function gitIn(cwd: string, ...args: string[]): void {
 
 function rulesConfig(validateMode: 'OFF' | 'NEW_AND_MODIFIED_FILES'): Record<string, unknown> {
     // webpieces-disable no-any-unknown -- migrate returns the complete validated config; the test only flips known rule modes
-    const config = migrate({}).config as Record<string, any>;
+    const config = JSON.parse(JSON.stringify(fixtureConfig)) as Record<string, any>;
     config.hookGuards['branch-creation-guard'].autoReapMergedBranches = false;
     for (const name of Object.keys(config.hookGuards)) config.hookGuards[name].mode = 'OFF';
     for (const name of Object.keys(config.rules)) config.rules[name].mode = 'OFF';

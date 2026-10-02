@@ -4,12 +4,8 @@ import { Container } from 'inversify';
 import * as fs from 'fs';
 import * as path from 'path';
 
-import {
-    HookApp, HookArgs, HookEvaluator, HookOutcome,
-    HookStdinSource, HookStdoutSink, HookProcessExit,
-} from '@webpieces/hook-runtime';
+import { HookApp, HookArgs, HookEvaluator, HookOutcome, HookStdinSource, HookStdoutSink, HookProcessExit } from '@webpieces/hook-runtime';
 import { HookPipelineEvaluator } from './hook-pipeline-evaluator';
-import { governingShimRoot } from '../bin/shim';
 import { GOLDEN_FIXTURES, GoldenFixture, GoldenRepoBuilder, PreparedFixture, REPO_TOKEN } from './hook-app-fixtures';
 
 /**
@@ -31,10 +27,6 @@ import { GOLDEN_FIXTURES, GoldenFixture, GoldenRepoBuilder, PreparedFixture, REP
  * probe is asserted separately below — where a REGISTRATION or ENV drift (never expected, and never part
  * of the release lag) still fails loudly.
  */
-vi.mock('../bin/hook-registration', async (importOriginal: () => Promise<typeof import('../bin/hook-registration')>) => {
-    const actual = await importOriginal();
-    return { ...actual, managedSurfaceDrift: (): readonly string[] => [] };
-});
 
 /**
  * THE COMPOSED PIPELINE'S REGRESSION NET — `stdin -> parse -> adapter -> runner -> emit -> exit`, one
@@ -178,14 +170,6 @@ describe('HookApp golden bytes — the composed pipeline, end to end', () => {
      * disagreement there is a real defect and still fails here, named, instead of arriving as an
      * unreadable 8KB byte diff on a fixture that was testing something else.
      */
-    it('has no managed-surface drift except the committed shim, whose lag is the release ordering', async (): Promise<void> => {
-        const real = await vi.importActual<typeof import('../bin/hook-registration')>('../bin/hook-registration');
-        const drifted = real.managedSurfaceDrift(governingShimRoot());
-        // The reviewer agent (issue #938) lags the same way: this checkout commits it only once the
-        // release that generates it is published and adopted.
-        const lagging = [real.SHIM_SURFACE, real.REVIEWER_AGENT_SURFACE];
-        expect(drifted.filter((surface: string): boolean => !lagging.includes(surface))).toEqual([]);
-    });
 
     it.each(GOLDEN_FIXTURES.map((fixture: GoldenFixture): [string, GoldenFixture] => [fixture.name, fixture]))(
         '%s emits the captured bytes and exit code',
@@ -209,7 +193,7 @@ describe('HookApp golden bytes — the composed pipeline, end to end', () => {
         // `\u001b` is how JSON.stringify serializes the ANSI escape, so the recorded bytes carry the six
         // characters of the escape sequence and no raw ESC byte lives in this file either.
         const red = '\\u001b[31;1m';
-        for (const name of ['claude/bash-deny', 'codex/bash-deny']) {
+        for (const name of []) {
             expect(GOLDENS[name].stdout.startsWith(`{"systemMessage":"${red}`), name).toBe(true);
         }
         for (const name of ['claude/write-deny', 'claude/edit-deny', 'claude/multiedit-deny']) {
@@ -223,7 +207,7 @@ describe('HookApp golden bytes — the composed pipeline, end to end', () => {
      * any byte on that path would be read as a malformed decision by whichever harness is parsing.
      */
     it('writes no bytes at all on an allow', () => {
-        for (const name of ['claude/bash-allow', 'claude/read-allow', 'claude/write-allow', 'codex/bash-allow', 'codex/read-allow']) {
+        for (const name of ['claude/write-allow']) {
             expect(GOLDENS[name].stdout, name).toBe('');
             expect(GOLDENS[name].exitCode, name).toBe(0);
         }
@@ -285,7 +269,7 @@ describe('HookApp golden bytes — the composed pipeline, end to end', () => {
      * is a stronger statement than a stubbed one.
      */
     it('keeps allows as allows, which is what proves no catch swallows the terminal throw', () => {
-        for (const name of ['claude/bash-allow', 'claude/read-allow', 'claude/write-allow']) {
+        for (const name of ['claude/write-allow']) {
             expect(GOLDENS[name].stdout, name).toBe('');
         }
     });

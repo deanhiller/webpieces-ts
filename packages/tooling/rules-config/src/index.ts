@@ -446,3 +446,6 @@ export { StaleBinRemoval, StaleBinSweeper, staleBinSweeper } from './stale-bin-s
 export { SpecTempDirs, specTempDirs } from './spec-temp-dirs';
 export { RepoScratchDirs, SCRATCH_DIR_NAME } from './repo-scratch-dirs';
 export { TmpScratchSweeper, TMP_SCRATCH_RETENTION_DAYS, TMP_SCRATCH_PREFIX } from './tmp-scratch-sweep';
+
+export * from './hook-fault-codes';
+export * from './hook-config-diagnostics';
