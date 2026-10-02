@@ -80,6 +80,7 @@ let dir: string;
 let target: string;
 let stopFile: string;
 let readerScript: string;
+let activeReader: ReaderProcess | null = null;
 
 // Start the reader and WAIT until it is actually looping. Without this the parent's synchronous write
 // burst can finish before the child has even booted, and the test proves nothing.
@@ -87,10 +88,13 @@ async function startReader(): Promise<ReaderProcess> {
     const reader = new ReaderProcess(spawn(process.execPath, [readerScript, target, stopFile], {
         stdio: ['ignore', 'pipe', 'ignore'],
     }));
+    activeReader = reader;
     const readyFile = `${stopFile}.ready`;
-    const deadline = Date.now() + 10000;
+    // Process startup can exceed ten seconds during the parallel gate. Readiness, rather than
+    // startup speed, is the prerequisite; keep this bounded below the suite's 45-second timeout.
+    const deadline = Date.now() + 30000;
     while (!fs.existsSync(readyFile) && Date.now() < deadline) {
-        await new Promise<void>((resolve: () => void): void => { setTimeout(resolve, 5); });
+        await new Promise<void>((resolve: () => void): void => { setTimeout(resolve, 50); });
     }
     expect(fs.existsSync(readyFile)).toBe(true);
     return reader;
@@ -117,7 +121,12 @@ describe('AtomicFile under a genuinely concurrent reader', () => {
         fs.writeFileSync(readerScript, READER_SOURCE);
     });
 
-    afterEach(() => { fs.rmSync(dir, { recursive: true, force: true }); });
+    afterEach(() => {
+        // A failed readiness/assertion must not leave a reader spinning after its fixture is removed.
+        activeReader?.child.kill();
+        activeReader = null;
+        fs.rmSync(dir, { recursive: true, force: true });
+    });
 
     /**
      * CONTROL. Proves the harness can actually SEE a torn read — without this, a green result from the

@@ -792,8 +792,8 @@
 <p>Tagged <code>framework:node</code> and <code>role:lib</code>. It is in <code>scripts/publish-packages.sh</code>'s ORDER; like <code>api-doc-model</code>, <code>core-mock</code> and <code>mcp-server</code> before it, the npm NAME has to be bootstrapped once by an authenticated manual publish, because trusted publishing can publish to an existing scoped name but cannot create one.</p>
 <p>The bin is declared in <code>publishConfig.bin</code> and never at the top level (<code>.claude/rules/packaging-and-bins.md</code>).</p>
 <p><code>apps/app-example/partner-api</code> is the worked example: a real contract, its manifest, and golden documents under <code>src/__tests__/goldens/</code>, with a spec that regenerates and diffs them. An app's real documents are build output, written into the outputPath of its <code>build</code> (tsc) target by the <code>openapi-generate</code> nx executor (inferred from the <code>generate:openapi</code> tag) and never committed.</p></div></details>
-<details class="wp-resp-card" data-node="rules-config"><summary><span class="wp-resp-level">L2</span> <strong>rules-config</strong> — Shared config/schema layer: loads and validates webpieces.config.json, defines every rule's typed config, mode unions, defaults, path-exclusion and diff-scope helpers, plus PR-gate and main-sync state. Single source of truth consumed by ai-hook-rules, code-rules, and nx-webpieces-rules.</summary><div class="wp-resp-body"><h4>Responsibilities — rules-config</h4>
-<p>Shared config/schema layer: loads and validates webpieces.config.json, defines every rule's typed config, mode unions, defaults, path-exclusion and diff-scope helpers, plus PR-gate and main-sync state. Single source of truth consumed by ai-hook-rules, code-rules, and nx-webpieces-rules.</p>
+<details class="wp-resp-card" data-node="rules-config"><summary><span class="wp-resp-level">L2</span> <strong>rules-config</strong> — Shared config/schema layer: loads and validates webpieces.config.json, defines every rule's typed config, mode unions, defaults, path-exclusion and diff-scope helpers, plus PR-gate review state. Single source of truth consumed by ai-hook-rules, code-rules, and nx-webpieces-rules.</summary><div class="wp-resp-body"><h4>Responsibilities — rules-config</h4>
+<p>Shared config/schema layer: loads and validates webpieces.config.json, defines every rule's typed config, mode unions, defaults, path-exclusion and diff-scope helpers, plus PR-gate review state. Single source of truth consumed by ai-hook-rules, code-rules, and nx-webpieces-rules.</p>
 <h5>In Scope</h5>
 <ul>
 <li>Loading, validating, and locating <code>webpieces.config.json</code> (<code>loadAndValidate</code>, <code>findConfigFile</code>, <code>validateWebpiecesConfig</code>).</li>
@@ -814,7 +814,7 @@
 <p>universal branch/epoch turn-offs (no annotation-level security bypass).</p>
 <ul>
 <li>Cross-cutting helpers reused by both edit-time and build-time engines: path exclusion, diff/changed-line scoping, disable-directive constants, template loading.</li>
-<li>Shared error types (<code>RuleFailError</code>, <code>InformAiError</code>), section/hook-guard metadata, PR-gate config, main-sync status/lock state, match-rule and controller-naming config.</li>
+<li>Structured rule failures (<code>RuleFailError</code>), section/hook-guard metadata, PR-gate config and review state, match-rule and controller-naming config.</li>
 </ul>
 <h5>Out of Scope</h5>
 <ul>
@@ -822,6 +822,7 @@
 <li>Claude Code / openclaw hook wiring and adapters (ai-hook-rules).</li>
 <li>CLI gate execution / CI orchestration (code-rules).</li>
 <li>Nx target wiring (nx-webpieces-rules).</li>
+<li>Generic errors and state-path utilities (tooling-common); main-sync and worktree status/locks (repo-workflow-core).</li>
 </ul>
 <h5>Notes (optional)</h5>
 <p>Pure config + schema + shared utilities with no execution engine — this is why both the edit-time and build-time engines depend on it, never the reverse.</p>
