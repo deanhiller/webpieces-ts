@@ -1,3 +1,4 @@
+import { McpToolPolicy } from './McpToolPolicy';
 import {
     ApiJsonSchema,
     AuthMeta,
@@ -8,7 +9,6 @@ import {
     getEndpoints,
     getWpMcpTools,
     getWpMcpAuthJwt,
-    rolesRequired,
     EndpointOperation,
     McpToolCatalogError,
     McpToolCatalogFile,
@@ -17,7 +17,7 @@ import {
     WpMcpToolHints,
     WpMcpToolMetadata,
 } from '@webpieces/core-util';
-import { ClassType } from '@webpieces/http-routing';
+import { AuthenticatedCaller, ClassType, JwtHook } from '@webpieces/http-routing';
 import { McpApiBinding } from './McpApiBinding';
 import { McpToolCatalog } from './McpToolCatalog';
 
@@ -36,14 +36,6 @@ export class RegisteredMcpTool {
         public readonly inputSchema: ApiJsonSchema,
         public readonly outputSchema: ApiJsonSchema,
     ) {}
-
-    /** Listing is advisory; MCP authorization is rechecked before the endpoint auth boundary. */
-    isVisibleTo(listingRoles: readonly string[]): boolean {
-        const required = rolesRequired(this.mcpAuth.requirement);
-        return (
-            required.length === 0 || required.some((role: string) => listingRoles.includes(role))
-        );
-    }
 }
 
 /**
@@ -213,7 +205,7 @@ class McpCatalogPairing {
                       `wrote no ${McpToolCatalogFile.fileNameFor(apiClass.name)} for it. Delete its ` +
                       'McpApiBinding — it publishes nothing.'
                 : `The server binds ${apiClass.name}, and no ${McpToolCatalogFile.fileNameFor(apiClass.name)} ` +
-                      "was handed to it. Add the api library that declares it to McpToolCatalog.fromPackages([...]) " +
+                      'was handed to it. Add the api library that declares it to McpToolCatalog.fromPackages([...]) ' +
                       'and rebuild that library (its openapi-generate target writes the file).',
         );
         return undefined;
@@ -235,7 +227,9 @@ class McpCatalogPairing {
             );
         }
         if (this.problems.length === 0) return;
-        const directories = [...new Set(this.catalogs.map((catalog: McpToolCatalog) => catalog.directory))];
+        const directories = [
+            ...new Set(this.catalogs.map((catalog: McpToolCatalog) => catalog.directory)),
+        ];
         throw new McpToolCatalogError(
             'The MCP tool catalogs do not match the bound contracts:\n' +
                 this.problems.map((text: string) => `  - ${text}`).join('\n') +
@@ -246,5 +240,28 @@ class McpCatalogPairing {
                 '\n',
             'Each bound contract needs exactly the one catalog its api library build writes, and nothing else.',
         );
+    }
+}
+
+/** Request-specific authorized projection, shared by documentation, schema lookup and name lookup. */
+export class AuthorizedMcpTools {
+    constructor(public readonly tools: readonly RegisteredMcpTool[]) {}
+
+    find(name: string): RegisteredMcpTool | undefined {
+        return this.tools.find((tool: RegisteredMcpTool) => tool.name === name);
+    }
+
+    // webpieces-disable no-function-outside-class -- asynchronous projection factory
+    static async create<T>(
+        registry: McpToolRegistry,
+        caller: AuthenticatedCaller,
+        policy: JwtHook<T>,
+    ): Promise<AuthorizedMcpTools> {
+        const tools: RegisteredMcpTool[] = [];
+        const authorization = new McpToolPolicy(policy);
+        for (const tool of registry.tools) {
+            if (await authorization.permits(caller, tool.mcpAuth.requirement)) tools.push(tool);
+        }
+        return new AuthorizedMcpTools(tools);
     }
 }

@@ -3,8 +3,6 @@ import { timingSafeEqual } from 'crypto';
 import {
     provideFrameworkSingleton,
     HttpRequest,
-    PendingWireTrust,
-    PendingTrustedValue,
     RawHttpRequest,
     RequestContext,
 } from '@webpieces/core-context';
@@ -23,13 +21,7 @@ import {
 import { Filter, Service } from '@webpieces/core-util';
 import { WpResponse } from '../WpResponse';
 import { MethodMeta } from '../MethodMeta';
-import {
-    AuthConfig,
-    AUTH_CONFIG,
-    AuthenticatedCaller,
-    AUTHENTICATED_CALLER_KEY,
-    SharedSecrets,
-} from '../AuthConfig';
+import { AuthConfig, AUTH_CONFIG, SharedSecrets } from '../AuthConfig';
 import {
     ApiKeyHook,
     API_KEY_HOOK,
@@ -40,6 +32,8 @@ import {
     WebhookAuthCallback,
     WEBHOOK_AUTH_CALLBACK,
 } from '../AuthHooks';
+import { AuthenticatedCallerContext } from '../AuthenticatedCallerContext';
+import { InvocationAuthentication } from '../InvocationAuthentication';
 import { DefaultOidcVerifier } from '../DefaultOidcVerifier';
 
 const log = LogManager.getLogger('AuthFilter');
@@ -95,6 +89,8 @@ const SHARED_SECRET_SCHEME = 'Webpieces';
 @provideFrameworkSingleton()
 // webpieces-disable no-any-unknown -- Filter generic params use unknown for response flexibility
 export class AuthFilter extends Filter<MethodMeta, WpResponse<unknown>> {
+    private readonly callerContext = new AuthenticatedCallerContext();
+
     constructor(
         // Framework default, always available — verifies Google OIDC with zero app wiring.
         // webpieces-disable inject-annotation-not-needed-for-concrete-class -- AuthFilter is DI-resolved via the esbuild/vitest path, which elides type-only imports (no design:paramtypes), so every param needs its explicit token
@@ -128,19 +124,21 @@ export class AuthFilter extends Filter<MethodMeta, WpResponse<unknown>> {
         nextFilter: Service<MethodMeta, WpResponse<unknown>>,
     ): Promise<WpResponse<unknown>> {
         const mode = meta.routeMeta.authMeta?.mode;
-        const authHeader = RequestContext.getRequest()?.getHeader(AUTHORIZATION_HEADER);
+        const authHeader = meta.invocationAuthentication
+            ? `Bearer ${meta.invocationAuthentication.token}`
+            : RequestContext.getRequest()?.getHeader(AUTHORIZATION_HEADER);
 
         if (!mode || mode.kind === 'public') {
             // Public: best-effort parse so a logged-out page can still know the logged-in user.
             await this.bestEffortJwt(authHeader);
-            this.reconcileWireTrust(/*callerVerified*/ false);
+            this.callerContext.reconcileWireTrust(/*callerVerified*/ false);
             this.rethrowDeferredBodyError();
             return nextFilter.invoke(meta);
         }
 
         switch (mode.kind) {
             case 'jwt':
-                await this.enforceJwt(authHeader, mode.requirement);
+                await this.enforceJwt(authHeader, mode.requirement, meta.invocationAuthentication);
                 break;
             case 'oidc':
                 await this.enforceOidc(authHeader, mode.callers);
@@ -162,7 +160,7 @@ export class AuthFilter extends Filter<MethodMeta, WpResponse<unknown>> {
                 break;
         }
         this.applySurface(mode);
-        this.reconcileWireTrust(AuthFilter.verifiesCaller(mode));
+        this.callerContext.reconcileWireTrust(AuthFilter.verifiesCaller(mode));
         this.rethrowDeferredBodyError();
         return nextFilter.invoke(meta);
     }
@@ -262,7 +260,7 @@ export class AuthFilter extends Filter<MethodMeta, WpResponse<unknown>> {
         // Throws ApiUnauthorizedError to deny. On success the vendor account the signature proved is
         // stamped through the SAME path a jwt or api-key caller takes.
         const caller = await this.webhookAuthCallback.verifyWebhook(name, request);
-        this.applyAuthenticatedCaller(caller);
+        this.callerContext.publish(caller);
     }
 
     /**
@@ -313,7 +311,7 @@ export class AuthFilter extends Filter<MethodMeta, WpResponse<unknown>> {
         // Throws ApiUnauthorizedError to deny. The hook gets the WHOLE request so it can cross-check
         // the key against a second header (the organization the customer is acting for).
         const caller = await this.apiKeyHook.verifyApiKey(regime, request);
-        this.applyAuthenticatedCaller(caller);
+        this.callerContext.publish(caller);
     }
 
     /**
@@ -389,68 +387,6 @@ export class AuthFilter extends Filter<MethodMeta, WpResponse<unknown>> {
     }
 
     /**
-     * Decide what happens to the trusted keys that arrived on the WIRE and were held back by
-     * {@link PendingWireTrust} (read that class for why they are held rather than written).
-     *
-     * `callerVerified` — the endpoint authenticated the SENDER **as a peer service** (`@WpAuthOidc`,
-     * `@WpAuthSharedSecret`).
-     * The sender is a service we trust, this is the service-to-service hop, and its forwarded
-     * identity is admitted as-is. This is the case that makes propagating a verified userId across
-     * internal services work.
-     *
-     * Otherwise the sender is a browser or anyone else with curl, and the ONLY acceptable inbound
-     * trusted value is one the authenticator independently derived to the same value. Everything
-     * else is rejected — see {@link requireVouched}.
-     *
-     * Runs AFTER the mode enforcement above, because that is what stamps the authenticator's own
-     * values (`applyAuthenticatedCaller`); comparing before it ran would compare against nothing.
-     */
-    private reconcileWireTrust(callerVerified: boolean): void {
-        const pending = PendingWireTrust.takeAll();
-        for (const item of pending) {
-            if (callerVerified) {
-                RequestContext.putTrusted(item.key, item.value);
-            } else {
-                this.requireVouched(item);
-            }
-        }
-    }
-
-    /**
-     * On a browser-reachable route, an inbound trusted header must match what the authenticator
-     * itself derived, or the request dies. Both failure shapes are rejections, not repairs:
-     *
-     * - DIFFERENT value — the caller said `alice`, the credential says `bob`. Silently letting the
-     *   credential win is not safe, because upstream rate limiters commonly bucket on the header
-     *   rather than the token: the request was already counted against the wrong principal, so
-     *   every forged header would be a free rate-limit bypass. No honest caller contradicts its own
-     *   credential.
-     * - NOTHING vouched for it — nobody derived this key at all, so there is no evidence behind a
-     *   value a stranger typed. This is the common case, not the exotic one: the framework's
-     *   {@link DefaultJwtHook} stamps NO entries, and an app hook (jwt or api-key) only stamps the keys it can prove,
-     *   so any other trusted key a caller sends lands here.
-     *
-     * The pending value is discarded either way — the throw is what leaves the request.
-     */
-    private requireVouched(item: PendingTrustedValue): void {
-        const vouched = RequestContext.getTrusted(item.key);
-        if (vouched === item.value) {
-            return;
-        }
-        log.error(
-            `Rejecting inbound '${item.key.httpHeader}': it is a TRUSTED context key, this route does ` +
-                `not authenticate its caller, and the credential ` +
-                (vouched === undefined
-                    ? 'vouched for no such value'
-                    : 'derived a different value') +
-                '.',
-        );
-        throw new ApiUnauthorizedError(
-            `Header '${item.key.httpHeader}' cannot be supplied by the caller on this endpoint`,
-        );
-    }
-
-    /**
      * `@WpAuthLocalOnly`: serve only on a developer's machine, and off-local behave EXACTLY as if the
      * endpoint did not exist.
      *
@@ -484,6 +420,7 @@ export class AuthFilter extends Filter<MethodMeta, WpResponse<unknown>> {
     private async enforceJwt(
         header: string | undefined,
         requirement: JwtRequirement,
+        invocation?: InvocationAuthentication,
     ): Promise<void> {
         const token = this.credential(header, BEARER_SCHEME);
         if (!token) {
@@ -493,7 +430,8 @@ export class AuthFilter extends Filter<MethodMeta, WpResponse<unknown>> {
             throw new ApiUnauthorizedError('User-JWT auth is not enabled on this server');
         }
         const caller = await this.jwtHook.parseJwt(token); // AUTHENTICATE — throws ApiUnauthorizedError if invalid
-        this.applyAuthenticatedCaller(caller);
+        invocation?.assertCaller(caller);
+        if (!invocation) this.callerContext.publish(caller);
         await this.jwtHook.authorizeJwt(caller, requirement); // AUTHORIZE — app policy; throws ApiForbiddenError to deny
     }
 
@@ -536,7 +474,7 @@ export class AuthFilter extends Filter<MethodMeta, WpResponse<unknown>> {
         }
         // eslint-disable-next-line @webpieces/no-unmanaged-exceptions -- best-effort on a public route: a bad/absent token just means "not logged in", must not fail the request
         try {
-            this.applyAuthenticatedCaller(await this.jwtHook.parseJwt(token));
+            this.callerContext.publish(await this.jwtHook.parseJwt(token));
         } catch (err: unknown) {
             const error = toError(err);
             log.debug(
@@ -544,22 +482,6 @@ export class AuthFilter extends Filter<MethodMeta, WpResponse<unknown>> {
                 error,
             );
         }
-    }
-
-    /**
-     * Stamp the authenticated caller's context entries + the caller itself into the RequestContext.
-     * ONE path for all three authenticating hooks — jwt, api-key and webhook — so a vendor hook that
-     * proved which account a payload belongs to seeds context exactly as a JwtHook does.
-     */
-    private applyAuthenticatedCaller(caller: AuthenticatedCaller): void {
-        for (const entry of caller.entries) {
-            // ContextTuple.key is a TRUSTED key by type, so this is the one sanctioned write of a
-            // proven identity: the app's hook derived it from a credential we just verified.
-            RequestContext.putTrusted(entry.key, entry.value);
-        }
-        // A real TRUSTED ContextKey, not a raw string slot: the caller IS the framework's own proof,
-        // so it is written with the same typed verb every other proven value goes through.
-        RequestContext.putTrusted(AUTHENTICATED_CALLER_KEY, caller);
     }
 
     /**

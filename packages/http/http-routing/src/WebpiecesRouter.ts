@@ -1,3 +1,4 @@
+import { InvocationAuthentication } from './InvocationAuthentication';
 import { Container, ContainerModule, inject } from 'inversify';
 import { buildProviderModule } from '@inversifyjs/binding-decorators';
 import { DocumentDesign } from '@webpieces/core-util';
@@ -74,7 +75,10 @@ export class WebpiecesRouter implements ApiFactory {
      * auto-scan + appBindings + appOverrides, and point the RouteBuilder at it. Called once by
      * the factory after this router is resolved from the framework container.
      */
-    async initialize(webpiecesContainer: Container, options: WebpiecesRouterOptions): Promise<void> {
+    async initialize(
+        webpiecesContainer: Container,
+        options: WebpiecesRouterOptions,
+    ): Promise<void> {
         this.webpiecesContainer = webpiecesContainer;
 
         // App container is a child so app bindings see framework bindings while staying separate.
@@ -150,6 +154,15 @@ export class WebpiecesRouter implements ApiFactory {
         return this.apiClientFactory.createApiClient(apiPrototype);
     }
 
+    /** Transport-only credential bridge; ordinary endpoint filters remain mandatory. */
+    // webpieces-disable no-any-unknown -- abstract API constructor signature
+    createInvocationApiClient<T>(
+        apiPrototype: abstract new (...args: any[]) => T,
+        authentication: InvocationAuthentication,
+    ): T {
+        return this.apiClientFactory.createInvocationApiClient(apiPrototype, authentication);
+    }
+
     /**
      * Reify the registered APIs as {@link ApiClient}s (contract + the createApiClient proxy) via
      * the shared {@link ApiClientFactory}. This is the ONLY handoff to the express layer — the
@@ -176,7 +189,9 @@ export class WebpiecesRouterFactory {
         // singletons (WebpiecesRouter, RouteBuilderImpl) come from the webpieces registry,
         // NOT the client's global one.
         const webpiecesContainer = new Container();
-        webpiecesContainer.bind(WEBPIECES_CONFIG_TOKEN).toConstantValue(options.config ?? new WebpiecesConfig());
+        webpiecesContainer
+            .bind(WEBPIECES_CONFIG_TOKEN)
+            .toConstantValue(options.config ?? new WebpiecesConfig());
         await webpiecesContainer.load(buildFrameworkModule());
 
         // Resolve the router from the container (NOT new'd) so @DocumentDesign + DI hold.

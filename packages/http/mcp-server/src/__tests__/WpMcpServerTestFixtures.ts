@@ -299,11 +299,14 @@ export class TestTokenAuthority implements McpAccessTokenAuthority<string> {
             expiresAt,
             scopes,
             validatedAt,
-            this.roles,
-            [new ContextTuple(USER_ID, `${subject}-delegated`)],
+            new AuthenticatedCaller(
+                `${subject}-7`,
+                subject == 'admin' ? ['admin'] : [...this.roles],
+                [new ContextTuple(USER_ID, `${subject}-7`)],
+            ),
         );
         if (token === 'list-bug') {
-            Object.defineProperty(credential, 'listingRoles', {
+            Object.defineProperty(credential.caller, 'roles', {
                 get: (): readonly string[] => {
                     throw new Error('SECRET-internal-detail');
                 },

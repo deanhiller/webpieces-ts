@@ -28,7 +28,7 @@ packages:
 #
 # Bumping the release the repo is built with is therefore a ONE-LINE edit, right here.
 catalog:
-  '@webpieces/nx-webpieces-rules': 0.4.822
+  '@webpieces/nx-webpieces-rules': 0.4.835
   # The OpenAPI 3.1 validator the openapi-generator suite checks every generated document against
   # (#1058). A test-only dependency, pinned exact; it is not a @webpieces release.
   '@seriousme/openapi-schema-validator': 2.11.0

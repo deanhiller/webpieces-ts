@@ -177,8 +177,8 @@ one request and causes the official handler to select request-scoped SSE; closin
 aborts the same signal. The context key has no HTTP header and is never propagated as caller input.
 
 For a local binding the API method must combine `@WpMcpAuthJwt` with `@WpAuthJwt`. Before every tool
-call the bridge asks the application `JwtHook` to mint a distinct short-lived endpoint JWT and invokes
-`ApiFactory.createApiClient`, preserving `JwtHook`, `LogApiFilter`, and `AuthFilter`. Literal MCP-token
+authorized, schema-valid call the bridge asks the application `JwtHook` to mint a distinct short-lived endpoint JWT and invokes
+`ApiFactory.createInvocationApiClient`, preserving `JwtHook`, `LogApiFilter`, and `AuthFilter`. Literal MCP-token
 passthrough is rejected. For a remote binding the endpoint must use `@WpAuthOidc`; the generated Node
 client supplies its service credential and propagates only trusted delegated context established by
 the MCP access-token authority. Neither an external MCP bearer nor a browser session JWT is sent to
@@ -197,24 +197,48 @@ rejected token must be thrown as `ApiUnauthorizedError` (answered 401 + `WWW-Aut
 other throw from the authority is an implementation failure (500). Endpoint JWTs are capped at one
 hour and MCP access tokens at 30 days.
 
+## Principal, policy and request context
+
+`VerifiedMcpCredential.caller` is the application's `AuthenticatedCaller` resolved from current account
+facts. `principalRoles` is derived from that caller, a public hard cut from the old listing-role field.
+Use the same application mapping for this caller and the endpoint JWT mint payload. Security metadata
+(issuer, exact resource, scopes, issuance/expiry and account validation time) remains on the credential.
+
+The framework publishes the caller's trusted entries and `llm` surface immediately after verification,
+then reconciles inbound trusted headers using the same operation as ordinary HTTP. Contradictory or
+unvouched identity/surface headers are rejected. `JwtHook.authorizeJwt` governs the request's authorized
+tool view before SDK processing; only explicit `ApiForbiddenError` denials hide tools. Policy/datastore
+failures propagate to the safe ingress boundary. Documentation, synchronous SDK schema lookup and call
+name resolution all use that view. The dispatcher independently checks the same policy before input
+validation and bridge issuance. A hidden tool is indistinguishable from an unknown name and triggers no
+schema validation, JWT issuance or binding invocation.
+
+Each HTTP POST has one transport-owned `RequestContext.run`, including malformed-body failures. Local
+invocation opens no detached/nested scope and retains the original transport request, request/action IDs,
+custom context and downstream response-header accumulation. Its immutable `InvocationAuthentication`
+is carried on that invocation's proxy/MethodMeta, never on a mutable ambient credential slot. Normal
+endpoint JWT parsing and policy still run, and parsed user/roles/trusted entries must match the ingress
+principal. GUI proxies continue reading the transport bearer. Remote bindings still use explicit OIDC
+clients and propagate the verified principal's trusted entries; another HTTP process has its own scope.
+
 ## Error boundary
 
 `WpMcpErrorTranslator` is the one place a failure becomes an MCP reply, mirroring
 `WebpiecesDefaultErrorTranslator`: an error in, the exact wire shape out. Each entry point has exactly one catch
-that only delegates to it; the dispatcher and the local/remote invokers have none. Classification is
+that delegates to it. HTTP ingress uses one translating wrapper and all SDK callbacks use one shared catch implementation with explicit protocol/tool stage; the dispatcher and invokers have none. Classification is
 the shared `ApiErrorBoundary.encode` rule (a non-`ApiError`, or a caller-local `ApiConnectionError`,
 publishes as kind `implementation`). The boundary never substitutes an object for the thrown error,
 so an app's `McpErrorTranslator` can `instanceof` its own error classes.
 
 There is ONE method per BOUNDARY, named for the boundary it guards. They cannot be one shape — the
-MCP spec fixes each — so the three-ness is made obvious rather than accidental:
+MCP spec fixes each. The shared SDK catch selects protocol versus tool rendering by operation/stage:
 
 | Boundary | Method | Reply |
 |---|---|---|
 | before the SDK: bearer, `Origin`, malformed body | `toBearerBoundaryResponse(error): HttpResponseDto<McpHttpErrorBody>` | HTTP 401 + `WWW-Authenticate` / 403 / 400, anything else 500 |
 | `tools/list` | `toListError(error): never` | throws JSON-RPC `-32602` (bad request) or `-32603` `Internal Error` |
-| `tools/call`, tool found: bad arguments, `@WpMcpAuthJwt` denial, JWT/OIDC mint failure, any local or remote failure, output-schema or serialization failure | `toToolCallResult(error): CallToolResult` (delegates to `McpRegistry.getErrorTranslator().toWire`) | `isError: true` result |
-| `tools/call`, unknown tool name | `unknownTool(name)` | JSON-RPC `-32602` `Unknown tool: <name>` |
+| `tools/call`, tool found: bad arguments, endpoint policy denial, JWT/OIDC mint failure, any local or remote failure, output-schema or serialization failure | `toToolCallResult(error): CallToolResult` (delegates to `McpRegistry.getErrorTranslator().toWire`) | `isError: true` result |
+| `tools/call`, unknown or hidden tool name (including a dispatcher policy recheck denial) | `unknownTool(name)` | JSON-RPC `-32602` `Unknown tool: <name>` |
 
 The pre-SDK boundary produces a VALUE like every other API in the framework and `WpMcpServer` writes
 it through the same `ExpressResponseWriter` the ordinary HTTP path uses — it does not hand-roll

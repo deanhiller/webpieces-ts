@@ -20,6 +20,10 @@ class NoRoutesApiFactory implements ApiFactory {
     }
 
     // webpieces-disable no-any-unknown -- must match the ApiFactory signature verbatim
+    createInvocationApiClient<T>(): T {
+        throw new Error('Invocation authentication is not used by this fixture');
+    }
+
     public createApiClient<T>(apiPrototype: abstract new (...args: any[]) => T): T {
         throw new Error(`No routes registered in this test: ${String(apiPrototype)}`);
     }

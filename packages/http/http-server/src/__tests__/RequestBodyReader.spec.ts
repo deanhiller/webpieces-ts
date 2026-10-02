@@ -70,6 +70,10 @@ class StubApiFactory implements ApiFactory {
         return [new ApiClient(BodyApi, { save: record, hook: record }, routes)];
     }
 
+    createInvocationApiClient<T>(): T {
+        throw new Error('Invocation authentication is not used by this fixture');
+    }
+
     createApiClient<T>(): T {
         throw new Error('not used by these tests');
     }

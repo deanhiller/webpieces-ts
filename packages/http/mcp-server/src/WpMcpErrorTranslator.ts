@@ -23,7 +23,7 @@ const log = LogManager.getLogger('WpMcpErrorTranslator');
 /**
  * The ONE place every MCP failure becomes a reply, mirroring `WebpiecesDefaultErrorTranslator` for HTTP: an error
  * in, the exact wire shape out. There is one method per BOUNDARY, and the MCP spec is what makes
- * them three rather than one:
+ * their renderings distinct at the two interception seams (HTTP ingress and shared SDK callbacks):
  *
  * | Boundary                       | Who writes HTTP | Failure shape                       |
  * |--------------------------------|-----------------|-------------------------------------|
