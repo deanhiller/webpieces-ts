@@ -1,9 +1,10 @@
+import { specTempDirs } from '@webpieces/tooling-testkit';
 import { describe, it, expect } from 'vitest';
 import { spawnSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 
-import { specTempDirs } from '@webpieces/rules-config';
+
 import { AiType } from '@webpieces/hook-runtime';
 import { EffectiveTree } from '@webpieces/hook-runtime';
 import { VersionSyncGuard } from './version-sync';

@@ -1,3 +1,4 @@
+import { specTempDirs } from '@webpieces/tooling-testkit';
 /**
  * Per-API contract files (#949): `architecture/apis/<ApiName>.json`.
  *
@@ -10,7 +11,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
-import { RuleFailError, renderRuleFailForHuman, specTempDirs } from '@webpieces/rules-config';
+import { RuleFailError, renderRuleFailForHuman } from '@webpieces/rules-config';
 import type { EnhancedGraph } from '../graph-sorter';
 import type { ApiContracts } from '../api-usage/api-relations';
 import { saveGraph, loadBlessedGraph, DEFAULT_GRAPH_PATH, AI_INSTRUCTIONS } from '../graph-loader';

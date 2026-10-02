@@ -1,8 +1,9 @@
+import { specTempDirs } from '@webpieces/tooling-testkit';
 import * as fs from 'fs';
 import * as path from 'path';
 
 import type { ExecutorContext } from '@nx/devkit';
-import { specTempDirs } from '@webpieces/rules-config';
+
 import { describe, expect, it } from 'vitest';
 
 import runExecutor from './executor';

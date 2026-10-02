@@ -1,8 +1,9 @@
+import { specTempDirs } from '@webpieces/tooling-testkit';
 import { describe, it, expect } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
 import { CONFLICTS_FILE, MERGED_DIR, MergeMarker, MergeState, STAGED_DIR } from './merge-state';
-import { MERGE_EXPLANATION_FILE, specTempDirs } from '@webpieces/rules-config';
+import { MERGE_EXPLANATION_FILE } from '@webpieces/rules-config';
 
 const ms = new MergeState();
 const scanConflictMarkers = (r: string, f: string[]): ReturnType<MergeState['scanConflictMarkers']> => ms.scanConflictMarkers(r, f);

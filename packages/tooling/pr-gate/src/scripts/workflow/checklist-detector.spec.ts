@@ -1,8 +1,9 @@
+import { specTempDirs } from '@webpieces/tooling-testkit';
 import { describe, it, expect } from 'vitest';
 import { execSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
-import { ChecklistDefinition, DiffScope, ReviewerAgentPolicy, specTempDirs } from '@webpieces/rules-config';
+import { ChecklistDefinition, DiffScope, ReviewerAgentPolicy } from '@webpieces/rules-config';
 import { ChecklistDetector } from './checklist-detector';
 
 const detector = new ChecklistDetector(new DiffScope());

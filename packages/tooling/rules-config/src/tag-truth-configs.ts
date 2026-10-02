@@ -1,5 +1,6 @@
-import { FieldDef, SchemaShape } from './field-def';
-import { BaseRuleConfig, BASE_RULE_SCHEMA, StructuralMode, STRUCTURAL_MODES } from './rule-configs';
+import { FieldDef, SchemaShape, BaseRuleConfig, BASE_RULE_SCHEMA } from '@webpieces/rules-sdk';
+
+import { StructuralMode, STRUCTURAL_MODES } from './rule-configs';
 
 /**
  * The five rules that make an nx `framework:*` / `role:*` tag TRUE (#1064). Before them a tag was a

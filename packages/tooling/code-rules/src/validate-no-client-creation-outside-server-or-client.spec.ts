@@ -1,8 +1,9 @@
+import { specTempDirs } from '@webpieces/tooling-testkit';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { execSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
-import { NoClientCreationOutsideServerOrClientConfig, specTempDirs } from '@webpieces/rules-config';
+import { NoClientCreationOutsideServerOrClientConfig } from '@webpieces/rules-config';
 
 import { NoClientCreationOutsideServerOrClientValidator } from './validate-no-client-creation-outside-server-or-client';
 import { ProjectRoleResolver } from './project-role-resolver';

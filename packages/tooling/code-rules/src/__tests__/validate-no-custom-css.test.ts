@@ -1,7 +1,8 @@
+import { specTempDirs } from '@webpieces/tooling-testkit';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
-import { NoCustomCssConfig, specTempDirs } from '@webpieces/rules-config';
+import { NoCustomCssConfig } from '@webpieces/rules-config';
 import { NoCustomCssValidator } from '../validate-no-custom-css';
 import { GateScanScope } from '../scan-scope';
 

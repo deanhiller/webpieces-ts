@@ -1,3 +1,4 @@
+import { specTempDirs } from '@webpieces/tooling-testkit';
 import { describe, it, expect } from 'vitest';
 import { spawnSync } from 'child_process';
 import * as fs from 'fs';
@@ -8,7 +9,7 @@ import { AiType } from '@webpieces/hook-runtime';
 import { VersionSyncGuard } from './version-sync';
 import { WebpiecesVersions } from './webpieces-versions';
 import { renderBumpSkewReport } from './version-sync-harness.spec';
-import { specTempDirs } from '@webpieces/rules-config';
+
 
 /**
  * L1 row 8 — the guard that replaced CoordinatorWorktreeGuard.

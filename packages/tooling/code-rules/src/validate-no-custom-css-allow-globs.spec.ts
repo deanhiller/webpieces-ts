@@ -1,3 +1,4 @@
+import { specTempDirs } from '@webpieces/tooling-testkit';
 /**
  * The `allowGlobs` repro, both directions.
  *
@@ -14,7 +15,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { execSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
-import { NoCustomCssConfig, NoCustomCssScope, specTempDirs } from '@webpieces/rules-config';
+import { NoCustomCssConfig, NoCustomCssScope } from '@webpieces/rules-config';
 
 import { NoCustomCssValidator } from './validate-no-custom-css';
 import { GateScanScope } from './scan-scope';

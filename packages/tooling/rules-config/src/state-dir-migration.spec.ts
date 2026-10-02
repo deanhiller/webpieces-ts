@@ -1,3 +1,4 @@
+import { specTempDirs } from '@webpieces/tooling-testkit';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { execSync } from 'child_process';
 import * as fs from 'fs';
@@ -6,7 +7,7 @@ import * as path from 'path';
 import { DotWebpieces, WORKTREE_STATE_DIR } from '@webpieces/tooling-common';
 import { StateDirMigrator } from '@webpieces/tooling-common';
 import { MainSyncStatusService, MainSyncLock } from '@webpieces/repo-workflow-core';
-import { specTempDirs } from './spec-temp-dirs';
+
 
 function git(cwd: string, cmd: string): string {
     return execSync(`git -c core.hooksPath=/dev/null ${cmd}`, {

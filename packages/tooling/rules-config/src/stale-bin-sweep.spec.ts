@@ -1,9 +1,10 @@
+import { specTempDirs } from '@webpieces/tooling-testkit';
 import { describe, it, expect } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
 import { StaleBinRemoval, StaleBinSweeper } from './stale-bin-sweep';
 import { TemplateWriter } from './load-template';
-import { specTempDirs } from './spec-temp-dirs';
+
 
 /**
  * The sweep exists because pnpm never removes a `.bin` entry for a bin an EARLIER version of the same

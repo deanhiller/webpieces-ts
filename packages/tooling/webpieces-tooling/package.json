@@ -24,7 +24,8 @@
         "@webpieces/pr-gate": "workspace:*",
         "@webpieces/repo-workflow-core": "workspace:*",
         "@webpieces/rules-config": "workspace:*",
-        "@webpieces/tooling-common": "workspace:*"
+        "@webpieces/tooling-common": "workspace:*",
+        "@webpieces/rules-sdk": "workspace:*"
     },
     "author": "Dean Hiller",
     "license": "Apache-2.0",
@@ -35,5 +36,8 @@
     },
     "publishConfig": {
         "access": "public"
+    },
+    "devDependencies": {
+        "@webpieces/tooling-testkit": "workspace:*"
     }
 }

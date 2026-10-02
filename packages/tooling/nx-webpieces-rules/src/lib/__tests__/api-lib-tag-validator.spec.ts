@@ -1,3 +1,4 @@
+import { specTempDirs } from '@webpieces/tooling-testkit';
 /**
  * Tests the two-way role:api-lib / role:api-client tag ⇔ code validator (#1064, D3): synthetic scan
  * results for the @ApiPath half, real source in a temp workspace for the IPC / in-process / DTO-only
@@ -7,7 +8,7 @@
 import { afterEach, beforeEach, describe, it, expect } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
-import { specTempDirs } from '@webpieces/rules-config';
+
 import { ProjectInfo } from '../project-info';
 import type { ApiScanResult } from '../api-usage/api-scanner';
 import {

@@ -1,3 +1,4 @@
+import { specTempDirs } from '@webpieces/tooling-testkit';
 import { describe, it, expect } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -11,7 +12,7 @@ import {  run  } from './runner';
 import { NormalizedToolInput, NormalizedEdit, BlockedResult } from '@webpieces/hook-runtime';
 import { SHIM_LOG_FAULTS, renderShim } from '../bin/shim';
 import { L2_DECISIONS_STREAM, CALLS_STREAM, REJECTIONS_STREAM } from './log-streams';
-import { specTempDirs } from '@webpieces/rules-config';
+
 
 function tmpRoot(): string {
     return specTempDirs.makeReal('wp-faultstamp-');

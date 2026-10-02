@@ -1,3 +1,4 @@
+import { specTempDirs } from '@webpieces/tooling-testkit';
 /**
  * Tests for findUntaggedProjects — the core of the framework-tag rule: given a
  * set of changed files, every owning project.json must carry a `framework:` tag.
@@ -8,7 +9,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { findUntaggedProjects } from '../validate-framework-tag';
 import { findProjectsWithInvalidTagValues } from '../tag-rule';
-import { specTempDirs } from '@webpieces/rules-config';
+
 
 /** The atomic env values the framework-tag rule allows (mirrors DEFAULT_KNOWN_TYPES). */
 const KNOWN_FRAMEWORKS = ['browser', 'react', 'angular', 'node', 'express', 'react-native'];

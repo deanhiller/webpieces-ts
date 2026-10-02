@@ -1,3 +1,4 @@
+import { specTempDirs } from '@webpieces/tooling-testkit';
 import { execFileSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -5,7 +6,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { BranchArchiver, WorktreeService } from '@webpieces/repo-workflow-core';
 import { InformAiError } from '@webpieces/tooling-common';
 import { toError } from '@webpieces/tooling-common/to-error';
-import { RepoRootFinder, specTempDirs, RepoScratchDirs } from '@webpieces/rules-config';
+import { RepoRootFinder, RepoScratchDirs } from '@webpieces/rules-config';
 
 import { LandPrCommand, LandPrRequest } from './land-pr-command';
 import { RepoConfigFixture } from '../workflow/repo-config-testkit';

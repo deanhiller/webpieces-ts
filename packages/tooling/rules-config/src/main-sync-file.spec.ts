@@ -1,9 +1,10 @@
+import { specTempDirs } from '@webpieces/tooling-testkit';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
 
 import { MAIN_SYNC_STATUS_VERSION, MainSyncFileStore, MainSyncStatus, MainSyncStatusFile } from '@webpieces/repo-workflow-core';
-import { specTempDirs } from './spec-temp-dirs';
+
 
 // The cache used to be ONE status for ONE branch, shared by every worktree of the repo — so at most
 // one worktree's guards were ever armed and the rest logged `stale-cross-branch-cache (fail-open)`.

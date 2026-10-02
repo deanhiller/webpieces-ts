@@ -1,8 +1,9 @@
+import { specTempDirs } from '@webpieces/tooling-testkit';
 import { describe, it, expect, afterAll, afterEach, beforeAll } from 'vitest';
 import { execSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
-import { ReviewJsonService, specTempDirs } from '@webpieces/rules-config';
+import { ReviewJsonService } from '@webpieces/rules-config';
 import { DiffBasis, DiffBasisResolver } from './diff-basis';
 import { DiffManifestEntry, DiffMaterializer, FILE_DIFF_MAX_BYTES } from './diff-materializer';
 import { ForkPoint } from './git-findForkPoint';

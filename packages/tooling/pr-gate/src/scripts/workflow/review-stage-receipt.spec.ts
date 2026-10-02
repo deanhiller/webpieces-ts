@@ -1,7 +1,8 @@
+import { specTempDirs } from '@webpieces/tooling-testkit';
 import { describe, it, expect, afterEach } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
-import { ReviewJsonService, specTempDirs } from '@webpieces/rules-config';
+import { ReviewJsonService } from '@webpieces/rules-config';
 import { ReviewStageReceipt, ReviewStageReceiptService } from './review-stage-receipt';
 
 const dirs: string[] = [];

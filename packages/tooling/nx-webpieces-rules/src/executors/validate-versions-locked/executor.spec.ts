@@ -1,8 +1,9 @@
+import { specTempDirs } from '@webpieces/tooling-testkit';
 import { describe, it, expect } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
 import { findPackageJsonFiles } from './executor';
-import { specTempDirs } from '@webpieces/rules-config';
+
 
 function tmpRoot(): string {
     return specTempDirs.make('wp-verlock-');

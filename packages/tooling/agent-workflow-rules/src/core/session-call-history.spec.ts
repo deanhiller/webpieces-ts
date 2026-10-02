@@ -1,9 +1,10 @@
+import { specTempDirs } from '@webpieces/tooling-testkit';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { describe, it, expect, beforeEach } from 'vitest';
 import { dotWebpieces } from '@webpieces/tooling-common';
-import { specTempDirs } from '@webpieces/rules-config';
+
 
 import { CALLS_STREAM } from './log-streams';
 import { logStream, StreamIdentity } from './log-stream';

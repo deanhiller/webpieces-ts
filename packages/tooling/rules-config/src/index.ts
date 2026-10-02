@@ -199,8 +199,6 @@ export {
     isHookGuard,
     sectionForRule,
 } from './sections';
-export { FieldDef } from './field-def';
-export type { SchemaShape } from './field-def';
 export { shouldSkipRule, HOTFIX_BUILD_COMMAND, HOTFIX_AUDIT_BANNER } from './skip-rule';
 export { SkipRuleResult } from './skip-rule';
 export {
@@ -263,7 +261,6 @@ export {
     ValidatePackageJsonConfig,
     ValidateVersionsLockedConfig,
     ValidateEslintSyncConfig,
-    BaseRuleConfig,
 } from './rule-configs';
 export { NoRootUnionApiTypeConfig } from './no-root-union-config';
 export { NoInlineImportInApiLibConfig, OneEnumSpellingInApiLibConfig } from './api-lib-spelling-configs';
@@ -443,9 +440,10 @@ export {
     DEFAULT_MERGE_COMPLETE_COMMAND,
 } from './commands-config';
 export { StaleBinRemoval, StaleBinSweeper, staleBinSweeper } from './stale-bin-sweep';
-export { SpecTempDirs, specTempDirs } from './spec-temp-dirs';
 export { RepoScratchDirs, SCRATCH_DIR_NAME } from './repo-scratch-dirs';
 export { TmpScratchSweeper, TMP_SCRATCH_RETENTION_DAYS, TMP_SCRATCH_PREFIX } from './tmp-scratch-sweep';
 
 export * from './hook-fault-codes';
 export * from './hook-config-diagnostics';
+export { RulePackRegistry, NodeRulePackModuleLoader } from './rule-pack-registry';
+export type { RulePackModuleLoader } from './rule-pack-registry';

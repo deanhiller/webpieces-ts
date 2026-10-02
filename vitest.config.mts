@@ -67,6 +67,8 @@ export default defineConfig({
             '@webpieces/ai-hook-rules': path.resolve(__dirname, 'packages/tooling/ai-hook-rules/src/index.ts'),
             '@webpieces/agent-workflow-rules': path.resolve(__dirname, 'packages/tooling/agent-workflow-rules/src/index.ts'),
             '@webpieces/tooling-common/to-error': path.resolve(__dirname, 'packages/tooling/tooling-common/src/to-error.ts'),
+            '@webpieces/rules-sdk': path.resolve(__dirname, 'packages/tooling/rules-sdk/src/index.ts'),
+            '@webpieces/tooling-testkit': path.resolve(__dirname, 'packages/tooling/tooling-testkit/src/index.ts'),
             '@webpieces/tooling-common': path.resolve(__dirname, 'packages/tooling/tooling-common/src/index.ts'),
             '@webpieces/repo-workflow-core': path.resolve(__dirname, 'packages/tooling/repo-workflow-core/src/index.ts'),
             '@webpieces/hook-runtime/harness-vocabulary': path.resolve(__dirname, 'packages/tooling/hook-runtime/src/harness-vocabulary.ts'),

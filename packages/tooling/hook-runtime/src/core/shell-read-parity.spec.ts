@@ -1,9 +1,10 @@
+import { specTempDirs } from '@webpieces/tooling-testkit';
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
 
 import { ShellReadParity } from './shell-read-parity';
-import { specTempDirs } from '@webpieces/rules-config';
+
 
 const parity = new ShellReadParity();
 let root = '';

@@ -1,10 +1,11 @@
+import { specTempDirs } from '@webpieces/tooling-testkit';
 import { describe, it, expect, vi } from 'vitest';
 import { execSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 import { AtomicFile } from '@webpieces/tooling-common';
 import { toError } from '@webpieces/tooling-common/to-error';
-import { CK_ORANGE_FIXED, CK_OVERRIDDEN, ChecklistDefinition, ChecklistInstructionsService, DEFAULT_MAX_CONCURRENT_BUILDS, DiffScope, HomeConfig, HomeConfigService, REVIEWER_AGENTS_PLACEHOLDER, RepoRootFinder, RequiredChecklist, ReviewJsonService, ReviewerAgentPolicy, specTempDirs, toChecklist } from '@webpieces/rules-config';
+import { CK_ORANGE_FIXED, CK_OVERRIDDEN, ChecklistDefinition, ChecklistInstructionsService, DEFAULT_MAX_CONCURRENT_BUILDS, DiffScope, HomeConfig, HomeConfigService, REVIEWER_AGENTS_PLACEHOLDER, RepoRootFinder, RequiredChecklist, ReviewJsonService, ReviewerAgentPolicy, toChecklist } from '@webpieces/rules-config';
 import { AiBranchName } from './git-readAiBranchName';
 import { BranchNaming } from './branch-naming';
 import { ChecklistDetector } from './checklist-detector';

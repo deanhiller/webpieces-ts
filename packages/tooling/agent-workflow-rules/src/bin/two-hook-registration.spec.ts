@@ -1,3 +1,4 @@
+import { specTempDirs } from '@webpieces/tooling-testkit';
 import { describe, it, expect } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -8,7 +9,7 @@ import type { ClaudeSettings, HookEntry } from './settings-shape';
 import { BASH_CWD_ENV_KEY, BASH_CWD_ENV_VALUE } from './managed-env';
 import { SHIM_MARKER, renderShim, shimPath } from './shim';
 import { runUpgradeShim } from './upgrade-shim';
-import { specTempDirs } from '@webpieces/rules-config';
+
 
 /**
  * THE TWO-HOOK ABSOLUTE REGISTRATION, end to end.

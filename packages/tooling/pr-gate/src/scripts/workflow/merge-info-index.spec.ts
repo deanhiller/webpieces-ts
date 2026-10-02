@@ -1,10 +1,11 @@
+import { specTempDirs } from '@webpieces/tooling-testkit';
 import { describe, it, expect, beforeEach } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
 
 import { ArchiveRecord, MergeInfoIndex, MergeInfoIndexFile } from './merge-info-index';
 import { MergeState } from './merge-state';
-import { specTempDirs } from '@webpieces/rules-config';
+
 
 const mergeState = new MergeState();
 const index = new MergeInfoIndex(mergeState);

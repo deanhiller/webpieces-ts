@@ -1,8 +1,9 @@
+import { specTempDirs } from '@webpieces/tooling-testkit';
 import * as fs from 'fs';
 import * as path from 'path';
 
 import { describe, it, expect, beforeEach } from 'vitest';
-import { CliExitError, DevDeployConfig, RepoRootFinder, specTempDirs } from '@webpieces/rules-config';
+import { CliExitError, DevDeployConfig, RepoRootFinder } from '@webpieces/rules-config';
 import { DotWebpieces } from '@webpieces/tooling-common';
 import { toError } from '@webpieces/tooling-common/to-error';
 

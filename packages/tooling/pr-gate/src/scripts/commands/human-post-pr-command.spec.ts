@@ -1,8 +1,9 @@
+import { specTempDirs } from '@webpieces/tooling-testkit';
 import * as fs from 'fs';
 import * as path from 'path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { BranchIdentity, MainSyncStatus, MainSyncStatusService } from '@webpieces/repo-workflow-core';
-import { CliExitError, GateTokenService, RepoRootFinder, ReviewJsonService, specTempDirs } from '@webpieces/rules-config';
+import { CliExitError, GateTokenService, RepoRootFinder, ReviewJsonService } from '@webpieces/rules-config';
 import { AiBranchName } from '../workflow/git-readAiBranchName';
 import { BranchNaming } from '../workflow/branch-naming';
 import { GatedPrPublisher, PublishedPr } from '../workflow/gated-pr-publisher';

@@ -1,8 +1,9 @@
+import { specTempDirs } from '@webpieces/tooling-testkit';
 import { execSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 import { describe, it, expect } from 'vitest';
-import { RepoRootFinder, specTempDirs } from '@webpieces/rules-config';
+import { RepoRootFinder } from '@webpieces/rules-config';
 import { GitExec } from './git-exec';
 import { GitStatusEntry, GitStatusParser } from './git-status';
 

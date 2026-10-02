@@ -1,3 +1,4 @@
+import { specTempDirs } from '@webpieces/tooling-testkit';
 /**
  * Tests for the service-name resolver: the runtime name clients address a service by is DECLARED
  * in project.json (metadata.webpieces.serviceName), never derived from the nx project name — the
@@ -9,7 +10,7 @@ import * as path from 'path';
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { ProjectInfo } from '../project-info';
 import { resolveCallsService, resolveServiceName, validateUniqueServiceNames } from '../service-name-resolver';
-import { specTempDirs } from '@webpieces/rules-config';
+
 
 let workspaceRoot = '';
 

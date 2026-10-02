@@ -1,10 +1,11 @@
+import { specTempDirs } from '@webpieces/tooling-testkit';
 import { describe, it, expect, beforeEach, afterEach, beforeAll, afterAll } from 'vitest';
 import { execSync, spawnSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 
 import { MainSyncStatus, MainSyncLock, readMainSyncStatus, writeMainSyncStatus, writeMainSyncLock, readMainSyncLock, tryAcquireMainSyncLock, isLockStale, isRefreshInProgress, inProcessLock, finishedLock, computeMainSyncStatus, squashRecoverySteps } from '@webpieces/repo-workflow-core';
-import { specTempDirs } from './spec-temp-dirs';
+
 
 function tmpRepoRoot(): string {
     return specTempDirs.make('mss-');

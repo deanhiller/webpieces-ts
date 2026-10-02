@@ -1,9 +1,10 @@
+import { specTempDirs } from '@webpieces/tooling-testkit';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
 
 import { MainSyncFileStore, MainSyncStatus, MainSyncStatusFile } from '@webpieces/repo-workflow-core';
-import { BranchStateGuardConfig, specTempDirs } from '@webpieces/rules-config';
+import { BranchStateGuardConfig } from '@webpieces/rules-config';
 
 import { BashContext, FileContext } from '@webpieces/hook-runtime';
 

@@ -9,7 +9,8 @@
         ".": "./src/index.js",
         "./package.json": "./package.json",
         "./plugin": "./src/plugin.js",
-        "./executors.json": "./executors.json"
+        "./executors.json": "./executors.json",
+        "./rule-pack": "./src/rule-pack.js"
     },
     "files": [
         "src/**/*",
@@ -23,7 +24,8 @@
         "@webpieces/core-util": "workspace:*",
         "@webpieces/eslint-rules": "workspace:*",
         "@webpieces/rules-config": "workspace:*",
-        "madge": "8.0.0"
+        "madge": "8.0.0",
+        "@webpieces/rules-sdk": "workspace:*"
     },
     "peerDependencies": {
         "@nx/devkit": ">=18.0.0"
@@ -40,5 +42,8 @@
             "wp-design-visualize": "./src/scripts/wp-design-visualize.js"
         },
         "access": "public"
+    },
+    "devDependencies": {
+        "@webpieces/tooling-testkit": "workspace:*"
     }
 }

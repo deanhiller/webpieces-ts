@@ -1,5 +1,6 @@
-import { FieldDef, SchemaShape } from './field-def';
-import { BaseRuleConfig, BASE_RULE_SCHEMA, OnOffMode, ON_OFF_MODES } from './rule-configs';
+import { FieldDef, SchemaShape, BaseRuleConfig, BASE_RULE_SCHEMA } from '@webpieces/rules-sdk';
+
+import { OnOffMode, ON_OFF_MODES } from './rule-configs';
 
 export const DEFAULT_MAX_COMMITS_BEHIND = 5;
 

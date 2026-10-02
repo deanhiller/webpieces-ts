@@ -1,9 +1,10 @@
+import { specTempDirs } from '@webpieces/tooling-testkit';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { execSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as ts from 'typescript';
-import { DiffScope, RequiredTypeSuffixConfig, RequiredTypeSuffixEntry, RuleFailError, specTempDirs } from '@webpieces/rules-config';
+import { DiffScope, RequiredTypeSuffixConfig, RequiredTypeSuffixEntry, RuleFailError } from '@webpieces/rules-config';
 import { toError } from '@webpieces/tooling-common/to-error';
 
 import { ApiLibFile, ApiLibSite } from './api-lib-source-rule';

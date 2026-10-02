@@ -1,7 +1,8 @@
+import { specTempDirs } from '@webpieces/tooling-testkit';
 import { describe, it, expect } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
-import { allRuleNames, sectionForRule, seedEntryForRule, CONFIG_FILENAME, specTempDirs } from '@webpieces/rules-config';
+import { allRuleNames, sectionForRule, seedEntryForRule, CONFIG_FILENAME } from '@webpieces/rules-config';
 import { RuleGate } from './rule-gate';
 
 // A webpieces.config.json that VALIDATES: every built-in present in its correct section (all OFF),

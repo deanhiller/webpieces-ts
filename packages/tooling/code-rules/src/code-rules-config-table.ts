@@ -1,35 +1,5 @@
-import {
-    BaseRuleConfig,
-    WebpiecesRulesConfig,
-    MaxMethodLinesConfig,
-    MaxFileLinesConfig,
-    RequireReturnTypeConfig,
-    NoInlineTypeLiteralsConfig,
-    NoAnyUnknownConfig,
-    NoImplicitAnyConfig,
-    PrismaValidateDtosConfig,
-    PrismaConverterConfig,
-    NoDestructureConfig,
-    CatchErrorPatternConfig,
-    NoUnmanagedExceptionsConfig,
-    AngularNoDirectApiInResolverConfig,
-    NoSymbolDiTokensConfig,
-    NoClientCreationOutsideServerOrClientConfig,
-    NoCustomCssConfig,
-    NoStatePathsInTemplatesConfig,
-    NoProcessExitOutsideMainConfig,
-    NoFunctionOutsideClassConfig,
-    InjectAnnotationNotNeededForConcreteClassConfig,
-    FrameworkTagConfig,
-    RoleTagConfig,
-    EnsureWeAreSecureConfig,
-    NoInlineImportInApiLibConfig,
-    OneEnumSpellingInApiLibConfig,
-    NoUtilityTypesInApiLibConfig,
-    RequiredTypeSuffixConfig,
-    FrameworkTsconfigConfig,
-    FrameworkPackagesConfig,
-} from '@webpieces/rules-config';
+import { BaseRuleConfig } from '@webpieces/rules-sdk';
+import { WebpiecesRulesConfig, MaxMethodLinesConfig, MaxFileLinesConfig, RequireReturnTypeConfig, NoInlineTypeLiteralsConfig, NoAnyUnknownConfig, NoImplicitAnyConfig, PrismaValidateDtosConfig, PrismaConverterConfig, NoDestructureConfig, CatchErrorPatternConfig, NoUnmanagedExceptionsConfig, AngularNoDirectApiInResolverConfig, NoSymbolDiTokensConfig, NoClientCreationOutsideServerOrClientConfig, NoCustomCssConfig, NoStatePathsInTemplatesConfig, NoProcessExitOutsideMainConfig, NoFunctionOutsideClassConfig, InjectAnnotationNotNeededForConcreteClassConfig, FrameworkTagConfig, RoleTagConfig, EnsureWeAreSecureConfig, NoInlineImportInApiLibConfig, OneEnumSpellingInApiLibConfig, NoUtilityTypesInApiLibConfig, RequiredTypeSuffixConfig, FrameworkTsconfigConfig, FrameworkPackagesConfig } from '@webpieces/rules-config';
 
 /** A rule config class usable as an inversify inject-by-type token. */
 export type ConfigCtor = new () => BaseRuleConfig;

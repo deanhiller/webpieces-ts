@@ -1,3 +1,4 @@
+import { specTempDirs } from '@webpieces/tooling-testkit';
 /**
  * `no-root-union-api-type` (#1009): a request or response type that IS a union must FAIL THE BUILD.
  *
@@ -19,13 +20,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import {
-    allRuleNames,
-    sectionForRule,
-    seedEntryForRule,
-    CONFIG_FILENAME,
-    specTempDirs,
-} from '@webpieces/rules-config';
+import { allRuleNames, sectionForRule, seedEntryForRule, CONFIG_FILENAME } from '@webpieces/rules-config';
 import { ProjectInfo } from '../project-info';
 import { ApiUsageScanner, buildApiContracts } from '../api-usage/api-scanner';
 import { RootUnionApiTypeError } from '../api-usage/api-contract-errors';

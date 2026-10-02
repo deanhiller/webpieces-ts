@@ -1,4 +1,5 @@
-import { BaseRuleConfig, WebpiecesRulesConfig, BranchCreationGuardConfig, PrLifecycleGuardConfig, BranchStateGuardConfig } from '@webpieces/rules-config';
+import { BaseRuleConfig } from '@webpieces/rules-sdk';
+import { WebpiecesRulesConfig, BranchCreationGuardConfig, PrLifecycleGuardConfig, BranchStateGuardConfig } from '@webpieces/rules-config';
 import { Rule, EmptyRuleConfig } from '@webpieces/hook-runtime';
 import { BranchCreationGuardRule } from './rules/branch-creation-guard';
 import { PrCreationOrPushGuardRule } from './rules/pr-creation-or-push-guard';

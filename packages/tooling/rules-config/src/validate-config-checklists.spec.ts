@@ -1,8 +1,9 @@
+import { specTempDirs } from '@webpieces/tooling-testkit';
 import { describe, it, expect } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
 import { validatePrGateSection } from './validate-config';
-import { specTempDirs } from './spec-temp-dirs';
+
 
 /**
  * `pr-gate.checklists` validation, split out of validate-config.spec.ts when that file hit the

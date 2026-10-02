@@ -1,10 +1,11 @@
+import { specTempDirs } from '@webpieces/tooling-testkit';
 import { execFileSync } from 'child_process';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as nodePath from 'path';
 import { vi, afterEach } from 'vitest';
 
-import { DEFAULT_MAX_CONCURRENT_BUILDS, HomeConfig, HomeConfigService, specTempDirs, atRoot } from '@webpieces/rules-config';
+import { DEFAULT_MAX_CONCURRENT_BUILDS, HomeConfig, HomeConfigService, atRoot } from '@webpieces/rules-config';
 import { migrate } from '../bin/setup-config';
 import { buildBashContext } from '@webpieces/hook-runtime';
 import { isAllowed } from '../bin/shim';

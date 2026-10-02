@@ -1,7 +1,8 @@
+import { FieldDef } from '@webpieces/rules-sdk';
 // The rule-name -> schema lookup table, split out of validate-config.ts (which hit the 700-line cap).
 // Every consumer of "what fields does rule X have" reads it from here: the validator, the missing-rule
 // snippet, and the installer's seeding (seed-entry.ts) — one table, so they cannot disagree.
-import { FieldDef } from './field-def';
+
 import { BranchStateGuardConfig } from './main-sync-guard-configs';
 import {
     MaxMethodLinesConfig,

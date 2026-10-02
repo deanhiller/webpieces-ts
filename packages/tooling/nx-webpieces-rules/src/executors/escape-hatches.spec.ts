@@ -1,3 +1,4 @@
+import { specTempDirs } from '@webpieces/tooling-testkit';
 /**
  * THE TWO UNIVERSAL ESCAPE HATCHES ACTUALLY REACH THE SKIP DECISION.
  *
@@ -54,7 +55,7 @@ vi.mock('@nx/devkit', () => ({
 import { loadRuntimeConfig, runtimeReportOnly, RUNTIME_RULE_NAME } from '../lib/runtime-config';
 import runTsInSrcExecutor from './validate-ts-in-src/executor';
 import runCyclesExecutor from './validate-no-file-import-cycles/executor';
-import { specTempDirs } from '@webpieces/rules-config';
+
 
 const HATCH_BRANCH = 'dean/some-huge-refactor';
 // 3 days out: a FUTURE epoch that is also comfortably inside the one-week cap the config validator

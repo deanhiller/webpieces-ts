@@ -1,3 +1,4 @@
+import { specTempDirs } from '@webpieces/tooling-testkit';
 /**
  * Regression: an api-lib with NO tsconfig.base `paths` entry.
  *
@@ -19,7 +20,7 @@ import { ProjectInfo } from '../project-info';
 import { ApiUsageScanner } from '../api-usage/api-scanner';
 import { describeUnresolvedApiCalls } from '../api-usage/api-contract-errors';
 import { ApiRelation } from '../api-usage/api-relations';
-import { specTempDirs } from '@webpieces/rules-config';
+
 
 let root = '';
 

@@ -486,6 +486,9 @@ importers:
       '@webpieces/rules-config':
         specifier: workspace:*
         version: link:../rules-config
+      '@webpieces/rules-sdk':
+        specifier: workspace:*
+        version: link:../rules-sdk
       '@webpieces/tooling-common':
         specifier: workspace:*
         version: link:../tooling-common
@@ -498,6 +501,10 @@ importers:
       tslib:
         specifier: 2.8.1
         version: 2.8.1
+    devDependencies:
+      '@webpieces/tooling-testkit':
+        specifier: workspace:*
+        version: link:../tooling-testkit
 
   packages/tooling/ai-hook-rules:
     dependencies:
@@ -507,6 +514,9 @@ importers:
       '@webpieces/rules-config':
         specifier: workspace:*
         version: link:../rules-config
+      '@webpieces/rules-sdk':
+        specifier: workspace:*
+        version: link:../rules-sdk
       '@webpieces/tooling-common':
         specifier: workspace:*
         version: link:../tooling-common
@@ -516,6 +526,10 @@ importers:
       reflect-metadata:
         specifier: 0.2.2
         version: 0.2.2
+    devDependencies:
+      '@webpieces/tooling-testkit':
+        specifier: workspace:*
+        version: link:../tooling-testkit
 
   packages/tooling/code-rules:
     dependencies:
@@ -528,6 +542,9 @@ importers:
       '@webpieces/rules-config':
         specifier: workspace:*
         version: link:../rules-config
+      '@webpieces/rules-sdk':
+        specifier: workspace:*
+        version: link:../rules-sdk
       '@webpieces/tooling-common':
         specifier: workspace:*
         version: link:../tooling-common
@@ -537,12 +554,19 @@ importers:
       reflect-metadata:
         specifier: 0.2.2
         version: 0.2.2
+    devDependencies:
+      '@webpieces/tooling-testkit':
+        specifier: workspace:*
+        version: link:../tooling-testkit
 
   packages/tooling/eslint-rules:
     dependencies:
       '@webpieces/rules-config':
         specifier: workspace:*
         version: link:../rules-config
+      '@webpieces/rules-sdk':
+        specifier: workspace:*
+        version: link:../rules-sdk
       eslint:
         specifier: '>=8.0.0'
         version: 9.39.1(jiti@1.21.7)
@@ -552,6 +576,9 @@ importers:
       '@webpieces/rules-config':
         specifier: workspace:*
         version: link:../rules-config
+      '@webpieces/rules-sdk':
+        specifier: workspace:*
+        version: link:../rules-sdk
       '@webpieces/tooling-common':
         specifier: workspace:*
         version: link:../tooling-common
@@ -564,6 +591,10 @@ importers:
       tslib:
         specifier: 2.8.1
         version: 2.8.1
+    devDependencies:
+      '@webpieces/tooling-testkit':
+        specifier: workspace:*
+        version: link:../tooling-testkit
 
   packages/tooling/nx-webpieces-rules:
     dependencies:
@@ -585,9 +616,16 @@ importers:
       '@webpieces/rules-config':
         specifier: workspace:*
         version: link:../rules-config
+      '@webpieces/rules-sdk':
+        specifier: workspace:*
+        version: link:../rules-sdk
       madge:
         specifier: 8.0.0
         version: 8.0.0(typescript@5.9.3)
+    devDependencies:
+      '@webpieces/tooling-testkit':
+        specifier: workspace:*
+        version: link:../tooling-testkit
 
   packages/tooling/pr-gate:
     dependencies:
@@ -612,6 +650,10 @@ importers:
       reflect-metadata:
         specifier: 0.2.2
         version: 0.2.2
+    devDependencies:
+      '@webpieces/tooling-testkit':
+        specifier: workspace:*
+        version: link:../tooling-testkit
 
   packages/tooling/repo-workflow-core:
     dependencies:
@@ -636,6 +678,9 @@ importers:
       '@webpieces/repo-workflow-core':
         specifier: workspace:*
         version: link:../repo-workflow-core
+      '@webpieces/rules-sdk':
+        specifier: workspace:*
+        version: link:../rules-sdk
       '@webpieces/tooling-common':
         specifier: workspace:*
         version: link:../tooling-common
@@ -648,6 +693,16 @@ importers:
       reflect-metadata:
         specifier: 0.2.2
         version: 0.2.2
+    devDependencies:
+      '@webpieces/tooling-testkit':
+        specifier: workspace:*
+        version: link:../tooling-testkit
+
+  packages/tooling/rules-sdk:
+    dependencies:
+      tslib:
+        specifier: 2.8.1
+        version: 2.8.1
 
   packages/tooling/tooling-common:
     dependencies:
@@ -657,6 +712,15 @@ importers:
       reflect-metadata:
         specifier: 0.2.2
         version: 0.2.2
+      tslib:
+        specifier: 2.8.1
+        version: 2.8.1
+
+  packages/tooling/tooling-testkit:
+    dependencies:
+      '@webpieces/tooling-common':
+        specifier: workspace:*
+        version: link:../tooling-common
       tslib:
         specifier: 2.8.1
         version: 2.8.1
@@ -690,9 +754,16 @@ importers:
       '@webpieces/rules-config':
         specifier: workspace:*
         version: link:../rules-config
+      '@webpieces/rules-sdk':
+        specifier: workspace:*
+        version: link:../rules-sdk
       '@webpieces/tooling-common':
         specifier: workspace:*
         version: link:../tooling-common
+    devDependencies:
+      '@webpieces/tooling-testkit':
+        specifier: workspace:*
+        version: link:../tooling-testkit
 
 packages:
 

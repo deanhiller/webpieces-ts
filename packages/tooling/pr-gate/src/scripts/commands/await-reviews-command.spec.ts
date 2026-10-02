@@ -1,8 +1,9 @@
+import { specTempDirs } from '@webpieces/tooling-testkit';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { describe, it, expect, beforeEach } from 'vitest';
-import { RequiredChecklist, REVIEWER_AGENTS_PLACEHOLDER, ReviewerAgentPolicy, ReviewJsonService, specTempDirs } from '@webpieces/rules-config';
+import { RequiredChecklist, REVIEWER_AGENTS_PLACEHOLDER, ReviewerAgentPolicy, ReviewJsonService } from '@webpieces/rules-config';
 
 import { ReviewerWaitProbe } from './await-reviews-command';
 import { WaitOutcome } from '../workflow/await-loop';

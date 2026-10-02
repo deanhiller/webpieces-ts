@@ -1,3 +1,4 @@
+import { specTempDirs } from '@webpieces/tooling-testkit';
 import { describe, it, expect, afterEach } from 'vitest';
 import { spawnSync } from 'child_process';
 import * as fs from 'fs';
@@ -7,7 +8,7 @@ import {
     MAX_BUILDS_LOG_BYTES, MAX_ROW_BYTES,
 } from './builds-log';
 import { DotWebpieces } from '@webpieces/tooling-common';
-import { specTempDirs } from './spec-temp-dirs';
+
 
 const dirs: string[] = [];
 

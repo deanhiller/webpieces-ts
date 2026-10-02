@@ -1,3 +1,4 @@
+import { specTempDirs } from '@webpieces/tooling-testkit';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -8,7 +9,7 @@ import { toError } from '@webpieces/tooling-common/to-error';
 import { defaultRules } from './default-rules';
 import { RULE_SCHEMAS } from './rule-schemas';
 import { HOOK_GUARD_NAMES as SHIPPED_HOOK_GUARD_NAMES } from './sections';
-import { specTempDirs } from './spec-temp-dirs';
+
 
 function mktmp(contents: Record<string, string>): string {
     const dir = specTempDirs.make('wp-config-');

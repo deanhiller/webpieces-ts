@@ -1,9 +1,10 @@
+import { specTempDirs } from '@webpieces/tooling-testkit';
 import { describe, it, expect } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
 import { ChecklistOverride, ChecklistResult, RequiredChecklist, ReviewJsonService } from './review-json';
 import { REVIEWER_AGENTS_PLACEHOLDER, ReviewerAgentPolicy } from './checklist-config';
-import { specTempDirs } from './spec-temp-dirs';
+
 
 const agentPolicy = (name: string): ReviewerAgentPolicy => new ReviewerAgentPolicy(name, REVIEWER_AGENTS_PLACEHOLDER);
 

@@ -1,3 +1,4 @@
+import { specTempDirs } from '@webpieces/tooling-testkit';
 import { describe, it, expect } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -8,7 +9,7 @@ import { NeighbourHookAnchor, anchorNeighbourHooks, neighbourHooksStale } from '
 import { BASH_CWD_ENV_KEY, BASH_CWD_ENV_VALUE } from './managed-env';
 import { renderShim, shimPath } from './shim';
 import { writeReviewerAgent } from './reviewer-agent';
-import { specTempDirs } from '@webpieces/rules-config';
+
 
 /**
  * NEIGHBOUR HOOKS — the consumer's own hook entries in the settings file webpieces manages.

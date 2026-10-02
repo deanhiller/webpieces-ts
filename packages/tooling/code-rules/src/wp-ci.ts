@@ -1,3 +1,4 @@
+import { BaseRuleConfig } from '@webpieces/rules-sdk';
 #!/usr/bin/env node
 /**
  * wp-ci — the universal webpieces CI entrypoint.
@@ -24,7 +25,7 @@ import * as path from 'path';
 
 import 'reflect-metadata';
 import { Container } from 'inversify';
-import { loadAndValidate, RuleFailError, renderRuleFailForHuman, RepoRootFinder, BaseRuleConfig } from '@webpieces/rules-config';
+import { loadAndValidate, RuleFailError, renderRuleFailForHuman, RepoRootFinder } from '@webpieces/rules-config';
 import { InformAiError } from '@webpieces/tooling-common';
 import { toError } from '@webpieces/tooling-common/to-error';
 import { BranchIdentity } from '@webpieces/repo-workflow-core';

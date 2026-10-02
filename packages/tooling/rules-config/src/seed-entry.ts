@@ -1,8 +1,9 @@
+import { FieldDef } from '@webpieces/rules-sdk';
 // Seeding: what a rule's webpieces.config.json entry should look like when nothing has configured it
 // yet. Split out of validate-config.ts (700-line cap). This is the SINGLE source of truth shared by the
 // validator's copy-paste snippet (rolloutTip), the installer (ai-hook-rules setup.seedRule) and fault Y's
 // deny — so a seeded config can never contradict the advice printed beside it.
-import { FieldDef } from './field-def';
+
 import { RULE_SCHEMAS } from './rule-schemas';
 import { defaultRules } from './default-rules';
 

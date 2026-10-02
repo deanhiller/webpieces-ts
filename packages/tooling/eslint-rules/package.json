@@ -7,7 +7,8 @@
     "exports": {
         ".": "./src/index.js",
         "./recommended": "./recommended.mjs",
-        "./package.json": "./package.json"
+        "./package.json": "./package.json",
+        "./rule-pack": "./src/rule-pack.js"
     },
     "files": [
         "src/**/*",
@@ -22,7 +23,8 @@
         "directory": "packages/tooling/eslint-rules"
     },
     "dependencies": {
-        "@webpieces/rules-config": "workspace:*"
+        "@webpieces/rules-config": "workspace:*",
+        "@webpieces/rules-sdk": "workspace:*"
     },
     "peerDependencies": {
         "eslint": ">=8.0.0"

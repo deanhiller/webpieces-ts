@@ -1,8 +1,9 @@
+import { specTempDirs } from '@webpieces/tooling-testkit';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
 import { findExitViolationsInFile } from '../validate-no-process-exit-outside-main';
-import { specTempDirs } from '@webpieces/rules-config';
+
 
 let tmpDir: string;
 

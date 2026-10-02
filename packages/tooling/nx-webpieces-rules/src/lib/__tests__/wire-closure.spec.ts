@@ -1,3 +1,4 @@
+import { specTempDirs } from '@webpieces/tooling-testkit';
 /**
  * The wire closure (#1064, D4): every type an `@ApiPath` contract reaches must be declared in a
  * `role:api-lib` project and carry the suffix its `required-type-suffix` entry demands — checked inside
@@ -8,7 +9,7 @@
  */
 import * as fs from 'fs';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { RequiredTypeSuffixEntry, specTempDirs } from '@webpieces/rules-config';
+import { RequiredTypeSuffixEntry } from '@webpieces/rules-config';
 import { ProjectInfo } from '../project-info';
 import { ApiContractDefect, ApiDocRule, MCP_RULE, OPENAPI_RULE } from '../api-usage/api-doc-rules';
 import { ApiDocRulesScan } from '../api-usage/api-doc-rules-scan';

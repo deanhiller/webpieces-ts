@@ -1,3 +1,4 @@
+import { specTempDirs } from '@webpieces/tooling-testkit';
 /**
  * Which design artifacts reach disk — the half of di-graph-generate that decides whether a project
  * gets committed files at all.
@@ -17,7 +18,7 @@ import * as path from 'path';
 
 import { removeDesignFiles, writeDesignFiles } from '../../executors/di-graph-generate/executor';
 import { DiDesign, DiGraph } from '../di-graph/model';
-import { specTempDirs } from '@webpieces/rules-config';
+
 
 const DESIGN_FILES = ['design.json', 'design.md', 'design.html'];
 const PROJECT_ROOT = 'services/legacy-thing';

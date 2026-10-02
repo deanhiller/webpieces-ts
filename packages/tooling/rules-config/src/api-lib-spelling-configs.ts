@@ -1,5 +1,6 @@
-import { FieldDef, SchemaShape } from './field-def';
-import { BaseRuleConfig, BASE_RULE_SCHEMA, ModifiedCodeMode, MODIFIED_CODE_MODES } from './rule-configs';
+import { FieldDef, SchemaShape, BaseRuleConfig, BASE_RULE_SCHEMA } from '@webpieces/rules-sdk';
+
+import { ModifiedCodeMode, MODIFIED_CODE_MODES } from './rule-configs';
 
 /**
  * `no-inline-import-in-api-lib` (#1023) — in every `role:api-lib` project, refuse an `import('…')`

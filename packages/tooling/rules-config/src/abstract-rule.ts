@@ -1,4 +1,5 @@
-import { BaseRuleConfig } from './rule-configs';
+import { BaseRuleConfig } from '@webpieces/rules-sdk';
+
 import { shouldSkipRule } from './skip-rule';
 
 /**

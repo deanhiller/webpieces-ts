@@ -1,3 +1,4 @@
+import { specTempDirs } from '@webpieces/tooling-testkit';
 /**
  * Tests for saving/loading architecture/dependencies.json in the wrapper
  * format ({ aiInstructions, projects }) plus legacy flat-map reading.
@@ -14,7 +15,7 @@ import {
     GRAPH_COMMANDS,
     DEFAULT_GRAPH_PATH,
 } from '../graph-loader';
-import { specTempDirs } from '@webpieces/rules-config';
+
 
 let tmpRoot: string;
 

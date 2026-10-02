@@ -1,7 +1,8 @@
+import { specTempDirs } from '@webpieces/tooling-testkit';
 import { describe, it, expect, afterEach, beforeEach } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
-import { PrGateConfig, RequiredChecklist, REVIEWER_AGENTS_PLACEHOLDER, ReviewerAgentPolicy, ReviewJsonService, ReviewProvenanceService, ReviewerInstructionsService, SubagentProvenanceService, ProvenanceResult, PROVENANCE_MISSING, specTempDirs } from '@webpieces/rules-config';
+import { PrGateConfig, RequiredChecklist, REVIEWER_AGENTS_PLACEHOLDER, ReviewerAgentPolicy, ReviewJsonService, ReviewProvenanceService, ReviewerInstructionsService, SubagentProvenanceService, ProvenanceResult, PROVENANCE_MISSING } from '@webpieces/rules-config';
 import { AtomicFile } from '@webpieces/tooling-common';
 import { toError } from '@webpieces/tooling-common/to-error';
 import { VerdictProvenanceService } from '../workflow/verdict-provenance';

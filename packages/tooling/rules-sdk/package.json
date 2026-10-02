@@ -1,0 +1,28 @@
+{
+    "name": "@webpieces/rules-sdk",
+    "version": "0.0.0-dev",
+    "description": "Pure schema and rule pack value contracts.",
+    "type": "commonjs",
+    "main": "./src/index.js",
+    "exports": {
+        ".": "./src/index.js",
+        "./package.json": "./package.json"
+    },
+    "files": [
+        "src/**/*",
+        "README.md"
+    ],
+    "dependencies": {
+        "tslib": "2.8.1"
+    },
+    "author": "Dean Hiller",
+    "license": "Apache-2.0",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/deanhiller/webpieces-ts.git",
+        "directory": "packages/tooling/rules-sdk"
+    },
+    "publishConfig": {
+        "access": "public"
+    }
+}

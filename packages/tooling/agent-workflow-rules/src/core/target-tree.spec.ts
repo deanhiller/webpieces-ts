@@ -1,10 +1,11 @@
+import { specTempDirs } from '@webpieces/tooling-testkit';
 import { execFileSync } from 'child_process';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 
-import { ExcludePaths, BranchStateGuardConfig, specTempDirs } from '@webpieces/rules-config';
+import { ExcludePaths, BranchStateGuardConfig } from '@webpieces/rules-config';
 import { MainSyncStatus, writeMainSyncStatus } from '@webpieces/repo-workflow-core';
 
 import type { FileContext, Rule } from '@webpieces/hook-runtime';

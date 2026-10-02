@@ -1,8 +1,9 @@
+import { specTempDirs } from '@webpieces/tooling-testkit';
 import { describe, it, expect, afterEach, afterAll } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
 import { TmpScratchSweeper, TMP_SCRATCH_RETENTION_DAYS } from './tmp-scratch-sweep';
-import { specTempDirs } from './spec-temp-dirs';
+
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const CUTOFF_MS = TMP_SCRATCH_RETENTION_DAYS * DAY_MS;

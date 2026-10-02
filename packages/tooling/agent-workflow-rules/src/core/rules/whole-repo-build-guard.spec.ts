@@ -1,3 +1,4 @@
+import { specTempDirs } from '@webpieces/tooling-testkit';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -19,7 +20,7 @@ vi.mock('../decision-log', async (importActual: () => Promise<DecisionLogModule>
     };
 });
 
-import { DEFAULT_MAX_CONCURRENT_BUILDS, HomeConfig, HomeConfigService, specTempDirs } from '@webpieces/rules-config';
+import { DEFAULT_MAX_CONCURRENT_BUILDS, HomeConfig, HomeConfigService } from '@webpieces/rules-config';
 import { InformAiError } from '@webpieces/tooling-common';
 import { BashContext } from '@webpieces/hook-runtime';
 import { WholeRepoBuildGuardRule } from './whole-repo-build-guard';

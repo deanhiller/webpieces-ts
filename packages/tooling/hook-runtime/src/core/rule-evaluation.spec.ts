@@ -1,9 +1,10 @@
+import { specTempDirs } from '@webpieces/tooling-testkit';
 import { execFileSync } from 'child_process';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as nodePath from 'path';
 
-import { ExcludePaths, RuleFailError, Option, specTempDirs } from '@webpieces/rules-config';
+import { ExcludePaths, RuleFailError, Option } from '@webpieces/rules-config';
 
 
 

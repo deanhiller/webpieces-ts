@@ -1,0 +1,32 @@
+{
+    "name": "@webpieces/tooling-testkit",
+    "version": "0.0.0-dev",
+    "description": "Shared development fixtures for tooling tests.",
+    "type": "commonjs",
+    "main": "./src/index.js",
+    "exports": {
+        ".": "./src/index.js",
+        "./package.json": "./package.json"
+    },
+    "files": [
+        "src/**/*",
+        "README.md"
+    ],
+    "dependencies": {
+        "@webpieces/tooling-common": "workspace:*",
+        "tslib": "2.8.1"
+    },
+    "author": "Dean Hiller",
+    "license": "Apache-2.0",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/deanhiller/webpieces-ts.git",
+        "directory": "packages/tooling/tooling-testkit"
+    },
+    "publishConfig": {
+        "access": "public"
+    },
+    "webpieces": {
+        "developmentOnly": true
+    }
+}

@@ -1,9 +1,10 @@
+import { specTempDirs } from '@webpieces/tooling-testkit';
 import * as fs from 'fs';
 import * as path from 'path';
 
 import { isBrokenTreeError, recoveryNotice } from './install-entry';
 import { renderShim, shimPath, healShim, findShimRoot, RECOVERY_CMD } from './shim';
-import { specTempDirs } from '@webpieces/rules-config';
+
 
 function mktmp(): string {
     return specTempDirs.make('wp-install-');

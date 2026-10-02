@@ -1,3 +1,4 @@
+import { specTempDirs } from '@webpieces/tooling-testkit';
 import { describe, it, expect } from 'vitest';
 import { execSync, spawnSync } from 'child_process';
 import * as fs from 'fs';
@@ -5,7 +6,7 @@ import * as os from 'os';
 import * as path from 'path';
 
 import { DotWebpieces, WORKTREE_STATE_DIR } from '@webpieces/tooling-common';
-import { specTempDirs } from '@webpieces/rules-config';
+
 
 import { renderShim, SHIM_LOG_MAX_BYTES, SHIM_LOG_FAULTS, SHIM_LOG_VERDICTS, ShimLogVerdict, RESOLVE_LOG_DIR_SH } from './shim';
 import { L0_FAULTS, L0Fault } from '../core/l0-matrix';

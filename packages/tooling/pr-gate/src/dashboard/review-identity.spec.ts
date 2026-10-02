@@ -1,8 +1,9 @@
+import { specTempDirs } from '@webpieces/tooling-testkit';
 import { ReviewIdentityRenderer } from './review-identity-renderer';
 import { afterEach, describe, expect, it } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
-import { RequiredChecklist, REVIEWER_AGENTS_PLACEHOLDER, ReviewerAgentPolicy, ReviewJsonService, specTempDirs } from '@webpieces/rules-config';
+import { RequiredChecklist, REVIEWER_AGENTS_PLACEHOLDER, ReviewerAgentPolicy, ReviewJsonService } from '@webpieces/rules-config';
 import { Dashboard, DashboardInput, DisableCounts } from './dashboard';
 import { ChecklistCommentRow } from './checklist-comment-row';
 import { ChecklistCommentRenderer } from './checklist-comment-renderer';

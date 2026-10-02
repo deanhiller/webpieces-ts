@@ -11,7 +11,8 @@
     "files": [
         "src/**/*",
         "templates/**/*",
-        "README.md"
+        "README.md",
+        "RULE_PACKS.md"
     ],
     "dependencies": {
         "@inversifyjs/binding-decorators": "1.1.5",
@@ -19,7 +20,8 @@
         "reflect-metadata": "0.2.2",
         "minimatch": "10.0.1",
         "@webpieces/tooling-common": "workspace:*",
-        "@webpieces/repo-workflow-core": "workspace:*"
+        "@webpieces/repo-workflow-core": "workspace:*",
+        "@webpieces/rules-sdk": "workspace:*"
     },
     "author": "Dean Hiller",
     "license": "Apache-2.0",
@@ -30,5 +32,8 @@
     },
     "publishConfig": {
         "access": "public"
+    },
+    "devDependencies": {
+        "@webpieces/tooling-testkit": "workspace:*"
     }
 }

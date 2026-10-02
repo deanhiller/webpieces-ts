@@ -1,8 +1,9 @@
+import { specTempDirs } from '@webpieces/tooling-testkit';
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import type { ExecutorContext, TargetConfiguration } from '@nx/devkit';
 import * as fs from 'fs';
 import * as path from 'path';
-import { RuleFailError, specTempDirs } from '@webpieces/rules-config';
+import { RuleFailError } from '@webpieces/rules-config';
 import runOpenApiGenerate, { CONTRACT_DOCUMENTS, OpenApiGenerate } from '../../executors/openapi-generate/executor';
 import runComponentsGenerate, { COMPONENTS_DOCUMENT } from '../../executors/openapi-components-generate/executor';
 import { DocsGenerate } from '../../executors/docs-generate/executor';

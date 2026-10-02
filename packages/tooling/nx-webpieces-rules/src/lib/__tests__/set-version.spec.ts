@@ -1,8 +1,9 @@
+import { specTempDirs } from '@webpieces/tooling-testkit';
 import { spawnSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 import { describe, expect, it } from 'vitest';
-import { specTempDirs } from '@webpieces/rules-config';
+
 
 /** Run the real release stamper against disposable manifests, never the working tree. */
 describe('release version stamping', () => {

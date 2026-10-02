@@ -1,14 +1,11 @@
+import { specTempDirs } from '@webpieces/tooling-testkit';
 import 'reflect-metadata';
 import * as fs from 'fs';
 import * as path from 'path';
 import { execFileSync } from 'child_process';
 import { describe, expect, it, vi } from 'vitest';
 import { AtomicFile } from '@webpieces/tooling-common';
-import {
-    ReviewJsonService,
-    ReviewerInstructionsService,
-    specTempDirs,
-} from '@webpieces/rules-config';
+import { ReviewJsonService, ReviewerInstructionsService } from '@webpieces/rules-config';
 import { ReviewUpsertPrCommand } from './review-upsert-pr-command';
 import { DiffBasis } from '../workflow/diff-basis';
 import { GateLogFile } from '../workflow/gate-log-file';

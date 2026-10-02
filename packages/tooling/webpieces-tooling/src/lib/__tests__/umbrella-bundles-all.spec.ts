@@ -48,7 +48,10 @@ class ToolingScan {
             if (!entry.isDirectory()) continue;
             const manifest = path.join(dir, entry.name, 'package.json');
             if (!fs.existsSync(manifest)) continue;
-            const name = String(this.read(manifest)['name']);
+            const parsed = this.read(manifest);
+            const metadata = parsed['webpieces'] as { developmentOnly?: boolean } | undefined;
+            if (metadata?.developmentOnly === true) continue;
+            const name = String(parsed['name']);
             if (name !== UMBRELLA) names.push(name);
         }
         return names.sort();

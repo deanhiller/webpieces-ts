@@ -1,4 +1,5 @@
-import { AbstractRule, BaseRuleConfig } from '@webpieces/rules-config';
+import { BaseRuleConfig } from '@webpieces/rules-sdk';
+import { AbstractRule } from '@webpieces/rules-config';
 
 /**
  * Result of running a single code validator.

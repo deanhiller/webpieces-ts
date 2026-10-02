@@ -86,7 +86,9 @@ PUBLISH_RETRY_SLEEP="${PUBLISH_RETRY_SLEEP:-10}"
 # publish-packages.spec.ts re-derives this from the real manifests, so a new @webpieces
 # dependency that invalidates the order fails a test rather than a release.
 ORDER=(
+    packages/tooling/rules-sdk
     packages/tooling/tooling-common
+    packages/tooling/tooling-testkit
     packages/tooling/repo-workflow-core
     packages/tooling/rules-config
     packages/tooling/hook-runtime

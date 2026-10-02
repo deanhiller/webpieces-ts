@@ -1,3 +1,4 @@
+import { specTempDirs } from '@webpieces/tooling-testkit';
 import { execFileSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -12,7 +13,7 @@ import { atRoot } from '@webpieces/rules-config';
 import { MissingDirectoryGuard } from './missing-directory';
 import { ReadOnlyInspectionScan } from './read-only-inspection';
 import {  isGitOrGhCommand, runBash  } from './runner';
-import { loadTemplate, specTempDirs } from '@webpieces/rules-config';
+import { loadTemplate } from '@webpieces/rules-config';
 
 import { renderL1Doc } from './l1-doc';
 import { LOCATION_MATRIX_DOC, locationMatrixPointer } from './l1-matrix-doc';

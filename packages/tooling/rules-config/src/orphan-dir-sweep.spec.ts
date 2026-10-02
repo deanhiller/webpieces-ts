@@ -1,3 +1,4 @@
+import { specTempDirs } from '@webpieces/tooling-testkit';
 import * as fs from 'fs';
 import * as path from 'path';
 import { spawnSync } from 'child_process';
@@ -7,7 +8,7 @@ import { OrphanCandidate, OrphanDirScanner } from './orphan-dir-scan';
 import { OrphanDirArchiver, TRASH_MANIFEST_FILE } from './orphan-dir-archive';
 import { OrphanDirSweeper, OrphanSweepReport } from './orphan-dir-sweep';
 import { DEFAULT_MAX_CONCURRENT_BUILDS, HomeConfig, HomeConfigService } from './home-config';
-import { specTempDirs } from './spec-temp-dirs';
+
 
 /**
  * A throwaway git repository on disk, because this feature's entire correctness claim is "git's own

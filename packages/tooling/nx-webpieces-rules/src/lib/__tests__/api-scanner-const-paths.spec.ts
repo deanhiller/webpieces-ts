@@ -1,3 +1,4 @@
+import { specTempDirs } from '@webpieces/tooling-testkit';
 /**
  * Regression: a contract that hoists its route to a `const` instead of writing a string literal.
  *
@@ -32,7 +33,7 @@ import {
     UndeclaredEndpointOperationError,
     UnresolvedEndpointPathError,
 } from '../api-usage/api-contract-errors';
-import { specTempDirs } from '@webpieces/rules-config';
+
 import { ApiMethodMeta } from '../api-usage/api-relations';
 
 let root = '';

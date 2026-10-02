@@ -1,3 +1,4 @@
+import { specTempDirs } from '@webpieces/tooling-testkit';
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -8,7 +9,7 @@ import { CodexAdapter } from '@webpieces/hook-runtime';
 import { CodexSubagentSharedTreeGuard } from './codex-subagent-guard';
 import { AgentHookEvent, FileOperation } from '@webpieces/hook-runtime';
 import { NormalizedToolInput } from '@webpieces/hook-runtime';
-import { specTempDirs } from '@webpieces/rules-config';
+
 
 /**
  * CLAUDE CODE MUST NOT BE ABLE TO REACH THE CODEX SURFACES.

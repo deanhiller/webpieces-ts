@@ -1,8 +1,9 @@
+import { specTempDirs } from '@webpieces/tooling-testkit';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { MatchRuleConfig, specTempDirs } from '@webpieces/rules-config';
+import { MatchRuleConfig } from '@webpieces/rules-config';
 import { MatchRulesChecker } from '../validate-match-rules';
 import { GateScanScope } from '../scan-scope';
 

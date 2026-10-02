@@ -1,4 +1,5 @@
-import { BaseRuleConfig } from '@webpieces/rules-config';
+import { BaseRuleConfig } from '@webpieces/rules-sdk';
+
 import { injectable, bindingScopeValues } from 'inversify';
 
 import { CodeValidator, ExecutorResult, RuleRun } from './code-validator';

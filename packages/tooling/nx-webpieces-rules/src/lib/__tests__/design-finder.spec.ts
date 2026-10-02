@@ -1,3 +1,4 @@
+import { specTempDirs } from '@webpieces/tooling-testkit';
 /**
  * Tests for design.json discovery + selection resolution used by the
  * wp-design-visualize CLI.
@@ -7,7 +8,7 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
 import { findDesignFiles, resolveSelections, DesignFileRef } from '../di-graph/design-finder';
-import { specTempDirs } from '@webpieces/rules-config';
+
 
 let tmpRoot: string;
 

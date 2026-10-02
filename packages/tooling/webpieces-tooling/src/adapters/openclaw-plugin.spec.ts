@@ -1,3 +1,4 @@
+import { specTempDirs } from '@webpieces/tooling-testkit';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -30,7 +31,7 @@ vi.mock('@webpieces/hook-runtime', async (original) => ({
     HookFileEvaluation: class { evaluate = state.evaluate; },
 }));
 import handler from './openclaw-plugin';
-import { CONFIG_FILENAME, specTempDirs } from '@webpieces/rules-config';
+import { CONFIG_FILENAME } from '@webpieces/rules-config';
 
 describe('OpenClaw uses one composed evaluation', () => {
     let root: string;

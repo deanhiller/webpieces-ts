@@ -1,7 +1,8 @@
+import { specTempDirs } from '@webpieces/tooling-testkit';
 import { describe, it, expect } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
-import { ChecklistInstructionsService, ChecklistReviewContext, RequiredChecklist, REVIEWER_AGENTS_PLACEHOLDER, ReviewerAgentPolicy, ReviewJsonService, specTempDirs } from '@webpieces/rules-config';
+import { ChecklistInstructionsService, ChecklistReviewContext, RequiredChecklist, REVIEWER_AGENTS_PLACEHOLDER, ReviewerAgentPolicy, ReviewJsonService } from '@webpieces/rules-config';
 import { toError } from '@webpieces/tooling-common/to-error';
 import { ChecklistRoster } from './checklist-detector';
 import { ChecklistScan } from './checklist-scanner';

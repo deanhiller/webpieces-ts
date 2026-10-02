@@ -1,9 +1,10 @@
+import { specTempDirs } from '@webpieces/tooling-testkit';
 import { describe, it, expect, vi } from 'vitest';
 import { execSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 import { AtomicFile } from '@webpieces/tooling-common';
-import { ChecklistDefinition, ChecklistInstructionsService, DEFAULT_MAX_CONCURRENT_BUILDS, DiffScope, HomeConfig, HomeConfigService, REVIEWER_AGENTS_PLACEHOLDER, RepoRootFinder, ReviewJsonService, ReviewerAgentPolicy, specTempDirs, toChecklist } from '@webpieces/rules-config';
+import { ChecklistDefinition, ChecklistInstructionsService, DEFAULT_MAX_CONCURRENT_BUILDS, DiffScope, HomeConfig, HomeConfigService, REVIEWER_AGENTS_PLACEHOLDER, RepoRootFinder, ReviewJsonService, ReviewerAgentPolicy, toChecklist } from '@webpieces/rules-config';
 import { ReviewIdentityStamp, ReviewIdentityStampService } from '@webpieces/repo-workflow-core';
 import { ReviewBudgetCheckOptions, WriteReviewCommand, WriteReviewOptions } from './write-review-command';
 import { AiBranchName } from '../workflow/git-readAiBranchName';
