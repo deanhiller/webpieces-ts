@@ -8,7 +8,8 @@ import {
     BRANCH_RETENTION_KEEP,
 } from './branch-archiver';
 import { BranchMutationEvent, BranchMutationLog, MutationVerb } from './branch-mutation-log';
-import { DeletableBranch, MergedBranchesCache, MergedBranchesService } from './merged-branches';
+import { DeletableBranch, MergedBranchesCache } from './merged-branch-verdicts';
+import { MergedBranchesService } from './merged-branches';
 
 /**
  * The EXECUTOR for the dead-branch verdicts that merged-branches.ts computes.

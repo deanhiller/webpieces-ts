@@ -2,7 +2,8 @@ import * as fs from 'fs';
 import * as path from 'path';
 
 import { describe, it, expect, beforeEach } from 'vitest';
-import { CliExitError, DotWebpieces, PUSH_DEV_STATE_FILE, toError, specTempDirs } from '@webpieces/rules-config';
+import { CliExitError, PUSH_DEV_STATE_FILE, specTempDirs } from '@webpieces/rules-config';
+import { DotWebpieces, toError } from '@webpieces/tooling-common';
 
 import { PushDevState, PushDevStateStore } from './push-dev-state';
 

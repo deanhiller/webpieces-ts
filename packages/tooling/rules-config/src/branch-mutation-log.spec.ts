@@ -2,11 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
 
-import {
-    BranchMutationEvent,
-    branchMutationLogPath,
-    logBranchMutation,
-} from './branch-mutation-log';
+import { BranchMutationEvent, branchMutationLogPath, logBranchMutation } from '@webpieces/repo-workflow-core';
 import { specTempDirs } from './spec-temp-dirs';
 
 function tmpRoot(): string {

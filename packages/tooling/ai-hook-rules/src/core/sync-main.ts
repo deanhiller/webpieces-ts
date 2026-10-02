@@ -1,17 +1,5 @@
-import {
-    BranchReaper,
-    DEFAULT_HANG_TIMEOUT_MINUTES,
-    MainSyncStatusFile,
-    MergedBranchesCache,
-    MergedBranchesService,
-    ReapResult,
-    loadAndValidate,
-    computeAllMainSyncStatuses,
-    writeMainSyncStatusFile,
-    writeMainSyncLock,
-    tryAcquireMainSyncLock,
-    finishedLock,
-} from '@webpieces/rules-config';
+import { BranchReaper, DEFAULT_HANG_TIMEOUT_MINUTES, MainSyncStatusFile, MergedBranchesCache, MergedBranchesService, ReapResult, computeAllMainSyncStatuses, writeMainSyncStatusFile, writeMainSyncLock, tryAcquireMainSyncLock, finishedLock } from '@webpieces/repo-workflow-core';
+import { loadAndValidate } from '@webpieces/rules-config';
 
 import { toError } from './to-error';
 import { logSyncEvent, SyncLogEvent } from './main-sync-log';

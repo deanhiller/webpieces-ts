@@ -1,8 +1,7 @@
 import { execSync, spawnSync } from 'child_process';
-import {
-    InformAiError, RepoRootFinder, MERGE_MODE_AUTO, loadAndValidate,
-    BranchArchiver, BRANCH_RETENTION_ARCHIVE_TAG, BRANCH_RETENTION_KEEP, toError,
-} from '@webpieces/rules-config';
+import { InformAiError, toError } from '@webpieces/tooling-common';
+import { RepoRootFinder, MERGE_MODE_AUTO, loadAndValidate } from '@webpieces/rules-config';
+import { BranchArchiver, BRANCH_RETENTION_ARCHIVE_TAG, BRANCH_RETENTION_KEEP } from '@webpieces/repo-workflow-core';
 import { injectable, bindingScopeValues } from 'inversify';
 import { AiBranchName } from '../workflow/git-readAiBranchName';
 import { BranchNaming } from '../workflow/branch-naming';

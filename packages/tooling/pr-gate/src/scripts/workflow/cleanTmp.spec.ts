@@ -1,7 +1,8 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
-import { AgedTreeSweeper, RepoRootFinder, WEBPIECES_TMP_DIR, specTempDirs, TmpScratchSweeper } from '@webpieces/rules-config';
+import { AgedTreeSweeper, RepoRootFinder, specTempDirs, TmpScratchSweeper } from '@webpieces/rules-config';
+import { WEBPIECES_TMP_DIR } from '@webpieces/tooling-common';
 import { CleanTmp } from './cleanTmp';
 
 // Pin the repo root to our temp dir so cleanTmp() sweeps a tree we fully control.

@@ -2,7 +2,8 @@
 // so ai-hooks and the Nx validate-code executor share one loader and one config file.
 import { RuleOptions } from '@webpieces/rules-config';
 import { HookMode, NormalizedBashInput, NormalizedEdit, NormalizedToolInput, ToolKind } from '@webpieces/hook-runtime';
-export { ResolvedConfig, ResolvedRuleConfig, RuleOptions, InformAiError, RuleFailError } from '@webpieces/rules-config';
+export { ResolvedConfig, ResolvedRuleConfig, RuleOptions, RuleFailError } from '@webpieces/rules-config';
+export { InformAiError } from '@webpieces/tooling-common';
 export { HookMode, NormalizedBashInput, NormalizedEdit, NormalizedToolInput, ToolKind } from '@webpieces/hook-runtime';
 import { FixHint } from './fix-hint';
 import { L0_FAULT_NONE } from './l0-fault-codes';

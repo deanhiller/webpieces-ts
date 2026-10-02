@@ -1,8 +1,7 @@
 import * as fs from 'fs';
-import {
-    InformAiError, RepoRootFinder, ReviewJsonService, VERDICT_ORANGE, VERDICT_RED, VERDICT_STATUSES, WRITE_REVIEW_BIN, checklistOverrideService,
-    summaryJsonPath, toError,
-} from '@webpieces/rules-config';
+import { InformAiError, toError } from '@webpieces/tooling-common';
+import { RepoRootFinder, ReviewJsonService, VERDICT_ORANGE, VERDICT_RED, VERDICT_STATUSES, checklistOverrideService, summaryJsonPath } from '@webpieces/rules-config';
+import { WRITE_REVIEW_BIN } from '@webpieces/repo-workflow-core';
 import { injectable, bindingScopeValues } from 'inversify';
 import { AiBranchName } from '../workflow/git-readAiBranchName';
 import { ReviewStageReceipt, ReviewStageReceiptService } from '../workflow/review-stage-receipt';

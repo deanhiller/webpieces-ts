@@ -1,6 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import { AtomicFile, toError } from '@webpieces/rules-config';
+import { AtomicFile, toError } from '@webpieces/tooling-common';
 import { injectable, bindingScopeValues } from 'inversify';
 
 import { ARCHIVE_RECORD_FILE, MERGED_DIR, MERGE_INDEX_FILE, MergeState } from './merge-state';

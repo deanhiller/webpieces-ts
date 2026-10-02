@@ -1,20 +1,4 @@
-import {
-    BranchMutationLog,
-    MutationVerb,
-    DeletableWorktree,
-    MergedBranchesService,
-    ReapedWorktree,
-    WorktreeReapResult,
-    WorktreeReaper,
-    WorktreeService,
-    WorktreeWorkInFlight,
-    CLASSIFICATION_LOCKED,
-    CLASSIFICATION_CURRENT,
-    CLASSIFICATION_DETACHED,
-    CLASSIFICATION_PRUNABLE,
-    ADJUDICATED_CLASSIFICATIONS,
-    LOCK_LIVENESS_UNVERIFIABLE,
-} from '@webpieces/rules-config';
+import { BranchMutationLog, MutationVerb, DeletableWorktree, MergedBranchesService, ReapedWorktree, WorktreeReapResult, WorktreeReaper, WorktreeService, WorktreeWorkInFlight, CLASSIFICATION_LOCKED, CLASSIFICATION_CURRENT, CLASSIFICATION_DETACHED, CLASSIFICATION_PRUNABLE, ADJUDICATED_CLASSIFICATIONS, LOCK_LIVENESS_UNVERIFIABLE } from '@webpieces/repo-workflow-core';
 import { injectable, bindingScopeValues } from 'inversify';
 
 import { FLAG_IGNORE_STALE_LOCKS } from './cleanup-options';

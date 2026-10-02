@@ -1,0 +1,23 @@
+{
+    "name": "repo-workflow-core",
+    "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+    "sourceRoot": "packages/tooling/repo-workflow-core/src",
+    "projectType": "library",
+    "targets": {
+        "test": {
+            "executor": "nx:run-commands",
+            "options": { "command": "vitest run packages/tooling/repo-workflow-core/" }
+        },
+        "build": {
+            "executor": "@nx/js:tsc",
+            "outputs": ["{options.outputPath}"],
+            "options": {
+                "outputPath": "dist/packages/tooling/repo-workflow-core",
+                "main": "packages/tooling/repo-workflow-core/src/index.ts",
+                "tsConfig": "packages/tooling/repo-workflow-core/tsconfig.lib.json",
+                "assets": ["packages/tooling/repo-workflow-core/package.json"]
+            }
+        }
+    },
+    "tags": ["type:tooling", "framework:node", "role:lib"]
+}

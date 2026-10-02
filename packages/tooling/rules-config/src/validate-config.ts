@@ -21,7 +21,7 @@ export { validateChecklistsSection };
 export { allRuleNames } from './rule-schemas';
 export { recommendedSeedMode, recommendedSeedModeFor, seedEntryForRule } from './seed-entry';
 import { DEFAULT_MATCH_RULES } from './match-rules-config';
-import { toError } from './to-error';
+import { toError } from '@webpieces/tooling-common';
 
 /**
  * The longest a `turnOffRuleUntilEpoch` may reach into the future: ONE WEEK. Poke it again next week to

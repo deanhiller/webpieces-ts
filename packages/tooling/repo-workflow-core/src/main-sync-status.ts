@@ -3,7 +3,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { injectable, bindingScopeValues } from 'inversify';
 
-import { AtomicFile } from './atomic-file';
+import { AtomicFile } from '@webpieces/tooling-common';
 import {
     MAIN_SYNC_STATUS_VERSION,
     MainSyncFileStore,
@@ -11,8 +11,8 @@ import {
     MainSyncStatusFile,
     PullRequestIndex,
 } from './main-sync-file';
-import { DotWebpieces, dotWebpieces } from './state-dir';
-import { toError } from './to-error';
+import { DotWebpieces, dotWebpieces } from '@webpieces/tooling-common';
+import { toError } from '@webpieces/tooling-common';
 import { WorktreeService } from './worktrees';
 
 // The on-disk shape lives in main-sync-file.ts; re-exported so every existing importer of
@@ -62,7 +62,7 @@ interface CmdCapture {
 
 /**
  * Reads/writes the main-sync cache + lock and computes the slow "is my branch healthy vs origin/main?"
- * status. `@injectable(bindingScopeValues.Singleton)` so it's injectable and drawn in the rules-config DI design.
+ * status. `@injectable(bindingScopeValues.Singleton)` so it's injectable and drawn in consumers’ DI designs.
  */
 @injectable(bindingScopeValues.Singleton)
 export class MainSyncStatusService {

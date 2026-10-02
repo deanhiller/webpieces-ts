@@ -2,8 +2,8 @@ import { describe, it, expect } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
 import { ReviewJsonService } from './review-json';
-import { InformAiError } from './inform-ai-error';
-import { toError } from './to-error';
+import { InformAiError } from '@webpieces/tooling-common';
+import { toError } from '@webpieces/tooling-common';
 import { specTempDirs } from './spec-temp-dirs';
 
 /**

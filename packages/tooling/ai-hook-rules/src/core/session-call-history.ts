@@ -1,6 +1,6 @@
 import * as fs from 'fs';
 
-import { dotWebpieces } from '@webpieces/rules-config';
+import { dotWebpieces } from '@webpieces/tooling-common';
 
 import { CALLS_STREAM } from './log-streams';
 import { logStream } from './log-stream';

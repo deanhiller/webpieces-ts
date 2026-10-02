@@ -1,15 +1,7 @@
 import * as path from 'path';
 
-import {
-    CliArgs,
-    CliArgSet,
-    CliExitError,
-    CliFlag,
-    CliUsage,
-    RuleFailError,
-    renderRuleFailForHuman,
-    toError,
-} from '@webpieces/rules-config';
+import { CliArgs, CliArgSet, CliExitError, CliFlag, CliUsage, RuleFailError, renderRuleFailForHuman } from '@webpieces/rules-config';
+import { toError } from '@webpieces/tooling-common';
 import { bindingScopeValues, injectable } from 'inversify';
 
 import { AwaitChecksArgs } from './commands/await-checks-command';

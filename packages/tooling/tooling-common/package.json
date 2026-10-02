@@ -1,0 +1,28 @@
+{
+    "name": "@webpieces/tooling-common",
+    "version": "0.0.0-dev",
+    "description": "Generic atomic files, errors, harness paths, and repository state paths.",
+    "type": "commonjs",
+    "main": "./src/index.js",
+    "exports": {
+        ".": "./src/index.js",
+        "./package.json": "./package.json"
+    },
+    "files": [
+        "src/**/*"
+    ],
+    "author": "Dean Hiller",
+    "license": "Apache-2.0",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/deanhiller/webpieces-ts.git",
+        "directory": "packages/tooling/tooling-common"
+    },
+    "dependencies": {
+        "inversify": "7.10.4",
+        "reflect-metadata": "0.2.2"
+    },
+    "publishConfig": {
+        "access": "public"
+    }
+}

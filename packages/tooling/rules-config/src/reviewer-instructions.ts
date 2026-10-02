@@ -1,7 +1,7 @@
 import * as path from 'path';
 import { injectable, bindingScopeValues } from 'inversify';
 import { ReviewJsonService } from './review-json';
-import { WRITE_REVIEW_BIN } from './review-identity-stamp';
+import { WRITE_REVIEW_BIN } from '@webpieces/repo-workflow-core';
 
 /** One pre-resolved place a reviewer would otherwise have to go hunting for. Data-only (per CLAUDE.md). */
 export class ContextEntry {

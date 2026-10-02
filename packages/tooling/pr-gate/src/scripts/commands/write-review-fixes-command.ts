@@ -1,5 +1,6 @@
 import * as fs from 'fs';
-import { RepoRootFinder, InformAiError, summaryJsonPath } from '@webpieces/rules-config';
+import { RepoRootFinder, summaryJsonPath } from '@webpieces/rules-config';
+import { InformAiError } from '@webpieces/tooling-common';
 import { injectable, bindingScopeValues } from 'inversify';
 import { AiBranchName } from '../workflow/git-readAiBranchName';
 import { ReviewRoundStateService } from '../workflow/review-round-state';

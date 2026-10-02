@@ -1,9 +1,9 @@
 import * as crypto from 'crypto';
 import * as fs from 'fs';
 import * as path from 'path';
-import {
-    AtomicFile, ChecklistResult, ReviewJsonService, WRITE_REVIEW_BIN, toError,
-} from '@webpieces/rules-config';
+import { AtomicFile, toError } from '@webpieces/tooling-common';
+import { ChecklistResult, ReviewJsonService } from '@webpieces/rules-config';
+import { WRITE_REVIEW_BIN } from '@webpieces/repo-workflow-core';
 import { injectable, bindingScopeValues } from 'inversify';
 
 /** `harness` for a verdict submitted from a plain terminal — a HUMAN reviewer, with no AI harness at all. */

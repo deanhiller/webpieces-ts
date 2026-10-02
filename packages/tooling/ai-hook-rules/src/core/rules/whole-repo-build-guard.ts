@@ -1,6 +1,7 @@
 import { execSync } from 'child_process';
 
-import { DEFAULT_BUILD_COMMAND, HomeConfig, HomeConfigService, InformAiError } from '@webpieces/rules-config';
+import { DEFAULT_BUILD_COMMAND, HomeConfig, HomeConfigService } from '@webpieces/rules-config';
+import { InformAiError } from '@webpieces/tooling-common';
 
 import type { BashContext, Violation } from '../types';
 import { Violation as V } from '../types';

@@ -1,11 +1,9 @@
 import { execSync, spawnSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
-import {
-    dotWebpieces, CliExitError,
-    MutationVerb, BranchMutationEvent, logBranchMutation, SyncFlowGuidance,
-    MERGE_PROCESS_DOC, MergeProcessText, MergeRun, loadTemplate,
-} from '@webpieces/rules-config';
+import { dotWebpieces } from '@webpieces/tooling-common';
+import { CliExitError, SyncFlowGuidance, MERGE_PROCESS_DOC, MergeProcessText, MergeRun, loadTemplate } from '@webpieces/rules-config';
+import { MutationVerb, BranchMutationEvent, logBranchMutation } from '@webpieces/repo-workflow-core';
 import { injectable, bindingScopeValues } from 'inversify';
 import { GatherInfo } from '../git-gatherInfo';
 import { BranchNaming } from './branch-naming';

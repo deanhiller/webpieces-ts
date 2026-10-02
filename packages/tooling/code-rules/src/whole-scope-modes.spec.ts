@@ -2,19 +2,8 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { execSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
-import {
-    CONFIG_FILENAME,
-    DiffScope,
-    InformAiError,
-    ModifiedCodeMode,
-    NoDestructureConfig,
-    OneEnumSpellingInApiLibConfig,
-    RuleFailError,
-    allRuleNames,
-    sectionForRule,
-    seedEntryForRule,
-    specTempDirs,
-} from '@webpieces/rules-config';
+import { CONFIG_FILENAME, DiffScope, ModifiedCodeMode, NoDestructureConfig, OneEnumSpellingInApiLibConfig, RuleFailError, allRuleNames, sectionForRule, seedEntryForRule, specTempDirs } from '@webpieces/rules-config';
+import { InformAiError } from '@webpieces/tooling-common';
 
 import { CodeRulesBootstrap } from './code-rules-bootstrap';
 import { CodeRulesRunRequest, RunRequestParser } from './code-rules-run-request';

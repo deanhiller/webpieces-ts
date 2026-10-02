@@ -1,7 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 
-import { dotWebpieces } from '@webpieces/rules-config';
+import { dotWebpieces } from '@webpieces/tooling-common';
 import { ASYNC_REFRESH_STREAM } from './log-streams';
 
 import { toError } from './to-error';

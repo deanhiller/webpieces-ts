@@ -1,6 +1,7 @@
 import { execSync } from 'child_process';
 
-import { BranchStateGuardConfig, BRANCH_STATE_GUARD_KEY, DEFAULT_HANG_TIMEOUT_MINUTES, readMainSyncStatus, MainSyncStatus, Option } from '@webpieces/rules-config';
+import { BranchStateGuardConfig, BRANCH_STATE_GUARD_KEY, Option } from '@webpieces/rules-config';
+import { DEFAULT_HANG_TIMEOUT_MINUTES, readMainSyncStatus, MainSyncStatus } from '@webpieces/repo-workflow-core';
 
 import type { BashContext, Violation } from '../types';
 import { Violation as V } from '../types';

@@ -19,7 +19,8 @@ vi.mock('../decision-log', async (importActual: () => Promise<DecisionLogModule>
     };
 });
 
-import { DEFAULT_MAX_CONCURRENT_BUILDS, HomeConfig, HomeConfigService, InformAiError, specTempDirs } from '@webpieces/rules-config';
+import { DEFAULT_MAX_CONCURRENT_BUILDS, HomeConfig, HomeConfigService, specTempDirs } from '@webpieces/rules-config';
+import { InformAiError } from '@webpieces/tooling-common';
 import { BashContext } from '../types';
 import { WholeRepoBuildGuardRule } from './whole-repo-build-guard';
 

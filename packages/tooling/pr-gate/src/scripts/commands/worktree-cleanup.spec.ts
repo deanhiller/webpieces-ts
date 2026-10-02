@@ -12,18 +12,7 @@
  * this compares the message to the answer rather than to a second copy of a string.
  */
 import { describe, it, expect } from 'vitest';
-import {
-    BranchMutationLog,
-    CLASSIFICATION_LOCKED,
-    DeletableWorktree,
-    LOCK_LIVENESS_UNVERIFIABLE,
-    MergedBranchesCache,
-    MergedBranchesService,
-    ReapedWorktree,
-    WorktreeReapResult,
-    WorktreeReaper,
-    WorktreeService,
-} from '@webpieces/rules-config';
+import { BranchMutationLog, CLASSIFICATION_LOCKED, DeletableWorktree, LOCK_LIVENESS_UNVERIFIABLE, MergedBranchesCache, MergedBranchesService, ReapedWorktree, WorktreeReapResult, WorktreeReaper, WorktreeService } from '@webpieces/repo-workflow-core';
 
 import { WorktreeCleanupSection } from './worktree-cleanup';
 import { FLAG_IGNORE_STALE_LOCKS } from './cleanup-options';

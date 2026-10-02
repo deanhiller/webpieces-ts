@@ -35,7 +35,7 @@ vi.mock('child_process', () => ({
     execSync: (): string => '',
 }));
 
-import { Worktree, WorktreeService } from '@webpieces/rules-config';
+import { Worktree, WorktreeService } from '@webpieces/repo-workflow-core';
 
 import { LandedWorktreeReaper, WorktreeReapHandoff } from './landed-worktree-reaper';
 import { ReapOutcomeSignal, REAP_OUTCOME_REFUSED, REAP_OUTCOME_REMOVED } from './reap-outcome';

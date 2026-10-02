@@ -1,5 +1,5 @@
 import { spawnSync } from 'child_process';
-import { Worktree, WorktreeService } from '@webpieces/rules-config';
+import { Worktree, WorktreeService } from '@webpieces/repo-workflow-core';
 import { injectable, bindingScopeValues } from 'inversify';
 
 /**

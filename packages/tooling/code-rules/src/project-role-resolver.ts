@@ -12,7 +12,7 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
-import { toError } from '@webpieces/rules-config';
+import { toError } from '@webpieces/tooling-common';
 import { injectable, bindingScopeValues } from 'inversify';
 
 const ROLE_TAG_PREFIX = 'role:';

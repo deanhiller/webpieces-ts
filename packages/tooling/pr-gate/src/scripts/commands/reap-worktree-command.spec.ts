@@ -40,17 +40,8 @@ vi.mock('child_process', () => ({
     execSync: (): string => '',
 }));
 
-import {
-    BranchMutationLog,
-    CLASSIFICATION_CURRENT,
-    CLASSIFICATION_MERGED_PR,
-    CLASSIFICATION_NEVER_PROPOSED,
-    DeletableWorktree,
-    MergedBranchesService,
-    RepoRootFinder,
-    WorktreeReaper,
-    WorktreeService,
-    branchMutationLogPath, specTempDirs } from '@webpieces/rules-config';
+import { BranchMutationLog, CLASSIFICATION_CURRENT, CLASSIFICATION_MERGED_PR, CLASSIFICATION_NEVER_PROPOSED, DeletableWorktree, MergedBranchesService, WorktreeReaper, WorktreeService, branchMutationLogPath } from '@webpieces/repo-workflow-core';
+import { RepoRootFinder, specTempDirs } from '@webpieces/rules-config';
 
 import {
     ReapOutcomeSignal,

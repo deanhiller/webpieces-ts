@@ -3,7 +3,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 // What WorktreeService.isLinkedWorktree reports for the root under test.
 const state = vi.hoisted(() => ({ linked: false }));
 
-vi.mock('@webpieces/rules-config', () => ({
+vi.mock('@webpieces/repo-workflow-core', () => ({
     WorktreeService: class {
         isLinkedWorktree(): boolean { return state.linked; }
     },

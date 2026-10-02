@@ -6,7 +6,7 @@ import { formatConfigErrorsBanner } from './config-error-banner';
 import { ConfigFile } from './config-file';
 import { defaultRules } from './default-rules';
 import { ExcludePaths } from './exclude-hook-paths';
-import { InformAiError } from './inform-ai-error';
+import { InformAiError } from '@webpieces/tooling-common';
 import { PrGateConfig } from './pr-gate-config';
 import { ResolvedConfig, ResolvedRuleConfig, RuleOptions } from './types';
 import { validateCommandsSection } from './commands-section-validators';

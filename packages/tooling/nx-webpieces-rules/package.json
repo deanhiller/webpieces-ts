@@ -26,7 +26,8 @@
         "@webpieces/eslint-rules": "workspace:*",
         "@webpieces/pr-gate": "workspace:*",
         "@webpieces/rules-config": "workspace:*",
-        "madge": "8.0.0"
+        "madge": "8.0.0",
+        "@webpieces/tooling-common": "workspace:*"
     },
     "peerDependencies": {
         "@nx/devkit": ">=18.0.0"

@@ -3,7 +3,7 @@ import * as os from 'os';
 import * as path from 'path';
 import { injectable, bindingScopeValues } from 'inversify';
 import { SweepCount } from './aged-tree-sweep';
-import { toError } from './to-error';
+import { toError } from '@webpieces/tooling-common';
 
 // ---------------------------------------------------------------------------
 // THE BACKSTOP FOR SCRATCH TREES NO EXIT HANDLER GOT TO REAP.

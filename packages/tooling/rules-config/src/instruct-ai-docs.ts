@@ -1,7 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 
-import { BranchMutationLog } from './branch-mutation-log';
+import { BranchMutationLog } from '@webpieces/repo-workflow-core';
 import { MERGE_PROCESS_DOC, MergeProcessText, ReferenceMergeRun } from './merge-process-doc';
 
 // ---------------------------------------------------------------------------

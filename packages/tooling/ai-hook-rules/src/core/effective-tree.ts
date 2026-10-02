@@ -1,7 +1,8 @@
 import * as fs from 'fs';
 import * as path from 'path';
 
-import { atRoot, dotWebpieces } from '@webpieces/rules-config';
+import { atRoot } from '@webpieces/rules-config';
+import { dotWebpieces } from '@webpieces/tooling-common';
 
 import { CommandScanner } from './command-scan';
 import { ShellSegmentScan } from './rules/shell-segment-scan';

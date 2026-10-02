@@ -66,12 +66,10 @@ export const RULE_NAMES = {
 // `DotWebpieces.aiWritable()` (this worktree's state that a CODING AGENT writes) so the call site
 // declares its scope. In a linked worktree the three resolve to different places, and getting that
 // silently wrong is the bug those methods exist to prevent.
-export const WEBPIECES_TMP_DIR = '.webpieces';
 export const MERGE_INFO_DIR = 'merge-info';
 // The PR working home. Renamed from the legacy `pr-info` to `pr-review` for clarity (it holds the
 // AI's PR review + rendered body). Old `pr-info/` dirs are gitignored local state and self-clear via
 // cleanTmp's legacy `pr-` sweep.
-export const PR_REVIEW_DIR = 'pr-review';
 export const MERGE_IN_PROGRESS_FILE = 'merge-in-progress.json';
 
 // The dev-deploy resolve state file, written by `wp-push-dev --resolve` and cleared by

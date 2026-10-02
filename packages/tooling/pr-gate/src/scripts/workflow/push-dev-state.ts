@@ -1,13 +1,7 @@
 import * as fs from 'fs';
 
-import {
-    CliExitError,
-    DotWebpieces,
-    PUSH_DEV_STATE_FILE,
-    WP_FINISH_PUSH_DEV,
-    WP_PUSH_DEV,
-    toError,
-} from '@webpieces/rules-config';
+import { CliExitError, PUSH_DEV_STATE_FILE, WP_FINISH_PUSH_DEV, WP_PUSH_DEV } from '@webpieces/rules-config';
+import { DotWebpieces, toError } from '@webpieces/tooling-common';
 import { injectable, bindingScopeValues } from 'inversify';
 
 const SEP = '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n';

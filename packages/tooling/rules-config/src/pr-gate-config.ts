@@ -1,4 +1,4 @@
-import { BRANCH_RETENTION_ARCHIVE_TAG, BRANCH_RETENTIONS } from './branch-archiver';
+import { BRANCH_RETENTION_ARCHIVE_TAG, BRANCH_RETENTIONS } from '@webpieces/repo-workflow-core';
 import {
     ChecklistDefinition,
     DEFAULT_REVIEWER_AGENT_NAME,

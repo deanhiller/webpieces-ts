@@ -1,16 +1,7 @@
 #!/usr/bin/env node
 import 'reflect-metadata';
-import {
-    CliArgs,
-    CliExitError,
-    CliFlag,
-    CliUsage,
-    InformAiError,
-    RuleFailError,
-    renderRuleFailForHuman,
-    toError,
-    RepoRootFinder,
-} from '@webpieces/rules-config';
+import { CliArgs, CliExitError, CliFlag, CliUsage, RuleFailError, renderRuleFailForHuman, RepoRootFinder } from '@webpieces/rules-config';
+import { InformAiError, toError } from '@webpieces/tooling-common';
 
 import { CodeRulesBootstrap } from './code-rules-bootstrap';
 import { RunRequestParser } from './code-rules-run-request';

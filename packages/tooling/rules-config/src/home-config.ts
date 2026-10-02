@@ -3,8 +3,8 @@ import * as os from 'os';
 import * as path from 'path';
 import { injectable, bindingScopeValues } from 'inversify';
 
-import { InformAiError } from './inform-ai-error';
-import { toError } from './to-error';
+import { InformAiError } from '@webpieces/tooling-common';
+import { toError } from '@webpieces/tooling-common';
 import { DOCUMENTATION_KEYS, HOME_KEY_DOC, HOME_KEY_AI_DOC, HomeDocKeys } from './home-config-doc-keys';
 import {
     RetiredHomeConfigKey, RETIRED_HOME_CONFIG_KEYS, EndedExperiment, ENDED_EXPERIMENTS,

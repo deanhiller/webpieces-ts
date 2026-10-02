@@ -1,7 +1,8 @@
 import { spawnSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
-import { isPathExcluded, ReviewJsonService, toError } from '@webpieces/rules-config';
+import { isPathExcluded, ReviewJsonService } from '@webpieces/rules-config';
+import { toError } from '@webpieces/tooling-common';
 import { injectable, bindingScopeValues } from 'inversify';
 import { DiffBasis } from './diff-basis';
 

@@ -1,5 +1,5 @@
 import { VERDICT_GREEN, VERDICT_ORANGE, VERDICT_RED, VERDICT_YELLOW } from './review-json-data';
-import { WRITE_REVIEW_BIN } from './review-identity-stamp';
+import { WRITE_REVIEW_BIN } from '@webpieces/repo-workflow-core';
 
 /**
  * Pure renderer for ONE reviewer's verdict schema and the command that submits it. Reached only through

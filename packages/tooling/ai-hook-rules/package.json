@@ -28,7 +28,9 @@
         "@webpieces/hook-runtime": "workspace:*",
         "@webpieces/rules-config": "workspace:*",
         "inversify": "7.10.4",
-        "reflect-metadata": "0.2.2"
+        "reflect-metadata": "0.2.2",
+        "@webpieces/tooling-common": "workspace:*",
+        "@webpieces/repo-workflow-core": "workspace:*"
     },
     "publishConfig": {
         "access": "public",

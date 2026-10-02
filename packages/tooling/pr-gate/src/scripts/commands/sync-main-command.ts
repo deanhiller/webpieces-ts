@@ -1,9 +1,6 @@
 import { injectable, bindingScopeValues } from 'inversify';
-import {
-    OrphanDirSweeper,
-    RepoRootFinder,
-    dotWebpieces,
-} from '@webpieces/rules-config';
+import { OrphanDirSweeper, RepoRootFinder } from '@webpieces/rules-config';
+import { dotWebpieces } from '@webpieces/tooling-common';
 
 import { CleanupCommand } from './cleanup-command';
 import {

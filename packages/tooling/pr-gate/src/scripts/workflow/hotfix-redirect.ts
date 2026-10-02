@@ -1,4 +1,5 @@
-import { BranchIdentity, CliExitError } from '@webpieces/rules-config';
+import { BranchIdentity } from '@webpieces/repo-workflow-core';
+import { CliExitError } from '@webpieces/rules-config';
 import { injectable, bindingScopeValues } from 'inversify';
 
 const SEP = '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n';

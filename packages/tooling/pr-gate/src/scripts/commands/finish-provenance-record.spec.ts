@@ -1,9 +1,8 @@
 import { describe, it, expect, afterEach, beforeEach } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
-import {
-    PrGateConfig, RequiredChecklist, REVIEWER_AGENTS_PLACEHOLDER, ReviewerAgentPolicy, ReviewJsonService, ReviewProvenanceService,
-    AtomicFile, ReviewerInstructionsService, SubagentProvenanceService, toError, ProvenanceResult, PROVENANCE_MISSING, specTempDirs } from '@webpieces/rules-config';
+import { PrGateConfig, RequiredChecklist, REVIEWER_AGENTS_PLACEHOLDER, ReviewerAgentPolicy, ReviewJsonService, ReviewProvenanceService, ReviewerInstructionsService, SubagentProvenanceService, ProvenanceResult, PROVENANCE_MISSING, specTempDirs } from '@webpieces/rules-config';
+import { AtomicFile, toError } from '@webpieces/tooling-common';
 import { VerdictProvenanceService } from '../workflow/verdict-provenance';
 import { ProvenanceEnforcer } from '../workflow/provenance-enforcer';
 import { AiBranchName } from '../workflow/git-readAiBranchName';

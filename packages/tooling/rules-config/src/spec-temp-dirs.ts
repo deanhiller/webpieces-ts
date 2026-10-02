@@ -1,7 +1,8 @@
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { toError } from './to-error';
+// The Vitest setup loads this leaf before per-spec fs mocks; keep filesystem services lazy.
+import { toError } from '../../tooling-common/src/to-error';
 
 // ---------------------------------------------------------------------------
 // ONE OWNER FOR EVERY `$TMPDIR` SCRATCH TREE THE TOOLING CREATES.

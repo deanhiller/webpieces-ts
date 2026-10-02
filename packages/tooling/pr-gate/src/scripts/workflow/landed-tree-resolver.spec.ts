@@ -27,7 +27,7 @@ vi.mock('child_process', () => ({
     execSync: (): string => '',
 }));
 
-import { WorktreeService } from '@webpieces/rules-config';
+import { WorktreeService } from '@webpieces/repo-workflow-core';
 
 import {
     LandedTreeResolver,

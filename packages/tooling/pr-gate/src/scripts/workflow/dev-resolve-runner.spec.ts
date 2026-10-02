@@ -2,7 +2,8 @@ import * as fs from 'fs';
 import * as path from 'path';
 
 import { describe, it, expect, beforeEach } from 'vitest';
-import { CliExitError, DevDeployConfig, DotWebpieces, RepoRootFinder, toError, specTempDirs } from '@webpieces/rules-config';
+import { CliExitError, DevDeployConfig, RepoRootFinder, specTempDirs } from '@webpieces/rules-config';
+import { DotWebpieces, toError } from '@webpieces/tooling-common';
 
 import { DevResolveRunner } from './dev-resolve-runner';
 import { DevDeployRefs } from './dev-deploy-refs';

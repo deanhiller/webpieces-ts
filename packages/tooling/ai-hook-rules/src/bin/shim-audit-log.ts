@@ -1,4 +1,4 @@
-import { LOGS_STATE_DIR, WORKTREE_STATE_DIR, WEBPIECES_TMP_DIR } from '@webpieces/rules-config';
+import { LOGS_STATE_DIR, WORKTREE_STATE_DIR, WEBPIECES_TMP_DIR } from '@webpieces/tooling-common';
 import { L0_SHIM_STREAM } from '../core/log-streams';
 import { AI_TYPES } from '@webpieces/hook-runtime';
 

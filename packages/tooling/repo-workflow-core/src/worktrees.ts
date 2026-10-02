@@ -3,7 +3,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { injectable, bindingScopeValues } from 'inversify';
 
-import { toError } from './to-error';
+import { toError } from '@webpieces/tooling-common';
 
 /**
  * Reading the git worktree list.

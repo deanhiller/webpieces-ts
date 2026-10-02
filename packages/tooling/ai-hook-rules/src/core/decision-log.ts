@@ -2,7 +2,9 @@ import { execSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 
-import { dotWebpieces, readMainSyncStatus, MainSyncStatus, RepoRootFinder, claudeEnv } from '@webpieces/rules-config';
+import { dotWebpieces } from '@webpieces/tooling-common';
+import { readMainSyncStatus, MainSyncStatus } from '@webpieces/repo-workflow-core';
+import { RepoRootFinder, claudeEnv } from '@webpieces/rules-config';
 import { L1_LOCATION_STREAM, L2_DECISIONS_STREAM, CALLS_STREAM } from './log-streams';
 
 import { L0_FAULT_NONE, L0_ROW_ALLOWLISTED, L0_ROW_BLOCKED } from './l0-fault-codes';

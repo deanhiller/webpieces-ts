@@ -4,7 +4,8 @@ import * as path from 'path';
 
 import { triggerMainSyncRefresh, resetMainSyncRefreshLatchForTest, refresherArgv } from './main-sync-refresh';
 import { spawnerIdentity } from './sync-main';
-import { DEFAULT_HANG_TIMEOUT_MINUTES, specTempDirs } from '@webpieces/rules-config';
+import { DEFAULT_HANG_TIMEOUT_MINUTES } from '@webpieces/repo-workflow-core';
+import { specTempDirs } from '@webpieces/rules-config';
 
 // Log FILENAMES carry the stream prefix (see LogStream). Specs resolve the name exactly as
 // production does, so the layout is regression-tested on the REAL path, not a fallback.

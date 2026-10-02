@@ -54,11 +54,7 @@ vi.mock('fs', () => ({
 }));
 
 import { BRANCH_RETENTION_DELETE, BRANCH_RETENTION_KEEP } from './branch-archiver';
-import {
-    CLASSIFICATION_MERGED_PR,
-    CLASSIFICATION_PRUNABLE,
-    DeletableWorktree,
-} from './merged-branches';
+import { CLASSIFICATION_MERGED_PR, CLASSIFICATION_PRUNABLE, DeletableWorktree } from './merged-branch-verdicts';
 import { ReapedWorktree, WorktreeReaper } from './worktree-reaper';
 
 const MAIN = '/repo';

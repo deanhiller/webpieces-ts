@@ -1,7 +1,8 @@
 import { spawnSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
-import { Worktree, WorktreeService, atRoot } from '@webpieces/rules-config';
+import { Worktree, WorktreeService } from '@webpieces/repo-workflow-core';
+import { atRoot } from '@webpieces/rules-config';
 import { injectable, bindingScopeValues } from 'inversify';
 
 import { ReapOutcomeReport, ReapOutcomeSignal, REAP_OUTCOME_MISSING } from './reap-outcome';

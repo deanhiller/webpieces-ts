@@ -1,12 +1,5 @@
-import {
-    loadAndValidate,
-    CliExitError,
-    DEFAULT_BUILD_COMMAND,
-    BuildsLog,
-    BuildTermination,
-    BranchIdentity,
-    HOTFIX_BUILD_COMMAND,
-} from '@webpieces/rules-config';
+import { loadAndValidate, CliExitError, DEFAULT_BUILD_COMMAND, BuildsLog, BuildTermination, HOTFIX_BUILD_COMMAND } from '@webpieces/rules-config';
+import { BranchIdentity } from '@webpieces/repo-workflow-core';
 import { injectable, bindingScopeValues } from 'inversify';
 import { BuildGateLog } from './build-gate-log';
 import { StageOutputLog } from './stage-output-log';

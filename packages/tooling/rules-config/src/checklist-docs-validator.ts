@@ -2,7 +2,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { findConfigFile } from './config-file';
 import { validateChecklistsSection } from './validate-config';
-import { toError } from './to-error';
+import { toError } from '@webpieces/tooling-common';
 
 /**
  * Validate ONLY the pr-gate `checklists` array, in isolation — that it IS an array (the removed `{ doc }`

@@ -1,29 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import {
-    BranchArchiver,
-    BranchMutationLog,
-    BranchReaper,
-    DeletableBranch,
-    DeletableWorktree,
-    MergedBranchesService,
-    ReapResult,
-    ReapedBranch,
-    ReapedWorktree,
-    RepoRootFinder,
-    WorktreeReapResult,
-    WorktreeReaper,
-    WorktreeService,
-    WorktreeWorkInFlight,
-    CliExitError,
-    CLASSIFICATION_SUPERSEDED,
-    CLASSIFICATION_CONTENT_IN_MAIN,
-    CLASSIFICATION_NEVER_PROPOSED,
-    CLASSIFICATION_NO_COMMITS,
-    CLASSIFICATION_IN_USE,
-    CLASSIFICATION_MERGED_PR,
-    CLASSIFICATION_CURRENT,
-    CLASSIFICATION_LOCKED,
-} from '@webpieces/rules-config';
+import { BranchArchiver, BranchMutationLog, BranchReaper, DeletableBranch, DeletableWorktree, MergedBranchesService, ReapResult, ReapedBranch, ReapedWorktree, WorktreeReapResult, WorktreeReaper, WorktreeService, WorktreeWorkInFlight, CLASSIFICATION_SUPERSEDED, CLASSIFICATION_CONTENT_IN_MAIN, CLASSIFICATION_NEVER_PROPOSED, CLASSIFICATION_NO_COMMITS, CLASSIFICATION_IN_USE, CLASSIFICATION_MERGED_PR, CLASSIFICATION_CURRENT, CLASSIFICATION_LOCKED } from '@webpieces/repo-workflow-core';
+import { RepoRootFinder, CliExitError } from '@webpieces/rules-config';
 
 import { CleanupCommand } from './cleanup-command';
 import { WorktreeCleanupSection } from './worktree-cleanup';

@@ -1,4 +1,4 @@
-import { WEBPIECES_TMP_DIR } from './constants';
+import { WEBPIECES_TMP_DIR } from '@webpieces/tooling-common';
 
 // Top-level `excludePaths` block from webpieces.config.json: ONE glob list that suppresses hook
 // enforcement for matching files (matched against the workspace-relative path). A path listed here is

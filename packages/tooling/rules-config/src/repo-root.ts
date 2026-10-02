@@ -2,8 +2,8 @@ import * as path from 'path';
 import { injectable, bindingScopeValues } from 'inversify';
 
 import { findConfigFile } from './config-file';
-import { WEBPIECES_TMP_DIR } from './constants';
-import { DotWebpieces, dotWebpieces } from './state-dir';
+import { WEBPIECES_TMP_DIR } from '@webpieces/tooling-common';
+import { DotWebpieces, dotWebpieces } from '@webpieces/tooling-common';
 
 // The single instruct-ai home under `.webpieces/`. Kept here (not just in load-template) so callers
 // building AI-facing messages can render the ABSOLUTE doc path from a resolved repo root.

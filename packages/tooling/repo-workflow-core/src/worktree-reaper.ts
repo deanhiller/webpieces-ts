@@ -9,7 +9,7 @@ import {
     BRANCH_RETENTION_KEEP,
 } from './branch-archiver';
 import { BranchMutationEvent, BranchMutationLog, MutationVerb } from './branch-mutation-log';
-import { CLASSIFICATION_PRUNABLE, DeletableWorktree } from './merged-branches';
+import { CLASSIFICATION_PRUNABLE, DeletableWorktree } from './merged-branch-verdicts';
 import { Worktree, WorktreeService } from './worktrees';
 
 /**

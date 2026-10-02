@@ -1,4 +1,4 @@
-import { dotWebpieces } from '@webpieces/rules-config';
+import { dotWebpieces } from '@webpieces/tooling-common';
 
 import type { BashContext, Violation } from '../types';
 import { Violation as V } from '../types';

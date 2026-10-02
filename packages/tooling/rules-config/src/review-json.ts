@@ -1,10 +1,10 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { injectable, bindingScopeValues } from 'inversify';
-import { PR_REVIEW_DIR } from './constants';
-import { DotWebpieces, dotWebpieces } from './state-dir';
-import { InformAiError } from './inform-ai-error';
-import { toError } from './to-error';
+import { PR_REVIEW_DIR } from '@webpieces/tooling-common';
+import { DotWebpieces, dotWebpieces } from '@webpieces/tooling-common';
+import { InformAiError } from '@webpieces/tooling-common';
+import { toError } from '@webpieces/tooling-common';
 import { SummaryJsonSchemaRenderer } from './summary-json-schema-renderer';
 import { VerdictSchemaRenderer } from './verdict-schema-renderer';
 import { ChecklistOverride, ChecklistOverrideService, checklistOverrideService } from './checklist-override';

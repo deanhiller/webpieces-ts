@@ -1,6 +1,5 @@
-import {
-    ChecklistInstructionsService, InformAiError, RequiredChecklist, ReviewJsonService,
-} from '@webpieces/rules-config';
+import { ChecklistInstructionsService, RequiredChecklist, ReviewJsonService } from '@webpieces/rules-config';
+import { InformAiError } from '@webpieces/tooling-common';
 import { injectable, bindingScopeValues } from 'inversify';
 import { ChecklistScan } from './checklist-scanner';
 import { STANDING_REJECTED, STANDING_STALE, VerdictStanding } from './verdict-provenance';

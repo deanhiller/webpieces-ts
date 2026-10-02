@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { execSync } from 'child_process';
 
-import { ReviewIdentityStampService, specTempDirs } from '@webpieces/rules-config';
+import { ReviewIdentityStampService } from '@webpieces/repo-workflow-core';
+import { specTempDirs } from '@webpieces/rules-config';
 
 import { ReviewIdentityStamper } from './review-identity-stamper';
 import { CodexAdapter } from './codex-adapter';

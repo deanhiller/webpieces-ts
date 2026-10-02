@@ -3,7 +3,7 @@ import { spawn, ChildProcess } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 
-import { AtomicFile } from './atomic-file';
+import { AtomicFile } from '@webpieces/tooling-common';
 import { specTempDirs } from './spec-temp-dirs';
 
 /**

@@ -1,14 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
-import {
-    BuildsLog,
-    DEFAULT_MAX_CONCURRENT_BUILDS,
-    HomeConfig,
-    HomeConfigService,
-    RepoRootFinder,
-    RunningBuild,
-    RuleFailError,
-    toError,
-} from '@webpieces/rules-config';
+import { BuildsLog, DEFAULT_MAX_CONCURRENT_BUILDS, HomeConfig, HomeConfigService, RepoRootFinder, RunningBuild, RuleFailError } from '@webpieces/rules-config';
+import { toError } from '@webpieces/tooling-common';
 
 import { BuildCommand, BuildOptions, TOO_MANY_CONCURRENT_BUILDS } from './build-command';
 import { BuildAffected, BuildGateOptions } from '../workflow/build-affected';

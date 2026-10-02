@@ -1,6 +1,6 @@
 import { injectable, bindingScopeValues } from 'inversify';
 
-import { InformAiError } from './inform-ai-error';
+import { InformAiError } from '@webpieces/tooling-common';
 
 /**
  * The documentation-key convention for `~/.webpieces/config.json`.

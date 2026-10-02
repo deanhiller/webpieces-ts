@@ -3,8 +3,8 @@ import * as fs from 'fs';
 import * as path from 'path';
 
 import { RepoRootFinder } from './repo-root';
-import { DotWebpieces } from './state-dir';
-import { WorktreeService } from './worktrees';
+import { DotWebpieces } from '@webpieces/tooling-common';
+import { WorktreeService } from '@webpieces/repo-workflow-core';
 import { specTempDirs } from './spec-temp-dirs';
 
 /**

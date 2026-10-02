@@ -1,7 +1,7 @@
 import * as fs from 'fs';
 import { injectable, bindingScopeValues } from 'inversify';
 
-import { AtomicFile } from './atomic-file';
+import { AtomicFile } from '@webpieces/tooling-common';
 import { ConfigFile } from './config-file';
 import { PRUNE_UNKNOWN_COMMAND } from './constants';
 import { RULE_SCHEMAS } from './rule-schemas';

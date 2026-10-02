@@ -2,7 +2,7 @@ import { describe, it, expect, afterAll } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
 import { RepoScratchDirs, SCRATCH_DIR_NAME } from './repo-scratch-dirs';
-import { dotWebpieces } from './state-dir';
+import { dotWebpieces } from '@webpieces/tooling-common';
 import { specTempDirs } from './spec-temp-dirs';
 
 const repoRoot = specTempDirs.makeReal('wp-scratchspec-');

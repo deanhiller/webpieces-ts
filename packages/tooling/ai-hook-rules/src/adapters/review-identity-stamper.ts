@@ -1,4 +1,4 @@
-import { ReviewIdentityStamp, ReviewIdentityStampService, reviewIdentityStamps } from '@webpieces/rules-config';
+import { ReviewIdentityStamp, ReviewIdentityStampService, reviewIdentityStamps } from '@webpieces/repo-workflow-core';
 
 import { AgentHookEvent } from '@webpieces/hook-runtime';
 

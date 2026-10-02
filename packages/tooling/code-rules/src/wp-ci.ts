@@ -24,7 +24,9 @@ import * as path from 'path';
 
 import 'reflect-metadata';
 import { Container } from 'inversify';
-import { loadAndValidate, InformAiError, RuleFailError, renderRuleFailForHuman, toError, RepoRootFinder, BaseRuleConfig, BranchIdentity } from '@webpieces/rules-config';
+import { loadAndValidate, RuleFailError, renderRuleFailForHuman, RepoRootFinder, BaseRuleConfig } from '@webpieces/rules-config';
+import { InformAiError, toError } from '@webpieces/tooling-common';
+import { BranchIdentity } from '@webpieces/repo-workflow-core';
 import { CodeRulesApp } from './code-rules-app';
 import { WorkspaceRoot, MatchRulesHolder } from './code-rules-context';
 import { CONFIG_BINDINGS } from './code-rules-config-table';

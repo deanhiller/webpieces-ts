@@ -3,8 +3,8 @@ import { execSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 
-import { MainSyncStatusService } from './main-sync-status';
-import { MAIN_SYNC_STATUS_VERSION } from './main-sync-file';
+import { MainSyncStatusService } from '@webpieces/repo-workflow-core';
+import { MAIN_SYNC_STATUS_VERSION } from '@webpieces/repo-workflow-core';
 import { specTempDirs } from './spec-temp-dirs';
 
 /**

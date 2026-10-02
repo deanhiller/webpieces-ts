@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { BranchIdentity } from './skip-rule';
+import { BranchIdentity } from './branch-identity';
 
 afterEach(() => {
     vi.unstubAllEnvs();

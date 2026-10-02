@@ -1,7 +1,8 @@
 import * as fs from 'fs';
 import * as path from 'path';
 
-import { dotWebpieces, MERGE_INFO_DIR, MERGE_IN_PROGRESS_FILE, PrLifecycleGuardConfig, PR_LIFECYCLE_GUARD_KEY } from '@webpieces/rules-config';
+import { dotWebpieces } from '@webpieces/tooling-common';
+import { MERGE_INFO_DIR, MERGE_IN_PROGRESS_FILE, PrLifecycleGuardConfig, PR_LIFECYCLE_GUARD_KEY } from '@webpieces/rules-config';
 
 import type { BashContext, Violation } from '../types';
 import { Violation as V } from '../types';

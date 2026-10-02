@@ -58,23 +58,8 @@ vi.mock('child_process', () => ({
     },
 }));
 
-import {
-    MergedBranchesService,
-    DeletableBranch,
-    CLASSIFICATION_MERGED_PR,
-    CLASSIFICATION_BACKUP_OF_MERGED,
-    CLASSIFICATION_BACKUP_OF_LIVE,
-    CLASSIFICATION_NO_COMMITS,
-    CLASSIFICATION_SUPERSEDED,
-    CLASSIFICATION_CONTENT_IN_MAIN,
-    CLASSIFICATION_NEVER_PROPOSED,
-    CLASSIFICATION_PRUNABLE,
-    CLASSIFICATION_LOCKED,
-    CLASSIFICATION_CURRENT,
-    ADJUDICATED_CLASSIFICATIONS,
-    MergedBranchesCache,
-    DeletableWorktree,
-} from './merged-branches';
+import { MergedBranchesService } from './merged-branches';
+import { DeletableBranch, CLASSIFICATION_MERGED_PR, CLASSIFICATION_BACKUP_OF_MERGED, CLASSIFICATION_BACKUP_OF_LIVE, CLASSIFICATION_NO_COMMITS, CLASSIFICATION_SUPERSEDED, CLASSIFICATION_CONTENT_IN_MAIN, CLASSIFICATION_NEVER_PROPOSED, CLASSIFICATION_PRUNABLE, CLASSIFICATION_LOCKED, CLASSIFICATION_CURRENT, ADJUDICATED_CLASSIFICATIONS, MergedBranchesCache, DeletableWorktree } from './merged-branch-verdicts';
 
 function names(list: DeletableBranch[]): string[] {
     return list.map((entry: DeletableBranch): string => entry.branch).sort();

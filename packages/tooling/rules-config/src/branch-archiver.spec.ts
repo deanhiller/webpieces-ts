@@ -3,7 +3,7 @@ import { execFileSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 
-import { ARCHIVE_TAG_PREFIX, BranchArchiver } from './branch-archiver';
+import { ARCHIVE_TAG_PREFIX, BranchArchiver } from '@webpieces/repo-workflow-core';
 import { specTempDirs } from './spec-temp-dirs';
 
 /**

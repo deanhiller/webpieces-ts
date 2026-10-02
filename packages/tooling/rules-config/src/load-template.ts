@@ -2,10 +2,10 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { injectable, bindingScopeValues } from 'inversify';
 
-import { AtomicFile } from './atomic-file';
+import { AtomicFile } from '@webpieces/tooling-common';
 import { InstructAiDocSet } from './instruct-ai-docs';
 import { INSTRUCT_AI_LEAF } from './repo-root';
-import { DotWebpieces, dotWebpieces } from './state-dir';
+import { DotWebpieces, dotWebpieces } from '@webpieces/tooling-common';
 import { StaleBinSweeper, staleBinSweeper } from './stale-bin-sweep';
 
 const TEMPLATES_DIR = path.join(__dirname, '..', 'templates');
