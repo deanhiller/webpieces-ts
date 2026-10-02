@@ -1,16 +1,14 @@
 #!/usr/bin/env node
 import 'reflect-metadata';
+import { runMain } from '@webpieces/rules-config';
 import { Container } from 'inversify';
-import { runMain, CliArgs, CliUsage } from '@webpieces/rules-config';
-import { PrGateApp } from './pr-gate-app';
+import { PrGateCliApp } from './pr-gate-cli-app';
+import { PrGateCliInvocationFactory } from './pr-gate-cli-invocation';
 
-// Composition root: build the container and resolve the app so inversify constructs the whole DAG.
-runMain(async (): Promise<void> => {
-    // autobind self-binds every @injectable(Singleton) tooling class (replaces the buildProviderModule registry scan)
-    const container = new Container({ autobind: true });
-    // Reject `--help`/bogus flags BEFORE the app touches git — an ignored flag must never start the flow.
-    container.get(CliArgs).assertNoArgs(new CliUsage(
-        'wp-sync-main',
-        'Go to main, fast-forward it, reap dead worktrees and branches, and sweep orphan directories.'));
-    await container.get(PrGateApp).syncMain();
-});
+const container = new Container({ autobind: true });
+runMain(
+    (): Promise<void> =>
+        container
+            .get(PrGateCliApp)
+            .run(container.get(PrGateCliInvocationFactory).fromProcess('wp-sync-main')),
+);
