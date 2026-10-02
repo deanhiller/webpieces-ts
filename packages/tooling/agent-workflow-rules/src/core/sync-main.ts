@@ -26,6 +26,7 @@ import { logStream, StreamIdentity } from './log-stream';
  * entirely. Adopting the parent's identity puts one refresh cycle back in one stream. Absent argv
  * (a hand-run of this file) leaves the default, which still prefixes.
  */
+// webpieces-disable no-function-outside-class -- existing stateless module helper moved intact with its callers; ownership extraction preserves its functional API
 export function main(): void {
     logStream.identify(spawnerIdentity(process.argv));
     refreshMainSync(

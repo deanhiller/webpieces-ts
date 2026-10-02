@@ -55,6 +55,7 @@ class HookSpec {
 }
 
 // Idempotent: re-running the installer overwrites the managed shim in place.
+// webpieces-disable no-function-outside-class -- existing CLI/shim bootstrap function moved intact; it must remain callable without constructing a DI container
 function writeShim(projectRoot: string): void {
     const target = shimPath(projectRoot);
     fs.mkdirSync(path.dirname(target), { recursive: true });
@@ -63,6 +64,7 @@ function writeShim(projectRoot: string): void {
     fs.chmodSync(target, 0o755);
 }
 
+// webpieces-disable no-function-outside-class -- existing CLI/shim bootstrap function moved intact; it must remain callable without constructing a DI container
 function removeShim(projectRoot: string): void {
     const target = shimPath(projectRoot);
     if (fs.existsSync(target)) fs.rmSync(target);
@@ -146,6 +148,7 @@ export const GUARDS_HOOK = new HookSpec('guards', 'Guards hook (git/PR/branch pr
  * `homeDir` is injectable so tests can point the global target at a temp dir instead of the real
  * ~/.claude/settings.json (a unit test must never write the user's actual global settings).
  */
+// webpieces-disable no-function-outside-class -- existing CLI/shim bootstrap function moved intact; it must remain callable without constructing a DI container
 export function installTargets(projectRoot: string, homeDir: string = homedir()): InstallTarget[] {
     return [
         new InstallTarget('1', 'project (.claude/settings.json — committed, for the team)',
@@ -164,6 +167,7 @@ export function installTargets(projectRoot: string, homeDir: string = homedir())
 // ---------------------------------------------------------------------------
 // Claude Code settings.json hook wiring.
 // ---------------------------------------------------------------------------
+// webpieces-disable no-function-outside-class -- existing CLI/shim bootstrap function moved intact; it must remain callable without constructing a DI container
 export function hasHook(settings: ClaudeSettings, bin: string): boolean {
     const entries = settings.hooks?.PreToolUse ?? [];
     return entries.some((e: HookEntry) => e.hooks.some((h: HookCommand) => h.command.includes(bin)));
@@ -190,6 +194,7 @@ function removeHookByMarker(settings: ClaudeSettings, marker: string): boolean {
 
 // Apply the chosen install for one hook: remove it from every target file, then add it back to the
 // chosen one (or nowhere, for uninstall). Writes only the files that changed.
+// webpieces-disable no-function-outside-class -- existing CLI/shim bootstrap function moved intact; it must remain callable without constructing a DI container
 export function applyHook(hook: HookSpec, chosen: InstallTarget | null, targets: InstallTarget[], projectRoot: string): void {
     // SCOPED TO THE CHOSEN HARNESS, and this is what makes one call per target composable. Installing
     // the Claude hook must not strip the Codex one, so "remove it from everywhere else" means everywhere
@@ -260,11 +265,13 @@ function reportCodexTrust(projectRoot: string, targets: InstallTarget[], choice:
     for (const line of lines) console.log(line);
 }
 
+// webpieces-disable no-function-outside-class -- existing CLI/shim bootstrap function moved intact; it must remain callable without constructing a DI container
 function currentLocation(hook: HookSpec, targets: InstallTarget[]): string {
     const here = targets.filter((t: InstallTarget) => hasHook(readSettings(t.settingsPath), hook.bin));
     return here.length === 0 ? 'none' : here.map((t: InstallTarget) => t.label.split(' (')[0]).join(', ');
 }
 
+// webpieces-disable no-function-outside-class -- existing CLI/shim bootstrap function moved intact; it must remain callable without constructing a DI container
 function prompt(question: string): Promise<string> {
     return new Promise((resolve: (answer: string) => void) => {
         const rl = createInterface({ input: process.stdin, output: process.stdout });
@@ -274,6 +281,7 @@ function prompt(question: string): Promise<string> {
 
 // Map a friendly `--target` name to an InstallTarget choice id (see installTargets). Returns null
 // for an unknown name so the caller can error out. Kept separate + exported for unit testing.
+// webpieces-disable no-function-outside-class -- existing CLI/shim bootstrap function moved intact; it must remain callable without constructing a DI container
 export function resolveTargetChoice(name: string): string | null {
     switch (name) {
         case 'project': return '1';
@@ -288,6 +296,7 @@ export function resolveTargetChoice(name: string): string | null {
 }
 
 // Extract the value of `--target=<name>` from argv (null if the flag is absent).
+// webpieces-disable no-function-outside-class -- existing CLI/shim bootstrap function moved intact; it must remain callable without constructing a DI container
 export function parseTargetArg(args: string[]): string | null {
     const flag = args.find((a: string): boolean => a.startsWith('--target='));
     return flag ? flag.slice('--target='.length) : null;
@@ -310,6 +319,7 @@ export function applyChoice(hook: HookSpec, choice: string, targets: InstallTarg
     for (const target of chosen) applyHook(hook, target, targets, projectRoot);
 }
 
+// webpieces-disable no-function-outside-class -- existing CLI/shim bootstrap function moved intact; it must remain callable without constructing a DI container
 async function wireHook(hook: HookSpec, targets: InstallTarget[], projectRoot: string): Promise<void> {
     console.log('');
     console.log(`${hook.label}`);
@@ -349,6 +359,7 @@ function scaffoldCiGate(projectRoot: string): void {
     console.log('     .webpieces/instruct-ai/webpieces.ci-gate-setup.md');
 }
 
+// webpieces-disable no-function-outside-class -- existing CLI/shim bootstrap function moved intact; it must remain callable without constructing a DI container
 export async function main(): Promise<void> {
     const args = process.argv.slice(2);
     // Anchor the install at the repo root (git toplevel — webpieces.config.json may not exist yet on

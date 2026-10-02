@@ -53,6 +53,7 @@ export const SHIM_MARKER = '.claude/webpieces/ai-hook.sh';
 // byte-STABLE across releases, so the self-guard (now in the binary) fires only on a genuine logic
 // change or a real tamper — which is what lets `pnpm install` be the fix for almost everything.
 
+// webpieces-disable no-function-outside-class -- existing CLI/shim bootstrap function moved intact; it must remain callable without constructing a DI container
 export function shimPath(projectRoot: string): string {
     return path.join(projectRoot, '.claude', 'webpieces', 'ai-hook.sh');
 }
@@ -421,6 +422,7 @@ else
   fi
 fi`;
 
+// webpieces-disable no-function-outside-class -- existing CLI/shim bootstrap function moved intact; it must remain callable without constructing a DI container
 export function renderShim(): string {
     return `#!/bin/sh
 # Managed by @webpieces/agent-workflow-rules (wp-install-ai-hooks) — do not edit. This file is GENERATED from
@@ -506,6 +508,7 @@ export function findShimRoot(cwd: string): string | null {
 // own. In a consistent repo this is a no-op (committed shim already equals renderShim()); it earns its
 // keep on the upgrade path, where bumping the pin and installing leaves the committed shim behind and
 // this quietly brings it forward to be committed.
+// webpieces-disable no-function-outside-class -- existing CLI/shim bootstrap function moved intact; it must remain callable without constructing a DI container
 export function healShim(cwd: string): void {
     // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
     try {

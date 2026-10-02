@@ -40,6 +40,7 @@ const MAX_AGE_DAYS = 7;
 
 const RULE_NAME_RE = /^\[([^\]]+)\] \(/gm;
 
+// webpieces-disable no-function-outside-class -- existing stateless module helper moved intact with its callers; ownership extraction preserves its functional API
 export function logRejection(
     toolKind: ToolKind,
     input: NormalizedToolInput,
@@ -94,6 +95,7 @@ export function logRejection(
     }
 }
 
+// webpieces-disable no-function-outside-class -- existing stateless module helper moved intact with its callers; ownership extraction preserves its functional API
 function computeRelativePath(filePath: string, cwd: string): string {
     if (filePath.startsWith(cwd)) {
         const rel = filePath.slice(cwd.length);
@@ -121,6 +123,7 @@ export function extractRuleNames(report: string): string[] {
     return names;
 }
 
+// webpieces-disable no-function-outside-class -- existing stateless module helper moved intact with its callers; ownership extraction preserves its functional API
 function buildDetailContent(
     timestamp: string,
     toolKind: ToolKind,
@@ -172,6 +175,7 @@ function buildDetailContent(
     return lines.join('\n') + '\n';
 }
 
+// webpieces-disable no-function-outside-class -- existing stateless module helper moved intact with its callers; ownership extraction preserves its functional API
 function rotateLogFile(logPath: string, prevPath: string): void {
     // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
     try {

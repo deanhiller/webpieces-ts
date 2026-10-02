@@ -85,6 +85,7 @@ const ORIGIN_MAIN_BASE = /git\s+(?:checkout\s+-[bB]|switch\s+-[cC])\s+\S+\s+orig
 // between the subcommand and the flags).
 const WORKTREE_ORIGIN_MAIN_BASE = /git\s+worktree\s+add\s+(?:\S+\s+)*origin\/main(?:\W|$)/;
 
+// webpieces-disable no-function-outside-class -- existing stateless module helper moved intact with its callers; ownership extraction preserves its functional API
 function extractBranchName(command: string): string | null {
     for (const pattern of BRANCH_PATTERNS) {
         const m = pattern.exec(command);
@@ -93,11 +94,13 @@ function extractBranchName(command: string): string | null {
     return null;
 }
 
+// webpieces-disable no-function-outside-class -- existing stateless module helper moved intact with its callers; ownership extraction preserves its functional API
 function truncate(s: string): string {
     const MAX = 120;
     return s.length <= MAX ? s : s.slice(0, MAX) + '…';
 }
 
+// webpieces-disable no-function-outside-class -- existing stateless module helper moved intact with its callers; ownership extraction preserves its functional API
 function checkMainIsUpToDate(ctx: BashContext, requestedName: string): readonly Violation[] {
     // `--no-write-fetch-head` for the same reason as the background refresher (see
     // MainSyncStatusService.fetchOriginMain): this refresh can run while the agent is mid

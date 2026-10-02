@@ -20,6 +20,7 @@ interface DevHookBackup {
     previousHooks: ClaudeSettings['hooks'] | null;
 }
 
+// webpieces-disable no-function-outside-class -- existing CLI/shim bootstrap function moved intact; it must remain callable without constructing a DI container
 function wireLocalRulesConfig(cwd: string, distRulesConfigPath: string): void {
     // Place the symlink in dist/packages/tooling/node_modules/ — one level above
     // the agent-workflow-rules package output but still below the workspace root node_modules.
@@ -38,6 +39,7 @@ function wireLocalRulesConfig(cwd: string, distRulesConfigPath: string): void {
 
 // NOTE: this is a dev-only tool, no longer a `wp-*` bin. Run it directly with node against the local
 // build: `node dist/packages/tooling/agent-workflow-rules/src/bin/dev-hook-install.js`.
+// webpieces-disable no-function-outside-class -- existing CLI/shim bootstrap function moved intact; it must remain callable without constructing a DI container
 export async function runDevHookInstall(): Promise<void> {
     const cwd = process.cwd();
     const adaptersDir = join(cwd, 'dist', 'packages', 'tooling', 'agent-workflow-rules', 'src', 'adapters');

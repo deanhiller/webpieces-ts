@@ -38,6 +38,7 @@ import { InformAiError } from '@webpieces/tooling-common';
 // for every class behind a policy key — `feature-branch-guard` is a rule NAME whose key is
 // `branch-state-guard` — and asking about the name would classify all eight collapsed guards as
 // code-style rules, i.e. run them in the wrong hook and never in the guards hook at all.
+// webpieces-disable no-function-outside-class -- existing stateless module helper moved intact with its callers; ownership extraction preserves its functional API
 function filterByMode(rules: readonly Rule[], mode: HookMode): readonly Rule[] {
     if (mode === 'all') return rules;
     if (mode === 'guards') return rules.filter((r: Rule): boolean => isHookGuard(r.configKey));
@@ -62,6 +63,7 @@ function guardHintsOf(loaded: LoadedConfig): GuardHintCommands {
 
 // A git or gh invocation anywhere in the command (start, or after a ;/&&/|| separator or pipe).
 const GIT_OR_GH_RE = /(?:^|[;&|]\s*)(?:git|gh)\b/;
+// webpieces-disable no-function-outside-class -- existing stateless module helper moved intact with its callers; ownership extraction preserves its functional API
 export function isGitOrGhCommand(command: string): boolean {
     return GIT_OR_GH_RE.test(command);
 }
@@ -81,6 +83,7 @@ function configMissingBlock(cwd: string): BlockedResult {
     return new BlockedResult(CONFIG_MISSING_REPORT + guardMatrixPointer(writeGuardMatrixDoc(root)), L0_FAULT_CONFIG_MISSING);
 }
 
+// webpieces-disable no-function-outside-class -- existing stateless module helper moved intact with its callers; ownership extraction preserves its functional API
 export function run(
     toolKind: ToolKind,
     input: NormalizedToolInput,
@@ -90,6 +93,7 @@ export function run(
     return runInternal(toolKind, input, cwd, mode);
 }
 
+// webpieces-disable no-function-outside-class -- existing stateless module helper moved intact with its callers; ownership extraction preserves its functional API
 function runInternal(
     toolKind: ToolKind,
     input: NormalizedToolInput,

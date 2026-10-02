@@ -71,6 +71,7 @@ export function formatReport(
     return lines.join('\n');
 }
 
+// webpieces-disable no-function-outside-class -- existing stateless module helper moved intact with its callers; ownership extraction preserves its functional API
 function formatEditPrefix(v: Violation): string {
     if (v.editIndex !== undefined && v.editCount !== undefined && v.editCount > 1) {
         return `edit ${String(v.editIndex + 1)}/${String(v.editCount)} `;

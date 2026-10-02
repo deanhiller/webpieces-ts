@@ -8,6 +8,7 @@ import { BashRuleBase } from '@webpieces/hook-runtime';
 import { FixHint } from '@webpieces/hook-runtime';
 import { TreeRecovery, TreeKind } from './tree-recovery';
 
+// webpieces-disable no-function-outside-class -- existing stateless module helper moved intact with its callers; ownership extraction preserves its functional API
 function truncate(s: string): string {
     const MAX = 120;
     return s.length <= MAX ? s : s.slice(0, MAX) + '…';

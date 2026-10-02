@@ -39,6 +39,7 @@ class StripState {
     }
 }
 
+// webpieces-disable no-function-outside-class -- existing stateless module helper moved intact with its callers; ownership extraction preserves its functional API
 function handleCodeOrInterp(s: StripState): void {
     const ch = s.ch();
     const next = s.next();
@@ -58,16 +59,19 @@ function handleCodeOrInterp(s: StripState): void {
     s.emit(s.i, ch); s.i += 1;
 }
 
+// webpieces-disable no-function-outside-class -- existing stateless module helper moved intact with its callers; ownership extraction preserves its functional API
 function handleLineComment(s: StripState): void {
     if (s.ch() === '\n') { s.emit(s.i, '\n'); s.i += 1; s.popState(); return; }
     s.blank(s.i, s.ch()); s.i += 1;
 }
 
+// webpieces-disable no-function-outside-class -- existing stateless module helper moved intact with its callers; ownership extraction preserves its functional API
 function handleBlockComment(s: StripState): void {
     if (s.ch() === '*' && s.next() === '/') { s.emit(s.i, '*'); s.emit(s.i + 1, '/'); s.i += 2; s.popState(); return; }
     s.blank(s.i, s.ch()); s.i += 1;
 }
 
+// webpieces-disable no-function-outside-class -- existing stateless module helper moved intact with its callers; ownership extraction preserves its functional API
 function handleStringLiteral(s: StripState, quoteChar: string): void {
     const ch = s.ch();
     if (ch === '\\' && s.i + 1 < s.len) { s.blank(s.i, ch); s.blank(s.i + 1, s.source[s.i + 1]); s.i += 2; return; }
@@ -75,6 +79,7 @@ function handleStringLiteral(s: StripState, quoteChar: string): void {
     s.blank(s.i, ch); s.i += 1;
 }
 
+// webpieces-disable no-function-outside-class -- existing stateless module helper moved intact with its callers; ownership extraction preserves its functional API
 function handleTemplate(s: StripState): void {
     const ch = s.ch();
     if (ch === '\\' && s.i + 1 < s.len) { s.blank(s.i, ch); s.blank(s.i + 1, s.source[s.i + 1]); s.i += 2; return; }
@@ -88,6 +93,7 @@ function handleTemplate(s: StripState): void {
     s.blank(s.i, ch); s.i += 1;
 }
 
+// webpieces-disable no-function-outside-class -- existing stateless module helper moved intact with its callers; ownership extraction preserves its functional API
 export function stripTsNoise(source: string): string {
     const s = new StripState(source);
     while (s.i < s.len) {

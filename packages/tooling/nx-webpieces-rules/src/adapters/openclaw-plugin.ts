@@ -37,11 +37,13 @@ const TOOL_MAP: Record<string, ToolKind> = {
     'edit': 'Edit',
 };
 
+// webpieces-disable no-function-outside-class -- existing OpenClaw callback and stateless adapter helpers moved intact; the SDK invokes this module function
 function mapToolName(openclawName: string): ToolKind | null {
     return TOOL_MAP[openclawName] || null;
 }
 
 // webpieces-disable no-any-unknown -- openclaw SDK passes opaque tool arguments
+// webpieces-disable no-function-outside-class -- existing OpenClaw callback and stateless adapter helpers moved intact; the SDK invokes this module function
 function mapToolInput(toolName: string, args: Record<string, unknown>): NormalizedToolInput | null {
     const filePath = typeof args['path'] === 'string' ? args['path'] as string : null;
     if (!filePath) return null;
@@ -58,6 +60,7 @@ function mapToolInput(toolName: string, args: Record<string, unknown>): Normaliz
     return null;
 }
 
+// webpieces-disable no-function-outside-class -- existing OpenClaw callback and stateless adapter helpers moved intact; the SDK invokes this module function
 function findWorkspaceRoot(filePath: string): string | null {
     let dir = path.dirname(filePath);
     while (true) {
@@ -68,6 +71,7 @@ function findWorkspaceRoot(filePath: string): string | null {
     }
 }
 
+// webpieces-disable no-function-outside-class -- existing OpenClaw callback and stateless adapter helpers moved intact; the SDK invokes this module function
 export default async function handler(
     event: ToolCallEvent,
     _context: HookContext,

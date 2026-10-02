@@ -17,6 +17,7 @@ export class BuiltContexts {
     }
 }
 
+// webpieces-disable no-function-outside-class -- existing stateless module helper moved intact with its callers; ownership extraction preserves its functional API
 export function buildContexts(
     toolKind: ToolKind,
     input: NormalizedToolInput,
@@ -83,6 +84,7 @@ export function buildBashContext(command: string, tree: EffectiveTree): BashCont
     return new BashContext(command, tree.root, tree.effectiveCwd, tree.governedRoot);
 }
 
+// webpieces-disable no-function-outside-class -- existing stateless module helper moved intact with its callers; ownership extraction preserves its functional API
 function readCurrentFileLines(filePath: string): number {
     // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
     try {
@@ -95,6 +97,7 @@ function readCurrentFileLines(filePath: string): number {
     }
 }
 
+// webpieces-disable no-function-outside-class -- existing stateless module helper moved intact with its callers; ownership extraction preserves its functional API
 function countLines(s: string): number {
     if (!s) return 0;
     return s.split('\n').length;

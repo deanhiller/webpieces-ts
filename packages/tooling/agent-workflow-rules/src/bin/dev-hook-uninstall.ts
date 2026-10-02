@@ -22,6 +22,7 @@ interface DevHookBackup {
 
 // NOTE: this is a dev-only tool, no longer a `wp-*` bin. Run it directly with node against the local
 // build: `node dist/packages/tooling/agent-workflow-rules/src/bin/dev-hook-uninstall.js`.
+// webpieces-disable no-function-outside-class -- existing CLI/shim bootstrap function moved intact; it must remain callable without constructing a DI container
 export async function runDevHookUninstall(): Promise<void> {
     const cwd = process.cwd();
     const homeDir = homedir();

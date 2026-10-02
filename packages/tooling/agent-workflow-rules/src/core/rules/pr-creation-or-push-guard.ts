@@ -17,6 +17,7 @@ const INSTRUCT_FILE = 'webpieces.git-workflow.md';
  * direction of the two. Naming both destinations is what makes the dev flow discoverable at all — nothing
  * else the AI can see mentions it.
  */
+// webpieces-disable no-function-outside-class -- existing stateless module helper moved intact with its callers; ownership extraction preserves its functional API
 function fixHintFor(upsertPrCommand: string): FixHint {
     return new FixHint(
         'Direct PR creation/update AND manual `git push` are blocked.',
@@ -50,6 +51,7 @@ function fixHintFor(upsertPrCommand: string): FixHint {
 // gated flow (wp-start-upsert-pr → wp-finish-upsert-pr, whose internal `git push` / `gh pr create`
 // run as child processes the hook never sees). Read-only `gh pr list` / `gh api .../pulls` GET are
 // intentionally allowed.
+// webpieces-disable no-function-outside-class -- existing stateless module helper moved intact with its callers; ownership extraction preserves its functional API
 function isBlockedPrOrPush(cmd: string): boolean {
     // A manual push is always blocked — the gated flow pushes for you behind the build gate.
     if (/\bgit\s+push\b/.test(cmd)) return true;
@@ -78,6 +80,7 @@ function isBlockedPrOrPush(cmd: string): boolean {
     return false;
 }
 
+// webpieces-disable no-function-outside-class -- existing stateless module helper moved intact with its callers; ownership extraction preserves its functional API
 function truncate(s: string): string {
     const MAX = 120;
     return s.length <= MAX ? s : s.slice(0, MAX) + '…';

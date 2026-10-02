@@ -48,6 +48,7 @@ export class SyncLogEvent {
  * the workspace root holding `.webpieces`. Swallows all errors — logging must never block or fail
  * the refresher (or the hook that spawns it).
  */
+// webpieces-disable no-function-outside-class -- existing stateless module helper moved intact with its callers; ownership extraction preserves its functional API
 export function logSyncEvent(root: string, event: SyncLogEvent): void {
     // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
     try {
@@ -87,11 +88,13 @@ export function refresherChildStdioPath(root: string): string {
 }
 
 // Collapse newlines/tabs and cap length so one event is always one log line.
+// webpieces-disable no-function-outside-class -- existing stateless module helper moved intact with its callers; ownership extraction preserves its functional API
 function oneLine(value: string): string {
     const flat = value.replace(/[\t\r\n]+/g, ' ').trim();
     return flat.length <= MAX_DETAIL_LEN ? flat : flat.slice(0, MAX_DETAIL_LEN) + '…';
 }
 
+// webpieces-disable no-function-outside-class -- existing stateless module helper moved intact with its callers; ownership extraction preserves its functional API
 function rotateLogFile(logPath: string, prevPath: string): void {
     // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
     try {

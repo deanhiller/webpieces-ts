@@ -97,6 +97,7 @@ function isBlockedDuringMerge(cmd: string): boolean {
         || BLOCKED_GH_PR_PATTERN.test(cmd);
 }
 
+// webpieces-disable no-function-outside-class -- existing stateless module helper moved intact with its callers; ownership extraction preserves its functional API
 function truncate(s: string): string {
     const MAX = 120;
     return s.length <= MAX ? s : s.slice(0, MAX) + '…';

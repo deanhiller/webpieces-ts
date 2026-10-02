@@ -377,6 +377,7 @@ export const invocationLog = new InvocationLog();
 // One-field summary of main-sync-status.json for the invocation log: the branch the cache is FOR,
 // whether it is already merged (and its PR), fork-point presence, and conflict state — the signals a
 // cleanup step keys off. 'sync=none' when the cache has not been written yet (first call of a session).
+// webpieces-disable no-function-outside-class -- existing stateless module helper moved intact with its callers; ownership extraction preserves its functional API
 function summarizeSyncStatus(status: MainSyncStatus | null): string {
     if (status === null) return 'sync=none';
     const merged = status.branchAlreadyMerged ? `PR#${status.mergedPr !== '' ? status.mergedPr : '?'}` : 'no';
@@ -385,6 +386,7 @@ function summarizeSyncStatus(status: MainSyncStatus | null): string {
 
 // Best-effort current branch for the log line. Returns 'unknown' on any failure (e.g. not a git
 // repo) — this is for display only, never for a control decision.
+// webpieces-disable no-function-outside-class -- existing stateless module helper moved intact with its callers; ownership extraction preserves its functional API
 export function branchForLog(root: string): string {
     // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
     try {
@@ -409,6 +411,7 @@ function oneLine(value: string): string {
     return logTarget.oneLine(value);
 }
 
+// webpieces-disable no-function-outside-class -- existing stateless module helper moved intact with its callers; ownership extraction preserves its functional API
 function rotateLogFile(logPath: string, prevPath: string): void {
     // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
     try {

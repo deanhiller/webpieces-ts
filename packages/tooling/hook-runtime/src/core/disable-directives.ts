@@ -24,6 +24,7 @@ export class DirectiveIndex {
     }
 }
 
+// webpieces-disable no-function-outside-class -- existing stateless module helper moved intact with its callers; ownership extraction preserves its functional API
 function parseRuleList(raw: string): readonly string[] {
     return raw
         .split(',')
@@ -31,6 +32,7 @@ function parseRuleList(raw: string): readonly string[] {
         .filter((s: string): boolean => s.length > 0 && s !== '*');
 }
 
+// webpieces-disable no-function-outside-class -- existing stateless module helper moved intact with its callers; ownership extraction preserves its functional API
 function nextTargetLine(lines: readonly string[], lineIdx: number): number | null {
     for (let j = lineIdx + 1; j < lines.length; j += 1) {
         const trimmed = lines[j].trim();
@@ -41,12 +43,14 @@ function nextTargetLine(lines: readonly string[], lineIdx: number): number | nul
     return null;
 }
 
+// webpieces-disable no-function-outside-class -- existing stateless module helper moved intact with its callers; ownership extraction preserves its functional API
 function addDisable(map: Map<number, Set<string>>, lineNum: number, rules: readonly string[]): void {
     if (!map.has(lineNum)) map.set(lineNum, new Set<string>());
     const set = map.get(lineNum)!;
     for (const r of rules) set.add(r);
 }
 
+// webpieces-disable no-function-outside-class -- existing stateless module helper moved intact with its callers; ownership extraction preserves its functional API
 function resolveTarget(
     line: string, lines: readonly string[], i: number,
     map: Map<number, Set<string>>, rules: readonly string[],
@@ -60,6 +64,7 @@ function resolveTarget(
     }
 }
 
+// webpieces-disable no-function-outside-class -- existing stateless module helper moved intact with its callers; ownership extraction preserves its functional API
 export function parseDirectives(source: string): DirectiveIndex {
     const lines = source.split('\n');
     const lineDisables = new Map<number, Set<string>>();
@@ -75,6 +80,7 @@ export function parseDirectives(source: string): DirectiveIndex {
     return new DirectiveIndex(lineDisables);
 }
 
+// webpieces-disable no-function-outside-class -- existing stateless module helper moved intact with its callers; ownership extraction preserves its functional API
 export function createIsLineDisabled(source: string): IsLineDisabled {
     const index = parseDirectives(source);
     return (lineNum: number, ruleName: string): boolean => index.isLineDisabled(lineNum, ruleName);

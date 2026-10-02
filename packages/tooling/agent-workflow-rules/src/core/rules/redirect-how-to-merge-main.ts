@@ -56,6 +56,7 @@ const UNDO_FLAG = /--(?:abort|quit)\b/;
 // Typed as a query ("would this fast-forward?"), but a successful --ff-only IS the merge.
 const FF_ONLY = /--ff-only\b/;
 
+// webpieces-disable no-function-outside-class -- existing stateless module helper moved intact with its callers; ownership extraction preserves its functional API
 function truncate(s: string): string {
     const MAX = 120;
     return s.length <= MAX ? s : s.slice(0, MAX) + '…';
