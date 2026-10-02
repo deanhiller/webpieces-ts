@@ -8,6 +8,7 @@ import { AiBranchName } from '../workflow/git-readAiBranchName';
 import { ReviewStageReceipt, ReviewStageReceiptService } from '../workflow/review-stage-receipt';
 import { ReviewerIdentity, ReviewerIdentityResolver } from '../workflow/reviewer-identity';
 import { SubmittedVerdict, VerdictProvenance, VerdictProvenanceService } from '../workflow/verdict-provenance';
+import type { PrGateCliStdin } from '../pr-gate-cli-invocation';
 
 /** The only keys a verdict may carry. Anything else is somebody's second schema. */
 const VERDICT_KEYS = ['id', 'status', 'agent', 'model', 'output'] as const;
@@ -237,14 +238,11 @@ export class WriteReviewCommand {
  */
 @injectable(bindingScopeValues.Singleton)
 export class WriteReviewInput {
-    read(filePath: string): string {
+    read(filePath: string, stdin: PrGateCliStdin): string {
         if (filePath.trim() !== '') {
             if (!fs.existsSync(filePath)) throw new InformAiError(`${WRITE_REVIEW_BIN}: --file ${filePath} does not exist.`);
             return fs.readFileSync(filePath, 'utf8');
         }
-        if (process.stdin.isTTY === true) {
-            throw new InformAiError(`${WRITE_REVIEW_BIN}: pass the verdict JSON on stdin (pnpm ${WRITE_REVIEW_BIN} --checklist <id> <<'EOF' … EOF) or with --file <path>.`);
-        }
-        return fs.readFileSync(0, 'utf8');
+        return stdin.read();
     }
 }

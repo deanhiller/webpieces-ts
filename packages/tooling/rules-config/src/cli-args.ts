@@ -182,7 +182,11 @@ export class CliArgs {
      * git.
      */
     parse(usage: CliUsage): CliArgSet {
-        const args = process.argv.slice(2);
+        return this.parseArgs(process.argv.slice(2), usage);
+    }
+
+    /** Parse explicitly supplied argv without mutating process.argv. */
+    parseArgs(args: string[], usage: CliUsage): CliArgSet {
         const check = this.classify(args, usage);
         if (!check.ok) throw new CliExitError(check.exitCode, check.message);
         const scan = this.scan(args, usage);

@@ -4,6 +4,7 @@ import { injectable, bindingScopeValues } from 'inversify';
 import { AiBranchName } from '../workflow/git-readAiBranchName';
 import { ReviewRoundStateService } from '../workflow/review-round-state';
 import { ReviewStageReceiptService } from '../workflow/review-stage-receipt';
+import type { PrGateCliStdin } from '../pr-gate-cli-invocation';
 
 export class WriteReviewFixesOptions {
     json: string;
@@ -42,14 +43,11 @@ export class WriteReviewFixesCommand {
 
 @injectable(bindingScopeValues.Singleton)
 export class WriteReviewFixesInput {
-    read(filePath: string): string {
+    read(filePath: string, stdin: PrGateCliStdin): string {
         if (filePath.trim() !== '') {
             if (!fs.existsSync(filePath)) throw new InformAiError(`wp-write-review-fixes: --file ${filePath} does not exist.`);
             return fs.readFileSync(filePath, 'utf8');
         }
-        if (process.stdin.isTTY === true) {
-            throw new InformAiError('wp-write-review-fixes: pass JSON on stdin or with --file <path>.');
-        }
-        return fs.readFileSync(0, 'utf8');
+        return stdin.read();
     }
 }

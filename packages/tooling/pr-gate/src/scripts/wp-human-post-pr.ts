@@ -1,18 +1,14 @@
 #!/usr/bin/env node
 import 'reflect-metadata';
+import { runMain } from '@webpieces/rules-config';
 import { Container } from 'inversify';
-import { CliArgs, CliUsage, runMain } from '@webpieces/rules-config';
-import { PrGateApp } from './pr-gate-app';
+import { PrGateCliApp } from './pr-gate-cli-app';
+import { PrGateCliInvocationFactory } from './pr-gate-cli-invocation';
 
-runMain(async (): Promise<void> => {
-    const container = new Container({ autobind: true });
-    container
-        .get(CliArgs)
-        .assertNoArgs(
-            new CliUsage(
-                'wp-human-post-pr',
-                'Interactively attest that a human is posting the current clean, current-main feature branch.',
-            ),
-        );
-    await container.get(PrGateApp).humanPostPr();
-});
+const container = new Container({ autobind: true });
+runMain(
+    (): Promise<void> =>
+        container
+            .get(PrGateCliApp)
+            .run(container.get(PrGateCliInvocationFactory).fromProcess('wp-human-post-pr')),
+);
