@@ -1,5 +1,5 @@
 import { TypeRef } from './TypeRef';
-import type { DocumentedStreaming } from '../extract/StreamingSignature';
+import type { DocumentedStreaming } from './DocumentedStreaming';
 
 /**
  * The model classes. Every one of them is a CLASS with an explicit constructor per `CLAUDE.md` §1 —

@@ -1,20 +1,10 @@
 import * as ts from 'typescript';
 import { StreamDirection, WpStream } from '@webpieces/core-util';
-import { TypeRef } from '../model/TypeRef';
 import { TypeResolver } from './TypeResolver';
 import { ConstantFolder } from './ConstantFolder';
 import { SourceLocation } from './SourceLocation';
 import { ApiDocExtractionError } from './ApiDocExtractionError';
-
-export class DocumentedStreaming {
-    constructor(
-        readonly direction: StreamDirection,
-        readonly initialRequest: TypeRef,
-        readonly initialResponse: TypeRef,
-        readonly requestEvent: TypeRef | undefined,
-        readonly responseEvent: TypeRef | undefined,
-    ) {}
-}
+import { DocumentedStreaming } from '../model/DocumentedStreaming';
 
 const FORMS = [
     'FULL: (InitialRequest, ResponseStream<ResponseEvent>) => Promise<RequestStream<InitialResponse, RequestEvent>>',
