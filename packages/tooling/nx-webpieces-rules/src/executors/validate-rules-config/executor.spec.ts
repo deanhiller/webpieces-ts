@@ -12,7 +12,9 @@ import runExecutor from './executor';
 class ConfigFixture {
     write(contents: string): string {
         const root = policyFixture.makeRepo('wp-rules-check-');
-        fs.writeFileSync(path.join(root, 'webpieces.config.json'), contents);
+        if (contents.startsWith('{ not'))
+            fs.writeFileSync(path.join(root, 'webpieces.config.json'), contents);
+        else policyFixture.writeOwnerConfig(root, JSON.parse(contents));
         return root;
     }
 
@@ -25,19 +27,29 @@ const fixture = new ConfigFixture();
 
 describe('rules:check config characterization', () => {
     it('fails malformed config edits at the scoped target', (): void => {
-        expect(() => runExecutor({}, fixture.context(fixture.write('{ not json'))))
-            .toThrow('could not be parsed as JSON');
+        expect(() => runExecutor({}, fixture.context(fixture.write('{ not json')))).toThrow(
+            'could not be parsed as JSON',
+        );
     });
 
     it('fails when required rule entries are missing', (): void => {
-        const root = fixture.write(JSON.stringify({
-            rules: {},
-            hookGuards: {},
-            commands: { 'pr-gate': { mode: 'ON', buildCommand: 'echo ci', mergeMode: 'AUTO', reviewerAgents: 1, maxReviewerRounds: 2 } },
-            excludePaths: [],
-            'match-rules': [],
-        }));
-        expect(() => runExecutor({}, fixture.context(root)))
-            .toThrow('Not configured in webpieces.config.json');
+        const root = fixture.write(
+            JSON.stringify({
+                rules: {},
+                hookGuards: {},
+                commands: {
+                    'pr-gate': {
+                        mode: 'ON',
+                        buildCommand: 'echo ci',
+                        mergeMode: 'AUTO',
+                        reviewerAgents: 1,
+                        maxReviewerRounds: 2,
+                    },
+                },
+                excludePaths: [],
+                'match-rules': [],
+            }),
+        );
+        expect(() => runExecutor({}, fixture.context(root))).toThrow('missing required entry');
     });
 });

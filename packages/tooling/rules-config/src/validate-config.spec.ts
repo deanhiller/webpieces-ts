@@ -1,12 +1,22 @@
 import { policyFixture } from '@webpieces/tooling-testkit';
 import { RulePackRegistry } from '@webpieces/rules-config';
 const fixtureRuleRegistry = new RulePackRegistry(policyFixture.manifests());
-import { fixtureHookGuardNames as HOOK_GUARD_NAMES, fixtureTuning as defaultRules } from '@webpieces/tooling-testkit';
+import {
+    fixtureHookGuardNames as HOOK_GUARD_NAMES,
+    fixtureTuning as defaultRules,
+} from '@webpieces/tooling-testkit';
 import { specTempDirs } from '@webpieces/tooling-testkit';
 import * as fs from 'fs';
 import * as path from 'path';
-import { validateWebpiecesConfig, validatePrGateSection, validateSectionPlacement, validateMatchRulesSection, allRuleNames, recommendedSeedMode, recommendedSeedModeFor, seedEntryForRule } from './validate-config';
-
+import {
+    validateWebpiecesConfig,
+    validatePrGateSection,
+    validateMatchRulesSection,
+    allRuleNames,
+    recommendedSeedMode,
+    recommendedSeedModeFor,
+    seedEntryForRule,
+} from './validate-config';
 
 import { MODIFIED_CODE_MODES } from '@webpieces/rules-sdk';
 
@@ -25,35 +35,63 @@ function validMatchRule(overrides: Record<string, unknown> = {}): Record<string,
 
 // Helper: errors mentioning a given rule name.
 function errorsFor(rule: string, errors: string[]): string[] {
-    return errors.filter(e => e.includes(`[${rule}]`));
+    return errors.filter((e) => e.includes(`[${rule}]`));
 }
 
 describe('validateWebpiecesConfig', () => {
+    it('names the declared owner file and direct policy map for an absent policy', () => {
+        const errors = validateWebpiecesConfig({}, fixtureRuleRegistry);
+        const advice = errorsFor('max-file-lines', errors).join('\n');
+        expect(advice).toContain(fixtureRuleRegistry.ownerOf('max-file-lines'));
+        expect(advice).toContain('declared owner config file');
+        expect(advice).toContain('policy-ID map');
+        expect(advice).not.toContain('webpieces.config.json');
+        expect(advice).not.toContain('"rules" section');
+        expect(advice).not.toContain('"hookGuards" section');
+    });
+
     it('accepts excludePackages + escape hatches on no-file-import-cycles (regression)', () => {
-        const errors = validateWebpiecesConfig({
-            'no-file-import-cycles': {
-                mode: 'RUN_EVERY_TIME',
-                ignoreTypeOnly: false,
-                excludePackages: ['@db/entities'],
-                turnOffRuleUntilEpoch: 1771931925,
-                turnOffRuleWhileOnBranch: 'deanhiller/foo',
+        const errors = validateWebpiecesConfig(
+            {
+                'no-file-import-cycles': {
+                    mode: 'RUN_EVERY_TIME',
+                    ignoreTypeOnly: false,
+                    excludePackages: ['@db/entities'],
+                    turnOffRuleUntilEpoch: 1771931925,
+                    turnOffRuleWhileOnBranch: 'deanhiller/foo',
+                },
             },
-        }, fixtureRuleRegistry);
+            fixtureRuleRegistry,
+        );
         // No field-level complaints for this rule (missing-OTHER-rule errors are expected and ignored).
-        const fieldErrors = errorsFor('no-file-import-cycles', errors).filter(e => e.includes('Unknown field') || e.includes('must be'));
+        const fieldErrors = errorsFor('no-file-import-cycles', errors).filter(
+            (e) => e.includes('Unknown field') || e.includes('must be'),
+        );
         expect(fieldErrors).toEqual([]);
     });
 
     it('still rejects a genuinely unknown field', () => {
-        const errors = validateWebpiecesConfig({
-            'no-file-import-cycles': { mode: 'RUN_EVERY_TIME', bogusField: true },
-        }, fixtureRuleRegistry);
-        expect(errorsFor('no-file-import-cycles', errors).some(e => e.includes('Unknown field "bogusField"'))).toBe(true);
+        const errors = validateWebpiecesConfig(
+            {
+                'no-file-import-cycles': { mode: 'RUN_EVERY_TIME', bogusField: true },
+            },
+            fixtureRuleRegistry,
+        );
+        expect(
+            errorsFor('no-file-import-cycles', errors).some((e) =>
+                e.includes('Unknown field "bogusField"'),
+            ),
+        ).toBe(true);
     });
 
     it('rejects an unknown rule key (e.g. a removed rule) when no rulesDir is configured', () => {
-        const errors = validateWebpiecesConfig({ 'no-shell-substitution': { mode: 'OFF' } }, fixtureRuleRegistry);
-        expect(errors.some(e => e.includes('[no-shell-substitution]') && e.includes('Unknown rule'))).toBe(true);
+        const errors = validateWebpiecesConfig(
+            { 'no-shell-substitution': { mode: 'OFF' } },
+            fixtureRuleRegistry,
+        );
+        expect(
+            errors.some((e) => e.includes('[no-shell-substitution]') && e.includes('Unknown rule')),
+        ).toBe(true);
     });
 
     /**
@@ -65,25 +103,48 @@ describe('validateWebpiecesConfig', () => {
      * See config-pruner.spec.ts for the full case-by-case pinning.
      */
     it('leads the unknown-rule fix with DELETING the key, and never prescribes `pnpm install`', () => {
-        const [msg] = validateWebpiecesConfig({ 'brand-new-rule': { mode: 'ON' } }, fixtureRuleRegistry);
+        const [msg] = validateWebpiecesConfig(
+            { 'brand-new-rule': { mode: 'ON' } },
+            fixtureRuleRegistry,
+        );
         expect(msg).not.toContain('pnpm install');
         expect(msg).toContain('DELETE the "brand-new-rule" key');
+        expect(msg).toContain('direct policy-ID map in its declared owner config file');
+        expect(msg).not.toContain('key from webpieces.config.json');
         expect(msg.indexOf('DELETE')).toBeLessThan(msg.indexOf('Secondary'));
     });
 
-    it('allows an unknown rule key when a rulesDir is configured (may be a custom rule)', () => {
-        const errors = validateWebpiecesConfig({ 'my-custom-rule': { mode: 'ON' } }, fixtureRuleRegistry, true);
-        expect(errors.some(e => e.includes('[my-custom-rule]'))).toBe(false);
+    it('rejects an undeclared client rule instead of accepting a directory escape', () => {
+        const errors = validateWebpiecesConfig(
+            { 'my-custom-rule': { mode: 'ON' } },
+            fixtureRuleRegistry,
+        );
+        expect(errors.some((e) => e.includes('[my-custom-rule]'))).toBe(true);
     });
 
     it('every rule accepts the universal escape hatches', () => {
-        const errors = validateWebpiecesConfig({
-            'pr-lifecycle-guard': { mode: 'ON', turnOffRuleWhileOnBranch: 'x', turnOffRuleUntilEpoch: 1 },
-            'branch-creation-guard': { mode: 'ON', turnOffRuleWhileOnBranch: 'x', turnOffRuleUntilEpoch: 1 },
-            'branch-state-guard': { mode: 'ON', turnOffRuleWhileOnBranch: 'x', turnOffRuleUntilEpoch: 1 },
-        }, fixtureRuleRegistry);
+        const errors = validateWebpiecesConfig(
+            {
+                'pr-lifecycle-guard': {
+                    mode: 'ON',
+                    turnOffRuleWhileOnBranch: 'x',
+                    turnOffRuleUntilEpoch: 1,
+                },
+                'branch-creation-guard': {
+                    mode: 'ON',
+                    turnOffRuleWhileOnBranch: 'x',
+                    turnOffRuleUntilEpoch: 1,
+                },
+                'branch-state-guard': {
+                    mode: 'ON',
+                    turnOffRuleWhileOnBranch: 'x',
+                    turnOffRuleUntilEpoch: 1,
+                },
+            },
+            fixtureRuleRegistry,
+        );
         for (const rule of ['pr-lifecycle-guard', 'branch-creation-guard', 'branch-state-guard']) {
-            const fieldErrors = errorsFor(rule, errors).filter(e => e.includes('Unknown field'));
+            const fieldErrors = errorsFor(rule, errors).filter((e) => e.includes('Unknown field'));
             expect(fieldErrors).toEqual([]);
         }
     });
@@ -91,7 +152,7 @@ describe('validateWebpiecesConfig', () => {
     it('missing-rule snippet lists mode + BOTH escape hatches as required (always visible)', () => {
         // Omit no-file-import-cycles so the snippet is emitted for it.
         const errors = validateWebpiecesConfig({}, fixtureRuleRegistry);
-        const snippet = errors.find(e => e.includes('[no-file-import-cycles] Not configured'));
+        const snippet = errors.find((e) => e.includes('[no-file-import-cycles] Not configured'));
         expect(snippet).toBeDefined();
         expect(snippet!).toContain('"mode"');
         const [requiredBlock] = snippet!.split('Optional fields you may add');
@@ -108,30 +169,40 @@ describe('validateWebpiecesConfig — retired runtime-architecture fields', () =
     it('rejects servicePaths + apiProjectPaths with a tailored "graph is auto-derived" hint', () => {
         // Both fields were removed from the schema — they were never read. A config that still enumerates
         // api libs must fail so the AI deletes the keys (not re-adds them, and not as a glob either).
-        const errors = validateWebpiecesConfig({
-            'runtime-architecture': {
-                mode: 'RUN_EVERY_TIME',
-                turnOffRuleUntilEpoch: 0,
-                servicePaths: ['services/*/*'],
-                apiProjectPaths: ['libraries/apis/internal/portal-apis', 'libraries/apis/internal/lang-apis'],
+        const errors = validateWebpiecesConfig(
+            {
+                'runtime-architecture': {
+                    mode: 'RUN_EVERY_TIME',
+                    turnOffRuleUntilEpoch: 0,
+                    servicePaths: ['services/*/*'],
+                    apiProjectPaths: [
+                        'libraries/apis/internal/portal-apis',
+                        'libraries/apis/internal/lang-apis',
+                    ],
+                },
             },
-        }, fixtureRuleRegistry);
+            fixtureRuleRegistry,
+        );
         const ra = errorsFor('runtime-architecture', errors);
-        const apiErr = ra.find(e => e.includes('Unknown field "apiProjectPaths"'));
+        const apiErr = ra.find((e) => e.includes('Unknown field "apiProjectPaths"'));
         expect(apiErr).toBeDefined();
         expect(apiErr).toContain('derived automatically from architecture/dependencies.json');
-        expect(ra.some(e => e.includes('Unknown field "servicePaths"'))).toBe(true);
+        expect(ra.some((e) => e.includes('Unknown field "servicePaths"'))).toBe(true);
     });
 
     it('rejects allowedCycles — a runtime cycle is not allowable at all any more', () => {
         // The allowlist was the last shape saying "some cycles are fine". Levelling now throws on any
         // cycle, so a config still carrying the key would be configuring a code path that is gone. The
         // per-EDGE `cutLegacyCycle:<targetService>` nx tag replaced it, and it is not config at all.
-        const errors = validateWebpiecesConfig({
-            'runtime-architecture': { mode: 'RUN_EVERY_TIME', allowedCycles: [] },
-        }, fixtureRuleRegistry);
-        const err = errorsFor('runtime-architecture', errors)
-            .find(e => e.includes('Unknown field "allowedCycles"'));
+        const errors = validateWebpiecesConfig(
+            {
+                'runtime-architecture': { mode: 'RUN_EVERY_TIME', allowedCycles: [] },
+            },
+            fixtureRuleRegistry,
+        );
+        const err = errorsFor('runtime-architecture', errors).find((e) =>
+            e.includes('Unknown field "allowedCycles"'),
+        );
         expect(err).toBeDefined();
         // The generic unknown-field error says WHAT vanished, not why — which is how an AI re-adds it.
         // The retired-field hint has to name the destination: the tag, and that there is no config key.
@@ -144,60 +215,126 @@ describe('validateWebpiecesConfig — standardized mode taxonomy', () => {
     // Structural rules (import-cycle / runtime-architecture / nx-wiring) use RUN_EVERY_TIME, not ON.
     it('accepts RUN_EVERY_TIME and rejects ON for structural rules', () => {
         for (const rule of ['no-file-import-cycles', 'runtime-architecture', 'nx-wiring']) {
-            const ok = errorsFor(rule, validateWebpiecesConfig({
-                [rule]: { mode: 'RUN_EVERY_TIME', turnOffRuleUntilEpoch: 0 },
-            }, fixtureRuleRegistry)).filter(e => e.includes('Must be one of'));
+            const ok = errorsFor(
+                rule,
+                validateWebpiecesConfig(
+                    {
+                        [rule]: { mode: 'RUN_EVERY_TIME', turnOffRuleUntilEpoch: 0 },
+                    },
+                    fixtureRuleRegistry,
+                ),
+            ).filter((e) => e.includes('Must be one of'));
             expect(ok).toEqual([]);
 
-            const bad = errorsFor(rule, validateWebpiecesConfig({
-                [rule]: { mode: 'ON', turnOffRuleUntilEpoch: 0 },
-            }, fixtureRuleRegistry));
-            expect(bad.some(e => e.includes('Must be one of') && e.includes('RUN_EVERY_TIME'))).toBe(true);
+            const bad = errorsFor(
+                rule,
+                validateWebpiecesConfig(
+                    {
+                        [rule]: { mode: 'ON', turnOffRuleUntilEpoch: 0 },
+                    },
+                    fixtureRuleRegistry,
+                ),
+            );
+            expect(
+                bad.some((e) => e.includes('Must be one of') && e.includes('RUN_EVERY_TIME')),
+            ).toBe(true);
         }
     });
 
     // File-tier rules use NEW_AND_MODIFIED_FILES, not the old MODIFIED_FILES.
     it('accepts NEW_AND_MODIFIED_FILES and rejects MODIFIED_FILES for file-tier rules', () => {
         for (const rule of ['max-file-lines', 'validate-ts-in-src', 'no-js-files']) {
-            const ok = errorsFor(rule, validateWebpiecesConfig({
-                [rule]: { mode: 'NEW_AND_MODIFIED_FILES', turnOffRuleUntilEpoch: 0 },
-            }, fixtureRuleRegistry)).filter(e => e.includes('Must be one of'));
+            const ok = errorsFor(
+                rule,
+                validateWebpiecesConfig(
+                    {
+                        [rule]: { mode: 'NEW_AND_MODIFIED_FILES', turnOffRuleUntilEpoch: 0 },
+                    },
+                    fixtureRuleRegistry,
+                ),
+            ).filter((e) => e.includes('Must be one of'));
             expect(ok).toEqual([]);
 
-            const bad = errorsFor(rule, validateWebpiecesConfig({
-                [rule]: { mode: 'MODIFIED_FILES', turnOffRuleUntilEpoch: 0 },
-            }, fixtureRuleRegistry));
-            expect(bad.some(e => e.includes('Must be one of') && e.includes('NEW_AND_MODIFIED_FILES'))).toBe(true);
+            const bad = errorsFor(
+                rule,
+                validateWebpiecesConfig(
+                    {
+                        [rule]: { mode: 'MODIFIED_FILES', turnOffRuleUntilEpoch: 0 },
+                    },
+                    fixtureRuleRegistry,
+                ),
+            );
+            expect(
+                bad.some(
+                    (e) => e.includes('Must be one of') && e.includes('NEW_AND_MODIFIED_FILES'),
+                ),
+            ).toBe(true);
         }
     });
 
     // Line-tier rules use NEW_AND_MODIFIED_CODE, not the old MODIFIED_CODE. The rename is a
     // deliberate breaking change: a downstream config still saying MODIFIED_CODE must hard-fail.
     it('accepts NEW_AND_MODIFIED_CODE and rejects the old MODIFIED_CODE for line-tier rules', () => {
-        for (const rule of ['no-any-unknown', 'no-destructure', 'catch-error-pattern', 'no-symbol-di-tokens', 'throw-cause-required']) {
-            const ok = errorsFor(rule, validateWebpiecesConfig({
-                [rule]: { mode: 'NEW_AND_MODIFIED_CODE', turnOffRuleUntilEpoch: 0 },
-            }, fixtureRuleRegistry)).filter(e => e.includes('Must be one of'));
+        for (const rule of [
+            'no-any-unknown',
+            'no-destructure',
+            'catch-error-pattern',
+            'no-symbol-di-tokens',
+            'throw-cause-required',
+        ]) {
+            const ok = errorsFor(
+                rule,
+                validateWebpiecesConfig(
+                    {
+                        [rule]: { mode: 'NEW_AND_MODIFIED_CODE', turnOffRuleUntilEpoch: 0 },
+                    },
+                    fixtureRuleRegistry,
+                ),
+            ).filter((e) => e.includes('Must be one of'));
             expect(ok).toEqual([]);
 
-            const bad = errorsFor(rule, validateWebpiecesConfig({
-                [rule]: { mode: 'MODIFIED_CODE', turnOffRuleUntilEpoch: 0 },
-            }, fixtureRuleRegistry));
-            expect(bad.some(e => e.includes('Must be one of') && e.includes('NEW_AND_MODIFIED_CODE'))).toBe(true);
+            const bad = errorsFor(
+                rule,
+                validateWebpiecesConfig(
+                    {
+                        [rule]: { mode: 'MODIFIED_CODE', turnOffRuleUntilEpoch: 0 },
+                    },
+                    fixtureRuleRegistry,
+                ),
+            );
+            expect(
+                bad.some(
+                    (e) => e.includes('Must be one of') && e.includes('NEW_AND_MODIFIED_CODE'),
+                ),
+            ).toBe(true);
         }
     });
 
     // framework-tag is PROJECT-level: it uses MODIFIED_PROJECTS, not the line/file-scoped modes.
     it('accepts MODIFIED_PROJECTS and rejects NEW_AND_MODIFIED_CODE for framework-tag', () => {
-        const ok = errorsFor('framework-tag', validateWebpiecesConfig({
-            'framework-tag': { mode: 'MODIFIED_PROJECTS', turnOffRuleUntilEpoch: 0 },
-        }, fixtureRuleRegistry)).filter(e => e.includes('Must be one of'));
+        const ok = errorsFor(
+            'framework-tag',
+            validateWebpiecesConfig(
+                {
+                    'framework-tag': { mode: 'MODIFIED_PROJECTS', turnOffRuleUntilEpoch: 0 },
+                },
+                fixtureRuleRegistry,
+            ),
+        ).filter((e) => e.includes('Must be one of'));
         expect(ok).toEqual([]);
 
-        const bad = errorsFor('framework-tag', validateWebpiecesConfig({
-            'framework-tag': { mode: 'NEW_AND_MODIFIED_CODE', turnOffRuleUntilEpoch: 0 },
-        }, fixtureRuleRegistry));
-        expect(bad.some(e => e.includes('Must be one of') && e.includes('MODIFIED_PROJECTS'))).toBe(true);
+        const bad = errorsFor(
+            'framework-tag',
+            validateWebpiecesConfig(
+                {
+                    'framework-tag': { mode: 'NEW_AND_MODIFIED_CODE', turnOffRuleUntilEpoch: 0 },
+                },
+                fixtureRuleRegistry,
+            ),
+        );
+        expect(
+            bad.some((e) => e.includes('Must be one of') && e.includes('MODIFIED_PROJECTS')),
+        ).toBe(true);
     });
 
     it('seeds ensure-we-are-secure with direct-project scope and universal turn-offs', () => {
@@ -206,100 +343,178 @@ describe('validateWebpiecesConfig — standardized mode taxonomy', () => {
             turnOffRuleUntilEpoch: 0,
             turnOffRuleWhileOnBranch: null,
         });
-        const errors = errorsFor('ensure-we-are-secure', validateWebpiecesConfig({
-            'ensure-we-are-secure': { mode: 'NEW_AND_MODIFIED_CODE', turnOffRuleUntilEpoch: 0, turnOffRuleWhileOnBranch: null },
-        }, fixtureRuleRegistry));
-        expect(errors.some(e => e.includes('MODIFIED_PROJECTS'))).toBe(true);
+        const errors = errorsFor(
+            'ensure-we-are-secure',
+            validateWebpiecesConfig(
+                {
+                    'ensure-we-are-secure': {
+                        mode: 'NEW_AND_MODIFIED_CODE',
+                        turnOffRuleUntilEpoch: 0,
+                        turnOffRuleWhileOnBranch: null,
+                    },
+                },
+                fixtureRuleRegistry,
+            ),
+        );
+        expect(errors.some((e) => e.includes('MODIFIED_PROJECTS'))).toBe(true);
     });
 
     it('recommends the gradual scoped mode in the missing-rule snippet (framework-tag → MODIFIED_PROJECTS)', () => {
-        const snippet = validateWebpiecesConfig({}, fixtureRuleRegistry).find(e => e.includes('[framework-tag] Not configured'));
+        const snippet = validateWebpiecesConfig({}, fixtureRuleRegistry).find((e) =>
+            e.includes('[framework-tag] Not configured'),
+        );
         expect(snippet).toBeDefined();
         expect(snippet!).toContain('💡 Recommended: start with "mode": "MODIFIED_PROJECTS"');
         expect(snippet!).toContain('rolls out gradually');
         // Structural rules (RUN_EVERY_TIME only) get no gradual recommendation.
-        const structural = validateWebpiecesConfig({}, fixtureRuleRegistry).find(e => e.includes('[no-file-import-cycles] Not configured'));
+        const structural = validateWebpiecesConfig({}, fixtureRuleRegistry).find((e) =>
+            e.includes('[no-file-import-cycles] Not configured'),
+        );
         expect(structural!).not.toContain('💡 Recommended');
     });
 });
 
 describe('validateWebpiecesConfig — required fields + branch-creation-guard modes', () => {
     it('rejects a rule with mode only — BOTH escape hatches are now required', () => {
-        const errors = errorsFor('pr-lifecycle-guard', validateWebpiecesConfig({
-            'pr-lifecycle-guard': { mode: 'ON' },
-        }, fixtureRuleRegistry));
-        expect(errors.some(e => e.includes('Missing required field "turnOffRuleUntilEpoch"'))).toBe(true);
-        expect(errors.some(e => e.includes('Missing required field "turnOffRuleWhileOnBranch"'))).toBe(true);
+        const errors = errorsFor(
+            'pr-lifecycle-guard',
+            validateWebpiecesConfig(
+                {
+                    'pr-lifecycle-guard': { mode: 'ON' },
+                },
+                fixtureRuleRegistry,
+            ),
+        );
+        expect(
+            errors.some((e) => e.includes('Missing required field "turnOffRuleUntilEpoch"')),
+        ).toBe(true);
+        expect(
+            errors.some((e) => e.includes('Missing required field "turnOffRuleWhileOnBranch"')),
+        ).toBe(true);
     });
 
     it('accepts the new turnOffRuleUntilEpoch / turnOffRuleWhileOnBranch field names', () => {
-        const errors = validateWebpiecesConfig({
-            'pr-lifecycle-guard': { mode: 'ON', turnOffRuleUntilEpoch: 1771931925, turnOffRuleWhileOnBranch: 'deanhiller/foo' },
-        }, fixtureRuleRegistry);
+        const errors = validateWebpiecesConfig(
+            {
+                'pr-lifecycle-guard': {
+                    mode: 'ON',
+                    turnOffRuleUntilEpoch: 1771931925,
+                    turnOffRuleWhileOnBranch: 'deanhiller/foo',
+                },
+            },
+            fixtureRuleRegistry,
+        );
         expect(errorsFor('pr-lifecycle-guard', errors)).toEqual([]);
     });
 
     it('rejects turnOffRuleUntilEpoch with the wrong type', () => {
-        const errors = validateWebpiecesConfig({
-            // webpieces-disable no-any-unknown -- deliberately wrong type for the negative test
-            'pr-lifecycle-guard': { mode: 'ON', turnOffRuleUntilEpoch: 'soon' as unknown as number },
-        }, fixtureRuleRegistry);
+        const errors = validateWebpiecesConfig(
+            {
+                // webpieces-disable no-any-unknown -- deliberately wrong type for the negative test
+                'pr-lifecycle-guard': {
+                    mode: 'ON',
+                    turnOffRuleUntilEpoch: 'soon' as unknown as number,
+                },
+            },
+            fixtureRuleRegistry,
+        );
         expect(
-            errorsFor('pr-lifecycle-guard', errors).some(
-                e => e.includes('"turnOffRuleUntilEpoch" must be number'),
+            errorsFor('pr-lifecycle-guard', errors).some((e) =>
+                e.includes('"turnOffRuleUntilEpoch" must be number'),
             ),
         ).toBe(true);
     });
 
     it('rejects a present rule that is missing the required mode', () => {
-        const errors = validateWebpiecesConfig({
-            'pr-lifecycle-guard': { turnOffRuleUntilEpoch: 0 },
-        }, fixtureRuleRegistry);
+        const errors = validateWebpiecesConfig(
+            {
+                'pr-lifecycle-guard': { turnOffRuleUntilEpoch: 0 },
+            },
+            fixtureRuleRegistry,
+        );
         expect(
-            errorsFor('pr-lifecycle-guard', errors).some(
-                e => e.includes('Missing required field "mode"'),
+            errorsFor('pr-lifecycle-guard', errors).some((e) =>
+                e.includes('Missing required field "mode"'),
             ),
         ).toBe(true);
     });
 
     it('accepts a fully-specified rule (mode + both hatches)', () => {
-        const errors = validateWebpiecesConfig({
-            'pr-lifecycle-guard': { mode: 'OFF', turnOffRuleUntilEpoch: 0, turnOffRuleWhileOnBranch: null },
-        }, fixtureRuleRegistry);
+        const errors = validateWebpiecesConfig(
+            {
+                'pr-lifecycle-guard': {
+                    mode: 'OFF',
+                    turnOffRuleUntilEpoch: 0,
+                    turnOffRuleWhileOnBranch: null,
+                },
+            },
+            fixtureRuleRegistry,
+        );
         expect(errorsFor('pr-lifecycle-guard', errors)).toEqual([]);
     });
 
     it('branch-creation-guard accepts ON_NO_SUBBRANCHES mode and branchFormat', () => {
-        const errors = validateWebpiecesConfig({
-            'branch-creation-guard': {
-                mode: 'ON_NO_SUBBRANCHES',
-                branchFormat: 'Name it {whoami}/<feature>',
-                subBranchNaming: 'feature/<ticket>/<desc>',
-                autoReapMergedBranches: true,
-                turnOffRuleUntilEpoch: 0,
-                turnOffRuleWhileOnBranch: null,
+        const errors = validateWebpiecesConfig(
+            {
+                'branch-creation-guard': {
+                    mode: 'ON_NO_SUBBRANCHES',
+                    branchFormat: 'Name it {whoami}/<feature>',
+                    subBranchNaming: 'feature/<ticket>/<desc>',
+                    autoReapMergedBranches: true,
+                    turnOffRuleUntilEpoch: 0,
+                    turnOffRuleWhileOnBranch: null,
+                },
             },
-        }, fixtureRuleRegistry);
+            fixtureRuleRegistry,
+        );
         expect(errorsFor('branch-creation-guard', errors)).toEqual([]);
     });
-
 });
 
 describe('validateWebpiecesConfig — escape-hatch fields (required, nullable branch, renamed old names)', () => {
     it('accepts a null branch hatch (the always-on value)', () => {
-        const errors = validateWebpiecesConfig({
-            'pr-lifecycle-guard': { mode: 'ON', turnOffRuleUntilEpoch: 0, turnOffRuleWhileOnBranch: null },
-        }, fixtureRuleRegistry);
+        const errors = validateWebpiecesConfig(
+            {
+                'pr-lifecycle-guard': {
+                    mode: 'ON',
+                    turnOffRuleUntilEpoch: 0,
+                    turnOffRuleWhileOnBranch: null,
+                },
+            },
+            fixtureRuleRegistry,
+        );
         expect(errorsFor('pr-lifecycle-guard', errors)).toEqual([]);
     });
 
     it('flags the renamed old names with a "renamed to X" hint', () => {
-        const errors = errorsFor('pr-lifecycle-guard', validateWebpiecesConfig({
-            // webpieces-disable no-any-unknown -- deliberately the removed old names for the negative test
-            'pr-lifecycle-guard': { mode: 'ON', ignoreModifiedUntilEpoch: 0, ignoreRuleWhileOnBranch: null } as unknown as Record<string, unknown>,
-        }, fixtureRuleRegistry));
-        expect(errors.some(e => e.includes('"ignoreModifiedUntilEpoch" — it was renamed to "turnOffRuleUntilEpoch"'))).toBe(true);
-        expect(errors.some(e => e.includes('"ignoreRuleWhileOnBranch" — it was renamed to "turnOffRuleWhileOnBranch"'))).toBe(true);
+        const errors = errorsFor(
+            'pr-lifecycle-guard',
+            validateWebpiecesConfig(
+                {
+                    // webpieces-disable no-any-unknown -- deliberately the removed old names for the negative test
+                    'pr-lifecycle-guard': {
+                        mode: 'ON',
+                        ignoreModifiedUntilEpoch: 0,
+                        ignoreRuleWhileOnBranch: null,
+                    } as unknown as Record<string, unknown>,
+                },
+                fixtureRuleRegistry,
+            ),
+        );
+        expect(
+            errors.some((e) =>
+                e.includes(
+                    '"ignoreModifiedUntilEpoch" — it was renamed to "turnOffRuleUntilEpoch"',
+                ),
+            ),
+        ).toBe(true);
+        expect(
+            errors.some((e) =>
+                e.includes(
+                    '"ignoreRuleWhileOnBranch" — it was renamed to "turnOffRuleWhileOnBranch"',
+                ),
+            ),
+        ).toBe(true);
     });
 });
 
@@ -311,389 +526,46 @@ describe('validateWebpiecesConfig — autoReapMergedBranches must be explicit', 
      * webpieces.config.json would have no way to tell whether that was intended.
      */
     it('branch-creation-guard requires an explicit autoReapMergedBranches — no silent default', () => {
-        const errors = validateWebpiecesConfig({
-            'branch-creation-guard': { mode: 'ON', turnOffRuleUntilEpoch: 0 },
-        }, fixtureRuleRegistry);
+        const errors = validateWebpiecesConfig(
+            {
+                'branch-creation-guard': { mode: 'ON', turnOffRuleUntilEpoch: 0 },
+            },
+            fixtureRuleRegistry,
+        );
         expect(
-            errorsFor('branch-creation-guard', errors).some(
-                e => e.includes('Missing required field "autoReapMergedBranches"'),
+            errorsFor('branch-creation-guard', errors).some((e) =>
+                e.includes('Missing required field "autoReapMergedBranches"'),
             ),
         ).toBe(true);
     });
 
     it('branch-creation-guard accepts autoReapMergedBranches false (report-only)', () => {
-        const errors = validateWebpiecesConfig({
-            'branch-creation-guard': {
-                mode: 'ON', autoReapMergedBranches: false, subBranchNaming: 'feature/<t>/<d>',
-                turnOffRuleUntilEpoch: 0, turnOffRuleWhileOnBranch: null,
+        const errors = validateWebpiecesConfig(
+            {
+                'branch-creation-guard': {
+                    mode: 'ON',
+                    autoReapMergedBranches: false,
+                    subBranchNaming: 'feature/<t>/<d>',
+                    turnOffRuleUntilEpoch: 0,
+                    turnOffRuleWhileOnBranch: null,
+                },
             },
-        }, fixtureRuleRegistry);
+            fixtureRuleRegistry,
+        );
         expect(errorsFor('branch-creation-guard', errors)).toEqual([]);
     });
 
     it('branch-creation-guard rejects an invalid mode', () => {
-        const errors = validateWebpiecesConfig({
-            'branch-creation-guard': { mode: 'SOMETIMES', turnOffRuleUntilEpoch: 0 },
-        }, fixtureRuleRegistry);
+        const errors = validateWebpiecesConfig(
+            {
+                'branch-creation-guard': { mode: 'SOMETIMES', turnOffRuleUntilEpoch: 0 },
+            },
+            fixtureRuleRegistry,
+        );
         expect(
-            errorsFor('branch-creation-guard', errors).some(
-                e => e.includes('"mode" = "SOMETIMES" is not valid'),
+            errorsFor('branch-creation-guard', errors).some((e) =>
+                e.includes('"mode" = "SOMETIMES" is not valid'),
             ),
         ).toBe(true);
-    });
-});
-
-describe('validatePrGateSection', () => {
-    it('errors with a copy-paste example when the block is missing', () => {
-        const errors = validatePrGateSection(undefined);
-        expect(errors.some(e => e.includes('[pr-gate] Not configured'))).toBe(true);
-        expect(errors.some(e => e.includes('"buildCommand"'))).toBe(true);
-    });
-
-    it('requires buildCommand when mode is ON', () => {
-        const errors = validatePrGateSection({ mode: 'ON' });
-        expect(errors.some(e => e.includes('Missing required field "buildCommand"'))).toBe(true);
-    });
-
-    it('does not require buildCommand when mode is OFF', () => {
-        expect(validatePrGateSection({ mode: 'OFF' })).toEqual([]);
-    });
-
-    it('accepts a full valid block (warningColor + disabled example gate)', () => {
-        const errors = validatePrGateSection({
-            mode: 'ON',
-            buildCommand: 'pnpm nx affected --target=ci --base=$(git merge-base origin/main HEAD)',
-            mergeMode: 'AUTO',
-            reviewerAgents: 1,
-            maxReviewerRounds: 2,
-            gates: [
-                { name: 'API', patterns: ['**/*Api.ts'], warningColor: 'yellow' },
-                { name: 'DB Schema', patterns: ['**/schema.prisma'], warningColor: 'red', disabled: true },
-            ],
-        });
-        expect(errors).toEqual([]);
-    });
-
-    it('rejects a gate missing the required warningColor', () => {
-        const bad = validatePrGateSection({
-            mode: 'ON', buildCommand: 'x',
-            gates: [{ name: 'API', patterns: ['**/*Api.ts'] }],
-        });
-        expect(bad.some(e => e.includes('gates[0].warningColor is required'))).toBe(true);
-    });
-
-    it('rejects an invalid mode and malformed gates', () => {
-        const bad = validatePrGateSection({ mode: 'MAYBE', buildCommand: 'x', gates: [{ patterns: 'nope' }] });
-        expect(bad.some(e => e.includes('"mode" = "MAYBE" is not valid'))).toBe(true);
-        expect(bad.some(e => e.includes('gates[0].name must be a string'))).toBe(true);
-        expect(bad.some(e => e.includes('gates[0].patterns must be string[]'))).toBe(true);
-    });
-
-    it('rejects an invalid gate warningColor and a non-boolean disabled', () => {
-        const bad = validatePrGateSection({
-            mode: 'ON', buildCommand: 'x',
-            gates: [{ name: 'X', patterns: ['**/*.ts'], warningColor: 'warn', disabled: 'nope' }],
-        });
-        expect(bad.some(e => e.includes('gates[0].warningColor must be "yellow" or "red"'))).toBe(true);
-        expect(bad.some(e => e.includes('gates[0].disabled must be a boolean'))).toBe(true);
-    });
-});
-
-// Split from the block above only because the combined describe() callback exceeded max-method-lines.
-describe('validatePrGateSection — mergeMode (required policy)', () => {
-
-    it('REQUIRES mergeMode — the policy is never guessed', () => {
-        const bad = validatePrGateSection({ mode: 'ON', buildCommand: 'x' });
-        expect(bad.some(e => e.includes('Missing required field "mergeMode"'))).toBe(true);
-    });
-
-    it('accepts every valid mergeMode', () => {
-        for (const mergeMode of ['AUTO', 'NONE']) {
-            expect(validatePrGateSection({ mode: 'ON', buildCommand: 'x', mergeMode, reviewerAgents: 1, maxReviewerRounds: 2 })).toEqual([]);
-        }
-    });
-
-    it('rejects an unknown mergeMode and explains what each mode costs', () => {
-        const bad = validatePrGateSection({ mode: 'ON', buildCommand: 'x', mergeMode: 'DETECT', reviewerAgents: 1, maxReviewerRounds: 2 });
-        expect(bad.some(e => e.includes('"mergeMode" = "DETECT" is not valid'))).toBe(true);
-        expect(bad.some(e => e.includes('allow_auto_merge'))).toBe(true);
-        expect(bad.some(e => e.includes('squash_merge_commit_title'))).toBe(true);
-        // NONE must not read as "and now go configure two repo settings" — SquashSettingsEnforcer pins
-        // them, and this help text claimed the compact body was "impossible" on NONE for one release.
-        expect(bad.some(e => e.includes('impossible'))).toBe(false);
-    });
-
-    it('does NOT require mergeMode when the whole gate is OFF', () => {
-        expect(validatePrGateSection({ mode: 'OFF' })).toEqual([]);
-    });
-});
-
-describe('validateSectionPlacement', () => {
-    it('flags a guard left in the rules section', () => {
-        const errors = validateSectionPlacement({ 'pr-lifecycle-guard': { mode: 'ON' } }, {}, fixtureRuleRegistry);
-        expect(errors.some(e => e.includes('[pr-lifecycle-guard]') && e.includes('"hookGuards"'))).toBe(true);
-    });
-
-    it('flags a code rule placed in the hookGuards section', () => {
-        const errors = validateSectionPlacement({}, { 'no-any-unknown': { mode: 'NEW_AND_MODIFIED_CODE' } }, fixtureRuleRegistry);
-        expect(errors.some(e => e.includes('[no-any-unknown]') && e.includes('"rules"'))).toBe(true);
-    });
-
-    it('accepts correctly-placed entries', () => {
-        const errors = validateSectionPlacement(
-            { 'no-any-unknown': { mode: 'NEW_AND_MODIFIED_CODE' } },
-            { 'pr-lifecycle-guard': { mode: 'ON' } }, fixtureRuleRegistry);
-        expect(errors).toEqual([]);
-    });
-
-    it('ignores unknown/custom names in hookGuards', () => {
-        const errors = validateSectionPlacement({}, { 'my-custom-guard': { mode: 'ON' } }, fixtureRuleRegistry);
-        expect(errors).toEqual([]);
-    });
-});
-
-describe('validateMatchRulesSection', () => {
-    it('errors when missing, printing the ready-to-paste no-fetch example', () => {
-        const errors = validateMatchRulesSection(undefined);
-        expect(errors.some(e => e.includes('[match-rules] Not configured'))).toBe(true);
-        // The printed example seeds the no-fetch guard so a client can copy it in.
-        expect(errors.some(e => e.includes('"match-rules"') && e.includes('"no-fetch"'))).toBe(true);
-    });
-
-    it('accepts an empty array (a conscious opt-out)', () => {
-        expect(validateMatchRulesSection([])).toEqual([]);
-    });
-
-    it('accepts a fully-specified valid entry', () => {
-        expect(validateMatchRulesSection([validMatchRule({ options: ['a', 'b'], allowedPaths: ['packages/**'], disableAllowed: true })])).toEqual([]);
-    });
-
-    it('rejects a non-array section', () => {
-        expect(validateMatchRulesSection({ name: 'no-fetch' }).some(e => e.includes('Must be an array'))).toBe(true);
-    });
-
-    it('reports an invalid regex with the entry name and index', () => {
-        const errors = validateMatchRulesSection([validMatchRule({ patterns: ['('] })]);
-        expect(errors.some(e => e.includes('"no-fetch".patterns[0] is not a valid regex'))).toBe(true);
-    });
-
-    it('requires name, patterns, mainMessage, mode, and BOTH escape hatches', () => {
-        const errors = validateMatchRulesSection([{ name: '' }]);
-        expect(errors.some(e => e.includes('.name must be a non-empty string'))).toBe(true);
-        expect(errors.some(e => e.includes('.patterns must be a non-empty string[]'))).toBe(true);
-        expect(errors.some(e => e.includes('.mainMessage must be a non-empty string'))).toBe(true);
-        expect(errors.some(e => e.includes('.mode must be one of'))).toBe(true);
-        // Both hatches are required on match-rules too.
-        expect(errors.some(e => e.includes('.turnOffRuleUntilEpoch must be a number'))).toBe(true);
-        expect(errors.some(e => e.includes('.turnOffRuleWhileOnBranch must be a string or null'))).toBe(true);
-    });
-
-    it('validates the epoch hatch type when present', () => {
-        // webpieces-disable no-any-unknown -- deliberately wrong type for the negative test
-        const errors = validateMatchRulesSection([validMatchRule({ turnOffRuleUntilEpoch: 'soon' as unknown as number })]);
-        expect(errors.some(e => e.includes('.turnOffRuleUntilEpoch must be a number'))).toBe(true);
-    });
-
-    it('accepts a null branch hatch and flags the renamed old names', () => {
-        expect(validateMatchRulesSection([validMatchRule({ turnOffRuleUntilEpoch: 1771931925, turnOffRuleWhileOnBranch: 'deanhiller/foo' })])).toEqual([]);
-        // webpieces-disable no-any-unknown -- deliberately the removed old name for the negative test
-        const renamed = validateMatchRulesSection([validMatchRule({ ignoreModifiedUntilEpoch: 0 } as Record<string, unknown>)]);
-        expect(renamed.some(e => e.includes('"ignoreModifiedUntilEpoch" — it was renamed to "turnOffRuleUntilEpoch"'))).toBe(true);
-    });
-
-    it('rejects an invalid mode value', () => {
-        expect(validateMatchRulesSection([validMatchRule({ mode: 'ON' })]).some(e => e.includes('.mode must be one of'))).toBe(true);
-    });
-
-    it('flags duplicate entry names', () => {
-        const errors = validateMatchRulesSection([validMatchRule(), validMatchRule()]);
-        expect(errors.some(e => e.includes('duplicate entry name "no-fetch"'))).toBe(true);
-    });
-});
-
-// Registry-consistency invariants. read-stale-guard (then named main-stale-guard) shipped in 0.4.415
-// registered in HOOK_GUARD_NAMES
-// (so the validator DEMANDED it in config) but absent from RULE_SCHEMAS (so the validator REJECTED it
-// as an unknown rule) — a hard deadlock: config-without-it fails the sync check, config-with-it fails
-// validation, and the only writes still allowed (config edits, pnpm install) can't reach the version
-// pin. These tests lock the two name-lists together so a half-wired guard can never ship again.
-describe('rule registry consistency', () => {
-    it('every hook-guard name has a schema in RULE_SCHEMAS (else the validator demands a key it then rejects)', () => {
-        const schema = new Set(allRuleNames(fixtureRuleRegistry));
-        const missing = HOOK_GUARD_NAMES.filter((name: string): boolean => !schema.has(name));
-        expect(missing).toEqual([]);
-    });
-
-    it('allRuleNames is exactly the schema keys, so the installer seeds every known rule', () => {
-        // allRuleNames drives buildSeedConfig; a name missing here can never be seeded and a repo
-        // could not add it via the install command.
-        expect(allRuleNames(fixtureRuleRegistry).length).toBeGreaterThan(0);
-        // The branch-state POLICY, not the four class names behind it. `read-stale-guard` used to be
-        // asserted here; it is now a rule NAME with no config key of its own, so demanding a schema for
-        // it would recreate the exact deadlock this describe block exists to prevent — the validator
-        // demanding a key that RETIRED_CONFIG_KEYS then rejects.
-        expect(new Set(allRuleNames(fixtureRuleRegistry)).has('branch-state-guard')).toBe(true);
-    });
-
-    // The other half of that deadlock, in the new direction the collapse opens up: a rule NAME must
-    // never acquire a schema, because a schema is what makes the validator demand a config entry.
-    it('no retired class-named guard has a schema, so the validator can never demand a rejected key', () => {
-        const schema = new Set(allRuleNames(fixtureRuleRegistry));
-        const retiredNames = [
-            'feature-branch-guard', 'read-stale-guard', 'stale-main-bash-guard', 'merged-branch-bash-guard',
-            'pr-creation-or-push-guard', 'merge-in-progress-guard', 'pr-merge-guard', 'redirect-how-to-merge-main',
-        ];
-        expect(retiredNames.filter((name: string): boolean => schema.has(name))).toEqual([]);
-    });
-
-    it('every defaultRules key has a schema (else the loader defaults a rule the validator rejects)', () => {
-        const schema = new Set(allRuleNames(fixtureRuleRegistry));
-        const missing = Object.keys(defaultRules).filter((name: string): boolean => !schema.has(name));
-        expect(missing).toEqual([]);
-    });
-
-    // The five Nx infrastructure validators moved to no-rule-defaults.spec.ts (#1017): they have
-    // no default, and what replaces one is that the config is DEMANDED to state their mode.
-});
-
-// webpieces-disable no-any-unknown -- a raw pr-gate section from a test
-function validPrGate(checklists: unknown): Record<string, unknown> {
-    return { mode: 'ON', buildCommand: 'pnpm ci', mergeMode: 'AUTO', reviewerAgents: 1, maxReviewerRounds: 2, gates: [], checklists };
-}
-
-// A temp repo root, optionally with `.claude/review/<doc>` files and `.claude/agents/<name>.md` reviewers.
-function repoWith(docs: string[] = [], agents: string[] = []): string {
-    const dir = policyFixture.makeRepo('wp-checklists-');
-    fs.mkdirSync(path.join(dir, '.claude', 'review'), { recursive: true });
-    for (const d of docs) fs.writeFileSync(path.join(dir, '.claude', 'review', d), '# doc');
-    if (agents.length > 0) {
-        fs.mkdirSync(path.join(dir, '.claude', 'agents'), { recursive: true });
-        for (const a of agents) fs.writeFileSync(path.join(dir, '.claude', 'agents', `${a}.md`), '# agent');
-    }
-    return dir;
-}
-
-describe('validatePrGateSection rejects gateSaltWhy', () => {
-    it('tells the consumer to delete it, so the next validate on upgrade forces removal', () => {
-        const section = { mode: 'ON', buildCommand: 'pnpm ci', mergeMode: 'AUTO', reviewerAgents: 1, maxReviewerRounds: 2, gateSalt: 's', gateSaltWhy: 'it works like this...' };
-        const errors = validatePrGateSection(section);
-        expect(errors.some((e: string): boolean => /DELETE the "gateSaltWhy" key/.test(e))).toBe(true);
-    });
-
-    it('leaves every other *Why rationale key alone', () => {
-        const section = { mode: 'ON', buildCommand: 'pnpm ci', mergeMode: 'AUTO', reviewerAgents: 1, maxReviewerRounds: 2, buildCommandWhy: 'because', gatesWhy: 'because' };
-        expect(validatePrGateSection(section)).toEqual([]);
-    });
-});
-
-// recommendedSeedMode is the ONE source of truth for "what mode should this rule arrive as" — used by
-// the validator's copy-paste snippet, by the installer's seeding, and by fault Y's deny.
-describe('recommendedSeedMode', () => {
-    it('prefers the narrowest gradual mode a rule supports', () => {
-        expect(recommendedSeedModeFor(['OFF', 'ON', 'NEW_AND_MODIFIED_FILES', 'NEW_AND_MODIFIED_CODE'])).toEqual('NEW_AND_MODIFIED_CODE');
-        // A project-wide mode is the BROADEST gradual mode, so a narrower one wins (#1027) …
-        expect(recommendedSeedModeFor(['OFF', 'ON', 'MODIFIED_CLASS', 'MODIFIED_PROJECTS'])).toEqual('MODIFIED_CLASS');
-        // … and a project rule, which offers nothing narrower, still arrives as MODIFIED_PROJECTS.
-        expect(recommendedSeedModeFor(['OFF', 'MODIFIED_PROJECTS', 'AFFECTED_PROJECT'])).toEqual('MODIFIED_PROJECTS');
-    });
-
-    it('keeps a line-scoped rule at NEW_AND_MODIFIED_CODE now that it also offers the whole-scope modes (#1027)', () => {
-        expect(recommendedSeedModeFor(MODIFIED_CODE_MODES)).toEqual('NEW_AND_MODIFIED_CODE');
-        expect(recommendedSeedMode('one-enum-spelling-in-api-lib', fixtureRuleRegistry)).toEqual('NEW_AND_MODIFIED_CODE');
-        expect(recommendedSeedMode('no-destructure', fixtureRuleRegistry)).toEqual('NEW_AND_MODIFIED_CODE');
-    });
-
-    it('falls back ON -> RUN_EVERY_TIME -> OFF when no gradual mode is offered', () => {
-        expect(recommendedSeedModeFor(['OFF', 'ON'])).toEqual('ON');
-        expect(recommendedSeedModeFor(['OFF', 'RUN_EVERY_TIME'])).toEqual('RUN_EVERY_TIME');
-        expect(recommendedSeedModeFor(['OFF'])).toEqual('OFF');
-        expect(recommendedSeedModeFor([])).toEqual('OFF');
-    });
-
-    it('never recommends OFF for a built-in rule — seeding a fresh config leaves everything enforcing', () => {
-        for (const name of allRuleNames(fixtureRuleRegistry)) {
-            expect(recommendedSeedMode(name, fixtureRuleRegistry), name).not.toEqual('OFF');
-        }
-    });
-
-    it('returns OFF for an unknown (custom) rule — no schema, so no modes are known to be accepted', () => {
-        expect(recommendedSeedMode('some-custom-rule', fixtureRuleRegistry)).toEqual('OFF');
-    });
-});
-
-// seedEntryForRule is what the installer writes, so it must satisfy the validator that reads the same
-// schema. The end-to-end version of this lives in ai-hook-rules/src/bin/setup.spec.ts (it runs a real
-// migrate() through validateWebpiecesConfig); this one pins the per-field default selection.
-describe('seedEntryForRule', () => {
-    it('emits EVERY schema-required field, not just mode + the two hatches', () => {
-        // The gap this closed: a seeded branch-creation-guard had no autoReapMergedBranches, so a fresh
-        // install wrote a config that failed to load. The values come from SEED_VALUES (seed-entry.ts)
-        // now that no rule has a DEFAULT (#1017) — autoReap seeds FALSE ("nobody answered" = delete
-        // nothing).
-        expect(seedEntryForRule('branch-creation-guard', fixtureRuleRegistry)).toEqual({
-            mode: 'ON', turnOffRuleUntilEpoch: 0, turnOffRuleWhileOnBranch: null,
-            autoReapMergedBranches: false,
-            subBranchNaming: 'feature/<ticket>/<short-description>',
-        });
-    });
-
-    it('always carries both escape hatches in their active state, at the recommended mode', () => {
-        for (const name of allRuleNames(fixtureRuleRegistry)) {
-            const entry = seedEntryForRule(name, fixtureRuleRegistry);
-            expect(entry['mode'], name).toEqual(recommendedSeedMode(name, fixtureRuleRegistry));
-            expect(entry['turnOffRuleUntilEpoch'], name).toEqual(0);
-            expect(entry['turnOffRuleWhileOnBranch'], name).toEqual(null);
-        }
-    });
-
-    it('gives an unknown (custom) rule the minimal entry — no schema to enumerate', () => {
-        expect(seedEntryForRule('some-custom-rule', fixtureRuleRegistry)).toEqual(
-            { mode: 'OFF', turnOffRuleUntilEpoch: 0, turnOffRuleWhileOnBranch: null });
-    });
-});
-
-/**
- * `pr-gate.devDeploy` — where wp-push-dev publishes the disposable copy. Optional with defaults, so
- * every existing consumer config keeps validating untouched; present, it has to be usable as a git ref,
- * because these two values are concatenated into a ref that a command then force-pushes.
- */
-describe('validatePrGateSection — devDeploy', () => {
-    const base = { mode: 'ON', buildCommand: 'x', mergeMode: 'AUTO', reviewerAgents: 1, maxReviewerRounds: 2 };
-
-    it('accepts a config that omits it entirely', () => {
-        expect(validatePrGateSection(base)).toEqual([]);
-    });
-
-    it('accepts explicit names', () => {
-        expect(validatePrGateSection({ ...base, devDeploy: { branchNamespace: 'staging-include', devBranch: 'staging' } }))
-            .toEqual([]);
-    });
-
-    it('accepts overriding only one of the two', () => {
-        expect(validatePrGateSection({ ...base, devDeploy: { devBranch: 'staging' } })).toEqual([]);
-    });
-
-    it('rejects a name git could not use as a ref', () => {
-        const bad = validatePrGateSection({ ...base, devDeploy: { branchNamespace: 'dev include!' } });
-        expect(bad.length).toBe(1);
-        expect(bad[0]).toContain('not a usable git ref name');
-    });
-
-    it('rejects an empty name rather than silently falling back to the default', () => {
-        expect(validatePrGateSection({ ...base, devDeploy: { devBranch: '  ' } })[0]).toContain('non-empty string');
-    });
-
-    it('rejects a devBranch with a slash — it is a branch, not a namespace', () => {
-        expect(validatePrGateSection({ ...base, devDeploy: { devBranch: 'shared/dev' } })[0])
-            .toContain('single ref name with no "/"');
-    });
-
-    it('rejects a devBranch nested inside the namespace, which would make --list enumerate it', () => {
-        const bad = validatePrGateSection({ ...base, devDeploy: { branchNamespace: 'dev', devBranch: 'dev' } });
-        expect(bad[0]).toContain('must not contain one another');
-    });
-
-    it('rejects a non-object', () => {
-        expect(validatePrGateSection({ ...base, devDeploy: 'dev-include' })[0]).toContain('must be an object');
     });
 });

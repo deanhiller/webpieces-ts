@@ -9,7 +9,7 @@ import { specTempDirs } from '@webpieces/tooling-testkit';
  */
 import * as fs from 'fs';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { RequiredTypeSuffixEntry } from "@webpieces/code-rules";
+import { WireSuffixEntry } from '../api-usage/wire-suffix-entry';
 import { ProjectInfo } from '../project-info';
 import { ApiContractDefect, ApiDocRule, MCP_RULE, OPENAPI_RULE } from '../api-usage/api-doc-rules';
 import { ApiDocRulesScan } from '../api-usage/api-doc-rules-scan';
@@ -21,7 +21,9 @@ let root = '';
 beforeEach(() => {
     root = specTempDirs.make('wp-wire-closure-');
     const fx = new FixtureWorkspace(root);
-    fx.project('lang-apis', `/** Lessons. */
+    fx.project(
+        'lang-apis',
+        `/** Lessons. */
     import { AiProvider, LessonDto } from '../../company-core/src/index';
 
     @ApiPath('/lessons')
@@ -45,8 +47,11 @@ beforeEach(() => {
         /** The lesson. */
         lesson: LessonDto;
     }
-`);
-    fx.project('company-core', `
+`,
+    );
+    fx.project(
+        'company-core',
+        `
     /** Which model. */
     export enum AiProvider { CLAUDE = 'claude', CHATGPT = 'chatgpt' }
 
@@ -55,7 +60,8 @@ beforeEach(() => {
         /** Its title. */
         title: string;
     }
-`);
+`,
+    );
 });
 
 afterEach(() => {
@@ -65,12 +71,15 @@ afterEach(() => {
 function infos(companyCoreRole: string): Map<string, ProjectInfo> {
     const map = new Map<string, ProjectInfo>();
     map.set('lang-apis', new ProjectInfo('lang-apis', 'libraries/lang-apis', ['role:api-lib']));
-    map.set('company-core', new ProjectInfo('company-core', 'libraries/company-core', [`role:${companyCoreRole}`]));
+    map.set(
+        'company-core',
+        new ProjectInfo('company-core', 'libraries/company-core', [`role:${companyCoreRole}`]),
+    );
     return map;
 }
 
 function suffixes(...list: string[]): WireClosureRule {
-    const entry = new RequiredTypeSuffixEntry();
+    const entry = new WireSuffixEntry();
     entry.paths = ['libraries/**'];
     entry.suffixes = list;
     return new WireClosureRule([entry]);
@@ -97,7 +106,9 @@ describe('wire closure (D4)', () => {
             "'AiProvider' goes over the wire but is declared in no package (project 'company-core', role:lib), " +
                 'which is not a role:api-lib project — every type a contract reaches must be declared in an api library',
         );
-        expect(found[0]).toContain("Move 'AiProvider' into a role:api-lib project — as a '…Dto' string enum");
+        expect(found[0]).toContain(
+            "Move 'AiProvider' into a role:api-lib project — as a '…Dto' string enum",
+        );
         expect(found[1]).toContain("'LessonDto' goes over the wire");
     });
 
@@ -116,7 +127,12 @@ describe('wire closure (D4)', () => {
     });
 
     it('nothing runs when both doc rules are OFF', () => {
-        const findings = new ApiDocRulesScan(root, infos('lib'), ApiDocRule.off(OPENAPI_RULE), ApiDocRule.off(MCP_RULE)).run();
+        const findings = new ApiDocRulesScan(
+            root,
+            infos('lib'),
+            ApiDocRule.off(OPENAPI_RULE),
+            ApiDocRule.off(MCP_RULE),
+        ).run();
         expect(findings.openApi.isEmpty() && findings.mcp.isEmpty()).toBe(true);
     });
 });

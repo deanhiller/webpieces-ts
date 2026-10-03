@@ -4,9 +4,23 @@ import { Container } from 'inversify';
 import * as fs from 'fs';
 import * as path from 'path';
 
-import { HookApp, HookArgs, HookEvaluator, HookOutcome, HookStdinSource, HookStdoutSink, HookProcessExit } from '@webpieces/hook-runtime';
+import {
+    HookApp,
+    HookArgs,
+    HookEvaluator,
+    HookOutcome,
+    HookStdinSource,
+    HookStdoutSink,
+    HookProcessExit,
+} from '@webpieces/hook-runtime';
 import { HookPipelineEvaluator } from './hook-pipeline-evaluator';
-import { GOLDEN_FIXTURES, GoldenFixture, GoldenRepoBuilder, PreparedFixture, REPO_TOKEN } from './hook-app-fixtures';
+import {
+    GOLDEN_FIXTURES,
+    GoldenFixture,
+    GoldenRepoBuilder,
+    PreparedFixture,
+    REPO_TOKEN,
+} from './hook-app-fixtures';
 
 /**
  * THE ONE AMBIENT READ THIS SUITE MUST NOT INHERIT — the live checkout's managed-surface state.
@@ -68,7 +82,9 @@ import { GOLDEN_FIXTURES, GoldenFixture, GoldenRepoBuilder, PreparedFixture, REP
  */
 
 // webpieces-disable no-any-unknown -- the goldens file is captured output on disk; the index signature is the widest true statement about a JSON blob whose keys are fixture names
-const GOLDENS = JSON.parse(fs.readFileSync(path.join(__dirname, '__goldens__', 'hook-app-goldens.json'), 'utf8')) as Record<string, GoldenRow>;
+const GOLDENS = JSON.parse(
+    fs.readFileSync(path.join(__dirname, '__goldens__', 'hook-app-goldens.json'), 'utf8'),
+) as Record<string, GoldenRow>;
 
 interface GoldenRow {
     /** The binary that produced these bytes: `0.4.696` (pre-#723) or this repo's main for new surface. */
@@ -171,13 +187,35 @@ describe('HookApp golden bytes — the composed pipeline, end to end', () => {
      * unreadable 8KB byte diff on a fixture that was testing something else.
      */
 
-    it.each(GOLDEN_FIXTURES.map((fixture: GoldenFixture): [string, GoldenFixture] => [fixture.name, fixture]))(
+    it.each(
+        GOLDEN_FIXTURES.map((fixture: GoldenFixture): [string, GoldenFixture] => [
+            fixture.name,
+            fixture,
+        ]),
+    )(
         '%s emits the captured bytes and exit code',
         async (name: string, fixture: GoldenFixture): Promise<void> => {
             const golden = GOLDENS[name];
             expect(golden, `no golden recorded for ${name}`).toBeDefined();
             const outcome = await runHook(fixture);
-            expect(outcome.stdout).toBe(golden.stdout);
+            // The captured crash named the retired directory loader. Its replacement is an explicitly declared client runtime.
+            let expected = fixture.crashingRuntime
+                ? golden.stdout.replace(
+                      "Cannot load custom rule '<REPO>/wprules/crash.js'",
+                      'Cannot load declared policy runtime ./crash-runtime.cjs from ./fixture-policy-4.cjs: boom from a custom rule module. Repair its public implementation module or root declaration.',
+                  )
+                : golden.stdout;
+            // Keep the captured protocol and policy behavior; config remedies now name the declared owner file.
+            expected = expected
+                .replaceAll(
+                    'no-js-files.allowedPaths in webpieces.config.json',
+                    'no-js-files.allowedPaths in <REPO>/.webpieces/rules/fixture-1.json',
+                )
+                .replaceAll(
+                    'no-destructure.allowedPaths in webpieces.config.json',
+                    'no-destructure.allowedPaths in <REPO>/.webpieces/rules/fixture-0.json',
+                );
+            expect(outcome.stdout).toBe(expected);
             expect(outcome.exitCode).toBe(golden.exitCode);
         },
     );
@@ -224,7 +262,12 @@ describe('HookApp golden bytes — the composed pipeline, end to end', () => {
             expect(row.exitCode, name).toBe(0);
             if (row.stdout === '') continue;
             // webpieces-disable no-any-unknown -- parsing the recorded wire bytes back; the shape asserted is exactly the two fields under test
-            const parsed = JSON.parse(row.stdout) as { hookSpecificOutput: { permissionDecision: string; permissionDecisionReason: string } };
+            const parsed = JSON.parse(row.stdout) as {
+                hookSpecificOutput: {
+                    permissionDecision: string;
+                    permissionDecisionReason: string;
+                };
+            };
             expect(parsed.hookSpecificOutput.permissionDecision, name).toBe('deny');
             expect(parsed.hookSpecificOutput.permissionDecisionReason.trim(), name).not.toBe('');
         }
@@ -253,7 +296,9 @@ describe('HookApp golden bytes — the composed pipeline, end to end', () => {
 
         expect(exit.code).toBe(0);
         // webpieces-disable no-any-unknown -- parsing the bytes just emitted; the shape asserted is exactly the two fields under test
-        const parsed = JSON.parse(stdout.written) as { hookSpecificOutput: { permissionDecision: string; permissionDecisionReason: string } };
+        const parsed = JSON.parse(stdout.written) as {
+            hookSpecificOutput: { permissionDecision: string; permissionDecisionReason: string };
+        };
         expect(parsed.hookSpecificOutput.permissionDecision).toBe('deny');
         expect(parsed.hookSpecificOutput.permissionDecisionReason).toContain('failing closed');
         expect(parsed.hookSpecificOutput.permissionDecisionReason).toContain('stdin is gone');

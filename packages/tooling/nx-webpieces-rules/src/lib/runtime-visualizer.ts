@@ -81,8 +81,8 @@ export class RuntimeVizOptions {
     constructor(
         /**
          * Draw the dashed terminal nodes for contracts nothing in-repo implements. On by default;
-         * a repo whose external surface is noisy can turn them off in webpieces.config.json
-         * (runtime-architecture.showExternalNodes).
+         * a repo whose external surface is noisy can turn them off in the declared Nx owner file's
+         * direct policy-ID map (runtime-architecture.showExternalNodes).
          */
         public readonly showExternalNodes: boolean = true,
     ) {}

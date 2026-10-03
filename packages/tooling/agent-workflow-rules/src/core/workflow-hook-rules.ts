@@ -1,12 +1,12 @@
-import * as path from 'path';
 import { LoadedConfig } from '@webpieces/rules-config';
-import { HookRuleSet } from '@webpieces/hook-runtime';
-import { loadRules, GuardHintCommands } from './load-rules';
+import { HookRuleSet, HookPolicyContributions } from '@webpieces/hook-runtime';
+import { WorkflowRuleRuntime } from '../rule-runtime';
 
 export class WorkflowHookRules {
     load(loaded: LoadedConfig): HookRuleSet {
-        const rules = loadRules(loaded.rulesConfig, path.dirname(loaded.configPath ?? ''),
-            new GuardHintCommands(loaded.commands.upsertPr, loaded.commands.mergeComplete));
-        return new HookRuleSet(rules, rules);
+        const rules = new HookPolicyContributions(
+            new Map([['@webpieces/agent-workflow-rules/rule-runtime', new WorkflowRuleRuntime()]]),
+        ).load(loaded, 'workflow-guard');
+        return new HookRuleSet(rules);
     }
 }

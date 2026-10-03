@@ -1,4 +1,4 @@
-import { RulePackSelection } from '@webpieces/rules-config';
+import { PackPolicyFiles } from '@webpieces/rules-config';
 import { policyFixture } from '@webpieces/tooling-testkit';
 import { RulePackRegistry } from '@webpieces/rules-config';
 const fixtureRuleRegistry = new RulePackRegistry(policyFixture.manifests());
@@ -18,7 +18,6 @@ import { loadTemplate } from './load-template';
 import { RETIRED_SCOPE_RULE, retiredKeyError } from './retired-config-keys';
 import { toError } from '@webpieces/tooling-common/to-error';
 import { validateWebpiecesConfig } from './validate-config';
-
 
 /**
  * THE INCIDENT THIS FILE PINS DOWN.
@@ -47,17 +46,19 @@ afterEach(() => {
 function repoWith(config: string): string {
     const dir = policyFixture.makeRepo('wp-prune-');
     dirs.push(dir);
-    fs.writeFileSync(path.join(dir, 'webpieces.config.json'), config);
+    policyFixture.writeOwnerConfig(dir, JSON.parse(config));
     return dir;
 }
 
 function pruner(): ConfigPruner {
-    return new ConfigPruner(new ConfigFile(), new AtomicFile(), new RulePackSelection());
+    return new ConfigPruner(new ConfigFile(), new AtomicFile(), new PackPolicyFiles());
 }
 
 /** The one error `validateWebpiecesConfig` produced for `name` (missing-OTHER-rule errors ignored). */
 function errorFor(name: string, rawRules: Record<string, Record<string, unknown>>): string {
-    const matching = validateWebpiecesConfig(rawRules, fixtureRuleRegistry).filter((e: string): boolean => e.includes(`[${name}]`));
+    const matching = validateWebpiecesConfig(rawRules, fixtureRuleRegistry).filter(
+        (e: string): boolean => e.includes(`[${name}]`),
+    );
     expect(matching, `exactly one error for ${name}`).toHaveLength(1);
     return matching[0];
 }
@@ -98,29 +99,52 @@ describe('case 1 — retired key, validator knows the retirement', () => {
     });
 
     it('prunes the key, and the config then validates', () => {
-        const dir = repoWith(JSON.stringify({
-            rules: {},
-            hookGuards: { 'whole-repo-build-guard': { mode: 'ON' } },
-        }, null, 4));
+        const dir = repoWith(
+            JSON.stringify(
+                {
+                    rules: {},
+                    hookGuards: { 'whole-repo-build-guard': { mode: 'ON' } },
+                },
+                null,
+                4,
+            ),
+        );
         const result: PruneResult = pruner().pruneFrom(dir);
 
         expect(result.changed()).toBe(true);
-        expect(result.removed.map((r: PrunedKey): string => r.key)).toEqual(['whole-repo-build-guard']);
+        expect(result.removed.map((r: PrunedKey): string => r.key)).toEqual([
+            'whole-repo-build-guard',
+        ]);
 
         // The file on disk no longer carries it, and re-validating the pruned sections is silent about it.
-        const after = JSON.parse(fs.readFileSync(path.join(dir, 'webpieces.config.json'), 'utf8')) as
-            Record<string, Record<string, Record<string, unknown>>>;
+        const after = {
+            hookGuards: Object.assign(
+                {},
+                ...[0, 1, 2, 3].map((index) =>
+                    JSON.parse(
+                        fs.readFileSync(
+                            path.join(dir, `.webpieces/rules/fixture-${index}.json`),
+                            'utf8',
+                        ),
+                    ),
+                ),
+            ),
+        } as Record<string, Record<string, Record<string, unknown>>>;
         expect(Object.keys(after['hookGuards'])).toEqual([]);
-        const stillReported = validateWebpiecesConfig(after['hookGuards'], fixtureRuleRegistry)
-            .filter((e: string): boolean => e.includes('whole-repo-build-guard'));
+        const stillReported = validateWebpiecesConfig(
+            after['hookGuards'],
+            fixtureRuleRegistry,
+        ).filter((e: string): boolean => e.includes('whole-repo-build-guard'));
         expect(stillReported).toEqual([]);
     });
 
     // Every removal is named. A silent sweep is what would make the one destructive case unrecoverable.
     it('reports each removed key by name rather than a count', () => {
-        const dir = repoWith(JSON.stringify({ hookGuards: { 'whole-repo-build-guard': { mode: 'ON' } } }, null, 4));
+        const dir = repoWith(
+            JSON.stringify({ hookGuards: { 'whole-repo-build-guard': { mode: 'ON' } } }, null, 4),
+        );
         const report = pruner().pruneFrom(dir).describeSelf();
-        expect(report).toContain('hookGuards.whole-repo-build-guard');
+        expect(report).toContain('.webpieces/rules/fixture-0.json.whole-repo-build-guard');
         expect(report).toContain('~/.webpieces/config.json');
     });
 });
@@ -200,7 +224,7 @@ describe('case 3 — the machine-local file is the one that is wrong', () => {
     // produces no error, so it has no error text for this suite to check the labelling of. The three
     // remaining rows are the ones that still reject.
     const cases: readonly string[] = [
-        '{ not json',                                    // unparseable
+        '{ not json', // unparseable
         '{"experimental":{"whole-repo-build-guard":"yes"}}', // wrong TYPE for a known flag
         '{"experimental":{"captureBuildGateLog":true}}', // retired flag
     ];
@@ -243,7 +267,9 @@ describe('case 4 — a valid-but-newer key is never dropped without warning', ()
      */
     it('the shim decides drift before exec`ing the guard bin, so a stale tree never reaches the pruner', () => {
         const shim = fs.readFileSync(
-            path.join(__dirname, '..', '..', 'agent-workflow-rules', 'templates', 'ai-hook.sh'), 'utf8');
+            path.join(__dirname, '..', '..', 'agent-workflow-rules', 'templates', 'ai-hook.sh'),
+            'utf8',
+        );
         expect(shim).toContain('DRIFT_PKG');
         // The guard bin only runs when there is no drift — the condition that makes `pnpm install` a no-op
         // by the time any validator message is on screen.
@@ -252,39 +278,64 @@ describe('case 4 — a valid-but-newer key is never dropped without warning', ()
 
     // A rename is a retirement whose value must CARRY OVER. Pruning one would lose it, so it is kept.
     it('the pruner refuses to remove a rename, which still has a destination in this file', () => {
-        const dir = repoWith(JSON.stringify({ hookGuards: { 'main-stale-guard': { mode: 'ON' } } }, null, 4));
+        const dir = repoWith(
+            JSON.stringify({ hookGuards: { 'main-stale-guard': { mode: 'ON' } } }, null, 4),
+        );
         const result = pruner().pruneFrom(dir);
         expect(result.changed()).toBe(false);
         expect(result.describeSelf()).toContain('nothing to remove');
     });
 
     // A rulesDir means an unrecognised name may be a legitimate CUSTOM rule. Never touch those.
-    it('the pruner removes nothing at all when a rulesDir is configured', () => {
-        const dir = repoWith(JSON.stringify({
-            rulesDir: ['./my-rules'],
-            rules: { 'my-custom-rule': { mode: 'ON' } },
-        }, null, 4));
-        expect(pruner().pruneFrom(dir).changed()).toBe(false);
+    it('rejects retired directory selection instead of pruning possibly owned client policies', () => {
+        const dir = repoWith(
+            JSON.stringify(
+                {
+                    rulesDir: ['./my-rules'],
+                    rules: { 'my-custom-rule': { mode: 'ON' } },
+                },
+                null,
+                4,
+            ),
+        );
+        expect(() => pruner().pruneFrom(dir)).toThrow('directory scanning is retired');
     });
 
     // The retired table is a worklist, and `prunable` is the field that decides delete-vs-rename. An entry
     // added without thinking about it would silently become non-prunable; this states the current split.
     it('exactly the retirements that left this file are prunable', () => {
-        const prunable = RETIRED_CONFIG_KEYS
-            .filter(e => e.scope === RETIRED_SCOPE_RULE && e.prunable)
-            .map(e => e.key);
+        const prunable = RETIRED_CONFIG_KEYS.filter(
+            (e) => e.scope === RETIRED_SCOPE_RULE && e.prunable,
+        ).map((e) => e.key);
         expect(prunable).toEqual(['whole-repo-build-guard']);
     });
 
     // A real rule the validator DOES know is never touched, whatever else is in the file.
     it('leaves every key that has a schema exactly where it is', () => {
-        const dir = repoWith(JSON.stringify({
-            hookGuards: { 'pr-merge-guard': { mode: 'ON' }, 'dead-key': { mode: 'ON' } },
-        }, null, 4));
+        const dir = repoWith(
+            JSON.stringify(
+                {
+                    hookGuards: { 'pr-merge-guard': { mode: 'ON' }, 'dead-key': { mode: 'ON' } },
+                },
+                null,
+                4,
+            ),
+        );
         const result = pruner().pruneFrom(dir);
         expect(result.removed.map((r: PrunedKey): string => r.key)).toEqual(['dead-key']);
-        const after = JSON.parse(fs.readFileSync(path.join(dir, 'webpieces.config.json'), 'utf8')) as
-            Record<string, Record<string, unknown>>;
+        const after = {
+            hookGuards: Object.assign(
+                {},
+                ...[0, 1, 2, 3].map((index) =>
+                    JSON.parse(
+                        fs.readFileSync(
+                            path.join(dir, `.webpieces/rules/fixture-${index}.json`),
+                            'utf8',
+                        ),
+                    ),
+                ),
+            ),
+        } as Record<string, Record<string, unknown>>;
         expect(Object.keys(after['hookGuards'])).toEqual(['pr-merge-guard']);
     });
 });
@@ -326,8 +377,11 @@ describe('the linked policy doc agrees with the banner', () => {
      * package as the banner that contradicts it.
      */
     it('no source doc in this package still offers `pnpm install` as the cure for a validation failure', () => {
-        const sources = ['retired-config-keys.ts', 'config-error-banner.ts', 'validate-config.ts']
-            .map((name: string): string => fs.readFileSync(path.join(__dirname, name), 'utf8'));
+        const sources = [
+            'retired-config-keys.ts',
+            'config-error-banner.ts',
+            'validate-config.ts',
+        ].map((name: string): string => fs.readFileSync(path.join(__dirname, name), 'utf8'));
         for (const source of sources) {
             expect(source).not.toContain('which fixes the far more common cause');
             expect(source).not.toContain('run `pnpm install` first');
@@ -352,7 +406,10 @@ describe('case 5 — the output never contradicts itself about `pnpm install`', 
         ['unknown rule', fullOutput({ 'brand-new-rule': { mode: 'ON' } })],
         ['retired rule', fullOutput({ 'whole-repo-build-guard': { mode: 'ON' } })],
         ['retired rename', fullOutput({ 'main-stale-guard': { mode: 'ON' } })],
-        ['a single retired-key error', formatConfigErrorsBanner([retiredKeyError(RETIRED_CONFIG_KEYS[0])])],
+        [
+            'a single retired-key error',
+            formatConfigErrorsBanner([retiredKeyError(RETIRED_CONFIG_KEYS[0])]),
+        ],
     ];
 
     it('mentions `pnpm install` exactly once, and only to rule it out', () => {

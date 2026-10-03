@@ -2,7 +2,7 @@ import { isRootManifest } from '@webpieces/hook-runtime';
 import * as fs from 'fs';
 import * as path from 'path';
 
-import { CONFIG_FILENAME } from '@webpieces/rules-config';
+import { ConfigRepairAccess, RepoRootFinder } from '@webpieces/rules-config';
 
 import { AiType } from '@webpieces/hook-runtime';
 import { L0_ALLOW_JS } from './l0-allowlist';
@@ -51,12 +51,25 @@ export const READ_TOOLS: ReadonlySet<string> = new Set(['Read']);
  * entry exists to remove.
  */
 // webpieces-disable no-function-outside-class -- pure predicate over the exported allowlist data, in the dependency-free shim module (it must load on a corrupt tree, so it cannot depend on DI)
-export function isAllowed(toolName: string, command: string, filePath: string, aiType: AiType): 'pass' | 'allow' | null {
+export function isAllowed(
+    toolName: string,
+    command: string,
+    filePath: string,
+    aiType: AiType,
+): 'pass' | 'allow' | null {
     if (READ_TOOLS.has(toolName)) return 'pass';
     // Nothing to judge — see L0_IGNORED_TOOLS. `pass`, never `allow`: L0 declines to be terminal, so on
     // a healthy tree the call still falls through to whatever runs next.
     if (L0_IGNORED_TOOLS.has(toolName)) return 'pass';
-    if (path.basename(filePath) === CONFIG_FILENAME) return 'pass';
+    if (
+        ['Write', 'Edit', 'MultiEdit'].includes(toolName) &&
+        filePath &&
+        new ConfigRepairAccess().isRepairFile(
+            new RepoRootFinder().resolveRepoRoot(path.dirname(path.resolve(filePath))),
+            filePath,
+        )
+    )
+        return 'pass';
     if (isRootManifest(filePath)) return 'pass';
     if (L0_ALLOW_JS.test(command.trim())) return 'allow';
     // The HARNESS-GATED tail of the list, and the only place `aiType` is consulted. Codex has no `Read`

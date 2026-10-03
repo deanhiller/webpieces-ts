@@ -10,9 +10,7 @@ import { isRetiredKey } from './retired-config-keys';
  * retired top-level block, and validateCommandsSection already reports it with the move instruction, so
  * listing it here would replace that precise message with a generic "unknown key".
  */
-const TOP_LEVEL_KEYS: readonly string[] = [
-    'extends', 'rules', 'hookGuards', 'commands', 'excludePaths', 'match-rules', 'rulesDir',
-];
+const TOP_LEVEL_KEYS: readonly string[] = ['rulePacks', 'commands', 'excludePaths', 'match-rules'];
 
 /**
  * Reject unknown TOP-LEVEL keys. Without this, a key that was retired at the top level (or simply
@@ -23,8 +21,28 @@ const TOP_LEVEL_KEYS: readonly string[] = [
  */
 // webpieces-disable no-any-unknown -- the raw parsed config is opaque; only key names are read here
 // webpieces-disable no-function-outside-class -- module-level config validator, matches the rest of this file
+// webpieces-disable no-any-unknown -- external JSON or runtime exports are validated before policy execution
 export function validateTopLevelKeys(raw: Record<string, unknown>): string[] {
-    return unknownKeyErrors(raw, [...TOP_LEVEL_KEYS, 'pr-gate'], '[webpieces.config.json]');
+    const retired = ['rules', 'hookGuards', 'rulesDir', 'extends'].filter((key: string) =>
+        Object.hasOwn(raw, key),
+    );
+    const errors = retired.map(
+        (key: string) =>
+            `[webpieces.config.json] Retired top-level key "${key}". ` +
+            (key === 'rulesDir'
+                ? 'Declare a client-owned rule pack with a schema and implementation module; directory scanning is retired.'
+                : key === 'extends'
+                  ? 'Declare exact rulePacks and explicit owner files; inherited central config is retired.'
+                  : 'Run pnpm wp-rules-sync --upgrade to move the existing explicit entries into declared owner files.'),
+    );
+    return [
+        ...errors,
+        ...unknownKeyErrors(
+            raw,
+            [...TOP_LEVEL_KEYS, 'pr-gate', ...retired],
+            '[webpieces.config.json]',
+        ),
+    ];
 }
 
 /**
@@ -51,7 +69,12 @@ export function isCommentKey(key: string): boolean {
  */
 // webpieces-disable no-any-unknown -- `section` is opaque consumer JSON; only key names are read
 // webpieces-disable no-function-outside-class -- module-level config validator, matches the rest of this file
-export function unknownKeyErrors(section: Record<string, unknown>, knownKeys: readonly string[], label: string): string[] {
+export function unknownKeyErrors(
+    // webpieces-disable no-any-unknown -- external JSON or runtime exports are validated before policy execution
+    section: Record<string, unknown>,
+    knownKeys: readonly string[],
+    label: string,
+): string[] {
     const errors: string[] = [];
     for (const key of Object.keys(section)) {
         if (knownKeys.includes(key) || isRetiredKey(key, label)) continue;
@@ -63,11 +86,9 @@ export function unknownKeyErrors(section: Record<string, unknown>, knownKeys: re
         }
         errors.push(
             `${label} Unknown key "${key}". Valid keys: [${knownKeys.join(', ')}]. ` +
-            `Delete it, or — if it is rationale you want to keep beside a key — rename it to "<key>Why" ` +
-            `with a string value (JSON has no comments, so "*Why" siblings are how this repo documents config).`,
+                `Delete it, or — if it is rationale you want to keep beside a key — rename it to "<key>Why" ` +
+                `with a string value (JSON has no comments, so "*Why" siblings are how this repo documents config).`,
         );
     }
     return errors;
 }
-
-

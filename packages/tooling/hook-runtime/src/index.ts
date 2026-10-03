@@ -1,6 +1,15 @@
 export {
-    AiType, AI_TYPES, AI_TYPE_UNKNOWN, HookMode, ToolKind, AgentEventKind,
-    NormalizedEdit, NormalizedToolInput, NormalizedBashInput, FileOperation, AgentHookEvent,
+    AiType,
+    AI_TYPES,
+    AI_TYPE_UNKNOWN,
+    HookMode,
+    ToolKind,
+    AgentEventKind,
+    NormalizedEdit,
+    NormalizedToolInput,
+    NormalizedBashInput,
+    FileOperation,
+    AgentHookEvent,
 } from './protocol';
 export { HookOutcome, HookArgs, HookTerminated } from './outcome';
 export { denyJson } from './response';
@@ -8,7 +17,18 @@ export { HookStdinSource, HookStdoutSink, HookProcessExit } from './hook-ports';
 export { HookEvaluator } from './hook-evaluator';
 export { HookApp, HookBootFailure } from './hook-app';
 
-export { RuleScope, IsLineDisabled, Violation, EditContext, FileContext, BashContext, Rule, PlainRule, RuleGroup, BlockedResult } from './core/types';
+export {
+    RuleScope,
+    IsLineDisabled,
+    Violation,
+    EditContext,
+    FileContext,
+    BashContext,
+    Rule,
+    PlainRule,
+    RuleGroup,
+    BlockedResult,
+} from './core/types';
 export * from './core/fix-hint';
 export * from './core/rule-base';
 export * from './core/custom-rule-adapter';
@@ -33,3 +53,7 @@ export * from './core/root-manifest';
 export * from './core/rule-evaluation';
 export * from './core/rules/shell-segment-scan';
 export * from './core/file-evaluation';
+
+export { HookPolicyRuntimeRequest } from './policy-runtime';
+export type { HookRuleRuntime } from './policy-runtime';
+export { HookPolicyContributions } from './policy-contributions';

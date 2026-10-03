@@ -1,3 +1,4 @@
+import { RetiredConfigKey } from '@webpieces/rules-sdk';
 import * as fs from 'fs';
 import { injectable, bindingScopeValues } from 'inversify';
 
@@ -6,49 +7,15 @@ import { ConfigFile } from './config-file';
 import { PRUNE_UNKNOWN_COMMAND } from './constants';
 import * as path from 'node:path';
 import { RulePackRegistry } from './rule-pack-registry';
-import { RulePackSelection } from './rule-pack-selection';
+import { PackPolicyFiles, SelectedPolicyPack } from './pack-policy-files';
 import { RETIRED_SCOPE_RULE } from './retired-config-keys';
+import { validateTopLevelKeys } from './config-key-rules';
+import { InformAiError } from '@webpieces/tooling-common';
 
-/**
- * `wp-prune-unknown-config` — the MECHANICAL cure for "[x] Unknown rule".
- *
- * ## Why a command and not just advice
- *
- * An unknown key controls nothing, so deleting it is the fix, and the validator now says so. But the
- * moment that advice is read is the worst possible moment to act on it by hand: the hook guard denies
- * every Bash call while the config is invalid, so the reader is editing JSON blind, with no way to
- * re-run the validator between edits. Making the cleanup one command means cleanliness is the default
- * path rather than a judgement call taken under a total block — and it makes "the file validates" mean
- * "every key in it is real", which is the property that keeps dead config from reading as live config.
- *
- * ## What it removes, and what it deliberately does NOT
- *
- * Removed, from the `rules` and `hookGuards` sections only:
- *   - a name with no entry in RULE_SCHEMAS and no entry in RETIRED_CONFIG_KEYS (a typo, or a rule some
- *     release deleted). Nothing reads it, by construction.
- *   - a name in RETIRED_CONFIG_KEYS whose entry is `prunable` — the retirement's own instruction is
- *     "delete this entry", because the setting left webpieces.config.json entirely.
- *
- * NOT removed:
- *   - a RENAME or an in-file move (`prunable: false`). Deleting those discards a value the new key still
- *     needs, so they keep their migration instruction and a human/agent applies it.
- *   - anything at all when `rulesDir` is configured. A custom rule legitimately has no built-in schema,
- *     and this command must never eat one.
- *   - top-level keys, `commands`, `excludePaths`, `match-rules`. Those are validated by shape, not by a
- *     name table, so "unknown" is not defined for them and a pruner would be guessing.
- *
- * ## The one destructive case, and why the drift guard already covers it
- *
- * A key CAN be valid-but-unlearned when package.json pins an @webpieces older than the config. Pruning
- * then would delete live config. That case cannot reach here: the shim's version-drift guard compares
- * the pin against the installed version and denies every tool call — including this one — before the
- * validator or this command ever runs. It is also why `PruneResult` names every key it removed rather
- * than reporting a count: a silent sweep is the thing that would make the rare case unrecoverable.
- */
-
+/** Prune only owner-file entries that no selected schema reads, retaining renames and wrong-owner entries for explicit repair. */
 /** One key this run removed, and the reason it was safe to remove. Data-only (per CLAUDE.md). */
 export class PrunedKey {
-    /** `rules` or `hookGuards` — the section the key sat in. */
+    /** The declared owner config path containing the key. */
     section: string;
     /** The rule/guard name exactly as it appeared in the file. */
     key: string;
@@ -83,21 +50,22 @@ export class PruneResult {
         if (!this.changed()) {
             return `[${PRUNE_UNKNOWN_COMMAND}] No unknown keys in ${this.configPath} — nothing to remove.`;
         }
-        const lines = this.removed.map((r: PrunedKey): string => `  • ${r.section}.${r.key} — ${r.reason}`);
-        return `[${PRUNE_UNKNOWN_COMMAND}] Removed ${this.removed.length} unknown key(s) from ` +
-            `${this.configPath}:\n${lines.join('\n')}`;
+        const lines = this.removed.map(
+            (r: PrunedKey): string => `  • ${r.section}.${r.key} — ${r.reason}`,
+        );
+        return (
+            `[${PRUNE_UNKNOWN_COMMAND}] Removed ${this.removed.length} unknown key(s) from ` +
+            `${this.configPath}:\n${lines.join('\n')}`
+        );
     }
 }
-
-/** The sections a rule/guard name may legally sit in — the only two this command touches. */
-const PRUNABLE_SECTIONS: readonly string[] = ['rules', 'hookGuards'];
 
 @injectable(bindingScopeValues.Singleton)
 export class ConfigPruner {
     constructor(
         private readonly configFile: ConfigFile,
         private readonly atomicFile: AtomicFile,
-        private readonly rulePacks: RulePackSelection,
+        private readonly files: PackPolicyFiles,
     ) {}
 
     /**
@@ -107,7 +75,9 @@ export class ConfigPruner {
     pruneFrom(cwd: string): PruneResult {
         const configPath = this.configFile.findConfigFile(cwd);
         if (configPath === null) {
-            throw new Error(`[${PRUNE_UNKNOWN_COMMAND}] No webpieces.config.json found above ${cwd}.`);
+            throw new Error(
+                `[${PRUNE_UNKNOWN_COMMAND}] No webpieces.config.json found above ${cwd}.`,
+            );
         }
         return this.prune(configPath);
     }
@@ -118,49 +88,43 @@ export class ConfigPruner {
      * file that fails validation.
      */
     prune(configPath: string): PruneResult {
-        const text = fs.readFileSync(configPath, 'utf8');
-        // webpieces-disable no-any-unknown -- the raw config document is opaque JSON until narrowed below
-        const parsed: unknown = JSON.parse(text);
-        if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
-            throw new Error(`[${PRUNE_UNKNOWN_COMMAND}] ${configPath} is not a JSON object.`);
-        }
-        // webpieces-disable no-any-unknown -- narrowed to a non-null, non-array object one line above
-        const document = parsed as Record<string, unknown>;
-        const removed = this.removeUnknown(document, this.rulePacks.loadFrom(path.dirname(configPath)));
-        if (removed.length > 0) {
-            this.atomicFile.writeAtomic(configPath, JSON.stringify(document, null, this.indentOf(text)) + '\n');
-        }
-        return new PruneResult(configPath, removed);
-    }
-
-    /** Mutates `document`, deleting every prunable name from the two rule sections. */
-    // webpieces-disable no-any-unknown -- opaque parsed config document
-    private removeUnknown(document: Record<string, unknown>, registry: RulePackRegistry): PrunedKey[] {
-        // A custom rules directory means a name with no built-in schema may be entirely legitimate.
-        const rulesDir = document['rulesDir'];
-        if (Array.isArray(rulesDir) && rulesDir.length > 0) return [];
-
+        const root = path.dirname(configPath),
+            document = this.configFile.readRawConfig(configPath);
+        // webpieces-disable no-any-unknown -- pruning may inspect invalid policy values, but never accepts a retired root selection surface
+        const rootErrors = validateTopLevelKeys(document as Record<string, unknown>);
+        if (rootErrors.length) throw new InformAiError(rootErrors.join('\n'));
+        const selected = this.files.select(root, this.files.declarations(document.rulePacks, root));
+        const registry = new RulePackRegistry(
+            selected.map((pack: SelectedPolicyPack) => pack.manifest),
+        );
         const removed: PrunedKey[] = [];
-        for (const sectionName of PRUNABLE_SECTIONS) {
-            const section = document[sectionName];
-            if (typeof section !== 'object' || section === null || Array.isArray(section)) continue;
-            // webpieces-disable no-any-unknown -- narrowed to a non-null, non-array object one line above
-            const entries = section as Record<string, unknown>;
+        for (const pack of selected) {
+            const filename = this.files.configPath(root, pack.declaration.config);
+            const text = fs.readFileSync(filename, 'utf8'),
+                entries = this.files.read(filename);
+            const pruned: PrunedKey[] = [];
             for (const key of Object.keys(entries)) {
                 const reason = this.reasonToRemove(key, registry);
                 if (reason === null) continue;
                 delete entries[key];
-                removed.push(new PrunedKey(sectionName, key, reason));
+                pruned.push(new PrunedKey(pack.declaration.config, key, reason));
             }
+            if (pruned.length)
+                this.atomicFile.writeAtomic(
+                    filename,
+                    JSON.stringify(entries, null, this.indentOf(text)) + '\n',
+                );
+            removed.push(...pruned);
         }
-        return removed;
+        return new PruneResult(configPath, removed);
     }
 
     /** Why `key` is safe to delete, or null when it must be kept. */
     private reasonToRemove(key: string, registry: RulePackRegistry): string | null {
         if (registry.hasRule(key)) return null;
-        const retired = registry.migrations().find(
-            e => e.scope === RETIRED_SCOPE_RULE && e.key === key);
+        const retired = registry
+            .migrations()
+            .find((e: RetiredConfigKey) => e.scope === RETIRED_SCOPE_RULE && e.key === key);
         if (retired) {
             if (!retired.prunable) return null;
             return retired.movedTo === ''

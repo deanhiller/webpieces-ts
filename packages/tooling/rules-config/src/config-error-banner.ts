@@ -73,9 +73,6 @@ export const RETIRED_KEY_MARKER = 'is a RETIRED webpieces.config.json key';
 /** `validateCommandsSection` — the retired TOP-LEVEL pr-gate block (a shape, so it has its own text). */
 export const RETIRED_TOP_LEVEL_MARKER = 'block is RETIRED';
 
-/** `validateSectionPlacement` — a built-in configured under the wrong section. */
-export const SECTION_PLACEMENT_MARKER = 'belongs in the';
-
 /**
  * Assemble the banner: the errors, then the ONE cure, then the warnings. Nothing else belongs here —
  * see the module comment.

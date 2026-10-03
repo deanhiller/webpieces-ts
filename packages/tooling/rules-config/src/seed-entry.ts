@@ -28,7 +28,6 @@ export function recommendedSeedModeFor(modes: readonly string[]): string {
     return 'OFF';
 }
 
-
 /** Recommendations are owner-authored file-writing data, never runtime defaults. */
 // webpieces-disable no-function-outside-class -- pure registry projection
 export function recommendedSeedMode(ruleName: string, registry: RulePackRegistry): string {
@@ -37,10 +36,13 @@ export function recommendedSeedMode(ruleName: string, registry: RulePackRegistry
 // webpieces-disable no-function-outside-class -- pure registry projection
 export function seedEntryForRule(ruleName: string, registry: RulePackRegistry): ConfigObject {
     if (registry.hasRule(ruleName)) return registry.seedFor(ruleName);
-    if (registry.isSafeguard(ruleName)) throw new InformAiError(`${ruleName} is a safeguard with no configurable seed. Remove its config entry.`);
-    // Existing rulesDir-only custom implementations have no declared schema. This is file-writing advice,
-    // never a loader default; declared custom policies always use their owner's complete seed.
-    return { mode: 'OFF', turnOffRuleUntilEpoch: 0, turnOffRuleWhileOnBranch: null };
+    if (registry.isSafeguard(ruleName))
+        throw new InformAiError(
+            `${ruleName} is a safeguard with no configurable seed. Remove its config entry.`,
+        );
+    throw new InformAiError(
+        `No selected owner supplies a seed for ${ruleName}. Declare its client rule pack with a schema and recommended seed; sync never invents settings for unknown policies.`,
+    );
 }
 
 /** True when `mode` is one of the gradual (change-scoped) modes — used to decide whether to print the rollout prose. */

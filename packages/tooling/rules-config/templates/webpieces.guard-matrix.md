@@ -104,10 +104,11 @@ that denied `rm -rf node_modules && pnpm install` while allowing a bare `pnpm in
 | 9 | pnpm exec wp-upgrade-shim | ALLOW |
 | 10 | cp node_modules/@webpieces/agent-workflow-rules/templates/ai-hook.sh .claude/webpieces/ai-hook.sh | ALLOW |
 | 11 | pnpm wp-prune-unknown-config | ALLOW |
-| 12 | pnpm exec wp-install-ai-hooks (flags allowed, e.g. --target=project) | ALLOW |
-| 13 | pnpm add -D @webpieces/agent-workflow-rules (an @version and extra flags allowed) | ALLOW |
-| 14 | read-only orientation: pwd, git status/log/diff/show/branch/rev-parse, git worktree list | ALLOW |
-| 15 | CODEX ONLY - a read-shaped Bash command (the harness has no Read tool): cat, head, tail, less, more, bat, or sed -n '<range>p' | PASS |
+| 12 | pnpm wp-rules-sync — explicit owner seeds and lock/catalog repair | ALLOW |
+| 13 | pnpm exec wp-install-ai-hooks (flags allowed, e.g. --target=project) | ALLOW |
+| 14 | pnpm add -D @webpieces/agent-workflow-rules (an @version and extra flags allowed) | ALLOW |
+| 15 | read-only orientation: pwd, git status/log/diff/show/branch/rev-parse, git worktree list | ALLOW |
+| 16 | CODEX ONLY - a read-shaped Bash command (the harness has no Read tool): cat, head, tail, less, more, bat, or sed -n '<range>p' | PASS |
 
 - **PASS** — L0 has no objection; the call falls THROUGH so the downstream guards still judge it.
 - **ALLOW** — terminal; bypasses everything, because a cure must stay reachable even when a

@@ -1,5 +1,11 @@
-import { SourceContributionConfig } from "../source-contribution-config";
-import { writeTemplateIfMissing, RepoRootFinder, isPathExcluded, GENERATED_CODE_PATHS, Option } from "@webpieces/rules-config";
+import { SourceContributionConfig } from '../source-contribution-config';
+import {
+    writeTemplateIfMissing,
+    RepoRootFinder,
+    isPathExcluded,
+    GENERATED_CODE_PATHS,
+    Option,
+} from '@webpieces/rules-config';
 
 import type { FileContext, Violation } from '@webpieces/hook-runtime';
 import { Violation as V } from '@webpieces/hook-runtime';
@@ -10,7 +16,9 @@ const DEFAULT_LIMIT = 900;
 const INSTRUCT_FILE = 'webpieces.filesize.md';
 
 export class MaxFileLinesRule extends FileRuleBase<SourceContributionConfig> {
-    constructor(config: SourceContributionConfig) { super(config, 'max-file-lines', 'max-file-lines'); }
+    constructor(config: SourceContributionConfig) {
+        super(config, 'max-file-lines', 'max-file-lines');
+    }
 
     readonly description = 'Cap file length at a configured line limit.';
     override readonly files = ['**/*.ts', '**/*.tsx'];
@@ -20,24 +28,40 @@ export class MaxFileLinesRule extends FileRuleBase<SourceContributionConfig> {
             'File exceeds the max-file-lines limit.',
             'Pick one:',
             [
-                new Option('Refactor to reduce the file size — READ the instruct-ai doc at the absolute path on the violation line above.', true),
-                new Option('If this file is MACHINE-GENERATED and its size is not yours to control, add its tree to max-file-lines.allowedPaths in webpieces.config.json (the generated trees in GENERATED_CODE_PATHS are already exempt with no config at all). Never do this for hand-written code.'),
+                new Option(
+                    'Refactor to reduce the file size — READ the instruct-ai doc at the absolute path on the violation line above.',
+                    true,
+                ),
+                new Option(
+                    'If this file is MACHINE-GENERATED and its size is not yours to control, add its tree to max-file-lines.allowedPaths in {configFile} (the generated trees in GENERATED_CODE_PATHS are already exempt with no config at all). Never do this for hand-written code.',
+                ),
             ],
-            new DisableEscape(this.config.disableAllowed ?? true, '// eslint-disable-next-line @webpieces/max-file-lines  (also suppresses the eslint rule)'),
+            new DisableEscape(
+                this.config.disableAllowed ?? true,
+                '// eslint-disable-next-line @webpieces/max-file-lines  (also suppresses the eslint rule)',
+            ),
         );
     }
 
     check(ctx: FileContext): readonly Violation[] {
         const limit = this.config.limit ?? DEFAULT_LIMIT;
         // Machine-generated trees are exempt unconditionally; allowedPaths ADDS to that floor.
-        if (isPathExcluded(ctx.relativePath, [...GENERATED_CODE_PATHS, ...(this.config.allowedPaths ?? [])])) return [];
+        if (
+            isPathExcluded(ctx.relativePath, [
+                ...GENERATED_CODE_PATHS,
+                ...(this.config.allowedPaths ?? []),
+            ])
+        )
+            return [];
         if (ctx.projectedFileLines <= limit) return [];
         writeTemplateIfMissing(ctx.workspaceRoot, INSTRUCT_FILE);
         const docPath = new RepoRootFinder().instructAiDocPath(ctx.workspaceRoot, INSTRUCT_FILE);
-        return [new V(
-            1,
-            `(projected ${String(ctx.projectedFileLines)} lines)`,
-            `File will be ${String(ctx.projectedFileLines)} lines, exceeding the ${String(limit)}-line limit. READ ${docPath} for detailed refactoring instructions.`,
-        )];
+        return [
+            new V(
+                1,
+                `(projected ${String(ctx.projectedFileLines)} lines)`,
+                `File will be ${String(ctx.projectedFileLines)} lines, exceeding the ${String(limit)}-line limit. READ ${docPath} for detailed refactoring instructions.`,
+            ),
+        ];
     }
 }

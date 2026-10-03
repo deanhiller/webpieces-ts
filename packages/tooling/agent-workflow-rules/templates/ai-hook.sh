@@ -363,10 +363,111 @@ case "$TOOL" in
     wp_log "$WP_FAULT" ALLOW-IGNORED
     exit 0 ;;
 esac
+# The same compiled Node probe is used by the live runner; it requires no installed package.
+if printf '%s' "$PAYLOAD" | node -e '/** Self-contained Node probe: serialized into the POSIX shim so repairs work with missing packages. */
+class ConfigRepairProbe {
+    rootFor(cwd) {
+        const fs = require('\''node:fs'\''), path = require('\''node:path'\'');
+        let directory = path.resolve(cwd);
+        while (!fs.existsSync(path.join(directory, '\''webpieces.config.json'\''))) {
+            const parent = path.dirname(directory);
+            if (parent === directory)
+                return cwd;
+            directory = parent;
+        }
+        return directory;
+    }
+    isRepairPatch(root, patch) {
+        const lines = patch.trim().split('\''\n'\'');
+        if (lines[0] !== '\''*** Begin Patch'\'' || lines.at(-1) !== '\''*** End Patch'\'')
+            return false;
+        let targets = 0;
+        for (const line of lines.slice(1, -1)) {
+            if (!line.startsWith('\''*** '\''))
+                continue;
+            const match = /^\*\*\* (?:Add|Update) File: (.+)$/.exec(line);
+            if (!match || !this.isRepairFile(root, match[1]))
+                return false;
+            targets += 1;
+        }
+        return targets > 0;
+    }
+    isRepairFile(root, filename) {
+        const toError = this.error;
+        // eslint-disable-next-line @webpieces/no-unmanaged-exceptions -- bootstrap cannot trust package imports or malformed declarations
+        try {
+            const fs = require('\''node:fs'\''), path = require('\''node:path'\'');
+            const target = this.canonical(root, path.resolve(root, filename));
+            const rootFile = this.canonical(root, path.join(root, '\''webpieces.config.json'\''));
+            if (target === rootFile)
+                return true;
+            // webpieces-disable no-any-unknown -- only validated declaration strings grant repair access
+            const raw = JSON.parse(fs.readFileSync(rootFile, '\''utf8'\''));
+            if (!raw ||
+                typeof raw !== '\''object'\'' ||
+                !('\''rulePacks'\'' in raw) ||
+                !Array.isArray(raw.rulePacks) ||
+                !raw.rulePacks.length)
+                return false;
+            const files = new Set(), packages = new Set();
+            const lock = this.canonical(root, path.join(root, '\''.webpieces/rules.lock.json'\''));
+            for (const declaration of raw.rulePacks) {
+                if (!declaration ||
+                    typeof declaration !== '\''object'\'' ||
+                    Array.isArray(declaration) ||
+                    typeof declaration.package !== '\''string'\'' ||
+                    !declaration.package ||
+                    typeof declaration.config !== '\''string'\'' ||
+                    !declaration.config.endsWith('\''.json'\'') ||
+                    path.isAbsolute(declaration.config) ||
+                    Object.keys(declaration).some((key) => !['\''package'\'', '\''config'\''].includes(key)))
+                    return false;
+                const file = this.canonical(root, path.join(root, declaration.config));
+                if (file === rootFile ||
+                    file === lock ||
+                    files.has(file) ||
+                    packages.has(declaration.package))
+                    return false;
+                files.add(file);
+                packages.add(declaration.package);
+            }
+            files.add(lock);
+            files.add(this.canonical(root, path.join(root, '\''.webpieces/instruct-ai/rules-catalog.md'\'')));
+            return files.has(target);
+            // webpieces-disable no-any-unknown -- external JSON or runtime exports are validated before policy execution
+        }
+        catch (err) {
+            const error = toError(err);
+            void error;
+            return false;
+        }
+    }
+    canonical(root, filename) {
+        const fs = require('\''node:fs'\''), path = require('\''node:path'\'');
+        const pending = [];
+        let ancestor = filename;
+        while (!fs.lstatSync(ancestor, { throwIfNoEntry: false })) {
+            pending.unshift(path.basename(ancestor));
+            const parent = path.dirname(ancestor);
+            if (parent === ancestor)
+                throw new Error('\''Cannot resolve config repair path.'\'');
+            ancestor = parent;
+        }
+        const canonical = path.resolve(fs.realpathSync(ancestor), ...pending), relative = path.relative(fs.realpathSync(root), canonical);
+        if (relative === '\''..'\'' || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative))
+            throw new Error('\''Config repair path escapes the repository.'\'');
+        return canonical;
+    }
+    // webpieces-disable no-any-unknown -- the bootstrap adapter must remain self-contained when node_modules is corrupt
+    error(err) {
+        return err instanceof Error ? err : new Error(String(err));
+    }
+}
+ const probe = new ConfigRepairProbe(); const root = probe.rootFor(process.argv[1]); const payload = JSON.parse(require('\''node:fs'\'').readFileSync(0, '\''utf8'\'')); const input = payload.tool_input; const tool = payload.tool_name; const allowed = ['\''Write'\'','\''Edit'\'','\''MultiEdit'\''].includes(tool) && input && typeof input.file_path === '\''string'\'' ? probe.isRepairFile(root, input.file_path) : tool === '\''apply_patch'\'' && input && typeof input.command === '\''string'\'' && probe.isRepairPatch(root, input.command); if (!allowed) process.exitCode = 1;' "$WP_CWD" >/dev/null 2>&1; then
+  wp_log "$WP_FAULT" ALLOW-CONFIG
+  exit 0
+fi
 case "$FILE" in
-  */webpieces.config.json|webpieces.config.json)
-    wp_log "$WP_FAULT" ALLOW-CONFIG  # the always-allowed recovery target — every guard is configured from it
-    exit 0 ;;
   */pnpm-workspace.yaml|pnpm-workspace.yaml|*/package.json|package.json)
     # A manifest AT THE ROOT OF A GOVERNED TREE, which is the only place the version pin lives. The test
     # is the sibling webpieces.config.json — TRACKED, so the main clone has one and every worktree has its
@@ -378,7 +479,7 @@ case "$FILE" in
       exit 0
     fi ;;
 esac
-if printf '%s' "$CMD" | grep -Eq '^(cd[[:space:]]+([A-Za-z0-9._/@~+-]+|'\''[^'\'']+'\'')[[:space:]]*&&[[:space:]]*)?((pnpm|npm)[[:space:]]+(install|i)([[:space:]]+--[A-Za-z][A-Za-z0-9=._/@:-]*)*|rm[[:space:]]+-rf[[:space:]]+(\./)?node_modules/?([[:space:]]*&&[[:space:]]*(pnpm|npm)[[:space:]]+(install|i)([[:space:]]+--[A-Za-z][A-Za-z0-9=._/@:-]*)*)?|git[[:space:]]+fetch([[:space:]]+(--)?[A-Za-z0-9][A-Za-z0-9=._/@:-]*)*|git[[:space:]]+checkout[[:space:]]+main[[:space:]]*&&[[:space:]]*git[[:space:]]+pull[[:space:]]+origin[[:space:]]+main|(pnpm|npm|npx)([[:space:]]+(exec|run))?[[:space:]]+wp-upgrade-shim|cp[[:space:]]+(\./)?node_modules/@webpieces/agent-workflow-rules/templates/ai-hook\.sh[[:space:]]+(\./)?\.claude/webpieces/ai-hook\.sh|(pnpm|npm|npx)([[:space:]]+(exec|run))?[[:space:]]+wp-prune-unknown-config|(pnpm|npm|npx)([[:space:]]+(exec|run))?[[:space:]]+wp-install-ai-hooks([[:space:]]+--[A-Za-z][A-Za-z0-9=._/@:-]*)*|(pnpm|npm)[[:space:]]+add([[:space:]]+(-[A-Za-z]|--[A-Za-z][A-Za-z0-9=._/@:-]*))*[[:space:]]+@webpieces/agent-workflow-rules(@[A-Za-z0-9._+-]+)?([[:space:]]+(-[A-Za-z]|--[A-Za-z][A-Za-z0-9=._/@:-]*))*|(pwd|git[[:space:]]+(status|log|diff|show|branch|rev-parse)|git[[:space:]]+worktree[[:space:]]+list)([[:space:]]+(--)?[A-Za-z0-9][A-Za-z0-9=._/@:-]*)*)([[:space:]]+2>(&1|/dev/null))?([[:space:]]*\|[[:space:]]*(tail|head)([[:space:]]+-(n[[:space:]]+)?[0-9]+)?)?[[:space:]]*$'; then
+if printf '%s' "$CMD" | grep -Eq '^(cd[[:space:]]+([A-Za-z0-9._/@~+-]+|'\''[^'\'']+'\'')[[:space:]]*&&[[:space:]]*)?((pnpm|npm)[[:space:]]+(install|i)([[:space:]]+--[A-Za-z][A-Za-z0-9=._/@:-]*)*|rm[[:space:]]+-rf[[:space:]]+(\./)?node_modules/?([[:space:]]*&&[[:space:]]*(pnpm|npm)[[:space:]]+(install|i)([[:space:]]+--[A-Za-z][A-Za-z0-9=._/@:-]*)*)?|git[[:space:]]+fetch([[:space:]]+(--)?[A-Za-z0-9][A-Za-z0-9=._/@:-]*)*|git[[:space:]]+checkout[[:space:]]+main[[:space:]]*&&[[:space:]]*git[[:space:]]+pull[[:space:]]+origin[[:space:]]+main|(pnpm|npm|npx)([[:space:]]+(exec|run))?[[:space:]]+wp-upgrade-shim|cp[[:space:]]+(\./)?node_modules/@webpieces/agent-workflow-rules/templates/ai-hook\.sh[[:space:]]+(\./)?\.claude/webpieces/ai-hook\.sh|(pnpm|npm|npx)([[:space:]]+(exec|run))?[[:space:]]+wp-prune-unknown-config|(pnpm|npm|npx)([[:space:]]+(exec|run))?[[:space:]]+wp-rules-sync([[:space:]]+(--upgrade|--pack(=|[[:space:]]+)[[:alnum:]_@./-]+=[[:alnum:]_./-]+))*|(pnpm|npm|npx)([[:space:]]+(exec|run))?[[:space:]]+wp-install-ai-hooks([[:space:]]+--[A-Za-z][A-Za-z0-9=._/@:-]*)*|(pnpm|npm)[[:space:]]+add([[:space:]]+(-[A-Za-z]|--[A-Za-z][A-Za-z0-9=._/@:-]*))*[[:space:]]+@webpieces/agent-workflow-rules(@[A-Za-z0-9._+-]+)?([[:space:]]+(-[A-Za-z]|--[A-Za-z][A-Za-z0-9=._/@:-]*))*|(pwd|git[[:space:]]+(status|log|diff|show|branch|rev-parse)|git[[:space:]]+worktree[[:space:]]+list)([[:space:]]+(--)?[A-Za-z0-9][A-Za-z0-9=._/@:-]*)*)([[:space:]]+2>(&1|/dev/null))?([[:space:]]*\|[[:space:]]*(tail|head)([[:space:]]+-(n[[:space:]]+)?[0-9]+)?)?[[:space:]]*$'; then
   wp_log "$WP_FAULT" ALLOW-CURE   # record the self-heal we let through (re-enables the guards)
   exit 0                     # allow the cure so the assistant can break the deadlock
 fi

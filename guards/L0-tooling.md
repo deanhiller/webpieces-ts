@@ -80,10 +80,11 @@ the same coordinates every L0 deny opens with, so a deny, a log line and this ta
 | 9 | pnpm exec wp-upgrade-shim | ALLOW | yes — it REPAIRS the tooling |
 | 10 | cp node_modules/@webpieces/agent-workflow-rules/templates/ai-hook.sh .claude/webpieces/ai-hook.sh | ALLOW | yes — it REPAIRS the tooling |
 | 11 | pnpm wp-prune-unknown-config | ALLOW | yes — it REPAIRS the tooling |
-| 12 | pnpm exec wp-install-ai-hooks (flags allowed, e.g. --target=project) | ALLOW | yes — it REPAIRS the tooling |
-| 13 | pnpm add -D @webpieces/agent-workflow-rules (an @version and extra flags allowed) | ALLOW | yes — it REPAIRS the tooling |
-| 14 | read-only orientation: pwd, git status/log/diff/show/branch/rev-parse, git worktree list | ALLOW | no — it repairs nothing, so L1 still judges it |
-| 15 | CODEX ONLY - a read-shaped Bash command (the harness has no Read tool): cat, head, tail, less, more, bat, or sed -n '<range>p' | PASS | no — it repairs nothing, so L1 still judges it |
+| 12 | pnpm wp-rules-sync — explicit owner seeds and lock/catalog repair | ALLOW | yes — it REPAIRS the tooling |
+| 13 | pnpm exec wp-install-ai-hooks (flags allowed, e.g. --target=project) | ALLOW | yes — it REPAIRS the tooling |
+| 14 | pnpm add -D @webpieces/agent-workflow-rules (an @version and extra flags allowed) | ALLOW | yes — it REPAIRS the tooling |
+| 15 | read-only orientation: pwd, git status/log/diff/show/branch/rev-parse, git worktree list | ALLOW | no — it repairs nothing, so L1 still judges it |
+| 16 | CODEX ONLY - a read-shaped Bash command (the harness has no Read tool): cat, head, tail, less, more, bat, or sed -n '<range>p' | PASS | no — it repairs nothing, so L1 still judges it |
 
 - **PASS** — L0 has no objection; the call falls THROUGH so downstream guards still judge it.
 - **ALLOW** — terminal; bypasses everything, because a cure must stay reachable even when a

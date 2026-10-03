@@ -84,6 +84,7 @@ graph TD
     OrphanDirArchiver["OrphanDirArchiver"]
     OrphanDirScanner["OrphanDirScanner"]
     OrphanDirSweeper["OrphanDirSweeper"]
+    PackPolicyFiles["PackPolicyFiles"]
     PrCommentUpserter["PrCommentUpserter"]
     PrContextWriter["PrContextWriter"]
     PrGateApp["PrGateApp"]:::controller
@@ -126,6 +127,7 @@ graph TD
     WriteReviewCommand["WriteReviewCommand"]
     WriteReviewFixesCommand["WriteReviewFixesCommand"]
     ActiveHatchReport --> ConfigFile
+    ActiveHatchReport --> PackPolicyFiles
     AiBranchName --> BranchNaming
     AwaitChecksCommand --> AwaitLoop
     AwaitChecksCommand --> StageOutputLog

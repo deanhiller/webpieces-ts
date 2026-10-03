@@ -1,3 +1,11 @@
+import {
+    ConfigObject,
+    FieldDef,
+    OwnedRuleDefinition,
+    RuleContribution,
+    RuleHelp,
+    RulePackManifest,
+} from '@webpieces/rules-sdk';
 import { rulePackManifest } from '../rule-pack';
 import { policyFixture } from '@webpieces/tooling-testkit';
 import { specTempDirs } from '@webpieces/tooling-testkit';
@@ -7,7 +15,6 @@ import * as os from 'os';
 import * as path from 'path';
 
 import { HookMode } from '@webpieces/hook-runtime';
-
 
 /**
  * THE WIRE BYTES the golden tests drive, and the throwaway repo they are judged against.
@@ -34,13 +41,13 @@ export class GoldenFixture {
      */
     readonly stdin: string;
     /** True ⇒ the fixture repo also gets a `rulesDir` whose one module throws when required. */
-    readonly crashingRulesDir: boolean;
+    readonly crashingRuntime: boolean;
 
-    constructor(name: string, mode: HookMode, stdin: string, crashingRulesDir: boolean = false) {
+    constructor(name: string, mode: HookMode, stdin: string, crashingRuntime: boolean = false) {
         this.name = name;
         this.mode = mode;
         this.stdin = stdin;
-        this.crashingRulesDir = crashingRulesDir;
+        this.crashingRuntime = crashingRuntime;
     }
 }
 
@@ -66,7 +73,12 @@ export class PreparedFixture {
  */
 export const REPO_TOKEN = '<REPO>';
 
-const CLAUDE_ENVELOPE = { hook_event_name: 'PreToolUse', session_id: 'sess-golden', transcript_path: '/dev/null', cwd: REPO_TOKEN };
+const CLAUDE_ENVELOPE = {
+    hook_event_name: 'PreToolUse',
+    session_id: 'sess-golden',
+    transcript_path: '/dev/null',
+    cwd: REPO_TOKEN,
+};
 
 /**
  * The Codex additions, MEASURED from codex-cli 0.151.0: it uses Claude's key names and merely ADDS
@@ -74,12 +86,21 @@ const CLAUDE_ENVELOPE = { hook_event_name: 'PreToolUse', session_id: 'sess-golde
  * detect-ai.ts). `agent_id` empty ⇒ the coordinator, populated ⇒ a subagent — identical semantics in
  * both harnesses.
  */
-const CODEX_ENVELOPE = { ...CLAUDE_ENVELOPE, model: 'gpt-5-codex', turn_id: 'turn-golden', tool_use_id: 'call_1', permission_mode: 'default', agent_type: 'default', agent_id: '' };
+const CODEX_ENVELOPE = {
+    ...CLAUDE_ENVELOPE,
+    model: 'gpt-5-codex',
+    turn_id: 'turn-golden',
+    tool_use_id: 'call_1',
+    permission_mode: 'default',
+    agent_type: 'default',
+    agent_id: '',
+};
 
 // Codex's edit tool. MEASURED: the tool is named `apply_patch`, it carries `tool_input.command` (not
 // file_path), hunk headers are a bare `@@`, and ONE patch may carry many files with mixed operations.
 const PATCH_ADD_JS = '*** Begin Patch\n*** Add File: src/foo.js\n+var x = 1;\n*** End Patch\n';
-const PATCH_ADD_TS = '*** Begin Patch\n*** Add File: scripts/added.ts\n+export const b = 2;\n*** End Patch\n';
+const PATCH_ADD_TS =
+    '*** Begin Patch\n*** Add File: scripts/added.ts\n+export const b = 2;\n*** End Patch\n';
 
 /**
  * Serializes ONE PreToolUse envelope to the bytes a harness would put on stdin. A class rather than a
@@ -88,7 +109,13 @@ const PATCH_ADD_TS = '*** Begin Patch\n*** Add File: scripts/added.ts\n+export c
  */
 class WirePayload {
     // webpieces-disable no-any-unknown -- these objects ARE the wire envelope; JSON.stringify of a plain object is the payload under test, and naming a type for it would assert a shape the fixtures exist to state literally
-    write(envelope: Record<string, unknown>, toolName: string, toolInput: Record<string, unknown>): string {
+    write(
+        // webpieces-disable no-any-unknown -- external JSON or runtime exports are validated before policy execution
+        envelope: Record<string, unknown>,
+        toolName: string,
+        // webpieces-disable no-any-unknown -- external JSON or runtime exports are validated before policy execution
+        toolInput: Record<string, unknown>,
+    ): string {
         return JSON.stringify({ ...envelope, tool_name: toolName, tool_input: toolInput });
     }
 }
@@ -104,19 +131,43 @@ export const GOLDEN_FIXTURES: readonly GoldenFixture[] = [
     // ── Claude Code ────────────────────────────────────────────────────────────────────────────────
     // A Bash deny. `git merge` is blocked on every branch, so this verdict does not depend on repo
     // state — and a Bash deny is the ONE case that carries the red `systemMessage`.
-    new GoldenFixture('claude/bash-deny', 'guards', WIRE.write(CLAUDE_ENVELOPE, 'Bash', { command: 'git merge main' })),
-    new GoldenFixture('claude/bash-allow', 'guards', WIRE.write(CLAUDE_ENVELOPE, 'Bash', { command: 'echo hi' })),
+    new GoldenFixture(
+        'claude/bash-deny',
+        'guards',
+        WIRE.write(CLAUDE_ENVELOPE, 'Bash', { command: 'git merge main' }),
+    ),
+    new GoldenFixture(
+        'claude/bash-allow',
+        'guards',
+        WIRE.write(CLAUDE_ENVELOPE, 'Bash', { command: 'echo hi' }),
+    ),
     // The read-only tool: log-and-allow, and the only guard that can deny it is a stale `main`.
-    new GoldenFixture('claude/read-allow', 'guards', WIRE.write(CLAUDE_ENVELOPE, 'Read', { file_path: `${REPO_TOKEN}/f.txt` })),
+    new GoldenFixture(
+        'claude/read-allow',
+        'guards',
+        WIRE.write(CLAUDE_ENVELOPE, 'Read', { file_path: `${REPO_TOKEN}/f.txt` }),
+    ),
     // Write / Edit / MultiEdit denies — all three must emit NO systemMessage.
     new GoldenFixture('claude/malformed', 'guards', 'not json at all'),
 
     // ── Codex ──────────────────────────────────────────────────────────────────────────────────────
-    new GoldenFixture('codex/bash-deny', 'guards', WIRE.write(CODEX_ENVELOPE, 'Bash', { command: 'git merge main' })),
-    new GoldenFixture('codex/bash-allow', 'guards', WIRE.write(CODEX_ENVELOPE, 'Bash', { command: 'echo hi' })),
+    new GoldenFixture(
+        'codex/bash-deny',
+        'guards',
+        WIRE.write(CODEX_ENVELOPE, 'Bash', { command: 'git merge main' }),
+    ),
+    new GoldenFixture(
+        'codex/bash-allow',
+        'guards',
+        WIRE.write(CODEX_ENVELOPE, 'Bash', { command: 'echo hi' }),
+    ),
     // Codex has no Read tool: a read arrives as `Bash` running a pager, which read parity turns into a
     // read-scoped verdict ON TOP of the bash guards.
-    new GoldenFixture('codex/read-allow', 'guards', WIRE.write(CODEX_ENVELOPE, 'Bash', { command: `sed -n '1,240p' ${REPO_TOKEN}/f.txt` })),
+    new GoldenFixture(
+        'codex/read-allow',
+        'guards',
+        WIRE.write(CODEX_ENVELOPE, 'Bash', { command: `sed -n '1,240p' ${REPO_TOKEN}/f.txt` }),
+    ),
     new GoldenFixture('codex/malformed', 'guards', '{"turn_id": broken'),
 ];
 
@@ -140,7 +191,10 @@ export class GoldenRepoBuilder {
     private readonly configJson: string;
 
     constructor() {
-        this.configJson = fs.readFileSync(path.join(__dirname, '__goldens__', 'fixture-webpieces.config.json'), 'utf8');
+        this.configJson = fs.readFileSync(
+            path.join(__dirname, '__goldens__', 'fixture-webpieces.config.json'),
+            'utf8',
+        );
     }
 
     build(fixture: GoldenFixture): PreparedFixture {
@@ -152,14 +206,47 @@ export class GoldenRepoBuilder {
         this.git(repo, 'config core.hooksPath /dev/null');
         this.git(repo, 'config user.email t@t.co');
         this.git(repo, 'config user.name tester');
-        fs.writeFileSync(path.join(repo, 'webpieces.config.json'), this.repoConfig(fixture));
-        policyFixture.declareIn(repo, policyFixture.manifests().map(pack => pack.packageName === rulePackManifest.packageName ? rulePackManifest : pack));
+        const manifests = policyFixture
+            .manifests()
+            .map((pack: RulePackManifest) =>
+                pack.packageName === rulePackManifest.packageName ? rulePackManifest : pack,
+            );
+        if (fixture.crashingRuntime) {
+            const seed = Object.assign(new ConfigObject(), { mode: 'ON' });
+            const definition = new OwnedRuleDefinition(
+                'client-crash',
+                { mode: new FieldDef('string', ['ON', 'OFF']) },
+                1,
+                {},
+                seed,
+                'rules',
+                new RuleHelp('Client failure fixture', 'Repair {configFile}.'),
+            );
+            manifests.push(
+                new RulePackManifest(
+                    '@client/crash',
+                    '1.0.0-fixture',
+                    3,
+                    [definition],
+                    [
+                        new RuleContribution(
+                            'client-crash',
+                            '@client/crash',
+                            'source-hook',
+                            './crash-runtime.cjs',
+                        ),
+                    ],
+                    [],
+                    [],
+                ),
+            );
+        }
+        policyFixture.writeOwnerConfig(repo, JSON.parse(this.repoConfig(fixture)), manifests);
         fs.writeFileSync(path.join(repo, 'f.txt'), 'hello\n');
         fs.mkdirSync(path.join(repo, 'scripts'));
         fs.writeFileSync(path.join(repo, 'scripts', 'ok.ts'), 'const a = 1;\n');
-        if (fixture.crashingRulesDir) {
-            fs.mkdirSync(path.join(repo, 'wprules'));
-            fs.writeFileSync(path.join(repo, 'wprules', 'crash.js'), CRASHING_RULE_MODULE);
+        if (fixture.crashingRuntime) {
+            fs.writeFileSync(path.join(repo, 'crash-runtime.cjs'), CRASHING_RULE_MODULE);
         }
         this.git(repo, 'add -A');
         this.git(repo, 'commit -qm init');
@@ -171,10 +258,13 @@ export class GoldenRepoBuilder {
     }
 
     private repoConfig(fixture: GoldenFixture): string {
-        if (!fixture.crashingRulesDir) return this.configJson;
+        if (!fixture.crashingRuntime) return this.configJson;
         // webpieces-disable no-any-unknown -- the frozen fixture config is data on disk; re-parsing it into a named type here would be a second declaration of a file whose whole point is being literal
         const parsed = JSON.parse(this.configJson) as Record<string, unknown>;
-        parsed['rulesDir'] = ['wprules'];
+        (parsed['rules'] as Record<string, ConfigObject>)['client-crash'] = Object.assign(
+            new ConfigObject(),
+            { mode: 'ON' },
+        );
         return JSON.stringify(parsed, null, 4);
     }
 

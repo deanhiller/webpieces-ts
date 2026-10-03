@@ -1,7 +1,10 @@
 import { describe, it, expect, vi } from 'vitest';
+import { PolicyRuntimeRequest } from '@webpieces/rules-sdk';
+import { WORKFLOW_POLICIES } from '../../workflow-policy-registry';
+import { WorkflowRuleRuntime } from '../../rule-runtime';
 
-import { Option, WebpiecesRulesConfig } from '@webpieces/rules-config';
-import { BashContext, Rule } from '@webpieces/hook-runtime';
+import { Option, buildCommandsConfig } from '@webpieces/rules-config';
+import { BashContext, Rule, HookPolicyRuntimeRequest } from '@webpieces/hook-runtime';
 import { WaitSpinGuardRule } from './wait-spin-guard';
 import { renderEverySkewReport } from '../version-sync-harness.spec';
 import { renderL1Doc } from '../l1-doc';
@@ -9,7 +12,7 @@ import { renderL2Doc } from '../l2-doc';
 import { renderGuardMatrixDoc } from '../l0-matrix';
 import { L0ToolingDoc } from '../l0-tooling-doc';
 import { GuardIndexDoc } from '../guard-index-doc';
-import {  GuardHintCommands, loadKeylessBashRules, loadRules  } from '../load-rules';
+import { loadKeylessBashRules } from '../load-rules';
 import { renderShim } from '../../bin/shim';
 import { shimStaleDenyReason } from '../../bin/shim-deny-reason';
 
@@ -75,12 +78,16 @@ const emittedMessages = (): Map<string, string> => {
     const emitted = new Map<string, string>();
     for (const command of ['echo .', 'true', 'date', 'gh pr checks 902']) {
         const main = new WaitSpinGuardRule();
-        emitted.set(`main-agent: ${command}`, main.check(new BashContext(command, '/repo'))[0]?.message ?? '');
+        emitted.set(
+            `main-agent: ${command}`,
+            main.check(new BashContext(command, '/repo'))[0]?.message ?? '',
+        );
 
         const isolated = new WaitSpinGuardRule();
         vi.spyOn(
             isolated as unknown as { isWorktreeIsolated: (c: BashContext) => boolean },
-            'isWorktreeIsolated').mockReturnValue(true);
+            'isWorktreeIsolated',
+        ).mockReturnValue(true);
         const sub = isolated.check(new BashContext(command, '/repo/.claude/worktrees/agent-abc'));
         emitted.set(`subagent: ${command}`, sub[0]?.message ?? '');
     }
@@ -113,8 +120,12 @@ describe('no guard string tells an AI to end its turn', () => {
     it('catches the prescription and spares the negation', () => {
         expect(offends('Cheapest: END YOUR TURN — anything pending re-invokes you.')).toBe(true);
         expect(offends('ending the turn is cheaper')).toBe(true);
-        expect(offends('Do NOT end your turn expecting a backgrounded wait to re-invoke you.')).toBe(false);
-        expect(offends('Be efficient with tokens: block in one call with pnpm wp-await-checks.')).toBe(false);
+        expect(
+            offends('Do NOT end your turn expecting a backgrounded wait to re-invoke you.'),
+        ).toBe(false);
+        expect(
+            offends('Be efficient with tokens: block in one call with pnpm wp-await-checks.'),
+        ).toBe(false);
     });
 
     /** The #1000 shapes, verbatim from the escalation block and the L1 row-8 cure that carried them. */
@@ -122,12 +133,22 @@ describe('no guard string tells an AI to end its turn', () => {
         expect(offends('   THEN STOP WORKING NOW.')).toBe(true);
         expect(offends('Forwarding that message IS the end of your turn')).toBe(true);
         expect(offends('make NO further tool\n   calls and do NOT retry this one')).toBe(true);
-        expect(offends('forward the deny\'s verbatim ask to the coordinator and STOP<br>Do NOT: expect')).toBe(true);
+        expect(
+            offends(
+                "forward the deny's verbatim ask to the coordinator and STOP<br>Do NOT: expect",
+            ),
+        ).toBe(true);
         expect(offends('WAIT for the main agent to confirm it is done, then STOP.')).toBe(true);
         // The legitimate half: refusing ONE futile command decides nothing about control flow.
-        expect(offends('   Do NOT retry this call — RETRYING IS THE BUG. It re-fires this identical deny.')).toBe(false);
+        expect(
+            offends(
+                '   Do NOT retry this call — RETRYING IS THE BUG. It re-fires this identical deny.',
+            ),
+        ).toBe(false);
         expect(offends('Do not stop working on the PR to ask permission.')).toBe(false);
-        expect(offends('If you genuinely believe this IS a chokepoint, STOP and ask the human first')).toBe(false);
+        expect(
+            offends('If you genuinely believe this IS a chokepoint, STOP and ask the human first'),
+        ).toBe(false);
     });
 });
 
@@ -145,21 +166,42 @@ describe('no guard string tells an AI to end its turn', () => {
  *   • the rendered L0 shim (every sh-side deny) and the fault-S deny, both agent kinds,
  *   • every built-in and keyless rule's `description` and `fixHint` (violation, main message, options).
  */
-const renderedDocs = (): Map<string, string> => new Map<string, string>([
-    ['L0 guard matrix', renderGuardMatrixDoc()],
-    ['L0 tooling doc', new L0ToolingDoc().render()],
-    ['L1 location matrix', renderL1Doc()],
-    ['L2 branch-state matrix', renderL2Doc()],
-    ['guard index', new GuardIndexDoc().render()],
-    ['L0 shim (ai-hook.sh)', renderShim()],
-    ['L0 fault-S deny, main agent', shimStaleDenyReason('0.4.624', '/tmp/wp-root', ['ai-hook.sh'], false)],
-    ['L0 fault-S deny, subagent', shimStaleDenyReason('0.4.624', '/tmp/wp-root', ['ai-hook.sh'], true)],
-]);
+const renderedDocs = (): Map<string, string> =>
+    new Map<string, string>([
+        ['L0 guard matrix', renderGuardMatrixDoc()],
+        ['L0 tooling doc', new L0ToolingDoc().render()],
+        ['L1 location matrix', renderL1Doc()],
+        ['L2 branch-state matrix', renderL2Doc()],
+        ['guard index', new GuardIndexDoc().render()],
+        ['L0 shim (ai-hook.sh)', renderShim()],
+        [
+            'L0 fault-S deny, main agent',
+            shimStaleDenyReason('0.4.624', '/tmp/wp-root', ['ai-hook.sh'], false),
+        ],
+        [
+            'L0 fault-S deny, subagent',
+            shimStaleDenyReason('0.4.624', '/tmp/wp-root', ['ai-hook.sh'], true),
+        ],
+    ]);
 
 const ruleHints = (): Map<string, string> => {
     const hints = new Map<string, string>();
     const rules: readonly Rule[] = [
-        ...loadRules({} as WebpiecesRulesConfig, '/repo', new GuardHintCommands('pnpm wp-start-upsert-pr', 'pnpm wp-merge-complete')),
+        ...new WorkflowRuleRuntime().create(
+            new HookPolicyRuntimeRequest(
+                new PolicyRuntimeRequest(
+                    '/repo',
+                    Object.fromEntries(
+                        WORKFLOW_POLICIES.map((policy) => [
+                            policy.definition.id,
+                            policy.definition.recommendedSeed,
+                        ]),
+                    ),
+                    WORKFLOW_POLICIES.map((policy) => policy.definition.id),
+                ),
+                buildCommandsConfig(undefined),
+            ),
+        ),
         ...loadKeylessBashRules('pnpm wp-build'),
     ];
     for (const rule of rules) {
@@ -177,18 +219,23 @@ describe('no agent-workflow-rules surface tells an AI to end its turn', () => {
     it('renders all ten skew reports (5 SkewCases × 2 harnesses), each non-empty', () => {
         const reports = renderEverySkewReport();
         expect(reports.size).toBe(10);
-        for (const [where, text] of reports) expect(text.length, `${where} rendered nothing`).toBeGreaterThan(0);
+        for (const [where, text] of reports)
+            expect(text.length, `${where} rendered nothing`).toBeGreaterThan(0);
         // The escalating cases MUST still carry the retry refusal — the legitimate half of #679.
         for (const skew of ['main-inconsistent', 'main-behind', 'bump']) {
             for (const aiType of ['claude-code', 'codex']) {
-                expect(reports.get(`${skew} × ${aiType}`), `${skew} × ${aiType}`).toContain('Do NOT retry this call');
+                expect(reports.get(`${skew} × ${aiType}`), `${skew} × ${aiType}`).toContain(
+                    'Do NOT retry this call',
+                );
             }
         }
     });
 
     it('never prescribes ending the turn in any version-skew report', () => {
         for (const [where, text] of renderEverySkewReport()) {
-            expect(offends(text), `skew report ${where} tells the agent to end its turn`).toBe(false);
+            expect(offends(text), `skew report ${where} tells the agent to end its turn`).toBe(
+                false,
+            );
         }
     });
 

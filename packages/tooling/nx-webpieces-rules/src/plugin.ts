@@ -222,7 +222,6 @@ function addArchitectureProject(
     }
 }
 
-
 // A project sits inside a NESTED git repo (e.g. a clone under repositories/) when any of its
 // ancestor dirs — up to but NOT including the workspace root — contains a `.git`. Such projects are
 // separate repos, not part of THIS workspace's graph, so they must not get inferred targets (that is
@@ -285,7 +284,9 @@ function addPerProjectTargets(
             projectRoot,
             opts,
             architectureEnabled,
-            isProjectJson ? new RawProjectJsonReader().read(context.workspaceRoot, projectFile, projectRoot) : undefined,
+            isProjectJson
+                ? new RawProjectJsonReader().read(context.workspaceRoot, projectFile, projectRoot)
+                : undefined,
         );
 
         if (Object.keys(targets).length === 0) continue;
@@ -438,8 +439,8 @@ function createWorkspaceTargetsWithoutPrefix(
     // ci aggregate so it does not change existing gate behavior — consumers point a required check at it.
     targets['validate-checklist-docs'] = targetFactory.checklistDocs();
     // Use combined validate-code instead of 3 separate targets
-    // Options come from webpieces.config.json at the workspace root
-    // (loaded via @webpieces/rules-config; same source of truth as @webpieces/ai-hook-rules)
+    // Options come from declared owner files' direct policy-ID maps, resolved by
+    // @webpieces/rules-config from the root rulePacks declaration.
     if (
         validations.validateNewMethods ||
         validations.validateModifiedMethods ||
@@ -519,54 +520,6 @@ function createValidateUnchangedTarget(graphPath: string): TargetConfiguration {
     };
 }
 
-function createValidateNewMethodsTarget(
-    maxLines: number,
-    mode: 'STRICT' | 'NORMAL' | 'OFF',
-): TargetConfiguration {
-    return {
-        executor: '@webpieces/nx-webpieces-rules:validate-new-methods',
-        cache: false, // Don't cache - depends on git state
-        inputs: ['default'],
-        options: { max: maxLines, mode },
-        metadata: {
-            technologies: ['nx'],
-            description: `Validate new methods do not exceed ${maxLines} lines (only runs in affected mode)`,
-        },
-    };
-}
-
-function createValidateModifiedMethodsTarget(
-    maxLines: number,
-    mode: 'STRICT' | 'NORMAL' | 'OFF',
-): TargetConfiguration {
-    return {
-        executor: '@webpieces/nx-webpieces-rules:validate-modified-methods',
-        cache: false, // Don't cache - depends on git state
-        inputs: ['default'],
-        options: { max: maxLines, mode },
-        metadata: {
-            technologies: ['nx'],
-            description: `Validate new and modified methods do not exceed ${maxLines} lines (encourages gradual cleanup)`,
-        },
-    };
-}
-
-function createValidateModifiedFilesTarget(
-    maxLines: number,
-    mode: 'STRICT' | 'NORMAL' | 'OFF',
-): TargetConfiguration {
-    return {
-        executor: '@webpieces/nx-webpieces-rules:validate-modified-files',
-        cache: false, // Don't cache - depends on git state
-        inputs: ['default'],
-        options: { max: maxLines, mode },
-        metadata: {
-            technologies: ['nx'],
-            description: `Validate modified files do not exceed ${maxLines} lines (encourages keeping files small)`,
-        },
-    };
-}
-
 function createValidateCompleteTarget(validationTargets: string[]): TargetConfiguration {
     return {
         executor: 'nx:noop',
@@ -574,7 +527,8 @@ function createValidateCompleteTarget(validationTargets: string[]): TargetConfig
         dependsOn: validationTargets,
         metadata: {
             technologies: ['nx'],
-            description: 'Run all architecture validations (cycles, unchanged, package.json, code rules)',
+            description:
+                'Run all architecture validations (cycles, unchanged, package.json, code rules)',
         },
     };
 }
@@ -628,7 +582,8 @@ export function createHotfixCiTarget(): TargetConfiguration {
         dependsOn: ['build', 'test'],
         metadata: {
             technologies: ['nx'],
-            description: 'Hotfix CI: compilation/typechecking and tests only; lint and Webpieces validators bypassed',
+            description:
+                'Hotfix CI: compilation/typechecking and tests only; lint and Webpieces validators bypassed',
         },
     };
 }
@@ -649,7 +604,7 @@ function createHelpTarget(): TargetConfiguration {
  *
  * Uses the `validate-no-file-import-cycles` executor (which bundles madge as a
  * dependency) rather than a runtime `npx madge` fetch. The executor reads
- * webpieces.config.json so the gate can be turned on/off (`mode`) and
+ * the declared Nx owner file's direct policy-ID map to turn the gate on/off (`mode`) and
  * time-boxed (`turnOffRuleUntilEpoch`) like every other webpieces rule.
  *
  * Note `projectRoot` is intentionally unused now — the executor derives the

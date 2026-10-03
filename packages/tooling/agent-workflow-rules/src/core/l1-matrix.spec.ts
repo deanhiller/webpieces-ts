@@ -8,7 +8,7 @@ import * as path from 'path';
 import { describe, it, expect, beforeAll } from 'vitest';
 
 import { isAllowed } from '../bin/shim';
-import { migrate } from '../bin/setup-config';
+import { prepareLegacyUpgrade } from '@webpieces/rules-config';
 import { BlockedResult } from '@webpieces/hook-runtime';
 import { VersionSyncGuard } from './version-sync';
 import { EffectiveTree, EffectiveTreeResolver } from '@webpieces/hook-runtime';
@@ -67,8 +67,14 @@ function stageSkew(worktreeVersion = '0.4.612'): { main: string; worktree: strin
     const main = path.join(base, 'main');
     const worktree = path.join(base, 'wt');
     for (const dir of [main, worktree]) fs.mkdirSync(dir, { recursive: true });
-    fs.writeFileSync(path.join(main, 'pnpm-workspace.yaml'), "catalog:\n  '@webpieces/webpieces-tooling': 0.4.616\n");
-    fs.writeFileSync(path.join(worktree, 'pnpm-workspace.yaml'), `catalog:\n  '@webpieces/webpieces-tooling': ${worktreeVersion}\n`);
+    fs.writeFileSync(
+        path.join(main, 'pnpm-workspace.yaml'),
+        "catalog:\n  '@webpieces/webpieces-tooling': 0.4.616\n",
+    );
+    fs.writeFileSync(
+        path.join(worktree, 'pnpm-workspace.yaml'),
+        `catalog:\n  '@webpieces/webpieces-tooling': ${worktreeVersion}\n`,
+    );
     return { main, worktree };
 }
 
@@ -90,8 +96,12 @@ describe('L1 matrix — every classification lands on exactly one verdict', () =
     });
 
     it('makes every row reachable as a first match — no row is dead', () => {
-        const reached = new Set(everyClassification().map((c: L1Classification): number => firstMatchingL1Row(c).num));
-        expect([...reached].sort((a: number, b: number): number => a - b)).toEqual([1, 2, 4, 5, 6, 7, 8]);
+        const reached = new Set(
+            everyClassification().map((c: L1Classification): number => firstMatchingL1Row(c).num),
+        );
+        expect([...reached].sort((a: number, b: number): number => a - b)).toEqual([
+            1, 2, 4, 5, 6, 7, 8,
+        ]);
     });
 
     // The ONLY overlap in the table, and it is the one the doc calls out by name. Pinned so that a new
@@ -109,7 +119,9 @@ describe('L1 matrix — every classification lands on exactly one verdict', () =
     it('blocks on rows 8, 5 and 7 only, and only those rows carry a cure and a blockId', () => {
         for (const row of L1_ROWS) {
             const blocking = row.action.kind === 'block';
-            expect(blocking, `row ${row.num}`).toBe(row.num === 8 || row.num === 5 || row.num === 7);
+            expect(blocking, `row ${row.num}`).toBe(
+                row.num === 8 || row.num === 5 || row.num === 7,
+            );
             expect(row.cure !== null, `row ${row.num} cure`).toBe(blocking);
             expect(row.blockId !== null, `row ${row.num} blockId`).toBe(blocking);
         }
@@ -128,12 +140,18 @@ describe('L1 rows — each row is witnessed by its own first use case', () => {
     for (const row of L1_ROWS.filter((r: L1Row): boolean => r.useCases.length > 0)) {
         it(`row ${row.num} is the first match for use case ${row.useCases[0].num}`, () => {
             const witness = row.useCases[0].classification;
-            expect(witness, `use case ${row.useCases[0].num} needs a classification`).not.toBeNull();
+            expect(
+                witness,
+                `use case ${row.useCases[0].num} needs a classification`,
+            ).not.toBeNull();
             if (witness === null) return;
             expect(firstMatchingL1Row(witness).num).toBe(row.num);
             const earlier = L1_ROWS.slice(0, L1_ROWS.indexOf(row));
             for (const before of earlier) {
-                expect(before.matches(witness), `row ${row.num} is shadowed by row ${before.num}`).toBe(false);
+                expect(
+                    before.matches(witness),
+                    `row ${row.num} is shadowed by row ${before.num}`,
+                ).toBe(false);
             }
         });
     }
@@ -151,7 +169,10 @@ describe('L1 rows — each row is witnessed by its own first use case', () => {
             for (const useCase of row.useCases) {
                 expect(useCase.classification, `use case ${useCase.num}`).not.toBeNull();
                 if (useCase.classification === null) continue;
-                expect(firstMatchingL1Row(useCase.classification).num, `use case ${useCase.num}`).toBe(row.num);
+                expect(
+                    firstMatchingL1Row(useCase.classification).num,
+                    `use case ${useCase.num}`,
+                ).toBe(row.num);
             }
         }
     });
@@ -159,9 +180,11 @@ describe('L1 rows — each row is witnessed by its own first use case', () => {
     // The filter and the L0 allowlist are not rows, so their use cases carry no classification — but
     // they are still L1 use cases and still numbered in the one table.
     it('keeps the unrowed use cases classification-free, and the numbering contiguous 1..21', () => {
-        for (const useCase of L1_UNROWED_USE_CASES) expect(useCase.classification, `use case ${useCase.num}`).toBeNull();
-        expect(allL1UseCases().map((u: L1UseCase): number => u.num))
-            .toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21]);
+        for (const useCase of L1_UNROWED_USE_CASES)
+            expect(useCase.classification, `use case ${useCase.num}`).toBeNull();
+        expect(allL1UseCases().map((u: L1UseCase): number => u.num)).toEqual([
+            1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21,
+        ]);
     });
 });
 
@@ -246,10 +269,10 @@ describe('L1 rows agree with the predicates the guards enforce', () => {
         const skew = stageSkew();
         const same = stageSkew('0.4.616');
         const cases: readonly [string, string, { main: string; worktree: string }][] = [
-            ['pnpm build', 'worktree', skew],   // skewed worktree, real work -> BLOCK
-            ['ls -la', 'worktree', skew],       // skewed worktree, inspection -> allow
-            ['pnpm build', 'worktree', same],   // aligned worktree -> allow
-            ['pnpm build', 'primary', skew],    // main tree is never this guard's business
+            ['pnpm build', 'worktree', skew], // skewed worktree, real work -> BLOCK
+            ['ls -la', 'worktree', skew], // skewed worktree, inspection -> allow
+            ['pnpm build', 'worktree', same], // aligned worktree -> allow
+            ['pnpm build', 'primary', skew], // main tree is never this guard's business
             // The RESIDENT agent: cwd IS the worktree, so the worktree's own tracked config governs it.
             // K is still `w` (git's answer), and the comparison is still against the main clone.
             ['pnpm build', 'resident', skew],
@@ -258,15 +281,25 @@ describe('L1 rows agree with the predicates the guards enforce', () => {
         for (const [command, kind, dirs] of cases) {
             const governed = kind === 'resident' ? dirs.worktree : dirs.main;
             const tree = new EffectiveTree(
-                dirs.main, dirs.worktree, dirs.worktree, governed, dirs.main,
+                dirs.main,
+                dirs.worktree,
+                dirs.worktree,
+                governed,
+                dirs.main,
                 kind === 'primary' ? 'primary' : 'worktree',
             );
             const blocked = guard.block(command, tree, 'claude-code') !== null;
             const classification = L1Classification.forEnforcement(
-                tree.kind, guard.skewed(tree), command === 'ls -la', false, false,
+                tree.kind,
+                guard.skewed(tree),
+                command === 'ls -la',
+                false,
+                false,
             );
-            expect(firstMatchingL1Row(classification).blockId === 'trinary-version-skew', `${command} / ${kind}`)
-                .toBe(blocked);
+            expect(
+                firstMatchingL1Row(classification).blockId === 'trinary-version-skew',
+                `${command} / ${kind}`,
+            ).toBe(blocked);
         }
     });
 
@@ -281,14 +314,24 @@ describe('L1 rows agree with the predicates the guards enforce', () => {
         expect(outside.kind).toBe('p');
         expect(firstMatchingL1Row(outside).num).toBe(5);
         // …while the matrix still knows what `o` SHOULD do.
-        expect(firstMatchingL1Row(new L1Classification('o', false, false, true, false)).num).toBe(2);
+        expect(firstMatchingL1Row(new L1Classification('o', false, false, true, false)).num).toBe(
+            2,
+        );
     });
 
     it('maps the other tree kinds straight through', () => {
-        expect(L1Classification.forEnforcement('foreign', false, false, false, false).kind).toBe('f');
-        expect(L1Classification.forEnforcement('worktree', false, false, false, false).kind).toBe('w');
-        expect(L1Classification.forEnforcement('primary', false, false, false, false).kind).toBe('p');
-        expect(L1Classification.forEnforcement('missing', false, false, false, false).kind).toBe('m');
+        expect(L1Classification.forEnforcement('foreign', false, false, false, false).kind).toBe(
+            'f',
+        );
+        expect(L1Classification.forEnforcement('worktree', false, false, false, false).kind).toBe(
+            'w',
+        );
+        expect(L1Classification.forEnforcement('primary', false, false, false, false).kind).toBe(
+            'p',
+        );
+        expect(L1Classification.forEnforcement('missing', false, false, false, false).kind).toBe(
+            'm',
+        );
     });
 });
 
@@ -301,13 +344,18 @@ describe('L1 rows agree with the predicates the guards enforce', () => {
  */
 describe('guards/L1-location.md is generated from the rows the guard consults', () => {
     it('matches renderL1Doc() byte for byte', () => {
-        expect(fs.readFileSync(L1_DOC, 'utf8'), 'run `pnpm guards:generate` to regenerate the doc').toBe(renderL1Doc());
+        expect(
+            fs.readFileSync(L1_DOC, 'utf8'),
+            'run `pnpm guards:generate` to regenerate the doc',
+        ).toBe(renderL1Doc());
     });
 
     it('renders every row and every use case', () => {
         const doc = renderL1Doc();
         for (const row of L1_ROWS) {
-            expect(doc, `row ${row.num} act`).toContain(`| ${row.num} | ${row.k === '-' ? '-' : `\`${row.k}\``} |`);
+            expect(doc, `row ${row.num} act`).toContain(
+                `| ${row.num} | ${row.k === '-' ? '-' : `\`${row.k}\``} |`,
+            );
             if (row.why !== '') expect(doc, `row ${row.num} why`).toContain(row.why);
         }
         for (const useCase of allL1UseCases()) {
@@ -336,7 +384,9 @@ describe('guards/L1-location.md is generated from the rows the guard consults', 
         const delivered = loadTemplate(LOCATION_MATRIX_DOC);
         const emittable = [L1_PRESTAGE_ROW, ...L1_ROWS.map((row: L1Row): number => row.num)];
         for (const num of emittable) {
-            expect(delivered, `row=${num} has no row in ${LOCATION_MATRIX_DOC}`).toContain(`\n| ${num} | `);
+            expect(delivered, `row=${num} has no row in ${LOCATION_MATRIX_DOC}`).toContain(
+                `\n| ${num} | `,
+            );
         }
     });
 
@@ -349,21 +399,27 @@ describe('guards/L1-location.md is generated from the rows the guard consults', 
      */
     it('points the reader at the doc only when it was actually written', () => {
         expect(locationMatrixPointer('', '6')).toBe('');
-        expect(locationMatrixPointer('/repo/.webpieces/instruct-ai/webpieces.location-matrix.md', '6'))
-            .toContain('/repo/.webpieces/instruct-ai/webpieces.location-matrix.md');
+        expect(
+            locationMatrixPointer('/repo/.webpieces/instruct-ai/webpieces.location-matrix.md', '6'),
+        ).toContain('/repo/.webpieces/instruct-ai/webpieces.location-matrix.md');
     });
 
     // The row is the point: a bare "read this doc" is a page, a row number is the two lines that
     // explain this exact verdict — and it is the SAME number the L1 log line carries.
     it('names the row that judged the call, including the pre-stage row 0', () => {
         expect(locationMatrixPointer('/tmp/x.md', '6')).toContain('ROW 6');
-        expect(locationMatrixPointer('/tmp/x.md', L1_PRESTAGE_ROW)).toContain(`ROW ${L1_PRESTAGE_ROW}`);
+        expect(locationMatrixPointer('/tmp/x.md', L1_PRESTAGE_ROW)).toContain(
+            `ROW ${L1_PRESTAGE_ROW}`,
+        );
     });
 
     // Interpolated into a REASON="…" shell assignment and then printf'd into a JSON string, exactly as
     // L0's and L2's are: a quote or backslash corrupts the decision payload, not merely the prose.
     it('emits a JSON-safe pointer', () => {
-        const pointer = locationMatrixPointer('/repo/.webpieces/instruct-ai/webpieces.location-matrix.md', '5');
+        const pointer = locationMatrixPointer(
+            '/repo/.webpieces/instruct-ai/webpieces.location-matrix.md',
+            '5',
+        );
         expect(pointer).not.toContain('"');
         expect(pointer).not.toContain('\\');
     });
@@ -371,7 +427,10 @@ describe('guards/L1-location.md is generated from the rows the guard consults', 
     // An absolute path or it is not a pointer — the shell's cwd is not the governed root and cannot be
     // assumed, which is why L1's own messages name <root> explicitly rather than saying "cd first".
     it('keeps the path absolute, and starts on its own line so the house report shape holds', () => {
-        const pointer = locationMatrixPointer('/repo/.webpieces/instruct-ai/webpieces.location-matrix.md', '5');
+        const pointer = locationMatrixPointer(
+            '/repo/.webpieces/instruct-ai/webpieces.location-matrix.md',
+            '5',
+        );
         expect(pointer.startsWith('\n')).toBe(true);
         expect(pointer).toContain(' /repo/');
     });
@@ -520,139 +579,3 @@ describe('L1 end to end — a REAL linked worktree, resolved and then classified
  * Scanning SOURCE rather than rendered output is deliberate: a prescription can hide in a template that
  * renders on only one branch of one guard, and that is exactly where the worst instance was hiding.
  */
-describe('no surface prescribes cross-tree `git -C` as a cure', () => {
-    // The three message-bearing modules. shim-deny-reason.ts is excluded ON PURPOSE — it names
-    // `git -C <root>` in order to say it is REFUSED, which is the story being told, not a breach of it.
-    // `rules/judged-tree.ts` is here because it is a message-bearing module that renders an AIMED cure
-    // — the one shape this scan exists for — and because its PLACEMENT would otherwise exempt it: the
-    // list is resolved against `core/`, so a new file one directory down is outside the scan by
-    // accident rather than by decision. A path-relative allowlist that silently misses a subdirectory
-    // is the same defect this whole spec is about, one level up.
-    const SITES = ['version-sync.ts', 'runner.ts', 'l1-rows.ts', 'rules/judged-tree.ts'] as const;
-
-    const sourceOf = (site: string): string => fs.readFileSync(path.join(__dirname, site), 'utf8');
-
-    /**
-     * A PRESCRIPTION is `git -C` whose directory is INTERPOLATED — `${tree.mainRoot}`, `$ROOT`. That is
-     * what makes it read as a runnable command aimed at a real other tree. A literal placeholder like
-     * `git -C <dir>` is documentation of an idiom, and is judged by the boundary test below instead.
-     */
-    it('never interpolates a path into a `git -C` the reader is told to run', () => {
-        for (const site of SITES) {
-            const prescriptions = sourceOf(site)
-                .split('\n')
-                // Lines that RUN git from node are not messages to a reader; spawnSync takes an argv array.
-                .filter((line: string) => !line.includes('spawnSync'))
-                .filter((line: string) => /git -C \$\{|git -C \$[A-Z]/.test(line));
-            expect(prescriptions, `${site} prescribes cross-tree git -C`).toEqual([]);
-        }
-    });
-
-    /**
-     * Wherever the literal idiom IS taught, the sentence that bounds it must be in the SAME message.
-     *
-     * "Taught" means a line the READER sees, so `//` and ` *` comment lines are skipped: version-sync.ts
-     * names `git -C <dir> <sub>` in a comment explaining how its argv parser skips the flag, which
-     * teaches nobody an idiom and needs no caveat.
-     */
-    it('bounds the `git -C <dir>` idiom to this tree wherever it is taught', () => {
-        for (const site of SITES) {
-            const source = sourceOf(site);
-            const teaches = source
-                .split('\n')
-                .some((line: string) => line.includes('git -C <dir') && !/^\s*(\/\/|\*|\/\*)/.test(line));
-            if (!teaches) continue;
-            expect(source, `${site} teaches git -C without bounding it to this tree`).toContain('INSIDE this tree');
-            expect(source, `${site} teaches git -C without naming the cross-tree refusal`).toMatch(/another tree/i);
-        }
-    });
-
-    /** The skew guard's own report is the one that must be clean in BOTH of its branches. */
-    it('leaves no `git -C <path>` command in either branch of the skew report', () => {
-        const source = sourceOf('version-sync.ts');
-        expect(source).not.toContain('`git -C ${tree.mainRoot}');
-        expect(source).not.toContain('`git -C ${tree.root}');
-    });
-});
-
-/**
- * THE DENY NAMES THE MATRIX — end to end, through the real runner.
- *
- * The delivered table (above) fixed the record; this fixes the experience. A blocked agent reads the
- * deny text and nothing else, so a table the deny does not name is indistinguishable from one that does
- * not exist. L0 and L2 have named theirs for releases; L1 — the layer emitting by far the most `row=` —
- * shipped the table and no pointer, and that is the regression these pin shut.
- *
- * Both branches of `l1LocationBlock` are driven: the row-0 PRE-STAGE (decided from command text before
- * a tree is resolved, and therefore the deny path most easily left out of a centralised pointer) and a
- * TREE-BASED row reached through `firstMatchingL1Row`.
- */
-describe('an L1 deny names the L1 matrix, by absolute path and by row', () => {
-    let outer: string;
-    let matrixPath: string;
-
-    // loadAndValidate demands a FULLY valid config, so it is built with the installer's own seeder
-    // rather than hand-rolled — the same shape runner.spec.ts uses, and for the same reason.
-    function writeGuardConfig(root: string): void {
-        // webpieces-disable no-any-unknown -- opaque JSON config shape, only mutated by known keys here
-        const config = migrate({}, fixtureRuleRegistry).config as Record<string, any>;
-        config.hookGuards['branch-creation-guard'].autoReapMergedBranches = false;
-        for (const name of Object.keys(config.hookGuards)) config.hookGuards[name].mode = 'OFF';
-        config.excludePaths = [];
-        policyFixture.declareIn(root);
-        fs.writeFileSync(path.join(root, 'webpieces.config.json'), JSON.stringify(config));
-    }
-
-    function initTempRepo(dir: string): void {
-        fs.mkdirSync(dir, { recursive: true });
-        const git = (...args: string[]): void => { execFileSync('git', args, { cwd: dir, stdio: 'pipe' }); };
-        git('init', '-b', 'main');
-        git('config', 'core.hooksPath', '/dev/null');   // never this machine's global hooks
-        git('config', 'user.email', 'test@example.com');
-        git('config', 'user.name', 'test');
-        fs.writeFileSync(path.join(dir, 'f.txt'), 'x');
-        git('add', '-A');
-        git('commit', '-m', 'init');
-    }
-
-    beforeAll(() => {
-        outer = specTempDirs.makeReal('wp-l1ptr-');
-        initTempRepo(outer);
-        writeGuardConfig(outer);
-        matrixPath = path.join(outer, '.webpieces', 'instruct-ai', LOCATION_MATRIX_DOC);
-    });
-
-    it(`row ${L1_PRESTAGE_ROW} (the misplaced-\`cd\` pre-stage): absolute path + the row`, () => {
-        const report = (runBash('ls && cd sub && pnpm build', outer, 'guards', 'claude-code') as BlockedResult).report;
-        expect(report).toContain('must come FIRST');
-        expect(report).toContain(matrixPath);
-        expect(report).toContain(`ROW ${L1_PRESTAGE_ROW}`);
-    });
-
-    it('row 5 (git from a subdirectory, force-to-root): absolute path + the row', () => {
-        const sub = path.join(outer, 'packages', 'http');
-        fs.mkdirSync(sub, { recursive: true });
-        const report = (runBash(`cd ${sub} && git status`, outer, 'guards', 'claude-code') as BlockedResult).report;
-        expect(report).toContain(matrixPath);
-        expect(report).toContain('ROW 5');
-    });
-
-    // Lazy: the doc is written on a BLOCK and nowhere else, so an agent that was never blocked never
-    // pays for a file it will not read.
-    it('writes the matrix only on a block', () => {
-        const clean = specTempDirs.makeReal('wp-l1ptr-ok-');
-        initTempRepo(clean);
-        writeGuardConfig(clean);
-        expect(runBash('pnpm build && pnpm test', clean, 'guards', 'claude-code')).toBeNull();
-        expect(fs.existsSync(path.join(clean, '.webpieces', 'instruct-ai', LOCATION_MATRIX_DOC))).toBe(false);
-    });
-
-    // The DELIVERED text, not merely the pure function: it is interpolated into a JSON decision
-    // payload, where a quote corrupts the decision rather than merely the prose.
-    it('adds nothing to the deny that could corrupt the JSON payload', () => {
-        const report = (runBash('ls && cd sub && pnpm build', outer, 'guards', 'claude-code') as BlockedResult).report;
-        const pointer = report.slice(report.indexOf('The full L1 location matrix'));
-        expect(pointer).not.toContain('"');
-        expect(pointer).not.toContain('\\');
-    });
-});

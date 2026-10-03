@@ -25,7 +25,7 @@ export class RuleRun {
  *
  * Extends the shared {@link AbstractRule} (which owns `name` + the on/off + escape-hatch
  * decision in `shouldRun()`) and adds the code-rules execution surface: `run(workspaceRoot)`.
- * Each validator is constructed with its typed `*Config` from `@webpieces/rules-config`, so
+ * Each validator is constructed with its typed `*Config` from this policy owner, so
  * the config classes are genuinely consumed (find-usages / rename work across packages).
  */
 export abstract class CodeValidator<C extends BaseRuleConfig> extends AbstractRule<C> {

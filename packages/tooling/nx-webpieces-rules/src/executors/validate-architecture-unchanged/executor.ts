@@ -71,14 +71,19 @@ function reportMismatch(summary: string, workspaceRoot: string): void {
  * endpoint change must not fail this rule. Null when the links match.
  */
 // webpieces-disable no-function-outside-class -- executor step helper, matches reportMismatch in this file
-function describeContractLinkDrift(current: ApiContractFileRefs, saved: ApiContractFileRefs): string | null {
+function describeContractLinkDrift(
+    current: ApiContractFileRefs,
+    saved: ApiContractFileRefs,
+): string | null {
     const names = [...new Set([...Object.keys(current), ...Object.keys(saved)])].sort();
     const changes: string[] = [];
     for (const name of names) {
         const a = current[name];
         const b = saved[name];
-        if (a === undefined) changes.push(`  - ${name}: linked in dependencies.json but no longer in source`);
-        else if (b === undefined) changes.push(`  + ${name}: in source but not linked from dependencies.json`);
+        if (a === undefined)
+            changes.push(`  - ${name}: linked in dependencies.json but no longer in source`);
+        else if (b === undefined)
+            changes.push(`  + ${name}: in source but not linked from dependencies.json`);
         else if (a !== b) changes.push(`  ~ ${name}: contract file link changed (${b} -> ${a})`);
     }
     if (changes.length === 0) return null;
@@ -102,15 +107,21 @@ export function describeTableDrift(current: CurrentArchitecture, saved: Dependen
  * system so the message points at the database that changed rather than dumping two JSON blobs.
  */
 // webpieces-disable no-function-outside-class -- executor step helper, matches describeContractLinkDrift above
-function describeExternalSystemDrift(current: ExternalSystemDecls, saved: ExternalSystemDecls): string | null {
+function describeExternalSystemDrift(
+    current: ExternalSystemDecls,
+    saved: ExternalSystemDecls,
+): string | null {
     const names = [...new Set([...Object.keys(current), ...Object.keys(saved)])].sort();
     const changes: string[] = [];
     for (const name of names) {
         const a = current[name];
         const b = saved[name];
-        if (a === undefined) changes.push(`  - ${name}: in dependencies.json but no longer declared in source`);
-        else if (b === undefined) changes.push(`  + ${name}: declared in source but missing from dependencies.json`);
-        else if (JSON.stringify(a) !== JSON.stringify(b)) changes.push(`  ~ ${name}: kind/label/declarers changed`);
+        if (a === undefined)
+            changes.push(`  - ${name}: in dependencies.json but no longer declared in source`);
+        else if (b === undefined)
+            changes.push(`  + ${name}: declared in source but missing from dependencies.json`);
+        else if (JSON.stringify(a) !== JSON.stringify(b))
+            changes.push(`  ~ ${name}: kind/label/declarers changed`);
     }
     if (changes.length === 0) return null;
     return `externalSystems drift (${changes.length} system(s)):\n${changes.join('\n')}`;
@@ -121,26 +132,27 @@ function describeExternalSystemDrift(current: ExternalSystemDecls, saved: Extern
  * graph, sort into levels, enrich with metadata, and attach the derived
  * apiRelations — so this validator compares like-for-like against the committed file.
  */
-// webpieces-disable no-function-outside-class -- executor step helper, matches reportMismatch/writeTmpInstructionsFile in this file
-async function buildCurrentGraph(workspaceRoot: string): Promise<CurrentArchitecture> {
-    console.log('📊 Generating current dependency graph...');
-    const reducedGraph = await generateReducedGraph();
-    console.log('🔄 Computing topological layers...');
-    const currentGraph = sortGraphTopologically(reducedGraph);
-    console.log('🏷️  Enriching graph with framework + responsibilities metadata...');
-    const projectInfos = await collectProjectInfo();
-    enrichGraph(currentGraph, projectInfos, workspaceRoot);
-    new TagTruthCheck().assertTrue(currentGraph, projectInfos, workspaceRoot);
-    console.log('🔎 Scanning source for implements/uses API relations...');
-    // The SAME externalApiPaths the generator uses: scanning without them would drop every vendor
-    // relation from the regenerated graph and report drift against a perfectly fresh file.
-    const externalApiPaths = loadRuntimeConfig(workspaceRoot).externalApiPaths;
-    const scan = scanAndAttachApiRelations(workspaceRoot, currentGraph, projectInfos, externalApiPaths);
-    return new CurrentArchitecture(
-        currentGraph,
-        new ApiContractFiles().refsFor(buildApiContracts(scan)),
-        buildExternalSystems(scan.apiIndex, projectInfos),
-    );
+export class CurrentGraphBuilder {
+    async build(workspaceRoot: string): Promise<CurrentArchitecture> {
+        console.log('📊 Generating current dependency graph...');
+        const reducedGraph = await generateReducedGraph();
+        console.log('🔄 Computing topological layers...');
+        const currentGraph = sortGraphTopologically(reducedGraph);
+        console.log('🏷️  Enriching graph with framework + responsibilities metadata...');
+        const projectInfos = await collectProjectInfo();
+        enrichGraph(currentGraph, projectInfos, workspaceRoot);
+        new TagTruthCheck().assertTrue(currentGraph, projectInfos, workspaceRoot);
+        console.log('🔎 Scanning source for implements/uses API relations...');
+        // The SAME externalApiPaths the generator uses: scanning without them would drop every vendor
+        // relation from the regenerated graph and report drift against a perfectly fresh file.
+        const externalApiPaths = loadRuntimeConfig(workspaceRoot).externalApiPaths;
+        const scan = scanAndAttachApiRelations(workspaceRoot, currentGraph, projectInfos, externalApiPaths);
+        return new CurrentArchitecture(
+            currentGraph,
+            new ApiContractFiles().refsFor(buildApiContracts(scan)),
+            buildExternalSystems(scan.apiIndex, projectInfos),
+        );
+    }
 }
 
 /** The regenerated graph plus the two tables beside it — everything dependencies.json holds. */
@@ -189,7 +201,7 @@ export default async function runExecutor(
 
         // Steps 1-3: build + enrich + scan the current graph (same pipeline the
         // generator runs, so any drift is caught).
-        const currentGraph = await buildCurrentGraph(workspaceRoot);
+        const currentGraph = await new CurrentGraphBuilder().build(workspaceRoot);
 
         // Step 4: Load saved graph
         console.log('📂 Loading saved graph...');

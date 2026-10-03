@@ -1,13 +1,21 @@
 import { BaseRuleConfig } from '@webpieces/rules-sdk';
 import { AbstractRule, RuleOptions } from '@webpieces/rules-config';
 
-import type { PlainRule, Rule, RuleScope, EditContext, FileContext, BashContext, Violation } from './types';
+import type {
+    PlainRule,
+    Rule,
+    RuleScope,
+    EditContext,
+    FileContext,
+    BashContext,
+    Violation,
+} from './types';
 import type { FixHint } from './fix-hint';
 
 /**
- * Wraps a custom rule loaded from a `rulesDir` (a plain object) so it satisfies the same
+ * Wraps a client policy returned by its declared runtime factory (a plain object) so it satisfies the same
  * runtime `Rule` contract as the built-in rule classes: it gains `shouldRun()` (driven by the
- * rule's config entry in webpieces.config.json) from AbstractRule, and it seeds `ctx.options`
+ * rule's validated config entry in its declared owner file) from AbstractRule, and it seeds `ctx.options`
  * with the merged option bag before delegating to the plain rule's `check()` — preserving the
  * exact behavior custom rules had under the old options-based runner.
  */
@@ -21,7 +29,7 @@ export class CustomRuleAdapter extends AbstractRule<BaseRuleConfig> implements R
     private readonly rawConfig: RuleOptions;
 
     constructor(impl: PlainRule, rawConfig: RuleOptions) {
-        // A custom rule from `rulesDir` is keyed in webpieces.config.json by its own `name`, so the
+        // A declared client policy uses its canonical owned ID as its config key, so the
         // two identities coincide. Stated twice rather than defaulted — see AbstractRule.
         super(rawConfig as BaseRuleConfig, impl.name, impl.name);
         this.impl = impl;

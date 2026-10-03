@@ -7,16 +7,13 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as nodePath from 'path';
 import { vi, afterEach } from 'vitest';
-
 import { DEFAULT_MAX_CONCURRENT_BUILDS, HomeConfig, HomeConfigService, atRoot } from '@webpieces/rules-config';
-import { migrate } from '../bin/setup-config';
+import { prepareLegacyUpgrade } from '@webpieces/rules-config';
 import { buildBashContext } from '@webpieces/hook-runtime';
 import { isAllowed } from '../bin/shim';
 import { EffectiveTreeResolver } from '@webpieces/hook-runtime';
 import { runBash } from './runner';
 import { BlockedResult } from '@webpieces/hook-runtime';
-
-
 /**
  * The bug these lock down: the harness RESETS a cwd that left the workspace, so an agent working in a
  * linked worktree writes `cd <worktree> && …` and the shell cwd the hook is handed is ALWAYS the
@@ -44,14 +41,14 @@ function initRepo(dir: string): void {
 // no other guard reads git state or spawns the detached main-sync refresher.
 function writeGuardConfig(root: string): void {
     // webpieces-disable no-any-unknown -- opaque JSON config shape, only mutated by known keys here
-    const config = migrate({}, fixtureRuleRegistry).config as Record<string, any>;
+    const config = prepareLegacyUpgrade({}, fixtureRuleRegistry).config as Record<string, any>;
     config.hookGuards['branch-creation-guard'].autoReapMergedBranches = false;
     for (const name of Object.keys(config.hookGuards)) {
         config.hookGuards[name].mode = name === 'pr-lifecycle-guard' ? 'ON' : 'OFF';
     }
     config.excludePaths = [];
     policyFixture.declareIn(root);
-    fs.writeFileSync(nodePath.join(root, 'webpieces.config.json'), JSON.stringify(config));
+    policyFixture.writeOwnerConfig(root, config);
 }
 
 // Every L1 block prints its remedy as an indented `cd '<dir>' && …` line. Pulling it back OUT of the
@@ -92,7 +89,6 @@ beforeAll(() => {
 const resolver = (): EffectiveTreeResolver => new EffectiveTreeResolver();
 
 describe('EffectiveTreeResolver — which tree does this command act on?', () => {
-
     it('no `cd` at the governed root → the primary clone, unchanged from before', () => {
         const tree = resolver().resolve('git status', primary, primary);
         expect(tree.kind).toBe('primary');
@@ -114,7 +110,9 @@ describe('EffectiveTreeResolver — which tree does this command act on?', () =>
         // Before this fix a worktree read as a different git toplevel and so as a FOREIGN repo, which
         // silently disabled EVERY guard for `cd <worktree> && …` commands. That is the opposite error
         // from the one in the report, and just as bad.
-        expect(resolver().resolve(`cd ${worktree} && git push`, primary, primary).kind).not.toBe('foreign');
+        expect(resolver().resolve(`cd ${worktree} && git push`, primary, primary).kind).not.toBe(
+            'foreign',
+        );
     });
 
     it('a subdirectory of a worktree still resolves to that worktree ROOT', () => {
@@ -122,7 +120,6 @@ describe('EffectiveTreeResolver — which tree does this command act on?', () =>
         fs.mkdirSync(sub, { recursive: true });
         expect(resolver().resolve(`cd ${sub} && git status`, primary, primary).root).toBe(worktree);
     });
-
 });
 
 /**
@@ -139,15 +136,16 @@ describe('EffectiveTreeResolver — which tree does this command act on?', () =>
  * and different for a nested clone, so it answers the same for both worktree placements.
  */
 describe('EffectiveTreeResolver — a worktree INSIDE the governed root (the agent-worktree layout)', () => {
-
-    it('is a WORKTREE, not foreign — placement inside the repo does not make it someone else\'s repo', () => {
+    it("is a WORKTREE, not foreign — placement inside the repo does not make it someone else's repo", () => {
         const tree = resolver().resolve(`cd ${agentWorktree} && git status`, primary, primary);
         expect(tree.kind).toBe('worktree');
         expect(tree.root).toBe(agentWorktree);
     });
 
     it('never reads as `foreign`, so the guards are never silently exempted there', () => {
-        expect(resolver().resolve(`cd ${agentWorktree} && git push`, primary, primary).kind).not.toBe('foreign');
+        expect(
+            resolver().resolve(`cd ${agentWorktree} && git push`, primary, primary).kind,
+        ).not.toBe('foreign');
     });
 
     it('a SUBDIRECTORY of it resolves to the worktree root, same as a sibling worktree', () => {
@@ -159,7 +157,9 @@ describe('EffectiveTreeResolver — a worktree INSIDE the governed root (the age
     });
 
     it('a nested CLONE inside the governed root is still foreign — its shared git dir is its own', () => {
-        expect(resolver().resolve(`cd ${nestedClone} && git push`, primary, primary).kind).toBe('foreign');
+        expect(resolver().resolve(`cd ${nestedClone} && git push`, primary, primary).kind).toBe(
+            'foreign',
+        );
     });
 
     it('a nested clone inside a linked WORKTREE is foreign too', () => {
@@ -187,7 +187,6 @@ describe('EffectiveTreeResolver — a worktree INSIDE the governed root (the age
  * worktree's name. Two resolvers, one process, opposite answers.
  */
 describe('EffectiveTreeResolver — the agent LIVES in the worktree (self-governed, still a worktree)', () => {
-
     it('is `worktree` when the worktree governs ITSELF — placement, cwd and config are all irrelevant', () => {
         const tree = resolver().resolve('pnpm build', agentWorktree, agentWorktree);
         expect(tree.kind).toBe('worktree');
@@ -198,8 +197,12 @@ describe('EffectiveTreeResolver — the agent LIVES in the worktree (self-govern
     });
 
     it('carries `mainRoot` — the PRIMARY clone, whose node_modules supplies the judging binary', () => {
-        expect(resolver().resolve('pnpm build', agentWorktree, agentWorktree).mainRoot).toBe(primary);
-        expect(resolver().resolve(`cd ${worktree} && pnpm build`, primary, primary).mainRoot).toBe(primary);
+        expect(resolver().resolve('pnpm build', agentWorktree, agentWorktree).mainRoot).toBe(
+            primary,
+        );
+        expect(resolver().resolve(`cd ${worktree} && pnpm build`, primary, primary).mainRoot).toBe(
+            primary,
+        );
         // In the primary clone the two coincide, which is what makes "work in the main tree" an escape.
         const home = resolver().resolve('pnpm build', primary, primary);
         expect(home.mainRoot).toBe(primary);
@@ -270,21 +273,28 @@ describe('EffectiveTreeResolver.remedyAtRoot — a remedy that satisfies its own
 // ONE legal shape: `cd <literal path> && <work>`. The resolver is unchanged — every command rejected
 // below was ALREADY judged from the shell cwd — so this is a silent misdirect becoming a loud rule.
 describe('EffectiveTreeResolver.misplacedCd — the one legal shape, everything else refused', () => {
-
     it('`VAR=…; cd "$VAR"; …` — the shape that reads as a guard malfunction — is rejected', () => {
-        expect(resolver().misplacedCd(`WT=${worktree}; cd "$WT"; git push`)).toContain('assignment precedes it');
+        expect(resolver().misplacedCd(`WT=${worktree}; cd "$WT"; git push`)).toContain(
+            'assignment precedes it',
+        );
         // …and the resolver still judges it from the shell cwd, exactly as before: no verdict moved.
-        expect(resolver().effectiveCwd(`WT=${worktree}; cd "$WT"; git push`, primary)).toBe(primary);
+        expect(resolver().effectiveCwd(`WT=${worktree}; cd "$WT"; git push`, primary)).toBe(
+            primary,
+        );
     });
 
     it('a non-literal target is rejected wherever it sits, leading run or not', () => {
         expect(resolver().misplacedCd('cd "$WT" && git push')).toContain('not a literal path');
         expect(resolver().misplacedCd('cd ~/repo && git push')).toContain('not a literal path');
-        expect(resolver().misplacedCd('cd $(git rev-parse --show-toplevel) && git push')).not.toBeNull();
+        expect(
+            resolver().misplacedCd('cd $(git rev-parse --show-toplevel) && git push'),
+        ).not.toBeNull();
     });
 
     it('a MID-LINE `cd` is rejected — bash runs the rest there, the guard does not', () => {
-        expect(resolver().misplacedCd(`git fetch && cd ${worktree} && git push`)).toContain('at the FRONT');
+        expect(resolver().misplacedCd(`git fetch && cd ${worktree} && git push`)).toContain(
+            'at the FRONT',
+        );
     });
 
     it('a TRAILING `cd` is rejected too — same rule, no carve-out to remember', () => {
@@ -345,7 +355,6 @@ describe('EffectiveTreeResolver.misplacedCd — the one legal shape, everything 
         expect(resolver().misplacedCd(command)).toBeNull();
         expect(resolver().effectiveCwd(command, primary)).toBe(primary);
     });
-
 });
 
 describe('EffectiveTreeResolver — the trees it must NOT claim, and what it hands the guards', () => {
@@ -405,7 +414,12 @@ describe('runBash end-to-end — a linked worktree is governed, and steering nam
     });
 
     it('`cd <worktree> && git push` is still BLOCKED by the push guard (a worktree is not an escape)', () => {
-        const result = runBash(`cd ${e2eWorktree} && git push -u origin feature-x`, e2ePrimary, 'guards', 'claude-code');
+        const result = runBash(
+            `cd ${e2eWorktree} && git push -u origin feature-x`,
+            e2ePrimary,
+            'guards',
+            'claude-code',
+        );
         expect(result).toBeInstanceOf(BlockedResult);
         expect((result as BlockedResult).report).toContain('gated flow');
     });
@@ -416,13 +430,23 @@ describe('runBash end-to-end — a linked worktree is governed, and steering nam
      * from `.claude/worktrees/probe-l1`. Only `--dry-run` kept it from being a real ungated push.
      */
     it('an IN-REPO agent worktree is governed too — it was ALLOW_EXEMPT as a "foreign repo" before', () => {
-        const result = runBash(`cd ${e2eAgentWorktree} && git push -u origin agent-branch`, e2ePrimary, 'guards', 'claude-code');
+        const result = runBash(
+            `cd ${e2eAgentWorktree} && git push -u origin agent-branch`,
+            e2ePrimary,
+            'guards',
+            'claude-code',
+        );
         expect(result).toBeInstanceOf(BlockedResult);
         expect((result as BlockedResult).report).toContain('gated flow');
     });
 
     it('the SAME push is blocked from the primary clone — the two locations now agree', () => {
-        const result = runBash(`cd ${e2ePrimary} && git push -u origin main`, e2ePrimary, 'guards', 'claude-code');
+        const result = runBash(
+            `cd ${e2ePrimary} && git push -u origin main`,
+            e2ePrimary,
+            'guards',
+            'claude-code',
+        );
         expect(result).toBeInstanceOf(BlockedResult);
         expect((result as BlockedResult).report).toContain('gated flow');
     });
@@ -431,14 +455,23 @@ describe('runBash end-to-end — a linked worktree is governed, and steering nam
         // EXPERIMENTAL and OFF unless ~/.webpieces/config.json says otherwise, so opt in here rather
         // than reading the developer's real preferences.
         // HomeConfig(wholeRepoBuildGuard, orphanDirSweep, maxConcurrentBuilds).
-        vi.spyOn(HomeConfigService.prototype, 'load').mockReturnValue(new HomeConfig(true, false, DEFAULT_MAX_CONCURRENT_BUILDS, false));
-        const result = runBash(`cd ${e2eAgentWorktree} && pnpm run build-all`, e2ePrimary, 'guards', 'claude-code');
+        vi.spyOn(HomeConfigService.prototype, 'load').mockReturnValue(
+            new HomeConfig(true, false, DEFAULT_MAX_CONCURRENT_BUILDS, false),
+        );
+        const result = runBash(
+            `cd ${e2eAgentWorktree} && pnpm run build-all`,
+            e2ePrimary,
+            'guards',
+            'claude-code',
+        );
         expect(result).toBeInstanceOf(BlockedResult);
         expect((result as BlockedResult).report).toContain('whole-repo-build-guard');
     });
 
     it('`git status` inside the worktree is ALLOWED — governed is not the same as blocked', () => {
-        expect(runBash(`cd ${e2eAgentWorktree} && git status`, e2ePrimary, 'guards', 'claude-code')).toBeNull();
+        expect(
+            runBash(`cd ${e2eAgentWorktree} && git status`, e2ePrimary, 'guards', 'claude-code'),
+        ).toBeNull();
     });
 
     /**
@@ -486,8 +519,10 @@ describe('runBash end-to-end — a linked worktree is governed, and steering nam
             expect(remedy, `no remedy found for ${command}`).not.toBe('');
             const second = runBash(remedy, e2ePrimary, 'guards', 'claude-code');
             const secondReport = second instanceof BlockedResult ? second.report : '';
-            expect(secondReport.split('\n')[0], `remedy re-triggered its own guard: ${remedy}`)
-                .not.toBe(headline);
+            expect(
+                secondReport.split('\n')[0],
+                `remedy re-triggered its own guard: ${remedy}`,
+            ).not.toBe(headline);
         }
     });
 
@@ -524,13 +559,19 @@ describe('runBash end-to-end — a RESIDENT agent in a skewed worktree (the meas
     const PKG = '@webpieces/webpieces-tooling';
 
     function writePin(root: string, version: string): void {
-        fs.writeFileSync(nodePath.join(root, 'pnpm-workspace.yaml'), `catalog:\n  '${PKG}': ${version}\n`);
+        fs.writeFileSync(
+            nodePath.join(root, 'pnpm-workspace.yaml'),
+            `catalog:\n  '${PKG}': ${version}\n`,
+        );
     }
 
     function writeInstalled(root: string, version: string): void {
         const dir = nodePath.join(root, 'node_modules', PKG);
         fs.mkdirSync(dir, { recursive: true });
-        fs.writeFileSync(nodePath.join(dir, 'package.json'), JSON.stringify({ name: PKG, version }));
+        fs.writeFileSync(
+            nodePath.join(dir, 'package.json'),
+            JSON.stringify({ name: PKG, version }),
+        );
     }
 
     /**
@@ -567,13 +608,16 @@ describe('runBash end-to-end — a RESIDENT agent in a skewed worktree (the meas
         expect(report).toContain(dirs.resident);
     });
 
-    it('the config the agent is governed by is the WORKTREE\'s, and it is blocked anyway', () => {
+    it("the config the agent is governed by is the WORKTREE's, and it is blocked anyway", () => {
         const dirs = stage('0.4.624');
         // The premise of the old bug: the worktree really does own the config walked up from the cwd.
         expect(fs.existsSync(nodePath.join(dirs.resident, 'webpieces.config.json'))).toBe(true);
-        expect(resolver().resolve('pnpm build', dirs.resident, dirs.resident).governedRoot)
-            .toBe(dirs.resident);
-        expect(runBash('pnpm build', dirs.resident, 'guards', 'claude-code')).toBeInstanceOf(BlockedResult);
+        expect(resolver().resolve('pnpm build', dirs.resident, dirs.resident).governedRoot).toBe(
+            dirs.resident,
+        );
+        expect(runBash('pnpm build', dirs.resident, 'guards', 'claude-code')).toBeInstanceOf(
+            BlockedResult,
+        );
     });
 
     it('ALLOWS everything once the two trees agree — the block is the skew, not the worktree', () => {
@@ -583,7 +627,9 @@ describe('runBash end-to-end — a RESIDENT agent in a skewed worktree (the meas
         // into whole-repo-build-guard it would be refused for its SCOPE — which has nothing to do with
         // skew and would make this test pass or fail by reading someone's ~/.webpieces/config.json. A
         // narrowed run is the honest probe, and it is allowed either way.
-        expect(runBash('pnpm exec vitest run packages/core', dirs.resident, 'guards', 'claude-code')).toBeNull();
+        expect(
+            runBash('pnpm exec vitest run packages/core', dirs.resident, 'guards', 'claude-code'),
+        ).toBeNull();
     });
 
     it('never blocks the look or the cure, so the resident agent is never deadlocked', () => {
@@ -592,7 +638,9 @@ describe('runBash end-to-end — a RESIDENT agent in a skewed worktree (the meas
             expect(runBash(command, dirs.resident, 'guards', 'claude-code'), command).toBeNull();
         }
         // …and the cure aimed at the MAIN tree passes from inside the worktree too.
-        expect(runBash(`git -C ${dirs.main} pull`, dirs.resident, 'guards', 'claude-code')).toBeNull();
+        expect(
+            runBash(`git -C ${dirs.main} pull`, dirs.resident, 'guards', 'claude-code'),
+        ).toBeNull();
     });
 
     it('the MAIN tree is never blocked by this guard, however skewed the worktree is', () => {

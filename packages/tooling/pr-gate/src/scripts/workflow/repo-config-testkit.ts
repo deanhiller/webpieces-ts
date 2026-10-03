@@ -74,8 +74,7 @@ export class RepoConfigFixture {
     /** Write `config` (usually a `load()` result a spec has edited) as the config of `dir`. */
     // webpieces-disable no-any-unknown -- see load()
     writeTo(dir: string, config: Record<string, unknown>): void {
-        fs.writeFileSync(path.join(dir, 'webpieces.config.json'), JSON.stringify(config, null, 4) + '\n');
-        policyFixture.declareIn(dir);
+        policyFixture.writeOwnerConfig(dir, config);
     }
 
     // webpieces-disable no-any-unknown -- see load()

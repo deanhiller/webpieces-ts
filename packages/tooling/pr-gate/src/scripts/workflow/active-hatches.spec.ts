@@ -2,7 +2,7 @@ import { specTempDirs } from '@webpieces/tooling-testkit';
 import * as fs from 'fs';
 import * as path from 'path';
 
-import { CONFIG_FILENAME, ConfigFile } from '@webpieces/rules-config';
+import { CONFIG_FILENAME, ConfigFile, PackPolicyFiles } from '@webpieces/rules-config';
 import { describe, it, expect, beforeEach } from 'vitest';
 
 import { ActiveHatch, ActiveHatchReport } from './active-hatches';
@@ -11,16 +11,24 @@ const DAY = 24 * 60 * 60;
 
 describe('ActiveHatchReport', () => {
     let repoRoot = '';
-    let report = new ActiveHatchReport(new ConfigFile());
+    let report = new ActiveHatchReport(new ConfigFile(), new PackPolicyFiles());
 
     beforeEach(() => {
         repoRoot = specTempDirs.make('wp-hatch-');
-        report = new ActiveHatchReport(new ConfigFile());
+        report = new ActiveHatchReport(new ConfigFile(), new PackPolicyFiles());
     });
 
     // webpieces-disable no-any-unknown -- a config FIXTURE, written straight to JSON
     function writeConfig(config: Record<string, unknown>): void {
-        fs.writeFileSync(path.join(repoRoot, CONFIG_FILENAME), JSON.stringify(config));
+        const declarations = ['rules', 'hookGuards'].map((section: string) => {
+            const file = `${section}.json`;
+            fs.writeFileSync(path.join(repoRoot, file), JSON.stringify(config[section] ?? {}));
+            return { package: `./${section}-fixture.cjs`, config: file };
+        });
+        fs.writeFileSync(
+            path.join(repoRoot, CONFIG_FILENAME),
+            JSON.stringify({ rulePacks: declarations, 'match-rules': config['match-rules'] }),
+        );
     }
 
     function names(hatches: readonly ActiveHatch[]): string[] {
@@ -32,7 +40,11 @@ describe('ActiveHatchReport', () => {
     it('finds nothing, and renders nothing, when every hatch is inert', () => {
         writeConfig({
             rules: {
-                'no-any-unknown': { mode: 'ON', turnOffRuleUntilEpoch: 0, turnOffRuleWhileOnBranch: null },
+                'no-any-unknown': {
+                    mode: 'ON',
+                    turnOffRuleUntilEpoch: 0,
+                    turnOffRuleWhileOnBranch: null,
+                },
                 // A PAST epoch is inert — it skips nothing. Listing those would bury the live ones.
                 'max-file-lines': {
                     mode: 'ON',
@@ -49,7 +61,11 @@ describe('ActiveHatchReport', () => {
     it('lists a branch hatch and a FUTURE epoch hatch, from rules and hookGuards alike', () => {
         writeConfig({
             rules: {
-                'no-any-unknown': { mode: 'ON', turnOffRuleUntilEpoch: 0, turnOffRuleWhileOnBranch: 'dean/big-refactor' },
+                'no-any-unknown': {
+                    mode: 'ON',
+                    turnOffRuleUntilEpoch: 0,
+                    turnOffRuleWhileOnBranch: 'dean/big-refactor',
+                },
                 'max-file-lines': {
                     mode: 'ON',
                     turnOffRuleUntilEpoch: Math.floor(Date.now() / 1000) + 10 * DAY,
@@ -57,7 +73,11 @@ describe('ActiveHatchReport', () => {
                 },
             },
             hookGuards: {
-                'branch-state-guard': { mode: 'ON', turnOffRuleUntilEpoch: 0, turnOffRuleWhileOnBranch: 'dean/spike' },
+                'branch-state-guard': {
+                    mode: 'ON',
+                    turnOffRuleUntilEpoch: 0,
+                    turnOffRuleWhileOnBranch: 'dean/spike',
+                },
             },
         });
 
@@ -71,7 +91,12 @@ describe('ActiveHatchReport', () => {
     it('covers match-rules entries, which name themselves', () => {
         writeConfig({
             'match-rules': [
-                { name: 'no-raw-http', mode: 'ON', turnOffRuleUntilEpoch: 0, turnOffRuleWhileOnBranch: 'dean/http' },
+                {
+                    name: 'no-raw-http',
+                    mode: 'ON',
+                    turnOffRuleUntilEpoch: 0,
+                    turnOffRuleWhileOnBranch: 'dean/http',
+                },
             ],
         });
 

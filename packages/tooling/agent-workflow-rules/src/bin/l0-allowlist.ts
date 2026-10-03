@@ -27,22 +27,8 @@ import { L0_IGNORED_TOOLS } from './l0-ignored-tools';
 // re-exports everything here, so every existing import keeps working, and this module stays as
 // dependency-free as shim.ts must be: it has to load on a tree too broken to load the rule engine.
 // ---------------------------------------------------------------------------
-// The OUTPUT-CAPTURE TAIL every escape hatch below tolerates — the 2026-07-21 deadlock report, part 2.
-// Every allowlist was anchored to a BARE command, but the way an AI assistant actually spells a
-// diagnostic command is `<cmd> 2>&1 | tail -20` (it trims the output it has to read back). The audit
-// log proves it: `.webpieces/logs/L0-shim/<writer>.log` has `pnpm install 2>&1 | tail -15` logged as
-// DENY-STALE seconds away from a bare `pnpm install` logged as ALLOW-INSTALL — the same cure, denied
-// for its redirection. A cure that is denied when spelled the natural way reads to the assistant as
-// "the guard blocks its own fix", which is exactly the conclusion it drew before handing the fix back
-// to the human.
-//
-// So each hatch accepts an OPTIONAL trailing stderr redirect (`2>&1` to fold stderr in, or `2>/dev/null`
-// to drop it — I hit the missing `2>/dev/null` case myself within the hour, running `pnpm install
-// 2>/dev/null | tail -2` against a drift block) and an OPTIONAL pipe into `tail`/`head` carrying at
-// most a line-count flag (`-20`, `-n 20`). Nothing else: the pipe target is one of two literal,
-// read-only pager words and its only argument is digits, so `| sh`, `| curl …`, `| tee /etc/x` and
-// every other operator stay DENIED. Spliced in place of each pattern's old `[[:space:]]*$` tail, so the
-// anchoring at both ends is unchanged. Keep in sync with CAPTURE_TAIL_JS_SRC (locked by a unit test).
+// Cures tolerate output-only stderr redirection and a numeric head/tail pipe. This keeps
+// ordinary diagnostic capture usable without granting arbitrary pipelines or mutations.
 export const CAPTURE_TAIL_ERE =
     '([[:space:]]+2>(&1|/dev/null))?([[:space:]]*\\|[[:space:]]*(tail|head)([[:space:]]+-(n[[:space:]]+)?[0-9]+)?)?[[:space:]]*$';
 
@@ -299,6 +285,12 @@ const PRUNE_CONFIG_BODY_ERE = '(pnpm|npm|npx)([[:space:]]+(exec|run))?[[:space:]
 // JS-regex twin of PRUNE_CONFIG_BODY_ERE (POSIX `[[:space:]]` → `\s`).
 const PRUNE_CONFIG_BODY_JS = '(pnpm|npm|npx)(\\s+(exec|run))?\\s+wp-prune-unknown-config';
 
+// Literal sync arguments only: no shell operators, substitutions, arbitrary switches or sibling commands.
+const RULES_SYNC_BODY_ERE =
+    '(pnpm|npm|npx)([[:space:]]+(exec|run))?[[:space:]]+wp-rules-sync([[:space:]]+(--upgrade|--pack(=|[[:space:]]+)[[:alnum:]_@./-]+=[[:alnum:]_./-]+))*';
+const RULES_SYNC_BODY_JS =
+    '(pnpm|npm|npx)(\\s+(exec|run))?\\s+wp-rules-sync(\\s+(--upgrade|--pack(=|\\s+)[a-zA-Z0-9_@./-]+=[a-zA-Z0-9_./-]+))*';
+
 // The entry below spells the command as PRUNE_UNKNOWN_COMMAND, IMPORTED rather than re-typed: that
 // constant is the single spelling, and a second literal here is exactly the drift that would let a
 // message prescribe a command this allowlist does not match.
@@ -493,12 +485,25 @@ export const L0_ALLOWLIST: readonly L0AllowEntry[] = [
     // TOOL-SHAPED, like the Read entry above and for the same reason: no regex can express "this tool
     // has nothing to judge". See L0_IGNORED_TOOLS for why the list is explicit and why `apply_patch`
     // (Codex's only WRITE) is deliberately not on it.
-    new L0AllowEntry(`a Codex tool with nothing to judge: ${[...L0_IGNORED_TOOLS].join(', ')}`,
-        'pass', false, null, null,
-        EVERY_HARNESS, new L0Call('update_plan', '', ''),
-        [new L0Call('view_image', '', ''), new L0Call('webrun', '', '')]),
-    new L0AllowEntry(`a Write/Edit whose target is ${CONFIG_FILENAME}`, 'pass', false, null, null,
-        EVERY_HARNESS, new L0Call('Edit', '', `/repo/${CONFIG_FILENAME}`)),
+    new L0AllowEntry(
+        `a Codex tool with nothing to judge: ${[...L0_IGNORED_TOOLS].join(', ')}`,
+        'pass',
+        false,
+        null,
+        null,
+        EVERY_HARNESS,
+        new L0Call('update_plan', '', ''),
+        [new L0Call('view_image', '', ''), new L0Call('webrun', '', '')],
+    ),
+    new L0AllowEntry(
+        `a Write/Edit whose target is ${CONFIG_FILENAME}`,
+        'pass',
+        false,
+        null,
+        null,
+        EVERY_HARNESS,
+        new L0Call('Edit', '', `/repo/${CONFIG_FILENAME}`),
+    ),
     // THE MANIFEST ESCAPE, and it is an escape L1 row 8 already PROMISED before it existed. Its report
     // says "STILL ALLOWED HERE: ... edits to pnpm-workspace.yaml / package.json / webpieces.config.json"
     // and its docblock calls that one of "two structurally independent escapes" — but only
@@ -515,14 +520,27 @@ export const L0_ALLOWLIST: readonly L0AllowEntry[] = [
     // The runner carves the same two files out on its own edit path (an early `return null`, beside the
     // webpieces.config.json pass). Scoped by isRootManifest, so it admits the root of the MAIN tree and
     // of every worktree — and no other package.json in the repo.
-    new L0AllowEntry(`a Write/Edit whose target is a tree ROOT's ${WORKSPACE_MANIFEST} or ${PACKAGE_MANIFEST} - the version pin`,
-        'pass', false, null, null,
-        EVERY_HARNESS, new L0Call('Edit', '', `/repo/${WORKSPACE_MANIFEST}`),
-        [new L0Call('Write', '', `/repo/${PACKAGE_MANIFEST}`)]),
+    new L0AllowEntry(
+        `a Write/Edit whose target is a tree ROOT's ${WORKSPACE_MANIFEST} or ${PACKAGE_MANIFEST} - the version pin`,
+        'pass',
+        false,
+        null,
+        null,
+        EVERY_HARNESS,
+        new L0Call('Edit', '', `/repo/${WORKSPACE_MANIFEST}`),
+        [new L0Call('Write', '', `/repo/${PACKAGE_MANIFEST}`)],
+    ),
     new L0AllowEntry('pnpm|npm install', 'allow', true, INSTALLER_BODY_ERE, INSTALLER_BODY_JS,
         EVERY_HARNESS, new L0Call('Bash', 'pnpm install', '')),
-    new L0AllowEntry(`${RECOVERY_CMD} - the cure for a CORRUPT node_modules`, 'allow', true, RECOVERY_BODY_ERE, RECOVERY_BODY_JS,
-        EVERY_HARNESS, new L0Call('Bash', RECOVERY_CMD, '')),
+    new L0AllowEntry(
+        `${RECOVERY_CMD} - the cure for a CORRUPT node_modules`,
+        'allow',
+        true,
+        RECOVERY_BODY_ERE,
+        RECOVERY_BODY_JS,
+        EVERY_HARNESS,
+        new L0Call('Bash', RECOVERY_CMD, ''),
+    ),
     // webpieces-disable no-fetch -- prose naming the git sync subcommand in a doc label, not an HTTP call
     new L0AllowEntry('git fetch - a bare git pull and git merge are NOT on the list', 'allow', true, FETCH_BODY_ERE, FETCH_BODY_JS,
         EVERY_HARNESS, new L0Call('Bash', 'git fetch', ''),
@@ -540,19 +558,49 @@ export const L0_ALLOWLIST: readonly L0AllowEntry[] = [
     new L0AllowEntry(PRUNE_UNKNOWN_COMMAND, 'allow', true, PRUNE_CONFIG_BODY_ERE, PRUNE_CONFIG_BODY_JS,
         EVERY_HARNESS, new L0Call('Bash', PRUNE_UNKNOWN_COMMAND, ''),
         [new L0Call('Bash', 'pnpm exec wp-prune-unknown-config', '')]),
-    new L0AllowEntry(`${INSTALL_HOOKS_CMD} (flags allowed, e.g. --target=project)`, 'allow', true, INSTALL_HOOKS_BODY_ERE, INSTALL_HOOKS_BODY_JS,
-        EVERY_HARNESS, new L0Call('Bash', INSTALL_HOOKS_CMD, ''),
-        [new L0Call('Bash', INSTALL_HOOKS_TARGET_CMD, '')]),
+    new L0AllowEntry(
+        'pnpm wp-rules-sync — explicit owner seeds and lock/catalog repair',
+        'allow',
+        true,
+        RULES_SYNC_BODY_ERE,
+        RULES_SYNC_BODY_JS,
+        EVERY_HARNESS,
+        new L0Call('Bash', 'pnpm wp-rules-sync', ''),
+        [
+            new L0Call(
+                'Bash',
+                'pnpm wp-rules-sync --upgrade --pack=@client/policy=.webpieces/rules/client.json',
+                '',
+            ),
+        ],
+    ),
+    new L0AllowEntry(
+        `${INSTALL_HOOKS_CMD} (flags allowed, e.g. --target=project)`,
+        'allow',
+        true,
+        INSTALL_HOOKS_BODY_ERE,
+        INSTALL_HOOKS_BODY_JS,
+        EVERY_HARNESS,
+        new L0Call('Bash', INSTALL_HOOKS_CMD, ''),
+        [new L0Call('Bash', INSTALL_HOOKS_TARGET_CMD, '')],
+    ),
     // The fault-U cure. `@<version>` is pinned as an extra sample because the deny INFERS a pin from the
     // repo's other @webpieces pins and prescribes the versioned spelling — the exact shape that must not
     // become untypable under a later tightening.
-    new L0AllowEntry(`${ADD_HOOK_PKG_CMD} (an @version and extra flags allowed)`, 'allow', true, ADD_HOOK_PKG_BODY_ERE, ADD_HOOK_PKG_BODY_JS,
-        EVERY_HARNESS, new L0Call('Bash', ADD_HOOK_PKG_CMD, ''),
+    new L0AllowEntry(
+        `${ADD_HOOK_PKG_CMD} (an @version and extra flags allowed)`,
+        'allow',
+        true,
+        ADD_HOOK_PKG_BODY_ERE,
+        ADD_HOOK_PKG_BODY_JS,
+        EVERY_HARNESS,
+        new L0Call('Bash', ADD_HOOK_PKG_CMD, ''),
         [
             new L0Call('Bash', `${ADD_HOOK_PKG_CMD}@0.4.574`, ''),
             new L0Call('Bash', `pnpm add -D -w ${HOOK_PKG}@0.4.574`, ''),
             new L0Call('Bash', `npm add --save-dev ${HOOK_PKG}`, ''),
-        ]),
+        ],
+    ),
     // NOT a cure (`cure: false`): it repairs nothing, so it must not bypass the L1 guards on a healthy
     // tree — `git status` from a subdirectory still meets force-to-root. It is on the L0 list because
     // while a fault is UP you have to be able to see where you are standing.
@@ -575,24 +623,31 @@ export const L0_ALLOWLIST: readonly L0AllowEntry[] = [
     // S) the read falls THROUGH to read-stale-guard, and where it is not (D/X/U/K) the sh half is
     // terminal by construction, which is the documented asymmetry entry 1 already has.
     new L0AllowEntry(
-        'CODEX ONLY - a read-shaped Bash command (the harness has no Read tool): '
-        + `${[...READ_COMMANDS].join(', ')}, or sed -n '<range>p'`,
-        'pass', false, CODEX_READ_BODY_ERE, CODEX_READ_BODY_JS, 'codex',
+        'CODEX ONLY - a read-shaped Bash command (the harness has no Read tool): ' +
+            `${[...READ_COMMANDS].join(', ')}, or sed -n '<range>p'`,
+        'pass',
+        false,
+        CODEX_READ_BODY_ERE,
+        CODEX_READ_BODY_JS,
+        'codex',
         new L0Call('Bash', CODEX_READ_CMD, ''),
         [
             new L0Call('Bash', 'cat webpieces.config.json', ''),
             new L0Call('Bash', 'head -50 .webpieces/instruct-ai/webpieces.guard-matrix.md', ''),
             new L0Call('Bash', 'tail -n 20 package.json', ''),
             new L0Call('Bash', "cat '/Users/dean hiller/repo/package.json'", ''),
-        ]),
+        ],
+    ),
 ];
 
 // The UNGATED bodies — every entry that is not scoped to one harness. A gated entry is spliced into its
 // own union below instead, which is what makes it unreachable from the harness it is not for.
-const L0_BODIES_ERE = L0_ALLOWLIST.flatMap(
-    (e: L0AllowEntry): string[] => (e.ere === null || e.harness !== EVERY_HARNESS ? [] : [e.ere]));
-const L0_BODIES_JS = L0_ALLOWLIST.flatMap(
-    (e: L0AllowEntry): string[] => (e.js === null || e.harness !== EVERY_HARNESS ? [] : [e.js]));
+const L0_BODIES_ERE = L0_ALLOWLIST.flatMap((e: L0AllowEntry): string[] =>
+    e.ere === null || e.harness !== EVERY_HARNESS ? [] : [e.ere],
+);
+const L0_BODIES_JS = L0_ALLOWLIST.flatMap((e: L0AllowEntry): string[] =>
+    e.js === null || e.harness !== EVERY_HARNESS ? [] : [e.js],
+);
 
 // The ONE Bash allowlist. Anchored and tailed exactly like each individual hatch, so it inherits every
 // security property: no shell operator can ride along, and only the optional leading `cd <path> &&` /
@@ -614,7 +669,6 @@ export const L0_ALLOW_ERE_SH = L0_ALLOW_ERE.split("'").join(`'\\''`);
 export const L0_ALLOW_JS =
     new RegExp(CD_PREFIX_JS_ANCHORED + '(' + L0_BODIES_JS.join('|') + ')' + CAPTURE_TAIL_JS_SRC);
 
-
 // The CURE subset of the same list — the entries that REPAIR the tooling.
 //
 // This is not a second allowlist and it is not an L0 concept. It exists because runner.ts consults the
@@ -631,7 +685,8 @@ export const L0_ALLOW_JS =
 // A harness-GATED entry is excluded here too, and not merely because today's one is a non-cure: this
 // union is consulted by runner.ts where NO harness has been established either, so a gated body spliced
 // in would be judged with the gate missing — i.e. reachable from the harness it was written to exclude.
-const L0_CURE_BODIES_JS = L0_ALLOWLIST.flatMap(
-    (e: L0AllowEntry): string[] => (e.js === null || !e.cure || e.harness !== EVERY_HARNESS ? [] : [e.js]));
+const L0_CURE_BODIES_JS = L0_ALLOWLIST.flatMap((e: L0AllowEntry): string[] =>
+    e.js === null || !e.cure || e.harness !== EVERY_HARNESS ? [] : [e.js],
+);
 export const L0_CURE_ALLOW_JS =
     new RegExp(CD_PREFIX_JS_ANCHORED + '(' + L0_CURE_BODIES_JS.join('|') + ')' + CAPTURE_TAIL_JS_SRC);

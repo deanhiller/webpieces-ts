@@ -1,7 +1,12 @@
 import { RulePackRegistry } from '@webpieces/rules-config';
 import { policyFixture } from '@webpieces/tooling-testkit';
 const fixtureRuleRegistry = new RulePackRegistry(policyFixture.manifests());
-import { fixtureMigrations as RETIRED_CONFIG_KEYS, fixtureTuning as defaultRules, fixtureSchemas as RULE_SCHEMAS, fixtureHookGuardNames as SHIPPED_HOOK_GUARD_NAMES } from '@webpieces/tooling-testkit';
+import {
+    fixtureMigrations as RETIRED_CONFIG_KEYS,
+    fixtureTuning as defaultRules,
+    fixtureSchemas as RULE_SCHEMAS,
+    fixtureHookGuardNames as SHIPPED_HOOK_GUARD_NAMES,
+} from '@webpieces/tooling-testkit';
 import { specTempDirs } from '@webpieces/tooling-testkit';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -12,14 +17,13 @@ import { RETIRED_SCOPE_RULE } from './retired-config-keys';
 import { RetiredConfigKey } from '@webpieces/rules-sdk';
 import { toError } from '@webpieces/tooling-common/to-error';
 
-
-
-
-
 function mktmp(contents: Record<string, string>): string {
     const dir = policyFixture.makeRepo('wp-config-');
     for (const [name, body] of Object.entries(contents)) {
-        fs.writeFileSync(path.join(dir, name), body);
+        if (name === CONFIG_FILENAME && body.trim().startsWith('{') && body.trim().endsWith('}')) {
+            const document = JSON.parse(body);
+            policyFixture.writeOwnerConfig(dir, document);
+        } else fs.writeFileSync(path.join(dir, name), body);
     }
     return dir;
 }
@@ -104,7 +108,9 @@ const EXTRA_REQUIRED: Record<string, Record<string, unknown>> = {
     // framework packages belong to which runtime are the consumer's layout.
     'api-lib-dependencies': { apiLibPackages: ['tslib'], apiClients: [] },
     'api-lib-path': { paths: ['libraries/apis/**'] },
-    'framework-folder': { entries: [{ paths: ['libraries/node/**'], frameworkSets: ['node'], roles: ['lib'] }] },
+    'framework-folder': {
+        entries: [{ paths: ['libraries/node/**'], frameworkSets: ['node'], roles: ['lib'] }],
+    },
     'framework-packages': { entries: [{ packages: ['@angular/*'], frameworks: ['angular'] }] },
 };
 
@@ -137,7 +143,13 @@ function allRulesOff(overrides: Record<string, unknown> = {}): Record<string, un
 }
 
 function validPrGate(): Record<string, unknown> {
-    return { mode: 'ON', buildCommand: 'echo ci', mergeMode: 'AUTO', reviewerAgents: 1, maxReviewerRounds: 2 };
+    return {
+        mode: 'ON',
+        buildCommand: 'echo ci',
+        mergeMode: 'AUTO',
+        reviewerAgents: 1,
+        maxReviewerRounds: 2,
+    };
 }
 
 // `sections` is { rules, hookGuards } from allRulesOff(); commands.pr-gate + the required
@@ -309,20 +321,16 @@ describe('loadAndValidate — escape-hatch fields', () => {
 });
 
 describe('loadAndValidate — sections & commands', () => {
-    it('errors when a guard is left in the rules section (placement)', () => {
-        const sections = allRulesOff();
-        // Misplace a guard into rules.
-        (sections['rules'] as Record<string, unknown>)['pr-lifecycle-guard'] = {
-            mode: 'ON',
-            turnOffRuleUntilEpoch: 0,
-        };
-        const dir = mktmp({
-            [CONFIG_FILENAME]: JSON.stringify({
-                ...sections,
-                commands: { 'pr-gate': validPrGate() },
-            }),
-        });
-        expect(() => loadAndValidate(dir)).toThrow('belongs in the "hookGuards" section');
+    it('errors when a policy is placed in another declared owner file', () => {
+        const dir = writeConfig(allRulesOff());
+        const ownerFile = path.join(dir, '.webpieces/rules/fixture-0.json');
+        const entries = JSON.parse(fs.readFileSync(ownerFile, 'utf8'));
+        entries['pr-lifecycle-guard'] = fixtureRuleRegistry.seedFor('pr-lifecycle-guard');
+        fs.writeFileSync(ownerFile, JSON.stringify(entries));
+        expect(() => loadAndValidate(dir)).toThrow(
+            'pr-lifecycle-guard belongs to @webpieces/agent-workflow-rules',
+        );
+        expect(() => loadAndValidate(dir)).toThrow('Move it to');
     });
 
     it('errors on a retired top-level pr-gate block', () => {
@@ -367,7 +375,7 @@ describe('loadAndValidate — sections & commands', () => {
         // there as a default beneath per-guard `upsertPrCommand` / `mergeCompleteCommand` fields — a
         // second spelling that beat the commands section at the point of use, keyed on guard-name
         // literals that a rename could miss without failing the build. Both fields are deleted and the
-        // resolved strings reach the two rules at CONSTRUCTION (see load-rules.BUILT_IN_RULE_MAP).
+        // resolved strings reach the two rules at CONSTRUCTION (see WorkflowRuleRuntime).
         const guard = loaded.rulesConfig['pr-lifecycle-guard'] as Record<string, unknown>;
         expect(guard['upsertPrCommand']).toBeUndefined();
         expect(guard['mergeCompleteCommand']).toBeUndefined();
@@ -447,7 +455,7 @@ describe('loadAndValidate — config-error banner (unblock instructions)', () =>
 
     it('names editing the config as THE fix, and rules `pnpm install` out instead of prescribing it', () => {
         const msg = bannerFor('totally-made-up-rule');
-        expect(msg).toContain('THE FIX: edit webpieces.config.json');
+        expect(msg).toContain('THE FIX: edit declared owner config files');
         expect(msg).toContain('Do NOT run `pnpm install`');
         expect(msg).not.toContain('FIX ORDER');
     });
@@ -547,13 +555,21 @@ describe('loadAndValidate — every retired key fails the load', () => {
         if (entry.label === '[pr-gate.checklists]') {
             // A checklist ENTRY key: carried by an otherwise-valid entry (id + doc + required).
             const docRoot = mktmp({ 'doc.md': '# doc' });
-            fs.writeFileSync(path.join(docRoot, CONFIG_FILENAME), JSON.stringify({
-                ...sections,
-                commands: { 'pr-gate': { ...validPrGate(), checklists: [
-                    { id: 'x', doc: 'doc.md', required: true, [entry.key]: 'x' },
-                ] } },
-                excludePaths: validExcludePaths(),
-            }));
+            fs.writeFileSync(
+                path.join(docRoot, CONFIG_FILENAME),
+                JSON.stringify({
+                    ...sections,
+                    commands: {
+                        'pr-gate': {
+                            ...validPrGate(),
+                            checklists: [
+                                { id: 'x', doc: 'doc.md', required: true, [entry.key]: 'x' },
+                            ],
+                        },
+                    },
+                    excludePaths: validExcludePaths(),
+                }),
+            );
             return docRoot;
         }
         if (entry.label === '[excludePaths]') {
@@ -589,7 +605,8 @@ describe('loadAndValidate — every retired key fails the load', () => {
     for (const entry of RETIRED_CONFIG_KEYS) {
         it(`rejects ${entry.label} "${entry.key}" and names where it went`, () => {
             const dir = configCarrying(entry);
-            if (entry.scope === 'field') expect(() => loadAndValidate(dir)).toThrow(entry.instruction);
+            if (entry.scope === 'field')
+                expect(() => loadAndValidate(dir)).toThrow(entry.instruction);
             else expect(() => loadAndValidate(dir)).toThrow(`"${entry.key}" is a RETIRED`);
             if (entry.movedTo !== '') expect(() => loadAndValidate(dir)).toThrow(entry.movedTo);
         });
@@ -600,7 +617,9 @@ describe('loadAndValidate — every retired key fails the load', () => {
 // an agent of its own takes the override AND the name, and the half-configured shapes fail the load.
 describe('loadAndValidate resolves the reviewer agent (overrideReviewerAgent)', () => {
     it('loads reviewerAgents zero as the explicit project review opt-out', () => {
-        const loaded = loadAndValidate(writeConfig(allRulesOff(), { ...validPrGate(), reviewerAgents: 0 }));
+        const loaded = loadAndValidate(
+            writeConfig(allRulesOff(), { ...validPrGate(), reviewerAgents: 0 }),
+        );
         expect(loaded.prGate.reviewer.maxAgents).toBe(0);
     });
 
@@ -611,13 +630,17 @@ describe('loadAndValidate resolves the reviewer agent (overrideReviewerAgent)', 
     });
 
     it('resolves to webpieces-reviewer when overrideReviewerAgent is false', () => {
-        const loaded = loadAndValidate(writeConfig(allRulesOff(), { ...validPrGate(), overrideReviewerAgent: false }));
+        const loaded = loadAndValidate(
+            writeConfig(allRulesOff(), { ...validPrGate(), overrideReviewerAgent: false }),
+        );
         expect(loaded.prGate.reviewer.agentName).toBe('webpieces-reviewer');
     });
 
     it('resolves to the named agent under overrideReviewerAgent: true, and binds it into every checklist', () => {
         const dir = writeConfig(allRulesOff(), {
-            ...validPrGate(), overrideReviewerAgent: true, reviewerAgentName: ' my-reviewer ',
+            ...validPrGate(),
+            overrideReviewerAgent: true,
+            reviewerAgentName: ' my-reviewer ',
             checklists: [{ id: 'a', doc: 'a.md', required: true }],
         });
         fs.writeFileSync(path.join(dir, 'a.md'), '# a');
@@ -627,18 +650,27 @@ describe('loadAndValidate resolves the reviewer agent (overrideReviewerAgent)', 
     });
 
     it('fails the load on a reviewerAgentName without the override, naming both cures', () => {
-        const dir = writeConfig(allRulesOff(), { ...validPrGate(), reviewerAgentName: 'webpieces-reviewer' });
+        const dir = writeConfig(allRulesOff(), {
+            ...validPrGate(),
+            reviewerAgentName: 'webpieces-reviewer',
+        });
         expect(() => loadAndValidate(dir)).toThrow('remove "reviewerAgentName"');
         expect(() => loadAndValidate(dir)).toThrow('set "overrideReviewerAgent": true');
     });
 
     it('fails the load on the override without a name, saying to add it', () => {
         const dir = writeConfig(allRulesOff(), { ...validPrGate(), overrideReviewerAgent: true });
-        expect(() => loadAndValidate(dir)).toThrow('"overrideReviewerAgent": true needs "reviewerAgentName"');
+        expect(() => loadAndValidate(dir)).toThrow(
+            '"overrideReviewerAgent": true needs "reviewerAgentName"',
+        );
     });
 
     it('fails the load on a non-boolean overrideReviewerAgent', () => {
-        const dir = writeConfig(allRulesOff(), { ...validPrGate(), overrideReviewerAgent: 'yes', reviewerAgentName: 'x' });
+        const dir = writeConfig(allRulesOff(), {
+            ...validPrGate(),
+            overrideReviewerAgent: 'yes',
+            reviewerAgentName: 'x',
+        });
         expect(() => loadAndValidate(dir)).toThrow('must be true or false');
     });
 });

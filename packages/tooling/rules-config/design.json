@@ -89,6 +89,14 @@
                     "level": 1
                 },
                 {
+                    "id": "PackPolicyFiles",
+                    "className": "PackPolicyFiles",
+                    "kind": "class",
+                    "scope": "singleton",
+                    "file": "packages/tooling/rules-config/src/pack-policy-files.ts",
+                    "level": 2
+                },
+                {
                     "id": "RepoRootFinder",
                     "className": "RepoRootFinder",
                     "kind": "class",
@@ -105,11 +113,11 @@
                     "level": 1
                 },
                 {
-                    "id": "RulePackSelection",
-                    "className": "RulePackSelection",
+                    "id": "RulePackArtifacts",
+                    "className": "RulePackArtifacts",
                     "kind": "class",
                     "scope": "singleton",
-                    "file": "packages/tooling/rules-config/src/rule-pack-selection.ts",
+                    "file": "packages/tooling/rules-config/src/rule-pack-artifacts.ts",
                     "level": 2
                 },
                 {
@@ -174,12 +182,21 @@
                 },
                 {
                     "from": "ConfigLoader",
-                    "to": "RulePackSelection",
+                    "to": "PackPolicyFiles",
                     "injection": "type",
-                    "token": "RulePackSelection",
-                    "tokenKey": "class:packages/tooling/rules-config/src/rule-pack-selection.ts#RulePackSelection",
-                    "paramName": "rulePacks",
-                    "paramType": "RulePackSelection"
+                    "token": "PackPolicyFiles",
+                    "tokenKey": "class:packages/tooling/rules-config/src/pack-policy-files.ts#PackPolicyFiles",
+                    "paramName": "files",
+                    "paramType": "PackPolicyFiles"
+                },
+                {
+                    "from": "ConfigLoader",
+                    "to": "RulePackArtifacts",
+                    "injection": "type",
+                    "token": "RulePackArtifacts",
+                    "tokenKey": "class:packages/tooling/rules-config/src/rule-pack-artifacts.ts#RulePackArtifacts",
+                    "paramName": "artifacts",
+                    "paramType": "RulePackArtifacts"
                 },
                 {
                     "from": "DotWebpieces",
@@ -270,6 +287,15 @@
                     "tokenKey": "class:packages/tooling/tooling-common/src/state-dir.ts#DotWebpieces",
                     "paramName": "dotDir",
                     "paramType": "DotWebpieces"
+                },
+                {
+                    "from": "RulePackArtifacts",
+                    "to": "AtomicFile",
+                    "injection": "type",
+                    "token": "AtomicFile",
+                    "tokenKey": "class:packages/tooling/tooling-common/src/atomic-file.ts#AtomicFile",
+                    "paramName": "atomic",
+                    "paramType": "AtomicFile"
                 },
                 {
                     "from": "RulesConfigDesign",

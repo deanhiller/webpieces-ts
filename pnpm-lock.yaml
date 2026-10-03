@@ -567,6 +567,9 @@ importers:
       '@webpieces/rules-sdk':
         specifier: workspace:*
         version: link:../rules-sdk
+      '@webpieces/tooling-common':
+        specifier: workspace:*
+        version: link:../tooling-common
       eslint:
         specifier: '>=8.0.0'
         version: 9.39.1(jiti@1.21.7)
@@ -604,9 +607,6 @@ importers:
       '@webpieces/api-doc-model':
         specifier: workspace:*
         version: link:../../docs/api-doc-model
-      '@webpieces/code-rules':
-        specifier: workspace:*
-        version: link:../code-rules
       '@webpieces/core-util':
         specifier: workspace:*
         version: link:../../core/core-util
