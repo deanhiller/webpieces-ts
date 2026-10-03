@@ -63,7 +63,7 @@ export class ReviewIdentityStamp {
  * Writes (from the PreToolUse hook) and consumes (from `wp-write-review`) {@link ReviewIdentityStamp}s.
  *
  * Both ends resolve the path from their OWN working directory through {@link DotWebpieces.local}, which is
- * keyed by git's answer for that tree — so the hook's payload cwd and the bin's process cwd land on the same
+ * keyed by git's answer for that tree — so the hook's effective command cwd and the bin's process cwd land on the same
  * file for the same worktree, and two worktrees never share a stamp.
  *
  * `@injectable(bindingScopeValues.Singleton)` so it is injected by type; {@link reviewIdentityStamps} is the

@@ -1,0 +1,14 @@
+{
+    "session_id": "01a100f6-e252-7513-9cc8-84d0f7a4489b",
+    "turn_id": "01a100f7-0387-7261-aa1c-99590cf0bf0b",
+    "transcript_path": null,
+    "cwd": "/private/tmp/wp-1105-probe/session",
+    "hook_event_name": "PreToolUse",
+    "model": "gpt-6.1-sol",
+    "permission_mode": "default",
+    "tool_name": "Bash",
+    "tool_input": {
+        "command": "pwd"
+    },
+    "tool_use_id": "exec-85d3344b-53ed-4806-b459-9bc98919c61e"
+}

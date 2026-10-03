@@ -1,6 +1,6 @@
 import { specTempDirs } from '@webpieces/tooling-testkit';
 import { describe, it, expect, vi } from 'vitest';
-import { execSync } from 'child_process';
+import { execSync, execFileSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 import { AtomicFile } from '@webpieces/tooling-common';
@@ -138,7 +138,7 @@ describe('ReviewerIdentityResolver — who is calling', () => {
     it('refuses a harness-launched call the hook did not stamp — it cannot say who is calling', () => {
         const dir = briefedRepo();
         expect(() => new ReviewerIdentityResolver(stamps).resolve(dir, 'security', { CODEX_THREAD_ID: 't-1' }))
-            .toThrow(/left no identity stamp/);
+            .toThrow(/no usable identity stamp/);
     });
 });
 
@@ -259,5 +259,94 @@ describe('wp-write-review fits the color to the round (issue #1053)', () => {
         await quietly((): Promise<void> => command().run(new WriteReviewOptions('security', RED, dir)));
         const verdictPath = reviewJson.checklistResultPath(reviewJson.summaryJsonPath(dir, 'dean-feat'), 'security', 1);
         expect(JSON.parse(fs.readFileSync(verdictPath, 'utf8')).status).toBe('red');
+    });
+});
+
+// Cross-package integration: the hook producer and the CLI writer must select the SAME namespace.
+describe('linked-worktree hook-to-writer routing (#1105)', () => {
+    function worktrees(): string[] {
+        const primary = briefedRepo();
+        const parent = specTempDirs.makeReal('wp-stamp-trees-');
+        const first = path.join(parent, 'first');
+        const second = path.join(parent, 'second');
+        git(primary, `git worktree add -q -b review-first "${first}"`);
+        git(primary, `git worktree add -q -b review-second "${second}"`);
+        for (const tree of [first, second]) {
+            receipts.write(tree, 'dean-feat', receipts.read(primary, 'dean-feat')!);
+        }
+        return [primary, first, second];
+    }
+
+    function submitHook(primary: string, target: string, agentId = 'reviewer-1105'): void {
+        const bash = `cd '${target}' && pnpm wp-write-review --checklist security`;
+        // Run the hook producer in a separate process, as in production. A static test import here
+        // would falsely add agent-workflow-rules to pr-gate's package dependency graph.
+        const producer = path.resolve(__dirname, '../../../../agent-workflow-rules/src/adapters/review-identity-stamper.ts');
+        const payload = JSON.stringify({
+            tool_name: 'Bash', tool_input: { command: bash }, cwd: primary,
+            turn_id: 'fixture-turn', session_id: 'fixture-session', agent_id: agentId, agent_type: 'default',
+        });
+        const hookScript = `
+            const { ReviewIdentityStamper } = require(${JSON.stringify(producer)});
+            const { CodexAdapter } = require('@webpieces/hook-runtime');
+            const payload = JSON.parse(process.argv[1]);
+            const event = new CodexAdapter().toEvent(payload, payload.cwd);
+            new ReviewIdentityStamper().stamp(event, payload.tool_input.command, payload.cwd);
+        `;
+        execFileSync(process.execPath, ['-r', '@swc-node/register', '-r', 'tsconfig-paths/register', '-e', hookScript, payload], {
+            env: { ...process.env, TS_NODE_PROJECT: path.resolve(__dirname, '../../../../../../tsconfig.base.json') },
+            stdio: 'pipe',
+        });
+    }
+
+    it('writes a legitimate verdict in the target worktree and consumes the hook stamp once', async () => {
+        const [primary, target, other] = worktrees();
+        submitHook(primary, target);
+        expect(fs.existsSync(stamps.stampPath(primary, 'security'))).toBe(false);
+        expect(stamps.take(other, 'security')).toBeNull();
+        expect(stamps.take(target, 'other-checklist')).toBeNull();
+        const stampPath = stamps.stampPath(target, 'security');
+        expect(stampPath).toContain(
+            `/.webpieces/worktrees/${path.basename(target)}/review-stamps/`,
+        );
+        const stamp = JSON.parse(fs.readFileSync(stampPath, 'utf8'));
+        expect(stamp.cwd).toBe(target);
+        expect(stamp.sessionId).toBe('fixture-session');
+        await command().run(new WriteReviewOptions('security', GREEN, target));
+        const record = provenance.read(
+            reviewJson.summaryJsonPath(target, 'dean-feat'),
+            'security',
+            1,
+        );
+        expect(record?.agentId).toBe('reviewer-1105');
+        expect(record?.harness).toBe('codex');
+        expect(stamps.take(target, 'security')).toBeNull();
+        expect(
+            provenance.read(reviewJson.summaryJsonPath(other, 'dean-feat'), 'security', 1),
+        ).toBeNull();
+    });
+
+    it('still refuses a coordinator routed into a worktree', () => {
+        const [primary, target] = worktrees();
+        submitHook(primary, target, '');
+        expect(() => command().run(new WriteReviewOptions('security', GREEN, target))).toThrow(
+            /COORDINATING agent/,
+        );
+        expect(stamps.take(target, 'security')).toBeNull();
+    });
+
+    it('reports the expected namespace when an old hook stamped the session tree', () => {
+        const [primary, target] = worktrees();
+        hookStamp(primary, 'codex', 'reviewer-1105');
+        const resolve = (): void => {
+            new ReviewerIdentityResolver(stamps).resolve(target, 'security', {
+                CODEX_THREAD_ID: 'fixture-session',
+            });
+        };
+        expect(resolve).toThrow(stamps.stampPath(target, 'security'));
+        expect(resolve).toThrow('Submission cwd: ' + target);
+        expect(resolve).toThrow('leading cd');
+        expect(resolve).not.toThrow('hooks are not installed');
+        expect(stamps.take(primary, 'security')?.agentId).toBe('reviewer-1105');
     });
 });

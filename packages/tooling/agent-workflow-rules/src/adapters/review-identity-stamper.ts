@@ -1,6 +1,6 @@
 import { ReviewIdentityStamp, ReviewIdentityStampService, reviewIdentityStamps } from '@webpieces/repo-workflow-core';
 
-import { AgentHookEvent } from '@webpieces/hook-runtime';
+import { AgentHookEvent, EffectiveTreeResolver } from '@webpieces/hook-runtime';
 
 /**
  * Tells `pnpm wp-write-review` WHO invoked it (issue #863).
@@ -21,10 +21,12 @@ export class ReviewIdentityStamper {
     stamp(event: AgentHookEvent, command: string, cwd: string): void {
         const checklists = this.stamps.invokedChecklists(command);
         if (checklists.length === 0) return;
+        // Match the Bash guards: payload cwd is the session directory, before any leading cd.
+        const commandCwd = new EffectiveTreeResolver().effectiveCwd(command, cwd);
         const now = new Date().toISOString();
         for (const checklistId of checklists) {
-            this.stamps.write(cwd, new ReviewIdentityStamp(
-                checklistId, event.aiType, event.sessionId, event.agentId, event.agentType, cwd, now));
+            this.stamps.write(commandCwd, new ReviewIdentityStamp(
+                checklistId, event.aiType, event.sessionId, event.agentId, event.agentType, commandCwd, now));
         }
     }
 }
