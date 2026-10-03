@@ -10,6 +10,7 @@ import {
 } from '../protocol';
 import { FixHint } from './fix-hint';
 import { L0_FAULT_NONE } from '@webpieces/rules-config';
+import { ProposedFile } from './proposed-file';
 
 // 'Read' is a first-class member because read-stale-guard is a file-scoped guard that runs on the
 // Read fast path. It is deliberately NOT in HANDLED_FILE_TOOLS (adapters/claude-code-adapter.ts), so
@@ -200,6 +201,7 @@ export class FileContext {
         filePath: string,
         relativePath: string,
         workspaceRoot: string,
+        readonly proposedFile: ProposedFile | null,
         currentFileLines: number,
         linesAdded: number,
         linesRemoved: number,

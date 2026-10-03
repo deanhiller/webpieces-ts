@@ -4,7 +4,7 @@ Source edit validation for AI coding agents, contributed independently to the sh
 
 ## In Scope
 
-- The thirteen source rule implementations, including the three source-only rules and ten edit contributions shared in concept with code-rules.
+- Fourteen source rule implementations, including method-size and keyword-type checks shared with the build gate.
 - Source rule registration, custom source rules and match rules.
 - `wp-ai-rules-hook`, its source pipeline, and source fixtures and golden tests.
 
