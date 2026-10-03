@@ -24,6 +24,7 @@ function ctx(relativePath: string, projectedLines: number): FileContext {
         path.join(WORKSPACE_ROOT, relativePath),
         relativePath,
         WORKSPACE_ROOT,
+        null,
         projectedLines,
         0,
         0,

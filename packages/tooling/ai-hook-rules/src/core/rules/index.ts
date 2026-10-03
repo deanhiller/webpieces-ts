@@ -11,3 +11,4 @@ export { NoSymbolDiTokensRule } from './no-symbol-di-tokens';
 export { NoCustomCssRule } from './no-custom-css';
 export { NoProcessExitOutsideMainRule } from './no-process-exit-outside-main';
 export { NoJsFilesRule } from './no-js-files';
+export { MaxMethodLinesRule } from './max-method-lines';

@@ -33,6 +33,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as ts from 'typescript';
+import { TypeKeywords, TypeKeywordSite } from '@webpieces/tooling-common/type-keywords';
 import { hasDisable, detectBase, getFileDiff, getChangedLineNumbers } from "@webpieces/rules-config";
 import { NoAnyUnknownConfig } from "./configs/rule-configs";
 import { ModifiedCodeMode } from '@webpieces/rules-sdk';
@@ -122,111 +123,19 @@ interface AnyUnknownInfo {
     hasDisableComment: boolean;
 }
 
-/**
- * Check if a node is in a catch clause variable declaration.
- * This allows `catch (err: unknown)` and `catch (err: unknown)` patterns.
- */
-function isInCatchClause(node: ts.Node): boolean {
-    let current: ts.Node | undefined = node.parent;
-    while (current) {
-        if (ts.isCatchClause(current)) {
-            // We're somewhere in a catch clause - check if we're in the variable declaration
-            const catchClause = current as ts.CatchClause;
-            if (catchClause.variableDeclaration) {
-                // Walk back up from the original node to see if we're part of the variable declaration
-                let checkNode: ts.Node | undefined = node.parent;
-                while (checkNode && checkNode !== current) {
-                    if (checkNode === catchClause.variableDeclaration) {
-                        return true;
-                    }
-                    checkNode = checkNode.parent;
-                }
-            }
-        }
-        current = current.parent;
-    }
-    return false;
-}
-
-/**
- * Find all `any` and `unknown` keywords in a file using AST.
- */
-// webpieces-disable max-lines-new-methods -- AST traversal with nested visitor function for keyword detection
+/** Find keyword types with the exact same syntax detector used by the pre-write hook. */
 function findAnyUnknownInFile(filePath: string, workspaceRoot: string): AnyUnknownInfo[] {
     const fullPath = path.join(workspaceRoot, filePath);
     if (!fs.existsSync(fullPath)) return [];
-
     const content = fs.readFileSync(fullPath, 'utf-8');
     const fileLines = content.split('\n');
-    const sourceFile = ts.createSourceFile(filePath, content, ts.ScriptTarget.Latest, true);
-
-    const violations: AnyUnknownInfo[] = [];
-
-    // webpieces-disable max-lines-new-methods -- AST visitor needs to handle both any and unknown keywords with full context detection
-    function visit(node: ts.Node): void {
-        // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
-        try {
-            // Detect `any` keyword
-            if (node.kind === ts.SyntaxKind.AnyKeyword) {
-                // Skip catch clause variable types: catch (err: unknown) is allowed
-                if (isInCatchClause(node)) {
-                    ts.forEachChild(node, visit);
-                    return;
-                }
-
-                const startPos = node.getStart(sourceFile);
-                if (startPos >= 0) {
-                    const pos = sourceFile.getLineAndCharacterOfPosition(startPos);
-                    const line = pos.line + 1;
-                    const column = pos.character + 1;
-                    const context = getViolationContext(node, sourceFile);
-                    const disabled = hasDisableComment(fileLines, line);
-
-                    violations.push({
-                        line,
-                        column,
-                        keyword: 'any',
-                        context,
-                        hasDisableComment: disabled,
-                    });
-                }
-            }
-
-            // Detect `unknown` keyword
-            if (node.kind === ts.SyntaxKind.UnknownKeyword) {
-                // Skip catch clause variable types: catch (err: unknown) is allowed
-                if (isInCatchClause(node)) {
-                    ts.forEachChild(node, visit);
-                    return;
-                }
-
-                const startPos = node.getStart(sourceFile);
-                if (startPos >= 0) {
-                    const pos = sourceFile.getLineAndCharacterOfPosition(startPos);
-                    const line = pos.line + 1;
-                    const column = pos.character + 1;
-                    const context = getViolationContext(node, sourceFile);
-                    const disabled = hasDisableComment(fileLines, line);
-
-                    violations.push({
-                        line,
-                        column,
-                        keyword: 'unknown',
-                        context,
-                        hasDisableComment: disabled,
-                    });
-                }
-            }
-        } catch (err: unknown) {
-            //const error = toError(err);
-            // Skip nodes that cause errors during analysis
-        }
-
-        ts.forEachChild(node, visit);
-    }
-
-    visit(sourceFile);
-    return violations;
+    return new TypeKeywords().parse(filePath, content).filter((site: TypeKeywordSite): boolean => !site.catchVariable).map((site: TypeKeywordSite): AnyUnknownInfo => ({
+        line: site.line,
+        column: site.column,
+        keyword: site.keyword,
+        context: getViolationContext(site.node, site.node.getSourceFile()),
+        hasDisableComment: hasDisableComment(fileLines, site.line),
+    }));
 }
 
 /**

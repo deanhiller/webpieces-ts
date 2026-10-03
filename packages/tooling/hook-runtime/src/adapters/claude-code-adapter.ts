@@ -62,13 +62,13 @@ export class ClaudeCodeAdapter {
         const filePath = toolInput.file_path;
         if (!filePath) return [];
         if (toolKind === 'Write') {
-            return [new FileOperation(toolKind, new NormalizedToolInput(filePath, [new NormalizedEdit('', toolInput.content || '')]))];
+            return [new FileOperation(toolKind, new NormalizedToolInput(filePath, [new NormalizedEdit('', toolInput.content || '', false)]))];
         }
         if (toolKind === 'Edit') {
-            return [new FileOperation(toolKind, new NormalizedToolInput(filePath, [new NormalizedEdit(toolInput.old_string || '', toolInput.new_string || '')]))];
+            return [new FileOperation(toolKind, new NormalizedToolInput(filePath, [new NormalizedEdit(toolInput.old_string || '', toolInput.new_string || '', toolInput.replace_all === true)]))];
         }
         const raw = Array.isArray(toolInput.edits) ? toolInput.edits : [];
-        const edits = raw.map((e: AgentEditEntry): NormalizedEdit => new NormalizedEdit(e.old_string || '', e.new_string || ''));
+        const edits = raw.map((e: AgentEditEntry): NormalizedEdit => new NormalizedEdit(e.old_string || '', e.new_string || '', e.replace_all === true));
         return [new FileOperation(toolKind, new NormalizedToolInput(filePath, edits))];
     }
 }

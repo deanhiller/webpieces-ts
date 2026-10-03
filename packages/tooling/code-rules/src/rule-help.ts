@@ -19,8 +19,8 @@ export const ruleHelp: Readonly<Record<string, RuleHelp>> = {
         'Apply this policy in source, or review its explicit settings in {configFile}. An intentional opt-out requires complete OFF settings.',
     ),
     'no-any-unknown': new RuleHelp(
-        'Require concrete types outside explicitly permitted opaque boundaries.',
-        'Apply this policy in source, or review its explicit settings in {configFile}. An intentional opt-out requires complete OFF settings.',
+        'Reject both any and unknown keyword types; use the actual concrete data type. Catch-variable annotations retain their specific exception.',
+        'Understand the data contract and reuse its concrete type or define a precise class, interface or type. Do not replace any with unknown or hide it behind a cast. Review explicit settings in {configFile} only for an intentional policy change.',
     ),
     'no-implicit-any': new RuleHelp(
         'Require explicit parameter types when inference does not establish them.',

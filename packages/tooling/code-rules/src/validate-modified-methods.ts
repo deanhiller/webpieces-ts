@@ -21,7 +21,8 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
-import * as ts from 'typescript';
+import { MethodLines, MethodLineSite } from '@webpieces/tooling-common/method-lines';
+import { MethodLinePolicy } from '@webpieces/rules-config/method-line-policy';
 import { writeTemplate, WEBPIECES_DISABLE, detectBase, getChangedFiles, getFileDiff, getChangedLineNumbers, findNewMethodSignaturesInDiff } from "@webpieces/rules-config";
 import { MaxMethodLinesConfig, MethodLimitMode } from "./configs/rule-configs";
 import { CodeValidator, ExecutorResult } from './code-validator';
@@ -46,38 +47,6 @@ const TMP_MD_FILE = 'webpieces.methodsize.md';
  */
 function writeTmpInstructions(workspaceRoot: string): string {
     return writeTemplate(workspaceRoot, TMP_MD_FILE);
-}
-
-/**
- * Parse a date string in yyyy/mm/dd format and return a Date object.
- * Returns null if the format is invalid.
- */
-function parseDisableDate(dateStr: string): Date | null {
-    // Match yyyy/mm/dd format
-    const match = dateStr.match(/^(\d{4})\/(\d{2})\/(\d{2})$/);
-    if (!match) return null;
-
-    const year = parseInt(match[1], 10);
-    const month = parseInt(match[2], 10) - 1; // JS months are 0-indexed
-    const day = parseInt(match[3], 10);
-
-    const date = new Date(year, month, day);
-
-    // Validate the date is valid (e.g., not Feb 30)
-    if (date.getFullYear() !== year || date.getMonth() !== month || date.getDate() !== day) {
-        return null;
-    }
-
-    return date;
-}
-
-/**
- * Check if a date is within the last month (not expired).
- */
-function isDateWithinMonth(date: Date): boolean {
-    const now = new Date();
-    const oneMonthAgo = new Date(now.getFullYear(), now.getMonth() - 1, now.getDate());
-    return date >= oneMonthAgo;
 }
 
 /**
@@ -106,76 +75,7 @@ interface DisableInfo {
  */
 // webpieces-disable max-lines-new-methods -- Complex validation logic with multiple escape hatch types
 function getDisableInfo(lines: string[], lineNumber: number): DisableInfo {
-    const startCheck = Math.max(0, lineNumber - 5);
-    for (let i = lineNumber - 2; i >= startCheck; i--) {
-        const line = lines[i]?.trim() ?? '';
-        if (line.startsWith('function ') || line.startsWith('class ') || line.endsWith('}')) {
-            break;
-        }
-        if (line.includes(WEBPIECES_DISABLE)) {
-            if (line.includes("max-lines-modified")) {
-                // Check for date in format: max-lines-modified yyyy/mm/dd
-                const dateMatch = line.match(/max-lines-modified\s+(\d{4}\/\d{2}\/\d{2}|XXXX\/XX\/XX)/);
-
-                if (!dateMatch) {
-                    // No date found - treat as expired (invalid)
-                    return { type: 'full', isExpired: true, date: undefined };
-                }
-
-                const dateStr = dateMatch[1];
-
-                // Secret permanent disable
-                if (dateStr === 'XXXX/XX/XX') {
-                    return { type: 'full', isExpired: false, date: dateStr };
-                }
-
-                const date = parseDisableDate(dateStr);
-                if (!date) {
-                    // Invalid date format - treat as expired
-                    return { type: 'full', isExpired: true, date: dateStr };
-                }
-
-                if (!isDateWithinMonth(date)) {
-                    // Date is expired (older than 1 month)
-                    return { type: 'full', isExpired: true, date: dateStr };
-                }
-
-                // Valid and not expired
-                return { type: 'full', isExpired: false, date: dateStr };
-            }
-            if (line.includes("max-lines-new-methods")) {
-                // Check for date in format: max-lines-new-methods yyyy/mm/dd
-                const dateMatch = line.match(/max-lines-new-methods\s+(\d{4}\/\d{2}\/\d{2}|XXXX\/XX\/XX)/);
-
-                if (!dateMatch) {
-                    // No date found - treat as expired (invalid)
-                    return { type: 'new-only', isExpired: true, date: undefined };
-                }
-
-                const dateStr = dateMatch[1];
-
-                // Secret permanent disable
-                if (dateStr === 'XXXX/XX/XX') {
-                    return { type: 'new-only', isExpired: false, date: dateStr };
-                }
-
-                const date = parseDisableDate(dateStr);
-                if (!date) {
-                    // Invalid date format - treat as expired
-                    return { type: 'new-only', isExpired: true, date: dateStr };
-                }
-
-                if (!isDateWithinMonth(date)) {
-                    // Date is expired (older than 1 month)
-                    return { type: 'new-only', isExpired: true, date: dateStr };
-                }
-
-                // Valid and not expired
-                return { type: 'new-only', isExpired: false, date: dateStr };
-            }
-        }
-    }
-    return { type: 'none', isExpired: false };
+    return new MethodLinePolicy().disableInfo(lines, lineNumber);
 }
 
 interface MethodInfo {
@@ -193,56 +93,12 @@ interface MethodInfo {
 function findMethodsInFile(filePath: string, workspaceRoot: string): MethodInfo[] {
     const fullPath = path.join(workspaceRoot, filePath);
     if (!fs.existsSync(fullPath)) return [];
-
     const content = fs.readFileSync(fullPath, 'utf-8');
-    const fileLines = content.split('\n');
-    const sourceFile = ts.createSourceFile(filePath, content, ts.ScriptTarget.Latest, true);
-
-    const methods: MethodInfo[] = [];
-
-    // webpieces-disable max-lines-new-methods -- AST visitor pattern requires handling multiple node types
-    function visit(node: ts.Node): void {
-        let methodName: string | undefined;
-        let startLine: number | undefined;
-        let endLine: number | undefined;
-
-        if (ts.isMethodDeclaration(node) && node.name) {
-            methodName = node.name.getText(sourceFile);
-            const start = sourceFile.getLineAndCharacterOfPosition(node.getStart());
-            const end = sourceFile.getLineAndCharacterOfPosition(node.getEnd());
-            startLine = start.line + 1;
-            endLine = end.line + 1;
-        } else if (ts.isFunctionDeclaration(node) && node.name) {
-            methodName = node.name.getText(sourceFile);
-            const start = sourceFile.getLineAndCharacterOfPosition(node.getStart());
-            const end = sourceFile.getLineAndCharacterOfPosition(node.getEnd());
-            startLine = start.line + 1;
-            endLine = end.line + 1;
-        } else if (ts.isArrowFunction(node)) {
-            if (ts.isVariableDeclaration(node.parent) && ts.isIdentifier(node.parent.name)) {
-                methodName = node.parent.name.getText(sourceFile);
-                const start = sourceFile.getLineAndCharacterOfPosition(node.getStart());
-                const end = sourceFile.getLineAndCharacterOfPosition(node.getEnd());
-                startLine = start.line + 1;
-                endLine = end.line + 1;
-            }
-        }
-
-        if (methodName && startLine !== undefined && endLine !== undefined) {
-            methods.push({
-                name: methodName,
-                line: startLine,
-                endLine: endLine,
-                lines: endLine - startLine + 1,
-                disableInfo: getDisableInfo(fileLines, startLine),
-            });
-        }
-
-        ts.forEachChild(node, visit);
-    }
-
-    visit(sourceFile);
-    return methods;
+    const lines = content.split('\n');
+    return new MethodLines().parse(filePath, content).map((site: MethodLineSite): MethodInfo => ({
+        name: site.name, line: site.line, lines: site.lines,
+        endLine: site.endLine, disableInfo: getDisableInfo(lines, site.line),
+    }));
 }
 
 /**
@@ -311,6 +167,7 @@ function findViolations(
     base: string,
     limit: number,
     disableAllowed: boolean,
+    allMethods: boolean,
     head?: string
 ): MethodViolation[] {
     const violations: MethodViolation[] = [];
@@ -321,7 +178,7 @@ function findViolations(
 
         const newMethodNames = findNewMethodSignaturesInDiff(diff);
         const changedLineNumbers = getChangedLineNumbers(diff);
-        if (changedLineNumbers.size === 0) continue;
+        if (changedLineNumbers.size === 0 && !allMethods) continue;
 
         const methods = findMethodsInFile(file, workspaceRoot);
 
@@ -332,6 +189,12 @@ function findViolations(
             // Skip methods with valid, non-expired full escape - unless disableAllowed is false
             if (disableAllowed && disableType === 'full' && !isExpired) continue;
             if (method.lines <= limit) continue;
+
+            if (allMethods) {
+                const violation = checkModifiedMethodViolation(file, method, disableAllowed);
+                if (violation) violations.push(violation);
+                continue;
+            }
 
             const isNewMethod = newMethodNames.has(method.name);
 
@@ -458,7 +321,7 @@ export async function runModifiedMethods(
 
         console.log(`\ud83d\udcc2 Checking ${changedFiles.length} changed file(s)...`);
 
-        const violations = findViolations(workspaceRoot, changedFiles, base, limit, disableAllowed, head);
+        const violations = findViolations(workspaceRoot, changedFiles, base, limit, disableAllowed, mode === 'NEW_AND_MODIFIED_FILES', head);
 
         if (violations.length === 0) {
             console.log('\u2705 All modified methods are under ' + limit + ' lines');
