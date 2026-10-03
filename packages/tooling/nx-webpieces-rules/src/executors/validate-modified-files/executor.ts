@@ -1,7 +1,7 @@
 import type { ExecutorContext } from '@nx/devkit';
 import { ExecutorResult } from '../../executor-result';
 import { MaxFileLinesValidator } from '@webpieces/code-rules';
-import { MaxFileLinesConfig } from '@webpieces/rules-config';
+import { MaxFileLinesConfig } from "@webpieces/code-rules";
 
 export default async function runExecutor(
     options: MaxFileLinesConfig,

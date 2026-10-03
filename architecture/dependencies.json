@@ -444,12 +444,11 @@
             "level": 2,
             "framework": ["node"],
             "role": "designed-lib",
-            "shortDescription": "Shared tooling configuration: validates webpieces.config.json, defines typed rule schemas and modes, supplies diagnostics, path and diff scoping, and owns PR-gate review state.",
+            "shortDescription": "Shared tooling configuration: validates webpieces.config.json, discovers owner-provided rule schemas, supplies diagnostics, path and diff scoping, and owns PR-gate review state.",
             "responsibilitiesFile": "packages/tooling/rules-config/responsibilities.md",
             "designFile": "packages/tooling/rules-config/design.json",
             "dependsOn": [
                 "repo-workflow-core",
-                "rules-sdk",
                 "tooling-testkit"
             ]
         },
@@ -512,6 +511,7 @@
             "shortDescription": "Own shared development fixtures, including scratch directory creation and cleanup. Consumers declare this package through devDependencies.",
             "responsibilitiesFile": "packages/tooling/tooling-testkit/responsibilities.md",
             "dependsOn": [
+                "rules-sdk",
                 "tooling-common"
             ]
         },

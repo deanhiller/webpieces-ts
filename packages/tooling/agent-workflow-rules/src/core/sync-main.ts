@@ -1,3 +1,4 @@
+import { BranchCreationGuardConfig } from '../configs/rule-configs';
 import { BranchReaper, DEFAULT_HANG_TIMEOUT_MINUTES, MainSyncStatusFile, MergedBranchesCache, MergedBranchesService, ReapResult, computeAllMainSyncStatuses, writeMainSyncStatusFile, writeMainSyncLock, tryAcquireMainSyncLock, finishedLock } from '@webpieces/repo-workflow-core';
 import { loadAndValidate } from '@webpieces/rules-config';
 
@@ -160,7 +161,7 @@ function summarize(file: MainSyncStatusFile): (branch: string) => string {
 function autoReap(repoRoot: string, cache: MergedBranchesCache): number {
     // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
     try {
-        const config = loadAndValidate(repoRoot).rulesConfig['branch-creation-guard'];
+        const config = loadAndValidate(repoRoot).rulesConfig['branch-creation-guard'] as BranchCreationGuardConfig | undefined;
         // Strictly opt-IN: only an explicit `true` reaps. `autoReapMergedBranches` is schema-required,
         // so every validated config states an answer — which means "absent" here is not a consumer
         // who wants the default, it is a config that never passed validation. Deleting branches on

@@ -1,3 +1,4 @@
+import { policyFixture } from '@webpieces/tooling-testkit';
 import { specTempDirs } from '@webpieces/tooling-testkit';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { mkdirSync, readFileSync, writeFileSync } from 'fs';
@@ -12,7 +13,7 @@ afterEach(() => vi.restoreAllMocks());
 
 describe('development hook installation after separating source and workflow packages', () => {
     it('installs both hooks from their owning builds without touching the real home', async () => {
-        const root = specTempDirs.make('wp-dev-hooks-');
+        const root = policyFixture.makeRepo('wp-dev-hooks-');
         fixture.home = join(root, 'home');
         vi.spyOn(process, 'cwd').mockReturnValue(root);
         vi.spyOn(console, 'log').mockImplementation(() => undefined);
@@ -33,7 +34,7 @@ describe('development hook installation after separating source and workflow pac
     });
 
     it.each(['ai-hook-rules', 'agent-workflow-rules'])('names the missing %s build and an executable cure', async (missing: string) => {
-        const root = specTempDirs.make('wp-dev-hooks-missing-');
+        const root = policyFixture.makeRepo('wp-dev-hooks-missing-');
         vi.spyOn(process, 'cwd').mockReturnValue(root);
         const error = vi.spyOn(console, 'error').mockImplementation(() => undefined);
         if (missing === 'agent-workflow-rules') {
@@ -48,7 +49,7 @@ describe('development hook installation after separating source and workflow pac
     });
 
     it.each(['rules-config', 'backup'])('carries the %s failure and cure in the thrown error', async (state: string) => {
-        const root = specTempDirs.make('wp-dev-hooks-state-');
+        const root = policyFixture.makeRepo('wp-dev-hooks-state-');
         fixture.home = join(root, 'home');
         vi.spyOn(process, 'cwd').mockReturnValue(root);
         const error = vi.spyOn(console, 'error').mockImplementation(() => undefined);

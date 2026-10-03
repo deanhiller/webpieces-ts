@@ -1,3 +1,4 @@
+import { policyFixture } from '@webpieces/tooling-testkit';
 import { describe, it, expect } from 'vitest';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
@@ -8,17 +9,17 @@ import { RulePackRegistry, NodeRulePackModuleLoader, RulePackDiscovery } from '@
 
 class Packs {
     static owner(name = 'client-policy'): RulePackManifest {
-        return new RulePackManifest(name, '1.2.3', 1, [new OwnedRuleDefinition('client-rule', { mode: new FieldDef('string', ['ON', 'OFF']), limit: new FieldDef('number') }, 1)], [new RuleContribution('client-rule', name, 'build')]);
+        return new RulePackManifest(name, '1.2.3', 2, [new OwnedRuleDefinition('client-rule', { mode: new FieldDef('string', ['ON', 'OFF']), limit: new FieldDef('number') }, 1, {}, { mode: 'ON', limit: 0 }, 'rules')], [new RuleContribution('client-rule', name, 'build')], [], []);
     }
 }
 
 describe('explicit rule pack registry', () => {
     it('loads an independent client module through public discovery and validates its custom schema', () => {
-        const root = specTempDirs.make('wp-client-pack-');
+        const root = policyFixture.makeRepo('wp-client-pack-');
         fs.writeFileSync(path.join(root, 'package.json'), '{"private":true}');
         fs.writeFileSync(path.join(root, 'client-pack.cjs'), `module.exports.rulePackManifest = {
-            packageName: 'client-policy', packageVersion: '1.2.3', apiVersion: 1,
-            ownedRules: [{ id: 'client-rule', schemaApiVersion: 1, schema: {
+            packageName: 'client-policy', packageVersion: '1.2.3', apiVersion: 2, migrations: [], safeguards: [],
+            ownedRules: [{ id: 'client-rule', schemaApiVersion: 1, optionalTuning: {}, recommendedSeed: { mode: 'ON', paths: ['src/**'], entries: [{ suffix: 'Dto' }] }, section: 'rules', schema: {
                 mode: { type: 'string', enumValues: ['ON', 'OFF'] },
                 paths: { type: 'string[]', nonEmpty: true },
                 entries: { type: 'object[]', elementSchema: { suffix: { type: 'string' } } }
@@ -44,28 +45,28 @@ describe('explicit rule pack registry', () => {
         expect(() => new RulePackRegistry([Packs.owner(), Packs.owner('other-owner')])).toThrow('multiple owners');
         expect(() => new RulePackRegistry([Packs.owner(), Packs.owner('other-owner')])).toThrow(InformAiError);
         const owner = Packs.owner();
-        expect(() => new RulePackRegistry([new RulePackManifest(owner.packageName, owner.packageVersion, 1, [...owner.ownedRules, ...owner.ownedRules], [])])).toThrow('multiple owners');
+        expect(() => new RulePackRegistry([new RulePackManifest(owner.packageName, owner.packageVersion, 2, [...owner.ownedRules, ...owner.ownedRules], [], [], [])])).toThrow('multiple owners');
     });
 
     it('rejects unknown owners and mismatched owner names', () => {
         for (const ownerPack of ['missing', 'other-owner']) {
-            const contributor = new RulePackManifest('contributor', '1.0.0', 1, [], [new RuleContribution('client-rule', ownerPack, 'lint')]);
+            const contributor = new RulePackManifest('contributor', '1.0.0', 2, [], [new RuleContribution('client-rule', ownerPack, 'lint')], [], []);
             expect(() => new RulePackRegistry([Packs.owner(), contributor])).toThrow('Unknown owner');
         }
     });
 
     it('rejects duplicate execution kinds but accepts independent build and lint contributions', () => {
-        const contributor = new RulePackManifest('linter', '1.0.0', 1, [], [new RuleContribution('client-rule', 'client-policy', 'lint')]);
+        const contributor = new RulePackManifest('linter', '1.0.0', 2, [], [new RuleContribution('client-rule', 'client-policy', 'lint')], [], []);
         expect(new RulePackRegistry([Packs.owner(), contributor]).ruleIds()).toEqual(['client-rule']);
-        const duplicate = new RulePackManifest('other-builder', '1.0.0', 1, [], [new RuleContribution('client-rule', 'client-policy', 'build')]);
+        const duplicate = new RulePackManifest('other-builder', '1.0.0', 2, [], [new RuleContribution('client-rule', 'client-policy', 'build')], [], []);
         expect(() => new RulePackRegistry([Packs.owner(), duplicate])).toThrow('Duplicate execution-kind');
     });
 
     it('rejects incompatible manifest and schema APIs without implicit upgrades', () => {
-        expect(() => new RulePackRegistry([new RulePackManifest('future', '2.0.0', 2, [], [])])).toThrow('Unsupported manifest API');
-        expect(() => new RulePackRegistry([new RulePackManifest('future', '2.0.0', 2, [], [])])).toThrow(InformAiError);
-        expect(() => new RulePackRegistry([new RulePackManifest('future', '2.0.0', 1, [new OwnedRuleDefinition('future-rule', {}, 2)], [])])).toThrow('Unsupported schema API');
-        expect(() => new RulePackRegistry([new RulePackManifest('future', '2.0.0', 1, [new OwnedRuleDefinition('future-rule', {}, 2)], [])])).toThrow(InformAiError);
+        expect(() => new RulePackRegistry([new RulePackManifest('future', '2.0.0', 3, [], [], [], [])])).toThrow('Unsupported manifest API');
+        expect(() => new RulePackRegistry([new RulePackManifest('future', '2.0.0', 3, [], [], [], [])])).toThrow(InformAiError);
+        expect(() => new RulePackRegistry([new RulePackManifest('future', '2.0.0', 2, [new OwnedRuleDefinition('future-rule', {}, 2, {}, { mode: 'ON', limit: 0 }, 'rules')], [], [], [])])).toThrow('Unsupported schema API');
+        expect(() => new RulePackRegistry([new RulePackManifest('future', '2.0.0', 2, [new OwnedRuleDefinition('future-rule', {}, 2, {}, { mode: 'ON', limit: 0 }, 'rules')], [], [], [])])).toThrow(InformAiError);
     });
 
     it('rejects duplicate pack declarations and unknown rules', () => {
@@ -73,12 +74,12 @@ describe('explicit rule pack registry', () => {
         expect(() => new RulePackRegistry([]).schemaFor('missing-rule')).toThrow('Unknown rule');
     });
     it('rejects malformed external schemas before registry queries can use them', () => {
-        const root = specTempDirs.make('wp-invalid-pack-');
+        const root = policyFixture.makeRepo('wp-invalid-pack-');
         fs.writeFileSync(path.join(root, 'package.json'), '{"private":true}');
         const file = path.join(root, 'invalid.cjs');
         fs.writeFileSync(file, `module.exports.rulePackManifest = {
-            packageName: 'client-policy', packageVersion: '1.0.0', apiVersion: 1,
-            ownedRules: [{ id: 'broken', schemaApiVersion: 1, schema: { entries: { type: 'object[]' } } }],
+            packageName: 'client-policy', packageVersion: '1.0.0', apiVersion: 2, migrations: [], safeguards: [],
+            ownedRules: [{ id: 'broken', schemaApiVersion: 1, optionalTuning: {}, recommendedSeed: {}, section: 'rules', schema: { entries: { type: 'object[]' } } }],
             contributions: []
         };`);
         expect(() => new RulePackDiscovery(new NodeRulePackModuleLoader(root)).discover([new RulePackDeclaration('./invalid.cjs')])).toThrow('Invalid schema');

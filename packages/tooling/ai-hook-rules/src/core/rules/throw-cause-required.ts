@@ -1,4 +1,5 @@
-import { ThrowCauseRequiredConfig, RULE_NAMES, Option } from '@webpieces/rules-config';
+import { Option } from "@webpieces/rules-config";
+import { ThrowCauseRequiredConfig } from "../../configs/rule-configs";
 
 import type { EditContext, Violation } from '@webpieces/hook-runtime';
 import { Violation as V } from '@webpieces/hook-runtime';
@@ -51,7 +52,7 @@ export class ThrowCauseRequiredRule extends EditRuleBase<ThrowCauseRequiredConfi
             if (CAUSE_PATTERN.test(stripped)) continue;
 
             const lineNum = i + 1;
-            if (disableAllowed && ctx.isLineDisabled(lineNum, RULE_NAMES.THROW_CAUSE_REQUIRED)) continue;
+            if (disableAllowed && ctx.isLineDisabled(lineNum, "throw-cause-required")) continue;
 
             violations.push(new V(lineNum, ctx.lines[i].trim()));
         }

@@ -14,3 +14,5 @@ Source edit validation for AI coding agents, contributed independently to the sh
 - Protocol normalization and generic rule evaluation (hook-runtime).
 - Git and worktree primitives (repo-workflow-core).
 - Config validation (rules-config), committed-diff validation (code-rules), and aggregate packaging (nx-webpieces-rules).
+
+This pack owns its concrete policy schemas, mode enums, optional tuning, and reviewed seeds. Workflow rule/field retirements and keyless safeguard metadata are published by the workflow owner.

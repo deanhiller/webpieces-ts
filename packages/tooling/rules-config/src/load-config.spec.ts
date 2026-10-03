@@ -1,18 +1,21 @@
+import { policyFixture } from '@webpieces/tooling-testkit';
+import { fixtureMigrations as RETIRED_CONFIG_KEYS, fixtureTuning as defaultRules, fixtureSchemas as RULE_SCHEMAS, fixtureHookGuardNames as SHIPPED_HOOK_GUARD_NAMES } from '@webpieces/tooling-testkit';
 import { specTempDirs } from '@webpieces/tooling-testkit';
 import * as fs from 'fs';
 import * as path from 'path';
 
 import { CONFIG_FILENAME } from './config-file';
 import { loadAndValidate } from './load-config';
-import { RETIRED_CONFIG_KEYS, RETIRED_SCOPE_RULE, RetiredConfigKey } from './retired-config-keys';
+import { RETIRED_SCOPE_RULE } from './retired-config-keys';
+import { RetiredConfigKey } from '@webpieces/rules-sdk';
 import { toError } from '@webpieces/tooling-common/to-error';
-import { defaultRules } from './default-rules';
-import { RULE_SCHEMAS } from './rule-schemas';
-import { HOOK_GUARD_NAMES as SHIPPED_HOOK_GUARD_NAMES } from './sections';
+
+
+
 
 
 function mktmp(contents: Record<string, string>): string {
-    const dir = specTempDirs.make('wp-config-');
+    const dir = policyFixture.makeRepo('wp-config-');
     for (const [name, body] of Object.entries(contents)) {
         fs.writeFileSync(path.join(dir, name), body);
     }

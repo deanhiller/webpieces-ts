@@ -18,7 +18,7 @@
  * role-specific prefix, known values, and violation message.
  */
 
-import { ProjectMode, RoleTagConfig } from '@webpieces/rules-config';
+import { ProjectMode, RoleTagConfig } from "./configs/rule-configs";
 import { CodeValidator, ExecutorResult } from './code-validator';
 import { injectable, bindingScopeValues } from 'inversify';
 import { MissingTagProject, TagRuleSpec, findProjectsMissingTag, runTagValidator } from './tag-rule';

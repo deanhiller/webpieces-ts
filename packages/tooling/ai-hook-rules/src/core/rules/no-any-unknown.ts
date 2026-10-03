@@ -1,4 +1,5 @@
-import { NoAnyUnknownConfig, RULE_NAMES } from '@webpieces/rules-config';
+import { SourceContributionConfig } from "../source-contribution-config";
+
 
 import type { EditContext, Violation } from '@webpieces/hook-runtime';
 import { Violation as V } from '@webpieces/hook-runtime';
@@ -9,8 +10,8 @@ import { FixHint, DisableEscape } from '@webpieces/hook-runtime';
 const ANY_PATTERN =
     /(?::\s*any\b|\bas\s+any\b|<any>|any\[\]|Array<any>|Promise<any>|Map<[^,<>]+,\s*any\s*>|Record<[^,<>]+,\s*any\s*>|Set<any>)/; // webpieces-disable no-any-unknown -- regex literal, not a type
 
-export class NoAnyUnknownRule extends EditRuleBase<NoAnyUnknownConfig> {
-    constructor(config: NoAnyUnknownConfig) { super(config, 'no-any-unknown', 'no-any-unknown'); }
+export class NoAnyUnknownRule extends EditRuleBase<SourceContributionConfig> {
+    constructor(config: SourceContributionConfig) { super(config, 'no-any-unknown', 'no-any-unknown'); }
 
     readonly description = 'Disallow the `any` keyword. Use concrete types or interfaces.';
     override readonly files = ['**/*.ts', '**/*.tsx'];
@@ -30,7 +31,7 @@ export class NoAnyUnknownRule extends EditRuleBase<NoAnyUnknownConfig> {
             const stripped = ctx.strippedLines[i];
             if (!ANY_PATTERN.test(stripped)) continue;
             const lineNum = i + 1;
-            if (disableAllowed && ctx.isLineDisabled(lineNum, RULE_NAMES.NO_ANY_UNKNOWN)) continue;
+            if (disableAllowed && ctx.isLineDisabled(lineNum, "no-any-unknown")) continue;
             violations.push(new V(lineNum, ctx.lines[i].trim()));
         }
         return violations;

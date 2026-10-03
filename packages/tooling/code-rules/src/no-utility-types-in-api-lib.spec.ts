@@ -4,7 +4,8 @@ import { execSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as ts from 'typescript';
-import { DiffScope, NoUtilityTypesInApiLibConfig, RuleFailError } from '@webpieces/rules-config';
+import { DiffScope, RuleFailError } from "@webpieces/rules-config";
+import { NoUtilityTypesInApiLibConfig } from "./configs/no-utility-types-config";
 
 import { ApiLibFile, ApiLibSite } from './api-lib-source-rule';
 import { NoUtilityTypesInApiLibValidator, UtilityTypeScanner } from './validate-no-utility-types-in-api-lib';

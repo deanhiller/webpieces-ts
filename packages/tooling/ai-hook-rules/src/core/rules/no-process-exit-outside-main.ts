@@ -1,4 +1,5 @@
-import { NoProcessExitOutsideMainConfig, RULE_NAMES, writeTemplateIfMissing, RepoRootFinder, Option } from '@webpieces/rules-config';
+import { SourceContributionConfig } from "../source-contribution-config";
+import { writeTemplateIfMissing, RepoRootFinder, Option } from "@webpieces/rules-config";
 
 import type { EditContext, Violation } from '@webpieces/hook-runtime';
 import { Violation as V } from '@webpieces/hook-runtime';
@@ -26,8 +27,8 @@ function enclosingFunctionName(strippedLines: readonly string[], idx: number): s
     return null;
 }
 
-export class NoProcessExitOutsideMainRule extends EditRuleBase<NoProcessExitOutsideMainConfig> {
-    constructor(config: NoProcessExitOutsideMainConfig) { super(config, 'no-process-exit-outside-main', 'no-process-exit-outside-main'); }
+export class NoProcessExitOutsideMainRule extends EditRuleBase<SourceContributionConfig> {
+    constructor(config: SourceContributionConfig) { super(config, 'no-process-exit-outside-main', 'no-process-exit-outside-main'); }
 
     readonly description = 'Disallow process.exit() outside a main()/runMain wrapper (and importing another module\'s main). A deep exit crashes a reused server/command too early; throw a semantic error and let main pick the exit code.';
     override readonly files = ['**/*.ts', '**/*.tsx'];
@@ -55,7 +56,7 @@ export class NoProcessExitOutsideMainRule extends EditRuleBase<NoProcessExitOuts
             const isImportMain = IMPORT_MAIN_REGEX.test(stripped);
             if (!isExit && !isImportMain) continue;
             const lineNum = i + 1;
-            if (disableAllowed && ctx.isLineDisabled(lineNum, RULE_NAMES.NO_PROCESS_EXIT_OUTSIDE_MAIN)) continue;
+            if (disableAllowed && ctx.isLineDisabled(lineNum, "no-process-exit-outside-main")) continue;
             const docPath = new RepoRootFinder().instructAiDocPath(ctx.workspaceRoot, INSTRUCT_FILE);
             violations.push(new V(lineNum, ctx.lines[i]?.trim() ?? '',
                 `A process exit outside main()/runMain. READ ${docPath} — throw a semantic error and let main pick the exit code.`));

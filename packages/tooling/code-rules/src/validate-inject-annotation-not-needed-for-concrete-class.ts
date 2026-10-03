@@ -43,13 +43,15 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as ts from 'typescript';
-import { hasDisable, RULE_NAMES, InjectAnnotationNotNeededForConcreteClassConfig, ModifiedCodeMode, detectBase, getFileDiff, getChangedLineNumbers, isPathExcluded } from '@webpieces/rules-config';
+import { hasDisable, detectBase, getFileDiff, getChangedLineNumbers, isPathExcluded } from "@webpieces/rules-config";
+import { InjectAnnotationNotNeededForConcreteClassConfig } from "./configs/rule-configs";
+import { ModifiedCodeMode } from '@webpieces/rules-sdk';
 import { CodeValidator, ExecutorResult } from './code-validator';
 import { injectable, bindingScopeValues } from 'inversify';
 import { shouldSkipRule } from './resolve-mode';
 import { ScanScope } from './scan-scope';
 
-const RULE_NAME = RULE_NAMES.INJECT_ANNOTATION_NOT_NEEDED_FOR_CONCRETE_CLASS;
+const RULE_NAME = "inject-annotation-not-needed-for-concrete-class";
 
 const SHARED_MESSAGE = `@inject(Foo) on a constructor parameter typed \`: Foo\` is noise — inversify resolves a constructor
 parameter by its class type via reflect-metadata, so \`private readonly foo: Foo\` already binds it

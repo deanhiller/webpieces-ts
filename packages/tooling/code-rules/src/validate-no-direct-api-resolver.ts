@@ -37,7 +37,8 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as ts from 'typescript';
-import { hasDisable, RULE_NAMES, AngularNoDirectApiInResolverConfig, DirectApiResolverMode, detectBase, getChangedFiles, getFileDiff, getChangedLineNumbers, findNewMethodSignaturesInDiff } from '@webpieces/rules-config';
+import { hasDisable, detectBase, getChangedFiles, getFileDiff, getChangedLineNumbers, findNewMethodSignaturesInDiff } from "@webpieces/rules-config";
+import { AngularNoDirectApiInResolverConfig, DirectApiResolverMode } from "./configs/rule-configs";
 import { CodeValidator, ExecutorResult } from './code-validator';
 import { injectable, bindingScopeValues } from 'inversify';
 import { shouldSkipRule } from './resolve-mode';
@@ -66,7 +67,7 @@ function hasDisableComment(lines: string[], lineNumber: number): boolean {
         if (line.startsWith('function ') || line.startsWith('class ') || line.endsWith('}')) {
             break;
         }
-        if (hasDisable(line, RULE_NAMES.NO_DIRECT_API_RESOLVER)) {
+        if (hasDisable(line, "no-direct-api-resolver")) {
             return true;
         }
     }

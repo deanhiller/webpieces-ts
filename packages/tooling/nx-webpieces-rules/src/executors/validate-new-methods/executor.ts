@@ -1,7 +1,7 @@
 import type { ExecutorContext } from '@nx/devkit';
 import { ExecutorResult } from '../../executor-result';
 import { runNewMethods } from '@webpieces/code-rules';
-import { MaxMethodLinesConfig } from '@webpieces/rules-config';
+import { MaxMethodLinesConfig } from "@webpieces/code-rules";
 
 export default async function runExecutor(
     options: MaxMethodLinesConfig,

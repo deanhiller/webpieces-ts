@@ -15,7 +15,9 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
-import { writeTemplate, hasDisable, RULE_NAMES, MaxFileLinesConfig, FileLimitMode, detectBase, getChangedFiles, isPathExcluded, GENERATED_CODE_PATHS, RuleFailError, Option } from '@webpieces/rules-config';
+import { writeTemplate, hasDisable, detectBase, getChangedFiles, isPathExcluded, GENERATED_CODE_PATHS, RuleFailError, Option } from "@webpieces/rules-config";
+import { MaxFileLinesConfig } from "./configs/rule-configs";
+import { FileLimitMode } from '@webpieces/rules-sdk';
 import { CodeValidator, ExecutorResult } from './code-validator';
 import { injectable, bindingScopeValues } from 'inversify';
 import { shouldSkipRule, SkipRuleResult } from './resolve-mode';
@@ -94,7 +96,7 @@ function checkDisableComment(content: string): DisableStatus {
     const lines = content.split('\n').slice(0, 5);
 
     for (const line of lines) {
-        if (hasDisable(line, RULE_NAMES.MAX_LINES_MODIFIED_FILES)) {
+        if (hasDisable(line, "max-lines-modified-files")) {
             // Found disable comment, now check for date
             // Format: // webpieces-disable max-lines-modified-files yyyy/mm/dd -- reason
             const dateMatch = line.match(/max-lines-modified-files\s+(\d{4}\/\d{2}\/\d{2}|XXXX\/XX\/XX)/);

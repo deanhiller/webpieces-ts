@@ -37,3 +37,5 @@ export = {
         'no-mat-cell-def': noMatCellDef,
     },
 };
+
+export { LintRuleConfig } from './lint-rule-config';

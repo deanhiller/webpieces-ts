@@ -21,14 +21,8 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
-import {
-    ApiClientPackagesEntry,
-    FrameworkFolderEntry,
-    loadAndValidate,
-    matchesAnyGlob,
-    RULE_NAMES,
-    RuleOptions,
-} from '@webpieces/rules-config';
+import { loadAndValidate, matchesAnyGlob, RuleOptions } from "@webpieces/rules-config";
+import { ApiClientPackagesEntry, FrameworkFolderEntry } from "../configs/tag-truth-configs";
 import type { EnhancedGraph, GraphEntry } from './graph-sorter';
 import { APP_ROLES, MetadataValidationError } from './graph-metadata';
 import { ProjectInfo } from './project-info';
@@ -119,9 +113,9 @@ export class TagTruthRules {
         const optionsOf = (name: string): RuleOptions | null =>
             gate.isDisabled(workspaceRoot, name, true) ? null : (rules.get(name)?.options ?? null);
 
-        const deps = optionsOf(RULE_NAMES.API_LIB_DEPENDENCIES);
-        const where = optionsOf(RULE_NAMES.API_LIB_PATH);
-        const folder = optionsOf(RULE_NAMES.FRAMEWORK_FOLDER);
+        const deps = optionsOf("api-lib-dependencies");
+        const where = optionsOf("api-lib-path");
+        const folder = optionsOf("framework-folder");
         return new TagTruthRules(
             deps === null ? null : TagTruthRules.dependenciesRule(deps),
             where === null ? null : new ApiLibPathRule(where['paths'] as string[]),
@@ -187,13 +181,13 @@ export class TagTruthValidator {
     ): string[] {
         const role = entry.role;
         if (role === undefined || !API_ROLES.includes(role)) return [];
-        const rulePrefix = `${RULE_NAMES.API_LIB_DEPENDENCIES}: '${name}' (role:${role})`;
+        const rulePrefix = `${"api-lib-dependencies"}: '${name}' (role:${role})`;
         const clientPackages = rule.apiClientPackages.get(name);
         if (role === API_CLIENT_ROLE && clientPackages === undefined) {
             return [
                 `${rulePrefix} has no apiClients entry — what an api-client talks to is stated, never inferred. ` +
                     `Add { "project": "${name}", "packages": [<its SDK, inversify, …>] } to ` +
-                    `${RULE_NAMES.API_LIB_DEPENDENCIES}.apiClients in webpieces.config.json, or retag it role:api-lib ` +
+                    `${"api-lib-dependencies"}.apiClients in webpieces.config.json, or retag it role:api-lib ` +
                     'if it bundles no implementation.',
             ];
         }
@@ -222,7 +216,7 @@ export class TagTruthValidator {
             problems.push(
                 `${rulePrefix} imports '${pkg}', which ${listName} does not list — an api library's wire contract ` +
                     `must not drag an outside runtime into every consumer. Remove the import, or add '${pkg}' ` +
-                    `to ${RULE_NAMES.API_LIB_DEPENDENCIES}.${role === API_CLIENT_ROLE ? `apiClients["${name}"].packages` : 'apiLibPackages'}.`,
+                    `to ${"api-lib-dependencies"}.${role === API_CLIENT_ROLE ? `apiClients["${name}"].packages` : 'apiLibPackages'}.`,
             );
         }
         return problems;
@@ -241,14 +235,14 @@ export class TagTruthValidator {
         const globs = `[${rule.paths.join(', ')}]`;
         if (isApi && !inPath) {
             return [
-                `${RULE_NAMES.API_LIB_PATH}: '${name}' is role:${entry.role} but lives at '${root}', outside ` +
-                    `${RULE_NAMES.API_LIB_PATH}.paths ${globs} — move it under one of them ` +
+                `${"api-lib-path"}: '${name}' is role:${entry.role} but lives at '${root}', outside ` +
+                    `${"api-lib-path"}.paths ${globs} — move it under one of them ` +
                     '(nx g @nx/workspace:move), so every contract in the repo is found in one place.',
             ];
         }
         if (inPath && !isApi) {
             return [
-                `${RULE_NAMES.API_LIB_PATH}: '${name}' lives at '${root}', under ${RULE_NAMES.API_LIB_PATH}.paths ` +
+                `${"api-lib-path"}: '${name}' lives at '${root}', under ${"api-lib-path"}.paths ` +
                     `${globs}, but is role:${entry.role ?? 'none'} — everything there is a contract. Retag it ` +
                     'role:api-lib (a contract and/or its DTOs) or role:api-client (a contract plus its SDK ' +
                     'adapter), or move it out of the api tree.',
@@ -263,7 +257,7 @@ export class TagTruthValidator {
         const set = FrameworkFolder.canonical(entry.framework);
         const role = entry.role;
         const governing = rule.folders.find((folder: FrameworkFolder) => matchesAnyGlob(root, folder.paths));
-        const prefix = `${RULE_NAMES.FRAMEWORK_FOLDER}: '${name}' at '${root}'`;
+        const prefix = `${"framework-folder"}: '${name}' at '${root}'`;
         if (governing !== undefined) {
             const problems: string[] = [];
             const glob = governing.paths.join(', ');
@@ -289,7 +283,7 @@ export class TagTruthValidator {
         if (homes.length === 0) return [];
         const globs = homes.map((folder: FrameworkFolder) => folder.paths.join(', ')).join(' | ');
         return [
-            `${prefix} is a role:${role} carrying [${set}], which ${RULE_NAMES.FRAMEWORK_FOLDER} places under ` +
+            `${prefix} is a role:${role} carrying [${set}], which ${"framework-folder"} places under ` +
                 `${globs} — move it there (nx g @nx/workspace:move), so the folder tells a reader what runs where.`,
         ];
     }

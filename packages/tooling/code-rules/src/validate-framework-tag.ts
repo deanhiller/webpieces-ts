@@ -35,7 +35,7 @@
  *                      owns ANY changed file (not just .ts, and not line-scoped).
  */
 
-import { ProjectMode, FrameworkTagConfig } from '@webpieces/rules-config';
+import { ProjectMode, FrameworkTagConfig } from "./configs/rule-configs";
 import { CodeValidator, ExecutorResult } from './code-validator';
 import { injectable, bindingScopeValues } from 'inversify';
 import {

@@ -1,6 +1,6 @@
 # A RULE MUST NOT HAVE A DEFAULT — the consumer decides, explicitly
 
-Read this when your diff adds or changes a webpieces RULE: a `RULE_SCHEMAS` entry, a `defaultRules`
+Read this when your diff adds or changes a webpieces RULE: an owner manifest/schema entry, an `optionalTuning`
 entry, a `FieldDef`'s optionality, or the code path that reads a rule's config.
 
 ## The rule
@@ -43,7 +43,7 @@ selects one of webpieces' OWN agent files; no consumer behaviour changes, and no
 is decided. The test is therefore not "is there a default?" but **"does this default decide something
 the CONSUMER owns?"** — whether a rule runs, which names are refused, what gets deleted.
 
-`defaultRules` survives for exactly one job: the value an **optional** field takes when a consumer
+Owner-provided `optionalTuning` survives for exactly one job: the value an **optional** field takes when a consumer
 omits it (`max-file-lines.limit: 900`). The rule runs either way; the knob tunes how loudly.
 
 `SEED_VALUES` (`seed-entry.ts`) is also not a default. A seed value is written INTO the consumer's own
@@ -61,7 +61,7 @@ has answered yet" must mean "delete no branches".
 
 ## Enforcement
 
-- `packages/tooling/rules-config/src/no-rule-defaults.spec.ts` — asserts `defaultRules` carries no
+- `packages/tooling/rules-config/src/no-rule-defaults.spec.ts` — pins the original tuning invariant; owner `rule-pack.spec.ts` tests and `RulePackRegistry` assert tuning carries no
   `mode` and no schema-required field, and that EVERY schema'd rule is demanded of the config.
 - `webpieces-config-defaults-reviewer` — REGISTERED in `commands.pr-gate.checklists` and REQUIRED over
   `packages/tooling/rules-config/**` and `webpieces.config.json`. Its checklist,
@@ -70,3 +70,7 @@ has answered yet" must mean "delete no branches".
 
 There is no new agent file. A `checklists` entry names a **doc**, and the one generic
 `webpieces-reviewer` reviews whichever doc the gate hands it.
+
+Ownership now lives in each execution pack (#1077). Add concrete schemas, mode enums, optional knobs,
+reviewed seeds, and rule/field migration instructions there. The SDK contains shared value contracts only.
+Do not add a concrete ID, schema import, seed, or tuning value back to `rules-config`.

@@ -34,7 +34,9 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
-import { hasDisable, RULE_NAMES, NoUnmanagedExceptionsConfig, ModifiedCodeMode, detectBase, getFileDiff, getChangedLineNumbers } from '@webpieces/rules-config';
+import { hasDisable, detectBase, getFileDiff, getChangedLineNumbers } from "@webpieces/rules-config";
+import { NoUnmanagedExceptionsConfig } from "./configs/rule-configs";
+import { ModifiedCodeMode } from '@webpieces/rules-sdk';
 import { CodeValidator, ExecutorResult } from './code-validator';
 import { injectable, bindingScopeValues } from 'inversify';
 import { shouldSkipRule } from './resolve-mode';
@@ -57,7 +59,7 @@ function hasDisableComment(lines: string[], lineNumber: number): boolean {
         if (line.startsWith('function ') || line.startsWith('class ') || line.endsWith('}')) {
             break;
         }
-        if (hasDisable(line, RULE_NAMES.NO_UNMANAGED_EXCEPTIONS)) {
+        if (hasDisable(line, "no-unmanaged-exceptions")) {
             return true;
         }
         if (line.includes('@webpieces/no-unmanaged-exceptions')) {

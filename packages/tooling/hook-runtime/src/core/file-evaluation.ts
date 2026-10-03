@@ -24,7 +24,7 @@ export class HookFileEvaluation {
         const governed = new TargetTreeResolver().governedPath(input.filePath, root);
         const rules = new DeleteScopedRules().narrow(toolKind, filterByExcludedPaths(contributions.rules, governed, loaded.excludePaths));
         if (rules.length === 0) return null;
-        const sync = checkConfigSync(rules.filter((rule: Rule): boolean => contributions.configuredRules.includes(rule)), loaded.rulesConfig);
+        const sync = checkConfigSync(rules.filter((rule: Rule): boolean => contributions.configuredRules.includes(rule)), loaded.rulesConfig, loaded.ruleRegistry);
         if (sync) return sync;
         const contexts = buildContexts(toolKind, input, root, governed);
         const groups = [...runEditRules(rules, contexts.editContexts), ...runFileRules(rules, contexts.fileContext)];

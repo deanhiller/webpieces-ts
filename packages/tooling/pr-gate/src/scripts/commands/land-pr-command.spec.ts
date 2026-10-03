@@ -1,3 +1,4 @@
+import { policyFixture } from '@webpieces/tooling-testkit';
 import { specTempDirs } from '@webpieces/tooling-testkit';
 import { execFileSync } from 'child_process';
 import * as fs from 'fs';
@@ -221,7 +222,7 @@ function landedBody(): string {
 
 beforeEach((): void => {
     savedCwd = process.cwd();
-    tmp = specTempDirs.make('wp-land-pr-');
+    tmp = policyFixture.makeRepo('wp-land-pr-');
     ghLog = path.join(tmp, 'gh.log');
     ghBodyCapture = path.join(tmp, 'landed-body.md');
     installFakeGh();

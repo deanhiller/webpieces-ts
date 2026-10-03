@@ -1,3 +1,4 @@
+import { policyFixture } from '@webpieces/tooling-testkit';
 import { specTempDirs } from '@webpieces/tooling-testkit';
 import { describe, it, expect } from 'vitest';
 import * as fs from 'fs';
@@ -29,7 +30,7 @@ import { writeReviewerAgent } from './reviewer-agent';
  */
 
 function mktmp(): string {
-    return specTempDirs.make('wp-neighbour-');
+    return policyFixture.makeRepo('wp-neighbour-');
 }
 
 /** A repo whose settings.json is fully current EXCEPT for the neighbour hooks the caller adds. */

@@ -1,6 +1,8 @@
 import { execSync } from 'child_process';
 
-import { BranchStateGuardConfig, BRANCH_STATE_GUARD_KEY, SyncFlowGuidance, Option } from '@webpieces/rules-config';
+import { SyncFlowGuidance, Option } from '@webpieces/rules-config';
+import { BRANCH_STATE_GUARD_KEY } from '../../policy-keys';
+import { BranchStateGuardConfig } from "../../configs/main-sync-guard-configs";
 import { DEFAULT_HANG_TIMEOUT_MINUTES, readMainSyncStatus, squashRecoverySteps, MainSyncStatus } from '@webpieces/repo-workflow-core';
 
 import type { FileContext, Violation } from '@webpieces/hook-runtime';

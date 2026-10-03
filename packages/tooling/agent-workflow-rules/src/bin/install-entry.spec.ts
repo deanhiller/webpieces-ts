@@ -1,3 +1,4 @@
+import { policyFixture } from '@webpieces/tooling-testkit';
 import { specTempDirs } from '@webpieces/tooling-testkit';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -7,7 +8,7 @@ import { renderShim, shimPath, healShim, findShimRoot, RECOVERY_CMD } from './sh
 
 
 function mktmp(): string {
-    return specTempDirs.make('wp-install-');
+    return policyFixture.makeRepo('wp-install-');
 }
 
 // Stage a repo whose committed shim is STALE (an old fail-open body), which is exactly the state a

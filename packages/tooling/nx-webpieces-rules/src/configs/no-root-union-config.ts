@@ -1,7 +1,5 @@
-import { FieldDef, SchemaShape, BaseRuleConfig, BASE_RULE_SCHEMA } from '@webpieces/rules-sdk';
-
-import { StructuralMode, STRUCTURAL_MODES } from './rule-configs';
-
+import { FieldDef, SchemaShape, BaseRuleConfig, BASE_RULE_SCHEMA } from "@webpieces/rules-sdk";
+import { StructuralMode, STRUCTURAL_MODES } from "./rule-configs";
 /**
  * `no-root-union-api-type` — a request or response type that IS a union, on any `@ApiPath` contract.
  *

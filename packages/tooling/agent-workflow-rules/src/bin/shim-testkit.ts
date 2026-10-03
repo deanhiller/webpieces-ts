@@ -1,3 +1,4 @@
+import { policyFixture } from '@webpieces/tooling-testkit';
 import { specTempDirs } from '@webpieces/tooling-testkit';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -56,7 +57,7 @@ export class ShimRun {
 export class ShimTestkit {
     /** A throwaway repo root under the OS temp dir. */
     mktmp(): string {
-        return specTempDirs.make('wp-setup-');
+        return policyFixture.makeRepo('wp-setup-');
     }
 
     /**

@@ -21,7 +21,8 @@
  * this rule is what forbids new ones in an api library.
  */
 
-import { DiffScope, OneEnumSpellingInApiLibConfig, RULE_NAMES } from '@webpieces/rules-config';
+import { DiffScope } from "@webpieces/rules-config";
+import { OneEnumSpellingInApiLibConfig } from "./configs/api-lib-spelling-configs";
 import { injectable, bindingScopeValues } from 'inversify';
 import * as ts from 'typescript';
 import { ApiLibEnumIndex, ObjectUnion } from './api-lib-enum-index';
@@ -227,7 +228,7 @@ export class OneEnumSpellingInApiLibValidator extends ApiLibSourceRule<OneEnumSp
     private readonly indexes = new Map<string, ApiLibEnumIndex>();
 
     constructor(config: OneEnumSpellingInApiLibConfig, roleResolver: ProjectRoleResolver, diffScope: DiffScope, scanScope: ScanScope) {
-        super(config, RULE_NAMES.ONE_ENUM_SPELLING_IN_API_LIB, roleResolver, diffScope, scanScope);
+        super(config, "one-enum-spelling-in-api-lib", roleResolver, diffScope, scanScope);
     }
 
     protected sitesIn(file: ApiLibFile): ApiLibSite[] {

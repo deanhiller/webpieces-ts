@@ -34,12 +34,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as ts from 'typescript';
-import {
-    loadAndValidate,
-    matchesAnyGlob,
-    WEBPIECES_DISABLE,
-    RULE_NAMES,
-} from '@webpieces/rules-config';
+import { loadAndValidate, matchesAnyGlob, WEBPIECES_DISABLE } from '@webpieces/rules-config';
 import { ProjectInfo } from '../project-info';
 import { RuleGate } from '../rule-gate';
 import {
@@ -52,7 +47,7 @@ import {
 } from './api-ast';
 
 /** The rule name, as it is written in a disable comment and as a config key. */
-export const ROOT_UNION_RULE = RULE_NAMES.NO_ROOT_UNION_API_TYPE;
+export const ROOT_UNION_RULE = "no-root-union-api-type";
 
 /**
  * `// webpieces-disable no-root-union-api-type -- <reason>`, with the reason CAPTURED so a

@@ -1,4 +1,5 @@
-import { CatchErrorPatternConfig, RULE_NAMES, Option } from '@webpieces/rules-config';
+import { SourceContributionConfig } from "../source-contribution-config";
+import { Option } from "@webpieces/rules-config";
 
 import type { EditContext, Violation } from '@webpieces/hook-runtime';
 import { Violation as V } from '@webpieces/hook-runtime';
@@ -34,8 +35,8 @@ interface ToErrorMatch {
     lineIndex: number;
 }
 
-export class CatchErrorPatternRule extends EditRuleBase<CatchErrorPatternConfig> {
-    constructor(config: CatchErrorPatternConfig) { super(config, 'catch-error-pattern', 'catch-error-pattern'); }
+export class CatchErrorPatternRule extends EditRuleBase<SourceContributionConfig> {
+    constructor(config: SourceContributionConfig) { super(config, 'catch-error-pattern', 'catch-error-pattern'); }
 
     readonly description = 'Catch blocks must use: catch (err: unknown) { const error = toError(err); }'; // webpieces-disable catch-error-pattern -- example text in a description string
     override readonly files = ['**/*.ts', '**/*.tsx'];
@@ -62,7 +63,7 @@ export class CatchErrorPatternRule extends EditRuleBase<CatchErrorPatternConfig>
             if (!catchMatch) continue;
 
             const lineNum = i + 1;
-            if (disableAllowed && ctx.isLineDisabled(lineNum, RULE_NAMES.CATCH_ERROR_PATTERN)) continue;
+            if (disableAllowed && ctx.isLineDisabled(lineNum, "catch-error-pattern")) continue;
 
             const actualParam = catchMatch[1];
             const typeAnnotation = catchMatch[2];

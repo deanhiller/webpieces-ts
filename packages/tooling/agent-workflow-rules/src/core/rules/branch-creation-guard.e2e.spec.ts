@@ -4,7 +4,7 @@ import { execSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 
-import { BranchCreationGuardConfig } from '@webpieces/rules-config';
+import { BranchCreationGuardConfig } from "../../configs/rule-configs";
 import { DeletableWorktree, MergedBranchesService, WorktreeService } from '@webpieces/repo-workflow-core';
 
 import { BashContext } from '@webpieces/hook-runtime';

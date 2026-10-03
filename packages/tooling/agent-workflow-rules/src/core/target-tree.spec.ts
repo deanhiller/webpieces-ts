@@ -5,7 +5,8 @@ import * as os from 'os';
 import * as path from 'path';
 import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 
-import { ExcludePaths, BranchStateGuardConfig } from '@webpieces/rules-config';
+import { ExcludePaths } from "@webpieces/rules-config";
+import { BranchStateGuardConfig } from "../configs/main-sync-guard-configs";
 import { MainSyncStatus, writeMainSyncStatus } from '@webpieces/repo-workflow-core';
 
 import type { FileContext, Rule } from '@webpieces/hook-runtime';

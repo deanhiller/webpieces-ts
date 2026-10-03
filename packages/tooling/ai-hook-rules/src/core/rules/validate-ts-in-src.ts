@@ -1,7 +1,8 @@
 import * as fs from 'fs';
 import * as path from 'path';
 
-import { ValidateTsInSrcConfig, isPathExcluded, Option } from '@webpieces/rules-config';
+import { isPathExcluded, Option } from "@webpieces/rules-config";
+import { ValidateTsInSrcConfig } from "../../configs/rule-configs";
 
 import type { FileContext, Violation } from '@webpieces/hook-runtime';
 import { Violation as V } from '@webpieces/hook-runtime';

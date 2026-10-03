@@ -1,7 +1,5 @@
-import { FieldDef, SchemaShape, BaseRuleConfig, BASE_RULE_SCHEMA } from '@webpieces/rules-sdk';
-
-import { ModifiedCodeMode, MODIFIED_CODE_MODES } from './rule-configs';
-
+import { FieldDef, SchemaShape, BaseRuleConfig, BASE_RULE_SCHEMA } from "@webpieces/rules-sdk";
+import { ModifiedCodeMode, MODIFIED_CODE_MODES } from "@webpieces/rules-sdk";
 /**
  * `no-utility-types-in-api-lib` (#1026) — in every `.ts` file under `paths`, refuse the TypeScript
  * utility types that turn a contract's field list (or its set of keys) into a type-level computation:

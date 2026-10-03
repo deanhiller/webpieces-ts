@@ -19,7 +19,8 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
-import { ChangedFilesOptions, DiffScope, ModifiedCodeMode } from '@webpieces/rules-config';
+import { ChangedFilesOptions, DiffScope } from "@webpieces/rules-config";
+import { ModifiedCodeMode } from '@webpieces/rules-sdk';
 import { InformAiError } from '@webpieces/tooling-common';
 import { toError } from '@webpieces/tooling-common/to-error';
 import { injectable, bindingScopeValues } from 'inversify';

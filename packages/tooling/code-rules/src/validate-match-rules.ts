@@ -10,18 +10,8 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
-import {
-    hasDisable,
-    MatchRuleConfig,
-    MatchRuleViolation,
-    findMatchRuleViolations,
-    renderMatchRuleMessage,
-    ModifiedCodeMode,
-    detectBase,
-    getFileDiff,
-    getChangedLineNumbers,
-    shouldSkipRule,
-} from '@webpieces/rules-config';
+import { hasDisable, MatchRuleConfig, MatchRuleViolation, findMatchRuleViolations, renderMatchRuleMessage, detectBase, getFileDiff, getChangedLineNumbers, shouldSkipRule } from "@webpieces/rules-config";
+import { ModifiedCodeMode } from '@webpieces/rules-sdk';
 import { injectable, bindingScopeValues } from 'inversify';
 import { ExecutorResult } from './code-validator';
 import { ScanScope } from './scan-scope';

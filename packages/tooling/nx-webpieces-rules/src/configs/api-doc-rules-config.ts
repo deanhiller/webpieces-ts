@@ -1,7 +1,4 @@
-import { FieldDef, SchemaShape, BaseRuleConfig, BASE_RULE_SCHEMA } from '@webpieces/rules-sdk';
-
-
-
+import { FieldDef, SchemaShape, BaseRuleConfig, BASE_RULE_SCHEMA } from "@webpieces/rules-sdk";
 /**
  * The modes the two CONTRACT rules accept (#1017).
  *
@@ -20,6 +17,7 @@ import { FieldDef, SchemaShape, BaseRuleConfig, BASE_RULE_SCHEMA } from '@webpie
  * type three files away — so the unit stays the PROJECT, which is the unit nx itself works in.
  */
 export const API_DOC_MODES = ['OFF', 'AFFECTED_PROJECT', 'RUN_EVERY_TIME'] as const;
+
 export type ApiDocMode = typeof API_DOC_MODES[number];
 
 /**

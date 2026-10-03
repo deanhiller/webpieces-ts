@@ -1,3 +1,6 @@
+import { policyFixture } from '@webpieces/tooling-testkit';
+import { RulePackRegistry } from '@webpieces/rules-config';
+const fixtureRuleRegistry = new RulePackRegistry(policyFixture.manifests());
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -63,7 +66,7 @@ export class RepoConfigFixture {
             const entries = config[section] as Record<string, unknown> | undefined;
             if (entries === undefined) continue;
             for (const name of Object.keys(entries)) {
-                if (retiredRuleFor(name) !== null) delete entries[name];
+                if (retiredRuleFor(name, fixtureRuleRegistry) !== null) delete entries[name];
             }
         }
     }
@@ -72,6 +75,7 @@ export class RepoConfigFixture {
     // webpieces-disable no-any-unknown -- see load()
     writeTo(dir: string, config: Record<string, unknown>): void {
         fs.writeFileSync(path.join(dir, 'webpieces.config.json'), JSON.stringify(config, null, 4) + '\n');
+        policyFixture.declareIn(dir);
     }
 
     // webpieces-disable no-any-unknown -- see load()
@@ -80,9 +84,9 @@ export class RepoConfigFixture {
         const rules = config['rules'] as Record<string, unknown>;
         // webpieces-disable no-any-unknown -- narrowing the two rule sections
         const guards = config['hookGuards'] as Record<string, unknown>;
-        for (const name of allRuleNames()) {
-            const section = sectionForRule(name) === 'hookGuards' ? guards : rules;
-            const seed = seedEntryForRule(name);
+        for (const name of allRuleNames(fixtureRuleRegistry)) {
+            const section = sectionForRule(name, fixtureRuleRegistry) === 'hookGuards' ? guards : rules;
+            const seed = seedEntryForRule(name, fixtureRuleRegistry);
             // webpieces-disable no-any-unknown -- one rule's opaque config entry, merged over its typed seed
             const existing = section[name] as Record<string, unknown> | undefined;
             section[name] = existing === undefined ? seed : { ...seed, ...existing };

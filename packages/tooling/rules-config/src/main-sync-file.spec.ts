@@ -1,3 +1,4 @@
+import { policyFixture } from '@webpieces/tooling-testkit';
 import { specTempDirs } from '@webpieces/tooling-testkit';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import * as fs from 'fs';
@@ -23,7 +24,7 @@ function status(branch: string, merged: boolean = false): MainSyncStatus {
 }
 
 beforeEach(() => {
-    dir = specTempDirs.make('msf-');
+    dir = policyFixture.makeRepo('msf-');
     file = path.join(dir, 'main-sync-status.json');
 });
 

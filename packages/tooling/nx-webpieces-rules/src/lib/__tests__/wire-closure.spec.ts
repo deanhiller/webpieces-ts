@@ -9,7 +9,7 @@ import { specTempDirs } from '@webpieces/tooling-testkit';
  */
 import * as fs from 'fs';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { RequiredTypeSuffixEntry } from '@webpieces/rules-config';
+import { RequiredTypeSuffixEntry } from "@webpieces/code-rules";
 import { ProjectInfo } from '../project-info';
 import { ApiContractDefect, ApiDocRule, MCP_RULE, OPENAPI_RULE } from '../api-usage/api-doc-rules';
 import { ApiDocRulesScan } from '../api-usage/api-doc-rules-scan';

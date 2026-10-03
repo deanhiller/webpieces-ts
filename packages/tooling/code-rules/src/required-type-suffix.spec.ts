@@ -4,7 +4,8 @@ import { execSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as ts from 'typescript';
-import { DiffScope, RequiredTypeSuffixConfig, RequiredTypeSuffixEntry, RuleFailError } from '@webpieces/rules-config';
+import { DiffScope, RuleFailError } from "@webpieces/rules-config";
+import { RequiredTypeSuffixConfig, RequiredTypeSuffixEntry } from "./configs/required-type-suffix-config";
 import { toError } from '@webpieces/tooling-common/to-error';
 
 import { ApiLibFile, ApiLibSite } from './api-lib-source-rule';

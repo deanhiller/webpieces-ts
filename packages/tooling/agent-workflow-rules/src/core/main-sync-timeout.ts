@@ -1,4 +1,6 @@
-import { loadAndValidate, WebpiecesRulesConfig, BranchStateGuardConfig, BRANCH_STATE_GUARD_KEY } from '@webpieces/rules-config';
+import { loadAndValidate, WebpiecesRulesConfig } from '@webpieces/rules-config';
+import { BRANCH_STATE_GUARD_KEY } from '../policy-keys';
+import { BranchStateGuardConfig } from "../configs/main-sync-guard-configs";
 import { DEFAULT_HANG_TIMEOUT_MINUTES } from '@webpieces/repo-workflow-core';
 
 import { toError } from '@webpieces/tooling-common/to-error';
@@ -40,7 +42,7 @@ export function hangTimeoutOf(config: BranchStateGuardConfig): number {
 /** The configured value for a caller that has ALREADY loaded the whole config. */
 // webpieces-disable no-function-outside-class -- module-scope config accessor, matching the shape of the runner helpers it was extracted from
 export function branchStateHangTimeout(config: WebpiecesRulesConfig): number {
-    const entry = config[BRANCH_STATE_GUARD_KEY];
+    const entry = config[BRANCH_STATE_GUARD_KEY] as BranchStateGuardConfig | undefined;
     return entry === undefined ? DEFAULT_HANG_TIMEOUT_MINUTES : hangTimeoutOf(entry);
 }
 

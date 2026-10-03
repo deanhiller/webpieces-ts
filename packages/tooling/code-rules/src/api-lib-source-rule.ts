@@ -19,18 +19,11 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as ts from 'typescript';
-import {
-    DiffScope,
-    ModifiedCodeMode,
-    NoInlineImportInApiLibConfig,
-    NoUtilityTypesInApiLibConfig,
-    OneEnumSpellingInApiLibConfig,
-    Option,
-    RequiredTypeSuffixConfig,
-    RuleFailError,
-    hasDisable,
-    isPathExcluded,
-} from '@webpieces/rules-config';
+import { DiffScope, Option, RuleFailError, hasDisable, isPathExcluded } from "@webpieces/rules-config";
+import { NoInlineImportInApiLibConfig, OneEnumSpellingInApiLibConfig } from "./configs/api-lib-spelling-configs";
+import { NoUtilityTypesInApiLibConfig } from "./configs/no-utility-types-config";
+import { RequiredTypeSuffixConfig } from "./configs/required-type-suffix-config";
+import { ModifiedCodeMode } from '@webpieces/rules-sdk';
 import { CodeValidator, ExecutorResult } from './code-validator';
 import { ProjectRoleResolver } from './project-role-resolver';
 import { ScanScope } from './scan-scope';

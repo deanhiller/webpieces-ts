@@ -1,4 +1,5 @@
-import { MaxFileLinesConfig, writeTemplateIfMissing, RepoRootFinder, isPathExcluded, GENERATED_CODE_PATHS, Option } from '@webpieces/rules-config';
+import { SourceContributionConfig } from "../source-contribution-config";
+import { writeTemplateIfMissing, RepoRootFinder, isPathExcluded, GENERATED_CODE_PATHS, Option } from "@webpieces/rules-config";
 
 import type { FileContext, Violation } from '@webpieces/hook-runtime';
 import { Violation as V } from '@webpieces/hook-runtime';
@@ -8,8 +9,8 @@ import { FixHint, DisableEscape } from '@webpieces/hook-runtime';
 const DEFAULT_LIMIT = 900;
 const INSTRUCT_FILE = 'webpieces.filesize.md';
 
-export class MaxFileLinesRule extends FileRuleBase<MaxFileLinesConfig> {
-    constructor(config: MaxFileLinesConfig) { super(config, 'max-file-lines', 'max-file-lines'); }
+export class MaxFileLinesRule extends FileRuleBase<SourceContributionConfig> {
+    constructor(config: SourceContributionConfig) { super(config, 'max-file-lines', 'max-file-lines'); }
 
     readonly description = 'Cap file length at a configured line limit.';
     override readonly files = ['**/*.ts', '**/*.tsx'];

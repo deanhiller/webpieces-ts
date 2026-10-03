@@ -23,7 +23,8 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as ts from 'typescript';
-import { FrameworkTsconfigConfig, matchesAnyGlob, Option, RuleFailError, RULE_NAMES } from '@webpieces/rules-config';
+import { matchesAnyGlob, Option, RuleFailError } from "@webpieces/rules-config";
+import { FrameworkTsconfigConfig } from "./configs/tag-truth-configs";
 import { injectable, bindingScopeValues } from 'inversify';
 import { CodeValidator, ExecutorResult } from './code-validator';
 import { ProjectScanTargets, ScannedProject } from './project-scan-targets';
@@ -123,7 +124,7 @@ export function frameworkTsconfigError(violations: readonly TsconfigRuntimeViola
             `\n      set compilerOptions: { ${v.snippet} }`)
         .join('\n');
     return new RuleFailError(
-        RULE_NAMES.FRAMEWORK_TSCONFIG,
+        "framework-tsconfig",
         'A library\'s tsconfig.lib.json lets code compile that the runtime its framework tags promise cannot run.\n' + details,
         undefined,
         undefined,
@@ -140,7 +141,7 @@ export class FrameworkTsconfigValidator extends CodeValidator<FrameworkTsconfigC
         config: FrameworkTsconfigConfig,
         private readonly targets: ProjectScanTargets,
     ) {
-        super(config, RULE_NAMES.FRAMEWORK_TSCONFIG, RULE_NAMES.FRAMEWORK_TSCONFIG);
+        super(config, "framework-tsconfig", "framework-tsconfig");
     }
 
     async run(workspaceRoot: string): Promise<ExecutorResult> {
@@ -148,7 +149,7 @@ export class FrameworkTsconfigValidator extends CodeValidator<FrameworkTsconfigC
         if (mode === 'OFF') return { success: true };
         const allowed = this.config.allowedPaths ?? [];
         const projects = this.targets
-            .projects(workspaceRoot, mode, RULE_NAMES.FRAMEWORK_TSCONFIG)
+            .projects(workspaceRoot, mode, "framework-tsconfig")
             .filter((p: ScannedProject) => !matchesAnyGlob(p.dir, allowed));
         const violations = new FrameworkTsconfigAudit().audit(workspaceRoot, projects);
         if (violations.length === 0) return { success: true };

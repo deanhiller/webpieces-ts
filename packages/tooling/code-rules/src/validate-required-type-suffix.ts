@@ -23,13 +23,8 @@
  * or a renamed one — so legacy names are grandfathered and a repo with hundreds of them can convert slowly.
  */
 
-import {
-    DiffScope,
-    RULE_NAMES,
-    RequiredTypeSuffixConfig,
-    RequiredTypeSuffixEntry,
-    matchesAnyGlob,
-} from '@webpieces/rules-config';
+import { DiffScope, matchesAnyGlob } from "@webpieces/rules-config";
+import { RequiredTypeSuffixConfig, RequiredTypeSuffixEntry } from "./configs/required-type-suffix-config";
 import { injectable, bindingScopeValues } from 'inversify';
 import * as ts from 'typescript';
 import { ApiLibFile, ApiLibSite, ApiLibSourceRule } from './api-lib-source-rule';
@@ -191,7 +186,7 @@ export class RequiredTypeSuffixValidator extends ApiLibSourceRule<RequiredTypeSu
         diffScope: DiffScope,
         scanScope: ScanScope,
     ) {
-        super(config, RULE_NAMES.REQUIRED_TYPE_SUFFIX, roleResolver, diffScope, scanScope);
+        super(config, "required-type-suffix", roleResolver, diffScope, scanScope);
     }
 
     protected sitesIn(file: ApiLibFile): ApiLibSite[] {

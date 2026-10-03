@@ -1,4 +1,3 @@
-import { NoCustomCssConfig } from './rule-configs';
 import { matchesAnyGlob } from './exclude-paths';
 
 /**
@@ -9,34 +8,20 @@ import { matchesAnyGlob } from './exclude-paths';
 const TEST_PATHS: readonly RegExp[] = [/\.test\.ts$/, /\.spec\.ts$/, /__tests__\//];
 
 /**
- * THE `no-custom-css` path exemption, shared by both engines that enforce the rule: the edit-time hook
- * (`@webpieces/ai-hook-rules`, per file) and the CI validator (`@webpieces/code-rules`, over the changed
- * file set).
- *
- * ## Why it lives in rules-config rather than in either engine
- *
- * `allowGlobs` is declared on {@link NoCustomCssConfig} and injected into BOTH engines. It used to be
- * honoured by the hook alone: the CI validator never read the field, so a consumer who exempted
- * `**\/design.html` watched the editor go quiet and CI keep failing on the very files it had exempted,
- * with no diagnostic anywhere. The cure is not "read the field in the validator too" — that is a second
- * implementation of one predicate, which is exactly the shape that produced the divergence. It is ONE
- * class, in the one package both engines already depend on for the schema.
- *
- * ## Constructed from the config, never from a loose list
- *
- * The constructor takes the whole {@link NoCustomCssConfig}, so a scope cannot be built that has quietly
- * dropped `allowGlobs` on the way in. TypeScript still cannot force a call site to CONSULT the scope —
- * that is the gap the two remaining engines close by having exactly one place each where the file set is
- * narrowed.
- *
- * Glob semantics are `matchesAnyGlob`: minimatch against the workspace-relative path, plus the
- * directory-prefix form (`libraries/vendor` also exempts `libraries/vendor/**`). An empty `allowGlobs`
- * matches nothing, so an unconfigured rule is enforced everywhere except the test paths above.
+ * Shared path exemption used by both edit-time and build-time CSS enforcement.
+ * The owning pack validates its schema; this helper consumes the resolved path
+ * settings without importing either implementation pack or its concrete config class.
+ * Both consumers use the same matcher so configured exemptions cannot drift.
  */
+/** A structural path-exemption input, independent of any concrete owner schema. */
+export class PathScopeConfig {
+    allowGlobs?: string[];
+}
+
 export class NoCustomCssScope {
     private readonly allowGlobs: readonly string[];
 
-    constructor(config: NoCustomCssConfig) {
+    constructor(config: PathScopeConfig) {
         this.allowGlobs = config.allowGlobs ?? [];
     }
 

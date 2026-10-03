@@ -14,3 +14,6 @@ export { NoCustomCssRule } from './core/rules/no-custom-css';
 export { NoJsFilesRule } from './core/rules/no-js-files';
 
 export { SourceHookRules } from './core/runner';
+
+export { THROW_CAUSE_MODES, VALIDATE_TS_MODES, ThrowCauseRequiredConfig, NoJsFilesConfig, ValidateTsInSrcConfig } from './configs/rule-configs';
+export type { ThrowCauseMode, ValidateTsMode } from './configs/rule-configs';

@@ -1,3 +1,4 @@
+import { policyFixture } from '@webpieces/tooling-testkit';
 import { specTempDirs } from '@webpieces/tooling-testkit';
 import { describe, it, expect } from 'vitest';
 import * as fs from 'fs';
@@ -37,7 +38,7 @@ const UNIDENTIFIED = new StreamIdentity('unknown', '', 'hook');
  * `logs/` and nothing else. A newly-added writer that invents a second state directory turns this red.
  */
 function tmpRoot(): string {
-    return specTempDirs.make('wp-loglayout-');
+    return policyFixture.makeRepo('wp-loglayout-');
 }
 
 // Every log file under `logs/`, named RELATIVE to it — so `calls/<writer>.log`, not `<writer>.log`.

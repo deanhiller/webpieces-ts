@@ -1,7 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 
-import { allRuleNames, seedEntryForRule, schemaFieldNames, sectionForRule, isHookGuard, DEFAULT_MATCH_RULES, DEFAULT_BUILD_COMMAND, RETIRED_CONFIG_KEYS, RETIRED_SCOPE_RULE } from '@webpieces/rules-config';
+import { RulePackRegistry, RulePackSelection, allRuleNames, seedEntryForRule, schemaFieldNames, sectionForRule, isHookGuard, DEFAULT_MATCH_RULES, DEFAULT_BUILD_COMMAND, RETIRED_SCOPE_RULE } from '@webpieces/rules-config';
 
 import { toError } from '@webpieces/tooling-common/to-error';
 
@@ -48,7 +48,7 @@ interface MigrateResult {
 }
 
 // webpieces-disable no-function-outside-class -- sibling of the other seed* helpers; this module is config-shape builders by design
-function seedRule(ruleName: string): RuleEntry {
+function seedRule(ruleName: string, registry: RulePackRegistry): RuleEntry {
     // Both escape hatches are seeded (and REQUIRED) so every rule block shows them: 0 = active,
     // null = no branch scoping. A human/AI edits these to time-box or branch-scope a rule off.
     //
@@ -59,7 +59,7 @@ function seedRule(ruleName: string): RuleEntry {
     // other schema-REQUIRED field. Seeding used to be a flat 'OFF' plus the two hatches, which was
     // wrong twice over: adopters got nothing enforced, AND the entry was missing required fields
     // (e.g. branch-creation-guard.autoReapMergedBranches), so the config failed to load on first run.
-    return seedEntryForRule(ruleName);
+    return seedEntryForRule(ruleName, registry);
 }
 
 // The guard-hint command strings live under `guardHints`. The flat `upsertPr`/`mergeComplete` keys this
@@ -166,8 +166,8 @@ function migrateGuardHints(commands: Json, changes: string[]): void {
  * when the entry says deleting is the whole fix, DELETE it, exactly as `ConfigPruner` does.
  */
 // webpieces-disable no-function-outside-class -- sibling of the other seed*/migrate* helpers; this module is config-shape builders by design
-function migrateRetiredRuleNames(section: Section, changes: string[]): void {
-    for (const entry of RETIRED_CONFIG_KEYS) {
+function migrateRetiredRuleNames(section: Section, changes: string[], registry: RulePackRegistry): void {
+    for (const entry of registry.migrations()) {
         if (entry.scope !== RETIRED_SCOPE_RULE) continue;
         if (!(entry.key in section)) continue;
         if (entry.prunable) {
@@ -175,9 +175,9 @@ function migrateRetiredRuleNames(section: Section, changes: string[]): void {
             changes.push(`deleted retired "${entry.key}" (it moved to ${entry.movedTo})`);
             continue;
         }
-        mergeIntoDestination(section, entry.key, entry.movedTo, changes);
+        mergeIntoDestination(section, entry.key, entry.movedTo, changes, registry);
     }
-    fillRequiredFields(section, changes);
+    fillRequiredFields(section, changes, registry);
 }
 
 /**
@@ -198,10 +198,10 @@ function migrateRetiredRuleNames(section: Section, changes: string[]): void {
  * across (`upsertPrCommand`) would produce a config the validator immediately rejects.
  */
 // webpieces-disable no-function-outside-class -- sibling of the other seed*/migrate* helpers; this module is config-shape builders by design
-function mergeIntoDestination(section: Section, key: string, destination: string, changes: string[]): void {
+function mergeIntoDestination(section: Section, key: string, destination: string, changes: string[], registry: RulePackRegistry): void {
     const source = asSection(section[key]);
     delete section[key];
-    const fields = schemaFieldNames(destination);
+    const fields = schemaFieldNames(destination, registry);
     const target = asSection(section[destination]);
     const existed = destination in section;
     const carried: string[] = [];
@@ -228,13 +228,13 @@ function mergeIntoDestination(section: Section, key: string, destination: string
  * rather than a first step. Only ever ADDS; a value the consumer stated is never touched.
  */
 // webpieces-disable no-function-outside-class -- sibling of the other seed*/migrate* helpers; this module is config-shape builders by design
-function fillRequiredFields(section: Section, changes: string[]): void {
+function fillRequiredFields(section: Section, changes: string[], registry: RulePackRegistry): void {
     for (const name of Object.keys(section)) {
-        if (schemaFieldNames(name) === null) continue;
+        if (schemaFieldNames(name, registry) === null) continue;
         // A rule ENTRY is a flat bag of scalars, so it is read as Json here rather than through
         // asSection (whose values are whole entries). Same object either way; only the view differs.
         const entry: Json = asSection(section[name]);
-        const seed = seedEntryForRule(name);
+        const seed = seedEntryForRule(name, registry);
         const added: string[] = [];
         for (const field of Object.keys(seed)) {
             if (field in entry) continue;
@@ -255,12 +255,12 @@ function seedMatchRules(): Json[] {
 }
 
 // webpieces-disable no-function-outside-class -- this module is deliberately DI-FREE: `wp-install-ai-hooks` must run on a half-written node_modules (see install-entry.ts), so it cannot build a container to hold a method
-function buildSeedConfig(): ConfigFile {
+function buildSeedConfig(registry: RulePackRegistry): ConfigFile {
     const rules: Section = {};
     const hookGuards: Section = {};
-    for (const name of allRuleNames()) {
-        if (sectionForRule(name) === 'hookGuards') hookGuards[name] = seedRule(name);
-        else rules[name] = seedRule(name);
+    for (const name of allRuleNames(registry)) {
+        if (sectionForRule(name, registry) === 'hookGuards') hookGuards[name] = seedRule(name, registry);
+        else rules[name] = seedRule(name, registry);
     }
     return {
         rules, hookGuards, commands: seedCommands(), excludePaths: seedExcludePaths(),
@@ -296,7 +296,7 @@ function asSection(value: Json[string]): Section {
 // Migrate an existing config to the rules / hookGuards / commands layout and add any missing rules.
 // Returns a human-readable list of what changed (empty = already up to date).
 // webpieces-disable no-function-outside-class -- this module is deliberately DI-FREE: `wp-install-ai-hooks` must run on a half-written node_modules (see install-entry.ts), so it cannot build a container to hold a method
-export function migrate(existing: Json): MigrateResult {
+export function migrate(existing: Json, registry: RulePackRegistry): MigrateResult {
     const changes: string[] = [];
     const rules: Section = asSection(existing['rules']);
     const hookGuards: Section = asSection(existing['hookGuards']);
@@ -310,12 +310,12 @@ export function migrate(existing: Json): MigrateResult {
     }
     // Apply retired RENAMES first, so a renamed guard is placed and presence-checked under its new name
     // rather than being treated as unknown and re-added alongside its own stale entry.
-    migrateRetiredRuleNames(rules, changes);
-    migrateRetiredRuleNames(hookGuards, changes);
+    migrateRetiredRuleNames(rules, changes, registry);
+    migrateRetiredRuleNames(hookGuards, changes, registry);
 
     // Move guards mistakenly left in rules into hookGuards.
     for (const name of Object.keys(rules)) {
-        if (isHookGuard(name)) {
+        if (isHookGuard(name, registry)) {
             hookGuards[name] = rules[name];
             delete rules[name];
             changes.push(`moved "${name}" from rules → hookGuards`);
@@ -323,19 +323,19 @@ export function migrate(existing: Json): MigrateResult {
     }
     // Move code rules mistakenly placed in hookGuards back into rules.
     for (const name of Object.keys(hookGuards)) {
-        if (!isHookGuard(name) && allRuleNames().includes(name)) {
+        if (!isHookGuard(name, registry) && allRuleNames(registry).includes(name)) {
             rules[name] = hookGuards[name];
             delete hookGuards[name];
             changes.push(`moved "${name}" from hookGuards → rules`);
         }
     }
     // Add any missing built-in into its correct section, ENFORCING at its recommended mode (not OFF).
-    for (const name of allRuleNames()) {
-        const target = sectionForRule(name) === 'hookGuards' ? hookGuards : rules;
+    for (const name of allRuleNames(registry)) {
+        const target = sectionForRule(name, registry) === 'hookGuards' ? hookGuards : rules;
         if (!(name in target)) {
-            const entry = seedRule(name);
+            const entry = seedRule(name, registry);
             target[name] = entry;
-            changes.push(`added "${name}" (${String(entry['mode'])}) to ${sectionForRule(name)}`);
+            changes.push(`added "${name}" (${String(entry['mode'])}) to ${sectionForRule(name, registry)}`);
         }
     }
     // Fill command defaults.
@@ -376,14 +376,15 @@ export function migrate(existing: Json): MigrateResult {
 // never was — `wp-upgrade-shim` is that.
 // webpieces-disable no-function-outside-class -- setup.ts is deliberately DI-free (it must run on a half-written node_modules; see install-entry.ts), so every function here is module-scope
 export function seedOrSyncConfig(projectRoot: string): void {
+    const registry = new RulePackSelection().loadFrom(projectRoot);
     const configPath = path.join(projectRoot, CONFIG_FILENAME);
     if (!fs.existsSync(configPath)) {
-        writeConfig(configPath, buildSeedConfig());
+        writeConfig(configPath, buildSeedConfig(registry));
         console.log(`  [ai-hooks] Created ${CONFIG_FILENAME} (rules / hookGuards / commands); each rule seeded at its recommended mode — gradual where supported, so only code you change is enforced.`);
         console.log('  Enable the ones you want by changing "mode".');
         return;
     }
-    const result = migrate(readConfig(configPath));
+    const result = migrate(readConfig(configPath), registry);
     if (result.changes.length === 0) {
         console.log(`  [ai-hooks] ${CONFIG_FILENAME} already uses the rules / hookGuards / commands layout — no changes.`);
         return;

@@ -1,7 +1,8 @@
 import { BaseRuleConfig } from '@webpieces/rules-sdk';
 import 'reflect-metadata';
 import { Container } from 'inversify';
-import { DiffScope, LoadedConfig, MatchRuleConfig, MODIFIED_CODE_MODES, RULE_SCHEMAS, loadAndValidate } from '@webpieces/rules-config';
+import { DiffScope, LoadedConfig, MatchRuleConfig, loadAndValidate } from "@webpieces/rules-config";
+import { MODIFIED_CODE_MODES } from '@webpieces/rules-sdk';
 import { InformAiError } from '@webpieces/tooling-common';
 
 import { ExecutorResult } from './code-validator';
@@ -54,10 +55,10 @@ export class CodeRulesBootstrap {
         container.bind(RuleSelection).toConstantValue(new RuleSelection(plan?.rule));
         container.bind(ScanRestriction).toConstantValue(new ScanRestriction(plan?.projects));
         for (const binding of CONFIG_BINDINGS) {
-            const ConfigClass = binding[0];
-            const configured = loaded.rulesConfig[binding[1]] as BaseRuleConfig | undefined;
+            const ConfigClass = binding.configClass;
+            const configured = loaded.rulesConfig[binding.ruleId] as BaseRuleConfig | undefined;
             const config = configured ?? new ConfigClass();
-            container.bind(ConfigClass).toConstantValue(plan?.rule === binding[1] ? this.overridden(config, plan) : config);
+            container.bind(ConfigClass).toConstantValue(plan?.rule === binding.ruleId ? this.overridden(config, plan) : config);
         }
 
         const result = await container.get(CodeRulesApp).run();
@@ -98,13 +99,13 @@ export class CodeRulesBootstrap {
     /** The mode set of a rule that reads its files through ScanScope, or undefined for any other rule. */
     private wholeScopeModesOf(rule: string, loaded: LoadedConfig): readonly string[] | undefined {
         if (loaded.matchRules.some((mr: MatchRuleConfig) => mr.name === rule)) return MODIFIED_CODE_MODES;
-        if (!CONFIG_BINDINGS.some((binding: ConfigBinding) => binding[1] === rule)) return undefined;
-        const modes = RULE_SCHEMAS[rule]?.['mode']?.enumValues ?? [];
+        if (!CONFIG_BINDINGS.some((binding: ConfigBinding) => binding.ruleId === rule)) return undefined;
+        const modes = CONFIG_BINDINGS.find(binding => binding.ruleId === rule)?.schema['mode']?.enumValues ?? [];
         return modes.includes('MODIFIED_PROJECTS') && modes.includes('RUN_EVERY_TIME') ? modes : undefined;
     }
 
     private debuggableRules(loaded: LoadedConfig): string[] {
-        const builtIns = CONFIG_BINDINGS.map((binding: ConfigBinding) => binding[1] as string);
+        const builtIns = CONFIG_BINDINGS.map((binding: ConfigBinding) => binding.ruleId as string);
         const names = [...builtIns, ...loaded.matchRules.map((mr: MatchRuleConfig) => mr.name)];
         return names.filter((name: string) => this.wholeScopeModesOf(name, loaded) !== undefined);
     }

@@ -26,7 +26,8 @@
  * unchanged either way.
  */
 
-import { DiffScope, NoUtilityTypesInApiLibConfig, RULE_NAMES, matchesAnyGlob } from '@webpieces/rules-config';
+import { DiffScope, matchesAnyGlob } from "@webpieces/rules-config";
+import { NoUtilityTypesInApiLibConfig } from "./configs/no-utility-types-config";
 import { injectable, bindingScopeValues } from 'inversify';
 import * as ts from 'typescript';
 import { ApiLibFile, ApiLibSite, ApiLibSourceRule } from './api-lib-source-rule';
@@ -150,7 +151,7 @@ export class NoUtilityTypesInApiLibValidator extends ApiLibSourceRule<NoUtilityT
     private readonly scanner = new UtilityTypeScanner();
 
     constructor(config: NoUtilityTypesInApiLibConfig, roleResolver: ProjectRoleResolver, diffScope: DiffScope, scanScope: ScanScope) {
-        super(config, RULE_NAMES.NO_UTILITY_TYPES_IN_API_LIB, roleResolver, diffScope, scanScope);
+        super(config, "no-utility-types-in-api-lib", roleResolver, diffScope, scanScope);
     }
 
     protected sitesIn(file: ApiLibFile): ApiLibSite[] {

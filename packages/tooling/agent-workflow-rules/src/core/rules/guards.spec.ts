@@ -1,9 +1,13 @@
+import { policyFixture } from '@webpieces/tooling-testkit';
+import { RulePackRegistry } from '@webpieces/rules-config';
+const fixtureRuleRegistry = new RulePackRegistry(policyFixture.manifests());
 import { specTempDirs } from '@webpieces/tooling-testkit';
 import { describe, it, expect } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
 import { WEBPIECES_TMP_DIR } from '@webpieces/tooling-common';
-import { MERGE_INFO_DIR, MERGE_IN_PROGRESS_FILE, PrLifecycleGuardConfig, DEFAULT_UPSERT_PR_COMMAND, DEFAULT_MERGE_COMPLETE_COMMAND, allRuleNames } from '@webpieces/rules-config';
+import { MERGE_INFO_DIR, MERGE_IN_PROGRESS_FILE, DEFAULT_UPSERT_PR_COMMAND, DEFAULT_MERGE_COMPLETE_COMMAND, allRuleNames } from "@webpieces/rules-config";
+import { PrLifecycleGuardConfig } from "../../configs/rule-configs";
 import { BashContext } from '@webpieces/hook-runtime';
 import { PrCreationOrPushGuardRule } from './pr-creation-or-push-guard';
 import { MergeInProgressGuardRule } from './merge-in-progress-guard';
@@ -28,12 +32,12 @@ function ctx(command: string, workspaceRoot: string): BashContext {
 // A real temp root: a blocking guard now WRITES the git-workflow doc it links to, so the root must be
 // a directory we own rather than a made-up path.
 function tempRoot(): string {
-    return specTempDirs.make('wp-guards-');
+    return policyFixture.makeRepo('wp-guards-');
 }
 
 // A workspace root carrying a merge marker, so merge-in-progress-guard sees a merge in flight.
 function withMarkerRoot(validated: boolean): string {
-    const root = specTempDirs.make('wp-guard-');
+    const root = policyFixture.makeRepo('wp-guard-');
     const dir = path.join(root, WEBPIECES_TMP_DIR, MERGE_INFO_DIR, 'feat');
     fs.mkdirSync(dir, { recursive: true });
     fs.writeFileSync(path.join(dir, MERGE_IN_PROGRESS_FILE), JSON.stringify({ validated }));
@@ -158,7 +162,7 @@ describe('merge-in-progress-guard', () => {
     });
 
     it('allows everything when no merge is in progress', () => {
-        const root = specTempDirs.make('wp-guard-');
+        const root = policyFixture.makeRepo('wp-guard-');
         expect(mergeInProgressGuard.check(ctx('git commit -m x', root)).length).toBe(0);
     });
 });
@@ -246,7 +250,7 @@ describe('merge-in-progress-guard fixHint tells the truth about what is blocked'
 // together here too.
 describe('built-in rule registry is validatable', () => {
     it('every built-in rule name has a schema (allRuleNames), so its config entry can be validated and seeded', () => {
-        const schema = new Set(allRuleNames());
+        const schema = new Set(allRuleNames(fixtureRuleRegistry));
         const missing = builtInConfigKeys.filter((name: string): boolean => !schema.has(name));
         expect(missing).toEqual([]);
     });

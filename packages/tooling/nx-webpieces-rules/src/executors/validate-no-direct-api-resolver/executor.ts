@@ -1,7 +1,7 @@
 import type { ExecutorContext } from '@nx/devkit';
 import { ExecutorResult } from '../../executor-result';
 import { NoDirectApiResolverValidator } from '@webpieces/code-rules';
-import { AngularNoDirectApiInResolverConfig } from '@webpieces/rules-config';
+import { AngularNoDirectApiInResolverConfig } from "@webpieces/code-rules";
 
 export default async function runExecutor(
     options: AngularNoDirectApiInResolverConfig,

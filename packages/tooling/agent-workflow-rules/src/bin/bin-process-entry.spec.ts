@@ -1,3 +1,4 @@
+import { policyFixture } from '@webpieces/tooling-testkit';
 import { specTempDirs } from '@webpieces/tooling-testkit';
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { spawnSync } from 'child_process';
@@ -90,7 +91,7 @@ function compileBin(entry: string): string {
 
 /** A temp tree that already carries a MANAGED (but reverted) shim — the state fault S blocks on. */
 function stageDriftedRepo(): string {
-    const root = specTempDirs.make('wp-bin-proc-');
+    const root = policyFixture.makeRepo('wp-bin-proc-');
     const target = shimPath(root);
     fs.mkdirSync(path.dirname(target), { recursive: true });
     fs.writeFileSync(target, '# hand-edited junk\n');
@@ -137,7 +138,7 @@ describe('wp-upgrade-shim, spawned as a process', () => {
     });
 
     it('exits NON-ZERO and explains when there is no managed shim to repair', () => {
-        const root = specTempDirs.make('wp-bin-proc-none-');
+        const root = policyFixture.makeRepo('wp-bin-proc-none-');
         const run = spawnSync(process.execPath, [compiled], { cwd: root, encoding: 'utf8', env: childEnv() });
 
         expect(run.status).toBe(1);

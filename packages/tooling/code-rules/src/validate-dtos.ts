@@ -31,7 +31,8 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as ts from 'typescript';
-import { PrismaValidateDtosConfig, PrismaValidateDtosMode, detectBase, getChangedFiles, getFileDiff, getChangedLineNumbers } from '@webpieces/rules-config';
+import { detectBase, getChangedFiles, getFileDiff, getChangedLineNumbers } from "@webpieces/rules-config";
+import { PrismaValidateDtosConfig, PrismaValidateDtosMode } from "./configs/rule-configs";
 import { CodeValidator, ExecutorResult } from './code-validator';
 import { injectable, bindingScopeValues } from 'inversify';
 import { shouldSkipRule } from './resolve-mode';

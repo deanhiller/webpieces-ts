@@ -17,15 +17,8 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
-import {
-    FrameworkPackagesConfig,
-    FrameworkPackagesEntry,
-    hasDisable,
-    matchesAnyGlob,
-    Option,
-    RuleFailError,
-    RULE_NAMES,
-} from '@webpieces/rules-config';
+import { hasDisable, matchesAnyGlob, Option, RuleFailError } from "@webpieces/rules-config";
+import { FrameworkPackagesConfig, FrameworkPackagesEntry } from "./configs/tag-truth-configs";
 import { injectable, bindingScopeValues } from 'inversify';
 import { CodeValidator, ExecutorResult } from './code-validator';
 import { ProjectScanTargets, ScannedProject } from './project-scan-targets';
@@ -107,8 +100,8 @@ export class FrameworkPackagesAudit {
             while (match !== null) {
                 const pkg = this.packageNameOf(match[1]);
                 const disabled =
-                    hasDisable(line, RULE_NAMES.FRAMEWORK_PACKAGES) ||
-                    (index > 0 && hasDisable(lines[index - 1], RULE_NAMES.FRAMEWORK_PACKAGES));
+                    hasDisable(line, "framework-packages") ||
+                    (index > 0 && hasDisable(lines[index - 1], "framework-packages"));
                 if (pkg !== null && !disabled) sites.push(new ImportSite(pkg, `${rel}:${index + 1}`));
                 match = IMPORT_RE.exec(line);
             }
@@ -142,7 +135,7 @@ export function frameworkPackagesError(violations: readonly FrameworkPackageViol
             `which only [${v.allowed.join(', ')}] projects may import`)
         .join('\n');
     return new RuleFailError(
-        RULE_NAMES.FRAMEWORK_PACKAGES,
+        "framework-packages",
         'A project imports a framework package that one of the runtimes its framework tags promise cannot run.\n' + details,
         undefined,
         undefined,
@@ -160,7 +153,7 @@ export class FrameworkPackagesValidator extends CodeValidator<FrameworkPackagesC
         config: FrameworkPackagesConfig,
         private readonly targets: ProjectScanTargets,
     ) {
-        super(config, RULE_NAMES.FRAMEWORK_PACKAGES, RULE_NAMES.FRAMEWORK_PACKAGES);
+        super(config, "framework-packages", "framework-packages");
     }
 
     async run(workspaceRoot: string): Promise<ExecutorResult> {
@@ -168,7 +161,7 @@ export class FrameworkPackagesValidator extends CodeValidator<FrameworkPackagesC
         if (mode === 'OFF') return { success: true };
         const allowed = this.config.allowedPaths ?? [];
         const projects = this.targets
-            .projects(workspaceRoot, mode, RULE_NAMES.FRAMEWORK_PACKAGES)
+            .projects(workspaceRoot, mode, "framework-packages")
             .filter((p: ScannedProject) => !matchesAnyGlob(p.dir, allowed));
         const violations = new FrameworkPackagesAudit(this.config.entries).audit(workspaceRoot, projects);
         if (violations.length === 0) return { success: true };

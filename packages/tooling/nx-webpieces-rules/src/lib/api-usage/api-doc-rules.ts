@@ -7,19 +7,12 @@
  */
 
 import * as fs from 'fs';
-import {
-    ChangedFilesOptions,
-    DiffScope,
-    loadAndValidate,
-    matchesAnyGlob,
-    RULE_NAMES,
-    WEBPIECES_DISABLE,
-} from '@webpieces/rules-config';
+import { ChangedFilesOptions, DiffScope, loadAndValidate, matchesAnyGlob, WEBPIECES_DISABLE } from '@webpieces/rules-config';
 import { RuleGate } from '../rule-gate';
 
 /** As written in a disable comment and as a config key. */
-export const OPENAPI_RULE = RULE_NAMES.API_RULES_FOR_OPENAPI;
-export const MCP_RULE = RULE_NAMES.API_RULES_FOR_MCP;
+export const OPENAPI_RULE = "api-rules-for-openapi";
+export const MCP_RULE = "api-rules-for-mcp";
 
 /** The `@ApiType` value that means "a partner reads this document". */
 export const EXTERNAL_CUSTOMER_API_TYPE = 'external-customer';

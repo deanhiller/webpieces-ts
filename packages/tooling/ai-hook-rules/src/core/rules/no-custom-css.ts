@@ -1,4 +1,5 @@
-import { NoCustomCssConfig, NoCustomCssScope, RULE_NAMES, Option } from '@webpieces/rules-config';
+import { SourceContributionConfig } from "../source-contribution-config";
+import { NoCustomCssScope, Option } from "@webpieces/rules-config";
 
 import type { EditContext, Violation } from '@webpieces/hook-runtime';
 import { Violation as V } from '@webpieces/hook-runtime';
@@ -14,12 +15,12 @@ const RE_INLINE_STYLE = /(^|\s)style\s*=\s*["']/; // static style="…"
 const RE_NG_STYLE = /\[?ngStyle\]?\s*=/; // [ngStyle]="…"
 const RE_STYLE_BINDING = /\[style(?:\.[\w.-]+)?\]/; // [style] / [style.width]
 
-export class NoCustomCssRule extends EditRuleBase<NoCustomCssConfig> {
+export class NoCustomCssRule extends EditRuleBase<SourceContributionConfig> {
     // The SAME exemption the CI validator narrows its changed-file set with. Shared, because a second copy
     // of this predicate is how `allowGlobs` came to be honoured here and ignored there.
     private readonly pathScope: NoCustomCssScope;
 
-    constructor(config: NoCustomCssConfig) {
+    constructor(config: SourceContributionConfig) {
         super(config, 'no-custom-css', 'no-custom-css');
         this.pathScope = new NoCustomCssScope(config);
     }
@@ -53,7 +54,7 @@ export class NoCustomCssRule extends EditRuleBase<NoCustomCssConfig> {
             const detail = this.detailForLine(ctx.strippedLines[i] ?? '', isHtml);
             if (!detail) continue;
             const lineNum = i + 1;
-            if (disableAllowed && ctx.isLineDisabled(lineNum, RULE_NAMES.NO_CUSTOM_CSS)) continue;
+            if (disableAllowed && ctx.isLineDisabled(lineNum, "no-custom-css")) continue;
             violations.push(new V(lineNum, `${detail}: ${ctx.lines[i]?.trim() ?? ''}`));
         }
         return violations;

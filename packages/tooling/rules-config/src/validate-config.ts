@@ -6,9 +6,10 @@ import * as path from 'path';
 // this marker is how it recognizes a placement error. See config-error-banner.ts.
 import { SECTION_PLACEMENT_MARKER } from './config-error-banner';
 import { sectionForRule, isHookGuard } from './sections';
-import { RULE_SCHEMAS, allRuleNames } from './rule-schemas';
+import { RulePackRegistry } from './rule-pack-registry';
+import { allRuleNames } from './rule-schemas';
 import { recommendedSeedModeFor, isGradualMode } from './seed-entry';
-import { MODIFIED_CODE_MODES } from './rule-configs';
+import { MODIFIED_CODE_MODES } from '@webpieces/rules-sdk';
 import {
     validateChecklistsSection, validateDevDeploySection, validateLandPrSection, validateNoGateSaltRationale,
     validateReviewerAgentKeys,
@@ -88,7 +89,7 @@ function objectListHint(def: FieldDef): string {
 }
 
 /** A rollout hint for the copy-paste snippet: recommend the narrowest gradual mode the rule supports. */
-function rolloutTip(schema: Record<string, FieldDef>): string {
+function rolloutTip(schema: Readonly<Record<string, FieldDef>>): string {
     const modes = schema['mode']?.enumValues ?? [];
     // Same source of truth as the seeder; only a GRADUAL recommendation gets the rollout prose, so a
     // rule whose recommendation falls through to ON/RUN_EVERY_TIME/OFF prints no tip (as before).
@@ -102,7 +103,7 @@ function rolloutTip(schema: Record<string, FieldDef>): string {
     );
 }
 
-function missingRuleSnippet(ruleName: string, schema: Record<string, FieldDef>): string {
+function missingRuleSnippet(ruleName: string, schema: Readonly<Record<string, FieldDef>>, registry: RulePackRegistry): string {
     // Required fields go in the copy-paste entry. The two universal escape hatches
     // (turnOffRuleUntilEpoch / turnOffRuleWhileOnBranch) are now REQUIRED, so they land in that block —
     // which is the whole point: every seeded rule shows both hatches. Optional fields are listed separately.
@@ -111,7 +112,7 @@ function missingRuleSnippet(ruleName: string, schema: Record<string, FieldDef>):
     const optional = fields.filter(f => schema[f].optional);
 
     const requiredLines = required.map(f => `    "${f}": ${valueHint(schema[f], f)}`);
-    const section = sectionForRule(ruleName);
+    const section = sectionForRule(ruleName, registry);
     let out =
         `[${ruleName}] Not configured in webpieces.config.json. Add this entry to the "${section}" section\n` +
         `(choose values appropriate for your project):\n\n` +
@@ -165,33 +166,7 @@ function unknownRuleError(ruleName: string): string {
 // Fields we DELETED from a rule's schema, keyed by "<rule>.<field>". The generic unknown-field error
 // ("Unknown field ... Valid fields: [...]") is correct but doesn't say WHY the field vanished, so an AI
 // might re-add it. These hints explain the removal so the only action left is to delete the key.
-const RETIRED_FIELD_HINTS: Record<string, string> = {
-    'runtime-architecture.servicePaths':
-        'This field was removed — it was never read. The runtime graph is derived automatically from ' +
-        'architecture/dependencies.json (apiRelations + project roles). Delete it.',
-    'runtime-architecture.apiProjectPaths':
-        'This field was removed — it was never read. The runtime graph is derived automatically from ' +
-        'architecture/dependencies.json, so there is NO list of api libs to maintain. Delete it (do not ' +
-        'enumerate api libs and do not replace it with a glob).',
-    'runtime-architecture.allowedCycles':
-        'This field was removed — a runtime cycle is not allowable at all any more. Levelling now FAILS ' +
-        'on any cycle, because CD deploys services in dependency order and a cycle has no such order. ' +
-        'Delete the key. If a cycle genuinely cannot be broken yet, declare it PER EDGE with a ' +
-        '`cutLegacyCycle:<targetService>` nx tag on the CALLING project, which admits the debt where ' +
-        '`grep -rn cutLegacyCycle` can enumerate it — there is no config key for it.',
-    // The two per-guard command strings, deleted as SECOND SPELLINGS of commands.guardHints. They were
-    // read at the point of use, so they BEAT the commands section — which made guardHintsWhy's promise
-    // ("rename a gated command here and every guard message follows") false for any repo that set them.
-    // Keyed on the new policy key, since that is the entry a consumer's field now sits inside.
-    'pr-lifecycle-guard.upsertPrCommand':
-        'This field was removed. The command the push/PR-creation block prints lives in ONE place: ' +
-        '"commands": { "guardHints": { "prCreationOrPush": <value> } }. Move your value there and delete ' +
-        'this key.',
-    'pr-lifecycle-guard.mergeCompleteCommand':
-        'This field was removed. The command the unfinished-merge block prints lives in ONE place: ' +
-        '"commands": { "guardHints": { "mergeInProgress": <value> } }. Move your value there and delete ' +
-        'this key.',
-};
+
 
 // Universal field renames (apply to EVERY rule/guard AND every match-rule, unlike the per-rule
 // RETIRED_FIELD_HINTS). When an entry still uses the old escape-hatch name, the generic unknown-field
@@ -217,7 +192,7 @@ function renamedFieldError(scope: string, oldKey: string, newKey: string): strin
  */
 // webpieces-disable no-any-unknown -- one config entry as opaque JSON; every field is typed-checked below
 // webpieces-disable no-function-outside-class -- module-scope validator helper, matching every other check in this file
-function fieldErrors(ruleName: string, entry: Record<string, unknown>, schema: Record<string, FieldDef>): string[] {
+function fieldErrors(ruleName: string, entry: Record<string, unknown>, schema: Readonly<Record<string, FieldDef>>, registry: RulePackRegistry): string[] {
     const errors: string[] = [];
     for (const [key, value] of Object.entries(entry)) {
         const fieldDef = schema[key];
@@ -227,7 +202,7 @@ function fieldErrors(ruleName: string, entry: Record<string, unknown>, schema: R
                 errors.push(renamedFieldError(`[${ruleName}]`, key, renamedTo));
                 continue;
             }
-            const retiredHint = RETIRED_FIELD_HINTS[`${ruleName}.${key}`];
+            const retiredHint = registry.migrations().find(entry => entry.scope === 'field' && entry.key === `${ruleName}.${key}`)?.instruction;
             const suffix = retiredHint ? ` ${retiredHint}` : '';
             errors.push(`[${ruleName}] Unknown field "${key}". Valid fields: [${Object.keys(schema).join(', ')}].${suffix}`);
             continue;
@@ -296,19 +271,24 @@ function arrayFieldErrors(label: string, value: unknown, def: FieldDef): string[
 // webpieces-disable no-any-unknown -- rawRules values are opaque JSON; each field is validated individually
 export function validateWebpiecesConfig(
     rawRules: Record<string, Record<string, unknown>>,
+    registry: RulePackRegistry,
     hasCustomRulesDir: boolean = false,
 ): string[] {
     const errors: string[] = [];
 
     // Check field-level correctness for rules that are present
     for (const [ruleName, entry] of Object.entries(rawRules)) {
-        const schema = RULE_SCHEMAS[ruleName];
+        const schema = registry.hasRule(ruleName) ? registry.schemaFor(ruleName) : undefined;
         if (!schema) {
+            if (registry.isSafeguard(ruleName) && !registry.migrations().some(entry => entry.scope === 'rule' && entry.key === ruleName)) {
+                errors.push(`[${ruleName}] is a cataloged safeguard, not a configurable policy. Delete its config entry; fixed safety cannot be disabled.`);
+                continue;
+            }
             // A name we KNOW is retired beats the generic unknown-rule message, because only the table
             // knows WHERE the setting went — a rename carries its value over, and a bare "delete it"
             // would throw that value away. It fires even when a rulesDir is set, because a custom rule
             // must not reuse a retired name.
-            const retired = retiredRuleFor(ruleName);
+            const retired = retiredRuleFor(ruleName, registry);
             if (retired) {
                 errors.push(retiredKeyError(retired));
                 continue;
@@ -319,7 +299,7 @@ export function validateWebpiecesConfig(
             if (!hasCustomRulesDir) errors.push(unknownRuleError(ruleName));
             continue;
         }
-        errors.push(...fieldErrors(ruleName, entry, schema));
+        errors.push(...fieldErrors(ruleName, entry, schema, registry));
         // Required fields must actually be present. Until now the loop above only checked
         // fields that WERE present, so an entry like `{}` (or one missing `mode` /
         // `turnOffRuleUntilEpoch`) slipped through. Every non-optional schema field is mandatory.
@@ -333,9 +313,10 @@ export function validateWebpiecesConfig(
     // Every built-in rule must be explicitly configured — no silent defaults.
     // When a new rule is added to the framework, this check surfaces it immediately
     // with a ready-to-copy snippet so AI can configure it in one pass.
-    for (const [ruleName, schema] of Object.entries(RULE_SCHEMAS)) {
+    for (const ruleName of registry.ruleIds()) {
+        const schema = registry.schemaFor(ruleName);
         if (!(ruleName in rawRules)) {
-            errors.push(missingRuleSnippet(ruleName, schema));
+            errors.push(missingRuleSnippet(ruleName, schema, registry));
         }
     }
 
@@ -671,10 +652,11 @@ export function validateMatchRulesSection(section: unknown): string[] {
 export function validateSectionPlacement(
     rulesSection: Record<string, Record<string, unknown>>,
     hookGuardsSection: Record<string, Record<string, unknown>>,
+    registry: RulePackRegistry,
 ): string[] {
     const errors: string[] = [];
     for (const name of Object.keys(rulesSection)) {
-        if (isHookGuard(name)) {
+        if (isHookGuard(name, registry)) {
             errors.push(
                 `[${name}] is a hook guard and ${SECTION_PLACEMENT_MARKER} "hookGuards" section, not "rules". ` +
                 `Move it.`,
@@ -683,7 +665,7 @@ export function validateSectionPlacement(
     }
     for (const name of Object.keys(hookGuardsSection)) {
         // Only flag KNOWN code rules misplaced into hookGuards; unknown names may be custom rules.
-        if (!isHookGuard(name) && RULE_SCHEMAS[name]) {
+        if (!isHookGuard(name, registry) && registry.hasRule(name)) {
             errors.push(
                 `[${name}] is a code rule and ${SECTION_PLACEMENT_MARKER} "rules" section, not "hookGuards". ` +
                 `Move it.`,

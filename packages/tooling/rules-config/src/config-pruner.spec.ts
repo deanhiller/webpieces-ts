@@ -1,3 +1,8 @@
+import { RulePackSelection } from '@webpieces/rules-config';
+import { policyFixture } from '@webpieces/tooling-testkit';
+import { RulePackRegistry } from '@webpieces/rules-config';
+const fixtureRuleRegistry = new RulePackRegistry(policyFixture.manifests());
+import { fixtureMigrations as RETIRED_CONFIG_KEYS } from '@webpieces/tooling-testkit';
 import { specTempDirs } from '@webpieces/tooling-testkit';
 import { describe, it, expect, afterEach } from 'vitest';
 import * as fs from 'fs';
@@ -10,7 +15,7 @@ import { PRUNE_UNKNOWN_COMMAND } from './constants';
 import { CONFIG_POLICY_DOC, formatConfigErrorsBanner } from './config-error-banner';
 import { HomeConfigService } from './home-config';
 import { loadTemplate } from './load-template';
-import { RETIRED_CONFIG_KEYS, RETIRED_SCOPE_RULE, retiredKeyError } from './retired-config-keys';
+import { RETIRED_SCOPE_RULE, retiredKeyError } from './retired-config-keys';
 import { toError } from '@webpieces/tooling-common/to-error';
 import { validateWebpiecesConfig } from './validate-config';
 
@@ -40,19 +45,19 @@ afterEach(() => {
 
 /** A throwaway repo dir holding one webpieces.config.json. Returns the dir. */
 function repoWith(config: string): string {
-    const dir = specTempDirs.make('wp-prune-');
+    const dir = policyFixture.makeRepo('wp-prune-');
     dirs.push(dir);
     fs.writeFileSync(path.join(dir, 'webpieces.config.json'), config);
     return dir;
 }
 
 function pruner(): ConfigPruner {
-    return new ConfigPruner(new ConfigFile(), new AtomicFile());
+    return new ConfigPruner(new ConfigFile(), new AtomicFile(), new RulePackSelection());
 }
 
 /** The one error `validateWebpiecesConfig` produced for `name` (missing-OTHER-rule errors ignored). */
 function errorFor(name: string, rawRules: Record<string, Record<string, unknown>>): string {
-    const matching = validateWebpiecesConfig(rawRules).filter((e: string): boolean => e.includes(`[${name}]`));
+    const matching = validateWebpiecesConfig(rawRules, fixtureRuleRegistry).filter((e: string): boolean => e.includes(`[${name}]`));
     expect(matching, `exactly one error for ${name}`).toHaveLength(1);
     return matching[0];
 }
@@ -106,7 +111,7 @@ describe('case 1 — retired key, validator knows the retirement', () => {
         const after = JSON.parse(fs.readFileSync(path.join(dir, 'webpieces.config.json'), 'utf8')) as
             Record<string, Record<string, Record<string, unknown>>>;
         expect(Object.keys(after['hookGuards'])).toEqual([]);
-        const stillReported = validateWebpiecesConfig(after['hookGuards'])
+        const stillReported = validateWebpiecesConfig(after['hookGuards'], fixtureRuleRegistry)
             .filter((e: string): boolean => e.includes('whole-repo-build-guard'));
         expect(stillReported).toEqual([]);
     });
@@ -173,7 +178,7 @@ describe('case 2 — retired key, validator too old to know it (generic fallback
  */
 describe('case 3 — the machine-local file is the one that is wrong', () => {
     function homeError(contents: string): string {
-        const home = specTempDirs.make('wp-home-');
+        const home = policyFixture.makeRepo('wp-home-');
         dirs.push(home);
         const file = path.join(home, '.webpieces', 'config.json');
         fs.mkdirSync(path.dirname(file), { recursive: true });
@@ -340,7 +345,7 @@ describe('the linked policy doc agrees with the banner', () => {
 describe('case 5 — the output never contradicts itself about `pnpm install`', () => {
     /** The complete thing a reader sees: the errors, rendered inside the banner. */
     function fullOutput(rawRules: Record<string, Record<string, unknown>>): string {
-        return formatConfigErrorsBanner(validateWebpiecesConfig(rawRules));
+        return formatConfigErrorsBanner(validateWebpiecesConfig(rawRules, fixtureRuleRegistry));
     }
 
     const outputs: ReadonlyArray<readonly [string, string]> = [

@@ -1,0 +1,150 @@
+{
+  "branch-creation-guard": {
+    "schema": {
+      "mode": {
+        "type": "string",
+        "enumValues": [
+          "ON",
+          "OFF",
+          "ON_NO_SUBBRANCHES"
+        ],
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "subBranchNaming": {
+        "type": "string",
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "branchFormat": {
+        "type": "string",
+        "optional": true,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "maxLocalBranches": {
+        "type": "number",
+        "optional": true,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "maxWorktrees": {
+        "type": "number",
+        "optional": true,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "autoReapMergedBranches": {
+        "type": "boolean",
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "turnOffRuleUntilEpoch": {
+        "type": "number",
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "turnOffRuleWhileOnBranch": {
+        "type": "string",
+        "optional": false,
+        "nullable": true,
+        "nonEmpty": false
+      }
+    },
+    "optionalTuning": {},
+    "recommendedSeed": {
+      "mode": "ON",
+      "turnOffRuleUntilEpoch": 0,
+      "turnOffRuleWhileOnBranch": null,
+      "subBranchNaming": "feature/<ticket>/<short-description>",
+      "autoReapMergedBranches": false
+    }
+  },
+  "pr-lifecycle-guard": {
+    "schema": {
+      "mode": {
+        "type": "string",
+        "enumValues": [
+          "ON",
+          "OFF"
+        ],
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "turnOffRuleUntilEpoch": {
+        "type": "number",
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "turnOffRuleWhileOnBranch": {
+        "type": "string",
+        "optional": false,
+        "nullable": true,
+        "nonEmpty": false
+      }
+    },
+    "optionalTuning": {},
+    "recommendedSeed": {
+      "mode": "ON",
+      "turnOffRuleUntilEpoch": 0,
+      "turnOffRuleWhileOnBranch": null
+    }
+  },
+  "branch-state-guard": {
+    "schema": {
+      "mode": {
+        "type": "string",
+        "enumValues": [
+          "ON",
+          "OFF"
+        ],
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "branchNamingConvention": {
+        "type": "string",
+        "optional": true,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "hangTimeoutMinutes": {
+        "type": "number",
+        "optional": true,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "maxCommitsBehind": {
+        "type": "number",
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "turnOffRuleUntilEpoch": {
+        "type": "number",
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "turnOffRuleWhileOnBranch": {
+        "type": "string",
+        "optional": false,
+        "nullable": true,
+        "nonEmpty": false
+      }
+    },
+    "optionalTuning": {},
+    "recommendedSeed": {
+      "mode": "ON",
+      "turnOffRuleUntilEpoch": 0,
+      "turnOffRuleWhileOnBranch": null,
+      "maxCommitsBehind": 5
+    }
+  }
+}

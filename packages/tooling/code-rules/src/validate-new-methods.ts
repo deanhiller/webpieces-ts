@@ -19,17 +19,8 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as ts from 'typescript';
-import {
-    writeTemplate,
-    RULE_NAMES,
-    WEBPIECES_DISABLE,
-    MaxMethodLinesConfig,
-    MethodLimitMode,
-    detectBase,
-    getChangedFiles,
-    getFileDiff,
-    findNewMethodSignaturesInDiff,
-} from '@webpieces/rules-config';
+import { writeTemplate, WEBPIECES_DISABLE, detectBase, getChangedFiles, getFileDiff, findNewMethodSignaturesInDiff } from "@webpieces/rules-config";
+import { MaxMethodLinesConfig, MethodLimitMode } from "./configs/rule-configs";
 import { ExecutorResult } from './code-validator';
 import { shouldSkipRule, SkipRuleResult } from './resolve-mode';
 
@@ -75,7 +66,7 @@ function hasDisableComment(lines: string[], lineNumber: number): boolean {
         }
         if (line.includes(WEBPIECES_DISABLE)) {
             // Either escape hatch exempts from the lowLimit new method check
-            if (line.includes(RULE_NAMES.MAX_LINES_NEW_METHODS) || line.includes(RULE_NAMES.MAX_LINES_MODIFIED)) {
+            if (line.includes("max-lines-new-methods") || line.includes("max-lines-modified")) {
                 return true;
             }
         }

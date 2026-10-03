@@ -1,5 +1,5 @@
 import { ReviewIdentityRenderer } from './review-identity-renderer';
-import { GateDefinition, WEBPIECES_DISABLE, RULE_NAMES, PrSummary, CK_PASS, CK_WARN, CK_OVERRIDDEN, CK_ORANGE_FIXED, CK_FAIL, CK_MISSING, HOME_CONFIG_DIR, HOME_CONFIG_FILE, HOME_KEY_TURN_OFF_ALL_REVIEWERS, HOTFIX_AUDIT_BANNER } from '@webpieces/rules-config';
+import { GateDefinition, WEBPIECES_DISABLE, PrSummary, CK_PASS, CK_WARN, CK_OVERRIDDEN, CK_ORANGE_FIXED, CK_FAIL, CK_MISSING, HOME_CONFIG_DIR, HOME_CONFIG_FILE, HOME_KEY_TURN_OFF_ALL_REVIEWERS, HOTFIX_AUDIT_BANNER } from '@webpieces/rules-config';
 import { injectable, bindingScopeValues } from 'inversify';
 import { AuthorIdentity } from './author-identity';
 
@@ -188,19 +188,20 @@ export class Dashboard {
     }
 
     // Count disables ADDED in this PR by scanning added (`+`) lines of the diff patch. Rule-aware:
-    // reports which webpieces rules were disabled, using the canonical RULE_NAMES vocabulary.
+    // reports the names written in each directive, including newly declared and client-owned rules.
     countAddedDisables(patch: string): DisableCounts {
         let webpiecesCount = 0;
         let eslintCount = 0;
         const rules = new Set<string>();
-        const allRuleTokens = Object.keys(RULE_NAMES).map((key: string): string => (RULE_NAMES as Record<string, string>)[key]);
 
         for (const line of patch.split('\n')) {
             if (!line.startsWith('+') || line.startsWith('+++')) continue;
             if (line.includes(WEBPIECES_DISABLE)) {
                 webpiecesCount += 1;
-                for (const token of allRuleTokens) {
-                    if (line.includes(token)) rules.add(token);
+                const directive = line.slice(line.indexOf(WEBPIECES_DISABLE) + WEBPIECES_DISABLE.length).split('--')[0];
+                for (const named of directive.split(',')) {
+                    const token = named.trim();
+                    if (/^[a-z][a-z0-9-]*$/.test(token)) rules.add(token);
                 }
             }
             if (line.includes('eslint-disable')) eslintCount += 1;

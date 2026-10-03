@@ -37,7 +37,9 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
-import { hasDisable, RULE_NAMES, NoSymbolDiTokensConfig, ModifiedCodeMode, detectBase, getFileDiff, getChangedLineNumbers } from '@webpieces/rules-config';
+import { hasDisable, detectBase, getFileDiff, getChangedLineNumbers } from "@webpieces/rules-config";
+import { NoSymbolDiTokensConfig } from "./configs/rule-configs";
+import { ModifiedCodeMode } from '@webpieces/rules-sdk';
 import { CodeValidator, ExecutorResult } from './code-validator';
 import { injectable, bindingScopeValues } from 'inversify';
 import { shouldSkipRule } from './resolve-mode';
@@ -123,7 +125,7 @@ function stripLineComments(line: string): string {
 }
 
 function hasDisableOnLine(line: string): boolean {
-    return hasDisable(line, RULE_NAMES.NO_SYMBOL_DI_TOKENS);
+    return hasDisable(line, "no-symbol-di-tokens");
 }
 
 function resolveDisable(disabled: boolean, disableAllowed: boolean): boolean {

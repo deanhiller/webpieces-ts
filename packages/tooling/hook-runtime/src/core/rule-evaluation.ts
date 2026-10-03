@@ -1,4 +1,4 @@
-import { CONFIG_FILENAME, CONFIG_OUT_OF_SYNC_HEADER, L0_FAULT_CONFIG_OUT_OF_SYNC, seedEntryForRule, WebpiecesRulesConfig, RuleFailError, renderRuleFailForAi } from '@webpieces/rules-config';
+import { CONFIG_FILENAME, CONFIG_OUT_OF_SYNC_HEADER, L0_FAULT_CONFIG_OUT_OF_SYNC, seedEntryForRule, RulePackRegistry, WebpiecesRulesConfig, RuleFailError, renderRuleFailForAi } from '@webpieces/rules-config';
 import { toError } from '@webpieces/tooling-common/to-error';
 import { Rule, EditContext, FileContext, BashContext, Violation, RuleGroup, BlockedResult } from './types';
 
@@ -22,7 +22,7 @@ function configuredRuleNames(config: WebpiecesRulesConfig): ReadonlySet<string> 
  * four copies of the same one under four different headings.
  */
 // webpieces-disable no-function-outside-class -- existing stateless evaluator helpers extracted intact for both hook providers
-export function checkConfigSync(rules: readonly Rule[], config: WebpiecesRulesConfig): BlockedResult | null {
+export function checkConfigSync(rules: readonly Rule[], config: WebpiecesRulesConfig, registry: RulePackRegistry): BlockedResult | null {
     const configured = configuredRuleNames(config);
     const seen = new Set<string>();
     const unconfiguredRules = rules.filter((r: Rule): boolean => {
@@ -72,7 +72,7 @@ export function checkConfigSync(rules: readonly Rule[], config: WebpiecesRulesCo
         // The SAME entry the installer would seed: recommended mode, both hatches, and every other
         // schema-required field — so pasting it satisfies the loader in one pass.
         lines.push(`Entry to add to ${CONFIG_FILENAME}:`);
-        lines.push(`  "${rule.configKey}": ${JSON.stringify(seedEntryForRule(rule.configKey))}`);
+        lines.push(`  "${rule.configKey}": ${JSON.stringify(seedEntryForRule(rule.configKey, registry))}`);
         lines.push('');
     }
 

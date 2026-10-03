@@ -1,6 +1,8 @@
 import { execSync } from 'child_process';
 
-import { PrLifecycleGuardConfig, PR_LIFECYCLE_GUARD_KEY, RepoRootFinder, SyncFlowGuidance, writeTemplate } from '@webpieces/rules-config';
+import { RepoRootFinder, SyncFlowGuidance, writeTemplate } from '@webpieces/rules-config';
+import { PR_LIFECYCLE_GUARD_KEY } from '../../policy-keys';
+import { PrLifecycleGuardConfig } from "../../configs/rule-configs";
 
 import type { BashContext, Violation } from '@webpieces/hook-runtime';
 import { Violation as V } from '@webpieces/hook-runtime';

@@ -1,3 +1,4 @@
+import { policyFixture } from '@webpieces/tooling-testkit';
 import { specTempDirs } from '@webpieces/tooling-testkit';
 import { describe, it, expect } from 'vitest';
 import * as fs from 'fs';
@@ -21,7 +22,7 @@ function streamName(stream: string, suffix: string = '.log'): string {
 
 
 function tmpRoot(): string {
-    return specTempDirs.make('wp-guardinv-');
+    return policyFixture.makeRepo('wp-guardinv-');
 }
 
 // One invocation, begin-to-end, the way the hook does it: capture on entry, flush at the terminal

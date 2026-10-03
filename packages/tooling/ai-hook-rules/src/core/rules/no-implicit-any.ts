@@ -1,4 +1,5 @@
-import { NoImplicitAnyConfig, RULE_NAMES } from '@webpieces/rules-config';
+import { SourceContributionConfig } from "../source-contribution-config";
+
 
 import type { EditContext, Violation } from '@webpieces/hook-runtime';
 import { Violation as V } from '@webpieces/hook-runtime';
@@ -39,8 +40,8 @@ function findOffender(line: string): string | null {
     return null;
 }
 
-export class NoImplicitAnyRule extends EditRuleBase<NoImplicitAnyConfig> {
-    constructor(config: NoImplicitAnyConfig) { super(config, 'no-implicit-any', 'no-implicit-any'); }
+export class NoImplicitAnyRule extends EditRuleBase<SourceContributionConfig> {
+    constructor(config: SourceContributionConfig) { super(config, 'no-implicit-any', 'no-implicit-any'); }
 
     readonly description = 'Disallow function parameters without explicit type annotations (implicit-any).';
     override readonly files = ['**/*.ts', '**/*.tsx'];
@@ -59,7 +60,7 @@ export class NoImplicitAnyRule extends EditRuleBase<NoImplicitAnyConfig> {
         for (let i = 0; i < ctx.strippedLines.length; i += 1) {
             const stripped = ctx.strippedLines[i];
             const lineNum = i + 1;
-            if (disableAllowed && ctx.isLineDisabled(lineNum, RULE_NAMES.NO_IMPLICIT_ANY)) continue;
+            if (disableAllowed && ctx.isLineDisabled(lineNum, "no-implicit-any")) continue;
             const offender = findOffender(stripped);
             if (!offender) continue;
             violations.push(new V(

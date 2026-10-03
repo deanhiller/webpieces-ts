@@ -94,8 +94,8 @@ async function runStandalone(cwd: string): Promise<number> {
     container.bind(WorkspaceRoot).toConstantValue(new WorkspaceRoot(workspaceRoot));
     container.bind(MatchRulesHolder).toConstantValue(new MatchRulesHolder(loaded.matchRules));
     for (const binding of CONFIG_BINDINGS) {
-        const ConfigClass = binding[0];
-        const configured = loaded.rulesConfig[binding[1]] as BaseRuleConfig | undefined;
+        const ConfigClass = binding.configClass;
+        const configured = loaded.rulesConfig[binding.ruleId] as BaseRuleConfig | undefined;
         container.bind(ConfigClass).toConstantValue(configured ?? new ConfigClass());
     }
 

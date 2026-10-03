@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-import { BranchCreationGuardConfig } from '@webpieces/rules-config';
+import { BranchCreationGuardConfig } from "../../configs/rule-configs";
 
 import { BashContext } from '@webpieces/hook-runtime';
 

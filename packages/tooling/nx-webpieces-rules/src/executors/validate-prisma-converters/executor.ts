@@ -1,7 +1,7 @@
 import type { ExecutorContext } from '@nx/devkit';
 import { ExecutorResult } from '../../executor-result';
 import { PrismaConverterValidator } from '@webpieces/code-rules';
-import { PrismaConverterConfig } from '@webpieces/rules-config';
+import { PrismaConverterConfig } from "@webpieces/code-rules";
 
 export default async function runExecutor(
     options: PrismaConverterConfig,

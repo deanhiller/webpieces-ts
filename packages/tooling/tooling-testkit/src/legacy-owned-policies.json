@@ -1,0 +1,2525 @@
+{
+  "schemas": {
+    "max-method-lines": {
+      "mode": {
+        "type": "string",
+        "enumValues": [
+          "OFF",
+          "NEW_METHODS",
+          "NEW_AND_MODIFIED_METHODS",
+          "NEW_AND_MODIFIED_FILES"
+        ],
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "limit": {
+        "type": "number",
+        "optional": true,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "disableAllowed": {
+        "type": "boolean",
+        "optional": true,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "turnOffRuleUntilEpoch": {
+        "type": "number",
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "turnOffRuleWhileOnBranch": {
+        "type": "string",
+        "optional": false,
+        "nullable": true,
+        "nonEmpty": false
+      }
+    },
+    "max-file-lines": {
+      "mode": {
+        "type": "string",
+        "enumValues": [
+          "OFF",
+          "NEW_AND_MODIFIED_FILES"
+        ],
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "limit": {
+        "type": "number",
+        "optional": true,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "disableAllowed": {
+        "type": "boolean",
+        "optional": true,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "allowedPaths": {
+        "type": "string[]",
+        "optional": true,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "turnOffRuleUntilEpoch": {
+        "type": "number",
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "turnOffRuleWhileOnBranch": {
+        "type": "string",
+        "optional": false,
+        "nullable": true,
+        "nonEmpty": false
+      }
+    },
+    "require-return-type": {
+      "mode": {
+        "type": "string",
+        "enumValues": [
+          "OFF",
+          "NEW_METHODS",
+          "NEW_AND_MODIFIED_METHODS",
+          "NEW_AND_MODIFIED_FILES"
+        ],
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "disableAllowed": {
+        "type": "boolean",
+        "optional": true,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "turnOffRuleUntilEpoch": {
+        "type": "number",
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "turnOffRuleWhileOnBranch": {
+        "type": "string",
+        "optional": false,
+        "nullable": true,
+        "nonEmpty": false
+      }
+    },
+    "no-inline-type-literals": {
+      "mode": {
+        "type": "string",
+        "enumValues": [
+          "OFF",
+          "NEW_METHODS",
+          "NEW_AND_MODIFIED_METHODS",
+          "NEW_AND_MODIFIED_FILES"
+        ],
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "disableAllowed": {
+        "type": "boolean",
+        "optional": true,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "turnOffRuleUntilEpoch": {
+        "type": "number",
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "turnOffRuleWhileOnBranch": {
+        "type": "string",
+        "optional": false,
+        "nullable": true,
+        "nonEmpty": false
+      }
+    },
+    "no-any-unknown": {
+      "mode": {
+        "type": "string",
+        "enumValues": [
+          "OFF",
+          "NEW_AND_MODIFIED_CODE",
+          "NEW_AND_MODIFIED_FILES",
+          "MODIFIED_PROJECTS",
+          "RUN_EVERY_TIME"
+        ],
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "disableAllowed": {
+        "type": "boolean",
+        "optional": true,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "turnOffRuleUntilEpoch": {
+        "type": "number",
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "turnOffRuleWhileOnBranch": {
+        "type": "string",
+        "optional": false,
+        "nullable": true,
+        "nonEmpty": false
+      }
+    },
+    "no-implicit-any": {
+      "mode": {
+        "type": "string",
+        "enumValues": [
+          "OFF",
+          "NEW_AND_MODIFIED_CODE",
+          "NEW_AND_MODIFIED_FILES",
+          "MODIFIED_PROJECTS",
+          "RUN_EVERY_TIME"
+        ],
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "disableAllowed": {
+        "type": "boolean",
+        "optional": true,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "turnOffRuleUntilEpoch": {
+        "type": "number",
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "turnOffRuleWhileOnBranch": {
+        "type": "string",
+        "optional": false,
+        "nullable": true,
+        "nonEmpty": false
+      }
+    },
+    "prisma-validate-dtos": {
+      "mode": {
+        "type": "string",
+        "enumValues": [
+          "OFF",
+          "MODIFIED_CLASS",
+          "NEW_AND_MODIFIED_FILES"
+        ],
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "disableAllowed": {
+        "type": "boolean",
+        "optional": true,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "prismaSchemaPath": {
+        "type": "string",
+        "optional": true,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "dtoSourcePaths": {
+        "type": "string[]",
+        "optional": true,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "turnOffRuleUntilEpoch": {
+        "type": "number",
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "turnOffRuleWhileOnBranch": {
+        "type": "string",
+        "optional": false,
+        "nullable": true,
+        "nonEmpty": false
+      }
+    },
+    "prisma-converter": {
+      "mode": {
+        "type": "string",
+        "enumValues": [
+          "OFF",
+          "NEW_AND_MODIFIED_METHODS",
+          "NEW_AND_MODIFIED_FILES"
+        ],
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "disableAllowed": {
+        "type": "boolean",
+        "optional": true,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "schemaPath": {
+        "type": "string",
+        "optional": true,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "convertersPaths": {
+        "type": "string[]",
+        "optional": true,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "enforcePaths": {
+        "type": "string[]",
+        "optional": true,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "turnOffRuleUntilEpoch": {
+        "type": "number",
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "turnOffRuleWhileOnBranch": {
+        "type": "string",
+        "optional": false,
+        "nullable": true,
+        "nonEmpty": false
+      }
+    },
+    "no-destructure": {
+      "mode": {
+        "type": "string",
+        "enumValues": [
+          "OFF",
+          "NEW_AND_MODIFIED_CODE",
+          "NEW_AND_MODIFIED_FILES",
+          "MODIFIED_PROJECTS",
+          "RUN_EVERY_TIME"
+        ],
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "allowTopLevel": {
+        "type": "boolean",
+        "optional": true,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "disableAllowed": {
+        "type": "boolean",
+        "optional": true,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "allowedPaths": {
+        "type": "string[]",
+        "optional": true,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "turnOffRuleUntilEpoch": {
+        "type": "number",
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "turnOffRuleWhileOnBranch": {
+        "type": "string",
+        "optional": false,
+        "nullable": true,
+        "nonEmpty": false
+      }
+    },
+    "no-unmanaged-exceptions": {
+      "mode": {
+        "type": "string",
+        "enumValues": [
+          "OFF",
+          "NEW_AND_MODIFIED_CODE",
+          "NEW_AND_MODIFIED_FILES",
+          "MODIFIED_PROJECTS",
+          "RUN_EVERY_TIME"
+        ],
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "disableAllowed": {
+        "type": "boolean",
+        "optional": true,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "turnOffRuleUntilEpoch": {
+        "type": "number",
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "turnOffRuleWhileOnBranch": {
+        "type": "string",
+        "optional": false,
+        "nullable": true,
+        "nonEmpty": false
+      }
+    },
+    "catch-error-pattern": {
+      "mode": {
+        "type": "string",
+        "enumValues": [
+          "OFF",
+          "NEW_AND_MODIFIED_CODE",
+          "NEW_AND_MODIFIED_FILES",
+          "MODIFIED_PROJECTS",
+          "RUN_EVERY_TIME"
+        ],
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "disableAllowed": {
+        "type": "boolean",
+        "optional": true,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "turnOffRuleUntilEpoch": {
+        "type": "number",
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "turnOffRuleWhileOnBranch": {
+        "type": "string",
+        "optional": false,
+        "nullable": true,
+        "nonEmpty": false
+      }
+    },
+    "throw-cause-required": {
+      "mode": {
+        "type": "string",
+        "enumValues": [
+          "OFF",
+          "NEW_AND_MODIFIED_CODE"
+        ],
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "disableAllowed": {
+        "type": "boolean",
+        "optional": true,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "turnOffRuleUntilEpoch": {
+        "type": "number",
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "turnOffRuleWhileOnBranch": {
+        "type": "string",
+        "optional": false,
+        "nullable": true,
+        "nonEmpty": false
+      }
+    },
+    "angular-no-direct-api-in-resolver": {
+      "mode": {
+        "type": "string",
+        "enumValues": [
+          "OFF",
+          "NEW_AND_MODIFIED_CODE",
+          "NEW_AND_MODIFIED_METHODS",
+          "NEW_AND_MODIFIED_FILES"
+        ],
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "disableAllowed": {
+        "type": "boolean",
+        "optional": true,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "enforcePaths": {
+        "type": "string[]",
+        "optional": true,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "turnOffRuleUntilEpoch": {
+        "type": "number",
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "turnOffRuleWhileOnBranch": {
+        "type": "string",
+        "optional": false,
+        "nullable": true,
+        "nonEmpty": false
+      }
+    },
+    "no-symbol-di-tokens": {
+      "mode": {
+        "type": "string",
+        "enumValues": [
+          "OFF",
+          "NEW_AND_MODIFIED_CODE",
+          "NEW_AND_MODIFIED_FILES",
+          "MODIFIED_PROJECTS",
+          "RUN_EVERY_TIME"
+        ],
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "disableAllowed": {
+        "type": "boolean",
+        "optional": true,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "allowedPaths": {
+        "type": "string[]",
+        "optional": true,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "turnOffRuleUntilEpoch": {
+        "type": "number",
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "turnOffRuleWhileOnBranch": {
+        "type": "string",
+        "optional": false,
+        "nullable": true,
+        "nonEmpty": false
+      }
+    },
+    "no-client-creation-outside-server-or-client": {
+      "mode": {
+        "type": "string",
+        "enumValues": [
+          "OFF",
+          "NEW_AND_MODIFIED_CODE",
+          "NEW_AND_MODIFIED_FILES",
+          "MODIFIED_PROJECTS",
+          "RUN_EVERY_TIME"
+        ],
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "severity": {
+        "type": "string",
+        "enumValues": [
+          "warn",
+          "error"
+        ],
+        "optional": true,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "disableAllowed": {
+        "type": "boolean",
+        "optional": true,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "allowedRoles": {
+        "type": "string[]",
+        "optional": true,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "allowedPaths": {
+        "type": "string[]",
+        "optional": true,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "turnOffRuleUntilEpoch": {
+        "type": "number",
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "turnOffRuleWhileOnBranch": {
+        "type": "string",
+        "optional": false,
+        "nullable": true,
+        "nonEmpty": false
+      }
+    },
+    "no-custom-css": {
+      "mode": {
+        "type": "string",
+        "enumValues": [
+          "OFF",
+          "NEW_AND_MODIFIED_CODE",
+          "NEW_AND_MODIFIED_FILES",
+          "MODIFIED_PROJECTS",
+          "RUN_EVERY_TIME"
+        ],
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "disableAllowed": {
+        "type": "boolean",
+        "optional": true,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "allowGlobs": {
+        "type": "string[]",
+        "optional": true,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "turnOffRuleUntilEpoch": {
+        "type": "number",
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "turnOffRuleWhileOnBranch": {
+        "type": "string",
+        "optional": false,
+        "nullable": true,
+        "nonEmpty": false
+      }
+    },
+    "no-state-paths-in-templates": {
+      "mode": {
+        "type": "string",
+        "enumValues": [
+          "OFF",
+          "NEW_AND_MODIFIED_CODE",
+          "NEW_AND_MODIFIED_FILES",
+          "MODIFIED_PROJECTS",
+          "RUN_EVERY_TIME"
+        ],
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "disableAllowed": {
+        "type": "boolean",
+        "optional": true,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "templateDirs": {
+        "type": "string[]",
+        "optional": true,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "bannedPathPrefixes": {
+        "type": "string[]",
+        "optional": true,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "turnOffRuleUntilEpoch": {
+        "type": "number",
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "turnOffRuleWhileOnBranch": {
+        "type": "string",
+        "optional": false,
+        "nullable": true,
+        "nonEmpty": false
+      }
+    },
+    "no-process-exit-outside-main": {
+      "mode": {
+        "type": "string",
+        "enumValues": [
+          "OFF",
+          "NEW_AND_MODIFIED_CODE",
+          "NEW_AND_MODIFIED_FILES",
+          "MODIFIED_PROJECTS",
+          "RUN_EVERY_TIME"
+        ],
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "disableAllowed": {
+        "type": "boolean",
+        "optional": true,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "turnOffRuleUntilEpoch": {
+        "type": "number",
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "turnOffRuleWhileOnBranch": {
+        "type": "string",
+        "optional": false,
+        "nullable": true,
+        "nonEmpty": false
+      }
+    },
+    "no-function-outside-class": {
+      "mode": {
+        "type": "string",
+        "enumValues": [
+          "OFF",
+          "NEW_AND_MODIFIED_CODE",
+          "NEW_AND_MODIFIED_FILES",
+          "MODIFIED_PROJECTS",
+          "RUN_EVERY_TIME"
+        ],
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "disableAllowed": {
+        "type": "boolean",
+        "optional": true,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "allowedPaths": {
+        "type": "string[]",
+        "optional": true,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "turnOffRuleUntilEpoch": {
+        "type": "number",
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "turnOffRuleWhileOnBranch": {
+        "type": "string",
+        "optional": false,
+        "nullable": true,
+        "nonEmpty": false
+      }
+    },
+    "inject-annotation-not-needed-for-concrete-class": {
+      "mode": {
+        "type": "string",
+        "enumValues": [
+          "OFF",
+          "NEW_AND_MODIFIED_CODE",
+          "NEW_AND_MODIFIED_FILES",
+          "MODIFIED_PROJECTS",
+          "RUN_EVERY_TIME"
+        ],
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "disableAllowed": {
+        "type": "boolean",
+        "optional": true,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "allowedPaths": {
+        "type": "string[]",
+        "optional": true,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "turnOffRuleUntilEpoch": {
+        "type": "number",
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "turnOffRuleWhileOnBranch": {
+        "type": "string",
+        "optional": false,
+        "nullable": true,
+        "nonEmpty": false
+      }
+    },
+    "framework-tag": {
+      "mode": {
+        "type": "string",
+        "enumValues": [
+          "OFF",
+          "MODIFIED_PROJECTS"
+        ],
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "knownTypes": {
+        "type": "string[]",
+        "optional": true,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "turnOffRuleUntilEpoch": {
+        "type": "number",
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "turnOffRuleWhileOnBranch": {
+        "type": "string",
+        "optional": false,
+        "nullable": true,
+        "nonEmpty": false
+      }
+    },
+    "role-tag": {
+      "mode": {
+        "type": "string",
+        "enumValues": [
+          "OFF",
+          "MODIFIED_PROJECTS"
+        ],
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "knownTypes": {
+        "type": "string[]",
+        "optional": true,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "turnOffRuleUntilEpoch": {
+        "type": "number",
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "turnOffRuleWhileOnBranch": {
+        "type": "string",
+        "optional": false,
+        "nullable": true,
+        "nonEmpty": false
+      }
+    },
+    "ensure-we-are-secure": {
+      "mode": {
+        "type": "string",
+        "enumValues": [
+          "OFF",
+          "MODIFIED_PROJECTS"
+        ],
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "turnOffRuleUntilEpoch": {
+        "type": "number",
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "turnOffRuleWhileOnBranch": {
+        "type": "string",
+        "optional": false,
+        "nullable": true,
+        "nonEmpty": false
+      }
+    },
+    "branch-creation-guard": {
+      "mode": {
+        "type": "string",
+        "enumValues": [
+          "ON",
+          "OFF",
+          "ON_NO_SUBBRANCHES"
+        ],
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "subBranchNaming": {
+        "type": "string",
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "branchFormat": {
+        "type": "string",
+        "optional": true,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "maxLocalBranches": {
+        "type": "number",
+        "optional": true,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "maxWorktrees": {
+        "type": "number",
+        "optional": true,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "autoReapMergedBranches": {
+        "type": "boolean",
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "turnOffRuleUntilEpoch": {
+        "type": "number",
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "turnOffRuleWhileOnBranch": {
+        "type": "string",
+        "optional": false,
+        "nullable": true,
+        "nonEmpty": false
+      }
+    },
+    "pr-lifecycle-guard": {
+      "mode": {
+        "type": "string",
+        "enumValues": [
+          "ON",
+          "OFF"
+        ],
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "turnOffRuleUntilEpoch": {
+        "type": "number",
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "turnOffRuleWhileOnBranch": {
+        "type": "string",
+        "optional": false,
+        "nullable": true,
+        "nonEmpty": false
+      }
+    },
+    "branch-state-guard": {
+      "mode": {
+        "type": "string",
+        "enumValues": [
+          "ON",
+          "OFF"
+        ],
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "branchNamingConvention": {
+        "type": "string",
+        "optional": true,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "hangTimeoutMinutes": {
+        "type": "number",
+        "optional": true,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "maxCommitsBehind": {
+        "type": "number",
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "turnOffRuleUntilEpoch": {
+        "type": "number",
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "turnOffRuleWhileOnBranch": {
+        "type": "string",
+        "optional": false,
+        "nullable": true,
+        "nonEmpty": false
+      }
+    },
+    "no-file-import-cycles": {
+      "mode": {
+        "type": "string",
+        "enumValues": [
+          "OFF",
+          "RUN_EVERY_TIME"
+        ],
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "ignoreTypeOnly": {
+        "type": "boolean",
+        "optional": true,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "excludePackages": {
+        "type": "string[]",
+        "optional": true,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "excludeRegExp": {
+        "type": "string[]",
+        "optional": true,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "turnOffRuleUntilEpoch": {
+        "type": "number",
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "turnOffRuleWhileOnBranch": {
+        "type": "string",
+        "optional": false,
+        "nullable": true,
+        "nonEmpty": false
+      }
+    },
+    "runtime-architecture": {
+      "mode": {
+        "type": "string",
+        "enumValues": [
+          "OFF",
+          "RUN_EVERY_TIME"
+        ],
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "showExternalNodes": {
+        "type": "boolean",
+        "optional": true,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "externalApiPaths": {
+        "type": "string[]",
+        "optional": true,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "turnOffRuleUntilEpoch": {
+        "type": "number",
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "turnOffRuleWhileOnBranch": {
+        "type": "string",
+        "optional": false,
+        "nullable": true,
+        "nonEmpty": false
+      }
+    },
+    "nx-wiring": {
+      "mode": {
+        "type": "string",
+        "enumValues": [
+          "OFF",
+          "RUN_EVERY_TIME"
+        ],
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "turnOffRuleUntilEpoch": {
+        "type": "number",
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "turnOffRuleWhileOnBranch": {
+        "type": "string",
+        "optional": false,
+        "nullable": true,
+        "nonEmpty": false
+      }
+    },
+    "di-graph": {
+      "mode": {
+        "type": "string",
+        "enumValues": [
+          "OFF",
+          "RUN_EVERY_TIME"
+        ],
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "turnOffRuleUntilEpoch": {
+        "type": "number",
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "turnOffRuleWhileOnBranch": {
+        "type": "string",
+        "optional": false,
+        "nullable": true,
+        "nonEmpty": false
+      }
+    },
+    "missing-design-annotation": {
+      "mode": {
+        "type": "string",
+        "enumValues": [
+          "OFF",
+          "RUN_EVERY_TIME"
+        ],
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "turnOffRuleUntilEpoch": {
+        "type": "number",
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "turnOffRuleWhileOnBranch": {
+        "type": "string",
+        "optional": false,
+        "nullable": true,
+        "nonEmpty": false
+      }
+    },
+    "no-js-files": {
+      "mode": {
+        "type": "string",
+        "enumValues": [
+          "OFF",
+          "NEW_AND_MODIFIED_FILES"
+        ],
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "allowedPaths": {
+        "type": "string[]",
+        "optional": true,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "turnOffRuleUntilEpoch": {
+        "type": "number",
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "turnOffRuleWhileOnBranch": {
+        "type": "string",
+        "optional": false,
+        "nullable": true,
+        "nonEmpty": false
+      }
+    },
+    "validate-ts-in-src": {
+      "mode": {
+        "type": "string",
+        "enumValues": [
+          "OFF",
+          "NEW_AND_MODIFIED_FILES"
+        ],
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "allowedRootFiles": {
+        "type": "string[]",
+        "optional": true,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "excludePaths": {
+        "type": "string[]",
+        "optional": true,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "turnOffRuleUntilEpoch": {
+        "type": "number",
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "turnOffRuleWhileOnBranch": {
+        "type": "string",
+        "optional": false,
+        "nullable": true,
+        "nonEmpty": false
+      }
+    },
+    "validate-architecture-unchanged": {
+      "mode": {
+        "type": "string",
+        "enumValues": [
+          "OFF",
+          "RUN_EVERY_TIME"
+        ],
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "turnOffRuleUntilEpoch": {
+        "type": "number",
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "turnOffRuleWhileOnBranch": {
+        "type": "string",
+        "optional": false,
+        "nullable": true,
+        "nonEmpty": false
+      }
+    },
+    "validate-no-architecture-cycles": {
+      "mode": {
+        "type": "string",
+        "enumValues": [
+          "OFF",
+          "RUN_EVERY_TIME"
+        ],
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "turnOffRuleUntilEpoch": {
+        "type": "number",
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "turnOffRuleWhileOnBranch": {
+        "type": "string",
+        "optional": false,
+        "nullable": true,
+        "nonEmpty": false
+      }
+    },
+    "validate-packagejson": {
+      "mode": {
+        "type": "string",
+        "enumValues": [
+          "OFF",
+          "RUN_EVERY_TIME"
+        ],
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "turnOffRuleUntilEpoch": {
+        "type": "number",
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "turnOffRuleWhileOnBranch": {
+        "type": "string",
+        "optional": false,
+        "nullable": true,
+        "nonEmpty": false
+      }
+    },
+    "validate-versions-locked": {
+      "mode": {
+        "type": "string",
+        "enumValues": [
+          "OFF",
+          "RUN_EVERY_TIME"
+        ],
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "turnOffRuleUntilEpoch": {
+        "type": "number",
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "turnOffRuleWhileOnBranch": {
+        "type": "string",
+        "optional": false,
+        "nullable": true,
+        "nonEmpty": false
+      }
+    },
+    "validate-eslint-sync": {
+      "mode": {
+        "type": "string",
+        "enumValues": [
+          "OFF",
+          "RUN_EVERY_TIME"
+        ],
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "turnOffRuleUntilEpoch": {
+        "type": "number",
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "turnOffRuleWhileOnBranch": {
+        "type": "string",
+        "optional": false,
+        "nullable": true,
+        "nonEmpty": false
+      }
+    },
+    "no-root-union-api-type": {
+      "mode": {
+        "type": "string",
+        "enumValues": [
+          "OFF",
+          "RUN_EVERY_TIME"
+        ],
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "allowedPaths": {
+        "type": "string[]",
+        "optional": true,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "turnOffRuleUntilEpoch": {
+        "type": "number",
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "turnOffRuleWhileOnBranch": {
+        "type": "string",
+        "optional": false,
+        "nullable": true,
+        "nonEmpty": false
+      }
+    },
+    "api-rules-for-openapi": {
+      "mode": {
+        "type": "string",
+        "enumValues": [
+          "OFF",
+          "AFFECTED_PROJECT",
+          "RUN_EVERY_TIME"
+        ],
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "allowedPaths": {
+        "type": "string[]",
+        "optional": true,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "turnOffRuleUntilEpoch": {
+        "type": "number",
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "turnOffRuleWhileOnBranch": {
+        "type": "string",
+        "optional": false,
+        "nullable": true,
+        "nonEmpty": false
+      }
+    },
+    "api-rules-for-mcp": {
+      "mode": {
+        "type": "string",
+        "enumValues": [
+          "OFF",
+          "AFFECTED_PROJECT",
+          "RUN_EVERY_TIME"
+        ],
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "allowedPaths": {
+        "type": "string[]",
+        "optional": true,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "turnOffRuleUntilEpoch": {
+        "type": "number",
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "turnOffRuleWhileOnBranch": {
+        "type": "string",
+        "optional": false,
+        "nullable": true,
+        "nonEmpty": false
+      }
+    },
+    "no-inline-import-in-api-lib": {
+      "mode": {
+        "type": "string",
+        "enumValues": [
+          "OFF",
+          "NEW_AND_MODIFIED_CODE",
+          "NEW_AND_MODIFIED_FILES",
+          "MODIFIED_PROJECTS",
+          "RUN_EVERY_TIME"
+        ],
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "allowedPaths": {
+        "type": "string[]",
+        "optional": true,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "turnOffRuleUntilEpoch": {
+        "type": "number",
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "turnOffRuleWhileOnBranch": {
+        "type": "string",
+        "optional": false,
+        "nullable": true,
+        "nonEmpty": false
+      }
+    },
+    "one-enum-spelling-in-api-lib": {
+      "mode": {
+        "type": "string",
+        "enumValues": [
+          "OFF",
+          "NEW_AND_MODIFIED_CODE",
+          "NEW_AND_MODIFIED_FILES",
+          "MODIFIED_PROJECTS",
+          "RUN_EVERY_TIME"
+        ],
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "allowedPaths": {
+        "type": "string[]",
+        "optional": true,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "turnOffRuleUntilEpoch": {
+        "type": "number",
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "turnOffRuleWhileOnBranch": {
+        "type": "string",
+        "optional": false,
+        "nullable": true,
+        "nonEmpty": false
+      }
+    },
+    "no-utility-types-in-api-lib": {
+      "mode": {
+        "type": "string",
+        "enumValues": [
+          "OFF",
+          "NEW_AND_MODIFIED_CODE",
+          "NEW_AND_MODIFIED_FILES",
+          "MODIFIED_PROJECTS",
+          "RUN_EVERY_TIME"
+        ],
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "paths": {
+        "type": "string[]",
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "allowedPaths": {
+        "type": "string[]",
+        "optional": true,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "turnOffRuleUntilEpoch": {
+        "type": "number",
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "turnOffRuleWhileOnBranch": {
+        "type": "string",
+        "optional": false,
+        "nullable": true,
+        "nonEmpty": false
+      }
+    },
+    "required-type-suffix": {
+      "mode": {
+        "type": "string",
+        "enumValues": [
+          "OFF",
+          "NEW_AND_MODIFIED_CODE",
+          "NEW_AND_MODIFIED_FILES",
+          "MODIFIED_PROJECTS",
+          "RUN_EVERY_TIME"
+        ],
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "entries": {
+        "type": "object[]",
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": true,
+        "elementSchema": {
+          "paths": {
+            "type": "string[]",
+            "optional": false,
+            "nullable": false,
+            "nonEmpty": true
+          },
+          "suffixes": {
+            "type": "string[]",
+            "optional": false,
+            "nullable": false,
+            "nonEmpty": true
+          }
+        }
+      },
+      "allowedPaths": {
+        "type": "string[]",
+        "optional": true,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "turnOffRuleUntilEpoch": {
+        "type": "number",
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "turnOffRuleWhileOnBranch": {
+        "type": "string",
+        "optional": false,
+        "nullable": true,
+        "nonEmpty": false
+      }
+    },
+    "api-lib-dependencies": {
+      "mode": {
+        "type": "string",
+        "enumValues": [
+          "OFF",
+          "RUN_EVERY_TIME"
+        ],
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "apiLibPackages": {
+        "type": "string[]",
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "apiClients": {
+        "type": "object[]",
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false,
+        "elementSchema": {
+          "project": {
+            "type": "string",
+            "optional": false,
+            "nullable": false,
+            "nonEmpty": false
+          },
+          "packages": {
+            "type": "string[]",
+            "optional": false,
+            "nullable": false,
+            "nonEmpty": false
+          }
+        }
+      },
+      "turnOffRuleUntilEpoch": {
+        "type": "number",
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "turnOffRuleWhileOnBranch": {
+        "type": "string",
+        "optional": false,
+        "nullable": true,
+        "nonEmpty": false
+      }
+    },
+    "api-lib-path": {
+      "mode": {
+        "type": "string",
+        "enumValues": [
+          "OFF",
+          "RUN_EVERY_TIME"
+        ],
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "paths": {
+        "type": "string[]",
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": true
+      },
+      "turnOffRuleUntilEpoch": {
+        "type": "number",
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "turnOffRuleWhileOnBranch": {
+        "type": "string",
+        "optional": false,
+        "nullable": true,
+        "nonEmpty": false
+      }
+    },
+    "framework-folder": {
+      "mode": {
+        "type": "string",
+        "enumValues": [
+          "OFF",
+          "RUN_EVERY_TIME"
+        ],
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "entries": {
+        "type": "object[]",
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": true,
+        "elementSchema": {
+          "paths": {
+            "type": "string[]",
+            "optional": false,
+            "nullable": false,
+            "nonEmpty": true
+          },
+          "frameworkSets": {
+            "type": "string[]",
+            "optional": false,
+            "nullable": false,
+            "nonEmpty": true
+          },
+          "roles": {
+            "type": "string[]",
+            "optional": false,
+            "nullable": false,
+            "nonEmpty": true
+          }
+        }
+      },
+      "turnOffRuleUntilEpoch": {
+        "type": "number",
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "turnOffRuleWhileOnBranch": {
+        "type": "string",
+        "optional": false,
+        "nullable": true,
+        "nonEmpty": false
+      }
+    },
+    "framework-tsconfig": {
+      "mode": {
+        "type": "string",
+        "enumValues": [
+          "OFF",
+          "MODIFIED_PROJECTS",
+          "RUN_EVERY_TIME"
+        ],
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "allowedPaths": {
+        "type": "string[]",
+        "optional": true,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "turnOffRuleUntilEpoch": {
+        "type": "number",
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "turnOffRuleWhileOnBranch": {
+        "type": "string",
+        "optional": false,
+        "nullable": true,
+        "nonEmpty": false
+      }
+    },
+    "framework-packages": {
+      "mode": {
+        "type": "string",
+        "enumValues": [
+          "OFF",
+          "MODIFIED_PROJECTS",
+          "RUN_EVERY_TIME"
+        ],
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "entries": {
+        "type": "object[]",
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": true,
+        "elementSchema": {
+          "packages": {
+            "type": "string[]",
+            "optional": false,
+            "nullable": false,
+            "nonEmpty": true
+          },
+          "frameworks": {
+            "type": "string[]",
+            "optional": false,
+            "nullable": false,
+            "nonEmpty": true
+          }
+        }
+      },
+      "allowedPaths": {
+        "type": "string[]",
+        "optional": true,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "turnOffRuleUntilEpoch": {
+        "type": "number",
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "turnOffRuleWhileOnBranch": {
+        "type": "string",
+        "optional": false,
+        "nullable": true,
+        "nonEmpty": false
+      }
+    }
+  },
+  "tuning": {
+    "no-any-unknown": {},
+    "no-implicit-any": {},
+    "max-file-lines": {
+      "limit": 900
+    },
+    "max-method-lines": {
+      "limit": 80
+    },
+    "require-return-type": {},
+    "no-inline-type-literals": {},
+    "no-destructure": {
+      "allowTopLevel": true
+    },
+    "catch-error-pattern": {},
+    "no-unmanaged-exceptions": {},
+    "no-file-import-cycles": {},
+    "runtime-architecture": {},
+    "prisma-validate-dtos": {},
+    "prisma-converter": {},
+    "angular-no-direct-api-in-resolver": {},
+    "no-symbol-di-tokens": {},
+    "no-client-creation-outside-server-or-client": {},
+    "no-custom-css": {
+      "allowGlobs": []
+    },
+    "no-state-paths-in-templates": {},
+    "no-process-exit-outside-main": {},
+    "inject-annotation-not-needed-for-concrete-class": {},
+    "framework-tag": {
+      "knownTypes": [
+        "browser",
+        "react",
+        "angular",
+        "node",
+        "express",
+        "react-native"
+      ]
+    },
+    "role-tag": {
+      "knownTypes": [
+        "server",
+        "app",
+        "bundle",
+        "designed-lib",
+        "lib",
+        "client",
+        "api-lib",
+        "api-client"
+      ]
+    },
+    "ensure-we-are-secure": {},
+    "nx-wiring": {},
+    "di-graph": {},
+    "missing-design-annotation": {},
+    "validate-ts-in-src": {
+      "allowedRootFiles": [
+        "jest.setup.ts"
+      ],
+      "excludePaths": [
+        "node_modules",
+        "dist",
+        ".nx",
+        ".git",
+        "**/*.d.ts",
+        "**/jest.config.ts"
+      ]
+    },
+    "no-js-files": {},
+    "validate-architecture-unchanged": {},
+    "validate-no-architecture-cycles": {},
+    "validate-packagejson": {},
+    "validate-versions-locked": {},
+    "validate-eslint-sync": {},
+    "no-root-union-api-type": {},
+    "api-rules-for-openapi": {},
+    "api-rules-for-mcp": {},
+    "no-inline-import-in-api-lib": {},
+    "one-enum-spelling-in-api-lib": {},
+    "no-utility-types-in-api-lib": {},
+    "required-type-suffix": {},
+    "api-lib-dependencies": {},
+    "api-lib-path": {},
+    "framework-folder": {},
+    "framework-tsconfig": {},
+    "framework-packages": {},
+    "branch-creation-guard": {},
+    "pr-lifecycle-guard": {},
+    "branch-state-guard": {}
+  },
+  "seeds": {
+    "max-method-lines": {
+      "mode": "NEW_AND_MODIFIED_METHODS",
+      "turnOffRuleUntilEpoch": 0,
+      "turnOffRuleWhileOnBranch": null
+    },
+    "max-file-lines": {
+      "mode": "NEW_AND_MODIFIED_FILES",
+      "turnOffRuleUntilEpoch": 0,
+      "turnOffRuleWhileOnBranch": null
+    },
+    "require-return-type": {
+      "mode": "NEW_AND_MODIFIED_METHODS",
+      "turnOffRuleUntilEpoch": 0,
+      "turnOffRuleWhileOnBranch": null
+    },
+    "no-inline-type-literals": {
+      "mode": "NEW_AND_MODIFIED_METHODS",
+      "turnOffRuleUntilEpoch": 0,
+      "turnOffRuleWhileOnBranch": null
+    },
+    "no-any-unknown": {
+      "mode": "NEW_AND_MODIFIED_CODE",
+      "turnOffRuleUntilEpoch": 0,
+      "turnOffRuleWhileOnBranch": null
+    },
+    "no-implicit-any": {
+      "mode": "NEW_AND_MODIFIED_CODE",
+      "turnOffRuleUntilEpoch": 0,
+      "turnOffRuleWhileOnBranch": null
+    },
+    "prisma-validate-dtos": {
+      "mode": "MODIFIED_CLASS",
+      "turnOffRuleUntilEpoch": 0,
+      "turnOffRuleWhileOnBranch": null
+    },
+    "prisma-converter": {
+      "mode": "NEW_AND_MODIFIED_METHODS",
+      "turnOffRuleUntilEpoch": 0,
+      "turnOffRuleWhileOnBranch": null
+    },
+    "no-destructure": {
+      "mode": "NEW_AND_MODIFIED_CODE",
+      "turnOffRuleUntilEpoch": 0,
+      "turnOffRuleWhileOnBranch": null
+    },
+    "no-unmanaged-exceptions": {
+      "mode": "NEW_AND_MODIFIED_CODE",
+      "turnOffRuleUntilEpoch": 0,
+      "turnOffRuleWhileOnBranch": null
+    },
+    "catch-error-pattern": {
+      "mode": "NEW_AND_MODIFIED_CODE",
+      "turnOffRuleUntilEpoch": 0,
+      "turnOffRuleWhileOnBranch": null
+    },
+    "throw-cause-required": {
+      "mode": "NEW_AND_MODIFIED_CODE",
+      "turnOffRuleUntilEpoch": 0,
+      "turnOffRuleWhileOnBranch": null
+    },
+    "angular-no-direct-api-in-resolver": {
+      "mode": "NEW_AND_MODIFIED_CODE",
+      "turnOffRuleUntilEpoch": 0,
+      "turnOffRuleWhileOnBranch": null
+    },
+    "no-symbol-di-tokens": {
+      "mode": "NEW_AND_MODIFIED_CODE",
+      "turnOffRuleUntilEpoch": 0,
+      "turnOffRuleWhileOnBranch": null
+    },
+    "no-client-creation-outside-server-or-client": {
+      "mode": "NEW_AND_MODIFIED_CODE",
+      "turnOffRuleUntilEpoch": 0,
+      "turnOffRuleWhileOnBranch": null
+    },
+    "no-custom-css": {
+      "mode": "NEW_AND_MODIFIED_CODE",
+      "turnOffRuleUntilEpoch": 0,
+      "turnOffRuleWhileOnBranch": null
+    },
+    "no-state-paths-in-templates": {
+      "mode": "NEW_AND_MODIFIED_CODE",
+      "turnOffRuleUntilEpoch": 0,
+      "turnOffRuleWhileOnBranch": null
+    },
+    "no-process-exit-outside-main": {
+      "mode": "NEW_AND_MODIFIED_CODE",
+      "turnOffRuleUntilEpoch": 0,
+      "turnOffRuleWhileOnBranch": null
+    },
+    "no-function-outside-class": {
+      "mode": "NEW_AND_MODIFIED_CODE",
+      "turnOffRuleUntilEpoch": 0,
+      "turnOffRuleWhileOnBranch": null
+    },
+    "inject-annotation-not-needed-for-concrete-class": {
+      "mode": "NEW_AND_MODIFIED_CODE",
+      "turnOffRuleUntilEpoch": 0,
+      "turnOffRuleWhileOnBranch": null
+    },
+    "framework-tag": {
+      "mode": "MODIFIED_PROJECTS",
+      "turnOffRuleUntilEpoch": 0,
+      "turnOffRuleWhileOnBranch": null
+    },
+    "role-tag": {
+      "mode": "MODIFIED_PROJECTS",
+      "turnOffRuleUntilEpoch": 0,
+      "turnOffRuleWhileOnBranch": null
+    },
+    "ensure-we-are-secure": {
+      "mode": "MODIFIED_PROJECTS",
+      "turnOffRuleUntilEpoch": 0,
+      "turnOffRuleWhileOnBranch": null
+    },
+    "branch-creation-guard": {
+      "mode": "ON",
+      "turnOffRuleUntilEpoch": 0,
+      "turnOffRuleWhileOnBranch": null,
+      "subBranchNaming": "feature/<ticket>/<short-description>",
+      "autoReapMergedBranches": false
+    },
+    "pr-lifecycle-guard": {
+      "mode": "ON",
+      "turnOffRuleUntilEpoch": 0,
+      "turnOffRuleWhileOnBranch": null
+    },
+    "branch-state-guard": {
+      "mode": "ON",
+      "turnOffRuleUntilEpoch": 0,
+      "turnOffRuleWhileOnBranch": null,
+      "maxCommitsBehind": 5
+    },
+    "no-file-import-cycles": {
+      "mode": "RUN_EVERY_TIME",
+      "turnOffRuleUntilEpoch": 0,
+      "turnOffRuleWhileOnBranch": null
+    },
+    "runtime-architecture": {
+      "mode": "RUN_EVERY_TIME",
+      "turnOffRuleUntilEpoch": 0,
+      "turnOffRuleWhileOnBranch": null
+    },
+    "nx-wiring": {
+      "mode": "RUN_EVERY_TIME",
+      "turnOffRuleUntilEpoch": 0,
+      "turnOffRuleWhileOnBranch": null
+    },
+    "di-graph": {
+      "mode": "RUN_EVERY_TIME",
+      "turnOffRuleUntilEpoch": 0,
+      "turnOffRuleWhileOnBranch": null
+    },
+    "missing-design-annotation": {
+      "mode": "RUN_EVERY_TIME",
+      "turnOffRuleUntilEpoch": 0,
+      "turnOffRuleWhileOnBranch": null
+    },
+    "no-js-files": {
+      "mode": "NEW_AND_MODIFIED_FILES",
+      "turnOffRuleUntilEpoch": 0,
+      "turnOffRuleWhileOnBranch": null
+    },
+    "validate-ts-in-src": {
+      "mode": "NEW_AND_MODIFIED_FILES",
+      "turnOffRuleUntilEpoch": 0,
+      "turnOffRuleWhileOnBranch": null
+    },
+    "validate-architecture-unchanged": {
+      "mode": "RUN_EVERY_TIME",
+      "turnOffRuleUntilEpoch": 0,
+      "turnOffRuleWhileOnBranch": null
+    },
+    "validate-no-architecture-cycles": {
+      "mode": "RUN_EVERY_TIME",
+      "turnOffRuleUntilEpoch": 0,
+      "turnOffRuleWhileOnBranch": null
+    },
+    "validate-packagejson": {
+      "mode": "RUN_EVERY_TIME",
+      "turnOffRuleUntilEpoch": 0,
+      "turnOffRuleWhileOnBranch": null
+    },
+    "validate-versions-locked": {
+      "mode": "RUN_EVERY_TIME",
+      "turnOffRuleUntilEpoch": 0,
+      "turnOffRuleWhileOnBranch": null
+    },
+    "validate-eslint-sync": {
+      "mode": "RUN_EVERY_TIME",
+      "turnOffRuleUntilEpoch": 0,
+      "turnOffRuleWhileOnBranch": null
+    },
+    "no-root-union-api-type": {
+      "mode": "RUN_EVERY_TIME",
+      "turnOffRuleUntilEpoch": 0,
+      "turnOffRuleWhileOnBranch": null
+    },
+    "api-rules-for-openapi": {
+      "mode": "AFFECTED_PROJECT",
+      "turnOffRuleUntilEpoch": 0,
+      "turnOffRuleWhileOnBranch": null
+    },
+    "api-rules-for-mcp": {
+      "mode": "AFFECTED_PROJECT",
+      "turnOffRuleUntilEpoch": 0,
+      "turnOffRuleWhileOnBranch": null
+    },
+    "no-inline-import-in-api-lib": {
+      "mode": "NEW_AND_MODIFIED_CODE",
+      "turnOffRuleUntilEpoch": 0,
+      "turnOffRuleWhileOnBranch": null
+    },
+    "one-enum-spelling-in-api-lib": {
+      "mode": "NEW_AND_MODIFIED_CODE",
+      "turnOffRuleUntilEpoch": 0,
+      "turnOffRuleWhileOnBranch": null
+    },
+    "no-utility-types-in-api-lib": {
+      "mode": "NEW_AND_MODIFIED_CODE",
+      "turnOffRuleUntilEpoch": 0,
+      "turnOffRuleWhileOnBranch": null,
+      "paths": [
+        "libraries/apis/**"
+      ]
+    },
+    "required-type-suffix": {
+      "mode": "NEW_AND_MODIFIED_CODE",
+      "turnOffRuleUntilEpoch": 0,
+      "turnOffRuleWhileOnBranch": null,
+      "entries": [
+        {
+          "paths": [
+            "libraries/apis/**"
+          ],
+          "suffixes": [
+            "Request",
+            "Response",
+            "Event",
+            "Dto",
+            "Api"
+          ]
+        }
+      ]
+    },
+    "api-lib-dependencies": {
+      "mode": "RUN_EVERY_TIME",
+      "turnOffRuleUntilEpoch": 0,
+      "turnOffRuleWhileOnBranch": null,
+      "apiLibPackages": [
+        "@webpieces/core-util",
+        "tslib"
+      ],
+      "apiClients": []
+    },
+    "api-lib-path": {
+      "mode": "RUN_EVERY_TIME",
+      "turnOffRuleUntilEpoch": 0,
+      "turnOffRuleWhileOnBranch": null,
+      "paths": [
+        "libraries/apis/**"
+      ]
+    },
+    "framework-folder": {
+      "mode": "RUN_EVERY_TIME",
+      "turnOffRuleUntilEpoch": 0,
+      "turnOffRuleWhileOnBranch": null,
+      "entries": [
+        {
+          "paths": [
+            "libraries/angular/**"
+          ],
+          "frameworkSets": [
+            "angular"
+          ],
+          "roles": [
+            "lib",
+            "designed-lib"
+          ]
+        },
+        {
+          "paths": [
+            "libraries/node/**"
+          ],
+          "frameworkSets": [
+            "node",
+            "express"
+          ],
+          "roles": [
+            "lib",
+            "designed-lib"
+          ]
+        },
+        {
+          "paths": [
+            "libraries/universal/**"
+          ],
+          "frameworkSets": [
+            "browser+node+react-native"
+          ],
+          "roles": [
+            "lib",
+            "designed-lib"
+          ]
+        },
+        {
+          "paths": [
+            "libraries/rn-browser/**"
+          ],
+          "frameworkSets": [
+            "browser+react-native"
+          ],
+          "roles": [
+            "lib",
+            "designed-lib"
+          ]
+        },
+        {
+          "paths": [
+            "libraries/react-native/**"
+          ],
+          "frameworkSets": [
+            "react-native"
+          ],
+          "roles": [
+            "lib",
+            "designed-lib"
+          ]
+        },
+        {
+          "paths": [
+            "libraries/apis/internal/**"
+          ],
+          "frameworkSets": [
+            "browser+node+react-native"
+          ],
+          "roles": [
+            "api-lib"
+          ]
+        },
+        {
+          "paths": [
+            "libraries/apis/external-node/**"
+          ],
+          "frameworkSets": [
+            "node"
+          ],
+          "roles": [
+            "api-client"
+          ]
+        },
+        {
+          "paths": [
+            "libraries/apis/external-rn-browser/**"
+          ],
+          "frameworkSets": [
+            "browser+react-native"
+          ],
+          "roles": [
+            "api-lib"
+          ]
+        }
+      ]
+    },
+    "framework-tsconfig": {
+      "mode": "MODIFIED_PROJECTS",
+      "turnOffRuleUntilEpoch": 0,
+      "turnOffRuleWhileOnBranch": null
+    },
+    "framework-packages": {
+      "mode": "MODIFIED_PROJECTS",
+      "turnOffRuleUntilEpoch": 0,
+      "turnOffRuleWhileOnBranch": null,
+      "entries": [
+        {
+          "packages": [
+            "@angular/*"
+          ],
+          "frameworks": [
+            "angular"
+          ]
+        },
+        {
+          "packages": [
+            "react",
+            "react-native",
+            "expo*",
+            "@expo/*",
+            "@sentry/react-native"
+          ],
+          "frameworks": [
+            "react",
+            "react-native"
+          ]
+        },
+        {
+          "packages": [
+            "express",
+            "firebase-admin",
+            "googleapis",
+            "google-auth-library",
+            "@google-cloud/*"
+          ],
+          "frameworks": [
+            "node",
+            "express"
+          ]
+        },
+        {
+          "packages": [
+            "firebase"
+          ],
+          "frameworks": [
+            "browser",
+            "angular",
+            "react"
+          ]
+        }
+      ]
+    }
+  },
+  "migrations": [
+    {
+      "scope": "rule",
+      "key": "pr-merge-cleanup",
+      "movedTo": "pr-lifecycle-guard",
+      "instruction": "Rename the key to \"pr-lifecycle-guard\" (merging its value into that entry if you already have one — the four PR/merge guards share one key now). Its mode and escape hatches carry over.",
+      "label": "[pr-merge-cleanup]",
+      "prunable": false
+    },
+    {
+      "scope": "rule",
+      "key": "pr-creation-guard",
+      "movedTo": "pr-lifecycle-guard",
+      "instruction": "Rename the key to \"pr-lifecycle-guard\" (merging its value into that entry if you already have one — the four PR/merge guards share one key now). Its mode and escape hatches carry over; the old \"upsertPrCommand\" field does NOT — that string lives only in commands.guardHints.prCreationOrPush.",
+      "label": "[pr-creation-guard]",
+      "prunable": false
+    },
+    {
+      "scope": "rule",
+      "key": "main-stale-guard",
+      "movedTo": "branch-state-guard",
+      "instruction": "Rename the key to \"branch-state-guard\" (merging its value into that entry if you already have one — the four branch-state guards share one key now). Its mode and escape hatches carry over. Note the widened scope: that key arms the Write, Read AND Bash halves of the branch-state policy, not just the Read block this key used to name.",
+      "label": "[main-stale-guard]",
+      "prunable": false
+    },
+    {
+      "scope": "key",
+      "key": "upsertPr",
+      "movedTo": "commands.guardHints.prCreationOrPush",
+      "instruction": "Move the value to \"guardHints\": { \"prCreationOrPush\": <value> } inside the same \"commands\" section, then delete \"upsertPr\".",
+      "label": "[commands]",
+      "prunable": false
+    },
+    {
+      "scope": "key",
+      "key": "mergeComplete",
+      "movedTo": "commands.guardHints.mergeInProgress",
+      "instruction": "Move the value to \"guardHints\": { \"mergeInProgress\": <value> } inside the same \"commands\" section, then delete \"mergeComplete\".",
+      "label": "[commands]",
+      "prunable": false
+    },
+    {
+      "scope": "key",
+      "key": "rules",
+      "movedTo": "excludePaths (one flat array)",
+      "instruction": "Replace the whole { \"rules\": [...], \"guards\": [...] } object with ONE array holding the union of both lists, de-duplicated — e.g. \"excludePaths\": [\"repositories/**\"]. A path is governed by webpieces or it is not, so there is no longer a per-engine split. To exclude a path from one rule only, use that rule's own \"excludePaths\" inside its config block instead.",
+      "label": "[excludePaths]",
+      "prunable": false
+    },
+    {
+      "scope": "rule",
+      "key": "whole-repo-build-guard",
+      "movedTo": "~/.webpieces/config.json → experimental.whole-repo-build-guard",
+      "instruction": "DELETE this entry from webpieces.config.json — no repo config key controls this guard any more. The guard is OFF by default for everyone, with no file and no key required. To turn it ON for YOUR machine only, put {\"experimental\": {\"whole-repo-build-guard\": true}} in ~/.webpieces/config.json — that file is optional and is tracked by no repo.",
+      "label": "[whole-repo-build-guard]",
+      "prunable": true
+    },
+    {
+      "scope": "rule",
+      "key": "feature-branch-guard",
+      "movedTo": "branch-state-guard",
+      "instruction": "MERGE it into ONE \"branch-state-guard\" entry under \"hookGuards\". All four of feature-branch-guard, read-stale-guard, stale-main-bash-guard and merged-branch-bash-guard now read that single entry — they are one policy (\"may I work here, and is what I read current?\") implemented by four classes, and configuring them separately let you switch on half of it. Keep \"mode\", \"turnOffRuleUntilEpoch\" and \"turnOffRuleWhileOnBranch\"; the ONE \"hangTimeoutMinutes\" survives (there was only ever one refresher and one cache, so at most one of the four values could ever take effect); \"branchNamingConvention\" survives from feature-branch-guard. If the four disagreed on \"mode\", pick the one you meant — \"ON\" arms the whole policy including the Read block. Then DELETE this key.",
+      "label": "[feature-branch-guard]",
+      "prunable": false
+    },
+    {
+      "scope": "rule",
+      "key": "read-stale-guard",
+      "movedTo": "branch-state-guard",
+      "instruction": "MERGE it into ONE \"branch-state-guard\" entry under \"hookGuards\". All four of feature-branch-guard, read-stale-guard, stale-main-bash-guard and merged-branch-bash-guard now read that single entry — they are one policy (\"may I work here, and is what I read current?\") implemented by four classes, and configuring them separately let you switch on half of it. Keep \"mode\", \"turnOffRuleUntilEpoch\" and \"turnOffRuleWhileOnBranch\"; the ONE \"hangTimeoutMinutes\" survives (there was only ever one refresher and one cache, so at most one of the four values could ever take effect); \"branchNamingConvention\" survives from feature-branch-guard. If the four disagreed on \"mode\", pick the one you meant — \"ON\" arms the whole policy including the Read block. Then DELETE this key.",
+      "label": "[read-stale-guard]",
+      "prunable": false
+    },
+    {
+      "scope": "rule",
+      "key": "stale-main-bash-guard",
+      "movedTo": "branch-state-guard",
+      "instruction": "MERGE it into ONE \"branch-state-guard\" entry under \"hookGuards\". All four of feature-branch-guard, read-stale-guard, stale-main-bash-guard and merged-branch-bash-guard now read that single entry — they are one policy (\"may I work here, and is what I read current?\") implemented by four classes, and configuring them separately let you switch on half of it. Keep \"mode\", \"turnOffRuleUntilEpoch\" and \"turnOffRuleWhileOnBranch\"; the ONE \"hangTimeoutMinutes\" survives (there was only ever one refresher and one cache, so at most one of the four values could ever take effect); \"branchNamingConvention\" survives from feature-branch-guard. If the four disagreed on \"mode\", pick the one you meant — \"ON\" arms the whole policy including the Read block. Then DELETE this key.",
+      "label": "[stale-main-bash-guard]",
+      "prunable": false
+    },
+    {
+      "scope": "rule",
+      "key": "merged-branch-bash-guard",
+      "movedTo": "branch-state-guard",
+      "instruction": "MERGE it into ONE \"branch-state-guard\" entry under \"hookGuards\". All four of feature-branch-guard, read-stale-guard, stale-main-bash-guard and merged-branch-bash-guard now read that single entry — they are one policy (\"may I work here, and is what I read current?\") implemented by four classes, and configuring them separately let you switch on half of it. Keep \"mode\", \"turnOffRuleUntilEpoch\" and \"turnOffRuleWhileOnBranch\"; the ONE \"hangTimeoutMinutes\" survives (there was only ever one refresher and one cache, so at most one of the four values could ever take effect); \"branchNamingConvention\" survives from feature-branch-guard. If the four disagreed on \"mode\", pick the one you meant — \"ON\" arms the whole policy including the Read block. Then DELETE this key.",
+      "label": "[merged-branch-bash-guard]",
+      "prunable": false
+    },
+    {
+      "scope": "rule",
+      "key": "pr-creation-or-push-guard",
+      "movedTo": "pr-lifecycle-guard",
+      "instruction": "MERGE it into ONE \"pr-lifecycle-guard\" entry under \"hookGuards\". All four of pr-creation-or-push-guard, merge-in-progress-guard, pr-merge-guard and redirect-how-to-merge-main now read that single entry — they are one policy (\"do PRs and merges go through the gated flow?\"). Keep \"mode\", \"turnOffRuleUntilEpoch\" and \"turnOffRuleWhileOnBranch\". Know what \"mode\": \"OFF\" now means: it releases the unvalidated-merge gate as well as the PR/push blocks, because merge-in-progress-guard is under this key too. The per-guard \"upsertPrCommand\" / \"mergeCompleteCommand\" fields are gone — those strings live ONLY in commands.guardHints.prCreationOrPush / .mergeInProgress. Then DELETE this key.",
+      "label": "[pr-creation-or-push-guard]",
+      "prunable": false
+    },
+    {
+      "scope": "rule",
+      "key": "merge-in-progress-guard",
+      "movedTo": "pr-lifecycle-guard",
+      "instruction": "MERGE it into ONE \"pr-lifecycle-guard\" entry under \"hookGuards\". All four of pr-creation-or-push-guard, merge-in-progress-guard, pr-merge-guard and redirect-how-to-merge-main now read that single entry — they are one policy (\"do PRs and merges go through the gated flow?\"). Keep \"mode\", \"turnOffRuleUntilEpoch\" and \"turnOffRuleWhileOnBranch\". Know what \"mode\": \"OFF\" now means: it releases the unvalidated-merge gate as well as the PR/push blocks, because merge-in-progress-guard is under this key too. The per-guard \"upsertPrCommand\" / \"mergeCompleteCommand\" fields are gone — those strings live ONLY in commands.guardHints.prCreationOrPush / .mergeInProgress. Then DELETE this key.",
+      "label": "[merge-in-progress-guard]",
+      "prunable": false
+    },
+    {
+      "scope": "rule",
+      "key": "pr-merge-guard",
+      "movedTo": "pr-lifecycle-guard",
+      "instruction": "MERGE it into ONE \"pr-lifecycle-guard\" entry under \"hookGuards\". All four of pr-creation-or-push-guard, merge-in-progress-guard, pr-merge-guard and redirect-how-to-merge-main now read that single entry — they are one policy (\"do PRs and merges go through the gated flow?\"). Keep \"mode\", \"turnOffRuleUntilEpoch\" and \"turnOffRuleWhileOnBranch\". Know what \"mode\": \"OFF\" now means: it releases the unvalidated-merge gate as well as the PR/push blocks, because merge-in-progress-guard is under this key too. The per-guard \"upsertPrCommand\" / \"mergeCompleteCommand\" fields are gone — those strings live ONLY in commands.guardHints.prCreationOrPush / .mergeInProgress. Then DELETE this key.",
+      "label": "[pr-merge-guard]",
+      "prunable": false
+    },
+    {
+      "scope": "rule",
+      "key": "redirect-how-to-merge-main",
+      "movedTo": "pr-lifecycle-guard",
+      "instruction": "MERGE it into ONE \"pr-lifecycle-guard\" entry under \"hookGuards\". All four of pr-creation-or-push-guard, merge-in-progress-guard, pr-merge-guard and redirect-how-to-merge-main now read that single entry — they are one policy (\"do PRs and merges go through the gated flow?\"). Keep \"mode\", \"turnOffRuleUntilEpoch\" and \"turnOffRuleWhileOnBranch\". Know what \"mode\": \"OFF\" now means: it releases the unvalidated-merge gate as well as the PR/push blocks, because merge-in-progress-guard is under this key too. The per-guard \"upsertPrCommand\" / \"mergeCompleteCommand\" fields are gone — those strings live ONLY in commands.guardHints.prCreationOrPush / .mergeInProgress. Then DELETE this key.",
+      "label": "[redirect-how-to-merge-main]",
+      "prunable": false
+    },
+    {
+      "scope": "key",
+      "key": "subagent",
+      "movedTo": "id",
+      "instruction": "Rename \"subagent\" to \"id\" in EVERY commands.pr-gate.checklists entry, keeping its value (it still names the checklist and keys review-round<N>-<id>.json). Checklists no longer choose an agent type: every one is reviewed by the webpieces-reviewer agent (or your own, via \"overrideReviewerAgent\": true + \"reviewerAgentName\" in commands.pr-gate).",
+      "label": "[pr-gate.checklists]",
+      "prunable": false
+    },
+    {
+      "scope": "field",
+      "key": "runtime-architecture.servicePaths",
+      "movedTo": "",
+      "instruction": "This field was removed — it was never read. The runtime graph is derived automatically from architecture/dependencies.json (apiRelations + project roles). Delete it.",
+      "label": "[runtime-architecture]",
+      "prunable": false
+    },
+    {
+      "scope": "field",
+      "key": "runtime-architecture.apiProjectPaths",
+      "movedTo": "",
+      "instruction": "This field was removed — it was never read. The runtime graph is derived automatically from architecture/dependencies.json, so there is NO list of api libs to maintain. Delete it (do not enumerate api libs and do not replace it with a glob).",
+      "label": "[runtime-architecture]",
+      "prunable": false
+    },
+    {
+      "scope": "field",
+      "key": "runtime-architecture.allowedCycles",
+      "movedTo": "",
+      "instruction": "This field was removed — a runtime cycle is not allowable at all any more. Levelling now FAILS on any cycle, because CD deploys services in dependency order and a cycle has no such order. Delete the key. If a cycle genuinely cannot be broken yet, declare it PER EDGE with a `cutLegacyCycle:<targetService>` nx tag on the CALLING project, which admits the debt where `grep -rn cutLegacyCycle` can enumerate it — there is no config key for it.",
+      "label": "[runtime-architecture]",
+      "prunable": false
+    },
+    {
+      "scope": "field",
+      "key": "pr-lifecycle-guard.upsertPrCommand",
+      "movedTo": "",
+      "instruction": "This field was removed. The command the push/PR-creation block prints lives in ONE place: \"commands\": { \"guardHints\": { \"prCreationOrPush\": <value> } }. Move your value there and delete this key.",
+      "label": "[pr-lifecycle-guard]",
+      "prunable": false
+    },
+    {
+      "scope": "field",
+      "key": "pr-lifecycle-guard.mergeCompleteCommand",
+      "movedTo": "",
+      "instruction": "This field was removed. The command the unfinished-merge block prints lives in ONE place: \"commands\": { \"guardHints\": { \"mergeInProgress\": <value> } }. Move your value there and delete this key.",
+      "label": "[pr-lifecycle-guard]",
+      "prunable": false
+    }
+  ],
+  "owners": {
+    "@webpieces/code-rules": [
+      "max-method-lines",
+      "max-file-lines",
+      "require-return-type",
+      "no-inline-type-literals",
+      "no-any-unknown",
+      "no-implicit-any",
+      "prisma-validate-dtos",
+      "prisma-converter",
+      "no-destructure",
+      "catch-error-pattern",
+      "no-unmanaged-exceptions",
+      "angular-no-direct-api-in-resolver",
+      "no-symbol-di-tokens",
+      "no-client-creation-outside-server-or-client",
+      "no-custom-css",
+      "no-state-paths-in-templates",
+      "no-process-exit-outside-main",
+      "no-function-outside-class",
+      "inject-annotation-not-needed-for-concrete-class",
+      "framework-tag",
+      "role-tag",
+      "ensure-we-are-secure",
+      "no-inline-import-in-api-lib",
+      "one-enum-spelling-in-api-lib",
+      "no-utility-types-in-api-lib",
+      "required-type-suffix",
+      "framework-tsconfig",
+      "framework-packages"
+    ],
+    "@webpieces/ai-hook-rules": [
+      "throw-cause-required",
+      "no-js-files",
+      "validate-ts-in-src"
+    ],
+    "@webpieces/agent-workflow-rules": [
+      "branch-creation-guard",
+      "pr-lifecycle-guard",
+      "branch-state-guard"
+    ],
+    "@webpieces/nx-webpieces-rules": [
+      "no-file-import-cycles",
+      "runtime-architecture",
+      "nx-wiring",
+      "di-graph",
+      "missing-design-annotation",
+      "validate-architecture-unchanged",
+      "validate-no-architecture-cycles",
+      "validate-packagejson",
+      "validate-versions-locked",
+      "validate-eslint-sync",
+      "no-root-union-api-type",
+      "api-rules-for-openapi",
+      "api-rules-for-mcp",
+      "api-lib-dependencies",
+      "api-lib-path",
+      "framework-folder"
+    ],
+    "@webpieces/eslint-rules": [
+      "enforce-architecture",
+      "no-json-property-primitive-type",
+      "require-typed-template",
+      "no-mat-cell-def"
+    ]
+  }
+}

@@ -1,9 +1,10 @@
+import { SourceContributionConfig } from "../source-contribution-config";
 import { specTempDirs } from '@webpieces/tooling-testkit';
 import { describe, it, expect } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
 
-import { MaxFileLinesConfig, GENERATED_CODE_PATHS, isPathExcluded, NoFunctionOutsideClassConfig } from '@webpieces/rules-config';
+import { GENERATED_CODE_PATHS, isPathExcluded } from "@webpieces/rules-config";
 
 import { FileContext } from '@webpieces/hook-runtime';
 import { MaxFileLinesRule } from './max-file-lines';
@@ -31,7 +32,7 @@ function ctx(relativePath: string, projectedLines: number): FileContext {
 }
 
 function rule(allowedPaths?: string[], disableAllowed = false): MaxFileLinesRule {
-    const cfg = new MaxFileLinesConfig();
+    const cfg = new SourceContributionConfig();
     cfg.mode = 'NEW_AND_MODIFIED_FILES';
     cfg.limit = 902;
     cfg.disableAllowed = disableAllowed;
@@ -101,7 +102,7 @@ describe('MaxFileLinesRule — mode', () => {
     });
 
     it('does not run when mode is OFF', () => {
-        const cfg = new MaxFileLinesConfig();
+        const cfg = new SourceContributionConfig();
         cfg.mode = 'OFF';
         expect(new MaxFileLinesRule(cfg).shouldRun()).toBe(false);
     });
@@ -117,7 +118,7 @@ describe('allowedPaths glob matching agrees with no-function-outside-class', () 
     ] as const;
 
     it.each(cases)('%s vs %s', (relPath: string, patterns: readonly string[]) => {
-        const nfoc = new NoFunctionOutsideClassConfig();
+        const nfoc = new SourceContributionConfig();
         nfoc.allowedPaths = [...patterns];
         const expected = isPathExcluded(relPath, nfoc.allowedPaths);
 

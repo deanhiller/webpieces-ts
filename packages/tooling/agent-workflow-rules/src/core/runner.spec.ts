@@ -1,3 +1,4 @@
+import { policyFixture } from '@webpieces/tooling-testkit';
 import { specTempDirs } from '@webpieces/tooling-testkit';
 import { execFileSync } from 'child_process';
 import * as fs from 'fs';
@@ -37,7 +38,7 @@ describe('runBash installer bypass (deadlock escape: installs pass even with no/
     // CONFIG_MISSING report. Installer commands must slip past that (and past config validation) so
     // `pnpm install` can re-enable the guards when the config is ahead of the installed validator.
     function tmpDirOutsideRepo(): string {
-        return specTempDirs.make('wp-ai-hook-');
+        return policyFixture.makeRepo('wp-ai-hook-');
     }
 
     it('lets `pnpm install` / `npm i` through (null = allow) where a normal command is blocked', () => {

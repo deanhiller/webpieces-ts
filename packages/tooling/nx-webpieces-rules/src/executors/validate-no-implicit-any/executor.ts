@@ -1,7 +1,7 @@
 import type { ExecutorContext } from '@nx/devkit';
 import { ExecutorResult } from '../../executor-result';
 import { NoImplicitAnyValidator, GateScanScope } from '@webpieces/code-rules';
-import { NoImplicitAnyConfig } from '@webpieces/rules-config';
+import { NoImplicitAnyConfig } from "@webpieces/code-rules";
 
 export default async function runExecutor(
     options: NoImplicitAnyConfig,

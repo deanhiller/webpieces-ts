@@ -519,3 +519,8 @@ describe('turnOffAllReviewers — one compact bullet in the commit body', () => 
         expect(renderDetailComment(baseInput())).not.toContain('SUPPRESSED');
     });
 });
+
+it('reports newly owned and custom directive names without a central token table', () => {
+    const counts = countAddedDisables('+// webpieces-disable newly-owned-policy, client-policy -- reason mentions no-any-unknown');
+    expect(counts.webpiecesRules).toEqual(['client-policy', 'newly-owned-policy']);
+});

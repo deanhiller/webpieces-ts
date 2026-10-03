@@ -1,7 +1,7 @@
 import type { ExecutorContext } from '@nx/devkit';
 import { ExecutorResult } from '../../executor-result';
 import { NoAnyUnknownValidator, GateScanScope } from '@webpieces/code-rules';
-import { NoAnyUnknownConfig } from '@webpieces/rules-config';
+import { NoAnyUnknownConfig } from "@webpieces/code-rules";
 
 export default async function runExecutor(
     options: NoAnyUnknownConfig,

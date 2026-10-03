@@ -13,10 +13,12 @@ Custom ESLint plugin exporting WebPieces lint rules — architecture dependency 
 ## Out of Scope
 
 - Nx executors / build targets that *invoke* these checks — those live in `nx-webpieces-rules` (the `validate-*` executors).
-- Rule mode/config resolution (ON/OFF, grace windows) — sourced from `@webpieces/rules-config` and `webpieces.config.json`, not defined here.
+- Generic configuration loading and validation (rules-config); shared scope/value contracts (rules-sdk).
 - PR-gate workflow CLIs and the merge dashboard — those live in `pr-gate`.
 - Runtime/framework code (routing, DI, http) — this package is lint-time only.
 
 ## Notes (optional)
 
 CommonJS package (`main: src/index.js`) so ESLint can `require()` it; `eslint` is a peer dependency. Rules read shared configuration from `@webpieces/rules-config` so lint-time and build-time gates stay consistent.
+
+The four lint-only policy schemas, optional tuning, and reviewed seeds belong here. Contributions to Code-owned policies retain the canonical Code owner and its settings.

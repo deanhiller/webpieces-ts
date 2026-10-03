@@ -1,3 +1,4 @@
+import { policyFixture } from '@webpieces/tooling-testkit';
 import { specTempDirs } from '@webpieces/tooling-testkit';
 import { describe, it, expect, beforeEach, afterEach, beforeAll, afterAll } from 'vitest';
 import { execSync, spawnSync } from 'child_process';
@@ -8,7 +9,7 @@ import { MainSyncStatus, MainSyncLock, readMainSyncStatus, writeMainSyncStatus, 
 
 
 function tmpRepoRoot(): string {
-    return specTempDirs.make('mss-');
+    return policyFixture.makeRepo('mss-');
 }
 
 describe('main-sync lock state machine', () => {
@@ -213,7 +214,7 @@ function repoTemplate(mainEdits: string[], featureEdits: string[]): string {
     const key = `${mainEdits.join(',')}|${featureEdits.join(',')}`;
     const cached = repoTemplates.get(key);
     if (cached !== undefined) return cached;
-    const dir = specTempDirs.make('mss-tpl-');
+    const dir = policyFixture.makeRepo('mss-tpl-');
     buildRepo(dir, mainEdits, featureEdits);
     repoTemplates.set(key, dir);
     templateRoots.push(dir);
@@ -231,7 +232,7 @@ function stageRepo(work: string, mainEdits: string[], featureEdits: string[]): v
 // the developer's gh state, a network round trip. A stub on PATH gives the SAME answer (non-zero =>
 // no PR) instantly, so these tests neither require gh to be installed nor inherit its latency.
 function stubGhOnPath(): string {
-    const binDir = specTempDirs.make('mss-bin-');
+    const binDir = policyFixture.makeRepo('mss-bin-');
     fs.writeFileSync(path.join(binDir, 'gh'), '#!/bin/sh\nexit 1\n', { mode: 0o755 });
     const previous = process.env['PATH'] ?? '';
     process.env['PATH'] = `${binDir}${path.delimiter}${previous}`;
@@ -255,7 +256,7 @@ describe('computeMainSyncStatus (integration)', () => {
     let work: string;
 
     beforeEach(() => {
-        work = specTempDirs.make('mss-work-');
+        work = policyFixture.makeRepo('mss-work-');
     });
 
     afterEach(() => {
@@ -355,8 +356,8 @@ describe('computeMainSyncStatus — must not write .git/FETCH_HEAD', () => {
     let work: string;
 
     beforeEach(() => {
-        origin = specTempDirs.make('mss-origin-');
-        work = specTempDirs.make('mss-fh-');
+        origin = policyFixture.makeRepo('mss-origin-');
+        work = policyFixture.makeRepo('mss-fh-');
         fs.rmSync(work, { recursive: true, force: true });  // git init makes it
         buildRepoWithRemote(origin, work);
     });
@@ -405,7 +406,7 @@ describe('computeMainSyncStatus — working-tree overlap (Bug #1)', () => {
     let work: string;
 
     beforeEach(() => {
-        work = specTempDirs.make('mss-wt-');
+        work = policyFixture.makeRepo('mss-wt-');
     });
 
     afterEach(() => {

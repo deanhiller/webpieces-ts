@@ -718,6 +718,9 @@ importers:
 
   packages/tooling/tooling-testkit:
     dependencies:
+      '@webpieces/rules-sdk':
+        specifier: workspace:*
+        version: link:../rules-sdk
       '@webpieces/tooling-common':
         specifier: workspace:*
         version: link:../tooling-common

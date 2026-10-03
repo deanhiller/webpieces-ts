@@ -3,7 +3,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { execSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
-import { NoClientCreationOutsideServerOrClientConfig } from '@webpieces/rules-config';
+import { NoClientCreationOutsideServerOrClientConfig } from "./configs/no-client-creation-config";
 
 import { NoClientCreationOutsideServerOrClientValidator } from './validate-no-client-creation-outside-server-or-client';
 import { ProjectRoleResolver } from './project-role-resolver';

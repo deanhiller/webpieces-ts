@@ -9,7 +9,8 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { execSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
-import { NoStatePathsInTemplatesConfig, RuleFailError } from '@webpieces/rules-config';
+import { RuleFailError } from "@webpieces/rules-config";
+import { NoStatePathsInTemplatesConfig } from "./configs/no-state-paths-config";
 
 import { NoStatePathsInTemplatesValidator } from './validate-no-state-paths-in-templates';
 import { GateScanScope } from './scan-scope';

@@ -1,3 +1,7 @@
+import { policyFixture } from '@webpieces/tooling-testkit';
+import { RulePackRegistry } from '@webpieces/rules-config';
+const fixtureRuleRegistry = new RulePackRegistry(policyFixture.manifests());
+import { fixtureMigrations as RETIRED_CONFIG_KEYS } from '@webpieces/tooling-testkit';
 import { describe, it, expect } from 'vitest';
 
 import {
@@ -7,7 +11,8 @@ import {
     SECTION_PLACEMENT_MARKER,
 } from './config-error-banner';
 import { validateCommandsSection } from './commands-section-validators';
-import { RETIRED_CONFIG_KEYS, RetiredConfigKey, retiredKeyError } from './retired-config-keys';
+import { retiredKeyError } from './retired-config-keys';
+import { RetiredConfigKey } from '@webpieces/rules-sdk';
 import { validateSectionPlacement } from './validate-config';
 
 /**
@@ -123,8 +128,8 @@ describe('config-error banner — the markers match what the validators actually
     });
 
     it('a guard left in `rules` and a code rule left in `hookGuards` both carry the marker', () => {
-        const guardInRules = validateSectionPlacement({ 'pr-lifecycle-guard': {} }, {});
-        const ruleInGuards = validateSectionPlacement({}, { 'max-file-lines': {} });
+        const guardInRules = validateSectionPlacement({ 'pr-lifecycle-guard': {} }, {}, fixtureRuleRegistry);
+        const ruleInGuards = validateSectionPlacement({}, { 'max-file-lines': {} }, fixtureRuleRegistry);
         expect(guardInRules).toHaveLength(1);
         expect(ruleInGuards).toHaveLength(1);
         for (const message of [...guardInRules, ...ruleInGuards]) {

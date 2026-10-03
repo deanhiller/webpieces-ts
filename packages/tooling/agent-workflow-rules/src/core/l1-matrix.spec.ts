@@ -1,3 +1,4 @@
+import { policyFixture } from '@webpieces/tooling-testkit';
 import { specTempDirs } from '@webpieces/tooling-testkit';
 import { execFileSync } from 'child_process';
 import * as fs from 'fs';
@@ -60,7 +61,7 @@ function label(c: L1Classification): string {
  * path would silently read nothing, come back "in sync", and make every assertion here vacuous.
  */
 function stageSkew(worktreeVersion = '0.4.612'): { main: string; worktree: string } {
-    const base = specTempDirs.make('wp-skew-');
+    const base = policyFixture.makeRepo('wp-skew-');
     const main = path.join(base, 'main');
     const worktree = path.join(base, 'wt');
     for (const dir of [main, worktree]) fs.mkdirSync(dir, { recursive: true });

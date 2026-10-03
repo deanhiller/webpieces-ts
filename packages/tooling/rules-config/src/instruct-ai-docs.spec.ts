@@ -1,3 +1,4 @@
+import { policyFixture } from '@webpieces/tooling-testkit';
 import { specTempDirs } from '@webpieces/tooling-testkit';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -13,7 +14,7 @@ const GIT_WORKFLOW_DOC = 'webpieces.git-workflow.md';
 const LOCATION_MATRIX_DOC = 'webpieces.location-matrix.md';
 
 function tempRoot(): string {
-    return specTempDirs.make('wp-instruct-ai-');
+    return policyFixture.makeRepo('wp-instruct-ai-');
 }
 
 function deliveredDir(root: string): string {

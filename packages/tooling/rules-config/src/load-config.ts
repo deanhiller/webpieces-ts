@@ -4,7 +4,8 @@ import { injectable, bindingScopeValues } from 'inversify';
 import { buildCommandsConfig, CommandsConfig } from './commands-config';
 import { formatConfigErrorsBanner } from './config-error-banner';
 import { ConfigFile } from './config-file';
-import { defaultRules } from './default-rules';
+import { RulePackRegistry } from './rule-pack-registry';
+import { RulePackSelection } from './rule-pack-selection';
 import { ExcludePaths } from './exclude-hook-paths';
 import { InformAiError } from '@webpieces/tooling-common';
 import { PrGateConfig } from './pr-gate-config';
@@ -29,6 +30,7 @@ export class LoadedConfig {
         readonly excludePaths: ExcludePaths,
         readonly matchRules: readonly MatchRuleConfig[],
         readonly configPath: string | null,
+        readonly ruleRegistry: RulePackRegistry,
     ) {}
 }
 
@@ -44,7 +46,7 @@ export class LoadedConfig {
  */
 @injectable(bindingScopeValues.Singleton)
 export class ConfigLoader {
-    constructor(private readonly configFile: ConfigFile) {}
+    constructor(private readonly configFile: ConfigFile, private readonly rulePacks: RulePackSelection) {}
 
     /**
      * Reads webpieces.config.json once, validates BOTH the `rules` map and the top-level `pr-gate`
@@ -64,6 +66,7 @@ export class ConfigLoader {
                 new ExcludePaths([]),
                 [],
                 null,
+                new RulePackRegistry([]),
             );
         }
 
@@ -82,11 +85,12 @@ export class ConfigLoader {
 
         // The repo root (dir holding webpieces.config.json) lets checklists[].docs existence be checked.
         const repoRoot = path.dirname(configPath);
+        const registry = this.rulePacks.loadFrom(repoRoot);
         const errors = [
             // webpieces-disable no-any-unknown -- the raw parsed config is opaque; only key names are read
             ...validateTopLevelKeys(consumerConfig as unknown as Record<string, unknown>),
-            ...validateWebpiecesConfig(overrideRules, rulesDir.length > 0),
-            ...validateSectionPlacement(rulesSection, hookGuardsSection),
+            ...validateWebpiecesConfig(overrideRules, registry, rulesDir.length > 0),
+            ...validateSectionPlacement(rulesSection, hookGuardsSection, registry),
             ...validateCommandsSection(consumerConfig.commands, legacyPrGate, repoRoot),
             ...validateExcludePaths(consumerConfig.excludePaths),
             ...validateMatchRulesSection(consumerConfig['match-rules']),
@@ -100,11 +104,11 @@ export class ConfigLoader {
         const userConfiguredRuleNames = new Set(Object.keys(overrideRules));
         const mergedRules = new Map<string, ResolvedRuleConfig>();
         const allRuleNames = new Set([
-            ...Object.keys(defaultRules),
+            ...registry.ruleIds(),
             ...Object.keys(overrideRules),
         ]);
         for (const name of allRuleNames) {
-            mergedRules.set(name, this.mergeRule(defaultRules[name], overrideRules[name]));
+            mergedRules.set(name, this.mergeRule(registry.hasRule(name) ? registry.optionalTuningFor(name) : undefined, overrideRules[name]));
         }
         const resolved = new ResolvedConfig(mergedRules, userConfiguredRuleNames, rulesDir, configPath);
 
@@ -112,7 +116,7 @@ export class ConfigLoader {
         const excludePaths = this.parseExcludePaths(consumerConfig.excludePaths);
         const matchRules = this.parseMatchRules(consumerConfig['match-rules']);
 
-        return new LoadedConfig(resolved, rulesConfig, commands, commands.prGate, excludePaths, matchRules, configPath);
+        return new LoadedConfig(resolved, rulesConfig, commands, commands.prGate, excludePaths, matchRules, configPath, registry);
     }
 
     // There is deliberately NO applyCommandDefaults here any more.
@@ -188,7 +192,7 @@ export class ConfigLoader {
 
 // Temporary migration delegator — consumers migrate to injecting ConfigLoader over follow-up PRs,
 // then this free function is removed. The logic now lives in the injected ConfigLoader class.
-const configLoaderSvc = new ConfigLoader(new ConfigFile());
+const configLoaderSvc = new ConfigLoader(new ConfigFile(), new RulePackSelection());
 
 // webpieces-disable no-function-outside-class -- temporary back-compat delegator to ConfigLoader; removed once all 118 consumers inject it
 export function loadAndValidate(cwd: string): LoadedConfig {

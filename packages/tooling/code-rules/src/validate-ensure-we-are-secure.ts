@@ -2,7 +2,8 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as ts from 'typescript';
-import { EnsureWeAreSecureConfig, getChangedFiles, detectBase, Option, RuleFailError, RULE_NAMES } from '@webpieces/rules-config';
+import { getChangedFiles, detectBase, Option, RuleFailError } from "@webpieces/rules-config";
+import { EnsureWeAreSecureConfig } from "./configs/rule-configs";
 import { InformAiError } from '@webpieces/tooling-common';
 import { injectable, bindingScopeValues } from 'inversify';
 import { CodeValidator, ExecutorResult } from './code-validator';
@@ -559,7 +560,7 @@ export function securityContractsError(
     const message =
         'API contracts in directly changed projects are not explicit and secure.\n' + details;
     return new RuleFailError(
-        RULE_NAMES.ENSURE_WE_ARE_SECURE,
+        "ensure-we-are-secure",
         message,
         first?.line,
         first === undefined ? undefined : `[${first.code}] ${first.message}`,

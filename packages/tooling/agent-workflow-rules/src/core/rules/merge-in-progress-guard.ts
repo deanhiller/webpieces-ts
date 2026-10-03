@@ -2,7 +2,9 @@ import * as fs from 'fs';
 import * as path from 'path';
 
 import { dotWebpieces } from '@webpieces/tooling-common';
-import { MERGE_INFO_DIR, MERGE_IN_PROGRESS_FILE, PrLifecycleGuardConfig, PR_LIFECYCLE_GUARD_KEY } from '@webpieces/rules-config';
+import { MERGE_INFO_DIR, MERGE_IN_PROGRESS_FILE } from '@webpieces/rules-config';
+import { PR_LIFECYCLE_GUARD_KEY } from '../../policy-keys';
+import { PrLifecycleGuardConfig } from "../../configs/rule-configs";
 
 import type { BashContext, Violation } from '@webpieces/hook-runtime';
 import { Violation as V } from '@webpieces/hook-runtime';

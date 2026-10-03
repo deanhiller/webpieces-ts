@@ -1,7 +1,5 @@
-import { FieldDef, SchemaShape, BaseRuleConfig, BASE_RULE_SCHEMA } from '@webpieces/rules-sdk';
-
-import { ModifiedCodeMode, MODIFIED_CODE_MODES } from './rule-configs';
-
+import { FieldDef, SchemaShape, BaseRuleConfig, BASE_RULE_SCHEMA } from "@webpieces/rules-sdk";
+import { ModifiedCodeMode, MODIFIED_CODE_MODES } from "@webpieces/rules-sdk";
 /**
  * The template dirs `no-state-paths-in-templates` looks at when a repo has not said otherwise:
  * webpieces' own instruct-ai templates, which are the generated docs the rule was written for.
