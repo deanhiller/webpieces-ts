@@ -16,6 +16,7 @@ import {
     validateReviewerAgentKeys,
 } from './pr-gate-section-validators';
 import { retiredEntry, retiredKeyError, retiredRuleFor } from './retired-config-keys';
+import { PRUNE_UNKNOWN_COMMAND } from './constants';
 
 // Re-exported so the isolated validate-checklist-docs target keeps importing it from here.
 export { validateChecklistsSection };
@@ -101,6 +102,7 @@ function unknownRuleError(ruleName: string): string {
     return (
         `[${ruleName}] Unknown rule — the running @webpieces validator has no selected owner schema for it. A key no validator knows controls NOTHING, so ` +
         `DELETE the "${ruleName}" key from the direct policy-ID map in its declared owner config file. ` +
+        `Run \`${PRUNE_UNKNOWN_COMMAND}\` to remove unknown entries from declared owner files mechanically. ` +
         `It may be RETIRED: a newer release can move ` +
         `a setting out of this file entirely, in which case deleting the key here is the WHOLE fix. ` +
         `MACHINE-LOCAL settings in particular now live in ~/.webpieces/config.json under "experimental" — ` +
