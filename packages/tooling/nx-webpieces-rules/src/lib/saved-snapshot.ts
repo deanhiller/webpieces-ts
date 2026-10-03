@@ -50,7 +50,7 @@ export class SavedSnapshot {
     }
 
     private readArtifact<T>(graphPath: string, load: () => T): T {
-        // webpieces-disable no-unmanaged-exceptions -- saved JSON decoding boundary adds the artifact path and repair while preserving the cause
+        // eslint-disable-next-line @webpieces/no-unmanaged-exceptions -- saved JSON decoding boundary adds the artifact path and repair while preserving the cause
         try {
             return load();
         } catch (err: unknown) {
