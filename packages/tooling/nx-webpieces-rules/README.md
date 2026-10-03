@@ -27,32 +27,45 @@ It is wired into the build: the `@nx/js:tsc` target default lists it in
 
 ### Configuration
 
-On/off and a time-boxed grace window come from `webpieces.config.json` at the
-workspace root — the same source of truth as every other webpieces rule — under
-the rule key `no-file-import-cycles`:
+`webpieces.config.json` declares each owning pack and its config path in the root
+`rulePacks` array. For example, the Nx entry is:
 
-```jsonc
+```json
 {
-  "rules": {
-    "no-file-import-cycles": {
-      "mode": "ON",                            // "OFF" disables the gate everywhere
-      "turnOffRuleUntilEpoch": 1771931925,  // epoch SECONDS — while now < epoch,
-                                               //   cycles are REPORTED but the build
-                                               //   PASSES; after it, the gate fails again
-      "ignoreTypeOnly": false                  // when true, ignore `import type`
-                                               //   re-export cycles (erased at compile
-                                               //   time, harmless at runtime)
-    }
+  "package": "@webpieces/nx-webpieces-rules",
+  "config": ".webpieces/rules/nx.json"
+}
+```
+
+Keep the other selected owners and required root settings. Policy settings come
+from the declared owner file's direct policy-ID map. This entry belongs directly
+in `.webpieces/rules/nx.json` (an excerpt; the other owned policies also require
+explicit settings):
+
+```json
+{
+  "no-file-import-cycles": {
+    "mode": "RUN_EVERY_TIME",
+    "turnOffRuleUntilEpoch": 0,
+    "turnOffRuleWhileOnBranch": null,
+    "ignoreTypeOnly": false
   }
 }
 ```
+
+Use complete `OFF` settings for an intentional opt-out. `ignoreTypeOnly: true`
+ignores type-only import/re-export cycles. A future `turnOffRuleUntilEpoch` value
+uses epoch seconds; `0` and a `null` branch hatch keep enforcement active.
+After reviewing the declarations, `pnpm wp-rules-sync` explicitly seeds missing
+owner settings and refreshes the lock/catalog artifacts. Review and commit its
+changes; normal loading never supplies missing required settings.
 
 Semantics, mirroring the method/file-size dated-disable model:
 
 | Situation                                   | Result                          |
 | ------------------------------------------- | ------------------------------- |
 | `mode: "OFF"`                               | Skipped (passes), no madge run  |
-| Cycle found, no `turnOffRuleUntilEpoch`  | **Fails**                       |
+| Cycle found, `turnOffRuleUntilEpoch: 0`  | **Fails**                       |
 | Cycle found, `now < turnOffRuleUntilEpoch` | Reported but **passes** (warn) |
 | Cycle found, `now >= turnOffRuleUntilEpoch` | **Fails** again               |
 | No cycle                                    | Passes                          |

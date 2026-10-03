@@ -439,8 +439,8 @@ function createWorkspaceTargetsWithoutPrefix(
     // ci aggregate so it does not change existing gate behavior — consumers point a required check at it.
     targets['validate-checklist-docs'] = targetFactory.checklistDocs();
     // Use combined validate-code instead of 3 separate targets
-    // Options come from webpieces.config.json at the workspace root
-    // (loaded via @webpieces/rules-config; same source of truth as @webpieces/ai-hook-rules)
+    // Options come from declared owner files' direct policy-ID maps, resolved by
+    // @webpieces/rules-config from the root rulePacks declaration.
     if (
         validations.validateNewMethods ||
         validations.validateModifiedMethods ||
@@ -604,7 +604,7 @@ function createHelpTarget(): TargetConfiguration {
  *
  * Uses the `validate-no-file-import-cycles` executor (which bundles madge as a
  * dependency) rather than a runtime `npx madge` fetch. The executor reads
- * webpieces.config.json so the gate can be turned on/off (`mode`) and
+ * the declared Nx owner file's direct policy-ID map to turn the gate on/off (`mode`) and
  * time-boxed (`turnOffRuleUntilEpoch`) like every other webpieces rule.
  *
  * Note `projectRoot` is intentionally unused now — the executor derives the
