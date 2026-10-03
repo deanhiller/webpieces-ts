@@ -1,0 +1,684 @@
+{
+  "packs": [
+    {
+      "config": ".webpieces/rules/agent-workflow-rules.json",
+      "contributions": [
+        {
+          "executionKind": "workflow-guard",
+          "implementationModule": "@webpieces/agent-workflow-rules/rule-runtime",
+          "ownerPack": "@webpieces/agent-workflow-rules",
+          "ruleId": "branch-creation-guard"
+        },
+        {
+          "executionKind": "workflow-guard",
+          "implementationModule": "@webpieces/agent-workflow-rules/rule-runtime",
+          "ownerPack": "@webpieces/agent-workflow-rules",
+          "ruleId": "pr-lifecycle-guard"
+        },
+        {
+          "executionKind": "workflow-guard",
+          "implementationModule": "@webpieces/agent-workflow-rules/rule-runtime",
+          "ownerPack": "@webpieces/agent-workflow-rules",
+          "ruleId": "branch-state-guard"
+        }
+      ],
+      "manifestApiVersion": 3,
+      "manifestDigest": "e6ac2414c4603ca21fe5a57ac5b68b139233a7ebd12fe0daddcfd362e11f1da8",
+      "ownedRules": [
+        {
+          "id": "branch-creation-guard",
+          "schemaApiVersion": 1
+        },
+        {
+          "id": "pr-lifecycle-guard",
+          "schemaApiVersion": 1
+        },
+        {
+          "id": "branch-state-guard",
+          "schemaApiVersion": 1
+        }
+      ],
+      "package": "@webpieces/agent-workflow-rules",
+      "packageName": "@webpieces/agent-workflow-rules",
+      "packageVersion": "0.4.848",
+      "safeguards": [
+        {
+          "activation": "fixed",
+          "description": "L0 tooling integrity; enforced by the managed shim and workflow hook.",
+          "id": "version-drift"
+        },
+        {
+          "activation": "fixed",
+          "description": "L0 tooling integrity; enforced by the managed shim and workflow hook.",
+          "id": "guard-bin-missing"
+        },
+        {
+          "activation": "fixed",
+          "description": "L0 tooling integrity; enforced by the managed shim and workflow hook.",
+          "id": "guard-pkg-undeclared"
+        },
+        {
+          "activation": "fixed",
+          "description": "L0 tooling integrity; enforced by the managed shim and workflow hook.",
+          "id": "guard-bin-crashed"
+        },
+        {
+          "activation": "fixed",
+          "description": "L0 tooling integrity; enforced by the managed shim and workflow hook.",
+          "id": "managed-hook-surface"
+        },
+        {
+          "activation": "fixed",
+          "description": "L0 tooling integrity; enforced by the managed shim and workflow hook.",
+          "id": "config-missing"
+        },
+        {
+          "activation": "fixed",
+          "description": "L0 tooling integrity; enforced by the managed shim and workflow hook.",
+          "id": "config-out-of-sync"
+        },
+        {
+          "activation": "fixed",
+          "description": "Protect the shared coordinator tree and require reviewer verdicts through wp-write-review.",
+          "id": "codex-subagent-no-write-in-shared-tree"
+        },
+        {
+          "activation": "fixed",
+          "description": "Reject shell substitution in commit messages.",
+          "id": "commit-message-substitution-guard"
+        },
+        {
+          "activation": "fixed",
+          "description": "Preserve build evidence instead of piping away its output.",
+          "id": "build-output-pipe-guard"
+        },
+        {
+          "activation": "fixed",
+          "description": "Reject shell wait loops that spin without progress.",
+          "id": "wait-spin-guard"
+        },
+        {
+          "activation": "experimental",
+          "description": "Opt in through experimental.whole-repo-build-guard in the optional machine-local config.",
+          "id": "whole-repo-build-guard"
+        }
+      ]
+    },
+    {
+      "config": ".webpieces/rules/ai-hook-rules.json",
+      "contributions": [
+        {
+          "executionKind": "source-hook",
+          "implementationModule": "@webpieces/ai-hook-rules/rule-runtime",
+          "ownerPack": "@webpieces/code-rules",
+          "ruleId": "no-any-unknown"
+        },
+        {
+          "executionKind": "source-hook",
+          "implementationModule": "@webpieces/ai-hook-rules/rule-runtime",
+          "ownerPack": "@webpieces/code-rules",
+          "ruleId": "no-implicit-any"
+        },
+        {
+          "executionKind": "source-hook",
+          "implementationModule": "@webpieces/ai-hook-rules/rule-runtime",
+          "ownerPack": "@webpieces/code-rules",
+          "ruleId": "max-file-lines"
+        },
+        {
+          "executionKind": "source-hook",
+          "implementationModule": "@webpieces/ai-hook-rules/rule-runtime",
+          "ownerPack": "@webpieces/ai-hook-rules",
+          "ruleId": "validate-ts-in-src"
+        },
+        {
+          "executionKind": "source-hook",
+          "implementationModule": "@webpieces/ai-hook-rules/rule-runtime",
+          "ownerPack": "@webpieces/code-rules",
+          "ruleId": "no-destructure"
+        },
+        {
+          "executionKind": "source-hook",
+          "implementationModule": "@webpieces/ai-hook-rules/rule-runtime",
+          "ownerPack": "@webpieces/code-rules",
+          "ruleId": "require-return-type"
+        },
+        {
+          "executionKind": "source-hook",
+          "implementationModule": "@webpieces/ai-hook-rules/rule-runtime",
+          "ownerPack": "@webpieces/code-rules",
+          "ruleId": "no-unmanaged-exceptions"
+        },
+        {
+          "executionKind": "source-hook",
+          "implementationModule": "@webpieces/ai-hook-rules/rule-runtime",
+          "ownerPack": "@webpieces/code-rules",
+          "ruleId": "catch-error-pattern"
+        },
+        {
+          "executionKind": "source-hook",
+          "implementationModule": "@webpieces/ai-hook-rules/rule-runtime",
+          "ownerPack": "@webpieces/ai-hook-rules",
+          "ruleId": "throw-cause-required"
+        },
+        {
+          "executionKind": "source-hook",
+          "implementationModule": "@webpieces/ai-hook-rules/rule-runtime",
+          "ownerPack": "@webpieces/code-rules",
+          "ruleId": "no-symbol-di-tokens"
+        },
+        {
+          "executionKind": "source-hook",
+          "implementationModule": "@webpieces/ai-hook-rules/rule-runtime",
+          "ownerPack": "@webpieces/code-rules",
+          "ruleId": "no-custom-css"
+        },
+        {
+          "executionKind": "source-hook",
+          "implementationModule": "@webpieces/ai-hook-rules/rule-runtime",
+          "ownerPack": "@webpieces/code-rules",
+          "ruleId": "no-process-exit-outside-main"
+        },
+        {
+          "executionKind": "source-hook",
+          "implementationModule": "@webpieces/ai-hook-rules/rule-runtime",
+          "ownerPack": "@webpieces/ai-hook-rules",
+          "ruleId": "no-js-files"
+        }
+      ],
+      "manifestApiVersion": 3,
+      "manifestDigest": "67a758c557b0e878a5c6de5fbea34340ee452b94f0bcbf5bb6f301189ccefaa9",
+      "ownedRules": [
+        {
+          "id": "throw-cause-required",
+          "schemaApiVersion": 1
+        },
+        {
+          "id": "no-js-files",
+          "schemaApiVersion": 1
+        },
+        {
+          "id": "validate-ts-in-src",
+          "schemaApiVersion": 1
+        }
+      ],
+      "package": "@webpieces/ai-hook-rules",
+      "packageName": "@webpieces/ai-hook-rules",
+      "packageVersion": "0.4.848",
+      "safeguards": []
+    },
+    {
+      "config": ".webpieces/rules/code-rules.json",
+      "contributions": [
+        {
+          "executionKind": "build",
+          "implementationModule": "@webpieces/code-rules/rule-runtime",
+          "ownerPack": "@webpieces/code-rules",
+          "ruleId": "max-method-lines"
+        },
+        {
+          "executionKind": "build",
+          "implementationModule": "@webpieces/code-rules/rule-runtime",
+          "ownerPack": "@webpieces/code-rules",
+          "ruleId": "max-file-lines"
+        },
+        {
+          "executionKind": "build",
+          "implementationModule": "@webpieces/code-rules/rule-runtime",
+          "ownerPack": "@webpieces/code-rules",
+          "ruleId": "require-return-type"
+        },
+        {
+          "executionKind": "build",
+          "implementationModule": "@webpieces/code-rules/rule-runtime",
+          "ownerPack": "@webpieces/code-rules",
+          "ruleId": "no-inline-type-literals"
+        },
+        {
+          "executionKind": "build",
+          "implementationModule": "@webpieces/code-rules/rule-runtime",
+          "ownerPack": "@webpieces/code-rules",
+          "ruleId": "no-any-unknown"
+        },
+        {
+          "executionKind": "build",
+          "implementationModule": "@webpieces/code-rules/rule-runtime",
+          "ownerPack": "@webpieces/code-rules",
+          "ruleId": "no-implicit-any"
+        },
+        {
+          "executionKind": "build",
+          "implementationModule": "@webpieces/code-rules/rule-runtime",
+          "ownerPack": "@webpieces/code-rules",
+          "ruleId": "prisma-validate-dtos"
+        },
+        {
+          "executionKind": "build",
+          "implementationModule": "@webpieces/code-rules/rule-runtime",
+          "ownerPack": "@webpieces/code-rules",
+          "ruleId": "prisma-converter"
+        },
+        {
+          "executionKind": "build",
+          "implementationModule": "@webpieces/code-rules/rule-runtime",
+          "ownerPack": "@webpieces/code-rules",
+          "ruleId": "no-destructure"
+        },
+        {
+          "executionKind": "build",
+          "implementationModule": "@webpieces/code-rules/rule-runtime",
+          "ownerPack": "@webpieces/code-rules",
+          "ruleId": "catch-error-pattern"
+        },
+        {
+          "executionKind": "build",
+          "implementationModule": "@webpieces/code-rules/rule-runtime",
+          "ownerPack": "@webpieces/code-rules",
+          "ruleId": "no-unmanaged-exceptions"
+        },
+        {
+          "executionKind": "build",
+          "implementationModule": "@webpieces/code-rules/rule-runtime",
+          "ownerPack": "@webpieces/code-rules",
+          "ruleId": "angular-no-direct-api-in-resolver"
+        },
+        {
+          "executionKind": "build",
+          "implementationModule": "@webpieces/code-rules/rule-runtime",
+          "ownerPack": "@webpieces/code-rules",
+          "ruleId": "no-symbol-di-tokens"
+        },
+        {
+          "executionKind": "build",
+          "implementationModule": "@webpieces/code-rules/rule-runtime",
+          "ownerPack": "@webpieces/code-rules",
+          "ruleId": "no-client-creation-outside-server-or-client"
+        },
+        {
+          "executionKind": "build",
+          "implementationModule": "@webpieces/code-rules/rule-runtime",
+          "ownerPack": "@webpieces/code-rules",
+          "ruleId": "no-custom-css"
+        },
+        {
+          "executionKind": "build",
+          "implementationModule": "@webpieces/code-rules/rule-runtime",
+          "ownerPack": "@webpieces/code-rules",
+          "ruleId": "no-state-paths-in-templates"
+        },
+        {
+          "executionKind": "build",
+          "implementationModule": "@webpieces/code-rules/rule-runtime",
+          "ownerPack": "@webpieces/code-rules",
+          "ruleId": "no-process-exit-outside-main"
+        },
+        {
+          "executionKind": "build",
+          "implementationModule": "@webpieces/code-rules/rule-runtime",
+          "ownerPack": "@webpieces/code-rules",
+          "ruleId": "no-function-outside-class"
+        },
+        {
+          "executionKind": "build",
+          "implementationModule": "@webpieces/code-rules/rule-runtime",
+          "ownerPack": "@webpieces/code-rules",
+          "ruleId": "inject-annotation-not-needed-for-concrete-class"
+        },
+        {
+          "executionKind": "build",
+          "implementationModule": "@webpieces/code-rules/rule-runtime",
+          "ownerPack": "@webpieces/code-rules",
+          "ruleId": "framework-tag"
+        },
+        {
+          "executionKind": "build",
+          "implementationModule": "@webpieces/code-rules/rule-runtime",
+          "ownerPack": "@webpieces/code-rules",
+          "ruleId": "role-tag"
+        },
+        {
+          "executionKind": "build",
+          "implementationModule": "@webpieces/code-rules/rule-runtime",
+          "ownerPack": "@webpieces/code-rules",
+          "ruleId": "ensure-we-are-secure"
+        },
+        {
+          "executionKind": "build",
+          "implementationModule": "@webpieces/code-rules/rule-runtime",
+          "ownerPack": "@webpieces/code-rules",
+          "ruleId": "no-inline-import-in-api-lib"
+        },
+        {
+          "executionKind": "build",
+          "implementationModule": "@webpieces/code-rules/rule-runtime",
+          "ownerPack": "@webpieces/code-rules",
+          "ruleId": "one-enum-spelling-in-api-lib"
+        },
+        {
+          "executionKind": "build",
+          "implementationModule": "@webpieces/code-rules/rule-runtime",
+          "ownerPack": "@webpieces/code-rules",
+          "ruleId": "no-utility-types-in-api-lib"
+        },
+        {
+          "executionKind": "build",
+          "implementationModule": "@webpieces/code-rules/rule-runtime",
+          "ownerPack": "@webpieces/code-rules",
+          "ruleId": "required-type-suffix"
+        },
+        {
+          "executionKind": "build",
+          "implementationModule": "@webpieces/code-rules/rule-runtime",
+          "ownerPack": "@webpieces/code-rules",
+          "ruleId": "framework-tsconfig"
+        },
+        {
+          "executionKind": "build",
+          "implementationModule": "@webpieces/code-rules/rule-runtime",
+          "ownerPack": "@webpieces/code-rules",
+          "ruleId": "framework-packages"
+        }
+      ],
+      "manifestApiVersion": 3,
+      "manifestDigest": "1363e55db766ae2c92f6dafac80a69f707b849bcd5316b70672dd247091c2a43",
+      "ownedRules": [
+        {
+          "id": "max-method-lines",
+          "schemaApiVersion": 1
+        },
+        {
+          "id": "max-file-lines",
+          "schemaApiVersion": 1
+        },
+        {
+          "id": "require-return-type",
+          "schemaApiVersion": 1
+        },
+        {
+          "id": "no-inline-type-literals",
+          "schemaApiVersion": 1
+        },
+        {
+          "id": "no-any-unknown",
+          "schemaApiVersion": 1
+        },
+        {
+          "id": "no-implicit-any",
+          "schemaApiVersion": 1
+        },
+        {
+          "id": "prisma-validate-dtos",
+          "schemaApiVersion": 1
+        },
+        {
+          "id": "prisma-converter",
+          "schemaApiVersion": 1
+        },
+        {
+          "id": "no-destructure",
+          "schemaApiVersion": 1
+        },
+        {
+          "id": "catch-error-pattern",
+          "schemaApiVersion": 1
+        },
+        {
+          "id": "no-unmanaged-exceptions",
+          "schemaApiVersion": 1
+        },
+        {
+          "id": "angular-no-direct-api-in-resolver",
+          "schemaApiVersion": 1
+        },
+        {
+          "id": "no-symbol-di-tokens",
+          "schemaApiVersion": 1
+        },
+        {
+          "id": "no-client-creation-outside-server-or-client",
+          "schemaApiVersion": 1
+        },
+        {
+          "id": "no-custom-css",
+          "schemaApiVersion": 1
+        },
+        {
+          "id": "no-state-paths-in-templates",
+          "schemaApiVersion": 1
+        },
+        {
+          "id": "no-process-exit-outside-main",
+          "schemaApiVersion": 1
+        },
+        {
+          "id": "no-function-outside-class",
+          "schemaApiVersion": 1
+        },
+        {
+          "id": "inject-annotation-not-needed-for-concrete-class",
+          "schemaApiVersion": 1
+        },
+        {
+          "id": "framework-tag",
+          "schemaApiVersion": 1
+        },
+        {
+          "id": "role-tag",
+          "schemaApiVersion": 1
+        },
+        {
+          "id": "ensure-we-are-secure",
+          "schemaApiVersion": 1
+        },
+        {
+          "id": "no-inline-import-in-api-lib",
+          "schemaApiVersion": 1
+        },
+        {
+          "id": "one-enum-spelling-in-api-lib",
+          "schemaApiVersion": 1
+        },
+        {
+          "id": "no-utility-types-in-api-lib",
+          "schemaApiVersion": 1
+        },
+        {
+          "id": "required-type-suffix",
+          "schemaApiVersion": 1
+        },
+        {
+          "id": "framework-tsconfig",
+          "schemaApiVersion": 1
+        },
+        {
+          "id": "framework-packages",
+          "schemaApiVersion": 1
+        }
+      ],
+      "package": "@webpieces/code-rules",
+      "packageName": "@webpieces/code-rules",
+      "packageVersion": "0.4.848",
+      "safeguards": []
+    },
+    {
+      "config": ".webpieces/rules/nx-webpieces-rules.json",
+      "contributions": [
+        {
+          "executionKind": "build",
+          "implementationModule": "@webpieces/nx-webpieces-rules/rule-runtime",
+          "ownerPack": "@webpieces/nx-webpieces-rules",
+          "ruleId": "no-file-import-cycles"
+        },
+        {
+          "executionKind": "build",
+          "implementationModule": "@webpieces/nx-webpieces-rules/rule-runtime",
+          "ownerPack": "@webpieces/nx-webpieces-rules",
+          "ruleId": "runtime-architecture"
+        },
+        {
+          "executionKind": "build",
+          "implementationModule": "@webpieces/nx-webpieces-rules/rule-runtime",
+          "ownerPack": "@webpieces/nx-webpieces-rules",
+          "ruleId": "nx-wiring"
+        },
+        {
+          "executionKind": "build",
+          "implementationModule": "@webpieces/nx-webpieces-rules/rule-runtime",
+          "ownerPack": "@webpieces/nx-webpieces-rules",
+          "ruleId": "di-graph"
+        },
+        {
+          "executionKind": "build",
+          "implementationModule": "@webpieces/nx-webpieces-rules/rule-runtime",
+          "ownerPack": "@webpieces/nx-webpieces-rules",
+          "ruleId": "missing-design-annotation"
+        },
+        {
+          "executionKind": "build",
+          "implementationModule": "@webpieces/nx-webpieces-rules/rule-runtime",
+          "ownerPack": "@webpieces/nx-webpieces-rules",
+          "ruleId": "validate-architecture-unchanged"
+        },
+        {
+          "executionKind": "build",
+          "implementationModule": "@webpieces/nx-webpieces-rules/rule-runtime",
+          "ownerPack": "@webpieces/nx-webpieces-rules",
+          "ruleId": "validate-no-architecture-cycles"
+        },
+        {
+          "executionKind": "build",
+          "implementationModule": "@webpieces/nx-webpieces-rules/rule-runtime",
+          "ownerPack": "@webpieces/nx-webpieces-rules",
+          "ruleId": "validate-packagejson"
+        },
+        {
+          "executionKind": "build",
+          "implementationModule": "@webpieces/nx-webpieces-rules/rule-runtime",
+          "ownerPack": "@webpieces/nx-webpieces-rules",
+          "ruleId": "validate-versions-locked"
+        },
+        {
+          "executionKind": "build",
+          "implementationModule": "@webpieces/nx-webpieces-rules/rule-runtime",
+          "ownerPack": "@webpieces/nx-webpieces-rules",
+          "ruleId": "validate-eslint-sync"
+        },
+        {
+          "executionKind": "build",
+          "implementationModule": "@webpieces/nx-webpieces-rules/rule-runtime",
+          "ownerPack": "@webpieces/nx-webpieces-rules",
+          "ruleId": "no-root-union-api-type"
+        },
+        {
+          "executionKind": "build",
+          "implementationModule": "@webpieces/nx-webpieces-rules/rule-runtime",
+          "ownerPack": "@webpieces/nx-webpieces-rules",
+          "ruleId": "api-rules-for-openapi"
+        },
+        {
+          "executionKind": "build",
+          "implementationModule": "@webpieces/nx-webpieces-rules/rule-runtime",
+          "ownerPack": "@webpieces/nx-webpieces-rules",
+          "ruleId": "api-rules-for-mcp"
+        },
+        {
+          "executionKind": "build",
+          "implementationModule": "@webpieces/nx-webpieces-rules/rule-runtime",
+          "ownerPack": "@webpieces/nx-webpieces-rules",
+          "ruleId": "api-lib-dependencies"
+        },
+        {
+          "executionKind": "build",
+          "implementationModule": "@webpieces/nx-webpieces-rules/rule-runtime",
+          "ownerPack": "@webpieces/nx-webpieces-rules",
+          "ruleId": "api-lib-path"
+        },
+        {
+          "executionKind": "build",
+          "implementationModule": "@webpieces/nx-webpieces-rules/rule-runtime",
+          "ownerPack": "@webpieces/nx-webpieces-rules",
+          "ruleId": "framework-folder"
+        },
+        {
+          "executionKind": "build",
+          "implementationModule": "@webpieces/nx-webpieces-rules/rule-runtime",
+          "ownerPack": "@webpieces/ai-hook-rules",
+          "ruleId": "validate-ts-in-src"
+        }
+      ],
+      "manifestApiVersion": 3,
+      "manifestDigest": "90478a8d01ed9e7de0bdccc2252d6315324efb1e89de45c49fec7023a2c48b6e",
+      "ownedRules": [
+        {
+          "id": "no-file-import-cycles",
+          "schemaApiVersion": 1
+        },
+        {
+          "id": "runtime-architecture",
+          "schemaApiVersion": 1
+        },
+        {
+          "id": "nx-wiring",
+          "schemaApiVersion": 1
+        },
+        {
+          "id": "di-graph",
+          "schemaApiVersion": 1
+        },
+        {
+          "id": "missing-design-annotation",
+          "schemaApiVersion": 1
+        },
+        {
+          "id": "validate-architecture-unchanged",
+          "schemaApiVersion": 1
+        },
+        {
+          "id": "validate-no-architecture-cycles",
+          "schemaApiVersion": 1
+        },
+        {
+          "id": "validate-packagejson",
+          "schemaApiVersion": 1
+        },
+        {
+          "id": "validate-versions-locked",
+          "schemaApiVersion": 1
+        },
+        {
+          "id": "validate-eslint-sync",
+          "schemaApiVersion": 1
+        },
+        {
+          "id": "no-root-union-api-type",
+          "schemaApiVersion": 1
+        },
+        {
+          "id": "api-rules-for-openapi",
+          "schemaApiVersion": 1
+        },
+        {
+          "id": "api-rules-for-mcp",
+          "schemaApiVersion": 1
+        },
+        {
+          "id": "api-lib-dependencies",
+          "schemaApiVersion": 1
+        },
+        {
+          "id": "api-lib-path",
+          "schemaApiVersion": 1
+        },
+        {
+          "id": "framework-folder",
+          "schemaApiVersion": 1
+        }
+      ],
+      "package": "@webpieces/nx-webpieces-rules",
+      "packageName": "@webpieces/nx-webpieces-rules",
+      "packageVersion": "0.4.848",
+      "safeguards": []
+    }
+  ],
+  "schemaVersion": 1
+}

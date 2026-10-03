@@ -5,7 +5,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 
 import {
-    allRuleNames, DEFAULT_REVIEWER_AGENT_NAME, retiredRuleFor, sectionForRule, seedEntryForRule,
+    allRuleNames, DEFAULT_REVIEWER_AGENT_NAME, PackPolicyFiles, retiredRuleFor, sectionForRule, seedEntryForRule,
 } from '@webpieces/rules-config';
 
 /**
@@ -18,7 +18,9 @@ import {
  *
  *  1. `checklists` is dropped. Its `doc` paths are validated REPO-RELATIVE and point at
  *     `.claude/review/*.md`, which exist here and not in a temp clone.
- *  2. Every locally-known rule is completed from its SEED. The repo's config is validated by the PUBLISHED
+ *  2. Explicit owner files are read from the root declarations and converted to the frozen
+ *     PolicyFixture transport ONLY inside these tests. Production loading accepts only owner files.
+ *     Every locally-known rule is completed from its SEED. The repo's config is validated by the PUBLISHED
  *     validator and therefore lags local source by one release
  *     (`.claude/rules/published-vs-local-source.md`): a rule added in this working tree cannot get a
  *     config entry or newly-required field until its release ships,
@@ -53,22 +55,29 @@ export class RepoConfigFixture {
         if (prGate['overrideReviewerAgent'] !== true && prGate['reviewerAgentName'] === DEFAULT_REVIEWER_AGENT_NAME) {
             delete prGate['reviewerAgentName'];
         }
-        this.dropRetiredRules(config);
+        this.loadOwnedRules(config, path.dirname(source));
         this.completeRulesFromSeed(config);
         return config;
     }
 
-    // Drop every rule/guard name this build knows to be RETIRED, from whichever section holds it.
-    // webpieces-disable no-any-unknown -- see load()
-    private dropRetiredRules(config: Record<string, unknown>): void {
-        for (const section of ['rules', 'hookGuards']) {
-            // webpieces-disable no-any-unknown -- narrowing one rule section
-            const entries = config[section] as Record<string, unknown> | undefined;
-            if (entries === undefined) continue;
+    // webpieces-disable no-any-unknown -- test-only transport for PolicyFixture.writeOwnerConfig, never a production accepted shape
+    private loadOwnedRules(config: Record<string, unknown>, root: string): void {
+        // webpieces-disable no-any-unknown -- parsed owner entries remain opaque until fixture validation
+        const rules: Record<string, unknown> = {};
+        // webpieces-disable no-any-unknown -- parsed owner entries remain opaque until fixture validation
+        const guards: Record<string, unknown> = {};
+        const declarations = new PackPolicyFiles().declarations(config['rulePacks'], root);
+        for (const declaration of declarations) {
+            // webpieces-disable no-any-unknown -- repository owner JSON, consumed by the real fixture validator
+            const entries = JSON.parse(fs.readFileSync(path.join(root, declaration.config), 'utf8')) as Record<string, unknown>;
             for (const name of Object.keys(entries)) {
-                if (retiredRuleFor(name, fixtureRuleRegistry) !== null) delete entries[name];
+                if (retiredRuleFor(name, fixtureRuleRegistry) !== null) continue;
+                const section = sectionForRule(name, fixtureRuleRegistry) === 'hookGuards' ? guards : rules;
+                section[name] = entries[name];
             }
         }
+        config['rules'] = rules;
+        config['hookGuards'] = guards;
     }
 
     /** Write `config` (usually a `load()` result a spec has edited) as the config of `dir`. */

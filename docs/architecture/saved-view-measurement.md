@@ -51,3 +51,40 @@ edits. They render both pages from older saved artifacts, verify snapshot messag
 and browser fallback paths, check malformed/missing artifacts, and load a newly
 written snapshot on subsequent viewing. Existing renderer tests cover menus,
 API relationship labels, and graph interactions.
+
+## Installed release verification (#1104)
+
+After release run [37106667039](https://github.com/deanhiller/webpieces-ts/actions/runs/37106667039)
+completed successfully, this repository installed the published
+`@webpieces/webpieces-tooling` 0.4.848 bundle. All four selected rule owners
+migrated to explicit owner config files; all 50 existing policy values were
+compared with the previous config and preserved exactly.
+
+The real installed Nx plugin inferred both view targets with `cache: false`
+and no generation prerequisites. With a temporary source file added, the public
+`pnpm arch:visualize` and `pnpm arch:visualize-runtime` commands both succeeded
+and opened the browser. SHA-256 hashes of the compile graph, runtime graph, and
+six API contracts were identical before and after viewing. Neither command's
+log contained generator or source scanner execution. Both HTML pages included
+the saved-snapshot, unknown-freshness, and explicit-refresh guidance.
+
+Observed public-command wall times were 29.05 s and 19.95 s respectively in
+this checkout. They include pnpm/Nx/plugin startup and browser opening; these
+are single smoke runs, not a controlled speed comparison or a consumer
+performance guarantee.
+
+A direct installed `architecture:visualize` invocation with a missing custom
+graph path exited 1, printed the explicit generation cure, and did not create
+the missing artifact. The temporary source file was then removed. A separate,
+explicit `pnpm arch:generate` succeeded and refreshed committed command guidance.
+
+Reproduce by hashing `architecture/dependencies.json`,
+`architecture/runtime-dependencies.json`, and `architecture/apis/*.json`,
+adding a temporary source-only edit, and running both public view commands.
+Check hashes and logs before removing the edit and explicitly generating.
+
+The upgrade gate also exposed a stale PR-command test fixture that read the
+removed root `rules`/`hookGuards` maps. It now reads the declared owner files
+before feeding the existing frozen test-only policy transport. Runtime config
+loading still accepts only the owner-file shape; this repair adds no production
+compatibility path and changes no consumer policy values.

@@ -1,0 +1,220 @@
+{
+  "max-method-lines": {
+    "limit": 80,
+    "mode": "NEW_AND_MODIFIED_METHODS",
+    "disableAllowed": false,
+    "turnOffRuleUntilEpoch": 1771931925,
+    "turnOffRuleWhileOnBranch": null
+  },
+  "max-file-lines": {
+    "limit": 902,
+    "mode": "NEW_AND_MODIFIED_FILES",
+    "disableAllowed": false,
+    "turnOffRuleUntilEpoch": 1771931925,
+    "turnOffRuleWhileOnBranch": null
+  },
+  "require-return-type": {
+    "mode": "NEW_AND_MODIFIED_METHODS",
+    "disableAllowed": false,
+    "turnOffRuleUntilEpoch": 1771931925,
+    "turnOffRuleWhileOnBranch": null
+  },
+  "no-inline-type-literals": {
+    "mode": "NEW_AND_MODIFIED_METHODS",
+    "disableAllowed": false,
+    "turnOffRuleUntilEpoch": 1771931925,
+    "turnOffRuleWhileOnBranch": null
+  },
+  "no-any-unknown": {
+    "mode": "NEW_AND_MODIFIED_CODE",
+    "disableAllowed": true,
+    "turnOffRuleUntilEpoch": 1783409251,
+    "turnOffRuleWhileOnBranch": "dean/bump-webpieces-0-4-658"
+  },
+  "no-implicit-any": {
+    "mode": "NEW_AND_MODIFIED_CODE",
+    "disableAllowed": true,
+    "turnOffRuleUntilEpoch": 1771931925,
+    "turnOffRuleWhileOnBranch": null
+  },
+  "prisma-validate-dtos": {
+    "mode": "MODIFIED_CLASS",
+    "disableAllowed": false,
+    "turnOffRuleUntilEpoch": 0,
+    "turnOffRuleWhileOnBranch": null
+  },
+  "prisma-converter": {
+    "mode": "NEW_AND_MODIFIED_METHODS",
+    "disableAllowed": false,
+    "turnOffRuleUntilEpoch": 0,
+    "turnOffRuleWhileOnBranch": null
+  },
+  "no-destructure": {
+    "mode": "NEW_AND_MODIFIED_CODE",
+    "disableAllowed": false,
+    "turnOffRuleUntilEpoch": 1771931925,
+    "turnOffRuleWhileOnBranch": null
+  },
+  "catch-error-pattern": {
+    "mode": "NEW_AND_MODIFIED_CODE",
+    "disableAllowed": true,
+    "turnOffRuleUntilEpoch": 1771931925,
+    "turnOffRuleWhileOnBranch": null
+  },
+  "no-unmanaged-exceptions": {
+    "mode": "NEW_AND_MODIFIED_CODE",
+    "disableAllowed": true,
+    "turnOffRuleUntilEpoch": 1771931925,
+    "turnOffRuleWhileOnBranch": null
+  },
+  "angular-no-direct-api-in-resolver": {
+    "mode": "OFF",
+    "disableAllowed": true,
+    "turnOffRuleUntilEpoch": 0,
+    "turnOffRuleWhileOnBranch": null
+  },
+  "no-symbol-di-tokens": {
+    "mode": "NEW_AND_MODIFIED_CODE",
+    "disableAllowed": true,
+    "turnOffRuleUntilEpoch": 1771931925,
+    "allowedPaths": [
+      "libraries/apis/**",
+      "packages/core/core-util/src/http/**"
+    ],
+    "turnOffRuleWhileOnBranch": null
+  },
+  "no-client-creation-outside-server-or-client": {
+    "mode": "NEW_AND_MODIFIED_CODE",
+    "disableAllowed": true,
+    "turnOffRuleUntilEpoch": 0,
+    "turnOffRuleWhileOnBranch": null
+  },
+  "no-custom-css": {
+    "mode": "NEW_AND_MODIFIED_CODE",
+    "disableAllowed": true,
+    "turnOffRuleUntilEpoch": 0,
+    "turnOffRuleWhileOnBranch": null,
+    "allowGlobs": [
+      "architecture/dependencies.html",
+      "architecture/runtime-dependencies.html"
+    ]
+  },
+  "no-state-paths-in-templates": {
+    "mode": "NEW_AND_MODIFIED_CODE",
+    "turnOffRuleUntilEpoch": 0,
+    "turnOffRuleWhileOnBranch": null
+  },
+  "no-process-exit-outside-main": {
+    "mode": "NEW_AND_MODIFIED_CODE",
+    "disableAllowed": true,
+    "turnOffRuleUntilEpoch": 0,
+    "turnOffRuleWhileOnBranch": null
+  },
+  "no-function-outside-class": {
+    "mode": "NEW_AND_MODIFIED_CODE",
+    "disableAllowed": true,
+    "turnOffRuleUntilEpoch": 0,
+    "turnOffRuleWhileOnBranch": null
+  },
+  "inject-annotation-not-needed-for-concrete-class": {
+    "mode": "NEW_AND_MODIFIED_CODE",
+    "disableAllowed": true,
+    "turnOffRuleUntilEpoch": 0,
+    "turnOffRuleWhileOnBranch": null
+  },
+  "framework-tag": {
+    "mode": "MODIFIED_PROJECTS",
+    "turnOffRuleUntilEpoch": 0,
+    "turnOffRuleWhileOnBranch": null,
+    "knownTypes": [
+      "browser",
+      "react",
+      "angular",
+      "node",
+      "express",
+      "react-native"
+    ]
+  },
+  "role-tag": {
+    "mode": "MODIFIED_PROJECTS",
+    "knownTypes": [
+      "server",
+      "app",
+      "bundle",
+      "designed-lib",
+      "lib",
+      "client",
+      "api-lib"
+    ],
+    "turnOffRuleUntilEpoch": 0,
+    "turnOffRuleWhileOnBranch": null
+  },
+  "ensure-we-are-secure": {
+    "mode": "MODIFIED_PROJECTS",
+    "turnOffRuleUntilEpoch": 0,
+    "turnOffRuleWhileOnBranch": null
+  },
+  "no-inline-import-in-api-lib": {
+    "mode": "NEW_AND_MODIFIED_CODE",
+    "turnOffRuleUntilEpoch": 0,
+    "turnOffRuleWhileOnBranch": null
+  },
+  "one-enum-spelling-in-api-lib": {
+    "mode": "NEW_AND_MODIFIED_CODE",
+    "turnOffRuleUntilEpoch": 0,
+    "turnOffRuleWhileOnBranch": null
+  },
+  "no-utility-types-in-api-lib": {
+    "mode": "NEW_AND_MODIFIED_CODE",
+    "paths": [
+      "apps/app-example/*-api/**",
+      "libraries/apis/**"
+    ],
+    "turnOffRuleUntilEpoch": 0,
+    "turnOffRuleWhileOnBranch": null
+  },
+  "required-type-suffix": {
+    "mode": "OFF",
+    "entries": [
+      {
+        "paths": [
+          "**/*Dto.ts"
+        ],
+        "suffixes": [
+          "Dto"
+        ]
+      }
+    ],
+    "turnOffRuleUntilEpoch": 0,
+    "turnOffRuleWhileOnBranch": null
+  },
+  "framework-tsconfig": {
+    "mode": "OFF",
+    "turnOffRuleUntilEpoch": 0,
+    "turnOffRuleWhileOnBranch": null
+  },
+  "framework-packages": {
+    "mode": "OFF",
+    "turnOffRuleUntilEpoch": 0,
+    "turnOffRuleWhileOnBranch": null,
+    "entries": [
+      {
+        "packages": [
+          "@angular/*"
+        ],
+        "frameworks": [
+          "angular"
+        ]
+      },
+      {
+        "packages": [
+          "express"
+        ],
+        "frameworks": [
+          "node",
+          "express"
+        ]
+      }
+    ]
+  }
+}

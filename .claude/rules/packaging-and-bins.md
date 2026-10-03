@@ -48,7 +48,7 @@ approach; its shim advice is superseded by this section.
 ### The umbrella: consumers depend on ONE package
 
 **RULE: `packages/tooling/*` depend on each other with `workspace:*`. The ROOT manifest depends on the
-PREVIOUS RELEASE of `@webpieces/nx-webpieces-rules` alone, via the one `catalog:` entry in
+PUBLISHED RELEASE of `@webpieces/webpieces-tooling` alone, via the one `catalog:` entry in
 `pnpm-workspace.yaml`.**
 
 These are two different things and conflating them is what caused the incident above:
@@ -58,11 +58,14 @@ These are two different things and conflating them is what caused the incident a
 | BUILDING the tooling | `workspace:*` between `packages/tooling/*` | built against local source; this is also what draws `nx-webpieces-rules` above its five children in `architecture/dependencies.json` — nx only draws workspace→workspace edges |
 | RUNNING the tooling on this repo | `catalog:` in the ROOT manifest | the repo is validated by the previous published release (see `.claude/rules/published-vs-local-source.md`) |
 
-`nx-webpieces-rules` is tagged `role:bundle`: it aggregates `ai-hook-rules`, `code-rules`,
-`eslint-rules`, `pr-gate` and `rules-config`, so **one** dependency line delivers every `wp-*` bin, every
-eslint rule and every nx executor. A consumer repo should never name the children directly.
+`webpieces-tooling` is the installation bundle: it aggregates the hook, code-rule,
+ESLint, PR-gate, config, workflow, and Nx implementation packages, so **one**
+dependency line delivers every `wp-*` bin, ESLint rule, and Nx executor. Keep
+`@webpieces/nx-webpieces-rules` registered in `nx.json`; it implements the plugin
+and executors and is no longer the installation umbrella. A consumer repo should
+never name the bundle's children as separately pinned tooling dependencies.
 
-So the catalog needs exactly one entry — the umbrella pins its children in lockstep, by construction, and
+So the catalog needs exactly one entry — the installation umbrella pins its children in lockstep, by construction, and
 listing them separately is five more versions to keep in step plus an invitation to the partial bump the
 L0 drift guard exists to catch. **Bumping the release the repo is built with is a one-line edit in
 `pnpm-workspace.yaml`.**

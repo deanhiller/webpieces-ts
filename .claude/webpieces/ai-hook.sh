@@ -1,11 +1,11 @@
 #!/bin/sh
-# Managed by @webpieces/ai-hook-rules (wp-install-ai-hooks) — do not edit. This file is GENERATED from
+# Managed by @webpieces/agent-workflow-rules (wp-install-ai-hooks) — do not edit. This file is GENERATED from
 # renderShim() and is intentionally VERSION-AGNOSTIC and byte-STABLE across releases: it carries no
 # version stamp, so it only changes when its own logic changes. The installed guards binary is what
 # checks that this committed copy still matches renderShim() (the committed-shim self-guard); if you
 # revert or hand-edit this file the binary fails closed and names the cure. Checked in on purpose so
 # the hook has a stable entry point even when node_modules is absent. Safe to delete along with the
-# matching .claude/settings.json entries if you remove @webpieces/ai-hook-rules.
+# matching .claude/settings.json entries if you remove @webpieces/agent-workflow-rules.
 #
 # Usage (wired into .claude/settings.json, ABSOLUTE so the MAIN tree governs every tree):
 #   sh "$CLAUDE_PROJECT_DIR/.claude/webpieces/ai-hook.sh" <bin-name>
@@ -50,7 +50,7 @@ fi
 # `catalogs:` block of pnpm-lock.yaml (catalog -> pkg -> resolved version) before comparing.
 #
 # THE SAME PASS ANSWERS FAULT U (2026-08-05). Scraping root package.json is also the only way to learn
-# whether @webpieces/ai-hook-rules is DECLARED at all, and that is the difference between "not installed
+# whether @webpieces/agent-workflow-rules is DECLARED at all, and that is the difference between "not installed
 # yet" (X, cured by pnpm install) and "nothing asks for it" (U, where pnpm install is a guaranteed
 # no-op). WP_PIN carries the first EXACT @webpieces pin found, so U's deny can prescribe the version the
 # rest of the repo is already on rather than an unpinned add. Both are set BEFORE the range/catalog
@@ -131,7 +131,7 @@ if [ -f "$ROOT/package.json" ]; then
     [ -n "$WP_NAME" ] || continue
     # Fault U's input: the package is DECLARED (in any spec shape, in any dependency block of the root
     # manifest). Recorded before every `continue` below, so a range or catalog spec still counts.
-    [ "$WP_NAME" = "ai-hook-rules" ] && WP_HOOK_PKG_DECLARED=1
+    [ "$WP_NAME" = "agent-workflow-rules" ] && WP_HOOK_PKG_DECLARED=1
     # Resolve the declared spec to an EXACT version, or skip it: ranges (^ ~ workspace:*) never drift,
     # and a catalog spec we cannot resolve is best-effort skipped rather than guessed.
     case "$WP_DECL" in
@@ -363,10 +363,111 @@ case "$TOOL" in
     wp_log "$WP_FAULT" ALLOW-IGNORED
     exit 0 ;;
 esac
+# The same compiled Node probe is used by the live runner; it requires no installed package.
+if printf '%s' "$PAYLOAD" | node -e '/** Self-contained Node probe: serialized into the POSIX shim so repairs work with missing packages. */
+class ConfigRepairProbe {
+    rootFor(cwd) {
+        const fs = require('\''node:fs'\''), path = require('\''node:path'\'');
+        let directory = path.resolve(cwd);
+        while (!fs.existsSync(path.join(directory, '\''webpieces.config.json'\''))) {
+            const parent = path.dirname(directory);
+            if (parent === directory)
+                return cwd;
+            directory = parent;
+        }
+        return directory;
+    }
+    isRepairPatch(root, patch) {
+        const lines = patch.trim().split('\''\n'\'');
+        if (lines[0] !== '\''*** Begin Patch'\'' || lines.at(-1) !== '\''*** End Patch'\'')
+            return false;
+        let targets = 0;
+        for (const line of lines.slice(1, -1)) {
+            if (!line.startsWith('\''*** '\''))
+                continue;
+            const match = /^\*\*\* (?:Add|Update) File: (.+)$/.exec(line);
+            if (!match || !this.isRepairFile(root, match[1]))
+                return false;
+            targets += 1;
+        }
+        return targets > 0;
+    }
+    isRepairFile(root, filename) {
+        const toError = this.error;
+        // eslint-disable-next-line @webpieces/no-unmanaged-exceptions -- bootstrap cannot trust package imports or malformed declarations
+        try {
+            const fs = require('\''node:fs'\''), path = require('\''node:path'\'');
+            const target = this.canonical(root, path.resolve(root, filename));
+            const rootFile = this.canonical(root, path.join(root, '\''webpieces.config.json'\''));
+            if (target === rootFile)
+                return true;
+            // webpieces-disable no-any-unknown -- only validated declaration strings grant repair access
+            const raw = JSON.parse(fs.readFileSync(rootFile, '\''utf8'\''));
+            if (!raw ||
+                typeof raw !== '\''object'\'' ||
+                !('\''rulePacks'\'' in raw) ||
+                !Array.isArray(raw.rulePacks) ||
+                !raw.rulePacks.length)
+                return false;
+            const files = new Set(), packages = new Set();
+            const lock = this.canonical(root, path.join(root, '\''.webpieces/rules.lock.json'\''));
+            for (const declaration of raw.rulePacks) {
+                if (!declaration ||
+                    typeof declaration !== '\''object'\'' ||
+                    Array.isArray(declaration) ||
+                    typeof declaration.package !== '\''string'\'' ||
+                    !declaration.package ||
+                    typeof declaration.config !== '\''string'\'' ||
+                    !declaration.config.endsWith('\''.json'\'') ||
+                    path.isAbsolute(declaration.config) ||
+                    Object.keys(declaration).some((key) => !['\''package'\'', '\''config'\''].includes(key)))
+                    return false;
+                const file = this.canonical(root, path.join(root, declaration.config));
+                if (file === rootFile ||
+                    file === lock ||
+                    files.has(file) ||
+                    packages.has(declaration.package))
+                    return false;
+                files.add(file);
+                packages.add(declaration.package);
+            }
+            files.add(lock);
+            files.add(this.canonical(root, path.join(root, '\''.webpieces/instruct-ai/rules-catalog.md'\'')));
+            return files.has(target);
+            // webpieces-disable no-any-unknown -- external JSON or runtime exports are validated before policy execution
+        }
+        catch (err) {
+            const error = toError(err);
+            void error;
+            return false;
+        }
+    }
+    canonical(root, filename) {
+        const fs = require('\''node:fs'\''), path = require('\''node:path'\'');
+        const pending = [];
+        let ancestor = filename;
+        while (!fs.lstatSync(ancestor, { throwIfNoEntry: false })) {
+            pending.unshift(path.basename(ancestor));
+            const parent = path.dirname(ancestor);
+            if (parent === ancestor)
+                throw new Error('\''Cannot resolve config repair path.'\'');
+            ancestor = parent;
+        }
+        const canonical = path.resolve(fs.realpathSync(ancestor), ...pending), relative = path.relative(fs.realpathSync(root), canonical);
+        if (relative === '\''..'\'' || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative))
+            throw new Error('\''Config repair path escapes the repository.'\'');
+        return canonical;
+    }
+    // webpieces-disable no-any-unknown -- the bootstrap adapter must remain self-contained when node_modules is corrupt
+    error(err) {
+        return err instanceof Error ? err : new Error(String(err));
+    }
+}
+ const probe = new ConfigRepairProbe(); const root = probe.rootFor(process.argv[1]); const payload = JSON.parse(require('\''node:fs'\'').readFileSync(0, '\''utf8'\'')); const input = payload.tool_input; const tool = payload.tool_name; const allowed = ['\''Write'\'','\''Edit'\'','\''MultiEdit'\''].includes(tool) && input && typeof input.file_path === '\''string'\'' ? probe.isRepairFile(root, input.file_path) : tool === '\''apply_patch'\'' && input && typeof input.command === '\''string'\'' && probe.isRepairPatch(root, input.command); if (!allowed) process.exitCode = 1;' "$WP_CWD" >/dev/null 2>&1; then
+  wp_log "$WP_FAULT" ALLOW-CONFIG
+  exit 0
+fi
 case "$FILE" in
-  */webpieces.config.json|webpieces.config.json)
-    wp_log "$WP_FAULT" ALLOW-CONFIG  # the always-allowed recovery target — every guard is configured from it
-    exit 0 ;;
   */pnpm-workspace.yaml|pnpm-workspace.yaml|*/package.json|package.json)
     # A manifest AT THE ROOT OF A GOVERNED TREE, which is the only place the version pin lives. The test
     # is the sibling webpieces.config.json — TRACKED, so the main clone has one and every worktree has its
@@ -378,7 +479,7 @@ case "$FILE" in
       exit 0
     fi ;;
 esac
-if printf '%s' "$CMD" | grep -Eq '^(cd[[:space:]]+([A-Za-z0-9._/@~+-]+|'\''[^'\'']+'\'')[[:space:]]*&&[[:space:]]*)?((pnpm|npm)[[:space:]]+(install|i)([[:space:]]+--[A-Za-z][A-Za-z0-9=._/@:-]*)*|rm[[:space:]]+-rf[[:space:]]+(\./)?node_modules/?([[:space:]]*&&[[:space:]]*(pnpm|npm)[[:space:]]+(install|i)([[:space:]]+--[A-Za-z][A-Za-z0-9=._/@:-]*)*)?|git[[:space:]]+fetch([[:space:]]+(--)?[A-Za-z0-9][A-Za-z0-9=._/@:-]*)*|git[[:space:]]+checkout[[:space:]]+main[[:space:]]*&&[[:space:]]*git[[:space:]]+pull[[:space:]]+origin[[:space:]]+main|(pnpm|npm|npx)([[:space:]]+(exec|run))?[[:space:]]+wp-upgrade-shim|cp[[:space:]]+(\./)?node_modules/@webpieces/ai-hook-rules/templates/ai-hook\.sh[[:space:]]+(\./)?\.claude/webpieces/ai-hook\.sh|(pnpm|npm|npx)([[:space:]]+(exec|run))?[[:space:]]+wp-prune-unknown-config|(pnpm|npm|npx)([[:space:]]+(exec|run))?[[:space:]]+wp-install-ai-hooks([[:space:]]+--[A-Za-z][A-Za-z0-9=._/@:-]*)*|(pnpm|npm)[[:space:]]+add([[:space:]]+(-[A-Za-z]|--[A-Za-z][A-Za-z0-9=._/@:-]*))*[[:space:]]+@webpieces/ai-hook-rules(@[A-Za-z0-9._+-]+)?([[:space:]]+(-[A-Za-z]|--[A-Za-z][A-Za-z0-9=._/@:-]*))*|(pwd|git[[:space:]]+(status|log|diff|show|branch|rev-parse)|git[[:space:]]+worktree[[:space:]]+list)([[:space:]]+(--)?[A-Za-z0-9][A-Za-z0-9=._/@:-]*)*)([[:space:]]+2>(&1|/dev/null))?([[:space:]]*\|[[:space:]]*(tail|head)([[:space:]]+-(n[[:space:]]+)?[0-9]+)?)?[[:space:]]*$'; then
+if printf '%s' "$CMD" | grep -Eq '^(cd[[:space:]]+([A-Za-z0-9._/@~+-]+|'\''[^'\'']+'\'')[[:space:]]*&&[[:space:]]*)?((pnpm|npm)[[:space:]]+(install|i)([[:space:]]+--[A-Za-z][A-Za-z0-9=._/@:-]*)*|rm[[:space:]]+-rf[[:space:]]+(\./)?node_modules/?([[:space:]]*&&[[:space:]]*(pnpm|npm)[[:space:]]+(install|i)([[:space:]]+--[A-Za-z][A-Za-z0-9=._/@:-]*)*)?|git[[:space:]]+fetch([[:space:]]+(--)?[A-Za-z0-9][A-Za-z0-9=._/@:-]*)*|git[[:space:]]+checkout[[:space:]]+main[[:space:]]*&&[[:space:]]*git[[:space:]]+pull[[:space:]]+origin[[:space:]]+main|(pnpm|npm|npx)([[:space:]]+(exec|run))?[[:space:]]+wp-upgrade-shim|cp[[:space:]]+(\./)?node_modules/@webpieces/agent-workflow-rules/templates/ai-hook\.sh[[:space:]]+(\./)?\.claude/webpieces/ai-hook\.sh|(pnpm|npm|npx)([[:space:]]+(exec|run))?[[:space:]]+wp-prune-unknown-config|(pnpm|npm|npx)([[:space:]]+(exec|run))?[[:space:]]+wp-rules-sync([[:space:]]+(--upgrade|--pack(=|[[:space:]]+)[[:alnum:]_@./-]+=[[:alnum:]_./-]+))*|(pnpm|npm|npx)([[:space:]]+(exec|run))?[[:space:]]+wp-install-ai-hooks([[:space:]]+--[A-Za-z][A-Za-z0-9=._/@:-]*)*|(pnpm|npm)[[:space:]]+add([[:space:]]+(-[A-Za-z]|--[A-Za-z][A-Za-z0-9=._/@:-]*))*[[:space:]]+@webpieces/agent-workflow-rules(@[A-Za-z0-9._+-]+)?([[:space:]]+(-[A-Za-z]|--[A-Za-z][A-Za-z0-9=._/@:-]*))*|(pwd|git[[:space:]]+(status|log|diff|show|branch|rev-parse)|git[[:space:]]+worktree[[:space:]]+list)([[:space:]]+(--)?[A-Za-z0-9][A-Za-z0-9=._/@:-]*)*)([[:space:]]+2>(&1|/dev/null))?([[:space:]]*\|[[:space:]]*(tail|head)([[:space:]]+-(n[[:space:]]+)?[0-9]+)?)?[[:space:]]*$'; then
   wp_log "$WP_FAULT" ALLOW-CURE   # record the self-heal we let through (re-enables the guards)
   exit 0                     # allow the cure so the assistant can break the deadlock
 fi
@@ -478,15 +579,15 @@ else
     # and converges to the identical broken tree, forever. So say what is actually true, say out loud
     # that the install is a no-op (an agent that has already run it needs to be told to STOP), and
     # prescribe the add — which is allowlist entry ADD_HOOK_PKG, so it is reachable while this block is up.
-    WP_ADD_CMD="pnpm add -D @webpieces/ai-hook-rules"
+    WP_ADD_CMD="pnpm add -D @webpieces/agent-workflow-rules"
     [ -n "$WP_PIN" ] && WP_ADD_CMD="${WP_ADD_CMD}@$WP_PIN"
     # The HEADLINE, kept in its own variable so DENY_EMIT_SH can paint ONLY it red (see there).
     WP_HEAD="❌ webpieces ai-hooks blocked this call: the guard package is not declared anywhere."
-    REASON="$WP_HEAD${NL}${NL}[guard-pkg-undeclared] (layer=L0 fault=U row=3, 1 violation)${NL}  @webpieces/ai-hook-rules is NOT declared in this tree's root package.json, and is not installed (${BIN_NAME} not found)${NL}    → .claude/settings.json still runs its hooks, so every OTHER tool call is BLOCKED. A BARE 'pnpm install' is a NO-OP here: the root manifest asks for nothing, so it reports 'Lockfile is up to date' and converges to this same state. CHANGE something first - sync, or the pin - and install AFTER that.${NL}    → matrix row 3: fault=U present / on the allowlist? no -> BLOCK. Those are the same coordinates the audit line carries (layer=L0 row=3 fault=U) and the same row webpieces.guard-matrix.md prints.${NL}${NL}${WP_STILL_ALLOWED}${NL}${NL}  Fix Option 1: (preferred) @webpieces/ai-hook-rules normally arrives WITH @webpieces/nx-webpieces-rules, the umbrella that bundles the whole toolchain - so the usual cause is a tree that is behind, not a missing declaration. Sync, then install:${NL}    run EXACTLY: 'git checkout main && git pull origin main'${NL}    then run EXACTLY: 'pnpm install'${NL}  Fix Option 2: still missing? the pinned release predates the umbrella carrying it. Raise the ONE catalog entry in pnpm-workspace.yaml to a newer @webpieces/nx-webpieces-rules - editing that file is allowed while this block is up - then:${NL}    run EXACTLY: 'pnpm install'${NL}  Fix Option 3: LAST RESORT, only to unblock yourself right now${NL}    run EXACTLY: '$WP_ADD_CMD'${NL}    then REVERT IT BEFORE YOU COMMIT: 'pnpm remove @webpieces/ai-hook-rules'. A direct root dependency on @webpieces/ai-hook-rules violates the umbrella rule - the root manifest depends on @webpieces/nx-webpieces-rules ALONE - so it must never reach a PR. It unblocks this session; it is not the fix.${NL}  NOT an option: if you removed @webpieces/ai-hook-rules on purpose, delete its hooks from .claude/settings.json instead.${NL}${NL}Run it EXACTLY as written - the allowlist matches the whole command, so appending anything (even && git status) makes it a different command and it is rejected; that is not the guard blocking its own cure. Only these may be added: a leading cd <dir> && (single-quote a path containing spaces), a trailing 2>&1, and | tail -N."
+    REASON="$WP_HEAD${NL}${NL}[guard-pkg-undeclared] (layer=L0 fault=U row=3, 1 violation)${NL}  @webpieces/agent-workflow-rules is NOT declared in this tree's root package.json, and is not installed (${BIN_NAME} not found)${NL}    → .claude/settings.json still runs its hooks, so every OTHER tool call is BLOCKED. A BARE 'pnpm install' is a NO-OP here: the root manifest asks for nothing, so it reports 'Lockfile is up to date' and converges to this same state. CHANGE something first - sync, or the pin - and install AFTER that.${NL}    → matrix row 3: fault=U present / on the allowlist? no -> BLOCK. Those are the same coordinates the audit line carries (layer=L0 row=3 fault=U) and the same row webpieces.guard-matrix.md prints.${NL}${NL}${WP_STILL_ALLOWED}${NL}${NL}  Fix Option 1: (preferred) @webpieces/agent-workflow-rules normally arrives WITH @webpieces/webpieces-tooling, the umbrella that bundles the whole toolchain - so the usual cause is a tree that is behind, not a missing declaration. Sync, then install:${NL}    run EXACTLY: 'git checkout main && git pull origin main'${NL}    then run EXACTLY: 'pnpm install'${NL}  Fix Option 2: still missing? the pinned release predates the umbrella carrying it. If the root still declares @webpieces/nx-webpieces-rules as its umbrella, replace that declaration in package.json and its catalog key in pnpm-workspace.yaml with @webpieces/webpieces-tooling. Pin the ONE new catalog entry to a release that carries the guard package - editing those files is allowed while this block is up - then:${NL}    run EXACTLY: 'pnpm install'${NL}  Fix Option 3: LAST RESORT, only to unblock yourself right now${NL}    run EXACTLY: '$WP_ADD_CMD'${NL}    then REVERT IT BEFORE YOU COMMIT: 'pnpm remove @webpieces/agent-workflow-rules'. A direct root dependency on @webpieces/agent-workflow-rules violates the umbrella rule - the root manifest depends on @webpieces/webpieces-tooling ALONE - so it must never reach a PR. It unblocks this session; it is not the fix.${NL}  NOT an option: if you removed @webpieces/agent-workflow-rules on purpose, delete its hooks from .claude/settings.json instead.${NL}${NL}Run it EXACTLY as written - the allowlist matches the whole command, so appending anything (even && git status) makes it a different command and it is rejected; that is not the guard blocking its own cure. Only these may be added: a leading cd <dir> && (single-quote a path containing spaces), a trailing 2>&1, and | tail -N."
   else
     # The HEADLINE, kept in its own variable so DENY_EMIT_SH can paint ONLY it red (see there).
     WP_HEAD="❌ webpieces ai-hooks blocked this call: the webpieces guard bin is not installed."
-    REASON="$WP_HEAD${NL}${NL}[guard-bin-missing] (layer=L0 fault=X row=3, 1 violation)${NL}  @webpieces/ai-hook-rules is declared in package.json but is not installed (${BIN_NAME} not found)${NL}    → the guards cannot run, so every OTHER tool call is BLOCKED until they can.${WORKTREE_NOTE}${NL}    → matrix row 3: fault=X present / on the allowlist? no -> BLOCK. Those are the same coordinates the audit line carries (layer=L0 row=3 fault=X) and the same row webpieces.guard-matrix.md prints.${NL}${NL}${WP_STILL_ALLOWED}${NL}${NL}  Fix Option 1: (preferred) the only cure - it materializes what package.json already asks for${NL}    run EXACTLY: 'pnpm install'${NL}  NOT an option: if you removed @webpieces/ai-hook-rules on purpose, delete its hooks from .claude/settings.json instead.${NL}${NL}Run it EXACTLY as written - the allowlist matches the whole command, so appending anything (even && git status) makes it a different command and it is rejected; that is not the guard blocking its own cure. Only these may be added: a leading cd <dir> && (single-quote a path containing spaces), a trailing 2>&1, and | tail -N."
+    REASON="$WP_HEAD${NL}${NL}[guard-bin-missing] (layer=L0 fault=X row=3, 1 violation)${NL}  @webpieces/agent-workflow-rules is declared in package.json but is not installed (${BIN_NAME} not found)${NL}    → the guards cannot run, so every OTHER tool call is BLOCKED until they can.${WORKTREE_NOTE}${NL}    → matrix row 3: fault=X present / on the allowlist? no -> BLOCK. Those are the same coordinates the audit line carries (layer=L0 row=3 fault=X) and the same row webpieces.guard-matrix.md prints.${NL}${NL}${WP_STILL_ALLOWED}${NL}${NL}  Fix Option 1: (preferred) the only cure - it materializes what package.json already asks for${NL}    run EXACTLY: 'pnpm install'${NL}  NOT an option: if you removed @webpieces/agent-workflow-rules on purpose, delete its hooks from .claude/settings.json instead.${NL}${NL}Run it EXACTLY as written - the allowlist matches the whole command, so appending anything (even && git status) makes it a different command and it is rejected; that is not the guard blocking its own cure. Only these may be added: a leading cd <dir> && (single-quote a path containing spaces), a trailing 2>&1, and | tail -N."
   fi
 fi
 if [ "$TOOL" = "Bash" ]; then

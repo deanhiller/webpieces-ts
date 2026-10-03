@@ -104,6 +104,14 @@ node_modules_*/
 # Webpieces tooling working dir: ai-hook-rules bootstrap/cache, instruct-ai docs,
 # and per-feature git workflow dirs (merge-/review-/pr-, 30-day retention)
 .webpieces/
+!/.webpieces/
+/.webpieces/*
+# Explicit policy settings and their registry/catalog are committed, reproducible inputs.
+!/.webpieces/rules/
+!/.webpieces/rules.lock.json
+!/.webpieces/instruct-ai/
+/.webpieces/instruct-ai/*
+!/.webpieces/instruct-ai/rules-catalog.md
 
 # Claude Code subagent worktrees — linked git worktrees, never committed.
 #

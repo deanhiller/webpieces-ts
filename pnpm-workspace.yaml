@@ -9,26 +9,13 @@ packages:
   - 'libraries/apis/*'
   - 'apps/app-example/*'
 
-# THE PREVIOUS @webpieces RELEASE THIS REPO IS BUILT WITH.
-#
-# Two different things are called "@webpieces" here and they must not be confused:
-#
-#   BUILDING the tooling  — packages/tooling/* depend on each OTHER with `workspace:*`, i.e. the LOCAL
-#                           source in this checkout. That is the build graph, and it is why
-#                           nx-webpieces-rules is drawn above its six children in architecture/.
-#
-#   RUNNING the tooling   — this repo is validated BY the tooling, and it uses the PREVIOUS published
-#                           release for that (nx executors, the wp-* bins, the hooks, the eslint
-#                           plugin). See .claude/rules/published-vs-local-source.md.
-#
-# Only the second one belongs in a catalog, and only ONE entry is needed: nx-webpieces-rules is the
-# umbrella, so installing it brings ai-hook-rules, hook-runtime, code-rules, eslint-rules, pr-gate and
-# rules-config with it. Listing those six here as well would be six more versions to keep in step for no gain —
-# the umbrella already pins them, in lockstep, by construction.
-#
-# Bumping the release the repo is built with is therefore a ONE-LINE edit, right here.
+# THE PUBLISHED @webpieces RELEASE THIS REPO IS BUILT WITH.
+# Local packages/tooling/* use workspace:* to build the tooling source. This catalog
+# instead installs the published toolchain used by Nx, wp-* commands, hooks, and ESLint.
+# webpieces-tooling is the complete installation umbrella; its children are pinned
+# together by the release. nx.json still registers @webpieces/nx-webpieces-rules.
 catalog:
-  '@webpieces/nx-webpieces-rules': 0.4.835
+  '@webpieces/webpieces-tooling': 0.4.848
   # The OpenAPI 3.1 validator the openapi-generator suite checks every generated document against
   # (#1058). A test-only dependency, pinned exact; it is not a @webpieces release.
   '@seriousme/openapi-schema-validator': 2.11.0
