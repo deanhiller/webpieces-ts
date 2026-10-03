@@ -3,10 +3,12 @@ import * as fs from 'fs';
 import * as path from 'path';
 import type { ExecutorContext, CreateNodesContextV2 } from '@nx/devkit';
 import { specTempDirs } from '@webpieces/tooling-testkit';
+import { RuleFailError, Option } from '@webpieces/rules-config';
+import { SavedSnapshot } from '../../lib/saved-snapshot';
 import visualize from './executor';
 import visualizeRuntime from '../visualize-runtime/executor';
 import { GraphVisualizer } from '../../lib/graph-visualizer';
-import { RuntimeHtmlPage } from '../../lib/runtime-visualizer';
+import { RuntimeHtmlPage } from '../../lib/runtime-html-page';
 import { createNodesV2 } from '../../plugin';
 import { saveGraph } from '../../lib/graph-loader';
 import { saveRuntimeGraph } from '../../lib/runtime-graph';
@@ -62,6 +64,35 @@ describe('saved architecture viewing', () => {
         vi.spyOn(console, 'error').mockImplementation(() => undefined);
     });
     afterEach(() => vi.restoreAllMocks());
+
+    it.each(['compile', 'runtime'])(
+        'renders structured %s failures with human messages and fix options',
+        async (kind) => {
+            const fixture = new SnapshotFixture();
+            const failure = new RuleFailError(
+                'saved-architecture-snapshot',
+                'AI-specific message',
+                undefined,
+                undefined,
+                [new Option('Explicit repair option', true)],
+                'Human-specific message',
+            );
+            const method = kind === 'compile' ? 'loadProjects' : 'loadRuntime';
+            vi.spyOn(SavedSnapshot.prototype, method).mockImplementation(() => {
+                throw failure;
+            });
+            const result =
+                kind === 'compile'
+                    ? await visualize({ graphPath: fixture.graphPath }, fixture.context)
+                    : await visualizeRuntime({}, fixture.context);
+            expect(result).toEqual({ success: false });
+            const output = vi.mocked(console.error).mock.calls.flat().join('\n');
+            expect(output).toContain('Human-specific message');
+            expect(output).toContain('Explicit repair option');
+            expect(output).not.toContain('AI-specific message');
+            expect(output).not.toContain('pnpm nx run architecture:generate');
+        },
+    );
 
     it('infers view targets without generation prerequisites and preserves validation', async () => {
         const fixture = new SnapshotFixture();

@@ -10,7 +10,7 @@
 
 import type { ExecutorContext } from '@nx/devkit';
 import { SavedSnapshot } from '../../lib/saved-snapshot';
-import { DEFAULT_GRAPH_PATH, loadBlessedGraph } from '../../lib/graph-loader';
+import { DEFAULT_GRAPH_PATH } from '../../lib/graph-loader';
 import { GraphVisualizer } from '../../lib/graph-visualizer';
 import { RuleFailError, renderRuleFailForHuman } from '@webpieces/rules-config';
 import { toError } from '../../toError';
@@ -34,19 +34,12 @@ export default async function runExecutor(
     console.log('\n🎨 Architecture Visualization\n');
     console.log(snapshot.message());
 
-    // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
+    // eslint-disable-next-line @webpieces/no-unmanaged-exceptions -- Nx command rendering boundary; success:false propagates failure to Nx
     try {
         // Load the saved graph
         console.log('📂 Loading saved graph...');
-        const graphFile = loadBlessedGraph(workspaceRoot, graphPath);
-
-        if (!graphFile) {
-            console.error(`❌ No saved graph found at ${graphPath}`);
-            console.error(snapshot.refresh());
-            return { success: false };
-        }
+        const graphFile = snapshot.loadProjects(workspaceRoot, graphPath);
         const graph = graphFile.projects;
-        snapshot.validateProjects(graph, graphPath);
 
         // Generate visualization
         console.log('🎨 Generating visualization...');
@@ -67,7 +60,6 @@ export default async function runExecutor(
         const error = toError(err);
         const rendered = error instanceof RuleFailError ? renderRuleFailForHuman(error) : error.message;
         console.error(`❌ Visualization failed for ${graphPath}:`, rendered);
-        console.error(snapshot.refresh());
         return { success: false };
     }
 }

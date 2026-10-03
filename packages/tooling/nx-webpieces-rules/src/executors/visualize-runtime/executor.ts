@@ -9,7 +9,7 @@
 
 import type { ExecutorContext } from '@nx/devkit';
 import { SavedSnapshot } from '../../lib/saved-snapshot';
-import { loadRuntimeGraph, runtimeGraphFileExists } from '../../lib/runtime-graph';
+import { RuleFailError, renderRuleFailForHuman } from '@webpieces/rules-config';
 import { writeRuntimeVisualization, RuntimeVizOptions } from '../../lib/runtime-visualizer';
 import { loadRuntimeConfig } from '../../lib/runtime-config';
 import { GraphVisualizer } from '../../lib/graph-visualizer';
@@ -33,16 +33,9 @@ export default async function runExecutor(
     console.log('\n🎨 Runtime Microservice Visualization\n');
     console.log(snapshot.message());
 
-    // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
+    // eslint-disable-next-line @webpieces/no-unmanaged-exceptions -- Nx command rendering boundary; success:false propagates failure to Nx
     try {
-        const graph = loadRuntimeGraph(workspaceRoot);
-        if (graph === null && !runtimeGraphFileExists(workspaceRoot)) {
-            console.error('❌ No architecture/runtime-dependencies.json found');
-            console.error(snapshot.refresh());
-            return { success: false };
-        }
-
-        snapshot.validateRuntime(graph);
+        const graph = snapshot.loadRuntime(workspaceRoot);
         const config = loadRuntimeConfig(workspaceRoot);
         const options = new RuntimeVizOptions(config.showExternalNodes);
         const vizPaths = writeRuntimeVisualization(graph, workspaceRoot, undefined, options);
@@ -59,8 +52,8 @@ export default async function runExecutor(
         return { success: true };
     } catch (err: unknown) {
         const error = toError(err);
-        console.error('❌ Runtime visualization failed for architecture/runtime-dependencies.json:', error.message);
-        console.error(snapshot.refresh());
+        const rendered = error instanceof RuleFailError ? renderRuleFailForHuman(error) : error.message;
+        console.error('❌ Runtime visualization failed for architecture/runtime-dependencies.json:', rendered);
         return { success: false };
     }
 }

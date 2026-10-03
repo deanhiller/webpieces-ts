@@ -1,6 +1,13 @@
 import { RuleFailError, Option } from '@webpieces/rules-config';
 import type { EnhancedGraph } from './graph-sorter';
 import type { RuntimeGraph } from './runtime-graph-model';
+import { DependenciesFile, loadBlessedGraph } from './graph-loader';
+import {
+    DEFAULT_RUNTIME_GRAPH_PATH,
+    loadRuntimeGraph,
+    runtimeGraphFileExists,
+} from './runtime-graph-io';
+import { toError } from '../toError';
 
 /** Saved graphs have no reliable generation timestamp; file mtimes also change on checkout. */
 export class SavedSnapshot {
@@ -24,6 +31,50 @@ export class SavedSnapshot {
         );
     }
 
+    loadProjects(workspaceRoot: string, graphPath: string): DependenciesFile {
+        const file = this.readArtifact(graphPath, () => loadBlessedGraph(workspaceRoot, graphPath));
+        if (file === null) throw this.failure(`No saved graph found at ${graphPath}`);
+        this.validateProjects(file.projects, graphPath);
+        return file;
+    }
+
+    loadRuntime(workspaceRoot: string): RuntimeGraph {
+        if (!runtimeGraphFileExists(workspaceRoot)) {
+            throw this.failure(`No saved graph found at ${DEFAULT_RUNTIME_GRAPH_PATH}`);
+        }
+        const graph = this.readArtifact(DEFAULT_RUNTIME_GRAPH_PATH, () =>
+            loadRuntimeGraph(workspaceRoot),
+        );
+        this.validateRuntime(graph);
+        return graph;
+    }
+
+    private readArtifact<T>(graphPath: string, load: () => T): T {
+        // webpieces-disable no-unmanaged-exceptions -- saved JSON decoding boundary adds the artifact path and repair while preserving the cause
+        try {
+            return load();
+        } catch (err: unknown) {
+            const error = toError(err);
+            if (error instanceof RuleFailError) throw error;
+            throw this.failure(
+                `Failed to read saved graph at ${graphPath}: ${error.message}`,
+                error,
+            );
+        }
+    }
+
+    private failure(message: string, cause?: Error): RuleFailError {
+        return new RuleFailError(
+            'saved-architecture-snapshot',
+            message,
+            undefined,
+            undefined,
+            [new Option(this.refresh(), true)],
+            undefined,
+            cause,
+        );
+    }
+
     // webpieces-disable no-any-unknown -- saved JSON is untrusted until its shape has been checked
     private isMap(value: unknown): boolean {
         return value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -40,12 +91,8 @@ export class SavedSnapshot {
                     entry.dependsOn.some((dep) => typeof dep !== 'string'),
             )
         ) {
-            throw new RuleFailError(
-                'saved-architecture-snapshot',
+            throw this.failure(
                 `Unusable saved project graph at ${graphPath}: expected projects with numeric level and string dependsOn arrays`,
-                undefined,
-                undefined,
-                [new Option(this.refresh(), true)],
             );
         }
     }
@@ -61,12 +108,8 @@ export class SavedSnapshot {
             !Array.isArray(graph.unresolvedUses) ||
             !Array.isArray(graph.triggers)
         ) {
-            throw new RuleFailError(
-                'saved-architecture-snapshot',
-                'Unusable saved runtime graph: expected services, apis, queues and runtimeEdges, unresolvedUses, triggers arrays',
-                undefined,
-                undefined,
-                [new Option(this.refresh(), true)],
+            throw this.failure(
+                `Unusable saved runtime graph at ${DEFAULT_RUNTIME_GRAPH_PATH}: expected services, apis, queues and runtimeEdges, unresolvedUses, triggers arrays`,
             );
         }
     }

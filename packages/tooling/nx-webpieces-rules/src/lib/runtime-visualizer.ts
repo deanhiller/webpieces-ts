@@ -55,7 +55,6 @@ import type {
 } from './runtime-graph';
 import { dotValue, recordValue, assertValidDot } from './dot-syntax';
 import { RuntimeHtmlPage } from './runtime-html-page';
-export { RuntimeHtmlPage } from './runtime-html-page';
 import {
     LEVEL_COLORS,
     QUEUE_FILL,

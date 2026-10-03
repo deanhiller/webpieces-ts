@@ -14,7 +14,7 @@ import { describe, it, expect } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as ts from 'typescript';
-import { RuntimeHtmlPage } from '../runtime-visualizer';
+import { RuntimeHtmlPage } from '../runtime-html-page';
 
 const CLIENT_TS = path.join(__dirname, '..', 'runtime-visualizer.client.ts');
 const clientJs = (): string => ts.transpileModule(
