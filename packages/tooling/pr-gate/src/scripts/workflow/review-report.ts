@@ -386,6 +386,9 @@ export class ReviewReport {
             '         checklist that judges the PR title, summary or risk level reads exactly this file, so\n' +
             '         writing it afterwards races that reviewer into seeing nothing — or, on a re-run of this\n' +
             '         stage, into judging the PREVIOUS run\'s summary of code that has since changed.\n\n' +
+            '         For a same-PR update, keep the active summary.json unchanged when its intent, issue,\n' +
+            '         title and risk are unchanged. Otherwise explicitly refresh those fields BEFORE review.\n' +
+            '         Successful finish retains this active file and saves an immutable audit snapshot.\n\n' +
             summaryJsonSchemaHint(summaryPath, mainAgentInstructions) + '\n\n'
         );
     }

@@ -217,6 +217,12 @@ flow are not interchangeable.
   branch generation — which is why `wp-start-update` refuses outright when it finds an open PR.
 - On the clean path the finish command is not needed at all: a conflict-free start finalizes itself.
 
+For a same-PR update, `wp-finish-upsert-pr` retains the active `summary.json` and saves each published
+summary as an immutable audit snapshot under `published-summaries/` beside it. Keep the active file
+unchanged when intent, issue association, title and risk are unchanged, including generated-only
+conflict resolutions. Explicitly refresh changed metadata before reviewer agents read it. Audit
+snapshots are never loaded as active summaries; a new PR requires its own authored summary.
+
 ## Commands
 
 1. **`pnpm wp-start-update`** — squash-update your branch from main (standalone, no PR). Clean merge →

@@ -1,5 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
+import { randomUUID } from 'crypto';
 import { injectable, bindingScopeValues } from 'inversify';
 import { PR_REVIEW_DIR } from '@webpieces/tooling-common';
 import { DotWebpieces, dotWebpieces } from '@webpieces/tooling-common';
@@ -105,6 +106,19 @@ export class ReviewJsonService {
     // summary and only the last one, so it can never be mistaken for a series that means something.
     oldSummaryJsonPath(summaryJsonFilePath: string): string {
         return path.join(path.dirname(summaryJsonFilePath), OLD_SUMMARY_FILE);
+    }
+
+    /** Keep the active PR intent available for updates; each publication gets an immutable audit copy. */
+    snapshotSummaryJson(summaryJsonFilePath: string): string {
+        const dir = path.join(path.dirname(summaryJsonFilePath), 'published-summaries');
+        fs.mkdirSync(dir, { recursive: true });
+        const snapshot = path.join(dir, `${randomUUID()}.json`);
+        const raw = fs.readFileSync(summaryJsonFilePath, 'utf8');
+        const note =
+            'AUDIT ONLY — the summary used by this publication. The active PR intent is in ' +
+            'summary.json beside published-summaries. Refresh the active file when intent, issue, title or risk changes.';
+        fs.writeFileSync(snapshot, this.archivedBody(raw, note), { flag: 'wx' });
+        return snapshot;
     }
 
     /**

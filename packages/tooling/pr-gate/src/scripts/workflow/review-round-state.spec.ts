@@ -75,6 +75,58 @@ function receiptWithOptionals(dir: string, required: string[], optional: string[
 }
 
 describe('ReviewRoundStateService', () => {
+    it.each([1, 2])(
+        'retains published summary through a same-PR main update with carried verdicts (cap %i)',
+        (cap: number) => {
+            const dir = repo();
+            commitFix(dir, 2);
+            const receipt = receiptAt(dir);
+            receipt.maxReviewerRounds = cap;
+            archive(dir, receipt, 'green');
+            const file = summary(dir);
+            const body = JSON.stringify({
+                agent: 'codex',
+                model: 'spec',
+                title: 'Fix generated graphs',
+                summary: 'Fixes #1114\n\nKeep PR intent across updates.',
+                riskScore: 10,
+                riskLevel: 'green',
+            });
+            fs.writeFileSync(file, body);
+            const required = [
+                new RequiredChecklist('security', new ReviewerAgentPolicy('reviewer', 1), '', []),
+            ];
+            const originalVerdict = fs.readFileSync(
+                reviewJson.checklistResultPath(file, 'security', 1),
+                'utf8',
+            );
+            const firstSummary = reviewJson.loadSummaryJson(file, required);
+            const firstSnapshot = reviewJson.snapshotSummaryJson(file);
+            const firstAudit = fs.readFileSync(firstSnapshot, 'utf8');
+
+            // The updater squashes onto advancing main; conflict resolution changes generated code only.
+            git(dir, 'checkout', '-q', 'main');
+            git(dir, 'reset', '--hard', 'HEAD~1');
+            commitFix(dir, 3);
+            git(dir, 'checkout', '-q', '-b', 'updated-feature');
+            commitFix(dir, 4);
+            expect(rounds.plan(dir, file, receipt, cap, basis(dir)).action).toBe(
+                ROUND_ACTION_FINISH,
+            );
+            receipt.buildHeadSha = git(dir, 'rev-parse', 'HEAD');
+
+            // Finish loads the unchanged active intent and carried verdict, then snapshots publication again.
+            expect(reviewJson.loadSummaryJson(file, required)).toEqual(firstSummary);
+            const secondSnapshot = reviewJson.snapshotSummaryJson(file);
+            expect(secondSnapshot).not.toBe(firstSnapshot);
+            expect(fs.readFileSync(firstSnapshot, 'utf8')).toBe(firstAudit);
+            expect(fs.readFileSync(file, 'utf8')).toBe(body);
+            expect(
+                fs.readFileSync(reviewJson.checklistResultPath(file, 'security', 1), 'utf8'),
+            ).toBe(originalVerdict);
+        },
+    );
+
     it('resumes an active fixed roster without consuming another round', () => {
         const dir = repo();
         commitFix(dir, 2);
