@@ -1,4 +1,3 @@
-import { policyFixture } from '@webpieces/tooling-testkit';
 import { specTempDirs } from '@webpieces/tooling-testkit';
 import { describe, it, expect, afterEach } from 'vitest';
 import * as fs from 'fs';
@@ -24,7 +23,7 @@ afterEach(() => {
 
 /** A fake HOME. Nothing in this suite may touch the real `~/.webpieces/config.json`. */
 function fakeHome(): string {
-    const dir = policyFixture.makeRepo('wp-homeconf-');
+    const dir = specTempDirs.make('wp-homeconf-');
     dirs.push(dir);
     return dir;
 }

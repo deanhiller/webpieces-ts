@@ -1,3 +1,4 @@
+import { policyFixture } from '@webpieces/tooling-testkit';
 import { specTempDirs } from '@webpieces/tooling-testkit';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -10,7 +11,7 @@ import runExecutor from './executor';
 
 class ConfigFixture {
     write(contents: string): string {
-        const root = specTempDirs.make('wp-rules-check-');
+        const root = policyFixture.makeRepo('wp-rules-check-');
         fs.writeFileSync(path.join(root, 'webpieces.config.json'), contents);
         return root;
     }

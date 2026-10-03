@@ -1,4 +1,7 @@
 import { policyFixture } from '@webpieces/tooling-testkit';
+import { RulePackRegistry } from '@webpieces/rules-config';
+const fixtureRuleRegistry = new RulePackRegistry(policyFixture.manifests());
+import { policyFixture } from '@webpieces/tooling-testkit';
 import { specTempDirs } from '@webpieces/tooling-testkit';
 import { execFileSync } from 'child_process';
 import * as fs from 'fs';
@@ -140,7 +143,7 @@ function initRepo(dir: string): void {
 }
 
 // loadAndValidate demands a FULLY valid config (pr-gate, match-rules, every rule section), so we build
-// one with the installer's own seeder (migrate({}) fills every rule with a valid default) rather than
+// one with the installer's own seeder (migrate({}, fixtureRuleRegistry) fills every rule with a valid default) rather than
 // hand-rolling one that drifts as rules are added. We then (a) arm ONLY the PR-lifecycle policy so
 // the tests stay hermetic (branch-state-guard is the one that reads git state and spawns the main-sync
 // refresher, so it stays OFF), and (b) set excludePaths per test.
@@ -150,13 +153,14 @@ function initRepo(dir: string): void {
 // pr-creation-or-push-guard — the one under test — is the only one that can fire.
 function writeGuardConfig(root: string, guardsExclude: readonly string[]): void {
     // webpieces-disable no-any-unknown -- opaque JSON config shape, only mutated by known keys here
-    const config = migrate({}).config as Record<string, any>;
+    const config = migrate({}, fixtureRuleRegistry).config as Record<string, any>;
     // seedRule() omits branch-creation-guard's required autoReapMergedBranches — supply it.
     config.hookGuards['branch-creation-guard'].autoReapMergedBranches = false;
     for (const name of Object.keys(config.hookGuards)) {
         config.hookGuards[name].mode = name === 'pr-lifecycle-guard' ? 'ON' : 'OFF';
     }
     config.excludePaths = [...guardsExclude];
+    policyFixture.declareIn(root);
     fs.writeFileSync(nodePath.join(root, 'webpieces.config.json'), JSON.stringify(config));
 }
 

@@ -88,46 +88,6 @@ function objectListHint(def: FieldDef): string {
     return `[{ ${fields.join(', ')} }, ...]`;
 }
 
-/** A rollout hint for the copy-paste snippet: recommend the narrowest gradual mode the rule supports. */
-function rolloutTip(schema: Readonly<Record<string, FieldDef>>): string {
-    const modes = schema['mode']?.enumValues ?? [];
-    // Same source of truth as the seeder; only a GRADUAL recommendation gets the rollout prose, so a
-    // rule whose recommendation falls through to ON/RUN_EVERY_TIME/OFF prints no tip (as before).
-    const recommended = recommendedSeedModeFor(modes);
-    if (!isGradualMode(recommended)) return '';
-    const optOut = modes.includes('OFF') ? ' Set "mode": "OFF" to opt out entirely.' : '';
-    return (
-        `\n\n💡 Recommended: start with "mode": "${recommended}" — it enforces only on what you ` +
-        `actually change, so the rule rolls out gradually (existing code stays grandfathered until ` +
-        `you next touch that project/file/method).${optOut}`
-    );
-}
-
-function missingRuleSnippet(ruleName: string, schema: Readonly<Record<string, FieldDef>>, registry: RulePackRegistry): string {
-    // Required fields go in the copy-paste entry. The two universal escape hatches
-    // (turnOffRuleUntilEpoch / turnOffRuleWhileOnBranch) are now REQUIRED, so they land in that block —
-    // which is the whole point: every seeded rule shows both hatches. Optional fields are listed separately.
-    const fields = Object.keys(schema);
-    const required = fields.filter(f => !schema[f].optional);
-    const optional = fields.filter(f => schema[f].optional);
-
-    const requiredLines = required.map(f => `    "${f}": ${valueHint(schema[f], f)}`);
-    const section = sectionForRule(ruleName, registry);
-    let out =
-        `[${ruleName}] Not configured in webpieces.config.json. Add this entry to the "${section}" section\n` +
-        `(choose values appropriate for your project):\n\n` +
-        `  "${ruleName}": {\n${requiredLines.join(',\n')}\n  }`;
-
-    if (optional.length > 0) {
-        const optionalLines = optional.map(f => `    "${f}": ${valueHint(schema[f], f)}`);
-        out +=
-            `\n\nOptional fields you may add to this rule (omit if not needed):\n` +
-            `${optionalLines.join(',\n')}`;
-    }
-    out += rolloutTip(schema);
-    return out;
-}
-
 /**
  * A config key under rules/hookGuards that the RUNNING validator has no schema for (and no rulesDir is set
  * to supply custom rules). THE FALLBACK: it fires for any name the table in retired-config-keys.ts does not
@@ -161,6 +121,50 @@ function unknownRuleError(ruleName: string): string {
         `and the version-drift guard reports THAT separately with its own cure (bump the pin) before this ` +
         `validator ever runs — so it is not what you are looking at.`
     );
+}
+
+/** Schema advice retains the existing validation text and consumes the selected owner registry. */
+class RuleConfigAdvice {
+    constructor(private readonly registry: RulePackRegistry) {}
+
+    private rolloutTip(schema: Readonly<Record<string, FieldDef>>): string {
+        const modes = schema['mode']?.enumValues ?? [];
+        // Same source of truth as the seeder; only a GRADUAL recommendation gets the rollout prose, so a
+        // rule whose recommendation falls through to ON/RUN_EVERY_TIME/OFF prints no tip (as before).
+        const recommended = recommendedSeedModeFor(modes);
+        if (!isGradualMode(recommended)) return '';
+        const optOut = modes.includes('OFF') ? ' Set "mode": "OFF" to opt out entirely.' : '';
+        return (
+            `\n\n💡 Recommended: start with "mode": "${recommended}" — it enforces only on what you ` +
+            `actually change, so the rule rolls out gradually (existing code stays grandfathered until ` +
+            `you next touch that project/file/method).${optOut}`
+        );
+    }
+
+    missingRuleSnippet(ruleName: string, schema: Readonly<Record<string, FieldDef>>): string {
+        // Required fields go in the copy-paste entry. The two universal escape hatches
+        // (turnOffRuleUntilEpoch / turnOffRuleWhileOnBranch) are now REQUIRED, so they land in that block —
+        // which is the whole point: every seeded rule shows both hatches. Optional fields are listed separately.
+        const fields = Object.keys(schema);
+        const required = fields.filter(f => !schema[f].optional);
+        const optional = fields.filter(f => schema[f].optional);
+
+        const requiredLines = required.map(f => `    "${f}": ${valueHint(schema[f], f)}`);
+        const section = this.registry.sectionFor(ruleName);
+        let out =
+            `[${ruleName}] Not configured in webpieces.config.json. Add this entry to the "${section}" section\n` +
+            `(choose values appropriate for your project):\n\n` +
+            `  "${ruleName}": {\n${requiredLines.join(',\n')}\n  }`;
+
+        if (optional.length > 0) {
+            const optionalLines = optional.map(f => `    "${f}": ${valueHint(schema[f], f)}`);
+            out +=
+                `\n\nOptional fields you may add to this rule (omit if not needed):\n` +
+                `${optionalLines.join(',\n')}`;
+        }
+        out += this.rolloutTip(schema);
+        return out;
+    }
 }
 
 // Fields we DELETED from a rule's schema, keyed by "<rule>.<field>". The generic unknown-field error
@@ -275,6 +279,7 @@ export function validateWebpiecesConfig(
     hasCustomRulesDir: boolean = false,
 ): string[] {
     const errors: string[] = [];
+    const advice = new RuleConfigAdvice(registry);
 
     // Check field-level correctness for rules that are present
     for (const [ruleName, entry] of Object.entries(rawRules)) {
@@ -316,7 +321,7 @@ export function validateWebpiecesConfig(
     for (const ruleName of registry.ruleIds()) {
         const schema = registry.schemaFor(ruleName);
         if (!(ruleName in rawRules)) {
-            errors.push(missingRuleSnippet(ruleName, schema, registry));
+            errors.push(advice.missingRuleSnippet(ruleName, schema));
         }
     }
 

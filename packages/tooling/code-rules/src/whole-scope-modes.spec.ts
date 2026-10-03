@@ -36,6 +36,7 @@ class Repo {
     readonly root = specTempDirs.makeReal('wp-whole-scope-');
 
     constructor() {
+        policyFixture.declareIn(this.root);
         this.git('init -q -b main');
         this.git('config user.email t@t.t');
         this.git('config user.name t');

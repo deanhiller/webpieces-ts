@@ -14,8 +14,7 @@
     ],
     "dependencies": {
         "@webpieces/tooling-common": "workspace:*",
-        "tslib": "2.8.1",
-        "@webpieces/rules-sdk": "workspace:*"
+        "tslib": "2.8.1"
     },
     "author": "Dean Hiller",
     "license": "Apache-2.0",
@@ -29,5 +28,8 @@
     },
     "webpieces": {
         "developmentOnly": true
+    },
+    "devDependencies": {
+        "@webpieces/rules-sdk": "workspace:*"
     }
 }

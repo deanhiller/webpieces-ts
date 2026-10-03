@@ -8,7 +8,6 @@ import * as path from 'path';
 import { validateWebpiecesConfig, validatePrGateSection, validateSectionPlacement, validateMatchRulesSection, allRuleNames, recommendedSeedMode, recommendedSeedModeFor, seedEntryForRule } from './validate-config';
 
 
-
 import { MODIFIED_CODE_MODES } from '@webpieces/rules-sdk';
 
 // A minimal valid match-rule entry, cloned + tweaked per test.
@@ -587,7 +586,6 @@ describe('validatePrGateSection rejects gateSaltWhy', () => {
     });
 });
 
-
 // recommendedSeedMode is the ONE source of truth for "what mode should this rule arrive as" — used by
 // the validator's copy-paste snippet, by the installer's seeding, and by fault Y's deny.
 describe('recommendedSeedMode', () => {
@@ -622,7 +620,6 @@ describe('recommendedSeedMode', () => {
         expect(recommendedSeedMode('some-custom-rule', fixtureRuleRegistry)).toEqual('OFF');
     });
 });
-
 
 // seedEntryForRule is what the installer writes, so it must satisfy the validator that reads the same
 // schema. The end-to-end version of this lives in ai-hook-rules/src/bin/setup.spec.ts (it runs a real
