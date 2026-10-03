@@ -66,3 +66,29 @@ forgotten because the gate starts failing again after the date.
 Setting `circularDeps.enabled: false` in the plugin options removes the target
 entirely (rather than toggling it via config). Prefer `mode: "OFF"` instead — it
 keeps the target present so any `dependsOn` references don't dangle.
+
+## View saved architecture and refresh explicitly
+
+`pnpm arch:visualize` and `pnpm arch:visualize-runtime` open saved generated
+snapshots. They render presentation files and open the browser without regenerating
+architecture, API contract, or runtime graph facts. Source edits do not update the
+snapshot. Freshness is unknown because these artifacts do not record reliable
+generation provenance; checkout/file modification times are not generation times.
+
+Refresh explicitly, then view:
+
+```sh
+pnpm arch:generate
+pnpm arch:visualize
+pnpm arch:visualize-runtime
+```
+
+In consuming workspaces without these npm shortcuts, use
+`pnpm nx run architecture:generate`, `pnpm nx run architecture:visualize`, and
+`pnpm nx run architecture:visualize-runtime`. The compile graph's configured
+`graphPath` (or `--graphPath=...`) is still supported. Missing or unusable saved
+artifacts fail with the artifact path and refresh command; viewing never generates
+as a fallback. A failed generation remains a failure, and viewing any saved files
+afterward does not establish that refresh succeeded. Browser-open failures print
+the HTML path for manual opening. Architecture/API validation and CI still run
+their existing checks independently of visualization.

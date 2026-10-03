@@ -8,7 +8,8 @@
  */
 
 import type { ExecutorContext } from '@nx/devkit';
-import { loadRuntimeGraph } from '../../lib/runtime-graph';
+import { SavedSnapshot } from '../../lib/saved-snapshot';
+import { RuleFailError, renderRuleFailForHuman } from '@webpieces/rules-config';
 import { writeRuntimeVisualization, RuntimeVizOptions } from '../../lib/runtime-visualizer';
 import { loadRuntimeConfig } from '../../lib/runtime-config';
 import { GraphVisualizer } from '../../lib/graph-visualizer';
@@ -27,18 +28,14 @@ export default async function runExecutor(
     context: ExecutorContext,
 ): Promise<ExecutorResult> {
     const workspaceRoot = context.root;
+    const snapshot: SavedSnapshot = new SavedSnapshot();
 
     console.log('\n🎨 Runtime Microservice Visualization\n');
+    console.log(snapshot.message());
 
-    // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
+    // eslint-disable-next-line @webpieces/no-unmanaged-exceptions -- Nx command rendering boundary; success:false propagates failure to Nx
     try {
-        const graph = loadRuntimeGraph(workspaceRoot);
-        if (!graph) {
-            console.error('❌ No architecture/runtime-dependencies.json found');
-            console.error('   Run: nx run architecture:generate first');
-            return { success: false };
-        }
-
+        const graph = snapshot.loadRuntime(workspaceRoot);
         const config = loadRuntimeConfig(workspaceRoot);
         const options = new RuntimeVizOptions(config.showExternalNodes);
         const vizPaths = writeRuntimeVisualization(graph, workspaceRoot, undefined, options);
@@ -55,7 +52,8 @@ export default async function runExecutor(
         return { success: true };
     } catch (err: unknown) {
         const error = toError(err);
-        console.error('❌ Runtime visualization failed:', error.message);
+        const rendered = error instanceof RuleFailError ? renderRuleFailForHuman(error) : error.message;
+        console.error('❌ Runtime visualization failed for architecture/runtime-dependencies.json:', rendered);
         return { success: false };
     }
 }

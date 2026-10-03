@@ -11,6 +11,7 @@
  */
 
 import * as fs from 'fs';
+import { SavedSnapshot } from './saved-snapshot';
 import * as path from 'path';
 import { execSync } from 'child_process';
 import type { EnhancedGraph } from './graph-sorter';
@@ -99,6 +100,7 @@ export function readCompiledClient(name: string): string {
 }
 
 export class GraphVisualizer {
+    private readonly snapshot = new SavedSnapshot();
     private readonly names = new GraphNames();
     private readonly responsibilities = new ResponsibilitiesRenderer();
     private readonly bandLayout = new LevelBandLayout();
@@ -365,6 +367,7 @@ export class GraphVisualizer {
 </head>
 <body>
     <h1>${title}</h1>
+    ${this.snapshot.html()}
     <p class="hint">💡 <strong>Click any box</strong> for its menu — <strong>View Design</strong> (only where that project has a generated <strong>design.html</strong>, i.e. what the AI sees inside it) and <strong>Lock/Unlock</strong>, which is the same lock as the dropdown below.</p>
     <p class="hint">🔦 <strong>Hover any box</strong> to trace its <em>entire</em> dependency chain — every ancestor above it (all the way up) <em>and</em> every dependency below it (all the way down), with all the boxes and lines between — while the rest of the graph dims so you can follow one box at a glance.</p>
     ${legend}

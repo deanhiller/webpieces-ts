@@ -9,7 +9,8 @@
  */
 
 import type { ExecutorContext } from '@nx/devkit';
-import { loadBlessedGraph } from '../../lib/graph-loader';
+import { SavedSnapshot } from '../../lib/saved-snapshot';
+import { DEFAULT_GRAPH_PATH } from '../../lib/graph-loader';
 import { GraphVisualizer } from '../../lib/graph-visualizer';
 import { RuleFailError, renderRuleFailForHuman } from '@webpieces/rules-config';
 import { toError } from '../../toError';
@@ -26,22 +27,18 @@ export default async function runExecutor(
     options: VisualizeExecutorOptions,
     context: ExecutorContext
 ): Promise<ExecutorResult> {
-    const graphPath = options.graphPath;
+    const graphPath = options.graphPath ?? DEFAULT_GRAPH_PATH;
     const workspaceRoot = context.root;
+    const snapshot: SavedSnapshot = new SavedSnapshot();
 
     console.log('\n🎨 Architecture Visualization\n');
+    console.log(snapshot.message());
 
-    // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
+    // eslint-disable-next-line @webpieces/no-unmanaged-exceptions -- Nx command rendering boundary; success:false propagates failure to Nx
     try {
         // Load the saved graph
         console.log('📂 Loading saved graph...');
-        const graphFile = loadBlessedGraph(workspaceRoot, graphPath);
-
-        if (!graphFile) {
-            console.error('❌ No saved graph found at architecture/dependencies.json');
-            console.error('   Run: nx run architecture:generate first');
-            return { success: false };
-        }
+        const graphFile = snapshot.loadProjects(workspaceRoot, graphPath);
         const graph = graphFile.projects;
 
         // Generate visualization
@@ -62,7 +59,7 @@ export default async function runExecutor(
     } catch (err: unknown) {
         const error = toError(err);
         const rendered = error instanceof RuleFailError ? renderRuleFailForHuman(error) : error.message;
-        console.error('❌ Visualization failed:', rendered);
+        console.error(`❌ Visualization failed for ${graphPath}:`, rendered);
         return { success: false };
     }
 }
