@@ -1,4 +1,5 @@
-import { RETIRED_CONFIG_KEYS, RETIRED_SCOPE_KEY, RETIRED_SCOPE_RULE, retiredKeyError } from './retired-config-keys';
+import { fixtureMigrations as RETIRED_CONFIG_KEYS } from '@webpieces/tooling-testkit';
+import { RETIRED_SCOPE_KEY, RETIRED_SCOPE_RULE, retiredKeyError } from './retired-config-keys';
 
 /**
  * THE POLICY GUARD. webpieces.config.json is never released backwards-compatible: a retired key must FAIL
@@ -15,9 +16,9 @@ describe('RETIRED_CONFIG_KEYS — the no-back-compat guard', () => {
         expect(RETIRED_CONFIG_KEYS.length).toBeGreaterThan(0);
     });
 
-    it('uses only the two defined scopes', () => {
+    it('uses only the defined framework, rule, and field scopes', () => {
         for (const entry of RETIRED_CONFIG_KEYS) {
-            expect([RETIRED_SCOPE_RULE, RETIRED_SCOPE_KEY]).toContain(entry.scope);
+            expect([RETIRED_SCOPE_RULE, RETIRED_SCOPE_KEY, 'field']).toContain(entry.scope);
         }
     });
 

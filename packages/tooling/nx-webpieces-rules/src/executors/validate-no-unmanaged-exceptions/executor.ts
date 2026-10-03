@@ -1,7 +1,7 @@
 import type { ExecutorContext } from '@nx/devkit';
 import { ExecutorResult } from '../../executor-result';
 import { NoUnmanagedExceptionsValidator, GateScanScope } from '@webpieces/code-rules';
-import { NoUnmanagedExceptionsConfig } from '@webpieces/rules-config';
+import { NoUnmanagedExceptionsConfig } from "@webpieces/code-rules";
 
 export default async function runExecutor(
     options: NoUnmanagedExceptionsConfig,

@@ -30,9 +30,11 @@ Nx inference plugin that auto-wires webpieces build gates with no manual project
 
 - The raw ESLint rule logic itself — defined in `eslint-rules`; here it is only invoked/wrapped as executors.
 - PR-gate workflow CLIs (`wp-*-upsert-pr`, merge dashboard) — those live in `pr-gate`.
-- Rule enable/disable config schema — owned by `@webpieces/rules-config`; this plugin reads `webpieces.config.json`, it does not define the token vocabulary.
+- Generic config loading and validation (rules-config); pure field and shared scope contracts (rules-sdk).
 - Product/runtime framework code (http, routing, DI container) — this is build-time Nx tooling only.
 
 ## Notes (optional)
 
 Gates are wired into the build via `nx.json` `targetDefaults.dependsOn` (e.g. `validate-no-file-import-cycles` before `@nx/js:tsc`), so `nx affected`/`run-many` run them. `madge` is a pinned dependency to avoid runtime `npx` fetches. On/off + dated grace windows come from `webpieces.config.json`.
+
+Nx-native policy schemas, concrete mode enums, optional tuning, reviewed seeds, and native field retirements belong here. Source and Code contributions refer to canonical owners without copying their schemas.

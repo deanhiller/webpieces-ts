@@ -1,4 +1,6 @@
-import { DEFAULT_DEV_BRANCH, DEFAULT_DEV_BRANCH_NAMESPACE, PrLifecycleGuardConfig, PR_LIFECYCLE_GUARD_KEY, RepoRootFinder, WP_PUSH_DEV, loadAndValidate, writeTemplate } from '@webpieces/rules-config';
+import { DEFAULT_DEV_BRANCH, DEFAULT_DEV_BRANCH_NAMESPACE, RepoRootFinder, WP_PUSH_DEV, loadAndValidate, writeTemplate } from '@webpieces/rules-config';
+import { PR_LIFECYCLE_GUARD_KEY } from '../../policy-keys';
+import { PrLifecycleGuardConfig } from "../../configs/rule-configs";
 
 import type { BashContext, Violation } from '@webpieces/hook-runtime';
 import { Violation as V } from '@webpieces/hook-runtime';

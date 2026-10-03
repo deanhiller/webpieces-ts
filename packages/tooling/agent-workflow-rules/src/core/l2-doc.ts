@@ -387,7 +387,7 @@ function renderTail(): string[] {
         '| the cache | `rules-config/src/main-sync-status.ts`, `main-sync-file.ts` | `readMainSyncStatus`, `MainSyncStatusFile`, `forgeReachable` |',
         '| the refresher | `agent-workflow-rules/src/core/sync-main.ts` | `refreshMainSync` |',
         '| command scanning | `agent-workflow-rules/src/core/rules/content-read-scan.ts`, `shell-segment-scan.ts` | `readsStaleContent`, `classify` |',
-        '| the config key | `rules-config/src/main-sync-guard-configs.ts`, `sections.ts` | `BranchStateGuardConfig`, `BRANCH_STATE_GUARD_KEY` |',
+        '| the config key | `agent-workflow-rules/src/configs/main-sync-guard-configs.ts`, `policy-keys.ts` | `BranchStateGuardConfig`, `BRANCH_STATE_GUARD_KEY` |',
         '',
     ];
 }

@@ -59,8 +59,7 @@ export { isPathExcluded, matchesAnyGlob } from './exclude-paths';
 export { GENERATED_CODE_PATHS } from './generated-code-paths';
 // THE one `no-custom-css` path exemption. Both engines that enforce the rule (the edit-time hook and the
 // CI validator) consult this class, so `allowGlobs` cannot be honoured by one half and ignored by the other.
-export { NoCustomCssScope } from './no-custom-css-scope';
-export { defaultRules, defaultRulesDir } from './default-rules';
+export { NoCustomCssScope, PathScopeConfig } from './no-custom-css-scope';
 export {
     loadTemplate,
     writeTemplateIfMissing,
@@ -108,7 +107,6 @@ export {
     RETIRED_CONFIG_KEYS,
     RETIRED_SCOPE_KEY,
     RETIRED_SCOPE_RULE,
-    RetiredConfigKey,
     isRetiredKey,
     retiredEntry,
     retiredKeyError,
@@ -191,11 +189,8 @@ export {
     DEFAULT_MATCH_RULES,
 } from './match-rules-config';
 export type { ConfigSection } from './sections';
-export { schemaFieldNames, RULE_SCHEMAS } from './rule-schemas';
+export { schemaFieldNames } from './rule-schemas';
 export {
-    HOOK_GUARD_NAMES,
-    BRANCH_STATE_GUARD_KEY,
-    PR_LIFECYCLE_GUARD_KEY,
     isHookGuard,
     sectionForRule,
 } from './sections';
@@ -215,7 +210,7 @@ export {
     ChangedFilesOptions,
 } from './diff-scope';
 export { AbstractRule } from './abstract-rule';
-export { WEBPIECES_DISABLE, RULE_NAMES, hasDisable, MERGE_INFO_DIR, MERGE_IN_PROGRESS_FILE, MERGE_EXPLANATION_FILE, PUSH_DEV_STATE_FILE, PRUNE_UNKNOWN_COMMAND, UPGRADE_SHIM_COMMAND } from './constants';
+export { WEBPIECES_DISABLE, hasDisable, MERGE_INFO_DIR, MERGE_IN_PROGRESS_FILE, MERGE_EXPLANATION_FILE, PUSH_DEV_STATE_FILE, PRUNE_UNKNOWN_COMMAND, UPGRADE_SHIM_COMMAND } from './constants';
 export { WebpiecesRulesConfig } from './WebpiecesRulesConfig';
 export {
     SyncFlowGuidance,
@@ -226,104 +221,24 @@ export {
     WP_PUSH_DEV,
     WP_FINISH_PUSH_DEV,
 } from './sync-flow-guidance';
-export {
-    MaxMethodLinesConfig,
-    MaxFileLinesConfig,
-    RequireReturnTypeConfig,
-    NoInlineTypeLiteralsConfig,
-    NoAnyUnknownConfig,
-    NoImplicitAnyConfig,
-    PrismaValidateDtosConfig,
-    PrismaConverterConfig,
-    NoDestructureConfig,
-    NoUnmanagedExceptionsConfig,
-    CatchErrorPatternConfig,
-    ThrowCauseRequiredConfig,
-    AngularNoDirectApiInResolverConfig,
-    NoSymbolDiTokensConfig,
-    NoCustomCssConfig,
-    NoProcessExitOutsideMainConfig,
-    NoFunctionOutsideClassConfig,
-    InjectAnnotationNotNeededForConcreteClassConfig,
-    FrameworkTagConfig,
-    RoleTagConfig,
-    EnsureWeAreSecureConfig,
-    BranchCreationGuardConfig,
-    PrLifecycleGuardConfig,
-    NoFileImportCyclesConfig,
-    RuntimeArchitectureConfig,
-    NxWiringConfig,
-    DiGraphConfig,
-    NoJsFilesConfig,
-    ValidateTsInSrcConfig,
-    ValidateArchitectureUnchangedConfig,
-    ValidateNoArchitectureCyclesConfig,
-    ValidatePackageJsonConfig,
-    ValidateVersionsLockedConfig,
-    ValidateEslintSyncConfig,
-} from './rule-configs';
-export { NoRootUnionApiTypeConfig } from './no-root-union-config';
-export { NoInlineImportInApiLibConfig, OneEnumSpellingInApiLibConfig } from './api-lib-spelling-configs';
-export { NoUtilityTypesInApiLibConfig } from './no-utility-types-config';
-export { RequiredTypeSuffixConfig, RequiredTypeSuffixEntry } from './required-type-suffix-config';
-export {
-    ApiClientPackagesEntry,
-    ApiLibDependenciesConfig,
-    ApiLibPathConfig,
-    FrameworkFolderConfig,
-    FrameworkFolderEntry,
-    FrameworkPackagesConfig,
-    FrameworkPackagesEntry,
-    FrameworkTsconfigConfig,
-    PROJECT_SCAN_MODES,
-} from './tag-truth-configs';
-export type { ProjectScanMode } from './tag-truth-configs';
-export { ApiRulesForMcpConfig, ApiRulesForOpenApiConfig, API_DOC_MODES } from './api-doc-rules-config';
-export type { ApiDocMode } from './api-doc-rules-config';
+
+
+
+
+
+
+
+
+
 // Mode unions + their value arrays — the single source of truth shared with code-rules.
-export {
-    METHOD_LIMIT_MODES,
-    FILE_LIMIT_MODES,
-    RETURN_TYPE_MODES,
-    INLINE_TYPE_MODES,
-    MODIFIED_CODE_MODES,
-    PROJECT_MODES,
-    PRISMA_DTOS_MODES,
-    PRISMA_CONVERTER_MODES,
-    DIRECT_API_RESOLVER_MODES,
-    THROW_CAUSE_MODES,
-    ON_OFF_MODES,
-    STRUCTURAL_MODES,
-    VALIDATE_TS_MODES,
-} from './rule-configs';
-export {
-    NoClientCreationOutsideServerOrClientConfig,
-    CLIENT_CREATION_SEVERITIES,
-} from './no-client-creation-config';
-export type { ClientCreationSeverity } from './no-client-creation-config';
+
+
+
 // The `no-state-paths-in-templates` config, in its own module for the same reason no-client-creation is:
 // rule-configs.ts is at its file-size cap and a rule that carries real defaults belongs beside them.
-export {
-    NoStatePathsInTemplatesConfig,
-    DEFAULT_TEMPLATE_DIRS,
-    DEFAULT_BANNED_STATE_PATH_PREFIXES,
-} from './no-state-paths-config';
-export type {
-    MethodLimitMode,
-    FileLimitMode,
-    ReturnTypeMode,
-    InlineTypeMode,
-    ModifiedCodeMode,
-    ProjectMode,
-    PrismaValidateDtosMode,
-    PrismaConverterMode,
-    DirectApiResolverMode,
-    ThrowCauseMode,
-    OnOffMode,
-    StructuralMode,
-    ValidateTsMode,
-} from './rule-configs';
-export { BranchStateGuardConfig, DEFAULT_MAX_COMMITS_BEHIND } from './main-sync-guard-configs';
+
+
+
 export {
     GateDefinition,
     PrGateConfig,
@@ -446,3 +361,5 @@ export { TmpScratchSweeper, TMP_SCRATCH_RETENTION_DAYS, TMP_SCRATCH_PREFIX } fro
 export * from './hook-fault-codes';
 export * from './hook-config-diagnostics';
 export { RulePackRegistry, NodeRulePackModuleLoader, RulePackDiscovery, RulePackModuleLoader } from './rule-pack-registry';
+
+export { RulePackSelection } from './rule-pack-selection';

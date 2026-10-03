@@ -28,7 +28,9 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as ts from 'typescript';
-import { hasDisable, RULE_NAMES, NoImplicitAnyConfig, ModifiedCodeMode, detectBase, getFileDiff, getChangedLineNumbers } from '@webpieces/rules-config';
+import { hasDisable, detectBase, getFileDiff, getChangedLineNumbers } from "@webpieces/rules-config";
+import { NoImplicitAnyConfig } from "./configs/rule-configs";
+import { ModifiedCodeMode } from '@webpieces/rules-sdk';
 import { CodeValidator, ExecutorResult } from './code-validator';
 import { injectable, bindingScopeValues } from 'inversify';
 import { shouldSkipRule } from './resolve-mode';
@@ -57,7 +59,7 @@ function hasDisableComment(lines: string[], lineNumber: number): boolean {
         if (line.startsWith('function ') || line.startsWith('class ') || line.endsWith('}')) {
             break;
         }
-        if (hasDisable(line, RULE_NAMES.NO_IMPLICIT_ANY)) {
+        if (hasDisable(line, "no-implicit-any")) {
             return true;
         }
     }

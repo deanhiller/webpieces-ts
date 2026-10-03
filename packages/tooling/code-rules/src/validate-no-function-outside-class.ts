@@ -34,7 +34,9 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as ts from 'typescript';
-import { hasDisable, RULE_NAMES, NoFunctionOutsideClassConfig, ModifiedCodeMode, detectBase, getFileDiff, getChangedLineNumbers, isPathExcluded } from '@webpieces/rules-config';
+import { hasDisable, detectBase, getFileDiff, getChangedLineNumbers, isPathExcluded } from "@webpieces/rules-config";
+import { NoFunctionOutsideClassConfig } from "./configs/rule-configs";
+import { ModifiedCodeMode } from '@webpieces/rules-sdk';
 import { CodeValidator, ExecutorResult } from './code-validator';
 import { injectable, bindingScopeValues } from 'inversify';
 import { shouldSkipRule } from './resolve-mode';
@@ -111,8 +113,8 @@ function staticMemberName(node: ts.MethodDeclaration | ts.PropertyDeclaration): 
 function hasDisableOnLine(fileLines: string[], lineNumber: number): boolean {
     const current = fileLines[lineNumber - 1] ?? '';
     const previous = lineNumber >= 2 ? (fileLines[lineNumber - 2] ?? '') : '';
-    return hasDisable(current, RULE_NAMES.NO_FUNCTION_OUTSIDE_CLASS)
-        || hasDisable(previous, RULE_NAMES.NO_FUNCTION_OUTSIDE_CLASS);
+    return hasDisable(current, "no-function-outside-class")
+        || hasDisable(previous, "no-function-outside-class");
 }
 
 function recordViolation(

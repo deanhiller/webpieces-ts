@@ -36,13 +36,13 @@ Build-time code validation gate. Standalone (no Nx dependency) CLI that validate
 
 ## Out of Scope
 
-- Config schema, typed `*Config` classes, mode unions, defaults, and config loading (rules-config).
+- Generic config loading and validation (rules-config); pure schema/value contracts (rules-sdk).
 - Edit-time PreToolUse/hook interception and fix-hint UX for AI agents (ai-hook-rules).
 - Nx executor/target wiring (nx-webpieces-rules).
 
 ## Notes (optional)
 
-Runs at build/CI time as a gate on the committed diff — the after-the-fact counterpart to ai-hook-rules' edit-time enforcement, both drawing rule config from rules-config. Dist bins load the PUBLISHED rules-config from node_modules, so new shared symbols need co-release.
+Runs at build/CI time as a gate on the committed diff — the after-the-fact counterpart to ai-hook-rules' edit-time enforcement, both consuming validated owner settings through rules-config. Dist bins load the PUBLISHED rules-config from node_modules, so new shared symbols need co-release.
 
 `ensure-we-are-secure` is configured with `"mode": "MODIFIED_PROJECTS"`. Here that means projects
 that directly own a changed file, not their transitive Nx dependents. Once selected, every owned
@@ -56,3 +56,5 @@ including aliases and namespace imports, so a local decorator with the same spel
 the rule. Only the universal branch/epoch turn-offs apply; there is no source annotation bypass.
 
 The role:lib tag reflects its exported validator APIs consumed directly by the Nx plugin. The standalone CLI is an entry point into that same library.
+
+Concrete Code schemas, mode enums, optional tuning, reviewed seeds, and Code migration instructions belong here. The manifest derives owned definitions from the local executable bindings.

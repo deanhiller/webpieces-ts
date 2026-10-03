@@ -1,3 +1,4 @@
+import { policyFixture } from '@webpieces/tooling-testkit';
 import { specTempDirs } from '@webpieces/tooling-testkit';
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { execFileSync } from 'child_process';
@@ -26,6 +27,7 @@ function gitIn(dir: string, ...args: readonly string[]): void {
 beforeAll(() => {
     root = specTempDirs.makeReal('wp-delete-kind-');
     fs.mkdirSync(root, { recursive: true });
+    policyFixture.declareIn(root);
     gitIn(root, 'init', '-b', 'main');
     // Temp repos must not run this machine's global hooks.
     gitIn(root, 'config', 'core.hooksPath', '/dev/null');

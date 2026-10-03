@@ -1,0 +1,134 @@
+{
+  "throw-cause-required": {
+    "schema": {
+      "mode": {
+        "type": "string",
+        "enumValues": [
+          "OFF",
+          "NEW_AND_MODIFIED_CODE"
+        ],
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "disableAllowed": {
+        "type": "boolean",
+        "optional": true,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "turnOffRuleUntilEpoch": {
+        "type": "number",
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "turnOffRuleWhileOnBranch": {
+        "type": "string",
+        "optional": false,
+        "nullable": true,
+        "nonEmpty": false
+      }
+    },
+    "optionalTuning": {},
+    "recommendedSeed": {
+      "mode": "NEW_AND_MODIFIED_CODE",
+      "turnOffRuleUntilEpoch": 0,
+      "turnOffRuleWhileOnBranch": null
+    }
+  },
+  "no-js-files": {
+    "schema": {
+      "mode": {
+        "type": "string",
+        "enumValues": [
+          "OFF",
+          "NEW_AND_MODIFIED_FILES"
+        ],
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "allowedPaths": {
+        "type": "string[]",
+        "optional": true,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "turnOffRuleUntilEpoch": {
+        "type": "number",
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "turnOffRuleWhileOnBranch": {
+        "type": "string",
+        "optional": false,
+        "nullable": true,
+        "nonEmpty": false
+      }
+    },
+    "optionalTuning": {},
+    "recommendedSeed": {
+      "mode": "NEW_AND_MODIFIED_FILES",
+      "turnOffRuleUntilEpoch": 0,
+      "turnOffRuleWhileOnBranch": null
+    }
+  },
+  "validate-ts-in-src": {
+    "schema": {
+      "mode": {
+        "type": "string",
+        "enumValues": [
+          "OFF",
+          "NEW_AND_MODIFIED_FILES"
+        ],
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "allowedRootFiles": {
+        "type": "string[]",
+        "optional": true,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "excludePaths": {
+        "type": "string[]",
+        "optional": true,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "turnOffRuleUntilEpoch": {
+        "type": "number",
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "turnOffRuleWhileOnBranch": {
+        "type": "string",
+        "optional": false,
+        "nullable": true,
+        "nonEmpty": false
+      }
+    },
+    "optionalTuning": {
+      "allowedRootFiles": [
+        "jest.setup.ts"
+      ],
+      "excludePaths": [
+        "node_modules",
+        "dist",
+        ".nx",
+        ".git",
+        "**/*.d.ts",
+        "**/jest.config.ts"
+      ]
+    },
+    "recommendedSeed": {
+      "mode": "NEW_AND_MODIFIED_FILES",
+      "turnOffRuleUntilEpoch": 0,
+      "turnOffRuleWhileOnBranch": null
+    }
+  }
+}

@@ -4,8 +4,10 @@ import { injectable, bindingScopeValues } from 'inversify';
 import { AtomicFile } from '@webpieces/tooling-common';
 import { ConfigFile } from './config-file';
 import { PRUNE_UNKNOWN_COMMAND } from './constants';
-import { RULE_SCHEMAS } from './rule-schemas';
-import { RETIRED_CONFIG_KEYS, RETIRED_SCOPE_RULE } from './retired-config-keys';
+import * as path from 'node:path';
+import { RulePackRegistry } from './rule-pack-registry';
+import { RulePackSelection } from './rule-pack-selection';
+import { RETIRED_SCOPE_RULE } from './retired-config-keys';
 
 /**
  * `wp-prune-unknown-config` — the MECHANICAL cure for "[x] Unknown rule".
@@ -95,6 +97,7 @@ export class ConfigPruner {
     constructor(
         private readonly configFile: ConfigFile,
         private readonly atomicFile: AtomicFile,
+        private readonly rulePacks: RulePackSelection,
     ) {}
 
     /**
@@ -123,7 +126,7 @@ export class ConfigPruner {
         }
         // webpieces-disable no-any-unknown -- narrowed to a non-null, non-array object one line above
         const document = parsed as Record<string, unknown>;
-        const removed = this.removeUnknown(document);
+        const removed = this.removeUnknown(document, this.rulePacks.loadFrom(path.dirname(configPath)));
         if (removed.length > 0) {
             this.atomicFile.writeAtomic(configPath, JSON.stringify(document, null, this.indentOf(text)) + '\n');
         }
@@ -132,7 +135,7 @@ export class ConfigPruner {
 
     /** Mutates `document`, deleting every prunable name from the two rule sections. */
     // webpieces-disable no-any-unknown -- opaque parsed config document
-    private removeUnknown(document: Record<string, unknown>): PrunedKey[] {
+    private removeUnknown(document: Record<string, unknown>, registry: RulePackRegistry): PrunedKey[] {
         // A custom rules directory means a name with no built-in schema may be entirely legitimate.
         const rulesDir = document['rulesDir'];
         if (Array.isArray(rulesDir) && rulesDir.length > 0) return [];
@@ -144,7 +147,7 @@ export class ConfigPruner {
             // webpieces-disable no-any-unknown -- narrowed to a non-null, non-array object one line above
             const entries = section as Record<string, unknown>;
             for (const key of Object.keys(entries)) {
-                const reason = this.reasonToRemove(key);
+                const reason = this.reasonToRemove(key, registry);
                 if (reason === null) continue;
                 delete entries[key];
                 removed.push(new PrunedKey(sectionName, key, reason));
@@ -154,9 +157,9 @@ export class ConfigPruner {
     }
 
     /** Why `key` is safe to delete, or null when it must be kept. */
-    private reasonToRemove(key: string): string | null {
-        if (RULE_SCHEMAS[key]) return null;
-        const retired = RETIRED_CONFIG_KEYS.find(
+    private reasonToRemove(key: string, registry: RulePackRegistry): string | null {
+        if (registry.hasRule(key)) return null;
+        const retired = registry.migrations().find(
             e => e.scope === RETIRED_SCOPE_RULE && e.key === key);
         if (retired) {
             if (!retired.prunable) return null;

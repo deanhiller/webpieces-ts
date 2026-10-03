@@ -1,8 +1,9 @@
+import { fixtureSchemas as RULE_SCHEMAS } from '@webpieces/tooling-testkit';
 import { describe, it, expect } from 'vitest';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { RulePackManifest } from '@webpieces/rules-sdk';
-import { RulePackRegistry, RULE_SCHEMAS } from '@webpieces/rules-config';
+import { RulePackRegistry } from '@webpieces/rules-config';
 
 class PackPackage {
     name!: string;

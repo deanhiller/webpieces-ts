@@ -1,10 +1,9 @@
 import { describe, it, expect } from 'vitest';
 
-import { NoCustomCssConfig } from './rule-configs';
-import { NoCustomCssScope } from './no-custom-css-scope';
+import { NoCustomCssScope, PathScopeConfig } from './no-custom-css-scope';
 
 function scope(allowGlobs?: string[]): NoCustomCssScope {
-    const cfg = new NoCustomCssConfig();
+    const cfg = new PathScopeConfig();
     cfg.mode = 'NEW_AND_MODIFIED_FILES';
     if (allowGlobs !== undefined) cfg.allowGlobs = allowGlobs;
     return new NoCustomCssScope(cfg);

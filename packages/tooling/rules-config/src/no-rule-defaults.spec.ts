@@ -1,3 +1,7 @@
+import { policyFixture } from '@webpieces/tooling-testkit';
+import { RulePackRegistry } from '@webpieces/rules-config';
+const fixtureRuleRegistry = new RulePackRegistry(policyFixture.manifests());
+import { fixtureTuning as defaultRules, fixtureSchemas as RULE_SCHEMAS } from '@webpieces/tooling-testkit';
 /**
  * A RULE MUST NOT HAVE A DEFAULT (#1017).
  *
@@ -13,8 +17,8 @@
  * rule FAILS THE LOAD, which is what makes having no default safe.
  */
 import { describe, it, expect } from 'vitest';
-import { defaultRules } from './default-rules';
-import { RULE_SCHEMAS } from './rule-schemas';
+
+
 import { validateWebpiecesConfig } from './validate-config';
 import { recommendedSeedMode, seedEntryForRule } from './seed-entry';
 
@@ -44,9 +48,9 @@ describe('a rule has no default', () => {
         for (const name of Object.keys(RULE_SCHEMAS)) {
             const others: Record<string, Record<string, unknown>> = {};
             for (const other of Object.keys(RULE_SCHEMAS)) {
-                if (other !== name) others[other] = seedEntryForRule(other);
+                if (other !== name) others[other] = seedEntryForRule(other, fixtureRuleRegistry);
             }
-            const errors = validateWebpiecesConfig(others, false);
+            const errors = validateWebpiecesConfig(others, fixtureRuleRegistry, false);
             expect(errors.join('\n')).toContain(`[${name}] Not configured in webpieces.config.json`);
         }
     });
@@ -79,7 +83,7 @@ describe('a rule has no default', () => {
         for (const name of infra) {
             expect(RULE_SCHEMAS[name]).toBeDefined();
             expect(defaultRules[name]?.['mode']).toBeUndefined();
-            expect(recommendedSeedMode(name)).toBe('RUN_EVERY_TIME');
+            expect(recommendedSeedMode(name, fixtureRuleRegistry)).toBe('RUN_EVERY_TIME');
         }
     });
 
@@ -98,7 +102,7 @@ describe('a rule has no default', () => {
         expect(schema['paths'].optional).toBe(false);
         expect(schema['allowedPaths'].optional).toBe(true);
         expect(defaultRules['no-utility-types-in-api-lib']).toEqual({});
-        expect(seedEntryForRule('no-utility-types-in-api-lib')['paths']).toEqual(['libraries/apis/**']);
+        expect(seedEntryForRule('no-utility-types-in-api-lib', fixtureRuleRegistry)['paths']).toEqual(['libraries/apis/**']);
     });
 
     it('required-type-suffix demands `entries` as well as mode — which directories carry which suffixes is the consumer\'s call', () => {
@@ -111,7 +115,7 @@ describe('a rule has no default', () => {
         expect(schema['allowedPaths'].optional).toBe(true);
         expect(defaultRules['required-type-suffix']).toEqual({});
         // A SEED is written into the consumer's own file, where it is read — not a default.
-        expect(seedEntryForRule('required-type-suffix')['entries']).toEqual([
+        expect(seedEntryForRule('required-type-suffix', fixtureRuleRegistry)['entries']).toEqual([
             { paths: ['libraries/apis/**'], suffixes: ['Request', 'Response', 'Event', 'Dto', 'Api'] },
         ]);
     });
@@ -128,7 +132,7 @@ describe('a rule has no default', () => {
             const schema = RULE_SCHEMAS[rule];
             for (const field of fields) expect(schema[field].optional, `${rule}.${field}`).toBe(false);
             expect(defaultRules[rule], rule).toEqual({});
-            const errors = validateWebpiecesConfig({ [rule]: seedEntryForRule(rule) })
+            const errors = validateWebpiecesConfig({ [rule]: seedEntryForRule(rule, fixtureRuleRegistry) }, fixtureRuleRegistry)
                 .filter((e: string) => e.includes(`[${rule}]`));
             expect(errors, rule).toEqual([]);
         }

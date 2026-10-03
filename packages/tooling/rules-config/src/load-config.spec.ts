@@ -1,18 +1,23 @@
+import { RulePackRegistry } from '@webpieces/rules-config';
+import { policyFixture } from '@webpieces/tooling-testkit';
+const fixtureRuleRegistry = new RulePackRegistry(policyFixture.manifests());
+import { fixtureMigrations as RETIRED_CONFIG_KEYS, fixtureTuning as defaultRules, fixtureSchemas as RULE_SCHEMAS, fixtureHookGuardNames as SHIPPED_HOOK_GUARD_NAMES } from '@webpieces/tooling-testkit';
 import { specTempDirs } from '@webpieces/tooling-testkit';
 import * as fs from 'fs';
 import * as path from 'path';
 
 import { CONFIG_FILENAME } from './config-file';
 import { loadAndValidate } from './load-config';
-import { RETIRED_CONFIG_KEYS, RETIRED_SCOPE_RULE, RetiredConfigKey } from './retired-config-keys';
+import { RETIRED_SCOPE_RULE } from './retired-config-keys';
+import { RetiredConfigKey } from '@webpieces/rules-sdk';
 import { toError } from '@webpieces/tooling-common/to-error';
-import { defaultRules } from './default-rules';
-import { RULE_SCHEMAS } from './rule-schemas';
-import { HOOK_GUARD_NAMES as SHIPPED_HOOK_GUARD_NAMES } from './sections';
+
+
+
 
 
 function mktmp(contents: Record<string, string>): string {
-    const dir = specTempDirs.make('wp-config-');
+    const dir = policyFixture.makeRepo('wp-config-');
     for (const [name, body] of Object.entries(contents)) {
         fs.writeFileSync(path.join(dir, name), body);
     }
@@ -523,6 +528,13 @@ describe('loadAndValidate — every retired key fails the load', () => {
     // Build the minimal config that still carries `entry`, so the ONLY reason to throw is the retirement.
     function configCarrying(entry: RetiredConfigKey): string {
         const sections = allRulesOff();
+        if (entry.scope === 'field') {
+            const [rule, field] = entry.key.split('.');
+            const section = fixtureRuleRegistry.sectionFor(rule);
+            const values = sections[section] as Record<string, Record<string, unknown>>;
+            values[rule][field] = 'obsolete';
+            return writeConfig(sections);
+        }
         if (entry.scope === RETIRED_SCOPE_RULE) {
             const guards = sections['hookGuards'] as Record<string, unknown>;
             guards[entry.key] = {
@@ -577,7 +589,8 @@ describe('loadAndValidate — every retired key fails the load', () => {
     for (const entry of RETIRED_CONFIG_KEYS) {
         it(`rejects ${entry.label} "${entry.key}" and names where it went`, () => {
             const dir = configCarrying(entry);
-            expect(() => loadAndValidate(dir)).toThrow(`"${entry.key}" is a RETIRED`);
+            if (entry.scope === 'field') expect(() => loadAndValidate(dir)).toThrow(entry.instruction);
+            else expect(() => loadAndValidate(dir)).toThrow(`"${entry.key}" is a RETIRED`);
             if (entry.movedTo !== '') expect(() => loadAndValidate(dir)).toThrow(entry.movedTo);
         });
     }

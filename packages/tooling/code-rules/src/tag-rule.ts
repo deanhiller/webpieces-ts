@@ -9,7 +9,8 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
-import { ProjectMode, detectBase, getChangedFiles } from '@webpieces/rules-config';
+import { detectBase, getChangedFiles } from "@webpieces/rules-config";
+import { ProjectMode } from "./configs/rule-configs";
 import { toError } from '@webpieces/tooling-common/to-error';
 import { ExecutorResult } from './code-validator';
 import { shouldSkipRule } from './resolve-mode';

@@ -1,4 +1,5 @@
-import { NoSymbolDiTokensConfig, RULE_NAMES, Option } from '@webpieces/rules-config';
+import { SourceContributionConfig } from "../source-contribution-config";
+import { Option } from "@webpieces/rules-config";
 
 import type { EditContext, Violation } from '@webpieces/hook-runtime';
 import { Violation as V } from '@webpieces/hook-runtime';
@@ -46,8 +47,8 @@ function isAllowedPath(relativePath: string, allowedPaths: readonly string[]): b
     return allowedPaths.some((pattern: string) => globToRegex(pattern).test(relativePath));
 }
 
-export class NoSymbolDiTokensRule extends EditRuleBase<NoSymbolDiTokensConfig> {
-    constructor(config: NoSymbolDiTokensConfig) { super(config, 'no-symbol-di-tokens', 'no-symbol-di-tokens'); }
+export class NoSymbolDiTokensRule extends EditRuleBase<SourceContributionConfig> {
+    constructor(config: SourceContributionConfig) { super(config, 'no-symbol-di-tokens', 'no-symbol-di-tokens'); }
 
     readonly description = 'Disallow Symbol() DI tokens outside explicitly configured paths. Use @injectable(bindingScopeValues.Singleton) + inject-by-type instead.';
     override readonly files = ['**/*.ts', '**/*.tsx'];
@@ -75,7 +76,7 @@ export class NoSymbolDiTokensRule extends EditRuleBase<NoSymbolDiTokensConfig> {
             const stripped = ctx.strippedLines[i];
             if (!SYMBOL_DI_REGEX.test(stripped ?? '')) continue;
             const lineNum = i + 1;
-            if (disableAllowed && ctx.isLineDisabled(lineNum, RULE_NAMES.NO_SYMBOL_DI_TOKENS)) continue;
+            if (disableAllowed && ctx.isLineDisabled(lineNum, "no-symbol-di-tokens")) continue;
             violations.push(new V(lineNum, ctx.lines[i]?.trim() ?? ''));
         }
         return violations;

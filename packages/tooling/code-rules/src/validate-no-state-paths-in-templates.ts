@@ -43,19 +43,9 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
-import {
-    hasDisable,
-    RULE_NAMES,
-    NoStatePathsInTemplatesConfig,
-    Option,
-    RuleFailError,
-    DEFAULT_TEMPLATE_DIRS,
-    DEFAULT_BANNED_STATE_PATH_PREFIXES,
-    ModifiedCodeMode,
-    detectBase,
-    getFileDiff,
-    getChangedLineNumbers,
-} from '@webpieces/rules-config';
+import { hasDisable, Option, RuleFailError, detectBase, getFileDiff, getChangedLineNumbers } from "@webpieces/rules-config";
+import { NoStatePathsInTemplatesConfig, DEFAULT_TEMPLATE_DIRS, DEFAULT_BANNED_STATE_PATH_PREFIXES } from "./configs/no-state-paths-config";
+import { ModifiedCodeMode } from '@webpieces/rules-sdk';
 import { injectable, bindingScopeValues } from 'inversify';
 
 import { CodeValidator, ExecutorResult } from './code-validator';
@@ -85,7 +75,7 @@ export class StatePathHit {
 @injectable(bindingScopeValues.Singleton)
 export class NoStatePathsInTemplatesValidator extends CodeValidator<NoStatePathsInTemplatesConfig> {
     constructor(config: NoStatePathsInTemplatesConfig, private readonly scanScope: ScanScope) {
-        super(config, RULE_NAMES.NO_STATE_PATHS_IN_TEMPLATES, RULE_NAMES.NO_STATE_PATHS_IN_TEMPLATES);
+        super(config, "no-state-paths-in-templates", "no-state-paths-in-templates");
     }
 
     async run(workspaceRoot: string): Promise<ExecutorResult> {
@@ -148,7 +138,7 @@ export class NoStatePathsInTemplatesValidator extends CodeValidator<NoStatePaths
             .join('\n');
         const first = violations[0];
         return new RuleFailError(
-            RULE_NAMES.NO_STATE_PATHS_IN_TEMPLATES,
+            "no-state-paths-in-templates",
             'A generated-doc template RESTATES a webpieces state path instead of computing it. These docs are '
             + 'regenerated into every governed repo and handed to an agent by absolute path AS INSTRUCTION, and '
             + 'every .webpieces/ path is per-tree — a linked worktree keeps its state under '
@@ -270,7 +260,7 @@ export class NoStatePathsInTemplatesValidator extends CodeValidator<NoStatePaths
     private hasDisableComment(lines: string[], lineNumber: number): boolean {
         const start = Math.max(0, lineNumber - 4);
         for (let i = lineNumber - 1; i >= start; i--) {
-            if (hasDisable(lines[i] ?? '', RULE_NAMES.NO_STATE_PATHS_IN_TEMPLATES)) return true;
+            if (hasDisable(lines[i] ?? '', "no-state-paths-in-templates")) return true;
         }
         return false;
     }

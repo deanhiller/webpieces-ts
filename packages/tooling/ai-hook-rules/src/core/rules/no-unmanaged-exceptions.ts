@@ -1,4 +1,5 @@
-import { NoUnmanagedExceptionsConfig, RULE_NAMES, RepoRootFinder, Option } from '@webpieces/rules-config';
+import { SourceContributionConfig } from "../source-contribution-config";
+import { RepoRootFinder, Option } from "@webpieces/rules-config";
 
 import type { EditContext, Violation } from '@webpieces/hook-runtime';
 import { Violation as V } from '@webpieces/hook-runtime';
@@ -18,8 +19,8 @@ function hasPrecedingDisable(lines: readonly string[], idx: number): boolean {
     return DISABLE_PATTERN.test(prevLine);
 }
 
-export class NoUnmanagedExceptionsRule extends EditRuleBase<NoUnmanagedExceptionsConfig> {
-    constructor(config: NoUnmanagedExceptionsConfig) { super(config, 'no-unmanaged-exceptions', 'no-unmanaged-exceptions'); }
+export class NoUnmanagedExceptionsRule extends EditRuleBase<SourceContributionConfig> {
+    constructor(config: SourceContributionConfig) { super(config, 'no-unmanaged-exceptions', 'no-unmanaged-exceptions'); }
 
     readonly description = 'try/catch is generally not allowed. Only allowed in chokepoints (filter, globalErrorHandler) or other rare locations.';
     override readonly files = ['**/*.ts', '**/*.tsx'];
@@ -48,7 +49,7 @@ export class NoUnmanagedExceptionsRule extends EditRuleBase<NoUnmanagedException
             const stripped = ctx.strippedLines[i];
             if (!TRY_PATTERN.test(stripped)) continue;
             const lineNum = i + 1;
-            if (disableAllowed && ctx.isLineDisabled(lineNum, RULE_NAMES.NO_UNMANAGED_EXCEPTIONS)) continue;
+            if (disableAllowed && ctx.isLineDisabled(lineNum, "no-unmanaged-exceptions")) continue;
             if (disableAllowed && hasPrecedingDisable(ctx.lines, i)) continue;
             const docPath = new RepoRootFinder().instructAiDocPath(ctx.workspaceRoot, INSTRUCT_FILE);
             violations.push(new V(lineNum, ctx.lines[i].trim(),

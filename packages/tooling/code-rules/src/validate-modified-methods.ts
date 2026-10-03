@@ -22,18 +22,8 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as ts from 'typescript';
-import {
-    writeTemplate,
-    RULE_NAMES,
-    WEBPIECES_DISABLE,
-    MaxMethodLinesConfig,
-    MethodLimitMode,
-    detectBase,
-    getChangedFiles,
-    getFileDiff,
-    getChangedLineNumbers,
-    findNewMethodSignaturesInDiff,
-} from '@webpieces/rules-config';
+import { writeTemplate, WEBPIECES_DISABLE, detectBase, getChangedFiles, getFileDiff, getChangedLineNumbers, findNewMethodSignaturesInDiff } from "@webpieces/rules-config";
+import { MaxMethodLinesConfig, MethodLimitMode } from "./configs/rule-configs";
 import { CodeValidator, ExecutorResult } from './code-validator';
 import { injectable, bindingScopeValues } from 'inversify';
 import { shouldSkipRule, SkipRuleResult } from './resolve-mode';
@@ -123,7 +113,7 @@ function getDisableInfo(lines: string[], lineNumber: number): DisableInfo {
             break;
         }
         if (line.includes(WEBPIECES_DISABLE)) {
-            if (line.includes(RULE_NAMES.MAX_LINES_MODIFIED)) {
+            if (line.includes("max-lines-modified")) {
                 // Check for date in format: max-lines-modified yyyy/mm/dd
                 const dateMatch = line.match(/max-lines-modified\s+(\d{4}\/\d{2}\/\d{2}|XXXX\/XX\/XX)/);
 
@@ -153,7 +143,7 @@ function getDisableInfo(lines: string[], lineNumber: number): DisableInfo {
                 // Valid and not expired
                 return { type: 'full', isExpired: false, date: dateStr };
             }
-            if (line.includes(RULE_NAMES.MAX_LINES_NEW_METHODS)) {
+            if (line.includes("max-lines-new-methods")) {
                 // Check for date in format: max-lines-new-methods yyyy/mm/dd
                 const dateMatch = line.match(/max-lines-new-methods\s+(\d{4}\/\d{2}\/\d{2}|XXXX\/XX\/XX)/);
 

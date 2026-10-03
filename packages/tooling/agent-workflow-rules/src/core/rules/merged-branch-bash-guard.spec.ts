@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 
 import { MainSyncStatus } from '@webpieces/repo-workflow-core';
-import { BranchStateGuardConfig } from '@webpieces/rules-config';
+import { BranchStateGuardConfig } from "../../configs/main-sync-guard-configs";
 
 import { BashContext } from '@webpieces/hook-runtime';
 

@@ -3,7 +3,8 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
 
-import { MaxFileLinesConfig, GENERATED_CODE_PATHS, isPathExcluded, NoFunctionOutsideClassConfig } from '@webpieces/rules-config';
+import { GENERATED_CODE_PATHS, isPathExcluded } from "@webpieces/rules-config";
+import { MaxFileLinesConfig, NoFunctionOutsideClassConfig } from "../configs/rule-configs";
 
 import { findViolations, exemptPathsFor, violationsError } from '../validate-modified-files';
 

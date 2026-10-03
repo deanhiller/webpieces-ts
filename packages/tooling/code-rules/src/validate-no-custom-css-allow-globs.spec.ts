@@ -15,7 +15,8 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { execSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
-import { NoCustomCssConfig, NoCustomCssScope } from '@webpieces/rules-config';
+import { NoCustomCssScope } from "@webpieces/rules-config";
+import { NoCustomCssConfig } from "./configs/rule-configs";
 
 import { NoCustomCssValidator } from './validate-no-custom-css';
 import { GateScanScope } from './scan-scope';

@@ -1,3 +1,4 @@
+import { policyFixture } from '@webpieces/tooling-testkit';
 import { specTempDirs } from '@webpieces/tooling-testkit';
 import { describe, it, expect, beforeEach } from 'vitest';
 import * as fs from 'fs';
@@ -38,7 +39,7 @@ describe('triggerMainSyncRefresh — at most one refresher per hook process', ()
     let root: string;
 
     beforeEach(() => {
-        root = specTempDirs.make('wp-refresh-');
+        root = policyFixture.makeRepo('wp-refresh-');
         resetMainSyncRefreshLatchForTest();
     });
 

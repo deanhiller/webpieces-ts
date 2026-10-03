@@ -21,7 +21,8 @@
 import * as path from 'path';
 import { DocumentedType } from '@webpieces/api-doc-model';
 import { SuffixEntryPicker } from '@webpieces/code-rules';
-import { loadAndValidate, RequiredTypeSuffixEntry, RULE_NAMES } from '@webpieces/rules-config';
+import { loadAndValidate } from "@webpieces/rules-config";
+import { RequiredTypeSuffixEntry } from "@webpieces/code-rules";
 import { ProjectInfo } from '../project-info';
 import { resolveRole } from '../role-resolver';
 import { RuleGate } from '../rule-gate';
@@ -41,10 +42,10 @@ export class WireClosureRule {
     /** `required-type-suffix`'s entries, unless that rule is OFF or time-boxed / branch-scoped off. */
     // webpieces-disable no-function-outside-class -- static factory of this class
     static fromConfig(workspaceRoot: string): WireClosureRule {
-        if (new RuleGate().skipReason(workspaceRoot, RULE_NAMES.REQUIRED_TYPE_SUFFIX, true) !== null) {
+        if (new RuleGate().skipReason(workspaceRoot, "required-type-suffix", true) !== null) {
             return WireClosureRule.withoutSuffixes();
         }
-        const rule = loadAndValidate(workspaceRoot).resolved.rules.get(RULE_NAMES.REQUIRED_TYPE_SUFFIX);
+        const rule = loadAndValidate(workspaceRoot).resolved.rules.get("required-type-suffix");
         const entries = rule?.options['entries'];
         return new WireClosureRule(Array.isArray(entries) ? (entries as RequiredTypeSuffixEntry[]) : []);
     }

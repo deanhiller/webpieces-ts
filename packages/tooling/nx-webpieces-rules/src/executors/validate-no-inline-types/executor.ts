@@ -1,7 +1,7 @@
 import type { ExecutorContext } from '@nx/devkit';
 import { ExecutorResult } from '../../executor-result';
 import { NoInlineTypeLiteralsValidator } from '@webpieces/code-rules';
-import { NoInlineTypeLiteralsConfig } from '@webpieces/rules-config';
+import { NoInlineTypeLiteralsConfig } from "@webpieces/code-rules";
 
 export default async function runExecutor(
     options: NoInlineTypeLiteralsConfig,

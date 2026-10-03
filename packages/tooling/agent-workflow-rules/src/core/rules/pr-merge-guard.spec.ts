@@ -10,7 +10,7 @@ vi.mock('child_process', () => ({
     }),
 }));
 
-import { PrLifecycleGuardConfig } from '@webpieces/rules-config';
+import { PrLifecycleGuardConfig } from "../../configs/rule-configs";
 import { BashContext } from '@webpieces/hook-runtime';
 import { PrMergeGuardRule } from './pr-merge-guard';
 

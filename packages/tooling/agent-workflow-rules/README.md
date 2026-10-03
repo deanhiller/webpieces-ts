@@ -15,8 +15,10 @@ Workflow guard policy and hook installation for AI coding agents, contributed in
 - Source rule implementations and their registry (ai-hook-rules).
 - Generic protocol and rule evaluation (hook-runtime).
 - Git/worktree primitives and state paths (repo-workflow-core and tooling-common).
-- Config schemas and loading (rules-config), PR orchestration (pr-gate), and aggregate packaging (nx-webpieces-rules).
+- Generic config loading and validation (rules-config), PR orchestration (pr-gate), and aggregate packaging (nx-webpieces-rules).
 
-The public source and guard hooks keep their existing binary names. Import shared rule contracts from `@webpieces/hook-runtime`, configuration types from `@webpieces/rules-config`, and errors from `@webpieces/tooling-common`. Workflow APIs previously imported from `ai-hook-rules` now belong to `agent-workflow-rules`. OpenClaw composition is provided by the umbrella package.
+The public source and guard hooks keep their existing binary names. Import shared rule contracts from `@webpieces/hook-runtime`, pure schema/value contracts from `@webpieces/rules-sdk` and concrete configuration types from their owner package, and errors from `@webpieces/tooling-common`. Workflow APIs previously imported from `ai-hook-rules` now belong to `agent-workflow-rules`. OpenClaw composition is provided by the umbrella package.
 
 The committed dispatcher is upgraded from the installed published release; this extraction does not regenerate it from unreleased source.
+
+This pack owns its concrete policy schemas, mode enums, optional tuning, and reviewed seeds. Workflow rule/field retirements and keyless safeguard metadata are published by the workflow owner.

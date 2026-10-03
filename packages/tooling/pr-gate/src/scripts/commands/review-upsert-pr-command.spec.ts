@@ -1,3 +1,4 @@
+import { policyFixture } from '@webpieces/tooling-testkit';
 import { specTempDirs } from '@webpieces/tooling-testkit';
 import 'reflect-metadata';
 import * as fs from 'fs';
@@ -29,7 +30,7 @@ vi.mock('@webpieces/rules-config', async (importOriginal) => {
 });
 
 class RecoveryFixture {
-    readonly root = specTempDirs.make('resume-stage-');
+    readonly root = policyFixture.makeRepo('resume-stage-');
     readonly feature = 'dean-1087';
     readonly reviewJson = new ReviewJsonService();
     readonly receipts = new ReviewStageReceiptService(this.reviewJson);

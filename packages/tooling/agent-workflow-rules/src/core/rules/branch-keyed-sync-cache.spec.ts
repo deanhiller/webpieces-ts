@@ -1,10 +1,11 @@
+import { policyFixture } from '@webpieces/tooling-testkit';
 import { specTempDirs } from '@webpieces/tooling-testkit';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
 
 import { MainSyncFileStore, MainSyncStatus, MainSyncStatusFile } from '@webpieces/repo-workflow-core';
-import { BranchStateGuardConfig } from '@webpieces/rules-config';
+import { BranchStateGuardConfig } from "../../configs/main-sync-guard-configs";
 
 import { BashContext, FileContext } from '@webpieces/hook-runtime';
 
@@ -116,7 +117,7 @@ function armedBashConfig(): BranchStateGuardConfig {
 let dir = '';
 
 beforeEach(() => {
-    dir = specTempDirs.make('bksc-');
+    dir = policyFixture.makeRepo('bksc-');
     state.cacheFile = path.join(dir, 'main-sync-status.json');
     writeCache(twoWorktreeCache());
     log.reasons = [];

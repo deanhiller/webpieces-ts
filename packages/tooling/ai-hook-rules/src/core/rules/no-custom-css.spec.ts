@@ -1,6 +1,7 @@
+import { SourceContributionConfig } from "../source-contribution-config";
 import { describe, it, expect } from 'vitest';
 
-import { NoCustomCssConfig, NoCustomCssScope } from '@webpieces/rules-config';
+import { NoCustomCssScope } from "@webpieces/rules-config";
 
 import { EditContext } from '@webpieces/hook-runtime';
 import { NoCustomCssRule } from './no-custom-css';
@@ -25,7 +26,7 @@ function ctx(relativePath: string, content: string, disabledLines: number[] = []
 }
 
 function rule(allowGlobs: string[] = []): NoCustomCssRule {
-    const cfg = new NoCustomCssConfig();
+    const cfg = new SourceContributionConfig();
     cfg.mode = 'NEW_AND_MODIFIED_CODE';
     cfg.allowGlobs = allowGlobs;
     return new NoCustomCssRule(cfg);
@@ -100,7 +101,7 @@ describe('NoCustomCssRule allowGlobs agrees with the shared scope', () => {
     });
 
     it('matches the scope verdict for every path', () => {
-        const cfg = new NoCustomCssConfig();
+        const cfg = new SourceContributionConfig();
         cfg.mode = 'NEW_AND_MODIFIED_CODE';
         cfg.allowGlobs = ['**/design.html'];
         const scope = new NoCustomCssScope(cfg);

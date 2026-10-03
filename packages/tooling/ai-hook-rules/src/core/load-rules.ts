@@ -1,8 +1,10 @@
+import { SourceContributionConfig } from "./source-contribution-config";
 import { BaseRuleConfig } from '@webpieces/rules-sdk';
 import * as fs from 'fs';
 import * as path from 'path';
 
-import { RuleOptions, WebpiecesRulesConfig, NoAnyUnknownConfig, NoImplicitAnyConfig, MaxFileLinesConfig, ValidateTsInSrcConfig, NoDestructureConfig, RequireReturnTypeConfig, NoUnmanagedExceptionsConfig, CatchErrorPatternConfig, ThrowCauseRequiredConfig, NoSymbolDiTokensConfig, NoCustomCssConfig, NoProcessExitOutsideMainConfig, NoJsFilesConfig, MatchRuleConfig } from '@webpieces/rules-config';
+import { RuleOptions, WebpiecesRulesConfig, MatchRuleConfig } from "@webpieces/rules-config";
+import { ValidateTsInSrcConfig, ThrowCauseRequiredConfig, NoJsFilesConfig } from "../configs/rule-configs";
 
 import type { Rule, PlainRule } from '@webpieces/hook-runtime';
 import { InformAiError } from '@webpieces/tooling-common';
@@ -42,18 +44,18 @@ const VALID_SCOPES = new Set(['edit', 'file', 'bash']);
 type RuleFactory = (config: BaseRuleConfig) => readonly Rule[];
 
 const BUILT_IN_RULE_MAP: Record<string, RuleFactory> = {
-    'no-any-unknown': (c: BaseRuleConfig) => [new NoAnyUnknownRule(c as NoAnyUnknownConfig)],
-    'no-implicit-any': (c: BaseRuleConfig) => [new NoImplicitAnyRule(c as NoImplicitAnyConfig)],
-    'max-file-lines': (c: BaseRuleConfig) => [new MaxFileLinesRule(c as MaxFileLinesConfig)],
+    'no-any-unknown': (c: BaseRuleConfig) => [new NoAnyUnknownRule(c as SourceContributionConfig)],
+    'no-implicit-any': (c: BaseRuleConfig) => [new NoImplicitAnyRule(c as SourceContributionConfig)],
+    'max-file-lines': (c: BaseRuleConfig) => [new MaxFileLinesRule(c as SourceContributionConfig)],
     'validate-ts-in-src': (c: BaseRuleConfig) => [new ValidateTsInSrcRule(c as ValidateTsInSrcConfig)],
-    'no-destructure': (c: BaseRuleConfig) => [new NoDestructureRule(c as NoDestructureConfig)],
-    'require-return-type': (c: BaseRuleConfig) => [new RequireReturnTypeRule(c as RequireReturnTypeConfig)],
-    'no-unmanaged-exceptions': (c: BaseRuleConfig) => [new NoUnmanagedExceptionsRule(c as NoUnmanagedExceptionsConfig)],
-    'catch-error-pattern': (c: BaseRuleConfig) => [new CatchErrorPatternRule(c as CatchErrorPatternConfig)],
+    'no-destructure': (c: BaseRuleConfig) => [new NoDestructureRule(c as SourceContributionConfig)],
+    'require-return-type': (c: BaseRuleConfig) => [new RequireReturnTypeRule(c as SourceContributionConfig)],
+    'no-unmanaged-exceptions': (c: BaseRuleConfig) => [new NoUnmanagedExceptionsRule(c as SourceContributionConfig)],
+    'catch-error-pattern': (c: BaseRuleConfig) => [new CatchErrorPatternRule(c as SourceContributionConfig)],
     'throw-cause-required': (c: BaseRuleConfig) => [new ThrowCauseRequiredRule(c as ThrowCauseRequiredConfig)],
-    'no-symbol-di-tokens': (c: BaseRuleConfig) => [new NoSymbolDiTokensRule(c as NoSymbolDiTokensConfig)],
-    'no-custom-css': (c: BaseRuleConfig) => [new NoCustomCssRule(c as NoCustomCssConfig)],
-    'no-process-exit-outside-main': (c: BaseRuleConfig) => [new NoProcessExitOutsideMainRule(c as NoProcessExitOutsideMainConfig)],
+    'no-symbol-di-tokens': (c: BaseRuleConfig) => [new NoSymbolDiTokensRule(c as SourceContributionConfig)],
+    'no-custom-css': (c: BaseRuleConfig) => [new NoCustomCssRule(c as SourceContributionConfig)],
+    'no-process-exit-outside-main': (c: BaseRuleConfig) => [new NoProcessExitOutsideMainRule(c as SourceContributionConfig)],
     'no-js-files': (c: BaseRuleConfig) => [new NoJsFilesRule(c as NoJsFilesConfig)],
 
 };

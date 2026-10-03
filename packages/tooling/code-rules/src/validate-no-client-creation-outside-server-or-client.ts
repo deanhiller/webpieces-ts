@@ -40,24 +40,16 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
-import {
-    hasDisable,
-    RULE_NAMES,
-    isPathExcluded,
-    NoClientCreationOutsideServerOrClientConfig,
-    ClientCreationSeverity,
-    ModifiedCodeMode,
-    detectBase,
-    getFileDiff,
-    getChangedLineNumbers,
-} from '@webpieces/rules-config';
+import { hasDisable, isPathExcluded, detectBase, getFileDiff, getChangedLineNumbers } from "@webpieces/rules-config";
+import { NoClientCreationOutsideServerOrClientConfig, ClientCreationSeverity } from "./configs/no-client-creation-config";
+import { ModifiedCodeMode } from '@webpieces/rules-sdk';
 import { CodeValidator, ExecutorResult } from './code-validator';
 import { injectable, bindingScopeValues } from 'inversify';
 import { shouldSkipRule } from './resolve-mode';
 import { ProjectRoleResolver } from './project-role-resolver';
 import { ScanScope } from './scan-scope';
 
-const RULE_NAME = RULE_NAMES.NO_CLIENT_CREATION_OUTSIDE_SERVER_OR_CLIENT;
+const RULE_NAME = "no-client-creation-outside-server-or-client";
 const DEFAULT_ALLOWED_ROLES = ['server', 'client', 'app'];
 // A `.createRpcClient(` / `.createPubSubClient(` method CALL — the leading dot excludes the framework
 // method DEFINITIONS (`createRpcClient<T>(apiPrototype, ...)`, no receiver); the `[(<]` requires a call

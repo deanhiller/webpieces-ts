@@ -21,7 +21,9 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
-import { hasDisable, RULE_NAMES, NoProcessExitOutsideMainConfig, ModifiedCodeMode, detectBase, getFileDiff, getChangedLineNumbers, writeTemplateIfMissing, RepoRootFinder } from '@webpieces/rules-config';
+import { hasDisable, detectBase, getFileDiff, getChangedLineNumbers, writeTemplateIfMissing, RepoRootFinder } from "@webpieces/rules-config";
+import { NoProcessExitOutsideMainConfig } from "./configs/rule-configs";
+import { ModifiedCodeMode } from '@webpieces/rules-sdk';
 import { CodeValidator, ExecutorResult } from './code-validator';
 import { injectable, bindingScopeValues } from 'inversify';
 import { shouldSkipRule } from './resolve-mode';
@@ -101,7 +103,7 @@ export function findExitViolationsInFile(filePath: string, workspaceRoot: string
 
         const lineNum = i + 1;
         const prevLine = i > 0 ? (lines[i - 1] ?? '') : '';
-        const disabled = hasDisable(line, RULE_NAMES.NO_PROCESS_EXIT_OUTSIDE_MAIN) || hasDisable(prevLine, RULE_NAMES.NO_PROCESS_EXIT_OUTSIDE_MAIN);
+        const disabled = hasDisable(line, "no-process-exit-outside-main") || hasDisable(prevLine, "no-process-exit-outside-main");
         violations.push({ line: lineNum, context: line.trim(), hasDisableComment: resolveDisable(disabled, disableAllowed) });
     }
     return violations;

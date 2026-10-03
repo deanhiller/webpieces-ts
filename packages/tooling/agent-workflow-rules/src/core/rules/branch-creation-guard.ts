@@ -1,6 +1,7 @@
 import { execSync } from 'child_process';
 
-import { BranchCreationGuardConfig, Option } from '@webpieces/rules-config';
+import { Option } from "@webpieces/rules-config";
+import { BranchCreationGuardConfig } from "../../configs/rule-configs";
 import { BranchIdentity, DeletableBranch, MergedBranchesCache, MergedBranchesService, WorktreeService, readMainSyncStatus } from '@webpieces/repo-workflow-core';
 
 import type { BashContext, Violation } from '@webpieces/hook-runtime';

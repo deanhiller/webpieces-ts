@@ -17,7 +17,8 @@
  * runtime behaviour in a file that should carry none.
  */
 
-import { DiffScope, NoInlineImportInApiLibConfig, RULE_NAMES } from '@webpieces/rules-config';
+import { DiffScope } from "@webpieces/rules-config";
+import { NoInlineImportInApiLibConfig } from "./configs/api-lib-spelling-configs";
 import { injectable, bindingScopeValues } from 'inversify';
 import * as ts from 'typescript';
 import { ApiLibFile, ApiLibSite, ApiLibSourceRule } from './api-lib-source-rule';
@@ -85,7 +86,7 @@ export class NoInlineImportInApiLibValidator extends ApiLibSourceRule<NoInlineIm
     private readonly scanner = new InlineImportScanner();
 
     constructor(config: NoInlineImportInApiLibConfig, roleResolver: ProjectRoleResolver, diffScope: DiffScope, scanScope: ScanScope) {
-        super(config, RULE_NAMES.NO_INLINE_IMPORT_IN_API_LIB, roleResolver, diffScope, scanScope);
+        super(config, "no-inline-import-in-api-lib", roleResolver, diffScope, scanScope);
     }
 
     protected sitesIn(file: ApiLibFile): ApiLibSite[] {

@@ -1,4 +1,5 @@
-// Built-in rule classes — each constructed with its typed *Config from @webpieces/rules-config
+// Source-owned configs are exported below; contributed source rules use the internal
+// SourceContributionConfig, and shared scope contracts come from @webpieces/rules-sdk.
 export { NoAnyUnknownRule } from './core/rules/no-any-unknown';
 export { NoImplicitAnyRule } from './core/rules/no-implicit-any';
 export { MaxFileLinesRule } from './core/rules/max-file-lines';
@@ -14,3 +15,6 @@ export { NoCustomCssRule } from './core/rules/no-custom-css';
 export { NoJsFilesRule } from './core/rules/no-js-files';
 
 export { SourceHookRules } from './core/runner';
+
+export { THROW_CAUSE_MODES, VALIDATE_TS_MODES, ThrowCauseRequiredConfig, NoJsFilesConfig, ValidateTsInSrcConfig } from './configs/rule-configs';
+export type { ThrowCauseMode, ValidateTsMode } from './configs/rule-configs';

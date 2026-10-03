@@ -1,3 +1,4 @@
+import { policyFixture } from '@webpieces/tooling-testkit';
 import { specTempDirs } from '@webpieces/tooling-testkit';
 import { execFileSync } from 'child_process';
 import * as fs from 'fs';
@@ -23,6 +24,7 @@ function rulesConfig(validateMode: 'OFF' | 'NEW_AND_MODIFIED_FILES'): Record<str
 }
 
 function writeConfig(root: string, mode: 'OFF' | 'NEW_AND_MODIFIED_FILES'): void {
+    policyFixture.declareIn(root);
     fs.writeFileSync(path.join(root, 'webpieces.config.json'), JSON.stringify(rulesConfig(mode)));
 }
 

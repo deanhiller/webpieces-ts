@@ -1,3 +1,4 @@
+import { policyFixture } from '@webpieces/tooling-testkit';
 import { specTempDirs } from '@webpieces/tooling-testkit';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import * as fs from 'fs';
@@ -354,7 +355,7 @@ describe('whole-repo-build-guard honours the machine-local opt-in', () => {
      * read — let alone write — the developer's real ~/.webpieces/config.json.
      */
     it('is OFF end-to-end for a machine with NO ~/.webpieces/config.json, through the real loader', () => {
-        const tmpHome = specTempDirs.make('wp-guard-home-');
+        const tmpHome = policyFixture.makeRepo('wp-guard-home-');
         // webpieces-disable no-unmanaged-exceptions -- chokepoint: the temp HOME is removed either way
         // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
         try {

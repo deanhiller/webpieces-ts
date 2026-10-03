@@ -1,9 +1,12 @@
+import { policyFixture } from '@webpieces/tooling-testkit';
 import { specTempDirs } from '@webpieces/tooling-testkit';
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { execFileSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
-import { PrLifecycleGuardConfig, BranchStateGuardConfig, Option } from '@webpieces/rules-config';
+import { Option } from "@webpieces/rules-config";
+import { PrLifecycleGuardConfig } from "../../configs/rule-configs";
+import { BranchStateGuardConfig } from "../../configs/main-sync-guard-configs";
 import { BashContext } from '@webpieces/hook-runtime';
 import { RedirectHowToMergeMainRule } from './redirect-how-to-merge-main';
 import { StaleMainBashGuardRule } from './stale-main-bash-guard';
@@ -17,7 +20,7 @@ function ctx(command: string, workspaceRoot: string): BashContext {
 // The merge/rebase path never shells out to git — that is the design win of the blanket ban, and it
 // is what makes these cases testable at all. It DOES write the git-workflow doc it links to, so the
 // root must be a real directory we own.
-const NO_GIT_NEEDED = specTempDirs.make('wp-redirect-');
+const NO_GIT_NEEDED = policyFixture.makeRepo('wp-redirect-');
 
 describe('redirect-how-to-merge-main — merge/rebase are banned outright', () => {
     it('blocks the regression: a compound command that lands on a feature branch first', () => {
@@ -91,7 +94,7 @@ describe('redirect-how-to-merge-main — why the fork point matters', () => {
     });
 
     it('sends the AI to a doc that states the invariant, its consumers and the rewrite in full', () => {
-        const root = specTempDirs.make('wp-redirect-invariant-');
+        const root = policyFixture.makeRepo('wp-redirect-invariant-');
         rule.check(ctx('git merge origin/main', root));
         const written = fs.readFileSync(path.join(root, '.webpieces', 'instruct-ai', 'webpieces.git-workflow.md'), 'utf8');
         expect(written).toContain('THE FORK POINT INVARIANT');
@@ -121,7 +124,7 @@ describe('redirect-how-to-merge-main — why the fork point matters', () => {
     // The scripted warning to hand the human was lifted out of the hint for the same reason. It is
     // only safe to drop from the message because the doc the message links carries it.
     it('leaves the words to warn the human with in the doc it links', () => {
-        const root = specTempDirs.make('wp-redirect-warn-');
+        const root = policyFixture.makeRepo('wp-redirect-warn-');
         rule.check(ctx('git merge origin/main', root));
         const written = fs.readFileSync(path.join(root, '.webpieces', 'instruct-ai', 'webpieces.git-workflow.md'), 'utf8');
         expect(written).toContain('push back and make you use the 3-point merge instead');
@@ -159,7 +162,7 @@ describe('redirect-how-to-merge-main — what the block tells the AI', () => {
     });
 
     it('writes the git-workflow doc it points the AI at, and links that exact path', () => {
-        const root = specTempDirs.make('wp-redirect-doc-');
+        const root = policyFixture.makeRepo('wp-redirect-doc-');
         const doc = path.join(root, '.webpieces', 'instruct-ai', 'webpieces.git-workflow.md');
         expect(fs.existsSync(doc)).toBe(false);
 
@@ -178,7 +181,7 @@ describe('redirect-how-to-merge-main — what the block tells the AI', () => {
     it('answers "how do I update MAIN itself" — the question that has no other answer here', () => {
         // The dead end that produces `git reset --hard origin/main`: an AI ON main is shown how to sync
         // a FEATURE branch and how to LOOK, but never how to fast-forward main. Now it is told.
-        const root = specTempDirs.make('wp-redirect-main-');
+        const root = policyFixture.makeRepo('wp-redirect-main-');
         const message = rule.check(ctx('git merge --ff-only origin/main', root))[0].message;
         expect(message).toContain('bring MAIN itself up to date');
         // The one command that goes to main, pulls it, reaps dead branches/worktrees and sweeps the
@@ -206,7 +209,7 @@ describe('redirect-how-to-merge-main — the pull path', () => {
     }
 
     beforeAll(() => {
-        repo = specTempDirs.make('wp-merge-rule-');
+        repo = policyFixture.makeRepo('wp-merge-rule-');
         git('init', '-b', 'main');
         // Temp repos must not run this repo's hooks, or the commit to main is blocked.
         git('config', 'core.hooksPath', '/dev/null');
@@ -301,7 +304,7 @@ describe('redirect-how-to-merge-main — inside a linked worktree', () => {
     }
 
     beforeAll(() => {
-        repo = specTempDirs.make('wp-merge-wt-');
+        repo = policyFixture.makeRepo('wp-merge-wt-');
         git('init', '-b', 'main');
         git('config', 'core.hooksPath', '/dev/null');
         git('config', 'user.email', 'test@example.com');

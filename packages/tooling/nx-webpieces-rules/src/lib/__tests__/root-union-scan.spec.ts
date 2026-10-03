@@ -1,3 +1,6 @@
+import { policyFixture } from '@webpieces/tooling-testkit';
+import { RulePackRegistry } from '@webpieces/rules-config';
+const fixtureRuleRegistry = new RulePackRegistry(policyFixture.manifests());
 import { specTempDirs } from '@webpieces/tooling-testkit';
 /**
  * `no-root-union-api-type` (#1009): a request or response type that IS a union must FAIL THE BUILD.
@@ -171,15 +174,15 @@ function names(found: readonly RootUnionApiType[]): string[] {
 function writeConfig(overrides: Record<string, unknown>): string {
     const rules: Record<string, unknown> = {};
     const hookGuards: Record<string, unknown> = {};
-    for (const name of allRuleNames()) {
+    for (const name of allRuleNames(fixtureRuleRegistry)) {
         // webpieces-disable no-any-unknown -- one rule's opaque option bag
         const entry: Record<string, unknown> = {
-            ...seedEntryForRule(name),
+            ...seedEntryForRule(name, fixtureRuleRegistry),
             mode: 'OFF',
             turnOffRuleUntilEpoch: 0,
             turnOffRuleWhileOnBranch: null,
         };
-        const target = sectionForRule(name) === 'hookGuards' ? hookGuards : rules;
+        const target = sectionForRule(name, fixtureRuleRegistry) === 'hookGuards' ? hookGuards : rules;
         target[name] = entry;
     }
     rules['no-root-union-api-type'] = {
@@ -188,7 +191,7 @@ function writeConfig(overrides: Record<string, unknown>): string {
         turnOffRuleWhileOnBranch: null,
         ...overrides,
     };
-    const dir = specTempDirs.make('wp-root-union-config-');
+    const dir = policyFixture.makeRepo('wp-root-union-config-');
     fs.writeFileSync(
         path.join(dir, CONFIG_FILENAME),
         JSON.stringify({

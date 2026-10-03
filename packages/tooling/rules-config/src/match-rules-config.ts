@@ -1,5 +1,5 @@
 import { BaseRuleConfig } from '@webpieces/rules-sdk';
-import { ModifiedCodeMode } from './rule-configs';
+import { ModifiedCodeMode } from '@webpieces/rules-sdk';
 import { WEBPIECES_DISABLE } from './constants';
 
 // ---------------------------------------------------------------------------

@@ -1,4 +1,5 @@
-import { NoDestructureConfig, RULE_NAMES, isPathExcluded, Option } from '@webpieces/rules-config';
+import { SourceContributionConfig } from "../source-contribution-config";
+import { isPathExcluded, Option } from "@webpieces/rules-config";
 
 import type { EditContext, Violation } from '@webpieces/hook-runtime';
 import { Violation as V } from '@webpieces/hook-runtime';
@@ -7,8 +8,8 @@ import { FixHint, DisableEscape } from '@webpieces/hook-runtime';
 
 const VARIABLE_DESTRUCTURE = /\b(?:const|let|var)\s*\{/;
 
-export class NoDestructureRule extends EditRuleBase<NoDestructureConfig> {
-    constructor(config: NoDestructureConfig) { super(config, 'no-destructure', 'no-destructure'); }
+export class NoDestructureRule extends EditRuleBase<SourceContributionConfig> {
+    constructor(config: SourceContributionConfig) { super(config, 'no-destructure', 'no-destructure'); }
 
     readonly description = 'Disallow destructuring patterns. Assign the whole result and pass it around or access properties explicitly.';
     override readonly files = ['**/*.ts', '**/*.tsx'];
@@ -35,7 +36,7 @@ export class NoDestructureRule extends EditRuleBase<NoDestructureConfig> {
             const stripped = ctx.strippedLines[i];
             if (!VARIABLE_DESTRUCTURE.test(stripped)) continue;
             const lineNum = i + 1;
-            if (disableAllowed && ctx.isLineDisabled(lineNum, RULE_NAMES.NO_DESTRUCTURE)) continue;
+            if (disableAllowed && ctx.isLineDisabled(lineNum, "no-destructure")) continue;
             violations.push(new V(lineNum, ctx.lines[i].trim()));
         }
         return violations;

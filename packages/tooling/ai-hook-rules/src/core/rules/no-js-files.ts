@@ -1,4 +1,5 @@
-import { NoJsFilesConfig, isPathExcluded, Option } from '@webpieces/rules-config';
+import { isPathExcluded, Option } from "@webpieces/rules-config";
+import { NoJsFilesConfig } from "../../configs/rule-configs";
 
 import type { FileContext, Violation } from '@webpieces/hook-runtime';
 import { Violation as V } from '@webpieces/hook-runtime';

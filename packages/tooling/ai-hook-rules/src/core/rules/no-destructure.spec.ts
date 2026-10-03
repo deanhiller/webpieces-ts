@@ -1,6 +1,7 @@
+import { SourceContributionConfig } from "../source-contribution-config";
 import { describe, it, expect } from 'vitest';
 
-import { NoDestructureConfig } from '@webpieces/rules-config';
+
 
 import { EditContext } from '@webpieces/hook-runtime';
 import { NoDestructureRule } from './no-destructure';
@@ -25,7 +26,7 @@ function ctx(relativePath: string, content: string, disabledLines: number[] = []
 }
 
 function rule(allowedPaths: string[] = [], disableAllowed = true): NoDestructureRule {
-    const cfg = new NoDestructureConfig();
+    const cfg = new SourceContributionConfig();
     cfg.mode = 'NEW_AND_MODIFIED_CODE';
     cfg.allowedPaths = allowedPaths;
     cfg.disableAllowed = disableAllowed;

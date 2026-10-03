@@ -1,12 +1,11 @@
-import { FieldDef, SchemaShape, BaseRuleConfig, BASE_RULE_SCHEMA } from '@webpieces/rules-sdk';
-
-import { ModifiedCodeMode, MODIFIED_CODE_MODES } from './rule-configs';
-
+import { FieldDef, SchemaShape, BaseRuleConfig, BASE_RULE_SCHEMA } from "@webpieces/rules-sdk";
+import { ModifiedCodeMode, MODIFIED_CODE_MODES } from "@webpieces/rules-sdk";
 // no-client-creation-outside-server-or-client severity. Landed as a hard failure this rule would
 // break every existing Angular repo on upgrade (provideCoreClient-style helpers create the client
 // inside a role:lib on purpose), so it ships WARN — reports + prints the migration but passes the
 // build — and a repo flips it to `error` once it has migrated its libraries.
 export const CLIENT_CREATION_SEVERITIES = ['warn', 'error'] as const;
+
 export type ClientCreationSeverity = typeof CLIENT_CREATION_SEVERITIES[number];
 
 // no-client-creation-outside-server-or-client — flags a project that CONSTRUCTS an rpc/pubsub client

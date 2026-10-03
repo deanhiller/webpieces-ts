@@ -1,7 +1,7 @@
 import { checkConfigSync, runRuleCheck, runEditRules, runFileRules, runBashRules } from '@webpieces/hook-runtime';
 import * as path from 'path';
 
-import { loadAndValidate, LoadedConfig, WebpiecesRulesConfig, isHookGuard, HomeConfigService, RepoRootFinder, seedEntryForRule, CONFIG_FILENAME, renderRuleFailForAi } from '@webpieces/rules-config';
+import { loadAndValidate, LoadedConfig, RulePackRegistry, WebpiecesRulesConfig, isHookGuard, HomeConfigService, RepoRootFinder, seedEntryForRule, CONFIG_FILENAME, renderRuleFailForAi } from '@webpieces/rules-config';
 
 import { buildContexts, buildBashContext } from '@webpieces/hook-runtime';
 import { DeleteScopedRules } from '@webpieces/hook-runtime';
@@ -39,10 +39,10 @@ import { InformAiError } from '@webpieces/tooling-common';
 // `branch-state-guard` — and asking about the name would classify all eight collapsed guards as
 // code-style rules, i.e. run them in the wrong hook and never in the guards hook at all.
 // webpieces-disable no-function-outside-class -- existing stateless module helper moved intact with its callers; ownership extraction preserves its functional API
-function filterByMode(rules: readonly Rule[], mode: HookMode): readonly Rule[] {
+function filterByMode(rules: readonly Rule[], mode: HookMode, registry: RulePackRegistry): readonly Rule[] {
     if (mode === 'all') return rules;
-    if (mode === 'guards') return rules.filter((r: Rule): boolean => isHookGuard(r.configKey));
-    return rules.filter((r: Rule): boolean => !isHookGuard(r.configKey));
+    if (mode === 'guards') return rules.filter((r: Rule): boolean => isHookGuard(r.configKey, registry));
+    return rules.filter((r: Rule): boolean => !isHookGuard(r.configKey, registry));
 }
 
 // The cwd a command actually runs from, after its own leading `cd`/`pushd` run. Thin delegate kept
@@ -123,7 +123,7 @@ function runInternal(
     // Built-in/custom rules PLUS the client-authored match-rules (content guards). Match-rules run only
     // in the file-edit path (they are code-style, so filterByMode keeps them out of the bash/guards path).
     const allRules = [...loadRules(loaded.rulesConfig, workspaceRoot, guardHintsOf(loaded))];
-    const modeRules = filterByMode(allRules, mode);
+    const modeRules = filterByMode(allRules, mode, loaded.ruleRegistry);
     if (modeRules.length === 0) return null;
 
     // Suppress enforcement for files under this category's excludePaths (e.g. vendored repos under
@@ -136,7 +136,7 @@ function runInternal(
 
     // Config-sync applies only to built-in/custom rules; match-rules have their own validated section
     // (loadAndValidate already rejected an invalid `match-rules`), so they must not trip the sync nag.
-    const outOfSync = checkConfigSync(rules, loaded.rulesConfig);
+    const outOfSync = checkConfigSync(rules, loaded.rulesConfig, loaded.ruleRegistry);
     if (outOfSync) return outOfSync;
 
     const contexts = buildContexts(toolKind, input, workspaceRoot, governed);
@@ -459,12 +459,12 @@ function runBashInternal(command: string, cwd: string, mode: HookMode, aiType: A
     // matches no exclusion glob, so a plain command at the repo root is unaffected.
     const governedCwd = bashGovernedPath(tree, workspaceRoot);
     const rules = filterByExcludedPaths(
-        filterByMode(loadRules(loaded.rulesConfig, workspaceRoot, guardHintsOf(loaded)), mode), governedCwd, loaded.excludePaths,
+        filterByMode(loadRules(loaded.rulesConfig, workspaceRoot, guardHintsOf(loaded)), mode, loaded.ruleRegistry), governedCwd, loaded.excludePaths,
     );
     const keyless = keylessBashRules(loaded, mode, governedCwd);
     if (rules.length === 0 && keyless.length === 0) return null;
 
-    const outOfSync = checkConfigSync(rules, loaded.rulesConfig); // fault Y — L0 list wins, as under C
+    const outOfSync = checkConfigSync(rules, loaded.rulesConfig, loaded.ruleRegistry); // fault Y — L0 list wins, as under C
     if (outOfSync) return l0FaultAllows(command, aiType) ? null : outOfSync;
 
     const locationBlock = l1LocationBlock(command, tree, aiType);

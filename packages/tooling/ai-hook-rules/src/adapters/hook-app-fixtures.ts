@@ -1,3 +1,5 @@
+import { rulePackManifest } from '../rule-pack';
+import { policyFixture } from '@webpieces/tooling-testkit';
 import { specTempDirs } from '@webpieces/tooling-testkit';
 import { execSync } from 'child_process';
 import * as fs from 'fs';
@@ -151,6 +153,7 @@ export class GoldenRepoBuilder {
         this.git(repo, 'config user.email t@t.co');
         this.git(repo, 'config user.name tester');
         fs.writeFileSync(path.join(repo, 'webpieces.config.json'), this.repoConfig(fixture));
+        policyFixture.declareIn(repo, policyFixture.manifests().map(pack => pack.packageName === rulePackManifest.packageName ? rulePackManifest : pack));
         fs.writeFileSync(path.join(repo, 'f.txt'), 'hello\n');
         fs.mkdirSync(path.join(repo, 'scripts'));
         fs.writeFileSync(path.join(repo, 'scripts', 'ok.ts'), 'const a = 1;\n');

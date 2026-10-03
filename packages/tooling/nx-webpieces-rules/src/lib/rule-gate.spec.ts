@@ -1,3 +1,6 @@
+import { policyFixture } from '@webpieces/tooling-testkit';
+import { RulePackRegistry } from '@webpieces/rules-config';
+const fixtureRuleRegistry = new RulePackRegistry(policyFixture.manifests());
 import { specTempDirs } from '@webpieces/tooling-testkit';
 import { describe, it, expect } from 'vitest';
 import * as fs from 'fs';
@@ -12,17 +15,17 @@ import { RuleGate } from './rule-gate';
 function writeConfig(overrides: Record<string, Record<string, unknown>> = {}): string {
     const rules: Record<string, unknown> = {};
     const hookGuards: Record<string, unknown> = {};
-    for (const name of allRuleNames()) {
+    for (const name of allRuleNames(fixtureRuleRegistry)) {
         // webpieces-disable no-any-unknown -- one rule's opaque option bag
         const entry: Record<string, unknown> = {
-            ...seedEntryForRule(name), mode: 'OFF', turnOffRuleUntilEpoch: 0, turnOffRuleWhileOnBranch: null,
+            ...seedEntryForRule(name, fixtureRuleRegistry), mode: 'OFF', turnOffRuleUntilEpoch: 0, turnOffRuleWhileOnBranch: null,
         };
-        const target = sectionForRule(name) === 'hookGuards' ? hookGuards : rules;
+        const target = sectionForRule(name, fixtureRuleRegistry) === 'hookGuards' ? hookGuards : rules;
         // Overrides are merged OVER the base entry so a test that only tweaks mode/epoch still carries the
         // required turnOffRuleWhileOnBranch (and autoReapMergedBranches) from the base.
         target[name] = overrides[name] ? { ...entry, ...overrides[name] } : entry;
     }
-    const dir = specTempDirs.make('wp-rule-gate-');
+    const dir = policyFixture.makeRepo('wp-rule-gate-');
     fs.writeFileSync(path.join(dir, CONFIG_FILENAME), JSON.stringify({
         rules,
         hookGuards,

@@ -15,4 +15,6 @@ Workflow guard policy and hook installation for AI coding agents, contributed in
 - Source rule implementations and their registry (ai-hook-rules).
 - Generic protocol and rule evaluation (hook-runtime).
 - Git/worktree primitives and state paths (repo-workflow-core and tooling-common).
-- Config schemas and loading (rules-config), PR orchestration (pr-gate), and aggregate packaging (nx-webpieces-rules).
+- Generic config loading and validation (rules-config), PR orchestration (pr-gate), and aggregate packaging (nx-webpieces-rules).
+
+This pack owns its concrete policy schemas, mode enums, optional tuning, and reviewed seeds. Workflow rule/field retirements and keyless safeguard metadata are published by the workflow owner.

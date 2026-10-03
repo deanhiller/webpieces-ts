@@ -1,0 +1,1381 @@
+{
+  "max-method-lines": {
+    "schema": {
+      "mode": {
+        "type": "string",
+        "enumValues": [
+          "OFF",
+          "NEW_METHODS",
+          "NEW_AND_MODIFIED_METHODS",
+          "NEW_AND_MODIFIED_FILES"
+        ],
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "limit": {
+        "type": "number",
+        "optional": true,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "disableAllowed": {
+        "type": "boolean",
+        "optional": true,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "turnOffRuleUntilEpoch": {
+        "type": "number",
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "turnOffRuleWhileOnBranch": {
+        "type": "string",
+        "optional": false,
+        "nullable": true,
+        "nonEmpty": false
+      }
+    },
+    "optionalTuning": {
+      "limit": 80
+    },
+    "recommendedSeed": {
+      "mode": "NEW_AND_MODIFIED_METHODS",
+      "turnOffRuleUntilEpoch": 0,
+      "turnOffRuleWhileOnBranch": null
+    }
+  },
+  "max-file-lines": {
+    "schema": {
+      "mode": {
+        "type": "string",
+        "enumValues": [
+          "OFF",
+          "NEW_AND_MODIFIED_FILES"
+        ],
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "limit": {
+        "type": "number",
+        "optional": true,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "disableAllowed": {
+        "type": "boolean",
+        "optional": true,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "allowedPaths": {
+        "type": "string[]",
+        "optional": true,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "turnOffRuleUntilEpoch": {
+        "type": "number",
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "turnOffRuleWhileOnBranch": {
+        "type": "string",
+        "optional": false,
+        "nullable": true,
+        "nonEmpty": false
+      }
+    },
+    "optionalTuning": {
+      "limit": 900
+    },
+    "recommendedSeed": {
+      "mode": "NEW_AND_MODIFIED_FILES",
+      "turnOffRuleUntilEpoch": 0,
+      "turnOffRuleWhileOnBranch": null
+    }
+  },
+  "require-return-type": {
+    "schema": {
+      "mode": {
+        "type": "string",
+        "enumValues": [
+          "OFF",
+          "NEW_METHODS",
+          "NEW_AND_MODIFIED_METHODS",
+          "NEW_AND_MODIFIED_FILES"
+        ],
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "disableAllowed": {
+        "type": "boolean",
+        "optional": true,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "turnOffRuleUntilEpoch": {
+        "type": "number",
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "turnOffRuleWhileOnBranch": {
+        "type": "string",
+        "optional": false,
+        "nullable": true,
+        "nonEmpty": false
+      }
+    },
+    "optionalTuning": {},
+    "recommendedSeed": {
+      "mode": "NEW_AND_MODIFIED_METHODS",
+      "turnOffRuleUntilEpoch": 0,
+      "turnOffRuleWhileOnBranch": null
+    }
+  },
+  "no-inline-type-literals": {
+    "schema": {
+      "mode": {
+        "type": "string",
+        "enumValues": [
+          "OFF",
+          "NEW_METHODS",
+          "NEW_AND_MODIFIED_METHODS",
+          "NEW_AND_MODIFIED_FILES"
+        ],
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "disableAllowed": {
+        "type": "boolean",
+        "optional": true,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "turnOffRuleUntilEpoch": {
+        "type": "number",
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "turnOffRuleWhileOnBranch": {
+        "type": "string",
+        "optional": false,
+        "nullable": true,
+        "nonEmpty": false
+      }
+    },
+    "optionalTuning": {},
+    "recommendedSeed": {
+      "mode": "NEW_AND_MODIFIED_METHODS",
+      "turnOffRuleUntilEpoch": 0,
+      "turnOffRuleWhileOnBranch": null
+    }
+  },
+  "no-any-unknown": {
+    "schema": {
+      "mode": {
+        "type": "string",
+        "enumValues": [
+          "OFF",
+          "NEW_AND_MODIFIED_CODE",
+          "NEW_AND_MODIFIED_FILES",
+          "MODIFIED_PROJECTS",
+          "RUN_EVERY_TIME"
+        ],
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "disableAllowed": {
+        "type": "boolean",
+        "optional": true,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "turnOffRuleUntilEpoch": {
+        "type": "number",
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "turnOffRuleWhileOnBranch": {
+        "type": "string",
+        "optional": false,
+        "nullable": true,
+        "nonEmpty": false
+      }
+    },
+    "optionalTuning": {},
+    "recommendedSeed": {
+      "mode": "NEW_AND_MODIFIED_CODE",
+      "turnOffRuleUntilEpoch": 0,
+      "turnOffRuleWhileOnBranch": null
+    }
+  },
+  "no-implicit-any": {
+    "schema": {
+      "mode": {
+        "type": "string",
+        "enumValues": [
+          "OFF",
+          "NEW_AND_MODIFIED_CODE",
+          "NEW_AND_MODIFIED_FILES",
+          "MODIFIED_PROJECTS",
+          "RUN_EVERY_TIME"
+        ],
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "disableAllowed": {
+        "type": "boolean",
+        "optional": true,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "turnOffRuleUntilEpoch": {
+        "type": "number",
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "turnOffRuleWhileOnBranch": {
+        "type": "string",
+        "optional": false,
+        "nullable": true,
+        "nonEmpty": false
+      }
+    },
+    "optionalTuning": {},
+    "recommendedSeed": {
+      "mode": "NEW_AND_MODIFIED_CODE",
+      "turnOffRuleUntilEpoch": 0,
+      "turnOffRuleWhileOnBranch": null
+    }
+  },
+  "prisma-validate-dtos": {
+    "schema": {
+      "mode": {
+        "type": "string",
+        "enumValues": [
+          "OFF",
+          "MODIFIED_CLASS",
+          "NEW_AND_MODIFIED_FILES"
+        ],
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "disableAllowed": {
+        "type": "boolean",
+        "optional": true,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "prismaSchemaPath": {
+        "type": "string",
+        "optional": true,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "dtoSourcePaths": {
+        "type": "string[]",
+        "optional": true,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "turnOffRuleUntilEpoch": {
+        "type": "number",
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "turnOffRuleWhileOnBranch": {
+        "type": "string",
+        "optional": false,
+        "nullable": true,
+        "nonEmpty": false
+      }
+    },
+    "optionalTuning": {},
+    "recommendedSeed": {
+      "mode": "MODIFIED_CLASS",
+      "turnOffRuleUntilEpoch": 0,
+      "turnOffRuleWhileOnBranch": null
+    }
+  },
+  "prisma-converter": {
+    "schema": {
+      "mode": {
+        "type": "string",
+        "enumValues": [
+          "OFF",
+          "NEW_AND_MODIFIED_METHODS",
+          "NEW_AND_MODIFIED_FILES"
+        ],
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "disableAllowed": {
+        "type": "boolean",
+        "optional": true,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "schemaPath": {
+        "type": "string",
+        "optional": true,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "convertersPaths": {
+        "type": "string[]",
+        "optional": true,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "enforcePaths": {
+        "type": "string[]",
+        "optional": true,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "turnOffRuleUntilEpoch": {
+        "type": "number",
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "turnOffRuleWhileOnBranch": {
+        "type": "string",
+        "optional": false,
+        "nullable": true,
+        "nonEmpty": false
+      }
+    },
+    "optionalTuning": {},
+    "recommendedSeed": {
+      "mode": "NEW_AND_MODIFIED_METHODS",
+      "turnOffRuleUntilEpoch": 0,
+      "turnOffRuleWhileOnBranch": null
+    }
+  },
+  "no-destructure": {
+    "schema": {
+      "mode": {
+        "type": "string",
+        "enumValues": [
+          "OFF",
+          "NEW_AND_MODIFIED_CODE",
+          "NEW_AND_MODIFIED_FILES",
+          "MODIFIED_PROJECTS",
+          "RUN_EVERY_TIME"
+        ],
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "allowTopLevel": {
+        "type": "boolean",
+        "optional": true,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "disableAllowed": {
+        "type": "boolean",
+        "optional": true,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "allowedPaths": {
+        "type": "string[]",
+        "optional": true,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "turnOffRuleUntilEpoch": {
+        "type": "number",
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "turnOffRuleWhileOnBranch": {
+        "type": "string",
+        "optional": false,
+        "nullable": true,
+        "nonEmpty": false
+      }
+    },
+    "optionalTuning": {
+      "allowTopLevel": true
+    },
+    "recommendedSeed": {
+      "mode": "NEW_AND_MODIFIED_CODE",
+      "turnOffRuleUntilEpoch": 0,
+      "turnOffRuleWhileOnBranch": null
+    }
+  },
+  "catch-error-pattern": {
+    "schema": {
+      "mode": {
+        "type": "string",
+        "enumValues": [
+          "OFF",
+          "NEW_AND_MODIFIED_CODE",
+          "NEW_AND_MODIFIED_FILES",
+          "MODIFIED_PROJECTS",
+          "RUN_EVERY_TIME"
+        ],
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "disableAllowed": {
+        "type": "boolean",
+        "optional": true,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "turnOffRuleUntilEpoch": {
+        "type": "number",
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "turnOffRuleWhileOnBranch": {
+        "type": "string",
+        "optional": false,
+        "nullable": true,
+        "nonEmpty": false
+      }
+    },
+    "optionalTuning": {},
+    "recommendedSeed": {
+      "mode": "NEW_AND_MODIFIED_CODE",
+      "turnOffRuleUntilEpoch": 0,
+      "turnOffRuleWhileOnBranch": null
+    }
+  },
+  "no-unmanaged-exceptions": {
+    "schema": {
+      "mode": {
+        "type": "string",
+        "enumValues": [
+          "OFF",
+          "NEW_AND_MODIFIED_CODE",
+          "NEW_AND_MODIFIED_FILES",
+          "MODIFIED_PROJECTS",
+          "RUN_EVERY_TIME"
+        ],
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "disableAllowed": {
+        "type": "boolean",
+        "optional": true,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "turnOffRuleUntilEpoch": {
+        "type": "number",
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "turnOffRuleWhileOnBranch": {
+        "type": "string",
+        "optional": false,
+        "nullable": true,
+        "nonEmpty": false
+      }
+    },
+    "optionalTuning": {},
+    "recommendedSeed": {
+      "mode": "NEW_AND_MODIFIED_CODE",
+      "turnOffRuleUntilEpoch": 0,
+      "turnOffRuleWhileOnBranch": null
+    }
+  },
+  "angular-no-direct-api-in-resolver": {
+    "schema": {
+      "mode": {
+        "type": "string",
+        "enumValues": [
+          "OFF",
+          "NEW_AND_MODIFIED_CODE",
+          "NEW_AND_MODIFIED_METHODS",
+          "NEW_AND_MODIFIED_FILES"
+        ],
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "disableAllowed": {
+        "type": "boolean",
+        "optional": true,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "enforcePaths": {
+        "type": "string[]",
+        "optional": true,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "turnOffRuleUntilEpoch": {
+        "type": "number",
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "turnOffRuleWhileOnBranch": {
+        "type": "string",
+        "optional": false,
+        "nullable": true,
+        "nonEmpty": false
+      }
+    },
+    "optionalTuning": {},
+    "recommendedSeed": {
+      "mode": "NEW_AND_MODIFIED_CODE",
+      "turnOffRuleUntilEpoch": 0,
+      "turnOffRuleWhileOnBranch": null
+    }
+  },
+  "no-symbol-di-tokens": {
+    "schema": {
+      "mode": {
+        "type": "string",
+        "enumValues": [
+          "OFF",
+          "NEW_AND_MODIFIED_CODE",
+          "NEW_AND_MODIFIED_FILES",
+          "MODIFIED_PROJECTS",
+          "RUN_EVERY_TIME"
+        ],
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "disableAllowed": {
+        "type": "boolean",
+        "optional": true,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "allowedPaths": {
+        "type": "string[]",
+        "optional": true,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "turnOffRuleUntilEpoch": {
+        "type": "number",
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "turnOffRuleWhileOnBranch": {
+        "type": "string",
+        "optional": false,
+        "nullable": true,
+        "nonEmpty": false
+      }
+    },
+    "optionalTuning": {},
+    "recommendedSeed": {
+      "mode": "NEW_AND_MODIFIED_CODE",
+      "turnOffRuleUntilEpoch": 0,
+      "turnOffRuleWhileOnBranch": null
+    }
+  },
+  "no-client-creation-outside-server-or-client": {
+    "schema": {
+      "mode": {
+        "type": "string",
+        "enumValues": [
+          "OFF",
+          "NEW_AND_MODIFIED_CODE",
+          "NEW_AND_MODIFIED_FILES",
+          "MODIFIED_PROJECTS",
+          "RUN_EVERY_TIME"
+        ],
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "severity": {
+        "type": "string",
+        "enumValues": [
+          "warn",
+          "error"
+        ],
+        "optional": true,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "disableAllowed": {
+        "type": "boolean",
+        "optional": true,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "allowedRoles": {
+        "type": "string[]",
+        "optional": true,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "allowedPaths": {
+        "type": "string[]",
+        "optional": true,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "turnOffRuleUntilEpoch": {
+        "type": "number",
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "turnOffRuleWhileOnBranch": {
+        "type": "string",
+        "optional": false,
+        "nullable": true,
+        "nonEmpty": false
+      }
+    },
+    "optionalTuning": {},
+    "recommendedSeed": {
+      "mode": "NEW_AND_MODIFIED_CODE",
+      "turnOffRuleUntilEpoch": 0,
+      "turnOffRuleWhileOnBranch": null
+    }
+  },
+  "no-custom-css": {
+    "schema": {
+      "mode": {
+        "type": "string",
+        "enumValues": [
+          "OFF",
+          "NEW_AND_MODIFIED_CODE",
+          "NEW_AND_MODIFIED_FILES",
+          "MODIFIED_PROJECTS",
+          "RUN_EVERY_TIME"
+        ],
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "disableAllowed": {
+        "type": "boolean",
+        "optional": true,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "allowGlobs": {
+        "type": "string[]",
+        "optional": true,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "turnOffRuleUntilEpoch": {
+        "type": "number",
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "turnOffRuleWhileOnBranch": {
+        "type": "string",
+        "optional": false,
+        "nullable": true,
+        "nonEmpty": false
+      }
+    },
+    "optionalTuning": {
+      "allowGlobs": []
+    },
+    "recommendedSeed": {
+      "mode": "NEW_AND_MODIFIED_CODE",
+      "turnOffRuleUntilEpoch": 0,
+      "turnOffRuleWhileOnBranch": null
+    }
+  },
+  "no-state-paths-in-templates": {
+    "schema": {
+      "mode": {
+        "type": "string",
+        "enumValues": [
+          "OFF",
+          "NEW_AND_MODIFIED_CODE",
+          "NEW_AND_MODIFIED_FILES",
+          "MODIFIED_PROJECTS",
+          "RUN_EVERY_TIME"
+        ],
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "disableAllowed": {
+        "type": "boolean",
+        "optional": true,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "templateDirs": {
+        "type": "string[]",
+        "optional": true,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "bannedPathPrefixes": {
+        "type": "string[]",
+        "optional": true,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "turnOffRuleUntilEpoch": {
+        "type": "number",
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "turnOffRuleWhileOnBranch": {
+        "type": "string",
+        "optional": false,
+        "nullable": true,
+        "nonEmpty": false
+      }
+    },
+    "optionalTuning": {},
+    "recommendedSeed": {
+      "mode": "NEW_AND_MODIFIED_CODE",
+      "turnOffRuleUntilEpoch": 0,
+      "turnOffRuleWhileOnBranch": null
+    }
+  },
+  "no-process-exit-outside-main": {
+    "schema": {
+      "mode": {
+        "type": "string",
+        "enumValues": [
+          "OFF",
+          "NEW_AND_MODIFIED_CODE",
+          "NEW_AND_MODIFIED_FILES",
+          "MODIFIED_PROJECTS",
+          "RUN_EVERY_TIME"
+        ],
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "disableAllowed": {
+        "type": "boolean",
+        "optional": true,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "turnOffRuleUntilEpoch": {
+        "type": "number",
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "turnOffRuleWhileOnBranch": {
+        "type": "string",
+        "optional": false,
+        "nullable": true,
+        "nonEmpty": false
+      }
+    },
+    "optionalTuning": {},
+    "recommendedSeed": {
+      "mode": "NEW_AND_MODIFIED_CODE",
+      "turnOffRuleUntilEpoch": 0,
+      "turnOffRuleWhileOnBranch": null
+    }
+  },
+  "no-function-outside-class": {
+    "schema": {
+      "mode": {
+        "type": "string",
+        "enumValues": [
+          "OFF",
+          "NEW_AND_MODIFIED_CODE",
+          "NEW_AND_MODIFIED_FILES",
+          "MODIFIED_PROJECTS",
+          "RUN_EVERY_TIME"
+        ],
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "disableAllowed": {
+        "type": "boolean",
+        "optional": true,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "allowedPaths": {
+        "type": "string[]",
+        "optional": true,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "turnOffRuleUntilEpoch": {
+        "type": "number",
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "turnOffRuleWhileOnBranch": {
+        "type": "string",
+        "optional": false,
+        "nullable": true,
+        "nonEmpty": false
+      }
+    },
+    "optionalTuning": {},
+    "recommendedSeed": {
+      "mode": "NEW_AND_MODIFIED_CODE",
+      "turnOffRuleUntilEpoch": 0,
+      "turnOffRuleWhileOnBranch": null
+    }
+  },
+  "inject-annotation-not-needed-for-concrete-class": {
+    "schema": {
+      "mode": {
+        "type": "string",
+        "enumValues": [
+          "OFF",
+          "NEW_AND_MODIFIED_CODE",
+          "NEW_AND_MODIFIED_FILES",
+          "MODIFIED_PROJECTS",
+          "RUN_EVERY_TIME"
+        ],
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "disableAllowed": {
+        "type": "boolean",
+        "optional": true,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "allowedPaths": {
+        "type": "string[]",
+        "optional": true,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "turnOffRuleUntilEpoch": {
+        "type": "number",
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "turnOffRuleWhileOnBranch": {
+        "type": "string",
+        "optional": false,
+        "nullable": true,
+        "nonEmpty": false
+      }
+    },
+    "optionalTuning": {},
+    "recommendedSeed": {
+      "mode": "NEW_AND_MODIFIED_CODE",
+      "turnOffRuleUntilEpoch": 0,
+      "turnOffRuleWhileOnBranch": null
+    }
+  },
+  "framework-tag": {
+    "schema": {
+      "mode": {
+        "type": "string",
+        "enumValues": [
+          "OFF",
+          "MODIFIED_PROJECTS"
+        ],
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "knownTypes": {
+        "type": "string[]",
+        "optional": true,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "turnOffRuleUntilEpoch": {
+        "type": "number",
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "turnOffRuleWhileOnBranch": {
+        "type": "string",
+        "optional": false,
+        "nullable": true,
+        "nonEmpty": false
+      }
+    },
+    "optionalTuning": {
+      "knownTypes": [
+        "browser",
+        "react",
+        "angular",
+        "node",
+        "express",
+        "react-native"
+      ]
+    },
+    "recommendedSeed": {
+      "mode": "MODIFIED_PROJECTS",
+      "turnOffRuleUntilEpoch": 0,
+      "turnOffRuleWhileOnBranch": null
+    }
+  },
+  "role-tag": {
+    "schema": {
+      "mode": {
+        "type": "string",
+        "enumValues": [
+          "OFF",
+          "MODIFIED_PROJECTS"
+        ],
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "knownTypes": {
+        "type": "string[]",
+        "optional": true,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "turnOffRuleUntilEpoch": {
+        "type": "number",
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "turnOffRuleWhileOnBranch": {
+        "type": "string",
+        "optional": false,
+        "nullable": true,
+        "nonEmpty": false
+      }
+    },
+    "optionalTuning": {
+      "knownTypes": [
+        "server",
+        "app",
+        "bundle",
+        "designed-lib",
+        "lib",
+        "client",
+        "api-lib",
+        "api-client"
+      ]
+    },
+    "recommendedSeed": {
+      "mode": "MODIFIED_PROJECTS",
+      "turnOffRuleUntilEpoch": 0,
+      "turnOffRuleWhileOnBranch": null
+    }
+  },
+  "ensure-we-are-secure": {
+    "schema": {
+      "mode": {
+        "type": "string",
+        "enumValues": [
+          "OFF",
+          "MODIFIED_PROJECTS"
+        ],
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "turnOffRuleUntilEpoch": {
+        "type": "number",
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "turnOffRuleWhileOnBranch": {
+        "type": "string",
+        "optional": false,
+        "nullable": true,
+        "nonEmpty": false
+      }
+    },
+    "optionalTuning": {},
+    "recommendedSeed": {
+      "mode": "MODIFIED_PROJECTS",
+      "turnOffRuleUntilEpoch": 0,
+      "turnOffRuleWhileOnBranch": null
+    }
+  },
+  "no-inline-import-in-api-lib": {
+    "schema": {
+      "mode": {
+        "type": "string",
+        "enumValues": [
+          "OFF",
+          "NEW_AND_MODIFIED_CODE",
+          "NEW_AND_MODIFIED_FILES",
+          "MODIFIED_PROJECTS",
+          "RUN_EVERY_TIME"
+        ],
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "allowedPaths": {
+        "type": "string[]",
+        "optional": true,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "turnOffRuleUntilEpoch": {
+        "type": "number",
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "turnOffRuleWhileOnBranch": {
+        "type": "string",
+        "optional": false,
+        "nullable": true,
+        "nonEmpty": false
+      }
+    },
+    "optionalTuning": {},
+    "recommendedSeed": {
+      "mode": "NEW_AND_MODIFIED_CODE",
+      "turnOffRuleUntilEpoch": 0,
+      "turnOffRuleWhileOnBranch": null
+    }
+  },
+  "one-enum-spelling-in-api-lib": {
+    "schema": {
+      "mode": {
+        "type": "string",
+        "enumValues": [
+          "OFF",
+          "NEW_AND_MODIFIED_CODE",
+          "NEW_AND_MODIFIED_FILES",
+          "MODIFIED_PROJECTS",
+          "RUN_EVERY_TIME"
+        ],
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "allowedPaths": {
+        "type": "string[]",
+        "optional": true,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "turnOffRuleUntilEpoch": {
+        "type": "number",
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "turnOffRuleWhileOnBranch": {
+        "type": "string",
+        "optional": false,
+        "nullable": true,
+        "nonEmpty": false
+      }
+    },
+    "optionalTuning": {},
+    "recommendedSeed": {
+      "mode": "NEW_AND_MODIFIED_CODE",
+      "turnOffRuleUntilEpoch": 0,
+      "turnOffRuleWhileOnBranch": null
+    }
+  },
+  "no-utility-types-in-api-lib": {
+    "schema": {
+      "mode": {
+        "type": "string",
+        "enumValues": [
+          "OFF",
+          "NEW_AND_MODIFIED_CODE",
+          "NEW_AND_MODIFIED_FILES",
+          "MODIFIED_PROJECTS",
+          "RUN_EVERY_TIME"
+        ],
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "paths": {
+        "type": "string[]",
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "allowedPaths": {
+        "type": "string[]",
+        "optional": true,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "turnOffRuleUntilEpoch": {
+        "type": "number",
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "turnOffRuleWhileOnBranch": {
+        "type": "string",
+        "optional": false,
+        "nullable": true,
+        "nonEmpty": false
+      }
+    },
+    "optionalTuning": {},
+    "recommendedSeed": {
+      "mode": "NEW_AND_MODIFIED_CODE",
+      "turnOffRuleUntilEpoch": 0,
+      "turnOffRuleWhileOnBranch": null,
+      "paths": [
+        "libraries/apis/**"
+      ]
+    }
+  },
+  "required-type-suffix": {
+    "schema": {
+      "mode": {
+        "type": "string",
+        "enumValues": [
+          "OFF",
+          "NEW_AND_MODIFIED_CODE",
+          "NEW_AND_MODIFIED_FILES",
+          "MODIFIED_PROJECTS",
+          "RUN_EVERY_TIME"
+        ],
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "entries": {
+        "type": "object[]",
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": true,
+        "elementSchema": {
+          "paths": {
+            "type": "string[]",
+            "optional": false,
+            "nullable": false,
+            "nonEmpty": true
+          },
+          "suffixes": {
+            "type": "string[]",
+            "optional": false,
+            "nullable": false,
+            "nonEmpty": true
+          }
+        }
+      },
+      "allowedPaths": {
+        "type": "string[]",
+        "optional": true,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "turnOffRuleUntilEpoch": {
+        "type": "number",
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "turnOffRuleWhileOnBranch": {
+        "type": "string",
+        "optional": false,
+        "nullable": true,
+        "nonEmpty": false
+      }
+    },
+    "optionalTuning": {},
+    "recommendedSeed": {
+      "mode": "NEW_AND_MODIFIED_CODE",
+      "turnOffRuleUntilEpoch": 0,
+      "turnOffRuleWhileOnBranch": null,
+      "entries": [
+        {
+          "paths": [
+            "libraries/apis/**"
+          ],
+          "suffixes": [
+            "Request",
+            "Response",
+            "Event",
+            "Dto",
+            "Api"
+          ]
+        }
+      ]
+    }
+  },
+  "framework-tsconfig": {
+    "schema": {
+      "mode": {
+        "type": "string",
+        "enumValues": [
+          "OFF",
+          "MODIFIED_PROJECTS",
+          "RUN_EVERY_TIME"
+        ],
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "allowedPaths": {
+        "type": "string[]",
+        "optional": true,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "turnOffRuleUntilEpoch": {
+        "type": "number",
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "turnOffRuleWhileOnBranch": {
+        "type": "string",
+        "optional": false,
+        "nullable": true,
+        "nonEmpty": false
+      }
+    },
+    "optionalTuning": {},
+    "recommendedSeed": {
+      "mode": "MODIFIED_PROJECTS",
+      "turnOffRuleUntilEpoch": 0,
+      "turnOffRuleWhileOnBranch": null
+    }
+  },
+  "framework-packages": {
+    "schema": {
+      "mode": {
+        "type": "string",
+        "enumValues": [
+          "OFF",
+          "MODIFIED_PROJECTS",
+          "RUN_EVERY_TIME"
+        ],
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "entries": {
+        "type": "object[]",
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": true,
+        "elementSchema": {
+          "packages": {
+            "type": "string[]",
+            "optional": false,
+            "nullable": false,
+            "nonEmpty": true
+          },
+          "frameworks": {
+            "type": "string[]",
+            "optional": false,
+            "nullable": false,
+            "nonEmpty": true
+          }
+        }
+      },
+      "allowedPaths": {
+        "type": "string[]",
+        "optional": true,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "turnOffRuleUntilEpoch": {
+        "type": "number",
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "turnOffRuleWhileOnBranch": {
+        "type": "string",
+        "optional": false,
+        "nullable": true,
+        "nonEmpty": false
+      }
+    },
+    "optionalTuning": {},
+    "recommendedSeed": {
+      "mode": "MODIFIED_PROJECTS",
+      "turnOffRuleUntilEpoch": 0,
+      "turnOffRuleWhileOnBranch": null,
+      "entries": [
+        {
+          "packages": [
+            "@angular/*"
+          ],
+          "frameworks": [
+            "angular"
+          ]
+        },
+        {
+          "packages": [
+            "react",
+            "react-native",
+            "expo*",
+            "@expo/*",
+            "@sentry/react-native"
+          ],
+          "frameworks": [
+            "react",
+            "react-native"
+          ]
+        },
+        {
+          "packages": [
+            "express",
+            "firebase-admin",
+            "googleapis",
+            "google-auth-library",
+            "@google-cloud/*"
+          ],
+          "frameworks": [
+            "node",
+            "express"
+          ]
+        },
+        {
+          "packages": [
+            "firebase"
+          ],
+          "frameworks": [
+            "browser",
+            "angular",
+            "react"
+          ]
+        }
+      ]
+    }
+  }
+}

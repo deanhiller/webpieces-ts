@@ -11,44 +11,7 @@ export const WEBPIECES_DISABLE = 'webpieces-disable';
 // Values must match existing comments exactly — changing a value silently breaks every
 // disable that names that rule. Note MAX_LINES_MODIFIED is a prefix of
 // MAX_LINES_MODIFIED_FILES (a historical substring-match quirk preserved on purpose).
-export const RULE_NAMES = {
-    NO_ANY_UNKNOWN: 'no-any-unknown',
-    NO_IMPLICIT_ANY: 'no-implicit-any',
-    NO_DESTRUCTURE: 'no-destructure',
-    NO_UNMANAGED_EXCEPTIONS: 'no-unmanaged-exceptions',
-    CATCH_ERROR_PATTERN: 'catch-error-pattern',
-    THROW_CAUSE_REQUIRED: 'throw-cause-required',
-    REQUIRE_RETURN_TYPE: 'require-return-type',
-    NO_SYMBOL_DI_TOKENS: 'no-symbol-di-tokens',
-    NO_CLIENT_CREATION_OUTSIDE_SERVER_OR_CLIENT: 'no-client-creation-outside-server-or-client',
-    NO_PROCESS_EXIT_OUTSIDE_MAIN: 'no-process-exit-outside-main',
-    NO_FUNCTION_OUTSIDE_CLASS: 'no-function-outside-class',
-    INJECT_ANNOTATION_NOT_NEEDED_FOR_CONCRETE_CLASS:
-        'inject-annotation-not-needed-for-concrete-class',
-    FRAMEWORK_TAG: 'framework-tag',
-    ROLE_TAG: 'role-tag',
-    ENSURE_WE_ARE_SECURE: 'ensure-we-are-secure',
-    NO_INLINE_TYPES: 'no-inline-types',
-    NO_DIRECT_API_RESOLVER: 'no-direct-api-resolver',
-    NO_CUSTOM_CSS: 'no-custom-css',
-    NO_STATE_PATHS_IN_TEMPLATES: 'no-state-paths-in-templates',
-    PRISMA_CONVERTER: 'prisma-converter',
-    MAX_LINES_NEW_METHODS: 'max-lines-new-methods',
-    MAX_LINES_MODIFIED_FILES: 'max-lines-modified-files',
-    MAX_LINES_MODIFIED: 'max-lines-modified',
-    NO_ROOT_UNION_API_TYPE: 'no-root-union-api-type',
-    API_RULES_FOR_OPENAPI: 'api-rules-for-openapi',
-    API_RULES_FOR_MCP: 'api-rules-for-mcp',
-    NO_INLINE_IMPORT_IN_API_LIB: 'no-inline-import-in-api-lib',
-    ONE_ENUM_SPELLING_IN_API_LIB: 'one-enum-spelling-in-api-lib',
-    NO_UTILITY_TYPES_IN_API_LIB: 'no-utility-types-in-api-lib',
-    REQUIRED_TYPE_SUFFIX: 'required-type-suffix',
-    API_LIB_DEPENDENCIES: 'api-lib-dependencies',
-    API_LIB_PATH: 'api-lib-path',
-    FRAMEWORK_FOLDER: 'framework-folder',
-    FRAMEWORK_TSCONFIG: 'framework-tsconfig',
-    FRAMEWORK_PACKAGES: 'framework-packages',
-} as const;
+
 
 // Merge-state convention shared by the pr-gate scripts (which WRITE the marker during a
 // conflicted 3-point merge) and the ai-hook-rules merge-in-progress-guard (which READS it

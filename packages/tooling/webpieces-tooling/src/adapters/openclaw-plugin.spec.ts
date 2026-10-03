@@ -1,3 +1,4 @@
+import { policyFixture } from '@webpieces/tooling-testkit';
 import { specTempDirs } from '@webpieces/tooling-testkit';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import * as fs from 'fs';
@@ -38,7 +39,7 @@ describe('OpenClaw uses one composed evaluation', () => {
     beforeEach((): void => {
         vi.clearAllMocks();
         state.evaluate.mockReset();
-        root = specTempDirs.make('wp-openclaw-composition-');
+        root = policyFixture.makeRepo('wp-openclaw-composition-');
         fs.writeFileSync(path.join(root, CONFIG_FILENAME), '{}');
     });
     afterEach((): void => { fs.rmSync(root, { recursive: true, force: true }); });

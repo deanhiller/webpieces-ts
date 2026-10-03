@@ -105,6 +105,14 @@
                     "level": 1
                 },
                 {
+                    "id": "RulePackSelection",
+                    "className": "RulePackSelection",
+                    "kind": "class",
+                    "scope": "singleton",
+                    "file": "packages/tooling/rules-config/src/rule-pack-selection.ts",
+                    "level": 2
+                },
+                {
                     "id": "RulesConfigDesign",
                     "className": "RulesConfigDesign",
                     "kind": "apiImplementation",
@@ -163,6 +171,15 @@
                     "tokenKey": "class:packages/tooling/rules-config/src/config-file.ts#ConfigFile",
                     "paramName": "configFile",
                     "paramType": "ConfigFile"
+                },
+                {
+                    "from": "ConfigLoader",
+                    "to": "RulePackSelection",
+                    "injection": "type",
+                    "token": "RulePackSelection",
+                    "tokenKey": "class:packages/tooling/rules-config/src/rule-pack-selection.ts#RulePackSelection",
+                    "paramName": "rulePacks",
+                    "paramType": "RulePackSelection"
                 },
                 {
                     "from": "DotWebpieces",

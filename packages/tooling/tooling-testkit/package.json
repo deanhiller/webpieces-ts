@@ -28,5 +28,8 @@
     },
     "webpieces": {
         "developmentOnly": true
+    },
+    "devDependencies": {
+        "@webpieces/rules-sdk": "workspace:*"
     }
 }

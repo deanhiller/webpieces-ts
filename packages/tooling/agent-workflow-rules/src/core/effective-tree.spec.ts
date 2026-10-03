@@ -1,3 +1,6 @@
+import { policyFixture } from '@webpieces/tooling-testkit';
+import { RulePackRegistry } from '@webpieces/rules-config';
+const fixtureRuleRegistry = new RulePackRegistry(policyFixture.manifests());
 import { specTempDirs } from '@webpieces/tooling-testkit';
 import { execFileSync } from 'child_process';
 import * as fs from 'fs';
@@ -41,12 +44,13 @@ function initRepo(dir: string): void {
 // no other guard reads git state or spawns the detached main-sync refresher.
 function writeGuardConfig(root: string): void {
     // webpieces-disable no-any-unknown -- opaque JSON config shape, only mutated by known keys here
-    const config = migrate({}).config as Record<string, any>;
+    const config = migrate({}, fixtureRuleRegistry).config as Record<string, any>;
     config.hookGuards['branch-creation-guard'].autoReapMergedBranches = false;
     for (const name of Object.keys(config.hookGuards)) {
         config.hookGuards[name].mode = name === 'pr-lifecycle-guard' ? 'ON' : 'OFF';
     }
     config.excludePaths = [];
+    policyFixture.declareIn(root);
     fs.writeFileSync(nodePath.join(root, 'webpieces.config.json'), JSON.stringify(config));
 }
 

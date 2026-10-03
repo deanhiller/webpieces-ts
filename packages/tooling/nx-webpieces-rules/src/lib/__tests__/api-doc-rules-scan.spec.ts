@@ -1,3 +1,6 @@
+import { policyFixture } from '@webpieces/tooling-testkit';
+import { RulePackRegistry } from '@webpieces/rules-config';
+const fixtureRuleRegistry = new RulePackRegistry(policyFixture.manifests());
 import { specTempDirs } from '@webpieces/tooling-testkit';
 /**
  * `api-rules-for-openapi` and `api-rules-for-mcp` (#1011).
@@ -103,15 +106,15 @@ function extract(name: string): ApiDocModel {
 function writeConfig(overrides: Record<string, unknown>): string {
     const rules: Record<string, unknown> = {};
     const hookGuards: Record<string, unknown> = {};
-    for (const name of allRuleNames()) {
+    for (const name of allRuleNames(fixtureRuleRegistry)) {
         // webpieces-disable no-any-unknown -- one rule's opaque option bag
         const entry: Record<string, unknown> = {
-            ...seedEntryForRule(name),
+            ...seedEntryForRule(name, fixtureRuleRegistry),
             mode: 'OFF',
             turnOffRuleUntilEpoch: 0,
             turnOffRuleWhileOnBranch: null,
         };
-        const target = sectionForRule(name) === 'hookGuards' ? hookGuards : rules;
+        const target = sectionForRule(name, fixtureRuleRegistry) === 'hookGuards' ? hookGuards : rules;
         target[name] = entry;
     }
     for (const name of [OPENAPI_RULE, MCP_RULE]) {
@@ -122,7 +125,7 @@ function writeConfig(overrides: Record<string, unknown>): string {
             ...overrides,
         };
     }
-    const dir = specTempDirs.make('wp-api-doc-rules-config-');
+    const dir = policyFixture.makeRepo('wp-api-doc-rules-config-');
     fs.writeFileSync(
         path.join(dir, CONFIG_FILENAME),
         JSON.stringify({

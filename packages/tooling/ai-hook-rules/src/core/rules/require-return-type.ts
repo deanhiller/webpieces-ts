@@ -1,4 +1,5 @@
-import { RequireReturnTypeConfig, RULE_NAMES } from '@webpieces/rules-config';
+import { SourceContributionConfig } from "../source-contribution-config";
+
 
 import type { EditContext, Violation } from '@webpieces/hook-runtime';
 import { Violation as V } from '@webpieces/hook-runtime';
@@ -32,8 +33,8 @@ function isMissingReturnType(line: string): boolean {
     return true;
 }
 
-export class RequireReturnTypeRule extends EditRuleBase<RequireReturnTypeConfig> {
-    constructor(config: RequireReturnTypeConfig) { super(config, 'require-return-type', 'require-return-type'); }
+export class RequireReturnTypeRule extends EditRuleBase<SourceContributionConfig> {
+    constructor(config: SourceContributionConfig) { super(config, 'require-return-type', 'require-return-type'); }
 
     readonly description = 'Every function and method must declare its return type.';
     override readonly files = ['**/*.ts', '**/*.tsx'];
@@ -53,7 +54,7 @@ export class RequireReturnTypeRule extends EditRuleBase<RequireReturnTypeConfig>
             const stripped = ctx.strippedLines[i];
             if (!isMissingReturnType(stripped)) continue;
             const lineNum = i + 1;
-            if (disableAllowed && ctx.isLineDisabled(lineNum, RULE_NAMES.REQUIRE_RETURN_TYPE)) continue;
+            if (disableAllowed && ctx.isLineDisabled(lineNum, "require-return-type")) continue;
             violations.push(new V(lineNum, ctx.lines[i].trim()));
         }
         return violations;

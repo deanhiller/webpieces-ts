@@ -1,3 +1,6 @@
+import { policyFixture } from '@webpieces/tooling-testkit';
+import { RulePackRegistry } from '@webpieces/rules-config';
+const fixtureRuleRegistry = new RulePackRegistry(policyFixture.manifests());
 import { describe, it, expect } from 'vitest';
 import { validateWebpiecesConfig, seedEntryForRule } from './validate-config';
 
@@ -11,7 +14,7 @@ const HATCHES = { turnOffRuleUntilEpoch: 0, turnOffRuleWhileOnBranch: null };
 
 // webpieces-disable no-any-unknown -- a config entry is opaque JSON by construction
 function errorsFor(rule: string, entry: Record<string, unknown>): string[] {
-    return validateWebpiecesConfig({ [rule]: entry }).filter((e: string) => e.includes(`[${rule}]`));
+    return validateWebpiecesConfig({ [rule]: entry }, fixtureRuleRegistry).filter((e: string) => e.includes(`[${rule}]`));
 }
 
 describe('api-lib-dependencies — config validation', () => {
@@ -112,7 +115,7 @@ describe('framework-packages — config validation', () => {
 
 describe('the tag-truth rules have no default', () => {
     it('a config naming none of them fails the load, naming each one', () => {
-        const errors = validateWebpiecesConfig({});
+        const errors = validateWebpiecesConfig({}, fixtureRuleRegistry);
         for (const rule of ['api-lib-dependencies', 'api-lib-path', 'framework-folder', 'framework-tsconfig', 'framework-packages']) {
             expect(errors.some((e: string) => e.includes(rule)), rule).toBe(true);
         }
@@ -120,7 +123,7 @@ describe('the tag-truth rules have no default', () => {
 
     it('every seeded entry validates clean', () => {
         for (const rule of ['api-lib-dependencies', 'api-lib-path', 'framework-folder', 'framework-tsconfig', 'framework-packages']) {
-            expect(errorsFor(rule, seedEntryForRule(rule)), rule).toEqual([]);
+            expect(errorsFor(rule, seedEntryForRule(rule, fixtureRuleRegistry)), rule).toEqual([]);
         }
     });
 });

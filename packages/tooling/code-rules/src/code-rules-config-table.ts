@@ -1,48 +1,51 @@
-import { BaseRuleConfig } from '@webpieces/rules-sdk';
-import { WebpiecesRulesConfig, MaxMethodLinesConfig, MaxFileLinesConfig, RequireReturnTypeConfig, NoInlineTypeLiteralsConfig, NoAnyUnknownConfig, NoImplicitAnyConfig, PrismaValidateDtosConfig, PrismaConverterConfig, NoDestructureConfig, CatchErrorPatternConfig, NoUnmanagedExceptionsConfig, AngularNoDirectApiInResolverConfig, NoSymbolDiTokensConfig, NoClientCreationOutsideServerOrClientConfig, NoCustomCssConfig, NoStatePathsInTemplatesConfig, NoProcessExitOutsideMainConfig, NoFunctionOutsideClassConfig, InjectAnnotationNotNeededForConcreteClassConfig, FrameworkTagConfig, RoleTagConfig, EnsureWeAreSecureConfig, NoInlineImportInApiLibConfig, OneEnumSpellingInApiLibConfig, NoUtilityTypesInApiLibConfig, RequiredTypeSuffixConfig, FrameworkTsconfigConfig, FrameworkPackagesConfig } from '@webpieces/rules-config';
+import { BaseRuleConfig, FieldDef } from '@webpieces/rules-sdk';
+import { MaxMethodLinesConfig, MaxFileLinesConfig, RequireReturnTypeConfig, NoInlineTypeLiteralsConfig, NoAnyUnknownConfig, NoImplicitAnyConfig, PrismaValidateDtosConfig, PrismaConverterConfig, NoDestructureConfig, CatchErrorPatternConfig, NoUnmanagedExceptionsConfig, AngularNoDirectApiInResolverConfig, NoSymbolDiTokensConfig, NoCustomCssConfig, NoProcessExitOutsideMainConfig, NoFunctionOutsideClassConfig, InjectAnnotationNotNeededForConcreteClassConfig, FrameworkTagConfig, RoleTagConfig, EnsureWeAreSecureConfig } from "./configs/rule-configs";
+import { NoClientCreationOutsideServerOrClientConfig } from "./configs/no-client-creation-config";
+import { NoStatePathsInTemplatesConfig } from "./configs/no-state-paths-config";
+import { NoInlineImportInApiLibConfig, OneEnumSpellingInApiLibConfig } from "./configs/api-lib-spelling-configs";
+import { NoUtilityTypesInApiLibConfig } from "./configs/no-utility-types-config";
+import { RequiredTypeSuffixConfig } from "./configs/required-type-suffix-config";
+import { FrameworkTsconfigConfig, FrameworkPackagesConfig } from "./configs/tag-truth-configs";
 
-/** A rule config class usable as an inversify inject-by-type token. */
+/** A concrete configuration data constructor used as the owner DI token. */
 export type ConfigCtor = new () => BaseRuleConfig;
 
-/**
- * The 1:1 table of `[config class, webpieces.config.json rule key]`. The composition root iterates it
- * to bind each rule's config into the container (`bind(ConfigClass).toConstantValue(config[key] ??
- * new ConfigClass())`), so every `@provideSingleton` validator injects its config by type. Data only
- * — the binding loop lives inline in the bin (an inline loop, exempt from no-function-outside-class).
- */
-/** One `[config class, rule key]` row of {@link CONFIG_BINDINGS}. */
-export type ConfigBinding = readonly [ConfigCtor, keyof WebpiecesRulesConfig];
+/** An owner-local configuration binding and its canonical schema. */
+export class ConfigBinding {
+    constructor(
+        readonly configClass: ConfigCtor,
+        readonly ruleId: string,
+        readonly schema: Readonly<Record<string, FieldDef>>,
+    ) {}
+}
 
 export const CONFIG_BINDINGS: ReadonlyArray<ConfigBinding> = [
-    [MaxMethodLinesConfig, 'max-method-lines'],
-    [MaxFileLinesConfig, 'max-file-lines'],
-    [RequireReturnTypeConfig, 'require-return-type'],
-    [NoInlineTypeLiteralsConfig, 'no-inline-type-literals'],
-    [NoAnyUnknownConfig, 'no-any-unknown'],
-    [NoImplicitAnyConfig, 'no-implicit-any'],
-    [PrismaValidateDtosConfig, 'prisma-validate-dtos'],
-    [PrismaConverterConfig, 'prisma-converter'],
-    [NoDestructureConfig, 'no-destructure'],
-    [CatchErrorPatternConfig, 'catch-error-pattern'],
-    [NoUnmanagedExceptionsConfig, 'no-unmanaged-exceptions'],
-    [AngularNoDirectApiInResolverConfig, 'angular-no-direct-api-in-resolver'],
-    [NoSymbolDiTokensConfig, 'no-symbol-di-tokens'],
-    [NoClientCreationOutsideServerOrClientConfig, 'no-client-creation-outside-server-or-client'],
-    [NoCustomCssConfig, 'no-custom-css'],
-    [NoStatePathsInTemplatesConfig, 'no-state-paths-in-templates'],
-    [NoProcessExitOutsideMainConfig, 'no-process-exit-outside-main'],
-    [NoFunctionOutsideClassConfig, 'no-function-outside-class'],
-    [
-        InjectAnnotationNotNeededForConcreteClassConfig,
-        'inject-annotation-not-needed-for-concrete-class',
-    ],
-    [FrameworkTagConfig, 'framework-tag'],
-    [RoleTagConfig, 'role-tag'],
-    [EnsureWeAreSecureConfig, 'ensure-we-are-secure'],
-    [NoInlineImportInApiLibConfig, 'no-inline-import-in-api-lib'],
-    [OneEnumSpellingInApiLibConfig, 'one-enum-spelling-in-api-lib'],
-    [NoUtilityTypesInApiLibConfig, 'no-utility-types-in-api-lib'],
-    [RequiredTypeSuffixConfig, 'required-type-suffix'],
-    [FrameworkTsconfigConfig, 'framework-tsconfig'],
-    [FrameworkPackagesConfig, 'framework-packages'],
+    new ConfigBinding(MaxMethodLinesConfig, 'max-method-lines', MaxMethodLinesConfig.SCHEMA),
+    new ConfigBinding(MaxFileLinesConfig, 'max-file-lines', MaxFileLinesConfig.SCHEMA),
+    new ConfigBinding(RequireReturnTypeConfig, 'require-return-type', RequireReturnTypeConfig.SCHEMA),
+    new ConfigBinding(NoInlineTypeLiteralsConfig, 'no-inline-type-literals', NoInlineTypeLiteralsConfig.SCHEMA),
+    new ConfigBinding(NoAnyUnknownConfig, 'no-any-unknown', NoAnyUnknownConfig.SCHEMA),
+    new ConfigBinding(NoImplicitAnyConfig, 'no-implicit-any', NoImplicitAnyConfig.SCHEMA),
+    new ConfigBinding(PrismaValidateDtosConfig, 'prisma-validate-dtos', PrismaValidateDtosConfig.SCHEMA),
+    new ConfigBinding(PrismaConverterConfig, 'prisma-converter', PrismaConverterConfig.SCHEMA),
+    new ConfigBinding(NoDestructureConfig, 'no-destructure', NoDestructureConfig.SCHEMA),
+    new ConfigBinding(CatchErrorPatternConfig, 'catch-error-pattern', CatchErrorPatternConfig.SCHEMA),
+    new ConfigBinding(NoUnmanagedExceptionsConfig, 'no-unmanaged-exceptions', NoUnmanagedExceptionsConfig.SCHEMA),
+    new ConfigBinding(AngularNoDirectApiInResolverConfig, 'angular-no-direct-api-in-resolver', AngularNoDirectApiInResolverConfig.SCHEMA),
+    new ConfigBinding(NoSymbolDiTokensConfig, 'no-symbol-di-tokens', NoSymbolDiTokensConfig.SCHEMA),
+    new ConfigBinding(NoClientCreationOutsideServerOrClientConfig, 'no-client-creation-outside-server-or-client', NoClientCreationOutsideServerOrClientConfig.SCHEMA),
+    new ConfigBinding(NoCustomCssConfig, 'no-custom-css', NoCustomCssConfig.SCHEMA),
+    new ConfigBinding(NoStatePathsInTemplatesConfig, 'no-state-paths-in-templates', NoStatePathsInTemplatesConfig.SCHEMA),
+    new ConfigBinding(NoProcessExitOutsideMainConfig, 'no-process-exit-outside-main', NoProcessExitOutsideMainConfig.SCHEMA),
+    new ConfigBinding(NoFunctionOutsideClassConfig, 'no-function-outside-class', NoFunctionOutsideClassConfig.SCHEMA),
+    new ConfigBinding(InjectAnnotationNotNeededForConcreteClassConfig, 'inject-annotation-not-needed-for-concrete-class', InjectAnnotationNotNeededForConcreteClassConfig.SCHEMA),
+    new ConfigBinding(FrameworkTagConfig, 'framework-tag', FrameworkTagConfig.SCHEMA),
+    new ConfigBinding(RoleTagConfig, 'role-tag', RoleTagConfig.SCHEMA),
+    new ConfigBinding(EnsureWeAreSecureConfig, 'ensure-we-are-secure', EnsureWeAreSecureConfig.SCHEMA),
+    new ConfigBinding(NoInlineImportInApiLibConfig, 'no-inline-import-in-api-lib', NoInlineImportInApiLibConfig.SCHEMA),
+    new ConfigBinding(OneEnumSpellingInApiLibConfig, 'one-enum-spelling-in-api-lib', OneEnumSpellingInApiLibConfig.SCHEMA),
+    new ConfigBinding(NoUtilityTypesInApiLibConfig, 'no-utility-types-in-api-lib', NoUtilityTypesInApiLibConfig.SCHEMA),
+    new ConfigBinding(RequiredTypeSuffixConfig, 'required-type-suffix', RequiredTypeSuffixConfig.SCHEMA),
+    new ConfigBinding(FrameworkTsconfigConfig, 'framework-tsconfig', FrameworkTsconfigConfig.SCHEMA),
+    new ConfigBinding(FrameworkPackagesConfig, 'framework-packages', FrameworkPackagesConfig.SCHEMA),
 ];

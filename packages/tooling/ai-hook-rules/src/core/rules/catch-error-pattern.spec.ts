@@ -1,6 +1,7 @@
+import { SourceContributionConfig } from "../source-contribution-config";
 import { describe, it, expect } from 'vitest';
 
-import { CatchErrorPatternConfig } from '@webpieces/rules-config';
+
 
 import { EditContext } from '@webpieces/hook-runtime';
 import { stripTsNoise } from '@webpieces/hook-runtime';
@@ -23,7 +24,7 @@ function ctx(content: string, relativePath: string = 'src/service.ts'): EditCont
 }
 
 function rule(): CatchErrorPatternRule {
-    const cfg = new CatchErrorPatternConfig();
+    const cfg = new SourceContributionConfig();
     cfg.mode = 'NEW_AND_MODIFIED_CODE';
     cfg.disableAllowed = true;
     return new CatchErrorPatternRule(cfg);

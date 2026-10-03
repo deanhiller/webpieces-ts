@@ -1,3 +1,6 @@
+import { policyFixture } from '@webpieces/tooling-testkit';
+import { RulePackRegistry } from '@webpieces/rules-config';
+const fixtureRuleRegistry = new RulePackRegistry(policyFixture.manifests());
 import { validateWebpiecesConfig, seedEntryForRule } from './validate-config';
 
 /**
@@ -7,7 +10,7 @@ import { validateWebpiecesConfig, seedEntryForRule } from './validate-config';
 
 // webpieces-disable no-any-unknown -- a config entry is opaque JSON by construction
 function errorsFor(entry: Record<string, unknown>): string[] {
-    return validateWebpiecesConfig({ 'required-type-suffix': entry })
+    return validateWebpiecesConfig({ 'required-type-suffix': entry }, fixtureRuleRegistry)
         .filter((e: string) => e.includes('[required-type-suffix]'));
 }
 
@@ -54,6 +57,6 @@ describe('required-type-suffix — config validation', () => {
     });
 
     it('seeds an entry the validator accepts', () => {
-        expect(errorsFor(seedEntryForRule('required-type-suffix'))).toEqual([]);
+        expect(errorsFor(seedEntryForRule('required-type-suffix', fixtureRuleRegistry))).toEqual([]);
     });
 });

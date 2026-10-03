@@ -26,16 +26,9 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as ts from 'typescript';
-import {
-    hasDisable,
-    RULE_NAMES,
-    NoCustomCssConfig,
-    NoCustomCssScope,
-    ModifiedCodeMode,
-    detectBase,
-    getFileDiff,
-    getChangedLineNumbers,
-} from '@webpieces/rules-config';
+import { hasDisable, NoCustomCssScope, detectBase, getFileDiff, getChangedLineNumbers } from "@webpieces/rules-config";
+import { NoCustomCssConfig } from "./configs/rule-configs";
+import { ModifiedCodeMode } from '@webpieces/rules-sdk';
 import { CodeValidator, ExecutorResult } from './code-validator';
 import { injectable, bindingScopeValues } from 'inversify';
 import { shouldSkipRule } from './resolve-mode';
@@ -239,7 +232,7 @@ export class NoCustomCssValidator extends CodeValidator<NoCustomCssConfig> {
     private hasDisableComment(lines: string[], lineNumber: number): boolean {
         const start = Math.max(0, lineNumber - 4);
         for (let i = lineNumber - 1; i >= start; i--) {
-            if (hasDisable(lines[i] ?? '', RULE_NAMES.NO_CUSTOM_CSS)) return true;
+            if (hasDisable(lines[i] ?? '', "no-custom-css")) return true;
         }
         return false;
     }

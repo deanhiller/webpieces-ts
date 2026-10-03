@@ -1,3 +1,6 @@
+import { policyFixture } from '@webpieces/tooling-testkit';
+import { RulePackRegistry } from '@webpieces/rules-config';
+const fixtureRuleRegistry = new RulePackRegistry(policyFixture.manifests());
 import { describe, it, expect } from 'vitest';
 
 import { validateWebpiecesConfig, validateMatchRulesSection, MAX_TURN_OFF_EPOCH_DAYS } from './validate-config';
@@ -38,7 +41,7 @@ describe('turnOffRuleUntilEpoch is capped at one week out', () => {
                 turnOffRuleUntilEpoch: epoch,
                 turnOffRuleWhileOnBranch: null,
             },
-        })).filter(e => e.includes('turnOffRuleUntilEpoch'));
+        }, fixtureRuleRegistry)).filter(e => e.includes('turnOffRuleUntilEpoch'));
     }
 
     // Every existing config is full of these; they are inert (they skip nothing) and must stay valid.
@@ -88,7 +91,7 @@ describe('turnOffRuleUntilEpoch is capped at one week out', () => {
                 turnOffRuleUntilEpoch: 0,
                 turnOffRuleWhileOnBranch: 'dean/a-very-long-refactor',
             },
-        }));
+        }, fixtureRuleRegistry));
 
         expect(errors.filter(e => e.includes('turnOffRuleWhileOnBranch'))).toEqual([]);
     });

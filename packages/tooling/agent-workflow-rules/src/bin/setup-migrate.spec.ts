@@ -1,3 +1,6 @@
+import { policyFixture } from '@webpieces/tooling-testkit';
+import { RulePackRegistry } from '@webpieces/rules-config';
+const fixtureRuleRegistry = new RulePackRegistry(policyFixture.manifests());
 import { migrate } from './setup-config';
 import { allRuleNames, recommendedSeedMode, validateWebpiecesConfig, validateSectionPlacement } from '@webpieces/rules-config';
 
@@ -18,7 +21,7 @@ describe('migrate', () => {
     // be a second and weaker spelling of it — and the next two tests are why a seed could never be the
     // mechanism anyway: the migrator never rewrites a list a consumer already has.
     it('seeds excludePaths EMPTY when the key is absent — the state-dir skip is code, not a glob', () => {
-        const result = migrate({ rules: {}, hookGuards: {}, commands: { 'pr-gate': { mode: 'OFF' } } });
+        const result = migrate({ rules: {}, hookGuards: {}, commands: { 'pr-gate': { mode: 'OFF' } } }, fixtureRuleRegistry);
         expect(result.config.excludePaths).toEqual([]);
         expect(result.changes.some(c => c.includes('added excludePaths ([])'))).toBe(true);
     });
@@ -27,7 +30,7 @@ describe('migrate', () => {
         const result = migrate({
             rules: {}, hookGuards: {}, commands: { 'pr-gate': { mode: 'OFF' } },
             excludePaths: ['repositories/**'],
-        });
+        }, fixtureRuleRegistry);
         expect(result.config.excludePaths).toEqual(['repositories/**']);
     });
 
@@ -35,7 +38,7 @@ describe('migrate', () => {
         const result = migrate({
             rules: {}, hookGuards: {}, commands: { 'pr-gate': { mode: 'OFF' } },
             excludePaths: [],
-        });
+        }, fixtureRuleRegistry);
         expect(result.config.excludePaths).toEqual([]);
     });
 
@@ -46,7 +49,7 @@ describe('migrate', () => {
                 'pr-creation-or-push-guard': { mode: 'ON', turnOffRuleUntilEpoch: 0 },
             },
             'pr-gate': { mode: 'OFF', buildCommand: 'echo ci', gates: [] },
-        });
+        }, fixtureRuleRegistry);
 
         expect(result.config.rules['no-any-unknown']).toBeDefined();
         // The guard was BOTH misplaced (in `rules`) and retired (a class name, not a policy key), so
@@ -68,7 +71,7 @@ describe('migrate', () => {
         const result = migrate({
             rules: {}, hookGuards: {},
             commands: { 'pr-gate': { mode: 'OFF' }, upsertPr: 'pnpm my-upsert', mergeComplete: 'pnpm my-finish' },
-        });
+        }, fixtureRuleRegistry);
         expect(result.config.commands['upsertPr']).toBeUndefined();
         expect(result.config.commands['mergeComplete']).toBeUndefined();
         const hints = result.config.commands['guardHints'] as Record<string, unknown>;
@@ -83,7 +86,7 @@ describe('migrate', () => {
             rules: {},
             hookGuards: { 'main-stale-guard': { mode: 'ON', turnOffRuleUntilEpoch: 0 } },
             commands: { 'pr-gate': { mode: 'OFF' } },
-        });
+        }, fixtureRuleRegistry);
         expect(result.config.hookGuards['main-stale-guard']).toBeUndefined();
         // Two hops in one pass: main-stale-guard was renamed read-stale-guard, and read-stale-guard is
         // now one of four classes behind `branch-state-guard`. The table points it at the destination it
@@ -101,7 +104,7 @@ describe('migrate', () => {
                 'branch-state-guard': { mode: 'ON', turnOffRuleUntilEpoch: 0 },
             },
             commands: { 'pr-gate': { mode: 'OFF' } },
-        });
+        }, fixtureRuleRegistry);
         expect(result.config.hookGuards['main-stale-guard']).toBeUndefined();
         expect(result.config.hookGuards['branch-state-guard']).toMatchObject({ mode: 'ON', turnOffRuleUntilEpoch: 0 });
     });
@@ -126,7 +129,7 @@ describe('migrate', () => {
                 'merged-branch-bash-guard': { mode: 'ON', turnOffRuleUntilEpoch: 0, turnOffRuleWhileOnBranch: null },
             },
             commands: { 'pr-gate': { mode: 'OFF' } },
-        });
+        }, fixtureRuleRegistry);
         for (const retired of ['feature-branch-guard', 'read-stale-guard', 'stale-main-bash-guard', 'merged-branch-bash-guard']) {
             expect(result.config.hookGuards[retired], retired).toBeUndefined();
         }
@@ -149,7 +152,7 @@ describe('migrate', () => {
                 'pr-creation-or-push-guard': { mode: 'ON', upsertPrCommand: 'pnpm mine', turnOffRuleUntilEpoch: 0, turnOffRuleWhileOnBranch: null },
             },
             commands: { 'pr-gate': { mode: 'OFF' } },
-        });
+        }, fixtureRuleRegistry);
         const merged = result.config.hookGuards['pr-lifecycle-guard'];
         expect(merged['upsertPrCommand']).toBeUndefined();
         expect(merged['mode']).toBe('ON');
@@ -164,7 +167,7 @@ describe('migrate', () => {
             rules: {},
             hookGuards: { 'stale-main-bash-guard': { mode: 'ON' } },
             commands: { 'pr-gate': { mode: 'OFF' } },
-        });
+        }, fixtureRuleRegistry);
         const merged = result.config.hookGuards['branch-state-guard'];
         expect(merged['mode']).toBe('ON');
         expect(merged['turnOffRuleUntilEpoch']).toBe(0);
@@ -189,7 +192,7 @@ describe('migrate', () => {
             rules: {},
             hookGuards: { 'whole-repo-build-guard': { mode: 'ON', turnOffRuleUntilEpoch: 0 } },
             commands: { 'pr-gate': { mode: 'OFF' } },
-        });
+        }, fixtureRuleRegistry);
         expect(result.config.hookGuards['whole-repo-build-guard']).toBeUndefined();
         // Nothing anywhere is named after the destination prose.
         for (const key of Object.keys(result.config.hookGuards)) {
@@ -200,18 +203,18 @@ describe('migrate', () => {
     });
 
     it('adds every missing built-in into its correct section, ENFORCING at its recommended mode', () => {
-        const result = migrate({ rules: {}, hookGuards: {}, commands: { 'pr-gate': { mode: 'OFF' } } });
+        const result = migrate({ rules: {}, hookGuards: {}, commands: { 'pr-gate': { mode: 'OFF' } } }, fixtureRuleRegistry);
         // A code rule and a guard both get seeded into the right section, with BOTH escape hatches shown.
         // The mode is rules-config's recommendedSeedMode() — NOT 'OFF'. Seeding OFF is what left adopters
         // with a fully installed webpieces that enforced nothing.
         expect(result.config.rules['max-file-lines']).toMatchObject(
-            { mode: recommendedSeedMode('max-file-lines'), turnOffRuleUntilEpoch: 0, turnOffRuleWhileOnBranch: null });
+            { mode: recommendedSeedMode('max-file-lines', fixtureRuleRegistry), turnOffRuleUntilEpoch: 0, turnOffRuleWhileOnBranch: null });
         // toMatchObject, not toEqual: a seeded entry also carries every OTHER schema-required field —
         // here autoReapMergedBranches and subBranchNaming, both BEHAVIOUR and therefore stated in the
         // consumer's own file rather than inherited from a default (#1017). Reaping seeds FALSE: until
         // somebody has answered, webpieces deletes no branches.
         expect(result.config.hookGuards['branch-creation-guard']).toMatchObject(
-            { mode: recommendedSeedMode('branch-creation-guard'), turnOffRuleUntilEpoch: 0,
+            { mode: recommendedSeedMode('branch-creation-guard', fixtureRuleRegistry), turnOffRuleUntilEpoch: 0,
               turnOffRuleWhileOnBranch: null, autoReapMergedBranches: false,
               subBranchNaming: 'feature/<ticket>/<short-description>' });
         expect(result.config.rules['max-file-lines']['mode']).not.toEqual('OFF');
@@ -219,9 +222,9 @@ describe('migrate', () => {
     });
 
     it('seeds NO built-in as OFF — every rule arrives enforcing (gradual where the rule supports it)', () => {
-        const result = migrate({ rules: {}, hookGuards: {}, commands: { 'pr-gate': { mode: 'OFF' } } });
+        const result = migrate({ rules: {}, hookGuards: {}, commands: { 'pr-gate': { mode: 'OFF' } } }, fixtureRuleRegistry);
         const seeded = { ...result.config.rules, ...result.config.hookGuards };
-        for (const name of allRuleNames()) {
+        for (const name of allRuleNames(fixtureRuleRegistry)) {
             expect(seeded[name]['mode'], `${name} seeded OFF`).not.toEqual('OFF');
         }
     });
@@ -236,16 +239,16 @@ describe('migrate', () => {
     // failed validation immediately. That was equally broken back when seeding was OFF — the
     // missing-required-field check does not care what mode says.
     it('seeds/migrates a config that validates with ZERO errors', () => {
-        const result = migrate({ rules: {}, hookGuards: {}, commands: { 'pr-gate': { mode: 'OFF' } } });
+        const result = migrate({ rules: {}, hookGuards: {}, commands: { 'pr-gate': { mode: 'OFF' } } }, fixtureRuleRegistry);
         const merged = { ...result.config.rules, ...result.config.hookGuards };
-        expect(validateWebpiecesConfig(merged, false)).toEqual([]);
+        expect(validateWebpiecesConfig(merged, fixtureRuleRegistry, false)).toEqual([]);
         // ...and every rule landed in the section the loader expects it in.
-        expect(validateSectionPlacement(result.config.rules, result.config.hookGuards)).toEqual([]);
+        expect(validateSectionPlacement(result.config.rules, result.config.hookGuards, fixtureRuleRegistry)).toEqual([]);
     });
 
     it('reports no changes for an already-migrated config', () => {
-        const once = migrate({ rules: {}, hookGuards: {}, commands: {} }).config;
-        const twice = migrate({ ...once });
+        const once = migrate({ rules: {}, hookGuards: {}, commands: {} }, fixtureRuleRegistry).config;
+        const twice = migrate({ ...once }, fixtureRuleRegistry);
         expect(twice.changes).toEqual([]);
     });
 });

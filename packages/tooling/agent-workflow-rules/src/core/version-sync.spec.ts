@@ -1,3 +1,4 @@
+import { policyFixture } from '@webpieces/tooling-testkit';
 import { specTempDirs } from '@webpieces/tooling-testkit';
 import { describe, it, expect } from 'vitest';
 import { spawnSync } from 'child_process';
@@ -26,7 +27,7 @@ import { renderBumpSkewReport } from './version-sync-harness.spec';
 const PKG = '@webpieces/webpieces-tooling';
 
 function tmp(): string {
-    return specTempDirs.make('wp-vsync-');
+    return policyFixture.makeRepo('wp-vsync-');
 }
 
 function writePin(root: string, version: string): void {

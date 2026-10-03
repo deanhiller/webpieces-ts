@@ -11,7 +11,8 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
-import { DiffScope, ProjectScanMode } from '@webpieces/rules-config';
+import { DiffScope } from "@webpieces/rules-config";
+import { ProjectScanMode } from "./configs/tag-truth-configs";
 import { InformAiError } from '@webpieces/tooling-common';
 import { toError } from '@webpieces/tooling-common/to-error';
 import { injectable, bindingScopeValues } from 'inversify';

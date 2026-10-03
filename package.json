@@ -89,5 +89,21 @@
       "nx",
       "unrs-resolver"
     ]
+  },
+  "webpieces": {
+    "rulePacks": [
+      {
+        "module": "@webpieces/code-rules/rule-pack"
+      },
+      {
+        "module": "@webpieces/ai-hook-rules/rule-pack"
+      },
+      {
+        "module": "@webpieces/agent-workflow-rules/rule-pack"
+      },
+      {
+        "module": "@webpieces/nx-webpieces-rules/rule-pack"
+      }
+    ]
   }
 }

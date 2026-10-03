@@ -4,7 +4,8 @@ import { execSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as ts from 'typescript';
-import { DiffScope, NoInlineImportInApiLibConfig, OneEnumSpellingInApiLibConfig, RuleFailError } from '@webpieces/rules-config';
+import { DiffScope, RuleFailError } from "@webpieces/rules-config";
+import { NoInlineImportInApiLibConfig, OneEnumSpellingInApiLibConfig } from "./configs/api-lib-spelling-configs";
 
 import { ApiLibFile, ApiLibSite } from './api-lib-source-rule';
 import { ApiLibEnumIndex } from './api-lib-enum-index';

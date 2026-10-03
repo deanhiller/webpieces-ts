@@ -1,7 +1,5 @@
-import { FieldDef, SchemaShape, BaseRuleConfig, BASE_RULE_SCHEMA } from '@webpieces/rules-sdk';
-
-import { ModifiedCodeMode, MODIFIED_CODE_MODES } from './rule-configs';
-
+import { FieldDef, SchemaShape, BaseRuleConfig, BASE_RULE_SCHEMA } from "@webpieces/rules-sdk";
+import { ModifiedCodeMode, MODIFIED_CODE_MODES } from "@webpieces/rules-sdk";
 /**
  * One `required-type-suffix` entry: the path globs it covers and the suffixes a type exported from a
  * file under them may end in. Data-only.

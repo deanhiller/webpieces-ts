@@ -1,9 +1,15 @@
+import { policyFixture } from '@webpieces/tooling-testkit';
+import { RulePackRegistry } from '@webpieces/rules-config';
+const fixtureRuleRegistry = new RulePackRegistry(policyFixture.manifests());
 import { specTempDirs } from '@webpieces/tooling-testkit';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { execSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
-import { CONFIG_FILENAME, DiffScope, ModifiedCodeMode, NoDestructureConfig, OneEnumSpellingInApiLibConfig, RuleFailError, allRuleNames, sectionForRule, seedEntryForRule } from '@webpieces/rules-config';
+import { CONFIG_FILENAME, DiffScope, RuleFailError, allRuleNames, sectionForRule, seedEntryForRule } from "@webpieces/rules-config";
+import { NoDestructureConfig } from "./configs/rule-configs";
+import { OneEnumSpellingInApiLibConfig } from "./configs/api-lib-spelling-configs";
+import { ModifiedCodeMode } from '@webpieces/rules-sdk';
 import { InformAiError } from '@webpieces/tooling-common';
 
 import { CodeRulesBootstrap } from './code-rules-bootstrap';
@@ -30,6 +36,7 @@ class Repo {
     readonly root = specTempDirs.makeReal('wp-whole-scope-');
 
     constructor() {
+        policyFixture.declareIn(this.root);
         this.git('init -q -b main');
         this.git('config user.email t@t.t');
         this.git('config user.name t');
@@ -58,9 +65,9 @@ class Repo {
         const rules: Record<string, unknown> = {};
         // webpieces-disable no-any-unknown -- opaque option bags
         const hookGuards: Record<string, unknown> = {};
-        for (const name of allRuleNames()) {
-            const entry = { ...seedEntryForRule(name), mode: 'OFF', turnOffRuleUntilEpoch: 0, turnOffRuleWhileOnBranch: null };
-            const target = sectionForRule(name) === 'hookGuards' ? hookGuards : rules;
+        for (const name of allRuleNames(fixtureRuleRegistry)) {
+            const entry = { ...seedEntryForRule(name, fixtureRuleRegistry), mode: 'OFF', turnOffRuleUntilEpoch: 0, turnOffRuleWhileOnBranch: null };
+            const target = sectionForRule(name, fixtureRuleRegistry) === 'hookGuards' ? hookGuards : rules;
             target[name] = overrides[name] ? { ...entry, ...overrides[name] } : entry;
         }
         this.write(CONFIG_FILENAME, JSON.stringify({
