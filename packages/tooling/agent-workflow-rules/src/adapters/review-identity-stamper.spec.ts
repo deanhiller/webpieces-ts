@@ -1,6 +1,9 @@
 import { specTempDirs } from '@webpieces/tooling-testkit';
 import { describe, it, expect } from 'vitest';
 import { execSync } from 'child_process';
+import * as fs from 'fs';
+import * as path from 'path';
+import { AgentPayloadParser } from '@webpieces/hook-runtime';
 
 import { ReviewIdentityStampService } from '@webpieces/repo-workflow-core';
 
@@ -54,5 +57,24 @@ describe('ReviewIdentityStamper — the hook tells wp-write-review who is callin
         const event = new ClaudeCodeAdapter().toEvent({ tool_name: 'Bash', tool_input: { command } }, root);
         stamper.stamp(event, command, root);
         expect(service.take(root, 'security')).toBeNull();
+    });
+});
+
+// Native capture from codex exec 0.160.0: exec_command(cmd="pwd", workdir=target).
+// The shell printed /private/tmp/wp-1105-probe/target; the hook never received that directory.
+describe('native exec_command.workdir envelope (#1105)', () => {
+    it('exposes only session cwd, so a literal leading cd is required to route another tree', () => {
+        const payload = new AgentPayloadParser().parse(
+            fs.readFileSync(
+                path.join(__dirname, '__fixtures__', 'codex-workdir-pre-tool-use.json'),
+                'utf8',
+            ),
+        )!;
+        expect(payload.cwd).toBe('/private/tmp/wp-1105-probe/session');
+        expect(payload.tool_name).toBe('Bash');
+        expect(payload.tool_input).toEqual({ command: 'pwd' });
+        const event = new CodexAdapter().toEvent(payload, payload.cwd!);
+        expect(event.cwd).toBe(payload.cwd);
+        expect(event.bash?.command).toBe('pwd');
     });
 });

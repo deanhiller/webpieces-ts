@@ -60,7 +60,7 @@ export class ReviewerIdentityResolver {
             return new ReviewerIdentity(stamp.aiType, stamp.sessionId, stamp.agentId, stamp.agentType);
         }
         const inHarness = HARNESS_ENV.filter((name: string): boolean => (env[name] ?? '').trim() !== '');
-        if (inHarness.length > 0) throw new InformAiError(this.unstampedRefusal(checklistId, inHarness));
+        if (inHarness.length > 0) throw new InformAiError(this.unstampedRefusal(cwd, checklistId, inHarness));
         return new ReviewerIdentity(HARNESS_TERMINAL, '', '', '');
     }
 
@@ -72,12 +72,21 @@ export class ReviewerIdentityResolver {
             + 'reviewer submits its own verdict.';
     }
 
-    private unstampedRefusal(checklistId: string, harnessEnv: readonly string[]): string {
-        return `${WRITE_REVIEW_BIN} REFUSED: this process runs under an AI harness (${harnessEnv.join(', ')} set), but the\n`
-            + `webpieces PreToolUse hook left no identity stamp for checklist "${checklistId}", so nothing can say whether a\n`
-            + 'reviewer subagent or the coordinator is calling.\n\n'
-            + `Run it as a plain Bash command the hook can read, naming the checklist literally:\n`
-            + `    pnpm ${WRITE_REVIEW_BIN} --checklist ${checklistId} <<'EOF' … EOF\n`
-            + 'If it already was, the webpieces hooks are not installed in this harness: pnpm wp-install-ai-hooks.';
+    private unstampedRefusal(
+        cwd: string,
+        checklistId: string,
+        harnessEnv: readonly string[],
+    ): string {
+        return (
+            `${WRITE_REVIEW_BIN} REFUSED: this process runs under an AI harness (${harnessEnv.join(', ')} set), but the\n` +
+            `expected worktree has no usable identity stamp for checklist "${checklistId}", so nothing can say whether a\n` +
+            'reviewer subagent or the coordinator is calling.\n\n' +
+            `Submission cwd: ${cwd}\nExpected stamp: ${this.stamps.stampPath(cwd, checklistId)}\n\n` +
+            'The hook may have written a stamp in the session checkout instead of this worktree. Use a literal\n' +
+            'leading cd to the absolute reviewed worktree path, then name the checklist literally:\n' +
+            `    cd '/absolute/reviewed-worktree' && pnpm ${WRITE_REVIEW_BIN} --checklist ${checklistId} <<'EOF' … EOF\n` +
+            'Do not rely on exec_command.workdir alone when the hook exposes only the session cwd. Check hook\n' +
+            'delivery and its selected tree; reinstall hooks only if they are actually missing.'
+        );
     }
 }
