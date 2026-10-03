@@ -32,6 +32,13 @@ describe('proposed complete file before write', () => {
         expect(new ProposedFile('MultiEdit', operation).read().text).toBe('type Value = ActualDto;');
     });
 
+    it('does not mark unchanged context modified when a later edit is a no-op', () => {
+        const original = 'type Legacy = unknown;\nconst value = 1;';
+        const final = original.replace('1', '2');
+        const operation = input(original, [new NormalizedEdit('1', '2', false), new NormalizedEdit(final, final, false)]);
+        expect(new ProposedFile('MultiEdit', operation).read().changedLines()).toEqual(new Set([2]));
+    });
+
     it('honors replace_all and refuses ambiguous single-location edits', () => {
         const operation = input('type A = string;\ntype B = string;', [new NormalizedEdit('string', 'unknown', true)]);
         expect(new ProposedFile('Edit', operation).read().text).toBe('type A = unknown;\ntype B = unknown;');

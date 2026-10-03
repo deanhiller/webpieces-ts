@@ -47,6 +47,12 @@ export class ProposedFile {
                 if (!edit.replaceAll && text.indexOf(edit.oldString, start + edit.oldString.length) >= 0)
                     throw new InformAiError(`Cannot project edit of ${this.input.filePath}: old_string matches multiple locations. Supply unique context or replace_all.`);
                 const end = start + edit.oldString.length;
+                if (edit.oldString === edit.newString) {
+                    count++;
+                    offset = end;
+                    if (!edit.replaceAll) break;
+                    continue;
+                }
                 const delta = edit.newString.length - edit.oldString.length;
                 changes = changes.map((range: ChangedRange): ChangedRange => range.end < start ? range
                     : range.start > end ? new ChangedRange(range.start + delta, range.end + delta)
@@ -56,7 +62,7 @@ export class ProposedFile {
                 let suffix = 0;
                 while (suffix < edit.oldString.length - prefix && suffix < edit.newString.length - prefix
                     && edit.oldString[edit.oldString.length - suffix - 1] === edit.newString[edit.newString.length - suffix - 1]) suffix++;
-                if (edit.oldString !== edit.newString) changes.push(new ChangedRange(start + prefix, start + edit.newString.length - suffix));
+                changes.push(new ChangedRange(start + prefix, start + edit.newString.length - suffix));
                 text = text.slice(0, start) + edit.newString + text.slice(end);
                 count++;
                 offset = start + edit.newString.length;
