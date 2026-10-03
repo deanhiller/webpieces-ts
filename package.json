@@ -54,7 +54,7 @@
     "@types/node": "24.9.2",
     "@typescript-eslint/eslint-plugin": "8.48.0",
     "@typescript-eslint/parser": "8.48.0",
-    "@webpieces/nx-webpieces-rules": "catalog:",
+    "@webpieces/webpieces-tooling": "catalog:",
     "eslint": "9.39.1",
     "hermes-compiler": "250829098.0.19",
     "madge": "8.0.0",
@@ -88,22 +88,6 @@
       "msgpackr-extract",
       "nx",
       "unrs-resolver"
-    ]
-  },
-  "webpieces": {
-    "rulePacks": [
-      {
-        "module": "@webpieces/code-rules/rule-pack"
-      },
-      {
-        "module": "@webpieces/ai-hook-rules/rule-pack"
-      },
-      {
-        "module": "@webpieces/agent-workflow-rules/rule-pack"
-      },
-      {
-        "module": "@webpieces/nx-webpieces-rules/rule-pack"
-      }
     ]
   }
 }

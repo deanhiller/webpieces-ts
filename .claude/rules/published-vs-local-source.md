@@ -6,7 +6,8 @@ are working in a linked worktree.
 
 ### Published vs local source (the one-release lag)
 
-This repo **dogfoods the published `@webpieces/*` packages**. `node_modules/@webpieces/*` are real
+This repo **dogfoods the published `@webpieces/*` packages** through the single
+`@webpieces/webpieces-tooling` catalog pin. `node_modules/@webpieces/*` are real
 published copies (verified: real directories, not symlinks into local `dist/`), and they are always
 **one release behind** the local source in `packages/tooling/**` — published `0.4.x` vs a local
 `0.0.0-dev`.

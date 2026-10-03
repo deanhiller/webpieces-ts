@@ -1,0 +1,32 @@
+{
+  "throw-cause-required": {
+    "mode": "NEW_AND_MODIFIED_CODE",
+    "disableAllowed": false,
+    "turnOffRuleUntilEpoch": 1771931925,
+    "turnOffRuleWhileOnBranch": null
+  },
+  "no-js-files": {
+    "mode": "NEW_AND_MODIFIED_FILES",
+    "allowedPaths": [],
+    "turnOffRuleUntilEpoch": 0,
+    "turnOffRuleWhileOnBranch": null
+  },
+  "validate-ts-in-src": {
+    "mode": "NEW_AND_MODIFIED_FILES",
+    "turnOffRuleUntilEpoch": 1771931925,
+    "allowedRootFiles": [
+      "jest.setup.ts"
+    ],
+    "excludePaths": [
+      "node_modules",
+      "dist",
+      ".nx",
+      ".git",
+      "scripts/**",
+      "**/*.d.ts",
+      "**/jest.config.ts",
+      "**/codegen.ts"
+    ],
+    "turnOffRuleWhileOnBranch": null
+  }
+}

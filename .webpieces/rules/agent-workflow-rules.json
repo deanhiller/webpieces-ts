@@ -1,0 +1,24 @@
+{
+  "branch-creation-guard": {
+    "mode": "ON_NO_SUBBRANCHES",
+    "subBranchNaming": "feature/<ticket>/<short-description>",
+    "autoReapMergedBranches": true,
+    "maxLocalBranches": 5,
+    "maxWorktrees": 10,
+    "turnOffRuleUntilEpoch": 0,
+    "turnOffRuleWhileOnBranch": null
+  },
+  "pr-lifecycle-guard": {
+    "mode": "ON",
+    "turnOffRuleUntilEpoch": 0,
+    "turnOffRuleWhileOnBranch": null
+  },
+  "branch-state-guard": {
+    "mode": "ON",
+    "branchNamingConvention": "{whoami}/{featurename}",
+    "hangTimeoutMinutes": 5,
+    "maxCommitsBehind": 5,
+    "turnOffRuleUntilEpoch": 0,
+    "turnOffRuleWhileOnBranch": null
+  }
+}
