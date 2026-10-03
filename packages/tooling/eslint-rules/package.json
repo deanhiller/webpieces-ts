@@ -8,7 +8,8 @@
         ".": "./src/index.js",
         "./recommended": "./recommended.mjs",
         "./package.json": "./package.json",
-        "./rule-pack": "./src/rule-pack.js"
+        "./rule-pack": "./src/rule-pack.js",
+        "./rule-runtime": "./src/rule-runtime.js"
     },
     "files": [
         "src/**/*",
@@ -24,7 +25,8 @@
     },
     "dependencies": {
         "@webpieces/rules-config": "workspace:*",
-        "@webpieces/rules-sdk": "workspace:*"
+        "@webpieces/rules-sdk": "workspace:*",
+        "@webpieces/tooling-common": "workspace:*"
     },
     "peerDependencies": {
         "eslint": ">=8.0.0"

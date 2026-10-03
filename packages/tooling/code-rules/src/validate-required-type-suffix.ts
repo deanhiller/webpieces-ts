@@ -1,3 +1,4 @@
+import { FirstPathMatch, PathMatchCandidate } from '@webpieces/rules-config';
 /**
  * `required-type-suffix` (#1037) — a type's name says which layer it belongs to.
  *
@@ -23,8 +24,11 @@
  * or a renamed one — so legacy names are grandfathered and a repo with hundreds of them can convert slowly.
  */
 
-import { DiffScope, matchesAnyGlob } from "@webpieces/rules-config";
-import { RequiredTypeSuffixConfig, RequiredTypeSuffixEntry } from "./configs/required-type-suffix-config";
+import { DiffScope, matchesAnyGlob } from '@webpieces/rules-config';
+import {
+    RequiredTypeSuffixConfig,
+    RequiredTypeSuffixEntry,
+} from './configs/required-type-suffix-config';
 import { injectable, bindingScopeValues } from 'inversify';
 import * as ts from 'typescript';
 import { ApiLibFile, ApiLibSite, ApiLibSourceRule } from './api-lib-source-rule';
@@ -45,17 +49,25 @@ export class GoverningGlob {
  * one; listed below, it never applies to the files the broader entry already covers.
  */
 export class SuffixEntryPicker {
-    entryFor(relFile: string, entries: readonly RequiredTypeSuffixEntry[]): RequiredTypeSuffixEntry | undefined {
+    entryFor(
+        relFile: string,
+        entries: readonly RequiredTypeSuffixEntry[],
+    ): RequiredTypeSuffixEntry | undefined {
         return this.winner(relFile, entries)?.entry;
     }
 
     /** The first matching entry (and its matching glob) for `relFile`, or undefined when no entry covers it. */
-    winner(relFile: string, entries: readonly RequiredTypeSuffixEntry[]): GoverningGlob | undefined {
-        for (const entry of entries) {
-            const glob = entry.paths.find((g: string) => matchesAnyGlob(relFile, [g]));
-            if (glob !== undefined) return new GoverningGlob(entry, glob);
-        }
-        return undefined;
+    winner(
+        relFile: string,
+        entries: readonly RequiredTypeSuffixEntry[],
+    ): GoverningGlob | undefined {
+        const match = new FirstPathMatch().winner(
+            relFile,
+            entries.map(
+                (entry: RequiredTypeSuffixEntry) => new PathMatchCandidate(entry.paths, entry),
+            ),
+        );
+        return match === undefined ? undefined : new GoverningGlob(match.entry, match.glob);
     }
 }
 
@@ -66,8 +78,25 @@ export class SuffixRename {
      * `TopNamePlaceDto`, not `TopNamePlaceInputDto`). Longest first, so `Object` wins over `Obj`.
      */
     private static readonly LAYERLESS_TAILS: readonly string[] = [
-        'Interface', 'Payload', 'Options', 'Object', 'Params', 'Output', 'Option', 'Record', 'Input', 'Model',
-        'Entry', 'Shape', 'Data', 'Info', 'Item', 'Type', 'Body', 'Row', 'Obj',
+        'Interface',
+        'Payload',
+        'Options',
+        'Object',
+        'Params',
+        'Output',
+        'Option',
+        'Record',
+        'Input',
+        'Model',
+        'Entry',
+        'Shape',
+        'Data',
+        'Info',
+        'Item',
+        'Type',
+        'Body',
+        'Row',
+        'Obj',
     ];
 
     /** Candidate names, one per allowed suffix, in the configured order. */
@@ -78,11 +107,15 @@ export class SuffixRename {
 
     private stem(name: string, suffixes: readonly string[]): string {
         // `FooDTO` → `Foo`: the suffix is there, in the wrong case.
-        const wrongCase = suffixes.find((s: string) => name.length > s.length && name.toLowerCase().endsWith(s.toLowerCase()));
+        const wrongCase = suffixes.find(
+            (s: string) => name.length > s.length && name.toLowerCase().endsWith(s.toLowerCase()),
+        );
         if (wrongCase !== undefined) return name.slice(0, name.length - wrongCase.length);
         // `Dto` alone → `<Name>Dto`: there is no stem to keep.
         if (suffixes.includes(name)) return '<Name>';
-        const tail = SuffixRename.LAYERLESS_TAILS.find((t: string) => name.length > t.length && name.endsWith(t));
+        const tail = SuffixRename.LAYERLESS_TAILS.find(
+            (t: string) => name.length > t.length && name.endsWith(t),
+        );
         return tail === undefined ? name : name.slice(0, name.length - tail.length);
     }
 }
@@ -98,7 +131,14 @@ export class ExportedTypeScanner {
             const declared = this.typeDeclaration(statement);
             if (declared === undefined) continue;
             if (this.isExported(declared)) {
-                const site = this.judge(file, declared, declared.name, declared.name?.getText(file.source) ?? '', entry, glob);
+                const site = this.judge(
+                    file,
+                    declared,
+                    declared.name,
+                    declared.name?.getText(file.source) ?? '',
+                    entry,
+                    glob,
+                );
                 if (site !== undefined) sites.push(site);
             } else if (declared.name !== undefined) {
                 locals.set(declared.name.getText(file.source), declared);
@@ -117,12 +157,23 @@ export class ExportedTypeScanner {
     ): ApiLibSite[] {
         const sites: ApiLibSite[] = [];
         for (const statement of file.source.statements) {
-            if (!ts.isExportDeclaration(statement) || statement.moduleSpecifier !== undefined) continue;
-            if (statement.exportClause === undefined || !ts.isNamedExports(statement.exportClause)) continue;
+            if (!ts.isExportDeclaration(statement) || statement.moduleSpecifier !== undefined)
+                continue;
+            if (statement.exportClause === undefined || !ts.isNamedExports(statement.exportClause))
+                continue;
             for (const element of statement.exportClause.elements) {
-                const local = locals.get((element.propertyName ?? element.name).getText(file.source));
+                const local = locals.get(
+                    (element.propertyName ?? element.name).getText(file.source),
+                );
                 if (local === undefined) continue;
-                const site = this.judge(file, local, element.name, element.name.getText(file.source), entry, glob);
+                const site = this.judge(
+                    file,
+                    local,
+                    element.name,
+                    element.name.getText(file.source),
+                    entry,
+                    glob,
+                );
                 if (site !== undefined) sites.push(site);
             }
         }
@@ -130,15 +181,19 @@ export class ExportedTypeScanner {
     }
 
     private typeDeclaration(statement: ts.Statement): ts.DeclarationStatement | undefined {
-        if (ts.isInterfaceDeclaration(statement) || ts.isTypeAliasDeclaration(statement) ||
-            ts.isEnumDeclaration(statement) || ts.isClassDeclaration(statement)) {
+        if (
+            ts.isInterfaceDeclaration(statement) ||
+            ts.isTypeAliasDeclaration(statement) ||
+            ts.isEnumDeclaration(statement) ||
+            ts.isClassDeclaration(statement)
+        ) {
             return statement;
         }
         return undefined;
     }
 
     private isExported(statement: ts.DeclarationStatement): boolean {
-        const modifiers = ts.canHaveModifiers(statement) ? ts.getModifiers(statement) ?? [] : [];
+        const modifiers = ts.canHaveModifiers(statement) ? (ts.getModifiers(statement) ?? []) : [];
         return modifiers.some((m: ts.ModifierLike) => m.kind === ts.SyntaxKind.ExportKeyword);
     }
 
@@ -152,16 +207,29 @@ export class ExportedTypeScanner {
     ): ApiLibSite | undefined {
         // `export default class { … }` has no name to judge.
         if (at === undefined || name === '') return undefined;
-        if (entry.suffixes.some((suffix: string) => name.length > suffix.length && name.endsWith(suffix))) return undefined;
+        if (
+            entry.suffixes.some(
+                (suffix: string) => name.length > suffix.length && name.endsWith(suffix),
+            )
+        )
+            return undefined;
         const kind = this.kindOf(declared);
         const allowed = entry.suffixes.join(' | ');
         const line = file.lineOf(at);
-        const snippet = (file.source.text.split('\n')[line - 1] ?? name).replace(/\s+/g, ' ').trim();
+        const snippet = (file.source.text.split('\n')[line - 1] ?? name)
+            .replace(/\s+/g, ' ')
+            .trim();
         const what = `exported ${kind} \`${name}\` does not end in a suffix allowed under ${glob} (${allowed})`;
         const candidates = this.rename.candidates(name, entry.suffixes);
-        const others = candidates.slice(1).map((c: string) => `\`${c}\``).join(' / ');
-        const cure = `rename ${kind} \`${name}\` → \`${candidates[0]}\`` +
-            (others === '' ? '' : ` (or ${others} — pick the suffix that names its layer, e.g. …Request for an endpoint body)`) +
+        const others = candidates
+            .slice(1)
+            .map((c: string) => `\`${c}\``)
+            .join(' / ');
+        const cure =
+            `rename ${kind} \`${name}\` → \`${candidates[0]}\`` +
+            (others === ''
+                ? ''
+                : ` (or ${others} — pick the suffix that names its layer, e.g. …Request for an endpoint body)`) +
             ` and update every reference. Allowed suffixes under ${glob}: ${allowed} — the suffix tells a reader ` +
             `which layer the type belongs to.`;
         return new ApiLibSite(line, snippet, what, cure);
@@ -186,7 +254,7 @@ export class RequiredTypeSuffixValidator extends ApiLibSourceRule<RequiredTypeSu
         diffScope: DiffScope,
         scanScope: ScanScope,
     ) {
-        super(config, "required-type-suffix", roleResolver, diffScope, scanScope);
+        super(config, 'required-type-suffix', roleResolver, diffScope, scanScope);
     }
 
     protected sitesIn(file: ApiLibFile): ApiLibSite[] {
@@ -206,8 +274,10 @@ export class RequiredTypeSuffixValidator extends ApiLibSourceRule<RequiredTypeSu
     }
 
     protected why(): string {
-        return 'every exported interface / class / enum / type there must end in one of its path\'s allowed suffixes — ' +
+        return (
+            "every exported interface / class / enum / type there must end in one of its path's allowed suffixes — " +
             'the suffix tells a reader which layer a type belongs to (a …Dto is on the wire, a …Fs is a Firestore ' +
-            'document), where an unsuffixed name reads the same as a server-internal or vendor type.';
+            'document), where an unsuffixed name reads the same as a server-internal or vendor type.'
+        );
     }
 }

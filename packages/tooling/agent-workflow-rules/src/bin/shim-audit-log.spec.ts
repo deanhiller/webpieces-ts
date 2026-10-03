@@ -284,7 +284,7 @@ describe('L0 audit log — the fault field matches guards/L0-tooling.md', () => 
     it('logs an allowed Read and an allowed config edit while the guards are down', () => {
         const root = kit.stageDeclaredRoot();
         kit.runShim(root, 'wp-ai-guards-hook', kit.readPayload('/x/README.md'));
-        kit.runShim(root, 'wp-ai-guards-hook', kit.filePayload('Edit', '/x/webpieces.config.json'));
+        kit.runShim(root, 'wp-ai-guards-hook', kit.filePayload('Edit', path.join(root, 'webpieces.config.json')));
         const log = logOf(root);
         expect(log).toContain('\tfault=X\tALLOW-READ\t');
         expect(log).toContain('\tfault=X\tALLOW-CONFIG\t');

@@ -1,5 +1,5 @@
-import { SourceContributionConfig } from "../source-contribution-config";
-import { isPathExcluded, Option } from "@webpieces/rules-config";
+import { SourceContributionConfig } from '../source-contribution-config';
+import { isPathExcluded, Option } from '@webpieces/rules-config';
 
 import type { EditContext, Violation } from '@webpieces/hook-runtime';
 import { Violation as V } from '@webpieces/hook-runtime';
@@ -9,9 +9,12 @@ import { FixHint, DisableEscape } from '@webpieces/hook-runtime';
 const VARIABLE_DESTRUCTURE = /\b(?:const|let|var)\s*\{/;
 
 export class NoDestructureRule extends EditRuleBase<SourceContributionConfig> {
-    constructor(config: SourceContributionConfig) { super(config, 'no-destructure', 'no-destructure'); }
+    constructor(config: SourceContributionConfig) {
+        super(config, 'no-destructure', 'no-destructure');
+    }
 
-    readonly description = 'Disallow destructuring patterns. Assign the whole result and pass it around or access properties explicitly.';
+    readonly description =
+        'Disallow destructuring patterns. Assign the whole result and pass it around or access properties explicitly.';
     override readonly files = ['**/*.ts', '**/*.tsx'];
     override readonly defaultOptions = { allowTopLevel: true, allowedPaths: [] };
     get fixHint(): FixHint {
@@ -19,10 +22,18 @@ export class NoDestructureRule extends EditRuleBase<SourceContributionConfig> {
             'Destructuring pattern on a call result.',
             'Pick one:',
             [
-                new Option('Assign the whole result instead: const obj = methodCall(); then pass obj around or use obj.x.', true),
-                new Option('If this whole tree is destructuring by construction (a React/React Native component or hook tree), add a glob to no-destructure.allowedPaths in webpieces.config.json'),
+                new Option(
+                    'Assign the whole result instead: const obj = methodCall(); then pass obj around or use obj.x.',
+                    true,
+                ),
+                new Option(
+                    'If this whole tree is destructuring by construction (a React/React Native component or hook tree), add a glob to no-destructure.allowedPaths in {configFile}',
+                ),
             ],
-            new DisableEscape(this.config.disableAllowed ?? true, '// webpieces-disable no-destructure -- <reason>'),
+            new DisableEscape(
+                this.config.disableAllowed ?? true,
+                '// webpieces-disable no-destructure -- <reason>',
+            ),
         );
     }
 
@@ -36,7 +47,7 @@ export class NoDestructureRule extends EditRuleBase<SourceContributionConfig> {
             const stripped = ctx.strippedLines[i];
             if (!VARIABLE_DESTRUCTURE.test(stripped)) continue;
             const lineNum = i + 1;
-            if (disableAllowed && ctx.isLineDisabled(lineNum, "no-destructure")) continue;
+            if (disableAllowed && ctx.isLineDisabled(lineNum, 'no-destructure')) continue;
             violations.push(new V(lineNum, ctx.lines[i].trim()));
         }
         return violations;

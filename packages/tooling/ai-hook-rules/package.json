@@ -8,7 +8,8 @@
         ".": "./src/index.js",
         "./package.json": "./package.json",
         "./claude-code-rules": "./src/adapters/rules-hook.js",
-        "./rule-pack": "./src/rule-pack.js"
+        "./rule-pack": "./src/rule-pack.js",
+        "./rule-runtime": "./src/rule-runtime.js"
     },
     "files": [
         "src/**/*",

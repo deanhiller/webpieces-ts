@@ -31,7 +31,10 @@
         "directory": "packages/tooling/rules-config"
     },
     "publishConfig": {
-        "access": "public"
+        "access": "public",
+        "bin": {
+            "wp-rules-sync": "./src/rules-sync-cli.js"
+        }
     },
     "devDependencies": {
         "@webpieces/tooling-testkit": "workspace:*"

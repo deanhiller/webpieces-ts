@@ -585,6 +585,14 @@
                     "level": 2
                 },
                 {
+                    "id": "PackPolicyFiles",
+                    "className": "PackPolicyFiles",
+                    "kind": "class",
+                    "scope": "singleton",
+                    "file": "packages/tooling/rules-config/src/pack-policy-files.ts",
+                    "level": 3
+                },
+                {
                     "id": "PrCommentUpserter",
                     "className": "PrCommentUpserter",
                     "kind": "class",
@@ -922,6 +930,15 @@
                     "tokenKey": "class:packages/tooling/rules-config/src/config-file.ts#ConfigFile",
                     "paramName": "configFile",
                     "paramType": "ConfigFile"
+                },
+                {
+                    "from": "ActiveHatchReport",
+                    "to": "PackPolicyFiles",
+                    "injection": "type",
+                    "token": "PackPolicyFiles",
+                    "tokenKey": "class:packages/tooling/rules-config/src/pack-policy-files.ts#PackPolicyFiles",
+                    "paramName": "files",
+                    "paramType": "PackPolicyFiles"
                 },
                 {
                     "from": "AiBranchName",

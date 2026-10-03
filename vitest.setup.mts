@@ -1,5 +1,6 @@
 import { afterAll, expect, vi } from 'vitest';
 import { specTempDirs } from './packages/tooling/tooling-testkit/src/spec-temp-dirs';
+import { policyFixture } from './packages/tooling/tooling-testkit/src/policy-fixture';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
@@ -78,6 +79,37 @@ const TOOLING_PATH = '/packages/tooling/';
 // a path-scoped budget possible at all. Absent (older vitest, odd runner) ⇒ leave the global in force
 // rather than guess, so a missing value can never silently widen the timeout for the whole repo.
 const testPath = expect.getState().testPath ?? '';
+
+// Load real config services only for fixtures that exercise strict owner loading. Other suites
+// mock filesystem/Git transports and must be able to install those mocks before product imports.
+if (['/rules-config/', '/ai-hook-rules/', '/agent-workflow-rules/', '/nx-webpieces-rules/', '/code-rules/src/rule-addition.spec.ts', '/code-rules/src/whole-scope-modes.spec.ts', '/pr-gate/src/scripts/commands/land-pr-command.spec.ts', '/pr-gate/src/scripts/workflow/build-affected.spec.ts'].some((scope) => testPath.includes(scope))) {
+    const { PackPolicyFiles } = await import('./packages/tooling/rules-config/src/pack-policy-files');
+    const { RulePackArtifacts } = await import('./packages/tooling/rules-config/src/rule-pack-artifacts');
+    const { ConfigFile } = await import('./packages/tooling/rules-config/src/config-file');
+    const { AtomicFile } = await import('./packages/tooling/tooling-common/src/atomic-file');
+    const { InformAiError } = await import('./packages/tooling/tooling-common/src/inform-ai-error');
+    const { toError } = await import('./packages/tooling/tooling-common/src/to-error');
+class RealFixtureArtifacts {
+    write(root) {
+        const files = new PackPolicyFiles(),
+            raw = new ConfigFile().readRawConfig(path.join(root, 'webpieces.config.json'));
+        // eslint-disable-next-line @webpieces/no-unmanaged-exceptions -- invalid fixtures intentionally exercise loader failures and must not acquire valid artifacts
+        try {
+            const resolved = files.resolve(
+                root,
+                files.select(root, files.declarations(raw.rulePacks, root)),
+            );
+            new RulePackArtifacts(new AtomicFile()).write(root, resolved);
+        } catch (err) {
+            const error = toError(err);
+            if (!(error instanceof InformAiError)) throw error;
+        }
+    }
+}
+
+policyFixture.registerArtifactWriter(new RealFixtureArtifacts());
+
+}
 
 if (testPath.includes(TOOLING_PATH)) {
     vi.setConfig({ testTimeout: TOOLING_TIMEOUT_MS, hookTimeout: TOOLING_TIMEOUT_MS });

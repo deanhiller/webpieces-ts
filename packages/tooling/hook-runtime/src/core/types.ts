@@ -1,7 +1,13 @@
 // ResolvedConfig / ResolvedRuleConfig / RuleOptions now live in @webpieces/rules-config
 // so ai-hooks and the Nx validate-code executor share one loader and one config file.
 import { RuleOptions } from '@webpieces/rules-config';
-import { HookMode, NormalizedBashInput, NormalizedEdit, NormalizedToolInput, ToolKind } from '../protocol';
+import {
+    HookMode,
+    NormalizedBashInput,
+    NormalizedEdit,
+    NormalizedToolInput,
+    ToolKind,
+} from '../protocol';
 import { FixHint } from './fix-hint';
 import { L0_FAULT_NONE } from '@webpieces/rules-config';
 
@@ -131,7 +137,12 @@ export class BashContext {
     readonly governedRoot: string;
     options: RuleOptions;
 
-    constructor(command: string, workspaceRoot: string, effectiveCwd?: string, governedRoot?: string) {
+    constructor(
+        command: string,
+        workspaceRoot: string,
+        effectiveCwd?: string,
+        governedRoot?: string,
+    ) {
         this.tool = 'Bash';
         this.command = command;
         this.commandCode = this.stripProse(command);
@@ -158,11 +169,14 @@ export class BashContext {
      */
     private stripProse(command: string): string {
         const withoutHeredocs = command.replace(HEREDOC_BODY, ' ');
-        return withoutHeredocs.replace(QUOTED_SPAN, (match: string, single?: string, double?: string): string => {
-            const content = single ?? double ?? '';
-            if (/\s/.test(content)) return ' ';
-            return SHELL_METACHARACTER.test(content) ? ' ' : content;
-        });
+        return withoutHeredocs.replace(
+            QUOTED_SPAN,
+            (match: string, single?: string, double?: string): string => {
+                const content = single ?? double ?? '';
+                if (/\s/.test(content)) return ' ';
+                return SHELL_METACHARACTER.test(content) ? ' ' : content;
+            },
+        );
     }
 }
 
@@ -208,7 +222,7 @@ export class FileContext {
 }
 
 /**
- * The shape of a custom rule loaded from a `rulesDir` (a plain object returned by require()).
+ * The shape of a client hook policy returned by its declared runtime factory.
  * It carries only metadata + a `check` method — no on/off logic of its own.
  */
 export interface PlainRule {
@@ -267,7 +281,7 @@ export class BlockedResult {
      * an ordinary rule block.
      *
      * It rides on the result rather than being re-derived from the report text because the block is
-     * decided deep in the runner (fault C in configMissingBlock, fault Y in checkConfigSync) and
+     * decided deep in the runner (fault C in configMissingBlock, fault Y during owner-config validation) and
      * STAMPED by the adapter at the terminal boundary, several frames up. Scraping the report for a
      * fault would be a second answer to a question the producer already knows.
      */

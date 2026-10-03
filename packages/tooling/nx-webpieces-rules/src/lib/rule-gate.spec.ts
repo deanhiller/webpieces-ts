@@ -5,7 +5,12 @@ import { specTempDirs } from '@webpieces/tooling-testkit';
 import { describe, it, expect } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
-import { allRuleNames, sectionForRule, seedEntryForRule, CONFIG_FILENAME } from '@webpieces/rules-config';
+import {
+    allRuleNames,
+    sectionForRule,
+    seedEntryForRule,
+    CONFIG_FILENAME,
+} from '@webpieces/rules-config';
 import { RuleGate } from './rule-gate';
 
 // A webpieces.config.json that VALIDATES: every built-in present in its correct section (all OFF),
@@ -18,21 +23,33 @@ function writeConfig(overrides: Record<string, Record<string, unknown>> = {}): s
     for (const name of allRuleNames(fixtureRuleRegistry)) {
         // webpieces-disable no-any-unknown -- one rule's opaque option bag
         const entry: Record<string, unknown> = {
-            ...seedEntryForRule(name, fixtureRuleRegistry), mode: 'OFF', turnOffRuleUntilEpoch: 0, turnOffRuleWhileOnBranch: null,
+            ...seedEntryForRule(name, fixtureRuleRegistry),
+            mode: 'OFF',
+            turnOffRuleUntilEpoch: 0,
+            turnOffRuleWhileOnBranch: null,
         };
-        const target = sectionForRule(name, fixtureRuleRegistry) === 'hookGuards' ? hookGuards : rules;
+        const target =
+            sectionForRule(name, fixtureRuleRegistry) === 'hookGuards' ? hookGuards : rules;
         // Overrides are merged OVER the base entry so a test that only tweaks mode/epoch still carries the
         // required turnOffRuleWhileOnBranch (and autoReapMergedBranches) from the base.
         target[name] = overrides[name] ? { ...entry, ...overrides[name] } : entry;
     }
     const dir = policyFixture.makeRepo('wp-rule-gate-');
-    fs.writeFileSync(path.join(dir, CONFIG_FILENAME), JSON.stringify({
+    policyFixture.writeOwnerConfig(dir, {
         rules,
         hookGuards,
-        commands: { 'pr-gate': { mode: 'ON', buildCommand: 'echo ci', mergeMode: 'AUTO', reviewerAgents: 1, maxReviewerRounds: 2 } },
+        commands: {
+            'pr-gate': {
+                mode: 'ON',
+                buildCommand: 'echo ci',
+                mergeMode: 'AUTO',
+                reviewerAgents: 1,
+                maxReviewerRounds: 2,
+            },
+        },
         excludePaths: [],
         'match-rules': [],
-    }));
+    });
     return dir;
 }
 
@@ -42,7 +59,7 @@ function writeConfig(overrides: Record<string, Record<string, unknown>> = {}): s
 const FUTURE_EPOCH = Math.floor(Date.now() / 1000) + 60 * 60 * 24 * 3;
 
 describe('RuleGate', () => {
-    it('runs the rule when it is RUN_EVERY_TIME (the shipped default)', () => {
+    it('runs an explicitly configured RUN_EVERY_TIME policy', () => {
         const dir = writeConfig({
             'validate-packagejson': { mode: 'RUN_EVERY_TIME', turnOffRuleUntilEpoch: 0 },
         });
@@ -57,7 +74,10 @@ describe('RuleGate', () => {
 
     it('honors turnOffRuleUntilEpoch for a baseline rule (honorEpoch = true)', () => {
         const dir = writeConfig({
-            'validate-architecture-unchanged': { mode: 'RUN_EVERY_TIME', turnOffRuleUntilEpoch: FUTURE_EPOCH },
+            'validate-architecture-unchanged': {
+                mode: 'RUN_EVERY_TIME',
+                turnOffRuleUntilEpoch: FUTURE_EPOCH,
+            },
         });
         const reason = new RuleGate().skipReason(dir, 'validate-architecture-unchanged', true);
         expect(reason).toContain('turnOffRuleUntilEpoch');
@@ -65,7 +85,10 @@ describe('RuleGate', () => {
 
     it('IGNORES the time-box hatch when the caller opts out with honorEpoch = false', () => {
         const dir = writeConfig({
-            'validate-versions-locked': { mode: 'RUN_EVERY_TIME', turnOffRuleUntilEpoch: FUTURE_EPOCH },
+            'validate-versions-locked': {
+                mode: 'RUN_EVERY_TIME',
+                turnOffRuleUntilEpoch: FUTURE_EPOCH,
+            },
         });
         expect(new RuleGate().skipReason(dir, 'validate-versions-locked', false)).toBeNull();
     });
@@ -92,10 +115,12 @@ describe('RuleGate', () => {
         expect(new RuleGate().skipReason(dir, 'validate-no-architecture-cycles', true)).toBeNull();
     });
 
-    it('runs when the rule key is absent entirely (fail-safe: behavior unchanged for older configs)', () => {
+    it('rejects an absent policy instead of enabling it implicitly', () => {
         // No webpieces.config.json anywhere under this tmp dir chain would still walk UP to a real
         // repo config, so instead ask for a rule name that no config or default declares.
         const dir = writeConfig();
-        expect(new RuleGate().skipReason(dir, 'some-rule-nobody-configured', true)).toBeNull();
+        expect(() => new RuleGate().skipReason(dir, 'some-rule-nobody-configured', true)).toThrow(
+            'not explicitly configured',
+        );
     });
 });

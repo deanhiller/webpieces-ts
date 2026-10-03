@@ -1,10 +1,21 @@
+import { PolicyFieldConstraints } from './policy-field-constraints';
 import { injectable, bindingScopeValues } from 'inversify';
 import { createRequire } from 'node:module';
 import { InformAiError } from '@webpieces/tooling-common';
 import * as path from 'node:path';
+import { ClientModuleResolution } from './client-module-resolution';
 import {
-    FieldDef, RulePackManifest, RulePackDeclaration, OwnedRuleDefinition,
-    RULE_PACK_API_VERSION, RULE_SCHEMA_API_VERSION, ConfigObject, RetiredConfigKey, SafeguardDefinition, RuleConfigSection,
+    FieldDef,
+    RulePackManifest,
+    RulePackDeclaration,
+    OwnedRuleDefinition,
+    RULE_PACK_API_VERSION,
+    RULE_SCHEMA_API_VERSION,
+    ConfigObject,
+    RetiredConfigKey,
+    SafeguardDefinition,
+    RuleConfigSection,
+    ConfigValue,
 } from '@webpieces/rules-sdk';
 
 /** Loading is the only impure boundary; callers may supply an alternative module transport. */
@@ -14,17 +25,21 @@ export abstract class RulePackModuleLoader {
 
 export class NodeRulePackModuleLoader extends RulePackModuleLoader {
     private readonly requireModule: NodeRequire;
+    private readonly resolution: ClientModuleResolution;
 
     constructor(clientRoot: string) {
         super();
         this.requireModule = createRequire(path.join(clientRoot, 'package.json'));
+        this.resolution = new ClientModuleResolution(clientRoot);
     }
 
     override load(moduleName: string): RulePackManifest {
         // webpieces-disable no-any-unknown -- external module boundary; registry validates its exported data before use
-        const exports: unknown = this.requireModule(moduleName);
+        const exports: unknown = this.requireModule(this.resolution.resolve(moduleName));
         if (typeof exports !== 'object' || exports === null || !('rulePackManifest' in exports)) {
-            throw new InformAiError(`Rule pack ${moduleName} must export rulePackManifest. Add the public manifest export.`);
+            throw new InformAiError(
+                `Rule pack ${moduleName} must export rulePackManifest. Add the public manifest export.`,
+            );
         }
         return exports.rulePackManifest as RulePackManifest;
     }
@@ -32,53 +47,95 @@ export class NodeRulePackModuleLoader extends RulePackModuleLoader {
 
 /** A registry depends only on declarations and the SDK, never on concrete execution packages. */
 export class RulePackRegistry {
+    private readonly modules = new Map<string, string>();
     private readonly owners = new Map<string, string>();
     private readonly definitions = new Map<string, OwnedRuleDefinition>();
     private readonly safeguards = new Map<string, SafeguardDefinition>();
 
     constructor(readonly manifests: readonly RulePackManifest[]) {
+        for (const manifest of manifests) this.validateManifestHeader(manifest);
         const packs = new Set<string>();
         for (const manifest of manifests) {
             this.validateManifest(manifest);
-            if (packs.has(manifest.packageName)) throw new InformAiError(`Duplicate pack ${manifest.packageName}. Declare it once.`);
+            if (packs.has(manifest.packageName))
+                throw new InformAiError(`Duplicate pack ${manifest.packageName}. Declare it once.`);
             packs.add(manifest.packageName);
             for (const definition of manifest.ownedRules) {
-                if (this.owners.has(definition.id)) throw new InformAiError(`Rule ${definition.id} has multiple owners. Keep exactly one owner.`);
+                if (this.owners.has(definition.id))
+                    throw new InformAiError(
+                        `Rule ${definition.id} has multiple owners. Keep exactly one owner.`,
+                    );
                 this.owners.set(definition.id, manifest.packageName);
                 this.definitions.set(definition.id, definition);
             }
         }
         for (const manifest of manifests) {
             for (const safeguard of manifest.safeguards) {
-                if (!safeguard || typeof safeguard.id !== 'string' || !safeguard.id ||
+                if (
+                    !safeguard ||
+                    typeof safeguard.id !== 'string' ||
+                    !safeguard.id ||
                     !['fixed', 'experimental'].includes(safeguard.activation) ||
-                    typeof safeguard.description !== 'string' || !safeguard.description) {
-                    throw new InformAiError('Invalid safeguard catalog. Supply id, activation, and description.');
+                    typeof safeguard.description !== 'string' ||
+                    !safeguard.description
+                ) {
+                    throw new InformAiError(
+                        'Invalid safeguard catalog. Supply id, activation, and description.',
+                    );
                 }
                 if (this.owners.has(safeguard.id) || this.safeguards.has(safeguard.id)) {
-                    throw new InformAiError(`Safeguard ${safeguard.id} cannot be configured or owned twice. Keep it outside configurable policies.`);
+                    throw new InformAiError(
+                        `Safeguard ${safeguard.id} cannot be configured or owned twice. Keep it outside configurable policies.`,
+                    );
                 }
                 this.safeguards.set(safeguard.id, safeguard);
             }
         }
         const executions = new Set<string>();
-        for (const manifest of manifests) {
+        for (const manifest of manifests) this.registerContributions(manifest, executions);
+    }
+
+    private registerContributions(manifest: RulePackManifest, executions: Set<string>): void {
             for (const contribution of manifest.contributions) {
-                if (!contribution || typeof contribution.ruleId !== 'string' || typeof contribution.ownerPack !== 'string') {
-                    throw new InformAiError(`Invalid contribution in ${manifest.packageName}. Supply ruleId and ownerPack.`);
+                if (
+                    !contribution ||
+                    typeof contribution.ruleId !== 'string' ||
+                    typeof contribution.ownerPack !== 'string'
+                ) {
+                    throw new InformAiError(
+                        `Invalid contribution in ${manifest.packageName}. Supply ruleId and ownerPack.`,
+                    );
+                }
+                if (
+                    typeof contribution.implementationModule !== 'string' ||
+                    !contribution.implementationModule.trim()
+                ) {
+                    throw new InformAiError(
+                        `Missing implementation module for ${contribution.ruleId} in ${manifest.packageName}. Declare its public runtime module.`,
+                    );
                 }
                 const owner = this.owners.get(contribution.ruleId);
                 if (!owner || owner !== contribution.ownerPack) {
-                    throw new InformAiError(`Unknown owner ${contribution.ownerPack} for ${contribution.ruleId}. Declare the owning pack and use its exact name.`);
+                    throw new InformAiError(
+                        `Unknown owner ${contribution.ownerPack} for ${contribution.ruleId}. Declare the owning pack and use its exact name.`,
+                    );
                 }
-                if (!['build', 'source-hook', 'workflow-guard', 'lint'].includes(contribution.executionKind)) {
-                    throw new InformAiError(`Invalid execution kind for ${contribution.ruleId}. Use build, source-hook, workflow-guard, or lint.`);
+                if (
+                    !['build', 'source-hook', 'workflow-guard', 'lint'].includes(
+                        contribution.executionKind,
+                    )
+                ) {
+                    throw new InformAiError(
+                        `Invalid execution kind for ${contribution.ruleId}. Use build, source-hook, workflow-guard, or lint.`,
+                    );
                 }
                 const execution = `${contribution.ruleId}:${contribution.executionKind}`;
-                if (executions.has(execution)) throw new InformAiError(`Duplicate execution-kind contribution ${execution}. Keep one implementation per execution kind.`);
+                if (executions.has(execution))
+                    throw new InformAiError(
+                        `Duplicate execution-kind contribution ${execution}. Keep one implementation per execution kind.`,
+                    );
                 executions.add(execution);
             }
-        }
     }
 
     ownerOf(ruleId: string): string {
@@ -92,23 +149,56 @@ export class RulePackRegistry {
         return this.definitions.get(ruleId)!.schema;
     }
 
+    /** The transport records the exact client declaration, including local manifest modules. */
+    recordModuleLocation(packName: string, moduleName: string): void {
+        if (
+            !this.manifests.some(
+                (manifest: RulePackManifest) => manifest.packageName === packName,
+            ) ||
+            this.modules.has(packName)
+        ) {
+            throw new InformAiError(
+                `Invalid or duplicate module location for ${packName}. Declare each selected pack once.`,
+            );
+        }
+        this.modules.set(packName, moduleName);
+    }
+
+    get manifestModules(): ReadonlyMap<string, string> {
+        return this.modules;
+    }
+
     ruleIds(): readonly string[] {
         return [...this.definitions.keys()];
     }
 
-    hasRule(ruleId: string): boolean { return this.definitions.has(ruleId); }
+    hasRule(ruleId: string): boolean {
+        return this.definitions.has(ruleId);
+    }
 
-    isSafeguard(ruleId: string): boolean { return this.safeguards.has(ruleId); }
+    isSafeguard(ruleId: string): boolean {
+        return this.safeguards.has(ruleId);
+    }
 
-    sectionFor(ruleId: string): RuleConfigSection { return this.definitionFor(ruleId).section; }
+    sectionFor(ruleId: string): RuleConfigSection {
+        return this.definitionFor(ruleId).section;
+    }
 
-    optionalTuningFor(ruleId: string): ConfigObject { return this.definitionFor(ruleId).optionalTuning; }
+    optionalTuningFor(ruleId: string): ConfigObject {
+        return this.definitionFor(ruleId).optionalTuning;
+    }
 
-    seedFor(ruleId: string): ConfigObject { return structuredClone(this.definitionFor(ruleId).recommendedSeed); }
+    seedFor(ruleId: string): ConfigObject {
+        return structuredClone(this.definitionFor(ruleId).recommendedSeed);
+    }
 
-    migrations(): readonly RetiredConfigKey[] { return this.manifests.flatMap(manifest => [...manifest.migrations]); }
+    migrations(): readonly RetiredConfigKey[] {
+        return this.manifests.flatMap((manifest: RulePackManifest) => [...manifest.migrations]);
+    }
 
-    safeguardCatalog(): readonly SafeguardDefinition[] { return [...this.safeguards.values()]; }
+    safeguardCatalog(): readonly SafeguardDefinition[] {
+        return [...this.safeguards.values()];
+    }
 
     private definitionFor(ruleId: string): OwnedRuleDefinition {
         this.ownerOf(ruleId);
@@ -117,93 +207,233 @@ export class RulePackRegistry {
 
     /** Validates explicit config values with the owner's schema; supplies no rule defaults. */
     validateRuleConfig(ruleId: string, value: ConfigObject): readonly string[] {
-        return this.validateObject(ruleId, this.schemaFor(ruleId), value);
+        const errors = this.validateObject(ruleId, this.schemaFor(ruleId), value);
+        if (value && typeof value['turnOffRuleUntilEpoch'] === 'number') {
+            const epoch = new PolicyFieldConstraints().epochError(
+                `[${ruleId}]`,
+                value['turnOffRuleUntilEpoch'],
+            );
+            if (epoch) errors.push(epoch);
+        }
+        return errors;
+    }
+
+    private validateManifestHeader(manifest: RulePackManifest): void {
+        if (
+            !manifest ||
+            typeof manifest.packageName !== 'string' ||
+            manifest.packageName.length === 0 ||
+            typeof manifest.packageVersion !== 'string' ||
+            manifest.packageVersion.length === 0 ||
+            !Array.isArray(manifest.ownedRules) ||
+            !Array.isArray(manifest.contributions) ||
+            !Array.isArray(manifest.migrations) ||
+            !Array.isArray(manifest.safeguards)
+        ) {
+            throw new InformAiError(
+                'Invalid rule pack manifest. Supply packageName, packageVersion, ownedRules, contributions, migrations, and safeguards.',
+            );
+        }
+        if (manifest.apiVersion !== RULE_PACK_API_VERSION) {
+            throw new InformAiError(
+                `Unsupported manifest API ${manifest.apiVersion} for ${manifest.packageName}. Use API ${RULE_PACK_API_VERSION}.`,
+            );
+        }
+        for (const migration of manifest.migrations) {
+            if (
+                !migration ||
+                !['rule', 'key', 'field'].includes(migration.scope) ||
+                typeof migration.key !== 'string' ||
+                !migration.key ||
+                typeof migration.movedTo !== 'string' ||
+                typeof migration.instruction !== 'string' ||
+                !migration.instruction ||
+                typeof migration.label !== 'string' ||
+                typeof migration.prunable !== 'boolean'
+            ) {
+                throw new InformAiError(
+                    `Invalid migration in ${manifest.packageName}. Supply the retired key and exact edit.`,
+                );
+            }
+        }
     }
 
     private validateManifest(manifest: RulePackManifest): void {
-        if (!manifest || typeof manifest.packageName !== 'string' || manifest.packageName.length === 0 ||
-            typeof manifest.packageVersion !== 'string' || manifest.packageVersion.length === 0 ||
-            !Array.isArray(manifest.ownedRules) || !Array.isArray(manifest.contributions) ||
-            !Array.isArray(manifest.migrations) || !Array.isArray(manifest.safeguards)) {
-            throw new InformAiError('Invalid rule pack manifest. Supply packageName, packageVersion, ownedRules, contributions, migrations, and safeguards.');
-        }
-        if (manifest.apiVersion !== RULE_PACK_API_VERSION) {
-            throw new InformAiError(`Unsupported manifest API ${manifest.apiVersion} for ${manifest.packageName}. Use API ${RULE_PACK_API_VERSION}.`);
-        }
         for (const definition of manifest.ownedRules) {
             if (!definition || typeof definition.id !== 'string' || definition.id.length === 0) {
-                throw new InformAiError(`Invalid owned rule in ${manifest.packageName}. Supply a nonempty id.`);
+                throw new InformAiError(
+                    `Invalid owned rule in ${manifest.packageName}. Supply a nonempty id.`,
+                );
             }
             if (definition.schemaApiVersion !== RULE_SCHEMA_API_VERSION) {
-                throw new InformAiError(`Unsupported schema API for ${definition.id}. Use API ${RULE_SCHEMA_API_VERSION}.`);
+                throw new InformAiError(
+                    `Unsupported schema API for ${definition.id}. Use API ${RULE_SCHEMA_API_VERSION}.`,
+                );
             }
             this.validateSchema(definition.id, definition.schema);
+            if (
+                !definition.help ||
+                typeof definition.help.description !== 'string' ||
+                !definition.help.description.trim() ||
+                typeof definition.help.remediation !== 'string' ||
+                !definition.help.remediation.trim()
+            ) {
+                throw new InformAiError(
+                    `Missing catalog help for ${definition.id}. Its owner must supply description and remediation.`,
+                );
+            }
             this.validateOwnerSettings(definition);
-        }
-        for (const migration of manifest.migrations) {
-            if (!migration || !['rule', 'key', 'field'].includes(migration.scope) ||
-                typeof migration.key !== 'string' || !migration.key ||
-                typeof migration.movedTo !== 'string' || typeof migration.instruction !== 'string' ||
-                !migration.instruction || typeof migration.label !== 'string' || typeof migration.prunable !== 'boolean') {
-                throw new InformAiError(`Invalid migration in ${manifest.packageName}. Supply the retired key and exact edit.`);
+            const mode = definition.schema['mode'];
+            if (
+                !mode ||
+                mode.type !== 'string' ||
+                mode.optional ||
+                mode.nullable ||
+                !mode.enumValues?.includes('OFF')
+            ) {
+                throw new InformAiError(
+                    `Policy ${definition.id} must declare a required string mode with explicit OFF opt-out. Fix its owner schema.`,
+                );
             }
         }
     }
 
     private validateOwnerSettings(definition: OwnedRuleDefinition): void {
         if (!['rules', 'hookGuards', 'lint'].includes(definition.section)) {
-            throw new InformAiError(`Invalid config section for ${definition.id}. Use rules, hookGuards, or lint.`);
+            throw new InformAiError(
+                `Invalid config section for ${definition.id}. Use rules, hookGuards, or lint.`,
+            );
         }
         const tuning = definition.optionalTuning;
         if (!tuning || typeof tuning !== 'object' || Array.isArray(tuning)) {
-            throw new InformAiError(`Missing optional tuning for ${definition.id}. Supply an explicit object, including {} when empty.`);
+            throw new InformAiError(
+                `Missing optional tuning for ${definition.id}. Supply an explicit object, including {} when empty.`,
+            );
         }
         for (const key of Object.keys(tuning)) {
             const field = definition.schema[key];
-            if (!field || !field.optional || key === 'mode') {
-                throw new InformAiError(`${definition.id}.${key} cannot have a default. Keep required behaviour in explicit repository config.`);
+            if (
+                !field ||
+                !field.optional ||
+                ['mode', 'turnOffRuleUntilEpoch', 'turnOffRuleWhileOnBranch'].includes(key)
+            ) {
+                throw new InformAiError(
+                    `${definition.id}.${key} cannot have a default. Keep required behaviour in explicit repository config.`,
+                );
             }
-            const errors = this.validateObject(definition.id, { [key]: field }, { [key]: tuning[key] });
+            const errors = this.validateObject(
+                definition.id,
+                { [key]: field },
+                { [key]: tuning[key] },
+            );
             if (errors.length) throw new InformAiError(errors.join('\n'));
         }
-        const errors = this.validateObject(definition.id, definition.schema, definition.recommendedSeed);
-        if (errors.length) throw new InformAiError(`Invalid recommended seed: ${errors.join('\n')}. Fix the owner's seed; the loader never applies it.`);
+        const errors = this.validateObject(
+            definition.id,
+            definition.schema,
+            definition.recommendedSeed,
+        );
+        if (errors.length)
+            throw new InformAiError(
+                `Invalid recommended seed: ${errors.join('\n')}. Fix the owner's seed; the loader never applies it.`,
+            );
     }
 
     private validateSchema(location: string, schema: Readonly<Record<string, FieldDef>>): void {
-        if (!schema || typeof schema !== 'object' || Array.isArray(schema)) throw new InformAiError(`Invalid schema for ${location}. Supply a field map.`);
+        if (!schema || typeof schema !== 'object' || Array.isArray(schema))
+            throw new InformAiError(`Invalid schema for ${location}. Supply a field map.`);
         for (const [key, field] of Object.entries(schema)) {
-            if (!field || !['string', 'number', 'boolean', 'string[]', 'object[]'].includes(field.type)) {
-                throw new InformAiError(`Invalid field ${location}.${key}. Supply a supported FieldDef type.`);
+            if (
+                !field ||
+                !['string', 'number', 'boolean', 'string[]', 'object[]'].includes(field.type)
+            ) {
+                throw new InformAiError(
+                    `Invalid field ${location}.${key}. Supply a supported FieldDef type.`,
+                );
             }
             for (const flag of ['optional', 'nullable', 'nonEmpty'] as const) {
-                if (field[flag] !== undefined && typeof field[flag] !== 'boolean') throw new InformAiError(`Invalid ${flag} for ${location}.${key}. Supply a boolean.`);
+                if (field[flag] !== undefined && typeof field[flag] !== 'boolean')
+                    throw new InformAiError(
+                        `Invalid ${flag} for ${location}.${key}. Supply a boolean.`,
+                    );
             }
-            if (field.enumValues !== undefined && (!Array.isArray(field.enumValues) || field.enumValues.some(item => typeof item !== 'string'))) {
-                throw new InformAiError(`Invalid enum for ${location}.${key}. Supply string values.`);
+            if (
+                field.enumValues !== undefined &&
+                (!Array.isArray(field.enumValues) ||
+                    // webpieces-disable no-any-unknown -- external JSON or runtime exports are validated before policy execution
+                    field.enumValues.some((item: unknown) => typeof item !== 'string'))
+            ) {
+                throw new InformAiError(
+                    `Invalid enum for ${location}.${key}. Supply string values.`,
+                );
             }
-            if (field.type === 'object[]') this.validateSchema(`${location}.${key}[]`, field.elementSchema!);
+            if (field.type === 'object[]')
+                this.validateSchema(`${location}.${key}[]`, field.elementSchema!);
         }
     }
 
-    private validateObject(location: string, schema: Readonly<Record<string, FieldDef>>, value: ConfigObject): string[] {
-        if (!value || typeof value !== 'object' || Array.isArray(value)) return [`${location} must be an explicitly configured object.`];
+    private validateObject(
+        location: string,
+        schema: Readonly<Record<string, FieldDef>>,
+        value: ConfigObject,
+    ): string[] {
+        if (!value || typeof value !== 'object' || Array.isArray(value))
+            return [`${location} must be an explicitly configured object.`];
         const errors: string[] = [];
-        for (const key of Object.keys(value)) if (!Object.hasOwn(schema, key)) errors.push(`${location}.${key} is unknown. Use a field declared by its owner.`);
+        for (const key of Object.keys(value)) {
+            if (Object.hasOwn(schema, key)) continue;
+            const fields = new PolicyFieldConstraints();
+            const renamed = fields.renamedField(key);
+            const retired = this.migrations().find(
+                (entry: RetiredConfigKey) =>
+                    entry.scope === 'field' && entry.key === `${location}.${key}`,
+            );
+            if (renamed)
+                errors.push(
+                    `${location}.${key} was renamed to ${renamed}. Rename the field; the old spelling is rejected.`,
+                );
+            else if (retired) errors.push(`${location}.${key}: ${retired.instruction}`);
+            else if (fields.isRationale(key)) {
+                if (typeof value[key] !== 'string')
+                    errors.push(`${location}.${key} must be a string rationale note.`);
+            } else errors.push(`${location}.${key} is unknown. Use a field declared by its owner.`);
+        }
         for (const [key, field] of Object.entries(schema)) {
-            const entry = Object.hasOwn(value, key) ? value[key] : undefined, label = `${location}.${key}`;
+            const entry = Object.hasOwn(value, key) ? value[key] : undefined,
+                label = `${location}.${key}`;
             if (entry === undefined) {
-                if (!field.optional) errors.push(`${label} is required. Add an explicit ${field.type} value.`);
+                if (!field.optional)
+                    errors.push(`${label} is required. Add an explicit ${field.type} value.`);
                 continue;
             }
             if (entry === null && field.nullable) continue;
-            const valid = field.type.endsWith('[]') ? Array.isArray(entry) : typeof entry === field.type;
-            if (!valid || entry === null) { errors.push(`${label} must be ${field.type}.`); continue; }
-            if (field.enumValues && !field.enumValues.includes(String(entry))) errors.push(`${label} must be one of ${field.enumValues.join(', ')}.`);
+            const valid = field.type.endsWith('[]')
+                ? Array.isArray(entry)
+                : typeof entry === field.type;
+            if (!valid || entry === null) {
+                errors.push(`${label} must be ${field.type}.`);
+                continue;
+            }
+            if (field.enumValues && !field.enumValues.includes(String(entry)))
+                errors.push(`${label} must be one of ${field.enumValues.join(', ')}.`);
             if (Array.isArray(entry)) {
-                if (field.nonEmpty && entry.length === 0) errors.push(`${label} must contain at least one entry.`);
-                if (field.type === 'string[]' && entry.some(item => typeof item !== 'string')) errors.push(`${label} must contain only strings.`);
-                if (field.type === 'object[]') entry.forEach((item, index) => errors.push(...this.validateObject(`${label}[${index}]`, field.elementSchema!, item as ConfigObject)));
+                if (field.nonEmpty && entry.length === 0)
+                    errors.push(`${label} must contain at least one entry.`);
+                if (
+                    field.type === 'string[]' &&
+                    entry.some((item: ConfigValue) => typeof item !== 'string')
+                )
+                    errors.push(`${label} must contain only strings.`);
+                if (field.type === 'object[]')
+                    entry.forEach((item: ConfigValue, index: number) =>
+                        errors.push(
+                            ...this.validateObject(
+                                `${label}[${index}]`,
+                                field.elementSchema!,
+                                item as ConfigObject,
+                            ),
+                        ),
+                    );
             }
         }
         return errors;
@@ -216,6 +446,13 @@ export class RulePackDiscovery {
     constructor(private readonly loader: RulePackModuleLoader) {}
 
     discover(declarations: readonly RulePackDeclaration[]): RulePackRegistry {
-        return new RulePackRegistry(declarations.map(declaration => this.loader.load(declaration.module)));
+        const manifests = declarations.map((declaration: RulePackDeclaration) =>
+            this.loader.load(declaration.module),
+        );
+        const registry = new RulePackRegistry(manifests);
+        manifests.forEach((manifest: RulePackManifest, index: number) =>
+            registry.recordModuleLocation(manifest.packageName, declarations[index].module),
+        );
+        return registry;
     }
 }

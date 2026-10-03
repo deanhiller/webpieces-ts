@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { BaseRuleConfig } from '@webpieces/rules-sdk';
+
 /**
  * wp-ci — the universal webpieces CI entrypoint.
  *
@@ -23,17 +23,25 @@ import { BaseRuleConfig } from '@webpieces/rules-sdk';
 import * as fs from 'fs';
 import * as path from 'path';
 
-import 'reflect-metadata';
-import { Container } from 'inversify';
-import { loadAndValidate, RuleFailError, renderRuleFailForHuman, RepoRootFinder } from '@webpieces/rules-config';
+import {
+    loadAndValidate,
+    RuleFailError,
+    renderRuleFailForHuman,
+    RepoRootFinder,
+} from '@webpieces/rules-config';
 import { InformAiError } from '@webpieces/tooling-common';
 import { toError } from '@webpieces/tooling-common/to-error';
 import { BranchIdentity } from '@webpieces/repo-workflow-core';
-import { CodeRulesApp } from './code-rules-app';
-import { WorkspaceRoot, MatchRulesHolder } from './code-rules-context';
-import { CONFIG_BINDINGS } from './code-rules-config-table';
+import { CodeRulesBootstrap } from './code-rules-bootstrap';
+import { CodeRulesRunRequest } from './code-rules-run-request';
 import { NxStepRunner } from './wp-ci-nx-runner';
-import { GracePeriodResolver, ProcessGroupKiller, ProcessGroupScanner, SurvivorReporter, SurvivorWatchdog } from './wp-ci-survivors';
+import {
+    GracePeriodResolver,
+    ProcessGroupKiller,
+    ProcessGroupScanner,
+    SurvivorReporter,
+    SurvivorWatchdog,
+} from './wp-ci-survivors';
 
 /** How often the watchdog re-runs `ps` while waiting for a finished step's process group to drain. */
 const SURVIVOR_POLL_INTERVAL_MILLIS = 1000;
@@ -73,9 +81,12 @@ function isPluginRegistered(nxJsonPath: string): boolean {
         const parsed = JSON.parse(raw) as RawNxJson;
         const plugins = parsed.plugins ?? [];
         return plugins.some((entry: NxPluginEntry) => pluginEntryMatches(entry));
+    // webpieces-disable no-any-unknown -- external JSON or runtime exports are validated before policy execution
     } catch (err: unknown) {
         const error = toError(err);
-        throw new InformAiError(`nx.json has invalid JSON — fix the file, then retry.\nParse error: ${error.message}\nFile: ${nxJsonPath}`);
+        throw new InformAiError(
+            `nx.json has invalid JSON — fix the file, then retry.\nParse error: ${error.message}\nFile: ${nxJsonPath}`,
+        );
     }
 }
 
@@ -88,19 +99,10 @@ async function runStandalone(cwd: string): Promise<number> {
     }
     console.log('ℹ️  Not an Nx repo — running standalone webpieces code validators.\n');
 
-    // Composition root: bind runtime values, then resolve the app so inversify builds the whole DAG.
-    // autobind self-binds every @injectable(Singleton) tooling class (replaces the buildProviderModule registry scan)
-    const container = new Container({ autobind: true });
-    container.bind(WorkspaceRoot).toConstantValue(new WorkspaceRoot(workspaceRoot));
-    container.bind(MatchRulesHolder).toConstantValue(new MatchRulesHolder(loaded.matchRules));
-    for (const binding of CONFIG_BINDINGS) {
-        const ConfigClass = binding.configClass;
-        const configured = loaded.rulesConfig[binding.ruleId] as BaseRuleConfig | undefined;
-        container.bind(ConfigClass).toConstantValue(configured ?? new ConfigClass());
-    }
-
-    const app = container.get(CodeRulesApp);
-    const result = await app.run();
+    const result = await new CodeRulesBootstrap().run(
+        workspaceRoot,
+        new CodeRulesRunRequest(undefined, undefined, undefined),
+    );
     return result.success ? 0 : 1;
 }
 
@@ -130,7 +132,13 @@ async function main(): Promise<void> {
         }
 
         const gracePeriod = new GracePeriodResolver().resolve(process.env);
-        const runner = new NxStepRunner(root, gracePeriod, new SurvivorWatchdog(new ProcessGroupScanner(), SURVIVOR_POLL_INTERVAL_MILLIS), new SurvivorReporter(), new ProcessGroupKiller());
+        const runner = new NxStepRunner(
+            root,
+            gracePeriod,
+            new SurvivorWatchdog(new ProcessGroupScanner(), SURVIVOR_POLL_INTERVAL_MILLIS),
+            new SurvivorReporter(),
+            new ProcessGroupKiller(),
+        );
         const hotfix = new BranchIdentity().isHotfix();
 
         // Validate the root policy exactly once. webpieces.config.json is deliberately NOT a
@@ -144,7 +152,10 @@ async function main(): Promise<void> {
         // Run the architecture + code validators next (this also runs the wiring guard,
         // which fails loudly if nx.json no longer wires validators into the build).
         if (!hotfix && fs.existsSync(path.join(root, 'architecture'))) {
-            const validateCode = await runner.run(['run', 'architecture:validate-complete'], 'architecture:validate-complete');
+            const validateCode = await runner.run(
+                ['run', 'architecture:validate-complete'],
+                'architecture:validate-complete',
+            );
             // webpieces-disable no-process-exit-outside-main -- this file's main() is the wp-ci bin boundary
             if (validateCode !== 0) process.exit(validateCode);
         }
@@ -152,9 +163,13 @@ async function main(): Promise<void> {
         // Hotfix deliberately schedules only compile/typecheck + tests. The shared branch resolver makes
         // this the same decision the local PR gate makes, including detached GitHub checkouts.
         const target = hotfix ? 'hotfix-ci' : 'ci';
-        const ciCode = await runner.run(['affected', `--target=${target}`, ...passthrough], `nx affected --target=${target}`);
+        const ciCode = await runner.run(
+            ['affected', `--target=${target}`, ...passthrough],
+            `nx affected --target=${target}`,
+        );
         // webpieces-disable no-process-exit-outside-main -- this file's main() is the wp-ci bin boundary
         process.exit(ciCode);
+    // webpieces-disable no-any-unknown -- external JSON or runtime exports are validated before policy execution
     } catch (err: unknown) {
         const error = toError(err);
         if (error instanceof RuleFailError) {

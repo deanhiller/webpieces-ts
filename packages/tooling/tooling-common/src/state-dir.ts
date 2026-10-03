@@ -1,3 +1,4 @@
+import { RepositoryConfigStatePaths } from './repository-config-state-paths';
 import { spawnSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -335,7 +336,7 @@ export class DotWebpieces {
         this.migrated.add(startDir);
         const toplevel = this.treeRoot(startDir);
         if (toplevel === null) return;
-        this.migrator.migrate(this.legacyDir(toplevel), target, AI_WRITABLE_STATE_DIRS);
+        this.migrator.migrate(this.legacyDir(toplevel), target, [...AI_WRITABLE_STATE_DIRS, ...new RepositoryConfigStatePaths().keepInPlace(toplevel)]);
     }
 
     // One `git rev-parse <flag>`, resolved to an absolute path (git prints a bare `.git`, relative to

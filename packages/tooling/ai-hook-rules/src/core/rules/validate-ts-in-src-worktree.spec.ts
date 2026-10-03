@@ -8,7 +8,6 @@ import fixtureConfig from '../../adapters/__goldens__/fixture-webpieces.config.j
 import { run } from '../runner';
 import { BlockedResult, NormalizedEdit, NormalizedToolInput } from '@webpieces/hook-runtime';
 
-
 function gitIn(cwd: string, ...args: string[]): void {
     execFileSync('git', args, { cwd, stdio: 'pipe' });
 }
@@ -25,7 +24,7 @@ function rulesConfig(validateMode: 'OFF' | 'NEW_AND_MODIFIED_FILES'): Record<str
 
 function writeConfig(root: string, mode: 'OFF' | 'NEW_AND_MODIFIED_FILES'): void {
     policyFixture.declareIn(root);
-    fs.writeFileSync(path.join(root, 'webpieces.config.json'), JSON.stringify(rulesConfig(mode)));
+    policyFixture.writeOwnerConfig(root, rulesConfig(mode));
 }
 
 function writeTarget(filePath: string): NormalizedToolInput {
@@ -45,10 +44,13 @@ describe('validate-ts-in-src — target tree identity for linked-worktree writes
         nested = path.join(primary, '.claude', 'worktrees', 'agent-898');
 
         fs.mkdirSync(path.join(primary, 'services', 'app', 'src'), { recursive: true });
-        fs.writeFileSync(path.join(primary, 'services', 'app', 'project.json'), JSON.stringify({
-            name: 'app',
-            sourceRoot: 'services/app/src',
-        }));
+        fs.writeFileSync(
+            path.join(primary, 'services', 'app', 'project.json'),
+            JSON.stringify({
+                name: 'app',
+                sourceRoot: 'services/app/src',
+            }),
+        );
         fs.writeFileSync(path.join(primary, 'services', 'app', 'src', 'seed.ts'), 'export {};\n');
         writeConfig(primary, 'NEW_AND_MODIFIED_FILES');
 
@@ -67,7 +69,9 @@ describe('validate-ts-in-src — target tree identity for linked-worktree writes
         writeConfig(nested, 'OFF');
     });
 
-    afterAll(() => { fs.rmSync(sandbox, { recursive: true, force: true }); });
+    afterAll(() => {
+        fs.rmSync(sandbox, { recursive: true, force: true });
+    });
 
     it('allows a new TypeScript source file in a sibling linked worktree project', () => {
         const target = path.join(sibling, 'services', 'app', 'src', 'new-service.ts');
@@ -83,7 +87,9 @@ describe('validate-ts-in-src — target tree identity for linked-worktree writes
         const target = path.join(sibling, 'services', 'app', 'scripts', 'generate.ts');
         const result = run('Write', writeTarget(target), primary, 'rules') as BlockedResult;
         expect(result).toBeInstanceOf(BlockedResult);
-        expect(result.report).toContain('inside project `services/app` but outside its src/ directory');
+        expect(result.report).toContain(
+            'inside project `services/app` but outside its src/ directory',
+        );
     });
 
     it('still rejects a truly projectless worktree TypeScript file', () => {

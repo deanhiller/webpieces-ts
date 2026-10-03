@@ -10,7 +10,8 @@
         "./package.json": "./package.json",
         "./plugin": "./src/plugin.js",
         "./executors.json": "./executors.json",
-        "./rule-pack": "./src/rule-pack.js"
+        "./rule-pack": "./src/rule-pack.js",
+        "./rule-runtime": "./src/rule-runtime.js"
     },
     "files": [
         "src/**/*",
@@ -20,7 +21,6 @@
     ],
     "dependencies": {
         "@webpieces/api-doc-model": "workspace:*",
-        "@webpieces/code-rules": "workspace:*",
         "@webpieces/core-util": "workspace:*",
         "@webpieces/eslint-rules": "workspace:*",
         "@webpieces/rules-config": "workspace:*",

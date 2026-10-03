@@ -50,8 +50,8 @@ describe('a rule has no default', () => {
             for (const other of Object.keys(RULE_SCHEMAS)) {
                 if (other !== name) others[other] = seedEntryForRule(other, fixtureRuleRegistry);
             }
-            const errors = validateWebpiecesConfig(others, fixtureRuleRegistry, false);
-            expect(errors.join('\n')).toContain(`[${name}] Not configured in webpieces.config.json`);
+            const errors = validateWebpiecesConfig(others, fixtureRuleRegistry);
+            expect(errors.join('\n')).toContain(`[${name}] Not configured in the declared owner config file`);
         }
     });
 

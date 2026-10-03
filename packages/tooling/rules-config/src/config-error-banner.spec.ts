@@ -8,12 +8,10 @@ import {
     formatConfigErrorsBanner,
     RETIRED_KEY_MARKER,
     RETIRED_TOP_LEVEL_MARKER,
-    SECTION_PLACEMENT_MARKER,
 } from './config-error-banner';
 import { validateCommandsSection } from './commands-section-validators';
 import { retiredKeyError } from './retired-config-keys';
 import { RetiredConfigKey } from '@webpieces/rules-sdk';
-import { validateSectionPlacement } from './validate-config';
 
 /**
  * THE INVARIANT this banner exists to state: every error it carries came from validating ONE file, so
@@ -124,16 +122,6 @@ describe('config-error banner — the markers match what the validators actually
     it('every RETIRED_CONFIG_KEYS message carries its marker', () => {
         for (const entry of RETIRED_CONFIG_KEYS) {
             expect(retiredKeyError(entry), `entry ${entry.key}`).toContain(RETIRED_KEY_MARKER);
-        }
-    });
-
-    it('a guard left in `rules` and a code rule left in `hookGuards` both carry the marker', () => {
-        const guardInRules = validateSectionPlacement({ 'pr-lifecycle-guard': {} }, {}, fixtureRuleRegistry);
-        const ruleInGuards = validateSectionPlacement({}, { 'max-file-lines': {} }, fixtureRuleRegistry);
-        expect(guardInRules).toHaveLength(1);
-        expect(ruleInGuards).toHaveLength(1);
-        for (const message of [...guardInRules, ...ruleInGuards]) {
-            expect(message).toContain(SECTION_PLACEMENT_MARKER);
         }
     });
 

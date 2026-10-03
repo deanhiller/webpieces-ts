@@ -6,12 +6,18 @@ import { describe, it, expect } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
 import { WEBPIECES_TMP_DIR } from '@webpieces/tooling-common';
-import { MERGE_INFO_DIR, MERGE_IN_PROGRESS_FILE, DEFAULT_UPSERT_PR_COMMAND, DEFAULT_MERGE_COMPLETE_COMMAND, allRuleNames } from "@webpieces/rules-config";
-import { PrLifecycleGuardConfig } from "../../configs/rule-configs";
+import {
+    MERGE_INFO_DIR,
+    MERGE_IN_PROGRESS_FILE,
+    DEFAULT_UPSERT_PR_COMMAND,
+    DEFAULT_MERGE_COMPLETE_COMMAND,
+    allRuleNames,
+} from '@webpieces/rules-config';
+import { PrLifecycleGuardConfig } from '../../configs/rule-configs';
 import { BashContext } from '@webpieces/hook-runtime';
 import { PrCreationOrPushGuardRule } from './pr-creation-or-push-guard';
 import { MergeInProgressGuardRule } from './merge-in-progress-guard';
-import {  builtInConfigKeys  } from './index';
+import { WORKFLOW_POLICIES } from '../../workflow-policy-registry';
 
 // The gated-command strings are handed in by the LOADER now, not read off the guard's config entry
 // (that field was a second spelling of commands.guardHints and beat it at the point of use). Tests
@@ -243,15 +249,13 @@ describe('merge-in-progress-guard fixHint tells the truth about what is blocked'
     });
 });
 
-// The runtime-side twin of rules-config's registry-consistency test. A name in builtInConfigKeys loads
-// at runtime and makes config-sync DEMAND a config entry for it — but validation accepts that entry
-// only if the name is also in RULE_SCHEMAS (allRuleNames). A name in one list but not the other is the
-// exact deadlock read-stale-guard (then named main-stale-guard) shipped with in 0.4.415. Lock them
-// together here too.
+// Owner runtime entries must all have a validatable, seedable schema.
 describe('built-in rule registry is validatable', () => {
     it('every built-in rule name has a schema (allRuleNames), so its config entry can be validated and seeded', () => {
         const schema = new Set(allRuleNames(fixtureRuleRegistry));
-        const missing = builtInConfigKeys.filter((name: string): boolean => !schema.has(name));
+        const missing = WORKFLOW_POLICIES.map((policy) => policy.definition.id).filter(
+            (name: string): boolean => !schema.has(name),
+        );
         expect(missing).toEqual([]);
     });
 });

@@ -1,6 +1,11 @@
 import * as path from 'path';
 
-import { CONFIG_FILENAME, ConfigFile, RawConfigFile } from '@webpieces/rules-config';
+import {
+    CONFIG_FILENAME,
+    ConfigFile,
+    PackPolicyFiles,
+    PackPolicyDeclaration,
+} from '@webpieces/rules-config';
 import { injectable, bindingScopeValues } from 'inversify';
 
 /** One rule that is currently NOT being enforced, and which of the two hatches is doing it. Data-only. */
@@ -52,7 +57,10 @@ export class ConfigEntry {
  */
 @injectable(bindingScopeValues.Singleton)
 export class ActiveHatchReport {
-    constructor(private readonly configFile: ConfigFile) {}
+    constructor(
+        private readonly configFile: ConfigFile,
+        private readonly files: PackPolicyFiles,
+    ) {}
 
     /**
      * Every active hatch in the repo's config: a non-null `turnOffRuleWhileOnBranch`, or a
@@ -62,7 +70,12 @@ export class ActiveHatchReport {
     scan(repoRoot: string): ActiveHatch[] {
         const raw = this.configFile.readRawConfig(path.join(repoRoot, CONFIG_FILENAME));
         const found: ActiveHatch[] = [];
-        for (const entry of this.namedEntries(raw)) found.push(...this.hatchesOf(entry));
+        const declarations = this.files.declarations(raw.rulePacks, repoRoot);
+        const entries = declarations.flatMap((declaration: PackPolicyDeclaration) =>
+            this.keyedEntries(this.files.read(this.files.configPath(repoRoot, declaration.config))),
+        );
+        entries.push(...this.matchRuleEntries(raw['match-rules']));
+        for (const entry of entries) found.push(...this.hatchesOf(entry));
         return found;
     }
 
@@ -70,32 +83,28 @@ export class ActiveHatchReport {
     render(hatches: readonly ActiveHatch[]): string {
         if (hatches.length === 0) return '';
         const width = Math.max(...hatches.map((h: ActiveHatch): number => h.ruleName.length));
-        const lines = hatches.map((h: ActiveHatch): string =>
-            `      ${h.ruleName.padEnd(width)}  ${h.hatchField.padEnd(24)} = ${h.value}`);
+        const lines = hatches.map(
+            (h: ActiveHatch): string =>
+                `      ${h.ruleName.padEnd(width)}  ${h.hatchField.padEnd(24)} = ${h.value}`,
+        );
         return (
             `\n⚠️  ${hatches.length} rule hatch(es) are currently active in ${CONFIG_FILENAME}:\n` +
-            lines.join('\n') + '\n' +
+            lines.join('\n') +
+            '\n' +
             '      Not blocking, and not necessarily wrong — just so a rule that is OFF is never off silently.\n'
         );
     }
 
-    /**
-     * Every named block in the config that can carry a hatch: the keyed `rules` and `hookGuards` maps, plus
-     * the `match-rules` array, whose entries name themselves.
-     */
-    private namedEntries(raw: RawConfigFile): ConfigEntry[] {
-        const entries: ConfigEntry[] = [];
-        entries.push(...this.keyedEntries(raw.rules));
-        entries.push(...this.keyedEntries(raw.hookGuards));
-        entries.push(...this.matchRuleEntries(raw['match-rules']));
-        return entries;
-    }
-
-    /** A `name → block` map (`rules`, `hookGuards`) as entries. */
+    /** An owner file's `name → block` map as entries, without requiring valid lock/schema data. */
     // webpieces-disable no-any-unknown -- an unvalidated config section: opaque JSON in, type-checked fields out
-    private keyedEntries(section: Record<string, Record<string, unknown>> | undefined): ConfigEntry[] {
+    private keyedEntries(
+        // webpieces-disable no-any-unknown -- external JSON or runtime exports are validated before policy execution
+        section: Record<string, Record<string, unknown>> | undefined,
+    ): ConfigEntry[] {
         if (!section) return [];
-        return Object.keys(section).map((name: string): ConfigEntry => new ConfigEntry(name, section[name]));
+        return Object.keys(section).map(
+            (name: string): ConfigEntry => new ConfigEntry(name, section[name]),
+        );
     }
 
     /** The `match-rules` array, whose elements carry their own `name`. Typed `unknown` in RawConfigFile. */
@@ -103,21 +112,31 @@ export class ActiveHatchReport {
     private matchRuleEntries(section: unknown): ConfigEntry[] {
         if (!Array.isArray(section)) return [];
         // webpieces-disable no-any-unknown -- one opaque config block per element
-        return (section as Record<string, unknown>[]).map((entry: Record<string, unknown>): ConfigEntry => {
-            const name = entry['name'];
-            return new ConfigEntry(typeof name === 'string' ? name : '(unnamed match-rule)', entry);
-        });
+        return (section as Record<string, unknown>[]).map(
+            // webpieces-disable no-any-unknown -- external JSON or runtime exports are validated before policy execution
+            (entry: Record<string, unknown>): ConfigEntry => {
+                const name = entry['name'];
+                return new ConfigEntry(
+                    typeof name === 'string' ? name : '(unnamed match-rule)',
+                    entry,
+                );
+            },
+        );
     }
 
     private hatchesOf(entry: ConfigEntry): ActiveHatch[] {
         const hatches: ActiveHatch[] = [];
         const branch = entry.fields['turnOffRuleWhileOnBranch'];
         if (typeof branch === 'string' && branch !== '') {
-            hatches.push(new ActiveHatch(entry.ruleName, 'turnOffRuleWhileOnBranch', `"${branch}"`));
+            hatches.push(
+                new ActiveHatch(entry.ruleName, 'turnOffRuleWhileOnBranch', `"${branch}"`),
+            );
         }
         const epoch = entry.fields['turnOffRuleUntilEpoch'];
         if (typeof epoch === 'number' && epoch > Date.now() / 1000) {
-            hatches.push(new ActiveHatch(entry.ruleName, 'turnOffRuleUntilEpoch', this.isoDate(epoch)));
+            hatches.push(
+                new ActiveHatch(entry.ruleName, 'turnOffRuleUntilEpoch', this.isoDate(epoch)),
+            );
         }
         return hatches;
     }

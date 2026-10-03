@@ -30,9 +30,9 @@ describe('shimStaleRecoveryDecision — recovery is never trapped by a stale shi
 
     it('passes an edit to webpieces.config.json through (the always-allowed recovery target)', () => {
         for (const tool of ['Write', 'Edit', 'MultiEdit']) {
-            expect(shimStaleRecoveryDecision(tool, '', `/repo/${CONFIG_FILENAME}`, 'claude-code'), `${tool} at root`).toBe('pass');
-            // basename match, so a config in a subdir/nested clone is recognised too.
-            expect(shimStaleRecoveryDecision(tool, '', path.join('/repo/packages/app', CONFIG_FILENAME), 'claude-code'), `${tool} nested`).toBe('pass');
+            expect(shimStaleRecoveryDecision(tool, '', path.join(process.cwd(), CONFIG_FILENAME), 'claude-code'), `${tool} at root`).toBe('pass');
+            // A nested basename does not grant access to an unrelated file.
+            expect(shimStaleRecoveryDecision(tool, '', path.join(process.cwd(), 'packages/app', CONFIG_FILENAME), 'claude-code'), `${tool} nested`).toBe('deny');
         }
     });
 

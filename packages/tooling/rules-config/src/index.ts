@@ -16,7 +16,6 @@ export {
     CONFIG_POLICY_DOC,
     RETIRED_KEY_MARKER,
     RETIRED_TOP_LEVEL_MARKER,
-    SECTION_PLACEMENT_MARKER,
 } from './config-error-banner';
 export {
     findConfigFile,
@@ -28,11 +27,10 @@ export {
 } from './config-file';
 // The PARSED-BUT-UNVALIDATED config shape. Exported for readers that walk the file generically rather
 // than through the typed config (the pr-gate active-hatch dashboard section reads every rule's hatches).
-export type { RawConfigFile } from './config-file';
+export { RawConfigFile } from './config-file';
 export { RepoRootFinder, INSTRUCT_AI_DIR, INSTRUCT_AI_LEAF } from './repo-root';
 // The scoped `.webpieces` resolver. EVERY reader/writer of `.webpieces/...` goes through one of its two
 // named methods so the call site declares whether the state is repo-wide or worktree-private.
-
 
 // There is NO machine-global state root. `MachineStateHome`/`StateHome`/`WEBPIECES_STATE_HOME` and the
 // `PrBodyStore` that used them are DELETED: the one artifact that needed a scope above the clone was the
@@ -86,7 +84,6 @@ export {
     validateWebpiecesConfig,
     validatePrGateSection,
     validateChecklistsSection,
-    validateSectionPlacement,
     validateExcludePaths,
     validateMatchRulesSection,
     allRuleNames,
@@ -190,10 +187,7 @@ export {
 } from './match-rules-config';
 export type { ConfigSection } from './sections';
 export { schemaFieldNames } from './rule-schemas';
-export {
-    isHookGuard,
-    sectionForRule,
-} from './sections';
+export { isHookGuard, sectionForRule } from './sections';
 export { shouldSkipRule, HOTFIX_BUILD_COMMAND, HOTFIX_AUDIT_BANNER } from './skip-rule';
 export { SkipRuleResult } from './skip-rule';
 export {
@@ -210,7 +204,16 @@ export {
     ChangedFilesOptions,
 } from './diff-scope';
 export { AbstractRule } from './abstract-rule';
-export { WEBPIECES_DISABLE, hasDisable, MERGE_INFO_DIR, MERGE_IN_PROGRESS_FILE, MERGE_EXPLANATION_FILE, PUSH_DEV_STATE_FILE, PRUNE_UNKNOWN_COMMAND, UPGRADE_SHIM_COMMAND } from './constants';
+export {
+    WEBPIECES_DISABLE,
+    hasDisable,
+    MERGE_INFO_DIR,
+    MERGE_IN_PROGRESS_FILE,
+    MERGE_EXPLANATION_FILE,
+    PUSH_DEV_STATE_FILE,
+    PRUNE_UNKNOWN_COMMAND,
+    UPGRADE_SHIM_COMMAND,
+} from './constants';
 export { WebpiecesRulesConfig } from './WebpiecesRulesConfig';
 export {
     SyncFlowGuidance,
@@ -222,22 +225,10 @@ export {
     WP_FINISH_PUSH_DEV,
 } from './sync-flow-guidance';
 
-
-
-
-
-
-
-
-
 // Mode unions + their value arrays — the single source of truth shared with code-rules.
-
-
 
 // The `no-state-paths-in-templates` config, in its own module for the same reason no-client-creation is:
 // rule-configs.ts is at its file-size cap and a rule that carries real defaults belongs beside them.
-
-
 
 export {
     GateDefinition,
@@ -298,7 +289,6 @@ export {
     PROVENANCE_SKIPPED,
 } from './subagent-provenance';
 
-
 export {
     ReviewProvenanceService,
     ReviewProvenance,
@@ -337,17 +327,6 @@ export {
     summaryJsonSchemaHint,
 } from './review-json';
 
-
-
-
-
-
-
-
-
-
-
-
 export {
     CommandsConfig,
     buildCommandsConfig,
@@ -356,10 +335,46 @@ export {
 } from './commands-config';
 export { StaleBinRemoval, StaleBinSweeper, staleBinSweeper } from './stale-bin-sweep';
 export { RepoScratchDirs, SCRATCH_DIR_NAME } from './repo-scratch-dirs';
-export { TmpScratchSweeper, TMP_SCRATCH_RETENTION_DAYS, TMP_SCRATCH_PREFIX } from './tmp-scratch-sweep';
+export {
+    TmpScratchSweeper,
+    TMP_SCRATCH_RETENTION_DAYS,
+    TMP_SCRATCH_PREFIX,
+} from './tmp-scratch-sweep';
 
 export * from './hook-fault-codes';
 export * from './hook-config-diagnostics';
-export { RulePackRegistry, NodeRulePackModuleLoader, RulePackDiscovery, RulePackModuleLoader } from './rule-pack-registry';
+export {
+    RulePackRegistry,
+    NodeRulePackModuleLoader,
+    RulePackDiscovery,
+    RulePackModuleLoader,
+} from './rule-pack-registry';
 
-export { RulePackSelection } from './rule-pack-selection';
+export {
+    prepareLegacyUpgrade,
+    LegacyConfigDocument,
+    LegacyUpgradeResult,
+} from './legacy-config-upgrade';
+export {
+    PackPolicyDeclaration,
+    SelectedPolicyPack,
+    PackPolicyFilesResult,
+    PackPolicyFiles,
+} from './pack-policy-files';
+export { RulePackSync, RulePackSyncOptions } from './rule-pack-sync';
+export { ConfigRepairAccess } from './config-repair-access';
+export { ConfigRepairBootstrap } from './config-repair-probe';
+export {
+    RulePackArtifacts,
+    RuleArtifactContents,
+    RULE_LOCK_FILE,
+    RULE_CATALOG_FILE,
+} from './rule-pack-artifacts';
+export {
+    RuleRuntimeModules,
+    RuleRuntimeModuleLoader,
+    NodeRuleRuntimeModuleLoader,
+    RuntimeContributionGroup,
+} from './rule-runtime-modules';
+
+export { FirstPathMatch, FirstPathMatchResult, PathMatchCandidate } from './first-path-match';

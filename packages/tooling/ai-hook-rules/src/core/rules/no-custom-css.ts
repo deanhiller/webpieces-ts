@@ -1,5 +1,5 @@
-import { SourceContributionConfig } from "../source-contribution-config";
-import { NoCustomCssScope, Option } from "@webpieces/rules-config";
+import { SourceContributionConfig } from '../source-contribution-config';
+import { NoCustomCssScope, Option } from '@webpieces/rules-config';
 
 import type { EditContext, Violation } from '@webpieces/hook-runtime';
 import { Violation as V } from '@webpieces/hook-runtime';
@@ -35,12 +35,22 @@ export class NoCustomCssRule extends EditRuleBase<SourceContributionConfig> {
             'Custom CSS bypasses Tailwind-first styling.',
             'Pick one:',
             [
-                new Option('Delete the CSS and use Tailwind utility classes (flex, grid, gap-4, text-red-600).', true),
-                new Option('Need a specific value? Use an arbitrary-value class: w-[240px], bg-[#fffde7], grid-cols-[2fr_2fr_48px].'),
+                new Option(
+                    'Delete the CSS and use Tailwind utility classes (flex, grid, gap-4, text-red-600).',
+                    true,
+                ),
+                new Option(
+                    'Need a specific value? Use an arbitrary-value class: w-[240px], bg-[#fffde7], grid-cols-[2fr_2fr_48px].',
+                ),
                 new Option('Dynamic on/off? Prefer [class.x]="cond" over a style binding.'),
-                new Option('Whole tree not yours to restyle (a vendored kit, a generated artifact)? Add a glob to no-custom-css.allowGlobs in webpieces.config.json — it exempts the path in the editor and in CI alike.'),
+                new Option(
+                    'Whole tree not yours to restyle (a vendored kit, a generated artifact)? Add a glob to no-custom-css.allowGlobs in {configFile} — it exempts the path in the editor and in CI alike.',
+                ),
             ],
-            new DisableEscape(this.config.disableAllowed ?? true, '// webpieces-disable no-custom-css -- <reason>'),
+            new DisableEscape(
+                this.config.disableAllowed ?? true,
+                '// webpieces-disable no-custom-css -- <reason>',
+            ),
         );
     }
 
@@ -54,7 +64,7 @@ export class NoCustomCssRule extends EditRuleBase<SourceContributionConfig> {
             const detail = this.detailForLine(ctx.strippedLines[i] ?? '', isHtml);
             if (!detail) continue;
             const lineNum = i + 1;
-            if (disableAllowed && ctx.isLineDisabled(lineNum, "no-custom-css")) continue;
+            if (disableAllowed && ctx.isLineDisabled(lineNum, 'no-custom-css')) continue;
             violations.push(new V(lineNum, `${detail}: ${ctx.lines[i]?.trim() ?? ''}`));
         }
         return violations;

@@ -22,9 +22,10 @@ graph TD
     InstructAiDocSet["InstructAiDocSet"]:::many
     MainSyncFileStore["MainSyncFileStore"]
     MainSyncStatusService["MainSyncStatusService"]
+    PackPolicyFiles["PackPolicyFiles"]
     RepoRootFinder["RepoRootFinder"]
     ReviewJsonService["ReviewJsonService"]
-    RulePackSelection["RulePackSelection"]
+    RulePackArtifacts["RulePackArtifacts"]
     RulesConfigDesign["RulesConfigDesign"]:::apiImpl
     StaleBinSweeper["StaleBinSweeper"]:::many
     StateDirMigrator["StateDirMigrator"]
@@ -32,7 +33,8 @@ graph TD
     WorktreeService["WorktreeService"]
     BranchMutationLog --> DotWebpieces
     ConfigLoader --> ConfigFile
-    ConfigLoader --> RulePackSelection
+    ConfigLoader --> PackPolicyFiles
+    ConfigLoader --> RulePackArtifacts
     DotWebpieces --> StateDirMigrator
     InstructAiDocSet --> BranchMutationLog
     MainSyncFileStore --> AtomicFile
@@ -43,6 +45,7 @@ graph TD
     RepoRootFinder --> DotWebpieces
     ReviewJsonService --> ChecklistOverrideService
     ReviewJsonService --> DotWebpieces
+    RulePackArtifacts --> AtomicFile
     RulesConfigDesign --> BranchMutationLog
     RulesConfigDesign --> ConfigLoader
     RulesConfigDesign --> DiffScope

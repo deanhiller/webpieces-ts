@@ -1,7 +1,19 @@
-import { checkConfigSync, runRuleCheck, runEditRules, runFileRules, runBashRules } from '@webpieces/hook-runtime';
+import { runRuleCheck, runEditRules, runFileRules, runBashRules } from '@webpieces/hook-runtime';
 import * as path from 'path';
 
-import { loadAndValidate, LoadedConfig, RulePackRegistry, WebpiecesRulesConfig, isHookGuard, HomeConfigService, RepoRootFinder, seedEntryForRule, CONFIG_FILENAME, renderRuleFailForAi } from '@webpieces/rules-config';
+import {
+    loadAndValidate,
+    LoadedConfig,
+    ConfigRepairAccess,
+    RulePackRegistry,
+    WebpiecesRulesConfig,
+    isHookGuard,
+    HomeConfigService,
+    RepoRootFinder,
+    seedEntryForRule,
+    CONFIG_FILENAME,
+    renderRuleFailForAi,
+} from '@webpieces/rules-config';
 
 import { buildContexts, buildBashContext } from '@webpieces/hook-runtime';
 import { DeleteScopedRules } from '@webpieces/hook-runtime';
@@ -11,7 +23,8 @@ import { GovernedPath, TargetTreeResolver } from '@webpieces/hook-runtime';
 import { bashGovernedPath, filterByExcludedPaths } from '@webpieces/hook-runtime';
 import { ExcludedPathEscapeHint } from './excluded-path-escape';
 import { gitFromSubdirBlock } from './force-to-root';
-import { loadRules, loadKeylessBashRules, GuardHintCommands } from './load-rules';
+import { loadKeylessBashRules } from './load-rules';
+import { WorkflowHookRules } from './workflow-hook-rules';
 import { missingDirectoryBlock } from './missing-directory';
 import { branchStateHangTimeout, maybeRefreshMainSync } from './main-sync-timeout';
 import { logGuardDecision, logL1Decision, GuardDecision, branchForLog, MatrixRef, Verdict, MATRIX_L0_ALLOW, MATRIX_L2_UNROWED } from './decision-log';
@@ -53,14 +66,6 @@ export function effectiveBashCwd(command: string, cwd: string): string {
     return new EffectiveTreeResolver().effectiveCwd(command, cwd);
 }
 
-// The resolved gated-command strings the PR-lifecycle guards print, straight off the loaded
-// `commands.guardHints`. Handed to the rules at construction rather than injected into their config
-// entries under guard-name literals — the injection this replaces could miss a rename silently.
-// webpieces-disable no-function-outside-class -- sibling of the module-scope runner helpers; the whole file is functions and a lone class here would break its shape
-function guardHintsOf(loaded: LoadedConfig): GuardHintCommands {
-    return new GuardHintCommands(loaded.commands.upsertPr, loaded.commands.mergeComplete);
-}
-
 // A git or gh invocation anywhere in the command (start, or after a ;/&&/|| separator or pipe).
 const GIT_OR_GH_RE = /(?:^|[;&|]\s*)(?:git|gh)\b/;
 // webpieces-disable no-function-outside-class -- existing stateless module helper moved intact with its callers; ownership extraction preserves its functional API
@@ -100,6 +105,16 @@ function runInternal(
     cwd: string,
     mode: HookMode,
 ): BlockedResult | null {
+    if (
+        toolKind !== 'Delete' &&
+        (new ConfigRepairAccess().isRepairFile(
+            new RepoRootFinder().resolveRepoRoot(cwd),
+            input.filePath,
+        ) ||
+            isRootManifest(input.filePath) ||
+            new HomeConfigService().isHomeConfigPath(input.filePath))
+    )
+        return null;
     const loaded = loadAndValidate(cwd);
     if (loaded.configPath === null) return configMissingBlock(cwd);
 
@@ -116,13 +131,16 @@ function runInternal(
     // it. isRootManifest, never a basename: this returns EARLY, so basename would unrule every
     // package.json in the repo. It admits any tree's root (the config sits beside it), which is what a
     // worktree's own cure needs — the same tree `workspaceRoot` above already names.
-    if (isRootManifest(input.filePath) || new HomeConfigService().isHomeConfigPath(input.filePath)) {
+    if (
+        isRootManifest(input.filePath) ||
+        new HomeConfigService().isHomeConfigPath(input.filePath)
+    ) {
         return null;
     }
 
     // Built-in/custom rules PLUS the client-authored match-rules (content guards). Match-rules run only
     // in the file-edit path (they are code-style, so filterByMode keeps them out of the bash/guards path).
-    const allRules = [...loadRules(loaded.rulesConfig, workspaceRoot, guardHintsOf(loaded))];
+    const allRules = [...new WorkflowHookRules().load(loaded).rules];
     const modeRules = filterByMode(allRules, mode, loaded.ruleRegistry);
     if (modeRules.length === 0) return null;
 
@@ -131,13 +149,11 @@ function runInternal(
     // rule set and is fully hands-off — no violations AND no config-sync nag on those files.
     const governed = new TargetTreeResolver().governedPath(input.filePath, workspaceRoot);
     const relativePath = governed.relativePath;
-    const rules = new DeleteScopedRules().narrow(toolKind, filterByExcludedPaths(modeRules, governed, loaded.excludePaths));
+    const rules = new DeleteScopedRules().narrow(
+        toolKind,
+        filterByExcludedPaths(modeRules, governed, loaded.excludePaths),
+    );
     if (rules.length === 0) return null;
-
-    // Config-sync applies only to built-in/custom rules; match-rules have their own validated section
-    // (loadAndValidate already rejected an invalid `match-rules`), so they must not trip the sync nag.
-    const outOfSync = checkConfigSync(rules, loaded.rulesConfig, loaded.ruleRegistry);
-    if (outOfSync) return outOfSync;
 
     const contexts = buildContexts(toolKind, input, workspaceRoot, governed);
 
@@ -183,11 +199,24 @@ const READ_SCOPED_GUARDS: ReadonlySet<string> = new Set(['read-stale-guard']);
  * Returns null (allow) unless the one guard fires.
  */
 // webpieces-disable no-function-outside-class -- sibling of run()/runBash() in this module; the whole runner is module-scope functions and a lone class for this one entry point would break the file's shape
-export function runRead(filePath: string, cwd: string, mode: HookMode = 'all'): BlockedResult | null {
+export function runRead(
+    filePath: string,
+    cwd: string,
+    mode: HookMode = 'all',
+): BlockedResult | null {
     // Code-style mode has nothing to say about a read.
     if (mode === 'rules') return null;
 
-    const loaded = loadAndValidate(cwd);
+    let loaded: LoadedConfig;
+    // eslint-disable-next-line @webpieces/no-unmanaged-exceptions -- broken configuration must remain readable without enabling any mutating policy
+    try {
+        loaded = loadAndValidate(cwd);
+    // webpieces-disable no-any-unknown -- external JSON or runtime exports are validated before policy execution
+    } catch (err: unknown) {
+        const error = toError(err);
+        if (error instanceof InformAiError) return null;
+        throw error;
+    }
     // No config → nothing to enforce. Unlike the edit path we do NOT block: an unconfigured repo
     // must still be readable.
     if (loaded.configPath === null) return null;
@@ -200,7 +229,7 @@ export function runRead(filePath: string, cwd: string, mode: HookMode = 'all'): 
 
     const governed = new TargetTreeResolver().governedPath(filePath, workspaceRoot);
     const relativePath = governed.relativePath;
-    const all = loadRules(loaded.rulesConfig, workspaceRoot, guardHintsOf(loaded));
+    const all = new WorkflowHookRules().load(loaded).rules;
     const rules = filterByExcludedPaths(
         all.filter((r: Rule): boolean => READ_SCOPED_GUARDS.has(r.name)),
         governed,
@@ -279,6 +308,7 @@ function loadConfigOrAllowInspection(command: string, cwd: string): LoadedConfig
     // eslint-disable-next-line @webpieces/no-unmanaged-exceptions -- rethrown unchanged unless the command is provably inert
     try {
         return loadAndValidate(cwd);
+    // webpieces-disable no-any-unknown -- external JSON or runtime exports are validated before policy execution
     } catch (err: unknown) {
         const error = toError(err);
         if (error instanceof InformAiError && new ReadOnlyInspectionScan().isReadOnlyInspection(command)) {
@@ -425,7 +455,12 @@ function keylessBashRules(loaded: LoadedConfig, mode: HookMode, governed: Govern
 }
 
 // webpieces-disable no-function-outside-class -- sibling of run()/runBash() in this module; the whole runner is module-scope functions and a lone class for this one entry point would break the file's shape
-function runBashInternal(command: string, cwd: string, mode: HookMode, aiType: AiType): BlockedResult | null {
+function runBashInternal(
+    command: string,
+    cwd: string,
+    mode: HookMode,
+    aiType: AiType,
+): BlockedResult | null {
     if (isL0CureCommand(command)) {
         logL0CureBypass(command, cwd);
         return null;
@@ -434,7 +469,8 @@ function runBashInternal(command: string, cwd: string, mode: HookMode, aiType: A
     const loaded = loadConfigOrAllowInspection(command, cwd);
     // null = the config would not load AND this command only inspects → allow, see the helper.
     if (loaded === null) return null;
-    if (loaded.configPath === null) return l0FaultAllows(command, aiType) ? null : configMissingBlock(cwd);
+    if (loaded.configPath === null)
+        return l0FaultAllows(command, aiType) ? null : configMissingBlock(cwd);
 
     const workspaceRoot = path.dirname(loaded.configPath);
 
@@ -444,14 +480,7 @@ function runBashInternal(command: string, cwd: string, mode: HookMode, aiType: A
     // disagree about which tree you are in.
     const tree = new EffectiveTreeResolver().resolve(command, cwd, workspaceRoot);
 
-    // Git-repo-boundary governance: the command runs inside a DIFFERENT git repo than this
-    // webpieces.config governs (e.g. a clone under repositories/). Out of scope → allow, hands-off.
-    // Intentional, not a silent hole. A LINKED WORKTREE of this repo is deliberately NOT foreign — it
-    // is the same project, so the guards run against THAT tree's branch and cache.
-    if (tree.kind === 'foreign') {
-        logGuardDecision(workspaceRoot, new GuardDecision('-', 'Bash', command, branchForLog(workspaceRoot), 'ALLOW_EXEMPT', 'foreign git repo (out of scope)', '-', L0_FAULT_NONE, new MatrixRef('L1', '1')));
-        return null;
-    }
+    if (allowForeignTree(command, tree, workspaceRoot)) return null;
 
     // Honour excludePaths on the bash path too (not just Read/Edit): a command whose effective
     // cwd sits under an excluded tree (e.g. repositories/**) drops the whole guard set — matching how
@@ -459,13 +488,12 @@ function runBashInternal(command: string, cwd: string, mode: HookMode, aiType: A
     // matches no exclusion glob, so a plain command at the repo root is unaffected.
     const governedCwd = bashGovernedPath(tree, workspaceRoot);
     const rules = filterByExcludedPaths(
-        filterByMode(loadRules(loaded.rulesConfig, workspaceRoot, guardHintsOf(loaded)), mode, loaded.ruleRegistry), governedCwd, loaded.excludePaths,
+        filterByMode(new WorkflowHookRules().load(loaded).rules, mode, loaded.ruleRegistry),
+        governedCwd,
+        loaded.excludePaths,
     );
     const keyless = keylessBashRules(loaded, mode, governedCwd);
     if (rules.length === 0 && keyless.length === 0) return null;
-
-    const outOfSync = checkConfigSync(rules, loaded.rulesConfig, loaded.ruleRegistry); // fault Y — L0 list wins, as under C
-    if (outOfSync) return l0FaultAllows(command, aiType) ? null : outOfSync;
 
     const locationBlock = l1LocationBlock(command, tree, aiType);
     if (locationBlock) return locationBlock;
@@ -478,22 +506,7 @@ function runBashInternal(command: string, cwd: string, mode: HookMode, aiType: A
     maybeRefreshMainSync(rules, tree.root, branchStateHangTimeout(loaded.rulesConfig));
 
     const groups = runBashRules([...rules, ...keyless], buildBashContext(command, tree));
-    if (groups.length === 0) {
-        // Record the ALLOW only for git/gh commands — the operations the bash guards actually reason
-        // about (branch create, commit, push, merge, PR). Skipping ls/cat/grep keeps the audit log
-        // focused (the whole point of the log is "why did/didn't a guard fire?"). Blocks are always
-        // logged below.
-        if (/\b(?:git|gh)\b/.test(command)) {
-            logGuardDecision(tree.root, new GuardDecision('-', 'Bash', command, branchForLog(tree.root), 'ALLOW', 'no bash-guard block', '-', L0_FAULT_NONE, MATRIX_L2_UNROWED));
-        }
-        return null;
-    }
-
-    const ruleNames = groups.map((g: RuleGroup): string => g.ruleName).join(',');
-    logGuardDecision(tree.root, new GuardDecision(ruleNames, 'Bash', command, branchForLog(tree.root), 'BLOCK_AI_CURE', 'bash-guard block', '-', L0_FAULT_NONE, MATRIX_L2_UNROWED));
-    const report = new ExcludedPathEscapeHint(workspaceRoot, tree.effectiveCwd).render(command, loaded.excludePaths)
-        + formatReport(commandLabel(command), groups, BASH_SUBJECT) + exemptTreesHint(groups, loaded.excludePaths.paths);
-    return new BlockedResult(report);
+    return bashPolicyResult(command, tree, loaded, groups);
 }
 
 // The bash report's subject line. It used to be the literal string `<bash>`, which told the agent
@@ -521,13 +534,90 @@ function commandLabel(command: string): string {
 // webpieces-disable no-function-outside-class -- sibling of the module-scope runner helpers; the whole file is functions and a lone class here would break its shape
 function exemptTreesHint(groups: readonly RuleGroup[], exemptGuards: readonly string[]): string {
     if (exemptGuards.length === 0) return '';
-    if (!groups.some((g: RuleGroup): boolean => g.ruleName === 'pr-creation-or-push-guard')) return '';
+    if (!groups.some((g: RuleGroup): boolean => g.ruleName === 'pr-creation-or-push-guard'))
+        return '';
 
-    return `\n\nℹ️  Working in a nested repo under one of these exempt trees (${exemptGuards.join(', ')})? `
-        + `Put a LITERAL \`cd\` at the FRONT of the SAME command — \`cd /abs/path/to/repo && git push\` — and git/gh `
-        + `run normally there: the webpieces guards do NOT govern them (each is its own repo).`
-        + `\n   \`cd <literal path> && <work>\` is the ONE shape that moves where a command is judged. A \`cd\` `
-        + `anywhere else in the line, or a non-literal target like \`cd "$DIR"\`, is refused outright rather than `
-        + `judged from somewhere you did not intend.`;
+    return (
+        `\n\nℹ️  Working in a nested repo under one of these exempt trees (${exemptGuards.join(', ')})? ` +
+        `Put a LITERAL \`cd\` at the FRONT of the SAME command — \`cd /abs/path/to/repo && git push\` — and git/gh ` +
+        `run normally there: the webpieces guards do NOT govern them (each is its own repo).` +
+        `\n   \`cd <literal path> && <work>\` is the ONE shape that moves where a command is judged. A \`cd\` ` +
+        `anywhere else in the line, or a non-literal target like \`cd "$DIR"\`, is refused outright rather than ` +
+        `judged from somewhere you did not intend.`
+    );
 }
 
+// webpieces-disable no-function-outside-class -- runner result assembly is a pure orchestration helper
+function bashPolicyResult(command: string, tree: EffectiveTree, loaded: LoadedConfig, groups: readonly RuleGroup[]): BlockedResult | null {
+    const workspaceRoot = path.dirname(loaded.configPath!);
+    if (groups.length === 0) {
+        // Record the ALLOW only for git/gh commands — the operations the bash guards actually reason
+        // about (branch create, commit, push, merge, PR). Skipping ls/cat/grep keeps the audit log
+        // focused (the whole point of the log is "why did/didn't a guard fire?"). Blocks are always
+        // logged below.
+        if (/\b(?:git|gh)\b/.test(command)) {
+            logGuardDecision(
+                tree.root,
+                new GuardDecision(
+                    '-',
+                    'Bash',
+                    command,
+                    branchForLog(tree.root),
+                    'ALLOW',
+                    'no bash-guard block',
+                    '-',
+                    L0_FAULT_NONE,
+                    MATRIX_L2_UNROWED,
+                ),
+            );
+        }
+        return null;
+    }
+
+    const ruleNames = groups.map((g: RuleGroup): string => g.ruleName).join(',');
+    logGuardDecision(
+        tree.root,
+        new GuardDecision(
+            ruleNames,
+            'Bash',
+            command,
+            branchForLog(tree.root),
+            'BLOCK_AI_CURE',
+            'bash-guard block',
+            '-',
+            L0_FAULT_NONE,
+            MATRIX_L2_UNROWED,
+        ),
+    );
+    const report =
+        new ExcludedPathEscapeHint(workspaceRoot, tree.effectiveCwd).render(
+            command,
+            loaded.excludePaths,
+        ) +
+        formatReport(commandLabel(command), groups, BASH_SUBJECT) +
+        exemptTreesHint(groups, loaded.excludePaths.paths);
+    return new BlockedResult(report);
+}
+
+// webpieces-disable no-function-outside-class -- orchestration helper for the explicit foreign-repository exemption
+function allowForeignTree(command: string, tree: EffectiveTree, workspaceRoot: string): boolean {
+    if (tree.kind === 'foreign') {
+        logGuardDecision(
+            workspaceRoot,
+            new GuardDecision(
+                '-',
+                'Bash',
+                command,
+                branchForLog(workspaceRoot),
+                'ALLOW_EXEMPT',
+                'foreign git repo (out of scope)',
+                '-',
+                L0_FAULT_NONE,
+                new MatrixRef('L1', '1'),
+            ),
+        );
+        return true;
+    }
+
+    return false;
+}

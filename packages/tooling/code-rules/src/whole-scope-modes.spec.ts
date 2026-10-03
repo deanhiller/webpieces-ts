@@ -70,13 +70,13 @@ class Repo {
             const target = sectionForRule(name, fixtureRuleRegistry) === 'hookGuards' ? hookGuards : rules;
             target[name] = overrides[name] ? { ...entry, ...overrides[name] } : entry;
         }
-        this.write(CONFIG_FILENAME, JSON.stringify({
+        policyFixture.writeOwnerConfig(this.root, {
             rules,
             hookGuards,
             commands: { 'pr-gate': { mode: 'ON', buildCommand: 'echo ci', mergeMode: 'AUTO', reviewerAgents: 1, maxReviewerRounds: 2 } },
             excludePaths: [],
             'match-rules': [],
-        }));
+        });
     }
 
     dispose(): void {

@@ -45,7 +45,9 @@ const ALIAS_CLAIM = /ignore\*\s*alias|ignore\w*\s+alias(es)?/i;
  */
 const ALLOWED_FILES = [
     'packages/tooling/rules-config/src/validate-config.ts',
+    'packages/tooling/rules-config/src/policy-field-constraints.ts',
     'packages/tooling/rules-config/src/validate-config.spec.ts',
+    'packages/tooling/rules-config/src/validate-command-sections.spec.ts',
     'packages/tooling/nx-webpieces-rules/src/lib/__tests__/escape-hatch-key-spelling.spec.ts',
 ];
 
@@ -154,7 +156,7 @@ describe('universal escape hatches have exactly one spelling', () => {
 
     it('keeps the rejection path — the loader still knows the dead spellings so it can reject them', () => {
         const aliases = fs.readFileSync(
-            path.join(scan.repoRoot, 'packages/tooling/rules-config/src/validate-config.ts'),
+            path.join(scan.repoRoot, 'packages/tooling/rules-config/src/policy-field-constraints.ts'),
             'utf8',
         );
         for (const spelling of DEAD_SPELLINGS) {

@@ -126,9 +126,7 @@ function writeConfig(overrides: Record<string, unknown>): string {
         };
     }
     const dir = policyFixture.makeRepo('wp-api-doc-rules-config-');
-    fs.writeFileSync(
-        path.join(dir, CONFIG_FILENAME),
-        JSON.stringify({
+    policyFixture.writeOwnerConfig(dir, {
             rules,
             hookGuards,
             commands: {
@@ -142,8 +140,7 @@ function writeConfig(overrides: Record<string, unknown>): string {
             },
             excludePaths: [],
             'match-rules': [],
-        }),
-    );
+        });
     return dir;
 }
 

@@ -1,16 +1,16 @@
-import { BaseRuleConfig } from '@webpieces/rules-sdk';
+import { BaseRuleConfig, ConfigObject, PolicyRuntimeRequest } from '@webpieces/rules-sdk';
 import 'reflect-metadata';
-import { Container } from 'inversify';
-import { DiffScope, LoadedConfig, MatchRuleConfig, loadAndValidate } from "@webpieces/rules-config";
+import { CodeRuleRuntime } from './code-policy-composition';
+import { DiffScope, LoadedConfig, MatchRuleConfig, loadAndValidate } from '@webpieces/rules-config';
 import { MODIFIED_CODE_MODES } from '@webpieces/rules-sdk';
 import { InformAiError } from '@webpieces/tooling-common';
 
 import { ExecutorResult } from './code-validator';
 import { CodeRulesApp } from './code-rules-app';
-import { WorkspaceRoot, MatchRulesHolder } from './code-rules-context';
-import { CONFIG_BINDINGS, ConfigBinding } from './code-rules-config-table';
+import { MatchRulesHolder } from './code-rules-context';
+import { CODE_POLICIES, CodePolicy } from './code-policy-registry';
 import { CodeRulesRunRequest, RuleSelection } from './code-rules-run-request';
-import { ProjectCatalog, ProjectEntry, ScanRestriction, ScanScope } from './scan-scope';
+import { ProjectCatalog, ProjectEntry, ScanScope } from './scan-scope';
 
 /** A validated debug run (#1027): the one rule, the mode it runs at, and the projects it is scoped to. */
 class DebugPlan {
@@ -41,25 +41,32 @@ export class CodeRulesBootstrap {
     async run(workspaceRoot: string, request: CodeRulesRunRequest): Promise<ExecutorResult> {
         const loaded = loadAndValidate(workspaceRoot);
         if (loaded.configPath === null) {
-            throw new InformAiError('No webpieces.config.json found at workspace root (or any ancestor).');
+            throw new InformAiError(
+                'No webpieces.config.json found at workspace root (or any ancestor).',
+            );
         }
         console.log(`\n📄 Loaded config: ${loaded.configPath}`);
 
         const plan = request.isDebug() ? this.plan(workspaceRoot, loaded, request) : undefined;
         if (plan !== undefined) this.printBanner(plan);
 
-        // autobind self-binds every @injectable(Singleton) tooling class (replaces the buildProviderModule registry scan)
-        const container = new Container({ autobind: true });
-        container.bind(WorkspaceRoot).toConstantValue(new WorkspaceRoot(workspaceRoot));
-        container.bind(MatchRulesHolder).toConstantValue(new MatchRulesHolder(this.matchRules(loaded, plan)));
-        container.bind(RuleSelection).toConstantValue(new RuleSelection(plan?.rule));
-        container.bind(ScanRestriction).toConstantValue(new ScanRestriction(plan?.projects));
-        for (const binding of CONFIG_BINDINGS) {
-            const ConfigClass = binding.configClass;
-            const configured = loaded.rulesConfig[binding.ruleId] as BaseRuleConfig | undefined;
-            const config = configured ?? new ConfigClass();
-            container.bind(ConfigClass).toConstantValue(plan?.rule === binding.ruleId ? this.overridden(config, plan) : config);
+        const configs: Record<string, ConfigObject> = {};
+        for (const policy of CODE_POLICIES) {
+            const config = loaded.rulesConfig[policy.ruleId] as BaseRuleConfig;
+            configs[policy.ruleId] = (
+                plan?.rule === policy.ruleId ? this.overridden(config, plan) : config
+            ) as ConfigObject;
         }
+        const runtimeRequest = new PolicyRuntimeRequest(
+            workspaceRoot,
+            configs,
+            CODE_POLICIES.map((policy: CodePolicy) => policy.ruleId),
+        );
+        const container = await new CodeRuleRuntime().compose(runtimeRequest, plan?.projects);
+        container
+            .bind(MatchRulesHolder)
+            .toConstantValue(new MatchRulesHolder(this.matchRules(loaded, plan)));
+        container.bind(RuleSelection).toConstantValue(new RuleSelection(plan?.rule));
 
         const result = await container.get(CodeRulesApp).run();
         if (plan === undefined) return result;
@@ -70,24 +77,42 @@ export class CodeRulesBootstrap {
     }
 
     /** Validate a debug request against the loaded config and the repo's projects; throws on a refusal. */
-    private plan(workspaceRoot: string, loaded: LoadedConfig, request: CodeRulesRunRequest): DebugPlan {
+    private plan(
+        workspaceRoot: string,
+        loaded: LoadedConfig,
+        request: CodeRulesRunRequest,
+    ): DebugPlan {
         const rule = request.rule;
-        if (rule === undefined) throw this.refusal('--mode and --projects need --rule=<name>: a debug run judges exactly one rule.');
+        if (rule === undefined)
+            throw this.refusal(
+                '--mode and --projects need --rule=<name>: a debug run judges exactly one rule.',
+            );
         const modes = this.wholeScopeModesOf(rule, loaded);
         if (modes === undefined) {
-            throw this.refusal(`--rule=${rule} is not a code rule that supports a debug run. Rules that do (they offer ` +
-                `MODIFIED_PROJECTS and RUN_EVERY_TIME): ${this.debuggableRules(loaded).join(', ')}.`);
+            throw this.refusal(
+                `--rule=${rule} is not a code rule that supports a debug run. Rules that do (they offer ` +
+                    `MODIFIED_PROJECTS and RUN_EVERY_TIME): ${this.debuggableRules(loaded).join(', ')}.`,
+            );
         }
         const committedMode = this.committedModeOf(rule, loaded) ?? 'OFF';
         const mode = request.mode ?? committedMode;
         if (!modes.includes(mode) || mode === 'OFF') {
-            const why = request.mode === undefined ? `its committed mode is ${committedMode}` : `--mode=${mode} is not one of its modes`;
-            throw this.refusal(`${rule} cannot run: ${why}. Pass --mode=<one of ${modes.filter((m: string) => m !== 'OFF').join(', ')}>.`);
+            const why =
+                request.mode === undefined
+                    ? `its committed mode is ${committedMode}`
+                    : `--mode=${mode} is not one of its modes`;
+            throw this.refusal(
+                `${rule} cannot run: ${why}. Pass --mode=<one of ${modes.filter((m: string) => m !== 'OFF').join(', ')}>.`,
+            );
         }
-        const unknown = (request.projects ?? []).filter((name: string) => !this.projectNames(workspaceRoot).includes(name));
+        const unknown = (request.projects ?? []).filter(
+            (name: string) => !this.projectNames(workspaceRoot).includes(name),
+        );
         if (unknown.length > 0) {
-            throw this.refusal(`--projects names no such nx project: ${unknown.join(', ')}. Known projects: ` +
-                `${this.projectNames(workspaceRoot).join(', ')}.`);
+            throw this.refusal(
+                `--projects names no such nx project: ${unknown.join(', ')}. Known projects: ` +
+                    `${this.projectNames(workspaceRoot).join(', ')}.`,
+            );
         }
         return new DebugPlan(rule, mode, committedMode, request.projects);
     }
@@ -98,14 +123,19 @@ export class CodeRulesBootstrap {
 
     /** The mode set of a rule that reads its files through ScanScope, or undefined for any other rule. */
     private wholeScopeModesOf(rule: string, loaded: LoadedConfig): readonly string[] | undefined {
-        if (loaded.matchRules.some((mr: MatchRuleConfig) => mr.name === rule)) return MODIFIED_CODE_MODES;
-        if (!CONFIG_BINDINGS.some((binding: ConfigBinding) => binding.ruleId === rule)) return undefined;
-        const modes = CONFIG_BINDINGS.find(binding => binding.ruleId === rule)?.schema['mode']?.enumValues ?? [];
-        return modes.includes('MODIFIED_PROJECTS') && modes.includes('RUN_EVERY_TIME') ? modes : undefined;
+        if (loaded.matchRules.some((mr: MatchRuleConfig) => mr.name === rule))
+            return MODIFIED_CODE_MODES;
+        if (!CODE_POLICIES.some((binding: CodePolicy) => binding.ruleId === rule)) return undefined;
+        const modes =
+            CODE_POLICIES.find((binding: CodePolicy) => binding.ruleId === rule)?.schema['mode']
+                ?.enumValues ?? [];
+        return modes.includes('MODIFIED_PROJECTS') && modes.includes('RUN_EVERY_TIME')
+            ? modes
+            : undefined;
     }
 
     private debuggableRules(loaded: LoadedConfig): string[] {
-        const builtIns = CONFIG_BINDINGS.map((binding: ConfigBinding) => binding.ruleId as string);
+        const builtIns = CODE_POLICIES.map((binding: CodePolicy) => binding.ruleId as string);
         const names = [...builtIns, ...loaded.matchRules.map((mr: MatchRuleConfig) => mr.name)];
         return names.filter((name: string) => this.wholeScopeModesOf(name, loaded) !== undefined);
     }
@@ -113,22 +143,32 @@ export class CodeRulesBootstrap {
     private committedModeOf(rule: string, loaded: LoadedConfig): string | undefined {
         const match = loaded.matchRules.find((mr: MatchRuleConfig) => mr.name === rule);
         if (match !== undefined) return match.mode;
-        const configured = loaded.rulesConfig[rule as keyof typeof loaded.rulesConfig] as BaseRuleConfig | undefined;
+        const configured = loaded.rulesConfig[rule as keyof typeof loaded.rulesConfig] as
+            | BaseRuleConfig
+            | undefined;
         return configured?.mode;
     }
 
     private projectNames(workspaceRoot: string): string[] {
-        return new ProjectCatalog(new DiffScope()).all(workspaceRoot).map((p: ProjectEntry) => p.name).sort();
+        return new ProjectCatalog(new DiffScope())
+            .all(workspaceRoot)
+            .map((p: ProjectEntry) => p.name)
+            .sort();
     }
 
     /** The match-rules, with the debugged one (if it is a match rule) overridden. */
     private matchRules(loaded: LoadedConfig, plan: DebugPlan | undefined): MatchRuleConfig[] {
-        return loaded.matchRules.map((mr: MatchRuleConfig) => (plan?.rule === mr.name ? this.overridden(mr, plan) : mr));
+        return loaded.matchRules.map((mr: MatchRuleConfig) =>
+            plan?.rule === mr.name ? this.overridden(mr, plan) : mr,
+        );
     }
 
     /** A copy of `config` at the plan's mode with both escape hatches cleared. The original is untouched. */
     private overridden<C extends BaseRuleConfig>(config: C, plan: DebugPlan): C {
-        const copy = Object.assign(Object.create(Object.getPrototypeOf(config) as object) as C, config);
+        const copy = Object.assign(
+            Object.create(Object.getPrototypeOf(config) as object) as C,
+            config,
+        );
         copy.mode = plan.mode;
         copy.turnOffRuleUntilEpoch = 0;
         copy.turnOffRuleWhileOnBranch = null;
@@ -137,14 +177,23 @@ export class CodeRulesBootstrap {
 
     private printBanner(plan: DebugPlan): void {
         console.log('');
-        console.log(`🔍 DEBUG RUN of ${plan.rule} — NOT the gate. webpieces.config.json is unchanged and nothing is written.`);
-        console.log(`   Mode: ${plan.mode} (committed: ${plan.committedMode})` +
-            ` · Projects: ${plan.projects === undefined ? 'every project' : plan.projects.join(', ')}` +
-            ' · escape hatches (turnOffRuleUntilEpoch / turnOffRuleWhileOnBranch) ignored for this run');
+        console.log(
+            `🔍 DEBUG RUN of ${plan.rule} — NOT the gate. webpieces.config.json is unchanged and nothing is written.`,
+        );
+        console.log(
+            `   Mode: ${plan.mode} (committed: ${plan.committedMode})` +
+                ` · Projects: ${plan.projects === undefined ? 'every project' : plan.projects.join(', ')}` +
+                ' · escape hatches (turnOffRuleUntilEpoch / turnOffRuleWhileOnBranch) ignored for this run',
+        );
     }
 
     /** Print one count per project and return the total. */
-    private printCounts(workspaceRoot: string, plan: DebugPlan, scan: ScanScope, result: ExecutorResult): number {
+    private printCounts(
+        workspaceRoot: string,
+        plan: DebugPlan,
+        scan: ScanScope,
+        result: ExecutorResult,
+    ): number {
         const counts = scan.countsByProject(workspaceRoot);
         const names = plan.projects ?? Array.from(counts.keys()).sort();
         const total = Array.from(counts.values()).reduce((sum: number, n: number) => sum + n, 0);

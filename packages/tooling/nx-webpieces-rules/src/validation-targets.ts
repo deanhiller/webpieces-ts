@@ -17,7 +17,11 @@ export class ValidationTargets {
         return {
             executor: '@webpieces/nx-webpieces-rules:validate-no-architecture-cycles',
             cache: true,
-            inputs: ['{workspaceRoot}/**/project.json', '{workspaceRoot}/architecture/dependencies.json', ...BRANCH_IDENTITY_INPUTS],
+            inputs: [
+                '{workspaceRoot}/**/project.json',
+                '{workspaceRoot}/architecture/dependencies.json',
+                ...BRANCH_IDENTITY_INPUTS,
+            ],
             metadata: {
                 technologies: ['nx'],
                 description: 'Validate the architecture has no circular project dependencies',
@@ -29,10 +33,15 @@ export class ValidationTargets {
         return {
             executor: '@webpieces/nx-webpieces-rules:validate-packagejson',
             cache: true,
-            inputs: ['{workspaceRoot}/**/project.json', '{workspaceRoot}/**/package.json', ...BRANCH_IDENTITY_INPUTS],
+            inputs: [
+                '{workspaceRoot}/**/project.json',
+                '{workspaceRoot}/**/package.json',
+                ...BRANCH_IDENTITY_INPUTS,
+            ],
             metadata: {
                 technologies: ['nx'],
-                description: 'Validate package.json dependencies match project.json build dependencies',
+                description:
+                    'Validate package.json dependencies match project.json build dependencies',
             },
         };
     }
@@ -47,7 +56,8 @@ export class ValidationTargets {
             inputs: ['{workspaceRoot}/webpieces.config.json'],
             metadata: {
                 technologies: ['nx'],
-                description: 'Validate the pr-gate checklists[] block (docs exist, patterns compile, ids unique)',
+                description:
+                    'Validate the pr-gate checklists[] block (docs exist, patterns compile, ids unique)',
             },
         };
     }
@@ -61,10 +71,14 @@ export class ValidationTargets {
         return {
             executor: '@webpieces/nx-webpieces-rules:validate-code',
             cache: false, // Don't cache - depends on git state
-            inputs: ['default', '{workspaceRoot}/webpieces.config.json', {'runtime': 'node -e "process.stdout.write(String(Math.random()))"'}],
+            inputs: [
+                'default',
+                '{workspaceRoot}/webpieces.config.json',
+                { runtime: 'node -e "process.stdout.write(String(Math.random()))"' },
+            ],
             metadata: {
                 technologies: ['nx'],
-                description: 'Combined validation for new methods, modified methods, and file sizes',
+                description: 'Execute the client-declared build policy contributions',
             },
         };
     }
@@ -86,7 +100,11 @@ export class ValidationTargets {
         return {
             executor: '@webpieces/nx-webpieces-rules:validate-ts-in-src',
             cache: false,
-            inputs: ['default', '{workspaceRoot}/webpieces.config.json', {'runtime': 'node -e "process.stdout.write(String(Math.random()))"'}],
+            inputs: [
+                'default',
+                '{workspaceRoot}/webpieces.config.json',
+                { runtime: 'node -e "process.stdout.write(String(Math.random()))"' },
+            ],
             metadata: {
                 technologies: ['nx'],
                 description: 'Validate all .ts files in projects are inside the src/ directory',
@@ -101,7 +119,8 @@ export class ValidationTargets {
             inputs: ['{workspaceRoot}/nx.json'],
             metadata: {
                 technologies: ['nx'],
-                description: 'Validate the webpieces validators are wired into the build via nx.json dependsOn',
+                description:
+                    'Validate the webpieces validators are wired into the build via nx.json dependsOn',
             },
         };
     }
@@ -118,7 +137,8 @@ export class ValidationTargets {
             inputs: ['default', '{workspaceRoot}/**/project.json'],
             metadata: {
                 technologies: ['nx'],
-                description: 'Validate every server/client api-lib dependency is implemented or used',
+                description:
+                    'Validate every server/client api-lib dependency is implemented or used',
             },
         };
     }

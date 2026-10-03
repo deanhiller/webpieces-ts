@@ -239,7 +239,7 @@ describe('cure reachability — every fault names at least one cure the allowlis
             expect(literal, `no literal in Fix line: ${line}`).not.toBe('');
             // "edit `<file>` yourself" is the tool-shaped cure — judged as the Edit it stands for.
             const outcome = line.includes('edit `')
-                ? isAllowedEdit(`/repo/${literal}`)
+                ? isAllowedEdit(path.join(SAMPLE_ROOT, literal))
                 : isAllowed('Bash', literal, '', 'claude-code');
             expect(outcome, `Fix output prescribes a DENIED call: ${literal}`).not.toBeNull();
         }

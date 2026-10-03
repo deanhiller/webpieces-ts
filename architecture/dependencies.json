@@ -386,7 +386,6 @@
             "responsibilitiesFile": "packages/tooling/nx-webpieces-rules/responsibilities.md",
             "dependsOn": [
                 "api-doc-model",
-                "code-rules",
                 "eslint-rules"
             ]
         },
@@ -524,6 +523,7 @@
             "dependsOn": [
                 "agent-workflow-rules",
                 "ai-hook-rules",
+                "code-rules",
                 "nx-webpieces-rules",
                 "pr-gate"
             ]

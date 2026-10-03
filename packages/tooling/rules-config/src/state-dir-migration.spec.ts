@@ -221,3 +221,32 @@ describe('main-sync lock recovery and status visibility', () => {
         expect(service.mainSyncStatusPath(worktreeA)).toBe(service.mainSyncStatusPath(worktreeB));
     });
 });
+
+describe('declared repository policy inputs survive linked-worktree state migration', () => {
+    beforeEach(makeMigrationRepo);
+    afterEach(cleanupMigrationRepo);
+
+    it('keeps owner configs, lock and catalog in the worktree while moving runtime state', () => {
+        writeFile(worktree, 'webpieces.config.json', JSON.stringify({
+            rulePacks: [{ package: '@client/policy', config: '.webpieces/custom/client.json' }],
+        }));
+        const policyFiles = ['custom/client.json', 'rules.lock.json', 'instruct-ai/rules-catalog.md'];
+        for (const filename of policyFiles) writeFile(worktree, `.webpieces/${filename}`, `original:${filename}`);
+        writeFile(worktree, '.webpieces/logs/hook.log', 'runtime state');
+
+        new DotWebpieces().local(worktree);
+
+        for (const filename of policyFiles) {
+            expect(fs.readFileSync(path.join(worktree, '.webpieces', filename), 'utf8')).toBe(`original:${filename}`);
+            expect(fs.existsSync(path.join(namespace, filename))).toBe(false);
+        }
+        expect(fs.readFileSync(path.join(namespace, 'logs/hook.log'), 'utf8')).toBe('runtime state');
+    });
+
+    it('defers relocation when malformed declarations leave config paths uncertain', () => {
+        writeFile(worktree, 'webpieces.config.json', '{ invalid');
+        writeFile(worktree, '.webpieces/custom/client.json', 'repair me');
+        new DotWebpieces().local(worktree);
+        expect(fs.readFileSync(path.join(worktree, '.webpieces/custom/client.json'), 'utf8')).toBe('repair me');
+    });
+});

@@ -20,9 +20,9 @@
 
 import * as path from 'path';
 import { DocumentedType } from '@webpieces/api-doc-model';
-import { SuffixEntryPicker } from '@webpieces/code-rules';
-import { loadAndValidate } from "@webpieces/rules-config";
-import { RequiredTypeSuffixEntry } from "@webpieces/code-rules";
+import { FirstPathMatch, PathMatchCandidate } from '@webpieces/rules-config';
+import { loadAndValidate } from '@webpieces/rules-config';
+import { WireSuffixEntry } from './wire-suffix-entry';
 import { ProjectInfo } from '../project-info';
 import { resolveRole } from '../role-resolver';
 import { RuleGate } from '../rule-gate';
@@ -31,7 +31,7 @@ const API_LIB_ROLE = 'api-lib';
 
 /** The `required-type-suffix` entries the wire closure enforces; empty when that rule is OFF. */
 export class WireClosureRule {
-    constructor(public readonly suffixEntries: readonly RequiredTypeSuffixEntry[]) {}
+    constructor(public readonly suffixEntries: readonly WireSuffixEntry[]) {}
 
     /** Only the role check — what a unit test or a repo with `required-type-suffix` OFF gets. */
     // webpieces-disable no-function-outside-class -- static factory of this class
@@ -42,12 +42,12 @@ export class WireClosureRule {
     /** `required-type-suffix`'s entries, unless that rule is OFF or time-boxed / branch-scoped off. */
     // webpieces-disable no-function-outside-class -- static factory of this class
     static fromConfig(workspaceRoot: string): WireClosureRule {
-        if (new RuleGate().skipReason(workspaceRoot, "required-type-suffix", true) !== null) {
+        if (new RuleGate().skipReason(workspaceRoot, 'required-type-suffix', true) !== null) {
             return WireClosureRule.withoutSuffixes();
         }
-        const rule = loadAndValidate(workspaceRoot).resolved.rules.get("required-type-suffix");
+        const rule = loadAndValidate(workspaceRoot).resolved.rules.get('required-type-suffix');
         const entries = rule?.options['entries'];
-        return new WireClosureRule(Array.isArray(entries) ? (entries as RequiredTypeSuffixEntry[]) : []);
+        return new WireClosureRule(Array.isArray(entries) ? (entries as WireSuffixEntry[]) : []);
     }
 }
 
@@ -70,7 +70,7 @@ class OwnedRoot {
 /** Judges every type a contract reaches against the api-lib role and the suffix rule. */
 export class WireClosure {
     private readonly roots: OwnedRoot[];
-    private readonly picker = new SuffixEntryPicker();
+    private readonly picker = new FirstPathMatch();
 
     constructor(
         private readonly workspaceRoot: string,
@@ -95,29 +95,40 @@ export class WireClosure {
         const declared = `${type.packageName ?? 'no package'} (project '${owner.name}', role:${role})`;
         const verdicts: WireClosureVerdict[] = [];
         if (role !== API_LIB_ROLE) {
-            verdicts.push(new WireClosureVerdict(
-                `'${type.name}' goes over the wire but is declared in ${declared}, which is not a role:api-lib ` +
-                    'project — every type a contract reaches must be declared in an api library',
-                `Move '${type.name}' into a role:api-lib project — as a '…Dto' string enum when it is a ` +
-                    `string-literal union. Retagging '${owner.name}' is not a way out unless it holds only ` +
-                    'contracts and wire types (validate-api-lib-tag refuses a role:api-lib with an implementation).',
-            ));
+            verdicts.push(
+                new WireClosureVerdict(
+                    `'${type.name}' goes over the wire but is declared in ${declared}, which is not a role:api-lib ` +
+                        'project — every type a contract reaches must be declared in an api library',
+                    `Move '${type.name}' into a role:api-lib project — as a '…Dto' string enum when it is a ` +
+                        `string-literal union. Retagging '${owner.name}' is not a way out unless it holds only ` +
+                        'contracts and wire types (validate-api-lib-tag refuses a role:api-lib with an implementation).',
+                ),
+            );
         }
-        const governing = this.picker.winner(relFile, this.rule.suffixEntries);
+        const governing = this.picker.winner(
+            relFile,
+            this.rule.suffixEntries.map(
+                (entry: WireSuffixEntry) => new PathMatchCandidate(entry.paths, entry),
+            ),
+        );
         if (governing !== undefined && !this.endsInSuffix(type.name, governing.entry.suffixes)) {
-            verdicts.push(new WireClosureVerdict(
-                `'${type.name}' goes over the wire from ${relFile} but does not end in one of ` +
-                    `[${governing.entry.suffixes.join(', ')}], which the required-type-suffix entry ` +
-                    `'${governing.glob}' demands of it`,
-                `Rename '${type.name}' to end in one of ${governing.entry.suffixes.join(', ')} — the suffix tells a ` +
-                    'reader which layer a type belongs to, and a wire type is the layer a partner reads.',
-            ));
+            verdicts.push(
+                new WireClosureVerdict(
+                    `'${type.name}' goes over the wire from ${relFile} but does not end in one of ` +
+                        `[${governing.entry.suffixes.join(', ')}], which the required-type-suffix entry ` +
+                        `'${governing.glob}' demands of it`,
+                    `Rename '${type.name}' to end in one of ${governing.entry.suffixes.join(', ')} — the suffix tells a ` +
+                        'reader which layer a type belongs to, and a wire type is the layer a partner reads.',
+                ),
+            );
         }
         return verdicts;
     }
 
     private endsInSuffix(name: string, suffixes: readonly string[]): boolean {
-        return suffixes.some((suffix: string) => name.length > suffix.length && name.endsWith(suffix));
+        return suffixes.some(
+            (suffix: string) => name.length > suffix.length && name.endsWith(suffix),
+        );
     }
 
     private ownerOf(abs: string): ProjectInfo | null {

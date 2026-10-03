@@ -37,6 +37,7 @@
     },
     "exports": {
         ".": "./src/index.js",
-        "./rule-pack": "./src/rule-pack.js"
+        "./rule-pack": "./src/rule-pack.js",
+        "./rule-runtime": "./src/rule-runtime.js"
     }
 }

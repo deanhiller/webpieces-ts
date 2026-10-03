@@ -12,7 +12,7 @@
     "arch:visualize": "pnpm nx run architecture:visualize",
     "arch:visualize-runtime": "pnpm nx run architecture:visualize-runtime",
     "design:visualize": "wp-design-visualize",
-    "guards:generate": "TS_NODE_PROJECT=tsconfig.base.json node -r @swc-node/register -r tsconfig-paths/register scripts/generate-guard-docs.ts",
+    "guards:generate": "TS_NODE_PROJECT=tsconfig.base.json node -r @swc-node/register -r tsconfig-paths/register scripts/generate-config-repair-bootstrap.ts && TS_NODE_PROJECT=tsconfig.base.json node -r @swc-node/register -r tsconfig-paths/register scripts/generate-guard-docs.ts",
     "clean": "rm -rf dist coverage .nx",
     "format": "prettier --write .",
     "format:check": "prettier --check ."

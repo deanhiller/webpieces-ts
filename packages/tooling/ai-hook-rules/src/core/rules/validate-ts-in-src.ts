@@ -1,8 +1,8 @@
 import * as fs from 'fs';
 import * as path from 'path';
 
-import { isPathExcluded, Option } from "@webpieces/rules-config";
-import { ValidateTsInSrcConfig } from "../../configs/rule-configs";
+import { isPathExcluded, Option } from '@webpieces/rules-config';
+import { ValidateTsInSrcConfig } from '../../configs/rule-configs';
 
 import type { FileContext, Violation } from '@webpieces/hook-runtime';
 import { Violation as V } from '@webpieces/hook-runtime';
@@ -10,8 +10,12 @@ import { FileRuleBase } from '@webpieces/hook-runtime';
 import { FixHint } from '@webpieces/hook-runtime';
 
 const DEFAULT_EXCLUDE_PATHS = [
-    'node_modules', 'dist', '.nx', '.git',
-    '**/*.d.ts', '**/jest.config.ts',
+    'node_modules',
+    'dist',
+    '.nx',
+    '.git',
+    '**/*.d.ts',
+    '**/jest.config.ts',
 ];
 const DEFAULT_ALLOWED_ROOT_FILES = ['jest.setup.ts'];
 
@@ -25,9 +29,11 @@ function findProjectRoot(filePath: string, workspaceRoot: string): string | null
 }
 
 export class ValidateTsInSrcRule extends FileRuleBase<ValidateTsInSrcConfig> {
-    constructor(config: ValidateTsInSrcConfig) { super(config, 'validate-ts-in-src', 'validate-ts-in-src'); }
+    constructor(config: ValidateTsInSrcConfig) {
+        super(config, 'validate-ts-in-src', 'validate-ts-in-src');
+    }
 
-    readonly description = 'Every .ts file must belong to a project\'s src/ directory.';
+    readonly description = "Every .ts file must belong to a project's src/ directory.";
     override readonly files = ['**/*.ts', '**/*.tsx'];
     override readonly defaultOptions = {
         excludePaths: DEFAULT_EXCLUDE_PATHS,
@@ -37,8 +43,13 @@ export class ValidateTsInSrcRule extends FileRuleBase<ValidateTsInSrcConfig> {
         'TypeScript file is outside a project src/ directory.',
         'Fix by one of:',
         [
-            new Option('Move the file into an existing project\'s src/ directory, or create a new project with project.json that owns the directory.', true),
-            new Option('Add a dir or glob (e.g. "**/codegen.ts") to validate-ts-in-src.excludePaths in webpieces.config.json'),
+            new Option(
+                "Move the file into an existing project's src/ directory, or create a new project with project.json that owns the directory.",
+                true,
+            ),
+            new Option(
+                'Add a dir or glob (e.g. "**/codegen.ts") to validate-ts-in-src.excludePaths in {configFile}',
+            ),
         ],
     );
 
@@ -57,21 +68,25 @@ export class ValidateTsInSrcRule extends FileRuleBase<ValidateTsInSrcConfig> {
         const projectRoot = findProjectRoot(ctx.filePath, ctx.targetRoot);
 
         if (!projectRoot) {
-            return [new V(
-                1,
-                ctx.targetRelativePath,
-                'File is not inside any Nx project. Move it into a project\'s src/ directory.',
-            )];
+            return [
+                new V(
+                    1,
+                    ctx.targetRelativePath,
+                    "File is not inside any Nx project. Move it into a project's src/ directory.",
+                ),
+            ];
         }
 
         const relToProject = path.relative(projectRoot, ctx.filePath);
         if (!relToProject.startsWith('src' + path.sep) && relToProject !== 'src') {
             const projectName = path.relative(ctx.targetRoot, projectRoot);
-            return [new V(
-                1,
-                ctx.targetRelativePath,
-                `File is inside project \`${projectName}\` but outside its src/ directory. Move it into src/.`,
-            )];
+            return [
+                new V(
+                    1,
+                    ctx.targetRelativePath,
+                    `File is inside project \`${projectName}\` but outside its src/ directory. Move it into src/.`,
+                ),
+            ];
         }
 
         return [];

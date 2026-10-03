@@ -33,32 +33,16 @@ export class ConfigParseAttempt {
     ) {}
 }
 
-// Raw shape of webpieces.config.json as parsed from JSON, before validation/typing.
-//  - `rules`      — code-style validators (scope edit/file).
-//  - `hookGuards` — git/PR/branch protection guards (scope bash).
-//  - `commands`   — gated command config the guards point at; `pr-gate` lives inside it. Carried as
-//                   opaque JSON because its nested `gates` array can't be expressed in the FieldDef
-//                   schema; validated structurally by validateCommandsSection.
-//  - `pr-gate`    — DEPRECATED top-level block (pre-migration layout). Read only as a back-compat
-//                   fallback / to emit a "move it under commands" migration error.
-// webpieces-disable no-any-unknown -- consumer JSON config has opaque rule option values
-export interface RawConfigFile {
-    extends?: string;
-    rules?: Record<string, Record<string, unknown>>;
-    hookGuards?: Record<string, Record<string, unknown>>;
-    // webpieces-disable no-any-unknown -- opaque commands JSON, validated by validateCommandsSection
+/** Parsed but unvalidated root declaration. Concrete policy settings live only in declared owner files. */
+export class RawConfigFile {
+    // webpieces-disable no-any-unknown -- opaque client JSON is validated at the root/owner boundary
+    rulePacks?: unknown;
+    // webpieces-disable no-any-unknown -- command behavior has its own structural validator
     commands?: unknown;
-    // REQUIRED top-level block: two glob lists that suppress hook enforcement per file path.
-    // Opaque here (validated structurally by validateExcludePaths, then parsed into ExcludePaths).
-    // webpieces-disable no-any-unknown -- opaque excludePaths JSON, validated by validateExcludePaths
+    // webpieces-disable no-any-unknown -- generic exclusions are validated before interpretation
     excludePaths?: unknown;
-    // REQUIRED top-level array of client-authored content guards (regex patterns + message + scoping).
-    // Opaque here; validated structurally by validateMatchRulesSection, then parsed into MatchRuleConfig[].
-    // webpieces-disable no-any-unknown -- opaque match-rules JSON, validated by validateMatchRulesSection
+    // webpieces-disable no-any-unknown -- client match rules have their own structural validator
     'match-rules'?: unknown;
-    rulesDir?: string[];
-    // webpieces-disable no-any-unknown -- DEPRECATED top-level pr-gate, migrated under `commands`
-    'pr-gate'?: unknown;
 }
 
 /**
@@ -106,6 +90,7 @@ export class ConfigFile {
         try {
             const raw = this.readFileText(configPath);
             return new ConfigParseAttempt(JSON.parse(raw) as RawConfigFile, null);
+        // webpieces-disable no-any-unknown -- external JSON or runtime exports are validated before policy execution
         } catch (err: unknown) {
             const error = toError(err);
             return new ConfigParseAttempt(null, error);

@@ -33,8 +33,8 @@ class OpenclawHandlerResult {
 }
 
 const TOOL_MAP: Record<string, ToolKind> = {
-    'write': 'Write',
-    'edit': 'Edit',
+    write: 'Write',
+    edit: 'Edit',
 };
 
 // webpieces-disable no-function-outside-class -- existing OpenClaw callback and stateless adapter helpers moved intact; the SDK invokes this module function
@@ -44,17 +44,18 @@ function mapToolName(openclawName: string): ToolKind | null {
 
 // webpieces-disable no-any-unknown -- openclaw SDK passes opaque tool arguments
 // webpieces-disable no-function-outside-class -- existing OpenClaw callback and stateless adapter helpers moved intact; the SDK invokes this module function
+// webpieces-disable no-any-unknown -- external JSON or runtime exports are validated before policy execution
 function mapToolInput(toolName: string, args: Record<string, unknown>): NormalizedToolInput | null {
-    const filePath = typeof args['path'] === 'string' ? args['path'] as string : null;
+    const filePath = typeof args['path'] === 'string' ? (args['path'] as string) : null;
     if (!filePath) return null;
 
     if (toolName === 'write') {
-        const content = typeof args['content'] === 'string' ? args['content'] as string : '';
+        const content = typeof args['content'] === 'string' ? (args['content'] as string) : '';
         return new NormalizedToolInput(filePath, [new NormalizedEdit('', content)]);
     }
     if (toolName === 'edit') {
-        const oldStr = typeof args['old_string'] === 'string' ? args['old_string'] as string : '';
-        const newStr = typeof args['new_string'] === 'string' ? args['new_string'] as string : '';
+        const oldStr = typeof args['old_string'] === 'string' ? (args['old_string'] as string) : '';
+        const newStr = typeof args['new_string'] === 'string' ? (args['new_string'] as string) : '';
         return new NormalizedToolInput(filePath, [new NormalizedEdit(oldStr, newStr)]);
     }
     return null;
@@ -90,10 +91,15 @@ export default async function handler(
         const loaded = loadAndValidate(wsRoot);
         const source = new SourceHookRules().load(loaded);
         const guards = new WorkflowHookRules().load(loaded);
-        const result = new HookFileEvaluation().evaluate(toolKind, input, loaded,
-            new HookRuleSet([...source.builtInRules, ...guards.rules, ...source.extensionRules], [...source.configuredRules, ...guards.configuredRules]));
+        const result = new HookFileEvaluation().evaluate(
+            toolKind,
+            input,
+            loaded,
+            new HookRuleSet([...source.contributedRules, ...guards.rules, ...source.matchRules]),
+        );
         if (!result) return new OpenclawHandlerResult('approved');
         return new OpenclawHandlerResult('rejected', result.report);
+    // webpieces-disable no-any-unknown -- external JSON or runtime exports are validated before policy execution
     } catch (err: unknown) {
         const error = toError(err);
         // An escaped RuleFailError or InformAiError carries an AI-readable message; anything else is
