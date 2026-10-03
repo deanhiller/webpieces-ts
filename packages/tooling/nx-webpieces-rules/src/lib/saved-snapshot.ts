@@ -4,11 +4,11 @@ import type { RuntimeGraph } from './runtime-graph-model';
 
 /** Saved graphs have no reliable generation timestamp; file mtimes also change on checkout. */
 export class SavedSnapshot {
-    static refresh(): string {
+    refresh(): string {
         return 'Refresh explicitly: pnpm nx run architecture:generate';
     }
 
-    static message(): string {
+    message(): string {
         return (
             'Saved generated snapshot. Viewing does not refresh architecture facts. ' +
             'Freshness unknown: no reliable generation provenance is recorded; current source has not been checked. ' +
@@ -16,7 +16,7 @@ export class SavedSnapshot {
         );
     }
 
-    static html(): string {
+    html(): string {
         return (
             `<p class="hint"><strong>Saved generated snapshot.</strong> Viewing does not refresh architecture facts. ` +
             `Freshness unknown; current source has not been checked. ` +
@@ -25,11 +25,11 @@ export class SavedSnapshot {
     }
 
     // webpieces-disable no-any-unknown -- saved JSON is untrusted until its shape has been checked
-    private static isMap(value: unknown): boolean {
+    private isMap(value: unknown): boolean {
         return value !== null && typeof value === 'object' && !Array.isArray(value);
     }
 
-    static validateProjects(graph: EnhancedGraph, graphPath: string): void {
+    validateProjects(graph: EnhancedGraph, graphPath: string): void {
         if (
             !this.isMap(graph) ||
             Object.values(graph).some(
@@ -50,7 +50,7 @@ export class SavedSnapshot {
         }
     }
 
-    static validateRuntime(graph: RuntimeGraph | null): asserts graph is RuntimeGraph {
+    validateRuntime(graph: RuntimeGraph | null): asserts graph is RuntimeGraph {
         if (
             graph === null ||
             !this.isMap(graph) ||

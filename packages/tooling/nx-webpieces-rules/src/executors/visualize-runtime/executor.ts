@@ -1,4 +1,3 @@
-import { SavedSnapshot } from '../../lib/saved-snapshot';
 /**
  * Visualize Runtime Executor
  *
@@ -9,6 +8,7 @@ import { SavedSnapshot } from '../../lib/saved-snapshot';
  */
 
 import type { ExecutorContext } from '@nx/devkit';
+import { SavedSnapshot } from '../../lib/saved-snapshot';
 import { loadRuntimeGraph, runtimeGraphFileExists } from '../../lib/runtime-graph';
 import { writeRuntimeVisualization, RuntimeVizOptions } from '../../lib/runtime-visualizer';
 import { loadRuntimeConfig } from '../../lib/runtime-config';
@@ -28,20 +28,21 @@ export default async function runExecutor(
     context: ExecutorContext,
 ): Promise<ExecutorResult> {
     const workspaceRoot = context.root;
+    const snapshot: SavedSnapshot = new SavedSnapshot();
 
     console.log('\n🎨 Runtime Microservice Visualization\n');
-    console.log(SavedSnapshot.message());
+    console.log(snapshot.message());
 
     // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
     try {
         const graph = loadRuntimeGraph(workspaceRoot);
         if (graph === null && !runtimeGraphFileExists(workspaceRoot)) {
             console.error('❌ No architecture/runtime-dependencies.json found');
-            console.error(SavedSnapshot.refresh());
+            console.error(snapshot.refresh());
             return { success: false };
         }
 
-        SavedSnapshot.validateRuntime(graph);
+        snapshot.validateRuntime(graph);
         const config = loadRuntimeConfig(workspaceRoot);
         const options = new RuntimeVizOptions(config.showExternalNodes);
         const vizPaths = writeRuntimeVisualization(graph, workspaceRoot, undefined, options);
@@ -59,7 +60,7 @@ export default async function runExecutor(
     } catch (err: unknown) {
         const error = toError(err);
         console.error('❌ Runtime visualization failed for architecture/runtime-dependencies.json:', error.message);
-        console.error(SavedSnapshot.refresh());
+        console.error(snapshot.refresh());
         return { success: false };
     }
 }

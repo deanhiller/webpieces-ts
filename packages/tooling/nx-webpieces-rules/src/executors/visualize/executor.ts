@@ -29,9 +29,10 @@ export default async function runExecutor(
 ): Promise<ExecutorResult> {
     const graphPath = options.graphPath ?? DEFAULT_GRAPH_PATH;
     const workspaceRoot = context.root;
+    const snapshot: SavedSnapshot = new SavedSnapshot();
 
     console.log('\n🎨 Architecture Visualization\n');
-    console.log(SavedSnapshot.message());
+    console.log(snapshot.message());
 
     // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
     try {
@@ -41,11 +42,11 @@ export default async function runExecutor(
 
         if (!graphFile) {
             console.error(`❌ No saved graph found at ${graphPath}`);
-            console.error(SavedSnapshot.refresh());
+            console.error(snapshot.refresh());
             return { success: false };
         }
         const graph = graphFile.projects;
-        SavedSnapshot.validateProjects(graph, graphPath);
+        snapshot.validateProjects(graph, graphPath);
 
         // Generate visualization
         console.log('🎨 Generating visualization...');
@@ -66,7 +67,7 @@ export default async function runExecutor(
         const error = toError(err);
         const rendered = error instanceof RuleFailError ? renderRuleFailForHuman(error) : error.message;
         console.error(`❌ Visualization failed for ${graphPath}:`, rendered);
-        console.error(SavedSnapshot.refresh());
+        console.error(snapshot.refresh());
         return { success: false };
     }
 }
