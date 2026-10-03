@@ -497,11 +497,11 @@ function createGenerateTarget(graphPath: string): TargetConfiguration {
 function createVisualizeTargetWithoutPrefix(graphPath: string): TargetConfiguration {
     return {
         executor: '@webpieces/nx-webpieces-rules:visualize',
-        dependsOn: ['generate'],
+        cache: false,
         options: { graphPath },
         metadata: {
             technologies: ['nx'],
-            description: 'Generate visual representations of the architecture graph',
+            description: 'View saved architecture without refreshing; refresh: pnpm nx run architecture:generate',
         },
     };
 }

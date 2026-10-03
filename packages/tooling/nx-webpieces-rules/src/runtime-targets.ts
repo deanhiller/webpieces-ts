@@ -9,10 +9,10 @@ import type { TargetConfiguration } from '@nx/devkit';
 export function createVisualizeRuntimeTarget(): TargetConfiguration {
     return {
         executor: '@webpieces/nx-webpieces-rules:visualize-runtime',
-        dependsOn: ['architecture:generate'],
+        cache: false,
         metadata: {
             technologies: ['nx'],
-            description: 'Render the runtime microservice graph (runtime-dependencies.json)',
+            description: 'View saved runtime architecture without refreshing; refresh: pnpm nx run architecture:generate',
         },
     };
 }

@@ -1,3 +1,4 @@
+import { SavedSnapshot } from '../../lib/saved-snapshot';
 /**
  * Visualize Runtime Executor
  *
@@ -8,7 +9,7 @@
  */
 
 import type { ExecutorContext } from '@nx/devkit';
-import { loadRuntimeGraph } from '../../lib/runtime-graph';
+import { loadRuntimeGraph, runtimeGraphFileExists } from '../../lib/runtime-graph';
 import { writeRuntimeVisualization, RuntimeVizOptions } from '../../lib/runtime-visualizer';
 import { loadRuntimeConfig } from '../../lib/runtime-config';
 import { GraphVisualizer } from '../../lib/graph-visualizer';
@@ -29,16 +30,18 @@ export default async function runExecutor(
     const workspaceRoot = context.root;
 
     console.log('\n🎨 Runtime Microservice Visualization\n');
+    console.log(SavedSnapshot.message());
 
     // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
     try {
         const graph = loadRuntimeGraph(workspaceRoot);
-        if (!graph) {
+        if (graph === null && !runtimeGraphFileExists(workspaceRoot)) {
             console.error('❌ No architecture/runtime-dependencies.json found');
-            console.error('   Run: nx run architecture:generate first');
+            console.error(SavedSnapshot.refresh());
             return { success: false };
         }
 
+        SavedSnapshot.validateRuntime(graph);
         const config = loadRuntimeConfig(workspaceRoot);
         const options = new RuntimeVizOptions(config.showExternalNodes);
         const vizPaths = writeRuntimeVisualization(graph, workspaceRoot, undefined, options);
@@ -55,7 +58,8 @@ export default async function runExecutor(
         return { success: true };
     } catch (err: unknown) {
         const error = toError(err);
-        console.error('❌ Runtime visualization failed:', error.message);
+        console.error('❌ Runtime visualization failed for architecture/runtime-dependencies.json:', error.message);
+        console.error(SavedSnapshot.refresh());
         return { success: false };
     }
 }

@@ -19,8 +19,9 @@ export default async function helpExecutor(
     console.log(`${BOLD}📝 Available npm scripts (convenient shortcuts):${RESET}`);
     console.log('');
     console.log('  Architecture graph:');
-    console.log('    npm run arch:generate                  # Generate dependency graph');
-    console.log('    npm run arch:visualize                 # Visualize dependency graph');
+    console.log('    npm run arch:generate                  # Explicitly refresh architecture/API/runtime facts');
+    console.log('    npm run arch:visualize                 # View saved snapshot (does not refresh)');
+    console.log('    npm run arch:visualize-runtime         # View saved runtime snapshot (does not refresh)');
     console.log('');
     console.log('  Validation:');
     console.log('    npm run arch:validate                  # Quick validation (no-cycles)');
@@ -32,8 +33,9 @@ export default async function helpExecutor(
     console.log(`${BOLD}📝 Available Nx targets:${RESET}`);
     console.log('');
     console.log('  Workspace-level architecture validation:');
-    console.log('    nx run architecture:generate                         # Generate dependency graph');
-    console.log('    nx run architecture:visualize                        # Visualize dependency graph');
+    console.log('    nx run architecture:generate                         # Explicitly refresh architecture/API/runtime facts');
+    console.log('    nx run architecture:visualize                        # View saved snapshot (does not refresh)');
+    console.log('    nx run architecture:visualize-runtime                # View saved runtime snapshot (does not refresh)');
     console.log('    nx run architecture:validate-no-architecture-cycles  # Check for circular project dependencies');
     console.log('    nx run architecture:validate-architecture-unchanged  # Validate against blessed graph');
     console.log('');

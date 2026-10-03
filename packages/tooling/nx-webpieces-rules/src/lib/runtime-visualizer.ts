@@ -1,3 +1,4 @@
+import { SavedSnapshot } from './saved-snapshot';
 /**
  * Runtime Visualizer
  *
@@ -599,6 +600,7 @@ export class RuntimeHtmlPage {
 </head>
 <body>
     <h1>${title}</h1>
+    ${SavedSnapshot.html()}
     <p class="hint">💡 <strong>Click any box</strong> for its menu — <strong>Lock</strong> dims every other box and every arrow so one service, queue, datastore or external system stands alone; <strong>Unlock</strong> restores the whole picture.</p>
     <div id="graph"></div>
     ${legendHtml()}

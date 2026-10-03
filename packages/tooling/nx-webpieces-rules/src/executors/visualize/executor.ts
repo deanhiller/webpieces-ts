@@ -9,7 +9,8 @@
  */
 
 import type { ExecutorContext } from '@nx/devkit';
-import { loadBlessedGraph } from '../../lib/graph-loader';
+import { SavedSnapshot } from '../../lib/saved-snapshot';
+import { DEFAULT_GRAPH_PATH, loadBlessedGraph } from '../../lib/graph-loader';
 import { GraphVisualizer } from '../../lib/graph-visualizer';
 import { RuleFailError, renderRuleFailForHuman } from '@webpieces/rules-config';
 import { toError } from '../../toError';
@@ -26,10 +27,11 @@ export default async function runExecutor(
     options: VisualizeExecutorOptions,
     context: ExecutorContext
 ): Promise<ExecutorResult> {
-    const graphPath = options.graphPath;
+    const graphPath = options.graphPath ?? DEFAULT_GRAPH_PATH;
     const workspaceRoot = context.root;
 
     console.log('\n🎨 Architecture Visualization\n');
+    console.log(SavedSnapshot.message());
 
     // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
     try {
@@ -38,11 +40,12 @@ export default async function runExecutor(
         const graphFile = loadBlessedGraph(workspaceRoot, graphPath);
 
         if (!graphFile) {
-            console.error('❌ No saved graph found at architecture/dependencies.json');
-            console.error('   Run: nx run architecture:generate first');
+            console.error(`❌ No saved graph found at ${graphPath}`);
+            console.error(SavedSnapshot.refresh());
             return { success: false };
         }
         const graph = graphFile.projects;
+        SavedSnapshot.validateProjects(graph, graphPath);
 
         // Generate visualization
         console.log('🎨 Generating visualization...');
@@ -62,7 +65,8 @@ export default async function runExecutor(
     } catch (err: unknown) {
         const error = toError(err);
         const rendered = error instanceof RuleFailError ? renderRuleFailForHuman(error) : error.message;
-        console.error('❌ Visualization failed:', rendered);
+        console.error(`❌ Visualization failed for ${graphPath}:`, rendered);
+        console.error(SavedSnapshot.refresh());
         return { success: false };
     }
 }

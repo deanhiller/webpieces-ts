@@ -1,3 +1,4 @@
+import { SavedSnapshot } from './saved-snapshot';
 /**
  * Graph Visualizer
  *
@@ -365,6 +366,7 @@ export class GraphVisualizer {
 </head>
 <body>
     <h1>${title}</h1>
+    ${SavedSnapshot.html()}
     <p class="hint">💡 <strong>Click any box</strong> for its menu — <strong>View Design</strong> (only where that project has a generated <strong>design.html</strong>, i.e. what the AI sees inside it) and <strong>Lock/Unlock</strong>, which is the same lock as the dropdown below.</p>
     <p class="hint">🔦 <strong>Hover any box</strong> to trace its <em>entire</em> dependency chain — every ancestor above it (all the way up) <em>and</em> every dependency below it (all the way down), with all the boxes and lines between — while the rest of the graph dims so you can follow one box at a glance.</p>
     ${legend}

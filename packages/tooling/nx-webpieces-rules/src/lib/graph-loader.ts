@@ -75,10 +75,10 @@ export const GRAPH_COMMANDS: CommandMap = {
         'adding/removing project dependencies or changing an API\'s endpoints',
     visualizeArchitecture:
         'pnpm nx run architecture:visualize — opens the monorepo dependency graph (this file) ' +
-        'as HTML in a browser',
+        'as HTML in a browser from saved data, without refreshing; freshness unknown',
     visualizeRuntimeArchitecture:
         'pnpm nx run architecture:visualize-runtime — opens the runtime microservice call graph ' +
-        'as HTML in a browser',
+        'as HTML in a browser from saved data, without refreshing; freshness unknown',
     regenerateDesigns:
         "pnpm nx run-many --target=di-graph-generate — rewrites every project's " +
         'design.json/design.md (also runs automatically on every build)',

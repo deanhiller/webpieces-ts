@@ -8,12 +8,12 @@
         "visualize": {
             "implementation": "./src/executors/visualize/executor",
             "schema": "./src/executors/visualize/schema.json",
-            "description": "Generate visual representations of the architecture graph"
+            "description": "View saved architecture without refreshing; refresh: pnpm nx run architecture:generate"
         },
         "visualize-runtime": {
             "implementation": "./src/executors/visualize-runtime/executor",
             "schema": "./src/executors/visualize-runtime/schema.json",
-            "description": "Render the runtime microservice graph (runtime-dependencies.json)"
+            "description": "View saved runtime architecture without refreshing; refresh: pnpm nx run architecture:generate"
         },
         "validate-runtime-architecture": {
             "implementation": "./src/executors/validate-runtime-architecture/executor",

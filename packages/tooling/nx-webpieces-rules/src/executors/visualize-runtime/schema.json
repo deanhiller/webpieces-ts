@@ -1,7 +1,7 @@
 {
     "$schema": "http://json-schema.org/schema",
     "title": "Visualize Runtime Executor",
-    "description": "Render the runtime microservice graph (runtime-dependencies.json) to DOT + HTML.",
+    "description": "View the saved runtime snapshot as DOT + HTML without refreshing. Refresh: pnpm nx run architecture:generate.",
     "type": "object",
     "properties": {},
     "required": []
