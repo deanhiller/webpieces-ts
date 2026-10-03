@@ -1,4 +1,6 @@
+import { RulePackRegistry } from '@webpieces/rules-config';
 import { policyFixture } from '@webpieces/tooling-testkit';
+const fixtureRuleRegistry = new RulePackRegistry(policyFixture.manifests());
 import { specTempDirs } from '@webpieces/tooling-testkit';
 import { execFileSync } from 'child_process';
 import * as fs from 'fs';
@@ -593,10 +595,11 @@ describe('an L1 deny names the L1 matrix, by absolute path and by row', () => {
     // rather than hand-rolled — the same shape runner.spec.ts uses, and for the same reason.
     function writeGuardConfig(root: string): void {
         // webpieces-disable no-any-unknown -- opaque JSON config shape, only mutated by known keys here
-        const config = migrate({}).config as Record<string, any>;
+        const config = migrate({}, fixtureRuleRegistry).config as Record<string, any>;
         config.hookGuards['branch-creation-guard'].autoReapMergedBranches = false;
         for (const name of Object.keys(config.hookGuards)) config.hookGuards[name].mode = 'OFF';
         config.excludePaths = [];
+        policyFixture.declareIn(root);
         fs.writeFileSync(path.join(root, 'webpieces.config.json'), JSON.stringify(config));
     }
 

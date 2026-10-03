@@ -16,20 +16,24 @@ const baseline = snapshot as OwnershipBaseline;
 /** Frozen pre-migration policy data for real config-loader fixtures; never used by product code. */
 export class PolicyFixture {
     manifests(): readonly RulePackManifest[] {
-        return Object.entries(baseline.owners).filter(([owner]) => owner !== '@webpieces/eslint-rules').map(([owner, ids]) => ({
-            packageName: owner, packageVersion: '1.0.0-fixture', apiVersion: 2,
-            ownedRules: ids.map(id => ({
-                id, schema: baseline.schemas[id as keyof typeof baseline.schemas], schemaApiVersion: 1,
-                optionalTuning: baseline.tuning[id as keyof typeof baseline.tuning] ?? {},
-                recommendedSeed: baseline.seeds[id as keyof typeof baseline.seeds],
-                section: owner === '@webpieces/agent-workflow-rules' ? 'hookGuards' : 'rules',
-            })),
-            contributions: [],
-            migrations: baseline.migrations.filter(entry =>
-                (owner === '@webpieces/agent-workflow-rules' && (entry.scope === 'rule' || entry.key.startsWith('pr-lifecycle-guard.'))) ||
-                (owner === '@webpieces/nx-webpieces-rules' && entry.scope === 'field' && entry.key.startsWith('runtime-architecture.'))),
-            safeguards: [],
-        } as RulePackManifest));
+        return Object.entries(baseline.owners).filter(entry => entry[0] !== '@webpieces/eslint-rules').map(entry => {
+            const owner = entry[0];
+            const ids = entry[1];
+            return ({
+                packageName: owner, packageVersion: '1.0.0-fixture', apiVersion: 2,
+                ownedRules: ids.map(id => ({
+                    id, schema: baseline.schemas[id as keyof typeof baseline.schemas], schemaApiVersion: 1,
+                    optionalTuning: baseline.tuning[id as keyof typeof baseline.tuning] ?? {},
+                    recommendedSeed: baseline.seeds[id as keyof typeof baseline.seeds],
+                    section: owner === '@webpieces/agent-workflow-rules' ? 'hookGuards' : 'rules',
+                })),
+                contributions: [],
+                migrations: baseline.migrations.filter(entry =>
+                    (owner === '@webpieces/agent-workflow-rules' && (entry.scope === 'rule' || entry.key.startsWith('pr-lifecycle-guard.'))) ||
+                    (owner === '@webpieces/nx-webpieces-rules' && entry.scope === 'field' && entry.key.startsWith('runtime-architecture.'))),
+                safeguards: [],
+            } as RulePackManifest);
+        });
     }
 
     /** Explicitly declares real CommonJS fixture modules; the real Node module transport loads them. */
