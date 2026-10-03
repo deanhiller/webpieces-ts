@@ -19,6 +19,34 @@ function tmpFile(contents: string): string {
     return file;
 }
 describe('summaryJsonPath', () => {
+    it('snapshots changed intent without overwriting earlier publications or consuming active metadata', () => {
+        const service = new ReviewJsonService();
+        const file = tmpFile(
+            JSON.stringify({ title: 'First intent', summary: 'Fixes #1114', riskScore: 10 }),
+        );
+        const first = service.snapshotSummaryJson(file);
+        const audit = fs.readFileSync(first, 'utf8');
+        fs.writeFileSync(
+            file,
+            JSON.stringify({ title: 'Changed intent', summary: 'Fixes #1115', riskScore: 40 }),
+        );
+        const second = service.snapshotSummaryJson(file);
+        expect(first).not.toBe(second);
+        expect(fs.readFileSync(first, 'utf8')).toBe(audit);
+        expect(JSON.parse(audit)).toMatchObject({
+            title: 'First intent',
+            summary: 'Fixes #1114',
+            riskScore: 10,
+        });
+        expect(JSON.parse(fs.readFileSync(second, 'utf8'))).toMatchObject({
+            title: 'Changed intent',
+            summary: 'Fixes #1115',
+            riskScore: 40,
+        });
+        expect(fs.readFileSync(second, 'utf8')).toContain('AUDIT ONLY');
+        expect(fs.readFileSync(file, 'utf8')).not.toContain('AUDIT ONLY');
+    });
+
     it('places summary.json under the per-feature pr-review dir', () => {
         const p = summaryJsonPath('/repo', 'dean-feat');
         expect(p).toBe(path.join('/repo', WEBPIECES_TMP_DIR, PR_REVIEW_DIR, 'dean-feat', 'summary.json'));

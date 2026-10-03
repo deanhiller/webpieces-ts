@@ -170,7 +170,9 @@ export class ReviewUpsertPrCommand {
                             `    Submit with: pnpm wp-write-review --checklist ${id} --file '<verdict JSON file>'\n`,
                     )
                     .join('') +
-                `\nAfter the remaining verdicts, write ${scan.summaryPath}:\n${summaryJsonSchemaHint(scan.summaryPath)}\n` +
+                `\nBefore reviewers read it, write ${scan.summaryPath}, or keep its unchanged same-PR metadata.\n` +
+                'Explicitly refresh it when intent, issue, title or risk changes.\n' +
+                `${summaryJsonSchemaHint(scan.summaryPath)}\n` +
                 'Then run: pnpm wp-review-upsert-pr (to plan any RED follow-up), followed by pnpm wp-finish-upsert-pr.\n',
         );
     }

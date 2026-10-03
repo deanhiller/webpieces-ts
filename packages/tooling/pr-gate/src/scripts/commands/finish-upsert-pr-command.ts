@@ -214,7 +214,7 @@ export class FinishUpsertPrCommand {
         const title = this.prTitleFrom(review);
         const input = this.computeDashboardInput(repoRoot, true, review, title, verdicted, scan);
         const result = this.publishAll(repoRoot, base, input, new PrCommentSources(scan, review, provenance));
-        this.archiveConsumedReview(repoRoot, featureName, result);
+        this.snapshotPublishedReview(repoRoot, featureName, result);
 
         // The closing recap + the clickable-link directive, BOTH derived from the real merge outcome.
         // Nothing here may hard-code success: a stranded PR under a green checkmark is how PRs got
@@ -341,33 +341,37 @@ export class FinishUpsertPrCommand {
     }
 
     /**
-     * Retire the review this run just used — move summary.json to old-summary.json beside it, stamped as
-     * audit-only (see ReviewJsonService.archiveSummaryJson).
-     *
-     * WHY it moves rather than staying put: summary.json left behind is a live-looking file describing a
-     * review that has already shipped, and the next `wp-review-upsert-pr` on this branch finds it sitting
-     * there. A reviewer subagent that judges the PR's stated INTENT — its title, summary or risk level —
-     * then reads the previous round's review and can return GREEN against a title that no longer exists,
-     * with nothing in the verdict distinguishing that from a real pass. Moving it makes the only route back
-     * to this command a freshly-written review.
+     * Snapshot the published intent without consuming the active summary (issue #1114). A same-PR
+     * update carries reviewer verdicts and can also carry unchanged intent. Stage ② requires the author
+     * to refresh metadata that changed BEFORE reviewers read it. Snapshots never become active input.
      *
      * ONLY on a PR that actually went up. A run that died before publishing must stay re-runnable without
      * making the AI rewrite a review that was never used, and prNumber === '' is exactly that case.
      * Non-fatal: the PR is live by here, so an unwritable archive warns rather than failing the command.
      */
-    private archiveConsumedReview(repoRoot: string, featureName: string, result: UpsertResult): void {
+    private snapshotPublishedReview(
+        repoRoot: string,
+        featureName: string,
+        result: UpsertResult,
+    ): void {
         if (result.prNumber === '') return;
         // webpieces-disable no-unmanaged-exceptions -- chokepoint: the PR is already up; a failed archive must not fail the command
         // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
         try {
-            const archived = this.reviewJsonService.archiveSummaryJson(summaryJsonPath(repoRoot, featureName));
-            if (archived !== '') process.stdout.write(`   archived this run's summary.json → ${archived} (audit only) ✓\n`);
+            const snapshot = this.reviewJsonService.snapshotSummaryJson(
+                summaryJsonPath(repoRoot, featureName),
+            );
+            process.stdout.write(
+                `   saved published summary → ${snapshot} (audit only); active summary.json retained ✓\n`,
+            );
             // Beside it, so an archived review keeps the transcript links belonging to the round that
             // produced it — a review whose provenance was overwritten by the NEXT round audits nothing.
             this.provenanceEnforcer.archiveRecord(prDirFor(repoRoot, featureName));
         } catch (err: unknown) {
             const error = toError(err);
-            process.stderr.write(`⚠️  Could not archive summary.json (non-fatal — the PR is already up): ${error.message}\n`);
+            process.stderr.write(
+                `⚠️  Could not snapshot summary.json (non-fatal — the PR is already up): ${error.message}\n`,
+            );
         }
     }
 
