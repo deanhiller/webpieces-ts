@@ -1,3 +1,5 @@
+import { ApprovedWiringGraph } from '../../lib/runtime-wiring/approved-graph';
+import { loadBlessedGraph } from '../../lib/graph-loader';
 /**
  * Generate Executor
  *
@@ -9,7 +11,12 @@
  */
 
 import type { ExecutorContext } from '@nx/devkit';
-import { writeTemplate, RuleFailError, renderRuleFailForHuman } from '@webpieces/rules-config';
+import {
+    writeTemplate,
+    Option,
+    RuleFailError,
+    renderRuleFailForHuman,
+} from '@webpieces/rules-config';
 import { generateReducedGraph } from '../../lib/graph-generator';
 import { sortGraphTopologically } from '../../lib/graph-sorter';
 import { ProjectCycleDetector } from '../../lib/graph-cycles';
@@ -18,21 +25,7 @@ import { ApiContractFiles } from '../../lib/api-contract-files';
 import { collectProjectInfo, enrichGraph, MetadataValidationError } from '../../lib/graph-metadata';
 import { TagTruthCheck } from '../../lib/tag-truth';
 import { ProjectInfo } from '../../lib/project-info';
-import {
-    scanAndAttachApiRelations,
-    describeNonLiteralDecoratorArgs,
-    buildApiContracts,
-    describeMismatchedEndpointKinds,
-} from '../../lib/api-usage/api-scanner';
-// The unresolved-contract report moved beside the other contract reports when api-scanner.ts reached
-// its file-size limit.
-import {
-    describeMcpExclusions,
-    describeUnresolvedApiCalls,
-} from '../../lib/api-usage/api-contract-errors';
-import { buildExternalSystems } from '../../lib/api-usage/external-systems';
 import type { ApiContracts, ExternalSystemDecls } from '../../lib/api-usage/api-relations';
-import { loadRuntimeConfig } from '../../lib/runtime-config';
 import type { EnhancedGraph, GraphEntry } from '../../lib/graph-sorter';
 import { GraphVisualizer } from '../../lib/graph-visualizer';
 import { deriveRuntimeGraphReport, saveRuntimeGraph } from '../../lib/runtime-graph';
@@ -77,7 +70,9 @@ function generateRuntimeGraph(
     // Printed here, FAILED by validate-runtime-architecture: generate must still write the graph,
     // or the validator would have nothing to compare against and the error would be unfixable.
     if (report.problems.length > 0) {
-        console.error(`❌ ${report.problems.length} client call(s) name a service no module answers to:`);
+        console.error(
+            `❌ ${report.problems.length} client call(s) name a service no module answers to:`,
+        );
         for (const problem of report.problems) console.error(`     • ${problem}`);
         console.error('   This FAILS architecture:validate-runtime-architecture.');
     }
@@ -101,30 +96,28 @@ function scanApiRelations(
     workspaceRoot: string,
     graph: EnhancedGraph,
     projectInfos: Map<string, ProjectInfo>,
+    graphPath: string = DEFAULT_GRAPH_PATH,
 ): ScannedTables {
-    console.log('🔎 Scanning source for implements/uses API relations...');
-    const externalApiPaths = loadRuntimeConfig(workspaceRoot).externalApiPaths;
-    const scan = scanAndAttachApiRelations(workspaceRoot, graph, projectInfos, externalApiPaths);
-    if (scan.unresolvedApiCalls.length > 0) console.warn(describeUnresolvedApiCalls(scan.unresolvedApiCalls));
-    // #1014: restated on EVERY run, green or red. An exclusion announced once, at the moment
-    // somebody adds it, is read by the one person who already knows the decision.
-    if (scan.apiDocRules.mcpExclusions.length > 0) {
-        console.log(describeMcpExclusions(scan.apiDocRules.mcpExclusions));
-    }
-    // A decorator argument we could not read costs the graph a basePath, a method, or a whole
-    // contract — none of which leaves a trace in the output. Name them before anything is written.
-    if (scan.nonLiteralDecoratorArgs.length > 0) {
-        console.warn(describeNonLiteralDecoratorArgs(scan.nonLiteralDecoratorArgs));
-    }
-    const contracts = buildApiContracts(scan);
-    // An endpoint whose declared trigger its api kind cannot deliver would silently draw a queue or a
-    // clock that nothing could ever fire — name it here, where the fix is one decorator away.
-    const mismatches = describeMismatchedEndpointKinds(contracts);
-    if (mismatches.length > 0) {
-        console.error(`❌ ${mismatches.length} @Endpoint kind(s) conflict with their api kind:`);
-        for (const mismatch of mismatches) console.error(`     • ${mismatch}`);
-    }
-    return new ScannedTables(contracts, buildExternalSystems(scan.apiIndex, projectInfos));
+    console.log('📖 Assembling approved runtime-deps.json declarations (no source extraction)...');
+    new ApprovedWiringGraph().attach(workspaceRoot, graph, projectInfos, graphPath);
+    const saved = loadBlessedGraph(workspaceRoot, graphPath);
+    if (saved === null)
+        throw new RuleFailError(
+            'validate-runtime-architecture',
+            'Missing approved API contract references.',
+            undefined,
+            undefined,
+            [
+                new Option(
+                    'Migrate src/wiring.ts and review runtime-deps.json and API contract approvals before generation.',
+                    true,
+                ),
+            ],
+        );
+    return new ScannedTables(
+        new ApiContractFiles().load(workspaceRoot, graphPath, saved.apiContractFiles),
+        saved.externalSystems,
+    );
 }
 
 /** The two committed tables one scan produces, kept together so callers cannot persist just one. */
@@ -159,7 +152,10 @@ function printGraphSummary(graph: EnhancedGraph): void {
  * not be separated from the throw by fifty lines of steps.
  */
 // webpieces-disable no-function-outside-class -- executor step helper, like the rest of this executor file
-async function generateEverything(workspaceRoot: string, graphPath: string | undefined): Promise<void> {
+async function generateEverything(
+    workspaceRoot: string,
+    graphPath: string | undefined,
+): Promise<void> {
     // Step 1: Build the full graph from nx, then transitively reduce it to the view
     console.log("📊 Generating dependency graph from nx's project graph...");
     const reducedGraph = await generateReducedGraph();
@@ -178,7 +174,11 @@ async function generateEverything(workspaceRoot: string, graphPath: string | und
     // ...and assert the stratification it just produced actually holds: every dependency strictly
     // below its dependent. Safe to assert only because the graph was sorted a line ago — a stale
     // committed file is never checked this way.
-    cycles.assertLevelsDescend(reducedGraph, cycles.levelsOf(enhancedGraph), 'the freshly sorted graph');
+    cycles.assertLevelsDescend(
+        reducedGraph,
+        cycles.levelsOf(enhancedGraph),
+        'the freshly sorted graph',
+    );
 
     // Step 3: Enrich with AI metadata (framework, shortDescription, file
     // pointers). This VALIDATES (responsibilities.md required per project)
@@ -191,25 +191,10 @@ async function generateEverything(workspaceRoot: string, graphPath: string | und
     // Step 3b: Classify each api-lib edge (implements/uses + rpc/pubsub) by
     // scanning source, so dependencies.json + the viz + the runtime graph all
     // read the same derived truth.
-    const scanned = scanApiRelations(workspaceRoot, enhancedGraph, projectInfos);
+    const scanned = scanApiRelations(workspaceRoot, enhancedGraph, projectInfos, graphPath);
     const apiContracts = scanned.apiContracts;
 
-    // Step 4: Write one contract file per API (architecture/apis/<Api>.json) and delete the files of
-    // APIs that no longer exist. dependencies.json only LINKS to them, so an endpoint change rewrites
-    // an api file and never the dependency graph. The runtime validator reads these files back.
-    const effectiveGraphPath = graphPath ?? DEFAULT_GRAPH_PATH;
-    const contractFiles = new ApiContractFiles();
-    const written = contractFiles.write(workspaceRoot, effectiveGraphPath, apiContracts);
-    console.log(`✅ Wrote ${written.written.length} api contract file(s)`);
-    for (const deleted of written.deleted) console.log(`🗑️  Deleted stale api contract file ${deleted}`);
-
-    // Step 4a: Save the graph, INCLUDING the contract-file links and the external-system
-    // declarations the runtime derivation reads back — generate derives from the in-memory graph,
-    // validate from the files, so anything not written here would make the two disagree.
-    console.log('💾 Saving graph to architecture/dependencies.json...');
-    const contractRefs = contractFiles.refsFor(apiContracts);
-    saveGraph(enhancedGraph, workspaceRoot, effectiveGraphPath, contractRefs, scanned.externalSystems);
-    console.log('✅ Graph saved successfully');
+    saveApprovedGraph(workspaceRoot, graphPath ?? DEFAULT_GRAPH_PATH, enhancedGraph, scanned);
 
     // Step 4b: Write the committed, clickable HTML view next to the JSON so
     // dependencies.html regenerates in lock-step with dependencies.json.
@@ -230,9 +215,41 @@ async function generateEverything(workspaceRoot: string, graphPath: string | und
     printGraphSummary(enhancedGraph);
 }
 
+// webpieces-disable no-function-outside-class -- persist the approved graph and contract tables together
+function saveApprovedGraph(
+    workspaceRoot: string,
+    effectiveGraphPath: string,
+    enhancedGraph: EnhancedGraph,
+    scanned: ScannedTables,
+): void {
+    // Step 4: Write one contract file per API (architecture/apis/<Api>.json) and delete the files of
+    // APIs that no longer exist. dependencies.json only LINKS to them, so an endpoint change rewrites
+    // an api file and never the dependency graph. The runtime validator reads these files back.
+    const apiContracts = scanned.apiContracts;
+    const contractFiles = new ApiContractFiles();
+    const written = contractFiles.write(workspaceRoot, effectiveGraphPath, apiContracts);
+    console.log(`✅ Wrote ${written.written.length} api contract file(s)`);
+    for (const deleted of written.deleted)
+        console.log(`🗑️  Deleted stale api contract file ${deleted}`);
+
+    // Step 4a: Save the graph, INCLUDING the contract-file links and the external-system
+    // declarations the runtime derivation reads back — generate derives from the in-memory graph,
+    // validate from the files, so anything not written here would make the two disagree.
+    console.log('💾 Saving graph to architecture/dependencies.json...');
+    const contractRefs = contractFiles.refsFor(apiContracts);
+    saveGraph(
+        enhancedGraph,
+        workspaceRoot,
+        effectiveGraphPath,
+        contractRefs,
+        scanned.externalSystems,
+    );
+    console.log('✅ Graph saved successfully');
+}
+
 export default async function runExecutor(
     options: GenerateExecutorOptions,
-    context: ExecutorContext
+    context: ExecutorContext,
 ): Promise<ExecutorResult> {
     const graphPath = options.graphPath;
     const workspaceRoot = context.root;
@@ -248,12 +265,17 @@ export default async function runExecutor(
         // A RuleFailError carries its cures as Option[]; `Error.message` is only the aiMessage, so
         // printing that alone silently drops them. renderRuleFailForHuman is the ONE renderer that
         // numbers them, and this catch is the top-level handler for the nx target.
-        const rendered = error instanceof RuleFailError ? renderRuleFailForHuman(error) : error.message;
+        const rendered =
+            error instanceof RuleFailError ? renderRuleFailForHuman(error) : error.message;
         console.error('❌ Graph generation failed:', rendered);
         if (error instanceof MetadataValidationError) {
             const mdPath = writeTemplate(workspaceRoot, 'webpieces.responsibilities.md');
             console.error('');
-            console.error('⚠️  *** Refer to ' + mdPath + ' for how to author responsibilities.md files *** ⚠️');
+            console.error(
+                '⚠️  *** Refer to ' +
+                    mdPath +
+                    ' for how to author responsibilities.md files *** ⚠️',
+            );
         }
         return { success: false };
     }

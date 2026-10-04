@@ -189,7 +189,9 @@ class RuntimeGraphDeriver {
         const apis = this.buildApis(decls);
         const edgeResult = this.buildEdges(decls, apis);
         // Cuts are stamped BEFORE buildServices, which is where leveling reads the edges.
-        this.problems.push(...applyCycleCuts(edgeResult.edges, this.projects, this.nodeByServiceName));
+        this.problems.push(
+            ...applyCycleCuts(edgeResult.edges, this.projects, this.nodeByServiceName),
+        );
         const services = this.buildServices(decls, edgeResult.edges);
         const apisObj: Record<string, RuntimeApi> = {};
         for (const api of Array.from(apis.keys()).sort()) apisObj[api] = apis.get(api)!;
@@ -207,7 +209,12 @@ class RuntimeGraphDeriver {
         // services deliver over the same contract, and is watched by the same drift check.
         const systems = resolveExternalSystems(this.externalSystemDecls, services);
         attachExternalSystems(graph, systems);
-        return new RuntimeGraphReport(graph, this.warnings, this.problems, [...this.autoHidden].sort());
+        return new RuntimeGraphReport(
+            graph,
+            this.warnings,
+            this.problems,
+            [...this.autoHidden].sort(),
+        );
     }
 
     /**
@@ -326,16 +333,17 @@ class RuntimeGraphDeriver {
         name: string,
         sink: RelationSink,
         visited: Set<string>,
+        includeRelations: boolean = true,
     ): void {
         const entry = this.projects[name];
         if (entry === undefined) return;
         sink.addMarkers(entry.webpiecesRuntime, name);
         const relations = entry.apiRelations;
-        if (relations !== undefined) {
+        if (includeRelations && relations !== undefined) {
             for (const owner of Object.keys(relations).sort()) {
                 for (const ref of relations[owner].implements) {
                     this.apiOwners.set(ref.api, owner);
-                    sink.addImplements(ref, name);
+                    sink.addImplements(ref, ref.declaredVia ?? name);
                 }
                 for (const ref of relations[owner].uses) {
                     this.apiOwners.set(ref.api, owner);
@@ -347,7 +355,12 @@ class RuntimeGraphDeriver {
             if (visited.has(dep)) continue;
             visited.add(dep);
             if (this.isNode(dep)) continue; // another server/client owns its own relations
-            this.collectEffectiveRelations(dep, sink, visited);
+            this.collectEffectiveRelations(
+                dep,
+                sink,
+                visited,
+                includeRelations && entry.runtimeComposition !== true,
+            );
         }
     }
 
@@ -609,6 +622,12 @@ class RuntimeGraphDeriver {
                 // One api used against two services is two refs but ONE api in this list.
                 uses: Array.from(new Set(decl.usesApis.map((r: ApiRef) => r.api))),
                 dependsOn,
+                wiringUses: decl.usesApis.some((ref) => ref.declaredVia !== undefined)
+                    ? decl.usesApis
+                    : undefined,
+                wiringImplements: decl.implementsApis.some((ref) => ref.declaredVia !== undefined)
+                    ? decl.implementsApis
+                    : undefined,
             };
             services[decl.name] = service;
             // The explicit tag wins and is NOT reported as auto-hidden — somebody asked for it.
@@ -653,7 +672,12 @@ export function deriveRuntimeGraphReport(
     apiContracts: ApiContracts = {},
     externalSystems: ExternalSystemDecls = {},
 ): RuntimeGraphReport {
-    return new RuntimeGraphDeriver(projects, hiddenProjects, apiContracts, externalSystems).assemble();
+    return new RuntimeGraphDeriver(
+        projects,
+        hiddenProjects,
+        apiContracts,
+        externalSystems,
+    ).assemble();
 }
 
 // Levels + adjacency live in runtime-graph-levels.ts; re-exported for the same reason the model types

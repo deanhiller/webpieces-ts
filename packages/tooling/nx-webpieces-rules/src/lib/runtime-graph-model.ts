@@ -11,6 +11,7 @@
  */
 
 import type {
+    ApiRef,
     ApiTransport,
     ExternalSystemDeclaration,
     ExternalSystemKind,
@@ -48,6 +49,9 @@ export interface RuntimeService {
     implementsVia?: Record<string, string>;
     uses: string[];
     dependsOn: string[];
+    /** Reviewed binding provenance and runtime conditions, retained for compact detail views. */
+    wiringUses?: ApiRef[];
+    wiringImplements?: ApiRef[];
     /**
      * When false, this service is hidden from the rendered runtime graph (its
      * node AND every edge touching it are omitted from the HTML/DOT). It stays

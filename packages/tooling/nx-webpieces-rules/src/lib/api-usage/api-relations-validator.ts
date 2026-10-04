@@ -36,9 +36,25 @@ export interface UnclassifiedApiDep {
     unresolved: UnresolvedApiCall[];
 }
 
+export class ApiOwnerIdentity {
+    constructor(
+        public readonly api: string,
+        public readonly owner: string,
+    ) {}
+}
+
+export class ApiRelationEvidence {
+    constructor(
+        public readonly scannedProjects: Set<string>,
+        public readonly apiLibProjects: Set<string>,
+        public readonly unresolvedApiCalls: UnresolvedApiCall[],
+        public readonly apiIndex: ReadonlyMap<string, ApiOwnerIdentity>,
+    ) {}
+}
+
 /** The API class names owned by `apiLib`, sorted (for a stable fix hint). */
 // webpieces-disable no-function-outside-class -- pure lookup helper, matches the validator-lib style
-function apisOwnedBy(scan: ApiScanResult, apiLib: string): string[] {
+function apisOwnedBy(scan: ApiRelationEvidence, apiLib: string): string[] {
     const names: string[] = [];
     for (const info of scan.apiIndex.values()) {
         if (info.owner === apiLib) names.push(info.api);
@@ -54,7 +70,7 @@ function apisOwnedBy(scan: ApiScanResult, apiLib: string): string[] {
 export function findUnclassifiedApiDeps(
     graph: EnhancedGraph,
     projectInfos: Map<string, ProjectInfo>,
-    scan: ApiScanResult,
+    scan: ApiRelationEvidence,
 ): UnclassifiedApiDep[] {
     const violations: UnclassifiedApiDep[] = [];
     for (const projectName of Object.keys(graph)) {
@@ -76,7 +92,9 @@ export function findUnclassifiedApiDeps(
                 role,
                 apiLib: dep,
                 apis: apisOwnedBy(scan, dep),
-                unresolved: scan.unresolvedApiCalls.filter((c: UnresolvedApiCall) => c.project === projectName),
+                unresolved: scan.unresolvedApiCalls.filter(
+                    (c: UnresolvedApiCall) => c.project === projectName,
+                ),
             });
         }
     }

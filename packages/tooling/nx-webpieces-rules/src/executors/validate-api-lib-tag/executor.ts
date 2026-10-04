@@ -11,10 +11,15 @@
  * nx run architecture:validate-api-lib-tag
  */
 
+import { RuleFailError, renderRuleFailForHuman } from '@webpieces/rules-config';
 import type { ExecutorContext } from '@nx/devkit';
 import { collectProjectInfo } from '../../lib/graph-metadata';
-import { ApiUsageScanner } from '../../lib/api-usage/api-scanner';
-import { findApiLibTagViolations, describeApiLibTagViolation } from '../../lib/api-usage/api-lib-tag-validator';
+import { ApiContractEvidence } from '../../lib/api-usage/api-contract-evidence';
+import { loadRuntimeConfig } from '../../lib/runtime-config';
+import {
+    findApiLibTagViolations,
+    describeApiLibTagViolation,
+} from '../../lib/api-usage/api-lib-tag-validator';
 import { toError } from '../../toError';
 
 export interface ValidateApiLibTagOptions {
@@ -28,7 +33,7 @@ export interface ExecutorResult {
 // webpieces-disable no-function-outside-class -- nx executor entry point (default export), like every sibling executor
 export default async function runExecutor(
     _options: ValidateApiLibTagOptions,
-    context: ExecutorContext
+    context: ExecutorContext,
 ): Promise<ExecutorResult> {
     const workspaceRoot = context.root;
 
@@ -37,11 +42,17 @@ export default async function runExecutor(
     // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
     try {
         const projectInfos = await collectProjectInfo();
-        const scan = new ApiUsageScanner(workspaceRoot, projectInfos).scan();
+        const scan = new ApiContractEvidence().collect(
+            workspaceRoot,
+            projectInfos,
+            loadRuntimeConfig(workspaceRoot).externalApiPaths,
+        );
         const violations = findApiLibTagViolations(projectInfos, scan, workspaceRoot);
 
         if (violations.length === 0) {
-            console.log('✅ role:api-lib / role:api-client match the code (every api library exports a contract or only wire types, and vice-versa).');
+            console.log(
+                '✅ role:api-lib / role:api-client match the code (every api library exports a contract or only wire types, and vice-versa).',
+            );
             return { success: true };
         }
 
@@ -53,7 +64,10 @@ export default async function runExecutor(
         return { success: false };
     } catch (err: unknown) {
         const error = toError(err);
-        console.error('❌ api-lib tag validation failed:', error.message);
+        console.error(
+            '❌ api-lib tag validation failed:',
+            error instanceof RuleFailError ? renderRuleFailForHuman(error) : error.message,
+        );
         return { success: false };
     }
 }

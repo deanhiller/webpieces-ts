@@ -1,3 +1,4 @@
+import { RuntimeWiringTargets } from './runtime-wiring-targets';
 /**
  * Unified Nx Inference Plugin for @webpieces/nx-webpieces-rules
  *
@@ -346,10 +347,13 @@ function buildPerProjectTargets(
     // costs this one in-memory tag check. They ride ci like every other build step — generation is
     // ordinary BUILD work, not a side channel (#1021).
     if (rawProject !== undefined) {
-        const generated = new GenerateTargets(projectRoot, rawProject).infer();
+        const generated = {
+            ...new GenerateTargets(projectRoot, rawProject).infer(),
+            ...new RuntimeWiringTargets().infer(rawProject),
+        };
         for (const [name, target] of Object.entries(generated)) {
             targets[name] = target;
-            validationTargets.push(name);
+            if (name !== 'build') validationTargets.push(name);
         }
     }
 
@@ -502,7 +506,8 @@ function createVisualizeTargetWithoutPrefix(graphPath: string): TargetConfigurat
         options: { graphPath },
         metadata: {
             technologies: ['nx'],
-            description: 'View saved architecture without refreshing; refresh: pnpm nx run architecture:generate',
+            description:
+                'View saved architecture without refreshing; refresh: pnpm nx run architecture:generate',
         },
     };
 }

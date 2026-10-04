@@ -64,3 +64,7 @@ export { ClientRequest, ClientFilterDefinition } from '@webpieces/http-client-co
 export type { ClientFilter } from '@webpieces/http-client-core';
 export type { ApiPrototype } from '@webpieces/http-client-core';
 export { StreamingCapabilityError } from '@webpieces/http-client-core';
+
+export { RuntimeClients } from './RuntimeClients';
+export { ClientToken, rpcTarget } from '@webpieces/http-client-core';
+export type { RpcTarget } from '@webpieces/http-client-core';

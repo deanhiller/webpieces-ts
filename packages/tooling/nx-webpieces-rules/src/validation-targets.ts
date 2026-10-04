@@ -147,8 +147,16 @@ export class ValidationTargets {
     apiLibTag(): TargetConfiguration {
         return {
             executor: '@webpieces/nx-webpieces-rules:validate-api-lib-tag',
-            cache: false,
-            inputs: ['default', '{workspaceRoot}/**/project.json'],
+            cache: true,
+            inputs: [
+                '{workspaceRoot}/**/*.ts',
+                '{workspaceRoot}/**/project.json',
+                '{workspaceRoot}/**/tsconfig*.json',
+                '{workspaceRoot}/webpieces.config.json',
+                '{workspaceRoot}/architecture/**/*.json',
+                ...BRANCH_IDENTITY_INPUTS,
+                { externalDependencies: ['@webpieces/nx-webpieces-rules'] },
+            ],
             metadata: {
                 technologies: ['nx'],
                 description: 'Validate role:api-lib matches the code (exports an API contract)',

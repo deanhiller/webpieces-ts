@@ -57,13 +57,11 @@ Viz.instance = async () => {
     }
 
     node(page: Page, id: string): Locator {
-        return page
-            .locator('g.node')
-            .filter({
-                has: page.locator('title', {
-                    hasText: new RegExp(`^${id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`),
-                }),
-            });
+        return page.locator('g.node').filter({
+            has: page.locator('title', {
+                hasText: new RegExp(`^${id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`),
+            }),
+        });
     }
 
     async names(page: Page, selector = '#graph g.node'): Promise<string[]> {
@@ -219,14 +217,18 @@ describe.skipIf(!process.env.WP_GRAPH_VIZ_JS)('real Viz local-file filtering', (
     }, 30000);
 
     it('rolls back SVG binding failures without accumulating handlers', async () => {
-        const page = await fixture.open('binding-failure', fixture.architecture(FilterFixture.wide()));
+        const page = await fixture.open(
+            'binding-failure',
+            fixture.architecture(FilterFixture.wide()),
+        );
         await page.selectOption('#wp-lock', 'hook-runtime');
         await fixture.filter(page, 'hook-runtime');
         const original = await page.locator('#graph svg').innerHTML();
         await page.evaluate(() => {
             const wire = WpNodeMenu.wire;
             WpNodeMenu.wire = (svg, items) => {
-                if (document.documentElement.dataset.failBinding === 'yes') throw new Error('Injected binding failure');
+                if (document.documentElement.dataset.failBinding === 'yes')
+                    throw new Error('Injected binding failure');
                 wire(svg, items);
             };
             document.documentElement.dataset.failBinding = 'yes';
@@ -235,10 +237,17 @@ describe.skipIf(!process.env.WP_GRAPH_VIZ_JS)('real Viz local-file filtering', (
         expect(await page.locator('#graph svg').innerHTML()).toBe(original);
         expect(await page.locator('#wp-filter-status').isVisible()).toBe(true);
         expect(await page.locator('#wp-lock').inputValue()).toBe('hook-runtime');
-        await page.evaluate(() => { delete document.documentElement.dataset.failBinding; });
+        await page.evaluate(() => {
+            delete document.documentElement.dataset.failBinding;
+        });
         await page.locator('#wp-filter-off').click();
         await fixture.node(page, 'hook-runtime').click();
-        expect(await page.locator('#wp-node-menu').getByRole('button', { name: 'Unlock', exact: true }).count()).toBe(1);
+        expect(
+            await page
+                .locator('#wp-node-menu')
+                .getByRole('button', { name: 'Unlock', exact: true })
+                .count(),
+        ).toBe(1);
         await page.close();
     }, 30000);
 
@@ -275,7 +284,7 @@ describe.skipIf(!process.env.WP_GRAPH_VIZ_JS)('real Viz local-file filtering', (
         const html = new RuntimeHtmlPage(
             () => FilterFixture.client('runtime-visualizer.client.ts'),
             () => FilterFixture.client('graph-filter.client.ts'),
-        ).render(model, 'Runtime');
+        ).render(model, 'Runtime', FilterFixture.runtime());
         const page = await fixture.open('runtime', html);
         const fullNames = await fixture.names(page);
         await fixture.snapshot(page, 'runtime-before');
