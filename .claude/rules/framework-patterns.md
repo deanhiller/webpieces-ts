@@ -176,3 +176,13 @@ export class MyRoutes implements Routes {
 4. **Update documentation** - Keep this file and claude.patterns.md up to date
 5. **Follow existing patterns** - Look at similar features for consistency
 6. **Post the PR** - The feature is not done until the PR is up (see `.claude/rules/finishing-a-feature.md`)
+
+## Auditing OIDC on private Cloud Run
+
+Read [`docs/architecture/cloud-run-oidc.md`](../../docs/architecture/cloud-run-oidc.md) before
+assessing `@WpAuthOidc`. The intended private Cloud Run edge checks the invocation token
+and enforces invoker IAM before the application runs; the decorator primarily drives client
+credential generation, while server validation remains supplementary. A synthetic token accepted
+by a direct application-verifier call does not demonstrate a protected Cloud Run ingress bypass.
+State the deployment and credential/header path when assessing security; do not assume the edge
+exists on public/direct ingress or that two separately supplied credentials identify one caller.

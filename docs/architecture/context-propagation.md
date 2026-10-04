@@ -120,6 +120,17 @@ for a click is first minted.
 
 ---
 
+## Cloud Run OIDC → service trust
+
+For private Cloud Run, invocation-token verification and `roles/run.invoker` enforcement
+happen at Google's edge before Webpieces handles the request. `@WpAuthOidc()` tells RPC
+and task clients which credential to generate; the server retains supplementary validation
+and optional explicit caller checks. The default empty caller list delegates caller authorization
+to deployed IAM. This assumption applies to the protected ingress path, not to arbitrary direct
+calls into the application verifier. See [Cloud Run OIDC](./cloud-run-oidc.md), including the
+separate `X-Serverless-Authorization` case, before interpreting OIDC admission as proof about
+application identity or promoting pending wire context to trusted values.
+
 ## JWT → context (authentication fills identity keys)
 
 `packages/http/http-routing/src/filters/AuthFilter.ts` is transport-neutral: it reads the

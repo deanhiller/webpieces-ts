@@ -121,6 +121,15 @@ for (const webhook of webhooks) {
   as its own node on the runtime architecture graph, and two services delivering over the same
   contract converge on one box.
 
+## `@WpAuthOidc`: generate the credential the Cloud Run edge expects
+
+The shared contract tells `OutboundAuthFilter` to mint a Google ID token for the final
+base URL and send it in `Authorization: Bearer`. A private Cloud Run service verifies
+that invocation token and enforces invoker IAM before the container runs. Webpieces retains
+supplementary server checks; its empty caller list relies on edge authorization. Off-GCP
+clients mint unsigned synthetic tokens for local tests. See [Cloud Run OIDC](../../../docs/architecture/cloud-run-oidc.md)
+for deployment assumptions and why a direct application-verifier test does not test the edge.
+
 ## Signing an OUTBOUND webhook — `@WpAuthWebhook`, the other way round
 
 `@WpAuthWebhook(name)` names a signing SCHEME, not a direction. Inbound, a vendor signs and your bound
