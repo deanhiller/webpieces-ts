@@ -39,10 +39,9 @@ import {
     RequestContextHeaders,
 } from '@webpieces/core-context';
 import { ExpressResponseWriter } from '@webpieces/http-server';
-import { AuthenticatedCallerContext, MintedJwt } from '@webpieces/http-routing';
+import { AuthenticatedCallerContext } from '@webpieces/http-routing';
 import {
     MAX_MCP_ACCESS_TOKEN_LIFETIME_SECONDS,
-    McpEndpointDescriptor,
     McpProtectedResourceMetadata,
     VerifiedMcpCredential,
     WpMcpServerConfig,
@@ -126,7 +125,7 @@ class WpSdkMcpServer extends McpServer {
  * translator reduces such a failure to "Internal Error" for the caller, so that line is the only place
  * its cause exists.
  */
-export class WpMcpServer<TGrant, TMintRequest> {
+export class WpMcpServer<TGrant> {
     private readonly callerContext = new AuthenticatedCallerContext();
     private readonly dispatcher = new McpApiDispatcher();
     /** Classifies a failure exactly as the translator will render it, so the two cannot disagree. */
@@ -149,7 +148,7 @@ export class WpMcpServer<TGrant, TMintRequest> {
     private streamingNodeHandler?: NodeMcpRequestHandler;
     private revision?: string;
 
-    constructor(private readonly config: WpMcpServerConfig<TGrant, TMintRequest>) {
+    constructor(private readonly config: WpMcpServerConfig<TGrant>) {
         this.translator = new WpMcpErrorTranslator((): string => this.challenge());
     }
 
@@ -185,7 +184,7 @@ export class WpMcpServer<TGrant, TMintRequest> {
                     `'${this.config.resource}' and the bound route are the same endpoint.`,
             );
         }
-        this.registry = new McpToolRegistry(options.bindings, options.toolCatalogs);
+        this.registry = new McpToolRegistry(options.bindings, options.toolCatalogs, this.config.authorizationService);
         this.revision = this.calculateRegistryRevision(this.registry);
         this.handler = this.createHandler(options, 'auto');
         this.streamingHandler = this.createHandler(options, 'sse');
@@ -345,8 +344,7 @@ export class WpMcpServer<TGrant, TMintRequest> {
         this.callerContext.reconcileWireTrust(false);
         const tools = await AuthorizedMcpTools.create(
             this.requireRegistry(),
-            credential.caller,
-            this.config.endpointJwtAuthority,
+            this.config.authorizationService,
         );
         return new McpPostAuthentication(token, credential, this.disconnectSignal(req), tools);
     }
@@ -510,8 +508,7 @@ export class WpMcpServer<TGrant, TMintRequest> {
             args,
             credential,
             invocation,
-            this.config.endpointJwtAuthority,
-            async () => (await this.mintEndpointJwt(tool, authentication)).token,
+            this.config.authorizationService,
         );
         const outputFailure = this.outputSchemas.validate(tool.outputSchema, value);
         if (outputFailure) {
@@ -524,35 +521,6 @@ export class WpMcpServer<TGrant, TMintRequest> {
             content: [{ type: 'text', text: JSON.stringify(structured) }],
             structuredContent: structured,
         };
-    }
-
-    private async mintEndpointJwt(
-        tool: RegisteredMcpTool,
-        authentication: McpPostAuthentication,
-    ): Promise<MintedJwt> {
-        const descriptor = new McpEndpointDescriptor(
-            tool.name,
-            tool.apiClass.name,
-            tool.methodName,
-        );
-        const minted = await this.config.endpointJwtAuthority.mint(
-            this.config.endpointMintRequest(authentication.credential, descriptor),
-        );
-        const now = Math.floor(Date.now() / 1000);
-        if (minted.token === authentication.accessToken) {
-            throw new ApiImplementationError(
-                `MCP access-token passthrough is forbidden (endpoint JWT for ${tool.name}).`,
-            );
-        }
-        if (
-            minted.expiresAtEpochSeconds <= now ||
-            minted.expiresAtEpochSeconds - now > this.config.maxEndpointJwtLifetimeSeconds
-        ) {
-            throw new ApiImplementationError(
-                `MCP endpoint JWT lifetime is invalid for ${tool.name}.`,
-            );
-        }
-        return minted;
     }
 
     private validateCredential(credential: VerifiedMcpCredential): void {

@@ -12,6 +12,7 @@ import { ApiFactory } from './ApiFactory';
 import { ApiClient } from './ApiClient';
 import { LogApiFilter } from './filters/LogApiFilter';
 import { AuthFilter } from './filters/AuthFilter';
+import { AuthorizationFilter } from './filters/AuthorizationFilter';
 
 /**
  * Options for {@link WebpiecesRouterFactory.create} — one object (config lives inside it).
@@ -103,6 +104,7 @@ export class WebpiecesRouter implements ApiFactory {
     private installFixedFilters(): void {
         this.addFilter(new FilterDefinition(1_000_000, LogApiFilter, '*'));
         this.addFilter(new FilterDefinition(900_000, AuthFilter, '*'));
+        this.addFilter(new FilterDefinition(800_000, AuthorizationFilter, '*'));
     }
 
     private async loadDIModules(options: WebpiecesRouterOptions): Promise<void> {

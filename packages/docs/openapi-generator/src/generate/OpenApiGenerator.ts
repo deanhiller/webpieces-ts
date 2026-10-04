@@ -1,6 +1,7 @@
 import {
     ApiDocModel,
     DocumentedApiKey,
+    DocumentedAuthMethod,
     DocumentedEndpoint,
     DocumentedField,
     DocumentedType,
@@ -268,9 +269,10 @@ export class OpenApiGenerator {
             .set('schemas', renderedSchemas)
             .set(
                 'securitySchemes',
-                apiKey === undefined
-                    ? undefined
-                    : this.security.schemes(apiKey, schemeNames, inputs.manifestPath),
+                this.security.addBuiltinSchemes(
+                    apiKey === undefined ? new JsonObject() : this.security.schemes(apiKey, schemeNames, inputs.manifestPath),
+                    this.selectedEndpoints(contracts, selection),
+                ).orUndefined(),
             )
             .set('headers', this.headers(inputs));
 
@@ -418,7 +420,7 @@ export class OpenApiGenerator {
                     model.contractName,
                     tag,
                     contract,
-                    endpoint.auth?.apiKey === undefined ? undefined : perOperationSecurity,
+                    this.security.operation(endpoint.auth, perOperationSecurity),
                 ),
             );
             paths.set(url, item);
@@ -489,7 +491,7 @@ export class OpenApiGenerator {
     ): DocumentedApiKey | undefined {
         let found: DocumentedApiKey | undefined;
         for (const endpoint of this.selectedEndpoints(contracts, selection)) {
-            const apiKey = endpoint.auth?.apiKey;
+            const apiKey = endpoint.auth?.methods.find((method: DocumentedAuthMethod) => method.apiKey !== undefined)?.apiKey;
             if (apiKey === undefined) {
                 continue;
             }
@@ -524,7 +526,7 @@ export class OpenApiGenerator {
         const served = this.selectedEndpoints(contracts, selection);
         return (
             served.length > 0 &&
-            served.every((e: DocumentedEndpoint) => e.auth?.apiKey !== undefined)
+            served.every((e: DocumentedEndpoint) => e.auth?.methods.length === 1 && e.auth.methods[0].apiKey !== undefined)
         );
     }
 

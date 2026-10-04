@@ -59,6 +59,17 @@ const OUTBOUND_AUTH_PRIORITY = 800;
  */
 @provideFrameworkTransient()
 export class NodeProxyClient extends ProxyClient {
+    protected override selectAuthMethod(route: import('@webpieces/core-util').RouteMetadata): import('@webpieces/core-util').AuthMode {
+        const methods = route.authMeta?.methods;
+        if (!methods) throw new Error('Endpoint requires @WpAuth or @WpAuthPublic.');
+        const selected = methods.find((method: import('@webpieces/core-util').AuthMode) =>
+            method.kind === 'oidc' || method.kind === 'public' ||
+            (method.kind === 'shared-secret' && !!this.secrets?.get(method.secretKey)) ||
+            (method.kind === 'webhook' && !!this.webhookSigner));
+        if (selected) return selected;
+        if (methods.length === 1) return methods[0];
+        throw new Error('No configured Node client credential can satisfy this endpoint; bind a declared service credential.');
+    }
     private config!: ClientConfig;
 
     constructor(

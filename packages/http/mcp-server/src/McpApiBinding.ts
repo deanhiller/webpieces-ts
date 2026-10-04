@@ -1,4 +1,4 @@
-import { DtoValue, getAuthMeta } from '@webpieces/core-util';
+import { AuthMode, DtoValue, getAuthMeta, assertEveryEndpointHasAuthMode } from '@webpieces/core-util';
 import {
     ApiClientProxy,
     ApiFactory,
@@ -52,14 +52,10 @@ export class McpApiBinding<TApi extends object = object> {
     }
 
     validateMethod(methodName: string): void {
-        const auth = getAuthMeta(this.api, methodName)?.mode;
-        const expected = this.topology === 'local' ? 'jwt' : 'oidc';
-        if (auth?.kind !== expected) {
-            throw new Error(
-                `MCP ${this.topology} binding ${this.api.name}.${methodName} requires ` +
-                    `@${expected === 'jwt' ? 'WpAuthJwt' : 'WpAuthOidc'}, but declares ` +
-                    `${auth ? `'${auth.kind}'` : 'no HTTP auth'}.`,
-            );
+        assertEveryEndpointHasAuthMode(this.api);
+        const methods = getAuthMeta(this.api, methodName)?.methods;
+        if (this.topology === 'remote' && !methods?.some((method: AuthMode) => method.kind === 'oidc' || method.kind === 'shared-secret')) {
+            throw new Error(`MCP remote binding ${this.api.name}.${methodName} requires oidc(...) or sharedSecret(...) network ingress.`);
         }
     }
 }

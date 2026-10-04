@@ -17,6 +17,8 @@ import {
 } from './HttpContract';
 import { RouteMetadata } from './RouteMetadata';
 import { getStreamingEndpoint } from './StreamingContract';
+import { getAuthorization } from './authorization';
+import { assertEveryEndpointHasAuthMode, isLocalOnly } from './decorators';
 import { StreamDirection, StreamingEndpointMetadata } from './StreamingContract';
 
 /**
@@ -31,8 +33,8 @@ export class RouteMetadataFactory {
         methodName: string,
         controllerClassName?: string,
     ): RouteMetadata {
-        const endpointPath = this.endpointPath(apiClass, methodName);
-        const fullPath = this.joinPath(getApiPath(apiClass) ?? '', endpointPath);
+        assertEveryEndpointHasAuthMode(apiClass);
+        const fullPath = this.joinPath(getApiPath(apiClass) ?? '', this.endpointPath(apiClass, methodName));
         const options = getEndpointOptions(apiClass, methodName);
         const streaming = getStreamingEndpoint(apiClass, methodName);
         const httpMethod = getEndpointHttpMethod(apiClass, methodName);
@@ -74,8 +76,7 @@ export class RouteMetadataFactory {
                     ),
             )
             .sort((a: HttpParameterBinding, b: HttpParameterBinding) => a.index - b.index);
-
-        return new RouteMetadata(
+        const route = new RouteMetadata(
             httpMethod,
             fullPath,
             methodName,
@@ -92,8 +93,11 @@ export class RouteMetadataFactory {
             streaming,
             options.background === true,
         );
+        route.authorization = getAuthorization(apiClass, methodName);
+        route.apiClass = apiClass;
+        route.localOnly = isLocalOnly(apiClass, methodName);
+        return route;
     }
-
     // webpieces-disable no-function-outside-class -- private pure helper for static route metadata construction
     private static endpointPath(apiClass: Function, methodName: string): string {
         const path = (getEndpoints(apiClass) ?? {})[methodName];

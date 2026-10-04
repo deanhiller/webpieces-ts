@@ -1,3 +1,4 @@
+import { WpAuthorization, AuthorizationType } from '@webpieces/core-util';
 /* eslint-disable */
 /**
  * `@WpMin` on a STRING. A minimum on text is not something a renderer can emit, and dropping it
@@ -15,6 +16,7 @@ export class BadBounds {
 export class BadBoundsApi {
     @Endpoint(POST, '/bad', READ, RPC)
     @WpAuthPublic('Fixture only.')
+    @WpAuthorization({ authType: AuthorizationType.ANONYMOUS, reason: 'Fixture only.' })
     bad(request: BadBounds): Promise<void> {
         throw new Error('contract');
     }

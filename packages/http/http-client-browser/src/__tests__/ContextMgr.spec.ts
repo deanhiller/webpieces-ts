@@ -23,7 +23,7 @@ const LOCAL_ONLY = ContextKey.untrusted<string>('localOnly'); // no httpHeader -
  * secret. Both are the un-verifying kind, so a browser never sends a trusted key.
  */
 const PUBLIC: AuthMode = { kind: 'public' };
-const JWT: AuthMode = { kind: 'jwt', requirement: { allRolesAllowed: true } };
+const JWT: AuthMode = { kind: 'jwt' };
 const TO_PUBLIC = DestinationTrust.forAuthMode(PUBLIC);
 
 /** Configure the global registry with the platform defaults + these test keys, and reset identity. */

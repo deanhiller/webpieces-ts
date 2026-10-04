@@ -1,15 +1,5 @@
-import {
-    ApiPath,
-    ApiType,
-    Endpoint,
-    MCP,
-    POST,
-    READ,
-    RPC,
-    WpAuthJwt,
-    WpMcpAuthJwt,
-    WpMcpTool,
-} from '@webpieces/core-util';
+import { WpAuthorization, AuthorizationType, WpAuth, jwt as jwtAuth } from '@webpieces/core-util';
+import { ApiPath, ApiType, Endpoint, MCP, POST, READ, RPC, WpMcpTool } from '@webpieces/core-util';
 
 /**
  * STRING ENUMS in every position a type can appear, and union DISCRIMINATORS spelled with them
@@ -140,8 +130,9 @@ export interface OverlapRequest {
 export abstract class McpEnumApi {
     /** Writes one story. */
     @WpMcpTool('write_story')
-    @WpAuthJwt({ allRolesAllowed: true })
-    @WpMcpAuthJwt({ allRolesAllowed: true })
+    @WpAuth([jwtAuth()])
+    @WpAuthorization({ authType: AuthorizationType.ALL_USERS })
+
     @Endpoint(POST, '/write', READ, RPC)
     writeStory(_request: StoryRequest): Promise<StoryResponse> {
         throw new Error('contract only');
@@ -149,8 +140,9 @@ export abstract class McpEnumApi {
 
     /** Refused: its request holds a union TypeScript cannot narrow. */
     @WpMcpTool('overlap_story')
-    @WpAuthJwt({ allRolesAllowed: true })
-    @WpMcpAuthJwt({ allRolesAllowed: true })
+    @WpAuth([jwtAuth()])
+    @WpAuthorization({ authType: AuthorizationType.ALL_USERS })
+
     @Endpoint(POST, '/overlap', READ, RPC)
     overlap(_request: OverlapRequest): Promise<StoryResponse> {
         throw new Error('contract only');

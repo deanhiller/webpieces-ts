@@ -29,6 +29,11 @@ import { RequestLifecycleListener } from './RequestLifecycleListener';
  * This is the ONLY class in webpieces that names ContextMgr.
  */
 export class BrowserProxyClient extends ProxyClient {
+    protected override selectAuthMethod(route: RouteMetadata): import('@webpieces/core-util').AuthMode {
+        const selected = route.authMeta?.methods.find((method: import('@webpieces/core-util').AuthMode) => method.kind === 'jwt' || method.kind === 'public');
+        if (!selected) throw new Error('A browser cannot supply this endpoint\'s declared credentials; call it server-side.');
+        return selected;
+    }
     private config!: ClientConfig;
 
     constructor(
@@ -144,14 +149,13 @@ export class BrowserProxyClient extends ProxyClient {
                 `Browser Fetch supports only @WpStream(StreamDirection.RESPONSE); ${methodName} is ${route.streaming.direction}.`,
             );
         }
-        const mode = route.authMeta?.mode;
+        const mode = this.selectAuthMethod(route);
         if (mode === undefined) {
             return;
         }
         switch (mode.kind) {
             case 'public':
             case 'jwt':
-            case 'local-only':
                 return;
             case 'oidc':
             case 'shared-secret':

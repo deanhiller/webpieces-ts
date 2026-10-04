@@ -14,6 +14,18 @@ import { EndpointOperation } from './HttpEndpointOptions';
  * `external-caller.ts` were split off `decorators.ts` before it. Nothing about its role changed.
  */
 export class RouteMetadata {
+    apiClass?: Function;
+    // webpieces-disable no-any-unknown -- erased application policy is validated by AuthorizationHook at server startup
+    authorization?: import('./authorization').AuthorizationRequirement<unknown>;
+    localOnly = false;
+
+    /** Clients clone metadata per call so a concrete winning mode governs both trust directions. */
+    withSelectedAuth(method: import('./auth-mode').AuthMode): RouteMetadata {
+        if (!this.authMeta?.methods.includes(method)) throw new Error('Selected credential is not declared by this endpoint.');
+        const route = Object.assign(new RouteMetadata(this.httpMethod, this.path, this.methodName, this.operation), this);
+        route.authMeta = new AuthMeta([method], method.kind === 'public' ? this.authMeta.publicReason : undefined);
+        return route;
+    }
     httpMethod: string;
     path: string;
     methodName: string;

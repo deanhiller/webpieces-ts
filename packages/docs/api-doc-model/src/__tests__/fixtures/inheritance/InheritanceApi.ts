@@ -1,15 +1,5 @@
-import {
-    ApiPath,
-    ApiType,
-    Endpoint,
-    MCP,
-    POST,
-    READ,
-    RPC,
-    WpAuthJwt,
-    WpMcpAuthJwt,
-    WpMcpTool,
-} from '@webpieces/core-util';
+import { WpAuthorization, AuthorizationType, WpAuth, jwt as jwtAuth } from '@webpieces/core-util';
+import { ApiPath, ApiType, Endpoint, MCP, POST, READ, RPC, WpMcpTool } from '@webpieces/core-util';
 import { LearnerNamedDto } from '@fixture/source-dtos';
 import { AiProvider, OfflineSettingsDto } from '@fixture/published-dtos';
 import { LessonScriptRequest } from './LessonBases';
@@ -65,8 +55,9 @@ export interface LearnerLookupRequest extends LearnerNamedDto, AgedDto {
 export abstract class InheritanceApi {
     /** Renders one lesson. */
     @WpMcpTool('render_lesson')
-    @WpAuthJwt({ allRolesAllowed: true })
-    @WpMcpAuthJwt({ allRolesAllowed: true })
+    @WpAuth([jwtAuth()])
+    @WpAuthorization({ authType: AuthorizationType.ALL_USERS })
+
     @Endpoint(POST, '/render', READ, RPC)
     render(_request: LessonRenderRequest): Promise<MySettingsResponse> {
         throw new Error('contract only');
@@ -74,8 +65,9 @@ export abstract class InheritanceApi {
 
     /** Looks one learner up. */
     @WpMcpTool('lookup_learner')
-    @WpAuthJwt({ allRolesAllowed: true })
-    @WpMcpAuthJwt({ allRolesAllowed: true })
+    @WpAuth([jwtAuth()])
+    @WpAuthorization({ authType: AuthorizationType.ALL_USERS })
+
     @Endpoint(POST, '/lookup', READ, RPC)
     lookup(_request: LearnerLookupRequest): Promise<LessonAudioRequest> {
         throw new Error('contract only');

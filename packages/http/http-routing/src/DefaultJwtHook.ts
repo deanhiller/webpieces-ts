@@ -81,9 +81,11 @@ export class DefaultJwtHook extends JwtHook<DefaultJwtMintRequest> {
 
     private extractRoles(payload: JwtPayload): string[] {
         const roles = payload['roles'];
-        if (Array.isArray(roles)) {
-            return roles.filter((role: string) => typeof role === 'string');
+        if (roles === undefined) return [];
+        // webpieces-disable no-any-unknown -- verified external JWT claim elements require runtime validation
+        if (!Array.isArray(roles) || !roles.every((role: unknown) => typeof role === 'string' && role.trim().length > 0)) {
+            throw new ApiUnauthorizedError('JWT roles must be an array of nonempty strings.');
         }
-        return [];
+        return roles;
     }
 }

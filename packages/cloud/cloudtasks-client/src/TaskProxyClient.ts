@@ -3,7 +3,7 @@ import {
     isApiPath,
     getApiPath,
     getEndpoints,
-    getAuthMode,
+    getAuthMeta,
     getQueueName,
     getMaskSpec,
     assertPubSubConventions,
@@ -187,7 +187,8 @@ export class TaskProxyClient {
         const plans = new Map<string, EndpointPlan>();
 
         for (const methodName of Object.keys(endpoints)) {
-            const authMode = getAuthMode(apiClass, methodName);
+            const authMeta = getAuthMeta(apiClass, methodName);
+            const authMode = authMeta ? this.invoker.selectAuthentication(authMeta) : undefined;
             if (!authMode) {
                 throw new Error(`Endpoint '${methodName}' on ${this.apiName} has no auth mode`);
             }

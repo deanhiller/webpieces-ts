@@ -1,3 +1,4 @@
+import { WpAuthorization, AuthorizationType } from '@webpieces/core-util';
 import { describe, it, expect } from 'vitest';
 import 'reflect-metadata';
 import { ApiPath, Endpoint, POST, READ, RPC, WpAuthPublic } from '../decorators';
@@ -41,6 +42,7 @@ class Response {
 class DeclaredApi {
     @Endpoint(POST, '/go', READ, RPC)
     @WpAuthPublic('Test fixture.')
+    @WpAuthorization({ authType: AuthorizationType.ANONYMOUS, reason: 'Test fixture.' })
     go(request: Request): Promise<Response> {
         throw new Error('contract');
     }
@@ -50,6 +52,7 @@ class DeclaredApi {
 class SilentApi {
     @Endpoint(POST, '/go', READ, RPC)
     @WpAuthPublic('Test fixture.')
+    @WpAuthorization({ authType: AuthorizationType.ANONYMOUS, reason: 'Test fixture.' })
     go(request: Request): Promise<Response> {
         throw new Error('contract');
     }
@@ -60,6 +63,7 @@ class SilentApi {
 class ClaimsMcpWithoutToolApi {
     @Endpoint(POST, '/go', READ, RPC)
     @WpAuthPublic('Test fixture.')
+    @WpAuthorization({ authType: AuthorizationType.ANONYMOUS, reason: 'Test fixture.' })
     go(request: Request): Promise<Response> {
         throw new Error('contract');
     }
@@ -70,6 +74,7 @@ class ClaimsMcpWithoutToolApi {
 class ToolWithoutMcpApi {
     @Endpoint(POST, '/go', READ, RPC)
     @WpAuthPublic('Test fixture.')
+    @WpAuthorization({ authType: AuthorizationType.ANONYMOUS, reason: 'Test fixture.' })
     @WpMcpTool('go')
     go(request: Request): Promise<Response> {
         throw new Error('contract');
@@ -81,6 +86,7 @@ class ToolWithoutMcpApi {
 class AgreesApi {
     @Endpoint(POST, '/go', READ, RPC)
     @WpAuthPublic('Test fixture.')
+    @WpAuthorization({ authType: AuthorizationType.ANONYMOUS, reason: 'Test fixture.' })
     @WpMcpTool('go')
     go(request: Request): Promise<Response> {
         throw new Error('contract');
@@ -92,6 +98,7 @@ class AgreesApi {
 class MixedMcpApi {
     @Endpoint(POST, '/go', READ, RPC)
     @WpAuthPublic('Test fixture.')
+    @WpAuthorization({ authType: AuthorizationType.ANONYMOUS, reason: 'Test fixture.' })
     @WpMcpTool('go')
     go(request: Request): Promise<Response> {
         throw new Error('contract');
@@ -99,6 +106,7 @@ class MixedMcpApi {
 
     @Endpoint(POST, '/fanout', READ, RPC)
     @WpAuthPublic('Test fixture.')
+    @WpAuthorization({ authType: AuthorizationType.ANONYMOUS, reason: 'Test fixture.' })
     @InvalidEndpointForMcp(TRANSPORT_REASON)
     fanout(request: Request): Promise<Response> {
         throw new Error('contract');
@@ -110,6 +118,7 @@ class MixedMcpApi {
 class ContradictsApi {
     @Endpoint(POST, '/go', READ, RPC)
     @WpAuthPublic('Test fixture.')
+    @WpAuthorization({ authType: AuthorizationType.ANONYMOUS, reason: 'Test fixture.' })
     @WpMcpTool('go')
     @InvalidEndpointForMcp(TRANSPORT_REASON)
     go(request: Request): Promise<Response> {
@@ -122,6 +131,7 @@ class ContradictsApi {
 class AllExcludedApi {
     @Endpoint(POST, '/fanout', READ, RPC)
     @WpAuthPublic('Test fixture.')
+    @WpAuthorization({ authType: AuthorizationType.ANONYMOUS, reason: 'Test fixture.' })
     @InvalidEndpointForMcp(TRANSPORT_REASON)
     fanout(request: Request): Promise<Response> {
         throw new Error('contract');

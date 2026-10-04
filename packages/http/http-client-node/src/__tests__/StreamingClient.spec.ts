@@ -1,3 +1,4 @@
+import { WpAuthorization, AuthorizationType } from '@webpieces/core-util';
 import 'reflect-metadata';
 import { AddressInfo, createServer, IncomingMessage, Server, ServerResponse } from 'node:http';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -51,6 +52,7 @@ const serverEventSchema = new ObjectSchemaBuilder()
 abstract class StreamingApi {
     @Endpoint(POST, '/exchange', READ, RPC)
     @WpAuthPublic('integration test')
+    @WpAuthorization({ authType: AuthorizationType.ANONYMOUS, reason: 'integration test' })
     @WpStream(StreamDirection.RESPONSE)
     exchange(_request: ClientEvent, _response: ResponseStream<ServerEvent>): Promise<ServerEvent> {
         throw new Error('contract only');
@@ -68,6 +70,7 @@ registerStreamingSchemas(StreamingApi, 'exchange', {
 abstract class DuplexApi {
     @Endpoint(POST, '/full', READ, RPC)
     @WpAuthPublic('integration test')
+    @WpAuthorization({ authType: AuthorizationType.ANONYMOUS, reason: 'integration test' })
     @WpStream(StreamDirection.FULL)
     full(
         _request: ClientEvent,
@@ -78,6 +81,7 @@ abstract class DuplexApi {
 
     @Endpoint(POST, '/upload', READ, RPC)
     @WpAuthPublic('integration test')
+    @WpAuthorization({ authType: AuthorizationType.ANONYMOUS, reason: 'integration test' })
     @WpStream(StreamDirection.REQUEST)
     upload(_request: ClientEvent): Promise<RequestStream<ServerEvent, ClientEvent>> {
         throw new Error('contract only');

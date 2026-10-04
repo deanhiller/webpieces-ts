@@ -1,3 +1,4 @@
+import { WpAuthorization, AuthorizationType } from '@webpieces/core-util';
 import {
     ApiPath,
     Endpoint,
@@ -28,6 +29,7 @@ export class ResponseEvent {
 export abstract class StreamingApi {
     @Endpoint(POST, '/full', READ, RPC)
     @WpAuthPublic('stream fixture')
+    @WpAuthorization({ authType: AuthorizationType.ANONYMOUS, reason: 'stream fixture' })
     @WpStream(StreamDirection.FULL)
     full(
         _request: InitialRequest,
@@ -38,6 +40,7 @@ export abstract class StreamingApi {
 
     @Endpoint(POST, '/response', READ, RPC)
     @WpAuthPublic('stream fixture')
+    @WpAuthorization({ authType: AuthorizationType.ANONYMOUS, reason: 'stream fixture' })
     @WpStream(StreamDirection.RESPONSE)
     watch(
         _request: InitialRequest,
@@ -48,6 +51,7 @@ export abstract class StreamingApi {
 
     @Endpoint(POST, '/request', READ, RPC)
     @WpAuthPublic('stream fixture')
+    @WpAuthorization({ authType: AuthorizationType.ANONYMOUS, reason: 'stream fixture' })
     @WpStream(StreamDirection.REQUEST)
     upload(_request: InitialRequest): Promise<RequestStream<InitialResponse, RequestEvent>> {
         throw new Error('contract only');

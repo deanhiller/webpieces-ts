@@ -1,4 +1,3 @@
-import { JwtRequirement } from '@webpieces/core-util';
 import { JwtHook, MintedJwt } from './AuthHooks';
 import { AuthenticatedCaller } from './AuthConfig';
 
@@ -33,9 +32,7 @@ export class JwtHookCompileAssertions {
                 return new AuthenticatedCaller('u1');
             }
 
-            override async authorizeJwt(_values: AuthenticatedCaller, _requirement: JwtRequirement): Promise<void> {
-                // An implementation that needs no I/O simply has no await — that is allowed and free.
-            }
+
         };
 
         class RemoteSigner {
@@ -83,8 +80,8 @@ export class JwtHookCompileAssertions {
                 return new AuthenticatedCaller('u1');
             }
 
-            // @ts-expect-error authorizeJwt is async now: a void override must not compile either
-            override authorizeJwt(_values: AuthenticatedCaller, _requirement: JwtRequirement): void {
+            // @ts-expect-error authorizeJwt is removed; application policy belongs in AuthorizationHook
+            override authorizeJwt(_values: AuthenticatedCaller, _requirement: object): void {
                 // an app rule enforced synchronously — the spelling this change deletes
             }
         };

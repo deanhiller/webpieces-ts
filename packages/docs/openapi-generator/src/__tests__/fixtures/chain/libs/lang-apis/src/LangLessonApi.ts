@@ -1,3 +1,4 @@
+import { WpAuthorization, AuthorizationType } from '@webpieces/core-util';
 /* eslint-disable */
 import {
     ApiPath,
@@ -38,6 +39,7 @@ export class LangLessonApi {
     /** Lists a lesson's passages. */
     @Endpoint(POST, '/passages', READ, RPC)
     @WpAuthPublic('Fixture only.')
+    @WpAuthorization({ authType: AuthorizationType.ANONYMOUS, reason: 'Fixture only.' })
     @WpMcpTool('list_passages')
     listPassages(request: PassageListRequest): Promise<PassageListResponse> {
         throw new Error('contract');

@@ -1,3 +1,4 @@
+import { WpAuthorization, AuthorizationType } from '@webpieces/core-util';
 import 'reflect-metadata';
 import { Container } from 'inversify';
 import { describe, expect, it } from 'vitest';
@@ -58,6 +59,7 @@ const serverEventSchema = new ObjectSchemaBuilder()
 @ApiPath('/typed')
 abstract class TypedStreamApi {
     @WpAuthPublic('Typed stream test fixture')
+    @WpAuthorization({ authType: AuthorizationType.ANONYMOUS, reason: 'Typed stream test fixture' })
     @WpStream(StreamDirection.FULL)
     @Endpoint(POST, '/stream', READ, RPC)
     stream(

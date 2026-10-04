@@ -1,3 +1,4 @@
+import { WpAuthorization, AuthorizationType } from '@webpieces/core-util';
 import 'reflect-metadata';
 import {
     ApiPath,
@@ -16,6 +17,7 @@ import {
 abstract class SampleWebhookApi {
     // Default: JSON.
     @WpAuthPublic('Form post metadata test')
+    @WpAuthorization({ authType: AuthorizationType.ANONYMOUS, reason: 'Form post metadata test' })
     @Endpoint(POST, '/rpc', WRITE, RPC)
     rpc(_req: object): Promise<object> {
         throw new Error('subclass');
@@ -24,6 +26,7 @@ abstract class SampleWebhookApi {
     // Explicit form-urlencoded (e.g. Twilio inbound) — driven by a system outside this repo, which
     // an `external` endpoint must now NAME (calledBy is required by the @Endpoint overloads).
     @WpAuthPublic('Inbound form post fixture')
+    @WpAuthorization({ authType: AuthorizationType.ANONYMOUS, reason: 'Inbound form post fixture' })
     @Endpoint(POST, '/hook', WRITE, EXTERNAL, { formPost: true, calledBy: 'twilio' })
     inbound(_req: object): Promise<object> {
         throw new Error('subclass');

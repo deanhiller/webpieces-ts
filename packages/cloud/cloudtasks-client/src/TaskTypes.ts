@@ -81,6 +81,12 @@ export class TaskRequest {
  * InMemoryTaskInvoker via an in-process queue that fetches the target directly.
  */
 export abstract class TaskInvoker {
+    selectAuthentication(meta: import('@webpieces/core-util').AuthMeta): AuthMode {
+        const selected = meta.methods.find((method: AuthMode) => method.kind === 'oidc' || method.kind === 'public');
+        if (selected) return selected;
+        if (meta.methods.length === 1) return meta.methods[0];
+        throw new Error('No configured Cloud Tasks credential satisfies the declared alternatives.');
+    }
     abstract enqueue(request: TaskRequest): Promise<JobReference>;
     abstract delete(ref: JobReference): Promise<void>;
 }

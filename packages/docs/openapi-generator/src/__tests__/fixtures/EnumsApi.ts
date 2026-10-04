@@ -1,3 +1,4 @@
+import { WpAuthorization, AuthorizationType } from '@webpieces/core-util';
 /* eslint-disable */
 /**
  * STRING ENUMS in every position a type can appear, and union DISCRIMINATORS whose value on one
@@ -72,6 +73,7 @@ export class EnumsApi {
     /** Writes one story. */
     @Endpoint(POST, '/write', READ, RPC)
     @WpAuthPublic('Fixture only.')
+    @WpAuthorization({ authType: AuthorizationType.ANONYMOUS, reason: 'Fixture only.' })
     write(request: StoryRequest): Promise<StoryResponse> {
         throw new Error('contract');
     }

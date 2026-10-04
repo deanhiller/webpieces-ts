@@ -1,3 +1,4 @@
+import { WpAuthorization, AuthorizationType } from '@webpieces/core-util';
 /* eslint-disable */
 import { ApiPath, Endpoint, POST, READ, RPC, WpAuthPublic } from '@webpieces/core-util';
 import { AiProvider } from '@fixture/company-core';
@@ -20,6 +21,7 @@ export class SettingsApi {
     /** Reads the settings. */
     @Endpoint(POST, '/read', READ, RPC)
     @WpAuthPublic('Fixture only.')
+    @WpAuthorization({ authType: AuthorizationType.ANONYMOUS, reason: 'Fixture only.' })
     read(request: SettingsRequest): Promise<SettingsResponse> {
         throw new Error('contract');
     }

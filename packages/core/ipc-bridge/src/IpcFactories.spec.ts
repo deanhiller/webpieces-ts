@@ -1,3 +1,4 @@
+import { WpAuthorization, AuthorizationType, WpAuth, jwt as jwtAuth } from '@webpieces/core-util';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { IpcClientFactory, IpcServerFactory } from '@webpieces/ipc-bridge';
 import {
@@ -23,7 +24,7 @@ import {
     getIpcMaskSpec,
     ApiCallTimeoutError,
 } from '@webpieces/core-util/ipc';
-import { ApiPath, Endpoint, WpAuthJwt, POST, RPC, WRITE } from '@webpieces/core-util';
+import { ApiPath, Endpoint, POST, RPC, WRITE } from '@webpieces/core-util';
 import type { AnyUntrustedContextKey } from '@webpieces/core-util';
 
 class Value {
@@ -136,7 +137,8 @@ describe('portable IPC JSON boundary', () => {
     it('requires internal contracts and rejects HTTP/IPC mixtures', () => {
         @ApiPath('/http')
         abstract class HttpApi {
-            @WpAuthJwt({ roles: ['admin'] })
+            @WpAuth([jwtAuth()])
+            @WpAuthorization({ authType: AuthorizationType.ROLES, roles: ['admin'] })
             @Endpoint(POST, '/call', WRITE, RPC)
             call(_request: Value): Promise<Value> {
                 throw new Error('contract only');

@@ -1,3 +1,5 @@
+import { AuthorizationService } from '@webpieces/http-routing';
+import { WpAuthorization, AuthorizationType, WpAuth, jwt as jwtAuth } from '@webpieces/core-util';
 import 'reflect-metadata';
 import { createServer, request as nodeRequest, Server } from 'node:http';
 import {
@@ -11,19 +13,7 @@ import {
 import express, { Express } from 'express';
 import { ContainerModule, ContainerModuleLoadOptions } from 'inversify';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import {
-    ApiPath,
-    ApiType,
-    Endpoint,
-    HeaderRegistry,
-    WpAuthJwt,
-    WpMcpTool,
-    MCP,
-    POST,
-    RPC,
-    SVC_TO_SVC,
-    WRITE,
-} from '@webpieces/core-util';
+import { ApiPath, ApiType, Endpoint, HeaderRegistry, WpMcpTool, MCP, POST, RPC, SVC_TO_SVC, WRITE } from '@webpieces/core-util';
 import { JWT_HOOK, WebpiecesRouter, WebpiecesRouterFactory } from '@webpieces/http-routing';
 import { McpApiBinding } from './McpApiBinding';
 import { VerifiedMcpCredential, WpMcpServerConfig } from './McpAuth';
@@ -64,13 +54,13 @@ class SharedTestEventBus implements ServerEventBus {
 }
 
 interface BoundTestBridge {
-    bridge: WpMcpServer<string, string>;
+    bridge: WpMcpServer<string>;
     server: Server;
     url: string;
 }
 
 describe('WpMcpServer HTTP bridge', () => {
-    let bridge: WpMcpServer<string, string>;
+    let bridge: WpMcpServer<string>;
     let controller: SearchController;
     let authority: TestTokenAuthority;
     let jwtHook: TestJwtHook;
@@ -125,14 +115,13 @@ describe('WpMcpServer HTTP bridge', () => {
         });
     });
 
-    function serverConfig(): WpMcpServerConfig<string, string> {
-        return new WpMcpServerConfig<string, string>()
+    function serverConfig(): WpMcpServerConfig<string> {
+        return new WpMcpServerConfig<string>()
             .setName('test-server')
             .setVersion('1.0.0')
             .setResource('https://api.example.test/app-owned/mcp')
             .setAccessTokenAuthority(authority)
-            .setEndpointJwtAuthority(jwtHook)
-            .setEndpointMintRequest((credential: VerifiedMcpCredential) => credential.subject)
+            .setAuthorizationService(new AuthorizationService())
             .setAuthorizationServers(['https://login.example.test'])
             .setRequiredScopes(['tools']);
     }
@@ -148,7 +137,7 @@ describe('WpMcpServer HTTP bridge', () => {
                     (binding: McpApiBinding) => binding.api.name === catalog.contractName,
                 ),
         );
-        const instance = new WpMcpServer<string, string>(serverConfig());
+        const instance = new WpMcpServer<string>(serverConfig());
         const app: Express = express();
         instance.bind(app, new McpBindOptions(ENDPOINT_PATH, bindings, catalogs, deployment));
         const server = createServer(app);
@@ -446,7 +435,7 @@ describe('WpMcpServer HTTP bridge', () => {
         SearchController.waitAbortedHook = undefined;
     });
 
-    it('runs the real local AuthFilter with a fresh endpoint JWT', async () => {
+    it('runs local invocation without minting an endpoint JWT', async () => {
         expect(structuredOf(await callTool('account_search', { query: 'mine' }))).toEqual({
             userId: 'user-7',
             result: 'mine',
@@ -455,7 +444,7 @@ describe('WpMcpServer HTTP bridge', () => {
             userId: 'user-7',
             result: 'again',
         });
-        expect(jwtHook.mintedTokens.at(-1)).not.toBe(jwtHook.mintedTokens.at(-2));
+        expect(jwtHook.mintedTokens).toEqual([]);
     });
 
     it('seeds remote trusted context without forwarding the MCP bearer token', async () => {
@@ -539,12 +528,12 @@ describe('WpMcpServer HTTP bridge', () => {
         expect(paramMismatch.payload.error?.code).toBe(-32_020);
     });
 
-    it('requires MCP auth metadata and topology-compatible HTTP auth at startup', () => {
+    it('requires common authorization and topology-compatible HTTP credentials at startup', () => {
         @ApiPath('/invalid')
         @ApiType(SVC_TO_SVC, MCP)
         class MissingMcpAuthApi {
-            /** Invalid: no @WpMcpAuthJwt. */
-            @WpAuthJwt({ allRolesAllowed: true })
+            /** Invalid: missing common authorization. */
+            @WpAuth([jwtAuth()])
             @Endpoint(POST, '/tool', WRITE, RPC)
             @WpMcpTool('missing_mcp_auth')
             tool(_request: SearchRequest): Promise<SearchResponse> {
@@ -562,7 +551,7 @@ describe('WpMcpServer HTTP bridge', () => {
                     McpDeployment.singleProcess(),
                 ),
             ),
-        ).toThrow(/must declare @WpMcpAuthJwt/);
+        ).toThrow(/WpAuthorization/);
         const mismatch = new WpMcpServer(serverConfig());
         expect(() =>
             mismatch.bind(
@@ -574,26 +563,20 @@ describe('WpMcpServer HTTP bridge', () => {
                     McpDeployment.singleProcess(),
                 ),
             ),
-        ).toThrow(/requires @WpAuthOidc/);
+        ).toThrow(/oidc.*sharedSecret/);
     });
 
-    it('exposes resource metadata, invalidates tools, and refuses token passthrough', async () => {
+    it('retains access-token metadata with no endpoint-token authority', async () => {
         expect(bridge.protectedResourceMetadata()).toMatchObject({
             resource: 'https://api.example.test/app-owned/mcp',
             authorization_servers: ['https://login.example.test'],
             scopes_supported: ['tools'],
         });
         expect(() => bridge.toolsChanged()).not.toThrow();
-        expect(
-            modelErrorOf(await callTool('account_search', { query: 'mine' }, 'mcp-passthrough')),
-        ).toMatchObject({
-            kind: 'implementation',
-        });
-        jwtHook.lifetimeSeconds = 3_601;
-        expect(modelErrorOf(await callTool('account_search', { query: 'mine' }))).toMatchObject({
-            kind: 'implementation',
-        });
-        jwtHook.lifetimeSeconds = 60;
+        jwtHook.failWith = new Error('JWT authority must not be called by MCP');
+        expect(structuredOf(await callTool('account_search', {query:'mine'}))).toEqual({userId:'user-7',result:'mine'});
+        expect(jwtHook.mintedTokens).toEqual([]);
+        jwtHook.failWith = undefined;
     });
 
     it.each(['GET', 'DELETE', 'PUT'])(
@@ -613,7 +596,7 @@ describe('WpMcpServer HTTP bridge', () => {
     });
 
     it('refuses to bind when the resource path and the endpointPath disagree', () => {
-        const mismatched = new WpMcpServer<string, string>(serverConfig());
+        const mismatched = new WpMcpServer<string>(serverConfig());
         expect(() =>
             mismatched.bind(
                 express(),

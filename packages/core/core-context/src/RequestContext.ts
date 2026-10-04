@@ -21,6 +21,19 @@ const HTTP_REQUEST_KEY = '__webpieces_http_request__';
  * ```
  */
 class RequestContextImpl {
+    private readonly scopeIdentities = new WeakMap<object, object>();
+
+    /** Opaque scope identity; restoring snapshots never restores local authentication. */
+    activeScopeIdentity(): object {
+        const store = this.storage.getStore();
+        if (!store) throw new Error('Invocation authentication requires an active RequestContext.');
+        let identity = this.scopeIdentities.get(store);
+        if (!identity) {
+            identity = Object.freeze({});
+            this.scopeIdentities.set(store, identity);
+        }
+        return identity;
+    }
     private storage: AsyncLocalStorage<Map<string, any>>;
 
     constructor() {
@@ -486,6 +499,7 @@ class RequestContextImpl {
             );
         }
         captured.restoreInto(ContextCaptureAuthority.INTERNAL, store);
+        this.scopeIdentities.delete(store);
     }
 
     /**

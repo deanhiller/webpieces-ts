@@ -1,3 +1,4 @@
+import { WpAuthorization, AuthorizationType, WpAuth, jwt as jwtAuth, apiKey as apiKeyAuth } from '@webpieces/core-util';
 /* eslint-disable */
 /**
  * The MAIN fixture contract. Every row of the vitest matrix in issue #981 is written here rather
@@ -5,32 +6,7 @@
  * plausibly have written, not a synthetic AST — and it uses the REAL decorators, so it cannot drift
  * from the signatures it exists to exercise.
  */
-import {
-    ApiPath,
-    ApiType,
-    CLOUDTASKS,
-    CRON,
-    Endpoint,
-    EXTERNAL,
-    EXTERNAL_CUSTOMER,
-    GET,
-    Integer,
-    MaskLog,
-    MCP,
-    POST,
-    READ,
-    RPC,
-    SVC_TO_SVC,
-    WRITE,
-    WpAuthApiKey,
-    WpAuthJwt,
-    WpAuthPublic,
-    WpInt,
-    WpMax,
-    WpMcpAuthJwt,
-    WpMcpTool,
-    WpMin,
-} from '@webpieces/core-util';
+import { ApiPath, ApiType, CLOUDTASKS, CRON, Endpoint, EXTERNAL, EXTERNAL_CUSTOMER, GET, Integer, MaskLog, MCP, POST, READ, RPC, SVC_TO_SVC, WRITE, WpAuthPublic, WpInt, WpMax, WpMcpTool, WpMin } from '@webpieces/core-util';
 import { SAVE_PATH } from './contract-constants';
 
 /** A string-literal union with a NAME — becomes one enum entry a renderer can `$ref`. */
@@ -206,9 +182,10 @@ export class ExampleApi {
      * @mcp Create or update one customer record. Safe to retry.
      */
     @Endpoint(POST, SAVE_PATH, WRITE, RPC)
-    @WpAuthJwt({ allRolesAllowed: true })
+    @WpAuth([jwtAuth()])
+    @WpAuthorization<{llmRoles: readonly [string, ...string[]]}>({ authType: AuthorizationType.CUSTOM, appPolicy: {llmRoles: ['admin']} })
     @WpMcpTool('save_customer')
-    @WpMcpAuthJwt({ roles: ['admin'] })
+
     @MaskLog({ secretToken: 'full' })
     save(request: SaveRequest): Promise<SaveResponse> {
         throw new Error('contract');
@@ -216,14 +193,16 @@ export class ExampleApi {
 
     /** Enqueued by a producer, delivered later. */
     @Endpoint(POST, '/enqueue', WRITE, CLOUDTASKS)
-    @WpAuthJwt({ allRolesAllowed: true })
+    @WpAuth([jwtAuth()])
+    @WpAuthorization({ authType: AuthorizationType.ALL_USERS })
     enqueue(request: EnqueueRequest): Promise<void> {
         throw new Error('contract');
     }
 
     /** Fired by a scheduler on a clock. */
     @Endpoint(POST, '/nightly', WRITE, CRON)
-    @WpAuthJwt({ allRolesAllowed: true })
+    @WpAuth([jwtAuth()])
+    @WpAuthorization({ authType: AuthorizationType.ALL_USERS })
     nightly(request: NightlyRequest): Promise<void> {
         throw new Error('contract');
     }
@@ -236,6 +215,7 @@ export class ExampleApi {
         openWorld: true,
     })
     @WpAuthPublic('Twilio signs its own payload; the webhook callback verifies it.')
+    @WpAuthorization({ authType: AuthorizationType.ANONYMOUS, reason: 'Twilio signs its own payload; the webhook callback verifies it.' })
     hook(request: WebhookRequest): Promise<void> {
         throw new Error('contract');
     }
@@ -246,7 +226,8 @@ export class ExampleApi {
      * Not published: an operator tool, and the customer contract has no concept of our internals.
      */
     @Endpoint(POST, '/internal', WRITE, RPC, { hidden: true })
-    @WpAuthJwt({ allRolesAllowed: true })
+    @WpAuth([jwtAuth()])
+    @WpAuthorization({ authType: AuthorizationType.ALL_USERS })
     internal(request: InternalRequest): Promise<void> {
         throw new Error('contract');
     }
@@ -258,31 +239,35 @@ export class ExampleApi {
      * why a renderer must AND them into one requirement rather than list them separately.
      */
     @Endpoint(POST, '/lookup', READ, RPC)
-    @WpAuthApiKey('partner', [
+    @WpAuth([apiKeyAuth('partner', [
         { in: 'header', name: 'x-api-key', description: 'Your partner key.' },
         { in: 'bearer', description: 'The organization the key acts for.' },
-    ])
+    ])])
+    @WpAuthorization({ authType: AuthorizationType.USERS_OR_SERVICES })
     lookup(request: LookupRequest): Promise<void> {
         throw new Error('contract');
     }
 
     /** Integer-ness, the preferred spelling. */
     @Endpoint(GET, '/limit-alias', READ, RPC)
-    @WpAuthJwt({ allRolesAllowed: true })
+    @WpAuth([jwtAuth()])
+    @WpAuthorization({ authType: AuthorizationType.ALL_USERS })
     limitAlias(request: LimitByAlias): Promise<void> {
         throw new Error('contract');
     }
 
     /** Integer-ness, the decorator spelling. */
     @Endpoint(POST, '/limit-decorator', READ, RPC)
-    @WpAuthJwt({ allRolesAllowed: true })
+    @WpAuth([jwtAuth()])
+    @WpAuthorization({ authType: AuthorizationType.ALL_USERS })
     limitDecorator(request: LimitByDecorator): Promise<void> {
         throw new Error('contract');
     }
 
     /** Numeric bounds. */
     @Endpoint(POST, '/bounded', READ, RPC)
-    @WpAuthJwt({ allRolesAllowed: true })
+    @WpAuth([jwtAuth()])
+    @WpAuthorization({ authType: AuthorizationType.ALL_USERS })
     bounded(request: BoundedRequest): Promise<void> {
         throw new Error('contract');
     }

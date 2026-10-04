@@ -1,3 +1,4 @@
+import { WpAuthorization, AuthorizationType } from '@webpieces/core-util';
 import 'reflect-metadata';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import {
@@ -40,6 +41,7 @@ class FetchStoresRequest {
 abstract class DbStoresApi {
     @Endpoint(POST, '/fetch-stores', READ, RPC)
     @WpAuthPublic('Anonymous access is intentionally required')
+    @WpAuthorization({ authType: AuthorizationType.ANONYMOUS, reason: 'Anonymous access is intentionally required' })
     // webpieces-disable no-unmanaged-exceptions -- abstract contract stub, never executed
     fetchStores(_request: FetchStoresRequest): Promise<void> {
         throw new Error('contract only');

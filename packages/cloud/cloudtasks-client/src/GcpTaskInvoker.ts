@@ -1,3 +1,4 @@
+import { AuthMeta, AuthMode } from '@webpieces/core-util';
 import { inject, optional } from 'inversify';
 import { CloudTasksClient, protos } from '@google-cloud/tasks';
 import { provideFrameworkSingletonDefaultForApi } from '@webpieces/core-context';
@@ -26,6 +27,13 @@ export class GcpTaskInvoker extends TaskInvoker {
     // @optional: only @WpAuthSharedSecret task endpoints need it; the client sends its bound value.
     constructor(@optional() @inject(SECRETS) private readonly secrets?: Secrets) {
         super();
+    }
+
+    override selectAuthentication(meta: AuthMeta): AuthMode {
+        const selected = meta.methods.find((method: AuthMode) => method.kind === 'oidc' || method.kind === 'public' ||
+            (method.kind === 'shared-secret' && this.secrets?.get(method.secretKey) !== undefined));
+        if (!selected) throw new Error('No declared task credential has a configured delivery mechanism.');
+        return selected;
     }
 
     override async enqueue(request: TaskRequest): Promise<JobReference> {

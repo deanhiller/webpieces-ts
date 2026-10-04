@@ -1,3 +1,4 @@
+import { AuthorizationService } from '@webpieces/http-routing';
 import 'reflect-metadata';
 import express, { Express } from 'express';
 import { ContainerModule, ContainerModuleLoadOptions } from 'inversify';
@@ -44,19 +45,18 @@ describe('WpMcpServerConfig fluent setters', () => {
         router.addRoutes(SearchApi, SearchController);
     });
 
-    function complete(): WpMcpServerConfig<string, string> {
-        return new WpMcpServerConfig<string, string>()
+    function complete(): WpMcpServerConfig<string> {
+        return new WpMcpServerConfig<string>()
             .setName('config-spec')
             .setVersion('1.0.0')
             .setResource(RESOURCE)
             .setAccessTokenAuthority(new TestTokenAuthority())
-            .setEndpointJwtAuthority(jwtHook)
-            .setEndpointMintRequest((credential: VerifiedMcpCredential) => credential.subject)
+            .setAuthorizationService(new AuthorizationService())
             .setAuthorizationServers([ISSUER])
             .setRequiredScopes(['tools']);
     }
 
-    function bind(config: WpMcpServerConfig<string, string>): void {
+    function bind(config: WpMcpServerConfig<string>): void {
         const app: Express = express();
         new WpMcpServer(config).bind(
             app,
@@ -77,30 +77,27 @@ describe('WpMcpServerConfig fluent setters', () => {
         expect(config.authorizationServers).toEqual([ISSUER]);
         expect(config.requiredScopes).toEqual(['tools']);
         expect(config.maxAccountValidationAgeSeconds).toBe(900);
-        // the untouched ceiling keeps its default
-        expect(config.maxEndpointJwtLifetimeSeconds).toBe(3600);
         expect(config.errorTranslator).toBeUndefined();
         expect(config.protectedResourceMetadata().authorization_servers).toEqual([ISSUER]);
     });
 
     it('bind() lists EVERY missing required setter in one startup failure', () => {
-        const config = new WpMcpServerConfig<string, string>()
+        const config = new WpMcpServerConfig<string>()
             .setName('half-built')
             .setVersion('1.0.0');
         expect(() => bind(config)).toThrow(
             'WpMcpServerConfig is missing setResource(...), setAccessTokenAuthority(...), ' +
-                'setEndpointJwtAuthority(...), setEndpointMintRequest(...), ' +
+                'setAuthorizationService(...), ' +
                 'setAuthorizationServers(...), setRequiredScopes(...)',
         );
     });
 
     it('bind() names the one forgotten setter', () => {
-        const config = new WpMcpServerConfig<string, string>()
+        const config = new WpMcpServerConfig<string>()
             .setName('no-resource')
             .setVersion('1.0.0')
             .setAccessTokenAuthority(new TestTokenAuthority())
-            .setEndpointJwtAuthority(jwtHook)
-            .setEndpointMintRequest((credential: VerifiedMcpCredential) => credential.subject)
+            .setAuthorizationService(new AuthorizationService())
             .setAuthorizationServers([ISSUER])
             .setRequiredScopes(['tools']);
         expect(() => bind(config)).toThrow('WpMcpServerConfig is missing setResource(...)');
@@ -111,7 +108,7 @@ describe('WpMcpServerConfig fluent setters', () => {
     });
 
     it('each text setter rejects an empty value naming itself', () => {
-        const config = new WpMcpServerConfig<string, string>();
+        const config = new WpMcpServerConfig<string>();
         expect(() => config.setName('  ')).toThrow(
             'WpMcpServerConfig.setName(...) requires a non-empty string.',
         );
@@ -124,7 +121,7 @@ describe('WpMcpServerConfig fluent setters', () => {
     });
 
     it('setResource rejects a name or version landed on it', () => {
-        const config = new WpMcpServerConfig<string, string>();
+        const config = new WpMcpServerConfig<string>();
         expect(() => config.setResource('lang-learning')).toThrow(
             "WpMcpServerConfig.setResource(...) requires an absolute URL, got 'lang-learning'.",
         );
@@ -134,7 +131,7 @@ describe('WpMcpServerConfig fluent setters', () => {
     });
 
     it('setAuthorizationServers rejects a scope list landed on it', () => {
-        const config = new WpMcpServerConfig<string, string>();
+        const config = new WpMcpServerConfig<string>();
         expect(() => config.setAuthorizationServers(['tools'])).toThrow(
             "WpMcpServerConfig.setAuthorizationServers(...) requires an absolute URL, got 'tools'.",
         );
@@ -148,22 +145,19 @@ describe('WpMcpServerConfig fluent setters', () => {
     });
 
     it('the ceilings keep their range validation', () => {
-        const config = new WpMcpServerConfig<string, string>();
+        const config = new WpMcpServerConfig<string>();
         expect(() => config.setMaxAccountValidationAgeSeconds(0)).toThrow(
             'WpMcpServerConfig.setMaxAccountValidationAgeSeconds(...) requires 1..3600 seconds, got 0.',
         );
         expect(() => config.setMaxAccountValidationAgeSeconds(3601)).toThrow(
             'requires 1..3600 seconds, got 3601.',
         );
-        expect(() => config.setMaxEndpointJwtLifetimeSeconds(3601)).toThrow(
-            'WpMcpServerConfig.setMaxEndpointJwtLifetimeSeconds(...) requires 1..3600 seconds, got 3601.',
-        );
-        expect(() => config.setMaxEndpointJwtLifetimeSeconds(3600)).not.toThrow();
+
     });
 
     it('derives the RFC 9728 metadata URL by path insertion, for every resource shape', () => {
         const metadataUrlOf = (resource: string): string =>
-            new WpMcpServerConfig<string, string>().setResource(resource).resourceMetadataUrl;
+            new WpMcpServerConfig<string>().setResource(resource).resourceMetadataUrl;
         expect(metadataUrlOf(RESOURCE)).toBe(
             'https://api.example.test/.well-known/oauth-protected-resource/app-owned/mcp',
         );
@@ -192,7 +186,7 @@ describe('WpMcpServerConfig fluent setters', () => {
     });
 
     it('reading an unset required value names the setter that fills it', () => {
-        expect(() => new WpMcpServerConfig<string, string>().resource).toThrow(
+        expect(() => new WpMcpServerConfig<string>().resource).toThrow(
             'WpMcpServerConfig is missing setResource(...)',
         );
     });

@@ -5,12 +5,8 @@ export {
     PathParam,
     QueryParam,
     WpAuthPublic,
-    WpAuthJwt,
-    rolesRequired,
-    WpAuthOidc,
-    WpAuthSharedSecret,
-    WpAuthWebhook,
-    WpAuthLocalOnly,
+    WpAuth, WpLocalOnly, isLocalOnly, jwt, oidc, sharedSecret, webhook, apiKey,
+    WpAuthorization, AuthorizationType, getAuthorization,
     Rpc,
     PubSub,
     Queue,
@@ -24,7 +20,6 @@ export {
     isRawBody,
     isApiPath,
     getAuthMeta,
-    getAuthMode,
     assertEveryEndpointHasAuthMode,
     getApiKind,
     assertApiKind,
@@ -116,6 +111,7 @@ export {
     AuthConfig,
     AUTH_CONFIG,
     AuthenticatedCaller,
+    AuthenticatedMachineIdentity,
     AUTHENTICATED_CALLER_KEY,
     SharedSecrets,
 } from './AuthConfig';
@@ -147,3 +143,7 @@ export { setupRuntime, RuntimeSetupOptions } from './setupRuntime';
 export { WebpiecesConfig, WEBPIECES_CONFIG_TOKEN } from './WebpiecesConfig';
 
 export { ServerWiring, ServerWiringOptions } from './ServerWiring';
+
+export { AuthorizationHook, AuthorizationService, CanonicalUserRoles, AUTHORIZATION_HOOK, VERIFIED_MACHINE_CALLER, VerifiedMachineCaller } from './AuthorizationHook';
+export { AuthorizedApiDocument } from './AuthorizedApiDocument';
+export type { ApiDocumentObject, ApiDocumentValue } from './AuthorizedApiDocument';

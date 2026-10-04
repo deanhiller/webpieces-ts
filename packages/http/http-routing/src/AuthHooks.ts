@@ -1,6 +1,5 @@
-import { JwtRequirement, rolesRequired, ApiForbiddenError } from '@webpieces/core-util';
 import { HttpRequest, RawHttpRequest } from '@webpieces/core-context';
-import { AuthenticatedCaller } from './AuthConfig';
+import { AuthenticatedCaller, AuthenticatedMachineIdentity } from './AuthConfig';
 
 /** Framework-normalized result from an application-owned JWT mint operation. */
 export class MintedJwt {
@@ -15,66 +14,10 @@ export class MintedJwt {
     }
 }
 
-/**
- * JwtHook - the OPTIONAL user-JWT mechanism. Its DI token is the {@link JWT_HOOK} Symbol injected via
- * `@inject(JWT_HOOK)` (a Symbol, because the app container uses autobind; rebindable in tests). Bind one
- * to turn on `@WpAuthJwt({...})` endpoints. When NO JwtHook is bound, the framework
- * {@link AuthFilter} treats every jwt endpoint as "not enabled" and fails fast (401) — there is no
- * default JWT verification because it needs an app secret + payload shape the framework can't guess.
- *
- *  - `mint`         — ISSUANCE: construct/sign a JWT from an application-owned request shape.
- *  - `parseJwt`     — AUTHENTICATION: decode/verify a user JWT into {@link AuthenticatedCaller}, or throw. The
- *                     app owns the strategy (HS256 secret, RS256 + JWKS, a provider SDK, ...).
- *  - `authorizeJwt` — AUTHORIZATION: check the authenticated user against the endpoint's
- *                     {@link JwtRequirement}. The DEFAULT enforces the roles any-of; override for
- *                     app-defined requirements carried by the SAME decorator, e.g.
- *                     `@WpAuthJwt({allRolesAllowed: true, inOrg: true})` →
- *                     `if (requirement['inOrg'] && !values.claims['orgId']) ...`.
- *
- * ALL THREE ARE ASYNC for the same reason: the strategy is the app's, and an app's strategy reaches
- * the network. `mint` may call KMS/HSM, `parseJwt` may fetch a JWKS or call a provider SDK, and `authorizeJwt`'s
- * motivating example — `@WpAuthJwt({allRolesAllowed: true, inOrg: true})` — is a membership question a
- * real app answers from a datastore. A sync signature makes both of those unwritable, and it made
- * `JwtHook` the last sync hook: {@link OidcHook.verifyOidc}, {@link WebhookAuthCallback.verifyWebhook} and
- * {@link ApiKeyHook.verifyApiKey} all return promises. An implementation that needs no I/O simply has
- * no `await` in its body — {@link DefaultJwtHook} is exactly that and pays nothing for it.
- */
+/** Optional application JWT credential authority. Authorization lives in AuthorizationHook. */
 export abstract class JwtHook<TMintRequest> {
-    /**
-     * Mint an application endpoint JWT. The application owns the request/claim shape while the
-     * framework constrains the returned token and expiry metadata. Always async so the authority
-     * may use a remote signer, KMS, or HSM.
-     */
     abstract mint(request: TMintRequest): Promise<MintedJwt>;
-
-    /**
-     * Parse a user JWT (kind:'jwt') — AUTHENTICATION only. Return who the user is, or throw.
-     * ASYNC so an app can reach a JWKS endpoint or a provider SDK; see the class doc.
-     *
-     * IT TAKES THE TOKEN, NOT THE REQUEST — the one deliberate asymmetry among the four hooks, and
-     * NOT an oversight to be "fixed". {@link ApiKeyHook.verifyApiKey} and
-     * {@link WebhookAuthCallback.verifyWebhook} take the whole {@link HttpRequest} because their
-     * credential regime is the APP's: which headers carry an api key, and how a vendor signs, are
-     * things the framework cannot know. A user JWT is different — the framework owns the
-     * `Authorization: Bearer` scheme and has already extracted the token from it. Widening this to
-     * the request would only invite a JwtHook to authenticate off some OTHER header, which is a
-     * second, ungoverned credential path on the mode that guards browser traffic.
-     */
     abstract parseJwt(token: string): Promise<AuthenticatedCaller>;
-
-    /**
-     * DEFAULT authorization: enforce the endpoint's roles (any-of). Override to enforce app-defined
-     * requirements. Throw ApiForbiddenError to deny; return to allow. ASYNC so an app-defined
-     * requirement can be answered from a datastore; see the class doc.
-     */
-    async authorizeJwt(caller: AuthenticatedCaller, requirement: JwtRequirement): Promise<void> {
-        // rolesRequired is the ONE reader of the JwtRoles union: [] means the endpoint typed
-        // `allRolesAllowed: true`, never "the field was missing" — that state no longer compiles.
-        const roles = rolesRequired(requirement);
-        if (roles.length > 0 && !roles.some((role: string) => caller.roles.includes(role))) {
-            throw new ApiForbiddenError(`Endpoint requires one of roles: ${roles.join(', ')}`);
-        }
-    }
 }
 
 /**
@@ -96,7 +39,7 @@ export const JWT_HOOK = Symbol.for('JwtHook');
  * throw on failure.
  */
 export abstract class OidcHook {
-    abstract verifyOidc(token: string, callers: string[]): Promise<void>;
+    abstract verifyOidc(token: string, callers: string[]): Promise<AuthenticatedMachineIdentity>;
 }
 
 /**

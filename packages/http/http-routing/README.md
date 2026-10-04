@@ -12,7 +12,7 @@ npm install @webpieces/http-routing
 
 ## OIDC on private Cloud Run
 
-`@WpAuthOidc()` primarily selects client-side Google ID-token generation. With invocation
+`@WpAuth([oidc()])` primarily selects client-side Google ID-token generation. With invocation
 authentication and invoker IAM enabled, Cloud Run checks the invocation before it reaches
 `AuthFilter`; the framework retains supplementary server validation. No callers means delegate
 caller authorization to the edge; explicit callers add an application allow-list. Local tokens
@@ -27,3 +27,5 @@ See the main [WebPieces README](https://github.com/deanhiller/webpieces-ts#readm
 ## License
 
 Apache-2.0
+
+Authentication and operation authorization are separate declarations. See [the migration guide](../../../docs/authorization-migration.md) for policies, canonical context, token-free MCP invocation, and validator release ordering.

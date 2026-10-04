@@ -17,6 +17,7 @@ export {
     DocumentedApiKey,
     DocumentedApiKeyCredential,
     DocumentedAuth,
+    DocumentedAuthMethod,
     DocumentedEndpoint,
     DocumentedEndpointOptions,
     DocumentedField,

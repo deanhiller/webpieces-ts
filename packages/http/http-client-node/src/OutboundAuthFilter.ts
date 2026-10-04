@@ -55,7 +55,7 @@ export class OutboundAuthFilter extends Filter<ClientRequest, Response> {
     }
 
     private async attach(request: ClientRequest): Promise<void> {
-        const mode = request.route.authMeta?.mode;
+        const mode = request.route.authMeta?.methods[0];
         if (mode?.kind === 'oidc') {
             request.headers.set(
                 'Authorization',

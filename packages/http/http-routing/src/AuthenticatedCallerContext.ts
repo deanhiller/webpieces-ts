@@ -1,12 +1,21 @@
 import { PendingWireTrust, PendingTrustedValue, RequestContext } from '@webpieces/core-context';
-import { ApiUnauthorizedError, LogManager } from '@webpieces/core-util';
+import { ApiUnauthorizedError, ApiImplementationError, LogManager, WebpiecesCoreHeaders } from '@webpieces/core-util';
+import { VERIFIED_MACHINE_CALLER, VerifiedMachineCaller } from './AuthorizationHook';
 import { AuthenticatedCaller, AUTHENTICATED_CALLER_KEY } from './AuthConfig';
 
 const log = LogManager.getLogger('AuthenticatedCallerContext');
 
 /** Shared trusted principal publication and inbound header reconciliation for HTTP and MCP. */
 export class AuthenticatedCallerContext {
+    private static readonly establishedScopes = new WeakSet<object>();
+
+    // webpieces-disable no-function-outside-class -- stateless contract validation or scope metadata reader used before DI registration
+    static hasEstablishedIngress(): boolean {
+        return this.establishedScopes.has(RequestContext.activeScopeIdentity());
+    }
+
     publish(caller: AuthenticatedCaller): void {
+        this.validateCanonicalIdentity(caller);
         for (const entry of caller.entries) {
             // ContextTuple.key is a TRUSTED key by type, so this is the one sanctioned write of a
             // proven identity: the app's hook derived it from a credential we just verified.
@@ -15,6 +24,30 @@ export class AuthenticatedCallerContext {
         // A real TRUSTED ContextKey, not a raw string slot: the caller IS the framework's own proof,
         // so it is written with the same typed verb every other proven value goes through.
         RequestContext.putTrusted(AUTHENTICATED_CALLER_KEY, caller);
+        if (caller.userId !== undefined) {
+            RequestContext.putTrusted(WebpiecesCoreHeaders.USER_ID, caller.userId);
+            RequestContext.putTrusted(WebpiecesCoreHeaders.USER_ROLES, JSON.stringify(caller.roles));
+        }
+        if (caller.machine) {
+            RequestContext.putTrusted(VERIFIED_MACHINE_CALLER, new VerifiedMachineCaller(caller.machine.mechanism, caller.machine.identity));
+        }
+    }
+
+    private validateCanonicalIdentity(caller: AuthenticatedCaller): void {
+        if ((caller.userId !== undefined && (typeof caller.userId !== 'string' || !caller.userId.trim())) ||
+            (caller.userId === undefined && !caller.machine)) {
+            throw new ApiImplementationError('Verified caller must contain a nonempty user ID or verified machine identity.');
+        }
+        if (!Array.isArray(caller.roles) || !caller.roles.every((role: string) => typeof role === 'string' && role.trim().length > 0) ||
+            (caller.userId === undefined && caller.roles.length > 0)) {
+            throw new ApiImplementationError('Verified caller roles must be nonempty strings belonging to a verified user.');
+        }
+        for (const entry of caller.entries) {
+            if ((entry.key.name === WebpiecesCoreHeaders.USER_ID.name && entry.value !== caller.userId) ||
+                (entry.key.name === WebpiecesCoreHeaders.USER_ROLES.name && entry.value !== JSON.stringify(caller.roles))) {
+                throw new ApiImplementationError('Canonical user ID/roles entries disagree with the verified caller.');
+            }
+        }
     }
 
     reconcileWireTrust(callerVerified: boolean): void {
@@ -25,6 +58,11 @@ export class AuthenticatedCallerContext {
             } else {
                 this.requireVouched(item);
             }
+        }
+        const machine = RequestContext.getTrusted(VERIFIED_MACHINE_CALLER);
+        if (RequestContext.getTrusted(AUTHENTICATED_CALLER_KEY) ||
+            (machine instanceof VerifiedMachineCaller && machine.isCurrentHop())) {
+            AuthenticatedCallerContext.establishedScopes.add(RequestContext.activeScopeIdentity());
         }
     }
 

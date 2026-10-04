@@ -1,3 +1,4 @@
+import { WpAuthorization, AuthorizationType } from '@webpieces/core-util';
 /* eslint-disable */
 /**
  * A WEBHOOK contract: the events we send to a partner's own server. Selected into the document's
@@ -27,6 +28,7 @@ export class EventsApi {
     /** Sent whenever a widget is made. */
     @Endpoint(POST, '/widget.made', WRITE, RPC)
     @WpAuthPublic('Never served here; this declares a payload we SEND to a partner endpoint.')
+    @WpAuthorization({ authType: AuthorizationType.ANONYMOUS, reason: 'Never served here; this declares a payload we SEND to a partner endpoint.' })
     widgetMade(event: WidgetMadeEvent): Promise<void> {
         throw new Error('contract');
     }

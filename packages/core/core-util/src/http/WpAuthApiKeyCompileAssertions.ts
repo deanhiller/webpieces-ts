@@ -1,5 +1,5 @@
-import { ApiKeyCredential, AuthMode } from './auth-mode';
-import { WpAuthApiKey } from './decorators';
+import { apiKey, ApiKeyCredential, AuthMode } from './auth-mode';
+import { WpAuth } from './decorators';
 
 /**
  * COMPILE-TIME assertions for the `apikey` member of the {@link AuthMode} union and for the
@@ -61,7 +61,7 @@ export class AuthApiKeyCompileAssertions {
 
     /** The decorator's TWO-argument form is the only one; asserted by the ABSENCE of an error. */
     legitimateDecorator(): MethodDecorator {
-        return WpAuthApiKey('onetablet-partner', [{ in: 'header', name: 'x-api-key' }]);
+        return WpAuth([apiKey('onetablet-partner', [{ in: 'header', name: 'x-api-key' }])]);
     }
 
     /** Every one of these must be UNWRITABLE. A directive going unused here fails the build. */
@@ -103,7 +103,7 @@ export class AuthApiKeyCompileAssertions {
      */
     oneArgumentFormIsGone(): void {
         // @ts-expect-error the one-argument form is DELETED; pass the credential list as well
-        const legacy = WpAuthApiKey('onetablet-partner');
+        const legacy = apiKey('onetablet-partner');
         void legacy;
     }
 
@@ -126,8 +126,6 @@ export class AuthApiKeyCompileAssertions {
                 return 'webhook';
             case 'apikey':
                 return 'apikey';
-            case 'local-only':
-                return 'local-only';
         }
     }
 }

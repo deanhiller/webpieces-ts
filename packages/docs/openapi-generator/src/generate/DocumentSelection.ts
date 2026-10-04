@@ -4,7 +4,6 @@ import {
     EXTERNAL_CUSTOMER,
     MCP,
     SVC_TO_SVC,
-    WpAuthLocalOnly,
 } from '@webpieces/core-util';
 
 /** The one line that says a document is not the customer contract. It appears in exactly one. */
@@ -143,7 +142,7 @@ export class DocumentSelection {
      * than omitting it, because a reader would reasonably try to call it.
      */
     acceptsEndpoint(endpoint: DocumentedEndpoint): boolean {
-        if (endpoint.auth?.decorator === WpAuthLocalOnly.name) {
+        if (endpoint.localOnly) {
             return false;
         }
         return !this.dropHidden || !endpoint.hidden;

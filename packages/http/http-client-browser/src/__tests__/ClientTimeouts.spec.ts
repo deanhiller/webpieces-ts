@@ -1,3 +1,4 @@
+import { WpAuthorization, AuthorizationType } from '@webpieces/core-util';
 import 'reflect-metadata';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
@@ -30,12 +31,14 @@ class Payload {
 abstract class RpcApi {
     @Endpoint(POST, '/work', WRITE, RPC)
     @WpAuthPublic('Anonymous access is intentionally required')
+    @WpAuthorization({ authType: AuthorizationType.ANONYMOUS, reason: 'Anonymous access is intentionally required' })
     work(_request: Payload): Promise<Payload> {
         throw new Error('contract only');
     }
 
     @Endpoint(POST, '/other', WRITE, RPC)
     @WpAuthPublic('Anonymous access is intentionally required')
+    @WpAuthorization({ authType: AuthorizationType.ANONYMOUS, reason: 'Anonymous access is intentionally required' })
     other(_request: Payload): Promise<Payload> {
         throw new Error('contract only');
     }

@@ -1,6 +1,7 @@
 import { inject } from 'inversify';
 import { provideFrameworkSingleton } from '@webpieces/core-context';
 import { ApiUnauthorizedError } from '@webpieces/core-util';
+import { AuthenticatedMachineIdentity } from './AuthConfig';
 import { GcpOidc } from '@webpieces/gcp-identity';
 
 /**
@@ -25,15 +26,16 @@ export class DefaultOidcVerifier {
         @inject(GcpOidc) private readonly gcpOidc: GcpOidc,
     ) {}
 
-    async verify(token: string, callers: string[]): Promise<void> {
+    async verify(token: string, callers: string[]): Promise<AuthenticatedMachineIdentity> {
         // callers pass straight through: EMPTY (@WpAuthOidc() with no callers) = TRUST THE EDGE, a
         // non-empty list enforces the explicit allow-list. Do NOT inject a ['self'] default — that
         // would reject a legitimate cross-SA caller the edge already admitted.
         const result = await this.gcpOidc.verifyFromCallers(token, callers);
-        if (!result.ok) {
+        if (!result.ok || !result.email) {
             throw new ApiUnauthorizedError(
                 `OIDC rejected: ${result.reason ?? 'not an allowed caller'}`,
             );
         }
+        return new AuthenticatedMachineIdentity('oidc', result.email);
     }
 }

@@ -265,12 +265,12 @@ export function toolFailures(
             ),
         );
     }
-    if (endpoint.mcpAuthText === undefined) {
+    if (endpoint.authorizationText === undefined) {
         found.push(
             new Verdict(
-                'an MCP tool does not declare @WpMcpAuthJwt(...)',
-                'Add @WpMcpAuthJwt(...) beside the HTTP auth. MCP authorization is rechecked ' +
-                    'before the endpoint boundary and is declared separately on purpose.',
+                'an MCP tool does not declare @WpAuthorization(...)',
+                'Add @WpAuthorization(...) beside @WpAuth. Common operation authorization is rechecked ' +
+                    'before tool/schema lookup and at the receiving endpoint.',
             ),
         );
     }

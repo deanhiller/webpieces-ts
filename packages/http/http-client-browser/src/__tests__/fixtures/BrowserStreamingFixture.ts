@@ -1,3 +1,4 @@
+import { WpAuthorization, AuthorizationType } from '@webpieces/core-util';
 import 'reflect-metadata';
 import {
     ApiPath,
@@ -32,6 +33,7 @@ class ResponseEvent {
 abstract class BrowserApi {
     @Endpoint(POST, '/watch', READ, RPC)
     @WpAuthPublic('Chromium integration fixture')
+    @WpAuthorization({ authType: AuthorizationType.ANONYMOUS, reason: 'Chromium integration fixture' })
     @WpStream(StreamDirection.RESPONSE)
     watch(
         _request: InitialRequest,

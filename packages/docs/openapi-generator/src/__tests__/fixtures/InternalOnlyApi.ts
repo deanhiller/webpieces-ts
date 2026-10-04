@@ -1,3 +1,4 @@
+import { WpAuthorization, AuthorizationType } from '@webpieces/core-util';
 /* eslint-disable */
 /**
  * A contract declaring NO `@ApiType`, so it feeds the internal document ALONE.
@@ -18,6 +19,7 @@ export class InternalOnlyApi {
     /** Says nothing about who may read it, so the default decides. */
     @Endpoint(POST, '/heartbeat', READ, RPC)
     @WpAuthPublic('Fixture only.')
+    @WpAuthorization({ authType: AuthorizationType.ANONYMOUS, reason: 'Fixture only.' })
     heartbeat(request: HeartbeatRequest): Promise<void> {
         throw new Error('contract');
     }

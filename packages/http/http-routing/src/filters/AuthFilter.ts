@@ -9,9 +9,8 @@ import {
 import {
     AuthMode,
     ApiEndpointNotFoundError,
-    ApiBadRequestError,
     ApiUnauthorizedError,
-    JwtRequirement,
+    ApiImplementationError,
     LogManager,
     RuntimeLocality,
     Surface,
@@ -33,7 +32,7 @@ import {
     WEBHOOK_AUTH_CALLBACK,
 } from '../AuthHooks';
 import { AuthenticatedCallerContext } from '../AuthenticatedCallerContext';
-import { InvocationAuthentication } from '../InvocationAuthentication';
+import { VERIFIED_MACHINE_CALLER, VerifiedMachineCaller } from '../AuthorizationHook';
 import { DefaultOidcVerifier } from '../DefaultOidcVerifier';
 
 const log = LogManager.getLogger('AuthFilter');
@@ -123,46 +122,51 @@ export class AuthFilter extends Filter<MethodMeta, WpResponse<unknown>> {
         meta: MethodMeta,
         nextFilter: Service<MethodMeta, WpResponse<unknown>>,
     ): Promise<WpResponse<unknown>> {
-        const mode = meta.routeMeta.authMeta?.mode;
-        const authHeader = meta.invocationAuthentication
-            ? `Bearer ${meta.invocationAuthentication.token}`
-            : RequestContext.getRequest()?.getHeader(AUTHORIZATION_HEADER);
-
-        if (!mode || mode.kind === 'public') {
-            // Public: best-effort parse so a logged-out page can still know the logged-in user.
-            await this.bestEffortJwt(authHeader);
-            this.callerContext.reconcileWireTrust(/*callerVerified*/ false);
-            this.rethrowDeferredBodyError();
+        const auth = meta.routeMeta.authMeta;
+        if (!auth) throw new ApiImplementationError('Every endpoint requires @WpAuth or @WpAuthPublic.');
+        if (meta.routeMeta.localOnly) this.enforceLocalOnly(meta);
+        if (meta.invocationAuthentication) {
+            meta.invocationAuthentication.assertTarget(meta.routeMeta);
             return nextFilter.invoke(meta);
         }
-
-        switch (mode.kind) {
-            case 'jwt':
-                await this.enforceJwt(authHeader, mode.requirement, meta.invocationAuthentication);
-                break;
-            case 'oidc':
-                await this.enforceOidc(authHeader, mode.callers);
-                break;
-            case 'shared-secret':
-                this.enforceSharedSecret(
-                    this.credential(authHeader, SHARED_SECRET_SCHEME),
-                    mode.secretKey,
-                );
-                break;
-            case 'webhook':
-                await this.enforceWebhook(mode.name, meta);
-                break;
-            case 'apikey':
-                await this.enforceApiKey(mode.regime, meta);
-                break;
-            case 'local-only':
-                this.enforceLocalOnly(meta);
-                break;
+        const header = RequestContext.getRequest()?.getHeader(AUTHORIZATION_HEADER);
+        if (auth.methods[0].kind === 'public') {
+            await this.bestEffortJwt(header);
+            this.callerContext.reconcileWireTrust(false);
+            return nextFilter.invoke(meta);
         }
-        this.applySurface(mode);
-        this.callerContext.reconcileWireTrust(AuthFilter.verifiesCaller(mode));
-        this.rethrowDeferredBodyError();
+        const selected = await this.authenticateAlternatives(auth.methods, header, meta);
+        this.applySurface(selected);
+        this.callerContext.reconcileWireTrust(AuthFilter.verifiesCaller(selected));
         return nextFilter.invoke(meta);
+    }
+
+    private async authenticateAlternatives(methods: readonly AuthMode[], header: string | undefined, meta: MethodMeta): Promise<AuthMode> {
+        for (const method of methods) {
+            // eslint-disable-next-line @webpieces/no-unmanaged-exceptions -- failed credentials may try another declared authenticator; invariants propagate
+            try {
+                await this.authenticateMethod(method, header, meta);
+                return method;
+            } catch (err: unknown) { // webpieces-disable no-any-unknown -- structured credential rejection at the boundary
+                const error = toError(err);
+                if (!(error instanceof ApiUnauthorizedError) || methods.length === 1) throw error;
+            }
+        }
+        throw new ApiUnauthorizedError('No declared credential mechanism authenticated this request.');
+    }
+
+    private async authenticateMethod(mode: AuthMode, header: string | undefined, meta: MethodMeta): Promise<void> {
+        switch (mode.kind) {
+            case 'jwt': await this.enforceJwt(header); return;
+            case 'oidc': await this.enforceOidc(header, mode.callers); return;
+            case 'shared-secret':
+                this.enforceSharedSecret(this.credential(header, SHARED_SECRET_SCHEME), mode.secretKey);
+                RequestContext.putTrusted(VERIFIED_MACHINE_CALLER, new VerifiedMachineCaller('shared-secret', mode.secretKey));
+                return;
+            case 'webhook': await this.enforceWebhook(mode.name, meta); return;
+            case 'apikey': await this.enforceApiKey(mode.regime, meta); return;
+            case 'public': throw new ApiImplementationError('Public is not a protected auth alternative.');
+        }
     }
 
     /**
@@ -216,7 +220,6 @@ export class AuthFilter extends Filter<MethodMeta, WpResponse<unknown>> {
             case 'oidc':
             case 'shared-secret':
             case 'webhook':
-            case 'local-only':
             case 'public':
                 return undefined;
         }
@@ -315,30 +318,6 @@ export class AuthFilter extends Filter<MethodMeta, WpResponse<unknown>> {
     }
 
     /**
-     * A body that failed to parse is held on the {@link RawRequest} and surfaces HERE, after auth, as
-     * the 400 it always was — never before it.
-     *
-     * The order is the whole point. A malformed body from an unauthenticated caller must answer 401,
-     * because "your JSON was bad" also says "I got past auth", and on a webhook endpoint — whose url
-     * is public by construction — that is a free oracle for anyone probing. Parsing first made the
-     * framework hand that out for nothing.
-     *
-     * Only routes that retain raw bytes can defer at all; every other route still fails at parse time
-     * in the transport, exactly as before.
-     */
-    private rethrowDeferredBodyError(): void {
-        const parseError = RequestContext.getRequest()?.raw?.bodyParseError;
-        if (parseError) {
-            throw new ApiBadRequestError(
-                'Request body is not valid JSON',
-                undefined,
-                undefined,
-                parseError,
-            );
-        }
-    }
-
-    /**
      * Does this mode authenticate the CALLER ITSELF (as opposed to a user, or nobody)? The INBOUND
      * twin of {@link DestinationTrust.forAuthMode}, and deliberately the same question: the client
      * omits trusted keys for a destination that cannot verify it, and the server rejects trusted keys
@@ -381,7 +360,6 @@ export class AuthFilter extends Filter<MethodMeta, WpResponse<unknown>> {
             // The hook's OWN derived entries still land (applyAuthenticatedCaller), and reconcileWireTrust then
             // admits an inbound trusted header only when the hook independently derived the same value.
             case 'apikey':
-            case 'local-only':
                 return false;
         }
     }
@@ -417,35 +395,21 @@ export class AuthFilter extends Filter<MethodMeta, WpResponse<unknown>> {
         throw new ApiEndpointNotFoundError(`No endpoint at ${meta.routeMeta.path}`);
     }
 
-    private async enforceJwt(
-        header: string | undefined,
-        requirement: JwtRequirement,
-        invocation?: InvocationAuthentication,
-    ): Promise<void> {
+    private async enforceJwt(header: string | undefined): Promise<void> {
         const token = this.credential(header, BEARER_SCHEME);
-        if (!token) {
-            throw new ApiUnauthorizedError('Authentication required');
-        }
-        if (!this.jwtHook) {
-            throw new ApiUnauthorizedError('User-JWT auth is not enabled on this server');
-        }
-        const caller = await this.jwtHook.parseJwt(token); // AUTHENTICATE — throws ApiUnauthorizedError if invalid
-        invocation?.assertCaller(caller);
-        if (!invocation) this.callerContext.publish(caller);
-        await this.jwtHook.authorizeJwt(caller, requirement); // AUTHORIZE — app policy; throws ApiForbiddenError to deny
+        if (!token) throw new ApiUnauthorizedError('Authentication required');
+        if (!this.jwtHook) throw new ApiUnauthorizedError('User-JWT auth is not enabled on this server');
+        this.callerContext.publish(await this.jwtHook.parseJwt(token));
     }
 
-    private async enforceOidc(header: string | undefined, callers: string[]): Promise<void> {
+    private async enforceOidc(header: string | undefined, callers: readonly string[]): Promise<void> {
         const token = this.credential(header, BEARER_SCHEME);
-        if (!token) {
-            throw new ApiUnauthorizedError('Missing OIDC bearer token for @WpAuthOidc endpoint');
-        }
-        // App-bound OidcHook overrides the caller policy; otherwise the framework default runs directly.
-        if (this.oidcHook) {
-            await this.oidcHook.verifyOidc(token, callers);
-        } else {
-            await this.oidcVerifier.verify(token, callers);
-        }
+        if (!token) throw new ApiUnauthorizedError('Missing OIDC bearer token');
+        const identity = this.oidcHook
+            ? await this.oidcHook.verifyOidc(token, [...callers])
+            : await this.oidcVerifier.verify(token, [...callers]);
+        if (!identity) throw new ApiImplementationError('OIDC verifier must return its verified machine identity.');
+        RequestContext.putTrusted(VERIFIED_MACHINE_CALLER, new VerifiedMachineCaller(identity.mechanism, identity.identity));
     }
 
     /** `provided` is the Authorization bearer value — the secret itself, same header as a JWT. */
@@ -477,6 +441,7 @@ export class AuthFilter extends Filter<MethodMeta, WpResponse<unknown>> {
             this.callerContext.publish(await this.jwtHook.parseJwt(token));
         } catch (err: unknown) {
             const error = toError(err);
+            if (!(error instanceof ApiUnauthorizedError)) throw error;
             log.debug(
                 'Best-effort JWT parse on a public endpoint failed (treating as anonymous): ',
                 error,

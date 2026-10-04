@@ -8,16 +8,16 @@ import {
     getEndpointOperation,
     getEndpoints,
     getWpMcpTools,
-    getWpMcpAuthJwt,
+    getAuthorization,
+    AuthorizationRequirement,
     EndpointOperation,
     McpToolCatalogError,
     McpToolCatalogFile,
     McpToolDefinition,
-    WpMcpJwtAuthMetadata,
     WpMcpToolHints,
     WpMcpToolMetadata,
 } from '@webpieces/core-util';
-import { AuthenticatedCaller, ClassType, JwtHook } from '@webpieces/http-routing';
+import { ClassType, AuthorizationService } from '@webpieces/http-routing';
 import { McpApiBinding } from './McpApiBinding';
 import { McpToolCatalog } from './McpToolCatalog';
 
@@ -31,7 +31,8 @@ export class RegisteredMcpTool {
         public readonly annotations: WpMcpToolHints,
         public readonly operation: EndpointOperation,
         public readonly authMeta: AuthMeta,
-        public readonly mcpAuth: WpMcpJwtAuthMetadata,
+        // webpieces-disable no-any-unknown -- custom policy is validated by AuthorizationService
+        public readonly authorization: AuthorizationRequirement<unknown>,
         public readonly binding: McpApiBinding,
         public readonly inputSchema: ApiJsonSchema,
         public readonly outputSchema: ApiJsonSchema,
@@ -67,7 +68,7 @@ export class RegisteredMcpTool {
 export class McpToolRegistry {
     readonly tools: readonly RegisteredMcpTool[];
 
-    constructor(bindings: readonly McpApiBinding[], catalogs: readonly McpToolCatalog[]) {
+    constructor(bindings: readonly McpApiBinding[], catalogs: readonly McpToolCatalog[], private readonly authorizationService: AuthorizationService) {
         const pairing = new McpCatalogPairing(catalogs);
         const registered: RegisteredMcpTool[] = [];
         const names = new Set<string>();
@@ -125,12 +126,13 @@ export class McpToolRegistry {
         const authMeta = getAuthMeta(apiClass, metadata.methodName);
         if (!authMeta)
             throw new Error(`@WpMcpTool ${apiClass.name}.${metadata.methodName} has no HTTP auth.`);
-        const mcpAuth = getWpMcpAuthJwt(apiClass, metadata.methodName);
-        if (!mcpAuth) {
+        const authorization = getAuthorization(apiClass, metadata.methodName);
+        if (!authorization) {
             throw new Error(
-                `@WpMcpTool ${apiClass.name}.${metadata.methodName} must declare @WpMcpAuthJwt(...).`,
+                `@WpMcpTool ${apiClass.name}.${metadata.methodName} must declare @WpAuthorization(...).`,
             );
         }
+        this.authorizationService.validate(authorization);
         binding.validateMethod(metadata.methodName);
         if (catalog === undefined) return undefined;
         const published = this.published(apiClass, metadata, catalog, pairing);
@@ -143,7 +145,7 @@ export class McpToolRegistry {
             published.hints,
             getEndpointOperation(apiClass, metadata.methodName),
             authMeta,
-            mcpAuth,
+            authorization,
             binding,
             published.inputSchema,
             published.outputSchema,
@@ -252,15 +254,14 @@ export class AuthorizedMcpTools {
     }
 
     // webpieces-disable no-function-outside-class -- asynchronous projection factory
-    static async create<T>(
+    static async create(
         registry: McpToolRegistry,
-        caller: AuthenticatedCaller,
-        policy: JwtHook<T>,
+        policy: AuthorizationService,
     ): Promise<AuthorizedMcpTools> {
         const tools: RegisteredMcpTool[] = [];
         const authorization = new McpToolPolicy(policy);
         for (const tool of registry.tools) {
-            if (await authorization.permits(caller, tool.mcpAuth.requirement)) tools.push(tool);
+            if (await authorization.permits(tool.authorization)) tools.push(tool);
         }
         return new AuthorizedMcpTools(tools);
     }

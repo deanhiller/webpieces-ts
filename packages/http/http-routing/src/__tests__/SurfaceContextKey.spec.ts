@@ -18,7 +18,7 @@ import { AuthFilter } from '../filters/AuthFilter';
 import { DefaultJwtHook } from '../DefaultJwtHook';
 import { DefaultOidcVerifier } from '../DefaultOidcVerifier';
 import { ApiKeyHook, OidcHook } from '../AuthHooks';
-import { AuthenticatedCaller } from '../AuthConfig';
+import { AuthenticatedCaller, AuthenticatedMachineIdentity } from '../AuthConfig';
 import { MethodMeta } from '../MethodMeta';
 import { WpResponse } from '../WpResponse';
 
@@ -50,8 +50,8 @@ class RecordingNext implements Service<MethodMeta, WpResponse<unknown>> {
 
 /** Accepts any caller: these specs are about the SURFACE key, not about OIDC verification. */
 class PassingOidcHook extends OidcHook {
-    override async verifyOidc(_token: string, _callers: string[]): Promise<void> {
-        await Promise.resolve();
+    override async verifyOidc(_token: string, _callers: string[]): Promise<AuthenticatedMachineIdentity> {
+        return new AuthenticatedMachineIdentity('oidc','caller@example.test');
     }
 }
 
@@ -72,7 +72,7 @@ const routeFor = (mode: AuthMode): RouteMetadata =>
         'thing',
         WRITE,
         'ThingController',
-        new AuthMeta(mode),
+        new AuthMeta([mode], mode.kind === 'public' ? 'test public endpoint' : undefined),
         'ThingApi',
     );
 
@@ -119,7 +119,7 @@ describe('AuthFilter stamps SURFACE from the auth mode that matched', () => {
     it('@WpAuthJwt -> gui: a browser GUI holding an end-user JWT', async () => {
         const next = new RecordingNext();
 
-        await runFilter(next, { kind: 'jwt', requirement: { allRolesAllowed: true } }, jwtHeader());
+        await runFilter(next, { kind: 'jwt' }, jwtHeader());
 
         expect(next.invoked).toBe(true);
         expect(next.surfaceSeenByController).toBe('gui');
@@ -181,7 +181,7 @@ describe('SURFACE propagates: the second hop INHERITS the edge hop, it does not 
             RequestContext.setRequest(requestWith(jwtHeader()));
             RequestContext.putTrusted(WebpiecesCoreHeaders.SURFACE, 'llm');
             return newAuthFilter().filter(
-                new MethodMeta(routeFor({ kind: 'jwt', requirement: { allRolesAllowed: true } })),
+                new MethodMeta(routeFor({ kind: 'jwt' })),
                 next,
             );
         });
@@ -206,7 +206,7 @@ describe('a CALLER cannot set its own surface', () => {
         const next = new RecordingNext();
 
         await expect(
-            runFilter(next, { kind: 'jwt', requirement: { allRolesAllowed: true } }, jwtHeader(), [
+            runFilter(next, { kind: 'jwt' }, jwtHeader(), [
                 new ContextTuple(WebpiecesCoreHeaders.SURFACE, 'public-api'),
             ]),
         ).rejects.toThrow(ApiUnauthorizedError);

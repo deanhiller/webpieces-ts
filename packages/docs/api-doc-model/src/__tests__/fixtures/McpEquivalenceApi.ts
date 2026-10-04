@@ -1,22 +1,6 @@
+import { WpAuthorization, AuthorizationType, WpAuth, jwt as jwtAuth } from '@webpieces/core-util';
 import 'reflect-metadata';
-import {
-    ApiPath,
-    ApiType,
-    Endpoint,
-    Integer,
-    MCP,
-    POST,
-    READ,
-    RPC,
-    SVC_TO_SVC,
-    WRITE,
-    WRITE_IDEMPOTENT,
-    WpAuthJwt,
-    WpMax,
-    WpMcpAuthJwt,
-    WpMcpTool,
-    WpMin,
-} from '@webpieces/core-util';
+import { ApiPath, ApiType, Endpoint, Integer, MCP, POST, READ, RPC, SVC_TO_SVC, WRITE, WRITE_IDEMPOTENT, WpMax, WpMcpTool, WpMin } from '@webpieces/core-util';
 
 /** Where an order is in its lifecycle. */
 export type OrderPhase = 'placed' | 'done';
@@ -166,8 +150,9 @@ export abstract class McpEquivalenceApi {
     // and this paragraph is for whoever maintains the fixture.
     /** Looks up orders at one store, newest first. */
     @Endpoint(POST, '/lookup', READ, RPC)
-    @WpAuthJwt({ allRolesAllowed: true })
-    @WpMcpAuthJwt({ allRolesAllowed: true })
+    @WpAuth([jwtAuth()])
+    @WpAuthorization({ authType: AuthorizationType.ALL_USERS })
+
     @WpMcpTool('lookup_orders')
     lookup(_request: LookupRequest): Promise<LookupResponse> {
         throw new Error('contract only');
@@ -177,8 +162,9 @@ export abstract class McpEquivalenceApi {
     // `@Endpoint`'s options, which is where the fourth hint lives after #982.
     /** Cancels one order. */
     @Endpoint(POST, '/cancel', WRITE, RPC, { openWorld: true })
-    @WpAuthJwt({ allRolesAllowed: true })
-    @WpMcpAuthJwt({ allRolesAllowed: true })
+    @WpAuth([jwtAuth()])
+    @WpAuthorization({ authType: AuthorizationType.ALL_USERS })
+
     @WpMcpTool('cancel_order')
     cancel(_request: CancelRequest): Promise<CancelResponse> {
         throw new Error('contract only');
@@ -188,8 +174,9 @@ export abstract class McpEquivalenceApi {
     // document and leaves it in the MCP one, which is the combination most likely to be got wrong.
     /** Rebuilds a store's menu cache. */
     @Endpoint(POST, '/reindex', WRITE_IDEMPOTENT, RPC, { hidden: true })
-    @WpAuthJwt({ allRolesAllowed: true })
-    @WpMcpAuthJwt({ allRolesAllowed: true })
+    @WpAuth([jwtAuth()])
+    @WpAuthorization({ authType: AuthorizationType.ALL_USERS })
+
     @WpMcpTool('reindex_store')
     reindex(_request: ReindexRequest): Promise<ReindexResponse> {
         throw new Error('contract only');

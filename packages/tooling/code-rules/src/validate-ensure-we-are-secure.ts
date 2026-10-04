@@ -2,23 +2,20 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as ts from 'typescript';
+import { SecurityPolicyShapes } from './security-policy-shapes';
 import { getChangedFiles, detectBase, Option, RuleFailError } from "@webpieces/rules-config";
 import { EnsureWeAreSecureConfig } from "./configs/rule-configs";
 import { InformAiError } from '@webpieces/tooling-common';
 import { injectable, bindingScopeValues } from 'inversify';
 import { CodeValidator, ExecutorResult } from './code-validator';
 
-const HTTP_AUTH = new Set([
-    'WpAuthJwt',
-    'WpAuthOidc',
-    'WpAuthWebhook',
-    'WpAuthSharedSecret',
-    'WpAuthApiKey',
-    'WpAuthLocalOnly',
-    'WpAuthPublic',
-]);
+const HTTP_AUTH = new Set(['WpAuth', 'WpAuthPublic']);
+const LEGACY_AUTH = new Set(['WpAuthJwt', 'WpAuthOidc', 'WpAuthWebhook', 'WpAuthSharedSecret', 'WpAuthApiKey', 'WpAuthLocalOnly', 'WpMcpAuthJwt']);
 const CONTRACT_DECORATORS = new Set([
     ...HTTP_AUTH,
+    ...LEGACY_AUTH,
+    'WpAuthorization', 'WpLocalOnly', 'AuthorizationType',
+    'jwt', 'oidc', 'sharedSecret', 'webhook', 'apiKey',
     'ApiPath',
     'Endpoint',
     'WpInternal',
@@ -39,6 +36,7 @@ class DecoratorUse {
         readonly name: string,
         readonly decorator: ts.Decorator,
         readonly call: ts.CallExpression | null,
+        readonly imports: CanonicalImports,
     ) {}
 }
 
@@ -51,6 +49,9 @@ class CanonicalImports {
 function isCanonicalModule(moduleName: string): boolean {
     return (
         moduleName === '@webpieces/core-util' ||
+        moduleName === '@webpieces/http-routing' ||
+        moduleName.endsWith('/core-util/src/http/auth-mode') ||
+        moduleName.endsWith('/core-util/src/http/authorization') ||
         moduleName === '@webpieces/core-util/ipc' ||
         moduleName.endsWith('/core-util/src/http/decorators') ||
         moduleName.includes('/core-util/src/ipc/')
@@ -84,7 +85,7 @@ function decoratorUse(decorator: ts.Decorator, imports: CanonicalImports): Decor
     const callee = call?.expression ?? expr;
     if (ts.isIdentifier(callee)) {
         const canonical = imports.named.get(callee.text);
-        return canonical ? new DecoratorUse(canonical, decorator, call) : null;
+        return canonical ? new DecoratorUse(canonical, decorator, call, imports) : null;
     }
     if (
         ts.isPropertyAccessExpression(callee) &&
@@ -92,7 +93,7 @@ function decoratorUse(decorator: ts.Decorator, imports: CanonicalImports): Decor
         imports.namespaces.has(callee.expression.text)
     ) {
         return CONTRACT_DECORATORS.has(callee.name.text)
-            ? new DecoratorUse(callee.name.text, decorator, call)
+            ? new DecoratorUse(callee.name.text, decorator, call, imports)
             : null;
     }
     return null;
@@ -161,6 +162,7 @@ function checkHttpMethod(
     const auth = uses.filter((use: DecoratorUse) => HTTP_AUTH.has(use.name));
     const ipc = uses.filter((use: DecoratorUse) => use.name === 'WpIpcEndpoint');
     const label = methodName(method);
+    checkAuthorization(file, source, method, uses, out);
     if (endpoints.length > 1)
         add(
             out,
@@ -177,7 +179,7 @@ function checkHttpMethod(
             source,
             method,
             'HTTP_AUTH_COUNT',
-            `${label} must have exactly one method-level @WpAuth* decorator; found ${auth.length}. Prefer an authenticated mode; use @WpAuthPublic('reason') only for deliberate anonymous access.`,
+            `${label} must have exactly one method-level @WpAuth or @WpAuthPublic decorator; found ${auth.length}. Prefer an authenticated mode; use @WpAuthPublic('reason') only for deliberate anonymous access.`,
         );
     }
     if (endpoints.length === 0 && auth.length > 0)
@@ -211,6 +213,24 @@ function checkHttpMethod(
         );
 }
 
+// webpieces-disable no-function-outside-class -- stateless security declaration audit shared by all served endpoints
+function checkAuthorization(file: string, source: ts.SourceFile, method: ts.MethodDeclaration, uses: DecoratorUse[], out: SecurityContractViolation[]): void {
+    const endpoint = uses.some((use: DecoratorUse) => use.name === 'Endpoint');
+    const authorization = uses.filter((use: DecoratorUse) => use.name === 'WpAuthorization');
+    if (endpoint && authorization.length !== 1) add(out, file, source, method, 'HTTP_AUTHORIZATION_COUNT', `${methodName(method)} requires exactly one method-level @WpAuthorization; found ${authorization.length}.`);
+    if (!endpoint && authorization.length) add(out, file, source, method, 'HTTP_ORPHAN_AUTHORIZATION', '@WpAuthorization requires an @Endpoint.');
+    const isPublic = uses.some((use: DecoratorUse) => use.name === 'WpAuthPublic');
+    for (const use of uses) {
+        if (LEGACY_AUTH.has(use.name)) add(out, file, source, use.decorator, 'HTTP_AUTH_MIGRATION', `@${use.name} was removed. Migrate credentials to @WpAuth([...]), operation policy to @WpAuthorization, and locality to @WpLocalOnly.`);
+        const problems = use.name === 'WpAuth'
+            ? SecurityPolicyShapes.authentication(use.call, use.imports.named, use.imports.namespaces)
+            : use.name === 'WpAuthorization'
+              ? SecurityPolicyShapes.authorization(use.call, isPublic, use.imports.named, use.imports.namespaces)
+              : [];
+        for (const problem of problems) add(out, file, source, use.decorator, problem.code, problem.message);
+    }
+}
+
 // webpieces-disable no-function-outside-class -- stateless TypeScript AST security validator helper
 function checkInternalMethod(
     file: string,
@@ -222,7 +242,7 @@ function checkInternalMethod(
 ): void {
     const ipc = uses.filter((use: DecoratorUse) => use.name === 'WpIpcEndpoint');
     const endpoint = uses.some((use: DecoratorUse) => use.name === 'Endpoint');
-    const auth = uses.some((use: DecoratorUse) => HTTP_AUTH.has(use.name));
+    const auth = uses.some((use: DecoratorUse) => (HTTP_AUTH.has(use.name) || LEGACY_AUTH.has(use.name) || use.name === 'WpAuthorization' || use.name === 'WpLocalOnly'));
     const label = methodName(method);
     if (ipc.length !== 1)
         add(
@@ -315,7 +335,7 @@ class ApiClassAudit {
         );
         this.apiPaths = this.classUses.filter((use: DecoratorUse) => use.name === 'ApiPath');
         this.internals = this.classUses.filter((use: DecoratorUse) => use.name === 'WpInternal');
-        this.classAuth = this.classUses.filter((use: DecoratorUse) => HTTP_AUTH.has(use.name));
+        this.classAuth = this.classUses.filter((use: DecoratorUse) => HTTP_AUTH.has(use.name) || LEGACY_AUTH.has(use.name) || use.name === 'WpAuthorization' || use.name === 'WpLocalOnly');
         this.hasHttpMethod = this.methodUses.some((uses: DecoratorUse[]) =>
             uses.some((use: DecoratorUse) => use.name === 'Endpoint'),
         );
@@ -566,7 +586,7 @@ export function securityContractsError(
         first === undefined ? undefined : `[${first.code}] ${first.message}`,
         [
             new Option(
-                "Put exactly one authenticated method-level @WpAuth* decorator on every @Endpoint. Use @WpAuthPublic('non-empty reason') only when anonymous access is deliberate.",
+                "Put exactly one authenticated method-level @WpAuth or @WpAuthPublic decorator on every @Endpoint. Use @WpAuthPublic('non-empty reason') only when anonymous access is deliberate.",
                 true,
             ),
             new Option(
@@ -590,7 +610,7 @@ export class EnsureWeAreSecureValidator extends CodeValidator<EnsureWeAreSecureC
     }
 
     async run(workspaceRoot: string): Promise<ExecutorResult> {
-        if ((this.config.mode ?? 'OFF') === 'OFF') return { success: true };
+        if (this.config.mode === 'OFF') return { success: true };
         const base = process.env['NX_BASE'] ?? detectBase(workspaceRoot);
         if (base === null || base === undefined) {
             throw missingSecurityBaseError();

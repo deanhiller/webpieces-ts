@@ -87,7 +87,7 @@ export const ruleHelp: Readonly<Record<string, RuleHelp>> = {
         'Apply this policy in source, or review its explicit settings in {configFile}. An intentional opt-out requires complete OFF settings.',
     ),
     'ensure-we-are-secure': new RuleHelp(
-        'Check configured API security requirements at the implementation boundary.',
+        'Audit canonical WpAuth credential alternatives and WpAuthorization operation policies on every HTTP endpoint; audit explicit IPC boundaries.',
         'Apply this policy in source, or review its explicit settings in {configFile}. An intentional opt-out requires complete OFF settings.',
     ),
     'no-inline-import-in-api-lib': new RuleHelp(

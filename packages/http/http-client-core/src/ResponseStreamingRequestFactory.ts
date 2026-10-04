@@ -54,6 +54,6 @@ export class ResponseStreamingRequestFactory {
     }
 
     destinationTrust(route: RouteMetadata): DestinationTrust {
-        return DestinationTrust.forAuthMode(route.authMeta?.mode);
+        return DestinationTrust.forAuthMode(route.authMeta?.methods[0]);
     }
 }

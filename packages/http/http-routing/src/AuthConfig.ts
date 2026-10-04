@@ -38,12 +38,18 @@ export class SharedSecrets {
  */
 export class AuthenticatedCaller {
     constructor(
-        public readonly userId: string,
+        public readonly userId: string | undefined,
         public readonly roles: string[] = [],
         public readonly entries: ContextTuple[] = [],
         // webpieces-disable no-any-unknown -- raw JWT claims for app-defined authorization (inOrg, tenant, ...)
         public readonly claims: Record<string, unknown> = {},
+        public readonly machine?: AuthenticatedMachineIdentity,
     ) {}
+}
+
+/** Verified external machine identity does not grant trusted-header delegation. */
+export class AuthenticatedMachineIdentity {
+    constructor(public readonly mechanism: string, public readonly identity: string) {}
 }
 
 /**

@@ -1,3 +1,4 @@
+import { AuthorizationService } from '@webpieces/http-routing';
 import 'reflect-metadata';
 import { Server } from 'node:http';
 import {
@@ -118,7 +119,7 @@ describe('McpApiBinding.remote generated Node client integration', () => {
     let server: Server;
     let garbageServer: Server;
     let gatewayServer: Server;
-    let gateway: WpMcpServer<string, string>;
+    let gateway: WpMcpServer<string>;
     let router: WebpiecesRouter;
     let controller: RemoteMcpController;
     let verifier: RecordingOidcVerifier;
@@ -159,7 +160,7 @@ describe('McpApiBinding.remote generated Node client integration', () => {
             ]),
         );
         tool = requiredTool(
-            new McpToolRegistry([binding], [REMOTE_MCP_CATALOG]),
+            new McpToolRegistry([binding], [REMOTE_MCP_CATALOG], new AuthorizationService()),
             'remote_integration_search',
         );
         await startGateway(jwtHook, factory);
@@ -202,13 +203,12 @@ describe('McpApiBinding.remote generated Node client integration', () => {
             new RecordingOidcMinter(new Error('SECRET-oidc-metadata-server-down')),
         );
         gateway = new WpMcpServer(
-            new WpMcpServerConfig<string, string>()
+            new WpMcpServerConfig<string>()
                 .setName('gateway')
                 .setVersion('1.0.0')
                 .setResource('https://gateway.example.test/gateway/mcp')
                 .setAccessTokenAuthority(new TestTokenAuthority())
-                .setEndpointJwtAuthority(jwtHook)
-                .setEndpointMintRequest((credential: VerifiedMcpCredential) => credential.subject)
+                .setAuthorizationService(new AuthorizationService())
                 .setAuthorizationServers(['https://login.example.test'])
                 .setRequiredScopes(['tools']),
         );
@@ -353,8 +353,7 @@ describe('McpApiBinding.remote generated Node client integration', () => {
                 new RemoteRequest('hello'),
                 credential,
                 invocation,
-                new TestJwtHook(),
-                async () => LOCAL_ENDPOINT_JWT,
+                new AuthorizationService(),
             );
         });
 

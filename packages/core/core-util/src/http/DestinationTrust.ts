@@ -80,7 +80,6 @@ export class DestinationTrust {
             // credential — so a browser with curl on the same laptop is indistinguishable from us.
             // Same bucket as public/jwt. (This switch has NO `default` on purpose: adding a kind to
             // AuthMode is a compile error here rather than a silent permissive fallthrough.)
-            case 'local-only':
                 return DestinationTrust.CANNOT_VERIFY_CALLER;
         }
     }

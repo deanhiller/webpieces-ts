@@ -1,39 +1,7 @@
+import { WpAuthorization, AuthorizationType, WpAuth, jwt as jwtAuth, oidc as oidcAuth } from '@webpieces/core-util';
 import 'reflect-metadata';
 import { injectable } from 'inversify';
-import {
-    ApiBadRequestError,
-    ApiBadGatewayError,
-    ApiConnectionError,
-    ApiDependencyBackoffError,
-    ApiDependencyError,
-    ApiDependencyTimeoutError,
-    ApiEndUserError,
-    ApiPath,
-    ApiType,
-    ApiUnauthorizedError,
-    ApiUnavailableError,
-    Logger,
-    LoggerFactory,
-    LogLevel,
-    ContextKey,
-    ContextTuple,
-    Endpoint,
-    WpAuthJwt,
-    WpAuthOidc,
-    ApiJsonSchema,
-    McpToolCatalogFile,
-    McpToolDefinition,
-    ObjectSchemaBuilder,
-    WpMcpAuthJwt,
-    WpMcpTool,
-    WpMcpToolHints,
-    MCP,
-    POST,
-    READ,
-    RPC,
-    SVC_TO_SVC,
-    WRITE,
-} from '@webpieces/core-util';
+import { ApiBadRequestError, ApiBadGatewayError, ApiConnectionError, ApiDependencyBackoffError, ApiDependencyError, ApiDependencyTimeoutError, ApiEndUserError, ApiPath, ApiType, ApiUnauthorizedError, ApiUnavailableError, Logger, LoggerFactory, LogLevel, ContextKey, ContextTuple, Endpoint, ApiJsonSchema, McpToolCatalogFile, McpToolDefinition, ObjectSchemaBuilder, WpMcpTool, WpMcpToolHints, MCP, POST, READ, RPC, SVC_TO_SVC, WRITE } from '@webpieces/core-util';
 import { RequestContext } from '@webpieces/core-context';
 import { AuthenticatedCaller, JwtHook, MintedJwt } from '@webpieces/http-routing';
 import { McpAccessTokenAuthority, VerifiedMcpCredential } from '../McpAuth';
@@ -145,8 +113,9 @@ export const REMOTE_SEARCH_API_CATALOG = new McpToolCatalog(
 @ApiType(SVC_TO_SVC, MCP)
 export abstract class SearchApi {
     /** Search records owned by the authenticated user. */
-    @WpMcpAuthJwt({ allRolesAllowed: true })
-    @WpAuthJwt({ allRolesAllowed: true })
+
+    @WpAuth([jwtAuth()])
+    @WpAuthorization({ authType: AuthorizationType.ALL_USERS })
     @Endpoint(POST, '/search', READ, RPC)
     @WpMcpTool('account_search')
     search(_request: SearchRequest): Promise<SearchResponse> {
@@ -154,8 +123,9 @@ export abstract class SearchApi {
     }
 
     /** Administrative search. */
-    @WpMcpAuthJwt({ roles: ['admin'] })
-    @WpAuthJwt({ roles: ['admin'] })
+
+    @WpAuth([jwtAuth()])
+    @WpAuthorization({ authType: AuthorizationType.ROLES, roles: ['admin'] })
     @Endpoint(POST, '/admin', WRITE, RPC)
     @WpMcpTool('admin_search')
     admin(_request: SearchRequest): Promise<SearchResponse> {
@@ -167,8 +137,9 @@ export abstract class SearchApi {
 @ApiType(SVC_TO_SVC, MCP)
 export abstract class RemoteSearchApi {
     /** Search a remote binding. */
-    @WpMcpAuthJwt({ allRolesAllowed: true })
-    @WpAuthOidc()
+
+    @WpAuth([oidcAuth()])
+    @WpAuthorization({ authType: AuthorizationType.USERS_OR_SERVICES })
     @Endpoint(POST, '/search', WRITE, RPC)
     @WpMcpTool('remote_search')
     search(_request: SearchRequest): Promise<SearchResponse> {

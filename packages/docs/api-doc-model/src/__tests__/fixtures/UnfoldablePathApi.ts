@@ -1,3 +1,4 @@
+import { WpAuthorization, AuthorizationType } from '@webpieces/core-util';
 /* eslint-disable */
 /**
  * A path only known at RUNTIME. The extractor must FAIL here rather than print `runtimePath()` or
@@ -21,6 +22,7 @@ export interface Empty {
 export class UnfoldablePathApi {
     @Endpoint(POST, runtimePath(), READ, RPC)
     @WpAuthPublic('Fixture only.')
+    @WpAuthorization({ authType: AuthorizationType.ANONYMOUS, reason: 'Fixture only.' })
     go(request: Empty): Promise<void> {
         throw new Error('contract');
     }

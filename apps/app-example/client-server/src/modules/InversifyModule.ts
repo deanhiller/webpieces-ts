@@ -2,8 +2,8 @@ import { ContainerModule, ContainerModuleLoadOptions } from 'inversify';
 import { Counter, SimpleCounter } from '../controllers/save-controller';
 import { TYPES } from '../remote/Server2Client';
 import { ContextKey, AnyContextKey, Secrets, SECRETS } from '@webpieces/core-util';
-import { AUTH_CONFIG, JWT_HOOK } from '@webpieces/http-routing';
-import { CompanyAuthConfig, CompanyJwtHook } from '@webpieces/company-svc-core';
+import { AUTH_CONFIG, JWT_HOOK, AUTHORIZATION_HOOK } from '@webpieces/http-routing';
+import { CompanyAuthConfig, CompanyJwtHook, CompanyAuthorizationHook } from '@webpieces/company-svc-core';
 
 /**
  * App-specific headers unique to this application.
@@ -56,6 +56,7 @@ export const InversifyModule = new ContainerModule((options: ContainerModuleLoad
     // User JWT mechanism: the framework AuthFilter injects JwtHook for @WpAuthJwt endpoints.
     // Tests rebind JwtHook to a permissive stub via appOverrides. (OIDC is the framework default.)
     bind(JWT_HOOK).to(CompanyJwtHook).inSingletonScope();
+    bind(AUTHORIZATION_HOOK).to(CompanyAuthorizationHook).inSingletonScope();
 
     // The ONE shared-secret store for ALL of this service's outbound clients (RPC + Cloud Tasks).
     // The VALUE it sends per @WpAuthSharedSecret(key); read from config ONCE here, never in the send

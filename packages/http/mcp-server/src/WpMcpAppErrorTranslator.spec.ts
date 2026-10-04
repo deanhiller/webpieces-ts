@@ -1,30 +1,12 @@
+import { AuthorizationService } from '@webpieces/http-routing';
+import { WpAuthorization, AuthorizationType, WpAuth, jwt as jwtAuth } from '@webpieces/core-util';
 import 'reflect-metadata';
 import { Server } from 'node:http';
 import express, { Express } from 'express';
 import { CallToolResult } from '@modelcontextprotocol/server';
 import { ContainerModule, ContainerModuleLoadOptions, injectable } from 'inversify';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import {
-    ApiJsonSchema,
-    ApiPath,
-    ApiType,
-    Endpoint,
-    HeaderRegistry,
-    LoggerFactory,
-    LogManager,
-    McpToolCatalogFile,
-    McpToolDefinition,
-    ObjectSchemaBuilder,
-    WpAuthJwt,
-    WpMcpAuthJwt,
-    WpMcpTool,
-    WpMcpToolHints,
-    MCP,
-    POST,
-    RPC,
-    SVC_TO_SVC,
-    WRITE_IDEMPOTENT,
-} from '@webpieces/core-util';
+import { ApiJsonSchema, ApiPath, ApiType, Endpoint, HeaderRegistry, LoggerFactory, LogManager, McpToolCatalogFile, McpToolDefinition, ObjectSchemaBuilder, WpMcpTool, WpMcpToolHints, MCP, POST, RPC, SVC_TO_SVC, WRITE_IDEMPOTENT } from '@webpieces/core-util';
 import { JWT_HOOK, WebpiecesRouterFactory } from '@webpieces/http-routing';
 import { McpApiBinding } from './McpApiBinding';
 import { VerifiedMcpCredential, WpMcpServerConfig } from './McpAuth';
@@ -69,8 +51,9 @@ class LockResponse {
 @ApiType(SVC_TO_SVC, MCP)
 abstract class LockApi {
     /** Open a passage for editing. */
-    @WpMcpAuthJwt({ allRolesAllowed: true })
-    @WpAuthJwt({ allRolesAllowed: true })
+
+    @WpAuth([jwtAuth()])
+    @WpAuthorization({ authType: AuthorizationType.ALL_USERS })
     @Endpoint(POST, '/open', WRITE_IDEMPOTENT, RPC)
     @WpMcpTool('passage_open')
     open(_request: LockRequest): Promise<LockResponse> {
@@ -138,7 +121,7 @@ class LockErrorTranslator implements McpErrorTranslator {
 }
 
 describe('application-owned tools/call error translation', () => {
-    let bridge: WpMcpServer<string, string>;
+    let bridge: WpMcpServer<string>;
     let httpServer: Server;
     let harness: McpHttpTestHarness;
     let translators: LockErrorTranslator;
@@ -161,13 +144,12 @@ describe('application-owned tools/call error translation', () => {
         authority = new TestTokenAuthority();
         translators = new LockErrorTranslator();
         bridge = new WpMcpServer(
-            new WpMcpServerConfig<string, string>()
+            new WpMcpServerConfig<string>()
                 .setName('translator-server')
                 .setVersion('1.0.0')
                 .setResource('https://api.example.test/app-owned/mcp')
                 .setAccessTokenAuthority(authority)
-                .setEndpointJwtAuthority(jwtHook)
-                .setEndpointMintRequest((credential: VerifiedMcpCredential) => credential.subject)
+                .setAuthorizationService(new AuthorizationService())
                 .setAuthorizationServers(['https://login.example.test'])
                 .setRequiredScopes(['tools']),
         );
@@ -306,7 +288,7 @@ describe('application-owned tools/call error translation', () => {
 });
 
 describe('no application translator registered', () => {
-    let bridge: WpMcpServer<string, string>;
+    let bridge: WpMcpServer<string>;
     let httpServer: Server;
     let harness: McpHttpTestHarness;
 
@@ -319,13 +301,12 @@ describe('no application translator registered', () => {
         const router = await WebpiecesRouterFactory.create({ appBindings: [module] });
         router.addRoutes(LockApi, LockController);
         bridge = new WpMcpServer(
-            new WpMcpServerConfig<string, string>()
+            new WpMcpServerConfig<string>()
                 .setName('plain-server')
                 .setVersion('1.0.0')
                 .setResource('https://api.example.test/app-owned/mcp')
                 .setAccessTokenAuthority(new TestTokenAuthority())
-                .setEndpointJwtAuthority(jwtHook)
-                .setEndpointMintRequest((credential: VerifiedMcpCredential) => credential.subject)
+                .setAuthorizationService(new AuthorizationService())
                 .setAuthorizationServers(['https://login.example.test'])
                 .setRequiredScopes(['tools']),
         );
