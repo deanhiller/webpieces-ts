@@ -207,3 +207,11 @@ installed Playwright Chromium. Set `WP_GRAPH_VIZ_JS` to that renderer's local pa
 (and `PLAYWRIGHT_BROWSERS_PATH` when necessary), then run the focused
 `graph-filter-browser.spec.ts`. It opens generated pages as local files and writes
 before/filter/restored screenshots under `.webpieces/1118-browser-evidence/`.
+
+Drawable nodes are keyboard reachable with Tab. Enter or Space opens the node menu,
+with focus on its first action. Escape returns keyboard focus to the invoking node;
+keyboard actions retain that node by name across a filter redraw, or focus the first
+surviving node when it is removed. Outside clicks keep focus on their clicked target.
+Keyboard focus uses a thin dashed violet outline that stays dim with an unrelated
+node. It is separate from blue hover, amber Lock, and the filter anchor. Pointer menu
+opening and dismissal do not leave a node focus outline.

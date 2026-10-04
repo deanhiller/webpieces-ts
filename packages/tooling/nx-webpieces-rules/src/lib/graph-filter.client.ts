@@ -127,7 +127,9 @@ abstract class WpFilterPage {
             );
     }
 
-    protected captureBinding(_svg: SVGSVGElement | null): () => void { return (): void => {}; }
+    protected captureBinding(_svg: SVGSVGElement | null): () => void {
+        return (): void => {};
+    }
     protected wireControls(): void {}
     protected abstract wireSvg(svg: SVGSVGElement): void;
     protected prepareSvg(_svg: SVGSVGElement): void {}
@@ -150,6 +152,7 @@ abstract class WpFilterPage {
         const previousAnchor = this.anchor;
         const previousRetained = this.retained;
         const previousSvg = host.querySelector('svg');
+        const focusName = WpNodeMenu.focusedName(previousSvg);
         const rollback = this.captureBinding(previousSvg);
         // eslint-disable-next-line @webpieces/no-unmanaged-exceptions -- browser transaction restores the previous usable graph on failure
         try {
@@ -165,6 +168,7 @@ abstract class WpFilterPage {
             host.replaceChildren(svg);
             this.wireSvg(svg);
             this.indicator();
+            WpNodeMenu.restoreFocus(svg, focusName);
             this.error(null);
             // webpieces-disable no-any-unknown -- JavaScript may throw any value at this browser boundary
         } catch (err: unknown) {
@@ -174,6 +178,7 @@ abstract class WpFilterPage {
             if (previousSvg !== null) host.replaceChildren(previousSvg);
             else host.replaceChildren();
             rollback();
+            if (previousSvg !== null) WpNodeMenu.restoreFocus(previousSvg, focusName);
             this.error(err instanceof Error ? err : new Error(String(err)));
         }
     }

@@ -29,12 +29,20 @@ interface DesignLinkJson {
  */
 declare class WpNodeMenuItem {
     constructor(label: string, onSelect: () => void);
+    label: string;
+    onSelect: () => void;
 }
 
 declare class WpNodeMenu {
     /** Give every `g.node` of `svg` a click that opens the menu with the items the callback builds. */
-    static wire(svg: SVGSVGElement, itemsFor: (name: string, node: SVGGElement) => WpNodeMenuItem[]): void;
-    static close(): void;
+    static wire(
+        svg: SVGSVGElement,
+        itemsFor: (name: string, node: SVGGElement) => WpNodeMenuItem[],
+    ): void;
+    static open(node: SVGGElement, name: string, items: WpNodeMenuItem[]): void;
+    static close(returnFocus?: boolean): void;
+    static focusedName(svg: SVGSVGElement | null): string | null;
+    static restoreFocus(svg: SVGSVGElement, name: string | null): void;
 }
 
 /**
@@ -74,6 +82,17 @@ interface RenderModelJson {
     footer: string;
 }
 
-interface RenderNodeJson { id: string; dot: string; }
-interface RenderEdgeJson { from: string; to: string; dot: string; id: string; }
-interface RenderBandJson { level: number; nodeNames: string[]; }
+interface RenderNodeJson {
+    id: string;
+    dot: string;
+}
+interface RenderEdgeJson {
+    from: string;
+    to: string;
+    dot: string;
+    id: string;
+}
+interface RenderBandJson {
+    level: number;
+    nodeNames: string[];
+}
