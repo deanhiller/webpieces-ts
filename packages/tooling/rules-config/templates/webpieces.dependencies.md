@@ -139,3 +139,29 @@ Instead of importing, receive the dependency as a constructor or method paramete
 - Every dependency you add today is technical debt for tomorrow
 - The best dependency is the one you don't need
 - When in doubt, refactor rather than add dependencies
+
+## Canonical runtime client migration
+
+For every owner tagged `webpieces` or `webpieces-lib`, move topology to `src/wiring.ts`
+and replace supported hand-written singleton/provider factories with the public helpers:
+
+```typescript
+// @webpieces/http-client-node (filters remain the optional fourth argument)
+const clients = new RuntimeClients(options);
+clients.bindRpc(TOKEN, SaveApi, rpcTarget(SaveApi, 'save'), filters);
+
+// @webpieces/cloudtasks-client (no filter argument is supported)
+new RuntimeTaskClients(options).bindPubSub(TASK_TOKEN, TaskApi, 'worker');
+
+// @webpieces/http-client-browser (no filter argument is supported)
+provideRpcClient(BROWSER_TOKEN, SaveApi, rpcTarget(SaveApi, 'save'));
+```
+
+Architecture validation checks ALL CODE in every participating owner, even unchanged projects
+outside the current diff. Canonical `wiring.ts` is checked too. Resolve every reported occurrence;
+moving raw factories to wiring alone does not satisfy the grammar. Preserve each existing token,
+API, deployment and supported filter list. Registration remains lazy and singleton; test overrides
+must still avoid resolving the production factory. Framework implementations, low-level calls,
+transient registrations, custom config options and provider filters without a helper equivalent
+are outside this helper-equivalence check. Review the resulting runtime declaration candidates
+and qualified API/deployment relationships before updating approvals.

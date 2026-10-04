@@ -23,8 +23,8 @@ export const ruleHelp: Readonly<Record<string, RuleHelp>> = {
         'Apply this policy in source, or review its explicit settings in {configFile}. An intentional opt-out requires complete OFF settings.',
     ),
     'validate-architecture-unchanged': new RuleHelp(
-        'Keep the committed architecture graph aligned with current dependencies.',
-        'Apply this policy in source, or review its explicit settings in {configFile}. An intentional opt-out requires complete OFF settings.',
+        'Keep the committed architecture graph aligned with current dependencies and enforce canonical client registrations across ALL CODE in participating runtime owners.',
+        'In src/wiring.ts use new RuntimeClients(options).bindRpc(token, Api, rpcTarget(Api, deployment), filters?) from @webpieces/http-client-node, new RuntimeTaskClients(options).bindPubSub(token, Api, deployment) from @webpieces/cloudtasks-client, and provideRpcClient(token, Api, rpcTarget(Api, deployment)) from @webpieces/http-client-browser. Migrate every supported raw singleton/provider factory, including unchanged owners; preserve tokens and filters. Review graph changes and runtime-deps.json candidates explicitly.',
     ),
     'validate-no-architecture-cycles': new RuleHelp(
         'Keep the project dependency architecture free of cycles.',

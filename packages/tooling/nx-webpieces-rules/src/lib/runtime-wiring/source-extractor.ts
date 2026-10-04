@@ -13,6 +13,7 @@ import {
     WiringSelection,
 } from './declaration';
 import { WiringSourceValues } from './source-values';
+import { CanonicalClientBindings } from './canonical-clients';
 
 /** Build-only extraction. It never imports application modules or invokes their constructors. */
 export class WiringSourceExtractor {
@@ -31,6 +32,17 @@ export class WiringSourceExtractor {
     }
 
     extract(): RuntimeDeclaration {
+        const clients = new CanonicalClientBindings(this.program.getTypeChecker());
+        const problems = this.program
+            .getSourceFiles()
+            .filter(
+                (file) =>
+                    !file.isDeclarationFile &&
+                    this.owns(file.fileName) &&
+                    !/(?:\.spec\.|\.test\.|\/__tests__\/)/.test(file.fileName),
+            )
+            .flatMap((file) => clients.problems(file));
+        clients.assert(problems);
         const wiringPath = path.resolve(this.workspaceRoot, this.info.root, 'src/wiring.ts');
         const wiring = this.program.getSourceFile(wiringPath);
         if (wiring === undefined) this.fail(`Missing canonical ${wiringPath}.`);
@@ -303,7 +315,7 @@ export class WiringSourceExtractor {
     private fail(message: string): never {
         throw new RuleFailError('validate-runtime-architecture', message, undefined, undefined, [
             new Option(
-                'Move topology into canonical src/wiring.ts and use the documented static plan grammar; do not execute configuration to extract it.',
+                'Move topology into canonical src/wiring.ts using RuntimeClients.bindRpc(token, Api, rpcTarget(Api, deployment)), RuntimeTaskClients.bindPubSub, or provideRpcClient for supported registrations, and use the documented static plan grammar; do not execute configuration to extract it.',
                 true,
             ),
         ]);

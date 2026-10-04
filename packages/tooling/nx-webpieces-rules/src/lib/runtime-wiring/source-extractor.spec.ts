@@ -55,7 +55,8 @@ class Fixture {
             import { SaveApi } from '../../contracts/src/api';
             class ServerWiring { constructor(host: string, options: ServerWiringOptions) {} }
             class ServerWiringOptions { constructor(bindings: unknown[], routes: unknown[]) {} }
-            class RuntimeClients { bindRpc(token: unknown, api: unknown, target: string) {} }
+            class RuntimeClients { bindRpc(token: unknown, api: unknown, target: object | string) {} }
+            function rpcTarget(api: unknown, service: string) { return {api, service}; }
             class WiringPolicy { constructor(name: string, public enabled: boolean) {} }
             export class Clients { constructor(public policy: WiringPolicy) { ${body} } }
             export class App { getRuntimeWiring() { return new ServerWiring('app', new ServerWiringOptions([new Clients(new WiringPolicy('warmup', process.env.WARMUP === '1'))], [])); } }
@@ -69,7 +70,7 @@ describe('build-only canonical wiring extraction', () => {
     it('resolves qualified imported contracts without running constructors', () => {
         const fixture = new Fixture();
         fixture.plan(
-            "new RuntimeClients().bindRpc(Symbol(), SaveApi, 'save'); throw new Error('must never execute');",
+            "new RuntimeClients().bindRpc(Symbol(), SaveApi, rpcTarget(SaveApi, 'save')); throw new Error('must never execute');",
         );
         const result = fixture.extract();
         expect(result.exports.Clients.relationships[0]).toMatchObject({
@@ -77,6 +78,19 @@ describe('build-only canonical wiring extraction', () => {
             target: { kind: 'service', service: 'save' },
         });
         expect(result.exports.App.selections[0].policies).toEqual({ policy: 'runtime' });
+    });
+
+    it('rejects a supported raw singleton factory inside canonical wiring before extracting facts', () => {
+        const fixture = new Fixture();
+        fixture.plan(
+            "options.bind(SaveApi).toDynamicValue(() => new ClientHttpFactory().createRpcClient(SaveApi, new ClientConfig('save'))).inSingletonScope();",
+            `class ClientConfig { constructor(service: string) {} }
+             class ClientHttpFactory { createRpcClient(api: object, config: ClientConfig) { return {}; } }
+             declare const options: { bind(token: object): { toDynamicValue(callback: Function): { inSingletonScope(): void } } };`,
+        );
+        expect(() => fixture.extract()).toThrow(
+            "bindRpc(SaveApi, SaveApi, rpcTarget(SaveApi, 'save'))",
+        );
     });
 
     it('retains named runtime conditions', () => {
