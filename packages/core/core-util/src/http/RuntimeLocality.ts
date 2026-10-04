@@ -13,7 +13,7 @@ export type Locality = 'local' | 'deployed';
 
 /**
  * RuntimeLocality - the ONE answer to "am I running on a developer's machine?", for the one part of
- * webpieces that needs it: {@link WpAuthLocalOnly}.
+ * webpieces that needs it: {@link WpLocalOnly}.
  *
  * ## Why this is a seam and not a `process.env` read
  *

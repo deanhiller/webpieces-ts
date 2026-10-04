@@ -64,7 +64,7 @@ export const OIDC_HOOK = Symbol.for('OidcHook');
  * When NO WebhookAuthCallback is bound, the framework {@link AuthFilter} 401s every `webhook(...)` endpoint,
  * exactly as it does for an unbound JwtHook. There is no framework default and there never will be
  * one: silently allowing an unverified webhook is the single default that must not exist, and the
- * framework ships no vendor crypto by design (see {@link WpAuthWebhook} for why reimplementing five
+ * framework ships no vendor crypto by design (see {@link webhook} for why reimplementing five
  * vendors' schemes is a losing trade).
  *
  * ONE hook serves EVERY vendor: `name` selects which, so an app with a Sentry hook and a Twilio hook

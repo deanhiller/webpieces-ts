@@ -3,7 +3,7 @@ import { WpAuth } from './decorators';
 
 /**
  * COMPILE-TIME assertions for the `apikey` member of the {@link AuthMode} union and for the
- * {@link WpAuthApiKey} signature. Each `@ts-expect-error` below FAILS THE BUILD (TS2578, "unused
+ * {@link apiKey} descriptor and {@link WpAuth} signature. Each `@ts-expect-error` below FAILS THE BUILD (TS2578, "unused
  * '@ts-expect-error' directive") if the line it guards ever starts compiling.
  *
  * WHY THIS IS NOT A `.spec.ts` FILE — same reason as its sibling `AuthJwtCompileAssertions.ts`:
@@ -22,7 +22,7 @@ import { WpAuth } from './decorators';
  * 3. {@link ApiKeyCredential} makes the two OpenAPI schemes MUTUALLY exclusive: a header credential
  *    must carry its header name, and a bearer credential must NOT — its location IS `Authorization`,
  *    so a `name` beside it would be a lie a generator has to guess about.
- * 4. The ONE-ARGUMENT `@WpAuthApiKey('regime')` form is GONE. It could declare a key regime while
+ * 4. The ONE-ARGUMENT `@apiKey('regime')` form is GONE. It could declare a key regime while
  *    saying nothing about where the credential rides, which is the whole defect; per the
  *    no-backwards-compatibility rule there is no overload and no optional second parameter left
  *    behind, and this directive is what proves it.
@@ -59,7 +59,7 @@ export class AuthApiKeyCompileAssertions {
         return credential;
     }
 
-    /** The decorator's TWO-argument form is the only one; asserted by the ABSENCE of an error. */
+    /** apiKey takes regime and credentials; WpAuth wraps the descriptor in a nonempty list. */
     legitimateDecorator(): MethodDecorator {
         return WpAuth([apiKey('onetablet-partner', [{ in: 'header', name: 'x-api-key' }])]);
     }
@@ -96,13 +96,9 @@ export class AuthApiKeyCompileAssertions {
         void unknownLocation;
     }
 
-    /**
-     * The DELETED one-argument form. `@WpAuthApiKey('onetablet-partner')` used to compile and is now a
-     * compile error naming the missing `credentials` argument — the delivery mechanism for the
-     * migration, and the reason no `@deprecated` overload survives.
-     */
+    /** The apiKey descriptor requires an explicit credential list; no one-argument form exists. */
     oneArgumentFormIsGone(): void {
-        // @ts-expect-error the one-argument form is DELETED; pass the credential list as well
+        // @ts-expect-error apiKey requires regime and credentials
         const legacy = apiKey('onetablet-partner');
         void legacy;
     }

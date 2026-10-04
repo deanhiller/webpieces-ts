@@ -71,7 +71,7 @@ for invocation IAM, destination audiences, and header handling.
 
 ## Source map
 
-- Contract: [`WpAuthOidc`](../../packages/core/core-util/src/http/decorators.ts).
+- Contract: [`oidc`](../../packages/core/core-util/src/http/auth-mode.ts).
 - RPC minting: [`OutboundAuthFilter`](../../packages/http/http-client-node/src/OutboundAuthFilter.ts).
 - Task delivery: [`GcpTaskInvoker`](../../packages/cloud/cloudtasks-client/src/GcpTaskInvoker.ts).
 - Server dispatch: [`AuthFilter`](../../packages/http/http-routing/src/filters/AuthFilter.ts),

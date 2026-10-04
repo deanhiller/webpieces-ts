@@ -20,9 +20,9 @@ export class DefaultJwtMintRequest {
  * and `jwt()` endpoints work with NO custom verification code.
  *
  * `parseJwt` verifies the signature + expiry (jsonwebtoken, HS256 only) and maps standard claims:
- * `sub` → userId, a string[] `roles` claim → roles, the whole payload → claims. `authorizeJwt`
- * (role enforcement) is inherited from JwtHook. For RS256 + JWKS, a provider SDK, or a non-standard
- * payload, write your own JwtHook subclass instead.
+ * `sub` → userId, a string[] `roles` claim → roles, the whole payload → claims. AuthorizationService
+ * separately enforces @WpAuthorization; AuthorizationHook owns CUSTOM application policy.
+ * For RS256 + JWKS, a provider SDK, or a non-standard payload, write your own JwtHook subclass.
  *
  * It satisfies {@link JwtHook}'s ASYNC signature with a body that awaits NOTHING, and that is the
  * point rather than an oversight: HS256 against a local secret is pure CPU. The signature is async

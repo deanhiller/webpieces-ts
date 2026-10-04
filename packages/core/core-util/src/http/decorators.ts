@@ -452,7 +452,7 @@ export function isFormPost(apiClass: Function, methodName: string): boolean {
 
 /**
  * True when the method's @Endpoint declared `{ rawBody: true }` — the transport must retain the
- * verbatim bytes + absolute url for an {@link WpAuthWebhook} hook to verify.
+ * verbatim bytes + absolute url for an {@link WebhookAuthCallback} hook to verify.
  */
 // webpieces-disable no-function-outside-class -- reflect-metadata reader, sibling of isFormPost
 export function isRawBody(apiClass: Function, methodName: string): boolean {

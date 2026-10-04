@@ -2,7 +2,7 @@ import { JwtHook, MintedJwt } from './AuthHooks';
 import { AuthenticatedCaller } from './AuthConfig';
 
 /**
- * COMPILE-TIME assertions that {@link JwtHook} mint/parse/authorize are async, mint is required, and
+ * COMPILE-TIME assertions that {@link JwtHook} mint/parse are async (authorization belongs to AuthorizationHook), mint is required, and
  * the old SYNC spelling no longer compiles. Each `@ts-expect-error` below FAILS THE BUILD (TS2578, "unused
  * '@ts-expect-error' directive") if the override it guards ever starts compiling again.
  *
