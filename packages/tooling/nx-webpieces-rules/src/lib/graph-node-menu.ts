@@ -147,15 +147,7 @@ export class GraphNodeMenu {
                 });
                 return button;
             }
-            static place(menu, nodeEl) {
-                const box = nodeEl.getBoundingClientRect();
-                const own = menu.getBoundingClientRect();
-                const maxLeft = window.scrollX + document.documentElement.clientWidth - own.width - 8;
-                let left = box.left + window.scrollX;
-                if (left > maxLeft) left = Math.max(window.scrollX + 8, maxLeft);
-                menu.style.left = left + 'px';
-                menu.style.top = (box.bottom + window.scrollY + 4) + 'px';
-            }
+            ${this.positionScript()}
             ${this.keyboardScript()}
             static wire(svg, itemsFor) {
                 svg.querySelectorAll('g.node').forEach(function (node) {
@@ -184,6 +176,19 @@ export class GraphNodeMenu {
                 });
             }
         }`;
+    }
+
+    private positionScript(): string {
+        return `            static place(menu, nodeEl) {
+                const box = nodeEl.getBoundingClientRect();
+                const own = menu.getBoundingClientRect();
+                const maxLeft = window.scrollX + document.documentElement.clientWidth - own.width - 8;
+                let left = box.left + window.scrollX;
+                if (left > maxLeft) left = Math.max(window.scrollX + 8, maxLeft);
+                menu.style.left = left + 'px';
+                menu.style.top = (box.bottom + window.scrollY + 4) + 'px';
+            }
+`;
     }
 
     /** Explicit input modality avoids Chromium's pointer-focus :focus-visible heuristics. */
