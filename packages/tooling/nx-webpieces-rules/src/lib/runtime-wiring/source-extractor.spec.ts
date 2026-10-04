@@ -1,25 +1,17 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'vitest';
+import { specTempDirs } from '@webpieces/tooling-testkit';
 import * as fs from 'fs';
-import * as os from 'os';
 import * as path from 'path';
 import * as ts from 'typescript';
 import { ProjectInfo } from '../project-info';
 import { WiringSourceExtractor } from './source-extractor';
 
-const directories: string[] = [];
-afterEach(() =>
-    directories
-        .splice(0)
-        .forEach((directory) => fs.rmSync(directory, { recursive: true, force: true })),
-);
-
 class Fixture {
-    readonly root = fs.mkdtempSync(path.join(os.tmpdir(), 'runtime-wiring-'));
+    readonly root = specTempDirs.make('runtime-wiring-');
     readonly infos = new Map<string, ProjectInfo>();
     readonly files: string[] = [];
 
     constructor() {
-        directories.push(this.root);
         this.write(
             'contracts',
             'api.ts',
