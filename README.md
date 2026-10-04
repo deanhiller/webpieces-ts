@@ -88,6 +88,15 @@ packages/
     └── example-app/       # Example microservice with SaveApi
 ```
 
+## Cloud Run service-to-service authentication
+
+For private Cloud Run services, Google verifies the invocation ID token and enforces
+invoker IAM before the container receives the request. `@WpAuthOidc()` primarily makes RPC
+and Cloud Tasks clients generate the appropriate destination-audience credential; Webpieces
+retains supplementary server validation. The empty caller list delegates caller authorization
+to the edge. Read the [Cloud Run OIDC security boundary](./docs/architecture/cloud-run-oidc.md)
+for deployment assumptions, local tokens, and the distinction between edge and application checks.
+
 ## Core Concepts
 
 ### 1. WebAppMeta - Application Bootstrap

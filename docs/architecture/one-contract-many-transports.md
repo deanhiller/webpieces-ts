@@ -36,6 +36,11 @@ endpoint that authenticates its caller, see
 so they never leak. The server side is `packages/http/http-server/src/ExpressWrapper.ts` +
 `WebpiecesMiddleware.ts`, which run the request through the full filter chain.
 
+For an `@WpAuthOidc()` contract, the Node client mints a Google ID token for the final
+destination audience. A private Cloud Run edge validates the invocation and enforces
+invoker IAM before the server chain runs. The application's OIDC check is supplementary;
+see [Cloud Run OIDC](./cloud-run-oidc.md) for the trust boundary and local-token behavior.
+
 ## Transport 2 — In-process (tests, zero HTTP, real filter chain)
 
 `ApiClientFactory` (`packages/http/http-routing/src/ApiClientFactory.ts`) builds a proxy that runs
