@@ -153,13 +153,26 @@
                 menu.style.left = left + 'px';
                 menu.style.top = (box.bottom + window.scrollY + 4) + 'px';
             }
+            static wireKeyboard(node, name, itemsFor) {
+            node.addEventListener('keydown', function (ev) {
+                if (ev.key !== 'Enter' && ev.key !== ' ') return;
+                ev.preventDefault();
+                ev.stopPropagation();
+                WpNodeMenu.open(node, name, itemsFor(name, node));
+                document.querySelector('#wp-node-menu button')?.focus();
+            });
+        }
             static wire(svg, itemsFor) {
                 svg.querySelectorAll('g.node').forEach(function (node) {
                     const title = node.querySelector('title');
                     const name = title === null || title.textContent === null
                         ? '' : title.textContent.trim();
                     if (name === '') return;
+                    if (node.classList.contains('wp-layout')) return;
                     node.classList.add('wp-node-clickable');
+                    node.setAttribute('tabindex', '0');
+                    node.setAttribute('role', 'button');
+                    WpNodeMenu.wireKeyboard(node, name, itemsFor);
                     node.addEventListener('click', function (ev) {
                         ev.preventDefault();
                         ev.stopPropagation();
@@ -171,6 +184,19 @@
 
         class WpNodeLock {
             constructor(svg) { this.svg = svg; this.locked = null; }
+            rebind(svg) {
+                const name = this.locked;
+                this.svg = svg;
+                this.clear();
+                this.locked = name;
+                if (name === null) return;
+                for (const node of svg.querySelectorAll('g.node')) {
+                    if (node.querySelector('title')?.textContent === name) {
+                        this.lock(name, node);
+                        break;
+                    }
+                }
+            }
             isLocked(name) { return this.locked === name; }
             toggle(name, nodeEl) {
                 if (this.locked === name) this.clear();

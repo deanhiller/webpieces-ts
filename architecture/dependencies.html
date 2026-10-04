@@ -144,12 +144,13 @@
             font-family: monospace;
         }
         .wp-hidden { display: none; }
+        #wp-filter-status { text-align:center; } #wp-graph-error { color:#b71c1c; } #graph .wp-filter-anchor polygon, #graph .wp-filter-anchor path, #graph .wp-filter-anchor ellipse { stroke:#1565c0; stroke-width:3; }
     </style>
 </head>
 <body>
     <h1>Monorepo Dependency Architecture</h1>
     <p class="hint"><strong>Saved generated snapshot.</strong> Viewing does not refresh architecture facts. Freshness unknown; current source has not been checked. Refresh explicitly: <code>pnpm nx run architecture:generate</code>.</p>
-    <p class="hint">💡 <strong>Click any box</strong> for its menu — <strong>View Design</strong> (only where that project has a generated <strong>design.html</strong>, i.e. what the AI sees inside it) and <strong>Lock/Unlock</strong>, which is the same lock as the dropdown below.</p>
+    <p class="hint">💡 <strong>Click any box</strong> for its menu — <strong>View Design</strong> (only where that project has a generated <strong>design.html</strong>, i.e. what the AI sees inside it) and <strong>Lock/Unlock</strong>, which is the same lock as the dropdown below. <strong>Filter Unconnected</strong> removes unrelated boxes and compacts the graph while preserving each L-number row.</p>
     <p class="hint">🔦 <strong>Hover any box</strong> to trace its <em>entire</em> dependency chain — every ancestor above it (all the way up) <em>and</em> every dependency below it (all the way down), with all the boxes and lines between — while the rest of the graph dims so you can follow one box at a glance.</p>
     <div class="legend">
         <h2>Legend</h2>
@@ -228,6 +229,7 @@
         <label for="wp-lock">🔒 Lock a box (dim the rest &amp; filter responsibilities):</label>
         <select id="wp-lock"><option value="">All (no lock)</option><option value="app-example-e2e">L7 · app-example-e2e</option><option value="client-server">L6 · client-server</option><option value="legacy-server">L6 · legacy-server</option><option value="server2">L6 · server2</option><option value="company-svc-core">L5 · company-svc-core</option><option value="mcp-server">L5 · mcp-server</option><option value="webpieces-tooling">L5 · webpieces-tooling</option><option value="agent-workflow-rules">L4 · agent-workflow-rules</option><option value="ai-hook-rules">L4 · ai-hook-rules</option><option value="http-server">L4 · http-server</option><option value="nx-webpieces-rules">L4 · nx-webpieces-rules</option><option value="pr-gate">L4 · pr-gate</option><option value="angular-site">L3 · angular-site</option><option value="cloudtasks-client">L3 · cloudtasks-client</option><option value="code-rules">L3 · code-rules</option><option value="eslint-rules">L3 · eslint-rules</option><option value="hook-runtime">L3 · hook-runtime</option><option value="http-client-node">L3 · http-client-node</option><option value="http-routing">L3 · http-routing</option><option value="partner-api">L3 · partner-api</option><option value="bunyan">L2 · bunyan</option><option value="gcp-identity">L2 · gcp-identity</option><option value="http-client-browser">L2 · http-client-browser</option><option value="openapi-generator">L2 · openapi-generator</option><option value="rules-config">L2 · rules-config</option><option value="winston">L2 · winston</option><option value="api-doc-model">L1 · api-doc-model</option><option value="client-server-api">L1 · client-server-api</option><option value="company-core">L1 · company-core</option><option value="core-context">L1 · core-context</option><option value="http-client-core">L1 · http-client-core</option><option value="ipc-bridge">L1 · ipc-bridge</option><option value="repo-workflow-core">L1 · repo-workflow-core</option><option value="server2-api">L1 · server2-api</option><option value="core-mock">L0 · core-mock</option><option value="core-util">L0 · core-util</option><option value="docs-site">L0 · docs-site</option><option value="rules">L0 · rules</option><option value="rules-sdk">L0 · rules-sdk</option><option value="tooling-common">L0 · tooling-common</option></select>
     </div>
+    <p id="wp-filter-status" hidden>Filtering: <strong id="wp-filter-anchor"></strong> <button id="wp-filter-off" type="button">Turn off Filter</button></p><p id="wp-graph-error" role="alert" hidden></p>
     <div id="graph"></div>
     <section id="wp-responsibilities"><h2>Responsibilities (level high → low)</h2><p class="hint">Lock a box above to narrow this list to just that box's dependency chain.</p><details class="wp-resp-card" data-node="app-example-e2e"><summary><span class="wp-resp-level">L7</span> <strong>app-example-e2e</strong> — End-to-end test project for the two-service example. Boots both `client-server` and `server2` on test ports with real HTTP between them and asserts the magic context (correlation/transaction id, per-hop request-id chain, tenant) flows through both servers' logs, with secured headers masked.</summary><div class="wp-resp-body"><h4>Responsibilities — app-example-e2e</h4>
 <p>End-to-end test project for the two-service example. Boots both <code>client-server</code> and <code>server2</code> on test ports with real HTTP between them and asserts the magic context (correlation/transaction id, per-hop request-id chain, tenant) flows through both servers' logs, with secured headers masked.</p>
@@ -1319,13 +1321,26 @@
                 menu.style.left = left + 'px';
                 menu.style.top = (box.bottom + window.scrollY + 4) + 'px';
             }
+            static wireKeyboard(node, name, itemsFor) {
+            node.addEventListener('keydown', function (ev) {
+                if (ev.key !== 'Enter' && ev.key !== ' ') return;
+                ev.preventDefault();
+                ev.stopPropagation();
+                WpNodeMenu.open(node, name, itemsFor(name, node));
+                document.querySelector('#wp-node-menu button')?.focus();
+            });
+        }
             static wire(svg, itemsFor) {
                 svg.querySelectorAll('g.node').forEach(function (node) {
                     const title = node.querySelector('title');
                     const name = title === null || title.textContent === null
                         ? '' : title.textContent.trim();
                     if (name === '') return;
+                    if (node.classList.contains('wp-layout')) return;
                     node.classList.add('wp-node-clickable');
+                    node.setAttribute('tabindex', '0');
+                    node.setAttribute('role', 'button');
+                    WpNodeMenu.wireKeyboard(node, name, itemsFor);
                     node.addEventListener('click', function (ev) {
                         ev.preventDefault();
                         ev.stopPropagation();
@@ -1337,6 +1352,19 @@
 
         class WpNodeLock {
             constructor(svg) { this.svg = svg; this.locked = null; }
+            rebind(svg) {
+                const name = this.locked;
+                this.svg = svg;
+                this.clear();
+                this.locked = name;
+                if (name === null) return;
+                for (const node of svg.querySelectorAll('g.node')) {
+                    if (node.querySelector('title')?.textContent === name) {
+                        this.lock(name, node);
+                        break;
+                    }
+                }
+            }
             isLocked(name) { return this.locked === name; }
             toggle(name, nodeEl) {
                 if (this.locked === name) this.clear();
@@ -1362,127 +1390,220 @@
             if (ev.key === 'Escape') WpNodeMenu.close();
         });</script>
     <script>"use strict";
-/*
- * Browser-side script for architecture/dependencies.html.
- *
- * graph-visualizer.ts reads this file's COMPILED output with readFileSync, substitutes the DOT
- * placeholder (see viz-client-globals.d.ts) with the JSON-encoded Graphviz DOT, and inlines the result into a <script> tag. So it
- * runs in a browser, never in node — but it is ordinary TypeScript, compiled in place by tsc exactly
- * like the package's bin entry points, and linted like every other file here.
- *
- * IT USED TO BE A COMMITTED .js ASSET, exempted from `no-js-files`, and its own header said why: so the
- * dim/highlight/lock logic "can define ordinary browser functions without tripping the TypeScript lint
- * rules". That is a file existing to dodge the rules — the same anti-pattern as the bin shims this repo
- * deleted, and the same cure applies. The logic is a CLASS now, which is what `no-function-outside-class`
- * was asking for all along; nothing needed a disable.
- *
- * Behaviour: after Viz renders the SVG, hovering a box dims the rest and lights its full
- * ancestor+descendant chain; the #wp-lock dropdown PINS one box's chain (the dim survives mouse-leave)
- * and filters the responsibilities cards below the graph to just that chain. "All" clears the lock.
- *
- * CLICKING a box opens the shared floating node menu (graph-node-menu.ts, the same menu every
- * project's design.html uses) — "View Design" only for a project that HAS a design.html, then
- * Lock/Unlock. Menu and dropdown are one lock: both go through setLock(), so each reflects the other.
- */
-// The DOT placeholder and the `Viz` global are declared once in viz-client-globals.d.ts — both
-// scripts share a global scope, so they cannot each declare them. Do NOT spell the placeholder token
-// in a comment: the inliner is a blind split/join, so every literal occurrence gets the whole DOT.
-/**
- * The class graph-visualizer.ts stamps on the invisible rank anchors, spacer bands and ordering
- * edges that pin each level to its own row. They are layout scaffolding, not architecture, so the
- * indexes below skip them: an anchor must never be walkable as a dependency, or hovering one box
- * would light boxes it has nothing to do with.
- *
- * Graphviz drops `style=invis` elements from its SVG entirely (verified against the emitted SVG),
- * so today nothing carrying this class reaches the DOM at all. The skip is the guarantee that the
- * scaffolding stays inert if that ever stops being true — the DOT is the only place that decides
- * what is scaffolding, and it says so with this class.
- */
-const LAYOUT_CLASS = 'wp-layout';
-/** One traversal direction: the edges to light, and the nodes to walk on to. */
-class Direction {
-    nodes;
-    edges;
-    constructor(nodes, edges) {
-        this.nodes = nodes;
-        this.edges = edges;
-    }
-}
-/**
- * Indexes the rendered SVG and drives the dim/highlight/lock interaction.
- *
- * The adjacency is DIRECTED and kept as two maps per axis: `in*` is what points AT a node (ancestors,
- * walked upward) and `out*` is what it points to (dependencies, walked downward). Highlighting walks
- * both, so a hovered box lights its entire chain in both directions rather than just its neighbours.
- */
-class GraphHighlighter {
-    svg;
-    nodeByName = new Map();
-    inEdges = new Map();
-    outEdges = new Map();
+/** Plain browser helpers shared by architecture and runtime; no CommonJS imports. */
+class WpGraphChain {
+    model;
     inNodes = new Map();
     outNodes = new Map();
-    /**
-     * The box the dropdown pinned, or null. Hover still works on top of a lock — leaving a box
-     * restores the LOCKED view instead of clearing, so the pinned subgraph stays visible while you
-     * scroll down to its responsibility cards.
-     */
-    locked = null;
-    constructor(svg) {
-        this.svg = svg;
+    constructor(model) {
+        this.model = model;
+        const ids = new Set(model.nodes.map((node) => node.id));
+        for (const edge of model.edges) {
+            if (!ids.has(edge.from) || !ids.has(edge.to))
+                continue;
+            this.add(this.outNodes, edge.from, edge.to);
+            this.add(this.inNodes, edge.to, edge.from);
+        }
     }
-    /** Index the SVG, then wire hover, the lock dropdown, and the per-node floating menu. */
-    wire() {
-        this.indexNodes();
-        this.indexEdges();
-        this.wireHover();
-        this.wireLock();
-        this.wireMenu();
+    add(map, from, to) {
+        if (!map.has(from))
+            map.set(from, new Set());
+        map.get(from)?.add(to);
     }
-    indexNodes() {
-        this.svg.querySelectorAll('g.node').forEach((g) => {
-            if (g.classList.contains(LAYOUT_CLASS))
-                return;
-            const title = g.querySelector('title');
-            if (title !== null && title.textContent !== null) {
-                this.nodeByName.set(title.textContent.trim(), g);
+    nodes(anchor) {
+        const retained = new Set();
+        if (!this.model.nodes.some((node) => node.id === anchor))
+            return retained;
+        for (const direction of [this.inNodes, this.outNodes]) {
+            const visited = new Set([anchor]);
+            const stack = [anchor];
+            while (stack.length > 0) {
+                const id = stack.pop();
+                retained.add(id);
+                for (const next of direction.get(id) ?? []) {
+                    if (visited.has(next))
+                        continue;
+                    visited.add(next);
+                    stack.push(next);
+                }
             }
+        }
+        return retained;
+    }
+}
+class WpRenderBand {
+    level;
+    nodeNames;
+    constructor(level, nodeNames) {
+        this.level = level;
+        this.nodeNames = nodeNames;
+    }
+}
+/** Original records plus fresh ranks: removed nodes cannot reappear via a rank/edge. */
+class WpFilteredDot {
+    model;
+    constructor(model) {
+        this.model = model;
+    }
+    render(retained) {
+        const nodes = this.model.nodes.filter((node) => retained.has(node.id));
+        const edges = this.model.edges.filter((edge) => retained.has(edge.from) && retained.has(edge.to));
+        const bands = this.model.bands
+            .map((band) => new WpRenderBand(band.level, band.nodeNames.filter((id) => retained.has(id))))
+            .filter((band) => band.nodeNames.length > 0);
+        return (this.model.header +
+            nodes.map((node) => node.dot).join('') +
+            this.bandDot(bands) +
+            edges.map((edge) => edge.dot).join('') +
+            this.model.footer);
+    }
+    bandDot(bands) {
+        const nodeAttrs = '[style=invis, shape=point, width=0.01, height=0.01, label="", class="wp-layout"]';
+        const edgeAttrs = '[style=invis, class="wp-layout"]';
+        let dot = '';
+        for (const band of bands) {
+            const anchor = `__wp_layout_L${band.level}`;
+            dot += `  "${anchor}" ${nodeAttrs};\n  { rank=same; "${anchor}"; `;
+            dot += band.nodeNames.map((id) => `${JSON.stringify(id)}; `).join('') + '}\n';
+        }
+        for (let i = 0; i + 1 < bands.length; i++) {
+            const upper = bands[i];
+            const lower = bands[i + 1];
+            const from = `__wp_layout_L${upper.level}`;
+            const to = `__wp_layout_L${lower.level}`;
+            if (upper.nodeNames.length <= 10 && lower.nodeNames.length <= 10) {
+                dot += `  "${from}" -> "${to}" ${edgeAttrs};\n`;
+                continue;
+            }
+            const spacer = `__wp_layout_spacer_L${upper.level}_L${lower.level}`;
+            dot += `  "${spacer}" ${nodeAttrs};\n  { rank=same; "${spacer}"; }\n`;
+            dot += `  "${from}" -> "${spacer}" ${edgeAttrs};\n  "${spacer}" -> "${to}" ${edgeAttrs};\n`;
+        }
+        return dot;
+    }
+}
+/** Page-owned state survives replacements; rendering failures leave the usable SVG intact. */
+class WpFilterPage {
+    model;
+    chain;
+    locked = null;
+    anchor = null;
+    retained;
+    viz = null;
+    constructor(model) {
+        this.model = model;
+        this.chain = new WpGraphChain(model);
+        this.retained = new Set(model.nodes.map((node) => node.id));
+    }
+    render() {
+        document
+            .getElementById('wp-filter-off')
+            ?.addEventListener('click', () => this.filter(null));
+        this.wireControls();
+        Viz.instance()
+            .then((viz) => {
+            this.viz = viz;
+            this.filter(null);
+        })
+            // webpieces-disable no-any-unknown -- promise rejections may carry any JavaScript value
+            .catch((err) => this.error(err instanceof Error ? err : new Error(String(err))));
+    }
+    captureBinding(_svg) { return () => { }; }
+    wireControls() { }
+    prepareSvg(_svg) { }
+    filterItem(name) {
+        return new WpNodeMenuItem(this.anchor === null ? 'Filter Unconnected' : 'Turn off Filter', () => this.filter(this.anchor === null ? name : null));
+    }
+    filter(anchor) {
+        if (this.viz === null)
+            return;
+        const host = document.getElementById('graph');
+        if (host === null)
+            return;
+        const retained = anchor === null
+            ? new Set(this.model.nodes.map((node) => node.id))
+            : this.chain.nodes(anchor);
+        const previousAnchor = this.anchor;
+        const previousRetained = this.retained;
+        const previousSvg = host.querySelector('svg');
+        const rollback = this.captureBinding(previousSvg);
+        // eslint-disable-next-line @webpieces/no-unmanaged-exceptions -- browser transaction restores the previous usable graph on failure
+        try {
+            const dot = anchor === null
+                ? this.model.fullDot
+                : new WpFilteredDot(this.model).render(retained);
+            const svg = this.viz.renderSVGElement(dot);
+            this.prepareSvg(svg);
+            WpNodeMenu.close();
+            this.anchor = anchor;
+            this.retained = retained;
+            host.replaceChildren(svg);
+            this.wireSvg(svg);
+            this.indicator();
+            this.error(null);
+            // webpieces-disable no-any-unknown -- JavaScript may throw any value at this browser boundary
+        }
+        catch (err) {
+            //const error = toError(err);
+            this.anchor = previousAnchor;
+            this.retained = previousRetained;
+            if (previousSvg !== null)
+                host.replaceChildren(previousSvg);
+            else
+                host.replaceChildren();
+            rollback();
+            this.error(err instanceof Error ? err : new Error(String(err)));
+        }
+    }
+    indicator() {
+        const status = document.getElementById('wp-filter-status');
+        const label = document.getElementById('wp-filter-anchor');
+        if (status !== null)
+            status.hidden = this.anchor === null;
+        if (label !== null)
+            label.textContent = this.anchor;
+        if (this.anchor !== null)
+            document.getElementById('wp-filter-off')?.focus();
+        else
+            document.querySelector('#graph g.wp-node-clickable')?.focus();
+    }
+    error(err) {
+        const el = document.getElementById('wp-graph-error');
+        if (el === null)
+            return;
+        el.hidden = err === null;
+        el.textContent =
+            err === null
+                ? ''
+                : `Graph rendering failed: ${err.message}. Try Turn off Filter or reload the page.`;
+    }
+}
+//# sourceMappingURL=graph-filter.client.js.map</script>
+    <script>"use strict";
+/** Architecture interactions bind to each new SVG; logical Lock/Filter state belongs to the page. */
+class GraphHighlighter {
+    svg;
+    chain;
+    model;
+    page;
+    nodeByName = new Map();
+    constructor(svg, chain, model, page) {
+        this.svg = svg;
+        this.chain = chain;
+        this.model = model;
+        this.page = page;
+    }
+    wire() {
+        this.svg.querySelectorAll('g.node').forEach((g) => {
+            if (g.classList.contains('wp-layout'))
+                return;
+            const name = g.querySelector('title')?.textContent;
+            if (name !== null && name !== undefined)
+                this.nodeByName.set(name, g);
         });
-    }
-    indexEdges() {
-        this.svg.querySelectorAll('g.edge').forEach((edge) => {
-            if (edge.classList.contains(LAYOUT_CLASS))
-                return;
-            const title = edge.querySelector('title');
-            const text = title === null ? null : title.textContent;
-            if (text === null)
-                return;
-            const idx = text.indexOf('->');
-            if (idx < 0)
-                return;
-            const from = text.slice(0, idx).trim();
-            const to = text.slice(idx + 2).trim();
-            this.ensureEdges(this.outEdges, from).add(edge);
-            this.ensureEdges(this.inEdges, to).add(edge);
-            this.ensureNodes(this.outNodes, from).add(to);
-            this.ensureNodes(this.inNodes, to).add(from);
-        });
-    }
-    ensureEdges(map, key) {
-        const existing = map.get(key);
-        if (existing !== undefined)
-            return existing;
-        const created = new Set();
-        map.set(key, created);
-        return created;
-    }
-    ensureNodes(map, key) {
-        const existing = map.get(key);
-        if (existing !== undefined)
-            return existing;
-        const created = new Set();
-        map.set(key, created);
-        return created;
+        this.wireHover();
+        this.wireMenu();
+        this.relight();
     }
     clear() {
         this.svg.classList.remove('wp-dim');
@@ -1490,163 +1611,88 @@ class GraphHighlighter {
             el.classList.remove('wp-focus', 'wp-neighbor', 'wp-hl');
         });
     }
-    /**
-     * Dim everything, then transitively light ancestors and descendants of `name`: edges reached get
-     * `wp-hl`, boxes get `wp-neighbor`. The `visited` set is what makes a cyclic graph terminate.
-     */
-    highlight(name, focusEl) {
+    highlight(name) {
         this.clear();
-        this.svg.classList.add('wp-dim');
-        focusEl.classList.add('wp-focus');
-        const directions = [
-            new Direction(this.inNodes, this.inEdges),
-            new Direction(this.outNodes, this.outEdges),
-        ];
-        for (const dir of directions)
-            this.walk(name, dir);
-    }
-    walk(start, dir) {
-        const visited = new Set();
-        const stack = [start];
-        while (stack.length > 0) {
-            const cur = stack.pop();
-            const edges = dir.edges.get(cur);
-            if (edges !== undefined) {
-                edges.forEach((e) => { e.classList.add('wp-hl'); });
-            }
-            const next = dir.nodes.get(cur);
-            if (next === undefined)
-                continue;
-            next.forEach((name) => {
-                if (visited.has(name))
-                    return;
-                visited.add(name);
-                stack.push(name);
-                const g = this.nodeByName.get(name);
-                if (g !== undefined)
-                    g.classList.add('wp-neighbor');
-            });
-        }
-    }
-    /** Leaving a box restores the locked view rather than clearing it outright. */
-    relight() {
-        if (this.locked === null) {
-            this.clear();
+        const focus = this.nodeByName.get(name);
+        if (focus === undefined)
             return;
+        const lit = this.chain.nodes(name);
+        this.svg.classList.add('wp-dim');
+        focus.classList.add('wp-focus');
+        for (const id of lit)
+            this.nodeByName.get(id)?.classList.add('wp-neighbor');
+        for (const edge of this.model.edges) {
+            if (lit.has(edge.from) && lit.has(edge.to)) {
+                this.svg.querySelector(`[id="${edge.id}"]`)?.classList.add('wp-hl');
+            }
         }
-        const g = this.nodeByName.get(this.locked);
-        if (g !== undefined)
-            this.highlight(this.locked, g);
+    }
+    relight() {
+        const locked = this.page.lockSelection();
+        if (locked === null)
+            this.clear();
+        else
+            this.highlight(locked);
     }
     wireHover() {
         this.nodeByName.forEach((g, name) => {
-            g.addEventListener('mouseenter', () => { this.highlight(name, g); });
-            g.addEventListener('mouseleave', () => { this.relight(); });
+            g.addEventListener('mouseenter', () => this.highlight(name));
+            g.addEventListener('mouseleave', () => this.relight());
         });
     }
-    wireLock() {
-        const lockSelect = this.lockSelect();
-        if (lockSelect === null)
-            return;
-        lockSelect.addEventListener('change', () => {
-            this.applyLock(lockSelect.value === '' ? null : lockSelect.value);
-        });
-    }
-    lockSelect() {
-        return document.getElementById('wp-lock');
-    }
-    /** True when `name` is the box the page is currently locked on — what the menu labels itself by. */
-    isLocked(name) {
-        return this.locked === name;
-    }
-    /**
-     * THE one lock entry point, so the dropdown and the node menu can never disagree: it sets the
-     * dropdown's selection, re-highlights, and re-filters the cards whichever of the two asked.
-     * `null` is "All (no lock)".
-     */
-    setLock(name) {
-        const lockSelect = this.lockSelect();
-        if (lockSelect !== null)
-            lockSelect.value = name === null ? '' : name;
-        this.applyLock(name);
-    }
-    applyLock(name) {
-        this.locked = name;
-        if (name === null) {
-            this.clear();
-        }
-        else {
-            const g = this.nodeByName.get(name);
-            if (g !== undefined)
-                this.highlight(name, g);
-        }
-        this.filterCards();
-    }
-    /**
-     * Every box opens the floating menu (the shared one both generated graphs use). "View Design" is
-     * only built when that project actually HAS a committed design.html; the bottom item is always
-     * Lock or Unlock, whichever applies to this box right now.
-     */
     wireMenu() {
-        const designs = new Map();
-        for (const link of [{"nodeId":"http-client-browser","href":"../packages/http/http-client-browser/design.html"},{"nodeId":"rules-config","href":"../packages/tooling/rules-config/design.html"},{"nodeId":"angular-site","href":"../apps/app-example/angular-site/design.html"},{"nodeId":"cloudtasks-client","href":"../packages/cloud/cloudtasks-client/design.html"},{"nodeId":"http-client-node","href":"../packages/http/http-client-node/design.html"},{"nodeId":"http-routing","href":"../packages/http/http-routing/design.html"},{"nodeId":"pr-gate","href":"../packages/tooling/pr-gate/design.html"},{"nodeId":"client-server","href":"../apps/app-example/client-server/design.html"},{"nodeId":"server2","href":"../apps/app-example/server2/design.html"}])
-            designs.set(link.nodeId, link.href);
+        const designs = new Map([{"nodeId":"angular-site","href":"../apps/app-example/angular-site/design.html"},{"nodeId":"client-server","href":"../apps/app-example/client-server/design.html"},{"nodeId":"cloudtasks-client","href":"../packages/cloud/cloudtasks-client/design.html"},{"nodeId":"http-client-browser","href":"../packages/http/http-client-browser/design.html"},{"nodeId":"http-client-node","href":"../packages/http/http-client-node/design.html"},{"nodeId":"http-routing","href":"../packages/http/http-routing/design.html"},{"nodeId":"pr-gate","href":"../packages/tooling/pr-gate/design.html"},{"nodeId":"rules-config","href":"../packages/tooling/rules-config/design.html"},{"nodeId":"server2","href":"../apps/app-example/server2/design.html"}].map((link) => [link.nodeId, link.href]));
         WpNodeMenu.wire(this.svg, (name) => {
             const items = [];
             const href = designs.get(name);
-            if (href !== undefined) {
-                items.push(new WpNodeMenuItem('View Design', () => { window.open(href, '_blank'); }));
-            }
-            const locked = this.isLocked(name);
-            items.push(new WpNodeMenuItem(locked ? 'Unlock' : 'Lock', () => {
-                this.setLock(locked ? null : name);
-            }));
+            if (href !== undefined)
+                items.push(new WpNodeMenuItem('View Design', () => window.open(href, '_blank')));
+            const locked = this.page.lockSelection() === name;
+            items.push(new WpNodeMenuItem(locked ? 'Unlock' : 'Lock', () => this.page.setLock(locked ? null : name)));
+            items.push(this.page.filterItem(name));
             return items;
         });
     }
-    /**
-     * Filter the responsibility cards to the locked box's chain by READING BACK the
-     * `.wp-focus`/`.wp-neighbor` classes highlight() just set — so there is no second graph walk and
-     * the cards can never disagree with the picture.
-     */
+}
+class GraphPage extends WpFilterPage {
+    highlighter = null;
+    captureBinding(_svg) {
+        const previous = this.highlighter;
+        return () => { this.highlighter = previous; this.filterCards(); };
+    }
+    wireControls() {
+        const select = document.getElementById('wp-lock');
+        select?.addEventListener('change', () => this.setLock(select.value === '' ? null : select.value));
+    }
+    wireSvg(svg) {
+        this.highlighter = new GraphHighlighter(svg, this.chain, this.model, this);
+        this.highlighter.wire();
+        this.filterCards();
+        svg.querySelectorAll('g.node').forEach((node) => {
+            if (node.querySelector('title')?.textContent === this.anchor)
+                node.classList.add('wp-filter-anchor');
+        });
+    }
+    lockSelection() {
+        return this.locked;
+    }
+    setLock(name) {
+        this.locked = name;
+        const select = document.getElementById('wp-lock');
+        if (select !== null)
+            select.value = name ?? '';
+        this.highlighter?.relight();
+        this.filterCards();
+    }
     filterCards() {
-        const lit = new Set();
-        if (this.locked !== null) {
-            this.svg.querySelectorAll('.wp-focus, .wp-neighbor').forEach((el) => {
-                const title = el.querySelector('title');
-                if (title !== null && title.textContent !== null)
-                    lit.add(title.textContent.trim());
-            });
-        }
+        const lit = this.locked === null ? this.retained : this.chain.nodes(this.locked);
         document.querySelectorAll('.wp-resp-card').forEach((card) => {
             const name = card.getAttribute('data-node');
-            const visible = this.locked === null || (name !== null && lit.has(name));
-            card.classList.toggle('wp-hidden', !visible);
+            card.classList.toggle('wp-hidden', name === null || !this.retained.has(name) || !lit.has(name));
         });
     }
 }
-/** Renders the DOT and hands the SVG to the highlighter. Reports a failure into the page, not just the console. */
-class GraphPage {
-    render() {
-        Viz.instance()
-            .then((viz) => {
-            const element = viz.renderSVGElement("digraph Architecture {\n  rankdir=TB;\n  node [shape=box, style=filled, fontname=\"Arial\"];\n  edge [fontname=\"Arial\"];\n\n  \"core-mock\" [fillcolor=\"#EDE7F6\", label=\"core-mock\\n(L0 · [browser, node] · lib)\"];\n  \"core-util\" [fillcolor=\"#EDE7F6\", label=\"core-util\\n(L0 · [browser, node, react-native] · lib)\"];\n  \"docs-site\" [fillcolor=\"#FFF9C4\", label=\"docs-site\\n(L0 · [node] · lib)\"];\n  \"rules\" [fillcolor=\"#FFF9C4\", color=\"#1976d2\", penwidth=3, label=\"rules\\n(L0 · [node] · app)\"];\n  \"rules-sdk\" [fillcolor=\"#FFF9C4\", label=\"rules-sdk\\n(L0 · [node] · lib)\"];\n  \"tooling-common\" [fillcolor=\"#FFF9C4\", label=\"tooling-common\\n(L0 · [node] · lib)\"];\n  \"api-doc-model\" [fillcolor=\"#FFF9C4\", label=\"api-doc-model\\n(L1 · [node] · lib)\"];\n  \"client-server-api\" [fillcolor=\"#EDE7F6\", color=\"#EF6C00\", penwidth=2, label=\"client-server-api\\n(L1 · [browser, node] · api-lib)\"];\n  \"company-core\" [fillcolor=\"#EDE7F6\", label=\"company-core\\n(L1 · [browser, node] · lib)\"];\n  \"core-context\" [fillcolor=\"#FFF9C4\", label=\"core-context\\n(L1 · [node] · lib)\"];\n  \"http-client-core\" [fillcolor=\"#EDE7F6\", label=\"http-client-core\\n(L1 · [browser, node, react-native] · lib)\"];\n  \"ipc-bridge\" [fillcolor=\"#EDE7F6\", label=\"ipc-bridge\\n(L1 · [browser, node, react-native] · lib)\"];\n  \"repo-workflow-core\" [fillcolor=\"#FFF9C4\", label=\"repo-workflow-core\\n(L1 · [node] · lib)\"];\n  \"server2-api\" [fillcolor=\"#EDE7F6\", color=\"#EF6C00\", penwidth=2, label=\"server2-api\\n(L1 · [browser, node] · api-lib)\"];\n  \"bunyan\" [fillcolor=\"#FFF9C4\", label=\"bunyan\\n(L2 · [node] · lib)\"];\n  \"gcp-identity\" [fillcolor=\"#FFF9C4\", label=\"gcp-identity\\n(L2 · [node] · lib)\"];\n  \"http-client-browser\" [fillcolor=\"#EDE7F6\", penwidth=2, label=\"http-client-browser\\n(L2 · [browser, react-native, node] · designed-lib)\"];\n  \"openapi-generator\" [fillcolor=\"#FFF9C4\", label=\"openapi-generator\\n(L2 · [node] · lib)\"];\n  \"rules-config\" [fillcolor=\"#FFF9C4\", penwidth=2, label=\"rules-config\\n(L2 · [node] · designed-lib)\"];\n  \"winston\" [fillcolor=\"#FFF9C4\", label=\"winston\\n(L2 · [node] · lib)\"];\n  \"angular-site\" [fillcolor=\"#FCE4EC\", color=\"red\", penwidth=3, label=\"angular-site\\n(L3 · [angular] · client)\"];\n  \"cloudtasks-client\" [fillcolor=\"#FFF9C4\", penwidth=2, label=\"cloudtasks-client\\n(L3 · [node] · designed-lib)\"];\n  \"code-rules\" [fillcolor=\"#FFF9C4\", label=\"code-rules\\n(L3 · [node] · lib)\"];\n  \"eslint-rules\" [fillcolor=\"#FFF9C4\", label=\"eslint-rules\\n(L3 · [node] · lib)\"];\n  \"hook-runtime\" [fillcolor=\"#FFF9C4\", label=\"hook-runtime\\n(L3 · [node] · lib)\"];\n  \"http-client-node\" [fillcolor=\"#FFF9C4\", penwidth=2, label=\"http-client-node\\n(L3 · [node] · designed-lib)\"];\n  \"http-routing\" [fillcolor=\"#FFF9C4\", penwidth=2, label=\"http-routing\\n(L3 · [node] · designed-lib)\"];\n  \"partner-api\" [fillcolor=\"#FFF9C4\", color=\"#EF6C00\", penwidth=2, label=\"partner-api\\n(L3 · [node] · api-lib)\"];\n  \"agent-workflow-rules\" [fillcolor=\"#FFF9C4\", label=\"agent-workflow-rules\\n(L4 · [node] · lib)\"];\n  \"ai-hook-rules\" [fillcolor=\"#FFF9C4\", label=\"ai-hook-rules\\n(L4 · [node] · lib)\"];\n  \"http-server\" [fillcolor=\"#E8F5E9\", label=\"http-server\\n(L4 · [express] · lib)\"];\n  \"nx-webpieces-rules\" [fillcolor=\"#FFF9C4\", label=\"nx-webpieces-rules\\n(L4 · [node] · lib)\"];\n  \"pr-gate\" [fillcolor=\"#FFF9C4\", color=\"#1976d2\", penwidth=3, label=\"pr-gate\\n(L4 · [node] · app)\"];\n  \"company-svc-core\" [fillcolor=\"#E8F5E9\", label=\"company-svc-core\\n(L5 · [express] · lib)\"];\n  \"mcp-server\" [fillcolor=\"#E8F5E9\", label=\"mcp-server\\n(L5 · [express] · lib)\"];\n  \"webpieces-tooling\" [fillcolor=\"#FFF9C4\", color=\"#6A1B9A\", penwidth=3, label=\"webpieces-tooling\\n(L5 · [node] · bundle)\"];\n  \"client-server\" [fillcolor=\"#E8F5E9\", color=\"green\", penwidth=3, label=\"client-server\\n(L6 · [express] · server)\"];\n  \"legacy-server\" [fillcolor=\"#E8F5E9\", color=\"green\", penwidth=3, label=\"legacy-server\\n(L6 · [express] · server)\"];\n  \"server2\" [fillcolor=\"#E8F5E9\", color=\"green\", penwidth=3, label=\"server2\\n(L6 · [express] · server)\"];\n  \"app-example-e2e\" [fillcolor=\"#E8F5E9\", color=\"green\", penwidth=3, label=\"app-example-e2e\\n(L7 · [express] · server)\"];\n\n  \"__wp_layout_L7\" [style=invis, shape=point, width=0.01, height=0.01, label=\"\", class=\"wp-layout\"];\n  { rank=same; \"__wp_layout_L7\"; \"app-example-e2e\"; }\n  \"__wp_layout_L6\" [style=invis, shape=point, width=0.01, height=0.01, label=\"\", class=\"wp-layout\"];\n  { rank=same; \"__wp_layout_L6\"; \"client-server\"; \"legacy-server\"; \"server2\"; }\n  \"__wp_layout_L5\" [style=invis, shape=point, width=0.01, height=0.01, label=\"\", class=\"wp-layout\"];\n  { rank=same; \"__wp_layout_L5\"; \"company-svc-core\"; \"mcp-server\"; \"webpieces-tooling\"; }\n  \"__wp_layout_L4\" [style=invis, shape=point, width=0.01, height=0.01, label=\"\", class=\"wp-layout\"];\n  { rank=same; \"__wp_layout_L4\"; \"agent-workflow-rules\"; \"ai-hook-rules\"; \"http-server\"; \"nx-webpieces-rules\"; \"pr-gate\"; }\n  \"__wp_layout_L3\" [style=invis, shape=point, width=0.01, height=0.01, label=\"\", class=\"wp-layout\"];\n  { rank=same; \"__wp_layout_L3\"; \"angular-site\"; \"cloudtasks-client\"; \"code-rules\"; \"eslint-rules\"; \"hook-runtime\"; \"http-client-node\"; \"http-routing\"; \"partner-api\"; }\n  \"__wp_layout_L2\" [style=invis, shape=point, width=0.01, height=0.01, label=\"\", class=\"wp-layout\"];\n  { rank=same; \"__wp_layout_L2\"; \"bunyan\"; \"gcp-identity\"; \"http-client-browser\"; \"openapi-generator\"; \"rules-config\"; \"winston\"; }\n  \"__wp_layout_L1\" [style=invis, shape=point, width=0.01, height=0.01, label=\"\", class=\"wp-layout\"];\n  { rank=same; \"__wp_layout_L1\"; \"api-doc-model\"; \"client-server-api\"; \"company-core\"; \"core-context\"; \"http-client-core\"; \"ipc-bridge\"; \"repo-workflow-core\"; \"server2-api\"; }\n  \"__wp_layout_L0\" [style=invis, shape=point, width=0.01, height=0.01, label=\"\", class=\"wp-layout\"];\n  { rank=same; \"__wp_layout_L0\"; \"core-mock\"; \"core-util\"; \"docs-site\"; \"rules\"; \"rules-sdk\"; \"tooling-common\"; }\n  \"__wp_layout_L7\" -> \"__wp_layout_L6\" [style=invis, class=\"wp-layout\"];\n  \"__wp_layout_L6\" -> \"__wp_layout_L5\" [style=invis, class=\"wp-layout\"];\n  \"__wp_layout_L5\" -> \"__wp_layout_L4\" [style=invis, class=\"wp-layout\"];\n  \"__wp_layout_L4\" -> \"__wp_layout_L3\" [style=invis, class=\"wp-layout\"];\n  \"__wp_layout_L3\" -> \"__wp_layout_L2\" [style=invis, class=\"wp-layout\"];\n  \"__wp_layout_L2\" -> \"__wp_layout_L1\" [style=invis, class=\"wp-layout\"];\n  \"__wp_layout_L1\" -> \"__wp_layout_L0\" [style=invis, class=\"wp-layout\"];\n\n  \"api-doc-model\" -> \"core-util\";\n  \"client-server-api\" -> \"core-util\";\n  \"company-core\" -> \"core-util\";\n  \"core-context\" -> \"core-util\";\n  \"http-client-core\" -> \"core-util\";\n  \"ipc-bridge\" -> \"core-util\";\n  \"repo-workflow-core\" -> \"tooling-common\";\n  \"server2-api\" -> \"core-util\";\n  \"bunyan\" -> \"core-context\";\n  \"gcp-identity\" -> \"core-context\";\n  \"http-client-browser\" -> \"http-client-core\";\n  \"openapi-generator\" -> \"api-doc-model\";\n  \"rules-config\" -> \"repo-workflow-core\";\n  \"winston\" -> \"core-context\";\n  \"angular-site\" -> \"client-server-api\";\n  \"angular-site\" -> \"company-core\";\n  \"angular-site\" -> \"http-client-browser\";\n  \"cloudtasks-client\" -> \"gcp-identity\";\n  \"code-rules\" -> \"rules-config\";\n  \"eslint-rules\" -> \"rules-config\";\n  \"hook-runtime\" -> \"rules-config\";\n  \"http-client-node\" -> \"gcp-identity\";\n  \"http-client-node\" -> \"http-client-core\";\n  \"http-routing\" -> \"gcp-identity\";\n  \"partner-api\" -> \"docs-site\";\n  \"partner-api\" -> \"openapi-generator\";\n  \"agent-workflow-rules\" -> \"hook-runtime\";\n  \"ai-hook-rules\" -> \"hook-runtime\";\n  \"http-server\" -> \"http-routing\";\n  \"nx-webpieces-rules\" -> \"api-doc-model\";\n  \"nx-webpieces-rules\" -> \"eslint-rules\";\n  \"pr-gate\" -> \"hook-runtime\";\n  \"company-svc-core\" -> \"company-core\";\n  \"company-svc-core\" -> \"http-server\";\n  \"mcp-server\" -> \"http-client-node\";\n  \"mcp-server\" -> \"http-server\";\n  \"webpieces-tooling\" -> \"agent-workflow-rules\";\n  \"webpieces-tooling\" -> \"ai-hook-rules\";\n  \"webpieces-tooling\" -> \"code-rules\";\n  \"webpieces-tooling\" -> \"nx-webpieces-rules\";\n  \"webpieces-tooling\" -> \"pr-gate\";\n  \"client-server\" -> \"client-server-api\" [style=dashed, label=\"implements: PublicApi, SaveApi, SecureApi\", fontsize=9];\n  \"client-server\" -> \"company-svc-core\";\n  \"client-server\" -> \"core-mock\";\n  \"client-server\" -> \"http-client-node\";\n  \"client-server\" -> \"server2-api\";\n  \"legacy-server\" -> \"client-server-api\" [style=dashed, label=\"implements: PublicApi, SaveApi\", fontsize=9];\n  \"legacy-server\" -> \"company-svc-core\";\n  \"legacy-server\" -> \"http-client-node\";\n  \"legacy-server\" -> \"server2-api\";\n  \"server2\" -> \"company-svc-core\";\n  \"server2\" -> \"server2-api\" [style=dashed, label=\"implements: Server2Api\", fontsize=9];\n  \"app-example-e2e\" -> \"client-server\";\n  \"app-example-e2e\" -> \"http-client-browser\";\n  \"app-example-e2e\" -> \"server2\";\n\n  labelloc=\"t\";\n  label=\"Monorepo Dependency Architecture\\n(from architecture/dependencies.json)\";\n  fontsize=20;\n}\n");
-            const host = document.getElementById('graph');
-            if (host === null)
-                return;
-            host.appendChild(element);
-            new GraphHighlighter(element).wire();
-        })
-            // webpieces-disable no-any-unknown -- a promise rejection reason is untyped BY THE LANGUAGE (any value can be thrown), and this browser script cannot import the repo's toError helper; it is stringified, never dereferenced
-            .catch((err) => {
-            console.error(err);
-            const host = document.getElementById('graph');
-            if (host !== null)
-                host.innerHTML = '<pre>' + String(err) + '</pre>';
-        });
-    }
-}
-new GraphPage().render();
+new GraphPage({"nodes":[{"id":"agent-workflow-rules","dot":"  \"agent-workflow-rules\" [fillcolor=\"#FFF9C4\", label=\"agent-workflow-rules\\n(L4 · [node] · lib)\"];\n"},{"id":"ai-hook-rules","dot":"  \"ai-hook-rules\" [fillcolor=\"#FFF9C4\", label=\"ai-hook-rules\\n(L4 · [node] · lib)\"];\n"},{"id":"angular-site","dot":"  \"angular-site\" [fillcolor=\"#FCE4EC\", color=\"red\", penwidth=3, label=\"angular-site\\n(L3 · [angular] · client)\"];\n"},{"id":"api-doc-model","dot":"  \"api-doc-model\" [fillcolor=\"#FFF9C4\", label=\"api-doc-model\\n(L1 · [node] · lib)\"];\n"},{"id":"app-example-e2e","dot":"  \"app-example-e2e\" [fillcolor=\"#E8F5E9\", color=\"green\", penwidth=3, label=\"app-example-e2e\\n(L7 · [express] · server)\"];\n"},{"id":"bunyan","dot":"  \"bunyan\" [fillcolor=\"#FFF9C4\", label=\"bunyan\\n(L2 · [node] · lib)\"];\n"},{"id":"client-server","dot":"  \"client-server\" [fillcolor=\"#E8F5E9\", color=\"green\", penwidth=3, label=\"client-server\\n(L6 · [express] · server)\"];\n"},{"id":"client-server-api","dot":"  \"client-server-api\" [fillcolor=\"#EDE7F6\", color=\"#EF6C00\", penwidth=2, label=\"client-server-api\\n(L1 · [browser, node] · api-lib)\"];\n"},{"id":"cloudtasks-client","dot":"  \"cloudtasks-client\" [fillcolor=\"#FFF9C4\", penwidth=2, label=\"cloudtasks-client\\n(L3 · [node] · designed-lib)\"];\n"},{"id":"code-rules","dot":"  \"code-rules\" [fillcolor=\"#FFF9C4\", label=\"code-rules\\n(L3 · [node] · lib)\"];\n"},{"id":"company-core","dot":"  \"company-core\" [fillcolor=\"#EDE7F6\", label=\"company-core\\n(L1 · [browser, node] · lib)\"];\n"},{"id":"company-svc-core","dot":"  \"company-svc-core\" [fillcolor=\"#E8F5E9\", label=\"company-svc-core\\n(L5 · [express] · lib)\"];\n"},{"id":"core-context","dot":"  \"core-context\" [fillcolor=\"#FFF9C4\", label=\"core-context\\n(L1 · [node] · lib)\"];\n"},{"id":"core-mock","dot":"  \"core-mock\" [fillcolor=\"#EDE7F6\", label=\"core-mock\\n(L0 · [browser, node] · lib)\"];\n"},{"id":"core-util","dot":"  \"core-util\" [fillcolor=\"#EDE7F6\", label=\"core-util\\n(L0 · [browser, node, react-native] · lib)\"];\n"},{"id":"docs-site","dot":"  \"docs-site\" [fillcolor=\"#FFF9C4\", label=\"docs-site\\n(L0 · [node] · lib)\"];\n"},{"id":"eslint-rules","dot":"  \"eslint-rules\" [fillcolor=\"#FFF9C4\", label=\"eslint-rules\\n(L3 · [node] · lib)\"];\n"},{"id":"gcp-identity","dot":"  \"gcp-identity\" [fillcolor=\"#FFF9C4\", label=\"gcp-identity\\n(L2 · [node] · lib)\"];\n"},{"id":"hook-runtime","dot":"  \"hook-runtime\" [fillcolor=\"#FFF9C4\", label=\"hook-runtime\\n(L3 · [node] · lib)\"];\n"},{"id":"http-client-browser","dot":"  \"http-client-browser\" [fillcolor=\"#EDE7F6\", penwidth=2, label=\"http-client-browser\\n(L2 · [browser, react-native, node] · designed-lib)\"];\n"},{"id":"http-client-core","dot":"  \"http-client-core\" [fillcolor=\"#EDE7F6\", label=\"http-client-core\\n(L1 · [browser, node, react-native] · lib)\"];\n"},{"id":"http-client-node","dot":"  \"http-client-node\" [fillcolor=\"#FFF9C4\", penwidth=2, label=\"http-client-node\\n(L3 · [node] · designed-lib)\"];\n"},{"id":"http-routing","dot":"  \"http-routing\" [fillcolor=\"#FFF9C4\", penwidth=2, label=\"http-routing\\n(L3 · [node] · designed-lib)\"];\n"},{"id":"http-server","dot":"  \"http-server\" [fillcolor=\"#E8F5E9\", label=\"http-server\\n(L4 · [express] · lib)\"];\n"},{"id":"ipc-bridge","dot":"  \"ipc-bridge\" [fillcolor=\"#EDE7F6\", label=\"ipc-bridge\\n(L1 · [browser, node, react-native] · lib)\"];\n"},{"id":"legacy-server","dot":"  \"legacy-server\" [fillcolor=\"#E8F5E9\", color=\"green\", penwidth=3, label=\"legacy-server\\n(L6 · [express] · server)\"];\n"},{"id":"mcp-server","dot":"  \"mcp-server\" [fillcolor=\"#E8F5E9\", label=\"mcp-server\\n(L5 · [express] · lib)\"];\n"},{"id":"nx-webpieces-rules","dot":"  \"nx-webpieces-rules\" [fillcolor=\"#FFF9C4\", label=\"nx-webpieces-rules\\n(L4 · [node] · lib)\"];\n"},{"id":"openapi-generator","dot":"  \"openapi-generator\" [fillcolor=\"#FFF9C4\", label=\"openapi-generator\\n(L2 · [node] · lib)\"];\n"},{"id":"partner-api","dot":"  \"partner-api\" [fillcolor=\"#FFF9C4\", color=\"#EF6C00\", penwidth=2, label=\"partner-api\\n(L3 · [node] · api-lib)\"];\n"},{"id":"pr-gate","dot":"  \"pr-gate\" [fillcolor=\"#FFF9C4\", color=\"#1976d2\", penwidth=3, label=\"pr-gate\\n(L4 · [node] · app)\"];\n"},{"id":"repo-workflow-core","dot":"  \"repo-workflow-core\" [fillcolor=\"#FFF9C4\", label=\"repo-workflow-core\\n(L1 · [node] · lib)\"];\n"},{"id":"rules","dot":"  \"rules\" [fillcolor=\"#FFF9C4\", color=\"#1976d2\", penwidth=3, label=\"rules\\n(L0 · [node] · app)\"];\n"},{"id":"rules-config","dot":"  \"rules-config\" [fillcolor=\"#FFF9C4\", penwidth=2, label=\"rules-config\\n(L2 · [node] · designed-lib)\"];\n"},{"id":"rules-sdk","dot":"  \"rules-sdk\" [fillcolor=\"#FFF9C4\", label=\"rules-sdk\\n(L0 · [node] · lib)\"];\n"},{"id":"server2","dot":"  \"server2\" [fillcolor=\"#E8F5E9\", color=\"green\", penwidth=3, label=\"server2\\n(L6 · [express] · server)\"];\n"},{"id":"server2-api","dot":"  \"server2-api\" [fillcolor=\"#EDE7F6\", color=\"#EF6C00\", penwidth=2, label=\"server2-api\\n(L1 · [browser, node] · api-lib)\"];\n"},{"id":"tooling-common","dot":"  \"tooling-common\" [fillcolor=\"#FFF9C4\", label=\"tooling-common\\n(L0 · [node] · lib)\"];\n"},{"id":"webpieces-tooling","dot":"  \"webpieces-tooling\" [fillcolor=\"#FFF9C4\", color=\"#6A1B9A\", penwidth=3, label=\"webpieces-tooling\\n(L5 · [node] · bundle)\"];\n"},{"id":"winston","dot":"  \"winston\" [fillcolor=\"#FFF9C4\", label=\"winston\\n(L2 · [node] · lib)\"];\n"}],"edges":[{"from":"agent-workflow-rules","to":"hook-runtime","dot":"  \"agent-workflow-rules\" -> \"hook-runtime\" [id=\"wp-real-edge-0\"];\n","id":"wp-real-edge-0"},{"from":"ai-hook-rules","to":"hook-runtime","dot":"  \"ai-hook-rules\" -> \"hook-runtime\" [id=\"wp-real-edge-1\"];\n","id":"wp-real-edge-1"},{"from":"angular-site","to":"client-server-api","dot":"  \"angular-site\" -> \"client-server-api\" [id=\"wp-real-edge-2\"];\n","id":"wp-real-edge-2"},{"from":"angular-site","to":"company-core","dot":"  \"angular-site\" -> \"company-core\" [id=\"wp-real-edge-3\"];\n","id":"wp-real-edge-3"},{"from":"angular-site","to":"http-client-browser","dot":"  \"angular-site\" -> \"http-client-browser\" [id=\"wp-real-edge-4\"];\n","id":"wp-real-edge-4"},{"from":"api-doc-model","to":"core-util","dot":"  \"api-doc-model\" -> \"core-util\" [id=\"wp-real-edge-5\"];\n","id":"wp-real-edge-5"},{"from":"app-example-e2e","to":"client-server","dot":"  \"app-example-e2e\" -> \"client-server\" [id=\"wp-real-edge-6\"];\n","id":"wp-real-edge-6"},{"from":"app-example-e2e","to":"http-client-browser","dot":"  \"app-example-e2e\" -> \"http-client-browser\" [id=\"wp-real-edge-7\"];\n","id":"wp-real-edge-7"},{"from":"app-example-e2e","to":"server2","dot":"  \"app-example-e2e\" -> \"server2\" [id=\"wp-real-edge-8\"];\n","id":"wp-real-edge-8"},{"from":"bunyan","to":"core-context","dot":"  \"bunyan\" -> \"core-context\" [id=\"wp-real-edge-9\"];\n","id":"wp-real-edge-9"},{"from":"client-server","to":"client-server-api","dot":"  \"client-server\" -> \"client-server-api\" [style=dashed, label=\"implements: PublicApi, SaveApi, SecureApi\", fontsize=9] [id=\"wp-real-edge-10\"];\n","id":"wp-real-edge-10"},{"from":"client-server","to":"company-svc-core","dot":"  \"client-server\" -> \"company-svc-core\" [id=\"wp-real-edge-11\"];\n","id":"wp-real-edge-11"},{"from":"client-server","to":"core-mock","dot":"  \"client-server\" -> \"core-mock\" [id=\"wp-real-edge-12\"];\n","id":"wp-real-edge-12"},{"from":"client-server","to":"http-client-node","dot":"  \"client-server\" -> \"http-client-node\" [id=\"wp-real-edge-13\"];\n","id":"wp-real-edge-13"},{"from":"client-server","to":"server2-api","dot":"  \"client-server\" -> \"server2-api\" [id=\"wp-real-edge-14\"];\n","id":"wp-real-edge-14"},{"from":"client-server-api","to":"core-util","dot":"  \"client-server-api\" -> \"core-util\" [id=\"wp-real-edge-15\"];\n","id":"wp-real-edge-15"},{"from":"cloudtasks-client","to":"gcp-identity","dot":"  \"cloudtasks-client\" -> \"gcp-identity\" [id=\"wp-real-edge-16\"];\n","id":"wp-real-edge-16"},{"from":"code-rules","to":"rules-config","dot":"  \"code-rules\" -> \"rules-config\" [id=\"wp-real-edge-17\"];\n","id":"wp-real-edge-17"},{"from":"company-core","to":"core-util","dot":"  \"company-core\" -> \"core-util\" [id=\"wp-real-edge-18\"];\n","id":"wp-real-edge-18"},{"from":"company-svc-core","to":"company-core","dot":"  \"company-svc-core\" -> \"company-core\" [id=\"wp-real-edge-19\"];\n","id":"wp-real-edge-19"},{"from":"company-svc-core","to":"http-server","dot":"  \"company-svc-core\" -> \"http-server\" [id=\"wp-real-edge-20\"];\n","id":"wp-real-edge-20"},{"from":"core-context","to":"core-util","dot":"  \"core-context\" -> \"core-util\" [id=\"wp-real-edge-21\"];\n","id":"wp-real-edge-21"},{"from":"eslint-rules","to":"rules-config","dot":"  \"eslint-rules\" -> \"rules-config\" [id=\"wp-real-edge-22\"];\n","id":"wp-real-edge-22"},{"from":"gcp-identity","to":"core-context","dot":"  \"gcp-identity\" -> \"core-context\" [id=\"wp-real-edge-23\"];\n","id":"wp-real-edge-23"},{"from":"hook-runtime","to":"rules-config","dot":"  \"hook-runtime\" -> \"rules-config\" [id=\"wp-real-edge-24\"];\n","id":"wp-real-edge-24"},{"from":"http-client-browser","to":"http-client-core","dot":"  \"http-client-browser\" -> \"http-client-core\" [id=\"wp-real-edge-25\"];\n","id":"wp-real-edge-25"},{"from":"http-client-core","to":"core-util","dot":"  \"http-client-core\" -> \"core-util\" [id=\"wp-real-edge-26\"];\n","id":"wp-real-edge-26"},{"from":"http-client-node","to":"gcp-identity","dot":"  \"http-client-node\" -> \"gcp-identity\" [id=\"wp-real-edge-27\"];\n","id":"wp-real-edge-27"},{"from":"http-client-node","to":"http-client-core","dot":"  \"http-client-node\" -> \"http-client-core\" [id=\"wp-real-edge-28\"];\n","id":"wp-real-edge-28"},{"from":"http-routing","to":"gcp-identity","dot":"  \"http-routing\" -> \"gcp-identity\" [id=\"wp-real-edge-29\"];\n","id":"wp-real-edge-29"},{"from":"http-server","to":"http-routing","dot":"  \"http-server\" -> \"http-routing\" [id=\"wp-real-edge-30\"];\n","id":"wp-real-edge-30"},{"from":"ipc-bridge","to":"core-util","dot":"  \"ipc-bridge\" -> \"core-util\" [id=\"wp-real-edge-31\"];\n","id":"wp-real-edge-31"},{"from":"legacy-server","to":"client-server-api","dot":"  \"legacy-server\" -> \"client-server-api\" [style=dashed, label=\"implements: PublicApi, SaveApi\", fontsize=9] [id=\"wp-real-edge-32\"];\n","id":"wp-real-edge-32"},{"from":"legacy-server","to":"company-svc-core","dot":"  \"legacy-server\" -> \"company-svc-core\" [id=\"wp-real-edge-33\"];\n","id":"wp-real-edge-33"},{"from":"legacy-server","to":"http-client-node","dot":"  \"legacy-server\" -> \"http-client-node\" [id=\"wp-real-edge-34\"];\n","id":"wp-real-edge-34"},{"from":"legacy-server","to":"server2-api","dot":"  \"legacy-server\" -> \"server2-api\" [id=\"wp-real-edge-35\"];\n","id":"wp-real-edge-35"},{"from":"mcp-server","to":"http-client-node","dot":"  \"mcp-server\" -> \"http-client-node\" [id=\"wp-real-edge-36\"];\n","id":"wp-real-edge-36"},{"from":"mcp-server","to":"http-server","dot":"  \"mcp-server\" -> \"http-server\" [id=\"wp-real-edge-37\"];\n","id":"wp-real-edge-37"},{"from":"nx-webpieces-rules","to":"api-doc-model","dot":"  \"nx-webpieces-rules\" -> \"api-doc-model\" [id=\"wp-real-edge-38\"];\n","id":"wp-real-edge-38"},{"from":"nx-webpieces-rules","to":"eslint-rules","dot":"  \"nx-webpieces-rules\" -> \"eslint-rules\" [id=\"wp-real-edge-39\"];\n","id":"wp-real-edge-39"},{"from":"openapi-generator","to":"api-doc-model","dot":"  \"openapi-generator\" -> \"api-doc-model\" [id=\"wp-real-edge-40\"];\n","id":"wp-real-edge-40"},{"from":"partner-api","to":"docs-site","dot":"  \"partner-api\" -> \"docs-site\" [id=\"wp-real-edge-41\"];\n","id":"wp-real-edge-41"},{"from":"partner-api","to":"openapi-generator","dot":"  \"partner-api\" -> \"openapi-generator\" [id=\"wp-real-edge-42\"];\n","id":"wp-real-edge-42"},{"from":"pr-gate","to":"hook-runtime","dot":"  \"pr-gate\" -> \"hook-runtime\" [id=\"wp-real-edge-43\"];\n","id":"wp-real-edge-43"},{"from":"repo-workflow-core","to":"tooling-common","dot":"  \"repo-workflow-core\" -> \"tooling-common\" [id=\"wp-real-edge-44\"];\n","id":"wp-real-edge-44"},{"from":"rules-config","to":"repo-workflow-core","dot":"  \"rules-config\" -> \"repo-workflow-core\" [id=\"wp-real-edge-45\"];\n","id":"wp-real-edge-45"},{"from":"server2","to":"company-svc-core","dot":"  \"server2\" -> \"company-svc-core\" [id=\"wp-real-edge-46\"];\n","id":"wp-real-edge-46"},{"from":"server2","to":"server2-api","dot":"  \"server2\" -> \"server2-api\" [style=dashed, label=\"implements: Server2Api\", fontsize=9] [id=\"wp-real-edge-47\"];\n","id":"wp-real-edge-47"},{"from":"server2-api","to":"core-util","dot":"  \"server2-api\" -> \"core-util\" [id=\"wp-real-edge-48\"];\n","id":"wp-real-edge-48"},{"from":"webpieces-tooling","to":"agent-workflow-rules","dot":"  \"webpieces-tooling\" -> \"agent-workflow-rules\" [id=\"wp-real-edge-49\"];\n","id":"wp-real-edge-49"},{"from":"webpieces-tooling","to":"ai-hook-rules","dot":"  \"webpieces-tooling\" -> \"ai-hook-rules\" [id=\"wp-real-edge-50\"];\n","id":"wp-real-edge-50"},{"from":"webpieces-tooling","to":"code-rules","dot":"  \"webpieces-tooling\" -> \"code-rules\" [id=\"wp-real-edge-51\"];\n","id":"wp-real-edge-51"},{"from":"webpieces-tooling","to":"nx-webpieces-rules","dot":"  \"webpieces-tooling\" -> \"nx-webpieces-rules\" [id=\"wp-real-edge-52\"];\n","id":"wp-real-edge-52"},{"from":"webpieces-tooling","to":"pr-gate","dot":"  \"webpieces-tooling\" -> \"pr-gate\" [id=\"wp-real-edge-53\"];\n","id":"wp-real-edge-53"},{"from":"winston","to":"core-context","dot":"  \"winston\" -> \"core-context\" [id=\"wp-real-edge-54\"];\n","id":"wp-real-edge-54"}],"bands":[{"level":7,"nodeNames":["app-example-e2e"]},{"level":6,"nodeNames":["client-server","legacy-server","server2"]},{"level":5,"nodeNames":["company-svc-core","mcp-server","webpieces-tooling"]},{"level":4,"nodeNames":["agent-workflow-rules","ai-hook-rules","http-server","nx-webpieces-rules","pr-gate"]},{"level":3,"nodeNames":["angular-site","cloudtasks-client","code-rules","eslint-rules","hook-runtime","http-client-node","http-routing","partner-api"]},{"level":2,"nodeNames":["bunyan","gcp-identity","http-client-browser","openapi-generator","rules-config","winston"]},{"level":1,"nodeNames":["api-doc-model","client-server-api","company-core","core-context","http-client-core","ipc-bridge","repo-workflow-core","server2-api"]},{"level":0,"nodeNames":["core-mock","core-util","docs-site","rules","rules-sdk","tooling-common"]}],"fullDot":"digraph Architecture {\n  rankdir=TB;\n  node [shape=box, style=filled, fontname=\"Arial\"];\n  edge [fontname=\"Arial\"];\n\n  \"agent-workflow-rules\" [fillcolor=\"#FFF9C4\", label=\"agent-workflow-rules\\n(L4 · [node] · lib)\"];\n  \"ai-hook-rules\" [fillcolor=\"#FFF9C4\", label=\"ai-hook-rules\\n(L4 · [node] · lib)\"];\n  \"angular-site\" [fillcolor=\"#FCE4EC\", color=\"red\", penwidth=3, label=\"angular-site\\n(L3 · [angular] · client)\"];\n  \"api-doc-model\" [fillcolor=\"#FFF9C4\", label=\"api-doc-model\\n(L1 · [node] · lib)\"];\n  \"app-example-e2e\" [fillcolor=\"#E8F5E9\", color=\"green\", penwidth=3, label=\"app-example-e2e\\n(L7 · [express] · server)\"];\n  \"bunyan\" [fillcolor=\"#FFF9C4\", label=\"bunyan\\n(L2 · [node] · lib)\"];\n  \"client-server\" [fillcolor=\"#E8F5E9\", color=\"green\", penwidth=3, label=\"client-server\\n(L6 · [express] · server)\"];\n  \"client-server-api\" [fillcolor=\"#EDE7F6\", color=\"#EF6C00\", penwidth=2, label=\"client-server-api\\n(L1 · [browser, node] · api-lib)\"];\n  \"cloudtasks-client\" [fillcolor=\"#FFF9C4\", penwidth=2, label=\"cloudtasks-client\\n(L3 · [node] · designed-lib)\"];\n  \"code-rules\" [fillcolor=\"#FFF9C4\", label=\"code-rules\\n(L3 · [node] · lib)\"];\n  \"company-core\" [fillcolor=\"#EDE7F6\", label=\"company-core\\n(L1 · [browser, node] · lib)\"];\n  \"company-svc-core\" [fillcolor=\"#E8F5E9\", label=\"company-svc-core\\n(L5 · [express] · lib)\"];\n  \"core-context\" [fillcolor=\"#FFF9C4\", label=\"core-context\\n(L1 · [node] · lib)\"];\n  \"core-mock\" [fillcolor=\"#EDE7F6\", label=\"core-mock\\n(L0 · [browser, node] · lib)\"];\n  \"core-util\" [fillcolor=\"#EDE7F6\", label=\"core-util\\n(L0 · [browser, node, react-native] · lib)\"];\n  \"docs-site\" [fillcolor=\"#FFF9C4\", label=\"docs-site\\n(L0 · [node] · lib)\"];\n  \"eslint-rules\" [fillcolor=\"#FFF9C4\", label=\"eslint-rules\\n(L3 · [node] · lib)\"];\n  \"gcp-identity\" [fillcolor=\"#FFF9C4\", label=\"gcp-identity\\n(L2 · [node] · lib)\"];\n  \"hook-runtime\" [fillcolor=\"#FFF9C4\", label=\"hook-runtime\\n(L3 · [node] · lib)\"];\n  \"http-client-browser\" [fillcolor=\"#EDE7F6\", penwidth=2, label=\"http-client-browser\\n(L2 · [browser, react-native, node] · designed-lib)\"];\n  \"http-client-core\" [fillcolor=\"#EDE7F6\", label=\"http-client-core\\n(L1 · [browser, node, react-native] · lib)\"];\n  \"http-client-node\" [fillcolor=\"#FFF9C4\", penwidth=2, label=\"http-client-node\\n(L3 · [node] · designed-lib)\"];\n  \"http-routing\" [fillcolor=\"#FFF9C4\", penwidth=2, label=\"http-routing\\n(L3 · [node] · designed-lib)\"];\n  \"http-server\" [fillcolor=\"#E8F5E9\", label=\"http-server\\n(L4 · [express] · lib)\"];\n  \"ipc-bridge\" [fillcolor=\"#EDE7F6\", label=\"ipc-bridge\\n(L1 · [browser, node, react-native] · lib)\"];\n  \"legacy-server\" [fillcolor=\"#E8F5E9\", color=\"green\", penwidth=3, label=\"legacy-server\\n(L6 · [express] · server)\"];\n  \"mcp-server\" [fillcolor=\"#E8F5E9\", label=\"mcp-server\\n(L5 · [express] · lib)\"];\n  \"nx-webpieces-rules\" [fillcolor=\"#FFF9C4\", label=\"nx-webpieces-rules\\n(L4 · [node] · lib)\"];\n  \"openapi-generator\" [fillcolor=\"#FFF9C4\", label=\"openapi-generator\\n(L2 · [node] · lib)\"];\n  \"partner-api\" [fillcolor=\"#FFF9C4\", color=\"#EF6C00\", penwidth=2, label=\"partner-api\\n(L3 · [node] · api-lib)\"];\n  \"pr-gate\" [fillcolor=\"#FFF9C4\", color=\"#1976d2\", penwidth=3, label=\"pr-gate\\n(L4 · [node] · app)\"];\n  \"repo-workflow-core\" [fillcolor=\"#FFF9C4\", label=\"repo-workflow-core\\n(L1 · [node] · lib)\"];\n  \"rules\" [fillcolor=\"#FFF9C4\", color=\"#1976d2\", penwidth=3, label=\"rules\\n(L0 · [node] · app)\"];\n  \"rules-config\" [fillcolor=\"#FFF9C4\", penwidth=2, label=\"rules-config\\n(L2 · [node] · designed-lib)\"];\n  \"rules-sdk\" [fillcolor=\"#FFF9C4\", label=\"rules-sdk\\n(L0 · [node] · lib)\"];\n  \"server2\" [fillcolor=\"#E8F5E9\", color=\"green\", penwidth=3, label=\"server2\\n(L6 · [express] · server)\"];\n  \"server2-api\" [fillcolor=\"#EDE7F6\", color=\"#EF6C00\", penwidth=2, label=\"server2-api\\n(L1 · [browser, node] · api-lib)\"];\n  \"tooling-common\" [fillcolor=\"#FFF9C4\", label=\"tooling-common\\n(L0 · [node] · lib)\"];\n  \"webpieces-tooling\" [fillcolor=\"#FFF9C4\", color=\"#6A1B9A\", penwidth=3, label=\"webpieces-tooling\\n(L5 · [node] · bundle)\"];\n  \"winston\" [fillcolor=\"#FFF9C4\", label=\"winston\\n(L2 · [node] · lib)\"];\n\n  \"__wp_layout_L7\" [style=invis, shape=point, width=0.01, height=0.01, label=\"\", class=\"wp-layout\"];\n  { rank=same; \"__wp_layout_L7\"; \"app-example-e2e\"; }\n  \"__wp_layout_L6\" [style=invis, shape=point, width=0.01, height=0.01, label=\"\", class=\"wp-layout\"];\n  { rank=same; \"__wp_layout_L6\"; \"client-server\"; \"legacy-server\"; \"server2\"; }\n  \"__wp_layout_L5\" [style=invis, shape=point, width=0.01, height=0.01, label=\"\", class=\"wp-layout\"];\n  { rank=same; \"__wp_layout_L5\"; \"company-svc-core\"; \"mcp-server\"; \"webpieces-tooling\"; }\n  \"__wp_layout_L4\" [style=invis, shape=point, width=0.01, height=0.01, label=\"\", class=\"wp-layout\"];\n  { rank=same; \"__wp_layout_L4\"; \"agent-workflow-rules\"; \"ai-hook-rules\"; \"http-server\"; \"nx-webpieces-rules\"; \"pr-gate\"; }\n  \"__wp_layout_L3\" [style=invis, shape=point, width=0.01, height=0.01, label=\"\", class=\"wp-layout\"];\n  { rank=same; \"__wp_layout_L3\"; \"angular-site\"; \"cloudtasks-client\"; \"code-rules\"; \"eslint-rules\"; \"hook-runtime\"; \"http-client-node\"; \"http-routing\"; \"partner-api\"; }\n  \"__wp_layout_L2\" [style=invis, shape=point, width=0.01, height=0.01, label=\"\", class=\"wp-layout\"];\n  { rank=same; \"__wp_layout_L2\"; \"bunyan\"; \"gcp-identity\"; \"http-client-browser\"; \"openapi-generator\"; \"rules-config\"; \"winston\"; }\n  \"__wp_layout_L1\" [style=invis, shape=point, width=0.01, height=0.01, label=\"\", class=\"wp-layout\"];\n  { rank=same; \"__wp_layout_L1\"; \"api-doc-model\"; \"client-server-api\"; \"company-core\"; \"core-context\"; \"http-client-core\"; \"ipc-bridge\"; \"repo-workflow-core\"; \"server2-api\"; }\n  \"__wp_layout_L0\" [style=invis, shape=point, width=0.01, height=0.01, label=\"\", class=\"wp-layout\"];\n  { rank=same; \"__wp_layout_L0\"; \"core-mock\"; \"core-util\"; \"docs-site\"; \"rules\"; \"rules-sdk\"; \"tooling-common\"; }\n  \"__wp_layout_L7\" -> \"__wp_layout_L6\" [style=invis, class=\"wp-layout\"];\n  \"__wp_layout_L6\" -> \"__wp_layout_L5\" [style=invis, class=\"wp-layout\"];\n  \"__wp_layout_L5\" -> \"__wp_layout_L4\" [style=invis, class=\"wp-layout\"];\n  \"__wp_layout_L4\" -> \"__wp_layout_L3\" [style=invis, class=\"wp-layout\"];\n  \"__wp_layout_L3\" -> \"__wp_layout_L2\" [style=invis, class=\"wp-layout\"];\n  \"__wp_layout_L2\" -> \"__wp_layout_L1\" [style=invis, class=\"wp-layout\"];\n  \"__wp_layout_L1\" -> \"__wp_layout_L0\" [style=invis, class=\"wp-layout\"];\n\n  \"agent-workflow-rules\" -> \"hook-runtime\" [id=\"wp-real-edge-0\"];\n  \"ai-hook-rules\" -> \"hook-runtime\" [id=\"wp-real-edge-1\"];\n  \"angular-site\" -> \"client-server-api\" [id=\"wp-real-edge-2\"];\n  \"angular-site\" -> \"company-core\" [id=\"wp-real-edge-3\"];\n  \"angular-site\" -> \"http-client-browser\" [id=\"wp-real-edge-4\"];\n  \"api-doc-model\" -> \"core-util\" [id=\"wp-real-edge-5\"];\n  \"app-example-e2e\" -> \"client-server\" [id=\"wp-real-edge-6\"];\n  \"app-example-e2e\" -> \"http-client-browser\" [id=\"wp-real-edge-7\"];\n  \"app-example-e2e\" -> \"server2\" [id=\"wp-real-edge-8\"];\n  \"bunyan\" -> \"core-context\" [id=\"wp-real-edge-9\"];\n  \"client-server\" -> \"client-server-api\" [style=dashed, label=\"implements: PublicApi, SaveApi, SecureApi\", fontsize=9] [id=\"wp-real-edge-10\"];\n  \"client-server\" -> \"company-svc-core\" [id=\"wp-real-edge-11\"];\n  \"client-server\" -> \"core-mock\" [id=\"wp-real-edge-12\"];\n  \"client-server\" -> \"http-client-node\" [id=\"wp-real-edge-13\"];\n  \"client-server\" -> \"server2-api\" [id=\"wp-real-edge-14\"];\n  \"client-server-api\" -> \"core-util\" [id=\"wp-real-edge-15\"];\n  \"cloudtasks-client\" -> \"gcp-identity\" [id=\"wp-real-edge-16\"];\n  \"code-rules\" -> \"rules-config\" [id=\"wp-real-edge-17\"];\n  \"company-core\" -> \"core-util\" [id=\"wp-real-edge-18\"];\n  \"company-svc-core\" -> \"company-core\" [id=\"wp-real-edge-19\"];\n  \"company-svc-core\" -> \"http-server\" [id=\"wp-real-edge-20\"];\n  \"core-context\" -> \"core-util\" [id=\"wp-real-edge-21\"];\n  \"eslint-rules\" -> \"rules-config\" [id=\"wp-real-edge-22\"];\n  \"gcp-identity\" -> \"core-context\" [id=\"wp-real-edge-23\"];\n  \"hook-runtime\" -> \"rules-config\" [id=\"wp-real-edge-24\"];\n  \"http-client-browser\" -> \"http-client-core\" [id=\"wp-real-edge-25\"];\n  \"http-client-core\" -> \"core-util\" [id=\"wp-real-edge-26\"];\n  \"http-client-node\" -> \"gcp-identity\" [id=\"wp-real-edge-27\"];\n  \"http-client-node\" -> \"http-client-core\" [id=\"wp-real-edge-28\"];\n  \"http-routing\" -> \"gcp-identity\" [id=\"wp-real-edge-29\"];\n  \"http-server\" -> \"http-routing\" [id=\"wp-real-edge-30\"];\n  \"ipc-bridge\" -> \"core-util\" [id=\"wp-real-edge-31\"];\n  \"legacy-server\" -> \"client-server-api\" [style=dashed, label=\"implements: PublicApi, SaveApi\", fontsize=9] [id=\"wp-real-edge-32\"];\n  \"legacy-server\" -> \"company-svc-core\" [id=\"wp-real-edge-33\"];\n  \"legacy-server\" -> \"http-client-node\" [id=\"wp-real-edge-34\"];\n  \"legacy-server\" -> \"server2-api\" [id=\"wp-real-edge-35\"];\n  \"mcp-server\" -> \"http-client-node\" [id=\"wp-real-edge-36\"];\n  \"mcp-server\" -> \"http-server\" [id=\"wp-real-edge-37\"];\n  \"nx-webpieces-rules\" -> \"api-doc-model\" [id=\"wp-real-edge-38\"];\n  \"nx-webpieces-rules\" -> \"eslint-rules\" [id=\"wp-real-edge-39\"];\n  \"openapi-generator\" -> \"api-doc-model\" [id=\"wp-real-edge-40\"];\n  \"partner-api\" -> \"docs-site\" [id=\"wp-real-edge-41\"];\n  \"partner-api\" -> \"openapi-generator\" [id=\"wp-real-edge-42\"];\n  \"pr-gate\" -> \"hook-runtime\" [id=\"wp-real-edge-43\"];\n  \"repo-workflow-core\" -> \"tooling-common\" [id=\"wp-real-edge-44\"];\n  \"rules-config\" -> \"repo-workflow-core\" [id=\"wp-real-edge-45\"];\n  \"server2\" -> \"company-svc-core\" [id=\"wp-real-edge-46\"];\n  \"server2\" -> \"server2-api\" [style=dashed, label=\"implements: Server2Api\", fontsize=9] [id=\"wp-real-edge-47\"];\n  \"server2-api\" -> \"core-util\" [id=\"wp-real-edge-48\"];\n  \"webpieces-tooling\" -> \"agent-workflow-rules\" [id=\"wp-real-edge-49\"];\n  \"webpieces-tooling\" -> \"ai-hook-rules\" [id=\"wp-real-edge-50\"];\n  \"webpieces-tooling\" -> \"code-rules\" [id=\"wp-real-edge-51\"];\n  \"webpieces-tooling\" -> \"nx-webpieces-rules\" [id=\"wp-real-edge-52\"];\n  \"webpieces-tooling\" -> \"pr-gate\" [id=\"wp-real-edge-53\"];\n  \"winston\" -> \"core-context\" [id=\"wp-real-edge-54\"];\n\n  labelloc=\"t\";\n  label=\"Monorepo Dependency Architecture\\n(from architecture/dependencies.json)\";\n  fontsize=20;\n}\n","header":"digraph Architecture {\n  rankdir=TB;\n  node [shape=box, style=filled, fontname=\"Arial\"];\n  edge [fontname=\"Arial\"];\n\n","footer":"\n  labelloc=\"t\";\n  label=\"Monorepo Dependency Architecture\\n(from architecture/dependencies.json)\";\n  fontsize=20;\n}\n"}).render();
 //# sourceMappingURL=graph-visualizer.client.js.map</script>
 </body>
 </html>
