@@ -1,4 +1,10 @@
-import { RouteModule, WebpiecesRouter, FilterDefinition } from '@webpieces/http-routing';
+import {
+    RouteModule,
+    WebpiecesRouter,
+    FilterDefinition,
+    ServerWiring,
+    ServerWiringOptions,
+} from '@webpieces/http-routing';
 // The legacy app is SELF-CONTAINED — it shares only the api CONTRACT with the greenfield sibling,
 // so its controllers are its OWN copies here.
 import { SaveApi, PublicApi } from '@webpieces/client-server-api';
@@ -21,5 +27,31 @@ export class LegacyRoutes implements RouteModule {
         }
         router.addRoutes(SaveApi, SaveController);
         router.addRoutes(PublicApi, PublicController);
+    }
+}
+
+import { ContainerModule, ContainerModuleLoadOptions } from 'inversify';
+import { RuntimeClients, rpcTarget } from '@webpieces/http-client-node';
+import { Server2Api, TYPES } from './remote/Server2Client';
+import { InversifyModule } from './modules/InversifyModule';
+
+export const RuntimeClientsModule = new ContainerModule((options: ContainerModuleLoadOptions) => {
+    new RuntimeClients(options).bindRpc(
+        TYPES.Server2Api,
+        Server2Api,
+        rpcTarget(Server2Api, 'server2'),
+    );
+});
+
+export class LegacyWiring {
+    constructor(private readonly additionalFilters: FilterDefinition[] = []) {}
+    getRuntimeWiring(): ServerWiring {
+        return new ServerWiring(
+            'legacy-server',
+            new ServerWiringOptions(
+                [InversifyModule, RuntimeClientsModule],
+                [new LegacyRoutes(this.additionalFilters)],
+            ),
+        );
     }
 }

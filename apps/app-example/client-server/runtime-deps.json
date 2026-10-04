@@ -1,0 +1,90 @@
+{
+    "schemaVersion": 1,
+    "project": "client-server",
+    "framework": "node",
+    "exports": {
+        "AppRoutes": {
+            "kind": "routing",
+            "relationships": [
+                {
+                    "contract": {
+                        "project": "client-server-api",
+                        "exportedName": "SaveApi"
+                    },
+                    "direction": "implements",
+                    "transport": "rpc"
+                },
+                {
+                    "contract": {
+                        "project": "client-server-api",
+                        "exportedName": "PublicApi"
+                    },
+                    "direction": "implements",
+                    "transport": "rpc"
+                },
+                {
+                    "contract": {
+                        "project": "client-server-api",
+                        "exportedName": "SecureApi"
+                    },
+                    "direction": "implements",
+                    "transport": "rpc"
+                }
+            ],
+            "selections": []
+        },
+        "ClientServerWiring": {
+            "kind": "plan",
+            "relationships": [],
+            "selections": [
+                {
+                    "project": "client-server",
+                    "exportedName": "InversifyModule",
+                    "targets": {},
+                    "policies": {}
+                },
+                {
+                    "project": "client-server",
+                    "exportedName": "RuntimeClientsModule",
+                    "targets": {},
+                    "policies": {}
+                },
+                {
+                    "project": "client-server",
+                    "exportedName": "AppRoutes",
+                    "targets": {},
+                    "policies": {}
+                }
+            ]
+        },
+        "InversifyModule": {
+            "kind": "binding",
+            "relationships": [],
+            "selections": []
+        },
+        "RuntimeClientsModule": {
+            "kind": "binding",
+            "relationships": [
+                {
+                    "contract": {
+                        "project": "server2-api",
+                        "exportedName": "Server2Api"
+                    },
+                    "direction": "uses",
+                    "transport": "rpc",
+                    "target": {
+                        "kind": "service",
+                        "service": "server2",
+                        "contract": {
+                            "project": "server2-api",
+                            "exportedName": "Server2Api"
+                        }
+                    }
+                }
+            ],
+            "selections": []
+        }
+    },
+    "entry": "ClientServerWiring",
+    "host": "client-server"
+}

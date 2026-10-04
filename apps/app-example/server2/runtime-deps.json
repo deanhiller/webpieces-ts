@@ -1,0 +1,46 @@
+{
+    "schemaVersion": 1,
+    "project": "server2",
+    "framework": "node",
+    "exports": {
+        "Server2Bindings": {
+            "kind": "binding",
+            "relationships": [],
+            "selections": []
+        },
+        "Server2Routes": {
+            "kind": "routing",
+            "relationships": [
+                {
+                    "contract": {
+                        "project": "server2-api",
+                        "exportedName": "Server2Api"
+                    },
+                    "direction": "implements",
+                    "transport": "rpc"
+                }
+            ],
+            "selections": []
+        },
+        "Server2Wiring": {
+            "kind": "plan",
+            "relationships": [],
+            "selections": [
+                {
+                    "project": "server2",
+                    "exportedName": "Server2Bindings",
+                    "targets": {},
+                    "policies": {}
+                },
+                {
+                    "project": "server2",
+                    "exportedName": "Server2Routes",
+                    "targets": {},
+                    "policies": {}
+                }
+            ]
+        }
+    },
+    "entry": "Server2Wiring",
+    "host": "server2"
+}

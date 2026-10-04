@@ -1,0 +1,46 @@
+{
+    "schemaVersion": 1,
+    "project": "angular-site",
+    "framework": "angular",
+    "exports": {
+        "ApplicationBrowserWiring": {
+            "kind": "plan",
+            "relationships": [
+                {
+                    "contract": {
+                        "project": "client-server-api",
+                        "exportedName": "SaveApi"
+                    },
+                    "direction": "uses",
+                    "transport": "rpc",
+                    "target": {
+                        "kind": "service",
+                        "service": "client-server",
+                        "contract": {
+                            "project": "client-server-api",
+                            "exportedName": "SaveApi"
+                        }
+                    }
+                },
+                {
+                    "contract": {
+                        "project": "client-server-api",
+                        "exportedName": "PublicApi"
+                    },
+                    "direction": "uses",
+                    "transport": "rpc",
+                    "target": {
+                        "kind": "service",
+                        "service": "client-server",
+                        "contract": {
+                            "project": "client-server-api",
+                            "exportedName": "PublicApi"
+                        }
+                    }
+                }
+            ],
+            "selections": []
+        }
+    },
+    "entry": "ApplicationBrowserWiring"
+}

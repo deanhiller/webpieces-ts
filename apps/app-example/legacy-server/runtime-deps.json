@@ -1,0 +1,82 @@
+{
+    "schemaVersion": 1,
+    "project": "legacy-server",
+    "framework": "node",
+    "exports": {
+        "InversifyModule": {
+            "kind": "binding",
+            "relationships": [],
+            "selections": []
+        },
+        "LegacyRoutes": {
+            "kind": "routing",
+            "relationships": [
+                {
+                    "contract": {
+                        "project": "client-server-api",
+                        "exportedName": "SaveApi"
+                    },
+                    "direction": "implements",
+                    "transport": "rpc"
+                },
+                {
+                    "contract": {
+                        "project": "client-server-api",
+                        "exportedName": "PublicApi"
+                    },
+                    "direction": "implements",
+                    "transport": "rpc"
+                }
+            ],
+            "selections": []
+        },
+        "LegacyWiring": {
+            "kind": "plan",
+            "relationships": [],
+            "selections": [
+                {
+                    "project": "legacy-server",
+                    "exportedName": "InversifyModule",
+                    "targets": {},
+                    "policies": {}
+                },
+                {
+                    "project": "legacy-server",
+                    "exportedName": "RuntimeClientsModule",
+                    "targets": {},
+                    "policies": {}
+                },
+                {
+                    "project": "legacy-server",
+                    "exportedName": "LegacyRoutes",
+                    "targets": {},
+                    "policies": {}
+                }
+            ]
+        },
+        "RuntimeClientsModule": {
+            "kind": "binding",
+            "relationships": [
+                {
+                    "contract": {
+                        "project": "server2-api",
+                        "exportedName": "Server2Api"
+                    },
+                    "direction": "uses",
+                    "transport": "rpc",
+                    "target": {
+                        "kind": "service",
+                        "service": "server2",
+                        "contract": {
+                            "project": "server2-api",
+                            "exportedName": "Server2Api"
+                        }
+                    }
+                }
+            ],
+            "selections": []
+        }
+    },
+    "entry": "LegacyWiring",
+    "host": "legacy-server"
+}

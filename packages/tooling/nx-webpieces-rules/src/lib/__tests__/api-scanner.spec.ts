@@ -1,12 +1,14 @@
 /**
- * Runs the ApiUsageScanner against the real example apps in this repo and asserts
- * the derived implements/uses topology. This is an integration test over actual
+ * Checks approved wiring topology and build-only contract discovery over the real example apps. This is an integration test over actual
  * source, so it doubles as the contract for the arch `apiRelations` field.
  */
 
 import * as path from 'path';
 import { describe, it, expect } from 'vitest';
 import { ProjectInfo } from '../project-info';
+import { ApprovedWiringGraph } from '../runtime-wiring/approved-graph';
+import { loadBlessedGraph } from '../graph-loader';
+import { ProjectApiRelations } from '../api-usage/api-relations';
 import { ApiUsageScanner, buildApiContracts } from '../api-usage/api-scanner';
 import { ApiMethodMeta, ApiRelation } from '../api-usage/api-relations';
 
@@ -17,31 +19,51 @@ function exampleProjects(): Map<string, ProjectInfo> {
     const add = (name: string, root: string, tags: string[]): void => {
         infos.set(name, new ProjectInfo(name, root, tags));
     };
-    add('client-server', 'apps/app-example/client-server', ['framework:express', 'role:server']);
+    add('client-server', 'apps/app-example/client-server', [
+        'webpieces',
+        'framework:express',
+        'role:server',
+    ]);
     add('client-server-api', 'apps/app-example/client-server-api', [
         'framework:browser',
         'framework:node',
         'role:lib',
     ]);
-    add('server2', 'apps/app-example/server2', ['framework:express', 'role:server']);
+    add('server2', 'apps/app-example/server2', ['webpieces', 'framework:express', 'role:server']);
     add('server2-api', 'apps/app-example/server2-api', [
         'framework:browser',
         'framework:node',
         'role:lib',
     ]);
-    add('angular-site', 'apps/app-example/angular-site', ['framework:angular', 'role:client']);
-    // legacy-server has only a solution-style tsconfig.json (no tsconfig.app/lib) — exercises the
-    // src-glob program fallback. app-example-e2e has only a *.spec.ts — exercises the "not scanned".
-    add('legacy-server', 'apps/app-example/legacy-server', ['framework:express', 'role:server']);
+    add('angular-site', 'apps/app-example/angular-site', [
+        'webpieces',
+        'framework:angular',
+        'role:client',
+    ]);
+    // Legacy now has a configured app build. The e2e project has only test source.
+    add('legacy-server', 'apps/app-example/legacy-server', [
+        'webpieces',
+        'framework:express',
+        'role:server',
+    ]);
     add('app-example-e2e', 'apps/app-example/e2e', ['framework:express', 'role:server']);
     return infos;
+}
+
+function approvedExampleRelations(): Map<string, ProjectApiRelations> {
+    const graph = loadBlessedGraph(WORKSPACE_ROOT)!.projects;
+    // Erase saved relationships so assertions must come from reviewed declarations.
+    for (const entry of Object.values(graph)) delete entry.apiRelations;
+    new ApprovedWiringGraph().attach(WORKSPACE_ROOT, graph, exampleProjects());
+    return new Map(Object.entries(graph).map(([name, entry]) => [name, entry.apiRelations ?? {}]));
 }
 
 function apiNames(refs: { api: string }[]): string[] {
     return refs.map((r: { api: string }) => r.api).sort();
 }
 
-describe('ApiUsageScanner over the example apps', () => {
+describe('approved topology and build contract discovery over the example apps', () => {
+    const approved = approvedExampleRelations();
     const result = new ApiUsageScanner(WORKSPACE_ROOT, exampleProjects()).scan();
 
     it('detects the api-lib projects by their @ApiPath abstract classes', () => {
@@ -57,7 +79,7 @@ describe('ApiUsageScanner over the example apps', () => {
     });
 
     it('classifies client-server: implements its own api-lib, uses server2-api', () => {
-        const relations = result.relationsByProject.get('client-server');
+        const relations = approved.get('client-server');
         expect(relations).toBeDefined();
 
         const impl = relations!['client-server-api'] as ApiRelation;
@@ -72,7 +94,7 @@ describe('ApiUsageScanner over the example apps', () => {
     });
 
     it('classifies angular-site as a pure user of client-server-api', () => {
-        const relations = result.relationsByProject.get('angular-site');
+        const relations = approved.get('angular-site');
         expect(relations).toBeDefined();
         const uses = relations!['client-server-api'] as ApiRelation;
         expect(uses.kind).toBe('uses');
@@ -81,7 +103,7 @@ describe('ApiUsageScanner over the example apps', () => {
     });
 
     it('classifies server2 as a pure implementer of server2-api', () => {
-        const relations = result.relationsByProject.get('server2');
+        const relations = approved.get('server2');
         expect(relations).toBeDefined();
         const impl = relations!['server2-api'] as ApiRelation;
         expect(impl.kind).toBe('implements');
@@ -89,34 +111,26 @@ describe('ApiUsageScanner over the example apps', () => {
     });
 });
 
-/**
- * The client config argument names WHICH service a client talks to. Dropping it is what forced the
- * runtime graph to fan an edge out to every implementer of a contract; keeping it makes the edge
- * single-target. A non-literal config keeps the field ABSENT — "unknown", not "none" — so the graph
- * knows to fall back rather than guess.
- */
-describe('ApiUsageScanner — the target service at the call site', () => {
-    const result = new ApiUsageScanner(WORKSPACE_ROOT, exampleProjects()).scan();
+describe('approved wiring — explicit targets replace legacy config inference', () => {
+    const relations = approvedExampleRelations();
 
-    it('records the service named by a `new ClientConfig(...)` literal', () => {
-        const uses = result.relationsByProject.get('client-server')!['server2-api'] as ApiRelation;
+    it('retains the Node client destination', () => {
+        const uses = relations.get('client-server')!['server2-api'] as ApiRelation;
         expect(uses.uses[0].api).toBe('Server2Api');
         expect(uses.uses[0].targetService).toBe('server2');
     });
 
-    it('records nothing when the config is a variable (angular-site passes one in)', () => {
-        const uses = result.relationsByProject.get('angular-site')![
-            'client-server-api'
-        ] as ApiRelation;
-        expect(uses.uses.length).toBeGreaterThan(0);
-        for (const ref of uses.uses) expect(ref.targetService).toBeUndefined();
+    it('retains the Angular destination without false fan-out to legacy-server', () => {
+        const uses = relations.get('angular-site')!['client-server-api'] as ApiRelation;
+        expect(apiNames(uses.uses)).toEqual(['PublicApi', 'SaveApi']);
+        for (const ref of uses.uses) expect(ref.targetService).toBe('client-server');
     });
 });
 
 describe('ApiUsageScanner — project-coverage edge cases', () => {
     const result = new ApiUsageScanner(WORKSPACE_ROOT, exampleProjects()).scan();
 
-    it('scans legacy-server via the src-glob fallback (solution-style tsconfig) and finds its implements', () => {
+    it('scans legacy-server through its configured app program and finds its implements', () => {
         expect(result.scannedProjects.has('legacy-server')).toBe(true);
         const relations = result.relationsByProject.get('legacy-server');
         expect(relations).toBeDefined();

@@ -16,3 +16,20 @@ export class Server2Routes implements RouteModule {
         router.addRoutes(Server2Api, Server2Controller);
     }
 }
+
+import { ContainerModule, ContainerModuleLoadOptions } from 'inversify';
+import { AUTH_CONFIG, ServerWiring, ServerWiringOptions } from '@webpieces/http-routing';
+import { CompanyAuthConfig } from '@webpieces/company-svc-core';
+
+export const Server2Bindings = new ContainerModule((options: ContainerModuleLoadOptions) => {
+    options.bind(AUTH_CONFIG).to(CompanyAuthConfig).inSingletonScope();
+});
+
+export class Server2Wiring {
+    getRuntimeWiring(): ServerWiring {
+        return new ServerWiring(
+            'server2',
+            new ServerWiringOptions([Server2Bindings], [new Server2Routes()]),
+        );
+    }
+}

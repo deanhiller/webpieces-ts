@@ -1,9 +1,8 @@
-import { ContainerModule, ContainerModuleLoadOptions } from 'inversify';
+import { ContainerModule } from 'inversify';
 import { AnyContextKey } from '@webpieces/core-util';
-import { AppModules, AUTH_CONFIG, RouteModule } from '@webpieces/http-routing';
-import { CompanyAuthConfig } from '@webpieces/company-svc-core';
+import { AppModules, RouteModule, ServerWiring } from '@webpieces/http-routing';
 import { CompanyHeaders } from '@webpieces/company-core';
-import { Server2Routes } from './Server2Routes';
+import { Server2Wiring } from './wiring';
 
 /**
  * Server2AppModules - server2's server-surface declaration ({@link AppModules}). server2 has no
@@ -21,16 +20,16 @@ export class Server2AppModules implements AppModules {
         return new Server2AppModules();
     }
 
+    getRuntimeWiring(): ServerWiring {
+        return new Server2Wiring().getRuntimeWiring();
+    }
+
     getBindingModules(): ContainerModule[] {
-        return [
-            new ContainerModule((options: ContainerModuleLoadOptions) => {
-                options.bind(AUTH_CONFIG).to(CompanyAuthConfig).inSingletonScope();
-            }),
-        ];
+        return this.getRuntimeWiring().options.bindingModules;
     }
 
     getRoutingModules(): RouteModule[] {
-        return [new Server2Routes()];
+        return this.getRuntimeWiring().options.routingModules;
     }
 
     getHeaders(): AnyContextKey[] {

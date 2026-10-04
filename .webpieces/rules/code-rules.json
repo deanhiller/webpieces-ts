@@ -96,7 +96,8 @@
     "turnOffRuleWhileOnBranch": null,
     "allowGlobs": [
       "architecture/dependencies.html",
-      "architecture/runtime-dependencies.html"
+      "architecture/runtime-dependencies.html",
+      "**/design.html"
     ]
   },
   "no-state-paths-in-templates": {

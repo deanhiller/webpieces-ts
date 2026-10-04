@@ -1,14 +1,7 @@
 import { ApplicationConfig, provideZoneChangeDetection } from '@angular/core';
 import { provideRouter } from '@angular/router';
 import { routes } from './app.routes';
-import {
-  ClientConfig,
-  ClientHttpBrowserFactory,
-  ClientRegistry,
-  MutableContextStore,
-} from '@webpieces/http-client-browser';
-import { EnvironmentConfig } from '../services/EnvironmentConfig';
-import { SaveApi, PublicApi } from '@webpieces/client-server-api';
+import { ApplicationBrowserWiring } from '../wiring';
 
 /**
  * Application configuration with dependency injection setup.
@@ -35,55 +28,10 @@ import { SaveApi, PublicApi } from '@webpieces/client-server-api';
  * ```
  */
 export const appConfig: ApplicationConfig = {
-  providers: [
-    provideZoneChangeDetection({ eventCoalescing: true }),
-    provideRouter(routes),
+    providers: [
+        provideZoneChangeDetection({ eventCoalescing: true }),
+        provideRouter(routes),
 
-    // Browser-side context store - inject this anywhere headers must be set
-    {
-      provide: MutableContextStore,
-      useValue: new MutableContextStore(),
-    },
-
-    // The ONE factory every client is built from - it carries the context transfer
-    {
-      provide: ClientHttpBrowserFactory,
-      useFactory: (store: MutableContextStore) => {
-        // The store is read through the GLOBAL HeaderRegistry (configured in main.ts at startup).
-        return new ClientHttpBrowserFactory(store);
-      },
-      deps: [MutableContextStore]
-    },
-
-    // Provide ClientConfig by svcName. Unregistered would resolve RELATIVE (same origin) and never
-    // throw — but the dev server is a different origin from the backend, so register the mapping
-    // (apiBaseUrl() already yields the right URL for localhost AND cloud). A mapping always wins.
-    {
-      provide: ClientConfig,
-      useFactory: (envConfig: EnvironmentConfig) => {
-        const svcName = 'client-server';
-        ClientRegistry.addUrlMapping(svcName, envConfig.apiBaseUrl());
-        return new ClientConfig(svcName);
-      },
-      deps: [EnvironmentConfig]
-    },
-
-    // Provide SaveApi client
-    {
-      provide: SaveApi,
-      useFactory: (factory: ClientHttpBrowserFactory, config: ClientConfig) => {
-        return factory.createRpcClient(SaveApi, config);
-      },
-      deps: [ClientHttpBrowserFactory, ClientConfig]
-    },
-
-    // Provide PublicApi client
-    {
-      provide: PublicApi,
-      useFactory: (factory: ClientHttpBrowserFactory, config: ClientConfig) => {
-        return factory.createRpcClient(PublicApi, config);
-      },
-      deps: [ClientHttpBrowserFactory, ClientConfig]
-    }
-  ]
+        ...new ApplicationBrowserWiring().getRuntimeWiring().toProviders(),
+    ],
 };

@@ -1,4 +1,10 @@
-import { RouteModule, WebpiecesRouter, FilterDefinition } from '@webpieces/http-routing';
+import {
+    RouteModule,
+    WebpiecesRouter,
+    FilterDefinition,
+    ServerWiring,
+    ServerWiringOptions,
+} from '@webpieces/http-routing';
 import { RecordingFilter } from '@webpieces/http-server';
 import { SaveApi, PublicApi, SecureApi } from '@webpieces/client-server-api';
 import { SaveController } from './controllers/save-controller';
@@ -19,5 +25,27 @@ export class AppRoutes implements RouteModule {
         router.addRoutes(SaveApi, SaveController);
         router.addRoutes(PublicApi, PublicController);
         router.addRoutes(SecureApi, SecureController);
+    }
+}
+
+import { ContainerModule, ContainerModuleLoadOptions } from 'inversify';
+import { RuntimeClients, rpcTarget } from '@webpieces/http-client-node';
+import { Server2Api, TYPES } from './remote/Server2Client';
+import { InversifyModule } from './modules/InversifyModule';
+
+export const RuntimeClientsModule = new ContainerModule((options: ContainerModuleLoadOptions) => {
+    new RuntimeClients(options).bindRpc(
+        TYPES.Server2Api,
+        Server2Api,
+        rpcTarget(Server2Api, 'server2'),
+    );
+});
+
+export class ClientServerWiring {
+    getRuntimeWiring(): ServerWiring {
+        return new ServerWiring(
+            'client-server',
+            new ServerWiringOptions([InversifyModule, RuntimeClientsModule], [new AppRoutes()]),
+        );
     }
 }
