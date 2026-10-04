@@ -192,7 +192,10 @@ rewrites saved JSON or runtime visibility settings.
 A page has one active filter. Every surviving node menu and the visible indicator
 naming the anchor offer **Turn off Filter**. Turn it off before choosing another
 anchor. Hover, Escape and outside clicks leave filtering active. Lock is independent:
-architecture Lock still highlights its full chain and filters responsibilities to
+architecture Lock pins its full chain in the foreground. Hover adds its own chain
+temporarily without dimming any locked node or edge; leaving removes only that
+temporary highlight. The locked box keeps an amber outline while hovering another box.
+Lock filters responsibilities to
 the intersection with the retained nodes; runtime Lock still focuses one box. A
 locked node hidden by filtering keeps its selection without dimming the whole graph.
 Clearing the filter restores the original full layout and Lock. Reloading clears

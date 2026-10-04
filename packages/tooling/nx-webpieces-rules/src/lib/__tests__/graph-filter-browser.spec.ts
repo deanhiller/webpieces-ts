@@ -8,6 +8,7 @@ import { generateRuntimeRenderModel } from '../runtime-visualizer';
 import { loadBlessedGraph } from '../graph-loader';
 import { ResponsibilitiesRenderer } from '../graph-responsibilities';
 import type { EnhancedGraph } from '../graph-sorter';
+import type { GraphRenderModel, RenderEdge } from '../graph-render-model';
 
 /** Opt-in real-browser suite: supply the page's pinned Viz UMD file and installed Chromium. */
 class BrowserFixture {
@@ -98,12 +99,161 @@ Viz.instance = async () => {
     async row(page: Page, id: string): Promise<number> {
         return Number(await this.node(page, id).locator('text').first().getAttribute('y'));
     }
+
+    async foreground(page: Page, model: GraphRenderModel, nodes: Set<string>): Promise<void> {
+        expect(await this.names(page, '#graph g.node.wp-neighbor')).toEqual([...nodes].sort());
+        const expected = model.edges
+            .filter((edge: RenderEdge) => nodes.has(edge.from) && nodes.has(edge.to))
+            .map((edge: RenderEdge) => edge.id)
+            .sort();
+        expect(
+            await page
+                .locator('#graph g.edge.wp-hl')
+                .evaluateAll((edges: Element[]) => edges.map((edge: Element) => edge.id).sort()),
+        ).toEqual(expected);
+        await expect
+            .poll(() =>
+                page
+                    .locator('#graph .wp-neighbor, #graph .wp-hl')
+                    .evaluateAll((elements: Element[]) =>
+                        elements.every(
+                            (element: Element) => getComputedStyle(element).opacity === '1',
+                        ),
+                    ),
+            )
+            .toBe(true);
+    }
+
+    async cards(page: Page): Promise<string[]> {
+        return page
+            .locator('.wp-resp-card:not(.wp-hidden)')
+            .evaluateAll((cards: Element[]) =>
+                cards.map((card: Element) => card.getAttribute('data-node')!).sort(),
+            );
+    }
 }
 
 const fixture = new BrowserFixture();
 describe.skipIf(!process.env.WP_GRAPH_VIZ_JS)('real Viz local-file filtering', () => {
     beforeAll(() => fixture.start());
     afterAll(async () => fixture.browser?.close());
+
+    it('pins all locked nodes and edges during both reported hover chains', async () => {
+        const graph = loadBlessedGraph(process.cwd())!.projects;
+        const model = fixture.viz.generateRenderModel(graph);
+        const chain = FilterFixture.api().chain(model);
+        const locked = chain.nodes('code-rules');
+        const page = await fixture.open('1127-lock-hover', fixture.architecture(graph));
+        await page.selectOption('#wp-lock', 'code-rules');
+        await fixture.foreground(page, model, locked);
+        const cards = await fixture.cards(page);
+        await fixture.snapshot(page, '1127-lock-before');
+        for (const hovered of ['nx-webpieces-rules', 'api-doc-model', 'openapi-generator']) {
+            await fixture.node(page, hovered).hover();
+            await fixture.foreground(page, model, new Set([...locked, ...chain.nodes(hovered)]));
+            expect(await fixture.names(page, '#graph g.node.wp-focus')).toEqual(
+                ['code-rules', hovered].sort(),
+            );
+            expect(await page.locator('#wp-lock').inputValue()).toBe('code-rules');
+            expect(await fixture.names(page, '#graph g.node.wp-locked')).toEqual(['code-rules']);
+            expect(await fixture.node(page, 'code-rules').locator('polygon').first().evaluate(
+                (shape: SVGElement) => getComputedStyle(shape).stroke,
+            )).toBe('rgb(178, 106, 0)');
+            expect(await fixture.cards(page)).toEqual(cards);
+            await fixture.snapshot(page, `1127-hover-${hovered}`);
+            await page.mouse.move(0, 0);
+            await fixture.foreground(page, model, locked);
+            expect(await fixture.names(page, '#graph g.node.wp-focus')).toEqual(['code-rules']);
+            await fixture.snapshot(page, `1127-leave-${hovered}`);
+        }
+        await page.close();
+    });
+
+    it('recomposes Lock changes and unlock while the pointer stays over a node', async () => {
+        const graph = loadBlessedGraph(process.cwd())!.projects;
+        const model = fixture.viz.generateRenderModel(graph);
+        const chain = FilterFixture.api().chain(model);
+        const page = await fixture.open('1127-lock-changes', fixture.architecture(graph));
+        await fixture.node(page, 'api-doc-model').hover();
+        for (const locked of ['code-rules', 'nx-webpieces-rules', '']) {
+            // selectOption changes the control without moving the pointer off the hovered box.
+            await page.selectOption('#wp-lock', locked);
+            await fixture.foreground(
+                page,
+                model,
+                new Set([...chain.nodes('api-doc-model'), ...chain.nodes(locked)]),
+            );
+            expect(await fixture.names(page, '#graph g.node.wp-focus')).toEqual(
+                (locked === '' ? ['api-doc-model'] : ['api-doc-model', locked]).sort(),
+            );
+        }
+        await page.mouse.move(0, 0);
+        expect(await page.locator('#graph svg').getAttribute('class')).not.toContain('wp-dim');
+        await fixture.node(page, 'code-rules').locator('text').first().click();
+        await page
+            .locator('#wp-node-menu')
+            .getByRole('button', { name: 'Lock', exact: true })
+            .click();
+        await page.mouse.move(0, 0);
+        expect(await page.locator('#wp-lock').inputValue()).toBe('code-rules');
+        await fixture.node(page, 'code-rules').locator('text').first().click();
+        await page
+            .locator('#wp-node-menu')
+            .getByRole('button', { name: 'Unlock', exact: true })
+            .click();
+        expect(await page.locator('#wp-lock').inputValue()).toBe('');
+        expect(await fixture.names(page, '#graph g.node.wp-locked')).toEqual([]);
+        await page.close();
+    });
+
+    it('suspends hidden Lock chains during hover and restores Lock after repeated redraws', async () => {
+        const graph = FilterFixture.wide();
+        const model = fixture.viz.generateRenderModel(graph);
+        const chain = FilterFixture.api().chain(model);
+        const page = await fixture.open('1127-filter-hover', fixture.architecture(graph));
+        await page.selectOption('#wp-lock', 'code-rules');
+        for (let round = 0; round < 2; round++) {
+            await fixture.filter(page, 'hook-runtime');
+            const retained = await fixture.names(page);
+            const cards = await fixture.cards(page);
+            await fixture.node(page, 'pr-gate').hover();
+            const hover = new Set(
+                [...chain.nodes('pr-gate')].filter((id: string) => retained.includes(id)),
+            );
+            await fixture.foreground(page, model, hover);
+            expect(await fixture.names(page)).toEqual(retained);
+            expect(await fixture.cards(page)).toEqual(cards);
+            expect(await fixture.names(page, '#graph g.node.wp-focus')).toEqual(['pr-gate']);
+            await page.mouse.move(0, 0);
+            expect(await page.locator('#graph svg').getAttribute('class')).not.toContain('wp-dim');
+            await page.locator('#wp-filter-off').click();
+            await fixture.foreground(page, model, chain.nodes('code-rules'));
+            expect(await fixture.names(page, '#graph g.node.wp-focus')).toEqual(['code-rules']);
+        }
+        await page.selectOption('#wp-lock', 'pr-gate');
+        await fixture.filter(page, 'hook-runtime');
+        const retained = await fixture.names(page);
+        const rows = await Promise.all(retained.map((id: string) => fixture.row(page, id)));
+        const cards = await fixture.cards(page);
+        await fixture.node(page, 'ai-hook-rules').hover();
+        const union = new Set(
+            [...chain.nodes('pr-gate'), ...chain.nodes('ai-hook-rules')].filter((id: string) =>
+                retained.includes(id),
+            ),
+        );
+        await fixture.foreground(page, model, union);
+        expect(await fixture.cards(page)).toEqual(cards);
+        expect(await Promise.all(retained.map((id: string) => fixture.row(page, id)))).toEqual(
+            rows,
+        );
+        await page.mouse.move(0, 0);
+        await fixture.foreground(
+            page,
+            model,
+            new Set([...chain.nodes('pr-gate')].filter((id: string) => retained.includes(id))),
+        );
+        await page.close();
+    });
 
     it('compacts real architecture ranks, preserves hidden Lock/cards and restores repeated rounds', async () => {
         const page = await fixture.open(

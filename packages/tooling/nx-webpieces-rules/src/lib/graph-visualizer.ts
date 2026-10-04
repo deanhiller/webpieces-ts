@@ -455,6 +455,9 @@ export class GraphVisualizer {
          * shared verbatim with the per-project design pages. */
         ${this.nodeMenu.styles()}
         ${this.nodeMenu.dimStyles('#graph')}
+        #graph g.node.wp-locked polygon,
+        #graph g.node.wp-locked ellipse,
+        #graph g.node.wp-locked path { stroke: #b26a00; stroke-width: 3; }
         #graph {
             text-align: center;
             background: white;

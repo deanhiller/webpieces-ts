@@ -1,6 +1,7 @@
 /** Architecture interactions bind to each new SVG; logical Lock/Filter state belongs to the page. */
 class GraphHighlighter {
     private readonly nodeByName = new Map<string, SVGGElement>();
+    private hovered: string | null = null;
 
     constructor(
         private readonly svg: SVGSVGElement,
@@ -22,18 +23,28 @@ class GraphHighlighter {
 
     private clear(): void {
         this.svg.classList.remove('wp-dim');
-        this.svg.querySelectorAll('.wp-focus, .wp-neighbor, .wp-hl').forEach((el) => {
-            el.classList.remove('wp-focus', 'wp-neighbor', 'wp-hl');
+        this.svg.querySelectorAll('.wp-focus, .wp-neighbor, .wp-hl, .wp-locked').forEach((el: Element) => {
+            el.classList.remove('wp-focus', 'wp-neighbor', 'wp-hl', 'wp-locked');
         });
     }
 
-    private highlight(name: string): void {
+    relight(): void {
         this.clear();
-        const focus = this.nodeByName.get(name);
-        if (focus === undefined) return;
-        const lit = this.chain.nodes(name);
+        const locked = this.page.lockSelection();
+        if (locked !== null) this.nodeByName.get(locked)?.classList.add('wp-locked');
+        // A filtered-out Lock is suspended, including its otherwise visible relatives.
+        const anchors = [locked, this.hovered].filter(
+            (name: string | null): name is string => name !== null && this.nodeByName.has(name),
+        );
+        if (anchors.length === 0) return;
+        const lit = new Set<string>();
+        for (const name of anchors) {
+            this.nodeByName.get(name)?.classList.add('wp-focus');
+            for (const id of this.chain.nodes(name)) {
+                if (this.nodeByName.has(id)) lit.add(id);
+            }
+        }
         this.svg.classList.add('wp-dim');
-        focus.classList.add('wp-focus');
         for (const id of lit) this.nodeByName.get(id)?.classList.add('wp-neighbor');
         for (const edge of this.model.edges) {
             if (lit.has(edge.from) && lit.has(edge.to)) {
@@ -42,16 +53,16 @@ class GraphHighlighter {
         }
     }
 
-    relight(): void {
-        const locked = this.page.lockSelection();
-        if (locked === null) this.clear();
-        else this.highlight(locked);
-    }
-
     private wireHover(): void {
-        this.nodeByName.forEach((g, name) => {
-            g.addEventListener('mouseenter', () => this.highlight(name));
-            g.addEventListener('mouseleave', () => this.relight());
+        this.nodeByName.forEach((g: SVGGElement, name: string) => {
+            g.addEventListener('mouseenter', () => {
+                this.hovered = name;
+                this.relight();
+            });
+            g.addEventListener('mouseleave', () => {
+                this.hovered = null;
+                this.relight();
+            });
         });
     }
 

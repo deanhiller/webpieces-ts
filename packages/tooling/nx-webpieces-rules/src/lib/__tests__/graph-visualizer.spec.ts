@@ -359,6 +359,9 @@ describe('generateHTML', () => {
         expect(html).toContain('wireHover');
         expect(html).toContain('mouseenter');
         expect(html).toContain('mouseleave');
+        expect(html).toContain('this.hovered = name');
+        expect(html).toContain('this.hovered = null');
+        expect(html).toContain('[locked, this.hovered]');
         // The hover-highlight CSS classes the script toggles.
         expect(html).toContain('wp-hl');
         expect(html).toContain('wp-neighbor');
