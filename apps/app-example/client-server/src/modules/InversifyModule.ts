@@ -1,10 +1,9 @@
-import { ContainerModule, ContainerModuleLoadOptions, ResolutionContext } from 'inversify';
+import { ContainerModule, ContainerModuleLoadOptions } from 'inversify';
 import { Counter, SimpleCounter } from '../controllers/save-controller';
-import { Server2Api, TYPES } from '../remote/Server2Client';
+import { TYPES } from '../remote/Server2Client';
 import { ContextKey, AnyContextKey, Secrets, SECRETS } from '@webpieces/core-util';
 import { AUTH_CONFIG, JWT_HOOK } from '@webpieces/http-routing';
 import { CompanyAuthConfig, CompanyJwtHook } from '@webpieces/company-svc-core';
-import { ClientHttpFactory, ClientConfig } from '@webpieces/http-client-node';
 
 /**
  * App-specific headers unique to this application.
@@ -63,23 +62,4 @@ export const InversifyModule = new ContainerModule((options: ContainerModuleLoad
     // path (so tests stay parallel-safe). Rotate a client by changing its value here.
     const secrets = new Secrets({ INTERNAL_API_SECRET: process.env['INTERNAL_API_SECRET'] });
     bind(SECRETS).toConstantValue(secrets); // injected into the Cloud Tasks invokers
-
-    // PROD binding: Server2Api is a REAL HTTP client to the server2 service.
-    //
-    // ClientHttpFactory is a framework singleton, so we just resolve it. Every client it builds
-    // reads this server's RequestContext (magic context: correlation id, tenant, request-id
-    // chain) and is backed by the SAME Secrets bound above — an @WpAuthSharedSecret endpoint sends
-    // secrets.get(key). Nothing here calls an @WpAuthOidc endpoint; a client for one would mint
-    // tokens via gcp-identity automatically.
-    //
-    // 'server2' is the Cloud Run service name. On GCP the URL is derived from it; locally it is
-    // resolved via the ClientRegistry, which the server registers at startup (server.ts).
-    // Tests rebind this token to a mock/simulator.
-    bind<Server2Api>(TYPES.Server2Api)
-        .toDynamicValue((ctx: ResolutionContext) => {
-            return ctx
-                .get(ClientHttpFactory)
-                .createRpcClient(Server2Api, new ClientConfig('server2'));
-        })
-        .inSingletonScope();
 });

@@ -9,7 +9,22 @@
             "options": {
                 "command": "vitest run apps/app-example/legacy-server/"
             }
+        },
+        "build": {
+            "executor": "@nx/js:tsc",
+            "outputs": ["{options.outputPath}"],
+            "options": {
+                "outputPath": "dist/apps/app-example/legacy-server",
+                "main": "apps/app-example/legacy-server/src/server.ts",
+                "tsConfig": "apps/app-example/legacy-server/tsconfig.app.json",
+                "assets": []
+            }
         }
     },
-    "tags": ["framework:express", "role:server"]
+    "tags": ["framework:express", "role:server", "webpieces"],
+    "metadata": {
+        "webpieces": {
+            "serviceName": "legacy-server"
+        }
+    }
 }

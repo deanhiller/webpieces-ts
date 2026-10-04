@@ -1,7 +1,7 @@
 {
     "aiInstructions": "Each project's shortDescription is only a summary. BEFORE adding code to a project, read its responsibilitiesFile for the full responsibilities (what belongs in that project and what does not), and read its designFile to understand the DI design before reading the code. Use the entries in `commands` to regenerate these files or display any of the graphs in a browser. To hide a project (its box AND every edge touching it) from BOTH rendered architecture graphs, add the nx tag 'drawOnGraph:false' to that project's project.json tags and regenerate; it stays in this file (marked \"drawOnGraph\": false) but is omitted from the HTML. A role:server with no webpiecesRuntime package anywhere in its dependency closure and no apiRelations is omitted from the RUNTIME drawing the same way — it speaks none of the webpieces runtime, so it can only ever draw as a disconnected box; it stays in both JSON files. An API's endpoints (name, kind, path, httpMethod, parameters, queueName, caller) are NOT in this file: `apiContractFiles` maps each API to its generated contract file, apis/<ApiName>.json relative to this file — read that file for the API's endpoints.",
     "commands": {
-        "regenerateArchitecture": "pnpm nx run architecture:generate — rewrites architecture/dependencies.json, architecture/apis/<ApiName>.json and architecture/runtime-dependencies.json; run after adding/removing project dependencies or changing an API's endpoints",
+        "regenerateArchitecture": "pnpm nx run architecture:generate — rewrites architecture/dependencies.json, architecture/apis/<ApiName>.json and architecture/runtime-dependencies.json; run after reviewing project runtime-deps.json and API contract candidates into architecture/apis; generation reads approvals and never approves endpoint changes",
         "visualizeArchitecture": "pnpm nx run architecture:visualize — opens the monorepo dependency graph (this file) as HTML in a browser from saved data, without refreshing; freshness unknown",
         "visualizeRuntimeArchitecture": "pnpm nx run architecture:visualize-runtime — opens the runtime microservice call graph as HTML in a browser from saved data, without refreshing; freshness unknown",
         "regenerateDesigns": "pnpm nx run-many --target=di-graph-generate — rewrites every project's design.json/design.md (also runs automatically on every build)",
@@ -49,16 +49,20 @@
                     "implements": [],
                     "uses": [
                         {
-                            "api": "PublicApi",
-                            "type": "rpc"
+                            "api": "SaveApi",
+                            "type": "rpc",
+                            "targetService": "client-server"
                         },
                         {
-                            "api": "SaveApi",
-                            "type": "rpc"
+                            "api": "PublicApi",
+                            "type": "rpc",
+                            "targetService": "client-server"
                         }
                     ]
                 }
             },
+            "runtimeDeclaration": "apps/app-example/angular-site/runtime-deps.json",
+            "runtimeComposition": true,
             "dependsOn": [
                 "client-server-api",
                 "company-core",
@@ -106,24 +110,6 @@
             "responsibilitiesFile": "apps/app-example/client-server/responsibilities.md",
             "designFile": "apps/app-example/client-server/design.json",
             "apiRelations": {
-                "client-server-api": {
-                    "kind": "implements",
-                    "implements": [
-                        {
-                            "api": "PublicApi",
-                            "type": "rpc"
-                        },
-                        {
-                            "api": "SaveApi",
-                            "type": "rpc"
-                        },
-                        {
-                            "api": "SecureApi",
-                            "type": "rpc"
-                        }
-                    ],
-                    "uses": []
-                },
                 "server2-api": {
                     "kind": "uses",
                     "implements": [],
@@ -134,8 +120,28 @@
                             "targetService": "server2"
                         }
                     ]
+                },
+                "client-server-api": {
+                    "kind": "implements",
+                    "implements": [
+                        {
+                            "api": "SaveApi",
+                            "type": "rpc"
+                        },
+                        {
+                            "api": "PublicApi",
+                            "type": "rpc"
+                        },
+                        {
+                            "api": "SecureApi",
+                            "type": "rpc"
+                        }
+                    ],
+                    "uses": []
                 }
             },
+            "runtimeDeclaration": "apps/app-example/client-server/runtime-deps.json",
+            "runtimeComposition": true,
             "dependsOn": [
                 "client-server-api",
                 "company-svc-core",
@@ -330,23 +336,11 @@
             "level": 6,
             "framework": ["express"],
             "role": "server",
+            "serviceName": "legacy-server",
             "shortDescription": "Example of INCREMENTAL webpieces adoption: a pre-existing express app (own routes, untouched) with the webpieces api → filters → controller pipeline bolted on via `WebpiecesRouteCreator`, using the SAME shared `setupCompanyRuntime` startup as the greenfield server. Proven by an integration test.",
             "responsibilitiesFile": "apps/app-example/legacy-server/responsibilities.md",
+            "designFile": "apps/app-example/legacy-server/design.json",
             "apiRelations": {
-                "client-server-api": {
-                    "kind": "implements",
-                    "implements": [
-                        {
-                            "api": "PublicApi",
-                            "type": "rpc"
-                        },
-                        {
-                            "api": "SaveApi",
-                            "type": "rpc"
-                        }
-                    ],
-                    "uses": []
-                },
                 "server2-api": {
                     "kind": "uses",
                     "implements": [],
@@ -357,8 +351,24 @@
                             "targetService": "server2"
                         }
                     ]
+                },
+                "client-server-api": {
+                    "kind": "implements",
+                    "implements": [
+                        {
+                            "api": "SaveApi",
+                            "type": "rpc"
+                        },
+                        {
+                            "api": "PublicApi",
+                            "type": "rpc"
+                        }
+                    ],
+                    "uses": []
                 }
             },
+            "runtimeDeclaration": "apps/app-example/legacy-server/runtime-deps.json",
+            "runtimeComposition": true,
             "dependsOn": [
                 "client-server-api",
                 "company-svc-core",
@@ -479,6 +489,8 @@
                     "uses": []
                 }
             },
+            "runtimeDeclaration": "apps/app-example/server2/runtime-deps.json",
+            "runtimeComposition": true,
             "dependsOn": [
                 "company-svc-core",
                 "server2-api"

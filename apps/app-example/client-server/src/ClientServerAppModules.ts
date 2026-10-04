@@ -1,9 +1,9 @@
 import { ContainerModule } from 'inversify';
 import { ContextKey, AnyContextKey } from '@webpieces/core-util';
-import { AppModules, RouteModule } from '@webpieces/http-routing';
+import { AppModules, RouteModule, ServerWiring } from '@webpieces/http-routing';
 import { CompanyHeaders } from '@webpieces/company-core';
-import { InversifyModule, AppHeaders } from './modules/InversifyModule';
-import { AppRoutes } from './AppRoutes';
+import { AppHeaders } from './modules/InversifyModule';
+import { ClientServerWiring } from './wiring';
 
 /**
  * ClientServerAppModules - this app's COMPLETE server-surface declaration ({@link AppModules}):
@@ -19,12 +19,16 @@ export class ClientServerAppModules implements AppModules {
         return new ClientServerAppModules();
     }
 
+    getRuntimeWiring(): ServerWiring {
+        return new ClientServerWiring().getRuntimeWiring();
+    }
+
     getBindingModules(): ContainerModule[] {
-        return [InversifyModule];
+        return this.getRuntimeWiring().options.bindingModules;
     }
 
     getRoutingModules(): RouteModule[] {
-        return [new AppRoutes()];
+        return this.getRuntimeWiring().options.routingModules;
     }
 
     getHeaders(): AnyContextKey[] {

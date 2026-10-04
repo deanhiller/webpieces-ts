@@ -6,7 +6,7 @@
             "root": "AppComponent",
             "rootKind": "component",
             "file": "apps/app-example/angular-site/src/app/app.component.ts",
-            "maxLevel": 3,
+            "maxLevel": 1,
             "nodes": [
                 {
                     "id": "AppComponent",
@@ -17,57 +17,30 @@
                     "level": 0
                 },
                 {
-                    "id": "ClientConfig",
-                    "className": "ClientConfig",
-                    "kind": "dynamic",
-                    "scope": "singleton",
-                    "file": "apps/app-example/angular-site/src/app/app.config.ts",
-                    "level": 2,
-                    "detail": "ClientConfig (dynamic)"
-                },
-                {
-                    "id": "ClientHttpBrowserFactory",
-                    "className": "ClientHttpBrowserFactory",
-                    "kind": "dynamic",
-                    "scope": "singleton",
-                    "file": "apps/app-example/angular-site/src/app/app.config.ts",
-                    "level": 2,
-                    "detail": "ClientHttpBrowserFactory (dynamic)"
-                },
-                {
                     "id": "EnvironmentConfig",
                     "className": "EnvironmentConfig",
                     "kind": "class",
                     "scope": "singleton",
                     "file": "apps/app-example/angular-site/src/services/EnvironmentConfig.ts",
-                    "level": 3
-                },
-                {
-                    "id": "MutableContextStore",
-                    "className": "MutableContextStore",
-                    "kind": "constant",
-                    "scope": "singleton",
-                    "file": "apps/app-example/angular-site/src/app/app.config.ts",
-                    "level": 3,
-                    "detail": "new MutableContextStore()"
+                    "level": 1
                 },
                 {
                     "id": "PublicApi",
                     "className": "PublicApi",
-                    "kind": "dynamic",
+                    "kind": "api",
                     "scope": "singleton",
-                    "file": "apps/app-example/angular-site/src/app/app.config.ts",
+                    "file": "apps/app-example/angular-site/src/wiring.ts",
                     "level": 1,
-                    "detail": "PublicApi (dynamic)"
+                    "detail": "PublicApi (api client)"
                 },
                 {
                     "id": "SaveApi",
                     "className": "SaveApi",
-                    "kind": "dynamic",
+                    "kind": "api",
                     "scope": "singleton",
-                    "file": "apps/app-example/angular-site/src/app/app.config.ts",
+                    "file": "apps/app-example/angular-site/src/wiring.ts",
                     "level": 1,
-                    "detail": "SaveApi (dynamic)"
+                    "detail": "SaveApi (api client)"
                 }
             ],
             "edges": [
@@ -97,60 +70,6 @@
                     "tokenKey": "class:apps/app-example/client-server-api/src/SaveApi.ts#SaveApi",
                     "paramName": "saveApi",
                     "paramType": "SaveApi"
-                },
-                {
-                    "from": "ClientConfig",
-                    "to": "EnvironmentConfig",
-                    "injection": "type",
-                    "token": "EnvironmentConfig",
-                    "tokenKey": "class:apps/app-example/angular-site/src/services/EnvironmentConfig.ts#EnvironmentConfig",
-                    "paramName": "EnvironmentConfig",
-                    "paramType": "EnvironmentConfig"
-                },
-                {
-                    "from": "ClientHttpBrowserFactory",
-                    "to": "MutableContextStore",
-                    "injection": "type",
-                    "token": "MutableContextStore",
-                    "tokenKey": "class:packages/http/http-client-browser/src/MutableContextStore.ts#MutableContextStore",
-                    "paramName": "MutableContextStore",
-                    "paramType": "MutableContextStore"
-                },
-                {
-                    "from": "PublicApi",
-                    "to": "ClientConfig",
-                    "injection": "type",
-                    "token": "ClientConfig",
-                    "tokenKey": "class:packages/http/http-client-browser/src/ClientConfig.ts#ClientConfig",
-                    "paramName": "ClientConfig",
-                    "paramType": "ClientConfig"
-                },
-                {
-                    "from": "PublicApi",
-                    "to": "ClientHttpBrowserFactory",
-                    "injection": "type",
-                    "token": "ClientHttpBrowserFactory",
-                    "tokenKey": "class:packages/http/http-client-browser/src/ClientHttpBrowserFactory.ts#ClientHttpBrowserFactory",
-                    "paramName": "ClientHttpBrowserFactory",
-                    "paramType": "ClientHttpBrowserFactory"
-                },
-                {
-                    "from": "SaveApi",
-                    "to": "ClientConfig",
-                    "injection": "type",
-                    "token": "ClientConfig",
-                    "tokenKey": "class:packages/http/http-client-browser/src/ClientConfig.ts#ClientConfig",
-                    "paramName": "ClientConfig",
-                    "paramType": "ClientConfig"
-                },
-                {
-                    "from": "SaveApi",
-                    "to": "ClientHttpBrowserFactory",
-                    "injection": "type",
-                    "token": "ClientHttpBrowserFactory",
-                    "tokenKey": "class:packages/http/http-client-browser/src/ClientHttpBrowserFactory.ts#ClientHttpBrowserFactory",
-                    "paramName": "ClientHttpBrowserFactory",
-                    "paramType": "ClientHttpBrowserFactory"
                 }
             ],
             "unresolved": []

@@ -27,7 +27,7 @@ graph TD
 ```mermaid
 graph TD
     SaveController["SaveController"]:::controller
-    Server2Api(["Server2Api"])
+    Server2Api[["Server2Api"]]:::api
     SimpleCounter["Counter<br/>(SimpleCounter)"]
     SaveController --> Server2Api
     SaveController --> SimpleCounter

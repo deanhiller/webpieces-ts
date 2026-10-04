@@ -2,7 +2,7 @@
 <html>
 <head>
     <meta charset="utf-8">
-    <title>DI Designs — angular-site</title>
+    <title>DI Designs — legacy-server</title>
     <script src="https://cdn.jsdelivr.net/npm/viz.js@2.1.2/viz.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/viz.js@2.1.2/full.render.js"></script>
     <style>
@@ -80,7 +80,7 @@
 </head>
 <body>
     <p class="back"><a href="../../../architecture/dependencies.html">← Back to architecture graph</a></p>
-    <h1>DI Designs — angular-site</h1>
+    <h1>DI Designs — legacy-server</h1>
     <p class="hint">💡 <strong>Click any box</strong> for its menu — <strong>Lock</strong> dims every other box in that graph so one class stands alone; <strong>Unlock</strong> restores it.</p>
     <div class="legend">
         <h2>Legend</h2>
@@ -104,9 +104,14 @@
             Edge labels are injection tokens; unlabeled edges are inject-by-type.</em></div>
     </div>
     <div class="section">
-        <h2>AppComponent — component, Level 0…1</h2>
-        <div class="meta">apps/app-example/angular-site/src/app/app.component.ts</div>
+        <h2>PublicController — controller, Level 0…0</h2>
+        <div class="meta">apps/app-example/legacy-server/src/controllers/public-controller.ts</div>
         <div id="graph-0" class="graph"></div>
+    </div>
+    <div class="section">
+        <h2>SaveController — controller, Level 0…1</h2>
+        <div class="meta">apps/app-example/legacy-server/src/controllers/save-controller.ts</div>
+        <div id="graph-1" class="graph"></div>
     </div>
     <script>
         class WpNodeMenuItem {
@@ -222,7 +227,7 @@
             if (ev.key === 'Escape') WpNodeMenu.close();
         });</script>
     <script>
-        const graphs = [{"id":"graph-0","dot":"digraph \"AppComponent\" {\n  rankdir=TB;\n  node [shape=box, fontname=\"Arial\"];\n  edge [fontname=\"Arial\", fontsize=11];\n\n  \"AppComponent\" [fillcolor=\"#E8F5E9\", style=\"filled\", label=\"AppComponent\\n(L0, transient)\", penwidth=2];\n  \"EnvironmentConfig\" [fillcolor=\"#F5F5F5\", style=\"filled\", label=\"EnvironmentConfig\\n(L1, singleton)\"];\n  \"PublicApi\" [fillcolor=\"#E1F5FE\", style=\"filled,rounded,bold\", label=\"PublicApi\\n(L1, singleton)\", penwidth=2, peripheries=2];\n  \"SaveApi\" [fillcolor=\"#E1F5FE\", style=\"filled,rounded,bold\", label=\"SaveApi\\n(L1, singleton)\", penwidth=2, peripheries=2];\n\n  { rank=same; \"AppComponent\"; }\n  { rank=same; \"EnvironmentConfig\"; \"PublicApi\"; \"SaveApi\"; }\n\n  \"AppComponent\" -> \"EnvironmentConfig\";\n  \"AppComponent\" -> \"PublicApi\";\n  \"AppComponent\" -> \"SaveApi\";\n\n  labelloc=\"t\";\n  label=\"AppComponent\\n(component, Level 0-1)\";\n  fontsize=16;\n}\n","stackedIds":["AppComponent"]}];
+        const graphs = [{"id":"graph-0","dot":"digraph \"PublicController\" {\n  rankdir=TB;\n  node [shape=box, fontname=\"Arial\"];\n  edge [fontname=\"Arial\", fontsize=11];\n\n  \"PublicController\" [fillcolor=\"#E3F2FD\", style=\"filled\", label=\"PublicController\\n(L0, singleton)\", penwidth=2];\n\n  { rank=same; \"PublicController\"; }\n\n\n  labelloc=\"t\";\n  label=\"PublicController\\n(controller, Level 0-0)\";\n  fontsize=16;\n}\n","stackedIds":[]},{"id":"graph-1","dot":"digraph \"SaveController\" {\n  rankdir=TB;\n  node [shape=box, fontname=\"Arial\"];\n  edge [fontname=\"Arial\", fontsize=11];\n\n  \"SaveController\" [fillcolor=\"#E3F2FD\", style=\"filled\", label=\"SaveController\\n(L0, singleton)\", penwidth=2];\n  \"Server2Api\" [fillcolor=\"#E1F5FE\", style=\"filled,rounded,bold\", label=\"Server2Api\\n(L1, singleton)\", penwidth=2, peripheries=2];\n  \"SimpleCounter\" [fillcolor=\"#F5F5F5\", style=\"filled\", label=\"Counter\\n(SimpleCounter)\\n(L1, singleton)\"];\n\n  { rank=same; \"SaveController\"; }\n  { rank=same; \"Server2Api\"; \"SimpleCounter\"; }\n\n  \"SaveController\" -> \"Server2Api\";\n  \"SaveController\" -> \"SimpleCounter\";\n\n  labelloc=\"t\";\n  label=\"SaveController\\n(controller, Level 0-1)\";\n  fontsize=16;\n}\n","stackedIds":[]}];
         
         function paintStacks(element, stackedIds) {
             const nodes = element.querySelectorAll('g.node');

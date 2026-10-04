@@ -1,11 +1,11 @@
 {
     "schemaVersion": 2,
-    "project": "client-server",
+    "project": "legacy-server",
     "designs": [
         {
             "root": "PublicController",
             "rootKind": "controller",
-            "file": "apps/app-example/client-server/src/controllers/public-controller.ts",
+            "file": "apps/app-example/legacy-server/src/controllers/public-controller.ts",
             "maxLevel": 0,
             "nodes": [
                 {
@@ -13,7 +13,7 @@
                     "className": "PublicController",
                     "kind": "controller",
                     "scope": "singleton",
-                    "file": "apps/app-example/client-server/src/controllers/public-controller.ts",
+                    "file": "apps/app-example/legacy-server/src/controllers/public-controller.ts",
                     "level": 0
                 }
             ],
@@ -23,7 +23,7 @@
         {
             "root": "SaveController",
             "rootKind": "controller",
-            "file": "apps/app-example/client-server/src/controllers/save-controller.ts",
+            "file": "apps/app-example/legacy-server/src/controllers/save-controller.ts",
             "maxLevel": 1,
             "nodes": [
                 {
@@ -31,7 +31,7 @@
                     "className": "SaveController",
                     "kind": "controller",
                     "scope": "singleton",
-                    "file": "apps/app-example/client-server/src/controllers/save-controller.ts",
+                    "file": "apps/app-example/legacy-server/src/controllers/save-controller.ts",
                     "level": 0
                 },
                 {
@@ -39,7 +39,7 @@
                     "className": "Server2Api",
                     "kind": "api",
                     "scope": "singleton",
-                    "file": "apps/app-example/client-server/src/wiring.ts",
+                    "file": "apps/app-example/legacy-server/src/wiring.ts",
                     "level": 1,
                     "detail": "TYPES.Server2Api (api client)"
                 },
@@ -48,7 +48,7 @@
                     "className": "SimpleCounter",
                     "kind": "class",
                     "scope": "singleton",
-                    "file": "apps/app-example/client-server/src/controllers/save-controller.ts",
+                    "file": "apps/app-example/legacy-server/src/controllers/save-controller.ts",
                     "level": 1,
                     "api": "Counter"
                 }
@@ -59,7 +59,7 @@
                     "to": "Server2Api",
                     "injection": "token",
                     "token": "TYPES.Server2Api",
-                    "tokenKey": "symbol.for:Server2Api",
+                    "tokenKey": "symbol.for:LegacyServer2Api",
                     "paramName": "remoteService",
                     "paramType": "Server2Api"
                 },
@@ -68,29 +68,11 @@
                     "to": "SimpleCounter",
                     "injection": "token",
                     "token": "TYPES.Counter",
-                    "tokenKey": "symbol.for:Counter",
+                    "tokenKey": "symbol.for:LegacyCounter",
                     "paramName": "counter",
                     "paramType": "Counter"
                 }
             ],
-            "unresolved": []
-        },
-        {
-            "root": "SecureController",
-            "rootKind": "controller",
-            "file": "apps/app-example/client-server/src/controllers/secure-controller.ts",
-            "maxLevel": 0,
-            "nodes": [
-                {
-                    "id": "SecureController",
-                    "className": "SecureController",
-                    "kind": "controller",
-                    "scope": "singleton",
-                    "file": "apps/app-example/client-server/src/controllers/secure-controller.ts",
-                    "level": 0
-                }
-            ],
-            "edges": [],
             "unresolved": []
         }
     ]

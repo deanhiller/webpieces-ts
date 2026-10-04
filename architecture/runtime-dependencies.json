@@ -9,8 +9,7 @@
                 "SaveApi"
             ],
             "dependsOn": [
-                "client-server",
-                "legacy-server"
+                "client-server"
             ]
         },
         "app-example-e2e": {
@@ -40,6 +39,7 @@
         "legacy-server": {
             "level": 1,
             "role": "server",
+            "serviceName": "legacy-server",
             "implements": [
                 "PublicApi",
                 "SaveApi"
@@ -109,15 +109,6 @@
         {
             "from": "angular-site",
             "to": "client-server",
-            "via": [
-                "PublicApi",
-                "SaveApi"
-            ],
-            "type": "rpc"
-        },
-        {
-            "from": "angular-site",
-            "to": "legacy-server",
             "via": [
                 "PublicApi",
                 "SaveApi"

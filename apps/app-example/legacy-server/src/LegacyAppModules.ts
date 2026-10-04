@@ -1,9 +1,9 @@
 import { ContainerModule } from 'inversify';
 import { ContextKey, AnyContextKey } from '@webpieces/core-util';
-import { AppModules, RouteModule, FilterDefinition } from '@webpieces/http-routing';
+import { AppModules, RouteModule, ServerWiring, FilterDefinition } from '@webpieces/http-routing';
 import { CompanyHeaders } from '@webpieces/company-core';
-import { InversifyModule, AppHeaders } from './modules/InversifyModule';
-import { LegacyRoutes } from './LegacyRoutes';
+import { AppHeaders } from './modules/InversifyModule';
+import { LegacyWiring } from './wiring';
 
 /**
  * LegacyAppModules - the legacy server's server-surface declaration ({@link AppModules}): its DI
@@ -19,12 +19,16 @@ export class LegacyAppModules implements AppModules {
         return new LegacyAppModules(additionalFilters);
     }
 
+    getRuntimeWiring(): ServerWiring {
+        return new LegacyWiring(this.additionalFilters).getRuntimeWiring();
+    }
+
     getBindingModules(): ContainerModule[] {
-        return [InversifyModule];
+        return this.getRuntimeWiring().options.bindingModules;
     }
 
     getRoutingModules(): RouteModule[] {
-        return [new LegacyRoutes(this.additionalFilters)];
+        return this.getRuntimeWiring().options.routingModules;
     }
 
     getHeaders(): AnyContextKey[] {
