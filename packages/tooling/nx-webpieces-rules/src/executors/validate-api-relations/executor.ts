@@ -14,7 +14,7 @@ import { RuleFailError, renderRuleFailForHuman } from '@webpieces/rules-config';
 import type { ExecutorContext } from '@nx/devkit';
 import { generateGraph } from '../../lib/graph-generator';
 import { sortGraphTopologically } from '../../lib/graph-sorter';
-import { collectProjectInfo } from '../../lib/graph-metadata';
+import { collectProjectInfo, enrichGraph } from '../../lib/graph-metadata';
 import { ApprovedWiringGraph } from '../../lib/runtime-wiring/approved-graph';
 import { loadBlessedGraph } from '../../lib/graph-loader';
 import { ApiContractFiles } from '../../lib/api-contract-files';
@@ -50,6 +50,7 @@ export default async function runExecutor(
         const rawGraph = await generateGraph();
         const graph = sortGraphTopologically(rawGraph);
         const projectInfos = await collectProjectInfo();
+        enrichGraph(graph, projectInfos, workspaceRoot);
         new ApprovedWiringGraph().attach(workspaceRoot, graph, projectInfos);
         const saved = loadBlessedGraph(workspaceRoot);
         if (saved === null) return { success: false };

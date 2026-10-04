@@ -77,6 +77,13 @@ export function resolveTokenKey(
     workspaceRoot: string,
 ): TokenRef {
     const display = expr.getText();
+    if (
+        ts.isPropertyAccessExpression(expr) &&
+        expr.name.text === 'identifier' &&
+        checker.getTypeAtLocation(expr.expression).getSymbol()?.getName() === 'ClientToken'
+    ) {
+        return new TokenRef(resolveTokenKey(expr.expression, checker, workspaceRoot).key, display);
+    }
 
     let symbol = checker.getSymbolAtLocation(expr);
     // For `TYPES.Counter` the symbol is on the property name; for a bare identifier it
@@ -101,6 +108,18 @@ export function resolveTokenKey(
     if (init) {
         const key = symbolCallKey(init, declFile, name);
         if (key) return new TokenRef(key, display);
+        if (
+            ts.isNewExpression(init) &&
+            checker.getTypeAtLocation(expr).getSymbol()?.getName() === 'ClientToken'
+        ) {
+            const identifier = init.arguments?.[0];
+            if (identifier !== undefined) {
+                const typedKey =
+                    symbolCallKey(identifier, declFile, name) ??
+                    resolveTokenKey(identifier, checker, workspaceRoot).key;
+                return new TokenRef(typedKey, display);
+            }
+        }
     }
 
     return new TokenRef(`expr:${declFile}#${name}`, display);

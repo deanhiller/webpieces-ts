@@ -14,6 +14,7 @@
  */
 
 import * as ts from 'typescript';
+import { RuntimeClientBindings } from './runtime-client-bindings';
 import { Binding, BindingKind, DiScope } from './model';
 import { classTokenKey, relativeFile, resolveTokenKey } from './token-resolver';
 
@@ -353,6 +354,7 @@ export function collectBindings(
     workspaceRoot: string,
 ): BindingTable {
     const table = new BindingTable();
+    const clients = new RuntimeClientBindings();
 
     for (const sourceFile of program.getSourceFiles()) {
         if (!isAnalyzableFile(sourceFile)) continue;
@@ -361,6 +363,8 @@ export function collectBindings(
             if (ts.isCallExpression(node)) {
                 collectBindCall(node, checker, workspaceRoot, table);
                 collectProviderBinding(node, checker, workspaceRoot, table);
+                const client = clients.collectNode(node, checker, workspaceRoot);
+                if (client !== undefined) table.add(client);
             } else if (ts.isClassDeclaration(node)) {
                 collectDecoratorBindings(node, checker, workspaceRoot, table);
             }

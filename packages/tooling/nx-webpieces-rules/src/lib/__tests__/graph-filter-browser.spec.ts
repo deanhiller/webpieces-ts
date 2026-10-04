@@ -88,7 +88,11 @@ Viz.instance = async () => {
     }
 
     async snapshot(page: Page, name: string): Promise<void> {
-        await page.screenshot({ path: path.join(this.output, `${name}.png`), fullPage: false });
+        await page.screenshot({
+            path: path.join(this.output, `${name}.png`),
+            clip: { x: 0, y: 0, width: 1440, height: 1000 },
+            animations: 'disabled',
+        });
     }
 
     async row(page: Page, id: string): Promise<number> {
