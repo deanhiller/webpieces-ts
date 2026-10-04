@@ -15,5 +15,12 @@ export class DeclarationCompileAssertions {
         new ImplementsFacts('rpc', { kind: 'service', service: 'server' });
         // @ts-expect-error The relationship discriminator cannot bypass the target requirement.
         new WiringRelationship(identity, { direction: 'uses', transport: 'rpc' });
+        const implementationWithTarget = {
+            direction: 'implements' as const,
+            transport: 'rpc' as const,
+            target: { kind: 'service' as const, service: 'server' },
+        };
+        // @ts-expect-error Structural implementation values cannot carry client targets.
+        new WiringRelationship(identity, implementationWithTarget);
     }
 }

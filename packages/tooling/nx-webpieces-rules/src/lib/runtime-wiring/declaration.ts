@@ -16,6 +16,7 @@ export type DeclaredTarget =
 
 export class ImplementsFacts {
     readonly direction = 'implements';
+    declare readonly target?: never;
     constructor(
         public readonly transport: ApiTransport,
         public readonly policy?: string,
