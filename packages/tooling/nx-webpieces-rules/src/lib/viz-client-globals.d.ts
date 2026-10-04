@@ -4,22 +4,13 @@
  *
  * They live HERE, in one .d.ts, rather than in each script, because both scripts are global SCRIPTS —
  * they have no import or export, which is precisely what makes tsc emit them as plain browser code with
- * no CommonJS wrapper. Two scripts in one program share a global scope, so declaring `__DOT__` in both
+ * no CommonJS wrapper. Two scripts in one program share a global scope, so declaring the render-model placeholder in both
  * is a redeclaration error. One shared declaration file is the fix, and it costs nothing at runtime:
  * a .d.ts emits no JavaScript.
  */
 
 /**
- * The Graphviz DOT for the page, as a JSON-encoded string.
- *
- * It is a PLACEHOLDER, not a real binding: graph-visualizer.ts / runtime-visualizer.ts read the
- * compiled script and `split('__DOT__').join(JSON.stringify(dot))` before inlining it into the HTML, so
- * by the time a browser sees this identifier it has been replaced by a string literal.
- */
-declare const __DOT__: string;
-
-/**
- * The design pages that EXIST, as JSON — substituted the same way `__DOT__` is. A node absent from
+ * The design pages that EXIST, as JSON — substituted the same way `__RENDER_MODEL__` is. A node absent from
  * it has no design.html, so its menu gets no "View Design" item at all.
  *
  * It is JSON, so its element type must be a structural declaration rather than one of the repo's
@@ -54,6 +45,7 @@ declare class WpNodeMenu {
  */
 declare class WpNodeLock {
     constructor(svg: SVGSVGElement);
+    rebind(svg: SVGSVGElement): void;
     isLocked(name: string): boolean;
     toggle(name: string, nodeEl: SVGGElement): void;
 }
@@ -70,3 +62,18 @@ interface VizInstance {
     /** SYNCHRONOUS in v3 — v2's returned a promise, which is why callers use it directly in then(). */
     renderSVGElement(dot: string): SVGSVGElement;
 }
+
+/** JSON renderer records; structural types because the browser receives deserialized data. */
+declare const __RENDER_MODEL__: RenderModelJson;
+interface RenderModelJson {
+    nodes: RenderNodeJson[];
+    edges: RenderEdgeJson[];
+    bands: RenderBandJson[];
+    fullDot: string;
+    header: string;
+    footer: string;
+}
+
+interface RenderNodeJson { id: string; dot: string; }
+interface RenderEdgeJson { from: string; to: string; dot: string; id: string; }
+interface RenderBandJson { level: number; nodeNames: string[]; }

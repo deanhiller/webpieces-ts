@@ -1,0 +1,75 @@
+import { dotValue } from './dot-syntax';
+import { LevelBand } from './graph-level-bands';
+
+/** Renderer-owned records, captured while emitting DOT, never recovered by parsing labels. */
+export class RenderNode {
+    constructor(
+        public readonly id: string,
+        public readonly dot: string,
+    ) {}
+}
+
+export class RenderEdge {
+    constructor(
+        public readonly from: string,
+        public readonly to: string,
+        public readonly dot: string,
+        public readonly id: string,
+    ) {}
+}
+
+/** The immutable drawable snapshot carried by a generated page. */
+export class GraphRenderModel {
+    readonly nodes: RenderNode[] = [];
+    readonly edges: RenderEdge[] = [];
+    bands: LevelBand[] = [];
+    fullDot = '';
+    header = '';
+    footer = '';
+
+    node(id: string, dot: string): string {
+        this.nodes.push(new RenderNode(id, dot));
+        return dot;
+    }
+
+    completeEndpoints(): void {
+        const ids = new Set(this.nodes.map((node) => node.id));
+        for (const edge of this.edges) {
+            for (const id of [edge.from, edge.to]) {
+                if (ids.has(id)) continue;
+                ids.add(id);
+                this.node(id, `  "${dotValue(id)}";\n`);
+            }
+        }
+    }
+
+    edge(from: string, to: string, dot: string): string {
+        const id = `wp-real-edge-${this.edges.length}`;
+        const statement = `${dot.slice(0, -2)} [id="${id}"];\n`;
+        this.edges.push(new RenderEdge(from, to, statement, id));
+        return statement;
+    }
+}
+
+/** Shared filter chrome and script-safe JSON for pages opened directly from disk. */
+export class GraphFilterAssets {
+    json<T>(value: T): string {
+        return JSON.stringify(value).replace(/</g, '\\u003c');
+    }
+
+    html(): string {
+        return (
+            '<p id="wp-filter-status" hidden>Filtering: <strong id="wp-filter-anchor"></strong> ' +
+            '<button id="wp-filter-off" type="button">Turn off Filter</button></p>' +
+            '<p id="wp-graph-error" role="alert" hidden></p>'
+        );
+    }
+
+    styles(): string {
+        return (
+            '#wp-filter-status { text-align:center; } #wp-graph-error { color:#b71c1c; } ' +
+            '#graph .wp-filter-anchor polygon, #graph .wp-filter-anchor path, ' +
+            '#graph .wp-filter-anchor ellipse { stroke:#1565c0; stroke-width:3; }'
+        );
+    }
+}

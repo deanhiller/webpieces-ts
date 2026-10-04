@@ -574,12 +574,12 @@ describe('generateRuntimeDot — rpc direct, pubsub via queue', () => {
     const dot = generateRuntimeDot(deriveRuntimeGraph(graph()));
 
     it('draws the rpc edge as a direct labeled arrow', () => {
-        expect(dot).toContain('"producer" -> "consumer" [label="RpcApi"];');
+        expect(dot).toContain('"producer" -> "consumer" [label="RpcApi"] [id="wp-real-edge-0"];');
     });
 
     it('draws the pubsub edge through a cylinder queue node', () => {
         expect(dot).toContain('"queue__producer__consumer" [shape=Mrecord');
-        expect(dot).toContain('"producer" -> "queue__producer__consumer" [label="enqueue", style=dashed];');
-        expect(dot).toContain('"queue__producer__consumer" -> "consumer" [label="deliver", style=dashed];');
+        expect(dot).toContain('"producer" -> "queue__producer__consumer" [label="enqueue", style=dashed] [id="wp-real-edge-1"];');
+        expect(dot).toContain('"queue__producer__consumer" -> "consumer" [label="deliver", style=dashed] [id="wp-real-edge-2"];');
     });
 });

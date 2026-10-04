@@ -90,7 +90,7 @@ describe('generateDot node identity', () => {
 
     it('draws the dependency as a real edge between two boxes, never as a self-loop', () => {
         const dot = viz.generateDot(SCOPED_GRAPH);
-        expect(dot).toContain('"public-api" -> "@mealco-internal/public-api";');
+        expect(dot).toContain('"public-api" -> "@mealco-internal/public-api" [id="wp-real-edge-0"];');
         expect(dot).not.toContain('"public-api" -> "public-api"');
     });
 
@@ -158,7 +158,7 @@ describe('generateRuntimeDot node identity', () => {
 
     it('draws the call as a real arrow between two boxes, never as a self-loop', () => {
         const dot = generateRuntimeDot(RUNTIME);
-        expect(dot).toContain('"public-api" -> "@mealco-internal/public-api" [label="OrdersApi"];');
+        expect(dot).toContain('"public-api" -> "@mealco-internal/public-api" [label="OrdersApi"] [id="wp-real-edge-0"];');
         expect(dot).not.toContain('"public-api" -> "public-api"');
     });
 });

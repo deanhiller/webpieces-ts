@@ -1,5 +1,6 @@
+import { GraphRenderModel, GraphFilterAssets } from './graph-render-model';
 import { SavedSnapshot } from './saved-snapshot';
-import { CLIENT_DOT_PLACEHOLDER, readCompiledClient } from './graph-visualizer';
+import { CLIENT_MODEL_PLACEHOLDER, readCompiledClient } from './graph-visualizer';
 import { GraphNodeMenu } from './graph-node-menu';
 import { legendHtml } from './runtime-viz-theme';
 
@@ -13,6 +14,7 @@ import { legendHtml } from './runtime-viz-theme';
  * source hands in the text itself instead of requiring the package to have been built first.
  */
 export class RuntimeHtmlPage {
+    private readonly filterAssets = new GraphFilterAssets();
     private readonly snapshot = new SavedSnapshot();
     /** The ONE floating-node-menu implementation, shared with dependencies.html and every design.html. */
     private readonly nodeMenu = new GraphNodeMenu();
@@ -20,9 +22,10 @@ export class RuntimeHtmlPage {
     constructor(
         private readonly clientJs: () => string = (): string =>
             readCompiledClient('runtime-visualizer.client.js'),
+        private readonly filterJs: () => string = (): string => readCompiledClient('graph-filter.client.js'),
     ) {}
 
-    render(dot: string, title: string): string {
+    render(model: GraphRenderModel, title: string): string {
         return `<!DOCTYPE html>
 <html>
 <head>
@@ -38,10 +41,13 @@ export class RuntimeHtmlPage {
     <h1>${title}</h1>
     ${this.snapshot.html()}
     <p class="hint">💡 <strong>Click any box</strong> for its menu — <strong>Lock</strong> dims every other box and every arrow so one service, queue, datastore or external system stands alone; <strong>Unlock</strong> restores the whole picture.</p>
+    <p class="hint"><strong>Filter Unconnected</strong> keeps incoming and outgoing chains and compacts the picture. <strong>Turn off Filter</strong> restores it.</p>
+    ${this.filterAssets.html()}
     <div id="graph"></div>
     ${legendHtml()}
     <script>${this.nodeMenu.script()}</script>
-    <script>${this.script(dot)}</script>
+    <script>${this.filterJs()}</script>
+    <script>${this.script(model)}</script>
 </body>
 </html>`;
     }
@@ -51,10 +57,10 @@ export class RuntimeHtmlPage {
      * rather than in a template literal here: it renders with @viz-js/viz v3, redraws every queue
      * node as a true horizontal cylinder, and wires the shared node menu onto every box — more
      * logic than belongs inline in a .ts string. The substitution is a blind split/join, so the
-     * placeholder must appear EXACTLY ONCE in the client.
+     * render-model placeholder must appear EXACTLY ONCE in the client.
      */
-    private script(dot: string): string {
-        return this.clientJs().split(CLIENT_DOT_PLACEHOLDER).join(JSON.stringify(dot));
+    private script(model: GraphRenderModel): string {
+        return this.clientJs().split(CLIENT_MODEL_PLACEHOLDER).join(this.filterAssets.json(model));
     }
 
     /**
@@ -75,6 +81,7 @@ export class RuntimeHtmlPage {
          * carries the cursor + blue glow and the dim/undim rules the lock toggles. Shared verbatim
          * with architecture/dependencies.html and every project's design.html. */
         ${this.nodeMenu.styles()}
+        ${this.filterAssets.styles()}
         ${this.nodeMenu.dimStyles('#graph')}
         #graph { text-align: center; background: white; padding: 20px; border-radius: 8px; overflow-x: auto; }
         #graph svg { max-width: 100%; height: auto; }

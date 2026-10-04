@@ -105,3 +105,17 @@ as a fallback. A failed generation remains a failure, and viewing any saved file
 afterward does not establish that refresh succeeded. Browser-open failures print
 the HTML path for manual opening. Architecture/API validation and CI still run
 their existing checks independently of visualization.
+
+### Compact graph filtering
+
+Architecture and runtime node menus offer **Filter Unconnected** alongside
+Lock/Unlock. Filtering retains the selected node and its separate transitive
+incoming and outgoing chains, then reruns Graphviz. Architecture L-number rows keep
+their original identities; runtime chains include rendered queues, clocks, external
+APIs and systems. The anchor indicator and all surviving node menus offer **Turn off
+Filter**, restoring the full layout and independent Lock state. Responsibilities
+follow the retained set intersected with architecture Lock. Hover and menu dismissal
+do not clear filtering, and no filter is persisted across reloads. Saved graph facts
+and visibility options remain untouched. See
+[dependency graphs](../../../docs/architecture/dependency-graphs.md#filter-unconnected)
+for traversal examples and browser verification.

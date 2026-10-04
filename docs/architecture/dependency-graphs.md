@@ -174,3 +174,33 @@ as a fallback. A failed generation remains a failure, and viewing any saved file
 afterward does not establish that refresh succeeded. Browser-open failures print
 the HTML path for manual opening. Architecture/API validation and CI still run
 their existing checks independently of visualization.
+
+## Filter Unconnected
+
+Both saved architecture pages offer **Filter Unconnected** in a node's floating
+menu. It retains that node, all transitive incoming ancestors, and all transitive
+outgoing dependencies, walking each direction separately. For `A → shared ← B`,
+filtering A keeps A and shared; filtering shared keeps all three. Runtime filtering
+follows the rendered topology, including queues, triggers, datastores and external
+systems. Hidden nodes never act as bridges.
+
+The page reruns Graphviz on the retained nodes and their original edges. Architecture
+projects keep their original L-number rows, highest first and L0 last; empty bands
+and unnecessary spacers disappear. The filter changes presentation only and never
+rewrites saved JSON or runtime visibility settings.
+
+A page has one active filter. Every surviving node menu and the visible indicator
+naming the anchor offer **Turn off Filter**. Turn it off before choosing another
+anchor. Hover, Escape and outside clicks leave filtering active. Lock is independent:
+architecture Lock still highlights its full chain and filters responsibilities to
+the intersection with the retained nodes; runtime Lock still focuses one box. A
+locked node hidden by filtering keeps its selection without dimming the whole graph.
+Clearing the filter restores the original full layout and Lock. Reloading clears
+both controls. Rendering failures leave the previous graph usable and show a recovery
+message.
+
+The optional browser regression suite uses the pages' pinned Viz UMD renderer and
+installed Playwright Chromium. Set `WP_GRAPH_VIZ_JS` to that renderer's local path
+(and `PLAYWRIGHT_BROWSERS_PATH` when necessary), then run the focused
+`graph-filter-browser.spec.ts`. It opens generated pages as local files and writes
+before/filter/restored screenshots under `.webpieces/1118-browser-evidence/`.

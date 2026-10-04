@@ -37,11 +37,12 @@
  *
  * EVERY node on the rendered page is clickable and opens the SHARED floating menu
  * (graph-node-menu.ts — one implementation, also used by architecture/dependencies.html
- * and every project's design.html). Its only item is Lock/Unlock: locking dims every
+ * and every project's design.html). Lock/Unlock dims every
  * other node and every edge and lights the locked box alone. There is no "View Design"
  * item here — a node is a running service, queue, datastore or third-party system, not
  * an nx project, so no design.html exists to point at and the item is absent rather than
- * dead. This page has no lock dropdown, so the menu is the one and only lock control.
+ * dead. Filter Unconnected follows separate incoming/outgoing chains and compacts the rendered
+ * topology; Turn off Filter restores the full picture. Lock remains independent of Filter.
  */
 
 import * as fs from 'fs';
@@ -54,6 +55,7 @@ import type {
     RuntimeTrigger,
 } from './runtime-graph';
 import { dotValue, recordValue, assertValidDot } from './dot-syntax';
+import { GraphRenderModel } from './graph-render-model';
 import { RuntimeHtmlPage } from './runtime-html-page';
 import {
     LEVEL_COLORS,
@@ -211,19 +213,19 @@ function queueLine(key: string, queue: RuntimeQueue | undefined): string {
     return `${line}\\nqueue: ${recordValue(queue.queueName)}`;
 }
 
-/** The node statement + enqueue/deliver arrows for one queue box. Names arrive pre-escaped. */
+/** The node statement + enqueue/deliver arrows for one queue box. Service identities remain raw; only emitted DOT is escaped. */
 // webpieces-disable no-function-outside-class -- DOT string builder, matching getShortName in this file
-function queueBoxDot(id: string, body: string, producers: string[], consumers: string[]): string {
+function queueBoxDot(id: string, body: string, producers: string[], consumers: string[], model: GraphRenderModel): string {
     // Record-mode label: the text must clear recordValue(), and QUEUE_LABEL_PREFIX supplies the
     // empty leading field that draws the cylinder's end cap. Drop it and the node silently
     // degrades to a plain box.
-    let dot =
+    let dot = model.node(id,
         `  "${id}" [shape=${QUEUE_SHAPE}, style="filled", fillcolor="${QUEUE_FILL}", ` +
-        `class="${QUEUE_CLASS}", label="${QUEUE_LABEL_PREFIX}${body}"];\n`;
+        `class="${QUEUE_CLASS}", label="${QUEUE_LABEL_PREFIX}${body}"];\n`);
     for (const producer of producers)
-        dot += `  "${producer}" -> "${id}" [label="enqueue", style=dashed];\n`;
+        dot += model.edge(producer, id, `  "${serviceNodeId(producer)}" -> "${id}" [label="enqueue", style=dashed];\n`);
     for (const consumer of consumers)
-        dot += `  "${id}" -> "${consumer}" [label="deliver", style=dashed];\n`;
+        dot += model.edge(id, consumer, `  "${id}" -> "${serviceNodeId(consumer)}" [label="deliver", style=dashed];\n`);
     return dot;
 }
 
@@ -266,7 +268,7 @@ function groupQueues(byQueue: Map<string, QueueEndpoints>, graph: RuntimeGraph):
  * one is stuck) at a fraction of the node count.
  */
 // webpieces-disable no-function-outside-class -- DOT string builder, matching getShortName in this file
-function queuesDot(graph: RuntimeGraph, hidden: Set<string>): string {
+function queuesDot(graph: RuntimeGraph, hidden: Set<string>, model: GraphRenderModel): string {
     const queued = graph.runtimeEdges.filter(
         (e: RuntimeEdge) => e.type === 'pubsub' && !hidden.has(e.from) && !hidden.has(e.to),
     );
@@ -280,8 +282,8 @@ function queuesDot(graph: RuntimeGraph, hidden: Set<string>): string {
     // per-method queue at all, so it keeps the historical unnamed per-pair box.
     const byQueue = new Map<string, QueueEndpoints>();
     for (const edge of queued) {
-        const from = serviceNodeId(edge.from);
-        const to = serviceNodeId(edge.to);
+        const from = edge.from;
+        const to = edge.to;
         if (edge.queue === undefined) {
             // Kept RAW: recordValue already applies dotValue, so escaping here would double it.
             const viaRaw = edge.via.map((v: string) => getShortName(v)).join(', ');
@@ -290,6 +292,7 @@ function queuesDot(graph: RuntimeGraph, hidden: Set<string>): string {
                 `${recordValue(viaRaw)}\\nqueue`,
                 [from],
                 [to],
+                model,
             );
             continue;
         }
@@ -307,6 +310,7 @@ function queuesDot(graph: RuntimeGraph, hidden: Set<string>): string {
             body,
             group.producers,
             group.consumers,
+            model,
         );
     }
     return dot;
@@ -333,6 +337,7 @@ function externalSystemNodeDot(
     kind: string,
     label: string,
     subtitle: string,
+    model: GraphRenderModel,
 ): string {
     const shape = EXTERNAL_SHAPES[kind] ?? 'box';
     const fill = EXTERNAL_FILLS[kind] ?? EXTERNAL_FILL;
@@ -344,7 +349,7 @@ function externalSystemNodeDot(
     // Only a queue-kind system is marked: a database here is an UPRIGHT cylinder and must not be
     // caught by the browser-side reshaping that lays queues on their side.
     const marker = isQueue ? `class="${QUEUE_CLASS}", ` : '';
-    return (
+    return model.node(`system__${dotId(identity)}`,
         `  "system__${dotId(identity)}" [shape=${shape}, style="filled", fillcolor="${fill}", ` +
         `${marker}label="${prefix}${text}\\n(${subtitle})"];\n`
     );
@@ -371,7 +376,7 @@ function externalSystemNodeDot(
  * must not restate the node statement.
  */
 // webpieces-disable no-function-outside-class -- DOT string builder, matching getShortName in this file
-function triggerDot(graph: RuntimeGraph, hidden: Set<string>, options: RuntimeVizOptions): string {
+function triggerDot(graph: RuntimeGraph, hidden: Set<string>, options: RuntimeVizOptions, model: GraphRenderModel): string {
     const triggers = graph.triggers.filter((t: RuntimeTrigger) => !hidden.has(t.service));
     if (triggers.length === 0) return '';
 
@@ -388,10 +393,10 @@ function triggerDot(graph: RuntimeGraph, hidden: Set<string>, options: RuntimeVi
         if (trigger.kind === 'cron') {
             const id = `cron__${dotId(`${trigger.api}_${trigger.method}`)}`;
             const schedule = dotValue(trigger.queueName ?? `${trigger.api}-${trigger.method}`);
-            dot +=
+            dot += model.node(id,
                 `  "${id}" [shape=circle, style="filled", fillcolor="${CRON_FILL}", ` +
-                `color="${CRON_BORDER}", label="⏰\\ncron"];\n` +
-                `  "${id}" -> "${service}" [label="${label}\\n${schedule}", color="${CRON_BORDER}"];\n`;
+                `color="${CRON_BORDER}", label="⏰\\ncron"];\n`) +
+                model.edge(id, trigger.service, `  "${id}" -> "${service}" [label="${label}\\n${schedule}", color="${CRON_BORDER}"];\n`);
             continue;
         }
         const caller = trigger.caller;
@@ -406,16 +411,17 @@ function triggerDot(graph: RuntimeGraph, hidden: Set<string>, options: RuntimeVi
             emitted.add(id);
             dot +=
                 caller === undefined
-                    ? `  "${id}" [shape=box, style="dotted,filled", fillcolor="${EXTERNAL_FILL}", ` +
-                      `color="${EXTERNAL_BORDER}", label="${dotValue(trigger.api)}\\n? unknown caller"];\n`
+                    ? model.node(id, `  "${id}" [shape=box, style="dotted,filled", fillcolor="${EXTERNAL_FILL}", ` +
+                      `color="${EXTERNAL_BORDER}", label="${dotValue(trigger.api)}\\n? unknown caller"];\n`)
                     : externalSystemNodeDot(
                           caller.label,
                           caller.kind,
                           caller.label,
                           'external caller',
+                          model,
                       );
         }
-        dot += `  "${id}" -> "${service}" [label="${label}", style=dashed, color="${EXTERNAL_BORDER}"];\n`;
+        dot += model.edge(id, trigger.service, `  "${id}" -> "${service}" [label="${label}", style=dashed, color="${EXTERNAL_BORDER}"];\n`);
     }
     return dot;
 }
@@ -431,7 +437,7 @@ function triggerDot(graph: RuntimeGraph, hidden: Set<string>, options: RuntimeVi
  * read look like an event.
  */
 // webpieces-disable no-function-outside-class -- DOT string builder, matching getShortName in this file
-function externalSystemsDot(graph: RuntimeGraph, hidden: Set<string>): string {
+function externalSystemsDot(graph: RuntimeGraph, hidden: Set<string>, model: GraphRenderModel): string {
     const systems = graph.externalSystems ?? {};
     const ids = Object.keys(systems).sort();
     if (ids.length === 0) return '';
@@ -445,6 +451,7 @@ function externalSystemsDot(graph: RuntimeGraph, hidden: Set<string>): string {
             system.kind,
             system.label,
             `external ${dotValue(system.kind)}`,
+            model,
         );
     }
     for (const id of ids) {
@@ -453,7 +460,7 @@ function externalSystemsDot(graph: RuntimeGraph, hidden: Set<string>): string {
             system.apis.length === 0 ? '' : ` [label="${labelList([...system.apis].sort())}"]`;
         for (const service of [...system.usedBy].sort()) {
             if (hidden.has(service)) continue;
-            dot += `  "${serviceNodeId(service)}" -> "system__${dotId(id)}"${via};\n`;
+            dot += model.edge(service, `system__${dotId(id)}`, `  "${serviceNodeId(service)}" -> "system__${dotId(id)}"${via};\n`);
         }
     }
     return dot;
@@ -472,7 +479,7 @@ function externalSystemsDot(graph: RuntimeGraph, hidden: Set<string>): string {
  * has already drawn it with a real shape, and rendering it in both places would double the node.
  */
 // webpieces-disable no-function-outside-class -- DOT string builder, matching getShortName in this file
-function externalDot(graph: RuntimeGraph, hidden: Set<string>): string {
+function externalDot(graph: RuntimeGraph, hidden: Set<string>, model: GraphRenderModel): string {
     // "service|externalName" -> the apis flowing over it.
     const apisByPair = new Map<string, string[]>();
     for (const use of graph.unresolvedUses) {
@@ -493,9 +500,9 @@ function externalDot(graph: RuntimeGraph, hidden: Set<string>): string {
     // carries the bare name.
     const externals = new Set([...apisByPair.keys()].map((key: string) => key.split(PAIR_SEP)[1]));
     for (const external of [...externals].sort()) {
-        dot +=
+        dot += model.node(`external__${external}`,
             `  "external__${dotValue(external)}" [shape=box, style="dashed,filled", fillcolor="${EXTERNAL_FILL}", ` +
-            `color="${EXTERNAL_BORDER}", label="${dotValue(getShortName(external))}\\n(external)"];\n`;
+            `color="${EXTERNAL_BORDER}", label="${dotValue(getShortName(external))}\\n(external)"];\n`);
     }
     for (const key of [...apisByPair.keys()].sort()) {
         const parts = key.split(PAIR_SEP);
@@ -504,9 +511,9 @@ function externalDot(graph: RuntimeGraph, hidden: Set<string>): string {
         const via = labelList(apisByPair.get(key)!.sort());
         // SOLID: this is a synchronous call that returns a value. Dashed is reserved for events, and
         // "outside the repo" is already said by the node's dashed border.
-        dot +=
+        dot += model.edge(service, `external__${external}`,
             `  "${serviceNodeId(service)}" -> "external__${dotValue(external)}" ` +
-            `[label="${via}", color="${EXTERNAL_BORDER}"];\n`;
+            `[label="${via}", color="${EXTERNAL_BORDER}"];\n`);
     }
     return dot;
 }
@@ -518,10 +525,23 @@ export function generateRuntimeDot(
     title: string = 'WebPieces Runtime Architecture',
     options: RuntimeVizOptions = new RuntimeVizOptions(),
 ): string {
+    return generateRuntimeRenderModel(graph, title, options).fullDot;
+}
+
+/** Capture synthetic drawable nodes and edges at their original emission sites. */
+// webpieces-disable no-function-outside-class -- renderer entry point matching generateRuntimeDot
+export function generateRuntimeRenderModel(
+    graph: RuntimeGraph,
+    title: string = 'WebPieces Runtime Architecture',
+    options: RuntimeVizOptions = new RuntimeVizOptions(),
+): GraphRenderModel {
+    const model = new GraphRenderModel();
     let dot = 'digraph RuntimeArchitecture {\n';
     dot += '  rankdir=TB;\n';
     dot += '  node [shape=box, style="filled,rounded", fontname="Arial"];\n';
     dot += '  edge [fontname="Arial", fontsize=10];\n\n';
+
+    model.header = dot;
 
     // Services tagged drawOnGraph:false stay in the JSON but are omitted here —
     // both their node and any edge touching them are dropped from the render.
@@ -535,7 +555,7 @@ export function generateRuntimeDot(
         if (hidden.has(name)) continue;
         const svc = graph.services[name];
         const color = LEVEL_COLORS[svc.level] || '#F5F5F5';
-        dot += `  "${serviceNodeId(name)}" [fillcolor="${color}", label="${nodeLabel(name, svc)}"];\n`;
+        dot += model.node(name, `  "${serviceNodeId(name)}" [fillcolor="${color}", label="${nodeLabel(name, svc)}"];\n`);
     }
 
     dot += '\n';
@@ -544,17 +564,18 @@ export function generateRuntimeDot(
         if (hidden.has(edge.from) || hidden.has(edge.to)) continue;
         // Queued hops are merged across methods, so they cannot be emitted one edge at a time.
         if (edge.type === 'pubsub') continue;
-        dot += edgeDot(edge);
+        dot += model.edge(edge.from, edge.to, edgeDot(edge));
     }
 
-    dot += queuesDot(graph, hidden);
-    dot += triggerDot(graph, hidden, options);
+    dot += queuesDot(graph, hidden, model);
+    dot += triggerDot(graph, hidden, options, model);
 
     if (options.showExternalNodes) {
-        dot += externalSystemsDot(graph, hidden);
-        dot += externalDot(graph, hidden);
+        dot += externalSystemsDot(graph, hidden, model);
+        dot += externalDot(graph, hidden, model);
     }
 
+    const footerStart = dot.length;
     dot += '\n  labelloc="t";\n';
     dot += `  label="${dotValue(title)}\\n(from architecture/runtime-dependencies.json)";\n`;
     dot += '  fontsize=20;\n';
@@ -562,7 +583,10 @@ export function generateRuntimeDot(
     // Nothing downstream parses this DOT until a human opens the page, so parse-shape is checked
     // HERE — a graph that cannot render is a generation failure, not a blank page to discover later.
     assertValidDot(dot, 'runtime-architecture.dot');
-    return dot;
+    model.footer = dot.slice(footerStart);
+    model.completeEndpoints();
+    model.fullDot = dot;
+    return model;
 }
 
 export interface RuntimeVisualizationPaths {
@@ -580,12 +604,13 @@ export function writeRuntimeVisualization(
     const outputDir = path.join(workspaceRoot, 'tmp', 'webpieces');
     if (!fs.existsSync(outputDir)) fs.mkdirSync(outputDir, { recursive: true });
 
-    const dot = generateRuntimeDot(graph, title, options);
+    const model = generateRuntimeRenderModel(graph, title, options);
+    const dot = model.fullDot;
     const dotPath = path.join(outputDir, 'runtime-architecture.dot');
     fs.writeFileSync(dotPath, dot, 'utf-8');
 
     const htmlPath = path.join(outputDir, 'runtime-architecture.html');
-    fs.writeFileSync(htmlPath, new RuntimeHtmlPage().render(dot, title), 'utf-8');
+    fs.writeFileSync(htmlPath, new RuntimeHtmlPage().render(model, title), 'utf-8');
 
     return { dotPath, htmlPath };
 }

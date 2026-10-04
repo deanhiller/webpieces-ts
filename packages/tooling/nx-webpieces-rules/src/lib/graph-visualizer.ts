@@ -21,6 +21,8 @@ import { LevelBand, LevelBandLayout } from './graph-level-bands';
 import { ProjectAdjacency, ProjectCycleDetector } from './graph-cycles';
 import { ResponsibilitiesRenderer } from './graph-responsibilities';
 import { GraphNodeMenu } from './graph-node-menu';
+import { dotValue } from './dot-syntax';
+import { GraphRenderModel, GraphFilterAssets } from './graph-render-model';
 import { toError } from '../toError';
 
 /**
@@ -76,9 +78,9 @@ export class VisualizationPaths {
  * client — the inliner is a blind split/join, so a second occurrence (in a comment, say) would be
  * replaced by the entire DOT too, bloating every generated page.
  */
-export const CLIENT_DOT_PLACEHOLDER = '__' + 'DOT' + '__';
+export const CLIENT_MODEL_PLACEHOLDER = '__' + 'RENDER_MODEL' + '__';
 
-/** Same contract as CLIENT_DOT_PLACEHOLDER, for the node → design.html links the menu offers. */
+/** Same contract as CLIENT_MODEL_PLACEHOLDER, for the node → design.html links the menu offers. */
 export const CLIENT_DESIGN_LINKS_PLACEHOLDER = '__' + 'DESIGN_LINKS' + '__';
 
 /**
@@ -100,6 +102,7 @@ export function readCompiledClient(name: string): string {
 }
 
 export class GraphVisualizer {
+    private readonly filterAssets = new GraphFilterAssets();
     private readonly snapshot = new SavedSnapshot();
     private readonly names = new GraphNames();
     private readonly responsibilities = new ResponsibilitiesRenderer();
@@ -117,6 +120,8 @@ export class GraphVisualizer {
     constructor(
         private readonly clientJs: () => string =
         (): string => readCompiledClient('graph-visualizer.client.js'),
+        private readonly filterJs: () => string =
+        (): string => readCompiledClient('graph-filter.client.js'),
     ) {}
 
     /**
@@ -193,7 +198,7 @@ export class GraphVisualizer {
         const served = (relation?.implements ?? []).map((ref: ApiRef) => ref.api);
         if (served.length > 0) attrs.push(`label="implements: ${this.labelledApis(served)}", fontsize=9`);
         const suffix = attrs.length === 0 ? '' : ` [${attrs.join(', ')}]`;
-        return `  "${from}" -> "${to}"${suffix};\n`;
+        return `  "${dotValue(from)}" -> "${dotValue(to)}"${suffix};\n`;
     }
 
     /**
@@ -239,26 +244,37 @@ export class GraphVisualizer {
      * Generate Graphviz DOT format from the graph
      */
     generateDot(graph: EnhancedGraph, title: string = 'Monorepo Dependency Architecture'): string {
+        return this.generateRenderModel(graph, title).fullDot;
+    }
+
+    generateRenderModel(graph: EnhancedGraph, title: string = 'Monorepo Dependency Architecture'): GraphRenderModel {
         this.assertDrawable(graph);
+        const model = new GraphRenderModel();
         let dot = 'digraph Architecture {\n';
         dot += '  rankdir=TB;\n';
         dot += '  node [shape=box, style=filled, fontname="Arial"];\n';
         dot += '  edge [fontname="Arial"];\n\n';
 
+        model.header = dot;
         const bands = this.levelBands(graph);
+        model.bands = bands;
 
-        dot += this.dotNodes(graph);
+        dot += this.dotNodes(graph, model);
         dot += '\n';
         dot += this.bandLayout.dot(bands);
         dot += '\n';
-        dot += this.dotEdges(graph);
+        dot += this.dotEdges(graph, model);
 
+        const footerStart = dot.length;
         dot += '\n  labelloc="t";\n';
-        dot += `  label="${title}\\n(from architecture/dependencies.json)";\n`;
+        dot += `  label="${dotValue(title)}\\n(from architecture/dependencies.json)";\n`;
         dot += '  fontsize=20;\n';
         dot += '}\n';
 
-        return dot;
+        model.footer = dot.slice(footerStart);
+        model.completeEndpoints();
+        model.fullDot = dot;
+        return model;
     }
 
     /**
@@ -305,7 +321,7 @@ export class GraphVisualizer {
     // role; the label shows the env set + role (e.g. [browser, node] · server).
     // No node carries a URL: EVERY box is clickable and opens the floating node
     // menu instead, which is where a design page is reached (see designLinks).
-    private dotNodes(graph: EnhancedGraph): string {
+    private dotNodes(graph: EnhancedGraph, model: GraphRenderModel): string {
         let dot = '';
         for (const project of Object.keys(graph)) {
             const info = graph[project];
@@ -319,7 +335,7 @@ export class GraphVisualizer {
             const envSet = `[${frameworks.join(', ')}]`;
             const labelMeta = `L${info.level} · ${envSet} · ${role}`;
             // Identity is the project key; the LABEL is the pretty short name.
-            dot += `  "${nodeId}" [fillcolor="${color}"${border}, label="${shortName}\\n(${labelMeta})"];\n`;
+            dot += model.node(nodeId, `  "${dotValue(nodeId)}" [fillcolor="${color}"${border}, label="${dotValue(shortName)}\\n(${dotValue(labelMeta)})"];\n`);
         }
         return dot;
     }
@@ -327,7 +343,7 @@ export class GraphVisualizer {
     // Edge lines (dependencies). An edge to an api-lib is styled by WHY it exists
     // (implements/uses/uses-implements, from apiRelations); every other dependency
     // keeps the default plain arrow.
-    private dotEdges(graph: EnhancedGraph): string {
+    private dotEdges(graph: EnhancedGraph, model: GraphRenderModel): string {
         let dot = '';
         for (const project of Object.keys(graph)) {
             const info = graph[project];
@@ -337,7 +353,7 @@ export class GraphVisualizer {
                 // Both endpoints must be visible — an edge to/from a hidden box
                 // is dropped so no connection dangles into empty space.
                 if (graph[dep] !== undefined && this.isHidden(graph[dep])) continue;
-                dot += this.edgeDot(nodeId, this.names.getNodeId(dep), info.apiRelations?.[dep]);
+                dot += model.edge(nodeId, this.names.getNodeId(dep), this.edgeDot(nodeId, this.names.getNodeId(dep), info.apiRelations?.[dep]));
             }
         }
         return dot;
@@ -347,7 +363,7 @@ export class GraphVisualizer {
      * Generate interactive HTML with embedded SVG using viz.js
      */
     generateHTML(
-        dot: string,
+        model: GraphRenderModel,
         links: DesignLink[],
         title: string = 'Monorepo Dependency Architecture',
         lockControl: string = '',
@@ -355,7 +371,7 @@ export class GraphVisualizer {
     ): string {
         const styles = this.styles();
         const legend = this.legend();
-        const script = this.script(dot, links);
+        const script = this.script(model, links);
 
         return `<!DOCTYPE html>
 <html>
@@ -368,13 +384,15 @@ export class GraphVisualizer {
 <body>
     <h1>${title}</h1>
     ${this.snapshot.html()}
-    <p class="hint">💡 <strong>Click any box</strong> for its menu — <strong>View Design</strong> (only where that project has a generated <strong>design.html</strong>, i.e. what the AI sees inside it) and <strong>Lock/Unlock</strong>, which is the same lock as the dropdown below.</p>
+    <p class="hint">💡 <strong>Click any box</strong> for its menu — <strong>View Design</strong> (only where that project has a generated <strong>design.html</strong>, i.e. what the AI sees inside it) and <strong>Lock/Unlock</strong>, which is the same lock as the dropdown below. <strong>Filter Unconnected</strong> removes unrelated boxes and compacts the graph while preserving each L-number row.</p>
     <p class="hint">🔦 <strong>Hover any box</strong> to trace its <em>entire</em> dependency chain — every ancestor above it (all the way up) <em>and</em> every dependency below it (all the way down), with all the boxes and lines between — while the rest of the graph dims so you can follow one box at a glance.</p>
     ${legend}
     ${lockControl}
+    ${this.filterAssets.html()}
     <div id="graph"></div>
     ${responsibilitiesHtml}
     <script>${this.nodeMenu.script()}</script>
+    <script>${this.filterJs()}</script>
     <script>${script}</script>
 </body>
 </html>`;
@@ -448,6 +466,7 @@ export class GraphVisualizer {
             vertical-align: middle;
         }
         ${this.componentStyles()}
+        ${this.filterAssets.styles()}
     `;
     }
 
@@ -612,10 +631,10 @@ export class GraphVisualizer {
      * ONCE in the client (never in one of its comments): every literal occurrence would otherwise be
      * replaced by the whole DOT.
      */
-    private script(dot: string, links: DesignLink[]): string {
+    private script(model: GraphRenderModel, links: DesignLink[]): string {
         return this.clientJs()
-            .split(CLIENT_DOT_PLACEHOLDER).join(JSON.stringify(dot))
-            .split(CLIENT_DESIGN_LINKS_PLACEHOLDER).join(JSON.stringify(links));
+            .split(CLIENT_MODEL_PLACEHOLDER).join(this.filterAssets.json(model))
+            .split(CLIENT_DESIGN_LINKS_PLACEHOLDER).join(this.filterAssets.json(links));
     }
 
     /**
@@ -643,7 +662,7 @@ export class GraphVisualizer {
         const lockControl = this.lockControl(graph);
         const responsibilities = this.responsibilities.generateSection(graph, workspaceRoot);
         const html = this.generateHTML(
-            this.generateDot(graph, title), this.designLinks(graph), title, lockControl, responsibilities);
+            this.generateRenderModel(graph, title), this.designLinks(graph), title, lockControl, responsibilities);
         const htmlPath = path.join(outputDir, 'dependencies.html');
         fs.writeFileSync(htmlPath, html, 'utf-8');
 

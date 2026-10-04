@@ -1,3 +1,5 @@
+import { dotValue } from './dot-syntax';
+
 /**
  * Level bands for the architecture graph.
  *
@@ -70,7 +72,7 @@ export class LevelBandLayout {
         for (const band of bands) {
             dot += `  "${band.anchorName()}" ${LAYOUT_NODE_ATTRS};\n`;
             dot += `  { rank=same; "${band.anchorName()}"; `;
-            for (const name of band.nodeNames) dot += `"${name}"; `;
+            for (const name of band.nodeNames) dot += `"${dotValue(name)}"; `;
             dot += '}\n';
         }
         for (let i = 0; i + 1 < bands.length; i++) {

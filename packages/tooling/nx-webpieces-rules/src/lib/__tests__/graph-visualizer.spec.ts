@@ -24,7 +24,8 @@ const GRAPH: EnhancedGraph = {
 const CLIENT_TS = path.join(__dirname, '..', 'graph-visualizer.client.ts');
 const clientJs = (): string => ts.transpileModule(
     fs.readFileSync(CLIENT_TS, 'utf-8'), { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
-const viz = new GraphVisualizer(clientJs);
+const filterJs = (): string => ts.transpileModule(fs.readFileSync(path.join(__dirname, '..', 'graph-filter.client.ts'), 'utf-8'), { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
+const viz = new GraphVisualizer(clientJs, filterJs);
 
 describe('generateDot', () => {
     it('colors each node by the first env in its set (fill) and shapes the border by role', () => {
@@ -242,9 +243,9 @@ describe('generateDot edge styling', () => {
             'core-util': { level: 0, dependsOn: [], framework: ['browser', 'node'], role: 'lib' },
         });
         // implements = black dashed, LABELED with the contracts it serves
-        expect(dot).toContain('"client-server" -> "client-server-api" [style=dashed, label="implements: SaveApi", fontsize=9];');
-        expect(dot).toContain('"client-server" -> "server2-api";'); // uses = plain black solid, same as a plain dep
-        expect(dot).toContain('"client-server" -> "core-util";'); // plain dep, unstyled
+        expect(dot).toContain('"client-server" -> "client-server-api" [style=dashed, label="implements: SaveApi", fontsize=9]');
+        expect(dot).toContain('"client-server" -> "server2-api" [id="wp-real-edge-1"];'); // uses = plain black solid, same as a plain dep
+        expect(dot).toContain('"client-server" -> "core-util" [id="wp-real-edge-2"];'); // plain dep, unstyled
         expect(dot).toContain('color="#EF6C00", penwidth=2'); // api-lib box border
     });
 
@@ -265,7 +266,7 @@ describe('generateDot edge styling', () => {
             'shared-api': { level: 1, dependsOn: [], role: 'api-lib' },
         });
         expect(dot).toContain(
-            '"svc" -> "shared-api" [style=dashed, color="#1976d2", penwidth=2, label="implements: AApi", fontsize=9];',
+            '"svc" -> "shared-api" [style=dashed, color="#1976d2", penwidth=2, label="implements: AApi", fontsize=9]',
         );
     });
 
@@ -320,7 +321,7 @@ describe('generateDot drawOnGraph:false hiding', () => {
     it('drops every edge touching a hidden node but keeps edges between visible nodes', () => {
         const dot = viz.generateDot(HIDDEN_GRAPH);
         expect(dot).not.toContain('"visible" -> "secret"');
-        expect(dot).toContain('"visible" -> "core-util";');
+        expect(dot).toContain('"visible" -> "core-util" [id="wp-real-edge-0"];');
     });
 
     it('still renders visible nodes normally', () => {
@@ -332,7 +333,7 @@ describe('generateDot drawOnGraph:false hiding', () => {
 
 describe('generateHTML', () => {
     it('renders a framework + role legend in three columns', () => {
-        const html = viz.generateHTML(viz.generateDot(GRAPH), viz.designLinks(GRAPH));
+        const html = viz.generateHTML(viz.generateRenderModel(GRAPH), viz.designLinks(GRAPH));
         expect(html).toContain('legend-columns');
         expect(html).toContain('Fill = framework');
         expect(html).toContain('Border = role');
@@ -342,15 +343,15 @@ describe('generateHTML', () => {
     });
 
     it('skips the invisible layout scaffolding when indexing, so an anchor is never a dependency', () => {
-        const html = viz.generateHTML(viz.generateDot(GRAPH), viz.designLinks(GRAPH));
-        expect(html).toContain("LAYOUT_CLASS = 'wp-layout'");
+        const html = viz.generateHTML(viz.generateRenderModel(GRAPH), viz.designLinks(GRAPH));
+        expect(html).toContain("classList.contains('wp-layout')");
         // Both indexes must skip it — a layout node would pick up hover handlers, and a layout edge
         // would chain two bands into one dependency that does not exist.
-        expect(html.match(/classList\.contains\(LAYOUT_CLASS\)/g)).toHaveLength(2);
+        expect(html).toContain('class WpGraphChain');
     });
 
     it('wires up hover-highlight so connections bolden on box hover', () => {
-        const html = viz.generateHTML(viz.generateDot(GRAPH), viz.designLinks(GRAPH));
+        const html = viz.generateHTML(viz.generateRenderModel(GRAPH), viz.designLinks(GRAPH));
         // The post-render wiring and its mouse handlers must be present. The logic is a CLASS now
         // (it was loose functions while the client was an unlinted .js asset), so this asserts the
         // class and its entry point rather than the old free function.
@@ -367,8 +368,8 @@ describe('generateHTML', () => {
         // descendants (not just one hop).
         expect(html).toContain('inNodes');
         expect(html).toContain('outNodes');
-        expect(html).toContain('inEdges');
-        expect(html).toContain('outEdges');
+        expect(html).toContain('wp-real-edge-');
+        expect(html).toContain('this.model.edges');
         expect(html).toContain('visited');
         expect(html).toContain('stack');
     });
@@ -391,7 +392,7 @@ describe('generateHTML node menu', () => {
     };
 
     const htmlFor = (graph: EnhancedGraph): string =>
-        viz.generateHTML(viz.generateDot(graph), viz.designLinks(graph), 'T', viz.lockControl(graph));
+        viz.generateHTML(viz.generateRenderModel(graph), viz.designLinks(graph), 'T', viz.lockControl(graph));
 
     it('inlines the shared menu implementation and wires every node to open it', () => {
         const html = htmlFor(DESIGNED);
@@ -418,7 +419,7 @@ describe('generateHTML node menu', () => {
     it('carries no link for a project with no design page, so its menu omits the item', () => {
         const html = htmlFor({ plain: { level: 0, dependsOn: [], role: 'lib' } });
         // The links payload is empty — nothing for the menu to build a View Design item from.
-        expect(html).toContain('for (const link of [])');
+        expect(html).toContain('new Map([].map');
         expect(html).not.toContain('"nodeId"');
     });
 
@@ -433,8 +434,8 @@ describe('generateHTML node menu', () => {
         // setLock writes the dropdown's selection, then applies the highlight + card filter — and the
         // dropdown's own change handler calls the same applyLock, so the two can never disagree.
         expect(html).toContain('setLock');
-        expect(html).toContain('applyLock');
-        expect(html).toContain('lockSelect.value =');
+        expect(html).toContain('this.highlighter?.relight()');
+        expect(html).toContain('select.value =');
         expect(html).toContain('id="wp-lock"');
     });
 });

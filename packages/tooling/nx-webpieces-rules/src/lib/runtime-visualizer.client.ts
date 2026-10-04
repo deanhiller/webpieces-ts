@@ -12,7 +12,7 @@
  *      renderSVGElement is then SYNCHRONOUS — v2's returned a promise);
  *   2. upgrade every queue node into a TRUE horizontal cylinder;
  *   3. make every node clickable, opening the SHARED floating menu (graph-node-menu.ts — the same one
- *      architecture/dependencies.html and every design.html use) whose only item here is Lock/Unlock.
+ *      architecture/dependencies.html and every design.html use) with independent Lock/Unlock and chain filtering.
  *
  * Why (2) is post-processing rather than a shape:
  *
@@ -165,57 +165,39 @@ class QueueCylinders {
     }
 }
 
-/**
- * Every node of the runtime graph opens the shared floating menu.
- *
- * There is exactly ONE item, and it is the lock. NO "View Design": a node here is a running SERVICE,
- * a queue, a datastore or a third-party system, not an nx project, so there is no design.html to point
- * at and the item is ABSENT rather than present-and-dead.
- *
- * LOCK means the literal thing the box shows: dim every other node and every edge, light the locked
- * box alone. That is `WpNodeLock`, the same lock a design page uses — this page has no lock dropdown
- * and no responsibilities list, so there is no second control for it to fall out of step with, and
- * the menu label is derived from the lock's own state on every open.
- */
+/** Runtime keeps the single-box Lock while Filter follows the full directed chain. */
 class RuntimeNodeMenu {
-    private readonly lock: WpNodeLock;
-
-    constructor(private readonly svg: SVGSVGElement) {
-        this.lock = new WpNodeLock(svg);
-    }
+    constructor(private readonly svg: SVGSVGElement, private readonly lock: WpNodeLock, private readonly page: RuntimePage) {}
 
     wire(): void {
         WpNodeMenu.wire(this.svg, (name: string, node: SVGGElement): WpNodeMenuItem[] => {
             const label = this.lock.isLocked(name) ? 'Unlock' : 'Lock';
-            return [new WpNodeMenuItem(label, (): void => { this.lock.toggle(name, node); })];
+            return [new WpNodeMenuItem(label, (): void => { this.lock.toggle(name, node); }), this.page.filterItem(name)];
         });
     }
 }
 
-/**
- * Renders the DOT, reshapes the queues, wires the node menu, and reports a failure into the page
- * rather than only the console.
- */
-class RuntimePage {
-    render(): void {
-        Viz.instance()
-            .then((viz: VizInstance): void => {
-                const element = viz.renderSVGElement(__DOT__);
-                new QueueCylinders().applyTo(element);
-                const host = document.getElementById('graph');
-                if (host === null) return;
-                host.appendChild(element);
-                // AFTER the cylinders: wiring reads each node's <title>, which the redraw leaves
-                // alone, but the clickable class belongs on the shape that is finally there.
-                new RuntimeNodeMenu(element).wire();
-            })
-            // webpieces-disable no-any-unknown -- a promise rejection reason is untyped BY THE LANGUAGE (any value can be thrown), and this browser script cannot import the repo's toError helper; it is stringified, never dereferenced
-            .catch((err: unknown): void => {
-                console.error(err);
-                const host = document.getElementById('graph');
-                if (host !== null) host.innerHTML = '<pre>' + String(err) + '</pre>';
-            });
+class RuntimePage extends WpFilterPage {
+    private lock: WpNodeLock | null = null;
+
+    protected override captureBinding(svg: SVGSVGElement | null): () => void {
+        const previous = this.lock;
+        return (): void => {
+            this.lock = previous;
+            if (svg !== null) this.lock?.rebind(svg);
+        };
+    }
+
+    protected override prepareSvg(svg: SVGSVGElement): void { new QueueCylinders().applyTo(svg); }
+
+    protected wireSvg(svg: SVGSVGElement): void {
+        if (this.lock === null) this.lock = new WpNodeLock(svg);
+        else this.lock.rebind(svg);
+        new RuntimeNodeMenu(svg, this.lock, this).wire();
+        svg.querySelectorAll<SVGGElement>('g.node').forEach(node => {
+            if (node.querySelector('title')?.textContent === this.anchor) node.classList.add('wp-filter-anchor');
+        });
     }
 }
 
-new RuntimePage().render();
+new RuntimePage(__RENDER_MODEL__).render();
