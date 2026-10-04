@@ -172,8 +172,8 @@ describe('generateRuntimeDot — per-method queues, clocks, inbound external', (
         // CHANGED from toContain: `TaskApi-send` is the DERIVED `${Api}-${method}` name, so the
         // `queue:` line only restated the line above it. Only a @Queue(...) OVERRIDE prints now.
         expect(dot).not.toContain('queue: TaskApi-send');
-        expect(dot).toContain('"worker" -> "queue__TaskApi_send" [label="enqueue", style=dashed];');
-        expect(dot).toContain('"queue__TaskApi_send" -> "worker" [label="deliver", style=dashed];');
+        expect(dot).toContain('"worker" -> "queue__TaskApi_send" [label="enqueue", style=dashed]');
+        expect(dot).toContain('"queue__TaskApi_send" -> "worker" [label="deliver", style=dashed]');
     });
 
     it('hangs the cron endpoint off a clock pointing INTO the service', () => {
@@ -240,10 +240,10 @@ describe('generateRuntimeDot — merging queues of one contract into one box', (
         expect(countLines(dot, '[label="enqueue"')).toBe(1);
         expect(countLines(dot, '[label="deliver"')).toBe(1);
         expect(dot).toContain(
-            '"worker" -> "queue__TaskApi_blast" [label="enqueue", style=dashed];',
+            '"worker" -> "queue__TaskApi_blast" [label="enqueue", style=dashed]',
         );
         expect(dot).toContain(
-            '"queue__TaskApi_blast" -> "worker" [label="deliver", style=dashed];',
+            '"queue__TaskApi_blast" -> "worker" [label="deliver", style=dashed]',
         );
     });
 
@@ -314,9 +314,9 @@ describe('generateRuntimeDot — queues with different endpoints stay separate',
         expect(dot).toContain('"queue__TaskApi_retry" [shape=Mrecord');
         expect(dot).toContain('"queue__TaskApi_send" [shape=Mrecord');
         // The two-producer queue keeps BOTH its enqueue arrows.
-        expect(dot).toContain('"p1" -> "queue__TaskApi_retry" [label="enqueue", style=dashed];');
-        expect(dot).toContain('"p2" -> "queue__TaskApi_retry" [label="enqueue", style=dashed];');
-        expect(dot).toContain('"p1" -> "queue__TaskApi_send" [label="enqueue", style=dashed];');
+        expect(dot).toContain('"p1" -> "queue__TaskApi_retry" [label="enqueue", style=dashed]');
+        expect(dot).toContain('"p2" -> "queue__TaskApi_retry" [label="enqueue", style=dashed]');
+        expect(dot).toContain('"p1" -> "queue__TaskApi_send" [label="enqueue", style=dashed]');
         expect(countLines(dot, '[label="deliver"')).toBe(2);
     });
 });
@@ -339,8 +339,8 @@ describe('generateRuntimeDot — the legacy unnamed per-pair queue', () => {
     it('still renders an edge that carries no queue key', () => {
         expect(dot).toContain('"queue__p1__c" [shape=Mrecord');
         expect(dot).toContain('label=" |EmailApi\\nqueue"');
-        expect(dot).toContain('"p1" -> "queue__p1__c" [label="enqueue", style=dashed];');
-        expect(dot).toContain('"queue__p1__c" -> "c" [label="deliver", style=dashed];');
+        expect(dot).toContain('"p1" -> "queue__p1__c" [label="enqueue", style=dashed]');
+        expect(dot).toContain('"queue__p1__c" -> "c" [label="deliver", style=dashed]');
     });
 });
 

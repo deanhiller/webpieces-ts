@@ -157,7 +157,17 @@ export class GraphNodeMenu {
                     const name = title === null || title.textContent === null
                         ? '' : title.textContent.trim();
                     if (name === '') return;
+                    if (node.classList.contains('wp-layout')) return;
                     node.classList.add('wp-node-clickable');
+                    node.setAttribute('tabindex', '0');
+                    node.setAttribute('role', 'button');
+                    node.addEventListener('keydown', function (ev) {
+                        if (ev.key !== 'Enter' && ev.key !== ' ') return;
+                        ev.preventDefault();
+                        ev.stopPropagation();
+                        WpNodeMenu.open(node, name, itemsFor(name, node));
+                        document.querySelector('#wp-node-menu button')?.focus();
+                    });
                     node.addEventListener('click', function (ev) {
                         ev.preventDefault();
                         ev.stopPropagation();
@@ -176,6 +186,19 @@ export class GraphNodeMenu {
         return `
         class WpNodeLock {
             constructor(svg) { this.svg = svg; this.locked = null; }
+            rebind(svg) {
+                const name = this.locked;
+                this.svg = svg;
+                this.clear();
+                this.locked = name;
+                if (name === null) return;
+                for (const node of svg.querySelectorAll('g.node')) {
+                    if (node.querySelector('title')?.textContent === name) {
+                        this.lock(name, node);
+                        break;
+                    }
+                }
+            }
             isLocked(name) { return this.locked === name; }
             toggle(name, nodeEl) {
                 if (this.locked === name) this.clear();

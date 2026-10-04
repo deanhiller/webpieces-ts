@@ -1,286 +1,121 @@
-/*
- * Browser-side script for architecture/dependencies.html.
- *
- * graph-visualizer.ts reads this file's COMPILED output with readFileSync, substitutes the DOT
- * placeholder (see viz-client-globals.d.ts) with the JSON-encoded Graphviz DOT, and inlines the result into a <script> tag. So it
- * runs in a browser, never in node — but it is ordinary TypeScript, compiled in place by tsc exactly
- * like the package's bin entry points, and linted like every other file here.
- *
- * IT USED TO BE A COMMITTED .js ASSET, exempted from `no-js-files`, and its own header said why: so the
- * dim/highlight/lock logic "can define ordinary browser functions without tripping the TypeScript lint
- * rules". That is a file existing to dodge the rules — the same anti-pattern as the bin shims this repo
- * deleted, and the same cure applies. The logic is a CLASS now, which is what `no-function-outside-class`
- * was asking for all along; nothing needed a disable.
- *
- * Behaviour: after Viz renders the SVG, hovering a box dims the rest and lights its full
- * ancestor+descendant chain; the #wp-lock dropdown PINS one box's chain (the dim survives mouse-leave)
- * and filters the responsibilities cards below the graph to just that chain. "All" clears the lock.
- *
- * CLICKING a box opens the shared floating node menu (graph-node-menu.ts, the same menu every
- * project's design.html uses) — "View Design" only for a project that HAS a design.html, then
- * Lock/Unlock. Menu and dropdown are one lock: both go through setLock(), so each reflects the other.
- */
-
-// The DOT placeholder and the `Viz` global are declared once in viz-client-globals.d.ts — both
-// scripts share a global scope, so they cannot each declare them. Do NOT spell the placeholder token
-// in a comment: the inliner is a blind split/join, so every literal occurrence gets the whole DOT.
-
-/**
- * The class graph-visualizer.ts stamps on the invisible rank anchors, spacer bands and ordering
- * edges that pin each level to its own row. They are layout scaffolding, not architecture, so the
- * indexes below skip them: an anchor must never be walkable as a dependency, or hovering one box
- * would light boxes it has nothing to do with.
- *
- * Graphviz drops `style=invis` elements from its SVG entirely (verified against the emitted SVG),
- * so today nothing carrying this class reaches the DOM at all. The skip is the guarantee that the
- * scaffolding stays inert if that ever stops being true — the DOT is the only place that decides
- * what is scaffolding, and it says so with this class.
- */
-const LAYOUT_CLASS = 'wp-layout';
-
-/** One traversal direction: the edges to light, and the nodes to walk on to. */
-class Direction {
-    constructor(
-        readonly nodes: Map<string, Set<string>>,
-        readonly edges: Map<string, Set<Element>>,
-    ) {}
-}
-
-/**
- * Indexes the rendered SVG and drives the dim/highlight/lock interaction.
- *
- * The adjacency is DIRECTED and kept as two maps per axis: `in*` is what points AT a node (ancestors,
- * walked upward) and `out*` is what it points to (dependencies, walked downward). Highlighting walks
- * both, so a hovered box lights its entire chain in both directions rather than just its neighbours.
- */
+/** Architecture interactions bind to each new SVG; logical Lock/Filter state belongs to the page. */
 class GraphHighlighter {
     private readonly nodeByName = new Map<string, SVGGElement>();
-    private readonly inEdges = new Map<string, Set<Element>>();
-    private readonly outEdges = new Map<string, Set<Element>>();
-    private readonly inNodes = new Map<string, Set<string>>();
-    private readonly outNodes = new Map<string, Set<string>>();
 
-    /**
-     * The box the dropdown pinned, or null. Hover still works on top of a lock — leaving a box
-     * restores the LOCKED view instead of clearing, so the pinned subgraph stays visible while you
-     * scroll down to its responsibility cards.
-     */
-    private locked: string | null = null;
+    constructor(
+        private readonly svg: SVGSVGElement,
+        private readonly chain: WpGraphChain,
+        private readonly model: RenderModelJson,
+        private readonly page: GraphPage,
+    ) {}
 
-    constructor(private readonly svg: SVGSVGElement) {}
-
-    /** Index the SVG, then wire hover, the lock dropdown, and the per-node floating menu. */
     wire(): void {
-        this.indexNodes();
-        this.indexEdges();
+        this.svg.querySelectorAll<SVGGElement>('g.node').forEach((g) => {
+            if (g.classList.contains('wp-layout')) return;
+            const name = g.querySelector('title')?.textContent;
+            if (name !== null && name !== undefined) this.nodeByName.set(name, g);
+        });
         this.wireHover();
-        this.wireLock();
         this.wireMenu();
-    }
-
-    private indexNodes(): void {
-        this.svg.querySelectorAll('g.node').forEach((g: Element): void => {
-            if (g.classList.contains(LAYOUT_CLASS)) return;
-            const title = g.querySelector('title');
-            if (title !== null && title.textContent !== null) {
-                this.nodeByName.set(title.textContent.trim(), g as SVGGElement);
-            }
-        });
-    }
-
-    private indexEdges(): void {
-        this.svg.querySelectorAll('g.edge').forEach((edge: Element): void => {
-            if (edge.classList.contains(LAYOUT_CLASS)) return;
-            const title = edge.querySelector('title');
-            const text = title === null ? null : title.textContent;
-            if (text === null) return;
-            const idx = text.indexOf('->');
-            if (idx < 0) return;
-            const from = text.slice(0, idx).trim();
-            const to = text.slice(idx + 2).trim();
-            this.ensureEdges(this.outEdges, from).add(edge);
-            this.ensureEdges(this.inEdges, to).add(edge);
-            this.ensureNodes(this.outNodes, from).add(to);
-            this.ensureNodes(this.inNodes, to).add(from);
-        });
-    }
-
-    private ensureEdges(map: Map<string, Set<Element>>, key: string): Set<Element> {
-        const existing = map.get(key);
-        if (existing !== undefined) return existing;
-        const created = new Set<Element>();
-        map.set(key, created);
-        return created;
-    }
-
-    private ensureNodes(map: Map<string, Set<string>>, key: string): Set<string> {
-        const existing = map.get(key);
-        if (existing !== undefined) return existing;
-        const created = new Set<string>();
-        map.set(key, created);
-        return created;
+        this.relight();
     }
 
     private clear(): void {
         this.svg.classList.remove('wp-dim');
-        this.svg.querySelectorAll('.wp-focus, .wp-neighbor, .wp-hl').forEach((el: Element): void => {
+        this.svg.querySelectorAll('.wp-focus, .wp-neighbor, .wp-hl').forEach((el) => {
             el.classList.remove('wp-focus', 'wp-neighbor', 'wp-hl');
         });
     }
 
-    /**
-     * Dim everything, then transitively light ancestors and descendants of `name`: edges reached get
-     * `wp-hl`, boxes get `wp-neighbor`. The `visited` set is what makes a cyclic graph terminate.
-     */
-    private highlight(name: string, focusEl: SVGGElement): void {
+    private highlight(name: string): void {
         this.clear();
+        const focus = this.nodeByName.get(name);
+        if (focus === undefined) return;
+        const lit = this.chain.nodes(name);
         this.svg.classList.add('wp-dim');
-        focusEl.classList.add('wp-focus');
-        const directions = [
-            new Direction(this.inNodes, this.inEdges),
-            new Direction(this.outNodes, this.outEdges),
-        ];
-        for (const dir of directions) this.walk(name, dir);
-    }
-
-    private walk(start: string, dir: Direction): void {
-        const visited = new Set<string>();
-        const stack = [start];
-        while (stack.length > 0) {
-            const cur = stack.pop() as string;
-            const edges = dir.edges.get(cur);
-            if (edges !== undefined) {
-                edges.forEach((e: Element): void => { e.classList.add('wp-hl'); });
+        focus.classList.add('wp-focus');
+        for (const id of lit) this.nodeByName.get(id)?.classList.add('wp-neighbor');
+        for (const edge of this.model.edges) {
+            if (lit.has(edge.from) && lit.has(edge.to)) {
+                this.svg.querySelector(`[id="${edge.id}"]`)?.classList.add('wp-hl');
             }
-            const next = dir.nodes.get(cur);
-            if (next === undefined) continue;
-            next.forEach((name: string): void => {
-                if (visited.has(name)) return;
-                visited.add(name);
-                stack.push(name);
-                const g = this.nodeByName.get(name);
-                if (g !== undefined) g.classList.add('wp-neighbor');
-            });
         }
     }
 
-    /** Leaving a box restores the locked view rather than clearing it outright. */
-    private relight(): void {
-        if (this.locked === null) {
-            this.clear();
-            return;
-        }
-        const g = this.nodeByName.get(this.locked);
-        if (g !== undefined) this.highlight(this.locked, g);
+    relight(): void {
+        const locked = this.page.lockSelection();
+        if (locked === null) this.clear();
+        else this.highlight(locked);
     }
 
     private wireHover(): void {
-        this.nodeByName.forEach((g: SVGGElement, name: string): void => {
-            g.addEventListener('mouseenter', (): void => { this.highlight(name, g); });
-            g.addEventListener('mouseleave', (): void => { this.relight(); });
+        this.nodeByName.forEach((g, name) => {
+            g.addEventListener('mouseenter', () => this.highlight(name));
+            g.addEventListener('mouseleave', () => this.relight());
         });
     }
 
-    private wireLock(): void {
-        const lockSelect = this.lockSelect();
-        if (lockSelect === null) return;
-        lockSelect.addEventListener('change', (): void => {
-            this.applyLock(lockSelect.value === '' ? null : lockSelect.value);
-        });
-    }
-
-    private lockSelect(): HTMLSelectElement | null {
-        return document.getElementById('wp-lock') as HTMLSelectElement | null;
-    }
-
-    /** True when `name` is the box the page is currently locked on — what the menu labels itself by. */
-    isLocked(name: string): boolean {
-        return this.locked === name;
-    }
-
-    /**
-     * THE one lock entry point, so the dropdown and the node menu can never disagree: it sets the
-     * dropdown's selection, re-highlights, and re-filters the cards whichever of the two asked.
-     * `null` is "All (no lock)".
-     */
-    setLock(name: string | null): void {
-        const lockSelect = this.lockSelect();
-        if (lockSelect !== null) lockSelect.value = name === null ? '' : name;
-        this.applyLock(name);
-    }
-
-    private applyLock(name: string | null): void {
-        this.locked = name;
-        if (name === null) {
-            this.clear();
-        } else {
-            const g = this.nodeByName.get(name);
-            if (g !== undefined) this.highlight(name, g);
-        }
-        this.filterCards();
-    }
-
-    /**
-     * Every box opens the floating menu (the shared one both generated graphs use). "View Design" is
-     * only built when that project actually HAS a committed design.html; the bottom item is always
-     * Lock or Unlock, whichever applies to this box right now.
-     */
     private wireMenu(): void {
-        const designs = new Map<string, string>();
-        for (const link of __DESIGN_LINKS__) designs.set(link.nodeId, link.href);
-        WpNodeMenu.wire(this.svg, (name: string): WpNodeMenuItem[] => {
+        const designs = new Map(__DESIGN_LINKS__.map((link) => [link.nodeId, link.href]));
+        WpNodeMenu.wire(this.svg, (name) => {
             const items: WpNodeMenuItem[] = [];
             const href = designs.get(name);
-            if (href !== undefined) {
-                items.push(new WpNodeMenuItem('View Design', (): void => { window.open(href, '_blank'); }));
-            }
-            const locked = this.isLocked(name);
-            items.push(new WpNodeMenuItem(locked ? 'Unlock' : 'Lock', (): void => {
-                this.setLock(locked ? null : name);
-            }));
+            if (href !== undefined)
+                items.push(new WpNodeMenuItem('View Design', () => window.open(href, '_blank')));
+            const locked = this.page.lockSelection() === name;
+            items.push(
+                new WpNodeMenuItem(locked ? 'Unlock' : 'Lock', () =>
+                    this.page.setLock(locked ? null : name),
+                ),
+            );
+            items.push(this.page.filterItem(name));
             return items;
         });
     }
+}
 
-    /**
-     * Filter the responsibility cards to the locked box's chain by READING BACK the
-     * `.wp-focus`/`.wp-neighbor` classes highlight() just set — so there is no second graph walk and
-     * the cards can never disagree with the picture.
-     */
+class GraphPage extends WpFilterPage {
+    private highlighter: GraphHighlighter | null = null;
+
+    protected override wireControls(): void {
+        const select = document.getElementById('wp-lock') as HTMLSelectElement | null;
+        select?.addEventListener('change', () =>
+            this.setLock(select.value === '' ? null : select.value),
+        );
+    }
+
+    protected wireSvg(svg: SVGSVGElement): void {
+        this.highlighter = new GraphHighlighter(svg, this.chain, this.model, this);
+        this.highlighter.wire();
+        this.filterCards();
+        svg.querySelectorAll<SVGGElement>('g.node').forEach((node) => {
+            if (node.querySelector('title')?.textContent === this.anchor)
+                node.classList.add('wp-filter-anchor');
+        });
+    }
+
+    lockSelection(): string | null {
+        return this.locked;
+    }
+
+    setLock(name: string | null): void {
+        this.locked = name;
+        const select = document.getElementById('wp-lock') as HTMLSelectElement | null;
+        if (select !== null) select.value = name ?? '';
+        this.highlighter?.relight();
+        this.filterCards();
+    }
+
     private filterCards(): void {
-        const lit = new Set<string>();
-        if (this.locked !== null) {
-            this.svg.querySelectorAll('.wp-focus, .wp-neighbor').forEach((el: Element): void => {
-                const title = el.querySelector('title');
-                if (title !== null && title.textContent !== null) lit.add(title.textContent.trim());
-            });
-        }
-        document.querySelectorAll('.wp-resp-card').forEach((card: Element): void => {
+        const lit = this.locked === null ? this.retained : this.chain.nodes(this.locked);
+        document.querySelectorAll('.wp-resp-card').forEach((card) => {
             const name = card.getAttribute('data-node');
-            const visible = this.locked === null || (name !== null && lit.has(name));
-            card.classList.toggle('wp-hidden', !visible);
+            card.classList.toggle(
+                'wp-hidden',
+                name === null || !this.retained.has(name) || !lit.has(name),
+            );
         });
     }
 }
 
-/** Renders the DOT and hands the SVG to the highlighter. Reports a failure into the page, not just the console. */
-class GraphPage {
-    render(): void {
-        Viz.instance()
-            .then((viz: VizInstance): void => {
-                const element = viz.renderSVGElement(__DOT__);
-                const host = document.getElementById('graph');
-                if (host === null) return;
-                host.appendChild(element);
-                new GraphHighlighter(element).wire();
-            })
-            // webpieces-disable no-any-unknown -- a promise rejection reason is untyped BY THE LANGUAGE (any value can be thrown), and this browser script cannot import the repo's toError helper; it is stringified, never dereferenced
-            .catch((err: unknown): void => {
-                console.error(err);
-                const host = document.getElementById('graph');
-                if (host !== null) host.innerHTML = '<pre>' + String(err) + '</pre>';
-            });
-    }
-}
-
-new GraphPage().render();
+new GraphPage(__RENDER_MODEL__).render();

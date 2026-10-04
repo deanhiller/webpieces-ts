@@ -53,11 +53,11 @@ describe('saved architecture viewing', () => {
         // DOT generation, HTML rendering, and browser fallback behavior under test.
         const generateHTML = GraphVisualizer.prototype.generateHTML;
         vi.spyOn(GraphVisualizer.prototype, 'generateHTML').mockImplementation(function (...args) {
-            return generateHTML.apply(new GraphVisualizer(() => '// browser client'), args);
+            return generateHTML.apply(new GraphVisualizer(() => '// browser client', () => '// filter client'), args);
         });
         const render = RuntimeHtmlPage.prototype.render;
         vi.spyOn(RuntimeHtmlPage.prototype, 'render').mockImplementation(function (...args) {
-            return render.apply(new RuntimeHtmlPage(() => '// browser client'), args);
+            return render.apply(new RuntimeHtmlPage(() => '// browser client', () => '// filter client'), args);
         });
         vi.spyOn(GraphVisualizer.prototype, 'openVisualization').mockReturnValue(false);
         vi.spyOn(console, 'log').mockImplementation(() => undefined);

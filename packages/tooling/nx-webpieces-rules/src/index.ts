@@ -22,3 +22,5 @@ export { NoRootUnionApiTypeConfig } from './configs/no-root-union-config';
 export { API_DOC_MODES, ApiRulesForOpenApiConfig, ApiRulesForMcpConfig } from './configs/api-doc-rules-config';
 export type { ApiDocMode } from './configs/api-doc-rules-config';
 export { ApiClientPackagesEntry, ApiLibDependenciesConfig, ApiLibPathConfig, FrameworkFolderEntry, FrameworkFolderConfig } from './configs/tag-truth-configs';
+
+export { GraphRenderModel, RenderNode, RenderEdge } from './lib/graph-render-model';

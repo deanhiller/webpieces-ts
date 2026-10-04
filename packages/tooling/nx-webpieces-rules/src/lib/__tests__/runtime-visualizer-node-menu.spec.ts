@@ -14,6 +14,7 @@ import { describe, it, expect } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as ts from 'typescript';
+import { GraphRenderModel } from '../graph-render-model';
 import { RuntimeHtmlPage } from '../runtime-html-page';
 
 const CLIENT_TS = path.join(__dirname, '..', 'runtime-visualizer.client.ts');
@@ -21,7 +22,8 @@ const clientJs = (): string => ts.transpileModule(
     fs.readFileSync(CLIENT_TS, 'utf-8'), { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
 
 const DOT = 'digraph G {\n  "svc-a" -> "svc-b";\n}';
-const html = (): string => new RuntimeHtmlPage(clientJs).render(DOT, 'Runtime');
+const filterJs = (): string => ts.transpileModule(fs.readFileSync(path.join(__dirname, '..', 'graph-filter.client.ts'), 'utf-8'), { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
+const html = (): string => { const model = new GraphRenderModel(); model.fullDot = DOT; return new RuntimeHtmlPage(clientJs, filterJs).render(model, 'Runtime'); };
 
 describe('runtime architecture page node menu', () => {
     it('inlines the shared menu implementation rather than a second copy of it', () => {
