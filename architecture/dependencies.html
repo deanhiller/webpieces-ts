@@ -12,7 +12,7 @@
          * navigation), so the menu's own stylesheet carries the cursor + blue
          * glow, and the dim/undim rules a hover or a lock toggles. Both are
          * shared verbatim with the per-project design pages. */
-
+        
         .wp-node-menu {
             position: absolute;
             z-index: 1000;
@@ -45,7 +45,12 @@
             cursor: pointer;
         }
         .wp-node-menu-item:hover { background: #E3F2FD; }
-        g.wp-node-clickable { cursor: pointer; }
+        g.wp-node-clickable { cursor: pointer; outline: none; }
+        /* DOM keyboard focus is independent of graph highlight/Lock and stays dim with its node. */
+        g.wp-node-clickable.wp-keyboard-focus {
+            outline: 2px dashed #7b1fa2;
+            outline-offset: 2px;
+        }
         /* Every shape Graphviz (or the runtime page's own queue-cylinder redraw) can emit for a node
          * body: box/record -> polygon, circle -> ellipse, cylinder and the redrawn queue -> path. A
          * shape left out of this list would be a box that is clickable but never looks it. */
@@ -59,13 +64,16 @@
             stroke-width: 5;
             filter: drop-shadow(0 0 6px rgba(25, 118, 210, 0.85));
         }
-
+        
         #graph .node, #graph .edge { transition: opacity 0.12s ease; }
         #graph svg.wp-dim .node,
         #graph svg.wp-dim .edge { opacity: 0.15; }
         #graph svg.wp-dim .node.wp-focus,
         #graph svg.wp-dim .node.wp-neighbor,
         #graph svg.wp-dim .edge.wp-hl { opacity: 1; }
+        #graph g.node.wp-locked polygon,
+        #graph g.node.wp-locked ellipse,
+        #graph g.node.wp-locked path { stroke: #b26a00; stroke-width: 3; }
         #graph {
             text-align: center;
             background: white;
@@ -91,7 +99,7 @@
             margin-right: 10px;
             vertical-align: middle;
         }
-
+        
         /* The architecture graph is very wide, so lay the legend out as three
          * side-by-side columns (fill / border / edge) instead of one tall
          * column — it keeps the legend short next to the wide graph, and
@@ -145,7 +153,7 @@
         }
         .wp-hidden { display: none; }
         #wp-filter-status { text-align:center; } #wp-graph-error { color:#b71c1c; } #graph .wp-filter-anchor polygon, #graph .wp-filter-anchor path, #graph .wp-filter-anchor ellipse { stroke:#1565c0; stroke-width:3; }
-
+    
         #graph { overflow: auto; max-height: 75vh; text-align: left; touch-action: pan-x pan-y; }
         #graph svg { max-width: none; max-height: none; display: block; }
         .wp-navigation { display: flex; gap: 8px; align-items: center; margin: 10px 0; }
@@ -1290,12 +1298,42 @@
             constructor(label, onSelect) { this.label = label; this.onSelect = onSelect; }
         }
         class WpNodeMenu {
-            static close() {
+                        static keyboard = false;
+            static owner = null;
+            static ownerKeyboard = false;
+            static wired = new WeakSet();
+            static close(returnFocus = false) {
                 const open = document.getElementById('wp-node-menu');
-                if (open !== null) open.remove();
+                const owner = WpNodeMenu.owner;
+                const keyboard = WpNodeMenu.ownerKeyboard;
+                WpNodeMenu.owner = null;
+                if (open === null) return;
+                open.remove();
+                if (returnFocus && keyboard && owner?.isConnected) {
+                    WpNodeMenu.keyboard = true;
+                    owner.focus({ preventScroll: true });
+                }
             }
+            static focusedName(svg) {
+                const active = document.activeElement;
+                const menu = document.getElementById('wp-node-menu');
+                const node = menu?.contains(active) && WpNodeMenu.ownerKeyboard
+                    ? WpNodeMenu.owner : active;
+                return svg?.contains(node) && (node === WpNodeMenu.owner || node?.classList.contains('wp-keyboard-focus'))
+                    ? node.querySelector('title')?.textContent.trim() : null;
+            }
+            static restoreFocus(svg, name) {
+                if (name == null) return;
+                const nodes = Array.from(svg.querySelectorAll('g.wp-node-clickable'));
+                const node = nodes.find(node => node.querySelector('title')?.textContent.trim() === name);
+                WpNodeMenu.keyboard = true;
+                (node || nodes[0])?.focus({ preventScroll: true });
+            }
+
             static open(nodeEl, name, items) {
                 WpNodeMenu.close();
+                WpNodeMenu.owner = nodeEl;
+                WpNodeMenu.ownerKeyboard = WpNodeMenu.keyboard;
                 const menu = document.createElement('div');
                 menu.id = 'wp-node-menu';
                 menu.className = 'wp-node-menu';
@@ -1307,6 +1345,7 @@
                 for (const item of items) menu.appendChild(WpNodeMenu.button(item));
                 document.body.appendChild(menu);
                 WpNodeMenu.place(menu, nodeEl);
+                menu.querySelector('button')?.focus({ preventScroll: true });
             }
             static button(item) {
                 const button = document.createElement('button');
@@ -1316,12 +1355,12 @@
                 button.addEventListener('click', function (ev) {
                     ev.preventDefault();
                     ev.stopPropagation();
-                    WpNodeMenu.close();
+                    WpNodeMenu.close(true);
                     item.onSelect();
                 });
                 return button;
             }
-            static place(menu, nodeEl) {
+                        static place(menu, nodeEl) {
                 const box = nodeEl.getBoundingClientRect();
                 const own = menu.getBoundingClientRect();
                 const maxLeft = window.scrollX + document.documentElement.clientWidth - own.width - 8;
@@ -1330,13 +1369,14 @@
                 menu.style.left = left + 'px';
                 menu.style.top = (box.bottom + window.scrollY + 4) + 'px';
             }
+
             static wireKeyboard(node, name, itemsFor) {
             node.addEventListener('keydown', function (ev) {
                 if (ev.key !== 'Enter' && ev.key !== ' ') return;
                 ev.preventDefault();
                 ev.stopPropagation();
+                WpNodeMenu.keyboard = true;
                 WpNodeMenu.open(node, name, itemsFor(name, node));
-                document.querySelector('#wp-node-menu button')?.focus();
             });
         }
             static wire(svg, itemsFor) {
@@ -1346,6 +1386,14 @@
                         ? '' : title.textContent.trim();
                     if (name === '') return;
                     if (node.classList.contains('wp-layout')) return;
+                    if (WpNodeMenu.wired.has(node)) return;
+                    WpNodeMenu.wired.add(node);
+                    node.addEventListener('focus', function () {
+                        node.classList.toggle('wp-keyboard-focus', WpNodeMenu.keyboard);
+                    });
+                    node.addEventListener('blur', function () {
+                        node.classList.remove('wp-keyboard-focus');
+                    });
                     node.classList.add('wp-node-clickable');
                     node.setAttribute('tabindex', '0');
                     node.setAttribute('role', 'button');
@@ -1394,10 +1442,20 @@
             }
         }
 
+        document.addEventListener('pointerdown', function () {
+            WpNodeMenu.keyboard = false;
+            document.querySelectorAll('.wp-keyboard-focus').forEach(function (node) {
+                node.classList.remove('wp-keyboard-focus');
+            });
+        }, true);
         document.addEventListener('click', function () { WpNodeMenu.close(); });
         document.addEventListener('keydown', function (ev) {
-            if (ev.key === 'Escape') WpNodeMenu.close();
-        });</script>
+            if (ev.altKey || ev.ctrlKey || ev.metaKey) return;
+            WpNodeMenu.keyboard = true;
+            const active = document.activeElement;
+            if (active?.classList.contains('wp-node-clickable')) active.classList.add('wp-keyboard-focus');
+            if (ev.key === 'Escape') WpNodeMenu.close(true);
+        }, true);</script>
     <script>"use strict";
 /** Plain browser helpers shared by architecture and runtime; no CommonJS imports. */
 class WpGraphChain {
@@ -1517,7 +1575,9 @@ class WpFilterPage {
             // webpieces-disable no-any-unknown -- promise rejections may carry any JavaScript value
             .catch((err) => this.error(err instanceof Error ? err : new Error(String(err))));
     }
-    captureBinding(_svg) { return () => { }; }
+    captureBinding(_svg) {
+        return () => { };
+    }
     wireControls() { }
     prepareSvg(_svg) { }
     filterItem(name) {
@@ -1535,6 +1595,7 @@ class WpFilterPage {
         const previousAnchor = this.anchor;
         const previousRetained = this.retained;
         const previousSvg = host.querySelector('svg');
+        const focusName = WpNodeMenu.focusedName(previousSvg);
         const rollback = this.captureBinding(previousSvg);
         // eslint-disable-next-line @webpieces/no-unmanaged-exceptions -- browser transaction restores the previous usable graph on failure
         try {
@@ -1549,6 +1610,7 @@ class WpFilterPage {
             host.replaceChildren(svg);
             this.wireSvg(svg);
             this.indicator();
+            WpNodeMenu.restoreFocus(svg, focusName);
             this.error(null);
             // webpieces-disable no-any-unknown -- JavaScript may throw any value at this browser boundary
         }
@@ -1561,6 +1623,8 @@ class WpFilterPage {
             else
                 host.replaceChildren();
             rollback();
+            if (previousSvg !== null)
+                WpNodeMenu.restoreFocus(previousSvg, focusName);
             this.error(err instanceof Error ? err : new Error(String(err)));
         }
     }
@@ -1674,6 +1738,7 @@ class GraphHighlighter {
     model;
     page;
     nodeByName = new Map();
+    hovered = null;
     constructor(svg, chain, model, page) {
         this.svg = svg;
         this.chain = chain;
@@ -1694,18 +1759,28 @@ class GraphHighlighter {
     }
     clear() {
         this.svg.classList.remove('wp-dim');
-        this.svg.querySelectorAll('.wp-focus, .wp-neighbor, .wp-hl').forEach((el) => {
-            el.classList.remove('wp-focus', 'wp-neighbor', 'wp-hl');
+        this.svg.querySelectorAll('.wp-focus, .wp-neighbor, .wp-hl, .wp-locked').forEach((el) => {
+            el.classList.remove('wp-focus', 'wp-neighbor', 'wp-hl', 'wp-locked');
         });
     }
-    highlight(name) {
+    relight() {
         this.clear();
-        const focus = this.nodeByName.get(name);
-        if (focus === undefined)
+        const locked = this.page.lockSelection();
+        if (locked !== null)
+            this.nodeByName.get(locked)?.classList.add('wp-locked');
+        // A filtered-out Lock is suspended, including its otherwise visible relatives.
+        const anchors = [locked, this.hovered].filter((name) => name !== null && this.nodeByName.has(name));
+        if (anchors.length === 0)
             return;
-        const lit = this.chain.nodes(name);
+        const lit = new Set();
+        for (const name of anchors) {
+            this.nodeByName.get(name)?.classList.add('wp-focus');
+            for (const id of this.chain.nodes(name)) {
+                if (this.nodeByName.has(id))
+                    lit.add(id);
+            }
+        }
         this.svg.classList.add('wp-dim');
-        focus.classList.add('wp-focus');
         for (const id of lit)
             this.nodeByName.get(id)?.classList.add('wp-neighbor');
         for (const edge of this.model.edges) {
@@ -1714,17 +1789,16 @@ class GraphHighlighter {
             }
         }
     }
-    relight() {
-        const locked = this.page.lockSelection();
-        if (locked === null)
-            this.clear();
-        else
-            this.highlight(locked);
-    }
     wireHover() {
         this.nodeByName.forEach((g, name) => {
-            g.addEventListener('mouseenter', () => this.highlight(name));
-            g.addEventListener('mouseleave', () => this.relight());
+            g.addEventListener('mouseenter', () => {
+                this.hovered = name;
+                this.relight();
+            });
+            g.addEventListener('mouseleave', () => {
+                this.hovered = null;
+                this.relight();
+            });
         });
     }
     wireMenu() {
