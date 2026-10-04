@@ -180,6 +180,14 @@ class RuntimeNodeMenu {
 class RuntimePage extends WpFilterPage {
     private lock: WpNodeLock | null = null;
 
+    protected override captureBinding(svg: SVGSVGElement | null): () => void {
+        const previous = this.lock;
+        return (): void => {
+            this.lock = previous;
+            if (svg !== null) this.lock?.rebind(svg);
+        };
+    }
+
     protected override prepareSvg(svg: SVGSVGElement): void { new QueueCylinders().applyTo(svg); }
 
     protected wireSvg(svg: SVGSVGElement): void {

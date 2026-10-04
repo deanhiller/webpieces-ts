@@ -218,6 +218,41 @@ describe.skipIf(!process.env.WP_GRAPH_VIZ_JS)('real Viz local-file filtering', (
         await page.close();
     }, 30000);
 
+    it('rolls back SVG binding failures without accumulating handlers', async () => {
+        const page = await fixture.open('binding-failure', fixture.architecture(FilterFixture.wide()));
+        await page.selectOption('#wp-lock', 'hook-runtime');
+        await fixture.filter(page, 'hook-runtime');
+        const original = await page.locator('#graph svg').innerHTML();
+        await page.evaluate(() => {
+            const wire = WpNodeMenu.wire;
+            WpNodeMenu.wire = (svg, items) => {
+                if (document.documentElement.dataset.failBinding === 'yes') throw new Error('Injected binding failure');
+                wire(svg, items);
+            };
+            document.documentElement.dataset.failBinding = 'yes';
+        });
+        await page.locator('#wp-filter-off').click();
+        expect(await page.locator('#graph svg').innerHTML()).toBe(original);
+        expect(await page.locator('#wp-filter-status').isVisible()).toBe(true);
+        expect(await page.locator('#wp-lock').inputValue()).toBe('hook-runtime');
+        await page.evaluate(() => { delete document.documentElement.dataset.failBinding; });
+        await page.locator('#wp-filter-off').click();
+        await fixture.node(page, 'hook-runtime').click();
+        expect(await page.locator('#wp-node-menu').getByRole('button', { name: 'Unlock', exact: true }).count()).toBe(1);
+        await page.close();
+    }, 30000);
+
+    it('handles a single isolated node and a filter retaining the whole graph', async () => {
+        const graph = { isolated: { level: 5, dependsOn: [] } };
+        const page = await fixture.open('single-node', fixture.architecture(graph));
+        await fixture.filter(page, 'isolated');
+        expect(await fixture.names(page)).toEqual(['isolated']);
+        expect(await page.locator('#wp-filter-status').isVisible()).toBe(true);
+        await page.locator('#wp-filter-off').click();
+        expect(await fixture.names(page)).toEqual(['isolated']);
+        await page.close();
+    }, 30000);
+
     it('compacts and restores the large saved architecture snapshot at normal browser zoom', async () => {
         const graph = loadBlessedGraph(process.cwd())!.projects;
         const page = await fixture.open('architecture-real', fixture.architecture(graph));

@@ -120,13 +120,14 @@ abstract class WpFilterPage {
             .then((viz) => {
                 this.viz = viz;
                 this.filter(null);
-                // webpieces-disable no-any-unknown -- promise rejections may carry any JavaScript value
             })
+            // webpieces-disable no-any-unknown -- promise rejections may carry any JavaScript value
             .catch((err: unknown): void =>
                 this.error(err instanceof Error ? err : new Error(String(err))),
             );
     }
 
+    protected captureBinding(_svg: SVGSVGElement | null): () => void { return (): void => {}; }
     protected wireControls(): void {}
     protected abstract wireSvg(svg: SVGSVGElement): void;
     protected prepareSvg(_svg: SVGSVGElement): void {}
@@ -146,7 +147,11 @@ abstract class WpFilterPage {
             anchor === null
                 ? new Set(this.model.nodes.map((node) => node.id))
                 : this.chain.nodes(anchor);
-        // webpieces-disable no-unmanaged-exceptions -- browser render boundary retains the usable SVG and exposes recovery
+        const previousAnchor = this.anchor;
+        const previousRetained = this.retained;
+        const previousSvg = host.querySelector('svg');
+        const rollback = this.captureBinding(previousSvg);
+        // eslint-disable-next-line @webpieces/no-unmanaged-exceptions -- browser transaction restores the previous usable graph on failure
         try {
             const dot =
                 anchor === null
@@ -164,6 +169,11 @@ abstract class WpFilterPage {
             // webpieces-disable no-any-unknown -- JavaScript may throw any value at this browser boundary
         } catch (err: unknown) {
             //const error = toError(err);
+            this.anchor = previousAnchor;
+            this.retained = previousRetained;
+            if (previousSvg !== null) host.replaceChildren(previousSvg);
+            else host.replaceChildren();
+            rollback();
             this.error(err instanceof Error ? err : new Error(String(err)));
         }
     }

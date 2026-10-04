@@ -151,6 +151,7 @@ export class GraphNodeMenu {
                 menu.style.left = left + 'px';
                 menu.style.top = (box.bottom + window.scrollY + 4) + 'px';
             }
+            ${this.keyboardScript()}
             static wire(svg, itemsFor) {
                 svg.querySelectorAll('g.node').forEach(function (node) {
                     const title = node.querySelector('title');
@@ -161,13 +162,7 @@ export class GraphNodeMenu {
                     node.classList.add('wp-node-clickable');
                     node.setAttribute('tabindex', '0');
                     node.setAttribute('role', 'button');
-                    node.addEventListener('keydown', function (ev) {
-                        if (ev.key !== 'Enter' && ev.key !== ' ') return;
-                        ev.preventDefault();
-                        ev.stopPropagation();
-                        WpNodeMenu.open(node, name, itemsFor(name, node));
-                        document.querySelector('#wp-node-menu button')?.focus();
-                    });
+                    WpNodeMenu.wireKeyboard(node, name, itemsFor);
                     node.addEventListener('click', function (ev) {
                         ev.preventDefault();
                         ev.stopPropagation();
@@ -175,6 +170,18 @@ export class GraphNodeMenu {
                     });
                 });
             }
+        }`;
+    }
+
+    private keyboardScript(): string {
+        return `static wireKeyboard(node, name, itemsFor) {
+            node.addEventListener('keydown', function (ev) {
+                if (ev.key !== 'Enter' && ev.key !== ' ') return;
+                ev.preventDefault();
+                ev.stopPropagation();
+                WpNodeMenu.open(node, name, itemsFor(name, node));
+                document.querySelector('#wp-node-menu button')?.focus();
+            });
         }`;
     }
 

@@ -77,6 +77,11 @@ class GraphHighlighter {
 class GraphPage extends WpFilterPage {
     private highlighter: GraphHighlighter | null = null;
 
+    protected override captureBinding(_svg: SVGSVGElement | null): () => void {
+        const previous = this.highlighter;
+        return (): void => { this.highlighter = previous; this.filterCards(); };
+    }
+
     protected override wireControls(): void {
         const select = document.getElementById('wp-lock') as HTMLSelectElement | null;
         select?.addEventListener('change', () =>
