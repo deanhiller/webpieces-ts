@@ -13,6 +13,7 @@
 import * as ts from 'typescript';
 import {
     ApiDocModel,
+    ApiDocExtractor,
     DocumentedEndpoint,
     McpRenderError,
     McpSchemaRenderer,
@@ -352,7 +353,7 @@ function lineOf(source: ts.SourceFile, node: ts.Node): number {
     return source.getLineAndCharacterOfPosition(node.getStart(source)).line + 1;
 }
 
-/** True when `node` carries `@name(...)`. Matched on the syntax, like every reader in this file. */
+/** Match canonical imports, including aliases and namespace calls. */
 // webpieces-disable no-function-outside-class -- pure AST reader
 function hasDecoratorNamed(node: ts.Node, name: string): boolean {
     const decorators = ts.canHaveDecorators(node) ? (ts.getDecorators(node) ?? []) : [];
@@ -360,8 +361,7 @@ function hasDecoratorNamed(node: ts.Node, name: string): boolean {
         const call = decorator.expression;
         if (
             ts.isCallExpression(call) &&
-            ts.isIdentifier(call.expression) &&
-            call.expression.text === name
+            ApiDocExtractor.canonicalCallName(call.expression) === name
         ) {
             return true;
         }

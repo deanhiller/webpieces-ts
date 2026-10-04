@@ -21,7 +21,7 @@ export class AuthorizedApiDocument {
     }
 
     async project(catalog: ApiDocumentObject): Promise<ApiDocumentObject> {
-        if (!AuthenticatedCallerContext.hasEstablishedIngress()) throw new ApiImplementationError('Serve API documents inside completed verified ingress.');
+        if (!AuthenticatedCallerContext.hasCompletedAuthentication()) throw new ApiImplementationError('Serve API documents inside completed authentication.');
         const document = structuredClone(catalog);
         const paths = this.object(document['paths']);
         const tags = new Set<string>();
@@ -51,6 +51,7 @@ export class AuthorizedApiDocument {
     private async permits(route: RouteMetadata): Promise<boolean> {
         if (!route.authorization) throw new ApiImplementationError('Missing document authorization.');
         // webpieces-disable no-unmanaged-exceptions -- document projection boundary turns only explicit policy denials into omitted operations; invariant failures propagate
+        // eslint-disable-next-line @webpieces/no-unmanaged-exceptions -- explicit policy denials are omitted document operations; other failures propagate
         try {
             await this.policy.authorize(route.authorization);
             return true;

@@ -12,7 +12,7 @@ tests) every call falls back to a deterministic localhost value so no GCP is nee
 - `GcpOidc.mintIdToken(audience)` — Google-signed OIDC ID token (a `dev-oidc.*` token off-GCP)
 - `GcpOidc.verifyFromCallers(idToken, callers)` — verify + allow-list the caller SA
 
-Underpins the `@WpAuthOidc` service-to-service credential contract used by
+Underpins the `oidc(...)` service-to-service credential contract used by
 `@webpieces/http-client-node` (RPC) and `@webpieces/cloudtasks-client`, with supplementary
 server checks dispatched by `AuthFilter`.
 
@@ -20,7 +20,7 @@ server checks dispatched by `AuthFilter`.
 
 The protected Cloud Run edge verifies the invocation ID token and enforces `roles/run.invoker`
 before the container receives it. The annotation primarily tells clients to generate the
-correct destination-audience token. A bare `@WpAuthOidc()` delegates caller authorization to
+correct destination-audience token. A bare `@WpAuth([oidc()])` delegates caller authorization to
 that edge; explicit callers add an application allow-list. Real tokens are also checked by the
 application verifier, without its own audience constraint.
 

@@ -51,9 +51,9 @@ derives the status from it (`SurfaceEndUserStatus`):
 
 | how the request authenticated | surface | an `ApiEndUserError` answers |
 |---|---|---|
-| `@WpAuthJwt` | `gui` | 266 |
-| `@WpMcpAuthJwt` (through the MCP bridge) | `llm` | 266 |
-| `@WpAuthApiKey` | `public-api` | `edgeHttpStatus`, else 400 |
+| `jwt()` | `gui` | 266 |
+| `@WpAuthorization` (through the MCP bridge) | `llm` | 266 |
+| `apiKey(...)` | `public-api` | `edgeHttpStatus`, else 400 |
 | nothing established one (public, webhook, internal hop) | absent | 266 |
 
 `gui` and `llm` are both webpieces clients that DECODE the body and render the message themselves, so

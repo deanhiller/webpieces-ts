@@ -133,7 +133,7 @@ export class DocumentSelection {
     }
 
     /**
-     * `{ hidden: true }` subtracts a method from the CUSTOMER document, and `@WpAuthLocalOnly`
+     * `{ hidden: true }` subtracts a method from the CUSTOMER document, and `@WpLocalOnly`
      * subtracts it from ALL of them.
      *
      * A local-only endpoint is not registered as a route at all once the process is deployed, so it

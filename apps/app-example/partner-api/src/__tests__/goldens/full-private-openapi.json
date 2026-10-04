@@ -31,6 +31,15 @@
         "/orders/fetch": {
             "post": {
                 "operationId": "PartnerOrdersApi_fetchOrders",
+                "x-webpieces-authentication": [
+                    {
+                        "kind": "apikey",
+                        "arguments": [
+                            "'partner'",
+                            "PARTNER_CREDENTIALS"
+                        ]
+                    }
+                ],
                 "summary": "fetchOrders",
                 "description": "Returns every order placed at one store inside a time window, newest first.\n\nPaginate by passing the previous response's `nextFrom` until it is absent.\n\nSafe to retry: this operation is read-only and idempotent.\n\nTriggered by a direct call.",
                 "tags": [
@@ -98,6 +107,15 @@
         "/orders/cancel": {
             "post": {
                 "operationId": "PartnerOrdersApi_cancelOrder",
+                "x-webpieces-authentication": [
+                    {
+                        "kind": "apikey",
+                        "arguments": [
+                            "'partner'",
+                            "PARTNER_CREDENTIALS"
+                        ]
+                    }
+                ],
                 "summary": "cancelOrder",
                 "description": "Cancels one order, if the store has not already started it.\n\nCancelling an order that is already `delivered` returns its current state rather than failing:\nthe call is about reaching a state, not about performing an action exactly once.\n\nNOT safe to retry: this operation changes state and is not idempotent.\n\nTriggered by a direct call.",
                 "tags": [
@@ -165,6 +183,15 @@
         "/orders/reindex": {
             "post": {
                 "operationId": "PartnerOrdersApi_reindex",
+                "x-webpieces-authentication": [
+                    {
+                        "kind": "apikey",
+                        "arguments": [
+                            "'partner'",
+                            "PARTNER_CREDENTIALS"
+                        ]
+                    }
+                ],
                 "summary": "reindex",
                 "description": "Rebuilds a store's menu cache from the source of truth.\n\nNot published: this is an operator tool, and the partner contract has no concept of our cache.\nIt is still served and still demands the `partner` credential — `hidden` is a documentation\ndecision and authorizes nobody.\n\nNOT safe to retry: this operation changes state and is not idempotent.\n\nTriggered by a direct call.",
                 "tags": [
@@ -234,6 +261,7 @@
         "order.state-changed": {
             "post": {
                 "operationId": "PartnerDeliveryWebhookApi_orderStateChanged",
+                "x-webpieces-authentication": [],
                 "summary": "orderStateChanged",
                 "description": "Sent whenever an order's state changes.\n\nDeliveries are at-least-once and may arrive out of order; treat `state` as the state at `at`\nand ignore an event older than one you have already applied.\n\nNOT safe to retry: this operation changes state and is not idempotent.\n\nTriggered by a direct call.",
                 "tags": [

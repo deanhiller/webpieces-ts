@@ -505,11 +505,11 @@ export class ApiDocExtractor {
     }
 
     // webpieces-disable no-function-outside-class -- canonical import-aware AST name resolution
-    private static canonicalCallName(expression: ts.Expression): string | undefined {
+    static canonicalCallName(expression: ts.Expression): string | undefined {
         for (const statement of expression.getSourceFile().statements) {
             if (!ts.isImportDeclaration(statement) || !ts.isStringLiteral(statement.moduleSpecifier)) continue;
             const module = statement.moduleSpecifier.text;
-            if (module !== '@webpieces/core-util' && !module.endsWith('/decorators') && !module.endsWith('/auth-mode')) continue;
+            if (!['@webpieces/core-util', '@webpieces/http-routing', '@webpieces/http-client-browser'].includes(module) && !module.endsWith('/core-util/src/http/decorators') && !module.endsWith('/core-util/src/http/auth-mode') && !module.endsWith('/core-util/src/http/authorization')) continue;
             const bindings = statement.importClause?.namedBindings;
             if (bindings && ts.isNamedImports(bindings) && ts.isIdentifier(expression)) {
                 const imported = bindings.elements.find((entry: ts.ImportSpecifier) => entry.name.text === expression.text);
@@ -521,7 +521,7 @@ export class ApiDocExtractor {
     }
 
     /**
-     * `@WpAuthApiKey(regime, [{in: 'header', name: 'x-api-key', description: '…'}, …])`, parsed.
+     * `apiKey(regime, [{in: 'header', name: 'x-api-key', description: '…'}, …])`, parsed.
      *
      * A malformed declaration FAILS rather than yielding a half-parsed regime: the credentials are
      * what a published document's security block is made of, and a document that silently omitted
@@ -533,18 +533,18 @@ export class ApiDocExtractor {
         const credentialsArgument = call.arguments[1];
         if (regimeArgument === undefined || credentialsArgument === undefined) {
             throw new ApiDocExtractionError(
-                '@WpAuthApiKey needs a regime AND its credentials',
+                'apiKey(...) needs a regime AND its credentials',
                 SourceLocation.of(call),
-                "Write both: @WpAuthApiKey('partner', [{ in: 'header', name: 'x-api-key' }]).",
+                "Write both: apiKey('partner', [{ in: 'header', name: 'x-api-key' }]).",
             );
         }
-        const regime = folder.foldString(regimeArgument, '@WpAuthApiKey regime');
+        const regime = folder.foldString(regimeArgument, 'apiKey(...) regime');
         // FOLLOW a name first: a credential list shared by every method of a contract is written
         // once as a `const` and named per method, which is better source than a copy per method.
         const credentialsLiteral = folder.follow(credentialsArgument);
         if (!ts.isArrayLiteralExpression(credentialsLiteral)) {
             throw new ApiDocExtractionError(
-                '@WpAuthApiKey credentials is not an array literal',
+                'apiKey(...) credentials is not an array literal',
                 SourceLocation.of(credentialsArgument),
                 'Write the credentials as an array literal, inline or in a `const`; a value ' +
                     'assembled at runtime cannot appear in a published security scheme.',
@@ -566,7 +566,7 @@ export class ApiDocExtractor {
         const element = folder.follow(expression);
         if (!ts.isObjectLiteralExpression(element)) {
             throw new ApiDocExtractionError(
-                'an @WpAuthApiKey credential is not an object literal',
+                'an apiKey(...) credential is not an object literal',
                 SourceLocation.of(element),
                 "Write it inline: { in: 'header', name: 'x-api-key' }.",
             );
@@ -574,7 +574,7 @@ export class ApiDocExtractor {
         const location = ApiDocExtractor.stringProperty(element, 'in', folder);
         if (location === undefined) {
             throw new ApiDocExtractionError(
-                'an @WpAuthApiKey credential declares no `in`',
+                'an apiKey(...) credential declares no `in`',
                 SourceLocation.of(element),
                 "Say where it rides: `in: 'header'` with a name, or `in: 'bearer'`.",
             );

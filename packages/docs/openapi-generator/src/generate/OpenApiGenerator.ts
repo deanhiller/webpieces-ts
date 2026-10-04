@@ -269,10 +269,7 @@ export class OpenApiGenerator {
             .set('schemas', renderedSchemas)
             .set(
                 'securitySchemes',
-                this.security.addBuiltinSchemes(
-                    apiKey === undefined ? new JsonObject() : this.security.schemes(apiKey, schemeNames, inputs.manifestPath),
-                    this.selectedEndpoints(contracts, selection),
-                ).orUndefined(),
+                this.security.addBuiltinSchemes(apiKey === undefined ? new JsonObject() : this.security.schemes(apiKey, schemeNames, inputs.manifestPath), this.selectedEndpoints(contracts, selection)).orUndefined(),
             )
             .set('headers', this.headers(inputs));
 

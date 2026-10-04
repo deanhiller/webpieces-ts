@@ -49,17 +49,17 @@ export const InversifyModule = new ContainerModule((options: ContainerModuleLoad
     // Bind services
     bind<Counter>(TYPES.Counter).to(SimpleCounter).inSingletonScope();
 
-    // Shared-secret state: the framework AuthFilter injects AuthConfig for @WpAuthSharedSecret.
+    // Shared-secret state: the framework AuthFilter injects AuthConfig for sharedSecret(...).
     // Tests rebind AuthConfig to a stub / test-key config via appOverrides.
     bind(AUTH_CONFIG).to(CompanyAuthConfig).inSingletonScope();
 
-    // User JWT mechanism: the framework AuthFilter injects JwtHook for @WpAuthJwt endpoints.
+    // User JWT mechanism: the framework AuthFilter injects JwtHook for jwt() endpoints.
     // Tests rebind JwtHook to a permissive stub via appOverrides. (OIDC is the framework default.)
     bind(JWT_HOOK).to(CompanyJwtHook).inSingletonScope();
     bind(AUTHORIZATION_HOOK).to(CompanyAuthorizationHook).inSingletonScope();
 
     // The ONE shared-secret store for ALL of this service's outbound clients (RPC + Cloud Tasks).
-    // The VALUE it sends per @WpAuthSharedSecret(key); read from config ONCE here, never in the send
+    // The VALUE it sends per sharedSecret(key); read from config ONCE here, never in the send
     // path (so tests stay parallel-safe). Rotate a client by changing its value here.
     const secrets = new Secrets({ INTERNAL_API_SECRET: process.env['INTERNAL_API_SECRET'] });
     bind(SECRETS).toConstantValue(secrets); // injected into the Cloud Tasks invokers

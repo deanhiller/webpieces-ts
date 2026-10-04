@@ -50,6 +50,7 @@ function isCanonicalModule(moduleName: string): boolean {
     return (
         moduleName === '@webpieces/core-util' ||
         moduleName === '@webpieces/http-routing' ||
+        moduleName === '@webpieces/http-client-browser' ||
         moduleName.endsWith('/core-util/src/http/auth-mode') ||
         moduleName.endsWith('/core-util/src/http/authorization') ||
         moduleName === '@webpieces/core-util/ipc' ||

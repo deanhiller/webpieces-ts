@@ -155,7 +155,7 @@ export abstract class ProxyClient {
 
     /**
      * Reject, at bind time, an endpoint this environment cannot satisfy — e.g. a browser cannot
-     * mint the OIDC token an @WpAuthOidc endpoint demands. Surfacing it here beats failing on the
+     * mint the OIDC token an oidc(...) endpoint demands. Surfacing it here beats failing on the
      * first call in production. The default accepts everything.
      */
     protected assertEndpointSupported(_route: RouteMetadata): void {}
@@ -319,17 +319,17 @@ export abstract class ProxyClient {
      */
     private refuseEndpointNoClientCanCall(route: RouteMetadata): void {
         const authMode = route.authMeta?.methods[0];
-        // @WpAuthApiKey: the credential is a CUSTOMER-held key, and the header carrying it is the app's
+        // apiKey(...): the credential is a CUSTOMER-held key, and the header carrying it is the app's
         // ApiKeyHook's choice, so this client has nothing to send and the call is a guaranteed 401.
         if (authMode?.kind === 'apikey') {
             throw new Error(
-                `${this.apiName}.${route.methodName} is @WpAuthApiKey('${authMode.regime}') — only the partner ` +
+                `${this.apiName}.${route.methodName} is apiKey('${authMode.regime}') — only the partner ` +
                     `holding that api key can call it, and the header carrying it is the app's ApiKeyHook's choice, ` +
                     `so a webpieces client has no credential to send.`,
             );
         }
-        // @WpAuthWebhook is DELIBERATELY absent from this list. It used to be here, on the assumption
-        // that the vendor is always somebody else — but `@WpAuthWebhook(name)` names a signing SCHEME,
+        // webhook(...) is DELIBERATELY absent from this list. It used to be here, on the assumption
+        // that the vendor is always somebody else — but `webhook(name)` names a signing SCHEME,
         // not a direction, and for an OUTBOUND partner webhook WE are the vendor. The environment's
         // outbound-auth filter asks its bound signer to produce the signature, which is the exact
         // mirror of the inbound WebhookAuthCallback that verifies one.

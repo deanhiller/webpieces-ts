@@ -1,8 +1,8 @@
 /**
  * Where this process is running, as a NAMED token rather than a boolean:
  *
- * - `'local'`    — a developer's machine. `@WpAuthLocalOnly` endpoints exist and serve.
- * - `'deployed'` — anywhere else (staging, prod, CI, a container). `@WpAuthLocalOnly` endpoints are
+ * - `'local'`    — a developer's machine. `@WpLocalOnly` endpoints exist and serve.
+ * - `'deployed'` — anywhere else (staging, prod, CI, a container). `@WpLocalOnly` endpoints are
  *                  not registered and, if reached anyway, 404.
  *
  * A `boolean` would have made the DANGEROUS half (`true`) unnameable and ungreppable — see

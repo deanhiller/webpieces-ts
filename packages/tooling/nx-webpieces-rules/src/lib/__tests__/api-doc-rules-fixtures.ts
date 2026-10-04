@@ -12,19 +12,16 @@
  * holding these strings at column zero is indistinguishable from a real contract to that sweep, and
  * turned it red. The indent is what makes this file honest to both readers.
  *
- * Every contract is ONE self-contained file: the decorators are declared beside the class rather
- * than imported, because the extractor matches them BY NAME on the syntax and a fixture that
- * imported them would be testing module resolution instead of the rule. The values in
- * `@Endpoint(...)` are the real strings the framework's constants hold (`'POST'`, `'read'`, `'rpc'`,
- * `'cloudtasks'`) — the extractor constant-folds that argument and rejects anything outside the set,
- * so a fixture cannot drift into a kind that does not exist.
+ * Every contract imports the canonical decorators. This exercises the same import-aware readers
+ * as production, including aliases and namespace calls. Endpoint arguments use the real framework
+ * literal values so constant folding cannot accept a fixture-only endpoint kind.
  */
 
 import * as fs from 'fs';
 import * as path from 'path';
 import { ProjectInfo } from '../project-info';
 
-/** Decorator stubs, declared in every fixture file so nothing has to resolve across modules. */
+/** Canonical decorator imports used by every fixture contract. */
 export const DECORATORS = `import {ApiPath, ApiType, Endpoint, WpAuth, WpAuthorization, AuthorizationType, jwt, WpMcpTool, InvalidEndpointForMcp} from '@webpieces/core-util';`;
 
 

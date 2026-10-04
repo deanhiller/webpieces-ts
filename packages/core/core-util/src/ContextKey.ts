@@ -73,9 +73,9 @@
  *
  * Trusted keys DO keep their `httpHeader` — service-to-service propagation of a verified
  * userId is a first-class requirement, not a hole. It is safe because rule 2 gates it on
- * the endpoint's own auth mode: a route that verified WHO called it (`@WpAuthOidc`,
- * `@WpAuthSharedSecret`) accepts the caller's trusted headers; a route reachable by a
- * browser (`@WpAuthJwt`, public) does not.
+ * the endpoint's own auth mode: a route that verified WHO called it (`oidc(...)`,
+ * `sharedSecret(...)`) accepts the caller's trusted headers; a route reachable by a
+ * browser (`jwt()`, public) does not.
  *
  * Per CLAUDE.md: data-only structures are classes, not interfaces.
  *

@@ -24,7 +24,7 @@ type ITask = protos.google.cloud.tasks.v2.ITask;
 export class GcpTaskInvoker extends TaskInvoker {
     private readonly client = new CloudTasksClient();
 
-    // @optional: only @WpAuthSharedSecret task endpoints need it; the client sends its bound value.
+    // @optional: only sharedSecret(...) task endpoints need it; the client sends its bound value.
     constructor(@optional() @inject(SECRETS) private readonly secrets?: Secrets) {
         super();
     }

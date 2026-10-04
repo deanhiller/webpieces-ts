@@ -16,7 +16,7 @@ Nothing here re-reads the source and no generated file is ever an input, so the 
   A document no contract declares is **not written** — there is no separate emptiness rule
 - `--format json|yaml|both` (default `both`) — the SERIALIZATION, orthogonal to which documents exist. Both come from the same in-memory document
 - **`hidden` means ABSENT.** A hidden method has no path, no operation, no schema and no prose in the customer document. Nothing marks that something was withheld
-- **Derived security** — `@WpAuthApiKey(regime, credentials)` → `components.securitySchemes` plus ONE AND-ed requirement, keyed by the manifest's published scheme names. Hoisted to the document when every operation in it is covered, stamped per operation otherwise
+- **Derived security** — `apiKey(regime, credentials)` → `components.securitySchemes` plus ONE AND-ed requirement, keyed by the manifest's published scheme names. Hoisted to the document when every operation in it is covered, stamped per operation otherwise
 - **The webhook block** — a manifest entry marked `"kind": "webhook"` lands under top-level `webhooks:`, keyed by the event NAME with the `@ApiPath` base deliberately not prepended, carrying `x-webpieces-webhook: true`, documenting a `void` method as "return any 2xx to acknowledge", and contributing NOTHING to the derived security requirement
 - **The document-wide error contract**, with the body read from a real TS type by the compiler
 - **The folded `nameConstant` response header**, on every success response
@@ -52,7 +52,7 @@ The `x-mcp-*` extensions in `mcp-openapi.json` are the exception and stay, becau
 
 Two things a document states structurally rather than in prose: `x-webpieces-webhook: true` marks an entry in the `webhooks:` block, and an endpoint declaring `@WpAuthPublic` gets `security: []` — OpenAPI's own spelling of "no credential required", where leaving the key off would instead mean "inherit the document's".
 
-`@WpAuthLocalOnly` endpoints appear in NO document. They are not registered as routes once the process is deployed, so publishing one even internally would document a route that exists in no deployed environment — worse than omitting it, because a reader would reasonably try to call it.
+`@WpLocalOnly` endpoints appear in NO document. They are not registered as routes once the process is deployed, so publishing one even internally would document a route that exists in no deployed environment — worse than omitting it, because a reader would reasonably try to call it.
 
 ## Why it emits YAML itself instead of depending on a YAML library
 

@@ -77,7 +77,7 @@ export class ExpressWrapper {
         private formPost: boolean = false,
         /**
          * True for an @Endpoint(..., { rawBody: true }) route: RETAIN the verbatim bytes + the
-         * absolute url on the published {@link HttpRequest}, so an @WpAuthWebhook hook can verify a
+         * absolute url on the published {@link HttpRequest}, so an webhook(...) hook can verify a
          * vendor signature over what the sender actually transmitted. Also switches the JSON parse
          * failure from "throw now" to "hold it for AuthFilter" — see {@link RawRequest.bodyParseError}.
          */
@@ -133,7 +133,7 @@ export class ExpressWrapper {
         //    know" and step aside. The translator was never too late; the context it needs was.
         //
         //    No `raw` yet — the bytes have not been read. Step 3 republishes WITH them, below the
-        //    same request scope and still above the filter chain, so @WpAuthWebhook signature
+        //    same request scope and still above the filter chain, so webhook(...) signature
         //    verification sees exactly what it saw before.
         //
         //    KNOWN ISSUE, ACCEPTED AND NOT FIXED (issue #862): this publishes the request but does

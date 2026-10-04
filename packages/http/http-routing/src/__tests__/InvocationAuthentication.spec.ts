@@ -44,11 +44,14 @@ describe('local invocation proof lifetime', () => {
             const captured = RequestContext.copyContext().withTrusted();
             RequestContext.runWithContext(captured, () => {
                 expect(RequestContext.getTrusted(WebpiecesCoreHeaders.USER_ID)).toBe('alice');
+                // Successful public-route reconciliation cannot promote a copied principal.
+                new AuthenticatedCallerContext().reconcileWireTrust(false);
                 expect(() => proof.assertTarget(target())).toThrow(ApiImplementationError);
                 expect(() => new InvocationAuthentication(TargetApi,'read')).toThrow(ApiImplementationError);
             });
             expect(() => proof.assertTarget(target())).not.toThrow();
             RequestContext.restoreContext(captured);
+            new AuthenticatedCallerContext().reconcileWireTrust(false);
             expect(() => proof.assertTarget(target())).toThrow(ApiImplementationError);
         });
     });

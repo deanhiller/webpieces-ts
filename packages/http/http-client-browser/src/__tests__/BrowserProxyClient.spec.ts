@@ -236,19 +236,19 @@ describe('BrowserProxyClient resolves a base URL without ever throwing', () => {
 describe('BrowserProxyClient rejects endpoints a browser cannot satisfy', () => {
     it('throws for an @WpAuthOidc contract', () => {
         expect(() => factory.createRpcClient(OidcApi, new ClientConfig('save-svc'))).toThrow(
-            /@WpAuthOidc — a browser cannot hold service credentials/,
+            /oidc.*browser cannot hold.*server-side/s,
         );
     });
 
     it('throws for an @WpAuthSharedSecret contract', () => {
         expect(() =>
             factory.createRpcClient(SharedSecretApi, new ClientConfig('save-svc')),
-        ).toThrow(/@WpAuthSharedSecret — a browser cannot hold service credentials/);
+        ).toThrow(/shared-secret.*browser cannot hold.*server-side/s);
     });
 
     it('throws for an @WpAuthApiKey contract, naming the regime and who may actually call it', () => {
         expect(() => factory.createRpcClient(ApiKeyApi, new ClientConfig('save-svc'))).toThrow(
-            /@WpAuthApiKey\('onetablet-partner'\).*customer-held/s,
+            /apiKey\('onetablet-partner'.*browser cannot hold.*server-side/s,
         );
     });
 

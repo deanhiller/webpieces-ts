@@ -10,7 +10,7 @@ The isomorphic engine of the webpieces HTTP client: reads an API contract's deco
 - `ClientTarget` — the base a `ClientConfig` extends: a logging `svcName` plus an async `resolveBaseUrl()`
 - Handing EVERY response — 2xx included — to `ClientRegistry.getErrorTranslator().fromWire(...)` through `ClientErrorTranslator.throwIfFailure`, and GUARANTEEING that a non-2xx can never return normally: the webpieces default runs behind an app translator that forgets to throw. `fromWire` THROWS; it does not return an error the caller must remember to throw. `ApiEndUserError.message` and `ApiBadRequestError.callerMessage` are the caller-safe prose fields.
 - Deciding whether a response body may be parsed at all, from its `content-type` (`ResponseBodyReader`) — an infra 502/503/504 serving HTML becomes a status-derived API error rather than a `SyntaxError`.
-- Attaching outbound delivery auth per the endpoint's `AuthMode` (@WpAuthOidc bearer via the injected `IdTokenMinter`, @WpAuthSharedSecret value from the bound `Secrets`)
+- Attaching outbound delivery auth per the endpoint's `AuthMode` (oidc(...) bearer via the injected `IdTokenMinter`, sharedSecret(...) value from the bound `Secrets`)
 
 ## Out of Scope
 

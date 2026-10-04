@@ -60,7 +60,7 @@ Z→X). `visualize-runtime` draws it, rendering pub-sub as a producer → queue-
 ## Cloud Run OIDC security boundary — [`cloud-run-oidc.md`](./cloud-run-oidc.md)
 
 Private Cloud Run authenticates invocation tokens and enforces invoker IAM before requests
-reach the container. `@WpAuthOidc()` drives client credential generation and retains
+reach the container. `@WpAuth([oidc()])` drives client credential generation and retains
 supplementary server validation; a bare application-verifier test does not test that edge.
 This guide states the deployment assumptions, synthetic local-token behavior, and header boundaries.
 

@@ -25,7 +25,7 @@ The backoff form also emits `Retry-After`.
 `edgeHttpStatus` (`EdgeHttpStatus`: 400, 404, 409 or 422). `ApiErrorCodec` keeps it across every
 remote hop like `errorCode`; a peer that does not send it decodes as `undefined`. Whether it is USED is a
 property of the CALLER, not of the router: `AuthFilter` stamps `WebpiecesCoreHeaders.SURFACE` from
-the auth mode that matched, and a `public-api` caller (`@WpAuthApiKey`) is answered
+the auth mode that matched, and a `public-api` caller (`apiKey(...)`) is answered
 `edgeHttpStatus`, or 400 when it is absent. `gui`, `llm` and a caller whose auth established no
 surface are all answered 266, because each is a webpieces client that decodes the body itself. `edgeHttpStatus` was inserted before `cause` (issue #948), so a call that passed `cause`
 third must now pass it fourth.

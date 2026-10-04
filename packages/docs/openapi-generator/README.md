@@ -83,7 +83,7 @@ Every path is relative to the manifest's own directory.
 **The ORDER of `apis[]` is the published sidebar order.** Alphabetising it is not a cleanup.
 
 **`securitySchemeNames` holds the published KEYS only.** The schemes themselves, and the AND-ed
-`security` requirement, are DERIVED from the contract's `@WpAuthApiKey(regime, credentials)`. A
+`security` requirement, are DERIVED from the contract's `apiKey(regime, credentials)`. A
 `securitySchemes` block in the manifest would be a second copy of header names the running server
 never reads, and nothing could contradict it.
 

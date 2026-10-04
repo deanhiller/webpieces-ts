@@ -218,7 +218,7 @@ export {
     getEndpointCaller,
 } from './http/external-caller';
 export type { ExternalSystemKind } from './http/external-caller';
-// Client-side shared-secret store (the value THIS service sends per @WpAuthSharedSecret key).
+// Client-side shared-secret store (the value THIS service sends per sharedSecret(...) key).
 export { Secrets, SECRETS } from './http/Secrets';
 
 // Type validators
@@ -264,7 +264,7 @@ export type { ServiceUrlDeriver } from './http/ClientRegistry';
 // RequestContextHeaders (to stamp requestIdSource on ids this service mints).
 export { ServiceInfo } from './http/ServiceInfo';
 // "Where am I running" — declared once at startup (setupRuntime, from RuntimeSetupOptions.locality).
-// The ONE input to @WpAuthLocalOnly enforcement. Undeclared reads as DEPLOYED (fail safe).
+// The ONE input to @WpLocalOnly enforcement. Undeclared reads as DEPLOYED (fail safe).
 export { RuntimeLocality } from './http/RuntimeLocality';
 export type { Locality } from './http/RuntimeLocality';
 // The ENTIRE HTTP response as pure data — the ONE form both transports (express, fetch) are

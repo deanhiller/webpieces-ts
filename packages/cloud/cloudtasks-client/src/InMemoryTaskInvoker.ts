@@ -40,7 +40,7 @@ export class InMemoryTaskInvoker extends TaskInvoker {
     constructor(
         // webpieces-disable inject-annotation-not-needed-for-concrete-class -- DI-resolved param; the esbuild/vitest path elides type-only imports (no design:paramtypes), so the explicit token is required
         @inject(GcpOidc) private readonly gcpOidc: GcpOidc,
-        // @optional: only @WpAuthSharedSecret task endpoints need it; the client sends its bound value.
+        // @optional: only sharedSecret(...) task endpoints need it; the client sends its bound value.
         // webpieces-disable inject-annotation-not-needed-for-concrete-class -- DI-resolved param; the esbuild/vitest path elides type-only imports (no design:paramtypes), so the explicit token is required
         @optional() @inject(SECRETS) private readonly secrets?: Secrets,
     ) {

@@ -208,7 +208,7 @@ export class DocumentedApiKeyCredential {
     ) {}
 }
 
-/** `@WpAuthApiKey(regime, credentials)`, parsed. See {@link DocumentedApiKeyCredential}. */
+/** `apiKey(regime, credentials)`, parsed. See {@link DocumentedApiKeyCredential}. */
 export class DocumentedApiKey {
     constructor(
         readonly regime: string,

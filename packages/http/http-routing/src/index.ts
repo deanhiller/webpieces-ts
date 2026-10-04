@@ -103,7 +103,7 @@ export { ApiFactory } from './ApiFactory';
 export { ApiClient, ApiClientProxy } from './ApiClient';
 
 // Auth: the app-provided, container-bound pieces the framework AuthFilter injects.
-//  - AuthConfig: shared-secret STATE (@WpAuthSharedSecret values).
+//  - AuthConfig: shared-secret STATE (sharedSecret(...) values).
 //  - JwtHook / OidcHook / WebhookAuthCallback / ApiKeyHook: OPTIONAL verification mechanisms
 //    (bind only what you use; unbound means the matching endpoints 401, never open).
 //  - DefaultOidcVerifier: the built-in Google OIDC verifier used when no OidcHook is bound.

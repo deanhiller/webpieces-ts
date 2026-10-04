@@ -15,12 +15,10 @@ export interface SecureResponse {
 }
 
 /**
- * SecureApi - endpoints exercising each non-public AuthMode, for Authentication.spec.ts:
- *  - userOp     → @WpAuthJwt({allRolesAllowed: true})  (any authenticated user — the NAMED wide grant)
- *  - adminOp    → @WpAuthJwt({roles: ['admin']})       (role-gated user JWT)
- *  - orgOp      → @WpAuthJwt({..., inOrg: true})       (app-defined authZ, enforced by authorizeJwt)
- *  - internalOp → @WpAuthSharedSecret(...)             (internal shared-secret)
- *  - serviceOp  → @WpAuthOidc()                        (service-to-service OIDC, trust-the-edge)
+ * SecureApi exercises independent authentication and authorization declarations:
+ * userOp accepts jwt() and ALL_USERS; adminOp requires the admin role; orgOp delegates
+ * organization access to CompanyAuthorizationHook; internalOp and serviceOp require
+ * verified shared-secret/OIDC machine callers through SERVICE_ONLY.
  */
 @ApiPath('/secure')
 export abstract class SecureApi {
@@ -56,7 +54,7 @@ export abstract class SecureApi {
         throw new Error('Method internalOp() must be implemented by subclass');
     }
 
-    /** Requires a genuine Google OIDC token; @WpAuthOidc() (no callers) trusts the edge for WHO (run.invoker IAM). */
+    /** Requires a genuine Google OIDC token; @WpAuth([oidc()]) (no callers) trusts the edge for WHO (run.invoker IAM). */
     @Endpoint(POST, '/service', READ, RPC)
     @WpAuth([oidcAuth()])
     @WpAuthorization({ authType: AuthorizationType.SERVICE_ONLY })

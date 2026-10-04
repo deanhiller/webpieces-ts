@@ -1,3 +1,4 @@
+import {AuthorizationService} from '../AuthorizationHook';
 import { WpAuthorization, AuthorizationType } from '@webpieces/core-util';
 import 'reflect-metadata';
 import { Container } from 'inversify';
@@ -127,6 +128,7 @@ class StreamingFixture {
     readonly client: TypedStreamApi;
 
     constructor() {
+        this.container.bind(AuthorizationService).toConstantValue(new AuthorizationService());
         this.container.bind(TypedStreamController).toSelf().inSingletonScope();
         this.container.bind(LifecycleFilter).toSelf().inSingletonScope();
         this.builder.setContainer(this.container);
@@ -286,6 +288,7 @@ describe('ApiClientFactory typed in-process streams', () => {
         }
         const builder = new RouteBuilderImpl();
         const container = new Container();
+        container.bind(AuthorizationService).toConstantValue(new AuthorizationService());
         container.bind(FailingController).toSelf();
         container.bind(LifecycleFilter).toSelf();
         builder.setContainer(container);

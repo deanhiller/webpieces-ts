@@ -1,6 +1,6 @@
 # Cloud Run OIDC: the edge is the security boundary
 
-`@WpAuthOidc()` describes a service-to-service credential contract. In the intended
+`@WpAuth([oidc()])` describes a service-to-service credential contract. In the intended
 private Cloud Run deployment, Google authenticates the invocation and enforces
 `roles/run.invoker` before the request reaches the container. The annotation primarily
 tells the RPC and Cloud Tasks clients to supply the correct Google ID token; the

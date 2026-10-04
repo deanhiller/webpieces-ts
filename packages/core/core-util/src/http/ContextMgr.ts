@@ -46,8 +46,8 @@ export class ContextMgr {
      *
      * `destination` gates TRUSTED keys exactly as it does on the server side (see
      * {@link DestinationTrust}). In practice a browser never reaches the permissive branch — twice
-     * over: `BrowserProxyClient.assertEndpointSupported` refuses to bind an `@WpAuthOidc` /
-     * `@WpAuthSharedSecret` contract at all, so every browser destination is `@WpAuthJwt` or `@WpAuthPublic`.
+     * over: `BrowserProxyClient.assertEndpointSupported` refuses to bind an `oidc(...)` /
+     * `sharedSecret(...)` contract at all, so every browser destination is `jwt()` or `@WpAuthPublic`.
      * The rule is applied here anyway rather than argued away, because the OTHER guarantee people
      * reach for — "`MutableContextStore.set` only accepts an untrusted key, so a browser store
      * cannot HOLD a trusted value" — is true of that store and NOT of the seam: {@link ContextMgr}
@@ -96,7 +96,7 @@ export class ContextMgr {
      * `if` is what makes that a compile-time fact rather than a convention: {@link ContextWriter.set}
      * takes an {@link AnyUntrustedContextKey}, so a browser store CANNOT hold a proven value. That is
      * the same rule as the outbound direction reaches by a different route — every browser
-     * destination is `@WpAuthJwt` or `@WpAuthPublic`, so `destination.allows` would refuse them
+     * destination is `jwt()` or `@WpAuthPublic`, so `destination.allows` would refuse them
      * anyway — and `destination` is still threaded and still applied, so a future browser destination
      * that DID authenticate its caller does not silently start believing response headers.
      */

@@ -10,7 +10,7 @@ const log = LogManager.getLogger('gcp-identity-oidc');
 /**
  * Prefix marking a deterministic local (off-GCP) OIDC token. Real Google-signed
  * tokens never start with this, so verify can tell them apart. This is what keeps
- * the @WpAuthOidc code path fully exercised in tests without any GCP round-trip.
+ * the oidc(...) code path fully exercised in tests without any GCP round-trip.
  */
 const DEV_TOKEN_PREFIX = 'dev-oidc.';
 
@@ -93,7 +93,7 @@ export class GcpOidc {
     }
 
     /**
-     * @WpAuthOidc() (trust-the-edge) is only secure when the Cloud Run service is PRIVATE — the edge
+     * @WpAuth([oidc()]) (trust-the-edge) is only secure when the Cloud Run service is PRIVATE — the edge
      * enforces run.invoker. If it is actually PUBLIC, warn LOUDLY (once): we still admit only
      * Google-signed callers, but the edge is not filtering WHO. Never fails — this is advisory.
      */
@@ -107,7 +107,7 @@ export class GcpOidc {
         }
         if (await this.isServicePublic()) {
             log.error(
-                'This endpoint is currently public but marked @WpAuthOidc which requires the service to be ' +
+                'This endpoint is currently public but marked oidc(...) which requires the service to be ' +
                     'private. You are currently running in a very insecure mode; however, we are only allowing ' +
                     'google-signed callers in. The edge will validate callers are allowed in (make the Cloud Run ' +
                     'service private — remove the allUsers run.invoker binding) to reduce your attack surface.',

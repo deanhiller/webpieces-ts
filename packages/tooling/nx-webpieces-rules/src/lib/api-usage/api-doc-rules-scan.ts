@@ -94,7 +94,7 @@ import {
 import { WireClosure, WireClosureRule } from './wire-closure';
 
 /** `@ApiPath(` at COLUMN ZERO — a docstring that TALKS about a contract declares none. */
-const DECLARES_CONTRACT = /^@ApiPath\(/m;
+const DECLARES_CONTRACT = /@/;
 
 /** ONE contract file, and which of the two rules apply to the project that owns it. */
 class ContractFile {

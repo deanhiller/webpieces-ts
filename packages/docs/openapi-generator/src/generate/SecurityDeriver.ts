@@ -4,7 +4,7 @@ import { OpenApiGenerationError } from '../OpenApiGenerationError';
 
 /**
  * `components.securitySchemes` and the `security` requirement, DERIVED from the contract's own
- * `@WpAuthApiKey(regime, credentials)`. The manifest contributes the published KEYS and nothing else.
+ * `apiKey(regime, credentials)`. The manifest contributes the published KEYS and nothing else.
  *
  * ## Why the schemes are not in the manifest
  *

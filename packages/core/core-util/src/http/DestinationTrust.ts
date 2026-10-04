@@ -8,7 +8,7 @@ import { AuthMode } from './auth-mode';
  * ## Why the client has to answer this at all
  *
  * The server already decided (see `PendingWireTrust`): an inbound `x-user-id` is admitted only on a
- * route that verified WHO called it — `@WpAuthOidc` / `@WpAuthSharedSecret`. On a `@WpAuthJwt` or `@WpAuthPublic`
+ * route that verified WHO called it — `oidc(...)` / `sharedSecret(...)`. On a `jwt()` or `@WpAuthPublic`
  * route the same header must match what the authenticator independently derived, or the request is
  * REJECTED with a 401.
  *
@@ -33,15 +33,15 @@ import { AuthMode } from './auth-mode';
  */
 export class DestinationTrust {
     /**
-     * The destination authenticates its CALLER (@WpAuthOidc / @WpAuthSharedSecret), so it is entitled to
+     * The destination authenticates its CALLER (oidc(...) / sharedSecret(...)), so it is entitled to
      * believe context WE vouch for — this is the service-to-service identity propagation that trusted
      * keys keep an `httpHeader` for.
      */
     private static readonly VERIFIES_CALLER = new DestinationTrust(true);
 
     /**
-     * The destination cannot tell us from a browser with curl (@WpAuthJwt / @WpAuthPublic / @WpAuthWebhook /
-     * @WpAuthApiKey / @WpAuthLocalOnly / an endpoint with no declared mode), so trusted keys are omitted.
+     * The destination cannot tell us from a browser with curl (jwt() / @WpAuthPublic / webhook(...) /
+     * apiKey(...) / @WpLocalOnly / an endpoint with no declared mode), so trusted keys are omitted.
      * Untrusted keys still travel.
      */
     private static readonly CANNOT_VERIFY_CALLER = new DestinationTrust(false);
@@ -64,19 +64,19 @@ export class DestinationTrust {
                 return DestinationTrust.VERIFIES_CALLER;
             case 'jwt':
             case 'public':
-            // @WpAuthWebhook authenticates an OUTSIDE VENDOR, which is not the same thing as
+            // webhook(...) authenticates an OUTSIDE VENDOR, which is not the same thing as
             // authenticating a peer in this repo. The vendor knows nothing of webpieces context
             // headers and would never send one, so there is no identity to propagate in either
             // direction — and a webpieces client cannot call such an endpoint anyway (it cannot mint
             // the vendor's signature). Trusted keys stay home.
             case 'webhook':
-            // @WpAuthApiKey authenticates a CUSTOMER, not a peer service. The holder of the key is
+            // apiKey(...) authenticates a CUSTOMER, not a peer service. The holder of the key is
             // another company's codebase, so nothing it forwards may be believed, and no webpieces
             // client can call it anyway (the framework extracts no api-key header — the app's hook
             // owns which headers carry the credential; the contract's `credentials` list only DESCRIBES
             // them). Trusted keys stay home.
             case 'apikey':
-            // @WpAuthLocalOnly authenticates NOBODY — it gates on the environment, not on a
+            // @WpLocalOnly authenticates NOBODY — it gates on the environment, not on a
             // credential — so a browser with curl on the same laptop is indistinguishable from us.
             // Same bucket as public/jwt. (This switch has NO `default` on purpose: adding a kind to
             // AuthMode is a compile error here rather than a silent permissive fallthrough.)
@@ -94,8 +94,8 @@ export class DestinationTrust {
      * - OUTBOUND (`buildOutboundHeaders`): may we SEND a trusted key there? Only when the destination
      *   will authenticate US, because that is the only case its `AuthFilter` will admit it.
      * - RESPONSE (`acceptResponseHeaders`): may we BELIEVE a trusted key that came BACK? Only from a
-     *   destination this client authenticated to — an `@WpAuthOidc` / `@WpAuthSharedSecret` peer is a
-     *   service in our own trust domain, while a `@WpAuthPublic` / `@WpAuthJwt` / partner endpoint is
+     *   destination this client authenticated to — an `oidc(...)` / `sharedSecret(...)` peer is a
+     *   service in our own trust domain, while a `@WpAuthPublic` / `jwt()` / partner endpoint is
      *   somebody else's process whose response headers are an assertion, not a proof.
      *
      * A second, identically-bodied `believesResponsesFrom(key)` would be two spellings of one

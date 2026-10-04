@@ -8,10 +8,17 @@ const log = LogManager.getLogger('AuthenticatedCallerContext');
 /** Shared trusted principal publication and inbound header reconciliation for HTTP and MCP. */
 export class AuthenticatedCallerContext {
     private static readonly establishedScopes = new WeakSet<object>();
+    private static readonly publishedScopes = new WeakSet<object>();
+    private static readonly completedScopes = new WeakSet<object>();
 
     // webpieces-disable no-function-outside-class -- stateless contract validation or scope metadata reader used before DI registration
     static hasEstablishedIngress(): boolean {
         return this.establishedScopes.has(RequestContext.activeScopeIdentity());
+    }
+
+    // webpieces-disable no-function-outside-class -- authentication completion is scoped metadata, not a transferable context value
+    static hasCompletedAuthentication(): boolean {
+        return this.completedScopes.has(RequestContext.activeScopeIdentity());
     }
 
     publish(caller: AuthenticatedCaller): void {
@@ -31,6 +38,7 @@ export class AuthenticatedCallerContext {
         if (caller.machine) {
             RequestContext.putTrusted(VERIFIED_MACHINE_CALLER, new VerifiedMachineCaller(caller.machine.mechanism, caller.machine.identity));
         }
+        AuthenticatedCallerContext.publishedScopes.add(RequestContext.activeScopeIdentity());
     }
 
     private validateCanonicalIdentity(caller: AuthenticatedCaller): void {
@@ -60,9 +68,11 @@ export class AuthenticatedCallerContext {
             }
         }
         const machine = RequestContext.getTrusted(VERIFIED_MACHINE_CALLER);
-        if (RequestContext.getTrusted(AUTHENTICATED_CALLER_KEY) ||
+        const scope = RequestContext.activeScopeIdentity();
+        AuthenticatedCallerContext.completedScopes.add(scope);
+        if (AuthenticatedCallerContext.publishedScopes.has(scope) ||
             (machine instanceof VerifiedMachineCaller && machine.isCurrentHop())) {
-            AuthenticatedCallerContext.establishedScopes.add(RequestContext.activeScopeIdentity());
+            AuthenticatedCallerContext.establishedScopes.add(scope);
         }
     }
 

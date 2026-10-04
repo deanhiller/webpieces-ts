@@ -460,16 +460,16 @@ export function isRawBody(apiClass: Function, methodName: string): boolean {
 }
 
 /**
- * Fail-fast at wiring time when an `@WpAuthWebhook` endpoint did not ask the transport to keep the
+ * Fail-fast at wiring time when an `webhook(...)` endpoint did not ask the transport to keep the
  * bytes it is supposed to verify. A hook with nothing to verify is a MISCONFIGURATION, and it must
  * surface at startup, naming the fix — not as a 401 in production on exactly the traffic the endpoint
  * exists for.
  *
  * This pairing is a runtime assert rather than a type because the two halves live on DIFFERENT
- * decorators (`@WpAuthWebhook` and `@Endpoint`), and no union over one decorator's argument can say
+ * decorators (`webhook(...)` and `@Endpoint`), and no union over one decorator's argument can say
  * anything about the other's.
  *
- * @throws Error naming the first `@WpAuthWebhook` endpoint missing `{ rawBody: true }`.
+ * @throws Error naming the first `webhook(...)` endpoint missing `{ rawBody: true }`.
  */
 // webpieces-disable no-function-outside-class -- wiring-time assert, sibling of assertEveryEndpointHasAuthMode
 export function assertEveryWebhookEndpointRetainsRawBody(apiClass: Function): void {
@@ -481,7 +481,7 @@ export function assertEveryWebhookEndpointRetainsRawBody(apiClass: Function): vo
         )
             continue;
         throw new Error(
-            `Endpoint '${methodName}' in ${apiClass.name || 'Unknown'} is @WpAuthWebhook but its @Endpoint ` +
+            `Endpoint '${methodName}' in ${apiClass.name || 'Unknown'} is webhook(...) but its @Endpoint ` +
                 `does not declare { rawBody: true }. A webhook hook verifies a signature over the bytes and ` +
                 `the url the SENDER transmitted, and without that option the transport parses the body and ` +
                 `throws them away — leaving the hook nothing to check.`,

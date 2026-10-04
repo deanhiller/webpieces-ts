@@ -79,10 +79,10 @@ export class NodeProxyClient extends ProxyClient {
         @inject(GcpOidc) private readonly gcpOidc: GcpOidc,
         // webpieces-disable inject-annotation-not-needed-for-concrete-class -- DI-resolved param; the esbuild/vitest path elides type-only imports (no design:paramtypes), so the explicit token is required
         @inject(AddressResolver) private readonly addressResolver: AddressResolver,
-        // @optional: only @WpAuthSharedSecret endpoints need it; the client sends its bound value.
+        // @optional: only sharedSecret(...) endpoints need it; the client sends its bound value.
         // webpieces-disable inject-annotation-not-needed-for-concrete-class -- DI-resolved param; the esbuild/vitest path elides type-only imports (no design:paramtypes), so the explicit token is required
         @optional() @inject(SECRETS) private readonly secrets?: Secrets,
-        // @optional: only @WpAuthWebhook endpoints need it, and an unbound one makes them THROW
+        // @optional: only webhook(...) endpoints need it, and an unbound one makes them THROW
         // rather than deliver unsigned — see WebhookSignerCallback.
         // webpieces-disable inject-annotation-not-needed-for-concrete-class -- DI-resolved param; the esbuild/vitest path elides type-only imports (no design:paramtypes), so the explicit token is required
         @optional()
@@ -239,8 +239,8 @@ export class NodeProxyClient extends ProxyClient {
      * Straight from the RequestContext. Throws when there is no active request scope.
      *
      * `destination` rides through unchanged: this is the ONE client that can legitimately propagate a
-     * verified identity, and it does so exactly when the callee will authenticate us (@WpAuthOidc /
-     * @WpAuthSharedSecret). Calling a peer's @WpAuthPublic or @WpAuthJwt endpoint now omits `x-user-id` and
+     * verified identity, and it does so exactly when the callee will authenticate us (oidc(...) /
+     * sharedSecret(...)). Calling a peer's @WpAuthPublic or jwt() endpoint now omits `x-user-id` and
      * friends instead of shipping headers that endpoint's AuthFilter is obliged to reject.
      */
     protected override outboundContextHeaders(destination: DestinationTrust): Map<string, string> {

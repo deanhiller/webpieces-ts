@@ -12,7 +12,7 @@ export const TEST_SHARED_SECRET_ROTATING = 'some-test-key-rotating';
 /**
  * TestAuthConfig - a stub {@link AuthConfig} (shared-secret STATE) for integration tests that don't
  * focus on auth. It binds a known shared secret; pair it with {@link TestJwtHook} when the test also
- * exercises @WpAuthJwt endpoints. Bound via appOverrides so an authorization token passes the framework
+ * exercises jwt() endpoints. Bound via appOverrides so an authorization token passes the framework
  * AuthFilter without minting a real JWT.
  */
 @injectable()
@@ -26,7 +26,7 @@ export class TestAuthConfig extends AuthConfig {
 
 /**
  * TestJwtHook - a permissive {@link JwtHook} stub: accepts ANY presented JWT as a fixed admin user,
- * so a non-auth-focused integration test can send an arbitrary bearer token to an @WpAuthJwt endpoint
+ * so a non-auth-focused integration test can send an arbitrary bearer token to an jwt() endpoint
  * without minting a real signed JWT. Bound via appOverrides alongside {@link TestAuthConfig}.
  */
 @injectable()

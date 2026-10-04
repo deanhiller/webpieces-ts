@@ -26,10 +26,10 @@ export interface EndpointOptions {
      */
     formPost?: boolean;
     /**
-     * Retain the verbatim request bytes and absolute URL for a `@WpAuthWebhook` callback to verify.
+     * Retain the verbatim request bytes and absolute URL for a `webhook(...)` callback to verify.
      * This is retention, not new buffering: the Express adapter already accumulates the body.
      *
-     * `@WpAuthWebhook` requires this option at wiring time. It combines with `formPost` for vendors
+     * `webhook(...)` requires this option at wiring time. It combines with `formPost` for vendors
      * that sign flat form bodies, e.g. `{ formPost: true, rawBody: true }`.
      */
     rawBody?: boolean;
