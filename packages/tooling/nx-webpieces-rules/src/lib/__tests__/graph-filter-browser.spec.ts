@@ -3,14 +3,18 @@ import { chromium, type Browser, type Page, type Locator } from '@playwright/tes
 import * as fs from 'fs';
 import * as path from 'path';
 import { FilterFixture } from './graph-filter-fixture';
+import { GraphFocusBrowser } from './graph-focus-browser';
 import { RuntimeHtmlPage } from '../runtime-html-page';
+import { DiDesign, DiGraph, DiNode } from '../di-graph/model';
+import { generateDesignHTML } from '../di-graph/design-visualizer';
 import { generateRuntimeRenderModel } from '../runtime-visualizer';
 import { loadBlessedGraph } from '../graph-loader';
 import { ResponsibilitiesRenderer } from '../graph-responsibilities';
 import type { EnhancedGraph } from '../graph-sorter';
 import type { GraphRenderModel, RenderEdge } from '../graph-render-model';
 
-/** Opt-in real-browser suite: supply the page's pinned Viz UMD file and installed Chromium. */
+/** Opt-in browser suite: WP_GRAPH_VIZ_JS supplies Viz 3; the cross-page test additionally uses
+ * WP_GRAPH_VIZ2_JS and WP_GRAPH_VIZ2_RENDER_JS for design's pinned Viz 2.1.2 scripts. */
 class BrowserFixture {
     readonly output = path.resolve('.webpieces/1118-browser-evidence');
     readonly viz = FilterFixture.visualizer();
@@ -25,8 +29,17 @@ class BrowserFixture {
         const file = path.join(this.output, `${name}.html`);
         fs.writeFileSync(file, html);
         const page = await this.browser.newPage({ viewport: { width: 1440, height: 1000 } });
-        await page.route('https://cdn.jsdelivr.net/**', (route) =>
-            route.fulfill({
+        await page.route('https://cdn.jsdelivr.net/**', (route) => {
+            if (route.request().url().includes('viz.js@2.1.2/')) {
+                const source = route.request().url().endsWith('/full.render.js')
+                    ? process.env.WP_GRAPH_VIZ2_RENDER_JS!
+                    : process.env.WP_GRAPH_VIZ2_JS!;
+                return route.fulfill({
+                    contentType: 'application/javascript',
+                    body: fs.readFileSync(source, 'utf8'),
+                });
+            }
+            return route.fulfill({
                 contentType: 'application/javascript',
                 body:
                     fs.readFileSync(process.env.WP_GRAPH_VIZ_JS!, 'utf8') +
@@ -40,10 +53,10 @@ Viz.instance = async () => {
   };
   return viz;
 };`,
-            }),
-        );
+            });
+        });
         await page.goto(`file://${file}`);
-        await page.locator('#graph svg').waitFor();
+        await page.locator('g.wp-node-clickable').first().waitFor();
         return page;
     }
 
@@ -138,6 +151,86 @@ describe.skipIf(!process.env.WP_GRAPH_VIZ_JS)('real Viz local-file filtering', (
     beforeAll(() => fixture.start());
     afterAll(async () => fixture.browser?.close());
 
+    it.skipIf(!process.env.WP_GRAPH_VIZ2_JS || !process.env.WP_GRAPH_VIZ2_RENDER_JS)(
+        'owns pointer and keyboard menu focus on architecture, runtime and design pages',
+        async () => {
+            const design = new DiDesign('Root', 'controller', 'src/Root.ts');
+            design.nodes = ['Root', 'Other'].map(
+                (name) => new DiNode(name, name, 'class', 'singleton', 'src/Root.ts', 0),
+            );
+            const graph = new DiGraph('focus-fixture');
+            graph.designs = [design];
+            const runtime = new RuntimeHtmlPage(
+                () => FilterFixture.client('runtime-visualizer.client.ts'),
+                () => FilterFixture.client('graph-filter.client.ts'),
+            ).render(
+                generateRuntimeRenderModel(FilterFixture.runtime()),
+                'Runtime',
+                FilterFixture.runtime(),
+            );
+            const pages = [
+                fixture.architecture(FilterFixture.wide()),
+                runtime,
+                generateDesignHTML(graph),
+            ];
+            for (const [index, html] of pages.entries()) {
+                const page = await fixture.open(`1129-focus-${index}`, html);
+                await GraphFocusBrowser.verify(page, index);
+                await page.close();
+            }
+        },
+    );
+
+    it('restores keyboard node identity across redraw, removal and failed replacement', async () => {
+        const page = await fixture.open('1129-redraw', fixture.architecture(FilterFixture.wide()));
+        const node = fixture.node(page, 'pr-gate');
+        for (let round = 0; round < 3; round++) {
+            await node.press('Enter');
+            const old = await node.elementHandle();
+            await page
+                .locator('#wp-node-menu')
+                .getByRole('button', { name: 'Filter Unconnected', exact: true })
+                .press('Enter');
+            expect(await old!.evaluate((el) => el.isConnected)).toBe(false);
+            expect(
+                await node.evaluate((el) => el === document.activeElement && el.isConnected),
+            ).toBe(true);
+            await node.press('Space');
+            await page
+                .locator('#wp-node-menu')
+                .getByRole('button', { name: 'Turn off Filter', exact: true })
+                .press('Enter');
+            expect(
+                await node.evaluate((el) => el === document.activeElement && el.isConnected),
+            ).toBe(true);
+        }
+        await page.evaluate(() => {
+            document.documentElement.dataset.failBinding = 'yes';
+        });
+        // Force a failure after replacement, then verify the old live node regains focus.
+        await page.evaluate(() => {
+            const wire = WpNodeMenu.wire;
+            WpNodeMenu.wire = (svg, items) => {
+                if (document.documentElement.dataset.failBinding === 'yes')
+                    throw new Error('Injected binding failure');
+                wire(svg, items);
+            };
+        });
+        await node.press('Enter');
+        await page
+            .locator('#wp-node-menu')
+            .getByRole('button', { name: 'Filter Unconnected', exact: true })
+            .press('Enter');
+        expect(await node.evaluate((el) => el === document.activeElement && el.isConnected)).toBe(
+            true,
+        );
+        await page.evaluate(() => {
+            delete document.documentElement.dataset.failBinding;
+        });
+        await GraphFocusBrowser.removal(page, node, fixture.node(page, 'core-mock'));
+        await page.close();
+    });
+
     it('pins all locked nodes and edges during both reported hover chains', async () => {
         const graph = loadBlessedGraph(process.cwd())!.projects;
         const model = fixture.viz.generateRenderModel(graph);
@@ -156,9 +249,13 @@ describe.skipIf(!process.env.WP_GRAPH_VIZ_JS)('real Viz local-file filtering', (
             );
             expect(await page.locator('#wp-lock').inputValue()).toBe('code-rules');
             expect(await fixture.names(page, '#graph g.node.wp-locked')).toEqual(['code-rules']);
-            expect(await fixture.node(page, 'code-rules').locator('polygon').first().evaluate(
-                (shape: SVGElement) => getComputedStyle(shape).stroke,
-            )).toBe('rgb(178, 106, 0)');
+            expect(
+                await fixture
+                    .node(page, 'code-rules')
+                    .locator('polygon')
+                    .first()
+                    .evaluate((shape: SVGElement) => getComputedStyle(shape).stroke),
+            ).toBe('rgb(178, 106, 0)');
             expect(await fixture.cards(page)).toEqual(cards);
             await fixture.snapshot(page, `1127-hover-${hovered}`);
             await page.mouse.move(0, 0);

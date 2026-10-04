@@ -62,7 +62,12 @@ export class GraphNodeMenu {
             cursor: pointer;
         }
         .wp-node-menu-item:hover { background: #E3F2FD; }
-        g.wp-node-clickable { cursor: pointer; }
+        g.wp-node-clickable { cursor: pointer; outline: none; }
+        /* DOM keyboard focus is independent of graph highlight/Lock and stays dim with its node. */
+        g.wp-node-clickable.wp-keyboard-focus {
+            outline: 2px dashed #7b1fa2;
+            outline-offset: 2px;
+        }
         /* Every shape Graphviz (or the runtime page's own queue-cylinder redraw) can emit for a node
          * body: box/record -> polygon, circle -> ellipse, cylinder and the redrawn queue -> path. A
          * shape left out of this list would be a box that is clickable but never looks it. */
@@ -111,12 +116,11 @@ export class GraphNodeMenu {
             constructor(label, onSelect) { this.label = label; this.onSelect = onSelect; }
         }
         class WpNodeMenu {
-            static close() {
-                const open = document.getElementById('wp-node-menu');
-                if (open !== null) open.remove();
-            }
+            ${this.focusScript()}
             static open(nodeEl, name, items) {
                 WpNodeMenu.close();
+                WpNodeMenu.owner = nodeEl;
+                WpNodeMenu.ownerKeyboard = WpNodeMenu.keyboard;
                 const menu = document.createElement('div');
                 menu.id = 'wp-node-menu';
                 menu.className = 'wp-node-menu';
@@ -128,6 +132,7 @@ export class GraphNodeMenu {
                 for (const item of items) menu.appendChild(WpNodeMenu.button(item));
                 document.body.appendChild(menu);
                 WpNodeMenu.place(menu, nodeEl);
+                menu.querySelector('button')?.focus({ preventScroll: true });
             }
             static button(item) {
                 const button = document.createElement('button');
@@ -137,20 +142,12 @@ export class GraphNodeMenu {
                 button.addEventListener('click', function (ev) {
                     ev.preventDefault();
                     ev.stopPropagation();
-                    WpNodeMenu.close();
+                    WpNodeMenu.close(true);
                     item.onSelect();
                 });
                 return button;
             }
-            static place(menu, nodeEl) {
-                const box = nodeEl.getBoundingClientRect();
-                const own = menu.getBoundingClientRect();
-                const maxLeft = window.scrollX + document.documentElement.clientWidth - own.width - 8;
-                let left = box.left + window.scrollX;
-                if (left > maxLeft) left = Math.max(window.scrollX + 8, maxLeft);
-                menu.style.left = left + 'px';
-                menu.style.top = (box.bottom + window.scrollY + 4) + 'px';
-            }
+            ${this.positionScript()}
             ${this.keyboardScript()}
             static wire(svg, itemsFor) {
                 svg.querySelectorAll('g.node').forEach(function (node) {
@@ -159,6 +156,14 @@ export class GraphNodeMenu {
                         ? '' : title.textContent.trim();
                     if (name === '') return;
                     if (node.classList.contains('wp-layout')) return;
+                    if (WpNodeMenu.wired.has(node)) return;
+                    WpNodeMenu.wired.add(node);
+                    node.addEventListener('focus', function () {
+                        node.classList.toggle('wp-keyboard-focus', WpNodeMenu.keyboard);
+                    });
+                    node.addEventListener('blur', function () {
+                        node.classList.remove('wp-keyboard-focus');
+                    });
                     node.classList.add('wp-node-clickable');
                     node.setAttribute('tabindex', '0');
                     node.setAttribute('role', 'button');
@@ -173,14 +178,63 @@ export class GraphNodeMenu {
         }`;
     }
 
+    private positionScript(): string {
+        return `            static place(menu, nodeEl) {
+                const box = nodeEl.getBoundingClientRect();
+                const own = menu.getBoundingClientRect();
+                const maxLeft = window.scrollX + document.documentElement.clientWidth - own.width - 8;
+                let left = box.left + window.scrollX;
+                if (left > maxLeft) left = Math.max(window.scrollX + 8, maxLeft);
+                menu.style.left = left + 'px';
+                menu.style.top = (box.bottom + window.scrollY + 4) + 'px';
+            }
+`;
+    }
+
+    /** Explicit input modality avoids Chromium's pointer-focus :focus-visible heuristics. */
+    private focusScript(): string {
+        return `            static keyboard = false;
+            static owner = null;
+            static ownerKeyboard = false;
+            static wired = new WeakSet();
+            static close(returnFocus = false) {
+                const open = document.getElementById('wp-node-menu');
+                const owner = WpNodeMenu.owner;
+                const keyboard = WpNodeMenu.ownerKeyboard;
+                WpNodeMenu.owner = null;
+                if (open === null) return;
+                open.remove();
+                if (returnFocus && keyboard && owner?.isConnected) {
+                    WpNodeMenu.keyboard = true;
+                    owner.focus({ preventScroll: true });
+                }
+            }
+            static focusedName(svg) {
+                const active = document.activeElement;
+                const menu = document.getElementById('wp-node-menu');
+                const node = menu?.contains(active) && WpNodeMenu.ownerKeyboard
+                    ? WpNodeMenu.owner : active;
+                return svg?.contains(node) && (node === WpNodeMenu.owner || node?.classList.contains('wp-keyboard-focus'))
+                    ? node.querySelector('title')?.textContent.trim() : null;
+            }
+            static restoreFocus(svg, name) {
+                if (name == null) return;
+                const nodes = Array.from(svg.querySelectorAll('g.wp-node-clickable'));
+                const node = nodes.find(node => node.querySelector('title')?.textContent.trim() === name);
+                WpNodeMenu.keyboard = true;
+                (node || nodes[0])?.focus({ preventScroll: true });
+            }
+`;
+    }
+
     private keyboardScript(): string {
         return `static wireKeyboard(node, name, itemsFor) {
             node.addEventListener('keydown', function (ev) {
                 if (ev.key !== 'Enter' && ev.key !== ' ') return;
                 ev.preventDefault();
                 ev.stopPropagation();
+                WpNodeMenu.keyboard = true;
                 WpNodeMenu.open(node, name, itemsFor(name, node));
-                document.querySelector('#wp-node-menu button')?.focus();
             });
         }`;
     }
@@ -230,9 +284,19 @@ export class GraphNodeMenu {
     /** Outside click and Escape both dismiss — wired once, on the document. */
     private dismissScript(): string {
         return `
+        document.addEventListener('pointerdown', function () {
+            WpNodeMenu.keyboard = false;
+            document.querySelectorAll('.wp-keyboard-focus').forEach(function (node) {
+                node.classList.remove('wp-keyboard-focus');
+            });
+        }, true);
         document.addEventListener('click', function () { WpNodeMenu.close(); });
         document.addEventListener('keydown', function (ev) {
-            if (ev.key === 'Escape') WpNodeMenu.close();
-        });`;
+            if (ev.altKey || ev.ctrlKey || ev.metaKey) return;
+            WpNodeMenu.keyboard = true;
+            const active = document.activeElement;
+            if (active?.classList.contains('wp-node-clickable')) active.classList.add('wp-keyboard-focus');
+            if (ev.key === 'Escape') WpNodeMenu.close(true);
+        }, true);`;
     }
 }
