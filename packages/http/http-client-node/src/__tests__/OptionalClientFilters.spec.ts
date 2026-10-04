@@ -1,4 +1,6 @@
 import 'reflect-metadata';
+import { Container, ContainerModule } from 'inversify';
+import { RuntimeClients } from '../RuntimeClients';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import {
     ApiPath,
@@ -18,7 +20,7 @@ import {
 import type { RequestContextHeaders } from '@webpieces/core-context';
 import { Provider, RequestContext } from '@webpieces/core-context';
 import type { GcpOidc } from '@webpieces/gcp-identity';
-import { ClientFilterDefinition, ClientRequest } from '@webpieces/http-client-core';
+import { ClientFilterDefinition, ClientRequest, rpcTarget } from '@webpieces/http-client-core';
 import { AddressResolver } from '../AddressResolver';
 import { ClientConfig } from '../ClientConfig';
 import { ClientHttpFactory } from '../ClientHttpFactory';
@@ -159,6 +161,29 @@ describe('createRpcClient filters are genuinely optional', () => {
         expect(sent).toHaveLength(2);
         expect(sent[1].url).toBe(sent[0].url);
         expect(sent[1].headers).toEqual(sent[0].headers);
+    });
+
+    it('canonical singleton wiring preserves filters and requires the calling request context', async () => {
+        const container = new Container();
+        container.bind(ClientHttpFactory).toConstantValue(newFactory());
+        const filters = [new ClientFilterDefinition(500, new OutboundLogFilter())];
+        await container.load(
+            new ContainerModule((options) => {
+                new RuntimeClients(options).bindRpc(
+                    SvcApi,
+                    SvcApi,
+                    rpcTarget(SvcApi, 'svc'),
+                    filters,
+                );
+            }),
+        );
+        const client = container.get(SvcApi);
+        expect(container.get(SvcApi)).toBe(client);
+        await expect(client.work(new WorkRequest('outside'))).rejects.toThrow();
+        await RequestContext.run(() => client.work(new WorkRequest('first')));
+        await RequestContext.run(() => client.work(new WorkRequest('second')));
+        expect(sent).toHaveLength(2);
+        expect(sent.map((call) => call.headers['x-log'])).toEqual(['on', 'on']);
     });
 
     it('accepts a list built up conditionally — the shape a real app produces', async () => {

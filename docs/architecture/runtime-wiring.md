@@ -17,7 +17,15 @@ remain lazy and preserve the token that tests override. A deployment identity se
 URLs, environment configuration, context stores, authentication and credentials remain runtime data.
 `ClientToken<T>` offers optional invariant typed Node tokens; raw symbols remain supported.
 `RuntimeTaskClients.bindPubSub(token, Api, deployment)` supplies lazy singleton Cloud Tasks clients.
-Raw factory APIs remain the implementation primitives for integrations.
+Raw factory APIs remain the implementation primitives for integrations. Supported hand-written
+singleton DI factories and browser providers are rejected, including inside canonical `wiring.ts`.
+This is an ALL-CODE grammar check: architecture validation scans every participating runtime owner,
+including unchanged projects outside the current diff, and reports all supported occurrences together.
+Use `new RuntimeClients(options)` once per module and preserve tokens, API, target and optional RPC
+filters in each `bindRpc` call. Pub/sub and browser helpers have no filter argument; registrations
+with unsupported options, transient scope or additional callback work remain low-level integrations.
+The per-owner source proof checks the same grammar before producing candidates. The generated
+architecture instructions and rule catalog contain these helper migration steps.
 
 ## Schema version 1
 
