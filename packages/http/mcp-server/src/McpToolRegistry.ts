@@ -133,7 +133,7 @@ export class McpToolRegistry {
             );
         }
         this.authorizationService.validate(authorization);
-        binding.validateMethod(metadata.methodName);
+        binding.validateMethod(metadata.methodName, this.authorizationService);
         if (catalog === undefined) return undefined;
         const published = this.published(apiClass, metadata, catalog, pairing);
         if (published === undefined) return undefined;

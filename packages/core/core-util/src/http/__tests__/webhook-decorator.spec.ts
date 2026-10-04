@@ -113,7 +113,7 @@ describe('{ rawBody: true } is retained per endpoint, beside formPost', () => {
 describe('assertEveryWebhookEndpointRetainsRawBody', () => {
     it('throws for @WpAuthWebhook without { rawBody: true }, naming the endpoint and the fix', () => {
         expect(() => assertEveryWebhookEndpointRetainsRawBody(ForgotRawBodyApi)).toThrow(
-            /'notify' in ForgotRawBodyApi is @WpAuthWebhook.*rawBody: true/s,
+            /'notify' in ForgotRawBodyApi is webhook\(\.\.\.\).*rawBody: true/s,
         );
     });
 

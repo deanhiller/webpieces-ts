@@ -1,3 +1,4 @@
+import { AuthorizationService } from '@webpieces/http-routing';
 import { describe, it, expect, afterEach, beforeAll } from 'vitest';
 import express from 'express';
 import { AddressInfo } from 'net';
@@ -28,6 +29,10 @@ class RefusingApi {}
 
 /** One route whose proxy always refuses the end user with the status the throw site chose. */
 class RefusingApiFactory implements ApiFactory {
+    authorizationService(): AuthorizationService {
+        throw new Error('This transport-only fixture does not implement authorization.');
+    }
+
     constructor(private readonly surface?: Surface) {}
 
     apiClients(): ApiClient[] {

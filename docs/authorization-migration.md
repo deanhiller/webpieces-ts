@@ -18,7 +18,7 @@ Verified user results publish canonical `USER_ID` and `USER_ROLES` automatically
 MCP keeps access-token verification, issuer/resource/scope/lifetime checks and fresh account validation. Remove endpoint JWT mint configuration and `WpMcpAuthJwt`. Supply the same `AuthorizationService` used by the receiving router:
 
 ```ts
-config.setAuthorizationService(router.getContainer().get(AuthorizationService));
+config.setAuthorizationService(router.authorizationService());
 ```
 
 Local MCP bindings pass an explicit token-free invocation proof through the ordinary filter chain. That proof is bound to the actual endpoint and active verified ingress scope. Capturing or restoring context cannot reuse it. A local MCP server does not need a GUI `JWT_HOOK`.

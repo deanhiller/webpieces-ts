@@ -208,7 +208,7 @@ describe('McpApiBinding.remote generated Node client integration', () => {
                 .setVersion('1.0.0')
                 .setResource('https://gateway.example.test/gateway/mcp')
                 .setAccessTokenAuthority(new TestTokenAuthority())
-                .setAuthorizationService(new AuthorizationService())
+                .setAuthorizationService(router.authorizationService())
                 .setAuthorizationServers(['https://login.example.test'])
                 .setRequiredScopes(['tools']),
         );

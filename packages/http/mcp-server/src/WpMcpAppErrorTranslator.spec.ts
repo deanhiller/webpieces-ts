@@ -149,7 +149,7 @@ describe('application-owned tools/call error translation', () => {
                 .setVersion('1.0.0')
                 .setResource('https://api.example.test/app-owned/mcp')
                 .setAccessTokenAuthority(authority)
-                .setAuthorizationService(new AuthorizationService())
+                .setAuthorizationService(router.authorizationService())
                 .setAuthorizationServers(['https://login.example.test'])
                 .setRequiredScopes(['tools']),
         );
@@ -306,7 +306,7 @@ describe('no application translator registered', () => {
                 .setVersion('1.0.0')
                 .setResource('https://api.example.test/app-owned/mcp')
                 .setAccessTokenAuthority(new TestTokenAuthority())
-                .setAuthorizationService(new AuthorizationService())
+                .setAuthorizationService(router.authorizationService())
                 .setAuthorizationServers(['https://login.example.test'])
                 .setRequiredScopes(['tools']),
         );

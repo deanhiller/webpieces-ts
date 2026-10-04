@@ -107,7 +107,7 @@ const config = new WpMcpServerConfig<MyGrant>()
     .setVersion('1.0.0')
     .setResource('https://api.example.com/mcp')
     .setAccessTokenAuthority(authority)
-    .setAuthorizationService(router.getContainer().get(AuthorizationService))
+    .setAuthorizationService(router.authorizationService())
     .setAuthorizationServers(['https://login.example.com'])
     .setRequiredScopes(['tools'])
     .setMaxAccountValidationAgeSeconds(15 * 60);

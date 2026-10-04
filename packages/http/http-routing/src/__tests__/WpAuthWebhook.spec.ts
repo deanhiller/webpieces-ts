@@ -379,7 +379,7 @@ describe('ApiRoutingFactory refuses a webhook route that kept no bytes', () => {
             new ApiRoutingFactory(ForgotRawBodyApi, ForgotRawBodyController).configure(
                 new CollectingRouteBuilder(),
             ),
-        ).toThrow(/is @WpAuthWebhook.*rawBody: true/s);
+        ).toThrow(/is webhook\(\.\.\.\).*rawBody: true/s);
     });
 
     it('registers the route, carrying rawBody on its metadata, when the pairing is right', () => {

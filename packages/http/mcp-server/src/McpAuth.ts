@@ -107,7 +107,7 @@ export class McpProtectedResourceMetadata {
  *     .setVersion('1.0.0')
  *     .setResource('https://api.example.com/mcp')
  *     .setAccessTokenAuthority(authority)
- *     .setAuthorizationService(new AuthorizationService())
+ *     .setAuthorizationService(router.authorizationService())
  *     .setAuthorizationServers(['https://login.example.com'])
  *     .setRequiredScopes(['tools']);
  *

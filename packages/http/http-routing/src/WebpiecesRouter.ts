@@ -1,3 +1,4 @@
+import { AuthorizationService } from './AuthorizationHook';
 import { InvocationAuthentication } from './InvocationAuthentication';
 import { Container, ContainerModule, inject } from 'inversify';
 import { buildProviderModule } from '@inversifyjs/binding-decorators';
@@ -172,6 +173,10 @@ export class WebpiecesRouter implements ApiFactory {
      */
     apiClients(): ApiClient[] {
         return this.apiClientFactory.apiClients();
+    }
+
+    authorizationService(): AuthorizationService {
+        return this.appContainer.get(AuthorizationService);
     }
 
     /** The application DI container (child of the framework container). */

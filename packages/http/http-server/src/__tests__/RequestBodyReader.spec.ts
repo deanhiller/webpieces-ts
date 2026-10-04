@@ -1,3 +1,4 @@
+import { AuthorizationService } from '@webpieces/http-routing';
 import { describe, it, expect, afterEach, beforeAll } from 'vitest';
 import express, { Express, NextFunction, Request, Response } from 'express';
 import { AddressInfo } from 'net';
@@ -28,6 +29,10 @@ class BodyApi {}
 
 /** An ApiFactory stub that hands the router two routes whose proxy just records what arrived. */
 class StubApiFactory implements ApiFactory {
+    authorizationService(): AuthorizationService {
+        throw new Error('This transport-only fixture does not implement authorization.');
+    }
+
     readonly captured = new Captured();
 
     apiClients(): ApiClient[] {
