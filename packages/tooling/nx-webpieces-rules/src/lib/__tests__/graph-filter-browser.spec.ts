@@ -170,7 +170,7 @@ describe.skipIf(!process.env.WP_GRAPH_VIZ_JS)('real Viz local-file filtering', (
             expect(await page.locator('#wp-node-menu').count()).toBe(0);
         }
         await page.close();
-    }, 30000);
+    });
 
     it('retains sparse L5/L2/L0 rows, including an unconstrained bottom leaf', async () => {
         const graph = {
@@ -190,7 +190,7 @@ describe.skipIf(!process.env.WP_GRAPH_VIZ_JS)('real Viz local-file filtering', (
         await page.locator('#wp-filter-off').click();
         expect(await fixture.row(page, 'bottom')).toBe(rows[2]);
         await page.close();
-    }, 30000);
+    });
 
     it('keeps the previous usable SVG and filter after render failures, then recovers', async () => {
         const page = await fixture.open(
@@ -225,7 +225,7 @@ describe.skipIf(!process.env.WP_GRAPH_VIZ_JS)('real Viz local-file filtering', (
         expect(await page.locator('#wp-graph-error').isVisible()).toBe(false);
         expect(await fixture.markup(page)).toBe(original);
         await page.close();
-    }, 30000);
+    });
 
     it('rolls back SVG binding failures without accumulating handlers', async () => {
         const page = await fixture.open(
@@ -260,7 +260,7 @@ describe.skipIf(!process.env.WP_GRAPH_VIZ_JS)('real Viz local-file filtering', (
                 .count(),
         ).toBe(1);
         await page.close();
-    }, 30000);
+    });
 
     it('handles a single isolated node and a filter retaining the whole graph', async () => {
         const graph = { isolated: { level: 5, dependsOn: [] } };
@@ -271,7 +271,7 @@ describe.skipIf(!process.env.WP_GRAPH_VIZ_JS)('real Viz local-file filtering', (
         await page.locator('#wp-filter-off').click();
         expect(await fixture.names(page)).toEqual(['isolated']);
         await page.close();
-    }, 30000);
+    });
 
     it('compacts and restores the large saved architecture snapshot at normal browser zoom', async () => {
         const graph = loadBlessedGraph(process.cwd())!.projects;
@@ -289,7 +289,7 @@ describe.skipIf(!process.env.WP_GRAPH_VIZ_JS)('real Viz local-file filtering', (
         expect(await fixture.names(page)).toEqual(original);
         await fixture.snapshot(page, 'real-restored');
         await page.close();
-    }, 30000);
+    });
     it('filters runtime chains through queues/externals and keeps its single-box Lock after every redraw', async () => {
         const model = generateRuntimeRenderModel(FilterFixture.runtime());
         const html = new RuntimeHtmlPage(
@@ -336,5 +336,5 @@ describe.skipIf(!process.env.WP_GRAPH_VIZ_JS)('real Viz local-file filtering', (
         await page.locator('#wp-filter-off').click();
         expect(await fixture.names(page, '#graph g.node.wp-focus')).toEqual(['consumer']);
         await page.close();
-    }, 30000);
+    });
 });
