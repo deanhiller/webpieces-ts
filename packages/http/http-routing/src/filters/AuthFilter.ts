@@ -67,7 +67,7 @@ const SHARED_SECRET_SCHEME = 'Webpieces';
  * default:
  *  - shared-secret → constant-time compare vs the {@link AuthConfig} secret VALUE (state). No
  *                    AuthConfig bound → no accepted secret → fail fast (401).
- *  - jwt           → the bound {@link JwtHook} (`parseJwt` + `authorizeJwt`, both awaited — an app's
+ *  - jwt           → the bound {@link JwtHook} (`parseJwt`, awaited — an app's
  *                    strategy may reach a JWKS or a datastore). No JwtHook bound → "not enabled"
  *                    (401): JWT needs an app secret + payload shape.
  *  - oidc          → the bound {@link OidcHook} if any, else the framework {@link DefaultOidcVerifier}

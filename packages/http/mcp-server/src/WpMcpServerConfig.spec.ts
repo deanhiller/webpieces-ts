@@ -51,7 +51,7 @@ describe('WpMcpServerConfig fluent setters', () => {
             .setVersion('1.0.0')
             .setResource(RESOURCE)
             .setAccessTokenAuthority(new TestTokenAuthority())
-            .setAuthorizationService(new AuthorizationService())
+            .setAuthorizationService(router.authorizationService())
             .setAuthorizationServers([ISSUER])
             .setRequiredScopes(['tools']);
     }
@@ -97,7 +97,7 @@ describe('WpMcpServerConfig fluent setters', () => {
             .setName('no-resource')
             .setVersion('1.0.0')
             .setAccessTokenAuthority(new TestTokenAuthority())
-            .setAuthorizationService(new AuthorizationService())
+            .setAuthorizationService(router.authorizationService())
             .setAuthorizationServers([ISSUER])
             .setRequiredScopes(['tools']);
         expect(() => bind(config)).toThrow('WpMcpServerConfig is missing setResource(...)');

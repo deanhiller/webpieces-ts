@@ -24,8 +24,8 @@ export class SharedSecrets {
  *
  *  - `userId`          — WHO the caller is, as the credential proved it.
  *  - `roles` / `claims` — the AUTHORIZATION inputs: `roles` is what the framework's own any-of check
- *                        reads, `claims` is the raw payload an app's {@link JwtHook.authorizeJwt}
- *                        override reads for app-defined requirements (inOrg, tenant, ...).
+ *                        reads, `claims` carries credential facts for the authenticator to validate and publish
+ *                        as trusted application context before AuthorizationHook evaluates policy.
  *  - `entries`         — the TRUSTED CONTEXT to seed. The framework writes each one with
  *                        {@link RequestContext.putTrusted}, so return only what THIS authenticator
  *                        derived from the credential it just verified.
@@ -82,7 +82,7 @@ export const AUTHENTICATED_CALLER_KEY = ContextKey.trusted<AuthenticatedCaller>(
  * there is no verification code here. The verification MECHANISMS are separate optional hooks the
  * app binds when it needs them:
  *
- *  - user JWT  → bind a {@link JwtHook} (async parseJwt + async authorizeJwt).
+ *  - user JWT  → bind a {@link JwtHook} (async parseJwt).
  *  - api key   → bind an {@link ApiKeyHook} (async verifyApiKey over the request's headers).
  *  - OIDC      → bind an {@link OidcHook} to override the framework's default verifier; a server that
  *                binds nothing still verifies Google OIDC via the built-in {@link DefaultOidcVerifier}.
