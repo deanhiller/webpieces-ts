@@ -24,6 +24,7 @@
  */
 
 import * as ts from 'typescript';
+import { RuntimeClientBindings } from './runtime-client-bindings';
 import { Binding, DiScope, TokenRef } from './model';
 import {
     BindingTable,
@@ -189,12 +190,17 @@ export function collectAngularProviders(
     workspaceRoot: string,
 ): BindingTable {
     const table = new BindingTable();
+    const clients = new RuntimeClientBindings();
 
     for (const sourceFile of program.getSourceFiles()) {
         if (!isAnalyzableFile(sourceFile)) continue;
         const file = relativeFile(workspaceRoot, sourceFile);
 
         const visit = (node: ts.Node): void => {
+            if (ts.isCallExpression(node)) {
+                const client = clients.collectBrowser(node, checker, workspaceRoot);
+                if (client !== undefined) table.add(client);
+            }
             if (ts.isClassDeclaration(node)) {
                 collectInjectableSelfBinding(node, checker, workspaceRoot, table);
             } else if (
