@@ -114,7 +114,11 @@ incoming and outgoing chains, then reruns Graphviz. Architecture L-number rows k
 their original identities; runtime chains include rendered queues, clocks, external
 APIs and systems. The anchor indicator and all surviving node menus offer **Turn off
 Filter**, restoring the full layout and independent Lock state. Responsibilities
-follow the retained set intersected with architecture Lock. Hover and menu dismissal
+follow the retained set intersected with architecture Lock. Architecture Lock pins
+its chain in the foreground; hover adds a temporary chain without dimming locked
+nodes or edges, and leaving restores the Lock chain. The locked anchor keeps an amber outline,
+and hover never changes responsibilities. A filtered-out Lock is suspended until
+the full graph returns. Hover and menu dismissal
 do not clear filtering, and no filter is persisted across reloads. Saved graph facts
 and visibility options remain untouched. See
 [dependency graphs](../../../docs/architecture/dependency-graphs.md#filter-unconnected)
