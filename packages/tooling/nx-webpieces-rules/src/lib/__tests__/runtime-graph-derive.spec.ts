@@ -1,3 +1,4 @@
+import { RuntimeDetails } from '../runtime-details';
 /**
  * Tests the runtime graph DERIVED from dependencies.json (per-project apiRelations): an rpc API
  * becomes a direct runtime edge; a pubsub API becomes an edge drawn producer -> queue -> consumer.
@@ -69,7 +70,9 @@ describe('deriveRuntimeGraph', () => {
     });
 
     it('splits producer→consumer into one rpc edge and one pubsub edge', () => {
-        const edges = derived.runtimeEdges.filter((e: RuntimeEdge) => e.from === 'producer' && e.to === 'consumer');
+        const edges = derived.runtimeEdges.filter(
+            (e: RuntimeEdge) => e.from === 'producer' && e.to === 'consumer',
+        );
         expect(edges).toHaveLength(2);
         const rpc = edges.find((e: RuntimeEdge) => e.type === 'rpc');
         const pubsub = edges.find((e: RuntimeEdge) => e.type === 'pubsub');
@@ -100,7 +103,11 @@ function graphWithSharedLib(): EnhancedGraph {
             role: 'server',
             framework: ['node'],
             apiRelations: {
-                'auth-api': { kind: 'implements', implements: [{ api: 'AuthApi', type: 'rpc' }], uses: [] },
+                'auth-api': {
+                    kind: 'implements',
+                    implements: [{ api: 'AuthApi', type: 'rpc' }],
+                    uses: [],
+                },
             },
         },
         'auth-client-lib': {
@@ -109,11 +116,25 @@ function graphWithSharedLib(): EnhancedGraph {
             role: 'lib',
             framework: ['browser', 'node'],
             apiRelations: {
-                'auth-api': { kind: 'uses', implements: [], uses: [{ api: 'AuthApi', type: 'rpc' }] },
+                'auth-api': {
+                    kind: 'uses',
+                    implements: [],
+                    uses: [{ api: 'AuthApi', type: 'rpc' }],
+                },
             },
         },
-        'app-web': { level: 2, dependsOn: ['auth-client-lib'], role: 'client', framework: ['browser'] },
-        'app-svr': { level: 2, dependsOn: ['auth-client-lib'], role: 'server', framework: ['node'] },
+        'app-web': {
+            level: 2,
+            dependsOn: ['auth-client-lib'],
+            role: 'client',
+            framework: ['browser'],
+        },
+        'app-svr': {
+            level: 2,
+            dependsOn: ['auth-client-lib'],
+            role: 'server',
+            framework: ['node'],
+        },
     };
 }
 
@@ -175,6 +196,23 @@ describe('drawOnGraph:false hides a service from the runtime render but keeps it
  * `ApiRef.targetService` and matched against the DECLARED `serviceName`. Note the naming spaces do
  * not line up: helper-svr is called 'helper-portal'; no suffix rule could derive that.
  */
+function helperFsdbNode(): EnhancedGraph[string] {
+    return {
+        level: 2,
+        dependsOn: ['svc-core', 'fsdb-api'],
+        role: 'server',
+        framework: ['node'],
+        serviceName: 'helper-fsdb',
+        apiRelations: {
+            'fsdb-api': {
+                kind: 'implements',
+                implements: [{ api: 'HelperFsdbApi', type: 'rpc' }],
+                uses: [],
+            },
+        },
+    };
+}
+
 function companyWideApiGraph(): EnhancedGraph {
     const warmup = { api: 'WarmupApi', type: 'rpc' as const };
     return {
@@ -188,16 +226,7 @@ function companyWideApiGraph(): EnhancedGraph {
             framework: ['node'],
             apiRelations: { 'warmup-api': { kind: 'implements', implements: [warmup], uses: [] } },
         },
-        'helper-fsdb-svr': {
-            level: 2,
-            dependsOn: ['svc-core', 'fsdb-api'],
-            role: 'server',
-            framework: ['node'],
-            serviceName: 'helper-fsdb',
-            apiRelations: {
-                'fsdb-api': { kind: 'implements', implements: [{ api: 'HelperFsdbApi', type: 'rpc' }], uses: [] },
-            },
-        },
+        'helper-fsdb-svr': helperFsdbNode(),
         'lang-fsdb-svr': {
             level: 2,
             dependsOn: ['svc-core', 'fsdb-api'],
@@ -205,7 +234,11 @@ function companyWideApiGraph(): EnhancedGraph {
             framework: ['node'],
             serviceName: 'lang-fsdb',
             apiRelations: {
-                'fsdb-api': { kind: 'implements', implements: [{ api: 'LangFsdbApi', type: 'rpc' }], uses: [] },
+                'fsdb-api': {
+                    kind: 'implements',
+                    implements: [{ api: 'LangFsdbApi', type: 'rpc' }],
+                    uses: [],
+                },
             },
         },
         'helper-svr': {
@@ -249,7 +282,10 @@ function untargetedGraph(): EnhancedGraph {
     for (const project of ['helper-svr', 'helper-portal-angular']) {
         const relations = graph[project].apiRelations!;
         for (const owner of Object.keys(relations)) {
-            relations[owner].uses = relations[owner].uses.map((ref: ApiRef) => ({ api: ref.api, type: ref.type }));
+            relations[owner].uses = relations[owner].uses.map((ref: ApiRef) => ({
+                api: ref.api,
+                type: ref.type,
+            }));
         }
     }
     return graph;
@@ -279,7 +315,9 @@ describe('a targeted client call produces ONE edge, not one per implementer', ()
     });
 
     it('lets an app server warm its OWN data server without inventing a cycle', () => {
-        expect(edges.filter((e: string) => e.startsWith('helper-svr->'))).toEqual(['helper-svr->helper-fsdb-svr']);
+        expect(edges.filter((e: string) => e.startsWith('helper-svr->'))).toEqual([
+            'helper-svr->helper-fsdb-svr',
+        ]);
         const warmupEdge = report.graph.runtimeEdges.find(
             (e: RuntimeEdge) => e.from === 'helper-svr' && e.to === 'helper-fsdb-svr',
         );
@@ -303,9 +341,11 @@ describe('an unresolvable target degrades to fan-out, but LOUDLY', () => {
         // The old, wrong behavior is preserved as the safe superset...
         expect(edges).toContain('helper-portal-angular->lang-fsdb-svr');
         // ...but it can no longer pass for a derived fact.
-        expect(report.warnings.some((w: string) => w.includes('helper-portal-angular') && w.includes('WarmupApi'))).toBe(
-            true,
-        );
+        expect(
+            report.warnings.some(
+                (w: string) => w.includes('helper-portal-angular') && w.includes('WarmupApi'),
+            ),
+        ).toBe(true);
     });
 
     it('FAILS when the named service matches no module and no declared alias', () => {
@@ -316,7 +356,9 @@ describe('an unresolvable target degrades to fan-out, but LOUDLY', () => {
         const report = deriveRuntimeGraphReport(graph);
         expect(report.problems.some((p: string) => p.includes("'typo-portal'"))).toBe(true);
         // Still derives a graph — validate fails the build, generate must keep writing the file.
-        expect(report.graph.runtimeEdges.some((e: RuntimeEdge) => e.from === 'helper-portal-angular')).toBe(true);
+        expect(
+            report.graph.runtimeEdges.some((e: RuntimeEdge) => e.from === 'helper-portal-angular'),
+        ).toBe(true);
     });
 
     it('FAILS when the named service exists but does not serve the contract', () => {
@@ -325,9 +367,12 @@ describe('an unresolvable target degrades to fan-out, but LOUDLY', () => {
             { api: 'HelperFsdbApi', type: 'rpc', targetService: 'lang-fsdb' },
         ];
         const report = deriveRuntimeGraphReport(graph);
-        expect(report.problems.some((p: string) => p.includes('does NOT') && p.includes('HelperFsdbApi'))).toBe(true);
+        expect(
+            report.problems.some(
+                (p: string) => p.includes('does NOT') && p.includes('HelperFsdbApi'),
+            ),
+        ).toBe(true);
     });
-
 });
 
 /**
@@ -352,7 +397,9 @@ describe('a client-project callsService declaration resolves an untargeted use t
         expect(edges).toEqual(['helper-portal-angular->helper-svr']);
         // No warning for the client whose target is now declared (helper-svr, still untargeted, is
         // a separate matter). And nothing FAILS the build.
-        expect(report.warnings.some((w: string) => w.includes('helper-portal-angular'))).toBe(false);
+        expect(report.warnings.some((w: string) => w.includes('helper-portal-angular'))).toBe(
+            false,
+        );
         expect(report.problems).toEqual([]);
     });
 
@@ -382,9 +429,11 @@ describe('a client-project callsService declaration resolves an untargeted use t
                 (e: RuntimeEdge) => e.from === 'helper-portal-angular' && e.to === 'lang-fsdb-svr',
             ),
         ).toBe(true);
-        expect(report.warnings.some((w: string) => w.includes('helper-portal-angular') && w.includes('WarmupApi'))).toBe(
-            true,
-        );
+        expect(
+            report.warnings.some(
+                (w: string) => w.includes('helper-portal-angular') && w.includes('WarmupApi'),
+            ),
+        ).toBe(true);
     });
 
     it('FAILS the build when callsService names a service that does not serve the api (check 4)', () => {
@@ -393,18 +442,21 @@ describe('a client-project callsService declaration resolves an untargeted use t
         const graph = untargetedGraph();
         graph['helper-svr'].callsService = 'lang-fsdb';
         const report = deriveRuntimeGraphReport(graph);
-        expect(report.problems.some((p: string) => p.includes('does NOT serve') && p.includes('HelperFsdbApi'))).toBe(
-            true,
-        );
+        expect(
+            report.problems.some(
+                (p: string) => p.includes('does NOT serve') && p.includes('HelperFsdbApi'),
+            ),
+        ).toBe(true);
     });
 
     it('FAILS the build when callsService names a service no module answers to', () => {
         const report = deriveRuntimeGraphReport(withCallsService('typo-portal'));
         expect(
-            report.problems.some((p: string) => p.includes('callsService') && p.includes("'typo-portal'")),
+            report.problems.some(
+                (p: string) => p.includes('callsService') && p.includes("'typo-portal'"),
+            ),
         ).toBe(true);
     });
-
 });
 
 describe('a callsService MAP resolves per api-class for a client that calls several services', () => {
@@ -428,9 +480,11 @@ describe('a callsService MAP resolves per api-class for a client that calls seve
     it('falls back to fan-out+warn for an api the map does not list', () => {
         // Map lists only AuthApi (not used here), so WarmupApi stays unresolved -> fan-out + warning.
         const report = deriveRuntimeGraphReport(withCallsService({ AuthApi: 'auth' }));
-        expect(report.warnings.some((w: string) => w.includes('helper-portal-angular') && w.includes('WarmupApi'))).toBe(
-            true,
-        );
+        expect(
+            report.warnings.some(
+                (w: string) => w.includes('helper-portal-angular') && w.includes('WarmupApi'),
+            ),
+        ).toBe(true);
     });
 });
 
@@ -448,14 +502,20 @@ describe('what a target service name may resolve to', () => {
         ];
         const report = deriveRuntimeGraphReport(graph);
         expect(report.problems).toEqual([]);
-        expect(report.graph.runtimeEdges.filter((e: RuntimeEdge) => e.from === 'helper-portal-angular')).toHaveLength(1);
+        expect(
+            report.graph.runtimeEdges.filter(
+                (e: RuntimeEdge) => e.from === 'helper-portal-angular',
+            ),
+        ).toHaveLength(1);
     });
 
     it('resolves a target by declared alias when the deployed name differs from the module', () => {
         // 'helper-portal' is not a module — only the alias on helper-svr makes it addressable.
         const report = deriveRuntimeGraphReport(companyWideApiGraph());
         expect(report.problems).toEqual([]);
-        expect(report.graph.runtimeEdges.some((e: RuntimeEdge) => e.to === 'helper-svr')).toBe(true);
+        expect(report.graph.runtimeEdges.some((e: RuntimeEdge) => e.to === 'helper-svr')).toBe(
+            true,
+        );
     });
 
     it('never lets an alias shadow a real module, and reports the unreachable alias', () => {
@@ -467,8 +527,12 @@ describe('what a target service name may resolve to', () => {
         ];
         const report = deriveRuntimeGraphReport(graph);
         // ...the module name still wins, so the call lands where the contract is actually served.
-        expect(report.graph.runtimeEdges.some((e: RuntimeEdge) => e.to === 'helper-fsdb-svr')).toBe(true);
-        expect(report.graph.runtimeEdges.some((e: RuntimeEdge) => e.to === 'lang-fsdb-svr')).toBe(false);
+        expect(report.graph.runtimeEdges.some((e: RuntimeEdge) => e.to === 'helper-fsdb-svr')).toBe(
+            true,
+        );
+        expect(report.graph.runtimeEdges.some((e: RuntimeEdge) => e.to === 'lang-fsdb-svr')).toBe(
+            false,
+        );
         expect(report.problems.some((p: string) => p.includes('can never be reached'))).toBe(true);
     });
 
@@ -482,14 +546,19 @@ describe('the runtime node says what it implements and where that came from', ()
 
     it('records the library a contract is served through, not just that it is served', () => {
         expect(derived.services['helper-svr'].implementsVia).toEqual({ WarmupApi: 'svc-core' });
-        expect(derived.services['helper-fsdb-svr'].implementsVia).toEqual({ WarmupApi: 'svc-core' });
+        expect(derived.services['helper-fsdb-svr'].implementsVia).toEqual({
+            WarmupApi: 'svc-core',
+        });
         // A contract from the server's OWN source has no "via" — it is not indirection.
         expect(derived.services['helper-fsdb-svr'].implements).toContain('HelperFsdbApi');
     });
 
     it('names the implemented contracts ON the node, with no incoming edge needed', () => {
         const dot = generateRuntimeDot(derived);
-        expect(dot).toContain('implements: HelperFsdbApi, WarmupApi (via svc-core)');
+        expect(dot).toContain('Implements (2)');
+        expect(
+            new RuntimeDetails(derived, true).nodes['helper-fsdb-svr'].implemented.join(', '),
+        ).toContain('WarmupApi via svc-core');
         // What a node USES is deliberately absent: every use already draws an outgoing arrow
         // labeled with the same contract, so repeating it only widened every box.
         expect(dot).not.toContain('uses: HelperFsdbApi');
@@ -509,7 +578,10 @@ describe('the runtime node says what it implements and where that came from', ()
     it('shows an api that a server serves and NOTHING in-repo calls', () => {
         const dot = generateRuntimeDot(derived);
         expect(derived.apis['LangFsdbApi'].usedBy).toEqual([]);
-        expect(dot).toContain('LangFsdbApi');
+        expect(dot).toContain('Implements (2)');
+        expect(
+            new RuntimeDetails(derived, true).nodes['lang-fsdb-svr'].implemented.join(', '),
+        ).toContain('LangFsdbApi');
     });
 });
 
@@ -551,7 +623,9 @@ describe('external systems are drawn as terminal nodes (render-only)', () => {
         const dot = generateRuntimeDot(derived);
         expect(dot).toContain('"external__lib-firestore" [shape=box, style="dashed,filled"');
         expect(dot).toContain('(external)"');
-        expect(dot).toContain('"fsdb-svr" -> "external__lib-firestore" [label="FirestoreReadApi, FirestoreWriteApi"');
+        expect(dot).toContain(
+            '"fsdb-svr" -> "external__lib-firestore" [label="FirestoreReadApi, FirestoreWriteApi"',
+        );
     });
 
     it('keeps them OUT of the graph data — no service, no level, no cycle input', () => {
@@ -579,7 +653,11 @@ describe('generateRuntimeDot — rpc direct, pubsub via queue', () => {
 
     it('draws the pubsub edge through a cylinder queue node', () => {
         expect(dot).toContain('"queue__producer__consumer" [shape=Mrecord');
-        expect(dot).toContain('"producer" -> "queue__producer__consumer" [label="enqueue", style=dashed] [id="wp-real-edge-1"];');
-        expect(dot).toContain('"queue__producer__consumer" -> "consumer" [label="deliver", style=dashed] [id="wp-real-edge-2"];');
+        expect(dot).toContain(
+            '"producer" -> "queue__producer__consumer" [label="enqueue", style=dashed] [id="wp-real-edge-1"];',
+        );
+        expect(dot).toContain(
+            '"queue__producer__consumer" -> "consumer" [label="deliver", style=dashed] [id="wp-real-edge-2"];',
+        );
     });
 });

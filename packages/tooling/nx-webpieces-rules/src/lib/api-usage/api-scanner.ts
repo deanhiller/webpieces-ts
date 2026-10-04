@@ -31,7 +31,7 @@
 import * as ts from 'typescript';
 import * as fs from 'fs';
 import * as path from 'path';
-import { matchesAnyGlob } from '@webpieces/rules-config';
+import { matchesAnyGlob, RuleFailError, Option } from '@webpieces/rules-config';
 import type { EnhancedGraph } from '../graph-sorter';
 import { ProjectInfo } from '../project-info';
 import { findProjectTsconfig } from '../di-graph/program';
@@ -195,7 +195,7 @@ class ApiSourceIndex {
  * written, and a plain parse cannot be diverted to a `.d.ts` by module resolution — which is
  * the entire bug this guards against. It is also cheap enough to run over every project.
  */
-class ApiSourceIndexBuilder {
+export class ApiSourceIndexBuilder {
     private readonly byName = new Map<string, ApiClassInfo>();
     private readonly owners = new Set<string>();
 
@@ -234,6 +234,20 @@ class ApiSourceIndexBuilder {
             : apiClassInfoFromNode(node, project, this.diagnostics);
         if (info) {
             this.owners.add(project);
+            const previous = this.byName.get(info.api);
+            if (previous !== undefined && previous.owner !== project)
+                throw new RuleFailError(
+                    'validate-runtime-architecture',
+                    `Ambiguous saved contract name ${info.api}: ${previous.owner}#${info.api} and ${project}#${info.api}.`,
+                    undefined,
+                    undefined,
+                    [
+                        new Option(
+                            'Use distinct exported contract names in the saved contract table; source ownership must never be merged by short name.',
+                            true,
+                        ),
+                    ],
+                );
             this.byName.set(info.api, info);
         }
         ts.forEachChild(node, (child: ts.Node) => this.indexNode(child, project, external));
@@ -353,7 +367,8 @@ export class ApiUsageScanner {
                 this.workspaceRoot,
                 this.projectInfos,
                 this.openApiRule,
-                this.mcpRule, this.wireClosureRule,
+                this.mcpRule,
+                this.wireClosureRule,
             ).run(),
         };
     }

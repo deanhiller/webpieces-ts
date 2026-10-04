@@ -1,3 +1,4 @@
+import { RuntimeDetails } from './runtime-details';
 /**
  * Runtime Visualizer
  *
@@ -118,33 +119,9 @@ function labelList(entries: string[]): string {
     return lines.join('\\n');
 }
 
-/**
- * The implemented-api entries for a node label. An api served through an EMBEDDED LIBRARY is
- * annotated with that library, because "who implements WarmupApi?" otherwise requires knowing that
- * the derivation walks the dependsOn closure and then walking it by hand.
- */
+/** Compact affordances carry full details in the HTML, including hidden external uses. */
 // webpieces-disable no-function-outside-class -- DOT label builder, matching getShortName in this file
-function implementsEntries(svc: RuntimeService): string[] {
-    return svc.implements.map((api: string) => {
-        const via = svc.implementsVia?.[api];
-        return via === undefined ? api : `${api} (via ${getShortName(via)})`;
-    });
-}
-
-/**
- * The full node label: name, role/level/declared service name, then the contracts it SERVES.
- *
- * What a service USES is deliberately absent. Every `uses` entry already draws an outgoing arrow —
- * to the implementing service, to a queue, or to an external node — and the arrow carries the same
- * contract name as its label, so listing them in the box restated the picture and made every box
- * wider than it needed to be. `implements` stays because it has no such arrow: an api a service
- * serves but nothing in-repo calls is invisible otherwise.
- *
- * The one case this loses information is `showExternalNodes:false`, where an outbound call draws no
- * node and therefore no arrow. That is precisely what that opt-out asks for, and the legend says so.
- */
-// webpieces-disable no-function-outside-class -- DOT label builder, matching getShortName in this file
-function nodeLabel(name: string, svc: RuntimeService): string {
+function nodeLabel(name: string, svc: RuntimeService, usesCount: number): string {
     // The DECLARED role when the graph carries one; the old inference only as a fallback for a
     // runtime-dependencies.json committed before `role` existed. Inferring it labelled every server
     // with no implements as a "client", which is exactly wrong for a queue-driven service.
@@ -153,7 +130,7 @@ function nodeLabel(name: string, svc: RuntimeService): string {
     // the label string and the whole graph stops parsing.
     const declared = svc.serviceName === undefined ? '' : `, \\"${dotValue(svc.serviceName)}\\"`;
     let label = `${dotValue(getShortName(name))}\\n(${role}, L${svc.level}${declared})`;
-    if (svc.implements.length > 0) label += `\\nimplements: ${labelList(implementsEntries(svc))}`;
+    label += `\\nImplements (${svc.implements.length})\\nUses (${usesCount})`;
     return label;
 }
 
@@ -171,7 +148,10 @@ function nodeLabel(name: string, svc: RuntimeService): string {
 function edgeDot(edge: RuntimeEdge): string {
     const from = serviceNodeId(edge.from);
     const to = serviceNodeId(edge.to);
-    const viaRaw = edge.via.map((v: string) => getShortName(v)).join(', ');
+    const viaRaw =
+        edge.via.length > 2
+            ? `Uses (${edge.via.length}) ▾`
+            : edge.via.map((v: string) => getShortName(v)).join(', ');
     const cut = edge.cutLegacyCycle === true;
     const label = cut ? `${dotValue(viaRaw)}\\nlegacy cycle` : dotValue(viaRaw);
     return `  "${from}" -> "${to}" [label="${label}"${cut ? CUT_CYCLE_EDGE_ATTRS : ''}];\n`;
@@ -215,17 +195,33 @@ function queueLine(key: string, queue: RuntimeQueue | undefined): string {
 
 /** The node statement + enqueue/deliver arrows for one queue box. Service identities remain raw; only emitted DOT is escaped. */
 // webpieces-disable no-function-outside-class -- DOT string builder, matching getShortName in this file
-function queueBoxDot(id: string, body: string, producers: string[], consumers: string[], model: GraphRenderModel): string {
+function queueBoxDot(
+    id: string,
+    body: string,
+    producers: string[],
+    consumers: string[],
+    model: GraphRenderModel,
+): string {
     // Record-mode label: the text must clear recordValue(), and QUEUE_LABEL_PREFIX supplies the
     // empty leading field that draws the cylinder's end cap. Drop it and the node silently
     // degrades to a plain box.
-    let dot = model.node(id,
+    let dot = model.node(
+        id,
         `  "${id}" [shape=${QUEUE_SHAPE}, style="filled", fillcolor="${QUEUE_FILL}", ` +
-        `class="${QUEUE_CLASS}", label="${QUEUE_LABEL_PREFIX}${body}"];\n`);
+            `class="${QUEUE_CLASS}", label="${QUEUE_LABEL_PREFIX}${body}"];\n`,
+    );
     for (const producer of producers)
-        dot += model.edge(producer, id, `  "${serviceNodeId(producer)}" -> "${id}" [label="enqueue", style=dashed];\n`);
+        dot += model.edge(
+            producer,
+            id,
+            `  "${serviceNodeId(producer)}" -> "${id}" [label="enqueue", style=dashed];\n`,
+        );
     for (const consumer of consumers)
-        dot += model.edge(id, consumer, `  "${id}" -> "${serviceNodeId(consumer)}" [label="deliver", style=dashed];\n`);
+        dot += model.edge(
+            id,
+            consumer,
+            `  "${id}" -> "${serviceNodeId(consumer)}" [label="deliver", style=dashed];\n`,
+        );
     return dot;
 }
 
@@ -286,7 +282,10 @@ function queuesDot(graph: RuntimeGraph, hidden: Set<string>, model: GraphRenderM
         const to = edge.to;
         if (edge.queue === undefined) {
             // Kept RAW: recordValue already applies dotValue, so escaping here would double it.
-            const viaRaw = edge.via.map((v: string) => getShortName(v)).join(', ');
+            const viaRaw =
+                edge.via.length > 2
+                    ? `Uses (${edge.via.length}) ▾`
+                    : edge.via.map((v: string) => getShortName(v)).join(', ');
             dot += queueBoxDot(
                 `queue__${dotId(edge.from)}__${dotId(edge.to)}`,
                 `${recordValue(viaRaw)}\\nqueue`,
@@ -349,9 +348,10 @@ function externalSystemNodeDot(
     // Only a queue-kind system is marked: a database here is an UPRIGHT cylinder and must not be
     // caught by the browser-side reshaping that lays queues on their side.
     const marker = isQueue ? `class="${QUEUE_CLASS}", ` : '';
-    return model.node(`system__${dotId(identity)}`,
+    return model.node(
+        `system__${dotId(identity)}`,
         `  "system__${dotId(identity)}" [shape=${shape}, style="filled", fillcolor="${fill}", ` +
-        `${marker}label="${prefix}${text}\\n(${subtitle})"];\n`
+            `${marker}label="${prefix}${text}\\n(${subtitle})"];\n`,
     );
 }
 
@@ -376,7 +376,12 @@ function externalSystemNodeDot(
  * must not restate the node statement.
  */
 // webpieces-disable no-function-outside-class -- DOT string builder, matching getShortName in this file
-function triggerDot(graph: RuntimeGraph, hidden: Set<string>, options: RuntimeVizOptions, model: GraphRenderModel): string {
+function triggerDot(
+    graph: RuntimeGraph,
+    hidden: Set<string>,
+    options: RuntimeVizOptions,
+    model: GraphRenderModel,
+): string {
     const triggers = graph.triggers.filter((t: RuntimeTrigger) => !hidden.has(t.service));
     if (triggers.length === 0) return '';
 
@@ -393,10 +398,17 @@ function triggerDot(graph: RuntimeGraph, hidden: Set<string>, options: RuntimeVi
         if (trigger.kind === 'cron') {
             const id = `cron__${dotId(`${trigger.api}_${trigger.method}`)}`;
             const schedule = dotValue(trigger.queueName ?? `${trigger.api}-${trigger.method}`);
-            dot += model.node(id,
-                `  "${id}" [shape=circle, style="filled", fillcolor="${CRON_FILL}", ` +
-                `color="${CRON_BORDER}", label="⏰\\ncron"];\n`) +
-                model.edge(id, trigger.service, `  "${id}" -> "${service}" [label="${label}\\n${schedule}", color="${CRON_BORDER}"];\n`);
+            dot +=
+                model.node(
+                    id,
+                    `  "${id}" [shape=circle, style="filled", fillcolor="${CRON_FILL}", ` +
+                        `color="${CRON_BORDER}", label="⏰\\ncron"];\n`,
+                ) +
+                model.edge(
+                    id,
+                    trigger.service,
+                    `  "${id}" -> "${service}" [label="${label}\\n${schedule}", color="${CRON_BORDER}"];\n`,
+                );
             continue;
         }
         const caller = trigger.caller;
@@ -411,8 +423,11 @@ function triggerDot(graph: RuntimeGraph, hidden: Set<string>, options: RuntimeVi
             emitted.add(id);
             dot +=
                 caller === undefined
-                    ? model.node(id, `  "${id}" [shape=box, style="dotted,filled", fillcolor="${EXTERNAL_FILL}", ` +
-                      `color="${EXTERNAL_BORDER}", label="${dotValue(trigger.api)}\\n? unknown caller"];\n`)
+                    ? model.node(
+                          id,
+                          `  "${id}" [shape=box, style="dotted,filled", fillcolor="${EXTERNAL_FILL}", ` +
+                              `color="${EXTERNAL_BORDER}", label="${dotValue(trigger.api)}\\n? unknown caller"];\n`,
+                      )
                     : externalSystemNodeDot(
                           caller.label,
                           caller.kind,
@@ -421,7 +436,11 @@ function triggerDot(graph: RuntimeGraph, hidden: Set<string>, options: RuntimeVi
                           model,
                       );
         }
-        dot += model.edge(id, trigger.service, `  "${id}" -> "${service}" [label="${label}", style=dashed, color="${EXTERNAL_BORDER}"];\n`);
+        dot += model.edge(
+            id,
+            trigger.service,
+            `  "${id}" -> "${service}" [label="${label}", style=dashed, color="${EXTERNAL_BORDER}"];\n`,
+        );
     }
     return dot;
 }
@@ -437,7 +456,11 @@ function triggerDot(graph: RuntimeGraph, hidden: Set<string>, options: RuntimeVi
  * read look like an event.
  */
 // webpieces-disable no-function-outside-class -- DOT string builder, matching getShortName in this file
-function externalSystemsDot(graph: RuntimeGraph, hidden: Set<string>, model: GraphRenderModel): string {
+function externalSystemsDot(
+    graph: RuntimeGraph,
+    hidden: Set<string>,
+    model: GraphRenderModel,
+): string {
     const systems = graph.externalSystems ?? {};
     const ids = Object.keys(systems).sort();
     if (ids.length === 0) return '';
@@ -457,10 +480,16 @@ function externalSystemsDot(graph: RuntimeGraph, hidden: Set<string>, model: Gra
     for (const id of ids) {
         const system = systems[id];
         const via =
-            system.apis.length === 0 ? '' : ` [label="${labelList([...system.apis].sort())}"]`;
+            system.apis.length === 0
+                ? ''
+                : ` [label="${system.apis.length > 2 ? `Uses (${system.apis.length}) ▾` : labelList([...system.apis].sort())}"]`;
         for (const service of [...system.usedBy].sort()) {
             if (hidden.has(service)) continue;
-            dot += model.edge(service, `system__${dotId(id)}`, `  "${serviceNodeId(service)}" -> "system__${dotId(id)}"${via};\n`);
+            dot += model.edge(
+                service,
+                `system__${dotId(id)}`,
+                `  "${serviceNodeId(service)}" -> "system__${dotId(id)}"${via};\n`,
+            );
         }
     }
     return dot;
@@ -500,20 +529,26 @@ function externalDot(graph: RuntimeGraph, hidden: Set<string>, model: GraphRende
     // carries the bare name.
     const externals = new Set([...apisByPair.keys()].map((key: string) => key.split(PAIR_SEP)[1]));
     for (const external of [...externals].sort()) {
-        dot += model.node(`external__${external}`,
+        dot += model.node(
+            `external__${external}`,
             `  "external__${dotValue(external)}" [shape=box, style="dashed,filled", fillcolor="${EXTERNAL_FILL}", ` +
-            `color="${EXTERNAL_BORDER}", label="${dotValue(getShortName(external))}\\n(external)"];\n`);
+                `color="${EXTERNAL_BORDER}", label="${dotValue(getShortName(external))}\\n(external)"];\n`,
+        );
     }
     for (const key of [...apisByPair.keys()].sort()) {
         const parts = key.split(PAIR_SEP);
         const service = parts[0];
         const external = parts[1];
-        const via = labelList(apisByPair.get(key)!.sort());
+        const apis = apisByPair.get(key)!.sort();
+        const via = apis.length > 2 ? `Uses (${apis.length}) ▾` : labelList(apis);
         // SOLID: this is a synchronous call that returns a value. Dashed is reserved for events, and
         // "outside the repo" is already said by the node's dashed border.
-        dot += model.edge(service, `external__${external}`,
+        dot += model.edge(
+            service,
+            `external__${external}`,
             `  "${serviceNodeId(service)}" -> "external__${dotValue(external)}" ` +
-            `[label="${via}", color="${EXTERNAL_BORDER}"];\n`);
+                `[label="${via}", color="${EXTERNAL_BORDER}"];\n`,
+        );
     }
     return dot;
 }
@@ -536,10 +571,11 @@ export function generateRuntimeRenderModel(
     options: RuntimeVizOptions = new RuntimeVizOptions(),
 ): GraphRenderModel {
     const model = new GraphRenderModel();
+    const details = new RuntimeDetails(graph, options.showExternalNodes);
     let dot = 'digraph RuntimeArchitecture {\n';
     dot += '  rankdir=TB;\n';
     dot += '  node [shape=box, style="filled,rounded", fontname="Arial"];\n';
-    dot += '  edge [fontname="Arial", fontsize=10];\n\n';
+    dot += '  edge [fontname="Arial", fontsize=12];\n\n';
 
     model.header = dot;
 
@@ -555,7 +591,10 @@ export function generateRuntimeRenderModel(
         if (hidden.has(name)) continue;
         const svc = graph.services[name];
         const color = LEVEL_COLORS[svc.level] || '#F5F5F5';
-        dot += model.node(name, `  "${serviceNodeId(name)}" [fillcolor="${color}", label="${nodeLabel(name, svc)}"];\n`);
+        dot += model.node(
+            name,
+            `  "${serviceNodeId(name)}" [fillcolor="${color}", label="${nodeLabel(name, svc, details.nodes[name].used.length)}"];\n`,
+        );
     }
 
     dot += '\n';
@@ -610,7 +649,11 @@ export function writeRuntimeVisualization(
     fs.writeFileSync(dotPath, dot, 'utf-8');
 
     const htmlPath = path.join(outputDir, 'runtime-architecture.html');
-    fs.writeFileSync(htmlPath, new RuntimeHtmlPage().render(model, title), 'utf-8');
+    fs.writeFileSync(
+        htmlPath,
+        new RuntimeHtmlPage().render(model, title, graph, options.showExternalNodes),
+        'utf-8',
+    );
 
     return { dotPath, htmlPath };
 }

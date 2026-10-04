@@ -48,3 +48,9 @@ export { SseEvent, SseEventParser } from './SseEventParser';
 export { StreamingCapabilityError } from './StreamingCapabilityError';
 export { Utf8Codec } from './Utf8Codec';
 export type { ByteReadableStream, ByteStreamReader, ByteReadResult } from './ByteStream';
+
+export { rpcTarget } from './RpcTarget';
+export type { RpcTarget } from './RpcTarget';
+export { ClientToken } from './ClientToken';
+export { ExternalContractUse } from './ExternalContractUse';
+export { WiringPolicy } from './WiringPolicy';

@@ -109,6 +109,11 @@
             "implementation": "./src/executors/validate-nx-wiring/executor",
             "schema": "./src/executors/validate-nx-wiring/schema.json",
             "description": "Validate the webpieces validators are wired into the build via nx.json targetDefaults dependsOn"
+        },
+        "runtime-wiring-check": {
+            "implementation": "./src/executors/runtime-wiring-check/executor",
+            "schema": "./src/executors/runtime-wiring-check/schema.json",
+            "description": "Verify canonical per-project wiring; write candidates only to build output"
         }
     }
 }

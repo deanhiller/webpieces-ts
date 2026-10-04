@@ -23,8 +23,10 @@ import { generateRuntimeDot } from '../runtime-visualizer';
 import { toError } from '../../toError';
 
 const CLIENT_TS = path.join(__dirname, '..', 'graph-visualizer.client.ts');
-const clientJs = (): string => ts.transpileModule(
-    fs.readFileSync(CLIENT_TS, 'utf-8'), { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
+const clientJs = (): string =>
+    ts.transpileModule(fs.readFileSync(CLIENT_TS, 'utf-8'), {
+        compilerOptions: { target: ts.ScriptTarget.ES2022 },
+    }).outputText;
 const viz = new GraphVisualizer(clientJs);
 const names = new GraphNames();
 
@@ -39,7 +41,9 @@ describe('GraphNames', () => {
     it('gives two projects that differ only by scope two DISTINCT node ids', () => {
         expect(names.getNodeId('public-api')).toBe('public-api');
         expect(names.getNodeId('@mealco-internal/public-api')).toBe('@mealco-internal/public-api');
-        expect(names.getNodeId('public-api')).not.toBe(names.getNodeId('@mealco-internal/public-api'));
+        expect(names.getNodeId('public-api')).not.toBe(
+            names.getNodeId('@mealco-internal/public-api'),
+        );
     });
 
     it('still strips the scope for the human-facing LABEL', () => {
@@ -48,10 +52,12 @@ describe('GraphNames', () => {
     });
 
     it('accepts a set of projects that all draw as their own node', () => {
-        expect((): void => names.assertUniqueNodeIds([
-            new NodeIdOwner('public-api', 6),
-            new NodeIdOwner('@mealco-internal/public-api', 0),
-        ])).not.toThrow();
+        expect((): void =>
+            names.assertUniqueNodeIds([
+                new NodeIdOwner('public-api', 6),
+                new NodeIdOwner('@mealco-internal/public-api', 0),
+            ]),
+        ).not.toThrow();
     });
 
     it('fails loudly, naming BOTH colliding project keys and their levels', () => {
@@ -102,7 +108,8 @@ describe('generateDot node identity', () => {
             .map((line: string): string[] =>
                 [...line.matchAll(/"([^"]+)"/g)]
                     .map((match): string => match[1])
-                    .filter((name: string): boolean => !name.startsWith('__wp_layout')));
+                    .filter((name: string): boolean => !name.startsWith('__wp_layout')),
+            );
         const seen = new Set<string>();
         for (const band of members) {
             for (const name of band) {
@@ -111,22 +118,29 @@ describe('generateDot node identity', () => {
             }
         }
         // ...and every project is placed exactly once.
-        expect([...seen].sort()).toEqual(
-            ['@mealco-internal/public-api', 'core-util', 'public-api']);
+        expect([...seen].sort()).toEqual([
+            '@mealco-internal/public-api',
+            'core-util',
+            'public-api',
+        ]);
     });
 
     it('refuses to draw a cyclic graph rather than rendering meaningless levels', () => {
-        expect((): string => viz.generateDot({
-            a: { level: 1, dependsOn: ['b'] },
-            b: { level: 1, dependsOn: ['a'] },
-        })).toThrow(/a -> b -> a/);
+        expect((): string =>
+            viz.generateDot({
+                a: { level: 1, dependsOn: ['b'] },
+                b: { level: 1, dependsOn: ['a'] },
+            }),
+        ).toThrow(/a -> b -> a/);
     });
 });
 
 describe('lockControl', () => {
     it('uses the node id as the option VALUE and the short name as its text', () => {
         const html = viz.lockControl(SCOPED_GRAPH);
-        expect(html).toContain('<option value="@mealco-internal/public-api">L0 · public-api</option>');
+        expect(html).toContain(
+            '<option value="@mealco-internal/public-api">L0 · public-api</option>',
+        );
         expect(html).toContain('<option value="public-api">L2 · public-api</option>');
     });
 });
@@ -140,11 +154,36 @@ describe('lockControl', () => {
 describe('generateRuntimeDot node identity', () => {
     const RUNTIME: RuntimeGraph = {
         services: {
-            'public-api': { level: 1, role: 'server', implements: [] },
-            '@mealco-internal/public-api': { level: 0, role: 'server', implements: ['OrdersApi'] },
+            'public-api': {
+                level: 1,
+                role: 'server',
+                implements: [],
+                uses: ['OrdersApi'],
+                dependsOn: [],
+            },
+            '@mealco-internal/public-api': {
+                level: 0,
+                role: 'server',
+                implements: ['OrdersApi'],
+                uses: [],
+                dependsOn: [],
+            },
         },
-        apis: { OrdersApi: { implementedBy: ['@mealco-internal/public-api'], usedBy: ['public-api'], owner: 'orders-api' } },
-        runtimeEdges: [{ from: 'public-api', to: '@mealco-internal/public-api', via: ['OrdersApi'], type: 'rpc' }],
+        apis: {
+            OrdersApi: {
+                implementedBy: ['@mealco-internal/public-api'],
+                usedBy: ['public-api'],
+                owner: 'orders-api',
+            },
+        },
+        runtimeEdges: [
+            {
+                from: 'public-api',
+                to: '@mealco-internal/public-api',
+                via: ['OrdersApi'],
+                type: 'rpc',
+            },
+        ],
         unresolvedUses: [],
         queues: {},
         triggers: [],

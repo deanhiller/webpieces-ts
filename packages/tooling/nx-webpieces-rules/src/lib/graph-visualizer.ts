@@ -1,3 +1,4 @@
+import { GraphNavigation } from './graph-navigation';
 /**
  * Graph Visualizer
  *
@@ -50,7 +51,6 @@ const ARCH_OUTPUT_DIR = 'architecture';
 /** Contracts named on one `implements` edge label before it truncates to "+N more". */
 const MAX_EDGE_LABEL_APIS = 4;
 
-
 /**
  * One node's design page, handed to the browser so the node menu can offer "View Design" for the
  * boxes that HAVE one and omit the item entirely for the boxes that do not.
@@ -61,7 +61,7 @@ const MAX_EDGE_LABEL_APIS = 4;
 export class DesignLink {
     constructor(
         public readonly nodeId: string,
-        public readonly href: string
+        public readonly href: string,
     ) {}
 }
 
@@ -95,8 +95,9 @@ export function readCompiledClient(name: string): string {
     const file = path.join(__dirname, name);
     if (!fs.existsSync(file)) {
         throw new Error(
-            `${name} not found beside ${__dirname}. It is COMPILED from ${name.replace(/\.js$/, '.ts')} `
-            + 'by tsc, so it only exists after a build — run the package build, or inject the text.');
+            `${name} not found beside ${__dirname}. It is COMPILED from ${name.replace(/\.js$/, '.ts')} ` +
+                'by tsc, so it only exists after a build — run the package build, or inject the text.',
+        );
     }
     return fs.readFileSync(file, 'utf-8');
 }
@@ -118,10 +119,10 @@ export class GraphVisualizer {
      * text itself rather than requiring the package to have been built first.
      */
     constructor(
-        private readonly clientJs: () => string =
-        (): string => readCompiledClient('graph-visualizer.client.js'),
-        private readonly filterJs: () => string =
-        (): string => readCompiledClient('graph-filter.client.js'),
+        private readonly clientJs: () => string = (): string =>
+            readCompiledClient('graph-visualizer.client.js'),
+        private readonly filterJs: () => string = (): string =>
+            readCompiledClient('graph-filter.client.js'),
     ) {}
 
     /**
@@ -196,7 +197,8 @@ export class GraphVisualizer {
         const styling = this.edgeAttrs(relation?.kind);
         if (styling !== '') attrs.push(styling);
         const served = (relation?.implements ?? []).map((ref: ApiRef) => ref.api);
-        if (served.length > 0) attrs.push(`label="implements: ${this.labelledApis(served)}", fontsize=9`);
+        if (served.length > 0)
+            attrs.push(`label="implements: ${this.labelledApis(served)}", fontsize=9`);
         const suffix = attrs.length === 0 ? '' : ` [${attrs.join(', ')}]`;
         return `  "${dotValue(from)}" -> "${dotValue(to)}"${suffix};\n`;
     }
@@ -247,7 +249,10 @@ export class GraphVisualizer {
         return this.generateRenderModel(graph, title).fullDot;
     }
 
-    generateRenderModel(graph: EnhancedGraph, title: string = 'Monorepo Dependency Architecture'): GraphRenderModel {
+    generateRenderModel(
+        graph: EnhancedGraph,
+        title: string = 'Monorepo Dependency Architecture',
+    ): GraphRenderModel {
         this.assertDrawable(graph);
         const model = new GraphRenderModel();
         let dot = 'digraph Architecture {\n';
@@ -313,8 +318,10 @@ export class GraphVisualizer {
             else nodeIds.push(this.names.getNodeId(project));
         }
         const levels = [...byLevel.keys()].sort((a: number, b: number): number => b - a);
-        return levels.map((level: number): LevelBand =>
-            new LevelBand(level, [...(byLevel.get(level) as string[])].sort()));
+        return levels.map(
+            (level: number): LevelBand =>
+                new LevelBand(level, [...(byLevel.get(level) as string[])].sort()),
+        );
     }
 
     // Node lines: fill colored by framework env set (libType), border shaped by
@@ -335,7 +342,10 @@ export class GraphVisualizer {
             const envSet = `[${frameworks.join(', ')}]`;
             const labelMeta = `L${info.level} · ${envSet} · ${role}`;
             // Identity is the project key; the LABEL is the pretty short name.
-            dot += model.node(nodeId, `  "${dotValue(nodeId)}" [fillcolor="${color}"${border}, label="${dotValue(shortName)}\\n(${dotValue(labelMeta)})"];\n`);
+            dot += model.node(
+                nodeId,
+                `  "${dotValue(nodeId)}" [fillcolor="${color}"${border}, label="${dotValue(shortName)}\\n(${dotValue(labelMeta)})"];\n`,
+            );
         }
         return dot;
     }
@@ -353,7 +363,11 @@ export class GraphVisualizer {
                 // Both endpoints must be visible — an edge to/from a hidden box
                 // is dropped so no connection dangles into empty space.
                 if (graph[dep] !== undefined && this.isHidden(graph[dep])) continue;
-                dot += model.edge(nodeId, this.names.getNodeId(dep), this.edgeDot(nodeId, this.names.getNodeId(dep), info.apiRelations?.[dep]));
+                dot += model.edge(
+                    nodeId,
+                    this.names.getNodeId(dep),
+                    this.edgeDot(nodeId, this.names.getNodeId(dep), info.apiRelations?.[dep]),
+                );
             }
         }
         return dot;
@@ -367,7 +381,7 @@ export class GraphVisualizer {
         links: DesignLink[],
         title: string = 'Monorepo Dependency Architecture',
         lockControl: string = '',
-        responsibilitiesHtml: string = ''
+        responsibilitiesHtml: string = '',
     ): string {
         const styles = this.styles();
         const legend = this.legend();
@@ -393,6 +407,7 @@ export class GraphVisualizer {
     ${responsibilitiesHtml}
     <script>${this.nodeMenu.script()}</script>
     <script>${this.filterJs()}</script>
+    <script>${new GraphNavigation().script()}</script>
     <script>${script}</script>
 </body>
 </html>`;
@@ -467,7 +482,7 @@ export class GraphVisualizer {
         }
         ${this.componentStyles()}
         ${this.filterAssets.styles()}
-    `;
+    ${new GraphNavigation().styles()}`;
     }
 
     // Styles for the lock dropdown and the responsibilities card list below the
@@ -633,8 +648,10 @@ export class GraphVisualizer {
      */
     private script(model: GraphRenderModel, links: DesignLink[]): string {
         return this.clientJs()
-            .split(CLIENT_MODEL_PLACEHOLDER).join(this.filterAssets.json(model))
-            .split(CLIENT_DESIGN_LINKS_PLACEHOLDER).join(this.filterAssets.json(links));
+            .split(CLIENT_MODEL_PLACEHOLDER)
+            .join(this.filterAssets.json(model))
+            .split(CLIENT_DESIGN_LINKS_PLACEHOLDER)
+            .join(this.filterAssets.json(links));
     }
 
     /**
@@ -651,7 +668,7 @@ export class GraphVisualizer {
     writeVisualization(
         graph: EnhancedGraph,
         workspaceRoot: string,
-        title: string = 'Monorepo Dependency Architecture'
+        title: string = 'Monorepo Dependency Architecture',
     ): VisualizationPaths {
         const outputDir = path.join(workspaceRoot, ARCH_OUTPUT_DIR);
 
@@ -662,7 +679,12 @@ export class GraphVisualizer {
         const lockControl = this.lockControl(graph);
         const responsibilities = this.responsibilities.generateSection(graph, workspaceRoot);
         const html = this.generateHTML(
-            this.generateRenderModel(graph, title), this.designLinks(graph), title, lockControl, responsibilities);
+            this.generateRenderModel(graph, title),
+            this.designLinks(graph),
+            title,
+            lockControl,
+            responsibilities,
+        );
         const htmlPath = path.join(outputDir, 'dependencies.html');
         fs.writeFileSync(htmlPath, html, 'utf-8');
 

@@ -7,12 +7,7 @@
  * delivered to the same endpoint through the full server filter chain.
  */
 
-export {
-    ScheduleInfo,
-    JobReference,
-    TaskRequest,
-    TaskInvoker,
-} from './TaskTypes';
+export { ScheduleInfo, JobReference, TaskRequest, TaskInvoker } from './TaskTypes';
 export { ClientCloudTasksFactory } from './ClientCloudTasksFactory';
 export { TaskProxyClient, TASK_PROXY_CLIENT_PROVIDER } from './TaskProxyClient';
 export { TaskClientConfig } from './TaskClientConfig';
@@ -29,3 +24,5 @@ export {
     currentScheduleFrame,
     clearScheduleFrame,
 } from './ScheduleContext';
+
+export { RuntimeTaskClients } from './RuntimeTaskClients';

@@ -81,7 +81,6 @@ export const EXTERNAL_FILLS: Record<string, string> = {
     runtime: RUNTIME_HOST_FILL,
 };
 
-
 /** Fill + border for the dashed terminal node standing for a system outside this repo. */
 export const EXTERNAL_FILL = '#FAFAFA';
 export const EXTERNAL_BORDER = '#9E9E9E';
@@ -94,8 +93,7 @@ export const CUT_CYCLE_COLOR = '#D32F2F';
  * DOT attributes appended to a `cutLegacyCycle` edge: dashed and red so it reads as debt, and
  * `constraint=false` so it does not pull on a ranking it was deliberately excluded from.
  */
-export const CUT_CYCLE_EDGE_ATTRS =
-    `, style=dashed, color="${CUT_CYCLE_COLOR}", fontcolor="${CUT_CYCLE_COLOR}", constraint=false`;
+export const CUT_CYCLE_EDGE_ATTRS = `, style=dashed, color="${CUT_CYCLE_COLOR}", fontcolor="${CUT_CYCLE_COLOR}", constraint=false`;
 
 export const CRON_FILL = '#FFF9C4';
 export const CRON_BORDER = '#F9A825';
@@ -159,15 +157,16 @@ export function legendHtml(): string {
                 ${item(sw.solid, '<strong>solid = rpc</strong> &mdash; the request follows the arrow, the response flows back')}
                 ${item(sw.dashed, '<strong>dashed = event</strong> &mdash; asynchronous: the event flows in the direction of the arrow and returns once it is in the queue')}
                 ${item(sw.scheduled, '<strong>scheduled</strong> &mdash; a cron invocation')}
-                <div class="legend-note"><em>Every line is labeled with the contract the call flows over. A service that enqueues to itself loops through its own queue &mdash; a queue decouples the two sides, so it is not a dependency cycle.</em></div>
+                <div class="legend-note"><em>Every line names its contracts inline or exposes them in a Uses dropdown. A service that enqueues to itself loops through its own queue &mdash; a queue decouples the two sides, so it is not a dependency cycle.</em></div>
             </div>
             <div class="legend-col">
                 <h3>Reading a box</h3>
                 <pre class="legend-box-anatomy">name
 (server|client, L#)
-implements: &lt;contracts it serves&gt;
+Implements (N)
+Uses (N)
 </pre>
-                <div class="legend-note">A box lists only what it <strong>serves</strong>. What it <em>calls</em> is on its outgoing arrows.</div>
+                <div class="legend-note">Hover, focus, or click <strong>Implements</strong> and <strong>Uses</strong> for complete qualified lists. One/two API arrows show names; larger groups have a Uses dropdown.</div>
                 <div class="legend-note"><code>(via &lt;lib&gt;)</code> = served through an embedded library, not its own source.</div>
             </div>
         </div>

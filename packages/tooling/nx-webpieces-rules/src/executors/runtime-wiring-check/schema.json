@@ -1,0 +1,14 @@
+{
+    "$schema": "http://json-schema.org/schema",
+    "version": 1,
+    "title": "Verify canonical runtime wiring against approved declarations",
+    "type": "object",
+    "properties": {
+        "outputPath": {
+            "type": "string",
+            "description": "Configured project build output directory for candidates"
+        }
+    },
+    "required": ["outputPath"],
+    "additionalProperties": false
+}

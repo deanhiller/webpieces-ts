@@ -48,15 +48,15 @@ export const AI_INSTRUCTIONS =
     'project and what does not), and read its designFile to understand the DI design ' +
     'before reading the code. Use the entries in `commands` to regenerate these files ' +
     'or display any of the graphs in a browser. To hide a project (its box AND every ' +
-    "edge touching it) from BOTH rendered architecture graphs, add the nx tag " +
+    'edge touching it) from BOTH rendered architecture graphs, add the nx tag ' +
     "'drawOnGraph:false' to that project's project.json tags and regenerate; it stays " +
     'in this file (marked "drawOnGraph": false) but is omitted from the HTML. A role:server ' +
     'with no webpiecesRuntime package anywhere in its dependency closure and no apiRelations is ' +
     'omitted from the RUNTIME drawing the same way — it speaks none of the webpieces runtime, so ' +
-    'it can only ever draw as a disconnected box; it stays in both JSON files. An API\'s endpoints ' +
+    "it can only ever draw as a disconnected box; it stays in both JSON files. An API's endpoints " +
     '(name, kind, path, httpMethod, parameters, queueName, caller) are NOT in this file: ' +
     '`apiContractFiles` maps each API to its generated contract file, apis/<ApiName>.json relative to ' +
-    'this file — read that file for the API\'s endpoints.';
+    "this file — read that file for the API's endpoints.";
 
 /**
  * Named command → "command — what it does" map embedded in dependencies.json.
@@ -72,7 +72,7 @@ export const GRAPH_COMMANDS: CommandMap = {
     regenerateArchitecture:
         'pnpm nx run architecture:generate — rewrites architecture/dependencies.json, ' +
         'architecture/apis/<ApiName>.json and architecture/runtime-dependencies.json; run after ' +
-        'adding/removing project dependencies or changing an API\'s endpoints',
+        'reviewing project runtime-deps.json and API contract candidates into architecture/apis; generation reads approvals and never approves endpoint changes',
     visualizeArchitecture:
         'pnpm nx run architecture:visualize — opens the monorepo dependency graph (this file) ' +
         'as HTML in a browser from saved data, without refreshing; freshness unknown',
@@ -106,7 +106,7 @@ export class DependenciesFile {
          * the runtime graph is derived from the committed files, so a declaration that is scanned but
          * not written would make generate and validate disagree.
          */
-        public readonly externalSystems: ExternalSystemDecls = {}
+        public readonly externalSystems: ExternalSystemDecls = {},
     ) {}
 }
 
@@ -120,7 +120,7 @@ export class DependenciesFile {
  */
 export function loadBlessedGraph(
     workspaceRoot: string,
-    graphPath: string = DEFAULT_GRAPH_PATH
+    graphPath: string = DEFAULT_GRAPH_PATH,
 ): DependenciesFile | null {
     const fullPath = path.join(workspaceRoot, graphPath);
 
@@ -138,7 +138,9 @@ export function loadBlessedGraph(
         if (parsed !== null && typeof parsed === 'object' && 'projects' in parsed) {
             return new DependenciesFile(
                 typeof parsed.aiInstructions === 'string' ? parsed.aiInstructions : '',
-                parsed.commands !== null && typeof parsed.commands === 'object' ? (parsed.commands as CommandMap) : {},
+                parsed.commands !== null && typeof parsed.commands === 'object'
+                    ? (parsed.commands as CommandMap)
+                    : {},
                 parsed.projects as EnhancedGraph,
                 parsed.apiContractFiles !== null && typeof parsed.apiContractFiles === 'object'
                     ? (parsed.apiContractFiles as ApiContractFileRefs)
@@ -147,7 +149,7 @@ export function loadBlessedGraph(
                 // table simply draws no shaped nodes, which is exactly the old rendering.
                 parsed.externalSystems !== null && typeof parsed.externalSystems === 'object'
                     ? (parsed.externalSystems as ExternalSystemDecls)
-                    : {}
+                    : {},
             );
         }
         // Legacy flat format: the whole object is the project map
@@ -173,7 +175,12 @@ function movedApiContractsError(fullPath: string, graphPath: string): RuleFailEr
             `${apisDir}/<ApiName>.json, and dependencies.json only links to it under \`apiContractFiles\`.`,
         undefined,
         undefined,
-        [new Option('Regenerate the architecture files and commit the result: pnpm nx run architecture:generate', true)],
+        [
+            new Option(
+                `Explicitly move each saved apiContracts.<ApiName> value into ${apisDir}/<ApiName>.json, replace apiContracts with reviewed apiContractFiles entries mapping each name to apis/<ApiName>.json, preserve externalSystems, and approve runtime-deps.json for all runtime owners. Then run pnpm nx run architecture:generate and review the result.`,
+                true,
+            ),
+        ],
     );
 }
 
@@ -187,7 +194,9 @@ function formatGraphJson(file: DependenciesFile): string {
     const commandNames = Object.keys(file.commands);
     commandNames.forEach((name: string, index: number) => {
         const comma = index === commandNames.length - 1 ? '' : ',';
-        lines.push(`        ${JSON.stringify(name)}: ${JSON.stringify(file.commands[name])}${comma}`);
+        lines.push(
+            `        ${JSON.stringify(name)}: ${JSON.stringify(file.commands[name])}${comma}`,
+        );
     });
     lines.push(`    },`);
     lines.push(...apiContractFilesLines(file.apiContractFiles));
@@ -269,6 +278,8 @@ function formatEntryLines(entry: GraphEntry): string[] {
     pushOptionalField(lines, 'responsibilitiesFile', entry.responsibilitiesFile);
     pushOptionalField(lines, 'designFile', entry.designFile);
     pushApiRelationsField(lines, entry.apiRelations);
+    pushOptionalField(lines, 'runtimeDeclaration', entry.runtimeDeclaration);
+    pushOptionalBooleanField(lines, 'runtimeComposition', entry.runtimeComposition);
 
     if (entry.dependsOn.length === 0) {
         lines.push(`            "dependsOn": []`);
@@ -314,7 +325,11 @@ function pushOptionalCallsServiceField(
  * (e.g. `"drawOnGraph": false,`), skipped when undefined.
  */
 // webpieces-disable no-function-outside-class -- module-scope formatter, matches the sibling push*Field helpers here
-function pushOptionalBooleanField(lines: string[], field: string, value: boolean | undefined): void {
+function pushOptionalBooleanField(
+    lines: string[],
+    field: string,
+    value: boolean | undefined,
+): void {
     if (value !== undefined) {
         lines.push(`            ${JSON.stringify(field)}: ${JSON.stringify(value)},`);
     }
@@ -359,7 +374,7 @@ export function saveGraph(
     workspaceRoot: string,
     graphPath: string = DEFAULT_GRAPH_PATH,
     apiContractFiles: ApiContractFileRefs = {},
-    externalSystems: ExternalSystemDecls = {}
+    externalSystems: ExternalSystemDecls = {},
 ): void {
     const fullPath = path.join(workspaceRoot, graphPath);
     const dir = path.dirname(fullPath);
@@ -377,7 +392,13 @@ export function saveGraph(
     }
 
     const content = formatGraphJson(
-        new DependenciesFile(AI_INSTRUCTIONS, GRAPH_COMMANDS, sortedGraph, apiContractFiles, externalSystems)
+        new DependenciesFile(
+            AI_INSTRUCTIONS,
+            GRAPH_COMMANDS,
+            sortedGraph,
+            apiContractFiles,
+            externalSystems,
+        ),
     );
     fs.writeFileSync(fullPath, content, 'utf-8');
 }
@@ -387,7 +408,7 @@ export function saveGraph(
  */
 export function graphFileExists(
     workspaceRoot: string,
-    graphPath: string = DEFAULT_GRAPH_PATH
+    graphPath: string = DEFAULT_GRAPH_PATH,
 ): boolean {
     const fullPath = path.join(workspaceRoot, graphPath);
     return fs.existsSync(fullPath);

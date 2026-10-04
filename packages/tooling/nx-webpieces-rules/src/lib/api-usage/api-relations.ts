@@ -111,6 +111,9 @@ export interface ApiRef {
      * falls back to the old fan-out and says so out loud.
      */
     targetService?: string;
+    /** Qualified selected library export that contributed this relationship. */
+    declaredVia?: string;
+    conditional?: string;
     /**
      * ONLY on a `pubsub` uses ref. True means "this producer was attributed to EVERY cloudtasks
      * method of the contract, not to the methods it actually enqueues".

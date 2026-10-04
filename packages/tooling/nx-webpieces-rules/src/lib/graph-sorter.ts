@@ -63,6 +63,8 @@ export interface GraphEntry {
     responsibilitiesFile?: string;
     designFile?: string;
     apiRelations?: ProjectApiRelations;
+    runtimeDeclaration?: string;
+    runtimeComposition?: boolean;
     /**
      * The @webpieces runtime packages this project's OWN package.json declares — http-routing,
      * http-server, http-client-node, http-client-browser, cloudtasks-client. Omitted when it
@@ -118,7 +120,8 @@ export function computeTopologicalLayers(graph: Record<string, string[]>): strin
             // Unreachable: Kahn only stalls on a cycle, and the assert above throws on every one.
             const remaining = allProjects.filter((p: string): boolean => !processed.has(p));
             throw new Error(
-                `Topological sort stalled with no cycle to report — projects left unlayered: ${remaining.join(', ')}`);
+                `Topological sort stalled with no cycle to report — projects left unlayered: ${remaining.join(', ')}`,
+            );
         }
 
         // Sort alphabetically within layer for deterministic output

@@ -40,6 +40,7 @@ const METADATA_FIELDS: ReadonlyArray<keyof GraphEntry & string> = [
     'shortDescription',
     'responsibilitiesFile',
     'designFile',
+    'runtimeDeclaration',
 ];
 
 /**
@@ -102,7 +103,7 @@ function findModifiedProjects(
     saved: EnhancedGraph,
     currentProjects: Set<string>,
     savedProjects: Set<string>,
-    diff: GraphDiff
+    diff: GraphDiff,
 ): void {
     for (const project of currentProjects) {
         if (!savedProjects.has(project)) continue;
@@ -135,7 +136,12 @@ function findModifiedProjects(
 
         const changedFields = findChangedFields(currentEntry, savedEntry);
 
-        if (addedDeps.length > 0 || removedDeps.length > 0 || levelChanged || changedFields.length > 0) {
+        if (
+            addedDeps.length > 0 ||
+            removedDeps.length > 0 ||
+            levelChanged ||
+            changedFields.length > 0
+        ) {
             diff.modified.push({
                 project,
                 addedDeps,
@@ -166,6 +172,12 @@ function findChangedFields(currentEntry: GraphEntry, savedEntry: GraphEntry): Fi
             changes.push({ field, from, to });
         }
     }
+    if (currentEntry.runtimeComposition !== savedEntry.runtimeComposition)
+        changes.push({
+            field: 'runtimeComposition',
+            from: String(savedEntry.runtimeComposition),
+            to: String(currentEntry.runtimeComposition),
+        });
     // apiRelations is a nested object — compare by canonical JSON. Both sides are
     // built with sorted owners + refs (scanner) / preserved key order (loader), so
     // string equality is a faithful deep-equality here.
@@ -209,7 +221,7 @@ function buildSummary(diff: GraphDiff): string {
         }
         for (const change of mod.changedFields) {
             parts.push(
-                `${change.field}: ${formatFieldValue(change.from)} -> ${formatFieldValue(change.to)}`
+                `${change.field}: ${formatFieldValue(change.from)} -> ${formatFieldValue(change.to)}`,
             );
         }
         if (parts.length > 0) {

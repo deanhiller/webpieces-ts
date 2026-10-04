@@ -145,3 +145,5 @@ export { setupRuntime, RuntimeSetupOptions } from './setupRuntime';
 
 // Server configuration
 export { WebpiecesConfig, WEBPIECES_CONFIG_TOKEN } from './WebpiecesConfig';
+
+export { ServerWiring, ServerWiringOptions } from './ServerWiring';

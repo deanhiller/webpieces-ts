@@ -10,13 +10,20 @@
  * nx run architecture:validate-api-relations
  */
 
+import { RuleFailError, renderRuleFailForHuman } from '@webpieces/rules-config';
 import type { ExecutorContext } from '@nx/devkit';
 import { generateGraph } from '../../lib/graph-generator';
 import { sortGraphTopologically } from '../../lib/graph-sorter';
 import { collectProjectInfo } from '../../lib/graph-metadata';
-import { scanAndAttachApiRelations } from '../../lib/api-usage/api-scanner';
-import { loadRuntimeConfig } from '../../lib/runtime-config';
-import { findUnclassifiedApiDeps, describeUnclassifiedApiDep } from '../../lib/api-usage/api-relations-validator';
+import { ApprovedWiringGraph } from '../../lib/runtime-wiring/approved-graph';
+import { loadBlessedGraph } from '../../lib/graph-loader';
+import { ApiContractFiles } from '../../lib/api-contract-files';
+import {
+    ApiRelationEvidence,
+    ApiOwnerIdentity,
+    findUnclassifiedApiDeps,
+    describeUnclassifiedApiDep,
+} from '../../lib/api-usage/api-relations-validator';
 import { toError } from '../../toError';
 
 export interface ValidateApiRelationsOptions {
@@ -30,7 +37,7 @@ export interface ExecutorResult {
 // webpieces-disable no-function-outside-class -- nx executor entry point (default export), like every sibling executor
 export default async function runExecutor(
     _options: ValidateApiRelationsOptions,
-    context: ExecutorContext
+    context: ExecutorContext,
 ): Promise<ExecutorResult> {
     const workspaceRoot = context.root;
 
@@ -43,12 +50,24 @@ export default async function runExecutor(
         const rawGraph = await generateGraph();
         const graph = sortGraphTopologically(rawGraph);
         const projectInfos = await collectProjectInfo();
-        // Same externalApiPaths as generate: a vendor lib must be classified by the SAME rules here,
-        // or a server depending on one would be reported unclassified purely because this scan was
-        // configured differently from the one that wrote the graph.
-        const externalApiPaths = loadRuntimeConfig(workspaceRoot).externalApiPaths;
-        const scan = scanAndAttachApiRelations(workspaceRoot, graph, projectInfos, externalApiPaths);
-
+        new ApprovedWiringGraph().attach(workspaceRoot, graph, projectInfos);
+        const saved = loadBlessedGraph(workspaceRoot);
+        if (saved === null) return { success: false };
+        const contracts = new ApiContractFiles().load(
+            workspaceRoot,
+            'architecture/dependencies.json',
+            saved.apiContractFiles,
+        );
+        const scan = new ApiRelationEvidence(
+            new Set(Object.keys(graph).filter((name) => graph[name].runtimeComposition)),
+            new Set(Object.values(contracts).map((contract) => contract.owner)),
+            [],
+            new Map(
+                Object.entries(contracts).map(
+                    (entry) => [entry[0], new ApiOwnerIdentity(entry[0], entry[1].owner)] as const,
+                ),
+            ),
+        );
         const violations = findUnclassifiedApiDeps(graph, projectInfos, scan);
         if (violations.length === 0) {
             console.log('✅ Every server/client api-lib dependency is implemented or used.');
@@ -63,7 +82,10 @@ export default async function runExecutor(
         return { success: false };
     } catch (err: unknown) {
         const error = toError(err);
-        console.error('❌ API relations validation failed:', error.message);
+        console.error(
+            '❌ API relations validation failed:',
+            error instanceof RuleFailError ? renderRuleFailForHuman(error) : error.message,
+        );
         return { success: false };
     }
 }

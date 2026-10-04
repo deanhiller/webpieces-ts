@@ -9,7 +9,12 @@
  */
 
 import type { ExecutorContext } from '@nx/devkit';
-import { writeTemplate, RuleFailError, renderRuleFailForHuman } from '@webpieces/rules-config';
+import {
+    writeTemplate,
+    Option,
+    RuleFailError,
+    renderRuleFailForHuman,
+} from '@webpieces/rules-config';
 import { generateReducedGraph } from '../../lib/graph-generator';
 import { sortGraphTopologically } from '../../lib/graph-sorter';
 import { compareGraphs } from '../../lib/graph-comparator';
@@ -17,12 +22,10 @@ import { loadBlessedGraph, graphFileExists } from '../../lib/graph-loader';
 import type { DependenciesFile } from '../../lib/graph-loader';
 import { collectProjectInfo, enrichGraph, MetadataValidationError } from '../../lib/graph-metadata';
 import { TagTruthCheck } from '../../lib/tag-truth';
-import { scanAndAttachApiRelations, buildApiContracts } from '../../lib/api-usage/api-scanner';
-import { buildExternalSystems } from '../../lib/api-usage/external-systems';
+import { ApprovedWiringGraph } from '../../lib/runtime-wiring/approved-graph';
 import type { ExternalSystemDecls } from '../../lib/api-usage/api-relations';
 import { ApiContractFiles } from '../../lib/api-contract-files';
 import type { ApiContractFileRefs } from '../../lib/api-contract-files';
-import { loadRuntimeConfig } from '../../lib/runtime-config';
 import { RuleGate } from '../../lib/rule-gate';
 import type { EnhancedGraph } from '../../lib/graph-sorter';
 import { toError } from '../../toError';
@@ -61,7 +64,9 @@ function reportMismatch(summary: string, workspaceRoot: string): void {
     console.error('');
     console.error('To fix:');
     console.error('  1. Review the changes above');
-    console.error('  2. If intentional, ASK USER to run: nx run architecture:generate since this is a critical change');
+    console.error(
+        '  2. If intentional, ASK USER to run: nx run architecture:generate since this is a critical change',
+    );
     console.error('  3. Commit the updated architecture/dependencies.json');
 }
 
@@ -96,7 +101,10 @@ function describeContractLinkDrift(
  * fixing it is the same single command either way, so listing both adds noise rather than information.
  */
 // webpieces-disable no-function-outside-class -- executor step helper, matches describeContractLinkDrift above
-export function describeTableDrift(current: CurrentArchitecture, saved: DependenciesFile): string | null {
+export function describeTableDrift(
+    current: CurrentArchitecture,
+    saved: DependenciesFile,
+): string | null {
     const linkDrift = describeContractLinkDrift(current.apiContractFiles, saved.apiContractFiles);
     if (linkDrift !== null) return linkDrift;
     return describeExternalSystemDrift(current.externalSystems, saved.externalSystems);
@@ -133,7 +141,7 @@ function describeExternalSystemDrift(
  * apiRelations — so this validator compares like-for-like against the committed file.
  */
 export class CurrentGraphBuilder {
-    async build(workspaceRoot: string): Promise<CurrentArchitecture> {
+    async build(workspaceRoot: string, graphPath?: string): Promise<CurrentArchitecture> {
         console.log('📊 Generating current dependency graph...');
         const reducedGraph = await generateReducedGraph();
         console.log('🔄 Computing topological layers...');
@@ -142,16 +150,22 @@ export class CurrentGraphBuilder {
         const projectInfos = await collectProjectInfo();
         enrichGraph(currentGraph, projectInfos, workspaceRoot);
         new TagTruthCheck().assertTrue(currentGraph, projectInfos, workspaceRoot);
-        console.log('🔎 Scanning source for implements/uses API relations...');
-        // The SAME externalApiPaths the generator uses: scanning without them would drop every vendor
-        // relation from the regenerated graph and report drift against a perfectly fresh file.
-        const externalApiPaths = loadRuntimeConfig(workspaceRoot).externalApiPaths;
-        const scan = scanAndAttachApiRelations(workspaceRoot, currentGraph, projectInfos, externalApiPaths);
-        return new CurrentArchitecture(
-            currentGraph,
-            new ApiContractFiles().refsFor(buildApiContracts(scan)),
-            buildExternalSystems(scan.apiIndex, projectInfos),
-        );
+        new ApprovedWiringGraph().attach(workspaceRoot, currentGraph, projectInfos, graphPath);
+        const saved = loadBlessedGraph(workspaceRoot, graphPath);
+        if (saved === null)
+            throw new RuleFailError(
+                'validate-runtime-architecture',
+                'Missing approved graph.',
+                undefined,
+                undefined,
+                [
+                    new Option(
+                        'Migrate src/wiring.ts and review runtime-deps.json and API contract approvals.',
+                        true,
+                    ),
+                ],
+            );
+        return new CurrentArchitecture(currentGraph, saved.apiContractFiles, saved.externalSystems);
     }
 }
 
@@ -166,19 +180,24 @@ export class CurrentArchitecture {
 
 /** The bootstrap path: there is nothing to diff against yet, so say how to create it. */
 // webpieces-disable no-function-outside-class -- executor step helper, matches reportMismatch in this file
-function reportMissingGraph(): void {
-    console.error('❌ No saved graph found at architecture/dependencies.json');
-    console.error('');
-    console.error('To initialize:');
-    console.error('  1. Run: nx run architecture:generate');
-    console.error('  2. Run: nx run architecture:visualize');
-    console.error('  3. Manually inspect the generated graph to confirm it is the desired architecture');
-    console.error('  4. Commit architecture/dependencies.json');
+function reportMissingGraph(): never {
+    throw new RuleFailError(
+        'validate-runtime-architecture',
+        'Missing reviewed architecture/dependencies.json.',
+        undefined,
+        undefined,
+        [
+            new Option(
+                'Run owning API source build checks to emit contract candidates, review and copy them into architecture/apis/<ApiName>.json, and create dependencies.json with projects:{}, apiContractFiles:{"<ApiName>":"apis/<ApiName>.json"}, and reviewed externalSystems. Approve tagged owners runtime-deps.json candidates, then run architecture:generate and review the resulting graph.',
+                true,
+            ),
+        ],
+    );
 }
 
 export default async function runExecutor(
     options: ValidateArchitectureUnchangedOptions,
-    context: ExecutorContext
+    context: ExecutorContext,
 ): Promise<ExecutorResult> {
     const graphPath = options.graphPath;
     const workspaceRoot = context.root;
@@ -201,7 +220,7 @@ export default async function runExecutor(
 
         // Steps 1-3: build + enrich + scan the current graph (same pipeline the
         // generator runs, so any drift is caught).
-        const currentGraph = await new CurrentGraphBuilder().build(workspaceRoot);
+        const currentGraph = await new CurrentGraphBuilder().build(workspaceRoot, graphPath);
 
         // Step 4: Load saved graph
         console.log('📂 Loading saved graph...');
@@ -236,13 +255,21 @@ export default async function runExecutor(
         const error = toError(err);
         // A RuleFailError (e.g. a dependencies.json still carrying the moved `apiContracts` key)
         // carries its cures in Option[]; render them rather than dropping them with `.message`.
-        const rendered = error instanceof RuleFailError ? renderRuleFailForHuman(error) : error.message;
+        const rendered =
+            error instanceof RuleFailError ? renderRuleFailForHuman(error) : error.message;
         console.error('❌ Architecture validation failed:', rendered);
-        if (error instanceof MetadataValidationError) {
-            const mdPath = writeTemplate(workspaceRoot, 'webpieces.responsibilities.md');
-            console.error('');
-            console.error('⚠️  *** Refer to ' + mdPath + ' for how to author responsibilities.md files *** ⚠️');
-        }
+        reportMetadataFailure(error, workspaceRoot);
         return { success: false };
+    }
+}
+
+// webpieces-disable no-function-outside-class -- executor diagnostic formatting
+function reportMetadataFailure(error: Error, workspaceRoot: string): void {
+    if (error instanceof MetadataValidationError) {
+        const mdPath = writeTemplate(workspaceRoot, 'webpieces.responsibilities.md');
+        console.error('');
+        console.error(
+            '⚠️  *** Refer to ' + mdPath + ' for how to author responsibilities.md files *** ⚠️',
+        );
     }
 }

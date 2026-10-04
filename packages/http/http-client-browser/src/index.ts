@@ -35,11 +35,7 @@ export { MutableContextStore } from './MutableContextStore';
 export type { RequestLifecycleListener } from './RequestLifecycleListener';
 
 // The isomorphic engine, re-exported so a browser app needs one import.
-export {
-    ProxyClient,
-    ClientErrorTranslator,
-    RequestOutcome,
-} from '@webpieces/http-client-core';
+export { ProxyClient, ClientErrorTranslator, RequestOutcome } from '@webpieces/http-client-core';
 export type { ApiPrototype } from '@webpieces/http-client-core';
 export { StreamingCapabilityError } from '@webpieces/http-client-core';
 
@@ -76,3 +72,8 @@ export {
     Queue,
     ValidateImplementation,
 } from '@webpieces/core-util';
+
+export { BrowserWiring } from './BrowserWiring';
+export { RpcClientProvider, provideRpcClient } from './RpcClientProvider';
+export { rpcTarget } from '@webpieces/http-client-core';
+export type { RpcTarget } from '@webpieces/http-client-core';
