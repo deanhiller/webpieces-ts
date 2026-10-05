@@ -23,7 +23,7 @@
         }
       ],
       "manifestApiVersion": 3,
-      "manifestDigest": "493fb1ab2fe8003dbde50d2f2c037ad4b9dff489f5a2408ca92bde72734edd35",
+      "manifestDigest": "69966a451cc7a9ff17af29b0c5c0ed22cd4b50114f99a3ced5fb802238f3d802",
       "ownedRules": [
         {
           "id": "branch-creation-guard",
@@ -40,7 +40,7 @@
       ],
       "package": "@webpieces/agent-workflow-rules",
       "packageName": "@webpieces/agent-workflow-rules",
-      "packageVersion": "0.4.864",
+      "packageVersion": "0.4.866",
       "safeguards": [
         {
           "activation": "fixed",
@@ -187,7 +187,7 @@
         }
       ],
       "manifestApiVersion": 3,
-      "manifestDigest": "11d87a4e6da405fac56f7411fc2698926aaebeb8a8a94983d036f4a1a57b7b97",
+      "manifestDigest": "33b974fa85d57f0aa1a3a102da8a3398ee477a500cf1ca96e1f66d9a8f2c5b58",
       "ownedRules": [
         {
           "id": "throw-cause-required",
@@ -204,7 +204,7 @@
       ],
       "package": "@webpieces/ai-hook-rules",
       "packageName": "@webpieces/ai-hook-rules",
-      "packageVersion": "0.4.864",
+      "packageVersion": "0.4.866",
       "safeguards": []
     },
     {
@@ -380,7 +380,7 @@
         }
       ],
       "manifestApiVersion": 3,
-      "manifestDigest": "90ea7d353a28bbdc2c36e06442928aa95af8399cb06d199be7addf3002b83210",
+      "manifestDigest": "1e95bcfd9f319440fb6f9783b4c0806170dbf1d5c2fde0c11326a0a02a7f1df2",
       "ownedRules": [
         {
           "id": "max-method-lines",
@@ -497,12 +497,18 @@
       ],
       "package": "@webpieces/code-rules",
       "packageName": "@webpieces/code-rules",
-      "packageVersion": "0.4.864",
+      "packageVersion": "0.4.866",
       "safeguards": []
     },
     {
       "config": ".webpieces/rules/nx-webpieces-rules.json",
       "contributions": [
+        {
+          "executionKind": "build",
+          "implementationModule": "@webpieces/nx-webpieces-rules/rule-runtime",
+          "ownerPack": "@webpieces/nx-webpieces-rules",
+          "ruleId": "wiring-format"
+        },
         {
           "executionKind": "build",
           "implementationModule": "@webpieces/nx-webpieces-rules/rule-runtime",
@@ -607,8 +613,12 @@
         }
       ],
       "manifestApiVersion": 3,
-      "manifestDigest": "1ebf7cddc3eb3fad08bb5d5a6adb211556f15dc1f1cf079e6a58f8aacb28af5f",
+      "manifestDigest": "61230caaa858da7bb6ba3b3e4a115d560a635f3b68d7d5cec0277774bacc4751",
       "ownedRules": [
+        {
+          "id": "wiring-format",
+          "schemaApiVersion": 1
+        },
         {
           "id": "no-file-import-cycles",
           "schemaApiVersion": 1
@@ -676,7 +686,7 @@
       ],
       "package": "@webpieces/nx-webpieces-rules",
       "packageName": "@webpieces/nx-webpieces-rules",
-      "packageVersion": "0.4.864",
+      "packageVersion": "0.4.866",
       "safeguards": []
     }
   ],

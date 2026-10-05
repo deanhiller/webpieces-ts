@@ -1,5 +1,5 @@
 import { policyFixture } from '@webpieces/tooling-testkit';
-import { RulePackRegistry } from '@webpieces/rules-config';
+import { RulePackRegistry, SelectedPolicyPack } from '@webpieces/rules-config';
 const fixtureRuleRegistry = new RulePackRegistry(policyFixture.manifests());
 import * as fs from 'fs';
 import * as path from 'path';
@@ -67,10 +67,18 @@ export class RepoConfigFixture {
         // webpieces-disable no-any-unknown -- parsed owner entries remain opaque until fixture validation
         const guards: Record<string, unknown> = {};
         const declarations = new PackPolicyFiles().declarations(config['rulePacks'], root);
+        // Validate live ownership before projecting into the fixture's deliberately frozen packs.
+        // Newly published policies remain enforced by the real repository; these workflow fixtures
+        // carry only policies their selected manifests own. Unknown live keys still fail here.
+        const liveRegistry = new RulePackRegistry(new PackPolicyFiles().select(root, declarations).map(
+            (pack: SelectedPolicyPack) => pack.manifest,
+        ));
         for (const declaration of declarations) {
             // webpieces-disable no-any-unknown -- repository owner JSON, consumed by the real fixture validator
             const entries = JSON.parse(fs.readFileSync(path.join(root, declaration.config), 'utf8')) as Record<string, unknown>;
             for (const name of Object.keys(entries)) {
+                liveRegistry.ownerOf(name);
+                if (!fixtureRuleRegistry.hasRule(name)) continue;
                 if (retiredRuleFor(name, fixtureRuleRegistry) !== null) continue;
                 const section = sectionForRule(name, fixtureRuleRegistry) === 'hookGuards' ? guards : rules;
                 section[name] = entries[name];

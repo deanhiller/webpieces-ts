@@ -123,9 +123,6 @@ resets zoom. Runtime nodes show Implements/Uses counts; hover, focus or click op
 facts and provenance. Edges keep one or two API names inline; larger sets open a Uses dropdown.
 Hidden external destinations remain in node details and queue producer inference is labeled.
 
-The framework producer tests its pending v2 examples against local tooling through
-`scripts/wiring-source-targets.cjs`. This redirects source proof and graph executors while preserving
-all installed validation dependencies. `architecture:wiring-format-source` uses the explicit
-`rules/wiring-source-policy.json` limit until the installed manifest knows the published rule;
-it does not add unknown rule keys to the installed manifest. Source graph generation injects compiled
-client assets through `ArchitectureGenerator`; the published executor retains its normal assets.
+The producer uses the published 0.4.866 tooling family. The explicit
+`wiring-format` policy uses `RUN_EVERY_TIME` with `maxLines: 200`; canonical source proof and
+approved graph generation use the installed executors. No source-preview override is required.
