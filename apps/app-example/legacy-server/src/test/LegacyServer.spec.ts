@@ -6,6 +6,8 @@ import {
     JWT_HOOK,
     FilterDefinition,
     MethodMeta,
+    RouteModule,
+    WebpiecesRouter,
     WpResponse,
 } from '@webpieces/http-routing';
 import { Filter, Service } from '@webpieces/core-util';
@@ -68,6 +70,21 @@ class GlobalOrderFilter extends OrderRecordingFilter {}
 @injectable()
 class ScopedOrderFilter extends OrderRecordingFilter {}
 
+/** Test-only route group: the two order-recording filters, ahead of the production routes. */
+class OrderRecordingFilters implements RouteModule {
+    configure(router: WebpiecesRouter): void {
+        router.addFilter(new FilterDefinition(1500, GlobalOrderFilter, '*'));
+        router.addFilter(new FilterDefinition(1400, ScopedOrderFilter, '**/SaveController.ts'));
+    }
+}
+
+/** The SAME production LegacyWiring, plus the test filters; production wiring.ts carries no test seam. */
+class OrderRecordingLegacyWiring extends LegacyWiring {
+    getRoutingModules(): RouteModule[] {
+        return [new OrderRecordingFilters(), ...super.getRoutingModules()];
+    }
+}
+
 let apiFactory: ApiFactory;
 let recorder: FilterOrderRecorder;
 
@@ -92,10 +109,7 @@ async function bootLegacyApi(): Promise<void> {
     });
 
     apiFactory = await setupCompanyRuntime(
-        new LegacyWiring([
-            new FilterDefinition(1500, GlobalOrderFilter, '*'),
-            new FilterDefinition(1400, ScopedOrderFilter, '**/SaveController.ts'),
-        ]),
+        new OrderRecordingLegacyWiring(),
         new CompanySetupOptions(undefined, appOverrides),
     );
 }

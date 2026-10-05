@@ -1,24 +1,29 @@
-import { AdditionalFilters } from './AdditionalFilters';
+import { ContainerModuleLoadOptions } from 'inversify';
+import { AnyContextKey, SECRETS } from '@webpieces/core-util';
 import {
     RouteModule,
     WebpiecesRouter,
-    FilterDefinition,
     AppWiring,
     Wiring,
     BindingModule,
+    AUTH_CONFIG,
+    JWT_HOOK,
 } from '@webpieces/http-routing';
+import { RuntimeClients } from '@webpieces/http-client-node';
+import { CompanyHeaders } from '@webpieces/company-core';
+import { CompanyAuthConfig, CompanyJwtHook } from '@webpieces/company-svc-core';
 // The legacy app is SELF-CONTAINED — it shares only the api CONTRACT with the greenfield sibling,
 // so its controllers are its OWN copies here.
 import { SaveApi, PublicApi } from '@webpieces/client-server-api';
-import { SaveController } from './controllers/save-controller';
+import { Counter, SaveController, SimpleCounter } from './controllers/save-controller';
 import { PublicController } from './controllers/public-controller';
+import { Server2Api, TYPES } from './remote/Server2Client';
+import { AppHeaders } from './modules/AppHeaders';
+import { EnvironmentSecrets } from './modules/EnvironmentSecrets';
 
 /**
- * LegacyRoutes - the legacy server's route group (a {@link RouteModule}): its api routes plus any
- * extra user filters. LogApiFilter + AuthFilter are auto-installed by the framework.
- *
- * `additionalFilters` is the extension/test seam (below the auto-installed framework filters): the
- * integration test injects order-recording filters to assert priority + glob scoping.
+ * LegacyRoutes - the legacy server's route group (a {@link RouteModule}): its api routes.
+ * LogApiFilter + AuthFilter are auto-installed by the framework.
  */
 export class LegacyRoutes implements RouteModule {
     configure(router: WebpiecesRouter): void {
@@ -27,29 +32,32 @@ export class LegacyRoutes implements RouteModule {
     }
 }
 
-import { ContainerModuleLoadOptions } from 'inversify';
-import { RuntimeClients } from '@webpieces/http-client-node';
-import { Server2Api, TYPES } from './remote/Server2Client';
-import { InversifyModule } from './modules/InversifyModule';
-
+/**
+ * ApplicationBindings - the legacy server's DI registrations. Controllers/filters with
+ * `@provideSingleton()` are auto-registered; these are the manual pieces, all singletons.
+ */
 export class ApplicationBindings implements BindingModule {
-    configure(options: ContainerModuleLoadOptions): void | Promise<void> {
-        return InversifyModule.load(options);
+    configure(options: ContainerModuleLoadOptions): void {
+        options.bind<Counter>(TYPES.Counter).to(SimpleCounter).inSingletonScope();
+        // Shared-secret state: the framework AuthFilter injects AuthConfig for sharedSecret(...).
+        // Tests rebind AuthConfig to a stub / test-key config via appOverrides.
+        options.bind(AUTH_CONFIG).to(CompanyAuthConfig).inSingletonScope();
+        // User JWT mechanism: the framework AuthFilter injects JwtHook for jwt() endpoints.
+        // Tests rebind JwtHook to a permissive stub via appOverrides. (OIDC is the framework default.)
+        options.bind(JWT_HOOK).to(CompanyJwtHook).inSingletonScope();
+        // The ONE shared-secret store for this service's outbound clients, read once.
+        options.bind(SECRETS).to(EnvironmentSecrets).inSingletonScope();
     }
 }
 
+/** API/token → HTTP client → deployment: Server2Api calls the server2 deployment. */
 export class RuntimeClientsModule implements BindingModule {
     configure(options: ContainerModuleLoadOptions): void {
         new RuntimeClients(options).bindRpc(TYPES.Server2Api, Server2Api, 'server2');
     }
 }
 
-import { AnyContextKey } from '@webpieces/core-util';
-import { CompanyHeaders } from '@webpieces/company-core';
-import { AppHeaders } from './modules/InversifyModule';
-
 export class LegacyWiring implements AppWiring {
-    constructor(private readonly additionalFilters: FilterDefinition[] = []) {}
     getWirings(): Wiring[] {
         return [];
     }
@@ -57,7 +65,7 @@ export class LegacyWiring implements AppWiring {
         return [new ApplicationBindings(), new RuntimeClientsModule()];
     }
     getRoutingModules(): RouteModule[] {
-        return [new AdditionalFilters(this.additionalFilters), new LegacyRoutes()];
+        return [new LegacyRoutes()];
     }
     getHeaders(): AnyContextKey[] {
         return [...CompanyHeaders.ALL_HEADERS, ...new AppHeaders().getAllHeaders()];

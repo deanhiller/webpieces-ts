@@ -26,7 +26,7 @@ export class WorkspaceWiringFormat {
         const rule = loadAndValidate(root).resolved.rules.get('wiring-format');
         const maxLines = rule?.options['maxLines'];
         if (typeof maxLines !== 'number' || !Number.isInteger(maxLines) || maxLines < 1)
-            throw new RuleFailError('wiring-format', 'Declare wiring-format.maxLines as a positive integer (agreed limit: 200).');
+            throw new RuleFailError('wiring-format', 'Declare wiring-format.maxLines as a positive integer (agreed limit: 400).');
         this.assert(root, infos, maxLines);
     }
 }

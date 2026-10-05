@@ -2,7 +2,7 @@ import { RuleHelp } from '@webpieces/rules-sdk';
 
 /** Owner-authored guidance consumed by the registry catalog. */
 export const ruleHelp: Readonly<Record<string, RuleHelp>> = {
-    'wiring-format': new RuleHelp('Check every canonical wiring.ts for declarative Wiring/AppWiring selections.', 'Use literal return arrays of named BindingModule/RouteModule instances and app-only library Wirings. Keep constructors as prepared-input storage, move setup implementations to imports, use direct service strings and explicit WiringPolicy declarations. Set maxLines explicitly (agreed upstream limit: 200).'),
+    'wiring-format': new RuleHelp('Check every canonical wiring.ts: its Wiring/AppWiring class plus the BindingModule/RouteModule classes it selects, with their actual registrations.', 'Declare each owner\'s Wiring/AppWiring class beside its named BindingModule/RouteModule classes and their registrations (bindRpc, provideRpcClient, bindPubSub, addRoutes, addFilter, DI binds, provider recipes) in its src/wiring.ts; select them with literal return arrays and select library Wirings only from AppWiring. Keep constructors as prepared-input storage, keep configuration building, environment discovery and initializer/factory bodies in imported implementations, use direct service strings and explicit WiringPolicy declarations. Set maxLines explicitly (agreed upstream limit: 400).'),
     'no-file-import-cycles': new RuleHelp(
         'Keep each project free of circular file imports.',
         'Apply this policy in source, or review its explicit settings in {configFile}. An intentional opt-out requires complete OFF settings.',

@@ -42,7 +42,7 @@ let logSpy: ReturnType<typeof vi.spyOn>;
 async function bootBothServers(): Promise<void> {
     // Server2Api.fetchValue is method-level @WpAuthSharedSecret('INTERNAL_API_SECRET'): server2 must ACCEPT this value
     // (CompanyAuthConfig reads it from env) and client-server's outbound client must SEND it (its
-    // InversifyModule builds Secrets from the same env var). Setting it here wires both halves the
+    // wiring.ts binds Secrets from the same env var). Setting it here wires both halves the
     // way prod does, instead of rebinding two containers.
     process.env['INTERNAL_API_SECRET'] = TEST_SHARED_SECRET;
 

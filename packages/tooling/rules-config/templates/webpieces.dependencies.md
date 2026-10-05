@@ -142,7 +142,7 @@ Instead of importing, receive the dependency as a constructor or method paramete
 
 ## Canonical runtime client migration
 
-For every owner tagged `webpieces` or `webpieces-lib`, move topology to `src/wiring.ts`
+For every owner tagged `webpieces` or `webpieces-lib`, keep topology in `src/wiring.ts`
 and replace supported hand-written singleton/provider factories with the public helpers:
 
 ```typescript
@@ -157,12 +157,19 @@ new RuntimeTaskClients(options).bindPubSub(TASK_TOKEN, TaskApi, 'worker');
 provideRpcClient(BROWSER_TOKEN, SaveApi, 'save');
 ```
 
+Each owner's `src/wiring.ts` shows its actual wiring: the Wiring/AppWiring class AND the named
+BindingModule and RouteModule classes it selects, with their real registrations (`bindRpc`,
+`provideRpcClient`, `bindPubSub`, `addRoutes`, `addFilter`, DI binds and provider recipes) in their
+`configure` methods. A selected module declared in any other file is rejected. Runtime extraction
+reads only canonical `wiring.ts` files; an AppWiring brings in a library through that library's
+Wiring, whose modules live in the library's own `wiring.ts`.
+
 The wiring-format rule checks canonical `src/wiring.ts` in every participating tagged owner,
-including unchanged projects outside the diff. Imported implementation files are outside this format
-rule; semantic architecture validation can still resolve their declarations. Use Wiring/AppWiring
-with literal arrays of named BindingModule and RouteModule instances; only AppWiring selects library
-Wirings. Set maxLines explicitly (the agreed limit is 200). Preserve each existing token, API,
-deployment and supported filter list. Registration remains lazy and singleton; test overrides must
-still avoid resolving the production factory. Put custom factories and setup in imported named
-implementations, keeping topology declarations visible. Review the resulting runtime declaration
-candidates and qualified API/deployment relationships before updating approvals.
+including unchanged projects outside the diff, and never format-checks other files. Select modules
+with literal arrays of named instances; only AppWiring selects library Wirings. Set maxLines
+explicitly (the agreed limit is 400). Preserve each existing token, API, deployment and supported
+filter list. Registration remains lazy and singleton; test overrides must still avoid resolving the
+production factory. Keep configuration building, translations, environment discovery and
+initializer or factory bodies in imported implementations, and reference them by name from the
+registration that stays visible in `wiring.ts`. Review the resulting runtime declaration candidates
+and qualified API/deployment relationships before updating approvals.

@@ -1,5 +1,30 @@
 # Wiring v2 producer verification
 
+## Canonical co-location (#1146)
+
+Issue [#1146](https://github.com/deanhiller/webpieces-ts/issues/1146) corrects the #1141 delivery,
+which let selected modules live in other files and broadened extraction to every owned source file
+so graphs still matched. Extraction now reads only each owner's `src/wiring.ts`; a selected module
+must resolve to a class in the same file and a selected library Wiring to its owner's `wiring.ts`.
+The four producer apps now show their actual registrations beside their AppWiring:
+
+- angular-site: `BrowserHostBindings` (context store, HTTP factory, ClientConfig provider recipes,
+  factory bodies in `services/BrowserHostFactories.ts`) moved in from its own file.
+- client-server and legacy-server: the former `InversifyModule` ContainerModule's binds are inlined
+  into `ApplicationBindings`; the shared-secret store is the injectable `EnvironmentSecrets`
+  (read from env once, like `CompanyAuthConfig`), bound to `SECRETS` as a singleton.
+- legacy-server: the runtime-only `AdditionalFilters` test seam (a loop, which the grammar rejects)
+  is gone from production wiring; its integration test adds the two order-recording filters through
+  a test-only subclass. Its reviewed `runtime-deps.json` drops that relationship-free routing
+  selection; every contract, implementation, transport, destination and policy fact is unchanged.
+- server2 was already co-located.
+
+The other three approvals are byte-identical. Approved graph facts for all four app entries are
+unchanged; the regenerated `architecture/dependencies.json` and `runtime-dependencies.json` differ
+only in legacy-server's provenance index (`routingModules[1]` became `routingModules[0]`). The
+approval schema stays at version 2: classes moving between files does not change their qualified
+identity.
+
 Issue [#1141](https://github.com/deanhiller/webpieces-ts/issues/1141) replaces plan wrappers with
 named Wiring/AppWiring and separate binding/routing modules. All four producer applications now
 approve schema v2. Reviewed candidates retain the existing implemented APIs and destinations:
