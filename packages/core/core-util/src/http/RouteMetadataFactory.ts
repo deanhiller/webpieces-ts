@@ -39,13 +39,7 @@ export class RouteMetadataFactory {
         const streaming = getStreamingEndpoint(apiClass, methodName);
         const httpMethod = getEndpointHttpMethod(apiClass, methodName);
         const operation = getEndpointOperation(apiClass, methodName);
-        this.validateEndpointOptions(
-            apiClass,
-            methodName,
-            httpMethod,
-            options.formPost,
-            options.rawBody,
-        );
+        this.validateEndpointOptions(apiClass, methodName, httpMethod, options.formPost, options.rawBody);
         const parameterTypes = this.parameterTypes(apiClass, methodName);
         const declarations = getHttpParameterDeclarations(apiClass, methodName);
         const bodyParameterIndex = streaming
