@@ -89,7 +89,7 @@ describe('every L0 fault code can appear in the audit trail with its `fault=` st
             // terminal would make every future append a false failure.
             expect(readLog(root, DECISION_LOG), `decision line, fault ${code}`).toContain(`\tfault=${code}\t`);
 
-            const input = new NormalizedToolInput(path.join(root, 'src/x.ts'), [new NormalizedEdit('a', 'b')]);
+            const input = new NormalizedToolInput(path.join(root, 'src/x.ts'), [new NormalizedEdit('a', 'b', false)]);
             logRejection('Edit', input, new BlockedResult('[some-rule] (a reason)\nblocked', code), root);
             expect(readLog(root, REJECTION_LOG), `rejection line, fault ${code}`).toContain(`\tfault=${code}\t`);
         }
@@ -109,7 +109,7 @@ describe('every L0 fault code can appear in the audit trail with its `fault=` st
     // temp dir. This is the half a constant cannot prove — that the PRODUCER stamps what it decided.
     it('is stamped by the producer: a config-missing block really carries fault C', () => {
         const root = tmpRoot();
-        const input = new NormalizedToolInput(path.join(root, 'src/x.ts'), [new NormalizedEdit('', 'x')]);
+        const input = new NormalizedToolInput(path.join(root, 'src/x.ts'), [new NormalizedEdit('', 'x', false)]);
         const result = run('Write', input, root, 'all');
         expect(result).not.toBeNull();
         expect(result?.fault).toBe('C');
@@ -139,7 +139,7 @@ describe('a log failure never throws', () => {
 
         expect(() => logGuardDecision(root, new GuardDecision('r', 'Bash', 'ls', 'b', 'BLOCK_AI_CURE', 'why', '-', 'C', MATRIX_L2_UNROWED))).not.toThrow();
 
-        const input = new NormalizedToolInput(path.join(root, 'src/x.ts'), [new NormalizedEdit('a', 'b')]);
+        const input = new NormalizedToolInput(path.join(root, 'src/x.ts'), [new NormalizedEdit('a', 'b', false)]);
         expect(() => logRejection('Edit', input, new BlockedResult('[r] (x)\nno', 'C'), root)).not.toThrow();
     });
 });

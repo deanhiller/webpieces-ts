@@ -427,7 +427,7 @@
 <p>Source edit validation for AI coding agents, contributed independently to the shared hook runtime.</p>
 <h5>In Scope</h5>
 <ul>
-<li>The thirteen source rule implementations, including the three source-only rules and ten edit contributions shared in concept with code-rules.</li>
+<li>Fourteen source rule implementations, including method-size and keyword-type checks shared with the build gate.</li>
 <li>Source rule registration, custom source rules and match rules.</li>
 <li><code>wp-ai-rules-hook</code>, its source pipeline, and source fixtures and golden tests.</li>
 </ul>
@@ -1292,7 +1292,8 @@
 <p>No filesystem, Git, Nx, dependency injection, execution engine, or concrete rule implementation belongs here.</p>
 <p>Keep API and schema versions independent from release versions.</p></div></details>
 <details class="wp-resp-card" data-node="tooling-common"><summary><span class="wp-resp-level">L0</span> <strong>tooling-common</strong> — Generic file operations, error normalization, harness config paths, and repository state path primitives. No config loader, rule policy, or workflow classification.</summary><div class="wp-resp-body"><h4>Responsibilities — tooling-common</h4>
-<p>Generic file operations, error normalization, harness config paths, and repository state path primitives. No config loader, rule policy, or workflow classification.</p></div></details></section>
+<p>Generic file operations, error normalization, harness config paths, and repository state path primitives. No config loader, rule policy, or workflow classification.</p>
+<p>Local TypeScript syntax helpers expose method spans, keyword types and catch-variable context. Consumers decide the rule policy; these helpers do not compile projects or resolve imports.</p></div></details></section>
     <script>
         class WpNodeMenuItem {
             constructor(label, onSelect) { this.label = label; this.onSelect = onSelect; }

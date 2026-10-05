@@ -1,18 +1,13 @@
 import { SourceContributionConfig } from "../source-contribution-config";
 
 
-import { EditContext } from '@webpieces/hook-runtime';
+import { FileContext, NormalizedEdit, NormalizedToolInput, ProposedFile } from '@webpieces/hook-runtime';
 import { NoAnyUnknownRule } from './no-any-unknown';
 
-// A single `: any` line that a webpieces-disable comment would normally suppress.
-// isLineDisabled always returns true here to simulate that suppression being present.
-function ctxWithDisableActive(): EditContext {
-    const lines = ['const x: any = foo();'];
-    return new EditContext(
-        'Edit', 0, 1, '/w/x.ts', 'x.ts', '/w',
-        lines.join('\n'), lines.join('\n'), lines, lines, '',
-        (): boolean => true,
-    );
+function ctxWithDisableActive(): FileContext {
+    const input = new NormalizedToolInput('/tmp/wp-type-keyword-fixture.ts', [new NormalizedEdit('',
+        '// webpieces-disable no-any-unknown -- test suppression\nconst x: any = foo();', false)]);
+    return new FileContext('Write', input.filePath, 'x.ts', '/tmp', new ProposedFile('Write', input), 0, 2, 0, 2);
 }
 
 describe('disableAllowed enforcement (ai-hook side honours the team config)', () => {

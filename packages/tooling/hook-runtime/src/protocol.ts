@@ -9,13 +9,14 @@ export type AgentEventKind = 'File' | 'Bash' | 'Read' | 'Ignored';
 export class NormalizedEdit {
     readonly oldString: string;
     readonly newString: string;
-    constructor(oldString: string, newString: string) { this.oldString = oldString; this.newString = newString; }
+    constructor(oldString: string, newString: string, readonly replaceAll: boolean) { this.oldString = oldString; this.newString = newString; }
 }
 
 export class NormalizedToolInput {
+    sourcePath: string;
     readonly filePath: string;
     readonly edits: readonly NormalizedEdit[];
-    constructor(filePath: string, edits: readonly NormalizedEdit[]) { this.filePath = filePath; this.edits = edits; }
+    constructor(filePath: string, edits: readonly NormalizedEdit[]) { this.filePath = filePath; this.sourcePath = filePath; this.edits = edits; }
 }
 
 export class NormalizedBashInput {

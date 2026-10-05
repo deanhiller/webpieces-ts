@@ -35,6 +35,7 @@ export * from './core/custom-rule-adapter';
 export * from './core/strip-ts-noise';
 export * from './core/disable-directives';
 export * from './core/build-context';
+export * from './core/proposed-file';
 export * from './core/report';
 export * from './core/effective-tree';
 export * from './core/command-scan';

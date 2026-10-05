@@ -18,7 +18,8 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
-import * as ts from 'typescript';
+import { MethodLines, MethodLineSite } from '@webpieces/tooling-common/method-lines';
+import { MethodLinePolicy } from '@webpieces/rules-config/method-line-policy';
 import { writeTemplate, WEBPIECES_DISABLE, detectBase, getChangedFiles, getFileDiff, findNewMethodSignaturesInDiff } from "@webpieces/rules-config";
 import { MaxMethodLinesConfig, MethodLimitMode } from "./configs/rule-configs";
 import { ExecutorResult } from './code-validator';
@@ -55,23 +56,7 @@ function writeTmpInstructions(workspaceRoot: string): string {
  * Both max-lines-new-methods AND max-lines-modified are accepted here.
  */
 function hasDisableComment(lines: string[], lineNumber: number): boolean {
-    // Check the line before the method (lineNumber is 1-indexed, array is 0-indexed)
-    // We need to check a few lines before in case there's JSDoc or decorators
-    const startCheck = Math.max(0, lineNumber - 5);
-    for (let i = lineNumber - 2; i >= startCheck; i--) {
-        const line = lines[i]?.trim() ?? '';
-        // Stop if we hit another function/class/etc
-        if (line.startsWith('function ') || line.startsWith('class ') || line.endsWith('}')) {
-            break;
-        }
-        if (line.includes(WEBPIECES_DISABLE)) {
-            // Either escape hatch exempts from the lowLimit new method check
-            if (line.includes("max-lines-new-methods") || line.includes("max-lines-modified")) {
-                return true;
-            }
-        }
-    }
-    return false;
+    return new MethodLinePolicy().hasNewDisable(lines, lineNumber);
 }
 
 /**
@@ -81,55 +66,12 @@ function hasDisableComment(lines: string[], lineNumber: number): boolean {
 function findMethodsInFile(filePath: string, workspaceRoot: string): MethodInfo[] {
     const fullPath = path.join(workspaceRoot, filePath);
     if (!fs.existsSync(fullPath)) return [];
-
     const content = fs.readFileSync(fullPath, 'utf-8');
-    const fileLines = content.split('\n');
-    const sourceFile = ts.createSourceFile(filePath, content, ts.ScriptTarget.Latest, true);
-
-    const methods: MethodInfo[] = [];
-
-    function visit(node: ts.Node): void {
-        let methodName: string | undefined;
-        let startLine: number | undefined;
-        let endLine: number | undefined;
-
-        if (ts.isMethodDeclaration(node) && node.name) {
-            methodName = node.name.getText(sourceFile);
-            const start = sourceFile.getLineAndCharacterOfPosition(node.getStart());
-            const end = sourceFile.getLineAndCharacterOfPosition(node.getEnd());
-            startLine = start.line + 1;
-            endLine = end.line + 1;
-        } else if (ts.isFunctionDeclaration(node) && node.name) {
-            methodName = node.name.getText(sourceFile);
-            const start = sourceFile.getLineAndCharacterOfPosition(node.getStart());
-            const end = sourceFile.getLineAndCharacterOfPosition(node.getEnd());
-            startLine = start.line + 1;
-            endLine = end.line + 1;
-        } else if (ts.isArrowFunction(node)) {
-            // Check if it's assigned to a variable
-            if (ts.isVariableDeclaration(node.parent) && ts.isIdentifier(node.parent.name)) {
-                methodName = node.parent.name.getText(sourceFile);
-                const start = sourceFile.getLineAndCharacterOfPosition(node.getStart());
-                const end = sourceFile.getLineAndCharacterOfPosition(node.getEnd());
-                startLine = start.line + 1;
-                endLine = end.line + 1;
-            }
-        }
-
-        if (methodName && startLine !== undefined && endLine !== undefined) {
-            methods.push({
-                name: methodName,
-                line: startLine,
-                lines: endLine - startLine + 1,
-                hasDisableComment: hasDisableComment(fileLines, startLine),
-            });
-        }
-
-        ts.forEachChild(node, visit);
-    }
-
-    visit(sourceFile);
-    return methods;
+    const lines = content.split('\n');
+    return new MethodLines().parse(filePath, content).map((site: MethodLineSite): MethodInfo => ({
+        name: site.name, line: site.line, lines: site.lines,
+        hasDisableComment: hasDisableComment(lines, site.line),
+    }));
 }
 
 /**

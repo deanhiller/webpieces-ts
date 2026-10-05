@@ -53,14 +53,14 @@ describe('ToolKind Delete', () => {
 
     it('CONTROL — the content IS blocked when the same path is written', () => {
         const input = new NormalizedToolInput(nodePath.join(root, 'src', 'x.ts'), [
-            new NormalizedEdit('', offending),
+            new NormalizedEdit('', offending, false),
         ]);
         expect(run('Write', input, root, 'rules')).toBeInstanceOf(BlockedResult);
     });
 
     it('no rule fires on a Delete of that same path', () => {
         const input = new NormalizedToolInput(nodePath.join(root, 'src', 'x.ts'), [
-            new NormalizedEdit('', offending),
+            new NormalizedEdit('', offending, false),
         ]);
         expect(run('Delete', input, root, 'rules')).toBeNull();
     });

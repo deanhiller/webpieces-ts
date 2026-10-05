@@ -50,6 +50,7 @@ export const SOURCE_POLICIES: readonly SourcePolicy[] = [
     new SourcePolicy('no-any-unknown', '@webpieces/code-rules', 'NoAnyUnknownRule'),
     new SourcePolicy('no-implicit-any', '@webpieces/code-rules', 'NoImplicitAnyRule'),
     new SourcePolicy('max-file-lines', '@webpieces/code-rules', 'MaxFileLinesRule'),
+    new SourcePolicy('max-method-lines', '@webpieces/code-rules', 'MaxMethodLinesRule'),
     new SourcePolicy('validate-ts-in-src', '@webpieces/ai-hook-rules', 'ValidateTsInSrcRule'),
     new SourcePolicy('no-destructure', '@webpieces/code-rules', 'NoDestructureRule'),
     new SourcePolicy('require-return-type', '@webpieces/code-rules', 'RequireReturnTypeRule'),

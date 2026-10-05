@@ -4,7 +4,7 @@ Source edit validation for AI coding agents, contributed independently to the sh
 
 ## In Scope
 
-- The thirteen source rule implementations, including the three source-only rules and ten edit contributions shared in concept with code-rules.
+- Fourteen source rule implementations, including method-size and keyword-type checks shared with the build gate.
 - Source rule registration, custom source rules and match rules.
 - `wp-ai-rules-hook`, its source pipeline, and source fixtures and golden tests.
 
@@ -20,3 +20,5 @@ The public source and guard hooks keep their existing binary names. Import share
 The committed dispatcher is upgraded from the installed published release; this extraction does not regenerate it from unreleased source.
 
 This pack owns its concrete policy schemas, mode enums, optional tuning, and reviewed seeds. Workflow rule/field retirements and keyless safeguard metadata are published by the workflow owner.
+
+`no-any-unknown` rejects both keyword types and recommends understanding the actual data and using a concrete type. It preserves the build's narrow catch-variable exception. `max-method-lines` measures complete proposed methods using the configured limit. Both reuse a local TypeScript syntax parse; they do not compile the project or resolve imports. MultiEdit checks the final combined file, and ambiguous/stale replacements are refused with a request for current, unique context. The build gate remains responsible for branch-wide validation and writes made outside the supported AI tools.

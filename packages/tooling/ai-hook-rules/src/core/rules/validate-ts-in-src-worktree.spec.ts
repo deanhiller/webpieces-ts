@@ -28,7 +28,7 @@ function writeConfig(root: string, mode: 'OFF' | 'NEW_AND_MODIFIED_FILES'): void
 }
 
 function writeTarget(filePath: string): NormalizedToolInput {
-    return new NormalizedToolInput(filePath, [new NormalizedEdit('', 'export const value = 1;\n')]);
+    return new NormalizedToolInput(filePath, [new NormalizedEdit('', 'export const value = 1;\n', false)]);
 }
 
 describe('validate-ts-in-src — target tree identity for linked-worktree writes', () => {
