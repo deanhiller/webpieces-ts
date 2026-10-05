@@ -67,8 +67,8 @@ export class WiringExport {
     constructor(
         public readonly kind: 'binding' | 'routing' | 'wiring' | 'app' | 'external',
         public readonly relationships: WiringRelationship[],
-        public readonly bindingModules: WiringSelection[],
-        public readonly routingModules: WiringSelection[] = [],
+        public readonly bindModules: WiringSelection[],
+        public readonly routeModules: WiringSelection[] = [],
         public readonly wirings: WiringSelection[] = [],
     ) {}
 }

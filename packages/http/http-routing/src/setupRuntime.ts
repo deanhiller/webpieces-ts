@@ -9,15 +9,15 @@ import {
 } from '@webpieces/core-util';
 import { WebpiecesConfig } from './WebpiecesConfig';
 import { WebpiecesRouterFactory } from './WebpiecesRouter';
-import { AppWiring, BindingModule } from './Wiring';
-import { WiringModules } from '@webpieces/http-client-core';
+import { AppWiring, BindModule, NodeWiringModules } from './Wiring';
+import { ContainerBinder } from './Binder';
 import { ApiFactory } from './ApiFactory';
 
 /**
  * RuntimeSetupOptions - the environment/wiring inputs to {@link setupRuntime} (everything NOT
  * declared by the app's {@link AppWiring}): the logging backend, whether to include the platform
  * default headers, and config. Data-only structure (a class, per the webpieces guidelines). The
- * app's own binding modules + route groups + headers come from the AppWiring passed alongside;
+ * app's own bind modules + route groups + headers come from the AppWiring passed alongside;
  * the test-override module is the separate `appOverrides` param of {@link setupRuntime}.
  *
  * Headers: {@link HeaderRegistry.configure} registers the platform defaults (when
@@ -59,8 +59,8 @@ export class RuntimeSetupOptions {
  *
  *   1. HeaderRegistry.configure  (filters read it at construction; logging masks off it)
  *   2. LogManager.setFactory     (fails fast unless the registry is configured first)
- *   3. build the router + DI container (from appModules.getBindingModules())
- *   4. configure each appModules.getRoutingModules() onto the router (addRoutes/addFilter)
+ *   3. build the router + DI container (from appModules.getBindModules(), each handed a Binder)
+ *   4. configure each appModules.getRouteModules() onto the router (addRoutes/addFilter)
  *
  * and returns the built {@link ApiFactory} — `apiClients()` for a transport to bind, or
  * `createApiClient()` for in-process tests. There is NO express (or any transport) here; a
@@ -93,17 +93,17 @@ export async function setupRuntime(
     LogManager.setFactory(options.loggerFactory);
 
     // 3. Build the node-only router + DI container.
-    const modules = new WiringModules(appModules);
+    const modules = new NodeWiringModules(appModules);
     const router = await WebpiecesRouterFactory.create({
-        appBindings: modules.bindingModules.map(
-            (module: BindingModule) => new ContainerModule((load: ContainerModuleLoadOptions) => module.configure(load)),
+        appBindings: modules.bindModules.map(
+            (module: BindModule) => new ContainerModule((load: ContainerModuleLoadOptions) => module.configure(new ContainerBinder(load))),
         ),
         appOverrides: appOverrides,
         config: options.config ?? new WebpiecesConfig(),
     });
 
     // 4. Let each route group declare its routes + filters, then hand back the consumer surface.
-    for (const routeModule of modules.routingModules) {
+    for (const routeModule of modules.routeModules) {
         routeModule.configure(router);
     }
     return router;

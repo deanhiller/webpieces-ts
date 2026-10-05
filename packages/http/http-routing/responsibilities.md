@@ -10,6 +10,7 @@ Server-side routing layer: `@Controller`/DI decorators, `WebAppMeta`/`Routes`/`R
 - Enforcing every auth mode at request time (`AuthFilter`: `@WpAuthPublic`, `jwt()`, `oidc(...)`, `sharedSecret(...)`, `webhook(...)`, `apiKey(...)`, `@WpLocalOnly`), and declaring the process's locality at startup from `RuntimeSetupOptions.locality`
 - The four app-implemented auth seams (`JwtHook`, `OidcHook`, `WebhookAuthCallback`, `ApiKeyHook`) and their optional DI tokens — bind one to turn on the endpoints that need it; unbound means 401, never open. Every method on all four is ASYNC, because an app's verification strategy reaches the network, and all four share ONE shape: `verify<Thing>`/`parseJwt` takes the credential regime plus what it needs to read it, and every AUTHENTICATING one returns an `AuthenticatedCaller` (`parseJwt`, `verifyApiKey`, `verifyWebhook`). `verifyOidc` returns `void` — it is caller-VERIFIED and has a framework default (`DefaultOidcVerifier`)
 - The `AuthenticatedCaller` an authenticator proved (userId, roles, claims, the trusted `entries` to seed) and `AUTHENTICATED_CALLER_KEY`, the trusted `ContextKey` the `AuthFilter` stamps it under
+- The Node wiring surface: `BindModule` (the Node alias of http-client-core's `BindModule<B>`), the Node-only `RouteModule`, `Wiring`/`AppWiring` (`getBindModules()`/`getRouteModules()`/`getWirings()`), and the Node `Binder` every `BindModule.configure` receives — `bind`, `createRpcClientAndBind` / `createPubSubClientAndBind` (with `ClientBindOptions` / `PubSubBindOptions`), and `bindExternal`
 - Matching filters to routes by controller filepath glob (`FilterMatcher`, `minimatch`)
 - Request-scoped context reading and server config types (`RequestContextReader`, `WebpiecesConfig`)
 
@@ -23,4 +24,4 @@ Server-side routing layer: `@Controller`/DI decorators, `WebAppMeta`/`Routes`/`R
 
 ## Notes (optional)
 
-Depends on `core-util` (for the `Filter` / `Service` / `FilterChain` abstraction), `core-context`, `inversify`, and `minimatch`. This is the "contract → handler" direction. It defines routing/filter-registration data structures and matching logic but does not run a server — `http-server` consumes this to build and serve the app.
+Depends on `core-util` (for the `Filter` / `Service` / `FilterChain` abstraction), `core-context`, `inversify`, and `minimatch`, plus `http-client-node` and `cloudtasks-client` so the Node `Binder` can create RPC and Cloud Tasks clients lazily from the already-bound `ClientHttpFactory` / `ClientCloudTasksFactory` — it binds clients, it never generates requests. This is the "contract → handler" direction. It defines routing/filter-registration data structures and matching logic but does not run a server — `http-server` consumes this to build and serve the app.

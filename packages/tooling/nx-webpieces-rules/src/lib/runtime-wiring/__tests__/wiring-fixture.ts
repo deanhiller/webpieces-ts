@@ -13,21 +13,37 @@ export class Fixture {
 
     constructor() {
         this.write('packages/http/http-routing', 'Wiring.ts', `
-            export interface BindingModule { configure(options: object): void; }
+            import { Binder } from './Binder';
+            export interface BindModule { configure(binder: Binder): void | Promise<void>; }
             export interface RouteModule { configure(router: WebpiecesRouter): void; }
-            export interface Wiring { getBindingModules(): BindingModule[]; getRoutingModules(): RouteModule[]; }
+            export interface Wiring { getBindModules(): BindModule[]; getRouteModules(): RouteModule[]; }
             export interface AppWiring extends Wiring { getWirings(): Wiring[]; }
             export class FilterDefinition { constructor(public priority: number, public filter: object, public glob: string) {} }
             export class WebpiecesRouter { addRoutes(api: object, implementation: object): void {} addFilter(filter: FilterDefinition): void {} }
             export class WiringPolicy { constructor(public name: string, public enabled: boolean) {} }
         `);
-        this.write('packages/http/http-client-node', 'RuntimeClients.ts', 'export class RuntimeClients { constructor(options?: object) {} bindRpc(token: object, api: object, destination: string): void {} }');
-        this.write('packages/cloud/cloudtasks-client', 'RuntimeTaskClients.ts', 'export class RuntimeTaskClients { constructor(options?: object) {} bindPubSub(token: object, api: object, destination: string): void {} }');
-        this.write('packages/http/http-client-core', 'ExternalContractUse.ts', 'export class ExternalContractUse { constructor(identity: string) {} }');
-        this.write('packages/http/http-client-browser', 'BrowserBindings.ts', `
-            export class BrowserBindings { add(...providers: unknown[]): void {} }
-            export function provideRpcClient(token: object, api: object, destination: string): object { return {}; }`);
-        this.write('contracts', 'api.ts', 'export class SaveApi {} export class AuthApi {}');
+        this.write('packages/http/http-routing', 'Binder.ts', `
+            import { BindingTarget } from '../../../../node_modules/inversify/index';
+            export class ClientBindOptions { constructor(public token?: unknown, public filters?: object[]) {} }
+            export class PubSubBindOptions { constructor(public token?: unknown) {} }
+            export interface Binder {
+                bind<T>(token: unknown): BindingTarget;
+                createRpcClientAndBind(api: object, deployment: string, options?: ClientBindOptions): void;
+                createPubSubClientAndBind(api: object, deployment: string, options?: PubSubBindOptions): void;
+                bindExternal(api: object, impl: new (...args: never[]) => object): void;
+            }
+        `);
+        this.write('packages/http/http-client-browser', 'Wiring.ts', `
+            export class ClientBindOptions { constructor(public token?: unknown) {} }
+            export class Binder {
+                provide(...recipes: unknown[]): void {}
+                createRpcClientAndBind(api: object, deployment: string, options?: ClientBindOptions): void {}
+            }
+            export interface BindModule { configure(binder: Binder): void; }
+            export interface Wiring { getBindModules(): BindModule[]; }
+            export interface AppWiring extends Wiring { getWirings(): Wiring[]; }
+        `);
+        this.write('contracts', 'api.ts', 'export function PubSub(): (target: object) => void { return () => undefined; } export class SaveApi {} export class AuthApi {} @PubSub() export class TaskApi {}');
         this.vendor('inversify', `
             export class ResolutionContext { get<T>(token: unknown): T { return token as T; } }
             export class BindingScope { inSingletonScope(): void {} }
@@ -65,14 +81,15 @@ export class Fixture {
     }
 
     source(body: string): string {
-        return `import { AppWiring, Wiring, BindingModule, RouteModule, WebpiecesRouter, WiringPolicy, FilterDefinition } from '../../packages/http/http-routing/src/Wiring';
-            import { RuntimeClients } from '../../packages/http/http-client-node/src/RuntimeClients';
-            import { RuntimeTaskClients } from '../../packages/cloud/cloudtasks-client/src/RuntimeTaskClients';
-            import { ExternalContractUse } from '../../packages/http/http-client-core/src/ExternalContractUse';
-            import { BrowserBindings, provideRpcClient } from '../../packages/http/http-client-browser/src/BrowserBindings';
-            import { ContainerModule, ContainerModuleLoadOptions, ResolutionContext } from '../../node_modules/inversify/index';
+        return `import { AppWiring, Wiring, BindModule, RouteModule, WebpiecesRouter, WiringPolicy, FilterDefinition } from '../../packages/http/http-routing/src/Wiring';
+            import { Binder, ClientBindOptions, PubSubBindOptions } from '../../packages/http/http-routing/src/Binder';
+            import {
+                AppWiring as BrowserAppWiring, Wiring as BrowserWiring, BindModule as BrowserBindModule,
+                Binder as BrowserBinder, ClientBindOptions as BrowserClientBindOptions,
+            } from '../../packages/http/http-client-browser/src/Wiring';
+            import { ContainerModule, ResolutionContext } from '../../node_modules/inversify/index';
             import { makeEnvironmentProviders, provideAppInitializer } from '../../node_modules/@angular/core/index';
-            import { SaveApi, AuthApi } from '../../contracts/src/api';
+            import { SaveApi, AuthApi, TaskApi } from '../../contracts/src/api';
             ${body}`;
     }
 

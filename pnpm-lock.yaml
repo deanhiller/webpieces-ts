@@ -355,6 +355,9 @@ importers:
       '@inversifyjs/binding-decorators':
         specifier: 1.1.5
         version: 1.1.5(inversify@7.10.4(reflect-metadata@0.2.2))(reflect-metadata@0.2.2)
+      '@webpieces/cloudtasks-client':
+        specifier: workspace:*
+        version: link:../../cloud/cloudtasks-client
       '@webpieces/core-context':
         specifier: workspace:*
         version: link:../../core/core-context
@@ -367,6 +370,9 @@ importers:
       '@webpieces/http-client-core':
         specifier: workspace:*
         version: link:../http-client-core
+      '@webpieces/http-client-node':
+        specifier: workspace:*
+        version: link:../http-client-node
       inversify:
         specifier: 7.10.4
         version: 7.10.4(reflect-metadata@0.2.2)

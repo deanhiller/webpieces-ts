@@ -3,7 +3,7 @@
   "$schema": "../../../node_modules/nx/schemas/project-schema.json",
   "sourceRoot": "apps/app-example/company-svc-core/src",
   "projectType": "library",
-  "tags": ["framework:express", "role:lib"],
+  "tags": ["framework:express", "role:lib", "webpieces-lib"],
   "targets": {
     "build": {
       "executor": "@nx/js:tsc",

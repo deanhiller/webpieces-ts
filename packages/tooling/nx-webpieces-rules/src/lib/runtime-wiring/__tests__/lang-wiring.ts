@@ -6,6 +6,7 @@ const WEBSITE_APIS = [
     'LangPlaybackSettingsApi', 'LangReusableTtsAudioApi', 'LangSecureAdminApi', 'LangSecureApi',
     'LangStarterListApi', 'LangWordUploadApi', 'McpDiagnosticApi',
 ];
+const PUBSUB_APIS = ['LangReusableTtsAudioApi', 'LangLessonAudioGenerationApi'];
 const FSDB_APIS = ['LangAdsFsdbApi', 'LangCourseAudioClipFsdbApi', 'LangCourseFsdbApi', 'LangFsdbApi', 'LangLessonFsdbApi', 'McpAuthorizationGrantApi', 'AuthStoreApi'];
 const CONTROLLERS = [
     'AdminController', 'AdsAdminController', 'CourseAuthorController', 'ReusableTtsAudioGenerationController',
@@ -19,19 +20,12 @@ const LANG_WIRING_BODY = `
 import {
     LangHeadersDto,
     CompanyHeaders,
-    LANG_ADS_FSDB_TYPES,
-    LANG_COURSE_AUDIO_CLIP_FSDB_TYPES,
-    LANG_COURSE_FSDB_TYPES,
-    LANG_FSDB_TYPES,
-    LANG_LESSON_FSDB_TYPES,
     LangAdsFsdbApi,
     LangCourseAudioClipFsdbApi,
     LangCourseFsdbApi,
     LangFsdbApi,
     LangLessonFsdbApi,
-    MCP_AUTHORIZATION_GRANT_TYPES,
     McpAuthorizationGrantApi,
-    AUTH_STORE_TYPES,
     AuthStoreApi,
 } from '../../lang-fsdb-api/src/index';
 import {
@@ -55,15 +49,13 @@ import {
 import {
     AppSettingsProvider,
     CourseSummaryStoreApi,
-    createCourseDbModule,
-    createLessonRulesModule,
-    GcpPrivateStorageModule,
-    GcpStorageModule,
-    GcpTtsModule,
     JWT_HOOK,
     LESSON_RULE_LIB_TYPES,
     WARMUP_TYPES,
 } from '../../lesson-rules/src/index';
+import { LessonRulesBindModule } from '../../lesson-rules/src/wiring';
+import { GcpStorageBindModule } from '../../lib-gcp-storage/src/wiring';
+import { GcpTtsBindModule } from '../../lib-gcp-tts/src/wiring';
 import { ServerAuthWiring } from '../../server-auth/src/wiring';
 import { CompanyWiring } from '../../company/src/wiring';
 import {
@@ -89,7 +81,6 @@ import {
     LangCourseStore,
     LangCourseSummaryStore,
     LangMcpTokenAuthority,
-    LessonRulesVocabularyModule,
     McpFirstSeenFilter,
     OfflineConfig,
     PreparedLangAppWiring,
@@ -97,56 +88,39 @@ import {
     WebAppConfig,
 } from './support';
 
-export class AppBindings implements BindingModule {
+export class AppBindModule implements BindModule {
     constructor(
         private readonly webApp: WebAppConfig,
         private readonly offline: OfflineConfig,
     ) {}
-    configure(options: ContainerModuleLoadOptions): void {
-        options.bind(WebAppConfig).toConstantValue(this.webApp);
-        options.bind(OfflineConfig).toConstantValue(this.offline);
-        options
+    configure(binder: Binder): void {
+        binder.bind(WebAppConfig).toConstantValue(this.webApp);
+        binder.bind(OfflineConfig).toConstantValue(this.offline);
+        binder
             .bind(JWT_HOOK)
             .toDynamicValue((context: ResolutionContext) => context.get(LangMcpTokenAuthority))
             .inSingletonScope();
-        options.bind(AppSettingsProvider).to(LangAppSettingsProvider).inSingletonScope();
-        new RuntimeTaskClients(options).bindPubSub(
-            LangReusableTtsAudioApi,
-            LangReusableTtsAudioApi,
-            'lang',
-        );
-        new RuntimeTaskClients(options).bindPubSub(
-            LangLessonAudioGenerationApi,
-            LangLessonAudioGenerationApi,
-            'lang',
-        );
+        binder.bind(AppSettingsProvider).to(LangAppSettingsProvider).inSingletonScope();
+        binder.createPubSubClientAndBind(LangReusableTtsAudioApi, 'lang');
+        binder.createPubSubClientAndBind(LangLessonAudioGenerationApi, 'lang');
     }
 }
 
-export class RemoteFsdbBindings implements BindingModule {
-    configure(options: ContainerModuleLoadOptions): void {
-        options
+export class RemoteFsdbBindModule implements BindModule {
+    configure(binder: Binder): void {
+        binder
             .bind<CourseSummaryStoreApi>(LESSON_RULE_LIB_TYPES.CourseSummaryStoreApi)
             .to(LangCourseSummaryStore);
-        const clients = new RuntimeClients(options);
-        clients.bindRpc(LANG_FSDB_TYPES.LangFsdbApi, LangFsdbApi, 'lang-fsdb');
-        clients.bindRpc(
-            MCP_AUTHORIZATION_GRANT_TYPES.McpAuthorizationGrantApi,
-            McpAuthorizationGrantApi,
-            'lang-fsdb',
-        );
-        clients.bindRpc(LANG_COURSE_FSDB_TYPES.LangCourseFsdbApi, LangCourseFsdbApi, 'lang-fsdb');
-        clients.bindRpc(
-            LANG_COURSE_AUDIO_CLIP_FSDB_TYPES.LangCourseAudioClipFsdbApi,
-            LangCourseAudioClipFsdbApi,
-            'lang-fsdb',
-        );
-        clients.bindRpc(LANG_ADS_FSDB_TYPES.LangAdsFsdbApi, LangAdsFsdbApi, 'lang-fsdb');
-        clients.bindRpc(LANG_LESSON_FSDB_TYPES.LangLessonFsdbApi, LangLessonFsdbApi, 'lang-fsdb');
-        clients.bindRpc(AUTH_STORE_TYPES.AuthStoreApi, AuthStoreApi, 'lang-fsdb');
-        options
+        binder.createRpcClientAndBind(LangFsdbApi, 'lang-fsdb');
+        binder.createRpcClientAndBind(McpAuthorizationGrantApi, 'lang-fsdb');
+        binder.createRpcClientAndBind(LangCourseFsdbApi, 'lang-fsdb');
+        binder.createRpcClientAndBind(LangCourseAudioClipFsdbApi, 'lang-fsdb');
+        binder.createRpcClientAndBind(LangAdsFsdbApi, 'lang-fsdb');
+        binder.createRpcClientAndBind(LangLessonFsdbApi, 'lang-fsdb');
+        binder.createRpcClientAndBind(AuthStoreApi, 'lang-fsdb');
+        binder
             .bind(WARMUP_TYPES.DownstreamWarmup)
-            .toDynamicValue((ctx: ResolutionContext) => ctx.get(AUTH_STORE_TYPES.AuthStoreApi))
+            .toDynamicValue((ctx: ResolutionContext) => ctx.get(AuthStoreApi))
             .inSingletonScope();
     }
 }
@@ -204,70 +178,17 @@ export class CoreRoutes implements RouteModule {
     }
 }
 
-export class ExternalBindingsBindings implements BindingModule {
-    configure(_options: ContainerModuleLoadOptions): void {
-        new ExternalContractUse('lib-gcp-storage#StorageApi');
-        new ExternalContractUse('lib-gcp-tts#TextToSpeechApi');
-    }
-}
-
-export class LessonRulesBindings implements BindingModule {
-    async configure(options: ContainerModuleLoadOptions): Promise<void> {
-        await createLessonRulesModule().load(options);
-    }
-}
-
-export class LessonRulesVocabularyBindings implements BindingModule {
-    async configure(options: ContainerModuleLoadOptions): Promise<void> {
-        await LessonRulesVocabularyModule.load(options);
-    }
-}
-
-export class CourseDbBindings implements BindingModule {
-    constructor(private readonly input0: Parameters<typeof createCourseDbModule>[0]) {}
-    async configure(options: ContainerModuleLoadOptions): Promise<void> {
-        await createCourseDbModule(this.input0).load(options);
-    }
-}
-
-export class GcpStorageBindings implements BindingModule {
-    constructor(private readonly input0: ConstructorParameters<typeof GcpStorageModule>[0]) {}
-    async configure(options: ContainerModuleLoadOptions): Promise<void> {
-        await new GcpStorageModule(this.input0).load(options);
-    }
-}
-
-export class GcpPrivateStorageBindings implements BindingModule {
-    constructor(
-        private readonly input0: ConstructorParameters<typeof GcpPrivateStorageModule>[0],
-    ) {}
-    async configure(options: ContainerModuleLoadOptions): Promise<void> {
-        await new GcpPrivateStorageModule(this.input0).load(options);
-    }
-}
-
-export class GcpTtsBindings implements BindingModule {
-    constructor(private readonly input0: ConstructorParameters<typeof GcpTtsModule>[0]) {}
-    async configure(options: ContainerModuleLoadOptions): Promise<void> {
-        await new GcpTtsModule(this.input0).load(options);
-    }
-}
-
 export class LangAppWiring extends PreparedLangAppWiring implements AppWiring {
-    getBindingModules(): BindingModule[] {
+    getBindModules(): BindModule[] {
         return [
-            new RemoteFsdbBindings(),
-            new LessonRulesBindings(),
-            new LessonRulesVocabularyBindings(),
-            new CourseDbBindings(LangCourseStore),
-            new GcpStorageBindings(this.config.storage),
-            new GcpPrivateStorageBindings(this.config.privateStorage),
-            new GcpTtsBindings(this.config.tts),
-            new AppBindings(this.config.webApp, this.config.offline),
-            new ExternalBindingsBindings(),
+            new RemoteFsdbBindModule(),
+            new LessonRulesBindModule(LangCourseStore),
+            new GcpStorageBindModule(this.config.storage, this.config.privateStorage),
+            new GcpTtsBindModule(this.config.tts),
+            new AppBindModule(this.config.webApp, this.config.offline),
         ];
     }
-    getRoutingModules(): RouteModule[] {
+    getRouteModules(): RouteModule[] {
         return [new AdminRoutes(), new CoreRoutes()];
     }
     getWirings(): Wiring[] {
@@ -283,36 +204,29 @@ export class LangAppWiring extends PreparedLangAppWiring implements AppWiring {
 `;
 
 /**
- * The complete lang-server wiring.ts previewed on issue #1146 (265 lines in the consumer), with only
- * its import specifiers pointed at fixture projects. Every client, task client, controller, filter,
- * DI binding and module load stays visible beside the AppWiring class.
+ * The complete lang-server wiring.ts in its #1150 shape (ctoteachings/monorepo#1751), with only its
+ * import specifiers pointed at fixture projects. Every client, task client, controller, filter and DI
+ * binding stays visible beside the AppWiring class, and each vendor library's BindModule (with its
+ * bindExternal edge) is selected in one line from that library's canonical wiring.ts.
  */
 export class LangWiring {
     install(fixture: Fixture): string {
-        fixture.write('lang-website-apis', 'index.ts', WEBSITE_APIS.map((name: string) => `export class ${name} {}`).join('\n'));
+        fixture.write('lang-website-apis', 'index.ts', [
+            'function PubSub(): (target: object) => void { return () => undefined; }',
+            ...WEBSITE_APIS.map((name: string) => `${PUBSUB_APIS.includes(name) ? '@PubSub() ' : ''}export class ${name} {}`),
+        ].join('\n'));
         fixture.write('lang-fsdb-api', 'index.ts', [
             ...FSDB_APIS.map((name: string) => `export class ${name} {}`),
-            ...FSDB_APIS.map((name: string) => `export const ${this.token(name)} = { ${name}: Symbol.for('${name}') };`),
             'export class LangHeadersDto { static readonly ALL_HEADERS: string[] = []; }',
             'export class CompanyHeaders { static readonly ALL: string[] = []; }',
         ].join('\n'));
-        fixture.write('lesson-rules', 'index.ts', `import { ContainerModule } from '../../node_modules/inversify/index';
-            export function createLessonRulesModule(): ContainerModule { return new ContainerModule(() => undefined); }
-            export function createCourseDbModule(store: object): ContainerModule { return new ContainerModule(() => undefined); }
-            export class GcpStorageModule extends ContainerModule { constructor(config: object) { super(() => undefined); } }
-            export class GcpPrivateStorageModule extends ContainerModule { constructor(config: object) { super(() => undefined); } }
-            export class GcpTtsModule extends ContainerModule { constructor(config: object) { super(() => undefined); } }
-            export const LESSON_RULE_LIB_TYPES = { CourseSummaryStoreApi: Symbol.for('CourseSummaryStoreApi') };
-            export interface CourseSummaryStoreApi { summary(): void; }
-            export const WARMUP_TYPES = { DownstreamWarmup: Symbol.for('DownstreamWarmup') };
-            export const JWT_HOOK = Symbol.for('JwtHook');
-            export class AppSettingsProvider {}`);
+        this.installLibraries(fixture);
         fixture.write('server-auth', 'wiring.ts', fixture.source(`
             export class AuthRouteModule implements RouteModule { configure(router: WebpiecesRouter): void { router.addRoutes(AuthApi, AuthApi); } }
             export class ServerAuthWiring implements Wiring {
                 constructor(private readonly config: object) {}
-                getBindingModules(): BindingModule[] { return []; }
-                getRoutingModules(): RouteModule[] { return [new AuthRouteModule()]; }
+                getBindModules(): BindModule[] { return []; }
+                getRouteModules(): RouteModule[] { return [new AuthRouteModule()]; }
             }`));
         fixture.write('company', 'wiring.ts', fixture.source(`
             export class CompanyRouteModule implements RouteModule {
@@ -321,15 +235,13 @@ export class LangWiring {
             }
             export class CompanyWiring implements Wiring {
                 constructor(private readonly publicWarmup: WiringPolicy) {}
-                getBindingModules(): BindingModule[] { return []; }
-                getRoutingModules(): RouteModule[] { return [new CompanyRouteModule(this.publicWarmup)]; }
+                getBindModules(): BindModule[] { return []; }
+                getRouteModules(): RouteModule[] { return [new CompanyRouteModule(this.publicWarmup)]; }
             }`));
         fixture.write('app', 'controllers.ts', CONTROLLERS.map((name: string) => `export class ${name} {}`).join('\n'));
-        fixture.write('app', 'support.ts', `import { ContainerModule } from '../../node_modules/inversify/index';
-            export class WebAppConfig {} export class OfflineConfig {}
+        fixture.write('app', 'support.ts', `export class WebAppConfig {} export class OfflineConfig {}
             export class LangMcpTokenAuthority {} export class McpFirstSeenFilter {} export class TermsGateFilter {}
             export class LangAppSettingsProvider {} export class LangCourseSummaryStore {} export class LangCourseStore {}
-            export const LessonRulesVocabularyModule = new ContainerModule(() => undefined);
             export class LangConfig { webApp = new WebAppConfig(); offline = new OfflineConfig(); storage = {}; privateStorage = {}; tts = {}; }
             export class PreparedLangAppWiring { constructor(protected readonly config: LangConfig) {} userErrorCodes(): string[] { return []; } }`);
         const source = fixture.source(LANG_WIRING_BODY);
@@ -337,7 +249,45 @@ export class LangWiring {
         return source;
     }
 
-    private token(name: string): string {
-        return name.replace(/([a-z])([A-Z])/g, '$1_$2').toUpperCase().replace(/_API$/, '_TYPES');
+    /** The vendor/library owners, each with a canonical wiring.ts exporting only BindModules. */
+    private installLibraries(fixture: Fixture): void {
+        fixture.write('lesson-rules', 'index.ts', `export const LESSON_RULE_LIB_TYPES = { CourseSummaryStoreApi: Symbol.for('CourseSummaryStoreApi') };
+            export interface CourseSummaryStoreApi { summary(): void; }
+            export const WARMUP_TYPES = { DownstreamWarmup: Symbol.for('DownstreamWarmup') };
+            export const JWT_HOOK = Symbol.for('JwtHook');
+            export const LESSON_RULES_TYPES = { CourseStore: Symbol.for('CourseStore') };
+            export class AppSettingsProvider {} export class LessonRules {} export class Vocabulary {}`);
+        fixture.write('lesson-rules', 'wiring.ts', fixture.source(`import { LESSON_RULES_TYPES, LessonRules, Vocabulary } from './index';
+            export class LessonRulesBindModule implements BindModule {
+                constructor(private readonly courseStore: object) {}
+                configure(binder: Binder): void {
+                    binder.bind(LESSON_RULES_TYPES.CourseStore).toConstantValue(this.courseStore);
+                    binder.bind(LessonRules).toSelf().inSingletonScope();
+                    binder.bind(Vocabulary).toSelf().inSingletonScope();
+                }
+            }`));
+        fixture.write('lib-gcp-storage', 'api.ts', `export abstract class StorageApi { abstract read(): void; }
+            export class GcpStorageClient extends StorageApi { read(): void {} }
+            export const GCP_STORAGE_TYPES = { Config: Symbol.for('StorageConfig'), PrivateConfig: Symbol.for('PrivateStorageConfig') };`);
+        fixture.write('lib-gcp-storage', 'wiring.ts', fixture.source(`import { GCP_STORAGE_TYPES, GcpStorageClient, StorageApi } from './api';
+            export class GcpStorageBindModule implements BindModule {
+                constructor(private readonly config: object, private readonly privateConfig: object) {}
+                configure(binder: Binder): void {
+                    binder.bind(GCP_STORAGE_TYPES.Config).toConstantValue(this.config);
+                    binder.bind(GCP_STORAGE_TYPES.PrivateConfig).toConstantValue(this.privateConfig);
+                    binder.bindExternal(StorageApi, GcpStorageClient);
+                }
+            }`));
+        fixture.write('lib-gcp-tts', 'api.ts', `export abstract class TextToSpeechApi { abstract speak(): void; }
+            export class GcpTextToSpeechClient extends TextToSpeechApi { speak(): void {} }
+            export const GCP_TTS_TYPES = { TextToSpeechConfigDto: Symbol.for('TextToSpeechConfigDto') };`);
+        fixture.write('lib-gcp-tts', 'wiring.ts', fixture.source(`import { GCP_TTS_TYPES, GcpTextToSpeechClient, TextToSpeechApi } from './api';
+            export class GcpTtsBindModule implements BindModule {
+                constructor(private readonly config: object) {}
+                configure(binder: Binder): void {
+                    binder.bind(GCP_TTS_TYPES.TextToSpeechConfigDto).toConstantValue(this.config);
+                    binder.bindExternal(TextToSpeechApi, GcpTextToSpeechClient);
+                }
+            }`));
     }
 }

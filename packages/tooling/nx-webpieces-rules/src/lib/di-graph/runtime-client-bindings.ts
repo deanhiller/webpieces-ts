@@ -2,23 +2,22 @@ import * as ts from 'typescript';
 import { Binding } from './model';
 import { relativeFile, resolveTokenKey } from './token-resolver';
 
-/** Canonical lazy client helpers retain the same DI token and singleton boundary. */
+/**
+ * The host binder's client registrations retain the same DI token and singleton boundary as a
+ * hand-written lazy factory: `binder.createRpcClientAndBind(Api, deployment, options?)` and
+ * `binder.createPubSubClientAndBind(...)` bind `options.token` when given, else the API class itself.
+ * `binder.bindExternal(Api, VendorImpl)` binds the vendor class to its external contract.
+ */
 export class RuntimeClientBindings {
     collectNode(
         call: ts.CallExpression,
         checker: ts.TypeChecker,
         root: string,
     ): Binding | undefined {
-        if (!this.frameworkCall(call, checker)) return;
-        const callee = call.expression;
-        if (!ts.isPropertyAccessExpression(callee)) return;
-        const owner = checker.getTypeAtLocation(callee.expression).getSymbol()?.getName();
-        if (
-            (callee.name.text === 'bindRpc' && owner === 'RuntimeClients') ||
-            (callee.name.text === 'bindPubSub' && owner === 'RuntimeTaskClients')
-        ) {
-            return this.binding(call, checker, root);
-        }
+        const method = this.binderMethod(call, checker, 'http-routing');
+        if (method === 'createRpcClientAndBind' || method === 'createPubSubClientAndBind')
+            return this.client(call, checker, root);
+        if (method === 'bindExternal') return this.external(call, checker, root);
         return undefined;
     }
 
@@ -27,31 +26,28 @@ export class RuntimeClientBindings {
         checker: ts.TypeChecker,
         root: string,
     ): Binding | undefined {
-        if (!this.frameworkCall(call, checker)) return;
-        let symbol = checker.getSymbolAtLocation(call.expression);
-        if (symbol && (symbol.flags & ts.SymbolFlags.Alias) !== 0)
-            symbol = checker.getAliasedSymbol(symbol);
-        if (
-            symbol?.getName() !== 'provideRpcClient' ||
-            checker.getTypeAtLocation(call).getSymbol()?.getName() !== 'RpcClientProvider'
-        )
-            return;
-        return this.binding(call, checker, root);
+        if (this.binderMethod(call, checker, 'http-client-browser') !== 'createRpcClientAndBind') return;
+        return this.client(call, checker, root);
     }
 
-    private frameworkCall(call: ts.CallExpression, checker: ts.TypeChecker): boolean {
+    /** The method name when `call` resolves to the host Binder declared in `pkg`; otherwise undefined. */
+    private binderMethod(call: ts.CallExpression, checker: ts.TypeChecker, pkg: string): string | undefined {
+        if (!ts.isPropertyAccessExpression(call.expression)) return undefined;
         const declaration = checker.getResolvedSignature(call)?.declaration;
-        if (declaration === undefined) return false;
-        return /(?:\/packages\/(?:http|cloud)\/|\/node_modules\/@webpieces\/)(?:http-client-node|http-client-browser|cloudtasks-client)\//.test(declaration.getSourceFile().fileName.replace(/\\/g, '/'));
+        if (declaration === undefined) return undefined;
+        const file = declaration.getSourceFile().fileName.replace(/\\/g, '/');
+        if (!new RegExp(`(?:/packages/http/|/node_modules/@webpieces/)${pkg}/`).test(file)) return undefined;
+        const owner = declaration.parent;
+        const ownerName =
+            owner !== undefined && (ts.isClassDeclaration(owner) || ts.isInterfaceDeclaration(owner))
+                ? owner.name?.text
+                : undefined;
+        return ownerName === 'Binder' ? call.expression.name.text : undefined;
     }
 
-    private binding(
-        call: ts.CallExpression,
-        checker: ts.TypeChecker,
-        root: string,
-    ): Binding | undefined {
-        if (call.arguments.length < 3) return;
-        const token = resolveTokenKey(call.arguments[0], checker, root);
+    private client(call: ts.CallExpression, checker: ts.TypeChecker, root: string): Binding | undefined {
+        if (call.arguments.length < 2) return;
+        const token = resolveTokenKey(this.tokenExpression(call), checker, root);
         return new Binding(
             token.key,
             token.display,
@@ -63,5 +59,38 @@ export class RuntimeClientBindings {
             [],
             true,
         );
+    }
+
+    private external(call: ts.CallExpression, checker: ts.TypeChecker, root: string): Binding | undefined {
+        const api = call.arguments[0];
+        const impl = call.arguments[1];
+        if (api === undefined || impl === undefined) return;
+        const token = resolveTokenKey(api, checker, root);
+        return new Binding(
+            token.key,
+            token.display,
+            'to',
+            'singleton',
+            this.implementation(impl, checker),
+            impl.getText(),
+            relativeFile(root, call.getSourceFile()),
+        );
+    }
+
+    private implementation(expression: ts.Expression, checker: ts.TypeChecker): ts.ClassDeclaration | null {
+        let symbol = checker.getSymbolAtLocation(expression);
+        if (symbol !== undefined && (symbol.flags & ts.SymbolFlags.Alias) !== 0) symbol = checker.getAliasedSymbol(symbol);
+        return symbol?.declarations?.find((declaration: ts.Declaration) => ts.isClassDeclaration(declaration)) as ts.ClassDeclaration | undefined ?? null;
+    }
+
+    /** `new ClientBindOptions(token, ...)` names an extra token; omitted, the API class is the token. */
+    private tokenExpression(call: ts.CallExpression): ts.Expression {
+        const options = call.arguments[2];
+        if (options !== undefined && ts.isNewExpression(options)) {
+            const token = options.arguments?.[0];
+            if (token !== undefined && token.kind !== ts.SyntaxKind.UndefinedKeyword && token.getText() !== 'undefined')
+                return token;
+        }
+        return call.arguments[0];
     }
 }

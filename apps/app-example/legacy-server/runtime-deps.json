@@ -6,8 +6,8 @@
         "ApplicationBindings": {
             "kind": "binding",
             "relationships": [],
-            "bindingModules": [],
-            "routingModules": [],
+            "bindModules": [],
+            "routeModules": [],
             "wirings": []
         },
         "LegacyRoutes": {
@@ -30,14 +30,20 @@
                     "transport": "rpc"
                 }
             ],
-            "bindingModules": [],
-            "routingModules": [],
+            "bindModules": [],
+            "routeModules": [],
             "wirings": []
         },
         "LegacyWiring": {
             "kind": "app",
             "relationships": [],
-            "bindingModules": [
+            "bindModules": [
+                {
+                    "project": "company-svc-core",
+                    "exportedName": "CompanyAuthBindModule",
+                    "targets": {},
+                    "policies": {}
+                },
                 {
                     "project": "legacy-server",
                     "exportedName": "ApplicationBindings",
@@ -51,7 +57,7 @@
                     "policies": {}
                 }
             ],
-            "routingModules": [
+            "routeModules": [
                 {
                     "project": "legacy-server",
                     "exportedName": "LegacyRoutes",
@@ -77,8 +83,8 @@
                     }
                 }
             ],
-            "bindingModules": [],
-            "routingModules": [],
+            "bindModules": [],
+            "routeModules": [],
             "wirings": []
         }
     },

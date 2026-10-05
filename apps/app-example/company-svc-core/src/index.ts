@@ -13,6 +13,8 @@ export { CompanySetupOptions } from './CompanySetupOptions';
 // Re-exported for app convenience: apps implement these to declare their server surface.
 export { AppWiring, RouteModule } from '@webpieces/http-routing';
 export { CompanyAuthConfig } from './CompanyAuthConfig';
+// The company's shared DI, as a library BindModule an app selects in one line (canonical src/wiring.ts).
+export { CompanyAuthBindModule } from './wiring';
 export { CompanyJwtHook, CompanyJwtMintRequest } from './CompanyJwtHook';
 
 export { CompanyAuthorizationHook } from './CompanyAuthorizationHook';

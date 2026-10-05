@@ -3,13 +3,6 @@
     "project": "server2",
     "framework": "node",
     "exports": {
-        "Server2Bindings": {
-            "kind": "binding",
-            "relationships": [],
-            "bindingModules": [],
-            "routingModules": [],
-            "wirings": []
-        },
         "Server2Routes": {
             "kind": "routing",
             "relationships": [
@@ -22,22 +15,22 @@
                     "transport": "rpc"
                 }
             ],
-            "bindingModules": [],
-            "routingModules": [],
+            "bindModules": [],
+            "routeModules": [],
             "wirings": []
         },
         "Server2Wiring": {
             "kind": "app",
             "relationships": [],
-            "bindingModules": [
+            "bindModules": [
                 {
-                    "project": "server2",
-                    "exportedName": "Server2Bindings",
+                    "project": "company-svc-core",
+                    "exportedName": "CompanyAuthBindModule",
                     "targets": {},
                     "policies": {}
                 }
             ],
-            "routingModules": [
+            "routeModules": [
                 {
                     "project": "server2",
                     "exportedName": "Server2Routes",

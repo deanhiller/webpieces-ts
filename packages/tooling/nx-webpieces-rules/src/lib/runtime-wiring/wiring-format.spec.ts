@@ -4,15 +4,18 @@ import { Fixture } from './__tests__/wiring-fixture';
 import { LangWiring } from './__tests__/lang-wiring';
 import { WiringFormat } from './wiring-format';
 import { WorkspaceWiringFormat } from './workspace-format';
+import { ResolvedWiringRelationship, RuntimeWiringAssembler } from './assembler';
+import type { RuntimeDeclaration } from './declaration';
+import * as path from 'path';
 
 const valid = `export class Routes implements RouteModule { configure(router: WebpiecesRouter): void { router.addRoutes(SaveApi, SaveApi); } }
 export class Library implements Wiring {
-    getBindingModules(): BindingModule[] { return []; }
-    getRoutingModules(): RouteModule[] { return [new Routes()]; }
+    getBindModules(): BindModule[] { return []; }
+    getRouteModules(): RouteModule[] { return [new Routes()]; }
 }
 export class Application implements AppWiring {
-    getBindingModules(): BindingModule[] { return []; }
-    getRoutingModules(): RouteModule[] { return []; }
+    getBindModules(): BindModule[] { return []; }
+    getRouteModules(): RouteModule[] { return []; }
     getWirings(): Wiring[] { return [new Library()]; }
 }`;
 
@@ -45,11 +48,11 @@ describe('one canonical wiring-format rule', () => {
         'export function hidden() { return []; }',
         'export const raw = new ContainerModule(() => {});',
         'export class Business { run() { return 1; } }',
-        'export class Library2 implements Wiring { getBindingModules() { return []; } getRoutingModules() { return []; } getWirings() { return []; } }',
+        'export class Library2 implements Wiring { getBindModules() { return []; } getRouteModules() { return []; } getWirings() { return []; } }',
         'export class Old { getRuntimeWiring() { return new ServerWiring(); } }',
-        'export class Hidden implements BindingModule { constructor() { bootstrap(); } configure(options: object) { options.bind(SaveApi); } }',
-        'export class Hidden implements BindingModule { configure(options: object) { hidden(options.bind(SaveApi)); } }',
-        'export class Hidden implements BindingModule { configure(options: object) { for (const item of items) { options.bind(item); } } }',
+        'export class Hidden implements BindModule { constructor() { bootstrap(); } configure(binder: Binder) { binder.bind(SaveApi); } }',
+        'export class Hidden implements BindModule { configure(binder: Binder) { hidden(binder.bind(SaveApi)); } }',
+        'export class Hidden implements BindModule { configure(binder: Binder) { for (const item of items) { binder.bind(item); } } }',
     ])('rejects setup, old authoring and hidden composition: %s', (source) => {
         const fixture = new Fixture();
         fixture.write('app', 'wiring.ts', fixture.source(valid + source));
@@ -61,11 +64,19 @@ describe('one canonical wiring-format rule', () => {
         fixture.write('app', 'wiring.ts', fixture.source(valid + '\n'.repeat(420) + '// too long'));
         fixture.write('app', 'implementation.ts', 'export function arbitrary() { return new ContainerModule(() => {}); }');
         const report = fixture.format().join('\n');
-        expect(report).toMatch(/wiring\.ts has \d+ lines, above maxLines 400\. Keep every BindingModule\/RouteModule and its registrations here beside the Wiring class/);
+        expect(report).toMatch(/wiring\.ts has \d+ lines, above maxLines 400\. Keep every BindModule\/RouteModule and its registrations here beside the Wiring class/);
         expect(report).not.toMatch(/move implementations to imported named modules|move (?:the )?(?:modules|registrations|bindings) (?:out|away|to)/i);
         const program = fixture.program();
         const other = program.getSourceFiles().find((file: ts.SourceFile) => file.fileName.endsWith('implementation.ts'))!;
         expect(new WiringFormat(program.getTypeChecker(), 400).problems(other)).toEqual([]);
+    });
+
+    it('names the renamed getters and the retired module contract', () => {
+        const fixture = new Fixture();
+        fixture.write('app', 'wiring.ts', fixture.source(valid.replace('getBindModules(): BindModule[] { return []; }\n    getRouteModules(): RouteModule[] { return []; }\n    getWirings', 'getBindingModules(): BindModule[] { return []; }\n    getRoutingModules(): RouteModule[] { return []; }\n    getWirings')));
+        const report = fixture.format().join('\n');
+        expect(report).toMatch(/getBindingModules was renamed to getBindModules/);
+        expect(report).toMatch(/getRoutingModules was renamed to getRouteModules/);
     });
 
     it('reports unchanged canonical violations from every participating owner in one failure', () => {
@@ -79,11 +90,11 @@ describe('one canonical wiring-format rule', () => {
 describe('#1146: modules and their registrations live in wiring.ts', () => {
     const application = `export class Application implements AppWiring {
         getWirings(): Wiring[] { return []; }
-        getBindingModules(): BindingModule[] { return [new Clients()]; }
-        getRoutingModules(): RouteModule[] { return [new Routes()]; }
+        getBindModules(): BindModule[] { return [new Clients()]; }
+        getRouteModules(): RouteModule[] { return [new Routes()]; }
     }`;
-    const modules = `export class Clients implements BindingModule {
-        configure(options: ContainerModuleLoadOptions): void { new RuntimeClients(options).bindRpc(SaveApi, SaveApi, 'store'); }
+    const modules = `export class Clients implements BindModule {
+        configure(binder: Binder): void { binder.createRpcClientAndBind(SaveApi, 'store'); }
     }
     export class Routes implements RouteModule { configure(router: WebpiecesRouter): void { router.addRoutes(AuthApi, AuthApi); } }`;
 
@@ -92,49 +103,42 @@ describe('#1146: modules and their registrations live in wiring.ts', () => {
         fixture.write('app', file, fixture.source(modules));
         fixture.write('app', 'wiring.ts', fixture.source(`import { Clients, Routes } from './${file.replace('.ts', '')}';\n${application}`));
         const report = fixture.format().join('\n');
-        expect(report).toMatch(new RegExp(`Clients is declared in .*${file}; declare this BindingModule class, with its registrations, here in wiring\\.ts`));
+        expect(report).toMatch(new RegExp(`Clients is declared in .*${file}; declare this BindModule class, with its registrations, here in wiring\\.ts`));
         expect(report).toMatch(new RegExp(`Routes is declared in .*${file}; declare this RouteModule class, with its registrations, here in wiring\\.ts`));
     });
 
     it('rejects selection getters or configure inherited from another file', () => {
         const fixture = new Fixture();
         fixture.write('app', 'RuntimeModules.ts', fixture.source(`
-            export class Prepared { getWirings(): Wiring[] { return []; } getBindingModules(): BindingModule[] { return []; } getRoutingModules(): RouteModule[] { return []; } }
+            export class Prepared { getWirings(): Wiring[] { return []; } getBindModules(): BindModule[] { return []; } getRouteModules(): RouteModule[] { return []; } }
             export class BaseRoutes { configure(router: WebpiecesRouter): void { router.addRoutes(AuthApi, AuthApi); } }`));
         fixture.write('app', 'wiring.ts', fixture.source(`import { Prepared, BaseRoutes } from './RuntimeModules';
             export class Routes extends BaseRoutes implements RouteModule {}
             export class Application extends Prepared implements AppWiring {}`));
         const report = fixture.format().join('\n');
-        expect(report).toMatch(/getBindingModules is inherited from .*RuntimeModules\.ts/);
+        expect(report).toMatch(/getBindModules is inherited from .*RuntimeModules\.ts/);
         expect(report).toMatch(/configure is inherited from .*RuntimeModules\.ts/);
     });
 
-    it('accepts the actual node registrations: DI chains, short DI factories, task/rpc clients, filters and module loads', () => {
+    it('accepts the actual node registrations: binder DI chains, short DI factories, clients created and bound, vendor binds and filters', () => {
         const fixture = new Fixture();
-        fixture.write('lib', 'modules.ts', `import { ContainerModule } from '../../node_modules/inversify/index';
-            export function createVendorModule(config: object): ContainerModule { return new ContainerModule(() => undefined); }
-            export class VendorModule extends ContainerModule { constructor(config: object) { super(() => undefined); } }`);
-        fixture.write('app', 'support.ts', `import { ContainerModule } from '../../node_modules/inversify/index';
-            export const LocalModule = new ContainerModule(() => undefined);
-            export class AppSecrets { static fromEnvironment(): object { return {}; } }
-            export class Hook {} export class Filter {} export const TOKEN = Symbol.for('token');`);
-        fixture.write('app', 'wiring.ts', fixture.source(`import { createVendorModule, VendorModule } from '../../lib/src/modules';
-            import { LocalModule, AppSecrets, Hook, Filter, TOKEN } from './support';
-            export class Clients implements BindingModule {
-                constructor(private readonly config: { vendor: object; value: object }) {}
-                async configure(options: ContainerModuleLoadOptions): Promise<void> {
-                    options.bind(TOKEN).to(Hook).inSingletonScope();
-                    options.bind<object>(Hook).toSelf().inSingletonScope();
-                    options.bind(SaveApi).toConstantValue(this.config.value);
-                    options.bind(AuthApi).toDynamicValue((ctx: ResolutionContext) => ctx.get(TOKEN)).inSingletonScope();
-                    options.bind(Filter).toDynamicValue(AppSecrets.fromEnvironment).inSingletonScope();
-                    const clients = new RuntimeClients(options);
-                    clients.bindRpc(SaveApi, SaveApi, 'store');
-                    new RuntimeTaskClients(options).bindPubSub(AuthApi, AuthApi, 'worker');
-                    new ExternalContractUse('vendor#VendorApi');
-                    await LocalModule.load(options);
-                    await createVendorModule(this.config.vendor).load(options);
-                    await new VendorModule(this.config.vendor).load(options);
+        fixture.write('vendor', 'api.ts', 'export abstract class VendorApi { abstract call(): void; } export class VendorClient extends VendorApi { call(): void {} }');
+        fixture.write('app', 'support.ts', `export class AppSecrets { static fromEnvironment(): object { return {}; } }
+            export class Hook {} export class Filter {} export const TOKEN = Symbol.for('token'); export const SECOND = Symbol.for('second');`);
+        fixture.write('app', 'wiring.ts', fixture.source(`import { VendorApi, VendorClient } from '../../vendor/src/api';
+            import { AppSecrets, Hook, Filter, TOKEN, SECOND } from './support';
+            export class Clients implements BindModule {
+                constructor(private readonly config: { value: object; filters: object[] }) {}
+                async configure(binder: Binder): Promise<void> {
+                    binder.bind(TOKEN).to(Hook).inSingletonScope();
+                    binder.bind<object>(Hook).toSelf().inSingletonScope();
+                    binder.bind(SaveApi).toConstantValue(this.config.value);
+                    binder.bind(AuthApi).toDynamicValue((ctx: ResolutionContext) => ctx.get(TOKEN)).inSingletonScope();
+                    binder.bind(Filter).toDynamicValue(AppSecrets.fromEnvironment).inSingletonScope();
+                    binder.createRpcClientAndBind(SaveApi, 'store');
+                    binder.createRpcClientAndBind(SaveApi, 'second-store', new ClientBindOptions(SECOND, this.config.filters));
+                    binder.createPubSubClientAndBind(TaskApi, 'worker', new PubSubBindOptions(TOKEN));
+                    binder.bindExternal(VendorApi, VendorClient);
                 }
             }
             export class Routes implements RouteModule {
@@ -145,12 +149,28 @@ describe('#1146: modules and their registrations live in wiring.ts', () => {
                 }
             }
             export class Application implements AppWiring {
-                constructor(private readonly config: { vendor: object; value: object }) {}
+                constructor(private readonly config: { value: object; filters: object[] }) {}
                 getWirings(): Wiring[] { return []; }
-                getBindingModules(): BindingModule[] { return [new Clients(this.config)]; }
-                getRoutingModules(): RouteModule[] { return [new Routes(new WiringPolicy('admin', true))]; }
+                getBindModules(): BindModule[] { return [new Clients(this.config)]; }
+                getRouteModules(): RouteModule[] { return [new Routes(new WiringPolicy('admin', true))]; }
             }`));
         expect(fixture.format()).toEqual([]);
+    });
+
+    it('accepts a library canonical wiring.ts that exports only BindModules', () => {
+        const fixture = new Fixture();
+        fixture.write('vendor', 'api.ts', 'export abstract class VendorApi { abstract call(): void; } export class VendorClient extends VendorApi { call(): void {} }');
+        fixture.write('vendor', 'wiring.ts', fixture.source(`import { VendorApi, VendorClient } from './api';
+            export class VendorBindModule implements BindModule {
+                constructor(private readonly config: object) {}
+                configure(binder: Binder): void {
+                    binder.bind(SaveApi).toConstantValue(this.config);
+                    binder.bindExternal(VendorApi, VendorClient);
+                }
+            }`));
+        const program = fixture.program();
+        const file = program.getSourceFile(path.join(fixture.root, 'vendor/src/wiring.ts'))!;
+        expect(new WiringFormat(program.getTypeChecker(), 400).problems(file)).toEqual([]);
     });
 
     it('accepts Angular provider recipes with named factories and initializers beside browser clients', () => {
@@ -162,10 +182,10 @@ describe('#1146: modules and their registrations live in wiring.ts', () => {
             export const ICON_PROVIDERS: object[] = []; export const NAVIGATION = Symbol.for('nav'); export const VERSION = Symbol.for('version');`);
         fixture.write('app', 'wiring.ts', fixture.source(`import { provideI18n, SchemePreference } from '../../ui-lib/src/index';
             import { NavigationData, NavigationService, AppNavigationService, ChromeText, chrome, initializeSession, ICON_PROVIDERS, NAVIGATION, VERSION } from './BrowserSetup';
-            export class AppBindings implements BindingModule {
+            export class AppBindings implements BrowserBindModule {
                 constructor(private readonly initial: object) {}
-                configure(bindings: BrowserBindings): void {
-                    bindings.add(
+                configure(binder: BrowserBinder): void {
+                    binder.provide(
                         makeEnvironmentProviders([
                             { provide: NAVIGATION, useFactory: (data: NavigationData): object => data.build(), deps: [NavigationData] },
                             { provide: NavigationService, useClass: AppNavigationService },
@@ -178,32 +198,36 @@ describe('#1146: modules and their registrations live in wiring.ts', () => {
                             provideAppInitializer(initializeSession),
                         ]),
                     );
-                    bindings.add(provideRpcClient(SaveApi, SaveApi, 'store'), provideRpcClient(AuthApi, AuthApi, 'store'));
+                    binder.createRpcClientAndBind(SaveApi, 'store');
+                    binder.createRpcClientAndBind(AuthApi, 'store', new BrowserClientBindOptions(NAVIGATION));
                 }
             }
-            export class Application implements AppWiring {
+            export class Application implements BrowserAppWiring {
                 constructor(private readonly initial: object) {}
-                getWirings(): Wiring[] { return []; }
-                getBindingModules(): BindingModule[] { return [new AppBindings(this.initial)]; }
-                getRoutingModules(): RouteModule[] { return []; }
+                getWirings(): BrowserWiring[] { return []; }
+                getBindModules(): BrowserBindModule[] { return [new AppBindings(this.initial)]; }
             }`));
         expect(fixture.format()).toEqual([]);
     });
 
     it.each([
-        ['a block-bodied DI factory', 'options.bind(SaveApi).toDynamicValue((ctx: ResolutionContext) => { audit(); return ctx.get(AuthApi); });'],
-        ['an inline initializer body', 'options.bind(SaveApi).toConstantValue(provideAppInitializer(() => { startTranslations(); }));'],
-        ['an owner helper returning a whole provider list', 'options.bind(SaveApi).toConstantValue(hiddenProviders());'],
-        ['an environment read', "options.bind(SaveApi).toConstantValue(process.env['SECRET']);"],
-        ['an environment property path', 'options.bind(SaveApi).toConstantValue(window.location);'],
-        ['computed configuration', "options.bind(SaveApi).toConstantValue(this.base + '/api');"],
-        ['a translation template', 'options.bind(SaveApi).toConstantValue(`${this.locale}-messages`);'],
-        ['a loop', 'for (const api of [SaveApi, AuthApi]) options.bind(api).toSelf();'],
-        ['a non-policy branch', 'if (this.base) options.bind(SaveApi).toSelf();'],
-        ['an else branch', 'if (this.policy.enabled) options.bind(SaveApi).toSelf(); else options.bind(AuthApi).toSelf();'],
-        ['an anonymous ContainerModule load', 'await new ContainerModule(() => undefined).load(options);'],
-        ['a promise chain hiding work', 'LocalModule.load(options).then(hiddenProviders);'],
-        ['a subscription body', 'options.bind(SaveApi).toConstantValue(subscribe((event: object) => { handle(event); }));'],
+        ['a block-bodied DI factory', 'binder.bind(SaveApi).toDynamicValue((ctx: ResolutionContext) => { audit(); return ctx.get(AuthApi); });'],
+        ['an inline initializer body', 'binder.bind(SaveApi).toConstantValue(provideAppInitializer(() => { startTranslations(); }));'],
+        ['an owner helper returning a whole provider list', 'binder.bind(SaveApi).toConstantValue(hiddenProviders());'],
+        ['an environment read', "binder.bind(SaveApi).toConstantValue(process.env['SECRET']);"],
+        ['an environment property path', 'binder.bind(SaveApi).toConstantValue(window.location);'],
+        ['computed configuration', "binder.bind(SaveApi).toConstantValue(this.base + '/api');"],
+        ['a translation template', 'binder.bind(SaveApi).toConstantValue(`${this.locale}-messages`);'],
+        ['a loop', 'for (const api of [SaveApi, AuthApi]) binder.bind(api).toSelf();'],
+        ['a non-policy branch', 'if (this.base) binder.bind(SaveApi).toSelf();'],
+        ['an else branch', 'if (this.policy.enabled) binder.bind(SaveApi).toSelf(); else binder.bind(AuthApi).toSelf();'],
+        ['an anonymous ContainerModule load', 'await new ContainerModule(() => undefined).load(binder);'],
+        ['an opaque named module load', 'await LocalModule.load(binder);'],
+        ['a promise chain hiding work', 'LocalModule.load(binder).then(hiddenProviders);'],
+        ['a retired RuntimeClients helper', "new RuntimeClients(binder).bindRpc(SaveApi, SaveApi, 'store');"],
+        ['a retired ExternalContractUse marker', "new ExternalContractUse('vendor#VendorApi');"],
+        ['a retired provideRpcClient recipe', "binder.bind(SaveApi).toConstantValue(provideRpcClient(SaveApi, SaveApi, 'store'));"],
+        ['a subscription body', 'binder.bind(SaveApi).toConstantValue(subscribe((event: object) => { handle(event); }));'],
         ['an arbitrary statement', 'console.log(SaveApi);'],
     ])('rejects %s inside configure', (_name: string, statement: string) => {
         const fixture = new Fixture();
@@ -211,29 +235,40 @@ describe('#1146: modules and their registrations live in wiring.ts', () => {
             export const LocalModule = new ContainerModule(() => undefined);
             export function hiddenProviders(): object[] { return []; }
             export function subscribe(handler: (event: object) => void): object { return {}; }
-            export function handle(event: object): void {} export function audit(): void {} export function startTranslations(): void {}`);
-        fixture.write('app', 'wiring.ts', fixture.source(`import { LocalModule, hiddenProviders, subscribe, handle, audit, startTranslations } from './support';
-            export class Clients implements BindingModule {
+            export function handle(event: object): void {} export function audit(): void {} export function startTranslations(): void {}
+            export class RuntimeClients { constructor(options: object) {} bindRpc(token: object, api: object, target: string): void {} }
+            export class ExternalContractUse { constructor(identity: string) {} }
+            export function provideRpcClient(token: object, api: object, target: string): object { return {}; }`);
+        fixture.write('app', 'wiring.ts', fixture.source(`import { LocalModule, hiddenProviders, subscribe, handle, audit, startTranslations, RuntimeClients, ExternalContractUse, provideRpcClient } from './support';
+            export class Clients implements BindModule {
                 constructor(private readonly base: string, private readonly locale: string, private readonly policy: WiringPolicy) {}
-                async configure(options: ContainerModuleLoadOptions): Promise<void> {
+                async configure(binder: Binder): Promise<void> {
                     ${statement}
                 }
             }
             export class Routes implements RouteModule { configure(router: WebpiecesRouter): void { router.addRoutes(AuthApi, AuthApi); } }
             export class Application implements AppWiring {
                 getWirings(): Wiring[] { return []; }
-                getBindingModules(): BindingModule[] { return [new Clients('base', 'en', new WiringPolicy('p', true))]; }
-                getRoutingModules(): RouteModule[] { return [new Routes()]; }
+                getBindModules(): BindModule[] { return [new Clients('base', 'en', new WiringPolicy('p', true))]; }
+                getRouteModules(): RouteModule[] { return [new Routes()]; }
             }`));
         expect(fixture.format().join('\n')).toMatch(/wiring\.ts:\d+:\d+: .*(?:configure contains only|recognized registration|declarative registration arguments|Removed topology shape)/);
     });
 
-    it('accepts the complete Lang-sized server wiring.ts under the 400-line bound', () => {
+    it('accepts the complete Lang server wiring.ts, selecting library BindModules in one line, under the 200-line bound', () => {
         const fixture = new Fixture();
         const source = new LangWiring().install(fixture);
         const lines = source.trimEnd().split('\n').length;
-        expect(lines).toBeGreaterThan(260);
-        expect(lines).toBeLessThanOrEqual(400);
+        expect(lines).toBeGreaterThan(150);
+        expect(lines).toBeLessThanOrEqual(200);
         expect(fixture.format()).toEqual([]);
+        const declarations = new Map(['app', 'server-auth', 'company', 'lesson-rules', 'lib-gcp-storage', 'lib-gcp-tts']
+            .map((project: string): [string, RuntimeDeclaration] => [project, fixture.extract(project)]));
+        const assembled = new RuntimeWiringAssembler(declarations).assemble('app');
+        const external = assembled.filter((relationship: ResolvedWiringRelationship) => relationship.transport === 'external');
+        expect(external.map((relationship: ResolvedWiringRelationship) => `${relationship.owner}#${relationship.api}`))
+            .toEqual(['lib-gcp-storage#StorageApi', 'lib-gcp-tts#TextToSpeechApi']);
+        expect(assembled.filter((relationship: ResolvedWiringRelationship) => relationship.direction === 'uses' && relationship.transport === 'rpc')).toHaveLength(7);
+        expect(assembled.filter((relationship: ResolvedWiringRelationship) => relationship.direction === 'uses' && relationship.transport === 'pubsub')).toHaveLength(2);
     });
 });

@@ -65,7 +65,4 @@ export type { ClientFilter } from '@webpieces/http-client-core';
 export type { ApiPrototype } from '@webpieces/http-client-core';
 export { StreamingCapabilityError } from '@webpieces/http-client-core';
 
-export { RuntimeClients } from './RuntimeClients';
-export { ClientToken } from '@webpieces/http-client-core';
-
-export { WiringPolicy, ExternalContractUse } from '@webpieces/http-client-core';
+export { WiringPolicy } from '@webpieces/http-client-core';

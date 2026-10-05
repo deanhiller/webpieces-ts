@@ -49,8 +49,6 @@ export { StreamingCapabilityError } from './StreamingCapabilityError';
 export { Utf8Codec } from './Utf8Codec';
 export type { ByteReadableStream, ByteStreamReader, ByteReadResult } from './ByteStream';
 
-export type { Wiring, AppWiring } from './Wiring';
-export { WiringModules } from './Wiring';
-export { ClientToken } from './ClientToken';
-export { ExternalContractUse } from './ExternalContractUse';
+export type { BindModule, Wiring, AppWiring } from './Wiring';
+export { WiringModules, WiringOrder } from './Wiring';
 export { WiringPolicy } from './WiringPolicy';

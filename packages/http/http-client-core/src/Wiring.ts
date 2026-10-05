@@ -1,35 +1,55 @@
-/** Platform adapters supply their own module types; topology stays transport independent. */
-export interface Wiring<B, R> {
-    getBindingModules(): B[];
-    getRoutingModules(): R[];
+/**
+ * One named DI module, for every host. The host hands it the ONE binder it understands: Node's binder
+ * wraps an Inversify load, the browser's collects Angular provider recipes. Each host re-exports a
+ * non-generic alias, so app code still writes `implements BindModule`.
+ */
+export interface BindModule<B> {
+    configure(binder: B): void | Promise<void>;
 }
 
-/** Only applications select libraries. Libraries expose their own two module channels. */
-export interface AppWiring<B, R> extends Wiring<B, R> {
-    getWirings(): Wiring<B, R>[];
+/** A library's selectable modules. Hosts with routes (Node) add their route channel on top. */
+export interface Wiring<M> {
+    getBindModules(): M[];
 }
 
-/** Ordered materialization preserves configured instances and repeated selections. */
-export class WiringModules<B, R> {
-    readonly bindingModules: B[];
-    readonly routingModules: R[];
+/** Only applications select libraries. */
+export interface AppWiring<M, W extends Wiring<M> = Wiring<M>> extends Wiring<M> {
+    getWirings(): W[];
+}
 
-    constructor(app: AppWiring<B, R>) {
-        this.bindingModules = [...app.getBindingModules()];
-        this.routingModules = [...app.getRoutingModules()];
-        const selected = new Map<Wiring<B, R>, WiringLists<B, R>>();
-        for (const library of app.getWirings()) {
-            let lists = selected.get(library);
-            if (lists === undefined) {
-                lists = new WiringLists(library.getBindingModules(), library.getRoutingModules());
-                selected.set(library, lists);
+/**
+ * The app first, then each selected library in order. A repeated selection is retained (its lists
+ * appear again) but each wiring instance's getters run exactly once.
+ */
+export class WiringOrder<W> {
+    readonly ordered: W[];
+
+    constructor(app: W, libraries: readonly W[]) {
+        this.ordered = [app, ...libraries];
+    }
+
+    collect<T>(read: (wiring: W) => T[]): T[] {
+        const cache = new Map<W, T[]>();
+        const result: T[] = [];
+        for (const wiring of this.ordered) {
+            let list = cache.get(wiring);
+            if (list === undefined) {
+                list = [...read(wiring)];
+                cache.set(wiring, list);
             }
-            this.bindingModules.push(...lists.bindings);
-            this.routingModules.push(...lists.routes);
+            result.push(...list);
         }
+        return result;
     }
 }
 
-class WiringLists<B, R> {
-    constructor(readonly bindings: B[], readonly routes: R[]) {}
+/** Ordered materialization of the bind channel; preserves configured instances and repeated selections. */
+export class WiringModules<M> {
+    readonly bindModules: M[];
+
+    constructor(app: AppWiring<M>) {
+        this.bindModules = new WiringOrder<Wiring<M>>(app, app.getWirings()).collect(
+            (wiring: Wiring<M>) => wiring.getBindModules(),
+        );
+    }
 }

@@ -80,8 +80,8 @@ class OrderRecordingFilters implements RouteModule {
 
 /** The SAME production LegacyWiring, plus the test filters; production wiring.ts carries no test seam. */
 class OrderRecordingLegacyWiring extends LegacyWiring {
-    getRoutingModules(): RouteModule[] {
-        return [new OrderRecordingFilters(), ...super.getRoutingModules()];
+    override getRouteModules(): RouteModule[] {
+        return [new OrderRecordingFilters(), ...super.getRouteModules()];
     }
 }
 

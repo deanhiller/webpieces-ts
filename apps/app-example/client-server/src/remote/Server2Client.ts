@@ -1,8 +1,8 @@
 /**
  * Re-exports the server2 contract this service USES (see service-contract.json
- * `uses: ["@webpieces/server2-api"]`). The prod binding in src/wiring.ts (RuntimeClientsModule) turns
- * Server2Api into a real HTTP client (ClientHttpFactory) with magic-context
- * transfer; tests rebind it to a mock/simulator.
+ * `uses: ["@webpieces/server2-api"]`). The prod binding in src/wiring.ts (RuntimeClientsModule,
+ * binder.createRpcClientAndBind under the TYPES.Server2Api token) turns Server2Api into a real HTTP
+ * client (ClientHttpFactory) with magic-context transfer; tests rebind it to a mock/simulator.
  */
 export { Server2Api, FetchValueRequest, FetchValueResponse } from '@webpieces/server2-api';
 

@@ -28,6 +28,8 @@
         "inversify": "7.10.4",
         "jsonwebtoken": "9.0.2",
         "minimatch": "10.0.1",
-        "@webpieces/http-client-core": "workspace:*"
+        "@webpieces/http-client-core": "workspace:*",
+        "@webpieces/http-client-node": "workspace:*",
+        "@webpieces/cloudtasks-client": "workspace:*"
     }
 }

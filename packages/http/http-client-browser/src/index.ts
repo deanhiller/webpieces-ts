@@ -78,10 +78,10 @@ export {
     ValidateImplementation,
 } from '@webpieces/core-util';
 
-export type { Wiring, AppWiring, BindingModule, RouteModule } from './Wiring';
-export { BrowserBindings, BrowserWiringProviders } from './Wiring';
+// The browser host's wiring: bind modules only (no route channel) and the Binder they configure.
+export type { Wiring, AppWiring, BindModule } from './Wiring';
+export { Binder, ClientBindOptions, BrowserWiringProviders } from './Wiring';
 export { BrowserValueProvider, BrowserClassProvider, BrowserExistingProvider, BrowserFactoryProvider } from './BrowserProviders';
 export type { BrowserProvider, BrowserToken, BrowserType } from './BrowserProviders';
-export { RpcClientProvider, provideRpcClient } from './RpcClientProvider';
 
-export { WiringPolicy, ExternalContractUse } from '@webpieces/http-client-core';
+export { WiringPolicy } from '@webpieces/http-client-core';
