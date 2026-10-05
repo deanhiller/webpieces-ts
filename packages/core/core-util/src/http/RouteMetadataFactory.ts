@@ -91,7 +91,9 @@ export class RouteMetadataFactory {
             bodyParameterIndex,
             this.responseType(options.responseType, apiClass, methodName),
             streaming,
-            options.background === true,
+            options.hideProgress === true,
+            options.noLogging === true,
+            options.allowUpgradeInFlight === true,
         );
         route.authorization = getAuthorization(apiClass, methodName);
         route.apiClass = apiClass;

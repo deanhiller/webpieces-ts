@@ -34,27 +34,64 @@ export interface EndpointOptions {
      */
     rawBody?: boolean;
     /**
-     * This route is plumbing the USER did not ask for — a log shipper, a heartbeat, a telemetry
-     * flush. It is not progress to report, and it must not be logged as an api call, because the
-     * line it would write is itself the thing being shipped.
+     * The app should show NO progress UI for this call — it is not something the USER is waiting on
+     * (a background download, a log shipper, a heartbeat, a telemetry flush).
      *
-     * Rides the route metadata for the same reason {@link formPost} and {@link rawBody} do: the
-     * consumer branches on the ROUTE, without knowing the apiClass/methodName. Two consumers read
-     * it today — {@link LogApiCallImpl} emits no `[API-*-req]`/`[API-*-resp-*]` line for the call,
-     * and an app's `RequestLifecycleListener` can skip its progress bar and its own RPC
-     * instrumentation.
+     * webpieces draws no progress bar itself; it DECLARES the fact and carries it on
+     * `RouteMetadata.hideProgress`, which an app's `RequestLifecycleListener` reads to keep the call
+     * out of its bar. WHY a declaration on the endpoint: the alternative is the app matching path
+     * strings in its listener, which silently drifts the first time a route is renamed. The ROUTE is
+     * the stable fact, so the decision belongs to the route's author.
+     *
+     * Independent of {@link noLogging} and {@link allowUpgradeInFlight}: a background download hides
+     * its progress yet still wants its `[API-*]` lines (exactly what you need when a sync is slow)
+     * and still must finish before an app upgrades under it.
+     *
+     * Default false: absent means the call drives the app's progress UI, like any ordinary route.
+     * `grep -rn hideProgress` lists every endpoint the user is not shown waiting on.
+     */
+    hideProgress?: boolean;
+    /**
+     * webpieces writes NO `[API-*-req]` / `[API-*-resp-*]` line for this call, on either side —
+     * {@link LogApiCallImpl} reads it via `ApiMethodInfo.noLogging`, handed in by both the client
+     * proxy and the server's `LogApiFilter` — and stamps no per-call `api` tag.
      *
      * WHY a declaration and not a suppression switch: shipping a log over a logged transport logs
-     * about shipping logs. The two mechanisms that do not know the endpoint both failed in prod
-     * (see #976) — a wall-clock "we are shipping" boolean swallowed unrelated lines including an
-     * error alarm, and a logger-name allowlist was incomplete by construction the moment anyone
-     * added a logger, producing a steady-state 4-lines-per-second request loop on an idle page.
+     * about shipping logs — the line describing the call IS the thing being shipped, and emitting it
+     * feeds the next batch its own payload. The two mechanisms that do not know the endpoint both
+     * failed in prod (see #976) — a wall-clock "we are shipping" boolean swallowed unrelated lines
+     * including an error alarm, and a logger-name allowlist was incomplete by construction the moment
+     * anyone added a logger, producing a steady-state 4-lines-per-second request loop on an idle page.
      * The ENDPOINT is the only stable, declarative fact, so it is where the decision belongs.
      *
+     * Rides the route metadata for the same reason {@link formPost} and {@link rawBody} do: the
+     * consumer branches on the ROUTE, without knowing the apiClass/methodName.
+     *
      * Default false: absent means the ordinary, fully-logged route. The quiet path is the one you
-     * have to say out loud, so `grep -rn background` lists every endpoint webpieces stops logging.
+     * have to say out loud, so `grep -rn noLogging` lists every endpoint webpieces stops logging.
      */
-    background?: boolean;
+    noLogging?: boolean;
+    /**
+     * An app MAY upgrade (reload onto a newer deployed bundle) while this call is in flight, and the
+     * call neither blocks nor arms that upgrade.
+     *
+     * By default every RPC participates in the app's upgrade decision: the app must not upgrade while
+     * it is in flight, and it counts toward the "finished with a SUCCESS result" boundary at which an
+     * app typically arms its seamless upgrade. That default is the safe one — reloading under an
+     * in-flight write or download loses it. A call nobody asked for, and that is harmless to cut off
+     * (a log shipper, a heartbeat), declares `true` so it can neither hold an upgrade hostage nor be
+     * the success that triggers one.
+     *
+     * WHY separate from {@link hideProgress}: apps commonly arm an upgrade off their progress bar's
+     * request group, so hiding a call from the bar used to drop it out of the upgrade decision as a
+     * side effect. A hidden background download must still block an upgrade until it succeeds; only
+     * this flag, said out loud, lets a call stop participating.
+     *
+     * webpieces only declares and carries it (`RouteMetadata.allowUpgradeInFlight`); the app's
+     * `RequestLifecycleListener` / upgrade logic decides what to do with it. Default false.
+     * `grep -rn allowUpgradeInFlight` lists every endpoint an upgrade may cut off.
+     */
+    allowUpgradeInFlight?: boolean;
     /**
      * This route is NOT part of the CUSTOMER-facing contract. `public-openapi.json` — the document a
      * customer gets, and the only one a publish path uploads — contains no path, no operation, no

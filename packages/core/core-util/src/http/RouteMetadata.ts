@@ -53,17 +53,27 @@ export class RouteMetadata {
      */
     readonly rawBody: boolean;
     /**
-     * True when @Endpoint(..., { background: true }): this route is plumbing the user did not ask
-     * for (a log shipper, a heartbeat, a telemetry flush). Rides the route metadata for the same
-     * reason {@link formPost} and {@link rawBody} do — each consumer branches on the ROUTE, without
-     * knowing the apiClass/methodName.
-     *
-     * Read by {@link LogApiCallImpl} (via ApiMethodInfo, exactly as {@link mask} is) so no
-     * `[API-*-req]`/`[API-*-resp-*]` line is emitted for the call, and readable from an app's
-     * `RequestLifecycleListener.onRequestStart/onRequestEnd` so a progress bar and any app-level RPC
-     * instrumentation can skip it too. Default false = an ordinary, fully-logged route.
+     * True when @Endpoint(..., { hideProgress: true }): the app should show no progress UI for this
+     * call. webpieces does not act on it; an app's `RequestLifecycleListener.onRequestStart/onRequestEnd`
+     * reads it from the ROUTE, for the same reason {@link formPost} and {@link rawBody} ride here —
+     * the consumer branches without knowing the apiClass/methodName. Default false = the call drives
+     * the progress UI.
      */
-    readonly background: boolean;
+    readonly hideProgress: boolean;
+    /**
+     * True when @Endpoint(..., { noLogging: true }): read by {@link LogApiCallImpl} (via
+     * ApiMethodInfo, exactly as {@link mask} is) so no `[API-*-req]`/`[API-*-resp-*]` line is
+     * emitted for the call, on the client or the server. Default false = an ordinary, fully-logged
+     * route.
+     */
+    readonly noLogging: boolean;
+    /**
+     * True when @Endpoint(..., { allowUpgradeInFlight: true }): an app may upgrade while this call is
+     * in flight, and the call neither blocks nor arms an upgrade. webpieces only carries it; the
+     * app's `RequestLifecycleListener` / upgrade logic reads it. Default false = the app must not
+     * upgrade while the call is in flight, and its success counts toward arming one.
+     */
+    readonly allowUpgradeInFlight: boolean;
 
     constructor(
         httpMethod: string,
@@ -85,7 +95,9 @@ export class RouteMetadata {
         readonly responseType: EndpointResponseType = 'body',
         /** Present only for `(ResponseStream) => Promise<RequestStream>` contracts. */
         readonly streaming?: StreamingEndpointMetadata,
-        background: boolean = false,
+        hideProgress: boolean = false,
+        noLogging: boolean = false,
+        allowUpgradeInFlight: boolean = false,
     ) {
         this.httpMethod = httpMethod;
         this.path = path;
@@ -100,6 +112,8 @@ export class RouteMetadata {
         this.bodyParameterIndex = bodyParameterIndex;
         this.responseType = responseType;
         this.streaming = streaming;
-        this.background = background;
+        this.hideProgress = hideProgress;
+        this.noLogging = noLogging;
+        this.allowUpgradeInFlight = allowUpgradeInFlight;
     }
 }
