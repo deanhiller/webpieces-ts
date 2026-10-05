@@ -19,23 +19,31 @@ import { RequestOutcome } from '@webpieces/http-client-core';
  * `onRequestStart` and `onRequestEnd` are PAIRED: every start is followed by exactly one end, on
  * every path (2xx, HTTP error, network reject), so a counter driven off them cannot leak.
  *
- * `route.background` is the endpoint's own declaration that it is plumbing the user did not ask for
- * — a log shipper, a heartbeat, a telemetry flush (`@Endpoint(..., { background: true })`). It is not
- * progress, so a bar driven off these callbacks should skip it, and so should any app-level RPC
- * instrumentation whose own lines would otherwise become the next batch's payload. webpieces already
- * emits no `[API-client-*]` line for such a route; this is the app's half of the same fact, read from
- * the ROUTE rather than matched on a path string.
+ * Three independent endpoint declarations ride the route, each read from the ROUTE rather than
+ * matched on a path string, each false when absent:
+ *
+ * - `route.hideProgress` (`@Endpoint(..., { hideProgress: true })`) — the user is not waiting on this
+ *   call (a background download, a log shipper), so a bar driven off these callbacks should skip it.
+ * - `route.allowUpgradeInFlight` (`@Endpoint(..., { allowUpgradeInFlight: true })`) — the app may
+ *   upgrade while this call is in flight, and the call neither blocks nor arms that upgrade. Absent,
+ *   the call must finish before an upgrade, and its success counts toward arming one — even when it
+ *   is hidden from the bar.
+ * - `route.noLogging` (`@Endpoint(..., { noLogging: true })`) — webpieces already emits no
+ *   `[API-client-*]` line for it; app-level RPC instrumentation whose own lines would become the next
+ *   log batch's payload should skip it too.
+ *
+ * A log shipper declares all three; a background download declares only `hideProgress`.
  *
  * ```typescript
  * class RpcLifecycleListener implements RequestLifecycleListener {
  *     onRequestStart(route: RouteMetadata): void {
- *         if (route.background) return;
- *         progressBar.noteRequestStart();
+ *         if (!route.allowUpgradeInFlight) upgradeGate.noteRequestStart();
+ *         if (!route.hideProgress) progressBar.noteRequestStart();
  *     }
  *     onRequestEnd(route: RouteMetadata, outcome: RequestOutcome): void {
  *         serverVersionBridge.set(outcome.headers?.get('x-myorg-server-version'));
- *         if (route.background) return;
- *         progressBar.noteRequestEnd(!outcome.ok);
+ *         if (!route.allowUpgradeInFlight) upgradeGate.noteRequestEnd(outcome.ok);
+ *         if (!route.hideProgress) progressBar.noteRequestEnd(!outcome.ok);
  *     }
  * }
  * const factory = new ClientHttpBrowserFactory(store, new RpcLifecycleListener());

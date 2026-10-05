@@ -540,13 +540,13 @@ describe('LogApiCall.isUserError (side-dependent)', () => {
 });
 
 /**
- * `@Endpoint(..., { background: true })` — the log-shipper case (#976).
+ * `@Endpoint(..., { noLogging: true })` — the log-shipper case (#976).
  *
- * Pinned in BOTH directions on purpose: asserting only that the background route is silent would
+ * Pinned in BOTH directions on purpose: asserting only that the noLogging route is silent would
  * still pass if `execute` stopped logging entirely, so every silence assertion is paired with the
  * SAME call on a normal route proving the line is still emitted.
  */
-describe('LogApiCall.execute — background routes are not api-logged', () => {
+describe('LogApiCall.execute — noLogging routes are not api-logged', () => {
     const capturing = new CapturingLoggerFactory();
     const previousFactory = LogManager.getFactory();
 
@@ -561,19 +561,19 @@ describe('LogApiCall.execute — background routes are not api-logged', () => {
         LogManager.setFactory(previousFactory);
     });
 
-    /** The log-shipping endpoint: a real call identity, declared background. */
-    const backgroundInfo = (side: ApiSide): ApiMethodInfo =>
+    /** The log-shipping endpoint: a real call identity, declared noLogging. */
+    const noLoggingInfo = (side: ApiSide): ApiMethodInfo =>
         new ApiMethodInfo(side, 'BrowserLogApi', 'sendBatch', undefined, undefined, true);
 
     /** True when any captured line carries `marker` — the "it still logs" half of each pair. */
     const logged = (marker: string): boolean =>
         capturing.lines.some((line: string) => line.includes(marker));
 
-    it('emits NO [API-client-req]/[API-client-resp-SUCCESS] line for a background route, while a normal route emits both', async () => {
+    it('emits NO [API-client-req]/[API-client-resp-SUCCESS] line for a noLogging route, while a normal route emits both', async () => {
         capturing.lines.length = 0;
         const ctx = new RecordingApiCallContext();
 
-        await ctx.logApiCall.execute(backgroundInfo('client'), { lines: ['a'] }, async () => ({
+        await ctx.logApiCall.execute(noLoggingInfo('client'), { lines: ['a'] }, async () => ({
             accepted: 1,
         }));
 
@@ -588,11 +588,11 @@ describe('LogApiCall.execute — background routes are not api-logged', () => {
         expect(logged('[API-client-resp-SUCCESS]')).toBe(true);
     });
 
-    it('emits NO [API-server-req] line for a background route (the log-INGEST endpoint), while a normal route does', async () => {
+    it('emits NO [API-server-req] line for a noLogging route (the log-INGEST endpoint), while a normal route does', async () => {
         capturing.lines.length = 0;
         const ctx = new RecordingApiCallContext();
 
-        await ctx.logApiCall.execute(backgroundInfo('server'), { lines: ['a'] }, async () => ({
+        await ctx.logApiCall.execute(noLoggingInfo('server'), { lines: ['a'] }, async () => ({
             accepted: 1,
         }));
         expect(capturing.lines).toEqual([]);
@@ -606,7 +606,7 @@ describe('LogApiCall.execute — background routes are not api-logged', () => {
         const ctx = new RecordingApiCallContext();
 
         await expect(
-            ctx.logApiCall.execute(backgroundInfo('client'), { lines: ['a'] }, async () => {
+            ctx.logApiCall.execute(noLoggingInfo('client'), { lines: ['a'] }, async () => {
                 throw new Error('ingest down');
             }),
         ).rejects.toThrow('ingest down');
@@ -624,14 +624,14 @@ describe('LogApiCall.execute — background routes are not api-logged', () => {
         const ctx = new RecordingApiCallContext();
 
         const response = await ctx.logApiCall.execute(
-            backgroundInfo('client'),
+            noLoggingInfo('client'),
             { lines: ['a'] },
             async () => ({ accepted: 1 }),
         );
         expect(response).toEqual({ accepted: 1 });
 
         await expect(
-            ctx.logApiCall.execute(backgroundInfo('client'), undefined, async () => ({
+            ctx.logApiCall.execute(noLoggingInfo('client'), undefined, async () => ({
                 accepted: 0,
             })),
         ).rejects.toThrow('Request cannot be null and was from BrowserLogApi.sendBatch');
@@ -643,7 +643,7 @@ describe('LogApiCall.execute — background routes are not api-logged', () => {
         ctx.active = false;
 
         await expect(
-            ctx.logApiCall.execute(backgroundInfo('client'), { lines: ['a'] }, async () => ({
+            ctx.logApiCall.execute(noLoggingInfo('client'), { lines: ['a'] }, async () => ({
                 accepted: 1,
             })),
         ).resolves.toEqual({ accepted: 1 });
@@ -654,8 +654,25 @@ describe('LogApiCall.execute — background routes are not api-logged', () => {
     });
 
     it('defaults to false, so every existing ApiMethodInfo caller keeps logging', () => {
-        expect(new ApiMethodInfo('client', 'SaveApi', 'save').background).toBe(false);
-        expect(info('client').background).toBe(false);
-        expect(backgroundInfo('client').background).toBe(true);
+        expect(new ApiMethodInfo('client', 'SaveApi', 'save').noLogging).toBe(false);
+        expect(info('client').noLogging).toBe(false);
+        expect(noLoggingInfo('client').noLogging).toBe(true);
+    });
+
+    it('is the ONLY flag that silences logging: hideProgress + allowUpgradeInFlight alone still log (#1148)', async () => {
+        capturing.lines.length = 0;
+        const ctx = new RecordingApiCallContext();
+        // A background download: hidden from the bar, upgrade-safe, but its [API-*] lines are wanted.
+        const hiddenButLogged = new ApiMethodInfo(
+            'client', 'OfflineApi', 'fetchManifest', undefined, undefined, false, true, true,
+        );
+        expect(hiddenButLogged.hideProgress).toBe(true);
+        expect(hiddenButLogged.allowUpgradeInFlight).toBe(true);
+        expect(new ApiMethodInfo('client', 'SaveApi', 'save').hideProgress).toBe(false);
+        expect(new ApiMethodInfo('client', 'SaveApi', 'save').allowUpgradeInFlight).toBe(false);
+
+        await ctx.logApiCall.execute(hiddenButLogged, { q: 'x' }, async () => ({ ok: true }));
+        expect(logged('[API-client-req]')).toBe(true);
+        expect(logged('[API-client-resp-SUCCESS]')).toBe(true);
     });
 });

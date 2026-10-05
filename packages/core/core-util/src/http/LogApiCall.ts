@@ -72,7 +72,7 @@ export class LogApiCallImpl {
         method: (dto: Q) => Promise<R>,
         responseCount?: (response: R) => number | undefined,
     ): Promise<R> {
-        if (methodInfo.background) {
+        if (methodInfo.noLogging) {
             return this.executeUnlogged(methodInfo, requestDto, method);
         }
         const side = methodInfo.side;
@@ -148,18 +148,18 @@ export class LogApiCallImpl {
     }
 
     /**
-     * The `@Endpoint(..., { background: true })` path: run the call and say NOTHING about it.
+     * The `@Endpoint(..., { noLogging: true })` path: run the call and say NOTHING about it.
      *
      * No `[API-*]` line, no {@link ApiCallInfo} stamp, and no serialization of either DTO — a
-     * background route is a log shipper or a heartbeat, so a line describing the call IS the thing
-     * being shipped, and emitting it feeds the next batch its own payload (#976).
+     * noLogging route is a log shipper or a log-ingest endpoint, so a line describing the call IS the
+     * thing being shipped, and emitting it feeds the next batch its own payload (#976).
      *
      * It deliberately does NOT call {@link activeContext}: that guard exists because a call with
-     * nowhere to STAMP a tag is a bug, and this path stamps nothing. A background call is therefore
+     * nowhere to STAMP a tag is a bug, and this path stamps nothing. A noLogging call is therefore
      * legal outside a RequestContext scope, which is exactly where a flusher tends to run.
      *
      * The null-request check is kept, because it is a contract error and not observability — a
-     * background route deserves the same error as any other, and the throw propagates to the caller
+     * noLogging route deserves the same error as every other route, and the throw propagates to the caller
      * unlogged here, exactly as the logged path re-throws.
      *
      * `responseCount` is not taken: it feeds only the `api.responseCount` tag, which is not emitted.
