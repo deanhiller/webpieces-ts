@@ -220,6 +220,37 @@ export class LangWiring {
             'export class LangHeadersDto { static readonly ALL_HEADERS: string[] = []; }',
             'export class CompanyHeaders { static readonly ALL: string[] = []; }',
         ].join('\n'));
+        this.installLibraries(fixture);
+        fixture.write('server-auth', 'wiring.ts', fixture.source(`
+            export class AuthRouteModule implements RouteModule { configure(router: WebpiecesRouter): void { router.addRoutes(AuthApi, AuthApi); } }
+            export class ServerAuthWiring implements Wiring {
+                constructor(private readonly config: object) {}
+                getBindModules(): BindModule[] { return []; }
+                getRouteModules(): RouteModule[] { return [new AuthRouteModule()]; }
+            }`));
+        fixture.write('company', 'wiring.ts', fixture.source(`
+            export class CompanyRouteModule implements RouteModule {
+                constructor(private readonly publicWarmup: WiringPolicy) {}
+                configure(router: WebpiecesRouter): void { if (this.publicWarmup.enabled) router.addRoutes(SaveApi, SaveApi); }
+            }
+            export class CompanyWiring implements Wiring {
+                constructor(private readonly publicWarmup: WiringPolicy) {}
+                getBindModules(): BindModule[] { return []; }
+                getRouteModules(): RouteModule[] { return [new CompanyRouteModule(this.publicWarmup)]; }
+            }`));
+        fixture.write('app', 'controllers.ts', CONTROLLERS.map((name: string) => `export class ${name} {}`).join('\n'));
+        fixture.write('app', 'support.ts', `export class WebAppConfig {} export class OfflineConfig {}
+            export class LangMcpTokenAuthority {} export class McpFirstSeenFilter {} export class TermsGateFilter {}
+            export class LangAppSettingsProvider {} export class LangCourseSummaryStore {} export class LangCourseStore {}
+            export class LangConfig { webApp = new WebAppConfig(); offline = new OfflineConfig(); storage = {}; privateStorage = {}; tts = {}; }
+            export class PreparedLangAppWiring { constructor(protected readonly config: LangConfig) {} userErrorCodes(): string[] { return []; } }`);
+        const source = fixture.source(LANG_WIRING_BODY);
+        fixture.write('app', 'wiring.ts', source);
+        return source;
+    }
+
+    /** The vendor/library owners, each with a canonical wiring.ts exporting only BindModules. */
+    private installLibraries(fixture: Fixture): void {
         fixture.write('lesson-rules', 'index.ts', `export const LESSON_RULE_LIB_TYPES = { CourseSummaryStoreApi: Symbol.for('CourseSummaryStoreApi') };
             export interface CourseSummaryStoreApi { summary(): void; }
             export const WARMUP_TYPES = { DownstreamWarmup: Symbol.for('DownstreamWarmup') };
@@ -258,32 +289,5 @@ export class LangWiring {
                     binder.bindExternal(TextToSpeechApi, GcpTextToSpeechClient);
                 }
             }`));
-        fixture.write('server-auth', 'wiring.ts', fixture.source(`
-            export class AuthRouteModule implements RouteModule { configure(router: WebpiecesRouter): void { router.addRoutes(AuthApi, AuthApi); } }
-            export class ServerAuthWiring implements Wiring {
-                constructor(private readonly config: object) {}
-                getBindModules(): BindModule[] { return []; }
-                getRouteModules(): RouteModule[] { return [new AuthRouteModule()]; }
-            }`));
-        fixture.write('company', 'wiring.ts', fixture.source(`
-            export class CompanyRouteModule implements RouteModule {
-                constructor(private readonly publicWarmup: WiringPolicy) {}
-                configure(router: WebpiecesRouter): void { if (this.publicWarmup.enabled) router.addRoutes(SaveApi, SaveApi); }
-            }
-            export class CompanyWiring implements Wiring {
-                constructor(private readonly publicWarmup: WiringPolicy) {}
-                getBindModules(): BindModule[] { return []; }
-                getRouteModules(): RouteModule[] { return [new CompanyRouteModule(this.publicWarmup)]; }
-            }`));
-        fixture.write('app', 'controllers.ts', CONTROLLERS.map((name: string) => `export class ${name} {}`).join('\n'));
-        fixture.write('app', 'support.ts', `export class WebAppConfig {} export class OfflineConfig {}
-            export class LangMcpTokenAuthority {} export class McpFirstSeenFilter {} export class TermsGateFilter {}
-            export class LangAppSettingsProvider {} export class LangCourseSummaryStore {} export class LangCourseStore {}
-            export class LangConfig { webApp = new WebAppConfig(); offline = new OfflineConfig(); storage = {}; privateStorage = {}; tts = {}; }
-            export class PreparedLangAppWiring { constructor(protected readonly config: LangConfig) {} userErrorCodes(): string[] { return []; } }`);
-        const source = fixture.source(LANG_WIRING_BODY);
-        fixture.write('app', 'wiring.ts', source);
-        return source;
     }
-
 }
