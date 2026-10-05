@@ -1,7 +1,8 @@
 /**
  * Re-exports the server2 contract this legacy service USES. The prod binding in
- * src/wiring.ts (RuntimeClientsModule) turns Server2Api into a real HTTP client (ClientHttpFactory)
- * with magic-context transfer; tests rebind it to an in-process simulator.
+ * src/wiring.ts (RuntimeClientsModule, binder.createRpcClientAndBind under the TYPES.Server2Api
+ * token) turns Server2Api into a real HTTP client (ClientHttpFactory) with magic-context transfer;
+ * tests rebind it to an in-process simulator.
  *
  * Copied into legacy-server (not imported from client-server): a LEGACY app must
  * not depend on a greenfield sibling server — it stands on its own, sharing only

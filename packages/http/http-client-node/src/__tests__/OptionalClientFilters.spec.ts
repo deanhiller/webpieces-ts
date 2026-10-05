@@ -1,7 +1,6 @@
 import { WpAuthorization, AuthorizationType } from '@webpieces/core-util';
 import 'reflect-metadata';
-import { Container, ContainerModule } from 'inversify';
-import { RuntimeClients } from '../RuntimeClients';
+import { Container, ContainerModule, ResolutionContext } from 'inversify';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import {
     ApiPath,
@@ -171,12 +170,12 @@ describe('createRpcClient filters are genuinely optional', () => {
         const filters = [new ClientFilterDefinition(500, new OutboundLogFilter())];
         await container.load(
             new ContainerModule((options) => {
-                new RuntimeClients(options).bindRpc(
-                    SvcApi,
-                    SvcApi,
-                    'svc',
-                    filters,
-                );
+                options
+                    .bind(SvcApi)
+                    .toDynamicValue((context: ResolutionContext) =>
+                        context.get(ClientHttpFactory).createRpcClient(SvcApi, new ClientConfig('svc'), filters),
+                    )
+                    .inSingletonScope();
             }),
         );
         const client = container.get(SvcApi);

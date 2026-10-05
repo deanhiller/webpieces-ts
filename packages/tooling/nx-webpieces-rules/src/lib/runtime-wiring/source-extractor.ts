@@ -14,6 +14,7 @@ import {
 } from './declaration';
 import { WiringSourceValues } from './source-values';
 import { WiringSourceTypes } from './source-types';
+import type { WiringKind } from './source-types';
 import * as fs from 'fs';
 
 /** Build-only extraction. It never imports application modules or invokes their constructors. */
@@ -68,37 +69,42 @@ export class WiringSourceExtractor {
         );
     }
 
+    /**
+     * The registration forms that carry graph facts: binder.createRpcClientAndBind /
+     * createPubSubClientAndBind / bindExternal and router.addRoutes (plus the factory calls they wrap).
+     */
     private facts(node: ts.Node, owner: string): void {
-        if (ts.isNewExpression(node) && new WiringSourceTypes(this.program.getTypeChecker()).isFramework(node.expression, 'ExternalContractUse'))
-            this.recordExternal(node, owner);
         if (ts.isCallExpression(node) && this.frameworkCall(node)) {
             const name = this.values.symbolName(node.expression);
-            if (['addRoutes', 'createRpcClient', 'createPubSubClient', 'bindRpc', 'bindPubSub', 'provideRpcClient'].includes(name))
+            if (name === 'bindExternal') this.recordExternal(node, owner);
+            else if (['addRoutes', 'createRpcClient', 'createPubSubClient', 'createRpcClientAndBind', 'createPubSubClientAndBind'].includes(name))
                 this.recordRelationship(node, name, owner);
         }
         ts.forEachChild(node, (child: ts.Node) => this.facts(child, owner));
     }
 
-    private recordExternal(expression: ts.NewExpression, owner: string): void {
-        const identity = expression.arguments?.[0];
-        if (identity === undefined || !ts.isStringLiteralLike(identity))
+    /**
+     * binder.bindExternal(Api, VendorImpl): the vendor contract's identity comes from the resolved
+     * symbol, exactly like any other API. An APPLICATION owner must also prove a production business
+     * consumer of it; a library module binds an adapter for whichever app selects it, so its
+     * consumer lives in that app.
+     */
+    private recordExternal(call: ts.CallExpression, owner: string): void {
+        const api = call.arguments[0];
+        if (api === undefined || call.arguments[1] === undefined)
+            this.fail('bindExternal requires the external API contract and its vendor implementation.');
+        const contract = this.values.identity(api!);
+        if (
+            this.info.tags.includes('webpieces') &&
+            !this.values.hasExternalConsumer(this.info.name, contract.project, contract.exportedName, this.program)
+        )
             this.fail(
-                'ExternalContractUse belongs to a selected exported module and requires a literal project#contract identity.',
-            );
-        const qualified = (identity as ts.StringLiteralLike).text.split('#');
-        const project = qualified[0];
-        const exportedName = qualified[1];
-        const extra = qualified[2];
-        if (!project || !exportedName || extra !== undefined)
-            this.fail('ExternalContractUse requires one qualified project#contract identity.');
-        if (!this.values.hasExternalConsumer(this.info.name, project, exportedName, this.program))
-            this.fail(
-                `${project}#${exportedName} has no production business consumer in ${this.info.name}; adapters and test doubles do not establish uses.`,
+                `${contract.project}#${contract.exportedName} has no production business consumer in ${this.info.name}; adapters and test doubles do not establish uses.`,
             );
         const exported = this.exported[owner];
         exported.relationships.push(
             new WiringRelationship(
-                new ContractIdentity(project, exportedName),
+                contract,
                 new UsesFacts('external', {
                     kind: 'unknown',
                     reason: 'Vendor interface; destination classified by approved contract metadata',
@@ -109,11 +115,7 @@ export class WiringSourceExtractor {
     }
 
     private recordRelationship(call: ts.CallExpression, method: string, owner: string): void {
-        const apiIndex =
-            method === 'bindRpc' || method === 'bindPubSub' || method === 'provideRpcClient'
-                ? 1
-                : 0;
-        const api = call.arguments[apiIndex];
+        const api = call.arguments[0];
         if (api === undefined) this.fail(`${method} requires an explicit API contract.`);
         const contract = this.values.identity(api!);
         const direction = method === 'addRoutes' ? 'implements' : 'uses';
@@ -121,7 +123,7 @@ export class WiringSourceExtractor {
         const transport =
             method === 'addRoutes'
                 ? contractTransport
-                : method === 'bindPubSub' || method === 'createPubSubClient'
+                : method === 'createPubSubClientAndBind' || method === 'createPubSubClient'
                   ? 'pubsub'
                   : 'rpc';
         if (transport !== contractTransport)
@@ -131,7 +133,7 @@ export class WiringSourceExtractor {
         const target =
             direction === 'implements'
                 ? undefined
-                : this.values.target(call.arguments[apiIndex + 1]);
+                : this.values.target(call.arguments[1]);
         const exported = this.exported[owner];
         exported.relationships.push(
             new WiringRelationship(
@@ -166,9 +168,11 @@ export class WiringSourceExtractor {
             this.facts(configure!.body!, owner);
             return;
         }
-        const bindings = this.moduleSelections(owner, types.method(declaration, 'getBindingModules'), 'binding');
-        const routes = this.moduleSelections(owner, types.method(declaration, 'getRoutingModules'), 'routing');
-        const libraries = kind === 'app' ? this.moduleSelections(owner, types.method(declaration, 'getWirings'), 'wiring') : [];
+        const bindings = this.moduleSelections(owner, types.method(declaration, 'getBindModules'), 'binding', kind);
+        // The browser has no route channel; a Node Wiring's getRouteModules is required by its type.
+        const routeGetter = types.method(declaration, 'getRouteModules');
+        const routes = routeGetter === undefined ? [] : this.moduleSelections(owner, routeGetter, 'routing', kind);
+        const libraries = kind === 'app' ? this.moduleSelections(owner, types.method(declaration, 'getWirings'), 'wiring', kind) : [];
         if (kind === 'wiring' && types.method(declaration, 'getWirings') !== undefined)
             this.fail(`${owner}: library Wiring cannot select other Wirings.`);
         this.exported[owner] = new WiringExport(kind, [], bindings, routes, libraries);
@@ -184,9 +188,9 @@ export class WiringSourceExtractor {
         }
     }
 
-    private moduleSelections(owner: string, method: ts.MethodDeclaration | undefined, expected: 'binding' | 'routing' | 'wiring'): WiringSelection[] {
+    private moduleSelections(owner: string, method: ts.MethodDeclaration | undefined, expected: 'binding' | 'routing' | 'wiring', ownerKind: WiringKind): WiringSelection[] {
         if (method !== undefined && path.resolve(method.getSourceFile().fileName) !== this.wiringPath)
-            this.fail(`${owner}: its selection getter is declared in ${method.getSourceFile().fileName}; declare getBindingModules/getRoutingModules/getWirings on ${owner} itself in ${this.wiringPath}.`);
+            this.fail(`${owner}: its selection getter is declared in ${method.getSourceFile().fileName}; declare getBindModules/getRouteModules/getWirings on ${owner} itself in ${this.wiringPath}.`);
         const statements = method?.body?.statements;
         const expression = statements?.length === 1 && ts.isReturnStatement(statements[0]) ? statements[0].expression : undefined;
         if (expression === undefined || !ts.isArrayLiteralExpression(expression))
@@ -196,36 +200,42 @@ export class WiringSourceExtractor {
             if (!ts.isNewExpression(element) || types.kind(element.expression) !== expected)
                 this.fail(`Wrong ${expected} selection ${element.getText()}; AppWiring children, delegation and nested lists are forbidden.`);
             const identity = this.values.identity(element.expression);
-            this.assertCanonicalDeclaration(owner, element.expression, identity, expected);
+            this.assertCanonicalDeclaration(owner, element.expression, identity, expected, ownerKind);
             return new WiringSelection(identity.project, identity.exportedName, this.values.arguments(element), this.values.policies(element));
         });
     }
 
     /**
-     * A selected module must be declared in THIS wiring.ts, and a selected library Wiring in its own
-     * owner's src/wiring.ts. Proven by the resolved declaration, never by a name, and checked before
-     * any argument analysis, so an off-file module body is never read.
+     * OWNER-canonical: a selected module is declared in THIS wiring.ts, or - for a BindModule an
+     * AppWiring selects, and for a library Wiring - in its library owner's canonical src/wiring.ts.
+     * Proven by the resolved declaration (so a re-export resolves to its true file), never by a name,
+     * and checked before any argument analysis, so an off-file module body is never read.
      */
     private assertCanonicalDeclaration(
         owner: string,
         selected: ts.Expression,
         identity: ContractIdentity,
         expected: 'binding' | 'routing' | 'wiring',
+        ownerKind: WiringKind,
     ): void {
         const declaration = new WiringSourceTypes(this.program.getTypeChecker()).declaration(selected);
         const declaredIn = declaration === undefined ? 'an unresolved file' : path.resolve(declaration.getSourceFile().fileName);
-        if (expected !== 'wiring') {
-            if (declaredIn === this.wiringPath) return;
-            const role = expected === 'binding' ? 'BindingModule' : 'RouteModule';
-            this.fail(
-                `${owner} selects ${identity.exportedName}, which is declared in ${declaredIn}. Declare the ${role} class ${identity.exportedName}, with its registrations, beside ${owner} in ${this.wiringPath}.`,
-            );
-        }
+        if (declaredIn === this.wiringPath && expected !== 'wiring') return;
         const library = this.infos.get(identity.project);
         const canonical = library === undefined ? undefined : path.resolve(this.workspaceRoot, library.root, 'src/wiring.ts');
-        if (canonical !== undefined && declaredIn === canonical) return;
+        const fromLibrary = identity.project !== this.info.name && canonical !== undefined && declaredIn === canonical;
+        if (expected === 'wiring' && fromLibrary) return;
+        if (expected === 'binding' && ownerKind === 'app' && fromLibrary) return;
+        if (expected === 'wiring')
+            this.fail(
+                `${owner} selects library Wiring ${identity.project}#${identity.exportedName}, which is declared in ${declaredIn}. A library Wiring and its modules belong in that library's canonical ${canonical ?? 'src/wiring.ts'}.`,
+            );
+        const role = expected === 'binding' ? 'BindModule' : 'RouteModule';
+        const where = expected === 'binding' && ownerKind === 'app'
+            ? ` beside ${owner} in ${this.wiringPath}, or in its library owner's canonical src/wiring.ts`
+            : ` beside ${owner} in ${this.wiringPath}`;
         this.fail(
-            `${owner} selects library Wiring ${identity.project}#${identity.exportedName}, which is declared in ${declaredIn}. A library Wiring and its modules belong in that library's canonical ${canonical ?? 'src/wiring.ts'}.`,
+            `${owner} selects ${identity.exportedName}, which is declared in ${declaredIn}. Declare the ${role} class ${identity.exportedName}, with its registrations,${where}; a ContainerModule or a class in any other file is never a module.`,
         );
     }
 
@@ -270,7 +280,7 @@ export class WiringSourceExtractor {
     private fail(message: string): never {
         throw new RuleFailError('validate-runtime-architecture', message, undefined, undefined, [
             new Option(
-                'Declare each owner\'s Wiring/AppWiring class AND its BindingModule/RouteModule classes, with their registrations (RuntimeClients.bindRpc(token, Api, deployment), RuntimeTaskClients.bindPubSub, provideRpcClient, addRoutes, addFilter, DI binds), together in that owner\'s canonical src/wiring.ts, and use the documented getter grammar; extraction reads only wiring.ts and never executes configuration.',
+                'Declare each owner\'s Wiring/AppWiring class AND its BindModule/RouteModule classes, with their registrations (binder.createRpcClientAndBind(Api, deployment), binder.createPubSubClientAndBind, binder.bindExternal(Api, VendorImpl), binder.bind chains, browser binder.provide recipes, router.addRoutes/addFilter), together in that owner\'s canonical src/wiring.ts (an app may also select a BindModule from a library owner\'s canonical src/wiring.ts), and use the documented getter grammar (getBindModules/getRouteModules/getWirings); extraction reads only canonical wiring.ts files and never executes configuration.',
                 true,
             ),
         ]);

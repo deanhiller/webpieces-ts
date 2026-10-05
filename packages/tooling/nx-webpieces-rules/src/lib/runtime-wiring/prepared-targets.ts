@@ -43,7 +43,7 @@ export class PreparedTargets {
             if (channel === 'policy' && ts.isPropertyAccessExpression(node) && node.name.text === 'enabled')
                 retain(this.path(node.expression));
             if (channel === 'target' && ts.isCallExpression(node) && this.clientCall(node)) {
-                const target = node.arguments[2];
+                const target = node.arguments[1];
                 if (target !== undefined) retain(this.path(target));
             }
             if (ts.isNewExpression(node) && this.types.kind(node.expression) !== undefined) {
@@ -70,10 +70,10 @@ export class PreparedTargets {
 
     private clientCall(call: ts.CallExpression): boolean {
         const signature = this.checker.getResolvedSignature(call)?.declaration;
-        if (signature === undefined || (!ts.isMethodDeclaration(signature) && !ts.isFunctionDeclaration(signature))) return false;
+        if (signature === undefined || (!ts.isMethodDeclaration(signature) && !ts.isMethodSignature(signature))) return false;
         const file = signature.getSourceFile().fileName.replace(/\\/g, '/');
         const name = signature.name?.getText();
-        return name !== undefined && ['bindRpc', 'bindPubSub', 'provideRpcClient'].includes(name) &&
-            /(?:\/packages\/(?:http|cloud)\/|\/node_modules\/@webpieces\/)(?:http-client-node|http-client-browser|cloudtasks-client)\//.test(file);
+        return name !== undefined && ['createRpcClientAndBind', 'createPubSubClientAndBind'].includes(name) &&
+            /(?:\/packages\/http\/|\/node_modules\/@webpieces\/)(?:http-routing|http-client-browser)\//.test(file);
     }
 }

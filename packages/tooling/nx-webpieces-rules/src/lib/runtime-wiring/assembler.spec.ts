@@ -131,15 +131,15 @@ describe('approved runtime composition', () => {
         expect(new RuntimeWiringAssembler(new Map([['app', declaration]])).assemble('app')).toEqual(
             [],
         );
-        declaration.exports.Plan.routingModules[0].policies.publicWarmup = true;
+        declaration.exports.Plan.routeModules[0].policies.publicWarmup = true;
         expect(
             new RuntimeWiringAssembler(new Map([['app', declaration]])).assemble('app'),
         ).toMatchObject([{ owner: 'core-api', api: 'WarmupApi' }]);
-        declaration.exports.Plan.routingModules[0].policies.publicWarmup = 'runtime';
+        declaration.exports.Plan.routeModules[0].policies.publicWarmup = 'runtime';
         expect(
             new RuntimeWiringAssembler(new Map([['app', declaration]])).assemble('app'),
         ).toMatchObject([{ conditional: 'app#Routes:publicWarmup' }]);
-        delete declaration.exports.Plan.routingModules[0].policies.publicWarmup;
+        delete declaration.exports.Plan.routeModules[0].policies.publicWarmup;
         expect(() =>
             new RuntimeWiringAssembler(new Map([['app', declaration]])).assemble('app'),
         ).toThrow('Missing explicit policy');

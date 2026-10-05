@@ -45,7 +45,7 @@ export class RuntimeDeclarationCodec {
             if (exported.kind !== 'app' && exported.wirings.length > 0)
                 this.fail(`${name}: only AppWiring may select library Wirings.`);
             if (!['app', 'wiring'].includes(exported.kind) &&
-                (exported.bindingModules.length > 0 || exported.routingModules.length > 0))
+                (exported.bindModules.length > 0 || exported.routeModules.length > 0))
                 this.fail(`${name}: leaf modules cannot select module lists.`);
             if (['app', 'wiring'].includes(exported.kind) && exported.relationships.length > 0)
                 this.fail(`${name}: declare relationships in named binding/route modules.`);
@@ -72,7 +72,9 @@ export class RuntimeDeclarationCodec {
 
     // webpieces-disable no-any-unknown -- untrusted JSON is narrowed and validated at the input boundary
     private exported(value: unknown): WiringExport {
-        const exported = this.record(value, ['kind', 'relationships', 'bindingModules', 'routingModules', 'wirings']);
+        this.renamed(value, 'bindingModules', 'bindModules');
+        this.renamed(value, 'routingModules', 'routeModules');
+        const exported = this.record(value, ['kind', 'relationships', 'bindModules', 'routeModules', 'wirings']);
         const kind = this.string(exported['kind']);
         if (
             kind !== 'binding' &&
@@ -85,10 +87,16 @@ export class RuntimeDeclarationCodec {
         return new WiringExport(
             kind,
             this.array(exported['relationships']).map((value) => this.relationship(value)),
-            this.array(exported['bindingModules']).map((value) => this.selection(value)),
-            this.array(exported['routingModules']).map((value) => this.selection(value)),
+            this.array(exported['bindModules']).map((value) => this.selection(value)),
+            this.array(exported['routeModules']).map((value) => this.selection(value)),
             this.array(exported['wirings']).map((value) => this.selection(value)),
         );
+    }
+
+    // webpieces-disable no-any-unknown -- untrusted JSON is narrowed before the renamed-field check
+    private renamed(value: unknown, old: string, renamed: string): void {
+        if (Object.hasOwn(this.record(value), old))
+            this.fail(`runtime-deps field ${old} was renamed to ${renamed}; regenerate the candidate from src/wiring.ts (getBindModules/getRouteModules) and review it.`);
     }
 
     // webpieces-disable no-any-unknown -- untrusted relationship JSON is narrowed before construction

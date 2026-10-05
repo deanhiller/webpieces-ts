@@ -1,0 +1,14 @@
+{
+    "schemaVersion": 2,
+    "project": "company-svc-core",
+    "framework": "node",
+    "exports": {
+        "CompanyAuthBindModule": {
+            "kind": "binding",
+            "relationships": [],
+            "bindModules": [],
+            "routeModules": [],
+            "wirings": []
+        }
+    }
+}

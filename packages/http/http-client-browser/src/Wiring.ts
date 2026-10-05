@@ -1,35 +1,62 @@
-import type { BrowserProvider } from './BrowserProviders';
-import type { Wiring as Topology, AppWiring as AppTopology } from '@webpieces/http-client-core';
+import type { BrowserProvider, BrowserToken } from './BrowserProviders';
+import type {
+    ApiPrototype,
+    BindModule as HostBindModule,
+    Wiring as HostWiring,
+    AppWiring as HostAppWiring,
+} from '@webpieces/http-client-core';
 import { WiringModules } from '@webpieces/http-client-core';
+import { RpcClientProvider } from './RpcClientProvider';
 
-/** The browser adapter imports neither Angular nor Node runtime or types. */
-export class BrowserBindings {
-    readonly providers: BrowserProvider[] = [];
+/**
+ * Options for {@link Binder.createRpcClientAndBind}. `token` is an EXTRA identity, needed only when two
+ * clients of the SAME api must coexist (e.g. one per deployment); omitted, the API class is the token.
+ */
+export class ClientBindOptions<T> {
+    constructor(public readonly token?: ApiPrototype<T> | symbol) {}
+}
 
-    add(provider: BrowserProvider): void {
-        this.providers.push(provider);
+/**
+ * The browser host's binder, handed to every {@link BindModule}.configure. It collects structural
+ * provider recipes; the package imports neither Angular nor Node runtime or types.
+ */
+export class Binder {
+    private readonly recipes: BrowserProvider[] = [];
+
+    /** Angular-compatible provider recipes, in order. */
+    provide(...recipes: BrowserProvider[]): void {
+        this.recipes.push(...recipes);
+    }
+
+    /** Registers a lazy factory provider: the client is created from ClientHttpBrowserFactory on first inject. */
+    createRpcClientAndBind<T extends object>(
+        api: ApiPrototype<T>,
+        deployment: string,
+        options?: ClientBindOptions<NoInfer<T>>,
+    ): void {
+        const token: BrowserToken = options?.token ?? api;
+        this.recipes.push(new RpcClientProvider<T>(token, api, deployment));
+    }
+
+    get providers(): BrowserProvider[] {
+        return [...this.recipes];
     }
 }
 
-export interface BindingModule {
-    configure(bindings: BrowserBindings): void;
+/** A browser DI module. Angular router providers are ordinary provider recipes here. */
+export interface BindModule extends HostBindModule<Binder> {
+    configure(binder: Binder): void;
 }
 
-/** Lazy route providers remain separate from domain bindings. */
-export interface RouteModule {
-    configure(bindings: BrowserBindings): void;
-}
+/** The browser has no route channel: a Wiring selects bind modules only. */
+export interface Wiring extends HostWiring<BindModule> {}
+export interface AppWiring extends HostAppWiring<BindModule, Wiring> {}
 
-export interface Wiring extends Topology<BindingModule, RouteModule> {}
-export interface AppWiring extends AppTopology<BindingModule, RouteModule> {}
-
-/** Configure the selected domain and route modules once, in topology order. */
+/** Configure the selected bind modules once, in topology order. */
 export class BrowserWiringProviders {
     toProviders(app: AppWiring): BrowserProvider[] {
-        const modules = new WiringModules(app);
-        const bindings = new BrowserBindings();
-        for (const module of modules.bindingModules) module.configure(bindings);
-        for (const module of modules.routingModules) module.configure(bindings);
-        return bindings.providers;
+        const binder = new Binder();
+        for (const module of new WiringModules<BindModule>(app).bindModules) module.configure(binder);
+        return binder.providers;
     }
 }

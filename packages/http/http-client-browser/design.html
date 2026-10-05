@@ -55,7 +55,12 @@
             cursor: pointer;
         }
         .wp-node-menu-item:hover { background: #E3F2FD; }
-        g.wp-node-clickable { cursor: pointer; }
+        g.wp-node-clickable { cursor: pointer; outline: none; }
+        /* DOM keyboard focus is independent of graph highlight/Lock and stays dim with its node. */
+        g.wp-node-clickable.wp-keyboard-focus {
+            outline: 2px dashed #7b1fa2;
+            outline-offset: 2px;
+        }
         /* Every shape Graphviz (or the runtime page's own queue-cylinder redraw) can emit for a node
          * body: box/record -> polygon, circle -> ellipse, cylinder and the redrawn queue -> path. A
          * shape left out of this list would be a box that is clickable but never looks it. */
@@ -113,12 +118,42 @@
             constructor(label, onSelect) { this.label = label; this.onSelect = onSelect; }
         }
         class WpNodeMenu {
-            static close() {
+                        static keyboard = false;
+            static owner = null;
+            static ownerKeyboard = false;
+            static wired = new WeakSet();
+            static close(returnFocus = false) {
                 const open = document.getElementById('wp-node-menu');
-                if (open !== null) open.remove();
+                const owner = WpNodeMenu.owner;
+                const keyboard = WpNodeMenu.ownerKeyboard;
+                WpNodeMenu.owner = null;
+                if (open === null) return;
+                open.remove();
+                if (returnFocus && keyboard && owner?.isConnected) {
+                    WpNodeMenu.keyboard = true;
+                    owner.focus({ preventScroll: true });
+                }
             }
+            static focusedName(svg) {
+                const active = document.activeElement;
+                const menu = document.getElementById('wp-node-menu');
+                const node = menu?.contains(active) && WpNodeMenu.ownerKeyboard
+                    ? WpNodeMenu.owner : active;
+                return svg?.contains(node) && (node === WpNodeMenu.owner || node?.classList.contains('wp-keyboard-focus'))
+                    ? node.querySelector('title')?.textContent.trim() : null;
+            }
+            static restoreFocus(svg, name) {
+                if (name == null) return;
+                const nodes = Array.from(svg.querySelectorAll('g.wp-node-clickable'));
+                const node = nodes.find(node => node.querySelector('title')?.textContent.trim() === name);
+                WpNodeMenu.keyboard = true;
+                (node || nodes[0])?.focus({ preventScroll: true });
+            }
+
             static open(nodeEl, name, items) {
                 WpNodeMenu.close();
+                WpNodeMenu.owner = nodeEl;
+                WpNodeMenu.ownerKeyboard = WpNodeMenu.keyboard;
                 const menu = document.createElement('div');
                 menu.id = 'wp-node-menu';
                 menu.className = 'wp-node-menu';
@@ -130,6 +165,7 @@
                 for (const item of items) menu.appendChild(WpNodeMenu.button(item));
                 document.body.appendChild(menu);
                 WpNodeMenu.place(menu, nodeEl);
+                menu.querySelector('button')?.focus({ preventScroll: true });
             }
             static button(item) {
                 const button = document.createElement('button');
@@ -139,12 +175,12 @@
                 button.addEventListener('click', function (ev) {
                     ev.preventDefault();
                     ev.stopPropagation();
-                    WpNodeMenu.close();
+                    WpNodeMenu.close(true);
                     item.onSelect();
                 });
                 return button;
             }
-            static place(menu, nodeEl) {
+                        static place(menu, nodeEl) {
                 const box = nodeEl.getBoundingClientRect();
                 const own = menu.getBoundingClientRect();
                 const maxLeft = window.scrollX + document.documentElement.clientWidth - own.width - 8;
@@ -153,13 +189,35 @@
                 menu.style.left = left + 'px';
                 menu.style.top = (box.bottom + window.scrollY + 4) + 'px';
             }
+
+            static wireKeyboard(node, name, itemsFor) {
+            node.addEventListener('keydown', function (ev) {
+                if (ev.key !== 'Enter' && ev.key !== ' ') return;
+                ev.preventDefault();
+                ev.stopPropagation();
+                WpNodeMenu.keyboard = true;
+                WpNodeMenu.open(node, name, itemsFor(name, node));
+            });
+        }
             static wire(svg, itemsFor) {
                 svg.querySelectorAll('g.node').forEach(function (node) {
                     const title = node.querySelector('title');
                     const name = title === null || title.textContent === null
                         ? '' : title.textContent.trim();
                     if (name === '') return;
+                    if (node.classList.contains('wp-layout')) return;
+                    if (WpNodeMenu.wired.has(node)) return;
+                    WpNodeMenu.wired.add(node);
+                    node.addEventListener('focus', function () {
+                        node.classList.toggle('wp-keyboard-focus', WpNodeMenu.keyboard);
+                    });
+                    node.addEventListener('blur', function () {
+                        node.classList.remove('wp-keyboard-focus');
+                    });
                     node.classList.add('wp-node-clickable');
+                    node.setAttribute('tabindex', '0');
+                    node.setAttribute('role', 'button');
+                    WpNodeMenu.wireKeyboard(node, name, itemsFor);
                     node.addEventListener('click', function (ev) {
                         ev.preventDefault();
                         ev.stopPropagation();
@@ -171,6 +229,19 @@
 
         class WpNodeLock {
             constructor(svg) { this.svg = svg; this.locked = null; }
+            rebind(svg) {
+                const name = this.locked;
+                this.svg = svg;
+                this.clear();
+                this.locked = name;
+                if (name === null) return;
+                for (const node of svg.querySelectorAll('g.node')) {
+                    if (node.querySelector('title')?.textContent === name) {
+                        this.lock(name, node);
+                        break;
+                    }
+                }
+            }
             isLocked(name) { return this.locked === name; }
             toggle(name, nodeEl) {
                 if (this.locked === name) this.clear();
@@ -191,10 +262,20 @@
             }
         }
 
+        document.addEventListener('pointerdown', function () {
+            WpNodeMenu.keyboard = false;
+            document.querySelectorAll('.wp-keyboard-focus').forEach(function (node) {
+                node.classList.remove('wp-keyboard-focus');
+            });
+        }, true);
         document.addEventListener('click', function () { WpNodeMenu.close(); });
         document.addEventListener('keydown', function (ev) {
-            if (ev.key === 'Escape') WpNodeMenu.close();
-        });</script>
+            if (ev.altKey || ev.ctrlKey || ev.metaKey) return;
+            WpNodeMenu.keyboard = true;
+            const active = document.activeElement;
+            if (active?.classList.contains('wp-node-clickable')) active.classList.add('wp-keyboard-focus');
+            if (ev.key === 'Escape') WpNodeMenu.close(true);
+        }, true);</script>
     <script>
         const graphs = [{"id":"graph-0","dot":"digraph \"ClientHttpBrowserFactory\" {\n  rankdir=TB;\n  node [shape=box, fontname=\"Arial\"];\n  edge [fontname=\"Arial\", fontsize=11];\n\n  \"ClientHttpBrowserFactory\" [fillcolor=\"#E0F2F1\", style=\"filled\", label=\"ClientHttpBrowserFactory\\n(L0, transient)\", penwidth=2];\n  \"MutableContextStore\" [fillcolor=\"#F5F5F5\", style=\"filled\", label=\"MutableContextStore\\n(L1, transient)\"];\n  \"RequestLifecycleListener\" [fillcolor=\"#FCE4EC\", style=\"filled,dashed\", label=\"RequestLifecycleListener\\n(L1, transient)\"];\n\n  { rank=same; \"ClientHttpBrowserFactory\"; }\n  { rank=same; \"MutableContextStore\"; \"RequestLifecycleListener\"; }\n\n  \"ClientHttpBrowserFactory\" -> \"MutableContextStore\";\n  \"ClientHttpBrowserFactory\" -> \"RequestLifecycleListener\";\n\n  labelloc=\"t\";\n  label=\"ClientHttpBrowserFactory\\n(apiImplementation, Level 0-1)\";\n  fontsize=16;\n}\n","stackedIds":["ClientHttpBrowserFactory","MutableContextStore"]}];
         

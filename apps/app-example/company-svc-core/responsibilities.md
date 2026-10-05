@@ -6,6 +6,7 @@ Company-wide shared SERVER core (node-only, `framework:express`). Holds the sing
 
 - `bootstrapServer(meta, options)` — the one startup sequence every service uses: install the server log backend, build `WebpiecesConfig`, `WebpiecesFactory.create(meta)`, `server.start(port)`, park on SIGTERM/SIGINT, and log+exit(1) on startup error.
 - `BootstrapOptions` — the per-service inputs (port, logger name, and the `LoggerFactory` seam where a node-only backend like bunyan/winston/pino is plugged in).
+- `CompanyAuthBindModule` (canonical `src/wiring.ts`) — the shared `AuthConfig` binding every service selects in one line from its `getBindModules()`.
 - `CompanyHeadersModule` — the shared company-header DI binding (`PlatformHeadersExtension` of `CompanyHeaders`), previously copy-pasted per service.
 
 ## Out of Scope

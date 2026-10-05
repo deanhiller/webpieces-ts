@@ -95,8 +95,12 @@ export { LogApiFilter } from './filters/LogApiFilter';
 // Filter matching
 export { FilterMatcher, HttpFilter } from './FilterMatcher';
 
-// The app's server-surface declaration: DI binding modules + route groups + headers.
-export type { Wiring, AppWiring, BindingModule, RouteModule } from './Wiring';
+// The app's server-surface declaration: DI bind modules + route groups + headers.
+export type { Wiring, AppWiring, BindModule, RouteModule } from './Wiring';
+export { NodeWiringModules } from './Wiring';
+// The Node binder every BindModule.configure receives.
+export type { Binder } from './Binder';
+export { ContainerBinder, ClientBindOptions, PubSubBindOptions } from './Binder';
 
 // The public API-surface abstraction: declare routes/filters, get them back as ApiClient[].
 export { ApiFactory } from './ApiFactory';
@@ -147,4 +151,4 @@ export { AuthorizationHook, AuthorizationService, CanonicalUserRoles, AUTHORIZAT
 export { AuthorizedApiDocument } from './AuthorizedApiDocument';
 export type { ApiDocumentObject, ApiDocumentValue } from './AuthorizedApiDocument';
 
-export { WiringPolicy, ExternalContractUse } from '@webpieces/http-client-core';
+export { WiringPolicy } from '@webpieces/http-client-core';

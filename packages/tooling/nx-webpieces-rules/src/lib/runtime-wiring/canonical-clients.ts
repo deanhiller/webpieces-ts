@@ -83,16 +83,22 @@ export class CanonicalClientBindings {
             return; // Custom config options aren't supported by helpers.
         const api = call.arguments[0].getText();
         const target = config.arguments[0].getText();
-        const filters = call.arguments[2] === undefined ? '' : `, ${call.arguments[2].getText()}`;
-        const replacement = task
-            ? `new RuntimeTaskClients(options).bindPubSub(${token.getText()}, ${api}, ${target});`
-            : provider
-              ? `provideRpcClient(${token.getText()}, ${api}, ${target})`
-              : `new RuntimeClients(options).bindRpc(${token.getText()}, ${api}, ${target}${filters});`;
+        const filters = call.arguments[2]?.getText();
+        const helper = task ? 'createPubSubClientAndBind' : 'createRpcClientAndBind';
+        const options = this.options(token.getText() === api ? undefined : token.getText(), filters, task, provider);
+        const replacement = `binder.${helper}(${api}, ${target}${options});`;
         const location = file.getLineAndCharacterOfPosition(factory.getStart(file));
         problems.push(
             `${file.fileName}:${location.line + 1}:${location.character + 1}: canonical client registration required: ${replacement}`,
         );
+    }
+
+    /** The optional trailing options argument: an extra token only when it differs from the api, plus RPC filters. */
+    private options(token: string | undefined, filters: string | undefined, task: boolean, browser: boolean): string {
+        if (task || browser)
+            return token === undefined ? '' : `, new ${task ? 'PubSubBindOptions' : 'ClientBindOptions'}(${token})`;
+        if (token === undefined && filters === undefined) return '';
+        return `, new ClientBindOptions(${token ?? 'undefined'}${filters === undefined ? '' : `, ${filters}`})`;
     }
 
     private singleton(call: ts.CallExpression): boolean {

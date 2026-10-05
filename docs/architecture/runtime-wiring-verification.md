@@ -1,5 +1,32 @@
 # Wiring v2 producer verification
 
+## BindModule, Binder and OWNER-canonical selection (#1150)
+
+Issue [#1150](https://github.com/deanhiller/webpieces-ts/issues/1150) renames `BindingModule` to
+`BindModule` (generic `BindModule<B>` in `@webpieces/http-client-core`, non-generic Node and browser
+aliases), makes `RouteModule` Node-only, renames the getters to `getBindModules()` /
+`getRouteModules()` / `getWirings()` and the approval fields to `bindModules` / `routeModules`
+(schema version stays 2; the old names are rejected naming the new ones). Each `configure` receives
+its host's `Binder`: Node's `bind` / `createRpcClientAndBind` / `createPubSubClientAndBind` /
+`bindExternal`, the browser's `provide` / `createRpcClientAndBind`. `RuntimeClients`,
+`RuntimeTaskClients`, `provideRpcClient`, `ExternalContractUse`, `ClientToken` and `BrowserBindings`
+are deleted.
+
+The selection rule is now OWNER-canonical: an AppWiring may select a BindModule declared in a
+library owner's canonical `src/wiring.ts`, resolved by symbol identity. The example apps show it:
+`company-svc-core` (tagged `webpieces-lib`) owns a canonical wiring.ts exporting only
+`CompanyAuthBindModule`, and server2, client-server and legacy-server each select it in one line
+beside their local modules (server2's former local `Server2Bindings` is gone). The client modules
+keep their `TYPES.Server2Api` token through `new ClientBindOptions(TYPES.Server2Api)`. Approved
+contract, transport, destination and policy facts are unchanged; the approvals and provenance
+strings differ by the field renames plus the new library selection.
+
+Fixtures cover an app-local module, a library module from its canonical wiring.ts, a library module
+from a non-canonical file (rejected naming the module and file), a re-exported library module
+(resolved by symbol), a `ContainerModule` selection (rejected), two clients of one API to different
+deployments distinguished by token, and `bindExternal` producing the external edge from a library
+module.
+
 ## Canonical co-location (#1146)
 
 Issue [#1146](https://github.com/deanhiller/webpieces-ts/issues/1146) corrects the #1141 delivery,
@@ -148,10 +175,10 @@ surfaces and integration paths are:
 
 | Responsibility | Paths |
 |---|---|
-| Typed targets, tokens, policy and external facts | `packages/http/http-client-core/src/ClientToken.ts`, `RpcTarget.ts`, `WiringPolicy.ts`, `ExternalContractUse.ts` and barrel exports |
-| Node lazy RPC and task bindings | `packages/http/http-client-node/src/RuntimeClients.ts`, `packages/cloud/cloudtasks-client/src/RuntimeTaskClients.ts` and their specs |
-| Browser providers and plan | `packages/http/http-client-browser/src/BrowserWiring.ts`, `RpcClientProvider.ts` and provider specs |
-| Separate Node route/DI plan | `packages/http/http-routing/src/ServerWiring.ts` and compile assertions |
+| Shared module roles and policy | `packages/http/http-client-core/src/Wiring.ts` (`BindModule<B>`, `Wiring<M>`, `AppWiring`), `WiringPolicy.ts` and barrel exports |
+| Node binder: lazy RPC/task clients and vendor binds | `packages/http/http-routing/src/Binder.ts` (`Binder`, `ContainerBinder`, `ClientBindOptions`, `PubSubBindOptions`) and `src/__tests__/Binder.spec.ts` |
+| Browser binder and providers | `packages/http/http-client-browser/src/Wiring.ts` (`Binder`, `ClientBindOptions`, `BrowserWiringProviders`), `RpcClientProvider.ts` and `Binder.spec.ts` |
+| Node route/bind modules | `packages/http/http-routing/src/Wiring.ts` and `WiringCompileAssertions.ts` |
 | Approved schema, extraction and assembly | `packages/tooling/nx-webpieces-rules/src/lib/runtime-wiring/` (`declaration.ts`, `codec.ts`, `source-extractor.ts`, `source-values.ts`, `verification.ts`, `assembler.ts`, `approved-graph.ts` and tests) |
 | Nx source proof | `packages/tooling/nx-webpieces-rules/src/runtime-wiring-targets.ts`, `src/executors/runtime-wiring-check/` and generator/architecture/API validation consumers |
 | Readable graphs and complete details | `packages/tooling/nx-webpieces-rules/src/lib/graph-navigation.ts`, `runtime-details.ts`, `runtime-visualizer.ts`, `runtime-html-page.ts`, `runtime-graph-model.ts`, client scripts and browser/detail tests |

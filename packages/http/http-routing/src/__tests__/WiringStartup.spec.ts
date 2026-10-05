@@ -3,17 +3,18 @@ import { describe, expect, it, vi } from 'vitest';
 import { Container, ContainerModule, ContainerModuleLoadOptions } from 'inversify';
 import { AnyContextKey, ConsoleLoggerFactory } from '@webpieces/core-util';
 import { WebpiecesRouter, WebpiecesRouterFactory, WebpiecesRouterOptions } from '../WebpiecesRouter';
-import { AppWiring, Wiring, BindingModule, RouteModule } from '../Wiring';
+import { AppWiring, Wiring, BindModule, RouteModule } from '../Wiring';
+import { Binder } from '../Binder';
 import { setupRuntime, RuntimeSetupOptions } from '../setupRuntime';
 
 class Value { constructor(readonly name: string) {} }
 class FakeRouter { apiClients(): never { throw new Error('unused in materialization test'); } }
-class Binding implements BindingModule {
+class Binding implements BindModule {
     constructor(readonly value: Value, readonly trace: string[]) {}
-    async configure(options: ContainerModuleLoadOptions): Promise<void> {
+    async configure(binder: Binder): Promise<void> {
         this.trace.push('binding:' + this.value.name);
         await Promise.resolve();
-        options.bind(this.value.name).toConstantValue(this.value);
+        binder.bind(this.value.name).toConstantValue(this.value);
     }
 }
 class Routes implements RouteModule {
@@ -21,11 +22,11 @@ class Routes implements RouteModule {
     configure(_router: WebpiecesRouter): void { this.trace.push('routes:' + this.name); }
 }
 class Library implements Wiring {
-    bindingCalls = 0;
-    routingCalls = 0;
+    bindCalls = 0;
+    routeCalls = 0;
     constructor(readonly binding: Binding, readonly routes: Routes) {}
-    getBindingModules(): BindingModule[] { this.bindingCalls++; return [this.binding]; }
-    getRoutingModules(): RouteModule[] { this.routingCalls++; return [this.routes]; }
+    getBindModules(): BindModule[] { this.bindCalls++; return [this.binding]; }
+    getRouteModules(): RouteModule[] { this.routeCalls++; return [this.routes]; }
 }
 class Application extends Library implements AppWiring {
     constructor(binding: Binding, routes: Routes, readonly library: Library) { super(binding, routes); }
@@ -56,7 +57,7 @@ describe('named bindings at startup', () => {
         expect(trace).toEqual(['binding:local', 'binding:library', 'overrides', 'routes:local', 'routes:library']);
         expect(container.get('local')).toBe(local);
         expect(container.get('library')).toBe(overrideValue);
-        expect(library.bindingCalls).toBe(1);
-        expect(library.routingCalls).toBe(1);
+        expect(library.bindCalls).toBe(1);
+        expect(library.routeCalls).toBe(1);
     });
 });

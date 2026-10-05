@@ -4,13 +4,16 @@
     "projectType": "application",
     "targets": {
         "generate": {
-            "executor": "@webpieces/nx-webpieces-rules:generate"
+            "executor": "nx:run-commands",
+            "options": {
+                "command": "TS_NODE_PROJECT=tsconfig.base.json node -r @swc-node/register -r tsconfig-paths/register scripts/wiring-source-generate.ts"
+            }
         },
         "validate-architecture-unchanged": {
-            "executor": "@webpieces/nx-webpieces-rules:validate-architecture-unchanged"
+            "executor": "@webpieces/nx-source:validate-architecture-unchanged"
         },
         "validate-api-relations": {
-            "executor": "@webpieces/nx-webpieces-rules:validate-api-relations"
+            "executor": "@webpieces/nx-source:validate-api-relations"
         }
     },
     "tags": [

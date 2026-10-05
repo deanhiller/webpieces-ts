@@ -28,7 +28,7 @@ describe('runtime declaration input validation', () => {
             codec.decode(
                 JSON.stringify({
                     ...valid,
-                    exports: { Plan: { kind: 'app', relationships: {}, bindingModules: [], routingModules: [], wirings: [] } },
+                    exports: { Plan: { kind: 'app', relationships: {}, bindModules: [], routeModules: [], wirings: [] } },
                 }),
                 'app',
             ),

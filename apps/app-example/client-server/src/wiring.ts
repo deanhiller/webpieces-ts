@@ -1,4 +1,3 @@
-import { ContainerModuleLoadOptions } from 'inversify';
 import { AnyContextKey, SECRETS } from '@webpieces/core-util';
 import {
     RouteModule,
@@ -6,15 +5,15 @@ import {
     FilterDefinition,
     AppWiring,
     Wiring,
-    BindingModule,
-    AUTH_CONFIG,
+    BindModule,
+    Binder,
+    ClientBindOptions,
     AUTHORIZATION_HOOK,
     JWT_HOOK,
 } from '@webpieces/http-routing';
-import { RuntimeClients } from '@webpieces/http-client-node';
 import { RecordingFilter } from '@webpieces/http-server';
 import { CompanyHeaders } from '@webpieces/company-core';
-import { CompanyAuthConfig, CompanyAuthorizationHook, CompanyJwtHook } from '@webpieces/company-svc-core';
+import { CompanyAuthBindModule, CompanyAuthorizationHook, CompanyJwtHook } from '@webpieces/company-svc-core';
 import { SaveApi, PublicApi, SecureApi } from '@webpieces/client-server-api';
 import { Counter, SaveController, SimpleCounter } from './controllers/save-controller';
 import { PublicController } from './controllers/public-controller';
@@ -39,27 +38,25 @@ export class AppRoutes implements RouteModule {
 
 /**
  * ApplicationBindings - this app's DI registrations. Controllers and filters with
- * `@provideSingleton()` are auto-registered; these are the manual pieces, all singletons.
+ * `@provideSingleton()` are auto-registered; these are the manual pieces, all singletons. The
+ * shared-secret AuthConfig comes from the company library's CompanyAuthBindModule.
  */
-export class ApplicationBindings implements BindingModule {
-    configure(options: ContainerModuleLoadOptions): void {
-        options.bind<Counter>(TYPES.Counter).to(SimpleCounter).inSingletonScope();
-        // Shared-secret state: the framework AuthFilter injects AuthConfig for sharedSecret(...).
-        // Tests rebind AuthConfig to a stub / test-key config via appOverrides.
-        options.bind(AUTH_CONFIG).to(CompanyAuthConfig).inSingletonScope();
+export class ApplicationBindings implements BindModule {
+    configure(binder: Binder): void {
+        binder.bind<Counter>(TYPES.Counter).to(SimpleCounter).inSingletonScope();
         // User JWT mechanism: the framework AuthFilter injects JwtHook for jwt() endpoints.
         // Tests rebind JwtHook to a permissive stub via appOverrides. (OIDC is the framework default.)
-        options.bind(JWT_HOOK).to(CompanyJwtHook).inSingletonScope();
-        options.bind(AUTHORIZATION_HOOK).to(CompanyAuthorizationHook).inSingletonScope();
+        binder.bind(JWT_HOOK).to(CompanyJwtHook).inSingletonScope();
+        binder.bind(AUTHORIZATION_HOOK).to(CompanyAuthorizationHook).inSingletonScope();
         // The ONE shared-secret store for every outbound client (RPC + Cloud Tasks), read once.
-        options.bind(SECRETS).to(EnvironmentSecrets).inSingletonScope();
+        binder.bind(SECRETS).to(EnvironmentSecrets).inSingletonScope();
     }
 }
 
 /** API/token → HTTP client → deployment: Server2Api calls the server2 deployment. */
-export class RuntimeClientsModule implements BindingModule {
-    configure(options: ContainerModuleLoadOptions): void {
-        new RuntimeClients(options).bindRpc(TYPES.Server2Api, Server2Api, 'server2');
+export class RuntimeClientsModule implements BindModule {
+    configure(binder: Binder): void {
+        binder.createRpcClientAndBind(Server2Api, 'server2', new ClientBindOptions<Server2Api>(TYPES.Server2Api));
     }
 }
 
@@ -67,10 +64,10 @@ export class ClientServerWiring implements AppWiring {
     getWirings(): Wiring[] {
         return [];
     }
-    getBindingModules(): BindingModule[] {
-        return [new ApplicationBindings(), new RuntimeClientsModule()];
+    getBindModules(): BindModule[] {
+        return [new CompanyAuthBindModule(), new ApplicationBindings(), new RuntimeClientsModule()];
     }
-    getRoutingModules(): RouteModule[] {
+    getRouteModules(): RouteModule[] {
         return [new AppRoutes()];
     }
     getHeaders(): AnyContextKey[] {

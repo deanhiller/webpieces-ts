@@ -47,6 +47,8 @@ function exampleProjects(): Map<string, ProjectInfo> {
         'role:server',
     ]);
     add('app-example-e2e', 'apps/app-example/e2e', ['framework:express', 'role:server']);
+    // A library owner whose canonical wiring.ts exports the CompanyAuthBindModule the servers select.
+    add('company-svc-core', 'apps/app-example/company-svc-core', ['webpieces-lib', 'framework:express', 'role:lib']);
     return infos;
 }
 

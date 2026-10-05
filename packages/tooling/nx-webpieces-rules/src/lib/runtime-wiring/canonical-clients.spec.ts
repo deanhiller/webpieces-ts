@@ -55,7 +55,7 @@ describe('ALL-CODE canonical helper registration grammar', () => {
             `options.bind(TOKEN).toDynamicValue(() => ctx.get(ClientHttpFactory).createRpcClient(SaveApi, new ClientConfig('save'), filters)).inSingletonScope();`,
         );
         expect(problems[0]).toContain(
-            "new RuntimeClients(options).bindRpc(TOKEN, SaveApi, 'save', filters);",
+            "binder.createRpcClientAndBind(SaveApi, 'save', new ClientBindOptions(TOKEN, filters));",
         );
     });
 
@@ -79,10 +79,10 @@ describe('ALL-CODE canonical helper registration grammar', () => {
         `);
         expect(problems).toHaveLength(2);
         expect(problems[0]).toContain(
-            "RuntimeTaskClients(options).bindPubSub(TOKEN, SaveApi, 'tasks')",
+            "binder.createPubSubClientAndBind(SaveApi, 'tasks', new PubSubBindOptions(TOKEN));",
         );
         expect(problems[1]).toContain(
-            "provideRpcClient(OtherApi, SaveApi, 'browser')",
+            "binder.createRpcClientAndBind(SaveApi, 'browser', new ClientBindOptions(OtherApi));",
         );
     });
 
@@ -101,12 +101,20 @@ describe('ALL-CODE canonical helper registration grammar', () => {
         ).toEqual([]);
     });
 
-    it('passes canonical helper equivalents', () => {
+    it('omits the options argument when the token IS the api and no filters are passed', () => {
+        const problems = new Fixture().problems(
+            `options.bind(SaveApi).toDynamicValue(() => ctx.get(ClientHttpFactory).createRpcClient(SaveApi, new ClientConfig('save'))).inSingletonScope();`,
+        );
+        expect(problems[0]).toContain("binder.createRpcClientAndBind(SaveApi, 'save');");
+    });
+
+    it('passes canonical binder equivalents', () => {
         expect(
             new Fixture().problems(`
-            new RuntimeClients(options).bindRpc(TOKEN, SaveApi, 'save', filters);
-            new RuntimeTaskClients(options).bindPubSub(TOKEN, SaveApi, 'tasks');
-            provideRpcClient(TOKEN, SaveApi, 'browser');
+            class Binder { createRpcClientAndBind(api: object, target: string, options?: object) {} createPubSubClientAndBind(api: object, target: string, options?: object) {} }
+            declare const binder: Binder;
+            binder.createRpcClientAndBind(SaveApi, 'save');
+            binder.createPubSubClientAndBind(SaveApi, 'tasks');
         `),
         ).toEqual([]);
     });

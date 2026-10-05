@@ -6,10 +6,16 @@ import { CanonicalClientBindings } from './canonical-clients';
 
 const WEBPIECES_SDK = /(?:\/packages\/(?:http|cloud)\/|\/node_modules\/@webpieces\/)(?:http-routing|http-client-node|http-client-browser|http-client-core|cloudtasks-client)\//;
 const INVERSIFY = /\/node_modules\/(?:@inversifyjs\/|inversify\/)/;
-/** Methods that START a registration: a DI bind, a client binding, a provider recipe, a route or a filter. */
-const REGISTRATION_ROOTS = ['bind', 'bindRpc', 'bindPubSub', 'add', 'addRoutes', 'addFilter'];
-/** Removed authoring shapes; their presence means an old wrapper or an anonymous module survived. */
-const LEGACY_TOPOLOGY = /\b(?:rpcTarget|RpcTarget|ContainerModule|ServerWiring|ServerWiringOptions|BrowserWiring|getRuntimeWiring)\b/;
+/**
+ * Methods that START a registration on the host's binder or router: a DI bind, a client created and
+ * bound, a vendor implementation bound to its external contract, a browser provider recipe, a route
+ * or a filter.
+ */
+const REGISTRATION_ROOTS = ['bind', 'createRpcClientAndBind', 'createPubSubClientAndBind', 'bindExternal', 'provide', 'addRoutes', 'addFilter'];
+/** Removed authoring shapes; their presence means an old wrapper, helper or an anonymous module survived. */
+const LEGACY_TOPOLOGY = /\b(?:rpcTarget|RpcTarget|ContainerModule|ServerWiring|ServerWiringOptions|BrowserWiring|getRuntimeWiring|RuntimeClients|RuntimeTaskClients|provideRpcClient|ExternalContractUse|BrowserBindings|BindingModule)\b/;
+/** Getters renamed with BindingModule -> BindModule. */
+const RENAMED_GETTERS: Readonly<Record<string, string>> = { getBindingModules: 'getBindModules', getRoutingModules: 'getRouteModules' };
 /** Environment discovery belongs in prepared configuration, never in a registration argument. */
 const ENVIRONMENT = new Set(['process', 'window', 'document', 'localStorage', 'sessionStorage', 'navigator', 'location', 'globalThis']);
 
@@ -24,8 +30,9 @@ class CanonicalFile {
 
 /**
  * One canonical-file grammar. Each owner's src/wiring.ts holds its Wiring/AppWiring class AND the
- * BindingModule/RouteModule classes it selects, with their actual registrations. Symbol resolution
- * may read imports; format checking never does.
+ * BindModule/RouteModule classes it selects, with their actual registrations. A library owner's
+ * canonical wiring.ts may export only BindModules. Symbol resolution may read imports; format
+ * checking never does.
  */
 export class WiringFormat {
     private readonly types: WiringSourceTypes;
@@ -46,7 +53,7 @@ export class WiringFormat {
         if (lines > this.maxLines)
             report(
                 file,
-                `wiring.ts has ${lines} lines, above maxLines ${this.maxLines}. Keep every BindingModule/RouteModule and its registrations here beside the Wiring class; shorten the file by moving configuration building, translations, environment discovery and initializer or factory bodies into imported implementations, or give a cohesive group its own library owner with its own wiring.ts.`,
+                `wiring.ts has ${lines} lines, above maxLines ${this.maxLines}. Keep every BindModule/RouteModule and its registrations here beside the Wiring class; shorten the file by moving configuration building, translations, environment discovery and initializer or factory bodies into imported implementations, or give a cohesive group its own library owner with its own wiring.ts.`,
             );
         for (const statement of file.statements) {
             if (ts.isImportDeclaration(statement) || ts.isExportDeclaration(statement)) continue;
@@ -56,7 +63,9 @@ export class WiringFormat {
             }
             const kind = this.types.kind(statement);
             if (kind === undefined) {
-                report(statement, 'Implement the framework Wiring, AppWiring, BindingModule or RouteModule contract.');
+                report(statement, LEGACY_TOPOLOGY.test(statement.getText())
+                    ? 'Removed authoring shape (BindingModule, ExternalContractUse, RuntimeClients, provideRpcClient, BrowserBindings); implement BindModule and register through the binder.'
+                    : 'Implement the framework Wiring, AppWiring, BindModule or RouteModule contract.');
                 continue;
             }
             this.classProblems(statement, kind, scope);
@@ -68,7 +77,7 @@ export class WiringFormat {
         if (problems.length === 0) return;
         throw new RuleFailError('wiring-format', problems.join('\n'), undefined, undefined, [
             new Option(
-                "Declare each owner's Wiring/AppWiring class together with its named BindingModule/RouteModule classes and their registrations in its src/wiring.ts, selected by literal getters. Keep configuration building, environment discovery and initializer/factory bodies in imported implementations, and keep named WiringPolicy conditions explicit.",
+                "Declare each owner's Wiring/AppWiring class together with its named BindModule/RouteModule classes and their registrations in its src/wiring.ts, selected by literal getters (getBindModules/getRouteModules/getWirings); an app may select a BindModule declared in a library owner's canonical src/wiring.ts. Register through the binder (binder.bind, binder.createRpcClientAndBind, binder.createPubSubClientAndBind, binder.bindExternal, browser binder.provide) and the router. Keep configuration building, environment discovery and initializer/factory bodies in imported implementations, and keep named WiringPolicy conditions explicit.",
                 true,
             ),
         ]);
@@ -87,11 +96,13 @@ export class WiringFormat {
                 continue;
             }
             const name = member.name.getText();
-            if (['getBindingModules', 'getRoutingModules', 'getWirings'].includes(name)) {
-                const expected = name === 'getWirings' ? 'wiring' : name === 'getBindingModules' ? 'binding' : 'routing';
+            if (Object.hasOwn(RENAMED_GETTERS, name)) {
+                report(member, `${name} was renamed to ${RENAMED_GETTERS[name]}.`);
+            } else if (['getBindModules', 'getRouteModules', 'getWirings'].includes(name)) {
+                const expected = name === 'getWirings' ? 'wiring' : name === 'getBindModules' ? 'binding' : 'routing';
                 if (name === 'getWirings' && kind !== 'app')
                     report(member, 'Only AppWiring can declare getWirings; libraries cannot compose libraries.');
-                this.arrayProblems(member, expected, scope);
+                this.arrayProblems(member, expected, kind, scope);
             } else if (name === 'configure' && ['binding', 'routing'].includes(kind)) {
                 for (const statement of member.body?.statements ?? []) this.configureProblems(statement, scope);
             } else if (name !== 'getHeaders' || kind !== 'app')
@@ -103,11 +114,13 @@ export class WiringFormat {
                 report(declaration, `configure is inherited from ${configure.getSourceFile().fileName}; declare this module's registrations in its own configure here in wiring.ts.`);
         }
         if (kind === 'app' || kind === 'wiring') {
-            const names = ['getBindingModules', 'getRoutingModules', ...(kind === 'app' ? ['getWirings'] : [])];
+            // getRouteModules is Node-only (its Wiring type requires it); the browser has no route channel.
+            const names = ['getBindModules', 'getRouteModules', ...(kind === 'app' ? ['getWirings'] : [])];
             for (const name of names) {
                 const method = this.types.method(declaration, name);
-                if (method === undefined) report(declaration, `Missing ${name} literal array getter.`);
-                else if (method.getSourceFile() !== scope.file)
+                if (method === undefined) {
+                    if (name !== 'getRouteModules') report(declaration, `Missing ${name} literal array getter.`);
+                } else if (method.getSourceFile() !== scope.file)
                     report(declaration, `${name} is inherited from ${method.getSourceFile().fileName}; declare the selection getter on this class in wiring.ts.`);
             }
             if (kind === 'wiring' && this.types.method(declaration, 'getWirings') !== undefined)
@@ -115,7 +128,7 @@ export class WiringFormat {
         }
     }
 
-    private arrayProblems(method: ts.MethodDeclaration, expected: WiringKind, scope: CanonicalFile): void {
+    private arrayProblems(method: ts.MethodDeclaration, expected: WiringKind, ownerKind: WiringKind, scope: CanonicalFile): void {
         const report = scope.report;
         const statements = method.body?.statements;
         const returned = statements?.length === 1 && ts.isReturnStatement(statements[0]) ? statements[0].expression : undefined;
@@ -128,24 +141,31 @@ export class WiringFormat {
                 report(element, `Select a named framework ${expected} instance; nested arrays and AppWiring children are forbidden.`);
                 continue;
             }
-            this.placementProblems(element.expression, expected, scope);
+            this.placementProblems(element.expression, expected, ownerKind, scope);
             for (const argument of element.arguments ?? []) {
                 if (!this.prepared(argument)) report(argument, 'Pass prepared inputs or a named WiringPolicy; no callbacks, topology wrappers or computed setup.');
             }
         }
     }
 
-    /** Proven through the resolved declaration: a selected module lives in THIS file, a library Wiring in its own wiring.ts. */
-    private placementProblems(selected: ts.Expression, expected: WiringKind, scope: CanonicalFile): void {
+    /**
+     * Proven through the resolved declaration: a selected module lives in THIS file; a BindModule an
+     * AppWiring selects may instead live in a library owner's canonical wiring.ts, and a library
+     * Wiring always does. The extractor additionally proves that file is the owner's src/wiring.ts.
+     */
+    private placementProblems(selected: ts.Expression, expected: WiringKind, ownerKind: WiringKind, scope: CanonicalFile): void {
         const declared = this.types.declaration(selected)?.getSourceFile();
         const where = declared === undefined ? 'an unresolved file' : declared.fileName;
+        const canonical = declared !== undefined && /(?:^|[\\/])wiring\.(?:d\.)?ts$/.test(declared.fileName);
         if (expected !== 'wiring') {
             if (declared === scope.file) return;
-            const role = expected === 'binding' ? 'BindingModule' : 'RouteModule';
-            scope.report(selected, `${selected.getText()} is declared in ${where}; declare this ${role} class, with its registrations, here in wiring.ts beside the Wiring class that selects it.`);
+            if (expected === 'binding' && ownerKind === 'app' && canonical) return;
+            const role = expected === 'binding' ? 'BindModule' : 'RouteModule';
+            const library = expected === 'binding' && ownerKind === 'app' ? ", or in its library owner's canonical src/wiring.ts" : '';
+            scope.report(selected, `${selected.getText()} is declared in ${where}; declare this ${role} class, with its registrations, here in wiring.ts beside the Wiring class that selects it${library}.`);
             return;
         }
-        if (declared !== undefined && /(?:^|[\\/])wiring\.(?:d\.)?ts$/.test(declared.fileName)) return;
+        if (canonical) return;
         scope.report(selected, `Library Wiring ${selected.getText()} is declared in ${where}; select a Wiring declared in its library's canonical src/wiring.ts.`);
     }
 
@@ -159,11 +179,6 @@ export class WiringFormat {
 
     private configureProblems(statement: ts.Statement, scope: CanonicalFile): void {
         const report = scope.report;
-        if (ts.isVariableStatement(statement)) {
-            const declarations = statement.declarationList.declarations;
-            const initializer = declarations.length === 1 ? declarations[0].initializer : undefined;
-            if ((statement.declarationList.flags & ts.NodeFlags.Const) !== 0 && initializer !== undefined && this.clientBinder(initializer)) return;
-        }
         if (ts.isIfStatement(statement) && ts.isPropertyAccessExpression(statement.expression) && statement.expression.name.text === 'enabled' && this.types.isPolicy(statement.expression.expression) && statement.elseStatement === undefined) {
             const body = ts.isBlock(statement.thenStatement) ? statement.thenStatement.statements : [statement.thenStatement];
             for (const child of body) this.configureProblems(child, scope);
@@ -172,15 +187,15 @@ export class WiringFormat {
         const written = ts.isExpressionStatement(statement) || ts.isReturnStatement(statement) ? statement.expression : undefined;
         const expression = written !== undefined && ts.isAwaitExpression(written) ? written.expression : written;
         if (expression === undefined || (!ts.isCallExpression(expression) && !ts.isNewExpression(expression))) {
-            report(statement, 'configure contains only registration declarations (DI binds, client bindings, provider recipes, routes, filters, module loads, external-contract markers) and named policy conditions.');
+            report(statement, 'configure contains only registration declarations (binder DI binds, clients created and bound, external vendor bindings, provider recipes, routes, filters) and named policy conditions.');
             return;
         }
         if (LEGACY_TOPOLOGY.test(expression.getText())) {
-            report(expression, 'Removed topology shape (rpcTarget, an anonymous ContainerModule or a plan wrapper); declare a named module registration instead.');
+            report(expression, 'Removed topology shape (rpcTarget, a ContainerModule, a plan wrapper, RuntimeClients/RuntimeTaskClients, provideRpcClient or ExternalContractUse); register through the binder: binder.createRpcClientAndBind(Api, deployment), binder.createPubSubClientAndBind(Api, deployment), binder.bindExternal(Api, VendorImpl).');
             return;
         }
         if (!this.registration(expression, scope)) {
-            report(expression, 'Use a recognized registration declaration: options.bind(...) chains, RuntimeClients.bindRpc, RuntimeTaskClients.bindPubSub, bindings.add(provider recipes), router.addRoutes/addFilter, (await) NamedModule.load(options) or new ExternalContractUse(...). Move custom setup into imported implementations.');
+            report(expression, 'Use a recognized registration declaration: binder.bind(...) chains, binder.createRpcClientAndBind(Api, deployment, options?), binder.createPubSubClientAndBind(Api, deployment, options?), binder.bindExternal(Api, VendorImpl), browser binder.provide(...recipes), router.addRoutes/addFilter. Move custom setup into imported implementations, and give a vendor ContainerModule its own library BindModule in that library\'s canonical wiring.ts.');
             return;
         }
         for (const argument of this.registrationArguments(expression)) {
@@ -191,45 +206,24 @@ export class WiringFormat {
     }
 
     private registration(expression: ts.CallExpression | ts.NewExpression, scope: CanonicalFile): boolean {
-        if (ts.isNewExpression(expression))
-            return this.types.isFramework(expression.expression, 'ExternalContractUse') &&
-                (expression.arguments ?? []).every((argument: ts.Expression) => ts.isStringLiteralLike(argument));
+        if (ts.isNewExpression(expression)) return false;
         if (!ts.isPropertyAccessExpression(expression.expression)) return false;
         const name = expression.expression.name.text;
         const receiver = this.unwrap(expression.expression.expression);
         const file = this.signatureFile(expression);
         if (file === undefined) return false;
-        if (name === 'load') return INVERSIFY.test(file) && this.moduleReceiver(receiver);
         if (!WEBPIECES_SDK.test(file) && !INVERSIFY.test(file)) return false;
         if (ts.isCallExpression(receiver)) return this.registration(receiver, scope);
-        return REGISTRATION_ROOTS.includes(name) && (this.path(receiver) || this.clientBinder(receiver));
+        return REGISTRATION_ROOTS.includes(name) && this.path(receiver);
     }
 
-    /** Every argument of every call in a registration chain, plus a loaded module's construction arguments. */
+    /** Every argument of every call in a registration chain. */
     private registrationArguments(expression: ts.CallExpression | ts.NewExpression): ts.Expression[] {
         const own = [...(expression.arguments ?? [])];
         if (!ts.isCallExpression(expression) || !ts.isPropertyAccessExpression(expression.expression)) return own;
         const receiver = this.unwrap(expression.expression.expression);
-        if (ts.isCallExpression(receiver)) {
-            if (expression.expression.name.text === 'load') return [...own, ...receiver.arguments];
-            return [...own, ...this.registrationArguments(receiver)];
-        }
-        if (ts.isNewExpression(receiver)) return [...own, ...(receiver.arguments ?? [])];
+        if (ts.isCallExpression(receiver)) return [...own, ...this.registrationArguments(receiver)];
         return own;
-    }
-
-    /** `X.load`, `new X(prepared).load` or `createX(prepared).load`: an explicit, opaque module load. */
-    private moduleReceiver(receiver: ts.Expression): boolean {
-        if (this.path(receiver)) return true;
-        if (ts.isNewExpression(receiver) || ts.isCallExpression(receiver))
-            return this.path(receiver.expression) && !LEGACY_TOPOLOGY.test(receiver.expression.getText());
-        return false;
-    }
-
-    private clientBinder(expression: ts.Expression): boolean {
-        return ts.isNewExpression(expression) &&
-            ['RuntimeClients', 'RuntimeTaskClients'].some((name: string) => this.types.isFramework(expression.expression, name)) &&
-            (expression.arguments ?? []).every((argument: ts.Expression) => this.prepared(argument));
     }
 
     /** Returns the first non-declarative node inside a registration argument, or undefined. */

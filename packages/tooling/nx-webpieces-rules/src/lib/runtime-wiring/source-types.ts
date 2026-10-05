@@ -49,7 +49,7 @@ export class WiringSourceTypes {
         if (framework) {
             if (name === 'AppWiring') return 'app';
             if (name === 'Wiring') return 'wiring';
-            if (name === 'BindingModule') return 'binding';
+            if (name === 'BindModule') return 'binding';
             if (name === 'RouteModule') return 'routing';
         }
         const roles: WiringKind[] = [];

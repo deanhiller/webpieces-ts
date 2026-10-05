@@ -4,17 +4,21 @@ Runtime topology belongs in each participating project's `src/wiring.ts`. Tag ap
 `webpieces` and libraries with exported wiring `webpieces-lib`. Imports establish source dependencies;
 only exports selected by an application's plan establish runtime relationships.
 
-Node and browser use the same roles. `Wiring` exposes `getBindingModules()` and
-`getRoutingModules()`. `AppWiring` adds `getWirings()` for one level of library composition;
-Node also retains `getHeaders()`. Import the concrete interfaces from `@webpieces/http-routing`
-or `@webpieces/http-client-browser`. The shared core contains only platform-neutral topology.
+Node and browser use the same roles. A `BindModule` binds DI for every host; the generic
+`BindModule<B>` lives in `@webpieces/http-client-core` and each host re-exports a non-generic alias
+whose `configure(binder: Binder)` receives that host's binder. `Wiring` exposes `getBindModules()`.
+A Node `Wiring` adds `getRouteModules()`: `RouteModule` (api -> controller routes) is Node-only, and
+a browser wiring has no route channel. `AppWiring` adds `getWirings()` for one level of library
+composition; Node also retains `getHeaders()`. Import the concrete interfaces from
+`@webpieces/http-routing` or `@webpieces/http-client-browser`. (#1150 renamed `BindingModule` to
+`BindModule` and the getters to `getBindModules()` / `getRouteModules()`.)
 
 Each selection getter returns a literal array of named instances:
 
 ```ts
 getWirings(): Wiring[] { return [new AuthWiring(this.config)]; }
-getBindingModules(): BindingModule[] { return [new ApplicationBindings()]; }
-getRoutingModules(): RouteModule[] { return [new ApplicationRoutes()]; }
+getBindModules(): BindModule[] { return [new ApplicationBindings(), new GcpTtsBindModule(this.config.tts)]; }
+getRouteModules(): RouteModule[] { return [new ApplicationRoutes()]; }
 ```
 
 Getters contain no spreads, helpers, nested arrays, casts, or setup. Constructors store prepared
@@ -23,14 +27,21 @@ inputs using parameter properties. Only an application can select libraries.
 ## wiring.ts shows the actual wiring
 
 Each owner's `src/wiring.ts` contains its exported Wiring or AppWiring class AND the named
-BindingModule and RouteModule classes it selects, above or below it, with their real registrations
-in `configure`: `RuntimeClients.bindRpc`, `provideRpcClient`, `RuntimeTaskClients.bindPubSub`,
-`router.addRoutes`, `router.addFilter`, DI binds and provider recipes. A selection must resolve
-(through the compiler, never by name) to a module class declared in the SAME file, and a library
-Wiring selected by `getWirings()` must be declared in that library's own `src/wiring.ts`, where its
-modules and registrations live. Importing a module implementation from `RuntimeModules.ts`,
-`BrowserSetup.ts` or any other file fails with a diagnostic naming the module and its file, and so
-does inheriting a selection getter or `configure` from another file.
+BindModule and RouteModule classes it selects, above or below it, with their real registrations
+in `configure`: `binder.createRpcClientAndBind`, `binder.createPubSubClientAndBind`,
+`binder.bindExternal`, `binder.bind` chains, browser `binder.provide` recipes, `router.addRoutes`
+and `router.addFilter`.
+
+The rule is OWNER-canonical. A selection must resolve (through the compiler, by symbol identity,
+never by name) to a module class declared in its owner's canonical `src/wiring.ts`: the selecting
+owner's own file, or, for a BindModule an AppWiring selects, a library owner's canonical
+`src/wiring.ts`. A re-export resolves to its true declaration, so `export { GcpTtsBindModule } from
+'./wiring'` in a library barrel is fine. A library Wiring selected by `getWirings()` must likewise
+be declared in that library's own `src/wiring.ts`. A library's canonical wiring.ts may export only
+BindModules, with no Wiring class, so an app selects a vendor module in one line. Selecting a class
+declared in `RuntimeModules.ts`, `BrowserSetup.ts` or any other file, or a `ContainerModule`, fails
+with a diagnostic naming the module and its file, and so does inheriting a selection getter or
+`configure` from another file. Only an AppWiring selects another owner's BindModule.
 
 ```ts
 export class ProductRoutes implements RouteModule {
@@ -39,19 +50,57 @@ export class ProductRoutes implements RouteModule {
     }
 }
 
-export class RemoteStoreBindings implements BindingModule {
-    configure(options: ContainerModuleLoadOptions): void {
-        new RuntimeClients(options).bindRpc(STORE_TYPES.StoreApi, StoreApi, 'store');
-        options.bind(JWT_HOOK).to(CompanyJwtHook).inSingletonScope();
-        options.bind(WARMUP).toDynamicValue((ctx: ResolutionContext) => ctx.get(STORE_TYPES.StoreApi)).inSingletonScope();
+export class RemoteStoreBindModule implements BindModule {
+    configure(binder: Binder): void {
+        binder.createRpcClientAndBind(StoreApi, 'store');
+        binder.bind(JWT_HOOK).to(CompanyJwtHook).inSingletonScope();
+        binder.bind(WARMUP).toDynamicValue((ctx: ResolutionContext) => ctx.get(StoreApi)).inSingletonScope();
     }
 }
 
 export class ProductAppWiring implements AppWiring {
     constructor(private readonly config: ProductConfig) {}
     getWirings(): Wiring[] { return [new AuthWiring(this.config.auth)]; }
-    getBindingModules(): BindingModule[] { return [new RemoteStoreBindings()]; }
-    getRoutingModules(): RouteModule[] { return [new ProductRoutes()]; }
+    getBindModules(): BindModule[] {
+        return [new RemoteStoreBindModule(), new GcpTtsBindModule(this.config.tts)];
+    }
+    getRouteModules(): RouteModule[] { return [new ProductRoutes()]; }
+}
+
+// libraries/apis/external-node/gcp-tts/src/wiring.ts - a library canonical file of BindModules only
+export class GcpTtsBindModule implements BindModule {
+    constructor(private readonly config: TextToSpeechConfigDto) {}
+    configure(binder: Binder): void {
+        binder.bind(GCP_TTS_TYPES.TextToSpeechConfigDto).toConstantValue(this.config);
+        binder.bindExternal(TextToSpeechApi, GcpTextToSpeechClient);
+    }
+}
+```
+
+Before #1150 the same lang-server module read
+`new RuntimeClients(options).bindRpc(LANG_FSDB_TYPES.LangFsdbApi, LangFsdbApi, 'lang-fsdb')`, every
+vendor `ContainerModule` needed a per-app wrapper whose `configure` called `.load(options)`, and the
+external edge was a side-effect-free `new ExternalContractUse('lib-gcp-tts#TextToSpeechApi')`. Now
+the same facts are one `binder.*` call each:
+
+```ts
+export class RemoteFsdbBindModule implements BindModule {
+    configure(binder: Binder): void {
+        binder.createRpcClientAndBind(LangFsdbApi, 'lang-fsdb');
+        binder.createRpcClientAndBind(AuthStoreApi, 'lang-fsdb');
+        binder.bind(WARMUP_TYPES.DownstreamWarmup)
+            .toDynamicValue((ctx: ResolutionContext) => ctx.get(AuthStoreApi))
+            .inSingletonScope();
+    }
+}
+
+export class AppBindModule implements BindModule {
+    constructor(private readonly webApp: WebAppConfig, private readonly offline: OfflineConfig) {}
+    configure(binder: Binder): void {
+        binder.bind(WebAppConfig).toConstantValue(this.webApp);
+        binder.bind(OfflineConfig).toConstantValue(this.offline);
+        binder.createPubSubClientAndBind(LangReusableTtsAudioApi, 'lang');
+    }
 }
 ```
 
@@ -60,15 +109,17 @@ environment discovery, event subscriptions, initializer bodies, controller/servi
 factory implementations. wiring.ts keeps the registration visible and references them by name:
 `provideAppInitializer(initializeSession)`, `{ provide: TOKEN, useFactory: chrome, deps: [Text] }`,
 `toDynamicValue(AppSecrets.fromEnvironment)`. A `configure` contains only registration declarations:
-`options.bind(...)` chains (`to`, `toSelf`, `toConstantValue`, `toDynamicValue`, `inSingletonScope`),
-short DI factory callbacks such as `(ctx) => ctx.get(Token)`, client bindings, `bindings.add(...)`
-provider recipes (`makeEnvironmentProviders`, `provide`/`useClass`/`useExisting`/`useFactory`/
-`useValue`/`deps`/`multi`, `provideRouter`, ...), routes, filters, `(await) Module.load(options)`
-for an opaque vendor or library module, `new ExternalContractUse(...)` and named `WiringPolicy`
-conditions. Loops, non-policy branches, block-bodied callbacks, environment reads, computed
-configuration and calls into this owner's own helpers (which would hide the registrations they
-return) are rejected. A loaded module's implementation is never scanned for topology: an owner's
-API clients and controllers are explicit in its wiring.ts.
+`binder.bind(...)` chains (`to`, `toSelf`, `toConstantValue`, `toDynamicValue`, `inSingletonScope`),
+short DI factory callbacks such as `(ctx) => ctx.get(Token)`, `binder.createRpcClientAndBind`,
+`binder.createPubSubClientAndBind`, `binder.bindExternal`, browser `binder.provide(...)` recipes
+(`makeEnvironmentProviders`, `provide`/`useClass`/`useExisting`/`useFactory`/`useValue`/`deps`/`multi`,
+`provideRouter`, ...), routes, filters and named `WiringPolicy` conditions. Loops, non-policy
+branches, block-bodied callbacks, environment reads, computed configuration and calls into this
+owner's own helpers (which would hide the registrations they return) are rejected. An opaque
+`Module.load(...)` is no longer a registration: give a vendor its own library BindModule in that
+library's canonical wiring.ts. The retired helpers `RuntimeClients`, `RuntimeTaskClients`,
+`provideRpcClient`, `ExternalContractUse` and `BrowserBindings` are deleted, and a canonical file
+naming them is rejected with the binder form to use instead.
 
 `wiring-format` checks every tagged owner's canonical `src/wiring.ts`, including unchanged owners,
 and never format-checks any other file. Its explicit `maxLines` configuration (the agreed limit is
@@ -80,24 +131,42 @@ owner's modules or registrations into another file.
 Runtime extraction reads ONLY canonical wiring.ts files. The compiler still type-checks the whole
 project, so imported and re-exported APIs, tokens, controllers and prepared configuration resolve to
 their qualified identities, but no other file's body is visited for wiring facts and there is no
-fallback discovery. Separately, an `ExternalContractUse` is still backed by a production business
-consumer found among the owner's constructor dependencies; that consumer proof adds no relationship.
+fallback discovery. A library BindModule an app selects is read from that library's canonical
+wiring.ts, through the library's own approved declaration. Separately, `binder.bindExternal` in an
+APPLICATION's module is still backed by a production business consumer found among the app's
+constructor dependencies; a library module binds an adapter for whichever app selects it, so its
+consumer lives in that app. That consumer proof adds no relationship.
 
-Node binding modules implement `configure(options: ContainerModuleLoadOptions)`; asynchronous
-configuration is awaited. Route modules implement `configure(router: WebpiecesRouter)`.
-Use `new RuntimeClients(options).bindRpc(token, Api, 'deployment')` or
-`RuntimeTaskClients.bindPubSub(token, Api, 'deployment')`. Destinations are strings; `rpcTarget`
-and `RpcTarget` have been removed. API/token typing, singleton scope, filters and test tokens remain.
+Node bind modules implement `configure(binder: Binder)`; asynchronous configuration is awaited.
+Route modules implement `configure(router: WebpiecesRouter)`. The Node `Binder`
+(`@webpieces/http-routing`) offers:
+
+- `bind(token)` — plain Inversify fluent syntax.
+- `createRpcClientAndBind(Api, 'deployment', options?)` — registers
+  `toDynamicValue(ctx => ctx.get(ClientHttpFactory).createRpcClient(Api, new ClientConfig(deployment), filters))`
+  in singleton scope, so the client resolves lazily from the already-bound factory.
+- `createPubSubClientAndBind(Api, 'deployment', options?)` — the same over `ClientCloudTasksFactory`.
+- `bindExternal(Api, VendorImpl)` — binds the vendor implementation to its external contract and
+  records the external-contract graph edge in one statement.
+
+The token defaults to the API class itself (contracts are abstract classes, valid DI tokens).
+`new ClientBindOptions<T>(token?, filters?)` supplies an extra token only when two clients of the
+same API must coexist (for example one per deployment), plus RPC outbound filters;
+`new PubSubBindOptions<T>(token?)` carries the token for a Cloud Tasks client. Destinations are
+strings; factories are bound once by the framework and never passed through a module constructor.
 Low-level factory bodies belong in imported implementations; their registrations stay in wiring.ts.
 
-Browser modules configure a `BrowserBindings` collector. `bindings.add(provideRpcClient(token,
-Api, 'deployment'))` remains lazy. `BrowserWiringProviders.toProviders(app)` installs the collected
-providers through Angular's application configuration. Named BrowserValueProvider,
-BrowserFactoryProvider, BrowserClassProvider and BrowserExistingProvider recipes preserve provider
-and dependency identities without importing Angular or Node into the browser package.
+Browser modules configure the browser `Binder` (`@webpieces/http-client-browser`):
+`binder.createRpcClientAndBind(Api, 'deployment', new ClientBindOptions<T>(token?))` registers a
+lazy factory provider with deps `[ClientHttpBrowserFactory, ClientConfig]`, and
+`binder.provide(...recipes)` adds provider recipes, including Angular router providers.
+`BrowserWiringProviders.toProviders(app)` installs the collected providers through Angular's
+application configuration. Named BrowserValueProvider, BrowserFactoryProvider, BrowserClassProvider
+and BrowserExistingProvider recipes preserve provider and dependency identities without importing
+Angular or Node into the browser package.
 
-The runtime materializes each selected instance's lists once. It runs application bindings then
-library bindings in list order, followed by application routes then library routes. Repeated
+The runtime materializes each selected instance's lists once. It runs application bind modules then
+library bind modules in list order, followed (on Node) by application routes then library routes. Repeated
 selections are retained. Node test override modules still load last, before route configuration.
 Company-owned config, context, authentication, errors and URLs remain outside framework topology.
 
@@ -111,9 +180,10 @@ Each project explicitly approves a `runtime-deps.json` containing:
 - `entry`: exactly one app export for applications; absent for libraries.
 - `host`: Node app deployment identity from project metadata; absent for libraries.
 
-Each export has `relationships`, `bindingModules`, `routingModules` and `wirings`. Only an app
-may populate `wirings`; leaves contain facts rather than selections. The two module channels are
-validated independently. Each relationship identifies its canonical contract as
+Each export has `relationships`, `bindModules`, `routeModules` and `wirings` (a browser export's
+`routeModules` is always empty). The pre-#1150 field names `bindingModules` / `routingModules` are
+rejected with an error naming the new field. Only an app may populate `wirings`; leaves contain
+facts rather than selections. The two module channels are validated independently. Each relationship identifies its canonical contract as
 `{project, exportedName}`, direction (`implements` or `uses`), and transport (`rpc`, `pubsub`,
 or `external`). Uses include a target: a service identity, forwarded named parameter, external
 system, or explicit unknown reason. Graph-relevant prepared constructor paths are inferred from
@@ -131,11 +201,13 @@ or disabled selection; environment expressions stay `runtime` and retain conditi
 Extraction never evaluates the environment. Nested conditions, else branches, switches and loops
 fail explicitly; express these as separate selected modules rather than losing conditions.
 
-Vendor interfaces remain interfaces. A selected module can declare
-`new ExternalContractUse('vendor-project#VendorApi')` alongside ordinary SDK bindings. This is
-metadata, not an RPC factory. Production constructor dependencies must establish a real business
-consumer of the interface. Implementations and test doubles alone do not establish uses. Existing
-approved external-system contract metadata and project tags determine vendor system identity.
+A vendor contract is bound with `binder.bindExternal(VendorApi, VendorClient)`, alongside ordinary
+SDK bindings, usually in the vendor library's own canonical wiring.ts. The contract is an abstract
+class, so its identity resolves by symbol like any other API, and the call records the same
+external `uses` edge `ExternalContractUse` used to. In an application's own module, production
+constructor dependencies must establish a real business consumer of the contract; implementations
+and test doubles alone do not establish uses. Existing approved external-system contract metadata
+and project tags determine vendor system identity.
 
 ## Build proof and review
 
@@ -187,4 +259,7 @@ The producer uses the published 0.4.866 tooling family, whose `wiring-format` po
 `RUN_EVERY_TIME`; canonical source proof and approved graph generation use the installed executors.
 No source-preview override is required. The canonical-only extraction, same-file module rule and
 400-line recommendation of issue #1146 ship in source first; the producer's explicit `maxLines`
-value moves to 400 with the pin bump to the release that carries them.
+value moves to 400 with the pin bump to the release that carries them. The #1150 BindModule/Binder
+surface, the OWNER-canonical rule and the `bindModules`/`routeModules` fields likewise ship in
+source first; until the release carrying them is pinned, this repo runs the wiring executors from
+source.

@@ -32,15 +32,15 @@ export class RuntimeWiringAssembler {
         const app = this.exported(root, 'app');
         const selections = [root, ...app.wirings.map((child: WiringSelection) => this.forward(child, root))];
         const result: ResolvedWiringRelationship[] = [];
-        for (const channel of ['bindingModules', 'routingModules'] as const) {
+        for (const channel of ['bindModules', 'routeModules'] as const) {
             for (const [index, selection] of selections.entries()) {
                 const owner = this.exported(selection, index === 0 ? 'app' : 'wiring');
                 if (index > 0 && owner.wirings.length > 0)
                     this.fail(`Only AppWiring selects libraries: ${selection.project}#${selection.exportedName}.`);
                 for (const [moduleIndex, module] of owner[channel].entries()) {
                     const selected = this.forward(module, selection);
-                    const leaf = this.exported(selected, channel === 'bindingModules' ? 'binding' : 'routing');
-                    if (leaf.bindingModules.length + leaf.routingModules.length + leaf.wirings.length > 0)
+                    const leaf = this.exported(selected, channel === 'bindModules' ? 'binding' : 'routing');
+                    if (leaf.bindModules.length + leaf.routeModules.length + leaf.wirings.length > 0)
                         this.fail('Leaf modules cannot hide composition or composition cycles.');
                     const via = `${project}#${declaration.entry}/${index}:${selection.project}#${selection.exportedName}/${channel}[${moduleIndex}]:${selected.project}#${selected.exportedName}`;
                     result.push(...this.resolveRelationships(leaf, selected, via));

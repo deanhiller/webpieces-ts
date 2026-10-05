@@ -140,36 +140,57 @@ Instead of importing, receive the dependency as a constructor or method paramete
 - The best dependency is the one you don't need
 - When in doubt, refactor rather than add dependencies
 
-## Canonical runtime client migration
+## Canonical runtime client registration
 
-For every owner tagged `webpieces` or `webpieces-lib`, keep topology in `src/wiring.ts`
-and replace supported hand-written singleton/provider factories with the public helpers:
+For every owner tagged `webpieces` or `webpieces-lib`, keep topology in `src/wiring.ts`. Each
+`BindModule.configure(binder: Binder)` registers clients through its host's binder, replacing
+hand-written singleton/provider factories:
 
 ```typescript
-// @webpieces/http-client-node (filters remain the optional fourth argument)
-const clients = new RuntimeClients(options);
-clients.bindRpc(TOKEN, SaveApi, 'save', filters);
+// Node: Binder from @webpieces/http-routing. The token defaults to the API class itself.
+binder.createRpcClientAndBind(SaveApi, 'save');
+binder.createRpcClientAndBind(SaveApi, 'save-eu', new ClientBindOptions<SaveApi>(SAVE_EU, filters));
+binder.createPubSubClientAndBind(TaskApi, 'worker');
+binder.bindExternal(TextToSpeechApi, GcpTextToSpeechClient);
 
-// @webpieces/cloudtasks-client (no filter argument is supported)
-new RuntimeTaskClients(options).bindPubSub(TASK_TOKEN, TaskApi, 'worker');
-
-// @webpieces/http-client-browser (no filter argument is supported)
-provideRpcClient(BROWSER_TOKEN, SaveApi, 'save');
+// Browser: Binder from @webpieces/http-client-browser (no filter argument is supported)
+binder.createRpcClientAndBind(SaveApi, 'save');
+binder.provide(new BrowserValueProvider(MutableContextStore, new MutableContextStore()));
 ```
 
+Supply `ClientBindOptions` / `PubSubBindOptions` with a `token` only when two clients of the same
+API must coexist; filters ride on `ClientBindOptions` for RPC clients. `bindExternal(Api,
+VendorImpl)` binds a vendor implementation AND records the external-contract graph edge.
+`RuntimeClients`, `RuntimeTaskClients`, `provideRpcClient`, `ExternalContractUse`, `ClientToken`,
+`BrowserBindings` and `BindingModule` no longer exist; `getBindingModules` / `getRoutingModules`
+are now `getBindModules` / `getRouteModules`, and `runtime-deps.json` uses `bindModules` /
+`routeModules`. `RouteModule` is Node-only; a browser Wiring has no route channel.
+
 Each owner's `src/wiring.ts` shows its actual wiring: the Wiring/AppWiring class AND the named
-BindingModule and RouteModule classes it selects, with their real registrations (`bindRpc`,
-`provideRpcClient`, `bindPubSub`, `addRoutes`, `addFilter`, DI binds and provider recipes) in their
-`configure` methods. A selected module declared in any other file is rejected. Runtime extraction
-reads only canonical `wiring.ts` files; an AppWiring brings in a library through that library's
-Wiring, whose modules live in the library's own `wiring.ts`.
+BindModule and RouteModule classes it selects, with their real registrations (`binder.bind`
+chains, `binder.createRpcClientAndBind`, `binder.createPubSubClientAndBind`, `binder.bindExternal`,
+browser `binder.provide` recipes, `addRoutes`, `addFilter`) in their `configure` methods. The rule
+is OWNER-canonical: an AppWiring may select a BindModule declared in a library owner's canonical
+`src/wiring.ts` (resolved by symbol, so a barrel re-export is fine), and a library's canonical
+wiring.ts may export only BindModules:
+
+```typescript
+getBindModules(): BindModule[] {
+    return [new RemoteFsdbBindModule(), new GcpTtsBindModule(this.config.tts)];
+}
+```
+
+A selected module declared in any other file, or a `ContainerModule`, is rejected naming the module
+and the file. A vendor `ContainerModule` loaded with `.load(options)` is no longer a registration:
+give the vendor library a canonical wiring.ts with its own BindModule. Runtime extraction reads only
+canonical `wiring.ts` files.
 
 The wiring-format rule checks canonical `src/wiring.ts` in every participating tagged owner,
 including unchanged projects outside the diff, and never format-checks other files. Select modules
-with literal arrays of named instances; only AppWiring selects library Wirings. Set maxLines
-explicitly (the agreed limit is 400). Preserve each existing token, API, deployment and supported
-filter list. Registration remains lazy and singleton; test overrides must still avoid resolving the
-production factory. Keep configuration building, translations, environment discovery and
-initializer or factory bodies in imported implementations, and reference them by name from the
-registration that stays visible in `wiring.ts`. Review the resulting runtime declaration candidates
-and qualified API/deployment relationships before updating approvals.
+with literal arrays of named instances; only AppWiring selects library Wirings or another owner's
+BindModules. Set maxLines explicitly (the agreed limit is 400). Preserve each existing token, API,
+deployment and supported filter list. Registration remains lazy and singleton; test overrides must
+still avoid resolving the production factory. Keep configuration building, translations,
+environment discovery and initializer or factory bodies in imported implementations, and reference
+them by name from the registration that stays visible in `wiring.ts`. Review the resulting runtime
+declaration candidates and qualified API/deployment relationships before updating approvals.

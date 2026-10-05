@@ -31,14 +31,14 @@
                     }
                 }
             ],
-            "bindingModules": [],
-            "routingModules": [],
+            "bindModules": [],
+            "routeModules": [],
             "wirings": []
         },
         "ApplicationBrowserWiring": {
             "kind": "app",
             "relationships": [],
-            "bindingModules": [
+            "bindModules": [
                 {
                     "project": "angular-site",
                     "exportedName": "BrowserHostBindings",
@@ -52,14 +52,14 @@
                     "policies": {}
                 }
             ],
-            "routingModules": [],
+            "routeModules": [],
             "wirings": []
         },
         "BrowserHostBindings": {
             "kind": "binding",
             "relationships": [],
-            "bindingModules": [],
-            "routingModules": [],
+            "bindModules": [],
+            "routeModules": [],
             "wirings": []
         }
     },
