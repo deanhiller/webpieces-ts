@@ -1,12 +1,14 @@
 {
-    "schemaVersion": 1,
+    "schemaVersion": 2,
     "project": "server2",
     "framework": "node",
     "exports": {
         "Server2Bindings": {
             "kind": "binding",
             "relationships": [],
-            "selections": []
+            "bindingModules": [],
+            "routingModules": [],
+            "wirings": []
         },
         "Server2Routes": {
             "kind": "routing",
@@ -20,25 +22,30 @@
                     "transport": "rpc"
                 }
             ],
-            "selections": []
+            "bindingModules": [],
+            "routingModules": [],
+            "wirings": []
         },
         "Server2Wiring": {
-            "kind": "plan",
+            "kind": "app",
             "relationships": [],
-            "selections": [
+            "bindingModules": [
                 {
                     "project": "server2",
                     "exportedName": "Server2Bindings",
                     "targets": {},
                     "policies": {}
-                },
+                }
+            ],
+            "routingModules": [
                 {
                     "project": "server2",
                     "exportedName": "Server2Routes",
                     "targets": {},
                     "policies": {}
                 }
-            ]
+            ],
+            "wirings": []
         }
     },
     "entry": "Server2Wiring",

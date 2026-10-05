@@ -128,6 +128,12 @@
             ],
             "@webpieces/tooling-testkit": [
                 "packages/tooling/tooling-testkit/src/index.ts"
+            ],
+            "@webpieces/nx-source": [
+                "packages/tooling/nx-webpieces-rules/src/index.ts"
+            ],
+            "@webpieces/nx-webpieces-rules/rule-runtime": [
+                "packages/tooling/nx-webpieces-rules/src/rule-runtime.ts"
             ]
         }
     },

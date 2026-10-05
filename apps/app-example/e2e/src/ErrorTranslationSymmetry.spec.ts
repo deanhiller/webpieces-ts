@@ -19,7 +19,7 @@ import {
 } from '@webpieces/http-client-node';
 import { PublicApi } from '@webpieces/client-server-api';
 import { setupCompanyRuntime } from '@webpieces/company-svc-core';
-import { ClientServerAppModules } from '../../client-server/src/ClientServerAppModules';
+import { ClientServerWiring } from '../../client-server/src/wiring';
 import {
     ORDER_SURFACE_HEADER,
     OrderErrorPayload,
@@ -66,7 +66,7 @@ const post = (path: string, body: string): Promise<Response> =>
     });
 
 beforeAll(async () => {
-    const factory = await setupCompanyRuntime(ClientServerAppModules.create());
+    const factory = await setupCompanyRuntime(new ClientServerWiring());
     httpServer = await new WebpiecesExpressRouter(factory).bindAndStartExpress(express(), PORT);
     ClientRegistry.resetForTests();
     ClientRegistry.addUrlMapping('client-server', url(''));

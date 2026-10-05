@@ -17,19 +17,30 @@ export class Server2Routes implements RouteModule {
     }
 }
 
-import { ContainerModule, ContainerModuleLoadOptions } from 'inversify';
-import { AUTH_CONFIG, ServerWiring, ServerWiringOptions } from '@webpieces/http-routing';
+import { ContainerModuleLoadOptions } from 'inversify';
+import { AUTH_CONFIG, AppWiring, Wiring, BindingModule } from '@webpieces/http-routing';
 import { CompanyAuthConfig } from '@webpieces/company-svc-core';
 
-export const Server2Bindings = new ContainerModule((options: ContainerModuleLoadOptions) => {
-    options.bind(AUTH_CONFIG).to(CompanyAuthConfig).inSingletonScope();
-});
+export class Server2Bindings implements BindingModule {
+    configure(options: ContainerModuleLoadOptions): void {
+        options.bind(AUTH_CONFIG).to(CompanyAuthConfig).inSingletonScope();
+    }
+}
 
-export class Server2Wiring {
-    getRuntimeWiring(): ServerWiring {
-        return new ServerWiring(
-            'server2',
-            new ServerWiringOptions([Server2Bindings], [new Server2Routes()]),
-        );
+import { AnyContextKey } from '@webpieces/core-util';
+import { CompanyHeaders } from '@webpieces/company-core';
+
+export class Server2Wiring implements AppWiring {
+    getWirings(): Wiring[] {
+        return [];
+    }
+    getBindingModules(): BindingModule[] {
+        return [new Server2Bindings()];
+    }
+    getRoutingModules(): RouteModule[] {
+        return [new Server2Routes()];
+    }
+    getHeaders(): AnyContextKey[] {
+        return CompanyHeaders.ALL_HEADERS;
     }
 }

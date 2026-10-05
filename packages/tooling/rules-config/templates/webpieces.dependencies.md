@@ -148,13 +148,13 @@ and replace supported hand-written singleton/provider factories with the public 
 ```typescript
 // @webpieces/http-client-node (filters remain the optional fourth argument)
 const clients = new RuntimeClients(options);
-clients.bindRpc(TOKEN, SaveApi, rpcTarget(SaveApi, 'save'), filters);
+clients.bindRpc(TOKEN, SaveApi, 'save', filters);
 
 // @webpieces/cloudtasks-client (no filter argument is supported)
 new RuntimeTaskClients(options).bindPubSub(TASK_TOKEN, TaskApi, 'worker');
 
 // @webpieces/http-client-browser (no filter argument is supported)
-provideRpcClient(BROWSER_TOKEN, SaveApi, rpcTarget(SaveApi, 'save'));
+provideRpcClient(BROWSER_TOKEN, SaveApi, 'save');
 ```
 
 Architecture validation checks ALL CODE in every participating owner, even unchanged projects

@@ -8,14 +8,14 @@ import { ApiUnauthorizedError } from '@webpieces/core-util';
 import { SaveApi, PublicApi } from '@webpieces/client-server-api';
 import { Counter, SimpleCounter } from '../controllers/save-controller';
 import { setupCompanyRuntime, CompanySetupOptions } from '@webpieces/company-svc-core';
-import { ClientServerAppModules } from '../ClientServerAppModules';
+import { ClientServerWiring } from '../wiring';
 import { Server2Api, FetchValueResponse, TYPES } from '../remote/Server2Client';
 
 /**
  * These tests exercise the FULL api-tier filter chain + controller through the in-process client
  * (createApiClient) — NO express, NO HTTP, NO ports. Each test declares its OWN container overrides
  * INLINE (Server2Api → a mock, AuthConfig → a stub, and whatever else it needs), then builds the
- * app's ApiFactory with the SAME AppModules the real server uses (ClientServerAppModules.create()) and
+ * app's ApiFactory with the SAME AppWiring the real server uses (new ClientServerWiring()) and
  * drives the api contract. It is the exact same container + filter chain production uses.
  *
  * (AuthConfig is stubbed because the framework AuthFilter is AuthMode-driven; the stub lets the
@@ -61,7 +61,7 @@ describe('SaveApi with mocked Server2Api', () => {
             (await options.rebind(JWT_HOOK)).to(TestJwtHook);
         });
         const factory = await setupCompanyRuntime(
-            ClientServerAppModules.create(),
+            new ClientServerWiring(),
             new CompanySetupOptions(undefined, appOverrides),
         );
         saveApi = factory.createApiClient<SaveApi>(SaveApi);
@@ -97,7 +97,7 @@ describe('SaveApi with mocked Server2Api', () => {
             (await options.rebind<Counter>(TYPES.Counter)).toConstantValue(counter);
         });
         const factory = await setupCompanyRuntime(
-            ClientServerAppModules.create(),
+            new ClientServerWiring(),
             new CompanySetupOptions(undefined, appOverrides),
         );
         const counterApi = factory.createApiClient<SaveApi>(SaveApi);
@@ -156,7 +156,7 @@ describe('PublicApi', () => {
             (await options.rebind(JWT_HOOK)).to(TestJwtHook);
         });
         const factory = await setupCompanyRuntime(
-            ClientServerAppModules.create(),
+            new ClientServerWiring(),
             new CompanySetupOptions(undefined, appOverrides),
         );
         publicApi = factory.createApiClient<PublicApi>(PublicApi);

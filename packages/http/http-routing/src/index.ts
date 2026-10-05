@@ -96,7 +96,7 @@ export { LogApiFilter } from './filters/LogApiFilter';
 export { FilterMatcher, HttpFilter } from './FilterMatcher';
 
 // The app's server-surface declaration: DI binding modules + route groups + headers.
-export { AppModules, RouteModule } from './AppModules';
+export type { Wiring, AppWiring, BindingModule, RouteModule } from './Wiring';
 
 // The public API-surface abstraction: declare routes/filters, get them back as ApiClient[].
 export { ApiFactory } from './ApiFactory';
@@ -142,8 +142,9 @@ export { setupRuntime, RuntimeSetupOptions } from './setupRuntime';
 // Server configuration
 export { WebpiecesConfig, WEBPIECES_CONFIG_TOKEN } from './WebpiecesConfig';
 
-export { ServerWiring, ServerWiringOptions } from './ServerWiring';
 
 export { AuthorizationHook, AuthorizationService, CanonicalUserRoles, AUTHORIZATION_HOOK, VERIFIED_MACHINE_CALLER, VerifiedMachineCaller } from './AuthorizationHook';
 export { AuthorizedApiDocument } from './AuthorizedApiDocument';
 export type { ApiDocumentObject, ApiDocumentValue } from './AuthorizedApiDocument';
+
+export { WiringPolicy, ExternalContractUse } from '@webpieces/http-client-core';

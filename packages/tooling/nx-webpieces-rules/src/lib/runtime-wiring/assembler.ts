@@ -5,6 +5,7 @@ import type {
     RuntimeDeclaration,
     WiringExport,
     WiringRelationship,
+    PolicyValue,
 } from './declaration';
 import { WiringSelection } from './declaration';
 
@@ -27,35 +28,58 @@ export class RuntimeWiringAssembler {
     assemble(project: string): ResolvedWiringRelationship[] {
         const declaration = this.getDeclaration(project);
         if (declaration.entry === undefined) this.fail(`${project} has no approved app entry.`);
-        return this.visit(newSelection(project, declaration.entry!), new Set<string>());
+        const root = newSelection(project, declaration.entry!);
+        const app = this.exported(root, 'app');
+        const selections = [root, ...app.wirings.map((child: WiringSelection) => this.forward(child, root))];
+        const result: ResolvedWiringRelationship[] = [];
+        for (const channel of ['bindingModules', 'routingModules'] as const) {
+            for (const [index, selection] of selections.entries()) {
+                const owner = this.exported(selection, index === 0 ? 'app' : 'wiring');
+                if (index > 0 && owner.wirings.length > 0)
+                    this.fail(`Only AppWiring selects libraries: ${selection.project}#${selection.exportedName}.`);
+                for (const [moduleIndex, module] of owner[channel].entries()) {
+                    const selected = this.forward(module, selection);
+                    const leaf = this.exported(selected, channel === 'bindingModules' ? 'binding' : 'routing');
+                    if (leaf.bindingModules.length + leaf.routingModules.length + leaf.wirings.length > 0)
+                        this.fail('Leaf modules cannot hide composition or composition cycles.');
+                    const via = `${project}#${declaration.entry}/${index}:${selection.project}#${selection.exportedName}/${channel}[${moduleIndex}]:${selected.project}#${selected.exportedName}`;
+                    result.push(...this.resolveRelationships(leaf, selected, via));
+                }
+            }
+        }
+        return result;
     }
 
-    private visit(selection: WiringSelection, stack: Set<string>): ResolvedWiringRelationship[] {
+    private exported(selection: WiringSelection, kind: WiringExport['kind']): WiringExport {
         const key = `${selection.project}#${selection.exportedName}`;
-        if (stack.has(key)) this.fail(`Runtime composition cycle: ${[...stack, key].join(' -> ')}`);
         const declaration = this.getDeclaration(selection.project);
         const exported = Object.hasOwn(declaration.exports, selection.exportedName)
             ? declaration.exports[selection.exportedName]
             : undefined;
         if (exported === undefined) this.fail(`Missing approved export ${key}.`);
-        const active = new Set([...stack, key]);
-        const relationships = this.resolveRelationships(exported!, selection);
-        for (const child of exported!.selections) {
-            const targets: Record<string, DeclaredTarget> = {};
-            for (const name of Object.keys(child.targets))
-                targets[name] = this.resolveTarget(child.targets[name], selection);
-            const next = newSelection(child.project, child.exportedName, targets, {
-                ...selection.policies,
-                ...child.policies,
-            });
-            relationships.push(...this.visit(next, active));
+        if (exported.kind !== kind)
+            this.fail(`${key}: expected ${kind}, found ${exported.kind}. Nested app/library composition is unsupported.`);
+        return exported;
+    }
+
+    private forward(child: WiringSelection, parent: WiringSelection): WiringSelection {
+        const targets: Record<string, DeclaredTarget> = {};
+        const policies: Record<string, PolicyValue> = {};
+        for (const [name, target] of Object.entries(child.targets))
+            targets[name] = this.resolveTarget(target, parent);
+        for (const [name, value] of Object.entries(child.policies)) {
+            const resolved = typeof value === 'object' ? parent.policies[value.parameter] : value;
+            if (resolved === undefined || typeof resolved === 'object')
+                this.fail(`Unresolved policy parameter ${name} via ${parent.project}#${parent.exportedName}.`);
+            policies[name] = resolved;
         }
-        return relationships;
+        return new WiringSelection(child.project, child.exportedName, targets, policies);
     }
 
     private resolveRelationships(
         exported: WiringExport,
         selection: WiringSelection,
+        via: string,
     ): ResolvedWiringRelationship[] {
         const result: ResolvedWiringRelationship[] = [];
         for (const relationship of exported.relationships) {
@@ -81,7 +105,7 @@ export class RuntimeWiringAssembler {
                     relationship.contract.exportedName,
                     relationship.direction,
                     relationship.transport,
-                    `${selection.project}#${selection.exportedName}`,
+                    via,
                     target,
                     relationship.policy !== undefined &&
                     selection.policies[relationship.policy] === 'runtime'
@@ -135,7 +159,7 @@ function newSelection(
     project: string,
     exportedName: string,
     targets: Record<string, DeclaredTarget> = {},
-    policies: Record<string, boolean | 'runtime'> = {},
+    policies: Record<string, PolicyValue> = {},
 ): WiringSelection {
     return new WiringSelection(project, exportedName, targets, policies);
 }

@@ -13,9 +13,20 @@ import {
     WiringSelection,
 } from './declaration';
 import { WiringSourceValues } from './source-values';
-import { CanonicalClientBindings } from './canonical-clients';
+import { WiringSourceTypes } from './source-types';
+import * as fs from 'fs';
 
 /** Build-only extraction. It never imports application modules or invokes their constructors. */
+class WiringProjectMetadata {
+    declare metadata?: WiringProjectMetadataValues;
+}
+class WiringProjectMetadataValues {
+    declare webpieces?: WiringServiceMetadata;
+}
+class WiringServiceMetadata {
+    declare serviceName?: string;
+}
+
 export class WiringSourceExtractor {
     private readonly values: WiringSourceValues;
     private readonly exported: Record<string, WiringExport> = {};
@@ -32,17 +43,6 @@ export class WiringSourceExtractor {
     }
 
     extract(): RuntimeDeclaration {
-        const clients = new CanonicalClientBindings(this.program.getTypeChecker());
-        const problems = this.program
-            .getSourceFiles()
-            .filter(
-                (file) =>
-                    !file.isDeclarationFile &&
-                    this.owns(file.fileName) &&
-                    !/(?:\.spec\.|\.test\.|\/__tests__\/)/.test(file.fileName),
-            )
-            .flatMap((file) => clients.problems(file));
-        clients.assert(problems);
         const wiringPath = path.resolve(this.workspaceRoot, this.info.root, 'src/wiring.ts');
         const wiring = this.program.getSourceFile(wiringPath);
         if (wiring === undefined) this.fail(`Missing canonical ${wiringPath}.`);
@@ -61,7 +61,7 @@ export class WiringSourceExtractor {
               ? 'node'
               : 'browser';
         if (this.info.tags.includes('webpieces') && this.entry === undefined)
-            this.fail(`${this.info.name} requires getRuntimeWiring() returning a typed plan.`);
+            this.fail(`${this.info.name} requires one unambiguous exported AppWiring in src/wiring.ts.`);
         return new RuntimeDeclaration(
             this.info.name,
             framework,
@@ -72,54 +72,24 @@ export class WiringSourceExtractor {
     }
 
     private visit(node: ts.Node, inWiring: boolean): void {
-        if (
-            !inWiring &&
-            (ts.isPropertyAccessExpression(node) || ts.isElementAccessExpression(node)) &&
-            [
-                'addRoutes',
-                'createRpcClient',
-                'createPubSubClient',
-                'bindRpc',
-                'bindPubSub',
-            ].includes(this.values.symbolName(node))
-        )
-            this.fail(
-                `${node.getSourceFile().fileName}: topology method references belong in src/wiring.ts, including aliases.`,
-            );
-        if (
-            inWiring &&
-            ts.isNewExpression(node) &&
-            this.values.symbolName(node.expression) === 'ExternalContractUse'
-        )
-            this.recordExternal(node);
-        if (ts.isCallExpression(node)) {
-            const name = this.values.symbolName(node.expression);
-            if (
-                [
-                    'addRoutes',
-                    'createRpcClient',
-                    'createPubSubClient',
-                    'bindRpc',
-                    'bindPubSub',
-                    'provideRpcClient',
-                ].includes(name)
-            ) {
-                if (!inWiring)
-                    this.fail(
-                        `${node.getSourceFile().fileName}: ${name} must be owned by src/wiring.ts.`,
-                    );
-                this.recordRelationship(node, name);
-            }
-        }
-        if (inWiring && ts.isMethodDeclaration(node) && node.name.getText() === 'getRuntimeWiring')
-            this.recordPlan(node);
-        ts.forEachChild(node, (child) => this.visit(child, inWiring));
+        if (ts.isClassDeclaration(node)) this.recordWiring(node, inWiring);
+        ts.forEachChild(node, (child: ts.Node) => this.visit(child, inWiring));
     }
 
-    private recordExternal(expression: ts.NewExpression): void {
-        const owner = this.exportOwner(expression);
+    private facts(node: ts.Node, owner: string): void {
+        if (ts.isNewExpression(node) && new WiringSourceTypes(this.program.getTypeChecker()).isFramework(node.expression, 'ExternalContractUse'))
+            this.recordExternal(node, owner);
+        if (ts.isCallExpression(node) && this.frameworkCall(node)) {
+            const name = this.values.symbolName(node.expression);
+            if (['addRoutes', 'createRpcClient', 'createPubSubClient', 'bindRpc', 'bindPubSub', 'provideRpcClient'].includes(name))
+                this.recordRelationship(node, name, owner);
+        }
+        ts.forEachChild(node, (child: ts.Node) => this.facts(child, owner));
+    }
+
+    private recordExternal(expression: ts.NewExpression, owner: string): void {
         const identity = expression.arguments?.[0];
-        if (owner === undefined || identity === undefined || !ts.isStringLiteralLike(identity))
+        if (identity === undefined || !ts.isStringLiteralLike(identity))
             this.fail(
                 'ExternalContractUse belongs to a selected exported module and requires a literal project#contract identity.',
             );
@@ -133,7 +103,7 @@ export class WiringSourceExtractor {
             this.fail(
                 `${project}#${exportedName} has no production business consumer in ${this.info.name}; adapters and test doubles do not establish uses.`,
             );
-        const exported = this.exported[owner!] ?? new WiringExport('binding', [], []);
+        const exported = this.exported[owner];
         exported.relationships.push(
             new WiringRelationship(
                 new ContractIdentity(project, exportedName),
@@ -143,15 +113,10 @@ export class WiringSourceExtractor {
                 }),
             ),
         );
-        this.exported[owner!] = exported;
+        this.exported[owner] = exported;
     }
 
-    private recordRelationship(call: ts.CallExpression, method: string): void {
-        const owner = this.exportOwner(call);
-        // The generic Angular integration adapter defines the primitive; its invocations own facts.
-        if (owner === 'provideRpcClient' && method === 'createRpcClient') return;
-        if (owner === undefined)
-            this.fail(`Unowned ${method} at ${call.getSourceFile().fileName}:${call.getStart()}.`);
+    private recordRelationship(call: ts.CallExpression, method: string, owner: string): void {
         const apiIndex =
             method === 'bindRpc' || method === 'bindPubSub' || method === 'provideRpcClient'
                 ? 1
@@ -175,13 +140,7 @@ export class WiringSourceExtractor {
             direction === 'implements'
                 ? undefined
                 : this.values.target(call.arguments[apiIndex + 1]);
-        const kind =
-            direction === 'implements'
-                ? 'routing'
-                : method === 'provideRpcClient'
-                  ? 'providers'
-                  : 'binding';
-        const exported = this.exported[owner!] ?? new WiringExport(kind, [], []);
+        const exported = this.exported[owner];
         exported.relationships.push(
             new WiringRelationship(
                 contract,
@@ -190,87 +149,60 @@ export class WiringSourceExtractor {
                     : new UsesFacts(transport, target!, this.values.condition(call)),
             ),
         );
-        this.exported[owner!] = exported;
+        this.exported[owner] = exported;
     }
 
-    private recordPlan(method: ts.MethodDeclaration): void {
-        const owner = this.exportOwner(method);
-        if (owner === undefined) this.fail('The plan class must be exported from src/wiring.ts.');
-        const returns = this.planReturns(method, owner!);
-        const expression = returns[0].expression as ts.NewExpression;
-        const name = this.values.symbolName(expression.expression);
-        const args = expression.arguments ?? [];
-        let arrays: readonly ts.Expression[];
-        if (name === 'ServerWiring') {
-            const host = this.values.target(args[0]);
-            if (host.kind !== 'service')
-                this.fail('ServerWiring requires a literal host identity.');
-            this.host = host.service;
-            if (
-                args[1] === undefined ||
-                !ts.isNewExpression(args[1]) ||
-                this.values.symbolName(args[1].expression) !== 'ServerWiringOptions'
-            )
-                this.fail(
-                    'Use ServerWiringOptions with separate bindingModules and routingModules arrays.',
-                );
-            arrays = (args[1] as ts.NewExpression).arguments ?? [];
-        } else if (name === 'BrowserWiring') arrays = args;
-        else this.fail(`Unsupported plan ${name}; use ServerWiring or BrowserWiring.`);
-        const selections: WiringSelection[] = [];
-        for (const array of arrays) {
-            if (!ts.isArrayLiteralExpression(array))
-                this.fail(
-                    'Plan module/provider lists must be static arrays; dynamic composition needs an explicit supported policy.',
-                );
-            for (const element of (array as ts.ArrayLiteralExpression).elements) {
-                if (ts.isObjectLiteralExpression(element)) continue; // ordinary Angular providers; API factories are checked independently
-                if (
-                    ts.isCallExpression(element) &&
-                    this.values.symbolName(element.expression) === 'provideRpcClient'
-                )
-                    continue;
-                const invocation =
-                    ts.isNewExpression(element) || ts.isCallExpression(element)
-                        ? element
-                        : undefined;
-                const identity = this.values.identity(
-                    invocation === undefined ? element : invocation.expression,
-                );
-                const targets = invocation === undefined ? {} : this.values.arguments(invocation);
-                selections.push(
-                    new WiringSelection(
-                        identity.project,
-                        identity.exportedName,
-                        targets,
-                        invocation === undefined ? {} : this.values.policies(invocation),
-                    ),
-                );
-                if (
-                    identity.project === this.info.name &&
-                    this.exported[identity.exportedName] === undefined
-                )
-                    this.exported[identity.exportedName] = new WiringExport('binding', [], []);
-            }
+    private frameworkCall(call: ts.CallExpression): boolean {
+        const declaration = this.program.getTypeChecker().getResolvedSignature(call)?.declaration;
+        if (declaration === undefined) return false;
+        const file = declaration.getSourceFile().fileName.replace(/\\/g, '/');
+        return /(?:\/packages\/(?:http|cloud)\/|\/node_modules\/@webpieces\/)(?:http-routing|http-client-node|http-client-browser|cloudtasks-client)\//.test(file);
+    }
+
+    private recordWiring(declaration: ts.ClassDeclaration, inWiring: boolean): void {
+        const types = new WiringSourceTypes(this.program.getTypeChecker());
+        const kind = types.kind(declaration);
+        const owner = this.exportOwner(declaration);
+        if (kind === undefined || owner === undefined) return;
+        if (kind === 'binding' || kind === 'routing') {
+            this.exported[owner] = new WiringExport(kind, [], []);
+            const configure = types.method(declaration, 'configure');
+            if (configure === undefined || configure.body === undefined)
+                this.fail(`${owner}: named module requires a statically resolvable configure implementation.`);
+            this.facts(configure!.body!, owner);
+            return;
         }
-        this.exported[owner!] = new WiringExport('plan', [], selections);
+        if (!inWiring) this.fail(`${owner}: declare Wiring/AppWiring only in canonical src/wiring.ts.`);
+        const bindings = this.moduleSelections(types.method(declaration, 'getBindingModules'), 'binding');
+        const routes = this.moduleSelections(types.method(declaration, 'getRoutingModules'), 'routing');
+        const libraries = kind === 'app' ? this.moduleSelections(types.method(declaration, 'getWirings'), 'wiring') : [];
+        if (kind === 'wiring' && types.method(declaration, 'getWirings') !== undefined)
+            this.fail(`${owner}: library Wiring cannot select other Wirings.`);
+        this.exported[owner] = new WiringExport(kind, [], bindings, routes, libraries);
+        if (kind !== 'app') return;
+        if (!this.info.tags.includes('webpieces'))
+            this.fail(`${owner}: library owners cannot declare an AppWiring entry.`);
+        if (this.entry !== undefined) this.fail('Ambiguous AppWiring root; export exactly one application entry.');
         this.entry = owner;
+        const projectFile = path.join(this.workspaceRoot, this.info.root, 'project.json');
+        if (fs.existsSync(projectFile)) {
+            const project = JSON.parse(fs.readFileSync(projectFile, 'utf8')) as WiringProjectMetadata;
+            this.host = project.metadata?.webpieces?.serviceName;
+        }
     }
 
-    private planReturns(method: ts.MethodDeclaration, owner: string): ts.ReturnStatement[] {
-        const returns: ts.ReturnStatement[] = [];
-        const visit = (node: ts.Node): void => {
-            if (ts.isReturnStatement(node)) returns.push(node);
-            else ts.forEachChild(node, visit);
-        };
-        if (method.body !== undefined) visit(method.body);
-        if (
-            returns.length !== 1 ||
-            returns[0].expression === undefined ||
-            !ts.isNewExpression(returns[0].expression)
-        )
-            this.fail(`${owner}.getRuntimeWiring must return one statically composed plan.`);
-        return returns;
+    private moduleSelections(method: ts.MethodDeclaration | undefined, expected: 'binding' | 'routing' | 'wiring'): WiringSelection[] {
+        const statements = method?.body?.statements;
+        const expression = statements?.length === 1 && ts.isReturnStatement(statements[0]) ? statements[0].expression : undefined;
+        if (expression === undefined || !ts.isArrayLiteralExpression(expression))
+            this.fail(`Expected ${expected} getter to contain only return [new NamedModule(preparedInputs)].`);
+        const types = new WiringSourceTypes(this.program.getTypeChecker());
+        return expression.elements.map((element: ts.Expression) => {
+            if (!ts.isNewExpression(element) || types.kind(element.expression) !== expected)
+                this.fail(`Wrong ${expected} selection ${element.getText()}; AppWiring children, delegation and nested lists are forbidden.`);
+            const identity = this.values.identity(element.expression);
+            return new WiringSelection(identity.project, identity.exportedName, this.values.arguments(element), this.values.policies(element));
+        });
     }
 
     private exportOwner(node: ts.Node): string | undefined {
@@ -315,7 +247,7 @@ export class WiringSourceExtractor {
     private fail(message: string): never {
         throw new RuleFailError('validate-runtime-architecture', message, undefined, undefined, [
             new Option(
-                'Move topology into canonical src/wiring.ts using RuntimeClients.bindRpc(token, Api, rpcTarget(Api, deployment)), RuntimeTaskClients.bindPubSub, or provideRpcClient for supported registrations, and use the documented static plan grammar; do not execute configuration to extract it.',
+                'Move topology into canonical src/wiring.ts using RuntimeClients.bindRpc(token, Api, deployment), RuntimeTaskClients.bindPubSub, or provideRpcClient for supported registrations, and use the documented Wiring/AppWiring getter grammar; do not execute configuration to extract it.',
                 true,
             ),
         ]);

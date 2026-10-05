@@ -78,7 +78,10 @@ export {
     ValidateImplementation,
 } from '@webpieces/core-util';
 
-export { BrowserWiring } from './BrowserWiring';
+export type { Wiring, AppWiring, BindingModule, RouteModule } from './Wiring';
+export { BrowserBindings, BrowserWiringProviders } from './Wiring';
+export { BrowserValueProvider, BrowserClassProvider, BrowserExistingProvider, BrowserFactoryProvider } from './BrowserProviders';
+export type { BrowserProvider, BrowserToken, BrowserType } from './BrowserProviders';
 export { RpcClientProvider, provideRpcClient } from './RpcClientProvider';
-export { rpcTarget } from '@webpieces/http-client-core';
-export type { RpcTarget } from '@webpieces/http-client-core';
+
+export { WiringPolicy, ExternalContractUse } from '@webpieces/http-client-core';

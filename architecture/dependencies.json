@@ -51,11 +51,13 @@
                         {
                             "api": "SaveApi",
                             "type": "rpc",
+                            "declaredVia": "angular-site#ApplicationBrowserWiring/0:angular-site#ApplicationBrowserWiring/bindingModules[1]:angular-site#ApiBindings",
                             "targetService": "client-server"
                         },
                         {
                             "api": "PublicApi",
                             "type": "rpc",
+                            "declaredVia": "angular-site#ApplicationBrowserWiring/0:angular-site#ApplicationBrowserWiring/bindingModules[1]:angular-site#ApiBindings",
                             "targetService": "client-server"
                         }
                     ]
@@ -117,6 +119,7 @@
                         {
                             "api": "Server2Api",
                             "type": "rpc",
+                            "declaredVia": "client-server#ClientServerWiring/0:client-server#ClientServerWiring/bindingModules[1]:client-server#RuntimeClientsModule",
                             "targetService": "server2"
                         }
                     ]
@@ -126,15 +129,18 @@
                     "implements": [
                         {
                             "api": "SaveApi",
-                            "type": "rpc"
+                            "type": "rpc",
+                            "declaredVia": "client-server#ClientServerWiring/0:client-server#ClientServerWiring/routingModules[0]:client-server#AppRoutes"
                         },
                         {
                             "api": "PublicApi",
-                            "type": "rpc"
+                            "type": "rpc",
+                            "declaredVia": "client-server#ClientServerWiring/0:client-server#ClientServerWiring/routingModules[0]:client-server#AppRoutes"
                         },
                         {
                             "api": "SecureApi",
-                            "type": "rpc"
+                            "type": "rpc",
+                            "declaredVia": "client-server#ClientServerWiring/0:client-server#ClientServerWiring/routingModules[0]:client-server#AppRoutes"
                         }
                     ],
                     "uses": []
@@ -308,7 +314,8 @@
             "responsibilitiesFile": "packages/http/http-routing/responsibilities.md",
             "designFile": "packages/http/http-routing/design.json",
             "dependsOn": [
-                "gcp-identity"
+                "gcp-identity",
+                "http-client-core"
             ]
         },
         "http-server": {
@@ -348,6 +355,7 @@
                         {
                             "api": "Server2Api",
                             "type": "rpc",
+                            "declaredVia": "legacy-server#LegacyWiring/0:legacy-server#LegacyWiring/bindingModules[1]:legacy-server#RuntimeClientsModule",
                             "targetService": "server2"
                         }
                     ]
@@ -357,11 +365,13 @@
                     "implements": [
                         {
                             "api": "SaveApi",
-                            "type": "rpc"
+                            "type": "rpc",
+                            "declaredVia": "legacy-server#LegacyWiring/0:legacy-server#LegacyWiring/routingModules[1]:legacy-server#LegacyRoutes"
                         },
                         {
                             "api": "PublicApi",
-                            "type": "rpc"
+                            "type": "rpc",
+                            "declaredVia": "legacy-server#LegacyWiring/0:legacy-server#LegacyWiring/routingModules[1]:legacy-server#LegacyRoutes"
                         }
                     ],
                     "uses": []
@@ -483,7 +493,8 @@
                     "implements": [
                         {
                             "api": "Server2Api",
-                            "type": "rpc"
+                            "type": "rpc",
+                            "declaredVia": "server2#Server2Wiring/0:server2#Server2Wiring/routingModules[0]:server2#Server2Routes"
                         }
                     ],
                     "uses": []

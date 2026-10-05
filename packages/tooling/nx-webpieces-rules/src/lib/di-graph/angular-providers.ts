@@ -78,14 +78,13 @@ function collectDeps(depsExpr: ts.Expression | undefined, checker: ts.TypeChecke
 }
 
 /** Record one provider-object literal (`{ provide, useX }`) as a binding. */
-function collectProviderObject(
-    obj: ts.ObjectLiteralExpression,
+function collectProviderRecipe(
+    props: Map<string, ts.Expression>,
     checker: ts.TypeChecker,
     workspaceRoot: string,
     file: string,
     table: BindingTable,
 ): void {
-    const props = objectProps(obj);
     const provideExpr = props.get('provide');
     if (!provideExpr) return;
 
@@ -153,7 +152,29 @@ function collectProviderElement(
     }
 
     if (ts.isObjectLiteralExpression(element)) {
-        collectProviderObject(element, checker, workspaceRoot, file, table);
+        collectProviderRecipe(objectProps(element), checker, workspaceRoot, file, table);
+    }
+}
+
+/** Named browser recipes preserve the same aliases and factory dependency evidence. */
+class NamedBrowserProviders {
+    collect(node: ts.NewExpression, checker: ts.TypeChecker, root: string, file: string, table: BindingTable): void {
+        let symbol = checker.getSymbolAtLocation(node.expression);
+        if (symbol !== undefined && (symbol.flags & ts.SymbolFlags.Alias) !== 0)
+            symbol = checker.getAliasedSymbol(symbol);
+        const name = symbol?.getName();
+        const recipe = name === 'BrowserValueProvider' ? 'useValue'
+            : name === 'BrowserFactoryProvider' ? 'useFactory'
+            : name === 'BrowserClassProvider' ? 'useClass'
+            : name === 'BrowserExistingProvider' ? 'useExisting' : undefined;
+        const declaration = symbol?.valueDeclaration;
+        if (recipe === undefined || declaration === undefined ||
+            !/(?:packages\/http\/|node_modules\/@webpieces\/)http-client-browser\//.test(declaration.getSourceFile().fileName)) return;
+        const args = node.arguments;
+        if (args === undefined || args.length < 2) return;
+        const props = new Map<string, ts.Expression>([['provide', args[0]], [recipe, args[1]]]);
+        if (args[2] !== undefined) props.set('deps', args[2]);
+        collectProviderRecipe(props, checker, root, file, table);
     }
 }
 
@@ -191,12 +212,14 @@ export function collectAngularProviders(
 ): BindingTable {
     const table = new BindingTable();
     const clients = new RuntimeClientBindings();
+    const providers = new NamedBrowserProviders();
 
     for (const sourceFile of program.getSourceFiles()) {
         if (!isAnalyzableFile(sourceFile)) continue;
         const file = relativeFile(workspaceRoot, sourceFile);
 
         const visit = (node: ts.Node): void => {
+            if (ts.isNewExpression(node)) providers.collect(node, checker, workspaceRoot, file, table);
             if (ts.isCallExpression(node)) {
                 const client = clients.collectBrowser(node, checker, workspaceRoot);
                 if (client !== undefined) table.add(client);

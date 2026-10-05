@@ -1,4 +1,25 @@
-# Runtime wiring producer rollout evidence
+# Wiring v2 producer verification
+
+Issue [#1141](https://github.com/deanhiller/webpieces-ts/issues/1141) replaces plan wrappers with
+named Wiring/AppWiring and separate binding/routing modules. All four producer applications now
+approve schema v2. Reviewed candidates retain the existing implemented APIs and destinations:
+Angular → client-server (PublicApi, SaveApi), client-server → server2 (Server2Api), and
+legacy-server → server2 (Server2Api). Unselected library exports do not activate graph facts.
+
+Focused tests cover one-time instance materialization, repeated selections, asynchronous bindings,
+last-loaded test overrides, lazy clients and typed token errors; source tests cover imported/aliased
+libraries, prepared nested fields, independent destinations, literal getter grammar, all-owner
+format scans and schema rejection. Generation consumes approved declarations and does not execute
+application constructors or approve candidates.
+
+The producer uses the local source executor bridge described in [runtime-wiring.md](runtime-wiring.md)
+so its pending schema and package implementation can be verified together before publication.
+Downstream adoption requires the compatible published family and a separate installed-tooling
+upgrade. Consumer source migrations and consumer performance measurements are not producer evidence.
+
+The prior v1 delivery and baseline graph measurements follow as historical evidence.
+
+## Previous runtime wiring producer rollout evidence
 
 Issue [#1106](https://github.com/deanhiller/webpieces-ts/issues/1106) is delivered in staged producer changes:
 [tooling PR #1124](https://github.com/deanhiller/webpieces-ts/pull/1124), published as **0.4.855**,

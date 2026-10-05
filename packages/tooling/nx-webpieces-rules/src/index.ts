@@ -18,6 +18,7 @@ export default { name: '@webpieces/nx-webpieces-rules', createNodesV2 };
 
 export { STRUCTURAL_MODES, NoFileImportCyclesConfig, RuntimeArchitectureConfig, NxWiringConfig, DiGraphConfig, MissingDesignAnnotationConfig, ValidateArchitectureUnchangedConfig, ValidateNoArchitectureCyclesConfig, ValidatePackageJsonConfig, ValidateVersionsLockedConfig, ValidateEslintSyncConfig } from './configs/rule-configs';
 export type { StructuralMode } from './configs/rule-configs';
+export { WiringFormatConfig } from './configs/wiring-format-config';
 export { NoRootUnionApiTypeConfig } from './configs/no-root-union-config';
 export { API_DOC_MODES, ApiRulesForOpenApiConfig, ApiRulesForMcpConfig } from './configs/api-doc-rules-config';
 export type { ApiDocMode } from './configs/api-doc-rules-config';

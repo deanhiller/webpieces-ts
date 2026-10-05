@@ -1,36 +1,24 @@
-import type { EnvironmentProviders, Provider } from '@angular/core';
 import {
-    BrowserWiring,
-    provideRpcClient,
-    ClientConfig,
-    ClientHttpBrowserFactory,
-    ClientRegistry,
-    MutableContextStore,
+    AppWiring, Wiring, BindingModule, RouteModule, BrowserBindings, provideRpcClient,
 } from '@webpieces/http-client-browser';
-import { rpcTarget } from '@webpieces/http-client-core';
 import { SaveApi, PublicApi } from '@webpieces/client-server-api';
-import { EnvironmentConfig } from './services/EnvironmentConfig';
+import { BrowserHostBindings } from './BrowserHostBindings';
 
-export class ApplicationBrowserWiring {
-    getRuntimeWiring(): BrowserWiring<Provider | EnvironmentProviders> {
-        return new BrowserWiring([
-            { provide: MutableContextStore, useValue: new MutableContextStore() },
-            {
-                provide: ClientHttpBrowserFactory,
-                useFactory: (store: MutableContextStore): ClientHttpBrowserFactory =>
-                    new ClientHttpBrowserFactory(store),
-                deps: [MutableContextStore],
-            },
-            {
-                provide: ClientConfig,
-                useFactory: (environment: EnvironmentConfig): ClientConfig => {
-                    ClientRegistry.addUrlMapping('client-server', environment.apiBaseUrl());
-                    return new ClientConfig('client-server');
-                },
-                deps: [EnvironmentConfig],
-            },
-            provideRpcClient(SaveApi, SaveApi, rpcTarget(SaveApi, 'client-server')),
-            provideRpcClient(PublicApi, PublicApi, rpcTarget(PublicApi, 'client-server')),
-        ]);
+export class ApiBindings implements BindingModule {
+    configure(bindings: BrowserBindings): void {
+        bindings.add(provideRpcClient(SaveApi, SaveApi, 'client-server'));
+        bindings.add(provideRpcClient(PublicApi, PublicApi, 'client-server'));
+    }
+}
+
+export class ApplicationBrowserWiring implements AppWiring {
+    getWirings(): Wiring[] {
+        return [];
+    }
+    getBindingModules(): BindingModule[] {
+        return [new BrowserHostBindings(), new ApiBindings()];
+    }
+    getRoutingModules(): RouteModule[] {
+        return [];
     }
 }

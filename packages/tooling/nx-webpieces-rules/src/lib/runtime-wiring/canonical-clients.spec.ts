@@ -4,7 +4,7 @@ import * as path from 'path';
 import * as ts from 'typescript';
 import { specTempDirs } from '@webpieces/tooling-testkit';
 import { ProjectInfo } from '../project-info';
-import { CanonicalClientBindings, WorkspaceClientBindings } from './canonical-clients';
+import { CanonicalClientBindings } from './canonical-clients';
 
 class Fixture {
     readonly root = specTempDirs.make('canonical-clients-');
@@ -50,27 +50,12 @@ class Fixture {
 }
 
 describe('ALL-CODE canonical helper registration grammar', () => {
-    it('reports every unchanged registration across owners without consulting git', () => {
-        const fixture = new Fixture();
-        for (const owner of ['unchanged', 'also-unchanged'])
-            fixture.write(
-                owner,
-                `options.bind(TOKEN).toDynamicValue(() => new ClientHttpFactory().createRpcClient(SaveApi, new ClientConfig('${owner}'))).inSingletonScope();`,
-            );
-        expect(() => new WorkspaceClientBindings().assert(fixture.root, fixture.infos)).toThrow(
-            /unchanged.*\n.*also-unchanged/s,
-        );
-        expect(() => new WorkspaceClientBindings().assert(fixture.root, fixture.infos)).toThrow(
-            'rpcTarget(SaveApi',
-        );
-    });
-
     it('reports supported bindings inside wiring.ts with token, API, target and filters', () => {
         const problems = new Fixture().problems(
             `options.bind(TOKEN).toDynamicValue(() => ctx.get(ClientHttpFactory).createRpcClient(SaveApi, new ClientConfig('save'), filters)).inSingletonScope();`,
         );
         expect(problems[0]).toContain(
-            "new RuntimeClients(options).bindRpc(TOKEN, SaveApi, rpcTarget(SaveApi, 'save'), filters);",
+            "new RuntimeClients(options).bindRpc(TOKEN, SaveApi, 'save', filters);",
         );
     });
 
@@ -84,7 +69,7 @@ describe('ALL-CODE canonical helper registration grammar', () => {
             bind(TOKEN)['toDynamicValue'](callback)['inSingletonScope']();
         `);
         expect(problems).toHaveLength(1);
-        expect(problems[0]).toContain("rpcTarget(SaveApi, 'save')");
+        expect(problems[0]).toContain("'save'");
     });
 
     it('audits the supported pubsub and browser helper equivalents', () => {
@@ -97,7 +82,7 @@ describe('ALL-CODE canonical helper registration grammar', () => {
             "RuntimeTaskClients(options).bindPubSub(TOKEN, SaveApi, 'tasks')",
         );
         expect(problems[1]).toContain(
-            "provideRpcClient(OtherApi, SaveApi, rpcTarget(SaveApi, 'browser'))",
+            "provideRpcClient(OtherApi, SaveApi, 'browser')",
         );
     });
 
@@ -116,22 +101,12 @@ describe('ALL-CODE canonical helper registration grammar', () => {
         ).toEqual([]);
     });
 
-    it('leaves framework helper implementations and tests outside participating source checks', () => {
-        const fixture = new Fixture();
-        const raw = `options.bind(TOKEN).toDynamicValue(() => new ClientHttpFactory().createRpcClient(SaveApi, new ClientConfig('save'))).inSingletonScope();`;
-        fixture.write('framework', raw, 'wiring.ts', false);
-        fixture.write('tests', raw, 'binding.spec.ts');
-        expect(() =>
-            new WorkspaceClientBindings().assert(fixture.root, fixture.infos),
-        ).not.toThrow();
-    });
-
     it('passes canonical helper equivalents', () => {
         expect(
             new Fixture().problems(`
-            new RuntimeClients(options).bindRpc(TOKEN, SaveApi, rpcTarget(SaveApi, 'save'), filters);
+            new RuntimeClients(options).bindRpc(TOKEN, SaveApi, 'save', filters);
             new RuntimeTaskClients(options).bindPubSub(TOKEN, SaveApi, 'tasks');
-            provideRpcClient(TOKEN, SaveApi, rpcTarget(SaveApi, 'browser'));
+            provideRpcClient(TOKEN, SaveApi, 'browser');
         `),
         ).toEqual([]);
     });

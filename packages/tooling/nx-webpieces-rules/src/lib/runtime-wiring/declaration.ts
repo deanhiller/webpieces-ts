@@ -57,21 +57,25 @@ export class WiringSelection {
         public readonly project: string,
         public readonly exportedName: string,
         public readonly targets: Record<string, DeclaredTarget>,
-        public readonly policies: Record<string, boolean | 'runtime'>,
+        public readonly policies: Record<string, PolicyValue>,
     ) {}
 }
 
+export type PolicyValue = boolean | 'runtime' | { parameter: string };
+
 export class WiringExport {
     constructor(
-        public readonly kind: 'binding' | 'routing' | 'providers' | 'plan' | 'external',
+        public readonly kind: 'binding' | 'routing' | 'wiring' | 'app' | 'external',
         public readonly relationships: WiringRelationship[],
-        public readonly selections: WiringSelection[],
+        public readonly bindingModules: WiringSelection[],
+        public readonly routingModules: WiringSelection[] = [],
+        public readonly wirings: WiringSelection[] = [],
     ) {}
 }
 
 /** No timestamps, machine paths, credentials, deployment URLs, or cache keys belong here. */
 export class RuntimeDeclaration {
-    declare readonly schemaVersion: 1;
+    declare readonly schemaVersion: 2;
     declare readonly project: string;
     declare readonly framework: 'node' | 'angular' | 'browser';
     declare readonly exports: Record<string, WiringExport>;
@@ -85,7 +89,7 @@ export class RuntimeDeclaration {
         entry?: string,
         host?: string,
     ) {
-        this.schemaVersion = 1;
+        this.schemaVersion = 2;
         this.project = project;
         this.framework = framework;
         this.exports = exports;

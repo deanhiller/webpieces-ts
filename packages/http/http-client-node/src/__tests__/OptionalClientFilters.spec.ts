@@ -21,7 +21,7 @@ import {
 import type { RequestContextHeaders } from '@webpieces/core-context';
 import { Provider, RequestContext } from '@webpieces/core-context';
 import type { GcpOidc } from '@webpieces/gcp-identity';
-import { ClientFilterDefinition, ClientRequest, rpcTarget } from '@webpieces/http-client-core';
+import { ClientFilterDefinition, ClientRequest } from '@webpieces/http-client-core';
 import { AddressResolver } from '../AddressResolver';
 import { ClientConfig } from '../ClientConfig';
 import { ClientHttpFactory } from '../ClientHttpFactory';
@@ -174,7 +174,7 @@ describe('createRpcClient filters are genuinely optional', () => {
                 new RuntimeClients(options).bindRpc(
                     SvcApi,
                     SvcApi,
-                    rpcTarget(SvcApi, 'svc'),
+                    'svc',
                     filters,
                 );
             }),

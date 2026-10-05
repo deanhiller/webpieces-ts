@@ -5,7 +5,7 @@ import { ContextKey, AnyContextKey } from '@webpieces/core-util';
  *
  * Lives in @webpieces/company-core (shared, browser-safe) - the company-wide
  * lib that ALL projects bring in. Each app returns these from its
- * `AppModules.getHeaders()` (server) / passes them to `HeaderRegistry.configure(...)`
+ * `AppWiring.getHeaders()` (server) / passes them to `HeaderRegistry.configure(...)`
  * (browser) — by convention the company-wide set every server registers.
  *
  * Header layers:

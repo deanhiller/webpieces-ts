@@ -15,7 +15,7 @@ import {
 } from '@webpieces/http-client-node';
 import { SecureApi } from '@webpieces/client-server-api';
 import { setupCompanyRuntime, CompanySetupOptions } from '@webpieces/company-svc-core';
-import { ClientServerAppModules } from '../ClientServerAppModules';
+import { ClientServerWiring } from '../wiring';
 import { TestAuthConfig } from './TestAuthConfig';
 
 /**
@@ -36,7 +36,7 @@ beforeAll(async () => {
     const authOverride = new ContainerModule(async (o: ContainerModuleLoadOptions) => {
         (await o.rebind(AUTH_CONFIG)).to(TestAuthConfig);
     });
-    const factory = await setupCompanyRuntime(ClientServerAppModules.create(), new CompanySetupOptions(undefined, authOverride));
+    const factory = await setupCompanyRuntime(new ClientServerWiring(), new CompanySetupOptions(undefined, authOverride));
     httpServer = await new WebpiecesExpressRouter(factory).bindAndStartExpress(express(), PORT);
     // The client resolves 'client-server' via the registry (off-GCP); point it at this test server.
     ClientRegistry.resetForTests();

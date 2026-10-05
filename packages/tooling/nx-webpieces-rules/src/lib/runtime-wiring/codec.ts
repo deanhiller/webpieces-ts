@@ -9,7 +9,7 @@ import {
     WiringRelationship,
     WiringSelection,
 } from './declaration';
-import type { DeclaredTarget } from './declaration';
+import type { DeclaredTarget, PolicyValue } from './declaration';
 import { isExternalSystemKind } from '../api-usage/api-relations';
 
 /** JSON is validated before it is allowed to influence graph assembly. */
@@ -23,8 +23,8 @@ export class RuntimeDeclarationCodec {
             'entry',
             'host',
         ]);
-        if (root['schemaVersion'] !== 1)
-            this.fail('Unsupported runtime-deps schemaVersion; migrate to version 1.');
+        if (root['schemaVersion'] !== 2)
+            this.fail('Unsupported runtime-deps schemaVersion; migrate src/wiring.ts to Wiring/AppWiring and explicitly review a version 2 candidate.');
         if (root['project'] !== expectedProject)
             this.fail(`Expected project ${expectedProject}, found ${String(root['project'])}.`);
         const framework = this.string(root['framework']);
@@ -33,6 +33,23 @@ export class RuntimeDeclarationCodec {
         const exports: Record<string, WiringExport> = {};
         for (const [name, value] of Object.entries(this.record(root['exports'])))
             exports[name] = this.exported(value);
+        const entry = root['entry'] === undefined ? undefined : this.string(root['entry']);
+        const apps = Object.entries(exports).filter(([_name, exported]: [string, WiringExport]) => exported.kind === 'app');
+        if ((entry === undefined && apps.length > 0) || (entry !== undefined && apps.length !== 1))
+            this.fail('Declare exactly one AppWiring entry for an application; libraries export Wiring without an entry.');
+        if (entry !== undefined && exports[entry]?.kind !== 'app')
+            this.fail('A runtime entry must select an AppWiring export. Libraries have no entry.');
+        if (entry === undefined && root['host'] !== undefined)
+            this.fail('Library declarations cannot carry an application host.');
+        for (const [name, exported] of Object.entries(exports)) {
+            if (exported.kind !== 'app' && exported.wirings.length > 0)
+                this.fail(`${name}: only AppWiring may select library Wirings.`);
+            if (!['app', 'wiring'].includes(exported.kind) &&
+                (exported.bindingModules.length > 0 || exported.routingModules.length > 0))
+                this.fail(`${name}: leaf modules cannot select module lists.`);
+            if (['app', 'wiring'].includes(exported.kind) && exported.relationships.length > 0)
+                this.fail(`${name}: declare relationships in named binding/route modules.`);
+        }
         return new RuntimeDeclaration(
             expectedProject,
             framework,
@@ -55,20 +72,22 @@ export class RuntimeDeclarationCodec {
 
     // webpieces-disable no-any-unknown -- untrusted JSON is narrowed and validated at the input boundary
     private exported(value: unknown): WiringExport {
-        const exported = this.record(value, ['kind', 'relationships', 'selections']);
+        const exported = this.record(value, ['kind', 'relationships', 'bindingModules', 'routingModules', 'wirings']);
         const kind = this.string(exported['kind']);
         if (
             kind !== 'binding' &&
             kind !== 'routing' &&
-            kind !== 'providers' &&
-            kind !== 'plan' &&
+            kind !== 'wiring' &&
+            kind !== 'app' &&
             kind !== 'external'
         )
             this.fail(`Invalid export kind ${kind}.`);
         return new WiringExport(
             kind,
             this.array(exported['relationships']).map((value) => this.relationship(value)),
-            this.array(exported['selections']).map((value) => this.selection(value)),
+            this.array(exported['bindingModules']).map((value) => this.selection(value)),
+            this.array(exported['routingModules']).map((value) => this.selection(value)),
+            this.array(exported['wirings']).map((value) => this.selection(value)),
         );
     }
 
@@ -111,13 +130,15 @@ export class RuntimeDeclarationCodec {
     private selection(value: unknown): WiringSelection {
         const selection = this.record(value, ['project', 'exportedName', 'targets', 'policies']);
         const targets: Record<string, DeclaredTarget> = {};
-        const policies: Record<string, boolean | 'runtime'> = {};
+        const policies: Record<string, PolicyValue> = {};
         for (const [name, target] of Object.entries(this.record(selection['targets'])))
             targets[name] = this.target(target);
         for (const [name, policy] of Object.entries(this.record(selection['policies']))) {
-            if (typeof policy !== 'boolean' && policy !== 'runtime')
-                this.fail(`Policy ${name} must be explicitly true, false, or runtime.`);
-            policies[name] = policy;
+            if (typeof policy === 'boolean' || policy === 'runtime') policies[name] = policy;
+            else {
+                const forwarded = this.record(policy, ['parameter']);
+                policies[name] = { parameter: this.string(forwarded['parameter']) };
+            }
         }
         return new WiringSelection(
             this.string(selection['project']),

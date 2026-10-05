@@ -66,5 +66,6 @@ export type { ApiPrototype } from '@webpieces/http-client-core';
 export { StreamingCapabilityError } from '@webpieces/http-client-core';
 
 export { RuntimeClients } from './RuntimeClients';
-export { ClientToken, rpcTarget } from '@webpieces/http-client-core';
-export type { RpcTarget } from '@webpieces/http-client-core';
+export { ClientToken } from '@webpieces/http-client-core';
+
+export { WiringPolicy, ExternalContractUse } from '@webpieces/http-client-core';

@@ -2,8 +2,9 @@ import {
     RouteModule,
     WebpiecesRouter,
     FilterDefinition,
-    ServerWiring,
-    ServerWiringOptions,
+    AppWiring,
+    Wiring,
+    BindingModule,
 } from '@webpieces/http-routing';
 import { RecordingFilter } from '@webpieces/http-server';
 import { SaveApi, PublicApi, SecureApi } from '@webpieces/client-server-api';
@@ -17,7 +18,7 @@ import { SecureController } from './controllers/secure-controller';
  * adds only this app's filters. Priority (higher runs first): 1850 RecordingFilter.
  *
  * A named RouteModule replaces the old inline `(router) => { ... }` callback; larger apps split
- * their routes across several RouteModules and compose them in their {@link AppModules}.
+ * their routes across several RouteModules and compose them in their {@link AppWiring}.
  */
 export class AppRoutes implements RouteModule {
     configure(router: WebpiecesRouter): void {
@@ -28,24 +29,38 @@ export class AppRoutes implements RouteModule {
     }
 }
 
-import { ContainerModule, ContainerModuleLoadOptions } from 'inversify';
-import { RuntimeClients, rpcTarget } from '@webpieces/http-client-node';
+import { ContainerModuleLoadOptions } from 'inversify';
+import { RuntimeClients } from '@webpieces/http-client-node';
 import { Server2Api, TYPES } from './remote/Server2Client';
 import { InversifyModule } from './modules/InversifyModule';
 
-export const RuntimeClientsModule = new ContainerModule((options: ContainerModuleLoadOptions) => {
-    new RuntimeClients(options).bindRpc(
-        TYPES.Server2Api,
-        Server2Api,
-        rpcTarget(Server2Api, 'server2'),
-    );
-});
+export class ApplicationBindings implements BindingModule {
+    configure(options: ContainerModuleLoadOptions): void | Promise<void> {
+        return InversifyModule.load(options);
+    }
+}
 
-export class ClientServerWiring {
-    getRuntimeWiring(): ServerWiring {
-        return new ServerWiring(
-            'client-server',
-            new ServerWiringOptions([InversifyModule, RuntimeClientsModule], [new AppRoutes()]),
-        );
+export class RuntimeClientsModule implements BindingModule {
+    configure(options: ContainerModuleLoadOptions): void {
+        new RuntimeClients(options).bindRpc(TYPES.Server2Api, Server2Api, 'server2');
+    }
+}
+
+import { AnyContextKey } from '@webpieces/core-util';
+import { CompanyHeaders } from '@webpieces/company-core';
+import { AppHeaders } from './modules/InversifyModule';
+
+export class ClientServerWiring implements AppWiring {
+    getWirings(): Wiring[] {
+        return [];
+    }
+    getBindingModules(): BindingModule[] {
+        return [new ApplicationBindings(), new RuntimeClientsModule()];
+    }
+    getRoutingModules(): RouteModule[] {
+        return [new AppRoutes()];
+    }
+    getHeaders(): AnyContextKey[] {
+        return [...CompanyHeaders.ALL_HEADERS, ...AppHeaders.ALL_HEADERS];
     }
 }

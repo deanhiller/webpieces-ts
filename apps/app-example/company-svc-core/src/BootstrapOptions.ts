@@ -4,8 +4,8 @@
  * Data-only structure (a class, not an inline object literal, per the webpieces
  * guidelines) so each server constructs it explicitly: `new BootstrapOptions(8200, 'Server')`.
  *
- * The DI modules, route groups, and context keys now live in the per-app `AppModules`
- * (the same declaration the server and its tests build via `MyAppModules.create()`), and the
+ * The DI modules, route groups, and context keys now live in the per-app `AppWiring`
+ * (the same declaration the server and its tests build via `MyAppWiring.create()`), and the
  * logging backend / test overrides live in {@link CompanySetupOptions}; bootstrapServer only
  * needs the transport-level port + log name.
  */

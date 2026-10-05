@@ -12,6 +12,12 @@ export class NativeAction {
 
 /** Metadata holds lazy imports only; importing the pack never imports an executor or the Nx runtime. */
 export class NativeActions {
+    readonly wiringFormat = new NativeAction('wiring-format', 'workspace', async (context: ExecutorContext) => {
+        const format = await import('./lib/runtime-wiring/workspace-format');
+        const metadata = await import('./lib/graph-metadata');
+        new format.WorkspaceWiringFormat().run(context.root, await metadata.collectProjectInfo());
+        return new BuildPolicyResult(true);
+    });
     readonly fileCycles = new NativeAction(
         'file-cycles',
         'projects',

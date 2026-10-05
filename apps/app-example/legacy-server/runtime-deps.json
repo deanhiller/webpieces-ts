@@ -1,12 +1,21 @@
 {
-    "schemaVersion": 1,
+    "schemaVersion": 2,
     "project": "legacy-server",
     "framework": "node",
     "exports": {
-        "InversifyModule": {
+        "AdditionalFilters": {
+            "kind": "routing",
+            "relationships": [],
+            "bindingModules": [],
+            "routingModules": [],
+            "wirings": []
+        },
+        "ApplicationBindings": {
             "kind": "binding",
             "relationships": [],
-            "selections": []
+            "bindingModules": [],
+            "routingModules": [],
+            "wirings": []
         },
         "LegacyRoutes": {
             "kind": "routing",
@@ -28,21 +37,31 @@
                     "transport": "rpc"
                 }
             ],
-            "selections": []
+            "bindingModules": [],
+            "routingModules": [],
+            "wirings": []
         },
         "LegacyWiring": {
-            "kind": "plan",
+            "kind": "app",
             "relationships": [],
-            "selections": [
+            "bindingModules": [
                 {
                     "project": "legacy-server",
-                    "exportedName": "InversifyModule",
+                    "exportedName": "ApplicationBindings",
                     "targets": {},
                     "policies": {}
                 },
                 {
                     "project": "legacy-server",
                     "exportedName": "RuntimeClientsModule",
+                    "targets": {},
+                    "policies": {}
+                }
+            ],
+            "routingModules": [
+                {
+                    "project": "legacy-server",
+                    "exportedName": "AdditionalFilters",
                     "targets": {},
                     "policies": {}
                 },
@@ -52,7 +71,8 @@
                     "targets": {},
                     "policies": {}
                 }
-            ]
+            ],
+            "wirings": []
         },
         "RuntimeClientsModule": {
             "kind": "binding",
@@ -66,15 +86,13 @@
                     "transport": "rpc",
                     "target": {
                         "kind": "service",
-                        "service": "server2",
-                        "contract": {
-                            "project": "server2-api",
-                            "exportedName": "Server2Api"
-                        }
+                        "service": "server2"
                     }
                 }
             ],
-            "selections": []
+            "bindingModules": [],
+            "routingModules": [],
+            "wirings": []
         }
     },
     "entry": "LegacyWiring",
