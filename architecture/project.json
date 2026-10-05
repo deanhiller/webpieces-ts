@@ -20,7 +20,7 @@
             "cache": true,
             "inputs": [
                 "{workspaceRoot}/packages/tooling/nx-webpieces-rules/src/**/*.ts",
-                "{workspaceRoot}/**/src/wiring.ts",
+                "{workspaceRoot}/**/src/**/*.ts",
                 "{workspaceRoot}/rules/wiring-source-policy.json",
                 "{workspaceRoot}/tsconfig.base.json"
             ],
