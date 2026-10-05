@@ -1,29 +1,11 @@
+import { AuthorizationService } from '@webpieces/http-routing';
+import { WpAuthorization, AuthorizationType, WpAuth, jwt as jwtAuth } from '@webpieces/core-util';
 import 'reflect-metadata';
 import { Server } from 'node:http';
 import express, { Express } from 'express';
 import { ContainerModule, ContainerModuleLoadOptions, injectable } from 'inversify';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import {
-    ApiJsonSchema,
-    ApiPath,
-    ApiType,
-    Endpoint,
-    HeaderRegistry,
-    LoggerFactory,
-    LogManager,
-    McpToolCatalogFile,
-    McpToolDefinition,
-    ObjectSchemaBuilder,
-    WpAuthJwt,
-    WpMcpAuthJwt,
-    WpMcpTool,
-    WpMcpToolHints,
-    MCP,
-    POST,
-    READ,
-    RPC,
-    SVC_TO_SVC,
-} from '@webpieces/core-util';
+import { ApiJsonSchema, ApiPath, ApiType, Endpoint, HeaderRegistry, LoggerFactory, LogManager, McpToolCatalogFile, McpToolDefinition, ObjectSchemaBuilder, WpMcpTool, WpMcpToolHints, MCP, POST, READ, RPC, SVC_TO_SVC } from '@webpieces/core-util';
 import { JWT_HOOK, WebpiecesRouterFactory } from '@webpieces/http-routing';
 import { McpApiBinding } from './McpApiBinding';
 import { VerifiedMcpCredential, WpMcpServerConfig } from './McpAuth';
@@ -72,8 +54,9 @@ class PassageResponse {
 @ApiType(SVC_TO_SVC, MCP)
 abstract class PassageApi {
     /** Find passages with their translations keyed by locale. */
-    @WpMcpAuthJwt({ allRolesAllowed: true })
-    @WpAuthJwt({ allRolesAllowed: true })
+
+    @WpAuth([jwtAuth()])
+    @WpAuthorization({ authType: AuthorizationType.ALL_USERS })
     @Endpoint(POST, '/passages', READ, RPC)
     @WpMcpTool('passages_find')
     passages(_request: PassageRequest): Promise<PassageResponse> {
@@ -142,7 +125,7 @@ class PassageController extends PassageApi {
 }
 
 describe('WpMcpServer error boundary (WpMcpErrorTranslator)', () => {
-    let bridge: WpMcpServer<string, string>;
+    let bridge: WpMcpServer<string>;
     let authority: TestTokenAuthority;
     let jwtHook: TestJwtHook;
     let httpServer: Server;
@@ -164,13 +147,12 @@ describe('WpMcpServer error boundary (WpMcpErrorTranslator)', () => {
         router.addRoutes(PassageApi, PassageController);
         authority = new TestTokenAuthority();
         bridge = new WpMcpServer(
-            new WpMcpServerConfig<string, string>()
+            new WpMcpServerConfig<string>()
                 .setName('boundary-server')
                 .setVersion('1.0.0')
                 .setResource('https://api.example.test/app-owned/mcp')
                 .setAccessTokenAuthority(authority)
-                .setEndpointJwtAuthority(jwtHook)
-                .setEndpointMintRequest((credential: VerifiedMcpCredential) => credential.subject)
+                .setAuthorizationService(router.authorizationService())
                 .setAuthorizationServers(['https://login.example.test'])
                 .setRequiredScopes(['tools']),
         );

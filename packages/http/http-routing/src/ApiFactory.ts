@@ -1,3 +1,4 @@
+import { AuthorizationService } from './AuthorizationHook';
 import { InvocationAuthentication } from './InvocationAuthentication';
 import { ApiClient } from './ApiClient';
 
@@ -17,6 +18,9 @@ import { ApiClient } from './ApiClient';
  * addRoutes/addFilter). Hand an ApiFactory to WebpiecesExpressRouter to serve it over HTTP.
  */
 export interface ApiFactory {
+    /** The receiving chain policy service, shared by every local projection and dispatch. */
+    authorizationService(): AuthorizationService;
+
     apiClients(): ApiClient[];
 
     /** Internal transports supply an immutable credential to the ordinary route chain. */

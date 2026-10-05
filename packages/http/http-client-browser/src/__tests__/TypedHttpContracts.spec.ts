@@ -1,3 +1,4 @@
+import { WpAuthorization, AuthorizationType } from '@webpieces/core-util';
 import 'reflect-metadata';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
@@ -32,6 +33,7 @@ class TokenRequest {
 @ApiPath('/oauth')
 abstract class BrowserTypedApi {
     @WpAuthPublic('OAuth metadata is public by protocol')
+    @WpAuthorization({ authType: AuthorizationType.ANONYMOUS, reason: 'OAuth metadata is public by protocol' })
     @Endpoint(GET, '/resource/{resourceId}', READ, RPC)
     // webpieces-disable no-unmanaged-exceptions -- contract stub
     resource(
@@ -42,6 +44,7 @@ abstract class BrowserTypedApi {
     }
 
     @WpAuthPublic('OAuth token exchanges authenticate their grant payload')
+    @WpAuthorization({ authType: AuthorizationType.ANONYMOUS, reason: 'OAuth token exchanges authenticate their grant payload' })
     @Endpoint(POST, '/token', WRITE, RPC, { formPost: true, responseType: 'full' })
     // webpieces-disable no-unmanaged-exceptions -- contract stub
     token(_request: TokenRequest): Promise<HttpResponseDto<object>> {
@@ -49,6 +52,7 @@ abstract class BrowserTypedApi {
     }
 
     @WpAuthPublic('OAuth authorization redirects are protocol responses')
+    @WpAuthorization({ authType: AuthorizationType.ANONYMOUS, reason: 'OAuth authorization redirects are protocol responses' })
     @Endpoint(GET, '/authorize', READ, RPC, { responseType: 'full' })
     // webpieces-disable no-unmanaged-exceptions -- contract stub
     authorize(@QueryParam('client_id') _clientId: string): Promise<HttpResponseDto<undefined>> {

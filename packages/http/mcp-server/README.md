@@ -5,9 +5,10 @@ and output JSON Schema — the build extracts them from the contract source and 
 `mcp-<ContractClass>-tools.json` per contract — invokes the normal Webpieces filter/controller path, and turns exceptions into safe model-visible
 MCP results.
 
-`@WpMcpTool` is an opt-in and every tool must also declare `@WpMcpAuthJwt`. MCP user
-authorization and endpoint transport authentication are deliberately separate. The MCP adapter
-never accepts trusted context values from tool arguments or unverified headers.
+`@WpMcpTool` opts an endpoint into the protocol. Every endpoint declares canonical
+`@WpAuth` credentials and common `@WpAuthorization` policy. The same policy governs tool visibility,
+schema lookup, dispatch and receiving endpoint execution. The MCP adapter never accepts trusted
+context from tool arguments or unverified headers.
 
 ```ts
 interface FindOrderRequest {
@@ -24,8 +25,8 @@ interface FindOrderResponse {
 @ApiType(SVC_TO_SVC, MCP)
 abstract class OrdersApi {
     /** Find one order owned by the signed-in user. */
-    @WpMcpAuthJwt({ allRolesAllowed: true })
-    @WpAuthJwt({ allRolesAllowed: true })
+    @WpAuth([jwt()])
+    @WpAuthorization({ authType: AuthorizationType.ALL_USERS })
     @Endpoint(POST, '/find', READ, RPC)
     @WpMcpTool('orders_find')
     find(request: FindOrderRequest): Promise<FindOrderResponse> {
@@ -101,13 +102,12 @@ settings can be swapped, and a future setting is an additive setter rather than 
 change. Expect to supply the type arguments explicitly:
 
 ```ts
-const config = new WpMcpServerConfig<MyGrant, MyMintRequest>()
+const config = new WpMcpServerConfig<MyGrant>()
     .setName('my-server')
     .setVersion('1.0.0')
     .setResource('https://api.example.com/mcp')
     .setAccessTokenAuthority(authority)
-    .setEndpointJwtAuthority(jwtHook)
-    .setEndpointMintRequest((credential) => new MyMintRequest(credential.subject))
+    .setAuthorizationService(router.authorizationService())
     .setAuthorizationServers(['https://login.example.com'])
     .setRequiredScopes(['tools'])
     .setMaxAccountValidationAgeSeconds(15 * 60);
@@ -176,13 +176,13 @@ supplied `_meta.progressToken`) a `reportProgress(...)` callback. Progress remai
 one request and causes the official handler to select request-scoped SSE; closing that response
 aborts the same signal. The context key has no HTTP header and is never propagated as caller input.
 
-For a local binding the API method must combine `@WpMcpAuthJwt` with `@WpAuthJwt`. Before every tool
-authorized, schema-valid call the bridge asks the application `JwtHook` to mint a distinct short-lived endpoint JWT and invokes
-`ApiFactory.createInvocationApiClient`, preserving `JwtHook`, `LogApiFilter`, and `AuthFilter`. Literal MCP-token
-passthrough is rejected. For a remote binding the endpoint must use `@WpAuthOidc`; the generated Node
-client supplies its service credential and propagates only trusted delegated context established by
-the MCP access-token authority. Neither an external MCP bearer nor a browser session JWT is sent to
-the downstream endpoint.
+Local bindings require explicit tool exposure and valid common authorization. They pass a token-free
+`InvocationAuthentication` through `ApiFactory.createInvocationApiClient`, preserving the ordinary
+logging, authentication and authorization filters. The proof identifies the actual endpoint and
+original verified ingress scope. No endpoint JWT is minted or parsed and no GUI `JWT_HOOK` is required.
+Remote bindings declare `oidc(...)` or `sharedSecret(...)` network credentials. The generated Node
+client chooses its service mechanism before forwarding verified delegated facts; the MCP bearer never
+becomes a downstream credential.
 
 `McpDeployment.singleProcess()` uses an in-memory invalidation bus and makes that limit explicit.
 Distributed deployments must use `McpDeployment.distributed(sharedBus)`. List responses have a bounded
@@ -194,32 +194,35 @@ The authority verifies issuer, signature/token state, expiry, scopes, the exact 
 current account state. Neither served era keeps a session here, so the bearer is verified once per POST
 at the `bind(...)` HTTP boundary, before the SDK is involved; tool handlers never re-verify it. A
 rejected token must be thrown as `ApiUnauthorizedError` (answered 401 + `WWW-Authenticate`); any
-other throw from the authority is an implementation failure (500). Endpoint JWTs are capped at one
-hour and MCP access tokens at 30 days.
+other throw from the authority is an implementation failure (500). MCP access tokens are capped at 30 days.
 
 ## Principal, policy and request context
 
 `VerifiedMcpCredential.caller` is the application's `AuthenticatedCaller` resolved from current account
 facts. `principalRoles` is derived from that caller, a public hard cut from the old listing-role field.
-Use the same application mapping for this caller and the endpoint JWT mint payload. Security metadata
+The framework publishes its canonical USER_ID and JSON-array USER_ROLES; custom trusted facts come from the verified caller entries. Security metadata
 (issuer, exact resource, scopes, issuance/expiry and account validation time) remains on the credential.
 
 The framework publishes the caller's trusted entries and `llm` surface immediately after verification,
 then reconciles inbound trusted headers using the same operation as ordinary HTTP. Contradictory or
-unvouched identity/surface headers are rejected. `JwtHook.authorizeJwt` governs the request's authorized
+unvouched identity/surface headers are rejected. The common `AuthorizationService` governs the request's authorized
 tool view before SDK processing; only explicit `ApiForbiddenError` denials hide tools. Policy/datastore
 failures propagate to the safe ingress boundary. Documentation, synchronous SDK schema lookup and call
 name resolution all use that view. The dispatcher independently checks the same policy before input
-validation and bridge issuance. A hidden tool is indistinguishable from an unknown name and triggers no
-schema validation, JWT issuance or binding invocation.
+validation and invocation. A hidden tool is indistinguishable from an unknown name and triggers no
+schema validation or binding invocation.
 
 Each HTTP POST has one transport-owned `RequestContext.run`, including malformed-body failures. Local
 invocation opens no detached/nested scope and retains the original transport request, request/action IDs,
 custom context and downstream response-header accumulation. Its immutable `InvocationAuthentication`
 is carried on that invocation's proxy/MethodMeta, never on a mutable ambient credential slot. Normal
-endpoint JWT parsing and policy still run, and parsed user/roles/trusted entries must match the ingress
-principal. GUI proxies continue reading the transport bearer. Remote bindings still use explicit OIDC
-clients and propagate the verified principal's trusted entries; another HTTP process has its own scope.
+receiving endpoint authorization runs against the same canonical trusted facts. A captured/restored
+snapshot cannot reuse the local proof. GUI HTTP requests verify their own bearer normally. Remote
+bindings authenticate their own hop before accepting delegated facts; another HTTP process has its
+own scope. `SERVICE_ONLY` requires actual current-hop machine evidence, even when the surface is `llm`.
+
+See [the authorization migration and release order](../../../docs/authorization-migration.md).
+
 
 ## Error boundary
 

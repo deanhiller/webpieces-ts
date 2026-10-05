@@ -1,3 +1,4 @@
+import { WpAuthorization, AuthorizationType } from '@webpieces/core-util';
 import 'reflect-metadata';
 import {
     ApiPath,
@@ -23,6 +24,7 @@ import { RouteMetadataFactory } from '../RouteMetadataFactory';
 abstract class SampleDevLogApi {
     /** The log shipper itself: its own request/response lines would be the next batch's payload. */
     @WpAuthPublic('Browser log shipping fixture')
+    @WpAuthorization({ authType: AuthorizationType.ANONYMOUS, reason: 'Browser log shipping fixture' })
     @Endpoint(POST, '/batch', WRITE, RPC, { background: true })
     sendBatch(_req: object): Promise<object> {
         throw new Error('subclass');
@@ -30,6 +32,7 @@ abstract class SampleDevLogApi {
 
     /** An ordinary route on the same contract — the control for every assertion below. */
     @WpAuthPublic('Ordinary route fixture')
+    @WpAuthorization({ authType: AuthorizationType.ANONYMOUS, reason: 'Ordinary route fixture' })
     @Endpoint(POST, '/ping', READ, RPC)
     ping(_req: object): Promise<object> {
         throw new Error('subclass');

@@ -1,4 +1,4 @@
-import { DocumentedEndpoint, TypeRef } from '@webpieces/api-doc-model';
+import { DocumentedAuthMethod, DocumentedEndpoint, TypeRef } from '@webpieces/api-doc-model';
 import {
     CLOUDTASKS,
     CRON,
@@ -7,7 +7,6 @@ import {
     POST,
     READ,
     RPC,
-    WpAuthPublic,
     WRITE,
     WRITE_IDEMPOTENT,
 } from '@webpieces/core-util';
@@ -105,6 +104,7 @@ export class OperationRenderer {
     ): JsonObject {
         return new JsonObject()
             .set('operationId', `${contractName}_${endpoint.methodName}`)
+            .set('x-webpieces-authentication', endpoint.auth?.methods.map((method: DocumentedAuthMethod) => new JsonObject().set('kind', method.kind).set('arguments', method.argumentTexts)))
             .set('summary', endpoint.methodName)
             .set('description', this.describe(endpoint))
             .set('tags', [tag])
@@ -170,7 +170,7 @@ export class OperationRenderer {
 
     /** An endpoint whose declared credential is "none", said out loud rather than left absent. */
     private isPublic(endpoint: DocumentedEndpoint): boolean {
-        return endpoint.auth?.decorator === WpAuthPublic.name;
+        return endpoint.auth?.publicReason !== undefined;
     }
 
     private retrySentence(endpoint: DocumentedEndpoint): string {
@@ -218,7 +218,7 @@ export class OperationRenderer {
                     .set('openWorldHint', hints.openWorldHint),
             )
             .set('x-mcp-description', this.prose(endpoint.mcpDescription))
-            .set('x-mcp-auth', endpoint.mcpAuthText);
+            .set('x-webpieces-authorization', endpoint.authorizationText);
     }
 
     /**

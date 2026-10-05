@@ -1,8 +1,7 @@
-import { AuthenticatedCaller, JwtHook } from '@webpieces/http-routing';
+import { AuthenticatedCaller, AuthorizationService } from '@webpieces/http-routing';
 
 export const MAX_MCP_ACCESS_TOKEN_LIFETIME_SECONDS = 30 * 24 * 60 * 60;
 export const MAX_MCP_ACCOUNT_VALIDATION_AGE_SECONDS = 60 * 60;
-export const MAX_MCP_ENDPOINT_JWT_LIFETIME_SECONDS = 60 * 60;
 
 /** Framework-normalized access-token result. The token representation remains application-owned. */
 export class MintedMcpAccessToken {
@@ -44,7 +43,7 @@ export class VerifiedMcpCredential {
         public readonly scopes: readonly string[],
         /** When current enabled/revoked state and roles were read from the authoritative source. */
         public readonly accountValidatedAtEpochSeconds: number,
-        /** Application mapping of freshly verified account facts, shared with endpoint JWT issuance. */
+        /** Application mapping of freshly verified account facts into canonical trusted context. */
         public readonly caller: AuthenticatedCaller,
     ) {}
 
@@ -67,21 +66,6 @@ export interface McpAccessTokenAuthority<TGrant> {
     ): Promise<VerifiedMcpCredential>;
 }
 
-/** Minimal tool identity supplied when the app creates its own endpoint-JWT mint request. */
-export class McpEndpointDescriptor {
-    constructor(
-        public readonly toolName: string,
-        public readonly apiClassName: string,
-        public readonly methodName: string,
-    ) {}
-}
-
-/** Application mapping from verified MCP identity to its unconstrained JwtHook mint request. */
-export type McpEndpointMintRequestFactory<TMintRequest> = (
-    credential: VerifiedMcpCredential,
-    endpoint: McpEndpointDescriptor,
-) => TMintRequest;
-
 /** RFC 9728-style metadata exposed by the MCP protected resource. */
 export class McpProtectedResourceMetadata {
     readonly resource: string;
@@ -103,9 +87,8 @@ export class McpProtectedResourceMetadata {
 /**
  * Node MCP server configuration, built with fluent setters: every name sits next to its own value, so
  * no two settings can be swapped, and a future setting is an additive setter rather than a breaking
- * signature change. Pass the same concrete application authority to both
- * `setAccessTokenAuthority(...)` and `setEndpointJwtAuthority(...)` when it implements both security
- * seams.
+ * signature change. The access-token authority verifies MCP credentials; the authorization service
+ * is shared with receiving endpoints and document projection.
  *
  * SINGLE CANONICAL ORIGIN: one server serves exactly one protected resource. {@link setResource} is
  * fixed for the lifetime of the process, is the audience of every access token, and is never derived
@@ -119,13 +102,12 @@ export class McpProtectedResourceMetadata {
  * so the client's correct response is to re-authenticate and fail again, forever.
  *
  * ```ts
- * const config = new WpMcpServerConfig<MyGrant, MyMintRequest>()
+ * const config = new WpMcpServerConfig<MyGrant>()
  *     .setName('my-server')
  *     .setVersion('1.0.0')
  *     .setResource('https://api.example.com/mcp')
  *     .setAccessTokenAuthority(authority)
- *     .setEndpointJwtAuthority(jwtHook)
- *     .setEndpointMintRequest((credential) => new MyMintRequest(credential.subject))
+ *     .setAuthorizationService(router.authorizationService())
  *     .setAuthorizationServers(['https://login.example.com'])
  *     .setRequiredScopes(['tools']);
  *
@@ -133,17 +115,15 @@ export class McpProtectedResourceMetadata {
  * McpRegistry.setErrorTranslator(new MyMcpErrorTranslator());
  * ```
  */
-export class WpMcpServerConfig<TGrant, TMintRequest> {
+export class WpMcpServerConfig<TGrant> {
     private nameValue?: string;
     private versionValue?: string;
     private resourceValue?: string;
     private accessTokenAuthorityValue?: McpAccessTokenAuthority<TGrant>;
-    private endpointJwtAuthorityValue?: JwtHook<TMintRequest>;
-    private endpointMintRequestValue?: McpEndpointMintRequestFactory<TMintRequest>;
+    private authorizationServiceValue?: AuthorizationService;
     private authorizationServersValue?: readonly string[];
     private requiredScopesValue?: readonly string[];
     private maxAccountValidationAgeSecondsValue = MAX_MCP_ACCOUNT_VALIDATION_AGE_SECONDS;
-    private maxEndpointJwtLifetimeSecondsValue = MAX_MCP_ENDPOINT_JWT_LIFETIME_SECONDS;
 
     /** REQUIRED. The MCP server name reported by `initialize`. */
     setName(name: string): this {
@@ -181,18 +161,9 @@ export class WpMcpServerConfig<TGrant, TMintRequest> {
         return this;
     }
 
-    /** REQUIRED. The application policy for MCP tools and short-lived endpoint JWT issuer. */
-    setEndpointJwtAuthority(authority: JwtHook<TMintRequest>): this {
-        this.endpointJwtAuthorityValue = this.requirePresent(authority, 'setEndpointJwtAuthority');
-        return this;
-    }
-
-    /** REQUIRED. Maps a verified MCP identity plus tool identity to that JwtHook's mint request. */
-    setEndpointMintRequest(factory: McpEndpointMintRequestFactory<TMintRequest>): this {
-        if (typeof factory !== 'function') {
-            throw new Error('WpMcpServerConfig.setEndpointMintRequest(...) requires a function.');
-        }
-        this.endpointMintRequestValue = factory;
+    /** REQUIRED. The common authorization service for tool projection and invocation. */
+    setAuthorizationService(authority: AuthorizationService): this {
+        this.authorizationServiceValue = this.requirePresent(authority, 'setAuthorizationService');
         return this;
     }
 
@@ -234,16 +205,6 @@ export class WpMcpServerConfig<TGrant, TMintRequest> {
         return this;
     }
 
-    /** OPTIONAL ceiling, 1 second to 1 hour. Defaults to 1 hour. */
-    setMaxEndpointJwtLifetimeSeconds(seconds: number): this {
-        this.maxEndpointJwtLifetimeSecondsValue = this.requireSeconds(
-            seconds,
-            MAX_MCP_ENDPOINT_JWT_LIFETIME_SECONDS,
-            'setMaxEndpointJwtLifetimeSeconds',
-        );
-        return this;
-    }
-
     /**
      * Called by `WpMcpServer.bind(...)`. Throws naming EVERY missing required setter at once, so a
      * half-built config is repaired in one pass rather than one boot failure at a time.
@@ -256,11 +217,8 @@ export class WpMcpServerConfig<TGrant, TMintRequest> {
         if (this.accessTokenAuthorityValue === undefined) {
             missing.push('setAccessTokenAuthority(...)');
         }
-        if (this.endpointJwtAuthorityValue === undefined) {
-            missing.push('setEndpointJwtAuthority(...)');
-        }
-        if (this.endpointMintRequestValue === undefined) {
-            missing.push('setEndpointMintRequest(...)');
+        if (this.authorizationServiceValue === undefined) {
+            missing.push('setAuthorizationService(...)');
         }
         if (this.authorizationServersValue === undefined) {
             missing.push('setAuthorizationServers(...)');
@@ -287,12 +245,8 @@ export class WpMcpServerConfig<TGrant, TMintRequest> {
         return this.read(this.accessTokenAuthorityValue, 'setAccessTokenAuthority');
     }
 
-    get endpointJwtAuthority(): JwtHook<TMintRequest> {
-        return this.read(this.endpointJwtAuthorityValue, 'setEndpointJwtAuthority');
-    }
-
-    get endpointMintRequest(): McpEndpointMintRequestFactory<TMintRequest> {
-        return this.read(this.endpointMintRequestValue, 'setEndpointMintRequest');
+    get authorizationService(): AuthorizationService {
+        return this.read(this.authorizationServiceValue, 'setAuthorizationService');
     }
 
     get authorizationServers(): readonly string[] {
@@ -305,10 +259,6 @@ export class WpMcpServerConfig<TGrant, TMintRequest> {
 
     get maxAccountValidationAgeSeconds(): number {
         return this.maxAccountValidationAgeSecondsValue;
-    }
-
-    get maxEndpointJwtLifetimeSeconds(): number {
-        return this.maxEndpointJwtLifetimeSecondsValue;
     }
 
     /**

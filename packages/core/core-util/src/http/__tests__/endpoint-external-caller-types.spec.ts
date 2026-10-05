@@ -1,3 +1,4 @@
+import { WpAuthorization, AuthorizationType } from '@webpieces/core-util';
 import 'reflect-metadata';
 import { describe, it, expect } from 'vitest';
 import {
@@ -14,12 +15,14 @@ import { getEndpointCaller } from '../external-caller';
 @ApiPath('/types')
 abstract class TypeCheckApi {
     @WpAuthPublic('Declared external endpoint fixture')
+    @WpAuthorization({ authType: AuthorizationType.ANONYMOUS, reason: 'Declared external endpoint fixture' })
     @Endpoint(POST, '/ok', WRITE, EXTERNAL, { calledBy: 'twilio' })
     declared(_req: object): Promise<object> {
         throw new Error('subclass');
     }
 
     @WpAuthPublic('RPC endpoint fixture')
+    @WpAuthorization({ authType: AuthorizationType.ANONYMOUS, reason: 'RPC endpoint fixture' })
     @Endpoint(POST, '/rpc2', WRITE, RPC, { formPost: true })
     rpcWithOptions(_req: object): Promise<object> {
         throw new Error('subclass');

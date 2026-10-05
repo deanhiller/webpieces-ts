@@ -208,7 +208,7 @@ export class DocumentedApiKeyCredential {
     ) {}
 }
 
-/** `@WpAuthApiKey(regime, credentials)`, parsed. See {@link DocumentedApiKeyCredential}. */
+/** `apiKey(regime, credentials)`, parsed. See {@link DocumentedApiKeyCredential}. */
 export class DocumentedApiKey {
     constructor(
         readonly regime: string,
@@ -220,21 +220,13 @@ export class DocumentedApiKey {
     ) {}
 }
 
-/** WHICH credential an endpoint demands — `@WpAuthPublic`, `@WpAuthJwt`, … — verbatim from the source. */
+/** Structurally extracted credential alternatives, with OR semantics. */
+export class DocumentedAuthMethod {
+    constructor(readonly kind: string, readonly argumentTexts: readonly string[], readonly apiKey: DocumentedApiKey | undefined) {}
+}
+
 export class DocumentedAuth {
-    constructor(
-        /** The decorator name as written, e.g. `WpAuthJwt`. */
-        readonly decorator: string,
-        /** Every argument's text, verbatim and in order. Empty for `@WpAuthPublic()`. */
-        readonly argumentTexts: readonly string[],
-        /**
-         * The PARSED api-key declaration, set only for `@WpAuthApiKey`. Every other decorator's
-         * argument is prose or a role list that a document quotes rather than restructures, so
-         * {@link argumentTexts} is all they need — see {@link DocumentedApiKeyCredential} for why
-         * this one is different.
-         */
-        readonly apiKey: DocumentedApiKey | undefined,
-    ) {}
+    constructor(readonly publicReason: string | undefined, readonly methods: readonly DocumentedAuthMethod[]) {}
 }
 
 /** One `@Endpoint` method of one contract. */
@@ -278,8 +270,8 @@ export class DocumentedEndpoint {
          * on every run.
          */
         readonly invalidForMcp: string | undefined,
-        /** `@WpMcpAuthJwt(...)`'s argument text, when present. */
-        readonly mcpAuthText: string | undefined,
+        /** The common @WpAuthorization declaration, shared by every surface. */
+        readonly authorizationText: string | undefined,
         /** `@MaskLog({...})` — field name -> mask mode. */
         readonly maskLog: ReadonlyMap<string, string>,
         readonly description: string,
@@ -288,6 +280,7 @@ export class DocumentedEndpoint {
         readonly request: TypeRef | undefined,
         readonly response: TypeRef | undefined,
         readonly streaming?: DocumentedStreaming,
+        readonly localOnly: boolean = false,
     ) {}
 }
 

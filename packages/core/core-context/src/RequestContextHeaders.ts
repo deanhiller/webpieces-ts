@@ -43,7 +43,7 @@ export class RequestContextHeaders {
      *
      * TRUSTED keys are the exception, and `destination` is why this method takes an argument at all.
      * The callee's `AuthFilter` admits an inbound `x-user-id` only on a route that authenticated its
-     * CALLER, so shipping one to a `@WpAuthPublic` / `@WpAuthJwt` endpoint builds a request the callee is
+     * CALLER, so shipping one to a `@WpAuthPublic` / `jwt()` endpoint builds a request the callee is
      * obliged to 401. {@link DestinationTrust} answers that from the destination endpoint's own
      * AuthMode — there is no "send everything" default to fall into. Untrusted keys always travel.
      *

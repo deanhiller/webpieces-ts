@@ -104,7 +104,7 @@ export class ApiClientFactory {
         for (const entry of routesByApi.entries()) {
             const api = entry[0];
             const routes = entry[1];
-            // Build only the routes that were actually registered. A @WpAuthLocalOnly method is
+            // Build only the routes that were actually registered. A @WpLocalOnly method is
             // deliberately absent off-local and must not make mounting the rest of its API fail.
             const client = this.buildProxy(api, routes);
             clients.push(new ApiClient(api, client, routes));

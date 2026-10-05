@@ -17,12 +17,12 @@ export class DefaultJwtMintRequest {
 /**
  * DefaultJwtHook - a batteries-included {@link JwtHook} for the common case: HS256 user JWTs signed
  * with ONE shared secret. Construct it with the secret and bind it — `new DefaultJwtHook(secret)` —
- * and `@WpAuthJwt` endpoints work with NO custom verification code.
+ * and `jwt()` endpoints work with NO custom verification code.
  *
  * `parseJwt` verifies the signature + expiry (jsonwebtoken, HS256 only) and maps standard claims:
- * `sub` → userId, a string[] `roles` claim → roles, the whole payload → claims. `authorizeJwt`
- * (role enforcement) is inherited from JwtHook. For RS256 + JWKS, a provider SDK, or a non-standard
- * payload, write your own JwtHook subclass instead.
+ * `sub` → userId, a string[] `roles` claim → roles, the whole payload → claims. AuthorizationService
+ * separately enforces @WpAuthorization; AuthorizationHook owns CUSTOM application policy.
+ * For RS256 + JWKS, a provider SDK, or a non-standard payload, write your own JwtHook subclass.
  *
  * It satisfies {@link JwtHook}'s ASYNC signature with a body that awaits NOTHING, and that is the
  * point rather than an oversight: HS256 against a local secret is pure CPU. The signature is async
@@ -81,9 +81,11 @@ export class DefaultJwtHook extends JwtHook<DefaultJwtMintRequest> {
 
     private extractRoles(payload: JwtPayload): string[] {
         const roles = payload['roles'];
-        if (Array.isArray(roles)) {
-            return roles.filter((role: string) => typeof role === 'string');
+        if (roles === undefined) return [];
+        // webpieces-disable no-any-unknown -- verified external JWT claim elements require runtime validation
+        if (!Array.isArray(roles) || !roles.every((role: unknown) => typeof role === 'string' && role.trim().length > 0)) {
+            throw new ApiUnauthorizedError('JWT roles must be an array of nonempty strings.');
         }
-        return [];
+        return roles;
     }
 }

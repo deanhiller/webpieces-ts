@@ -1,3 +1,4 @@
+import { WpAuthorization, AuthorizationType } from '@webpieces/core-util';
 import 'reflect-metadata';
 import { describe, expect, it } from 'vitest';
 import {
@@ -18,6 +19,7 @@ import { RouteMetadataFactory } from '../RouteMetadataFactory';
 @ApiPath('/widgets/')
 abstract class WidgetApi {
     @WpAuthPublic('Public catalog lookup')
+    @WpAuthorization({ authType: AuthorizationType.ANONYMOUS, reason: 'Public catalog lookup' })
     @Endpoint(GET, '/{ownerId}/{widgetId}', READ, RPC)
     // webpieces-disable no-unmanaged-exceptions -- contract stub
     get(
@@ -33,6 +35,7 @@ abstract class WidgetApi {
 @ApiPath('/widgets')
 abstract class UpdateApi {
     @WpAuthPublic('Test update')
+    @WpAuthorization({ authType: AuthorizationType.ANONYMOUS, reason: 'Test update' })
     @Endpoint(POST, '/{id}', WRITE, RPC)
     // webpieces-disable no-unmanaged-exceptions -- contract stub
     update(@PathParam('id') _id: number, _body: object): Promise<object> {
@@ -43,12 +46,14 @@ abstract class UpdateApi {
 @ApiPath('/semantic-verbs')
 abstract class SemanticVerbApi {
     @WpAuthPublic('GET with deliberate side effects')
+    @WpAuthorization({ authType: AuthorizationType.ANONYMOUS, reason: 'GET with deliberate side effects' })
     @Endpoint(GET, '/write-over-get', WRITE, RPC)
     writeOverGet(): Promise<object> {
         throw new Error('contract only');
     }
 
     @WpAuthPublic('POST used as a read/query transport')
+    @WpAuthorization({ authType: AuthorizationType.ANONYMOUS, reason: 'POST used as a read/query transport' })
     @Endpoint(POST, '/read-over-post', READ, RPC)
     readOverPost(_request: object): Promise<object> {
         throw new Error('contract only');
@@ -167,6 +172,7 @@ describe('contract mapping validation', () => {
         @ApiPath('/broken')
         class BrokenApi {
             @WpAuthPublic('Test fixture')
+            @WpAuthorization({ authType: AuthorizationType.ANONYMOUS, reason: 'Test fixture' })
             @Endpoint(GET, '/get', READ, RPC)
             get(_value: string): Promise<object> {
                 return Promise.resolve({});
@@ -182,6 +188,7 @@ describe('contract mapping validation', () => {
         @ApiPath('/broken')
         class BrokenPathApi {
             @WpAuthPublic('Test fixture')
+            @WpAuthorization({ authType: AuthorizationType.ANONYMOUS, reason: 'Test fixture' })
             @Endpoint(GET, '/{id}', READ, RPC)
             get(@QueryParam('id') _id: string): Promise<object> {
                 return Promise.resolve({});
@@ -191,6 +198,7 @@ describe('contract mapping validation', () => {
         @ApiPath('/broken')
         class DuplicateQueryApi {
             @WpAuthPublic('Test fixture')
+            @WpAuthorization({ authType: AuthorizationType.ANONYMOUS, reason: 'Test fixture' })
             @Endpoint(GET, '/get', READ, RPC)
             get(@QueryParam('q') _one: string, @QueryParam('q') _two: string): Promise<object> {
                 return Promise.resolve({});

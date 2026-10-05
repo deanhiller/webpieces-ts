@@ -37,7 +37,7 @@ const headers = new RequestContextHeaders();
 // AuthMode is a discriminated union, and these literals are its one spelling — the same one
 // `defineAuthMode({ kind: 'public' })` uses in decorators.ts.
 const PUBLIC: AuthMode = { kind: 'public' };
-const JWT: AuthMode = { kind: 'jwt', requirement: { allRolesAllowed: true } };
+const JWT: AuthMode = { kind: 'jwt' };
 const OIDC: AuthMode = { kind: 'oidc', callers: ['self'] };
 const SHARED_SECRET: AuthMode = { kind: 'shared-secret', secretKey: 'peer-key' };
 

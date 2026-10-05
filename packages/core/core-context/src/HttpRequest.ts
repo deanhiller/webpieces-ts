@@ -23,7 +23,7 @@ export class HttpRequest {
         /**
          * The verbatim bytes + absolute url, present ONLY on an `@Endpoint(..., { rawBody: true })`
          * route (see {@link RawRequest}). Absent everywhere else, and absent is the SAFE state:
-         * `@WpAuthWebhook` has nothing to verify without it and 401s rather than waving the call
+         * `webhook(...)` has nothing to verify without it and 401s rather than waving the call
          * through. A spec driving a webhook route in-process supplies one here, the same way a spec
          * today supplies an `authorization` header.
          */

@@ -1,21 +1,7 @@
+import { WpAuthorization, AuthorizationType, WpAuth, oidc as oidcAuth } from '@webpieces/core-util';
 import 'reflect-metadata';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import {
-    ApiPath,
-    ClientRegistry,
-    DestinationTrust,
-    Endpoint,
-    QueryParam,
-    Rpc,
-    Secrets,
-    TestCaseRecorder,
-    WebpiecesCoreHeaders,
-    WpAuthOidc,
-    WpAuthPublic,
-    POST,
-    RPC,
-    WRITE,
-} from '@webpieces/core-util';
+import { ApiPath, ClientRegistry, DestinationTrust, Endpoint, QueryParam, Rpc, Secrets, TestCaseRecorder, WebpiecesCoreHeaders, WpAuthPublic, POST, RPC, WRITE } from '@webpieces/core-util';
 import type { RequestContextHeaders } from '@webpieces/core-context';
 import { RequestContext } from '@webpieces/core-context';
 import type { GcpOidc } from '@webpieces/gcp-identity';
@@ -40,6 +26,7 @@ class DeliverRequest {
 abstract class HonestWebhookApi {
     @Endpoint(POST, '/deliver', WRITE, RPC)
     @WpAuthPublic('Partner authenticates us by signature')
+    @WpAuthorization({ authType: AuthorizationType.ANONYMOUS, reason: 'Partner authenticates us by signature' })
     // webpieces-disable no-unmanaged-exceptions -- abstract contract stub, never executed
     deliver(_request: DeliverRequest): Promise<void> {
         throw new Error('contract only');
@@ -47,6 +34,7 @@ abstract class HonestWebhookApi {
 
     @Endpoint(POST, '/deliver-tagged', WRITE, RPC)
     @WpAuthPublic('Partner authenticates us by signature')
+    @WpAuthorization({ authType: AuthorizationType.ANONYMOUS, reason: 'Partner authenticates us by signature' })
     // webpieces-disable no-unmanaged-exceptions -- abstract contract stub, never executed
     deliverTagged(@QueryParam('tag') _tag: string, _request: DeliverRequest): Promise<void> {
         throw new Error('contract only');
@@ -59,6 +47,7 @@ abstract class HonestWebhookApi {
 abstract class EmptyPathWebhookApi {
     @Endpoint(POST, '', WRITE, RPC)
     @WpAuthPublic('Partner authenticates us by signature')
+    @WpAuthorization({ authType: AuthorizationType.ANONYMOUS, reason: 'Partner authenticates us by signature' })
     // webpieces-disable no-unmanaged-exceptions -- abstract contract stub, never executed
     deliver(_request: DeliverRequest): Promise<void> {
         throw new Error('contract only');
@@ -69,7 +58,8 @@ abstract class EmptyPathWebhookApi {
 @ApiPath('/internal')
 abstract class OidcWebhookApi {
     @Endpoint(POST, '/work', WRITE, RPC)
-    @WpAuthOidc()
+    @WpAuth([oidcAuth()])
+    @WpAuthorization({ authType: AuthorizationType.SERVICE_ONLY })
     // webpieces-disable no-unmanaged-exceptions -- abstract contract stub, never executed
     work(_request: DeliverRequest): Promise<void> {
         throw new Error('contract only');
@@ -82,6 +72,7 @@ abstract class OidcWebhookApi {
 abstract class DuplicateRouteApi {
     @Endpoint(POST, '', WRITE, RPC)
     @WpAuthPublic('Test fixture')
+    @WpAuthorization({ authType: AuthorizationType.ANONYMOUS, reason: 'Test fixture' })
     // webpieces-disable no-unmanaged-exceptions -- abstract contract stub, never executed
     deliver(_request: DeliverRequest): Promise<void> {
         throw new Error('contract only');
@@ -89,6 +80,7 @@ abstract class DuplicateRouteApi {
 
     @Endpoint(POST, '', WRITE, RPC)
     @WpAuthPublic('Test fixture')
+    @WpAuthorization({ authType: AuthorizationType.ANONYMOUS, reason: 'Test fixture' })
     // webpieces-disable no-unmanaged-exceptions -- abstract contract stub, never executed
     redeliver(_request: DeliverRequest): Promise<void> {
         throw new Error('contract only');

@@ -1,3 +1,4 @@
+import { WpAuthorization, AuthorizationType } from '@webpieces/core-util';
 import {
     ApiPath,
     ApiType,
@@ -55,6 +56,7 @@ export abstract class PartnerDeliveryWebhookApi {
     @WpAuthPublic(
         'Never served by this process: this contract declares the payload we SEND to a partner endpoint, and the manifest is what selects it into the webhooks block.',
     )
+    @WpAuthorization({ authType: AuthorizationType.ANONYMOUS, reason: 'Never served by this process: this contract declares the payload we SEND to a partner endpoint, and the manifest is what selects it into the webhooks block.' })
     orderStateChanged(event: OrderStateChangedEvent): Promise<void> {
         throw new Error('Webhook contract: this service SENDS this event, it does not serve it');
     }

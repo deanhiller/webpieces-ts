@@ -44,14 +44,14 @@ const API_KEY_ROUTE = new RouteMetadata(
     'listOrders',
     READ,
     'ManagementController',
-    new AuthMeta({
+    new AuthMeta([{
         kind: 'apikey',
         regime: 'onetablet-partner',
         credentials: [
             { in: 'header', name: 'x-api-key' },
             { in: 'header', name: 'x-organization-id' },
         ],
-    }),
+    }], undefined),
     'ManagementApi',
 );
 

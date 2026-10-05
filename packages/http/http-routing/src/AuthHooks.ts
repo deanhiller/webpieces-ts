@@ -1,6 +1,5 @@
-import { JwtRequirement, rolesRequired, ApiForbiddenError } from '@webpieces/core-util';
 import { HttpRequest, RawHttpRequest } from '@webpieces/core-context';
-import { AuthenticatedCaller } from './AuthConfig';
+import { AuthenticatedCaller, AuthenticatedMachineIdentity } from './AuthConfig';
 
 /** Framework-normalized result from an application-owned JWT mint operation. */
 export class MintedJwt {
@@ -15,66 +14,10 @@ export class MintedJwt {
     }
 }
 
-/**
- * JwtHook - the OPTIONAL user-JWT mechanism. Its DI token is the {@link JWT_HOOK} Symbol injected via
- * `@inject(JWT_HOOK)` (a Symbol, because the app container uses autobind; rebindable in tests). Bind one
- * to turn on `@WpAuthJwt({...})` endpoints. When NO JwtHook is bound, the framework
- * {@link AuthFilter} treats every jwt endpoint as "not enabled" and fails fast (401) — there is no
- * default JWT verification because it needs an app secret + payload shape the framework can't guess.
- *
- *  - `mint`         — ISSUANCE: construct/sign a JWT from an application-owned request shape.
- *  - `parseJwt`     — AUTHENTICATION: decode/verify a user JWT into {@link AuthenticatedCaller}, or throw. The
- *                     app owns the strategy (HS256 secret, RS256 + JWKS, a provider SDK, ...).
- *  - `authorizeJwt` — AUTHORIZATION: check the authenticated user against the endpoint's
- *                     {@link JwtRequirement}. The DEFAULT enforces the roles any-of; override for
- *                     app-defined requirements carried by the SAME decorator, e.g.
- *                     `@WpAuthJwt({allRolesAllowed: true, inOrg: true})` →
- *                     `if (requirement['inOrg'] && !values.claims['orgId']) ...`.
- *
- * ALL THREE ARE ASYNC for the same reason: the strategy is the app's, and an app's strategy reaches
- * the network. `mint` may call KMS/HSM, `parseJwt` may fetch a JWKS or call a provider SDK, and `authorizeJwt`'s
- * motivating example — `@WpAuthJwt({allRolesAllowed: true, inOrg: true})` — is a membership question a
- * real app answers from a datastore. A sync signature makes both of those unwritable, and it made
- * `JwtHook` the last sync hook: {@link OidcHook.verifyOidc}, {@link WebhookAuthCallback.verifyWebhook} and
- * {@link ApiKeyHook.verifyApiKey} all return promises. An implementation that needs no I/O simply has
- * no `await` in its body — {@link DefaultJwtHook} is exactly that and pays nothing for it.
- */
+/** Optional application JWT credential authority. Authorization lives in AuthorizationHook. */
 export abstract class JwtHook<TMintRequest> {
-    /**
-     * Mint an application endpoint JWT. The application owns the request/claim shape while the
-     * framework constrains the returned token and expiry metadata. Always async so the authority
-     * may use a remote signer, KMS, or HSM.
-     */
     abstract mint(request: TMintRequest): Promise<MintedJwt>;
-
-    /**
-     * Parse a user JWT (kind:'jwt') — AUTHENTICATION only. Return who the user is, or throw.
-     * ASYNC so an app can reach a JWKS endpoint or a provider SDK; see the class doc.
-     *
-     * IT TAKES THE TOKEN, NOT THE REQUEST — the one deliberate asymmetry among the four hooks, and
-     * NOT an oversight to be "fixed". {@link ApiKeyHook.verifyApiKey} and
-     * {@link WebhookAuthCallback.verifyWebhook} take the whole {@link HttpRequest} because their
-     * credential regime is the APP's: which headers carry an api key, and how a vendor signs, are
-     * things the framework cannot know. A user JWT is different — the framework owns the
-     * `Authorization: Bearer` scheme and has already extracted the token from it. Widening this to
-     * the request would only invite a JwtHook to authenticate off some OTHER header, which is a
-     * second, ungoverned credential path on the mode that guards browser traffic.
-     */
     abstract parseJwt(token: string): Promise<AuthenticatedCaller>;
-
-    /**
-     * DEFAULT authorization: enforce the endpoint's roles (any-of). Override to enforce app-defined
-     * requirements. Throw ApiForbiddenError to deny; return to allow. ASYNC so an app-defined
-     * requirement can be answered from a datastore; see the class doc.
-     */
-    async authorizeJwt(caller: AuthenticatedCaller, requirement: JwtRequirement): Promise<void> {
-        // rolesRequired is the ONE reader of the JwtRoles union: [] means the endpoint typed
-        // `allRolesAllowed: true`, never "the field was missing" — that state no longer compiles.
-        const roles = rolesRequired(requirement);
-        if (roles.length > 0 && !roles.some((role: string) => caller.roles.includes(role))) {
-            throw new ApiForbiddenError(`Endpoint requires one of roles: ${roles.join(', ')}`);
-        }
-    }
 }
 
 /**
@@ -91,12 +34,12 @@ export const JWT_HOOK = Symbol.for('JwtHook');
  * autobind; rebindable in tests). Bind one ONLY to customize the caller policy — e.g. an app that reads an
  * `ALLOWED_OIDC_CALLERS` env var at its composition root and enforces that allow-list. When NO
  * OidcHook is bound, the framework {@link AuthFilter} runs the built-in {@link DefaultOidcVerifier}
- * directly, so a server that wires nothing still verifies Google OIDC against its `@WpAuthOidc(...callers)`
+ * directly, so a server that wires nothing still verifies Google OIDC against its `oidc(...callers)`
  * (else trusts the edge — any Google-signed caller). `verifyOidc` verifies the token against `callers`;
  * throw on failure.
  */
 export abstract class OidcHook {
-    abstract verifyOidc(token: string, callers: string[]): Promise<void>;
+    abstract verifyOidc(token: string, callers: string[]): Promise<AuthenticatedMachineIdentity>;
 }
 
 /**
@@ -108,7 +51,7 @@ export abstract class OidcHook {
 export const OIDC_HOOK = Symbol.for('OidcHook');
 
 /**
- * WebhookAuthCallback - the OPTIONAL mechanism behind `@WpAuthWebhook(name)`: prove that an inbound request was
+ * WebhookAuthCallback - the OPTIONAL mechanism behind `webhook(name)`: prove that an inbound request was
  * really authored by the outside vendor the contract names. Its DI token is the {@link WEBHOOK_AUTH_CALLBACK}
  * Symbol injected via `@inject(WEBHOOK_AUTH_CALLBACK)` (a Symbol, because the app container uses autobind;
  * rebindable in tests). The third hook, symmetric with {@link JwtHook} / {@link OidcHook}:
@@ -118,10 +61,10 @@ export const OIDC_HOOK = Symbol.for('OidcHook');
  * options.bind(WEBHOOK_AUTH_CALLBACK).to(CompanyWebhookAuthCallback);
  * ```
  *
- * When NO WebhookAuthCallback is bound, the framework {@link AuthFilter} 401s every `@WpAuthWebhook` endpoint,
+ * When NO WebhookAuthCallback is bound, the framework {@link AuthFilter} 401s every `webhook(...)` endpoint,
  * exactly as it does for an unbound JwtHook. There is no framework default and there never will be
  * one: silently allowing an unverified webhook is the single default that must not exist, and the
- * framework ships no vendor crypto by design (see {@link WpAuthWebhook} for why reimplementing five
+ * framework ships no vendor crypto by design (see {@link webhook} for why reimplementing five
  * vendors' schemes is a losing trade).
  *
  * ONE hook serves EVERY vendor: `name` selects which, so an app with a Sentry hook and a Twilio hook
@@ -144,10 +87,10 @@ export abstract class WebhookAuthCallback {
      * caller-NOT-verified (see `AuthFilter.verifiesCaller`): a vendor is not a peer service, so
      * nothing the vendor merely ASSERTED on the wire is admitted.
      *
-     * @param name    the string on the contract's `@WpAuthWebhook(name)` — which vendor this route is.
+     * @param name    the string on the contract's `webhook(name)` — which vendor this route is.
      * @param request the transport-neutral request, narrowed to {@link RawHttpRequest}: `request.raw`
      *                holds the verbatim bytes + absolute url and is PRESENT, never optional.
-     *                `@WpAuthWebhook` requires `@Endpoint(..., { rawBody: true })` at wiring time, and
+     *                `webhook(...)` requires `@Endpoint(..., { rawBody: true })` at wiring time, and
      *                AuthFilter 401s rather than calling this hook with nothing to check — so an
      *                implementation never writes `raw!` or a guard of its own.
      */
@@ -163,7 +106,7 @@ export abstract class WebhookAuthCallback {
 export const WEBHOOK_AUTH_CALLBACK = Symbol.for('WebhookAuthCallback');
 
 /**
- * ApiKeyHook - the OPTIONAL mechanism behind `@WpAuthApiKey(regime, credentials)`: authenticate a
+ * ApiKeyHook - the OPTIONAL mechanism behind `apiKey(regime, credentials)`: authenticate a
  * CUSTOMER-held api key
  * against the app's own datastore and return the context to seed. Its DI token is the
  * {@link API_KEY_HOOK} Symbol injected via `@inject(API_KEY_HOOK)` (a Symbol, because the app container
@@ -175,7 +118,7 @@ export const WEBHOOK_AUTH_CALLBACK = Symbol.for('WebhookAuthCallback');
  * options.bind(API_KEY_HOOK).to(OneTabletApiKeyHook);
  * ```
  *
- * When NO ApiKeyHook is bound, the framework {@link AuthFilter} 401s every `@WpAuthApiKey` endpoint,
+ * When NO ApiKeyHook is bound, the framework {@link AuthFilter} 401s every `apiKey(...)` endpoint,
  * exactly as it does for an unbound JwtHook. There is no framework default and there never will be
  * one: the key regime lives in the app's datastore, under the app's hashing scheme, behind the app's
  * choice of header names.
@@ -201,10 +144,10 @@ export abstract class ApiKeyHook {
      *
      * NOTE the seeded entries are TRUSTED context keys, so return only what THIS hook proved from the
      * credential it just verified. Anything the caller merely asserted on the wire is not admitted by
-     * `@WpAuthApiKey` — the mode is deliberately caller-NOT-verified (see `AuthFilter.verifiesCaller`),
+     * `apiKey(...)` — the mode is deliberately caller-NOT-verified (see `AuthFilter.verifiesCaller`),
      * because a customer is not an internal service.
      *
-     * @param regime  the first argument of the contract's `@WpAuthApiKey(regime, credentials)` — which key
+     * @param regime  the first argument of the contract's `apiKey(regime, credentials)` — which key
      *                regime this route belongs to.
      * @param request the inbound request; read as many headers as the regime needs with
      *                `getHeader` / `getHeaderValues`, either by raw name or by {@link ContextKey}.

@@ -1,3 +1,4 @@
+import { WpAuthorization, AuthorizationType } from '@webpieces/core-util';
 /* eslint-disable */
 /**
  * A contract carrying a field the model cannot give a shape to.
@@ -45,6 +46,7 @@ export class UnmappedApi {
     /** Sends a payload. */
     @Endpoint(POST, '/send', READ, RPC)
     @WpAuthPublic('Fixture only.')
+    @WpAuthorization({ authType: AuthorizationType.ANONYMOUS, reason: 'Fixture only.' })
     send(request: SendRequest): Promise<SendResponse> {
         throw new Error('contract');
     }

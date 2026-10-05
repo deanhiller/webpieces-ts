@@ -1,3 +1,4 @@
+import { WpAuthorization, AuthorizationType } from '@webpieces/core-util';
 import 'reflect-metadata';
 import { describe, it, expect } from 'vitest';
 import { ApiPath, Endpoint, WpAuthPublic, POST, RPC, WRITE } from '@webpieces/core-util';
@@ -13,6 +14,7 @@ import { FilterDefinition, RouteBuilder, RouteDefinition } from '../WebAppMeta';
 @ApiPath('')
 abstract class EmptyPathApi {
     @WpAuthPublic('Test fixture')
+    @WpAuthorization({ authType: AuthorizationType.ANONYMOUS, reason: 'Test fixture' })
     @Endpoint(POST, '', WRITE, RPC)
     deliver(_r: object): Promise<object> {
         throw new Error('subclass');
@@ -28,12 +30,14 @@ class EmptyPathController extends EmptyPathApi {
 @ApiPath('/hooks')
 abstract class DuplicateApi {
     @WpAuthPublic('Test fixture')
+    @WpAuthorization({ authType: AuthorizationType.ANONYMOUS, reason: 'Test fixture' })
     @Endpoint(POST, '/in', WRITE, RPC)
     first(_r: object): Promise<object> {
         throw new Error('subclass');
     }
 
     @WpAuthPublic('Test fixture')
+    @WpAuthorization({ authType: AuthorizationType.ANONYMOUS, reason: 'Test fixture' })
     @Endpoint(POST, 'in', WRITE, RPC)
     second(_r: object): Promise<object> {
         throw new Error('subclass');

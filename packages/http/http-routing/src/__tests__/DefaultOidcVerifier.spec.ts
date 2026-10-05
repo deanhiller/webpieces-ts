@@ -26,7 +26,7 @@ describe('DefaultOidcVerifier — @WpAuthOidc() trusts the edge (no ["self"] fal
 
     it('empty callers (@WpAuthOidc()) accepts a genuine token from ANOTHER caller — TRUST THE EDGE', async () => {
         // With the old `callers.length ? callers : ['self']` bug this REJECTED (other-sa !== self).
-        await expect(verifier.verify(devTokenFor(OTHER_CALLER), [])).resolves.toBeUndefined();
+        await expect(verifier.verify(devTokenFor(OTHER_CALLER), [])).resolves.toMatchObject({mechanism:'oidc',identity:OTHER_CALLER});
     });
 
     it('a non-empty allow-list still ENFORCES callers (defense-in-depth)', async () => {

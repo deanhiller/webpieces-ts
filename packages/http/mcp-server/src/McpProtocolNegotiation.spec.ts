@@ -1,3 +1,4 @@
+import { AuthorizationService } from '@webpieces/http-routing';
 import 'reflect-metadata';
 import { createServer, Server } from 'node:http';
 import {
@@ -37,7 +38,7 @@ import {
  * that a revision no era knows is still refused.
  */
 describe('WpMcpServer protocol negotiation', () => {
-    let bridge: WpMcpServer<string, string>;
+    let bridge: WpMcpServer<string>;
     let httpServer: Server;
     let baseUrl: string;
     let legacy: LegacyMcpHttpTestHarness;
@@ -54,13 +55,12 @@ describe('WpMcpServer protocol negotiation', () => {
         });
         router.addRoutes(SearchApi, SearchController);
         bridge = new WpMcpServer(
-            new WpMcpServerConfig<string, string>()
+            new WpMcpServerConfig<string>()
                 .setName('test-server')
                 .setVersion('1.0.0')
                 .setResource('https://api.example.test/app-owned/mcp')
                 .setAccessTokenAuthority(new TestTokenAuthority())
-                .setEndpointJwtAuthority(jwtHook)
-                .setEndpointMintRequest((credential: VerifiedMcpCredential) => credential.subject)
+                .setAuthorizationService(router.authorizationService())
                 .setAuthorizationServers(['https://login.example.test'])
                 .setRequiredScopes(['tools']),
         );

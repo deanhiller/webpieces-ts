@@ -1,19 +1,10 @@
-import {
-    ApiPath,
-    ApiType,
-    Endpoint,
-    EXTERNAL_CUSTOMER,
-    MCP,
-    POST,
-    READ,
-    RPC,
-    SVC_TO_SVC,
-    WRITE,
-    WpAuthApiKey,
-    WpMcpAuthJwt,
-    WpMcpTool,
-} from '@webpieces/core-util';
+import { WpAuthorization, AuthorizationType, WpAuth, apiKey as apiKeyAuth } from '@webpieces/core-util';
+import { ApiPath, ApiType, Endpoint, EXTERNAL_CUSTOMER, MCP, POST, READ, RPC, SVC_TO_SVC, WRITE, WpMcpTool } from '@webpieces/core-util';
 import { WindowedStoreRequest } from './OrderRequestBases';
+
+export class PartnerAccessPolicy {
+    llmRoles!: readonly string[];
+}
 
 /**
  * Both credentials of the `partner` regime, written ONCE and named per method.
@@ -153,9 +144,10 @@ export abstract class PartnerOrdersApi {
      *      earlier answer, order state changes minute to minute.
      */
     @Endpoint(POST, '/fetch', READ, RPC)
-    @WpAuthApiKey('partner', PARTNER_CREDENTIALS)
+    @WpAuth([apiKeyAuth('partner', PARTNER_CREDENTIALS)])
+    @WpAuthorization<PartnerAccessPolicy>({ authType: AuthorizationType.CUSTOM, appPolicy: {llmRoles: ['partner-agent']} })
     @WpMcpTool('fetch_orders')
-    @WpMcpAuthJwt({ roles: ['partner-agent'] })
+
     fetchOrders(request: FetchOrdersRequest): Promise<FetchOrdersResponse> {
         throw new Error('Method fetchOrders() must be implemented by subclass');
     }
@@ -167,7 +159,8 @@ export abstract class PartnerOrdersApi {
      * the call is about reaching a state, not about performing an action exactly once.
      */
     @Endpoint(POST, '/cancel', WRITE, RPC)
-    @WpAuthApiKey('partner', PARTNER_CREDENTIALS)
+    @WpAuth([apiKeyAuth('partner', PARTNER_CREDENTIALS)])
+    @WpAuthorization({ authType: AuthorizationType.USERS_OR_SERVICES })
     cancelOrder(request: CancelOrderRequest): Promise<CancelOrderResponse> {
         throw new Error('Method cancelOrder() must be implemented by subclass');
     }
@@ -180,7 +173,8 @@ export abstract class PartnerOrdersApi {
      * decision and authorizes nobody.
      */
     @Endpoint(POST, '/reindex', WRITE, RPC, { hidden: true })
-    @WpAuthApiKey('partner', PARTNER_CREDENTIALS)
+    @WpAuth([apiKeyAuth('partner', PARTNER_CREDENTIALS)])
+    @WpAuthorization({ authType: AuthorizationType.USERS_OR_SERVICES })
     reindex(request: ReindexRequest): Promise<ReindexResponse> {
         throw new Error('Method reindex() must be implemented by subclass');
     }

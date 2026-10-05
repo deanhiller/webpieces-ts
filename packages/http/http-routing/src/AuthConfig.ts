@@ -1,7 +1,7 @@
 import { ContextKey, ContextTuple } from '@webpieces/core-util';
 
 /**
- * SharedSecrets - the accepted values for ONE `@WpAuthSharedSecret(name)`. BOTH secret1 AND secret2
+ * SharedSecrets - the accepted values for ONE `sharedSecret(name)`. BOTH secret1 AND secret2
  * are accepted — this is what makes zero-downtime ROTATION possible:
  *
  *   to rotate: shift secret2 → secret1, and put the NEW secret in secret2. Callers cut over from
@@ -24,8 +24,8 @@ export class SharedSecrets {
  *
  *  - `userId`          — WHO the caller is, as the credential proved it.
  *  - `roles` / `claims` — the AUTHORIZATION inputs: `roles` is what the framework's own any-of check
- *                        reads, `claims` is the raw payload an app's {@link JwtHook.authorizeJwt}
- *                        override reads for app-defined requirements (inOrg, tenant, ...).
+ *                        reads, `claims` carries credential facts for the authenticator to validate and publish
+ *                        as trusted application context before AuthorizationHook evaluates policy.
  *  - `entries`         — the TRUSTED CONTEXT to seed. The framework writes each one with
  *                        {@link RequestContext.putTrusted}, so return only what THIS authenticator
  *                        derived from the credential it just verified.
@@ -38,12 +38,18 @@ export class SharedSecrets {
  */
 export class AuthenticatedCaller {
     constructor(
-        public readonly userId: string,
+        public readonly userId: string | undefined,
         public readonly roles: string[] = [],
         public readonly entries: ContextTuple[] = [],
         // webpieces-disable no-any-unknown -- raw JWT claims for app-defined authorization (inOrg, tenant, ...)
         public readonly claims: Record<string, unknown> = {},
+        public readonly machine?: AuthenticatedMachineIdentity,
     ) {}
+}
+
+/** Verified external machine identity does not grant trusted-header delegation. */
+export class AuthenticatedMachineIdentity {
+    constructor(public readonly mechanism: string, public readonly identity: string) {}
 }
 
 /**
@@ -72,11 +78,11 @@ export const AUTHENTICATED_CALLER_KEY = ContextKey.trusted<AuthenticatedCaller>(
 
 /**
  * AuthConfig - the app-provided SHARED-SECRET state the framework {@link AuthFilter} reads to
- * enforce `@WpAuthSharedSecret(name)` endpoints. It holds ONLY the accepted secret values (STATE) —
+ * enforce `sharedSecret(name)` endpoints. It holds ONLY the accepted secret values (STATE) —
  * there is no verification code here. The verification MECHANISMS are separate optional hooks the
  * app binds when it needs them:
  *
- *  - user JWT  → bind a {@link JwtHook} (async parseJwt + async authorizeJwt).
+ *  - user JWT  → bind a {@link JwtHook} (async parseJwt).
  *  - api key   → bind an {@link ApiKeyHook} (async verifyApiKey over the request's headers).
  *  - OIDC      → bind an {@link OidcHook} to override the framework's default verifier; a server that
  *                binds nothing still verifies Google OIDC via the built-in {@link DefaultOidcVerifier}.
@@ -86,7 +92,7 @@ export const AUTHENTICATED_CALLER_KEY = ContextKey.trusted<AuthenticatedCaller>(
  * when unbound, shared-secret endpoints simply have no accepted secret and fail fast (401).
  */
 export class AuthConfig {
-    /** Accepted shared-secret values keyed by `@WpAuthSharedSecret(name)`. DEFAULT empty — pass to enable. */
+    /** Accepted shared-secret values keyed by `sharedSecret(name)`. DEFAULT empty — pass to enable. */
     readonly sharedSecrets: Record<string, SharedSecrets>;
 
     constructor(sharedSecrets: Record<string, SharedSecrets> = {}) {

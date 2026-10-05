@@ -41,8 +41,8 @@ export { MissingRuntimeBaseUrlError } from './MissingRuntimeBaseUrlError';
 // hostile' (SsrfRefusedError) without matching message text.
 export { MissingSharedSecretError, MissingWebhookSignerError } from './OutboundAuthErrors';
 
-// The OUTBOUND half of @WpAuthWebhook(name) — the mirror of http-routing's WebhookAuthCallback. Bind
-// one, or every outbound @WpAuthWebhook call throws rather than delivering unsigned.
+// The OUTBOUND half of webhook(name) — the mirror of http-routing's WebhookAuthCallback. Bind
+// one, or every outbound webhook(...) call throws rather than delivering unsigned.
 export {
     WebhookSignerCallback,
     SignableRequest,

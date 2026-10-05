@@ -1,3 +1,4 @@
+import { AuthorizationService } from '@webpieces/http-routing';
 import 'reflect-metadata';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
@@ -18,6 +19,12 @@ import {
 
 /** A factory nothing calls: a registry only VALIDATES bindings, it never invokes them. */
 class UnusedApiFactory implements ApiFactory {
+    private readonly policy = new AuthorizationService();
+
+    authorizationService(): AuthorizationService {
+        return this.policy;
+    }
+
     apiClients(): ApiClient[] {
         return [];
     }
@@ -211,10 +218,15 @@ describe('McpToolRegistry pairs each binding with ITS contract’s catalog', () 
             throw new Error('never invoked');
         });
 
+    it('refuses local visibility evaluated by a different receiving policy service', () => {
+        expect(() => new McpToolRegistry([search()], [SEARCH_API_CATALOG],
+            new AuthorizationService())).toThrow('receiving ApiFactory authorizationService()');
+    });
+
     it('boots when every bound contract has exactly its own catalog', () => {
         const registry = new McpToolRegistry(
             [search(), remote()],
-            [SEARCH_API_CATALOG, REMOTE_SEARCH_API_CATALOG],
+            [SEARCH_API_CATALOG, REMOTE_SEARCH_API_CATALOG], factory.authorizationService(),
         );
 
         expect(registry.tools.map((tool: RegisteredMcpTool) => tool.name).sort()).toEqual([
@@ -227,14 +239,14 @@ describe('McpToolRegistry pairs each binding with ITS contract’s catalog', () 
     it('refuses a bound contract with no catalog, naming the file and every directory searched', () => {
         const other = new McpToolCatalog(REMOTE_SEARCH_API_CATALOG.file, '/built/apis');
 
-        expect(() => new McpToolRegistry([search(), remote()], [other])).toThrow(
+        expect(() => new McpToolRegistry([search(), remote()], [other], factory.authorizationService())).toThrow(
             /binds SearchApi, and no mcp-SearchApi-tools\.json[\s\S]*Directories searched[\s\S]*\/built\/apis/,
         );
     });
 
     it('refuses a catalog whose contract is not bound, naming the filter that drops it', () => {
         expect(
-            () => new McpToolRegistry([search()], [SEARCH_API_CATALOG, REMOTE_SEARCH_API_CATALOG]),
+            () => new McpToolRegistry([search()], [SEARCH_API_CATALOG, REMOTE_SEARCH_API_CATALOG], factory.authorizationService()),
         ).toThrow(
             /mcp-RemoteSearchApi-tools\.json \(.*\) is the catalog of RemoteSearchApi, which the server does not bind[\s\S]*catalog\.contractName !== 'RemoteSearchApi'/,
         );
@@ -246,13 +258,13 @@ describe('McpToolRegistry pairs each binding with ITS contract’s catalog', () 
             IN_MEMORY,
         );
 
-        expect(() => new McpToolRegistry([search()], [SEARCH_API_CATALOG, clash])).toThrow(
+        expect(() => new McpToolRegistry([search()], [SEARCH_API_CATALOG, clash], factory.authorizationService())).toThrow(
             /Two MCP tool catalogs for SearchApi/,
         );
     });
 
     it('refuses an empty catalog list, saying so', () => {
-        expect(() => new McpToolRegistry([search()], [])).toThrow(
+        expect(() => new McpToolRegistry([search()], [], factory.authorizationService())).toThrow(
             /\(none — toolCatalogs is empty\)/,
         );
     });

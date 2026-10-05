@@ -11,7 +11,7 @@
  * - `descriptionFile` — a teaching decision.
  * - `apis[]` — which contracts, in the order the published sidebar shows them.
  * - `securitySchemeNames[]` — the published scheme KEYS only. Everything else about the schemes, and
- *   the AND-ed `security` requirement, is DERIVED from the contract's own `@WpAuthApiKey`. A
+ *   the AND-ed `security` requirement, is DERIVED from the contract's own `apiKey(...)`. A
  *   `components.securitySchemes` block here would be a second copy of header names the running
  *   server never reads, and nothing could contradict it.
  * - `errors` — the document-wide failure contract, with the BODY read from a real TS type so the

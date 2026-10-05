@@ -1,3 +1,4 @@
+import { WpAuthorization, AuthorizationType } from '@webpieces/core-util';
 /* eslint-disable */
 /**
  * A contract that declares NO `@ApiType`.
@@ -16,6 +17,7 @@ export class NoApiTypeApi {
     /** Says nothing about who may read it, so the default decides. */
     @Endpoint(POST, '/ping', READ, RPC)
     @WpAuthPublic('Fixture only.')
+    @WpAuthorization({ authType: AuthorizationType.ANONYMOUS, reason: 'Fixture only.' })
     ping(request: Ping): Promise<void> {
         throw new Error('contract');
     }

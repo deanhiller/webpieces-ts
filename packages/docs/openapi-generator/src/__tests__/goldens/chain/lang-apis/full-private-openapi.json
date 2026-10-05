@@ -15,6 +15,7 @@
         "/lang/passages": {
             "post": {
                 "operationId": "LangLessonApi_listPassages",
+                "x-webpieces-authentication": [],
                 "summary": "listPassages",
                 "description": "Lists a lesson's passages.\n\nSafe to retry: this operation is read-only and idempotent.\n\nTriggered by a direct call.",
                 "tags": [

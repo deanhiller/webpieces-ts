@@ -1,3 +1,7 @@
+import {AuthorizationType} from '@webpieces/core-util';
+import {AuthorizationService} from '../AuthorizationHook';
+import {AuthorizationFilter} from '../filters/AuthorizationFilter';
+import { WpAuthorization, AuthorizationType, WpAuth, webhook as webhookAuth } from '@webpieces/core-util';
 import 'reflect-metadata';
 import { describe, it, expect } from 'vitest';
 import { GcpOidc } from '@webpieces/gcp-identity';
@@ -8,20 +12,7 @@ import {
     RawRequest,
     RequestContext,
 } from '@webpieces/core-context';
-import {
-    ApiPath,
-    AuthMeta,
-    WpAuthWebhook,
-    ContextKey,
-    ContextTuple,
-    Endpoint,
-    ApiBadRequestError,
-    ApiUnauthorizedError,
-    RouteMetadata,
-    EXTERNAL,
-    POST,
-    WRITE,
-} from '@webpieces/core-util';
+import { ApiPath, AuthMeta, ContextKey, ContextTuple, Endpoint, ApiBadRequestError, ApiUnauthorizedError, RouteMetadata, EXTERNAL, POST, WRITE } from '@webpieces/core-util';
 import { AuthFilter } from '../filters/AuthFilter';
 import { DefaultOidcVerifier } from '../DefaultOidcVerifier';
 import { ApiRoutingFactory } from '../ApiRoutingFactory';
@@ -42,7 +33,8 @@ import { RouteBuilder, RouteDefinition, FilterDefinition } from '../WebAppMeta';
 
 @ApiPath('/hook')
 abstract class SentryHookApi {
-    @WpAuthWebhook('sentry')
+    @WpAuth([webhookAuth('sentry')])
+    @WpAuthorization({ authType: AuthorizationType.USERS_OR_SERVICES })
     @Endpoint(POST, '/sentry/issue', WRITE, EXTERNAL, { calledBy: 'sentry', rawBody: true })
     notify(_r: object): Promise<object> {
         throw new Error('subclass');
@@ -57,7 +49,8 @@ class SentryHookController extends SentryHookApi {
 
 @ApiPath('/hook')
 abstract class ForgotRawBodyApi {
-    @WpAuthWebhook('sentry')
+    @WpAuth([webhookAuth('sentry')])
+    @WpAuthorization({ authType: AuthorizationType.USERS_OR_SERVICES })
     @Endpoint(POST, '/sentry/issue', WRITE, EXTERNAL, { calledBy: 'sentry' })
     notify(_r: object): Promise<object> {
         throw new Error('subclass');
@@ -76,7 +69,7 @@ const WEBHOOK_ROUTE = new RouteMetadata(
     'notify',
     WRITE,
     'SentryHookController',
-    new AuthMeta({ kind: 'webhook', name: 'sentry' }),
+    new AuthMeta([{ kind: 'webhook', name: 'sentry' }], undefined),
     'SentryHookApi',
     /*formPost*/ false,
     /*mask*/ undefined,
@@ -187,6 +180,14 @@ function webhookRequest(body: string, parseError?: Error): HttpRequest {
 }
 
 /** Run AuthFilter over the webhook route inside a request scope carrying `request`. */
+class AuthorizedNext implements Service<MethodMeta, WpResponse<unknown>> {
+    constructor(private readonly next: RecordingNext) {}
+    invoke(meta: MethodMeta): Promise<WpResponse<unknown>> {
+        meta.routeMeta.authorization = {authType:AuthorizationType.USERS_OR_SERVICES};
+        return new AuthorizationFilter(new AuthorizationService()).filter(meta, this.next);
+    }
+}
+
 async function runFilter(
     next: RecordingNext,
     hook: WebhookAuthCallback | undefined,
@@ -200,7 +201,7 @@ async function runFilter(
         for (const tuple of onTheWire) {
             PendingWireTrust.stash(tuple.key, String(tuple.value));
         }
-        return newAuthFilter(hook).filter(new MethodMeta(WEBHOOK_ROUTE), next);
+        return newAuthFilter(hook).filter(new MethodMeta(WEBHOOK_ROUTE), new AuthorizedNext(next));
     });
 }
 
@@ -378,7 +379,7 @@ describe('ApiRoutingFactory refuses a webhook route that kept no bytes', () => {
             new ApiRoutingFactory(ForgotRawBodyApi, ForgotRawBodyController).configure(
                 new CollectingRouteBuilder(),
             ),
-        ).toThrow(/is @WpAuthWebhook.*rawBody: true/s);
+        ).toThrow(/is webhook\(\.\.\.\).*rawBody: true/s);
     });
 
     it('registers the route, carrying rawBody on its metadata, when the pairing is right', () => {

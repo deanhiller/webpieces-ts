@@ -1,34 +1,23 @@
-import { isDeepStrictEqual } from 'node:util';
-import { ApiImplementationError } from '@webpieces/core-util';
-import { AuthenticatedCaller } from './AuthConfig';
+import { RequestContext } from '@webpieces/core-context';
+import { ApiImplementationError, RouteMetadata } from '@webpieces/core-util';
+import { AuthenticatedCallerContext } from './AuthenticatedCallerContext';
 
-/** In-process invocation credential. Never read from the wire or installed in ambient request state. */
+/** Token-free local entry, bound to the verified ingress scope and one actual endpoint. */
 export class InvocationAuthentication {
-    constructor(
-        public readonly token: string,
-        private readonly principal: AuthenticatedCaller,
-    ) {}
+    private readonly scopeIdentity: object;
 
-    /** Endpoint JWT verification must reproduce the ingress identity before endpoint policy runs. */
-    assertCaller(caller: AuthenticatedCaller): void {
-        const expected = this.principal;
-        const sameRoles =
-            caller.roles.length === expected.roles.length &&
-            caller.roles.every((role: string) => expected.roles.includes(role));
-        const sameEntries =
-            caller.entries.length === expected.entries.length &&
-            caller.entries.every((entry) =>
-                expected.entries.some(
-                    (item) => item.key === entry.key && isDeepStrictEqual(item.value, entry.value),
-                ),
-            );
-        const sameClaims = Object.keys(expected.claims).every((key: string) =>
-            isDeepStrictEqual(expected.claims[key], caller.claims[key]),
-        );
-        if (caller.userId !== expected.userId || !sameRoles || !sameEntries || !sameClaims) {
-            throw new ApiImplementationError(
-                'Invocation JWT disagrees with the verified ingress principal.',
-            );
+    constructor(private readonly apiClass: Function, private readonly methodName: string) {
+        if (!AuthenticatedCallerContext.hasEstablishedIngress()) {
+            throw new ApiImplementationError('Local invocation requires completed verified ingress.');
+        }
+        this.scopeIdentity = RequestContext.activeScopeIdentity();
+    }
+
+    assertTarget(route: RouteMetadata): void {
+        if (this.scopeIdentity !== RequestContext.activeScopeIdentity() ||
+            !AuthenticatedCallerContext.hasEstablishedIngress() ||
+            route.apiClass !== this.apiClass || route.methodName !== this.methodName) {
+            throw new ApiImplementationError('Local invocation authentication belongs to a different target or request scope.');
         }
     }
 }

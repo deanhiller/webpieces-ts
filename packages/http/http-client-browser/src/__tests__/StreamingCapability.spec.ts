@@ -1,3 +1,4 @@
+import { WpAuthorization, AuthorizationType } from '@webpieces/core-util';
 import 'reflect-metadata';
 import { describe, expect, it, vi } from 'vitest';
 import {
@@ -44,6 +45,7 @@ const browserOutputSchema = new ObjectSchemaBuilder()
 abstract class BrowserStreamingApi {
     @Endpoint(POST, '/exchange', READ, RPC)
     @WpAuthPublic('test stream')
+    @WpAuthorization({ authType: AuthorizationType.ANONYMOUS, reason: 'test stream' })
     @WpStream(StreamDirection.FULL)
     exchange(
         _request: BrowserInput,
@@ -65,6 +67,7 @@ registerStreamingSchemas(BrowserStreamingApi, 'exchange', {
 abstract class BrowserResponseStreamingApi {
     @Endpoint(POST, '/watch', READ, RPC)
     @WpAuthPublic('test response stream')
+    @WpAuthorization({ authType: AuthorizationType.ANONYMOUS, reason: 'test response stream' })
     @WpStream(StreamDirection.RESPONSE)
     watch(
         _request: BrowserInput,

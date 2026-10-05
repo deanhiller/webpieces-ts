@@ -33,7 +33,7 @@ export class RuntimeSetupOptions {
         public readonly svcVersion: string,
         /**
          * WHERE this process runs — `'local'` (a developer's machine) or `'deployed'` (everything
-         * else). Published to {@link RuntimeLocality}; the ONE input to `@WpAuthLocalOnly` enforcement.
+         * else). Published to {@link RuntimeLocality}; the ONE input to `@WpLocalOnly` enforcement.
          *
          * REQUIRED and POSITIONAL on purpose, exactly like `@Endpoint(path, kind)`: only the app
          * knows how its platform is detected (Cloud Run's `K_SERVICE`, an ECS metadata URL, the
@@ -81,7 +81,7 @@ export async function setupRuntime(
     ServiceInfo.setInfo(options.svcName, options.svcVersion);
 
     // 0b. Declare WHERE we run, before any route is built: ApiRoutingFactory reads it in step 4 to
-    // decide whether @WpAuthLocalOnly routes are registered at all. Undeclared reads as DEPLOYED, so
+    // decide whether @WpLocalOnly routes are registered at all. Undeclared reads as DEPLOYED, so
     // this call is what lets a local-only endpoint exist — never what hides one.
     RuntimeLocality.declare(options.locality);
 

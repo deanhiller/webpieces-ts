@@ -303,7 +303,7 @@ describe('api-rules-for-mcp', () => {
         expect(lines(findings.mcp.violations)).toEqual([
             "SearchApi.reindex: an MCP tool is declared on a 'cloudtasks' endpoint",
             'SearchApi.open: an MCP tool declares no HTTP auth',
-            'SearchApi.open: an MCP tool does not declare @WpMcpAuthJwt(...)',
+            'SearchApi.open: an MCP tool does not declare @WpAuthorization(...)',
             'SearchApi.quiet: an MCP tool has no documentation (SearchApi.quiet) — no MCP schema ' +
                 'could be built',
         ]);

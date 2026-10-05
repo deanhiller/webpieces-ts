@@ -14,12 +14,10 @@ exactly one artifact, read by everyone.
 ## The contract
 
 A contract is an abstract class decorated with the shared api decorators
-(`packages/core/core-util/src/http/decorators.ts`): `@ApiPath`, `@Post`/`@Get`/…, and an auth mode
-(exactly one of `@WpAuthPublic`, `@WpAuthJwt`, `@WpAuthOidc`, `@WpAuthSharedSecret`, `@WpAuthWebhook`,
-`@WpAuthLocalOnly`). For a
-pub-sub/task contract it is additionally
-marked `@PubSub` with a queue name. The decorators attach runtime metadata that every transport
-reads back.
+(`packages/core/core-util/src/http/decorators.ts`): `@ApiPath`, `@Endpoint`, one
+`@WpAuth([jwt(), oidc(), ...])` or `@WpAuthPublic(reason)`, and mandatory
+`@WpAuthorization(...)`. `@WpLocalOnly()` independently limits route availability.
+Task contracts additionally declare their queue. Every transport reads this same runtime metadata.
 
 The contract carries **no implementation** — it is the compile-time interface *and* the runtime
 metadata simultaneously. Both the client proxies and the server router read the same decorators.
@@ -36,7 +34,7 @@ endpoint that authenticates its caller, see
 so they never leak. The server side is `packages/http/http-server/src/ExpressWrapper.ts` +
 `WebpiecesMiddleware.ts`, which run the request through the full filter chain.
 
-For an `@WpAuthOidc()` contract, the Node client mints a Google ID token for the final
+For an `@WpAuth([oidc()])` contract, the Node client mints a Google ID token for the final
 destination audience. A private Cloud Run edge validates the invocation and enforces
 invoker IAM before the server chain runs. The application's OIDC check is supplementary;
 see [Cloud Run OIDC](./cloud-run-oidc.md) for the trust boundary and local-token behavior.
@@ -74,7 +72,7 @@ HTTP `ProxyClient`:
 > through the full server filter chain." — `TaskProxyClient.ts`
 
 `init(apiClass, config)` validates the *same* decorators as HTTP (`assertPubSubConventions`,
-`assertEveryEndpointHasAuthMode`, reads `getApiPath`/`getEndpoints`/`getAuthMode`/`getQueueName`).
+`assertEveryEndpointHasAuthMode`, reads `getApiPath`/`getEndpoints`/`getAuthMeta`/`getQueueName`).
 The `TaskInvoker` contract is bound to a default impl exactly like the HTTP pattern:
 - `GcpTaskInvoker` (`@provideFrameworkSingletonDefaultForApi(TaskInvoker)`) — real
   `@google-cloud/tasks`, OIDC or shared-secret delivery auth, dedup via deterministic task name.

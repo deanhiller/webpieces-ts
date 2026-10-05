@@ -4,7 +4,6 @@ import {
     EXTERNAL_CUSTOMER,
     MCP,
     SVC_TO_SVC,
-    WpAuthLocalOnly,
 } from '@webpieces/core-util';
 
 /** The one line that says a document is not the customer contract. It appears in exactly one. */
@@ -134,7 +133,7 @@ export class DocumentSelection {
     }
 
     /**
-     * `{ hidden: true }` subtracts a method from the CUSTOMER document, and `@WpAuthLocalOnly`
+     * `{ hidden: true }` subtracts a method from the CUSTOMER document, and `@WpLocalOnly`
      * subtracts it from ALL of them.
      *
      * A local-only endpoint is not registered as a route at all once the process is deployed, so it
@@ -143,7 +142,7 @@ export class DocumentSelection {
      * than omitting it, because a reader would reasonably try to call it.
      */
     acceptsEndpoint(endpoint: DocumentedEndpoint): boolean {
-        if (endpoint.auth?.decorator === WpAuthLocalOnly.name) {
+        if (endpoint.localOnly) {
             return false;
         }
         return !this.dropHidden || !endpoint.hidden;

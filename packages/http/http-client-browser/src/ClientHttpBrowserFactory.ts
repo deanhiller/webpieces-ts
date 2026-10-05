@@ -30,7 +30,7 @@ import { RequestLifecycleListener } from './RequestLifecycleListener';
  * store.set(CompanyHeaders.TENANT_ID, tenantId);
  * ```
  *
- * A browser cannot hold service credentials, so a contract with an @WpAuthOidc or @WpAuthSharedSecret
+ * A browser cannot hold service credentials, so a contract with an oidc(...) or sharedSecret(...)
  * endpoint throws in `createRpcClient`, not on the first call.
  */
 @DocumentDesign()

@@ -123,8 +123,8 @@ export class WebpiecesCoreHeaders {
      * service is the point. What makes that safe is not the header being absent, it is WHO is
      * allowed to have set it: an inbound value is held PENDING by
      * `RequestContextHeaders.fillFromRequest` and admitted by `AuthFilter` only on a route that
-     * verified its CALLER (`@WpAuthOidc` / `@WpAuthSharedSecret`). On a browser-reachable route
-     * (`@WpAuthJwt` / public) the value must match what the authenticator itself derived, or the
+     * verified its CALLER (`oidc(...)` / `sharedSecret(...)`). On a browser-reachable route
+     * (`jwt()` / public) the value must match what the authenticator itself derived, or the
      * request is rejected.
      *
      * `provenance` says "an app-bound JwtHook" rather than naming one hook, because the framework
@@ -163,7 +163,7 @@ export class WebpiecesCoreHeaders {
      * every other unvouched trusted header.
      *
      * It keeps its `httpHeader` because PROPAGATION is the point: the surface belongs to the ORIGINAL
-     * caller, so `GUI -> api1 -> api2` must leave api2 seeing `gui`. An internal `@WpAuthOidc` hop
+     * caller, so `GUI -> api1 -> api2` must leave api2 seeing `gui`. An internal `oidc(...)` hop
      * verifies its caller, so the propagated value is admitted verbatim — and the auth filter only
      * ever SETS a surface when none arrived, so an inherited one is never overwritten.
      */

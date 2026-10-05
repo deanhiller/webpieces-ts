@@ -1,9 +1,8 @@
-import { JwtRequirement } from '@webpieces/core-util';
 import { JwtHook, MintedJwt } from './AuthHooks';
 import { AuthenticatedCaller } from './AuthConfig';
 
 /**
- * COMPILE-TIME assertions that {@link JwtHook} mint/parse/authorize are async, mint is required, and
+ * COMPILE-TIME assertions that {@link JwtHook} mint/parse are async (authorization belongs to AuthorizationHook), mint is required, and
  * the old SYNC spelling no longer compiles. Each `@ts-expect-error` below FAILS THE BUILD (TS2578, "unused
  * '@ts-expect-error' directive") if the override it guards ever starts compiling again.
  *
@@ -33,9 +32,7 @@ export class JwtHookCompileAssertions {
                 return new AuthenticatedCaller('u1');
             }
 
-            override async authorizeJwt(_values: AuthenticatedCaller, _requirement: JwtRequirement): Promise<void> {
-                // An implementation that needs no I/O simply has no await — that is allowed and free.
-            }
+
         };
 
         class RemoteSigner {
@@ -83,8 +80,8 @@ export class JwtHookCompileAssertions {
                 return new AuthenticatedCaller('u1');
             }
 
-            // @ts-expect-error authorizeJwt is async now: a void override must not compile either
-            override authorizeJwt(_values: AuthenticatedCaller, _requirement: JwtRequirement): void {
+            // @ts-expect-error authorizeJwt is removed; application policy belongs in AuthorizationHook
+            override authorizeJwt(_values: AuthenticatedCaller, _requirement: object): void {
                 // an app rule enforced synchronously — the spelling this change deletes
             }
         };

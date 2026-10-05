@@ -1,27 +1,7 @@
+import { WpAuthorization, AuthorizationType, WpAuth, oidc as oidcAuth, sharedSecret as sharedSecretAuth, apiKey as apiKeyAuth } from '@webpieces/core-util';
 import 'reflect-metadata';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import {
-    ApiPath,
-    WpAuthApiKey,
-    WpAuthOidc,
-    WpAuthSharedSecret,
-    ClientRegistry,
-    ContextKey,
-    Endpoint,
-    HeaderRegistry,
-    ApiDependencyError,
-    ApiEndUserError,
-    ApiImplementationError,
-    LogManager,
-    ApiConnectionError,
-    WpAuthPublic,
-    Rpc,
-    WebpiecesCoreHeaders,
-    POST,
-    READ,
-    RPC,
-    WRITE,
-} from '@webpieces/core-util';
+import { ApiPath, ClientRegistry, ContextKey, Endpoint, HeaderRegistry, ApiDependencyError, ApiEndUserError, ApiImplementationError, LogManager, ApiConnectionError, WpAuthPublic, Rpc, WebpiecesCoreHeaders, POST, READ, RPC, WRITE } from '@webpieces/core-util';
 import type { ApiCallInfo, Logger, LoggerFactory } from '@webpieces/core-util';
 import { BrowserApiCallContext } from '../BrowserApiCallContext';
 import { RouteMetadata } from '@webpieces/core-util';
@@ -40,6 +20,7 @@ class SaveRequest {
 abstract class PublicApi {
     @Endpoint(POST, '/save', WRITE, RPC)
     @WpAuthPublic('Anonymous access is intentionally required')
+    @WpAuthorization({ authType: AuthorizationType.ANONYMOUS, reason: 'Anonymous access is intentionally required' })
     // webpieces-disable no-unmanaged-exceptions -- abstract contract stub, never executed
     save(_request: SaveRequest): Promise<void> {
         throw new Error('contract only');
@@ -50,7 +31,8 @@ abstract class PublicApi {
 @ApiPath('/secure')
 abstract class OidcApi {
     @Endpoint(POST, '/internalOp', WRITE, RPC)
-    @WpAuthOidc()
+    @WpAuth([oidcAuth()])
+    @WpAuthorization({ authType: AuthorizationType.SERVICE_ONLY })
     // webpieces-disable no-unmanaged-exceptions -- abstract contract stub, never executed
     internalOp(_request: SaveRequest): Promise<void> {
         throw new Error('contract only');
@@ -61,7 +43,8 @@ abstract class OidcApi {
 @ApiPath('/secret')
 abstract class SharedSecretApi {
     @Endpoint(POST, '/internalOp', WRITE, RPC)
-    @WpAuthSharedSecret('INTERNAL_API_SECRET')
+    @WpAuth([sharedSecretAuth('INTERNAL_API_SECRET')])
+    @WpAuthorization({ authType: AuthorizationType.SERVICE_ONLY })
     // webpieces-disable no-unmanaged-exceptions -- abstract contract stub, never executed
     internalOp(_request: SaveRequest): Promise<void> {
         throw new Error('contract only');
@@ -72,7 +55,8 @@ abstract class SharedSecretApi {
 @ApiPath('/management/v1')
 abstract class ApiKeyApi {
     @Endpoint(POST, '/orders', READ, RPC)
-    @WpAuthApiKey('onetablet-partner', [{ in: 'header', name: 'x-api-key' }])
+    @WpAuth([apiKeyAuth('onetablet-partner', [{ in: 'header', name: 'x-api-key' }])])
+    @WpAuthorization({ authType: AuthorizationType.USERS_OR_SERVICES })
     // webpieces-disable no-unmanaged-exceptions -- abstract contract stub, never executed
     listOrders(_request: SaveRequest): Promise<void> {
         throw new Error('contract only');
@@ -252,19 +236,19 @@ describe('BrowserProxyClient resolves a base URL without ever throwing', () => {
 describe('BrowserProxyClient rejects endpoints a browser cannot satisfy', () => {
     it('throws for an @WpAuthOidc contract', () => {
         expect(() => factory.createRpcClient(OidcApi, new ClientConfig('save-svc'))).toThrow(
-            /@WpAuthOidc — a browser cannot hold service credentials/,
+            /oidc.*browser cannot hold.*server-side/s,
         );
     });
 
     it('throws for an @WpAuthSharedSecret contract', () => {
         expect(() =>
             factory.createRpcClient(SharedSecretApi, new ClientConfig('save-svc')),
-        ).toThrow(/@WpAuthSharedSecret — a browser cannot hold service credentials/);
+        ).toThrow(/shared-secret.*browser cannot hold.*server-side/s);
     });
 
     it('throws for an @WpAuthApiKey contract, naming the regime and who may actually call it', () => {
         expect(() => factory.createRpcClient(ApiKeyApi, new ClientConfig('save-svc'))).toThrow(
-            /@WpAuthApiKey\('onetablet-partner'\).*customer-held/s,
+            /apiKey\('onetablet-partner'.*browser cannot hold.*server-side/s,
         );
     });
 

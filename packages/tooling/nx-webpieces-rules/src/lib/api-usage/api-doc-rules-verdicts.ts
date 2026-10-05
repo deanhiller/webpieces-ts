@@ -13,6 +13,7 @@
 import * as ts from 'typescript';
 import {
     ApiDocModel,
+    ApiDocExtractor,
     DocumentedEndpoint,
     McpRenderError,
     McpSchemaRenderer,
@@ -265,12 +266,12 @@ export function toolFailures(
             ),
         );
     }
-    if (endpoint.mcpAuthText === undefined) {
+    if (endpoint.authorizationText === undefined) {
         found.push(
             new Verdict(
-                'an MCP tool does not declare @WpMcpAuthJwt(...)',
-                'Add @WpMcpAuthJwt(...) beside the HTTP auth. MCP authorization is rechecked ' +
-                    'before the endpoint boundary and is declared separately on purpose.',
+                'an MCP tool does not declare @WpAuthorization(...)',
+                'Add @WpAuthorization(...) beside @WpAuth. Common operation authorization is rechecked ' +
+                    'before tool/schema lookup and at the receiving endpoint.',
             ),
         );
     }
@@ -352,7 +353,7 @@ function lineOf(source: ts.SourceFile, node: ts.Node): number {
     return source.getLineAndCharacterOfPosition(node.getStart(source)).line + 1;
 }
 
-/** True when `node` carries `@name(...)`. Matched on the syntax, like every reader in this file. */
+/** Match canonical imports, including aliases and namespace calls. */
 // webpieces-disable no-function-outside-class -- pure AST reader
 function hasDecoratorNamed(node: ts.Node, name: string): boolean {
     const decorators = ts.canHaveDecorators(node) ? (ts.getDecorators(node) ?? []) : [];
@@ -360,8 +361,7 @@ function hasDecoratorNamed(node: ts.Node, name: string): boolean {
         const call = decorator.expression;
         if (
             ts.isCallExpression(call) &&
-            ts.isIdentifier(call.expression) &&
-            call.expression.text === name
+            ApiDocExtractor.canonicalCallName(call.expression) === name
         ) {
             return true;
         }

@@ -1,3 +1,4 @@
+import { WpAuthorization, AuthorizationType, WpAuth, apiKey as apiKeyAuth } from '@webpieces/core-util';
 /* eslint-disable */
 /**
  * The MAIN fixture: one api-key regime on every endpoint, one method hidden from customers, one that
@@ -7,21 +8,7 @@
  * a stub cannot be wrong about the signature it stands in for, so a fixture built on stubs proves
  * nothing about the thing it is a fixture FOR.
  */
-import {
-    ApiPath,
-    ApiType,
-    Endpoint,
-    EXTERNAL_CUSTOMER,
-    MCP,
-    POST,
-    READ,
-    RPC,
-    SVC_TO_SVC,
-    WRITE,
-    WpAuthApiKey,
-    WpMcpAuthJwt,
-    WpMcpTool,
-} from '@webpieces/core-util';
+import { ApiPath, ApiType, Endpoint, EXTERNAL_CUSTOMER, MCP, POST, READ, RPC, SVC_TO_SVC, WRITE, WpMcpTool } from '@webpieces/core-util';
 
 const PARTNER_CREDENTIALS = [
     { in: 'header', name: 'x-api-key', description: 'Your key.' },
@@ -74,9 +61,10 @@ export class WidgetsApi {
      * @mcp Read-only. Prefer this over guessing from an earlier answer.
      */
     @Endpoint(POST, '/list', READ, RPC)
-    @WpAuthApiKey('partner', PARTNER_CREDENTIALS)
+    @WpAuth([apiKeyAuth('partner', PARTNER_CREDENTIALS)])
+    @WpAuthorization<{llmRoles: readonly string[]}>({ authType: AuthorizationType.CUSTOM, appPolicy: {llmRoles: ['agent']} })
     @WpMcpTool('list_widgets')
-    @WpMcpAuthJwt({ roles: ['agent'] })
+
     list(request: ListWidgetsRequest): Promise<ListWidgetsResponse> {
         throw new Error('contract');
     }
@@ -87,7 +75,8 @@ export class WidgetsApi {
      * Not published: an operator tool, and the customer contract has no concept of our retention.
      */
     @Endpoint(POST, '/purge', WRITE, RPC, { hidden: true })
-    @WpAuthApiKey('partner', PARTNER_CREDENTIALS)
+    @WpAuth([apiKeyAuth('partner', PARTNER_CREDENTIALS)])
+    @WpAuthorization({ authType: AuthorizationType.USERS_OR_SERVICES })
     purge(request: PurgeRequest): Promise<PurgeResponse> {
         throw new Error('contract');
     }

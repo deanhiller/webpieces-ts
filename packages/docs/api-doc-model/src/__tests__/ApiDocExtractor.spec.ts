@@ -129,8 +129,8 @@ describe('the contract itself', () => {
 
     it('PARSES @WpAuthApiKey into a regime and its ordered credentials', () => {
         const auth = harness.endpoint(model, 'lookup').auth;
-        expect(auth?.decorator).toBe('WpAuthApiKey');
-        const apiKey = auth?.apiKey;
+        expect(auth?.methods[0].kind).toBe('apikey');
+        const apiKey = auth?.methods[0].apiKey;
         expect(apiKey?.regime).toBe('partner');
         // ORDER is the order a published document lists them in, so it is asserted.
         expect(apiKey?.credentials.map((c: DocumentedApiKeyCredential) => c.location)).toEqual([
@@ -145,9 +145,9 @@ describe('the contract itself', () => {
 
     it('leaves `apiKey` unset for every other credential kind', () => {
         const jwt = harness.endpoint(model, 'save').auth;
-        expect(jwt?.decorator).toBe('WpAuthJwt');
-        expect(jwt?.apiKey).toBeUndefined();
-        expect(jwt?.argumentTexts).toHaveLength(1);
+        expect(jwt?.methods.map((method) => method.kind)).toEqual(['jwt']);
+        expect(jwt?.methods[0].apiKey).toBeUndefined();
+        expect(jwt?.methods[0].argumentTexts).toEqual([]);
     });
 
     it('extracts ONE named type from a file, for a type no contract field points at', () => {
@@ -200,15 +200,15 @@ describe('the contract itself', () => {
 
     it('records the @WpAuth* declaration, the @WpMcpTool, the @WpMcpAuthJwt and the @MaskLog', () => {
         const save = harness.endpoint(model, 'save');
-        expect(save.auth?.decorator).toBe('WpAuthJwt');
+        expect(save.auth?.methods.map((method) => method.kind)).toEqual(['jwt']);
         // The NAME is all the model takes from @WpMcpTool: `description` duplicates the JSDoc, and
         // the three side-effect hints are computed from `operation` by mcpHintsForOperation.
         expect(save.mcpTool?.name).toBe('save_customer');
-        expect(save.mcpAuthText).toContain('admin');
+        expect(save.authorizationText).toContain('admin');
         expect(save.maskLog.get('secretToken')).toBe('full');
 
         // @WpMcpAuthJwt must NOT be mistaken for the endpoint's own credential declaration.
-        expect(harness.endpoint(model, 'hook').auth?.decorator).toBe('WpAuthPublic');
+        expect(harness.endpoint(model, 'hook').auth?.publicReason).toBeDefined();
     });
 
     it('captures @mcp where it was written, and leaves it UNDEFINED where it was not', () => {

@@ -15,6 +15,7 @@
         "/fsdb/passage": {
             "post": {
                 "operationId": "FsdbApi_readPassage",
+                "x-webpieces-authentication": [],
                 "summary": "readPassage",
                 "description": "Reads one stored passage.\n\nSafe to retry: this operation is read-only and idempotent.\n\nTriggered by a direct call.",
                 "tags": [

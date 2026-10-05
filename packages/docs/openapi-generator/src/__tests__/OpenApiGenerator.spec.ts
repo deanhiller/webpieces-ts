@@ -426,7 +426,7 @@ describe('prose', () => {
             openWorldHint: false,
         });
         expect(harness.at(mcp, 'paths./widgets/list.post.x-mcp-description')).toMatch(/Read-only/);
-        expect(harness.at(mcp, 'paths./widgets/list.post.x-mcp-auth')).toContain('agent');
+        expect(harness.at(mcp, 'paths./widgets/list.post.x-webpieces-authorization')).toContain('agent');
         // A published document says what a customer must send; our agent-side roles are not that.
         expect(harness.at(published, 'paths./widgets/list.post.x-mcp-tool')).toBeUndefined();
     });

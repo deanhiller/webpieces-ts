@@ -1,6 +1,6 @@
 import { ApiBadRequestError, ApiJsonSchemaValidator, DtoValue } from '@webpieces/core-util';
 import { RequestContext } from '@webpieces/core-context';
-import { InvocationAuthentication, JwtHook } from '@webpieces/http-routing';
+import { InvocationAuthentication, AuthorizationService } from '@webpieces/http-routing';
 import { McpToolPolicy } from './McpToolPolicy';
 import { RegisteredMcpTool } from './McpToolRegistry';
 import { VerifiedMcpCredential } from './McpAuth';
@@ -10,17 +10,15 @@ import { MCP_INVOCATION_CONTEXT, McpInvocationContext } from './McpInvocationCon
 export class McpApiDispatcher {
     private readonly schemas = new ApiJsonSchemaValidator();
 
-    async call<T>(
+    async call(
         tool: RegisteredMcpTool,
         requestDto: DtoValue,
         credential: VerifiedMcpCredential,
         invocation: McpInvocationContext,
-        policy: JwtHook<T>,
-        mintEndpointToken: () => Promise<string>,
+        policy: AuthorizationService,
     ): Promise<DtoValue> {
         await new McpToolPolicy(policy).require(
-            credential.caller,
-            tool.mcpAuth.requirement,
+            tool.authorization,
             tool.name,
         );
         const inputFailure = this.schemas.validate(tool.inputSchema, requestDto);
@@ -33,7 +31,7 @@ export class McpApiDispatcher {
         }
         const authentication =
             tool.binding.topology === 'local'
-                ? new InvocationAuthentication(await mintEndpointToken(), credential.caller)
+                ? new InvocationAuthentication(tool.apiClass, tool.methodName)
                 : undefined;
         RequestContext.putTrusted(MCP_INVOCATION_CONTEXT, invocation);
         return tool.binding.invoke(tool.methodName, requestDto, authentication);

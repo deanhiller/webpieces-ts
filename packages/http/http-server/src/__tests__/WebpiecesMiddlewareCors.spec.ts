@@ -1,3 +1,4 @@
+import { AuthorizationService } from '@webpieces/http-routing';
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import express, { Express, Request, Response } from 'express';
 import { AddressInfo } from 'net';
@@ -15,6 +16,10 @@ class CorsResponse {
 
 /** No webpieces routes — these tests exercise the GLOBAL middleware, not route dispatch. */
 class NoRoutesApiFactory implements ApiFactory {
+    authorizationService(): AuthorizationService {
+        throw new Error('This transport-only fixture does not implement authorization.');
+    }
+
     public apiClients(): ApiClient[] {
         return [];
     }

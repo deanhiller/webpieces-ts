@@ -1,24 +1,7 @@
+import { WpAuthorization, AuthorizationType, WpAuth, oidc as oidcAuth, sharedSecret as sharedSecretAuth, webhook as webhookAuth } from '@webpieces/core-util';
 import 'reflect-metadata';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import {
-    ApiPath,
-    WpAuthOidc,
-    WpAuthSharedSecret,
-    WpAuthWebhook,
-    ClientRegistry,
-    DestinationTrust,
-    Endpoint,
-    Filter,
-    WpAuthPublic,
-    Rpc,
-    Secrets,
-    Service,
-    TestCaseRecorder,
-    WebpiecesCoreHeaders,
-    POST,
-    RPC,
-    WRITE,
-} from '@webpieces/core-util';
+import { ApiPath, ClientRegistry, DestinationTrust, Endpoint, Filter, WpAuthPublic, Rpc, Secrets, Service, TestCaseRecorder, WebpiecesCoreHeaders, POST, RPC, WRITE } from '@webpieces/core-util';
 import type { RequestContextHeaders } from '@webpieces/core-context';
 import { RequestContext } from '@webpieces/core-context';
 import type { GcpOidc } from '@webpieces/gcp-identity';
@@ -46,6 +29,7 @@ class DeliverRequest {
 abstract class PartnerWebhookApi {
     @Endpoint(POST, '/deliver', WRITE, RPC)
     @WpAuthPublic('Anonymous access is intentionally required')
+    @WpAuthorization({ authType: AuthorizationType.ANONYMOUS, reason: 'Anonymous access is intentionally required' })
     // webpieces-disable no-unmanaged-exceptions -- abstract contract stub, never executed
     deliver(_request: DeliverRequest): Promise<void> {
         throw new Error('contract only');
@@ -61,7 +45,8 @@ abstract class PartnerWebhookApi {
 @ApiPath('/internal')
 abstract class OidcApi {
     @Endpoint(POST, '/work', WRITE, RPC)
-    @WpAuthOidc()
+    @WpAuth([oidcAuth()])
+    @WpAuthorization({ authType: AuthorizationType.SERVICE_ONLY })
     // webpieces-disable no-unmanaged-exceptions -- abstract contract stub, never executed
     work(_request: DeliverRequest): Promise<void> {
         throw new Error('contract only');
@@ -72,7 +57,8 @@ abstract class OidcApi {
 @ApiPath('/internal')
 abstract class SharedSecretApi {
     @Endpoint(POST, '/work', WRITE, RPC)
-    @WpAuthSharedSecret('partner-secret')
+    @WpAuth([sharedSecretAuth('partner-secret')])
+    @WpAuthorization({ authType: AuthorizationType.SERVICE_ONLY })
     // webpieces-disable no-unmanaged-exceptions -- abstract contract stub, never executed
     work(_request: DeliverRequest): Promise<void> {
         throw new Error('contract only');
@@ -84,7 +70,8 @@ abstract class SharedSecretApi {
 @ApiPath('/ot-webhook')
 abstract class SignedWebhookApi {
     @Endpoint(POST, '/deliver', WRITE, RPC)
-    @WpAuthWebhook('partner-hmac')
+    @WpAuth([webhookAuth('partner-hmac')])
+    @WpAuthorization({ authType: AuthorizationType.USERS_OR_SERVICES })
     // webpieces-disable no-unmanaged-exceptions -- abstract contract stub, never executed
     deliver(_request: DeliverRequest): Promise<void> {
         throw new Error('contract only');

@@ -1,3 +1,4 @@
+import { WpAuthorization, AuthorizationType } from '@webpieces/core-util';
 /**
  * `@Endpoint(POST, path, WRITE, EXTERNAL, { calledBy })` — the compile-time forcing function that makes a human
  * name the system calling us from outside, plus the metadata it records for the architecture graph.
@@ -25,6 +26,7 @@ import { ExternalCaller, getEndpointCaller } from '../external-caller';
 @ApiPath('/hooks')
 abstract class CallerApi {
     @WpAuthPublic('External caller metadata fixture')
+    @WpAuthorization({ authType: AuthorizationType.ANONYMOUS, reason: 'External caller metadata fixture' })
     @Endpoint(POST, '/rpc', WRITE, RPC)
     plain(_req: object): Promise<object> {
         throw new Error('subclass');
@@ -32,6 +34,7 @@ abstract class CallerApi {
 
     // Vendor webhook: kind defaults to 'saas'.
     @WpAuthPublic('External caller metadata fixture')
+    @WpAuthorization({ authType: AuthorizationType.ANONYMOUS, reason: 'External caller metadata fixture' })
     @Endpoint(POST, '/twilio', WRITE, EXTERNAL, { formPost: true, calledBy: 'twilio' })
     inbound(_req: object): Promise<object> {
         throw new Error('subclass');
@@ -39,6 +42,7 @@ abstract class CallerApi {
 
     // A SECOND method with the SAME caller — one vendor, several endpoints.
     @WpAuthPublic('External caller metadata fixture')
+    @WpAuthorization({ authType: AuthorizationType.ANONYMOUS, reason: 'External caller metadata fixture' })
     @Endpoint(POST, '/twilio-status', WRITE, EXTERNAL, { calledBy: 'twilio' })
     status(_req: object): Promise<object> {
         throw new Error('subclass');
@@ -46,6 +50,7 @@ abstract class CallerApi {
 
     // Infrastructure rather than a vendor product.
     @WpAuthPublic('External caller metadata fixture')
+    @WpAuthorization({ authType: AuthorizationType.ANONYMOUS, reason: 'External caller metadata fixture' })
     @Endpoint(POST, '/push', WRITE, EXTERNAL, { calledBy: 'pubsub-push', callerKind: 'system' })
     push(_req: object): Promise<object> {
         throw new Error('subclass');
@@ -110,6 +115,7 @@ describe('assertEveryExternalEndpointDeclaresCaller', () => {
             // The `as never` is the point: TS refuses this, JS callers and `as any` do not, so the
             // wiring-time assert is the backstop behind the compile error.
             @WpAuthPublic('External caller metadata fixture')
+            @WpAuthorization({ authType: AuthorizationType.ANONYMOUS, reason: 'External caller metadata fixture' })
             @Endpoint(POST, '/hook', WRITE, EXTERNAL, { formPost: true } as never)
             inbound(_req: object): Promise<object> {
                 throw new Error('subclass');
@@ -125,6 +131,7 @@ describe('assertEveryExternalEndpointDeclaresCaller', () => {
         @ApiPath('/plain')
         abstract class PlainApi {
             @WpAuthPublic('External caller metadata fixture')
+            @WpAuthorization({ authType: AuthorizationType.ANONYMOUS, reason: 'External caller metadata fixture' })
             @Endpoint(POST, '/go', WRITE, RPC)
             go(_req: object): Promise<object> {
                 throw new Error('subclass');

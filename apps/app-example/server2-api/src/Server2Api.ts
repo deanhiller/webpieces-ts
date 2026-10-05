@@ -1,4 +1,5 @@
-import { ApiPath, WpAuthSharedSecret, Endpoint, POST, READ, RPC } from '@webpieces/core-util';
+import { WpAuthorization, AuthorizationType, WpAuth, sharedSecret as sharedSecretAuth } from '@webpieces/core-util';
+import { ApiPath, Endpoint, POST, READ, RPC } from '@webpieces/core-util';
 
 /**
  * Request to server2.
@@ -37,7 +38,8 @@ export interface FetchValueResponse {
  */
 @ApiPath('/server2')
 export abstract class Server2Api {
-    @WpAuthSharedSecret('INTERNAL_API_SECRET')
+    @WpAuth([sharedSecretAuth('INTERNAL_API_SECRET')])
+    @WpAuthorization({ authType: AuthorizationType.SERVICE_ONLY })
     @Endpoint(POST, '/fetchValue', READ, RPC)
     fetchValue(request: FetchValueRequest): Promise<FetchValueResponse> {
         throw new Error('Method fetchValue() must be implemented by subclass');

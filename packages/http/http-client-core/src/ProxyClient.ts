@@ -120,6 +120,12 @@ export abstract class ProxyClient {
      */
     protected abstract outboundContextHeaders(destination: DestinationTrust): Map<string, string>;
 
+    protected selectAuthMethod(route: RouteMetadata): import('@webpieces/core-util').AuthMode {
+        const methods = route.authMeta?.methods;
+        if (!methods || methods.length !== 1) throw new Error('This client must select one configured credential from the endpoint alternatives.');
+        return methods[0];
+    }
+
     /**
      * Run the call. The default just logs it. Test-case RECORDING is a server concept, so
      * NodeProxyClient overrides this to capture the call when a recorder is in the context.
@@ -149,7 +155,7 @@ export abstract class ProxyClient {
 
     /**
      * Reject, at bind time, an endpoint this environment cannot satisfy — e.g. a browser cannot
-     * mint the OIDC token an @WpAuthOidc endpoint demands. Surfacing it here beats failing on the
+     * mint the OIDC token an oidc(...) endpoint demands. Surfacing it here beats failing on the
      * first call in production. The default accepts everything.
      */
     protected assertEndpointSupported(_route: RouteMetadata): void {}
@@ -312,18 +318,18 @@ export abstract class ProxyClient {
      * @throws Error naming the endpoint, what it declared, and who its real caller is.
      */
     private refuseEndpointNoClientCanCall(route: RouteMetadata): void {
-        const authMode = route.authMeta?.mode;
-        // @WpAuthApiKey: the credential is a CUSTOMER-held key, and the header carrying it is the app's
+        const authMode = route.authMeta?.methods[0];
+        // apiKey(...): the credential is a CUSTOMER-held key, and the header carrying it is the app's
         // ApiKeyHook's choice, so this client has nothing to send and the call is a guaranteed 401.
         if (authMode?.kind === 'apikey') {
             throw new Error(
-                `${this.apiName}.${route.methodName} is @WpAuthApiKey('${authMode.regime}') — only the partner ` +
+                `${this.apiName}.${route.methodName} is apiKey('${authMode.regime}') — only the partner ` +
                     `holding that api key can call it, and the header carrying it is the app's ApiKeyHook's choice, ` +
                     `so a webpieces client has no credential to send.`,
             );
         }
-        // @WpAuthWebhook is DELIBERATELY absent from this list. It used to be here, on the assumption
-        // that the vendor is always somebody else — but `@WpAuthWebhook(name)` names a signing SCHEME,
+        // webhook(...) is DELIBERATELY absent from this list. It used to be here, on the assumption
+        // that the vendor is always somebody else — but `webhook(name)` names a signing SCHEME,
         // not a direction, and for an OUTBOUND partner webhook WE are the vendor. The environment's
         // outbound-auth filter asks its bound signer to produce the signature, which is the exact
         // mirror of the inbound WebhookAuthCallback that verifies one.
@@ -331,6 +337,7 @@ export abstract class ProxyClient {
 
     // webpieces-disable no-any-unknown -- request and response DTOs are erased at the proxy boundary
     async makeRequest(route: RouteMetadata, args: unknown[]): Promise<unknown> {
+        route = route.withSelectedAuth(this.selectAuthMethod(route));
         this.refuseEndpointNoClientCanCall(route);
         if (route.streaming) return this.makeStreamingRequest(route, args);
         const mapped = HttpContractMapper.toWire(
@@ -368,7 +375,7 @@ export abstract class ProxyClient {
             this.apiName,
             (): Promise<string> => this.resolveBaseUrl(),
             (current: RouteMetadata): Map<string, string> =>
-                this.outboundContextHeaders(DestinationTrust.forAuthMode(current.authMeta?.mode)),
+                this.outboundContextHeaders(DestinationTrust.forAuthMode(current.authMeta?.methods[0])),
             (request: ClientRequest, signal: AbortSignal): Promise<Response> =>
                 this.chain.execute(request, () => this.sendOnce(request, signal)),
             (response: Response, current: RouteMetadata): Promise<DtoValue> =>
@@ -406,7 +413,7 @@ export abstract class ProxyClient {
                                 (): Promise<string> => this.resolveBaseUrl(),
                                 (current: RouteMetadata): Map<string, string> =>
                                     this.outboundContextHeaders(
-                                        DestinationTrust.forAuthMode(current.authMeta?.mode),
+                                        DestinationTrust.forAuthMode(current.authMeta?.methods[0]),
                                     ),
                                 (
                                     request: ClientRequest,
@@ -461,7 +468,7 @@ export abstract class ProxyClient {
         }
         this.acceptResponseContext(
             response.headers,
-            DestinationTrust.forAuthMode(route.authMeta?.mode),
+            DestinationTrust.forAuthMode(route.authMeta?.methods[0]),
         );
     }
 
@@ -526,7 +533,7 @@ export abstract class ProxyClient {
         const headers = new Map<string, string>();
         const body = this.bodySerializer.serialize(this.apiName, route, mapped.body, headers);
         const context = this.outboundContextHeaders(
-            DestinationTrust.forAuthMode(route.authMeta?.mode),
+            DestinationTrust.forAuthMode(route.authMeta?.methods[0]),
         );
         for (const entry of context.entries()) headers.set(entry[0], entry[1]);
         return new ClientRequest(

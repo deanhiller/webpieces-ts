@@ -1,3 +1,4 @@
+import { WpAuthorization, AuthorizationType } from '@webpieces/core-util';
 import 'reflect-metadata';
 import { Container, ContainerModule } from 'inversify';
 import { RuntimeClients } from '../RuntimeClients';
@@ -46,6 +47,7 @@ class WorkRequest {
 abstract class SvcApi {
     @Endpoint(POST, '/work', WRITE, RPC)
     @WpAuthPublic('Anonymous access is intentionally required')
+    @WpAuthorization({ authType: AuthorizationType.ANONYMOUS, reason: 'Anonymous access is intentionally required' })
     // webpieces-disable no-unmanaged-exceptions -- abstract contract stub, never executed
     work(_request: WorkRequest): Promise<void> {
         throw new Error('contract only');

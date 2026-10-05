@@ -12,19 +12,13 @@ import {
     RPC,
     WRITE,
     WRITE_IDEMPOTENT,
-    WpAuthApiKey,
-    WpAuthJwt,
-    WpAuthLocalOnly,
-    WpAuthOidc,
     WpAuthPublic,
-    WpAuthSharedSecret,
-    WpAuthWebhook,
+    WpAuth, WpAuthorization, WpLocalOnly, apiKey,
     ApiType,
     EXTERNAL_CUSTOMER,
     MCP,
     SVC_TO_SVC,
     InvalidEndpointForMcp,
-    WpMcpAuthJwt,
     WpMcpTool,
 } from '@webpieces/core-util';
 import {
@@ -33,6 +27,7 @@ import {
     DocumentedApiKey,
     DocumentedApiKeyCredential,
     DocumentedAuth,
+    DocumentedAuthMethod,
     DocumentedEndpoint,
     DocumentedEndpointOptions,
     DocumentedMcpTool,
@@ -77,8 +72,8 @@ const ENDPOINT = Endpoint.name;
 const MASK_LOG = MaskLog.name;
 const MCP_TOOL = WpMcpTool.name;
 const MCP_INVALID = InvalidEndpointForMcp.name;
-const MCP_AUTH = WpMcpAuthJwt.name;
-const API_KEY_AUTH = WpAuthApiKey.name;
+const AUTHORIZATION = WpAuthorization.name;
+const API_KEY_AUTH = apiKey.name;
 const API_TYPE = ApiType.name;
 
 /**
@@ -86,19 +81,6 @@ const API_TYPE = ApiType.name;
  * from, so it stays a literal — but the set it selects is pinned below, which is what stops it
  * quietly matching nothing.
  */
-const AUTH_PREFIX = 'WpAuth';
-
-/** Every credential decorator, by real symbol, so a rename of any of them fails to compile here. */
-const AUTH_DECORATORS = new Set([
-    WpAuthPublic.name,
-    WpAuthJwt.name,
-    WpAuthOidc.name,
-    WpAuthSharedSecret.name,
-    WpAuthWebhook.name,
-    WpAuthApiKey.name,
-    WpAuthLocalOnly.name,
-]);
-
 /** The REAL trigger kinds and side-effect contracts, so a contract cannot declare one that is not. */
 const ENDPOINT_KINDS: readonly string[] = [RPC, CLOUDTASKS, CRON, EXTERNAL];
 const ENDPOINT_OPERATIONS: readonly string[] = [READ, WRITE_IDEMPOTENT, WRITE];
@@ -208,6 +190,8 @@ export class ApiDocExtractor {
 
     /** {@link extractAll} against a program the caller already built. */
     extractAllFrom(program: ts.Program, source: ts.SourceFile): readonly ApiDocModel[] {
+        // Binding establishes AST parent links used by canonical import resolution.
+        program.getTypeChecker();
         const models: ApiDocModel[] = [];
         for (const statement of source.statements) {
             if (
@@ -222,6 +206,7 @@ export class ApiDocExtractor {
 
     /** The same extraction against a program the caller already built. */
     extract(program: ts.Program, source: ts.SourceFile): ApiDocModel {
+        program.getTypeChecker();
         return this.extractContract(program, this.findContract(source));
     }
 
@@ -396,13 +381,14 @@ export class ApiDocExtractor {
             ApiDocExtractor.authOf(member, folder),
             mcpTool,
             ApiDocExtractor.invalidForMcpOf(member, folder),
-            ApiDocExtractor.decoratorCall(member, MCP_AUTH)?.arguments[0]?.getText(),
+            ApiDocExtractor.decoratorCall(member, AUTHORIZATION)?.arguments[0]?.getText(),
             ApiDocExtractor.maskLogOf(member),
             doc.description,
             doc.mcp,
             this.requestOf(member, methodName, resolver),
             streaming?.initialResponse ?? this.responseOf(member, methodName, resolver),
             streaming,
+            ApiDocExtractor.decoratorCall(member, WpLocalOnly.name) !== undefined,
         );
     }
 
@@ -494,29 +480,48 @@ export class ApiDocExtractor {
         return resolver.resolve(member.type, `${methodName}.response`);
     }
 
-    /** `@WpAuthPublic()`, `@WpAuthJwt({...})`, … — recorded verbatim; this package rules on nothing. */
-    // webpieces-disable no-function-outside-class -- private static reader of this class
+    /** Read OR alternatives structurally rather than preserving an opaque WpAuth array. */
+    // webpieces-disable no-function-outside-class -- private static declaration reader
     private static authOf(member: ts.Node, folder: ConstantFolder): DocumentedAuth | undefined {
-        const decorators = ts.canHaveDecorators(member) ? (ts.getDecorators(member) ?? []) : [];
-        for (const decorator of decorators) {
-            const call = decorator.expression;
-            if (!ts.isCallExpression(call) || !ts.isIdentifier(call.expression)) {
-                continue;
+        const publicCall = this.decoratorCall(member, WpAuthPublic.name);
+        if (publicCall) {
+            const reason = publicCall.arguments[0];
+            if (!reason) throw new ApiDocExtractionError('Public authentication requires a reason', SourceLocation.of(publicCall), "Declare @WpAuthPublic('reason').");
+            return new DocumentedAuth(folder.foldString(reason, 'public auth reason'), []);
+        }
+        const protectedCall = this.decoratorCall(member, WpAuth.name);
+        if (!protectedCall) return undefined;
+        const array = protectedCall.arguments[0];
+        if (!array || !ts.isArrayLiteralExpression(array) || !array.elements.length) throw new ApiDocExtractionError('WpAuth requires a nonempty descriptor array', SourceLocation.of(protectedCall), 'Use @WpAuth([jwt(), oidc(...)]).');
+        const methods: DocumentedAuthMethod[] = [];
+        for (const element of array.elements) {
+            if (!ts.isCallExpression(element)) throw new ApiDocExtractionError('Auth method is not a descriptor call', SourceLocation.of(element), 'Use canonical credential descriptors.');
+            const name = this.canonicalCallName(element.expression);
+            const kind = new Map([['jwt', 'jwt'], ['oidc', 'oidc'], ['sharedSecret', 'shared-secret'], ['webhook', 'webhook'], ['apiKey', 'apikey']]).get(name ?? '');
+            if (!kind) throw new ApiDocExtractionError('Unknown authentication descriptor', SourceLocation.of(element), 'Import jwt/oidc/sharedSecret/webhook/apiKey from core-util.');
+            methods.push(new DocumentedAuthMethod(kind, element.arguments.map((argument: ts.Expression) => argument.getText()), name === API_KEY_AUTH ? this.apiKeyOf(element, folder) : undefined));
+        }
+        return new DocumentedAuth(undefined, methods);
+    }
+
+    // webpieces-disable no-function-outside-class -- canonical import-aware AST name resolution
+    static canonicalCallName(expression: ts.Expression): string | undefined {
+        for (const statement of expression.getSourceFile().statements) {
+            if (!ts.isImportDeclaration(statement) || !ts.isStringLiteral(statement.moduleSpecifier)) continue;
+            const module = statement.moduleSpecifier.text;
+            if (!['@webpieces/core-util', '@webpieces/http-routing', '@webpieces/http-client-browser'].includes(module) && !module.endsWith('/core-util/src/http/decorators') && !module.endsWith('/core-util/src/http/auth-mode') && !module.endsWith('/core-util/src/http/authorization')) continue;
+            const bindings = statement.importClause?.namedBindings;
+            if (bindings && ts.isNamedImports(bindings) && ts.isIdentifier(expression)) {
+                const imported = bindings.elements.find((entry: ts.ImportSpecifier) => entry.name.text === expression.text);
+                if (imported) return imported.propertyName?.text ?? imported.name.text;
             }
-            const name = call.expression.text;
-            if (name.startsWith(AUTH_PREFIX) && AUTH_DECORATORS.has(name)) {
-                return new DocumentedAuth(
-                    name,
-                    call.arguments.map((argument: ts.Expression) => argument.getText()),
-                    name === API_KEY_AUTH ? ApiDocExtractor.apiKeyOf(call, folder) : undefined,
-                );
-            }
+            if (bindings && ts.isNamespaceImport(bindings) && ts.isPropertyAccessExpression(expression) && ts.isIdentifier(expression.expression) && expression.expression.text === bindings.name.text) return expression.name.text;
         }
         return undefined;
     }
 
     /**
-     * `@WpAuthApiKey(regime, [{in: 'header', name: 'x-api-key', description: '…'}, …])`, parsed.
+     * `apiKey(regime, [{in: 'header', name: 'x-api-key', description: '…'}, …])`, parsed.
      *
      * A malformed declaration FAILS rather than yielding a half-parsed regime: the credentials are
      * what a published document's security block is made of, and a document that silently omitted
@@ -528,18 +533,18 @@ export class ApiDocExtractor {
         const credentialsArgument = call.arguments[1];
         if (regimeArgument === undefined || credentialsArgument === undefined) {
             throw new ApiDocExtractionError(
-                '@WpAuthApiKey needs a regime AND its credentials',
+                'apiKey(...) needs a regime AND its credentials',
                 SourceLocation.of(call),
-                "Write both: @WpAuthApiKey('partner', [{ in: 'header', name: 'x-api-key' }]).",
+                "Write both: apiKey('partner', [{ in: 'header', name: 'x-api-key' }]).",
             );
         }
-        const regime = folder.foldString(regimeArgument, '@WpAuthApiKey regime');
+        const regime = folder.foldString(regimeArgument, 'apiKey(...) regime');
         // FOLLOW a name first: a credential list shared by every method of a contract is written
         // once as a `const` and named per method, which is better source than a copy per method.
         const credentialsLiteral = folder.follow(credentialsArgument);
         if (!ts.isArrayLiteralExpression(credentialsLiteral)) {
             throw new ApiDocExtractionError(
-                '@WpAuthApiKey credentials is not an array literal',
+                'apiKey(...) credentials is not an array literal',
                 SourceLocation.of(credentialsArgument),
                 'Write the credentials as an array literal, inline or in a `const`; a value ' +
                     'assembled at runtime cannot appear in a published security scheme.',
@@ -561,7 +566,7 @@ export class ApiDocExtractor {
         const element = folder.follow(expression);
         if (!ts.isObjectLiteralExpression(element)) {
             throw new ApiDocExtractionError(
-                'an @WpAuthApiKey credential is not an object literal',
+                'an apiKey(...) credential is not an object literal',
                 SourceLocation.of(element),
                 "Write it inline: { in: 'header', name: 'x-api-key' }.",
             );
@@ -569,7 +574,7 @@ export class ApiDocExtractor {
         const location = ApiDocExtractor.stringProperty(element, 'in', folder);
         if (location === undefined) {
             throw new ApiDocExtractionError(
-                'an @WpAuthApiKey credential declares no `in`',
+                'an apiKey(...) credential declares no `in`',
                 SourceLocation.of(element),
                 "Say where it rides: `in: 'header'` with a name, or `in: 'bearer'`.",
             );
@@ -688,8 +693,7 @@ export class ApiDocExtractor {
             const call = decorator.expression;
             if (
                 ts.isCallExpression(call) &&
-                ts.isIdentifier(call.expression) &&
-                call.expression.text === decoratorName
+                ApiDocExtractor.canonicalCallName(call.expression) === decoratorName
             ) {
                 return call;
             }

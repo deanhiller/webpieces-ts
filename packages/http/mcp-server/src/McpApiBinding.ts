@@ -1,7 +1,8 @@
-import { DtoValue, getAuthMeta } from '@webpieces/core-util';
+import { AuthMode, DtoValue, getAuthMeta, assertEveryEndpointHasAuthMode } from '@webpieces/core-util';
 import {
     ApiClientProxy,
     ApiFactory,
+    AuthorizationService,
     ClassType,
     InvocationAuthentication,
 } from '@webpieces/http-routing';
@@ -14,6 +15,7 @@ export class McpApiBinding<TApi extends object = object> {
         public readonly api: ClassType<TApi>,
         public readonly topology: McpBindingTopology,
         private readonly provider: (authentication?: InvocationAuthentication) => TApi,
+        private readonly receivingPolicy?: AuthorizationService,
     ) {}
 
     // webpieces-disable no-function-outside-class -- explicit public factory mirrors the binding API
@@ -25,7 +27,7 @@ export class McpApiBinding<TApi extends object = object> {
             if (!authentication)
                 throw new Error('Local MCP invocation requires explicit authentication.');
             return apiFactory.createInvocationApiClient(api as never, authentication);
-        });
+        }, apiFactory.authorizationService());
     }
 
     // webpieces-disable no-function-outside-class -- explicit public factory mirrors the binding API
@@ -51,15 +53,14 @@ export class McpApiBinding<TApi extends object = object> {
         return method.call(client, request) as Promise<DtoValue>;
     }
 
-    validateMethod(methodName: string): void {
-        const auth = getAuthMeta(this.api, methodName)?.mode;
-        const expected = this.topology === 'local' ? 'jwt' : 'oidc';
-        if (auth?.kind !== expected) {
-            throw new Error(
-                `MCP ${this.topology} binding ${this.api.name}.${methodName} requires ` +
-                    `@${expected === 'jwt' ? 'WpAuthJwt' : 'WpAuthOidc'}, but declares ` +
-                    `${auth ? `'${auth.kind}'` : 'no HTTP auth'}.`,
-            );
+    validateMethod(methodName: string, policy: AuthorizationService): void {
+        if (this.topology === 'local' && this.receivingPolicy !== policy) {
+            throw new Error('Local MCP visibility and invocation must use the receiving ApiFactory authorizationService().');
+        }
+        assertEveryEndpointHasAuthMode(this.api);
+        const methods = getAuthMeta(this.api, methodName)?.methods;
+        if (this.topology === 'remote' && !methods?.some((method: AuthMode) => method.kind === 'oidc' || method.kind === 'shared-secret')) {
+            throw new Error(`MCP remote binding ${this.api.name}.${methodName} requires oidc(...) or sharedSecret(...) network ingress.`);
         }
     }
 }

@@ -1,6 +1,6 @@
 # Cloud Run OIDC: the edge is the security boundary
 
-`@WpAuthOidc()` describes a service-to-service credential contract. In the intended
+`@WpAuth([oidc()])` describes a service-to-service credential contract. In the intended
 private Cloud Run deployment, Google authenticates the invocation and enforces
 `roles/run.invoker` before the request reaches the container. The annotation primarily
 tells the RPC and Cloud Tasks clients to supply the correct Google ID token; the
@@ -71,7 +71,7 @@ for invocation IAM, destination audiences, and header handling.
 
 ## Source map
 
-- Contract: [`WpAuthOidc`](../../packages/core/core-util/src/http/decorators.ts).
+- Contract: [`oidc`](../../packages/core/core-util/src/http/auth-mode.ts).
 - RPC minting: [`OutboundAuthFilter`](../../packages/http/http-client-node/src/OutboundAuthFilter.ts).
 - Task delivery: [`GcpTaskInvoker`](../../packages/cloud/cloudtasks-client/src/GcpTaskInvoker.ts).
 - Server dispatch: [`AuthFilter`](../../packages/http/http-routing/src/filters/AuthFilter.ts),

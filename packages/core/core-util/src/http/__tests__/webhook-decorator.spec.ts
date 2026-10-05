@@ -1,24 +1,7 @@
+import { WpAuthorization, AuthorizationType, WpAuth, webhook as webhookAuth, jwt as jwtAuth } from '@webpieces/core-util';
 import 'reflect-metadata';
 import { describe, it, expect } from 'vitest';
-import {
-    ApiPath,
-    WpAuthWebhook,
-    WpAuthJwt,
-    DestinationTrust,
-    Endpoint,
-    ContextKey,
-    WpAuthPublic,
-    assertEveryEndpointHasAuthMode,
-    assertEveryWebhookEndpointRetainsRawBody,
-    getAuthMode,
-    isFormPost,
-    isRawBody,
-    EXTERNAL,
-    POST,
-    READ,
-    RPC,
-    WRITE,
-} from '../../index';
+import { ApiPath, DestinationTrust, Endpoint, ContextKey, WpAuthPublic, assertEveryEndpointHasAuthMode, assertEveryWebhookEndpointRetainsRawBody, getAuthMeta, isFormPost, isRawBody, EXTERNAL, POST, READ, RPC, WRITE } from '../../index';
 
 /**
  * The CONTRACT half of `@WpAuthWebhook` (the enforcement half is pinned in http-routing's
@@ -32,7 +15,8 @@ import {
 
 @ApiPath('/hook')
 abstract class SentryHookApi {
-    @WpAuthWebhook('sentry')
+    @WpAuth([webhookAuth('sentry')])
+    @WpAuthorization({ authType: AuthorizationType.USERS_OR_SERVICES })
     @Endpoint(POST, '/sentry/issue', WRITE, EXTERNAL, { calledBy: 'sentry', rawBody: true })
     notify(_r: object): Promise<object> {
         throw new Error('subclass');
@@ -42,7 +26,8 @@ abstract class SentryHookApi {
 /** The Twilio case: the hook needs the bytes + url, the controller still wants the flat DTO. */
 @ApiPath('/hook')
 abstract class TwilioHookApi {
-    @WpAuthWebhook('twilio')
+    @WpAuth([webhookAuth('twilio')])
+    @WpAuthorization({ authType: AuthorizationType.USERS_OR_SERVICES })
     @Endpoint(POST, '/twilio/sms', WRITE, EXTERNAL, {
         calledBy: 'twilio',
         formPost: true,
@@ -56,7 +41,8 @@ abstract class TwilioHookApi {
 /** The misconfiguration the wiring-time assert exists to catch: verify what, exactly? */
 @ApiPath('/hook')
 abstract class ForgotRawBodyApi {
-    @WpAuthWebhook('sentry')
+    @WpAuth([webhookAuth('sentry')])
+    @WpAuthorization({ authType: AuthorizationType.USERS_OR_SERVICES })
     @Endpoint(POST, '/sentry/issue', WRITE, EXTERNAL, { calledBy: 'sentry' })
     notify(_r: object): Promise<object> {
         throw new Error('subclass');
@@ -65,7 +51,7 @@ abstract class ForgotRawBodyApi {
 
 describe('@WpAuthWebhook declares a verified external caller on the contract', () => {
     it('records a webhook AuthMode carrying the vendor name the hook switches on', () => {
-        const mode = getAuthMode(SentryHookApi, 'notify');
+        const mode = getAuthMeta(SentryHookApi, 'notify')?.methods[0];
 
         expect(mode?.kind).toBe('webhook');
         if (mode?.kind === 'webhook') {
@@ -82,7 +68,8 @@ describe('@WpAuthWebhook declares a verified external caller on the contract', (
             @ApiPath('/x')
             abstract class TwoModesApi {
                 @WpAuthPublic('Anonymous access is intentionally required')
-                @WpAuthWebhook('sentry')
+                @WpAuthorization({ authType: AuthorizationType.ANONYMOUS, reason: 'Anonymous access is intentionally required' })
+                @WpAuth([webhookAuth('sentry')])
                 @Endpoint(POST, '/y', WRITE, EXTERNAL, { calledBy: 'sentry', rawBody: true })
                 hook(_r: object): Promise<object> {
                     throw new Error('subclass');
@@ -107,6 +94,7 @@ describe('{ rawBody: true } is retained per endpoint, beside formPost', () => {
         @ApiPath('/api')
         abstract class PlainApi {
             @WpAuthPublic('Anonymous access is intentionally required')
+            @WpAuthorization({ authType: AuthorizationType.ANONYMOUS, reason: 'Anonymous access is intentionally required' })
             @Endpoint(POST, '/ping', READ, RPC)
             ping(_r: object): Promise<object> {
                 throw new Error('subclass');
@@ -125,7 +113,7 @@ describe('{ rawBody: true } is retained per endpoint, beside formPost', () => {
 describe('assertEveryWebhookEndpointRetainsRawBody', () => {
     it('throws for @WpAuthWebhook without { rawBody: true }, naming the endpoint and the fix', () => {
         expect(() => assertEveryWebhookEndpointRetainsRawBody(ForgotRawBodyApi)).toThrow(
-            /'notify' in ForgotRawBodyApi is @WpAuthWebhook.*rawBody: true/s,
+            /'notify' in ForgotRawBodyApi is webhook\(\.\.\.\).*rawBody: true/s,
         );
     });
 
@@ -137,7 +125,8 @@ describe('assertEveryWebhookEndpointRetainsRawBody', () => {
     it('ignores endpoints that are not @WpAuthWebhook — rawBody is theirs to skip', () => {
         @ApiPath('/api')
         abstract class JwtApi {
-            @WpAuthJwt({ roles: ['admin'] })
+            @WpAuth([jwtAuth()])
+            @WpAuthorization({ authType: AuthorizationType.ROLES, roles: ['admin'] })
             @Endpoint(POST, '/thing', WRITE, RPC)
             thing(_r: object): Promise<object> {
                 throw new Error('subclass');

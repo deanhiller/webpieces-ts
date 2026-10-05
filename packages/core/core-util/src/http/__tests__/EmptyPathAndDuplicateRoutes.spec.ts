@@ -1,3 +1,4 @@
+import { WpAuthorization, AuthorizationType } from '@webpieces/core-util';
 import 'reflect-metadata';
 import { describe, expect, it } from 'vitest';
 import {
@@ -21,6 +22,7 @@ class Body {
 @ApiPath('')
 abstract class WholeUrlApi {
     @WpAuthPublic('Test fixture')
+    @WpAuthorization({ authType: AuthorizationType.ANONYMOUS, reason: 'Test fixture' })
     @Endpoint(POST, '', WRITE, RPC)
     // webpieces-disable no-unmanaged-exceptions -- contract stub
     deliver(_body: Body): Promise<object> {
@@ -31,6 +33,7 @@ abstract class WholeUrlApi {
 @ApiPath('')
 abstract class HalfEmptyApi {
     @WpAuthPublic('Test fixture')
+    @WpAuthorization({ authType: AuthorizationType.ANONYMOUS, reason: 'Test fixture' })
     @Endpoint(POST, 'deliver', WRITE, RPC)
     // webpieces-disable no-unmanaged-exceptions -- contract stub
     deliver(_body: Body): Promise<object> {
@@ -41,6 +44,7 @@ abstract class HalfEmptyApi {
 @ApiPath('')
 abstract class TwoMethodsApi {
     @WpAuthPublic('Test fixture')
+    @WpAuthorization({ authType: AuthorizationType.ANONYMOUS, reason: 'Test fixture' })
     @Endpoint(GET, '', READ, RPC)
     // webpieces-disable no-unmanaged-exceptions -- contract stub
     read(): Promise<object> {
@@ -48,6 +52,7 @@ abstract class TwoMethodsApi {
     }
 
     @WpAuthPublic('Test fixture')
+    @WpAuthorization({ authType: AuthorizationType.ANONYMOUS, reason: 'Test fixture' })
     @Endpoint(POST, '', WRITE, RPC)
     // webpieces-disable no-unmanaged-exceptions -- contract stub
     write(_body: Body): Promise<object> {
@@ -58,6 +63,7 @@ abstract class TwoMethodsApi {
 @ApiPath('')
 abstract class DuplicateApi {
     @WpAuthPublic('Test fixture')
+    @WpAuthorization({ authType: AuthorizationType.ANONYMOUS, reason: 'Test fixture' })
     @Endpoint(POST, '', WRITE, RPC)
     // webpieces-disable no-unmanaged-exceptions -- contract stub
     first(_body: Body): Promise<object> {
@@ -65,6 +71,7 @@ abstract class DuplicateApi {
     }
 
     @WpAuthPublic('Test fixture')
+    @WpAuthorization({ authType: AuthorizationType.ANONYMOUS, reason: 'Test fixture' })
     @Endpoint(POST, '/', WRITE, RPC)
     // webpieces-disable no-unmanaged-exceptions -- contract stub
     second(_body: Body): Promise<object> {
@@ -75,6 +82,7 @@ abstract class DuplicateApi {
 @ApiPath('/items')
 abstract class PlaceholderApi {
     @WpAuthPublic('Test fixture')
+    @WpAuthorization({ authType: AuthorizationType.ANONYMOUS, reason: 'Test fixture' })
     @Endpoint(GET, '/{id}', READ, RPC)
     // webpieces-disable no-unmanaged-exceptions -- contract stub
     byId(@PathParam('id') _id: string): Promise<object> {
@@ -82,6 +90,7 @@ abstract class PlaceholderApi {
     }
 
     @WpAuthPublic('Test fixture')
+    @WpAuthorization({ authType: AuthorizationType.ANONYMOUS, reason: 'Test fixture' })
     @Endpoint(GET, '/{key}', READ, RPC)
     // webpieces-disable no-unmanaged-exceptions -- contract stub
     byKey(@PathParam('key') _key: string): Promise<object> {

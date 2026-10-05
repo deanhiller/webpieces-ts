@@ -1,3 +1,4 @@
+import { WpAuthorization, AuthorizationType, WpAuth, oidc as oidcAuth } from '@webpieces/core-util';
 import 'reflect-metadata';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
@@ -14,7 +15,7 @@ import {
     POST,
     WRITE,
 } from '@webpieces/core-util';
-import { PubSub, WpAuthOidc } from '@webpieces/core-util';
+import { PubSub } from '@webpieces/core-util';
 import { Provider, RequestContext, RequestContextHeaders } from '@webpieces/core-context';
 import { ClientCloudTasksFactory } from '../ClientCloudTasksFactory';
 import { CloudTaskScheduler } from '../CloudTaskScheduler';
@@ -28,13 +29,15 @@ class Payload {
 @PubSub()
 @ApiPath('/timeout-task')
 abstract class TaskApi {
-    @WpAuthOidc()
+    @WpAuth([oidcAuth()])
+    @WpAuthorization({ authType: AuthorizationType.SERVICE_ONLY })
     @Endpoint(POST, '/work', WRITE, CLOUDTASKS)
     work(_request: Payload): Promise<void> {
         throw new Error('contract only');
     }
 
-    @WpAuthOidc()
+    @WpAuth([oidcAuth()])
+    @WpAuthorization({ authType: AuthorizationType.SERVICE_ONLY })
     @Endpoint(POST, '/other', WRITE, CLOUDTASKS)
     other(_request: Payload): Promise<void> {
         throw new Error('contract only');

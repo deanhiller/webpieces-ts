@@ -10,6 +10,7 @@ import {
     AuthMeta,
     MISSING_AUTH_DECORATOR_FIX,
     RuntimeLocality,
+    isLocalOnly,
 } from '@webpieces/core-util';
 import 'reflect-metadata';
 import { ROUTING_METADATA_KEYS } from './decorators';
@@ -111,14 +112,14 @@ export class ApiRoutingFactory<TApi = unknown, TController extends TApi = TApi> 
                 );
             }
 
-            // @WpAuthLocalOnly: off-local the route is never registered, so the endpoint does not
+            // @WpLocalOnly: off-local the route is never registered, so the endpoint does not
             // exist rather than existing-and-refusing. This is the PRIMARY gate; AuthFilter's 404 is
             // the backstop for routes added by hand through RouteBuilder. One decorator drives both
             // — the point of moving this into the framework was that apps were hand-syncing exactly
             // these two halves across two files with a comment.
-            if (authMeta.mode.kind === 'local-only' && !RuntimeLocality.isLocalDevelopment()) {
+            if (isLocalOnly(this.apiMetaClass, methodName) && !RuntimeLocality.isLocalDevelopment()) {
                 log.info(
-                    `Skipping @WpAuthLocalOnly endpoint ${apiName}.${methodName} — this process is not ` +
+                    `Skipping @WpLocalOnly endpoint ${apiName}.${methodName} — this process is not ` +
                         `a local developer machine, so the route is not registered at all.`,
                 );
                 continue;

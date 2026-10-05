@@ -63,7 +63,8 @@ A `POST` method may have one unannotated parameter: that parameter is the reques
 query parameters can sit beside it:
 
 ```typescript
-@WpAuthJwt({ allRolesAllowed: true })
+@WpAuth([jwt()])
+@WpAuthorization({ authType: AuthorizationType.ALL_USERS })
 @Endpoint(POST, '/owners/{owner}/items', WRITE, RPC)
 create(
     @PathParam('owner') owner: string,
@@ -130,13 +131,13 @@ Webpieces route/filter boundary. `ContextFilter`, auth filters, logging, recordi
 filters therefore run before the controller with an active `RequestContext`. A controller can make
 a nested generated Node client call without manually creating a new context.
 
-The existing auth vocabulary applies identically to every verb and encoding:
+Authentication and authorization apply identically to every verb and encoding:
 
-- `@WpAuthPublic` skips the application's JWT requirement, but does **not** promise anonymous
-  success. The endpoint must still validate its protocol credentials and payload. OAuth login,
-  authorization, registration, and token endpoints commonly use this shape.
-- `@WpAuthJwt`, `@WpAuthOidc`, `@WpAuthSharedSecret`, `@WpAuthWebhook`, `@WpAuthApiKey`, and
-  `@WpAuthLocalOnly` retain their existing filter behavior.
+- `@WpAuthPublic(reason)` pairs with `@WpAuthorization({authType: AuthorizationType.ANONYMOUS, reason})`.
+  Protocol credentials and payload validation remain the controller's responsibility.
+- `@WpAuth([jwt(), oidc(...), sharedSecret(...), webhook(...), apiKey(...)])` accepts any
+  declared credential mechanism. A separate `@WpAuthorization(...)` controls access.
+- `@WpLocalOnly()` limits registration to local runtime without replacing either declaration.
 
 No special OAuth auth decorator is needed. OAuth client credentials, authorization codes, PKCE
 verifiers, redirect URIs, and similar protocol inputs are request data; the controller validates
@@ -156,7 +157,7 @@ Keep one contract and replace hand-written Express URL/body parsing with explici
 | dynamic registration | JSON `POST`, `@WpAuthPublic`, often `responseType: 'full'` for `201` and headers |
 | authorization | `GET` plus named `@QueryParam`s, `@WpAuthPublic`, full response for redirects/errors |
 | token exchange | `POST` plus `formPost: true`, `@WpAuthPublic`, full response for OAuth error payloads |
-| authenticated resource | `GET` or `POST` plus the existing applicable `@WpAuthJwt`/`@WpAuthOidc` mode |
+| authenticated resource | `GET` or `POST` plus the existing applicable `jwt()`/`oidc(...)` mode |
 
 This framework capability does not migrate an application's OAuth endpoints automatically. Move
 each application route deliberately, preserving its protocol validation and security policy.

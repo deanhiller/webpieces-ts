@@ -1,27 +1,9 @@
+import { WpAuthorization, AuthorizationType, WpAuth, jwt as jwtAuth } from '@webpieces/core-util';
 import 'reflect-metadata';
 import express from 'express';
 import type { Server as HttpServer } from 'http';
 import { ContainerModule, ContainerModuleLoadOptions } from 'inversify';
-import {
-    ApiPath,
-    ClientRegistry,
-    ContextKey,
-    Endpoint,
-    HeaderRegistry,
-    HttpHeader,
-    HttpResponseDto,
-    HttpResponseStatus,
-    PathParam,
-    QueryParam,
-    Rpc,
-    WpAuthJwt,
-    WpAuthPublic,
-    GET,
-    POST,
-    READ,
-    RPC,
-    WRITE,
-} from '@webpieces/core-util';
+import { ApiPath, ClientRegistry, ContextKey, Endpoint, HeaderRegistry, HttpHeader, HttpResponseDto, HttpResponseStatus, PathParam, QueryParam, Rpc, WpAuthPublic, GET, POST, READ, RPC, WRITE } from '@webpieces/core-util';
 import {
     AuthenticatedCaller,
     JWT_HOOK,
@@ -79,6 +61,7 @@ class TokenRequest {
 @ApiPath('/typed/context')
 abstract class ContextProbeApi {
     @WpAuthPublic('Internal context test endpoint')
+    @WpAuthorization({ authType: AuthorizationType.ANONYMOUS, reason: 'Internal context test endpoint' })
     @Endpoint(GET, '/active', READ, RPC)
     // webpieces-disable no-unmanaged-exceptions -- contract stub
     active(): Promise<object> {
@@ -90,6 +73,7 @@ abstract class ContextProbeApi {
 @ApiPath('/typed')
 abstract class TypedTransportApi {
     @WpAuthPublic('Public metadata lookup')
+    @WpAuthorization({ authType: AuthorizationType.ANONYMOUS, reason: 'Public metadata lookup' })
     @Endpoint(GET, '/lookup/{owner}/{item}', READ, RPC)
     // webpieces-disable no-unmanaged-exceptions -- contract stub
     lookup(
@@ -102,6 +86,7 @@ abstract class TypedTransportApi {
     }
 
     @WpAuthPublic('Dynamic client registration is public by OAuth protocol')
+    @WpAuthorization({ authType: AuthorizationType.ANONYMOUS, reason: 'Dynamic client registration is public by OAuth protocol' })
     @Endpoint(POST, '/register', WRITE, RPC, { responseType: 'full' })
     // webpieces-disable no-unmanaged-exceptions -- contract stub
     register(_request: RegisterRequest): Promise<HttpResponseDto<object>> {
@@ -109,6 +94,7 @@ abstract class TypedTransportApi {
     }
 
     @WpAuthPublic('Authorization request validates signed protocol parameters')
+    @WpAuthorization({ authType: AuthorizationType.ANONYMOUS, reason: 'Authorization request validates signed protocol parameters' })
     @Endpoint(GET, '/authorize', READ, RPC, { responseType: 'full' })
     // webpieces-disable no-unmanaged-exceptions -- contract stub
     authorize(@QueryParam('client_id') _clientId: string): Promise<HttpResponseDto<undefined>> {
@@ -116,13 +102,15 @@ abstract class TypedTransportApi {
     }
 
     @WpAuthPublic('Token exchange authenticates the one-time code and PKCE verifier')
+    @WpAuthorization({ authType: AuthorizationType.ANONYMOUS, reason: 'Token exchange authenticates the one-time code and PKCE verifier' })
     @Endpoint(POST, '/token', WRITE, RPC, { formPost: true, responseType: 'full' })
     // webpieces-disable no-unmanaged-exceptions -- contract stub
     token(_request: TokenRequest): Promise<HttpResponseDto<object>> {
         throw new Error('contract only');
     }
 
-    @WpAuthJwt({ allRolesAllowed: true })
+    @WpAuth([jwtAuth()])
+    @WpAuthorization({ authType: AuthorizationType.ALL_USERS })
     @Endpoint(GET, '/secure/{id}', READ, RPC)
     // webpieces-disable no-unmanaged-exceptions -- contract stub
     secure(@PathParam('id') _id: number): Promise<object> {

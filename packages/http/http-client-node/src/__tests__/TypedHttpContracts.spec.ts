@@ -1,3 +1,4 @@
+import { WpAuthorization, AuthorizationType } from '@webpieces/core-util';
 import 'reflect-metadata';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
@@ -26,6 +27,7 @@ import { NodeProxyClient } from '../NodeProxyClient';
 @ApiPath('/inventory')
 abstract class NodeTypedApi {
     @WpAuthPublic('Inventory metadata is public')
+    @WpAuthorization({ authType: AuthorizationType.ANONYMOUS, reason: 'Inventory metadata is public' })
     @Endpoint(GET, '/{owner}/{item}', READ, RPC)
     // webpieces-disable no-unmanaged-exceptions -- contract stub
     get(

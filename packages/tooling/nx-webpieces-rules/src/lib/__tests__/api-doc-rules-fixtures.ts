@@ -12,27 +12,18 @@
  * holding these strings at column zero is indistinguishable from a real contract to that sweep, and
  * turned it red. The indent is what makes this file honest to both readers.
  *
- * Every contract is ONE self-contained file: the decorators are declared beside the class rather
- * than imported, because the extractor matches them BY NAME on the syntax and a fixture that
- * imported them would be testing module resolution instead of the rule. The values in
- * `@Endpoint(...)` are the real strings the framework's constants hold (`'POST'`, `'read'`, `'rpc'`,
- * `'cloudtasks'`) — the extractor constant-folds that argument and rejects anything outside the set,
- * so a fixture cannot drift into a kind that does not exist.
+ * Every contract imports the canonical decorators. This exercises the same import-aware readers
+ * as production, including aliases and namespace calls. Endpoint arguments use the real framework
+ * literal values so constant folding cannot accept a fixture-only endpoint kind.
  */
 
 import * as fs from 'fs';
 import * as path from 'path';
 import { ProjectInfo } from '../project-info';
 
-/** Decorator stubs, declared in every fixture file so nothing has to resolve across modules. */
-export const DECORATORS = `export function ApiPath(_p: string): ClassDecorator { return (): void => undefined; }
-    export function ApiType(..._t: string[]): ClassDecorator { return (): void => undefined; }
-    export function Endpoint(_m: string, _p: string, _o: string, _k: string): MethodDecorator { return (): void => undefined; }
-    export function WpAuthJwt(_r: object): MethodDecorator { return (): void => undefined; }
-    export function WpMcpTool(_n: string): MethodDecorator { return (): void => undefined; }
-    export function WpMcpAuthJwt(_r: object): MethodDecorator { return (): void => undefined; }
-    export function InvalidEndpointForMcp(_r: string): MethodDecorator { return (): void => undefined; }
-`;
+/** Canonical decorator imports used by every fixture contract. */
+export const DECORATORS = `import {ApiPath, ApiType, Endpoint, WpAuth, WpAuthorization, AuthorizationType, jwt, WpMcpTool, InvalidEndpointForMcp} from '@webpieces/core-util';`;
+
 
 /** One fixture project: `libraries/<name>/src/index.ts`, with its own tsconfig beside it. */
 export class FixtureWorkspace {
@@ -79,7 +70,7 @@ export const CLEAN_API = `/** Orders a partner may fetch. */
     export abstract class CleanApi {
         /** Fetch one order by its id. */
         @Endpoint('POST', '/fetch', 'read', 'rpc')
-        @WpAuthJwt({ allRolesAllowed: true })
+        @WpAuth([jwt()])
         abstract fetch(request: FetchRequest): Promise<FetchResponse>;
 
         /** Accept a delivery receipt. Fire-and-forget by contract. */
@@ -115,8 +106,8 @@ export const MCP_API = `/** Orders a partner may fetch. */
     export abstract class PublishedApi {
         /** Fetch one order by its id. */
         @Endpoint('POST', '/fetch', 'read', 'rpc')
-        @WpAuthJwt({ allRolesAllowed: true })
-        @WpMcpAuthJwt({ allRolesAllowed: true })
+        @WpAuth([jwt()])
+        @WpAuthorization({authType: AuthorizationType.ALL_USERS})
         @WpMcpTool('fetch_order')
         abstract fetch(request: FetchRequest): Promise<FetchResponse>;
     }
@@ -268,8 +259,8 @@ export const BAD_MCP_API = `/** Search. */
     export abstract class SearchApi {
         /** Enqueue a reindex. */
         @Endpoint('POST', '/reindex', 'write', 'cloudtasks')
-        @WpAuthJwt({ allRolesAllowed: true })
-        @WpMcpAuthJwt({ allRolesAllowed: true })
+        @WpAuth([jwt()])
+        @WpAuthorization({authType: AuthorizationType.ALL_USERS})
         @WpMcpTool('reindex_store')
         abstract reindex(request: SearchRequest): Promise<SearchResponse>;
 
@@ -279,8 +270,8 @@ export const BAD_MCP_API = `/** Search. */
         abstract open(request: SearchRequest): Promise<SearchResponse>;
 
         @Endpoint('POST', '/quiet', 'read', 'rpc')
-        @WpAuthJwt({ allRolesAllowed: true })
-        @WpMcpAuthJwt({ allRolesAllowed: true })
+        @WpAuth([jwt()])
+        @WpAuthorization({authType: AuthorizationType.ALL_USERS})
         @WpMcpTool('quiet_search')
         abstract quiet(request: SearchRequest): Promise<SearchResponse>;
     }
@@ -305,8 +296,8 @@ export const UNDOCUMENTED_FIELD_API = `/** Widgets. */
     export abstract class WidgetsApi {
         /** List the widgets. */
         @Endpoint('POST', '/list', 'read', 'rpc')
-        @WpAuthJwt({ allRolesAllowed: true })
-        @WpMcpAuthJwt({ allRolesAllowed: true })
+        @WpAuth([jwt()])
+        @WpAuthorization({authType: AuthorizationType.ALL_USERS})
         @WpMcpTool('list_widgets')
         abstract list(request: ListRequest): Promise<ListResponse>;
     }
@@ -333,14 +324,14 @@ export const EXCLUDED_API = `/** Webhooks. */
     export abstract class PublicWebhooksApi {
         /** Search past deliveries. */
         @Endpoint('POST', '/search', 'read', 'rpc')
-        @WpAuthJwt({ allRolesAllowed: true })
-        @WpMcpAuthJwt({ allRolesAllowed: true })
+        @WpAuth([jwt()])
+        @WpAuthorization({authType: AuthorizationType.ALL_USERS})
         @WpMcpTool('search_deliveries')
         abstract search(request: SearchRequest): Promise<SearchResponse>;
 
         /** Fan a partner event out to its subscribers. */
         @Endpoint('POST', '/fanout', 'write', 'rpc')
-        @WpAuthJwt({ allRolesAllowed: true })
+        @WpAuth([jwt()])
         @InvalidEndpointForMcp('a transport envelope body is opaque by design; the published partner contract for each event type owns its shape')
         abstract fanout(request: FanoutRequest): Promise<FanoutResponse>;
     }
@@ -379,8 +370,8 @@ export const CONTRADICTS_API = `/** Search. */
     export abstract class ContradictsApi {
         /** Search. */
         @Endpoint('POST', '/search', 'read', 'rpc')
-        @WpAuthJwt({ allRolesAllowed: true })
-        @WpMcpAuthJwt({ allRolesAllowed: true })
+        @WpAuth([jwt()])
+        @WpAuthorization({authType: AuthorizationType.ALL_USERS})
         @WpMcpTool('contradicting_search')
         @InvalidEndpointForMcp('a transport envelope body is opaque by design')
         abstract search(request: SearchRequest): Promise<SearchResponse>;

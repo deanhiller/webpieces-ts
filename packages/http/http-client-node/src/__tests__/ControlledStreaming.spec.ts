@@ -1,3 +1,4 @@
+import { WpAuthorization, AuthorizationType } from '@webpieces/core-util';
 import 'reflect-metadata';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
@@ -55,6 +56,7 @@ class ResponseEvent {
 abstract class ControlledApi {
     @Endpoint(POST, '/full', READ, RPC)
     @WpAuthPublic('controlled transport test')
+    @WpAuthorization({ authType: AuthorizationType.ANONYMOUS, reason: 'controlled transport test' })
     @WpStream(StreamDirection.FULL)
     full(
         _request: OpenRequest,

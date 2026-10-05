@@ -8,6 +8,7 @@ import { Service } from '@webpieces/core-util';
 import { WpResponse } from './WpResponse';
 import { FilterMatcher, HttpFilter } from './FilterMatcher';
 import { LogManager } from '@webpieces/core-util';
+import { AuthorizationService } from './AuthorizationHook';
 
 const log = LogManager.getLogger('RouteBuilder');
 
@@ -113,6 +114,10 @@ export class RouteBuilderImpl implements RouteBuilder {
      * @param route - Route definition with controller class and method name
      */
     addRoute(route: RouteDefinition): void {
+        const policy = route.routeMeta.authorization;
+        if (!route.routeMeta.authMeta || !policy) throw new Error(`Endpoint ${route.routeMeta.path} requires @WpAuth/@WpAuthPublic and @WpAuthorization.`);
+        if (!this.container) throw new Error('Set the route container before registering endpoints.');
+        this.container.get(AuthorizationService).validate(policy);
         const routeWithMeta = this.createRouteHandlerWithMeta(route);
         this.routes.push(routeWithMeta);
 

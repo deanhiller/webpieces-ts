@@ -1,25 +1,9 @@
+import { WpAuthorization, AuthorizationType, WpLocalOnly } from '@webpieces/core-util';
 import 'reflect-metadata';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { GcpOidc } from '@webpieces/gcp-identity';
 import { HttpRequest, RequestContext, RequestContextHeaders } from '@webpieces/core-context';
-import {
-    ApiPath,
-    WpAuthLocalOnly,
-    ContextKey,
-    Endpoint,
-    ApiEndpointNotFoundError,
-    ApiErrorHttpStatus,
-    HeaderRegistry,
-    ApiUnauthorizedError,
-    WpAuthPublic,
-    RouteMetadata,
-    RuntimeLocality,
-    AuthMeta,
-    POST,
-    READ,
-    RPC,
-    WRITE,
-} from '@webpieces/core-util';
+import { ApiPath, ContextKey, Endpoint, ApiEndpointNotFoundError, ApiErrorHttpStatus, HeaderRegistry, ApiUnauthorizedError, WpAuthPublic, RouteMetadata, RuntimeLocality, AuthMeta, POST, READ, RPC, WRITE } from '@webpieces/core-util';
 import { AuthFilter } from '../filters/AuthFilter';
 import { DefaultOidcVerifier } from '../DefaultOidcVerifier';
 import { ApiRoutingFactory } from '../ApiRoutingFactory';
@@ -40,7 +24,9 @@ import { RouteBuilder, RouteDefinition, FilterDefinition } from '../WebAppMeta';
 
 @ApiPath('/dev')
 abstract class DevToolsApi {
-    @WpAuthLocalOnly()
+    @WpLocalOnly()
+    @WpAuthPublic('Local development diagnostic')
+    @WpAuthorization({ authType: AuthorizationType.ANONYMOUS, reason: 'Local development diagnostic' })
     @Endpoint(POST, '/logs', WRITE, RPC)
     shipLogs(_r: object): Promise<object> {
         throw new Error('subclass');
@@ -56,12 +42,15 @@ class DevToolsController extends DevToolsApi {
 @ApiPath('/open')
 abstract class OpenApi {
     @WpAuthPublic('Open route fixture')
+    @WpAuthorization({ authType: AuthorizationType.ANONYMOUS, reason: 'Open route fixture' })
     @Endpoint(POST, '/ping', READ, RPC)
     ping(_r: object): Promise<object> {
         throw new Error('subclass');
     }
 
-    @WpAuthLocalOnly()
+    @WpLocalOnly()
+    @WpAuthPublic('Local development diagnostic')
+    @WpAuthorization({ authType: AuthorizationType.ANONYMOUS, reason: 'Local development diagnostic' })
     @Endpoint(POST, '/debug', READ, RPC)
     debug(_r: object): Promise<object> {
         throw new Error('subclass');
@@ -113,9 +102,10 @@ const LOCAL_ONLY_ROUTE = new RouteMetadata(
     'shipLogs',
     WRITE,
     'DevToolsController',
-    new AuthMeta({ kind: 'local-only' }),
+    new AuthMeta([{ kind: 'public' }], 'local development'),
     'DevToolsApi',
 );
+LOCAL_ONLY_ROUTE.localOnly = true;
 
 /**
  * Only the local-only branch runs in this file, and it touches none of AuthFilter's collaborators —

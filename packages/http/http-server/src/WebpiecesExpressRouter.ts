@@ -161,7 +161,7 @@ export class WebpiecesExpressRouter {
         for (const route of apiClient.routes) {
             const path = this.expressPath(route);
             // The parser is chosen by the @Endpoint annotation, not the request Content-Type — and
-            // so is whether the verbatim bytes survive the parse for an @WpAuthWebhook hook to verify.
+            // so is whether the verbatim bytes survive the parse for an webhook(...) hook to verify.
             const wrapper = route.streaming
                 ? this.middleware.createStreamExpressWrapper(
                       apiClient.client[route.methodName],

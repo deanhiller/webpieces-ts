@@ -5,12 +5,8 @@ export {
     PathParam,
     QueryParam,
     WpAuthPublic,
-    WpAuthJwt,
-    rolesRequired,
-    WpAuthOidc,
-    WpAuthSharedSecret,
-    WpAuthWebhook,
-    WpAuthLocalOnly,
+    WpAuth, WpLocalOnly, isLocalOnly, jwt, oidc, sharedSecret, webhook, apiKey,
+    WpAuthorization, AuthorizationType, getAuthorization,
     Rpc,
     PubSub,
     Queue,
@@ -24,7 +20,6 @@ export {
     isRawBody,
     isApiPath,
     getAuthMeta,
-    getAuthMode,
     assertEveryEndpointHasAuthMode,
     getApiKind,
     assertApiKind,
@@ -108,7 +103,7 @@ export { ApiFactory } from './ApiFactory';
 export { ApiClient, ApiClientProxy } from './ApiClient';
 
 // Auth: the app-provided, container-bound pieces the framework AuthFilter injects.
-//  - AuthConfig: shared-secret STATE (@WpAuthSharedSecret values).
+//  - AuthConfig: shared-secret STATE (sharedSecret(...) values).
 //  - JwtHook / OidcHook / WebhookAuthCallback / ApiKeyHook: OPTIONAL verification mechanisms
 //    (bind only what you use; unbound means the matching endpoints 401, never open).
 //  - DefaultOidcVerifier: the built-in Google OIDC verifier used when no OidcHook is bound.
@@ -116,6 +111,7 @@ export {
     AuthConfig,
     AUTH_CONFIG,
     AuthenticatedCaller,
+    AuthenticatedMachineIdentity,
     AUTHENTICATED_CALLER_KEY,
     SharedSecrets,
 } from './AuthConfig';
@@ -147,3 +143,7 @@ export { setupRuntime, RuntimeSetupOptions } from './setupRuntime';
 export { WebpiecesConfig, WEBPIECES_CONFIG_TOKEN } from './WebpiecesConfig';
 
 export { ServerWiring, ServerWiringOptions } from './ServerWiring';
+
+export { AuthorizationHook, AuthorizationService, CanonicalUserRoles, AUTHORIZATION_HOOK, VERIFIED_MACHINE_CALLER, VerifiedMachineCaller } from './AuthorizationHook';
+export { AuthorizedApiDocument } from './AuthorizedApiDocument';
+export type { ApiDocumentObject, ApiDocumentValue } from './AuthorizedApiDocument';

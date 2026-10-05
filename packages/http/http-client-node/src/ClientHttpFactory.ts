@@ -44,7 +44,7 @@ bindFrameworkProvider(NODE_PROXY_CLIENT_PROVIDER, NodeProxyClient);
  * ]);
  * ```
  * The SSRF guard arms itself the moment that filter re-points a request, and the contract's
- * `@WpAuthWebhook(name)` selects the app's bound `WebhookSignerCallback` to sign the exact bytes —
+ * `webhook(name)` selects the app's bound `WebhookSignerCallback` to sign the exact bytes —
  * neither is something the app registers, orders, or can displace.
  *
  * Every client it builds shares one {@link NodeProxyClient} *shape* but never one instance: the

@@ -1,3 +1,7 @@
+import {RequestContext} from '@webpieces/core-context';
+import {AuthorizationType} from '@webpieces/core-util';
+import {AuthorizationService} from '../AuthorizationHook';
+import {AuthenticatedCallerContext} from '../AuthenticatedCallerContext';
 import 'reflect-metadata';
 import { describe, it, expect } from 'vitest';
 import { sign } from 'jsonwebtoken';
@@ -33,13 +37,12 @@ describe('DefaultJwtHook (batteries-included HS256 JwtHook)', () => {
         expect(values.claims['orgId']).toBe('org-9');
     });
 
-    it('defaults roles to [] when the claim is absent or not a string[]', async () => {
+    it('defaults absent roles to [] and rejects a malformed claim', async () => {
         const hook = new DefaultJwtHook(SECRET);
         const noRoles = await hook.parseJwt(sign({ sub: 'u1' }, SECRET));
         expect(noRoles.roles).toEqual([]);
 
-        const badRoles = await hook.parseJwt(sign({ sub: 'u1', roles: 'admin' }, SECRET));
-        expect(badRoles.roles).toEqual([]);
+        await expect(hook.parseJwt(sign({ sub: 'u1', roles: 'admin' }, SECRET))).rejects.toThrow(ApiUnauthorizedError);
     });
 
     /**
@@ -66,39 +69,30 @@ describe('DefaultJwtHook (batteries-included HS256 JwtHook)', () => {
         await expect(hook.parseJwt(token)).rejects.toThrow(ApiUnauthorizedError);
     });
 
-    /**
-     * The two branches of the {@link JwtRoles} union, which is the WHOLE contract now: an endpoint
-     * either names at least one role or says `allRolesAllowed: true` out loud. The old spelling this
-     * assertion used to carry — `authorizeJwt(values, {})` for "any authenticated user" — is gone by
-     * construction: `{}` satisfies neither branch, so it is a compile error, and the six bad shapes
-     * are pinned in `core-util/src/http/AuthJwtCompileAssertions.ts` rather than re-asserted here (a
-     * spec cannot pin a type — vitest strips them).
-     */
-    it('enforces roles via the inherited authorizeJwt (any-of; allRolesAllowed = any authenticated user)', async () => {
+    it('publishes verified JWT identity into common authorization', async () => {
         const hook = new DefaultJwtHook(SECRET);
-        const values = await hook.parseJwt(sign({ sub: 'u1', roles: ['editor'] }, SECRET));
-
-        await expect(hook.authorizeJwt(values, { allRolesAllowed: true })).resolves.toBeUndefined();
-        await expect(hook.authorizeJwt(values, { roles: ['editor'] })).resolves.toBeUndefined();
-        await expect(
-            hook.authorizeJwt(values, { roles: ['editor', 'admin'] }),
-        ).resolves.toBeUndefined();
-        await expect(hook.authorizeJwt(values, { roles: ['admin'] })).rejects.toThrow(
-            ApiForbiddenError,
-        );
+        const values = await hook.parseJwt(sign({sub:'u1',roles:['editor']},SECRET));
+        await RequestContext.run(async () => {
+            new AuthenticatedCallerContext().publish(values);
+            const service = new AuthorizationService();
+            await expect(service.authorize({authType:AuthorizationType.ALL_USERS})).resolves.toBeUndefined();
+            await expect(service.authorize({authType:AuthorizationType.ROLES,roles:['editor','admin']})).resolves.toBeUndefined();
+            await expect(service.authorize({authType:AuthorizationType.ROLES,roles:['admin']})).rejects.toThrow(ApiForbiddenError);
+        });
     });
 
-    /**
-     * The wide branch is wide for AUTHENTICATED users only — it skips the role check, it does not
-     * skip authentication (AuthFilter has already run parseJwt by the time this is reached).
-     */
-    it('allRolesAllowed admits a user carrying NO roles at all', async () => {
+    it('admits a verified user without roles through ALL_USERS', async () => {
         const hook = new DefaultJwtHook(SECRET);
-        const values = await hook.parseJwt(sign({ sub: 'u1' }, SECRET));
+        await RequestContext.run(async () => {
+            new AuthenticatedCallerContext().publish(await hook.parseJwt(sign({sub:'u1'},SECRET)));
+            await expect(new AuthorizationService().authorize({authType:AuthorizationType.ALL_USERS})).resolves.toBeUndefined();
+        });
+    });
 
-        await expect(hook.authorizeJwt(values, { allRolesAllowed: true })).resolves.toBeUndefined();
-        await expect(hook.authorizeJwt(values, { roles: ['admin'] })).rejects.toThrow(
-            ApiForbiddenError,
-        );
+    it('rejects malformed role claims rather than silently dropping them', async () => {
+        const hook = new DefaultJwtHook(SECRET);
+        for (const roles of [['editor',7],[''], 'admin']) {
+            await expect(hook.parseJwt(sign({sub:'u1',roles},SECRET))).rejects.toThrow(ApiUnauthorizedError);
+        }
     });
 });

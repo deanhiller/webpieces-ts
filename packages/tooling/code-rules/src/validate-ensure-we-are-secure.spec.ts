@@ -69,56 +69,77 @@ describe('ensure-we-are-secure project scope', () => {
             @ApiPath('/nested') class Nested { @Endpoint(POST, '/x', WRITE, RPC) x(v: object): Promise<object> { throw 0; } }
         `,
         );
-        expect(codes()).toEqual(['HTTP_AUTH_COUNT']);
+        expect(codes()).toEqual(['HTTP_AUTH_COUNT', 'HTTP_AUTHORIZATION_COUNT']);
     });
 });
 
 describe('ensure-we-are-secure HTTP contracts', () => {
     beforeEach(() => project('packages/api'));
 
-    it('accepts all seven canonical method auth modes', () => {
-        write(
-            'packages/api/src/Api.ts',
-            `
-            import { ApiPath, Endpoint, WpAuthJwt, WpAuthOidc, WpAuthWebhook,
-                WpAuthSharedSecret, WpAuthApiKey, WpAuthLocalOnly, WpAuthPublic } from '@webpieces/core-util';
+    it('accepts canonical credentials, OR alternatives, and separate locality', () => {
+        write('packages/api/src/Api.ts', `
+            import { ApiPath, Endpoint, WpAuth, WpAuthPublic, WpAuthorization,
+                AuthorizationType, WpLocalOnly, jwt, oidc, webhook, sharedSecret, apiKey } from '@webpieces/core-util';
             @ApiPath('/x') class Api {
-                @Endpoint(POST, '/jwt', WRITE, RPC) @WpAuthJwt({ allRolesAllowed: true }) jwt(v: object): Promise<object> { throw 0; }
-                @Endpoint(POST, '/oidc', WRITE, RPC) @WpAuthOidc() oidc(v: object): Promise<object> { throw 0; }
-                @Endpoint(POST, '/webhook', WRITE, RPC) @WpAuthWebhook('x') webhook(v: object): Promise<object> { throw 0; }
-                @Endpoint(POST, '/secret', WRITE, RPC) @WpAuthSharedSecret('x') secret(v: object): Promise<object> { throw 0; }
-                @Endpoint(POST, '/key', WRITE, RPC) @WpAuthApiKey('x') key(v: object): Promise<object> { throw 0; }
-                @Endpoint(POST, '/local', WRITE, RPC) @WpAuthLocalOnly() local(v: object): Promise<object> { throw 0; }
-                @Endpoint(POST, '/public', WRITE, RPC) @WpAuthPublic('health probe') public(v: object): Promise<object> { throw 0; }
+                @Endpoint() @WpAuth([jwt()]) @WpAuthorization({authType: AuthorizationType.ALL_USERS}) user(v: object): Promise<object> {throw 0;}
+                @Endpoint() @WpAuth([oidc()]) @WpAuthorization({authType: AuthorizationType.SERVICE_ONLY}) service(v: object): Promise<object> {throw 0;}
+                @Endpoint() @WpAuth([webhook('x')]) @WpAuthorization({authType: AuthorizationType.USERS_OR_SERVICES}) hook(v: object): Promise<object> {throw 0;}
+                @Endpoint() @WpAuth([sharedSecret('x'), jwt()]) @WpAuthorization({authType: AuthorizationType.USERS_OR_SERVICES}) either(v: object): Promise<object> {throw 0;}
+                @Endpoint() @WpAuth([apiKey('partner', [{in:'header',name:'x-api-key'}])]) @WpAuthorization({authType: AuthorizationType.ROLES, roles:['agent']}) key(v: object): Promise<object> {throw 0;}
+                @Endpoint() @WpLocalOnly() @WpAuthPublic('diagnostics') @WpAuthorization({authType: AuthorizationType.ANONYMOUS, reason:'diagnostics'}) local(v: object): Promise<object> {throw 0;}
+                @Endpoint() @WpAuth([jwt()]) @WpAuthorization({authType: AuthorizationType.CUSTOM, appPolicy:{inOrg:true}}) custom(v: object): Promise<object> {throw 0;}
             }
-        `,
-        );
+        `);
         expect(codes()).toEqual([]);
     });
 
-    it('resolves direct aliases and namespace imports', () => {
-        write(
-            'packages/api/src/Aliases.ts',
-            `
-            import { ApiPath as Path, Endpoint as Route, WpAuthJwt as Jwt } from '@webpieces/core-util';
+    it('resolves aliases and namespace imports for credentials and policies', () => {
+        write('packages/api/src/Aliases.ts', `
+            import {ApiPath as Path, Endpoint as Route, WpAuth as Auth, jwt as credential,
+                WpAuthorization as Policy, AuthorizationType as Type} from '@webpieces/core-util';
             import * as wp from '@webpieces/core-util';
-            @Path('/a') class A { @Route('/x', 'rpc') @Jwt({ allRolesAllowed: true }) x(v: object): Promise<object> { throw 0; } }
-            @wp.ApiPath('/b') class B { @wp.Endpoint('/x', 'rpc') @wp.WpAuthOidc() x(v: object): Promise<object> { throw 0; } }
-        `,
-        );
+            @Path('/a') class A {@Route() @Auth([credential()]) @Policy({authType:Type.ALL_USERS}) x(v: object): Promise<object> {throw 0;}}
+            @wp.ApiPath('/b') class B {@wp.Endpoint() @wp.WpAuth([wp.oidc()]) @wp.WpAuthorization({authType:wp.AuthorizationType.SERVICE_ONLY}) x(v: object): Promise<object> {throw 0;}}
+        `);
         expect(codes()).toEqual([]);
     });
 
-    it('rejects a local same-name decorator as proof of auth', () => {
-        write(
-            'packages/api/src/Fake.ts',
-            `
-            import { ApiPath, Endpoint } from '@webpieces/core-util';
-            function WpAuthJwt(): MethodDecorator { return () => undefined; }
-            @ApiPath('/x') class Api { @Endpoint(POST, '/x', WRITE, RPC) @WpAuthJwt() x(v: object): Promise<object> { throw 0; } }
-        `,
-        );
-        expect(codes()).toEqual(['HTTP_AUTH_COUNT']);
+    it('rejects local same-name declarations as security evidence', () => {
+        write('packages/api/src/Fake.ts', `
+            import {ApiPath, Endpoint} from '@webpieces/core-util';
+            function WpAuth(): MethodDecorator {return () => undefined;}
+            function WpAuthorization(): MethodDecorator {return () => undefined;}
+            @ApiPath('/x') class Api {@Endpoint() @WpAuth() @WpAuthorization() x(v: object): Promise<object> {throw 0;}}
+        `);
+        expect(codes()).toEqual(['HTTP_AUTH_COUNT', 'HTTP_AUTHORIZATION_COUNT']);
+    });
+
+    it.each(['WpAuthJwt', 'WpAuthOidc', 'WpAuthSharedSecret', 'WpAuthWebhook', 'WpAuthApiKey', 'WpAuthLocalOnly', 'WpMcpAuthJwt'])('rejects removed %s with migration instructions', (legacy: string) => {
+        write('packages/api/src/Legacy.ts', `
+            import {ApiPath, Endpoint, ${legacy}} from '@webpieces/core-util';
+            @ApiPath('/x') class Api {@Endpoint() @${legacy}() x(v: object): Promise<object> {throw 0;}}
+        `);
+        const violations = auditSecurityContracts(root, ['packages/api']);
+        expect(violations.some((v: SecurityContractViolation) => v.code === 'HTTP_AUTH_MIGRATION' && v.message.includes('WpAuthorization'))).toBe(true);
+    });
+
+    it.each([
+        ['@WpAuth([])', '{authType:AuthorizationType.ALL_USERS}', 'HTTP_AUTH_METHODS'],
+        ['@WpAuth([jwt(),jwt()])', '{authType:AuthorizationType.ALL_USERS}', 'HTTP_AUTH_METHODS'],
+        ['@WpAuth([fake()])', '{authType:AuthorizationType.ALL_USERS}', 'HTTP_AUTH_METHODS'],
+        ['@WpAuth([jwt()])', '{authType:AuthorizationType.ROLES,roles:[]}', 'HTTP_AUTHORIZATION_POLICY'],
+        ['@WpAuth([jwt()])', '{authType:AuthorizationType.CUSTOM}', 'HTTP_AUTHORIZATION_POLICY'],
+        ['@WpAuth([jwt()])', '{authType:AuthorizationType.ALL_USERS,inOrg:true}', 'HTTP_AUTHORIZATION_POLICY'],
+        ['@WpAuth([jwt()])', '{authType:AuthorizationType.ALL_USERS,appPolicy:{permission:"x"}}', 'HTTP_AUTHORIZATION_POLICY'],
+        ['@WpAuth([jwt()])', '{authType:AuthorizationType.ANONYMOUS,reason:"x"}', 'HTTP_AUTHORIZATION_PAIRING'],
+        ["@WpAuthPublic('probe')", '{authType:AuthorizationType.ALL_USERS}', 'HTTP_AUTHORIZATION_PAIRING'],
+    ])('fails closed on %s with %s', (authentication: string, policy: string, code: string) => {
+        write('packages/api/src/BadPolicy.ts', `
+            import {ApiPath,Endpoint,WpAuth,WpAuthPublic,WpAuthorization,AuthorizationType,jwt} from '@webpieces/core-util';
+            function fake() {return {kind:'jwt'};}
+            @ApiPath('/x') class Api {@Endpoint() ${authentication} @WpAuthorization(${policy}) x(v: object): Promise<object> {throw 0;}}
+        `);
+        expect(codes()).toContain(code);
     });
 
     it('does not treat negative test fixtures as production API contracts', () => {
@@ -132,27 +153,22 @@ describe('ensure-we-are-secure HTTP contracts', () => {
         expect(codes()).toEqual([]);
     });
 
-    it('reports class auth, missing/multiple auth, public reason, and orphans deterministically', () => {
-        write(
-            'packages/api/src/Bad.ts',
-            `
-            import { ApiPath, Endpoint, WpAuthJwt, WpAuthOidc, WpAuthPublic } from '@webpieces/core-util';
-            @WpAuthJwt({ allRolesAllowed: true }) @ApiPath('/x') class Api {
-                @Endpoint(POST, '/missing', WRITE, RPC) missing(v: object): Promise<object> { throw 0; }
-                @Endpoint(POST, '/many', WRITE, RPC) @WpAuthJwt({ allRolesAllowed: true }) @WpAuthOidc() many(v: object): Promise<object> { throw 0; }
-                @Endpoint(POST, '/public', WRITE, RPC) @WpAuthPublic('   ') public(v: object): Promise<object> { throw 0; }
-                @WpAuthOidc() orphan(v: object): Promise<object> { throw 0; }
+    it('reports class-level, duplicate, missing and orphan declarations', () => {
+        write('packages/api/src/Bad.ts', `
+            import {ApiPath,Endpoint,WpAuth,WpAuthPublic,WpAuthorization,AuthorizationType,jwt,oidc} from '@webpieces/core-util';
+            @WpAuth([jwt()]) @ApiPath('/x') class Api {
+                @Endpoint() missing(v: object): Promise<object> {throw 0;}
+                @Endpoint() @WpAuth([jwt()]) @WpAuth([oidc()]) @WpAuthorization({authType:AuthorizationType.ALL_USERS}) many(v: object): Promise<object> {throw 0;}
+                @Endpoint() @WpAuthPublic('   ') @WpAuthorization({authType:AuthorizationType.ANONYMOUS,reason:'probe'}) public(v: object): Promise<object> {throw 0;}
+                @WpAuth([oidc()]) @WpAuthorization({authType:AuthorizationType.SERVICE_ONLY}) orphan(v: object): Promise<object> {throw 0;}
             }
-        `,
-        );
+        `);
         expect(codes()).toEqual([
-            'HTTP_CLASS_AUTH',
-            'HTTP_AUTH_COUNT',
-            'HTTP_AUTH_COUNT',
-            'HTTP_PUBLIC_REASON',
-            'HTTP_ORPHAN_AUTH',
+            'HTTP_CLASS_AUTH', 'HTTP_AUTH_COUNT', 'HTTP_AUTHORIZATION_COUNT',
+            'HTTP_AUTH_COUNT', 'HTTP_PUBLIC_REASON', 'HTTP_ORPHAN_AUTH', 'HTTP_ORPHAN_AUTHORIZATION',
         ]);
     });
+
 });
 
 describe('ensure-we-are-secure IPC contracts', () => {

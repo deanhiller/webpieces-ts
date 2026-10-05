@@ -1,3 +1,4 @@
+import { WpAuthorization, AuthorizationType, WpAuth, oidc as oidcAuth } from '@webpieces/core-util';
 import 'reflect-metadata';
 
 // Force gcp-metadata to report "not on GCP" instantly so these tests are hermetic
@@ -5,20 +6,7 @@ import 'reflect-metadata';
 process.env['METADATA_SERVER_DETECTION'] = 'none';
 
 import { describe, it, expect, beforeEach } from 'vitest';
-import {
-    ApiPath,
-    WpAuthOidc,
-    ContextKey,
-    Endpoint,
-    HeaderRegistry,
-    ClientRegistry,
-    PubSub,
-    Queue,
-    WebpiecesCoreHeaders,
-    CLOUDTASKS,
-    POST,
-    WRITE,
-} from '@webpieces/core-util';
+import { ApiPath, ContextKey, Endpoint, HeaderRegistry, ClientRegistry, PubSub, Queue, WebpiecesCoreHeaders, CLOUDTASKS, POST, WRITE } from '@webpieces/core-util';
 import { RequestContext } from '@webpieces/core-context';
 import { Provider, RequestContextHeaders } from '@webpieces/core-context';
 import { ClientCloudTasksFactory } from '../ClientCloudTasksFactory';
@@ -39,7 +27,8 @@ class SendEmailRequest {
 @PubSub()
 @ApiPath('/email')
 abstract class EmailApi {
-    @WpAuthOidc()
+    @WpAuth([oidcAuth()])
+    @WpAuthorization({ authType: AuthorizationType.SERVICE_ONLY })
     @Endpoint(POST, '/send', WRITE, CLOUDTASKS)
     @Queue('email-send-queue')
     // webpieces-disable no-unmanaged-exceptions -- abstract contract stub, never executed

@@ -1,20 +1,7 @@
+import { WpAuthorization, AuthorizationType, WpAuth, apiKey as apiKeyAuth } from '@webpieces/core-util';
 import 'reflect-metadata';
 import { describe, it, expect } from 'vitest';
-import {
-    ApiPath,
-    WpAuthApiKey,
-    DestinationTrust,
-    Endpoint,
-    ContextKey,
-    MISSING_AUTH_DECORATOR_FIX,
-    WpAuthPublic,
-    assertEveryEndpointHasAuthMode,
-    getAuthMode,
-    POST,
-    READ,
-    RPC,
-    WRITE,
-} from '../../index';
+import { ApiPath, DestinationTrust, Endpoint, ContextKey, MISSING_AUTH_DECORATOR_FIX, WpAuthPublic, assertEveryEndpointHasAuthMode, getAuthMeta, POST, READ, RPC, WRITE } from '../../index';
 import type { ApiKeyCredential, AuthMode } from '../../index';
 
 /**
@@ -42,7 +29,8 @@ const MANAGEMENT_CREDENTIALS = [
 
 @ApiPath('/management/v1')
 abstract class ManagementApi {
-    @WpAuthApiKey('onetablet-partner', MANAGEMENT_CREDENTIALS)
+    @WpAuth([apiKeyAuth('onetablet-partner', MANAGEMENT_CREDENTIALS)])
+    @WpAuthorization({ authType: AuthorizationType.USERS_OR_SERVICES })
     @Endpoint(POST, '/orders', READ, RPC)
     listOrders(_r: object): Promise<object> {
         throw new Error('subclass');
@@ -52,15 +40,17 @@ abstract class ManagementApi {
 /** Per-METHOD, and a second regime on the same server — `regime` tells the one hook them apart. */
 @ApiPath('/mixed')
 abstract class MixedApi {
-    @WpAuthApiKey('internal-tooling', [
+    @WpAuth([apiKeyAuth('internal-tooling', [
         { in: 'bearer', description: 'Send the tooling key as a bearer token.' },
-    ])
+    ])])
+    @WpAuthorization({ authType: AuthorizationType.USERS_OR_SERVICES })
     @Endpoint(POST, '/tooling', WRITE, RPC)
     tooling(_r: object): Promise<object> {
         throw new Error('subclass');
     }
 
     @WpAuthPublic('Anonymous access is intentionally required')
+    @WpAuthorization({ authType: AuthorizationType.ANONYMOUS, reason: 'Anonymous access is intentionally required' })
     @Endpoint(POST, '/health', WRITE, RPC)
     health(_r: object): Promise<object> {
         throw new Error('subclass');
@@ -69,7 +59,7 @@ abstract class MixedApi {
 
 describe('@WpAuthApiKey declares a customer-key posture on the contract', () => {
     it('records an apikey AuthMode carrying the regime name the hook switches on', () => {
-        const mode = getAuthMode(ManagementApi, 'listOrders');
+        const mode = getAuthMeta(ManagementApi, 'listOrders')?.methods[0];
 
         expect(mode?.kind).toBe('apikey');
         if (mode?.kind === 'apikey') {
@@ -78,8 +68,8 @@ describe('@WpAuthApiKey declares a customer-key posture on the contract', () => 
     });
 
     it('applies explicitly at method level beside other modes', () => {
-        expect(getAuthMode(MixedApi, 'tooling')?.kind).toBe('apikey');
-        expect(getAuthMode(MixedApi, 'health')?.kind).toBe('public');
+        expect(getAuthMeta(MixedApi, 'tooling')?.methods[0]?.kind).toBe('apikey');
+        expect(getAuthMeta(MixedApi, 'health')?.methods[0]?.kind).toBe('public');
     });
 
     it('satisfies assertEveryEndpointHasAuthMode — it is a real mode, not a @WpAuthPublic workaround', () => {
@@ -91,7 +81,8 @@ describe('@WpAuthApiKey declares a customer-key posture on the contract', () => 
             @ApiPath('/x')
             abstract class TwoModesApi {
                 @WpAuthPublic('Anonymous access is intentionally required')
-                @WpAuthApiKey('onetablet-partner', MANAGEMENT_CREDENTIALS)
+                @WpAuthorization({ authType: AuthorizationType.ANONYMOUS, reason: 'Anonymous access is intentionally required' })
+                @WpAuth([apiKeyAuth('onetablet-partner', MANAGEMENT_CREDENTIALS)])
                 @Endpoint(POST, '/y', WRITE, RPC)
                 op(_r: object): Promise<object> {
                     throw new Error('subclass');
@@ -106,7 +97,7 @@ describe('@WpAuthApiKey declares a customer-key posture on the contract', () => 
      * which is how `@WpAuthPublic` stayed the only reachable posture for a partner contract in the first place.
      */
     it('is named in the "you forgot authorization" prescription', () => {
-        expect(MISSING_AUTH_DECORATOR_FIX).toContain('@WpAuthApiKey');
+        expect(MISSING_AUTH_DECORATOR_FIX).toContain('apiKey(');
     });
 
     it('is named in the conflicting-decorator message too', () => {
@@ -114,14 +105,15 @@ describe('@WpAuthApiKey declares a customer-key posture on the contract', () => 
             @ApiPath('/x')
             abstract class TwoModesApi {
                 @WpAuthPublic('Anonymous access is intentionally required')
-                @WpAuthApiKey('onetablet-partner', MANAGEMENT_CREDENTIALS)
+                @WpAuthorization({ authType: AuthorizationType.ANONYMOUS, reason: 'Anonymous access is intentionally required' })
+                @WpAuth([apiKeyAuth('onetablet-partner', MANAGEMENT_CREDENTIALS)])
                 @Endpoint(POST, '/y', WRITE, RPC)
                 op(_r: object): Promise<object> {
                     throw new Error('subclass');
                 }
             }
             return TwoModesApi;
-        }).toThrow(/@WpAuthApiKey\(\.\.\.\)/);
+        }).toThrow(/@WpAuth\(\[\.\.\.\]\)/);
     });
 });
 
@@ -172,7 +164,7 @@ describe('DestinationTrust classifies apikey as NOT caller-verifying (trusted ke
  */
 describe('the auth metadata a spec generator reads off a contract', () => {
     it('exposes the regime and the ORDERED credential list, verbatim', () => {
-        const mode = getAuthMode(ManagementApi, 'listOrders');
+        const mode = getAuthMeta(ManagementApi, 'listOrders')?.methods[0];
         if (mode?.kind !== 'apikey') throw new Error(`expected an apikey mode, got ${mode?.kind}`);
 
         expect(mode.regime).toBe('onetablet-partner');
@@ -193,7 +185,7 @@ describe('the auth metadata a spec generator reads off a contract', () => {
      * with TWO keys. A LIST of two objects would tell every partner that either header alone suffices.
      */
     it('carries BOTH halves of a pair, so a generator can AND them rather than OR them', () => {
-        const mode = getAuthMode(ManagementApi, 'listOrders');
+        const mode = getAuthMeta(ManagementApi, 'listOrders')?.methods[0];
         if (mode?.kind !== 'apikey') throw new Error(`expected an apikey mode, got ${mode?.kind}`);
 
         expect(mode.credentials).toHaveLength(2);
@@ -207,7 +199,7 @@ describe('the auth metadata a spec generator reads off a contract', () => {
      * with no guessing and no way for a contract to have claimed both.
      */
     it('distinguishes a bearer credential, which has a location but no header name', () => {
-        const mode = getAuthMode(MixedApi, 'tooling');
+        const mode = getAuthMeta(MixedApi, 'tooling')?.methods[0];
         if (mode?.kind !== 'apikey') throw new Error(`expected an apikey mode, got ${mode?.kind}`);
 
         expect(mode.credentials).toEqual([
@@ -223,7 +215,7 @@ describe('the auth metadata a spec generator reads off a contract', () => {
      */
     it('the missing-auth prescription teaches the credential list, not the deleted one-arg form', () => {
         expect(MISSING_AUTH_DECORATOR_FIX).toContain(
-            "@WpAuthApiKey('regime', [{in: 'header', name: 'x-api-key'}])",
+            "apiKey('regime', [{in: 'header', name: 'x-api-key'}])",
         );
     });
 });

@@ -4,27 +4,11 @@ import { JwtHook, AuthenticatedCaller, MintedJwt } from '@webpieces/http-routing
 import {
     ContextTuple,
     ApiUnauthorizedError,
-    ApiForbiddenError,
-    JwtRequirement,
     toError,
     WebpiecesCoreHeaders,
 } from '@webpieces/core-util';
 
-/**
- * CompanyJwtHook - the company's user-JWT mechanism, bound to the framework {@link JwtHook} so every
- * company service inherits working @WpAuthJwt auth. Written ONCE at the company layer:
- *
- *  - mint: construct and sign application JWT claims in the same authority that verifies them.
- *  - parseJwt: verify a user JWT with `jsonwebtoken` (secret from JWT_SECRET) → userId(`sub`) +
- *    roles(`roles` claim) + the USER_ID context entry.
- *  - authorizeJwt: default roles any-of (via super) PLUS the company rule that an `inOrg: true`
- *    requires an orgId claim. Both are async because {@link JwtHook} is: an app rule like `inOrg`
- *    is a membership question a real service answers from a datastore. This one does not need to,
- *    so its body awaits only `super`.
- *
- * OIDC is NOT wired here — the framework {@link DefaultOidcVerifier} handles service-to-service OIDC
- * by default, so a company service gets it for free. Shared secrets live on {@link CompanyAuthConfig}.
- */
+/** Company JWT authority verifies claims; application authorization runs in CompanyAuthorizationHook. */
 export class CompanyJwtMintRequest {
     constructor(
         public readonly userId: string,
@@ -51,35 +35,25 @@ export class CompanyJwtHook extends JwtHook<CompanyJwtMintRequest> {
     override async parseJwt(token: string): Promise<AuthenticatedCaller> {
         const claims = this.decode(token);
         const subject = claims['sub'] ?? claims['userId'];
-        if (subject === undefined || subject === null || subject === '') {
+        if (typeof subject !== 'string' || !subject.trim()) {
             throw new ApiUnauthorizedError('JWT has no subject (sub/userId) claim');
         }
-        const userId = String(subject);
-        const roles = Array.isArray(claims['roles']) ? claims['roles'].map(String) : [];
+        const userId = subject;
+        const rawRoles = claims['roles'] ?? [];
+        // webpieces-disable no-any-unknown -- verified external JWT claim elements require runtime validation
+        if (!Array.isArray(rawRoles) || !rawRoles.every((role: unknown) => typeof role === 'string' && role.trim())) {
+            throw new ApiUnauthorizedError('JWT roles must be nonempty strings');
+        }
+        const roles: string[] = rawRoles;
+        const entries = [new ContextTuple(WebpiecesCoreHeaders.USER_ID, userId)];
+        const orgId = claims['orgId'];
+        if (typeof orgId === 'string' && orgId.trim()) entries.push(new ContextTuple(WebpiecesCoreHeaders.ORG_ID, orgId));
         return new AuthenticatedCaller(
             userId,
             roles,
-            [new ContextTuple(WebpiecesCoreHeaders.USER_ID, userId)],
+            entries,
             claims,
         );
-    }
-
-    /**
-     * AUTHORIZATION: the company policy over the endpoint's @WpAuthJwt requirement. Default
-     * roles any-of (via super), PLUS this company's custom rule: `inOrg: true` requires the
-     * JWT to carry an orgId claim. This is the pluggable seam — apps enforce their own rules here
-     * without touching the framework.
-     */
-    override async authorizeJwt(
-        values: AuthenticatedCaller,
-        requirement: JwtRequirement,
-    ): Promise<void> {
-        await super.authorizeJwt(values, requirement); // roles any-of
-        if (requirement['inOrg'] === true && !values.claims['orgId']) {
-            throw new ApiForbiddenError(
-                'Endpoint requires an organization (orgId claim) on the JWT',
-            );
-        }
     }
 
     // webpieces-disable no-any-unknown -- jwt claims are an arbitrary provider-defined bag

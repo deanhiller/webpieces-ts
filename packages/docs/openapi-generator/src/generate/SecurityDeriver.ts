@@ -1,10 +1,10 @@
-import { DocumentedApiKey, DocumentedApiKeyCredential } from '@webpieces/api-doc-model';
+import { DocumentedAuth, DocumentedApiKey, DocumentedApiKeyCredential, DocumentedEndpoint } from '@webpieces/api-doc-model';
 import { JsonObject, JsonValue } from '../json/JsonObject';
 import { OpenApiGenerationError } from '../OpenApiGenerationError';
 
 /**
  * `components.securitySchemes` and the `security` requirement, DERIVED from the contract's own
- * `@WpAuthApiKey(regime, credentials)`. The manifest contributes the published KEYS and nothing else.
+ * `apiKey(regime, credentials)`. The manifest contributes the published KEYS and nothing else.
  *
  * ## Why the schemes are not in the manifest
  *
@@ -29,6 +29,47 @@ import { OpenApiGenerationError } from '../OpenApiGenerationError';
  * partner told they may skip the organization header. Hence one object, always.
  */
 export class SecurityDeriver {
+    operation(auth: DocumentedAuth | undefined, apiKeyRequirement: readonly JsonValue[] | undefined): readonly JsonValue[] | undefined {
+        const methods = auth?.methods;
+        if (!methods?.length) return undefined;
+        if (methods.length === 1 && methods[0].kind === 'apikey') return apiKeyRequirement;
+        const alternatives: JsonValue[] = [];
+        for (const method of methods) {
+            if (method.kind === 'apikey') {
+                if (!apiKeyRequirement) throw new Error('Mixed credentials require an explicit API-key security requirement.');
+                alternatives.push(...apiKeyRequirement);
+            } else {
+                const name = this.builtinName(method.kind);
+                // Vendor signatures do not declare their wire headers. Keep the complete canonical
+                // authentication extension rather than inventing a header or publishing a subset.
+                if (!name) return undefined;
+                alternatives.push(new JsonObject().set(name, []));
+            }
+        }
+        return alternatives;
+    }
+
+    addBuiltinSchemes(schemes: JsonObject, endpoints: readonly DocumentedEndpoint[]): JsonObject {
+        const added = new Set<string>();
+        for (const endpoint of endpoints) for (const method of endpoint.auth?.methods ?? []) {
+            const name = this.builtinName(method.kind);
+            if (!name || added.has(name)) continue;
+            if (schemes.has(name)) throw new Error(`securitySchemeNames reserves '${name}' for framework credentials; choose another API-key scheme name.`);
+            added.add(name);
+            schemes.set(name, new JsonObject().set('type', 'http').set('scheme', method.kind === 'shared-secret' ? 'Webpieces' : 'bearer'));
+        }
+        return schemes;
+    }
+
+    private builtinName(kind: string): string | undefined {
+        switch (kind) {
+            case 'jwt': return 'WebpiecesJwt';
+            case 'oidc': return 'WebpiecesOidc';
+            case 'shared-secret': return 'WebpiecesSharedSecret';
+            default: return undefined;
+        }
+    }
+
     /** Every scheme, keyed by the manifest's published names, in declaration order. */
     schemes(
         apiKey: DocumentedApiKey,

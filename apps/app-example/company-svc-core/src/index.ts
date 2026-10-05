@@ -14,3 +14,5 @@ export { CompanySetupOptions } from './CompanySetupOptions';
 export { AppModules, RouteModule } from '@webpieces/http-routing';
 export { CompanyAuthConfig } from './CompanyAuthConfig';
 export { CompanyJwtHook, CompanyJwtMintRequest } from './CompanyJwtHook';
+
+export { CompanyAuthorizationHook } from './CompanyAuthorizationHook';

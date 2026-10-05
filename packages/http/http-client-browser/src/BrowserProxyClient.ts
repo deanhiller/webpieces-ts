@@ -29,6 +29,14 @@ import { RequestLifecycleListener } from './RequestLifecycleListener';
  * This is the ONLY class in webpieces that names ContextMgr.
  */
 export class BrowserProxyClient extends ProxyClient {
+    protected override selectAuthMethod(route: RouteMetadata): import('@webpieces/core-util').AuthMode {
+        const selected = route.authMeta?.methods.find((method: import('@webpieces/core-util').AuthMode) => method.kind === 'jwt' || method.kind === 'public');
+        if (!selected) {
+            const methods = route.authMeta?.methods.map((method: import('@webpieces/core-util').AuthMode) => method.kind === 'apikey' ? `apiKey('${method.regime}', credentials)` : method.kind).join(', ');
+            throw new Error(`Endpoint ${route.apiName}.${route.methodName} declares ${methods}. A browser cannot hold these credentials; call it from a server-side client with the configured verifier credentials.`);
+        }
+        return selected;
+    }
     private config!: ClientConfig;
 
     constructor(
@@ -84,8 +92,8 @@ export class BrowserProxyClient extends ProxyClient {
 
     /**
      * `destination` is always the un-verifying kind here — {@link assertEndpointSupported} below
-     * refuses to bind an @WpAuthOidc / @WpAuthSharedSecret contract, so every browser destination is
-     * @WpAuthJwt or @WpAuthPublic — which means a browser never puts a trusted context key on the wire. It is
+     * refuses to bind an oidc(...) / sharedSecret(...) contract, so every browser destination is
+     * jwt() or @WpAuthPublic — which means a browser never puts a trusted context key on the wire. It is
      * still threaded rather than short-circuited: the rule lives in ContextMgr, one place, for both
      * environments.
      */
@@ -122,10 +130,10 @@ export class BrowserProxyClient extends ProxyClient {
 
     /**
      * Reject a contract this browser cannot satisfy, at bind time rather than on the first call.
-     * Both service-to-service modes need credentials only a server has: @WpAuthOidc needs a runtime
-     * service account to mint a token, @WpAuthSharedSecret needs a secret no browser may ship.
+     * Both service-to-service modes need credentials only a server has: oidc(...) needs a runtime
+     * service account to mint a token, sharedSecret(...) needs a secret no browser may ship.
      *
-     * @WpAuthLocalOnly is deliberately NOT rejected: a browser calling a dev-only endpoint on the
+     * @WpLocalOnly is deliberately NOT rejected: a browser calling a dev-only endpoint on the
      * developer's own server is the motivating case for that mode (shipping browser logs into the
      * server log). It needs no credential — the server refuses it off-local by not having the route.
      *
@@ -144,41 +152,6 @@ export class BrowserProxyClient extends ProxyClient {
                 `Browser Fetch supports only @WpStream(StreamDirection.RESPONSE); ${methodName} is ${route.streaming.direction}.`,
             );
         }
-        const mode = route.authMeta?.mode;
-        if (mode === undefined) {
-            return;
-        }
-        switch (mode.kind) {
-            case 'public':
-            case 'jwt':
-            case 'local-only':
-                return;
-            case 'oidc':
-            case 'shared-secret':
-                throw new Error(
-                    `Endpoint ${methodName} is @${mode.kind === 'oidc' ? 'WpAuthOidc' : 'WpAuthSharedSecret'} — a browser ` +
-                        `cannot hold service credentials. Call it server-side with ClientHttpFactory from ` +
-                        `@webpieces/http-client-node.`,
-                );
-            // @WpAuthWebhook is not "a credential a browser lacks" — it is an endpoint whose ONLY
-            // legitimate caller is the outside vendor that signs the request in its own scheme.
-            // NOTHING in this repo can call it, browser or server, so it is refused at bind time
-            // rather than failing as a 401 on the first call.
-            case 'webhook':
-                throw new Error(
-                    `Endpoint ${methodName} is @WpAuthWebhook('${mode.name}') — only ${mode.name} can call it, ` +
-                        `because only ${mode.name} can produce the signature its WebhookAuthCallback verifies. It is not ` +
-                        `callable from a webpieces client.`,
-                );
-            // @WpAuthApiKey is the same shape of refusal for a different reason: the credential is a
-            // CUSTOMER-held api key whose header names the app's ApiKeyHook chooses, so no webpieces
-            // client knows what to send — and a browser must not ship a customer's key at all.
-            case 'apikey':
-                throw new Error(
-                    `Endpoint ${methodName} is @WpAuthApiKey('${mode.regime}') — its credential is a customer-held ` +
-                        `api key that a browser must never ship, and the header carrying it is the app's ApiKeyHook's ` +
-                        `choice, so no webpieces client can build the call. Only the partner holding the key calls it.`,
-                );
-        }
+        this.selectAuthMethod(route);
     }
 }

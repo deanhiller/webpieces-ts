@@ -221,7 +221,7 @@ export class WebpiecesMiddleware {
      * @param formPost - True for an @Endpoint(..., { formPost: true }) route (parse body as
      *   urlencoded, not JSON). Default false = JSON.
      * @param rawBody - True for an @Endpoint(..., { rawBody: true }) route: retain the verbatim
-     *   bytes + absolute url on the HttpRequest so an @WpAuthWebhook hook can verify a vendor
+     *   bytes + absolute url on the HttpRequest so an webhook(...) hook can verify a vendor
      *   signature over them. Default false = the bytes are dropped once parsed.
      * @param bodyReader - Where the body bytes come from (the router's choice, see
      *   `WebpiecesExpressRouter.setBodyReader`). Required so the router's choice can never be
