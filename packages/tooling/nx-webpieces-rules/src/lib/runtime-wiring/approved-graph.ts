@@ -61,7 +61,7 @@ export class ApprovedWiringGraph {
                 };
                 const ref: ApiRef = { api: resolved.api, type: resolved.transport };
                 if (resolved.conditional !== undefined) ref.conditional = resolved.conditional;
-                if (!resolved.via.startsWith(`${name}#`)) ref.declaredVia = resolved.via;
+                ref.declaredVia = resolved.via;
                 if (resolved.target?.kind === 'service')
                     ref.targetService = resolved.target.service;
                 if (resolved.transport === 'pubsub' && resolved.direction === 'uses')

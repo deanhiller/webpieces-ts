@@ -2,6 +2,7 @@ import { RuleHelp } from '@webpieces/rules-sdk';
 
 /** Owner-authored guidance consumed by the registry catalog. */
 export const ruleHelp: Readonly<Record<string, RuleHelp>> = {
+    'wiring-format': new RuleHelp('Check every canonical wiring.ts for declarative Wiring/AppWiring selections.', 'Use literal return arrays of named BindingModule/RouteModule instances and app-only library Wirings. Keep constructors as prepared-input storage, move setup implementations to imports, use direct service strings and explicit WiringPolicy declarations. Set maxLines explicitly (agreed upstream limit: 200).'),
     'no-file-import-cycles': new RuleHelp(
         'Keep each project free of circular file imports.',
         'Apply this policy in source, or review its explicit settings in {configFile}. An intentional opt-out requires complete OFF settings.',
@@ -23,8 +24,8 @@ export const ruleHelp: Readonly<Record<string, RuleHelp>> = {
         'Apply this policy in source, or review its explicit settings in {configFile}. An intentional opt-out requires complete OFF settings.',
     ),
     'validate-architecture-unchanged': new RuleHelp(
-        'Keep the committed architecture graph aligned with current dependencies and enforce canonical client registrations across ALL CODE in participating runtime owners.',
-        'In src/wiring.ts use new RuntimeClients(options).bindRpc(token, Api, rpcTarget(Api, deployment), filters?) from @webpieces/http-client-node, new RuntimeTaskClients(options).bindPubSub(token, Api, deployment) from @webpieces/cloudtasks-client, and provideRpcClient(token, Api, rpcTarget(Api, deployment)) from @webpieces/http-client-browser. Migrate every supported raw singleton/provider factory, including unchanged owners; preserve tokens and filters. Review graph changes and runtime-deps.json candidates explicitly.',
+        'Keep the committed architecture graph aligned with current dependencies.',
+        'In src/wiring.ts use new RuntimeClients(options).bindRpc(token, Api, deployment, filters?) from @webpieces/http-client-node, new RuntimeTaskClients(options).bindPubSub(token, Api, deployment) from @webpieces/cloudtasks-client, and provideRpcClient(token, Api, deployment) from @webpieces/http-client-browser. wiring-format checks canonical wiring.ts in all participating owners; preserve tokens and filters. Review graph changes and runtime-deps.json candidates explicitly.',
     ),
     'validate-no-architecture-cycles': new RuleHelp(
         'Keep the project dependency architecture free of cycles.',

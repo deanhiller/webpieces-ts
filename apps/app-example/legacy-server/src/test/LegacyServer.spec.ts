@@ -17,11 +17,11 @@ import { Server2Api } from '@webpieces/server2-api';
 import { TYPES } from '../remote/Server2Client';
 import { Server2Simulator } from '../remote/Server2Simulator';
 import { setupCompanyRuntime, CompanySetupOptions } from '@webpieces/company-svc-core';
-import { LegacyAppModules } from '../LegacyAppModules';
+import { LegacyWiring } from '../wiring';
 
 /**
  * Contract-based integration test for the legacy-server example. It builds the node-only
- * ApiFactory from the SAME LegacyAppModules the server main uses (via setupCompanyRuntime), then
+ * ApiFactory from the SAME LegacyWiring the server main uses (via setupCompanyRuntime), then
  * drives the api CONTRACT through createApiClient. NO express, NO HTTP, NO ports: because
  * the tests speak the api contract, they are protocol-agnostic — the express embed is just one
  * binding (server.ts + the e2e HTTP test cover that). Proves the webpieces routes run the full
@@ -72,7 +72,7 @@ let apiFactory: ApiFactory;
 let recorder: FilterOrderRecorder;
 
 /**
- * Build the legacy webpieces API surface from the SAME LegacyAppModules the server main uses,
+ * Build the legacy webpieces API surface from the SAME LegacyWiring the server main uses,
  * rebinding Server2Api to the in-process simulator and adding two order-recording filters to
  * assert priority + glob scoping. Node-only — no express, no ports.
  */
@@ -92,7 +92,7 @@ async function bootLegacyApi(): Promise<void> {
     });
 
     apiFactory = await setupCompanyRuntime(
-        LegacyAppModules.create([
+        new LegacyWiring([
             new FilterDefinition(1500, GlobalOrderFilter, '*'),
             new FilterDefinition(1400, ScopedOrderFilter, '**/SaveController.ts'),
         ]),

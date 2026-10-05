@@ -1,8 +1,15 @@
 {
-    "schemaVersion": 1,
+    "schemaVersion": 2,
     "project": "client-server",
     "framework": "node",
     "exports": {
+        "ApplicationBindings": {
+            "kind": "binding",
+            "relationships": [],
+            "bindingModules": [],
+            "routingModules": [],
+            "wirings": []
+        },
         "AppRoutes": {
             "kind": "routing",
             "relationships": [
@@ -31,15 +38,17 @@
                     "transport": "rpc"
                 }
             ],
-            "selections": []
+            "bindingModules": [],
+            "routingModules": [],
+            "wirings": []
         },
         "ClientServerWiring": {
-            "kind": "plan",
+            "kind": "app",
             "relationships": [],
-            "selections": [
+            "bindingModules": [
                 {
                     "project": "client-server",
-                    "exportedName": "InversifyModule",
+                    "exportedName": "ApplicationBindings",
                     "targets": {},
                     "policies": {}
                 },
@@ -48,19 +57,17 @@
                     "exportedName": "RuntimeClientsModule",
                     "targets": {},
                     "policies": {}
-                },
+                }
+            ],
+            "routingModules": [
                 {
                     "project": "client-server",
                     "exportedName": "AppRoutes",
                     "targets": {},
                     "policies": {}
                 }
-            ]
-        },
-        "InversifyModule": {
-            "kind": "binding",
-            "relationships": [],
-            "selections": []
+            ],
+            "wirings": []
         },
         "RuntimeClientsModule": {
             "kind": "binding",
@@ -74,15 +81,13 @@
                     "transport": "rpc",
                     "target": {
                         "kind": "service",
-                        "service": "server2",
-                        "contract": {
-                            "project": "server2-api",
-                            "exportedName": "Server2Api"
-                        }
+                        "service": "server2"
                     }
                 }
             ],
-            "selections": []
+            "bindingModules": [],
+            "routingModules": [],
+            "wirings": []
         }
     },
     "entry": "ClientServerWiring",

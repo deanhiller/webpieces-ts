@@ -5,7 +5,7 @@ import express, { Express, Request, Response } from 'express';
  * touches them. This is the app a legacy team already runs today.
  *
  * The "webpieces part" is no longer a bespoke builder here — the server main and the test both
- * build the node-only ApiFactory directly with `setupCompanyRuntime(LegacyAppModules.create(...),
+ * build the node-only ApiFactory directly with `setupCompanyRuntime(new LegacyWiring(...),
  * new CompanySetupOptions(...))`, then pick their transport (bindExpress for the embed, or
  * createApiClient for in-process tests).
  */

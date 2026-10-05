@@ -5,13 +5,14 @@ const fixtures: Fixture[] = [];
 afterEach(() => fixtures.splice(0).forEach((fixture) => fixture.cleanup()));
 
 class RuntimeFixture {
-    node(receiver: string, method: string): Fixture {
+    node(receiver: string, method: string, trusted: boolean = true): Fixture {
+        const helper = trusted ? `packages/${receiver === 'RuntimeTaskClients' ? 'cloud/cloudtasks-client' : 'http/http-client-node'}/helpers` : 'helpers';
         const fixture = new Fixture({
             'api.ts': `export abstract class RemoteApi { abstract send(): void; }
                 export const TOKEN = Symbol('RemoteApi');`,
-            'helpers.ts': `export class ${receiver} { ${method}(token: symbol, api: object, target: string): void {} }`,
+            [helper + '.ts']: `export class ${receiver} { ${method}(token: symbol, api: object, target: string): void {} }`,
             'wiring.ts': `import { TOKEN, RemoteApi } from './api';
-                import { ${receiver} as Clients } from './helpers';
+                import { ${receiver} as Clients } from './${helper}';
                 new Clients().${method}(TOKEN, RemoteApi, 'remote');`,
             'root.ts': `import { inject } from 'inversify';
                 import { DocumentDesign } from '@webpieces/core-util';
@@ -49,14 +50,20 @@ describe('canonical runtime clients in DI designs', () => {
         expect(allUnresolved(graph)).toContain('TOKEN');
     });
 
+    it('rejects unrelated classes with the same framework short name', () => {
+        const graph = new RuntimeFixture().node('RuntimeClients', 'bindRpc', false).build();
+        expect(allUnresolved(graph)).toContain('TOKEN');
+    });
+
     it('resolves typed wrapper bindings to the identifier that consumers inject', () => {
         const fixture = new Fixture({
             'api.ts': `export abstract class RemoteApi { abstract send(): void; }
                 export class ClientToken<T> { constructor(public readonly identifier: symbol) {} }
                 export const TOKEN = new ClientToken<RemoteApi>(Symbol('RemoteApi'));`,
             'wiring.ts': `import { TOKEN, RemoteApi } from './api';
-                class RuntimeClients { bindRpc(token: object, api: object, target: string): void {} }
+                import { RuntimeClients } from './packages/http/http-client-node/helpers';
                 new RuntimeClients().bindRpc(TOKEN, RemoteApi, 'remote');`,
+            'packages/http/http-client-node/helpers.ts': 'export class RuntimeClients { bindRpc(token: object, api: object, target: string): void {} }',
             'root.ts': `import { inject } from 'inversify';
                 import { DocumentDesign } from '@webpieces/core-util';
                 import { provideSingleton } from '@webpieces/core-context';
@@ -79,14 +86,14 @@ describe('canonical runtime clients in DI designs', () => {
                 import { AppComponent } from './app.component';
                 bootstrapApplication(AppComponent, { providers: [] });`,
             'api.ts': `export abstract class RemoteApi { abstract send(): void; }`,
-            'helpers.ts': `export class RpcClientProvider {}
+            'packages/http/http-client-browser/helpers.ts': `export class RpcClientProvider {}
                 export function provideRpcClient(token: object, api: object, target: string): RpcClientProvider { return new RpcClientProvider(); }
-                export class BrowserWiring { constructor(providers: RpcClientProvider[]) {} }`,
+                export class BrowserBindings { add(provider: RpcClientProvider): void {} }`,
             'wiring.ts': `import { RemoteApi } from './api';
-                import { BrowserWiring, provideRpcClient as client } from './helpers';
-                export const wiring = new BrowserWiring([client(RemoteApi, RemoteApi, 'remote')]);`,
+                import { BrowserBindings, provideRpcClient as client } from './packages/http/http-client-browser/helpers';
+                export class Clients { configure(bindings: BrowserBindings): void { bindings.add(client(RemoteApi, RemoteApi, 'remote')); } }`,
             'app.component.ts': `import { Component, inject } from '@angular/core';
-                import { RemoteApi } from './api'; import { wiring } from './wiring';
+                import { RemoteApi } from './api'; import { Clients } from './wiring';
                 @Component({ selector: 'app', template: '' })
                 export class AppComponent { private remote = inject(RemoteApi); }`,
         });

@@ -1,6 +1,6 @@
 import express from 'express';
 import { WebpiecesExpressRouter } from '@webpieces/http-server';
-import { ApiFactory, AppModules, setupRuntime, RuntimeSetupOptions } from '@webpieces/http-routing';
+import { ApiFactory, AppWiring, setupRuntime, RuntimeSetupOptions } from '@webpieces/http-routing';
 import {
     toError,
     LogManager,
@@ -12,16 +12,16 @@ import { CompanySetupOptions } from './CompanySetupOptions';
 
 /**
  * setupCompanyRuntime - the thin COMPANY wrapper over the framework {@link setupRuntime}. It
- * forwards the app's {@link AppModules} (binding modules + route groups + headers) plus the
+ * forwards the app's {@link AppWiring} (binding modules + route groups + headers) plus the
  * environment options, so the whole canonical sequence (headers → logging → router → the app's
  * route groups → {@link ApiFactory}) lives in the framework and is reused verbatim. The app's
  * `getHeaders()` returns the company-wide key set (there is no separate company-header tier
  * anymore). Every company express service + its tests call this with the app's
- * `MyAppModules.create()`; tests pass their own {@link CompanySetupOptions} (logger / appOverrides),
+ * `MyAppWiring.create()`; tests pass their own {@link CompanySetupOptions} (logger / appOverrides),
  * else identical to prod.
  */
 export async function setupCompanyRuntime(
-    appModules: AppModules,
+    appModules: AppWiring,
     options: CompanySetupOptions = new CompanySetupOptions(),
 ): Promise<ApiFactory> {
     // Install the app's ONE ErrorTranslator at the same point we install the logger/registry
@@ -58,12 +58,12 @@ export async function setupCompanyRuntime(
 /**
  * bootstrapServer - the ONE shared startup every company express service uses.
  *
- * The app supplies its port/logName + its {@link AppModules} — the SAME `MyAppModules.create()`
+ * The app supplies its port/logName + its {@link AppWiring} — the SAME `MyAppWiring.create()`
  * its tests build, which declares its binding modules + route groups + headers. So each entry
  * point stays tiny and the server + tests share one server-surface declaration:
  *
  * ```ts
- * bootstrapServer(new BootstrapOptions(8200, 'Server'), ClientServerAppModules.create());
+ * bootstrapServer(new BootstrapOptions(8200, 'Server'), new ClientServerWiring());
  * ```
  *
  * Sequence: setupCompanyRuntime(appModules) (HeaderRegistry → log backend → router+container →
@@ -73,7 +73,7 @@ export async function setupCompanyRuntime(
  */
 export async function bootstrapServer(
     options: BootstrapOptions,
-    appModules: AppModules,
+    appModules: AppWiring,
     setupOptions: CompanySetupOptions = new CompanySetupOptions(),
 ): Promise<void> {
     const log = LogManager.getLogger(options.logName);

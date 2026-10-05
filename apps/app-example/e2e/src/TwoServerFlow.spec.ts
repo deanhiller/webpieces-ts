@@ -7,8 +7,8 @@ import { AUTH_CONFIG, JWT_HOOK } from '@webpieces/http-routing';
 import { SaveResponse } from '@webpieces/client-server-api';
 import { ClientRegistry } from '@webpieces/core-util';
 import { setupCompanyRuntime, CompanySetupOptions } from '@webpieces/company-svc-core';
-import { ClientServerAppModules } from '../../client-server/src/ClientServerAppModules';
-import { Server2AppModules } from '../../server2/src/Server2AppModules';
+import { ClientServerWiring } from '../../client-server/src/wiring';
+import { Server2Wiring } from '../../server2/src/wiring';
 import {
     TestAuthConfig,
     TestJwtHook,
@@ -25,7 +25,7 @@ import {
  *                      |  server's RequestContext -> outbound headers)
  *                      +--HTTP--> server2 :18202  (implements server2-api)
  *
- * Each server is built from its app-owned AppModules (XxxAppModules.create() — the SAME
+ * Each server is built from its app-owned AppWiring (XxxAppWiring.create() — the SAME
  * declaration its own main + tests use) via setupCompanyRuntime, and served over an app-owned
  * express via WebpiecesExpressRouter (bindAndStartExpress) — the same production path, just with
  * the test owning express.
@@ -53,7 +53,7 @@ async function bootBothServers(): Promise<void> {
     // One process, one global HeaderRegistry serving TWO servers. Build server2 FIRST (no
     // app-specific headers) and client-server LAST (it carries the header superset), so the
     // shared global registry ends configured as the UNION both servers need.
-    const server2ApiFactory = await setupCompanyRuntime(Server2AppModules.create());
+    const server2ApiFactory = await setupCompanyRuntime(new Server2Wiring());
     server2Http = await new WebpiecesExpressRouter(server2ApiFactory).bindAndStartExpress(
         express(),
         server2Port,
@@ -66,7 +66,7 @@ async function bootBothServers(): Promise<void> {
         (await options.rebind(JWT_HOOK)).to(TestJwtHook);
     });
     const clientApiFactory = await setupCompanyRuntime(
-        ClientServerAppModules.create(),
+        new ClientServerWiring(),
         new CompanySetupOptions(undefined, authOverride),
     );
     clientServerHttp = await new WebpiecesExpressRouter(clientApiFactory).bindAndStartExpress(

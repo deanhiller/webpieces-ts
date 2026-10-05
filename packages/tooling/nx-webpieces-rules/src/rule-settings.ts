@@ -2,6 +2,7 @@ import { ConfigObject } from '@webpieces/rules-sdk';
 
 /** Optional knobs only. Required behaviour is always supplied by the repository. */
 export const optionalTuning: Readonly<Record<string, ConfigObject>> = {
+    "wiring-format": {},
     "no-file-import-cycles": {},
     "runtime-architecture": {},
     "nx-wiring": {},
@@ -22,6 +23,12 @@ export const optionalTuning: Readonly<Record<string, ConfigObject>> = {
 
 /** Written for review by setup/sync; never used as a loader fallback. */
 export const recommendedSeeds: Readonly<Record<string, ConfigObject>> = {
+    "wiring-format": {
+        "mode": "RUN_EVERY_TIME",
+        "maxLines": 200,
+        "turnOffRuleUntilEpoch": 0,
+        "turnOffRuleWhileOnBranch": null
+    },
     "no-file-import-cycles": {
         "mode": "RUN_EVERY_TIME",
         "turnOffRuleUntilEpoch": 0,

@@ -4,52 +4,66 @@ Runtime topology belongs in each participating project's `src/wiring.ts`. Tag ap
 `webpieces` and libraries with exported wiring `webpieces-lib`. Imports establish source dependencies;
 only exports selected by an application's plan establish runtime relationships.
 
-`rpcTarget(Api, deployment)` is the sole public target constructor; `RpcTarget<T>` is exported as a type. RPC bindings require this descriptor.
+Node and browser use the same roles. `Wiring` exposes `getBindingModules()` and
+`getRoutingModules()`. `AppWiring` adds `getWirings()` for one level of library composition;
+Node also retains `getHeaders()`. Import the concrete interfaces from `@webpieces/http-routing`
+or `@webpieces/http-client-browser`. The shared core contains only platform-neutral topology.
 
-Node plans return `new ServerWiring(host, new ServerWiringOptions(bindingModules, routingModules))`.
-Binding modules are Inversify ContainerModules; routing modules are RouteModules. Keep them separate.
-Browser plans return `new BrowserWiring(providers)` and applications install `toProviders()` through
-Angular's existing application configuration. The browser package imports neither Angular nor Node.
+Each selection getter returns a literal array of named instances:
 
-Use `RuntimeClients.bindRpc(token, Api, rpcTarget(Api, deployment))` inside binding modules and
-`provideRpcClient(token, Api, rpcTarget(Api, deployment))` in browser provider lists. These factories
-remain lazy and preserve the token that tests override. A deployment identity selects a service;
-URLs, environment configuration, context stores, authentication and credentials remain runtime data.
-`ClientToken<T>` offers optional invariant typed Node tokens; raw symbols remain supported.
-`RuntimeTaskClients.bindPubSub(token, Api, deployment)` supplies lazy singleton Cloud Tasks clients.
-Raw factory APIs remain the implementation primitives for integrations. Supported hand-written
-singleton DI factories and browser providers are rejected, including inside canonical `wiring.ts`.
-This is an ALL-CODE grammar check: architecture validation scans every participating runtime owner,
-including unchanged projects outside the current diff, and reports all supported occurrences together.
-Use `new RuntimeClients(options)` once per module and preserve tokens, API, target and optional RPC
-filters in each `bindRpc` call. Pub/sub and browser helpers have no filter argument; registrations
-with unsupported options, transient scope or additional callback work remain low-level integrations.
-The per-owner source proof checks the same grammar before producing candidates. The generated
-architecture instructions and rule catalog contain these helper migration steps.
+```ts
+getWirings(): Wiring[] { return [new AuthWiring(this.config)]; }
+getBindingModules(): BindingModule[] { return [new ApplicationBindings()]; }
+getRoutingModules(): RouteModule[] { return [new ApplicationRoutes()]; }
+```
 
-## Schema version 1
+Getters contain no spreads, helpers, nested arrays, casts, or setup. Constructors store prepared
+inputs using parameter properties. Only an application can select libraries. `wiring-format`
+checks every tagged owner's canonical `src/wiring.ts`, including unchanged owners, using its explicit
+`maxLines` configuration (the agreed limit is 200). Imported implementations are resolved for graph
+facts, but their non-wiring source files are outside this format rule.
 
-Each project approves a `runtime-deps.json` with these fields:
+Node binding modules implement `configure(options: ContainerModuleLoadOptions)`; asynchronous
+configuration is awaited. Route modules implement `configure(router: WebpiecesRouter)`.
+Use `new RuntimeClients(options).bindRpc(token, Api, 'deployment')` or
+`RuntimeTaskClients.bindPubSub(token, Api, 'deployment')`. Destinations are strings; `rpcTarget`
+and `RpcTarget` have been removed. API/token typing, singleton scope, filters and test tokens remain.
+Low-level implementation factories belong in imported implementation modules.
 
-- `schemaVersion`: exactly 1.
-- `project`: the Nx owning project name.
-- `framework`: `node`, `angular`, or `browser`.
-- `exports`: map of exported source symbols to wiring declarations.
-- `entry`: the application's exported plan class; absent for libraries.
-- `host`: Node deployment identity, matching project metadata `serviceName`.
+Browser modules configure a `BrowserBindings` collector. `bindings.add(provideRpcClient(token,
+Api, 'deployment'))` remains lazy. `BrowserWiringProviders.toProviders(app)` installs the collected
+providers through Angular's application configuration. Named BrowserValueProvider,
+BrowserFactoryProvider, BrowserClassProvider and BrowserExistingProvider recipes preserve provider
+and dependency identities without importing Angular or Node into the browser package.
 
-Each export has `kind` (`binding`, `routing`, `providers`, `plan`, or `external`),
-`relationships`, and `selections`. Each relationship identifies its canonical contract as
-`{project, exportedName}`, its `direction` (`implements` or `uses`), and its `transport`
-(`rpc`, `pubsub`, or `external`). Uses include a target: a literal `service` identity,
-a named `parameter`, an `external` system, or an explicit `unknown` reason.
-Typed service targets also carry their contract capability identity.
+The runtime materializes each selected instance's lists once. It runs application bindings then
+library bindings in list order, followed by application routes then library routes. Repeated
+selections are retained. Node test override modules still load last, before route configuration.
+Company-owned config, context, authentication, errors and URLs remain outside framework topology.
+
+## Schema version 2
+
+Each project explicitly approves a `runtime-deps.json` containing:
+
+- `schemaVersion`: exactly 2; older versions fail with migration instructions.
+- `project` and `framework`: the Nx owner and `node`, `angular`, or `browser`.
+- `exports`: map of resolved named exports, with `kind` of `app`, `wiring`, `binding`, `routing`, or `external`.
+- `entry`: exactly one app export for applications; absent for libraries.
+- `host`: Node app deployment identity from project metadata; absent for libraries.
+
+Each export has `relationships`, `bindingModules`, `routingModules` and `wirings`. Only an app
+may populate `wirings`; leaves contain facts rather than selections. The two module channels are
+validated independently. Each relationship identifies its canonical contract as
+`{project, exportedName}`, direction (`implements` or `uses`), and transport (`rpc`, `pubsub`,
+or `external`). Uses include a target: a service identity, forwarded named parameter, external
+system, or explicit unknown reason. Graph-relevant prepared constructor paths are inferred from
+actual declarations, including nested config fields; unused config and credentials are omitted.
+Extraction resolves imports, aliases and inherited methods without running application code.
 
 Each selection names `project` and `exportedName`, supplies a `targets` map, and supplies a
 `policies` map. Library arguments are substituted per selection; two selections can bind the
 same API to different deployments. Unselected library exports contribute no relationships.
-Missing declarations, exports, targets, policies, invalid capability identities and composition
-cycles fail before graph output is written. Unknown schema fields are rejected.
+Missing declarations, exports, targets, policies, invalid capability identities and unsupported app/library nesting fail before graph output is written. Unknown schema fields are rejected.
 
 Topology conditions use an explicit `WiringPolicy` parameter and `if (policy.enabled)`.
 Pass `new WiringPolicy(name, expression)` at composition. Literal booleans resolve to an enabled
@@ -93,8 +107,8 @@ external systems. Generation never migrates or approves contract source on the c
 
 ## Release and migration
 
-Publish declaration tooling and client helpers first. Upgrade the producer's installed catalog to
-that release before switching its applications, approving per-project declarations and generating
+Publish the compatible declaration tooling and runtime family first. Upgrade the producer's installed catalog to
+that release before enabling the new public rule configuration, approving per-project declarations and generating
 architecture. Consumers then upgrade their installed tooling and migrate all saved runtime owners
 in one reviewed change. Declaration-only generation fails clearly on unmigrated owners; this failure
 does not prevent rendering committed snapshots with `visualize` or `visualize-runtime`.
@@ -108,3 +122,10 @@ Both HTML graphs default to readable scale with contained scrolling. Fit is expl
 resets zoom. Runtime nodes show Implements/Uses counts; hover, focus or click opens full qualified
 facts and provenance. Edges keep one or two API names inline; larger sets open a Uses dropdown.
 Hidden external destinations remain in node details and queue producer inference is labeled.
+
+The framework producer tests its pending v2 examples against local tooling through
+`scripts/wiring-source-targets.cjs`. This redirects source proof and graph executors while preserving
+all installed validation dependencies. `architecture:wiring-format-source` uses the explicit
+`rules/wiring-source-policy.json` limit until the installed manifest knows the published rule;
+it does not add unknown rule keys to the installed manifest. Source graph generation injects compiled
+client assets through `ArchitectureGenerator`; the published executor retains its normal assets.

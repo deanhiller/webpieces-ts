@@ -78,56 +78,57 @@ function collectDeps(depsExpr: ts.Expression | undefined, checker: ts.TypeChecke
 }
 
 /** Record one provider-object literal (`{ provide, useX }`) as a binding. */
-function collectProviderObject(
-    obj: ts.ObjectLiteralExpression,
-    checker: ts.TypeChecker,
-    workspaceRoot: string,
-    file: string,
-    table: BindingTable,
-): void {
-    const props = objectProps(obj);
-    const provideExpr = props.get('provide');
-    if (!provideExpr) return;
+class ProviderRecipes {
+    collect(
+        props: Map<string, ts.Expression>,
+        checker: ts.TypeChecker,
+        workspaceRoot: string,
+        file: string,
+        table: BindingTable,
+    ): void {
+        const provideExpr = props.get('provide');
+        if (!provideExpr) return;
 
-    const provideClass = resolveClassDeclaration(provideExpr, checker);
-    const token = provideClass
-        ? classTokenKey(provideClass, workspaceRoot)
-        : resolveTokenKey(provideExpr, checker, workspaceRoot);
+        const provideClass = resolveClassDeclaration(provideExpr, checker);
+        const token = provideClass
+            ? classTokenKey(provideClass, workspaceRoot)
+            : resolveTokenKey(provideExpr, checker, workspaceRoot);
 
-    const useClass = props.get('useClass');
-    const useValue = props.get('useValue');
-    const useFactory = props.get('useFactory');
-    const useExisting = props.get('useExisting');
+        const useClass = props.get('useClass');
+        const useValue = props.get('useValue');
+        const useFactory = props.get('useFactory');
+        const useExisting = props.get('useExisting');
 
-    if (useClass) {
-        const impl = resolveClassDeclaration(useClass, checker);
-        table.add(new Binding(token.key, token.display, 'to', ANGULAR_SCOPE, impl, useClass.getText(), file));
-        return;
-    }
-    if (useExisting) {
-        // Alias: T resolves to whatever `useExisting` points at — resolve through
-        // to the target impl class so the walk continues into its dependencies.
-        const impl = resolveClassDeclaration(useExisting, checker);
-        table.add(new Binding(token.key, token.display, 'to', ANGULAR_SCOPE, impl, useExisting.getText(), file));
-        return;
-    }
-    if (useFactory) {
-        const deps = collectDeps(props.get('deps'), checker, workspaceRoot);
-        const isApiBoundary = isApiClientBoundary(useFactory, checker);
-        table.add(
-            new Binding(token.key, token.display, 'toDynamicValue', ANGULAR_SCOPE, null, firstLine(useFactory.getText()), file, deps, isApiBoundary),
-        );
-        return;
-    }
-    if (useValue) {
-        table.add(
-            new Binding(token.key, token.display, 'toConstantValue', ANGULAR_SCOPE, null, firstLine(useValue.getText()), file),
-        );
-        return;
-    }
-    // `{ provide: T }` with no recipe — treat the token itself as the impl class.
-    if (provideClass) {
-        table.add(new Binding(token.key, token.display, 'to', ANGULAR_SCOPE, provideClass, provideExpr.getText(), file));
+        if (useClass) {
+            const impl = resolveClassDeclaration(useClass, checker);
+            table.add(new Binding(token.key, token.display, 'to', ANGULAR_SCOPE, impl, useClass.getText(), file));
+            return;
+        }
+        if (useExisting) {
+            // Alias: T resolves to whatever `useExisting` points at — resolve through
+            // to the target impl class so the walk continues into its dependencies.
+            const impl = resolveClassDeclaration(useExisting, checker);
+            table.add(new Binding(token.key, token.display, 'to', ANGULAR_SCOPE, impl, useExisting.getText(), file));
+            return;
+        }
+        if (useFactory) {
+            const deps = collectDeps(props.get('deps'), checker, workspaceRoot);
+            const isApiBoundary = isApiClientBoundary(useFactory, checker);
+            table.add(
+                new Binding(token.key, token.display, 'toDynamicValue', ANGULAR_SCOPE, null, firstLine(useFactory.getText()), file, deps, isApiBoundary),
+            );
+            return;
+        }
+        if (useValue) {
+            table.add(
+                new Binding(token.key, token.display, 'toConstantValue', ANGULAR_SCOPE, null, firstLine(useValue.getText()), file),
+            );
+            return;
+        }
+        // `{ provide: T }` with no recipe — treat the token itself as the impl class.
+        if (provideClass) {
+            table.add(new Binding(token.key, token.display, 'to', ANGULAR_SCOPE, provideClass, provideExpr.getText(), file));
+        }
     }
 }
 
@@ -153,7 +154,29 @@ function collectProviderElement(
     }
 
     if (ts.isObjectLiteralExpression(element)) {
-        collectProviderObject(element, checker, workspaceRoot, file, table);
+        new ProviderRecipes().collect(objectProps(element), checker, workspaceRoot, file, table);
+    }
+}
+
+/** Named browser recipes preserve the same aliases and factory dependency evidence. */
+class NamedBrowserProviders {
+    collect(node: ts.NewExpression, checker: ts.TypeChecker, root: string, file: string, table: BindingTable): void {
+        let symbol = checker.getSymbolAtLocation(node.expression);
+        if (symbol !== undefined && (symbol.flags & ts.SymbolFlags.Alias) !== 0)
+            symbol = checker.getAliasedSymbol(symbol);
+        const name = symbol?.getName();
+        const recipe = name === 'BrowserValueProvider' ? 'useValue'
+            : name === 'BrowserFactoryProvider' ? 'useFactory'
+            : name === 'BrowserClassProvider' ? 'useClass'
+            : name === 'BrowserExistingProvider' ? 'useExisting' : undefined;
+        const declaration = symbol?.valueDeclaration;
+        if (recipe === undefined || declaration === undefined ||
+            !/(?:packages\/http\/|node_modules\/@webpieces\/)http-client-browser\//.test(declaration.getSourceFile().fileName)) return;
+        const args = node.arguments;
+        if (args === undefined || args.length < 2) return;
+        const props = new Map<string, ts.Expression>([['provide', args[0]], [recipe, args[1]]]);
+        if (args[2] !== undefined) props.set('deps', args[2]);
+        new ProviderRecipes().collect(props, checker, root, file, table);
     }
 }
 
@@ -191,12 +214,14 @@ export function collectAngularProviders(
 ): BindingTable {
     const table = new BindingTable();
     const clients = new RuntimeClientBindings();
+    const providers = new NamedBrowserProviders();
 
     for (const sourceFile of program.getSourceFiles()) {
         if (!isAnalyzableFile(sourceFile)) continue;
         const file = relativeFile(workspaceRoot, sourceFile);
 
         const visit = (node: ts.Node): void => {
+            if (ts.isNewExpression(node)) providers.collect(node, checker, workspaceRoot, file, table);
             if (ts.isCallExpression(node)) {
                 const client = clients.collectBrowser(node, checker, workspaceRoot);
                 if (client !== undefined) table.add(client);

@@ -2,6 +2,7 @@ import { ApplicationConfig, provideZoneChangeDetection } from '@angular/core';
 import { provideRouter } from '@angular/router';
 import { routes } from './app.routes';
 import { ApplicationBrowserWiring } from '../wiring';
+import { BrowserWiringProviders } from '@webpieces/http-client-browser';
 
 /**
  * Application configuration with dependency injection setup.
@@ -32,6 +33,6 @@ export const appConfig: ApplicationConfig = {
         provideZoneChangeDetection({ eventCoalescing: true }),
         provideRouter(routes),
 
-        ...new ApplicationBrowserWiring().getRuntimeWiring().toProviders(),
+        ...new BrowserWiringProviders().toProviders(new ApplicationBrowserWiring()),
     ],
 };

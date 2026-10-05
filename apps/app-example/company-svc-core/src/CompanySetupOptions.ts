@@ -11,7 +11,7 @@ import { WebpiecesConfig } from '@webpieces/http-routing';
 
 /**
  * CompanySetupOptions - the ENVIRONMENT/wiring inputs to {@link setupCompanyRuntime} (everything
- * NOT declared by the app's {@link AppModules}): the logging backend, the test-override module,
+ * NOT declared by the app's {@link AppWiring}): the logging backend, the test-override module,
  * and config. Defaulted so the real server passes nothing (`setupCompanyRuntime(appModules)`) and
  * tests pass only what they override.
  *

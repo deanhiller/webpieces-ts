@@ -16,7 +16,7 @@ import { ClientHttpFactory, ClientConfig, NodeProxyClient, DnsAddressResolver } 
 import { GcpOidc } from '@webpieces/gcp-identity';
 import { PublicApi, SecureApi } from '@webpieces/client-server-api';
 import { setupCompanyRuntime } from '@webpieces/company-svc-core';
-import { ClientServerAppModules } from '../../client-server/src/ClientServerAppModules';
+import { ClientServerWiring } from '../../client-server/src/wiring';
 
 class SurfaceError extends Error {}
 
@@ -87,7 +87,7 @@ let translators: SurfaceTranslator;
 beforeAll(async () => {
     ClientRegistry.resetForTests();
     // Actual production modules, routes, filters and controllers from the example app.
-    factory = await setupCompanyRuntime(ClientServerAppModules.create());
+    factory = await setupCompanyRuntime(new ClientServerWiring());
     server = await new WebpiecesExpressRouter(factory).bindAndStartExpress(express(), 0);
     baseUrl = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
     ClientRegistry.addUrlMapping('boundary-demo', baseUrl);

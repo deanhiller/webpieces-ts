@@ -1,4 +1,4 @@
-import { ContainerModule } from 'inversify';
+import { ContainerModule, ContainerModuleLoadOptions } from 'inversify';
 import {
     HeaderRegistry,
     Locality,
@@ -9,18 +9,19 @@ import {
 } from '@webpieces/core-util';
 import { WebpiecesConfig } from './WebpiecesConfig';
 import { WebpiecesRouterFactory } from './WebpiecesRouter';
-import { AppModules } from './AppModules';
+import { AppWiring, BindingModule } from './Wiring';
+import { WiringModules } from '@webpieces/http-client-core';
 import { ApiFactory } from './ApiFactory';
 
 /**
  * RuntimeSetupOptions - the environment/wiring inputs to {@link setupRuntime} (everything NOT
- * declared by the app's {@link AppModules}): the logging backend, whether to include the platform
+ * declared by the app's {@link AppWiring}): the logging backend, whether to include the platform
  * default headers, and config. Data-only structure (a class, per the webpieces guidelines). The
- * app's own binding modules + route groups + headers come from the AppModules passed alongside;
+ * app's own binding modules + route groups + headers come from the AppWiring passed alongside;
  * the test-override module is the separate `appOverrides` param of {@link setupRuntime}.
  *
  * Headers: {@link HeaderRegistry.configure} registers the platform defaults (when
- * `platformHeaders` is true) plus AppModules.getHeaders() (by convention the company-wide set).
+ * `platformHeaders` is true) plus AppWiring.getHeaders() (by convention the company-wide set).
  */
 export class RuntimeSetupOptions {
     constructor(
@@ -67,7 +68,7 @@ export class RuntimeSetupOptions {
  */
 export async function setupRuntime(
     options: RuntimeSetupOptions,
-    appModules: AppModules,
+    appModules: AppWiring,
     /** A single DI module loaded LAST so tests can rebind bindings to mocks.
      * Or special case servers that want to override specific things */
     appOverrides?: ContainerModule,
@@ -85,21 +86,24 @@ export async function setupRuntime(
     // this call is what lets a local-only endpoint exist — never what hides one.
     RuntimeLocality.declare(options.locality);
 
-    // 1. Register the global HeaderRegistry FIRST (this service's own keys come from AppModules).
+    // 1. Register the global HeaderRegistry FIRST (this service's own keys come from AppWiring).
     HeaderRegistry.configure(appModules.getHeaders(), options.platformHeaders);
 
     // 2. Install the logging backend ONCE, before anything else logs.
     LogManager.setFactory(options.loggerFactory);
 
     // 3. Build the node-only router + DI container.
+    const modules = new WiringModules(appModules);
     const router = await WebpiecesRouterFactory.create({
-        appBindings: [...appModules.getBindingModules()],
+        appBindings: modules.bindingModules.map(
+            (module: BindingModule) => new ContainerModule((load: ContainerModuleLoadOptions) => module.configure(load)),
+        ),
         appOverrides: appOverrides,
         config: options.config ?? new WebpiecesConfig(),
     });
 
     // 4. Let each route group declare its routes + filters, then hand back the consumer surface.
-    for (const routeModule of appModules.getRoutingModules()) {
+    for (const routeModule of modules.routingModules) {
         routeModule.configure(router);
     }
     return router;

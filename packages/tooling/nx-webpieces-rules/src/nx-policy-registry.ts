@@ -21,6 +21,7 @@ import {
     FrameworkFolderConfig,
 } from './configs/tag-truth-configs';
 import { NativeActions, NativeAction } from './native-actions';
+import { WiringFormatConfig } from './configs/wiring-format-config';
 
 export class NxPolicy {
     constructor(
@@ -31,6 +32,11 @@ export class NxPolicy {
 
 const actions = new NativeActions();
 export const NX_POLICIES: readonly NxPolicy[] = [
+    new NxPolicy(
+        new OwnedRuleDefinition('wiring-format', WiringFormatConfig.SCHEMA, RULE_SCHEMA_API_VERSION,
+            optionalTuning['wiring-format'], recommendedSeeds['wiring-format'], 'rules', ruleHelp['wiring-format']),
+        actions.wiringFormat,
+    ),
     new NxPolicy(
         new OwnedRuleDefinition(
             'no-file-import-cycles',

@@ -364,6 +364,9 @@ importers:
       '@webpieces/gcp-identity':
         specifier: workspace:*
         version: link:../../cloud/gcp-identity
+      '@webpieces/http-client-core':
+        specifier: workspace:*
+        version: link:../http-client-core
       inversify:
         specifier: 7.10.4
         version: 7.10.4(reflect-metadata@0.2.2)

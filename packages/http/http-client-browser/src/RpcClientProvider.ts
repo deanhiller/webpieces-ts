@@ -1,4 +1,4 @@
-import type { ApiPrototype, RpcTarget } from '@webpieces/http-client-core';
+import type { ApiPrototype } from '@webpieces/http-client-core';
 import { ClientHttpBrowserFactory } from './ClientHttpBrowserFactory';
 import { ClientConfig } from './ClientConfig';
 
@@ -9,18 +9,18 @@ export class RpcClientProvider<T extends object> {
     constructor(
         public readonly provide: ApiPrototype<T> | symbol,
         private readonly api: ApiPrototype<T>,
-        private readonly target: RpcTarget<T>,
+        private readonly destination: string,
     ) {}
 
     readonly useFactory = (factory: ClientHttpBrowserFactory, _config: ClientConfig): T =>
-        factory.createRpcClient(this.api, new ClientConfig(this.target.serviceName));
+        factory.createRpcClient(this.api, new ClientConfig(this.destination));
 }
 
 // webpieces-disable no-function-outside-class -- declarative framework integration seam
 export function provideRpcClient<T extends object>(
     token: ApiPrototype<NoInfer<T>> | symbol,
     api: ApiPrototype<T>,
-    target: RpcTarget<NoInfer<T>>,
+    destination: string,
 ): RpcClientProvider<T> {
-    return new RpcClientProvider(token, api, target);
+    return new RpcClientProvider(token, api, destination);
 }

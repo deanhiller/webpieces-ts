@@ -22,7 +22,6 @@ import { loadBlessedGraph, graphFileExists } from '../../lib/graph-loader';
 import type { DependenciesFile } from '../../lib/graph-loader';
 import { collectProjectInfo, enrichGraph, MetadataValidationError } from '../../lib/graph-metadata';
 import { TagTruthCheck } from '../../lib/tag-truth';
-import { WorkspaceClientBindings } from '../../lib/runtime-wiring/canonical-clients';
 import { ApprovedWiringGraph } from '../../lib/runtime-wiring/approved-graph';
 import type { ExternalSystemDecls } from '../../lib/api-usage/api-relations';
 import { ApiContractFiles } from '../../lib/api-contract-files';
@@ -149,7 +148,6 @@ export class CurrentGraphBuilder {
         const currentGraph = sortGraphTopologically(reducedGraph);
         console.log('🏷️  Enriching graph with framework + responsibilities metadata...');
         const projectInfos = await collectProjectInfo();
-        new WorkspaceClientBindings().assert(workspaceRoot, projectInfos);
         enrichGraph(currentGraph, projectInfos, workspaceRoot);
         new TagTruthCheck().assertTrue(currentGraph, projectInfos, workspaceRoot);
         new ApprovedWiringGraph().attach(workspaceRoot, currentGraph, projectInfos, graphPath);

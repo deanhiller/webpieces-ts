@@ -1,5 +1,5 @@
 import type { ContainerModuleLoadOptions, ServiceIdentifier } from 'inversify';
-import type { ApiPrototype, ClientFilterDefinition, RpcTarget } from '@webpieces/http-client-core';
+import type { ApiPrototype, ClientFilterDefinition } from '@webpieces/http-client-core';
 import { ClientToken } from '@webpieces/http-client-core';
 import { ClientHttpFactory } from './ClientHttpFactory';
 import { ClientConfig } from './ClientConfig';
@@ -11,7 +11,7 @@ export class RuntimeClients {
     bindRpc<T extends object>(
         token: ServiceIdentifier<NoInfer<T>> | ClientToken<NoInfer<T>>,
         api: ApiPrototype<T>,
-        target: RpcTarget<NoInfer<T>>,
+        destination: string,
         filters?: readonly ClientFilterDefinition[],
     ): void {
         this.options
@@ -19,7 +19,7 @@ export class RuntimeClients {
             .toDynamicValue((context) =>
                 context
                     .get(ClientHttpFactory)
-                    .createRpcClient(api, new ClientConfig(target.serviceName), filters),
+                    .createRpcClient(api, new ClientConfig(destination), filters),
             )
             .inSingletonScope();
     }

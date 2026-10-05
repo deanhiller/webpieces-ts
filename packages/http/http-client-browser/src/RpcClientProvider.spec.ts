@@ -1,10 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
-import { rpcTarget } from '@webpieces/http-client-core';
 import { ClientConfig } from './ClientConfig';
 import { ClientHttpBrowserFactory } from './ClientHttpBrowserFactory';
 import { MutableContextStore } from './MutableContextStore';
 import { provideRpcClient } from './RpcClientProvider';
-import { BrowserWiring } from './BrowserWiring';
 
 abstract class Api {
     abstract read(): string;
@@ -21,11 +19,10 @@ describe('browser RPC providers', () => {
         const second = Symbol('second');
         const factory = new ClientHttpBrowserFactory(new MutableContextStore());
         const spy = vi.spyOn(factory, 'createRpcClient').mockReturnValue(new Stub());
-        const plan = new BrowserWiring([
-            provideRpcClient(first, Api, rpcTarget(Api, 'first-deployment')),
-            provideRpcClient(second, Api, rpcTarget(Api, 'second-deployment')),
-        ]);
-        const providers = plan.toProviders();
+        const providers = [
+            provideRpcClient(first, Api, 'first-deployment'),
+            provideRpcClient(second, Api, 'second-deployment'),
+        ];
         expect(spy).not.toHaveBeenCalled();
         expect(providers.map((provider) => provider.provide)).toEqual([first, second]);
         providers[0].useFactory(factory, new ClientConfig('shared-default'));

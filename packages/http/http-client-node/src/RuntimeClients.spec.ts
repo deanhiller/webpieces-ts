@@ -3,7 +3,6 @@ import { Container, ContainerModule } from 'inversify';
 import { describe, expect, it, vi } from 'vitest';
 import { RuntimeClients } from './RuntimeClients';
 import { ClientHttpFactory } from './ClientHttpFactory';
-import { rpcTarget } from '@webpieces/http-client-core';
 
 abstract class ExampleApi {
     abstract read(): string;
@@ -32,7 +31,7 @@ describe('RuntimeClients', () => {
                 new RuntimeClients(options).bindRpc(
                     ExampleApi,
                     ExampleApi,
-                    rpcTarget(ExampleApi, 'first'),
+                    'first',
                 );
             }),
         );
@@ -57,7 +56,7 @@ describe('RuntimeClients', () => {
                 new RuntimeClients(options).bindRpc(
                     token,
                     ExampleApi,
-                    rpcTarget(ExampleApi, 'production'),
+                    'production',
                 );
             }),
             new ContainerModule(async (options) => {
@@ -77,8 +76,8 @@ describe('RuntimeClients', () => {
         await container.load(
             new ContainerModule((options) => {
                 const clients = new RuntimeClients(options);
-                clients.bindRpc(first, ExampleApi, rpcTarget(ExampleApi, 'first'));
-                clients.bindRpc(second, ExampleApi, rpcTarget(ExampleApi, 'second'));
+                clients.bindRpc(first, ExampleApi, 'first');
+                clients.bindRpc(second, ExampleApi, 'second');
             }),
         );
         expect(container.get(first)).not.toBe(container.get(second));

@@ -1,14 +1,11 @@
-import * as path from 'path';
 import * as ts from 'typescript';
-import { Option, RuleFailError } from '@webpieces/rules-config';
-import type { ProjectInfo } from '../project-info';
-import { createProjectProgram } from '../di-graph/program';
 
-/** ALL-CODE grammar check: no git diff, line exemptions, or wiring.ts carve-out. */
+/** Replacement diagnostics used only by the canonical wiring-format analyzer. */
 export class CanonicalClientBindings {
     constructor(private readonly checker: ts.TypeChecker) {}
 
     problems(file: ts.SourceFile): string[] {
+        if (!/(?:^|\/)wiring\.ts$/.test(file.fileName)) return [];
         const problems: string[] = [];
         const visit = (node: ts.Node): void => {
             if (ts.isCallExpression(node) && this.method(node.expression) === 'toDynamicValue') {
@@ -42,22 +39,6 @@ export class CanonicalClientBindings {
         };
         visit(file);
         return problems;
-    }
-
-    assert(problems: readonly string[]): void {
-        if (problems.length === 0) return;
-        throw new RuleFailError(
-            'validate-runtime-architecture',
-            problems.join('\n'),
-            undefined,
-            undefined,
-            [
-                new Option(
-                    'Replace every supported hand-written registration, including unchanged code in src/wiring.ts. Use RuntimeClients.bindRpc with rpcTarget; RuntimeTaskClients.bindPubSub for task clients; provideRpcClient for browser providers. Preserve tokens, filters and lazy singleton resolution.',
-                    true,
-                ),
-            ],
-        );
     }
 
     private checkFactory(
@@ -106,8 +87,8 @@ export class CanonicalClientBindings {
         const replacement = task
             ? `new RuntimeTaskClients(options).bindPubSub(${token.getText()}, ${api}, ${target});`
             : provider
-              ? `provideRpcClient(${token.getText()}, ${api}, rpcTarget(${api}, ${target}))`
-              : `new RuntimeClients(options).bindRpc(${token.getText()}, ${api}, rpcTarget(${api}, ${target})${filters});`;
+              ? `provideRpcClient(${token.getText()}, ${api}, ${target})`
+              : `new RuntimeClients(options).bindRpc(${token.getText()}, ${api}, ${target}${filters});`;
         const location = file.getLineAndCharacterOfPosition(factory.getStart(file));
         problems.push(
             `${file.fileName}:${location.line + 1}:${location.character + 1}: canonical client registration required: ${replacement}`,
@@ -172,51 +153,5 @@ export class CanonicalClientBindings {
         )
             return this.expand(declaration.initializer, seen);
         return expression;
-    }
-}
-
-/** Architecture validation scans every participating owner, even when its build isn't affected. */
-export class WorkspaceClientBindings {
-    private program(root: string): ts.Program {
-        const configured = createProjectProgram(root);
-        const files = ts.sys.readDirectory(
-            path.join(root, 'src'),
-            ['.ts', '.tsx'],
-            ['**/*.spec.ts', '**/*.test.ts', '**/__tests__/**', '**/node_modules/**'],
-        );
-        return ts.createProgram(files, configured?.getCompilerOptions() ?? {});
-    }
-
-    assert(workspaceRoot: string, infos: ReadonlyMap<string, ProjectInfo>): void {
-        const problems: string[] = [];
-        for (const info of infos.values()) {
-            if (!info.tags.some((tag) => tag === 'webpieces' || tag === 'webpieces-lib')) continue;
-            const program = this.program(path.resolve(workspaceRoot, info.root));
-            const check = new CanonicalClientBindings(program.getTypeChecker());
-            const root = path.resolve(workspaceRoot, info.root) + path.sep;
-            for (const file of program.getSourceFiles()) {
-                if (
-                    file.isDeclarationFile ||
-                    !file.fileName.startsWith(root) ||
-                    /(?:\.spec\.|\.test\.|\/__tests__\/|\/node_modules\/)/.test(file.fileName)
-                )
-                    continue;
-                problems.push(...check.problems(file));
-            }
-        }
-        // No source program is needed to render a structured aggregate failure.
-        if (problems.length > 0)
-            throw new RuleFailError(
-                'validate-runtime-architecture',
-                problems.join('\n'),
-                undefined,
-                undefined,
-                [
-                    new Option(
-                        'Migrate all reported registrations using the canonical helpers and rpcTarget, preserving tokens and filters. This checks ALL CODE in every participating runtime owner, irrespective of the current diff.',
-                        true,
-                    ),
-                ],
-            );
     }
 }

@@ -148,20 +148,21 @@ and replace supported hand-written singleton/provider factories with the public 
 ```typescript
 // @webpieces/http-client-node (filters remain the optional fourth argument)
 const clients = new RuntimeClients(options);
-clients.bindRpc(TOKEN, SaveApi, rpcTarget(SaveApi, 'save'), filters);
+clients.bindRpc(TOKEN, SaveApi, 'save', filters);
 
 // @webpieces/cloudtasks-client (no filter argument is supported)
 new RuntimeTaskClients(options).bindPubSub(TASK_TOKEN, TaskApi, 'worker');
 
 // @webpieces/http-client-browser (no filter argument is supported)
-provideRpcClient(BROWSER_TOKEN, SaveApi, rpcTarget(SaveApi, 'save'));
+provideRpcClient(BROWSER_TOKEN, SaveApi, 'save');
 ```
 
-Architecture validation checks ALL CODE in every participating owner, even unchanged projects
-outside the current diff. Canonical `wiring.ts` is checked too. Resolve every reported occurrence;
-moving raw factories to wiring alone does not satisfy the grammar. Preserve each existing token,
-API, deployment and supported filter list. Registration remains lazy and singleton; test overrides
-must still avoid resolving the production factory. Framework implementations, low-level calls,
-transient registrations, custom config options and provider filters without a helper equivalent
-are outside this helper-equivalence check. Review the resulting runtime declaration candidates
-and qualified API/deployment relationships before updating approvals.
+The wiring-format rule checks canonical `src/wiring.ts` in every participating tagged owner,
+including unchanged projects outside the diff. Imported implementation files are outside this format
+rule; semantic architecture validation can still resolve their declarations. Use Wiring/AppWiring
+with literal arrays of named BindingModule and RouteModule instances; only AppWiring selects library
+Wirings. Set maxLines explicitly (the agreed limit is 200). Preserve each existing token, API,
+deployment and supported filter list. Registration remains lazy and singleton; test overrides must
+still avoid resolving the production factory. Put custom factories and setup in imported named
+implementations, keeping topology declarations visible. Review the resulting runtime declaration
+candidates and qualified API/deployment relationships before updating approvals.

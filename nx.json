@@ -87,6 +87,7 @@
             "plugin": "@webpieces/nx-webpieces-rules",
             "options": {}
         },
-        "./scripts/hook-boundaries.cjs"
+        "./scripts/hook-boundaries.cjs",
+        "./scripts/wiring-source-targets.cjs"
     ]
 }

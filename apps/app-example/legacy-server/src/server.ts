@@ -3,7 +3,7 @@ import { LogManager, ClientRegistry } from '@webpieces/core-util';
 import { WebpiecesExpressRouter } from '@webpieces/http-server';
 import { setupCompanyRuntime } from '@webpieces/company-svc-core';
 import { createLegacyExpressApp } from './LegacyServer';
-import { LegacyAppModules } from './LegacyAppModules';
+import { LegacyWiring } from './wiring';
 
 /**
  * Main entry point for the legacy-server example: a pre-existing express app (its own routes,
@@ -27,8 +27,8 @@ async function main(): Promise<void> {
     const app = createLegacyExpressApp();
 
     // 2. Build the webpieces API surface (headers → logging → routes/filters) — the SAME
-    //    AppModules + call the integration test uses.
-    const apiFactory = await setupCompanyRuntime(LegacyAppModules.create());
+    //    AppWiring + call the integration test uses.
+    const apiFactory = await setupCompanyRuntime(new LegacyWiring());
 
     // 3. Embed webpieces onto the legacy app (no app.use, no takeover); the legacy app owns listen.
     new WebpiecesExpressRouter(apiFactory).bindExpress(app);

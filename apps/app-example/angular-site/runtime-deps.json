@@ -1,10 +1,10 @@
 {
-    "schemaVersion": 1,
+    "schemaVersion": 2,
     "project": "angular-site",
     "framework": "angular",
     "exports": {
-        "ApplicationBrowserWiring": {
-            "kind": "plan",
+        "ApiBindings": {
+            "kind": "binding",
             "relationships": [
                 {
                     "contract": {
@@ -15,11 +15,7 @@
                     "transport": "rpc",
                     "target": {
                         "kind": "service",
-                        "service": "client-server",
-                        "contract": {
-                            "project": "client-server-api",
-                            "exportedName": "SaveApi"
-                        }
+                        "service": "client-server"
                     }
                 },
                 {
@@ -31,15 +27,40 @@
                     "transport": "rpc",
                     "target": {
                         "kind": "service",
-                        "service": "client-server",
-                        "contract": {
-                            "project": "client-server-api",
-                            "exportedName": "PublicApi"
-                        }
+                        "service": "client-server"
                     }
                 }
             ],
-            "selections": []
+            "bindingModules": [],
+            "routingModules": [],
+            "wirings": []
+        },
+        "ApplicationBrowserWiring": {
+            "kind": "app",
+            "relationships": [],
+            "bindingModules": [
+                {
+                    "project": "angular-site",
+                    "exportedName": "BrowserHostBindings",
+                    "targets": {},
+                    "policies": {}
+                },
+                {
+                    "project": "angular-site",
+                    "exportedName": "ApiBindings",
+                    "targets": {},
+                    "policies": {}
+                }
+            ],
+            "routingModules": [],
+            "wirings": []
+        },
+        "BrowserHostBindings": {
+            "kind": "binding",
+            "relationships": [],
+            "bindingModules": [],
+            "routingModules": [],
+            "wirings": []
         }
     },
     "entry": "ApplicationBrowserWiring"

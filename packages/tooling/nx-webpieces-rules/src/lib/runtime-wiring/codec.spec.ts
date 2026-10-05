@@ -6,7 +6,7 @@ describe('runtime declaration input validation', () => {
     const valid = new RuntimeDeclaration(
         'app',
         'node',
-        { Plan: new WiringExport('plan', [], []) },
+        { Plan: new WiringExport('app', [], []) },
         'Plan',
         'app',
     );
@@ -15,7 +15,7 @@ describe('runtime declaration input validation', () => {
     });
     it('rejects wrong versions, foreign owners, unknown fields, and malformed exports', () => {
         const codec = new RuntimeDeclarationCodec();
-        expect(() => codec.decode(JSON.stringify({ ...valid, schemaVersion: 2 }), 'app')).toThrow(
+        expect(() => codec.decode(JSON.stringify({ ...valid, schemaVersion: 1 }), 'app')).toThrow(
             'schemaVersion',
         );
         expect(() => codec.decode(JSON.stringify(valid), 'other')).toThrow(
@@ -28,7 +28,7 @@ describe('runtime declaration input validation', () => {
             codec.decode(
                 JSON.stringify({
                     ...valid,
-                    exports: { Plan: { kind: 'plan', relationships: {}, selections: [] } },
+                    exports: { Plan: { kind: 'app', relationships: {}, bindingModules: [], routingModules: [], wirings: [] } },
                 }),
                 'app',
             ),
@@ -37,7 +37,7 @@ describe('runtime declaration input validation', () => {
     it('rejects prototype-mutating dictionary keys', () => {
         expect(() =>
             new RuntimeDeclarationCodec().decode(
-                '{"schemaVersion":1,"project":"app","framework":"node","exports":{"__proto__":{}}}',
+                '{"schemaVersion":2,"project":"app","framework":"node","exports":{"__proto__":{}}}',
                 'app',
             ),
         ).toThrow('Reserved runtime-deps field');

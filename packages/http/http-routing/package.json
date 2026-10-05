@@ -27,6 +27,7 @@
         "@webpieces/gcp-identity": "workspace:*",
         "inversify": "7.10.4",
         "jsonwebtoken": "9.0.2",
-        "minimatch": "10.0.1"
+        "minimatch": "10.0.1",
+        "@webpieces/http-client-core": "workspace:*"
     }
 }

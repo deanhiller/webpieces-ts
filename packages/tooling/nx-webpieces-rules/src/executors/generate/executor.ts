@@ -151,68 +151,68 @@ function printGraphSummary(graph: EnhancedGraph): void {
  * try/catch-and-report shell — the error reporting is what a caller reads on failure, and it should
  * not be separated from the throw by fifty lines of steps.
  */
-// webpieces-disable no-function-outside-class -- executor step helper, like the rest of this executor file
-async function generateEverything(
-    workspaceRoot: string,
-    graphPath: string | undefined,
-): Promise<void> {
-    // Step 1: Build the full graph from nx, then transitively reduce it to the view
-    console.log("📊 Generating dependency graph from nx's project graph...");
-    const reducedGraph = await generateReducedGraph();
+export class ArchitectureGenerator {
+    constructor(private readonly visualizer: GraphVisualizer) {}
 
-    // Step 1b: The graph is a BUILD graph — refuse a cyclic one, naming EVERY cycle. This runs
-    // before the sort deliberately: the sort also refuses, but reports one cycle and an
-    // undifferentiated list of everything tangled with it, so a repo with several cycles pays one
-    // full regeneration per cycle to discover them.
-    console.log('🔄 Checking the project graph is acyclic...');
-    const cycles = new ProjectCycleDetector();
-    cycles.assertAcyclic(reducedGraph, 'the nx project graph');
+    async generate(workspaceRoot: string, graphPath: string | undefined): Promise<void> {
+        // Step 1: Build the full graph from nx, then transitively reduce it to the view
+        console.log("📊 Generating dependency graph from nx's project graph...");
+        const reducedGraph = await generateReducedGraph();
 
-    // Step 2: Topological sort (to assign levels for visualization)
-    console.log('🔄 Computing topological layers...');
-    const enhancedGraph = sortGraphTopologically(reducedGraph);
-    // ...and assert the stratification it just produced actually holds: every dependency strictly
-    // below its dependent. Safe to assert only because the graph was sorted a line ago — a stale
-    // committed file is never checked this way.
-    cycles.assertLevelsDescend(
-        reducedGraph,
-        cycles.levelsOf(enhancedGraph),
-        'the freshly sorted graph',
-    );
+        // Step 1b: The graph is a BUILD graph — refuse a cyclic one, naming EVERY cycle. This runs
+        // before the sort deliberately: the sort also refuses, but reports one cycle and an
+        // undifferentiated list of everything tangled with it, so a repo with several cycles pays one
+        // full regeneration per cycle to discover them.
+        console.log('🔄 Checking the project graph is acyclic...');
+        const cycles = new ProjectCycleDetector();
+        cycles.assertAcyclic(reducedGraph, 'the nx project graph');
 
-    // Step 3: Enrich with AI metadata (framework, shortDescription, file
-    // pointers). This VALIDATES (responsibilities.md required per project)
-    // and throws before any write, so a failure never clobbers the file.
-    console.log('🏷️  Enriching graph with framework + responsibilities metadata...');
-    const projectInfos = await collectProjectInfo();
-    enrichGraph(enhancedGraph, projectInfos, workspaceRoot);
-    new TagTruthCheck().assertTrue(enhancedGraph, projectInfos, workspaceRoot); // #1064, before any write
+        // Step 2: Topological sort (to assign levels for visualization)
+        console.log('🔄 Computing topological layers...');
+        const enhancedGraph = sortGraphTopologically(reducedGraph);
+        // ...and assert the stratification it just produced actually holds: every dependency strictly
+        // below its dependent. Safe to assert only because the graph was sorted a line ago — a stale
+        // committed file is never checked this way.
+        cycles.assertLevelsDescend(
+            reducedGraph,
+            cycles.levelsOf(enhancedGraph),
+            'the freshly sorted graph',
+        );
 
-    // Step 3b: Classify each api-lib edge (implements/uses + rpc/pubsub) by
-    // scanning source, so dependencies.json + the viz + the runtime graph all
-    // read the same derived truth.
-    const scanned = scanApiRelations(workspaceRoot, enhancedGraph, projectInfos, graphPath);
-    const apiContracts = scanned.apiContracts;
+        // Step 3: Enrich with AI metadata (framework, shortDescription, file
+        // pointers). This VALIDATES (responsibilities.md required per project)
+        // and throws before any write, so a failure never clobbers the file.
+        console.log('🏷️  Enriching graph with framework + responsibilities metadata...');
+        const projectInfos = await collectProjectInfo();
+        enrichGraph(enhancedGraph, projectInfos, workspaceRoot);
+        new TagTruthCheck().assertTrue(enhancedGraph, projectInfos, workspaceRoot); // #1064, before any write
 
-    saveApprovedGraph(workspaceRoot, graphPath ?? DEFAULT_GRAPH_PATH, enhancedGraph, scanned);
+        // Step 3b: Classify each api-lib edge (implements/uses + rpc/pubsub) by
+        // scanning source, so dependencies.json + the viz + the runtime graph all
+        // read the same derived truth.
+        const scanned = scanApiRelations(workspaceRoot, enhancedGraph, projectInfos, graphPath);
+        const apiContracts = scanned.apiContracts;
 
-    // Step 4b: Write the committed, clickable HTML view next to the JSON so
-    // dependencies.html regenerates in lock-step with dependencies.json.
-    const vizPaths = new GraphVisualizer().writeVisualization(enhancedGraph, workspaceRoot);
-    console.log(`✅ Wrote ${vizPaths.htmlPath}`);
+        saveApprovedGraph(workspaceRoot, graphPath ?? DEFAULT_GRAPH_PATH, enhancedGraph, scanned);
 
-    // Step 5: Generate the runtime microservice graph from the same scan.
-    // Projects tagged drawOnGraph:false are threaded through so the runtime
-    // graph hides them too (they stay flagged in runtime-dependencies.json).
-    generateRuntimeGraph(
-        workspaceRoot,
-        enhancedGraph,
-        hiddenProjectsIn(enhancedGraph),
-        apiContracts,
-        scanned.externalSystems,
-    );
+        // Step 4b: Write the committed, clickable HTML view next to the JSON so
+        // dependencies.html regenerates in lock-step with dependencies.json.
+        const vizPaths = this.visualizer.writeVisualization(enhancedGraph, workspaceRoot);
+        console.log(`✅ Wrote ${vizPaths.htmlPath}`);
 
-    printGraphSummary(enhancedGraph);
+        // Step 5: Generate the runtime microservice graph from the same scan.
+        // Projects tagged drawOnGraph:false are threaded through so the runtime
+        // graph hides them too (they stay flagged in runtime-dependencies.json).
+        generateRuntimeGraph(
+            workspaceRoot,
+            enhancedGraph,
+            hiddenProjectsIn(enhancedGraph),
+            apiContracts,
+            scanned.externalSystems,
+        );
+
+        printGraphSummary(enhancedGraph);
+    }
 }
 
 // webpieces-disable no-function-outside-class -- persist the approved graph and contract tables together
@@ -258,7 +258,7 @@ export default async function runExecutor(
 
     // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
     try {
-        await generateEverything(workspaceRoot, graphPath);
+        await new ArchitectureGenerator(new GraphVisualizer()).generate(workspaceRoot, graphPath);
         return { success: true };
     } catch (err: unknown) {
         const error = toError(err);

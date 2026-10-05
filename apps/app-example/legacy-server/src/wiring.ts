@@ -1,9 +1,11 @@
+import { AdditionalFilters } from './AdditionalFilters';
 import {
     RouteModule,
     WebpiecesRouter,
     FilterDefinition,
-    ServerWiring,
-    ServerWiringOptions,
+    AppWiring,
+    Wiring,
+    BindingModule,
 } from '@webpieces/http-routing';
 // The legacy app is SELF-CONTAINED — it shares only the api CONTRACT with the greenfield sibling,
 // so its controllers are its OWN copies here.
@@ -19,39 +21,45 @@ import { PublicController } from './controllers/public-controller';
  * integration test injects order-recording filters to assert priority + glob scoping.
  */
 export class LegacyRoutes implements RouteModule {
-    constructor(private readonly additionalFilters: FilterDefinition[] = []) {}
-
     configure(router: WebpiecesRouter): void {
-        for (const filter of this.additionalFilters) {
-            router.addFilter(filter);
-        }
         router.addRoutes(SaveApi, SaveController);
         router.addRoutes(PublicApi, PublicController);
     }
 }
 
-import { ContainerModule, ContainerModuleLoadOptions } from 'inversify';
-import { RuntimeClients, rpcTarget } from '@webpieces/http-client-node';
+import { ContainerModuleLoadOptions } from 'inversify';
+import { RuntimeClients } from '@webpieces/http-client-node';
 import { Server2Api, TYPES } from './remote/Server2Client';
 import { InversifyModule } from './modules/InversifyModule';
 
-export const RuntimeClientsModule = new ContainerModule((options: ContainerModuleLoadOptions) => {
-    new RuntimeClients(options).bindRpc(
-        TYPES.Server2Api,
-        Server2Api,
-        rpcTarget(Server2Api, 'server2'),
-    );
-});
+export class ApplicationBindings implements BindingModule {
+    configure(options: ContainerModuleLoadOptions): void | Promise<void> {
+        return InversifyModule.load(options);
+    }
+}
 
-export class LegacyWiring {
+export class RuntimeClientsModule implements BindingModule {
+    configure(options: ContainerModuleLoadOptions): void {
+        new RuntimeClients(options).bindRpc(TYPES.Server2Api, Server2Api, 'server2');
+    }
+}
+
+import { AnyContextKey } from '@webpieces/core-util';
+import { CompanyHeaders } from '@webpieces/company-core';
+import { AppHeaders } from './modules/InversifyModule';
+
+export class LegacyWiring implements AppWiring {
     constructor(private readonly additionalFilters: FilterDefinition[] = []) {}
-    getRuntimeWiring(): ServerWiring {
-        return new ServerWiring(
-            'legacy-server',
-            new ServerWiringOptions(
-                [InversifyModule, RuntimeClientsModule],
-                [new LegacyRoutes(this.additionalFilters)],
-            ),
-        );
+    getWirings(): Wiring[] {
+        return [];
+    }
+    getBindingModules(): BindingModule[] {
+        return [new ApplicationBindings(), new RuntimeClientsModule()];
+    }
+    getRoutingModules(): RouteModule[] {
+        return [new AdditionalFilters(this.additionalFilters), new LegacyRoutes()];
+    }
+    getHeaders(): AnyContextKey[] {
+        return [...CompanyHeaders.ALL_HEADERS, ...new AppHeaders().getAllHeaders()];
     }
 }

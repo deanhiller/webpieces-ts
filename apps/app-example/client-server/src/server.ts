@@ -1,12 +1,12 @@
 import 'reflect-metadata';
 import { ClientRegistry } from '@webpieces/core-util';
 import { bootstrapServer, BootstrapOptions } from '@webpieces/company-svc-core';
-import { ClientServerAppModules } from './ClientServerAppModules';
+import { ClientServerWiring } from './wiring';
 
 /**
  * Main entry point for client-server. All startup boilerplate (logging backend, router build,
  * express bind + listen, SIGTERM/SIGINT, error handling) lives in the shared bootstrapServer().
- * This service just supplies its port/log name + ClientServerAppModules.create() — the SAME
+ * This service just supplies its port/log name + new ClientServerWiring() — the SAME
  * server-surface declaration its integration tests build, so server and tests stay in sync.
  */
 async function main(): Promise<void> {
@@ -15,7 +15,7 @@ async function main(): Promise<void> {
     if (!process.env['K_SERVICE']) {
         ClientRegistry.addMapping('server2', 8202);
     }
-    await bootstrapServer(new BootstrapOptions(8200, 'Server'), ClientServerAppModules.create());
+    await bootstrapServer(new BootstrapOptions(8200, 'Server'), new ClientServerWiring());
 }
 
 // Always run main() when this file is loaded

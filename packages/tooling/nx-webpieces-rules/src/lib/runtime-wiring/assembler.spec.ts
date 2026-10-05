@@ -40,7 +40,7 @@ function application(project: string, target: string): RuntimeDeclaration {
         'node',
         {
             Plan: new WiringExport(
-                'plan',
+                'app',
                 [],
                 [
                     new WiringSelection(
@@ -67,12 +67,13 @@ describe('approved runtime composition', () => {
             ]),
         );
         expect(assembler.assemble('lang')).toMatchObject([
-            { api: 'AuthStoreApi', target: { service: 'lang-fsdb' }, via: 'auth#AuthClients' },
+            { api: 'AuthStoreApi', target: { service: 'lang-fsdb' } },
         ]);
         expect(assembler.assemble('helper')).toMatchObject([
             { api: 'AuthStoreApi', target: { service: 'helper-fsdb' } },
         ]);
         expect(assembler.assemble('lang')).toHaveLength(1);
+        expect(assembler.assemble('lang')[0].via).toContain('auth#AuthClients');
     });
 
     it('rejects missing target arguments instead of guessing from library imports', () => {
@@ -81,7 +82,7 @@ describe('approved runtime composition', () => {
             'node',
             {
                 Plan: new WiringExport(
-                    'plan',
+                    'app',
                     [],
                     [new WiringSelection('auth', 'AuthClients', {}, {})],
                 ),
@@ -102,12 +103,12 @@ describe('approved runtime composition', () => {
         const broken = new RuntimeDeclaration(
             'broken',
             'node',
-            { Plan: new WiringExport('plan', [], [new WiringSelection('broken', 'Plan', {}, {})]) },
+            { Plan: new WiringExport('app', [], [new WiringSelection('broken', 'Plan', {}, {})]) },
             'Plan',
         );
         expect(() =>
             new RuntimeWiringAssembler(new Map([['broken', broken]])).assemble('broken'),
-        ).toThrow('composition cycle');
+        ).toThrow('expected binding');
         expect(() => new RuntimeWiringAssembler(new Map()).assemble('missing')).toThrow(
             'Missing approved',
         );
@@ -122,11 +123,7 @@ describe('approved runtime composition', () => {
             'app',
             'node',
             {
-                Plan: new WiringExport(
-                    'plan',
-                    [],
-                    [new WiringSelection('app', 'Routes', {}, { publicWarmup: false })],
-                ),
+                Plan: new WiringExport('app', [], [], [new WiringSelection('app', 'Routes', {}, { publicWarmup: false })]),
                 Routes: new WiringExport('routing', [warmup], []),
             },
             'Plan',
@@ -134,15 +131,15 @@ describe('approved runtime composition', () => {
         expect(new RuntimeWiringAssembler(new Map([['app', declaration]])).assemble('app')).toEqual(
             [],
         );
-        declaration.exports.Plan.selections[0].policies.publicWarmup = true;
+        declaration.exports.Plan.routingModules[0].policies.publicWarmup = true;
         expect(
             new RuntimeWiringAssembler(new Map([['app', declaration]])).assemble('app'),
         ).toMatchObject([{ owner: 'core-api', api: 'WarmupApi' }]);
-        declaration.exports.Plan.selections[0].policies.publicWarmup = 'runtime';
+        declaration.exports.Plan.routingModules[0].policies.publicWarmup = 'runtime';
         expect(
             new RuntimeWiringAssembler(new Map([['app', declaration]])).assemble('app'),
         ).toMatchObject([{ conditional: 'app#Routes:publicWarmup' }]);
-        delete declaration.exports.Plan.selections[0].policies.publicWarmup;
+        delete declaration.exports.Plan.routingModules[0].policies.publicWarmup;
         expect(() =>
             new RuntimeWiringAssembler(new Map([['app', declaration]])).assemble('app'),
         ).toThrow('Missing explicit policy');

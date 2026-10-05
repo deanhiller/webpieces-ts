@@ -3,7 +3,9 @@ import * as ts from 'typescript';
 import { Option, RuleFailError } from '@webpieces/rules-config';
 import type { ProjectInfo } from '../project-info';
 import { ContractIdentity } from './declaration';
-import type { DeclaredTarget } from './declaration';
+import type { DeclaredTarget, PolicyValue } from './declaration';
+import { PreparedTargets } from './prepared-targets';
+import { WiringSourceTypes } from './source-types';
 
 /** Resolves imported symbols and bounded literal expressions without invoking application code. */
 export class WiringSourceValues {
@@ -52,31 +54,22 @@ export class WiringSourceValues {
             this.fail('Missing or cyclic runtime target expression.');
         const value = expression!;
         if (ts.isStringLiteralLike(value)) return { kind: 'service', service: value.text };
-        if (ts.isCallExpression(value) && this.symbolName(value.expression) === 'rpcTarget') {
-            const target = this.target(value.arguments[1], depth + 1);
-            if (target.kind !== 'service')
-                this.fail('rpcTarget requires a literal deployment identity.');
-            return { ...target, contract: this.identity(value.arguments[0]) };
-        }
-        if (
-            ts.isNewExpression(value) &&
-            ['RpcTarget', 'ClientConfig', 'TaskClientConfig'].includes(
-                this.symbolName(value.expression),
-            )
-        )
-            return this.target(
-                value.arguments?.[this.symbolName(value.expression) === 'RpcTarget' ? 1 : 0],
-                depth + 1,
-            );
+        if (ts.isNewExpression(value) && ['ClientConfig', 'TaskClientConfig'].includes(this.symbolName(value.expression)))
+            return this.target(value.arguments?.[0], depth + 1);
         const declaration = this.symbol(value)?.declarations?.[0];
         if (declaration !== undefined && ts.isVariableDeclaration(declaration))
             return this.target(declaration.initializer, depth + 1);
         if (declaration !== undefined && ts.isPropertyAssignment(declaration))
             return this.target(declaration.initializer, depth + 1);
         if (declaration !== undefined && ts.isParameter(declaration))
-            return { kind: 'parameter', parameter: declaration.name.getText() };
+            return { kind: 'parameter', parameter: this.parameterPath(value) };
+        if (ts.isPropertyAccessExpression(value)) {
+            const type = this.checker.getTypeAtLocation(value);
+            if ((type.flags & ts.TypeFlags.StringLike) !== 0)
+                return { kind: 'parameter', parameter: this.parameterPath(value) };
+        }
         this.fail(
-            `Unsupported target ${value.getText()}; use a literal service, rpcTarget, or an explicit typed target parameter.`,
+            `Unsupported target ${value.getText()}; use a literal service or a prepared constructor field.`,
         );
     }
 
@@ -97,17 +90,19 @@ export class WiringSourceValues {
     arguments(invocation: ts.NewExpression | ts.CallExpression): Record<string, DeclaredTarget> {
         const targets: Record<string, DeclaredTarget> = {};
         const signature = this.checker.getResolvedSignature(invocation);
-        for (const [index, parameter] of (signature?.getParameters() ?? []).entries()) {
-            const declaration = parameter.valueDeclaration;
-            if (declaration === undefined) continue;
-            const type = this.checker.typeToString(
-                this.checker.getTypeOfSymbolAtLocation(parameter, declaration),
-            );
-            if (
-                type.includes('RpcTarget') ||
-                (type === 'string' && /target/i.test(parameter.getName()))
-            ) {
-                targets[parameter.getName()] = this.target(invocation.arguments?.[index]);
+        const prepared = new PreparedTargets(this.checker);
+        for (const path of prepared.paths(invocation, 'target')) {
+            const parts = path.split('.');
+            const name = parts[0];
+            const suffix = parts.slice(1);
+            const index = signature?.getParameters().findIndex((parameter: ts.Symbol) => parameter.name === name) ?? -1;
+            const expression = invocation.arguments?.[index];
+            if (expression === undefined) this.fail(`Missing prepared destination argument ${path}.`);
+            if (suffix.length === 0) targets[path] = this.target(expression);
+            else {
+                const value = this.preparedValue(expression!, suffix);
+                targets[path] = value instanceof ForwardedParameter
+                    ? { kind: 'parameter', parameter: value.parameter } : this.target(value);
             }
         }
         return targets;
@@ -174,30 +169,31 @@ export class WiringSourceValues {
 
     policies(
         invocation: ts.NewExpression | ts.CallExpression,
-    ): Record<string, boolean | 'runtime'> {
-        const policies: Record<string, boolean | 'runtime'> = {};
+    ): Record<string, PolicyValue> {
+        const policies: Record<string, PolicyValue> = {};
         const signature = this.checker.getResolvedSignature(invocation);
-        for (const [index, parameter] of (signature?.getParameters() ?? []).entries()) {
-            const declaration = parameter.valueDeclaration;
-            if (declaration === undefined) continue;
-            const type = this.checker.typeToString(
-                this.checker.getTypeOfSymbolAtLocation(parameter, declaration),
-            );
-            if (!type.includes('WiringPolicy')) continue;
-            const argument = invocation.arguments?.[index];
-            if (
-                argument === undefined ||
-                !ts.isNewExpression(argument) ||
-                this.symbolName(argument.expression) !== 'WiringPolicy'
-            )
+        const prepared = new PreparedTargets(this.checker);
+        for (const path of prepared.paths(invocation, 'policy')) {
+            const parts = path.split('.');
+            const name = parts[0];
+            const suffix = parts.slice(1);
+            const index = signature?.getParameters().findIndex((parameter: ts.Symbol) => parameter.name === name) ?? -1;
+            const supplied = invocation.arguments?.[index];
+            if (supplied === undefined) this.fail(`Missing explicit policy argument ${path}.`);
+            const argument = suffix.length === 0 ? supplied! : this.preparedValue(supplied!, suffix);
+            if (argument instanceof ForwardedParameter) {
+                policies[path] = { parameter: argument.parameter };
+                continue;
+            }
+            if (ts.isIdentifier(argument) || ts.isPropertyAccessExpression(argument)) {
+                policies[path] = { parameter: this.parameterPath(argument) };
+                continue;
+            }
+            if (!ts.isNewExpression(argument) || !new WiringSourceTypes(this.checker).isFramework(argument.expression, 'WiringPolicy'))
                 this.fail('Pass an explicit named WiringPolicy to conditional modules.');
             const condition = argument.arguments?.[1];
-            policies[parameter.getName()] =
-                condition?.kind === ts.SyntaxKind.TrueKeyword
-                    ? true
-                    : condition?.kind === ts.SyntaxKind.FalseKeyword
-                      ? false
-                      : 'runtime';
+            policies[path] = condition?.kind === ts.SyntaxKind.TrueKeyword ? true
+                : condition?.kind === ts.SyntaxKind.FalseKeyword ? false : 'runtime';
         }
         return policies;
     }
@@ -219,7 +215,7 @@ export class WiringSourceValues {
                 const condition = node.expression;
                 if (!ts.isPropertyAccessExpression(condition) || condition.name.text !== 'enabled')
                     this.fail('Topology conditions must use a named WiringPolicy.enabled.');
-                policy = this.symbolName((condition as ts.PropertyAccessExpression).expression);
+                policy = this.parameterPath((condition as ts.PropertyAccessExpression).expression);
             }
             if (
                 ts.isConditionalExpression(node) ||
@@ -231,6 +227,40 @@ export class WiringSourceValues {
             node = node.parent;
         }
         return policy;
+    }
+
+    private preparedValue(expression: ts.Expression, suffix: readonly string[]): ts.Expression | ForwardedParameter {
+        const base = this.symbol(expression)?.declarations?.[0];
+        if (base !== undefined && ts.isParameter(base))
+            return new ForwardedParameter([this.parameterPath(expression), ...suffix].join('.'));
+        if (ts.isPropertyAccessExpression(expression)) {
+            const root = expression.expression;
+            if (root.kind === ts.SyntaxKind.ThisKeyword || ts.isPropertyAccessExpression(root))
+                return new ForwardedParameter([this.parameterPath(expression), ...suffix].join('.'));
+        }
+        let type = this.checker.getTypeAtLocation(expression);
+        let declaration: ts.Declaration | undefined;
+        for (const name of suffix) {
+            const property = type.getProperty(name);
+            declaration = property?.valueDeclaration;
+            if (property === undefined || declaration === undefined)
+                this.fail(`Cannot resolve prepared destination ${expression.getText()}.${suffix.join('.')}.`);
+            type = this.checker.getTypeOfSymbolAtLocation(property!, declaration!);
+        }
+        if (declaration !== undefined && ts.isPropertyAssignment(declaration))
+            return declaration.initializer;
+        if (declaration !== undefined && ts.isPropertyDeclaration(declaration) && declaration.initializer !== undefined)
+            return declaration.initializer;
+        this.fail(`Unresolved destination ${expression.getText()}.${suffix.join('.')}; prepare a statically resolvable destination, never a computed config function.`);
+    }
+
+    private parameterPath(expression: ts.Expression): string {
+        if (ts.isPropertyAccessExpression(expression)) {
+            if (expression.expression.kind === ts.SyntaxKind.ThisKeyword) return expression.name.text;
+            return `${this.parameterPath(expression.expression)}.${expression.name.text}`;
+        }
+        if (ts.isIdentifier(expression)) return expression.text;
+        this.fail(`Unsupported prepared parameter path ${expression.getText()}.`);
     }
 
     private symbol(node: ts.Node): ts.Symbol | undefined {
@@ -248,4 +278,8 @@ export class WiringSourceValues {
             ),
         ]);
     }
+}
+
+class ForwardedParameter {
+    constructor(readonly parameter: string) {}
 }

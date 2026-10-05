@@ -36,6 +36,8 @@ export class RuntimeWiringTargets {
                     '{projectRoot}/runtime-deps.json',
                     '{workspaceRoot}/packages/tooling/nx-webpieces-rules/src/**/*.ts',
                     '^default',
+                    '{workspaceRoot}/**/src/wiring.ts',
+                    '{workspaceRoot}/**/runtime-deps.json',
                     '{workspaceRoot}/webpieces.config.json',
                     '{workspaceRoot}/tsconfig.base.json',
                     '{workspaceRoot}/nx.json',

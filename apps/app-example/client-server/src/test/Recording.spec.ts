@@ -12,7 +12,7 @@ import { RequestContext, HttpRequest } from '@webpieces/core-context';
 import { SaveApi } from '@webpieces/client-server-api';
 import { Server2Api, FetchValueResponse, FetchValueRequest } from '@webpieces/server2-api';
 import { setupCompanyRuntime, CompanySetupOptions } from '@webpieces/company-svc-core';
-import { ClientServerAppModules } from '../ClientServerAppModules';
+import { ClientServerWiring } from '../wiring';
 import { TYPES } from '../remote/Server2Client';
 import { Server2Simulator } from '../remote/Server2Simulator';
 
@@ -43,9 +43,9 @@ async function bootRecordingServer(): Promise<void> {
         (await options.rebind(AUTH_CONFIG)).to(TestAuthConfig);
         (await options.rebind(JWT_HOOK)).to(TestJwtHook);
     });
-    // ONE call — the SAME AppModules the real server uses; only the recordable override + config differ.
+    // ONE call — the SAME AppWiring the real server uses; only the recordable override + config differ.
     router = await setupCompanyRuntime(
-        ClientServerAppModules.create(),
+        new ClientServerWiring(),
         new CompanySetupOptions(undefined, appOverrides, config),
     );
 }
@@ -119,7 +119,7 @@ describe('createMock replaces hand-rolled mocks', () => {
             (await options.rebind(AUTH_CONFIG)).to(TestAuthConfig);
             (await options.rebind(JWT_HOOK)).to(TestJwtHook);
         });
-        router = await setupCompanyRuntime(ClientServerAppModules.create(), new CompanySetupOptions(undefined, appOverrides));
+        router = await setupCompanyRuntime(new ClientServerWiring(), new CompanySetupOptions(undefined, appOverrides));
     });
 
     it('primes responses and asserts captured requests through the full filter chain', async () => {
