@@ -38,7 +38,7 @@ describe('complete compatibility pack catalog', () => {
         expect(configured.sort()).toEqual(Object.keys(RULE_SCHEMAS).sort());
         for (const id of configured) expect(registry.schemaFor(id)).toEqual(RULE_SCHEMAS[id]);
         expect(registry.ruleIds().filter(id => !Object.hasOwn(RULE_SCHEMAS, id)).sort()).toEqual([
-            'enforce-architecture', 'no-json-property-primitive-type', 'no-mat-cell-def', 'require-typed-template',
+            'enforce-architecture', 'no-json-property-primitive-type', 'no-mat-cell-def', 'require-typed-template', 'wiring-format',
         ]);
     });
 });

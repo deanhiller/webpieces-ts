@@ -1,5 +1,4 @@
 import * as ts from 'typescript';
-import { Option, RuleFailError } from '@webpieces/rules-config';
 
 /** Replacement diagnostics used only by the canonical wiring-format analyzer. */
 export class CanonicalClientBindings {
@@ -40,22 +39,6 @@ export class CanonicalClientBindings {
         };
         visit(file);
         return problems;
-    }
-
-    assert(problems: readonly string[]): void {
-        if (problems.length === 0) return;
-        throw new RuleFailError(
-            'validate-runtime-architecture',
-            problems.join('\n'),
-            undefined,
-            undefined,
-            [
-                new Option(
-                    'Replace every supported hand-written registration, including unchanged code in src/wiring.ts. Use RuntimeClients.bindRpc with a service string; RuntimeTaskClients.bindPubSub for task clients; provideRpcClient for browser providers. Preserve tokens, filters and lazy singleton resolution.',
-                    true,
-                ),
-            ],
-        );
     }
 
     private checkFactory(

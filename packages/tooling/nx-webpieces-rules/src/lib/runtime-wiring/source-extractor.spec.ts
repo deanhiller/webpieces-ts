@@ -17,6 +17,25 @@ const app = `export class Application implements AppWiring {
 }`;
 
 describe('typed Wiring/AppWiring extraction', () => {
+    it('infers browser destinations through an aliased provider function', () => {
+        const fixture = new Fixture();
+        fixture.write('packages/http/http-client-browser', 'RpcClientProvider.ts',
+            'export function provideRpcClient(token: object, api: object, destination: string): object { return {}; }');
+        fixture.write('app', 'wiring.ts', fixture.source(`
+            import { provideRpcClient as client } from '../../packages/http/http-client-browser/src/RpcClientProvider';
+            export class BrowserClients implements BindingModule {
+                constructor(private readonly store: string) {}
+                configure(bindings: object): void { client(SaveApi, SaveApi, this.store); }
+            }
+            export class Application implements AppWiring {
+                getWirings(): Wiring[] { return []; }
+                getBindingModules(): BindingModule[] { return [new BrowserClients('browser-database')]; }
+                getRoutingModules(): RouteModule[] { return []; }
+            }`));
+        const declaration = fixture.extract();
+        expect(declaration.exports.Application.bindingModules[0].targets).toEqual({ store: { kind: 'service', service: 'browser-database' } });
+        expect(new RuntimeWiringAssembler(new Map([['app', declaration]])).assemble('app')).toMatchObject([{ target: { service: 'browser-database' } }]);
+    });
     it('forwards a prepared destination and named policy through app, library and module', () => {
         const fixture = new Fixture();
         fixture.write('library', 'wiring.ts', fixture.source(`

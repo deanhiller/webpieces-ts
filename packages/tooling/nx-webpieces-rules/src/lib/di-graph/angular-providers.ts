@@ -78,55 +78,57 @@ function collectDeps(depsExpr: ts.Expression | undefined, checker: ts.TypeChecke
 }
 
 /** Record one provider-object literal (`{ provide, useX }`) as a binding. */
-function collectProviderRecipe(
-    props: Map<string, ts.Expression>,
-    checker: ts.TypeChecker,
-    workspaceRoot: string,
-    file: string,
-    table: BindingTable,
-): void {
-    const provideExpr = props.get('provide');
-    if (!provideExpr) return;
+class ProviderRecipes {
+    collect(
+        props: Map<string, ts.Expression>,
+        checker: ts.TypeChecker,
+        workspaceRoot: string,
+        file: string,
+        table: BindingTable,
+    ): void {
+        const provideExpr = props.get('provide');
+        if (!provideExpr) return;
 
-    const provideClass = resolveClassDeclaration(provideExpr, checker);
-    const token = provideClass
-        ? classTokenKey(provideClass, workspaceRoot)
-        : resolveTokenKey(provideExpr, checker, workspaceRoot);
+        const provideClass = resolveClassDeclaration(provideExpr, checker);
+        const token = provideClass
+            ? classTokenKey(provideClass, workspaceRoot)
+            : resolveTokenKey(provideExpr, checker, workspaceRoot);
 
-    const useClass = props.get('useClass');
-    const useValue = props.get('useValue');
-    const useFactory = props.get('useFactory');
-    const useExisting = props.get('useExisting');
+        const useClass = props.get('useClass');
+        const useValue = props.get('useValue');
+        const useFactory = props.get('useFactory');
+        const useExisting = props.get('useExisting');
 
-    if (useClass) {
-        const impl = resolveClassDeclaration(useClass, checker);
-        table.add(new Binding(token.key, token.display, 'to', ANGULAR_SCOPE, impl, useClass.getText(), file));
-        return;
-    }
-    if (useExisting) {
-        // Alias: T resolves to whatever `useExisting` points at — resolve through
-        // to the target impl class so the walk continues into its dependencies.
-        const impl = resolveClassDeclaration(useExisting, checker);
-        table.add(new Binding(token.key, token.display, 'to', ANGULAR_SCOPE, impl, useExisting.getText(), file));
-        return;
-    }
-    if (useFactory) {
-        const deps = collectDeps(props.get('deps'), checker, workspaceRoot);
-        const isApiBoundary = isApiClientBoundary(useFactory, checker);
-        table.add(
-            new Binding(token.key, token.display, 'toDynamicValue', ANGULAR_SCOPE, null, firstLine(useFactory.getText()), file, deps, isApiBoundary),
-        );
-        return;
-    }
-    if (useValue) {
-        table.add(
-            new Binding(token.key, token.display, 'toConstantValue', ANGULAR_SCOPE, null, firstLine(useValue.getText()), file),
-        );
-        return;
-    }
-    // `{ provide: T }` with no recipe — treat the token itself as the impl class.
-    if (provideClass) {
-        table.add(new Binding(token.key, token.display, 'to', ANGULAR_SCOPE, provideClass, provideExpr.getText(), file));
+        if (useClass) {
+            const impl = resolveClassDeclaration(useClass, checker);
+            table.add(new Binding(token.key, token.display, 'to', ANGULAR_SCOPE, impl, useClass.getText(), file));
+            return;
+        }
+        if (useExisting) {
+            // Alias: T resolves to whatever `useExisting` points at — resolve through
+            // to the target impl class so the walk continues into its dependencies.
+            const impl = resolveClassDeclaration(useExisting, checker);
+            table.add(new Binding(token.key, token.display, 'to', ANGULAR_SCOPE, impl, useExisting.getText(), file));
+            return;
+        }
+        if (useFactory) {
+            const deps = collectDeps(props.get('deps'), checker, workspaceRoot);
+            const isApiBoundary = isApiClientBoundary(useFactory, checker);
+            table.add(
+                new Binding(token.key, token.display, 'toDynamicValue', ANGULAR_SCOPE, null, firstLine(useFactory.getText()), file, deps, isApiBoundary),
+            );
+            return;
+        }
+        if (useValue) {
+            table.add(
+                new Binding(token.key, token.display, 'toConstantValue', ANGULAR_SCOPE, null, firstLine(useValue.getText()), file),
+            );
+            return;
+        }
+        // `{ provide: T }` with no recipe — treat the token itself as the impl class.
+        if (provideClass) {
+            table.add(new Binding(token.key, token.display, 'to', ANGULAR_SCOPE, provideClass, provideExpr.getText(), file));
+        }
     }
 }
 
@@ -152,7 +154,7 @@ function collectProviderElement(
     }
 
     if (ts.isObjectLiteralExpression(element)) {
-        collectProviderRecipe(objectProps(element), checker, workspaceRoot, file, table);
+        new ProviderRecipes().collect(objectProps(element), checker, workspaceRoot, file, table);
     }
 }
 
@@ -174,7 +176,7 @@ class NamedBrowserProviders {
         if (args === undefined || args.length < 2) return;
         const props = new Map<string, ts.Expression>([['provide', args[0]], [recipe, args[1]]]);
         if (args[2] !== undefined) props.set('deps', args[2]);
-        collectProviderRecipe(props, checker, root, file, table);
+        new ProviderRecipes().collect(props, checker, root, file, table);
     }
 }
 

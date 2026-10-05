@@ -5,6 +5,7 @@ import type { ProjectInfo } from '../project-info';
 import { ContractIdentity } from './declaration';
 import type { DeclaredTarget, PolicyValue } from './declaration';
 import { PreparedTargets } from './prepared-targets';
+import { WiringSourceTypes } from './source-types';
 
 /** Resolves imported symbols and bounded literal expressions without invoking application code. */
 export class WiringSourceValues {
@@ -91,7 +92,9 @@ export class WiringSourceValues {
         const signature = this.checker.getResolvedSignature(invocation);
         const prepared = new PreparedTargets(this.checker);
         for (const path of prepared.paths(invocation, 'target')) {
-            const [name, ...suffix] = path.split('.');
+            const parts = path.split('.');
+            const name = parts[0];
+            const suffix = parts.slice(1);
             const index = signature?.getParameters().findIndex((parameter: ts.Symbol) => parameter.name === name) ?? -1;
             const expression = invocation.arguments?.[index];
             if (expression === undefined) this.fail(`Missing prepared destination argument ${path}.`);
@@ -171,7 +174,9 @@ export class WiringSourceValues {
         const signature = this.checker.getResolvedSignature(invocation);
         const prepared = new PreparedTargets(this.checker);
         for (const path of prepared.paths(invocation, 'policy')) {
-            const [name, ...suffix] = path.split('.');
+            const parts = path.split('.');
+            const name = parts[0];
+            const suffix = parts.slice(1);
             const index = signature?.getParameters().findIndex((parameter: ts.Symbol) => parameter.name === name) ?? -1;
             const supplied = invocation.arguments?.[index];
             if (supplied === undefined) this.fail(`Missing explicit policy argument ${path}.`);
@@ -184,7 +189,7 @@ export class WiringSourceValues {
                 policies[path] = { parameter: this.parameterPath(argument) };
                 continue;
             }
-            if (!ts.isNewExpression(argument) || this.symbolName(argument.expression) !== 'WiringPolicy')
+            if (!ts.isNewExpression(argument) || !new WiringSourceTypes(this.checker).isFramework(argument.expression, 'WiringPolicy'))
                 this.fail('Pass an explicit named WiringPolicy to conditional modules.');
             const condition = argument.arguments?.[1];
             policies[path] = condition?.kind === ts.SyntaxKind.TrueKeyword ? true

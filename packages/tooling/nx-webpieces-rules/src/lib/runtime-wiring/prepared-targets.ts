@@ -38,8 +38,7 @@ export class PreparedTargets {
         const visit = (node: ts.Node): void => {
             if (channel === 'policy' && ts.isPropertyAccessExpression(node) && node.name.text === 'enabled')
                 retain(this.path(node.expression));
-            if (channel === 'target' && ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression) &&
-                ['bindRpc', 'bindPubSub'].includes(node.expression.name.text)) {
+            if (channel === 'target' && ts.isCallExpression(node) && this.clientCall(node)) {
                 const target = node.arguments[2];
                 if (target !== undefined) retain(this.path(target));
             }
@@ -48,7 +47,9 @@ export class PreparedTargets {
                 const signature = this.checker.getResolvedSignature(node);
                 if (child !== undefined && ts.isClassDeclaration(child)) {
                     for (const path of this.collect(child, next, channel)) {
-                        const [name, ...suffix] = path.split('.');
+                        const parts = path.split('.');
+                        const name = parts[0];
+                        const suffix = parts.slice(1);
                         const index = signature?.getParameters().findIndex((parameter: ts.Symbol) => parameter.name === name) ?? -1;
                         const argument = node.arguments?.[index];
                         if (argument === undefined) continue;
@@ -61,5 +62,14 @@ export class PreparedTargets {
         };
         ts.forEachChild(declaration, visit);
         return [...paths].sort();
+    }
+
+    private clientCall(call: ts.CallExpression): boolean {
+        const signature = this.checker.getResolvedSignature(call)?.declaration;
+        if (signature === undefined || (!ts.isMethodDeclaration(signature) && !ts.isFunctionDeclaration(signature))) return false;
+        const file = signature.getSourceFile().fileName.replace(/\\/g, '/');
+        const name = signature.name?.getText();
+        return name !== undefined && ['bindRpc', 'bindPubSub', 'provideRpcClient'].includes(name) &&
+            /(?:\/packages\/(?:http|cloud)\/|\/node_modules\/@webpieces\/)(?:http-client-node|http-client-browser|cloudtasks-client)\//.test(file);
     }
 }

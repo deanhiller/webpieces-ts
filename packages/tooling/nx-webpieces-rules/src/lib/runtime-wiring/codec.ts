@@ -34,7 +34,7 @@ export class RuntimeDeclarationCodec {
         for (const [name, value] of Object.entries(this.record(root['exports'])))
             exports[name] = this.exported(value);
         const entry = root['entry'] === undefined ? undefined : this.string(root['entry']);
-        const apps = Object.entries(exports).filter(([_name, exported]: [string, WiringExport]) => exported.kind === 'app');
+        const apps = Object.values(exports).filter((exported: WiringExport) => exported.kind === 'app');
         if ((entry === undefined && apps.length > 0) || (entry !== undefined && apps.length !== 1))
             this.fail('Declare exactly one AppWiring entry for an application; libraries export Wiring without an entry.');
         if (entry !== undefined && exports[entry]?.kind !== 'app')

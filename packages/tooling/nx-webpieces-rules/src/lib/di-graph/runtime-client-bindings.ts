@@ -9,6 +9,7 @@ export class RuntimeClientBindings {
         checker: ts.TypeChecker,
         root: string,
     ): Binding | undefined {
+        if (!this.frameworkCall(call, checker)) return;
         const callee = call.expression;
         if (!ts.isPropertyAccessExpression(callee)) return;
         const owner = checker.getTypeAtLocation(callee.expression).getSymbol()?.getName();
@@ -26,6 +27,7 @@ export class RuntimeClientBindings {
         checker: ts.TypeChecker,
         root: string,
     ): Binding | undefined {
+        if (!this.frameworkCall(call, checker)) return;
         let symbol = checker.getSymbolAtLocation(call.expression);
         if (symbol && (symbol.flags & ts.SymbolFlags.Alias) !== 0)
             symbol = checker.getAliasedSymbol(symbol);
@@ -35,6 +37,12 @@ export class RuntimeClientBindings {
         )
             return;
         return this.binding(call, checker, root);
+    }
+
+    private frameworkCall(call: ts.CallExpression, checker: ts.TypeChecker): boolean {
+        const declaration = checker.getResolvedSignature(call)?.declaration;
+        if (declaration === undefined) return false;
+        return /(?:\/packages\/(?:http|cloud)\/|\/node_modules\/@webpieces\/)(?:http-client-node|http-client-browser|cloudtasks-client)\//.test(declaration.getSourceFile().fileName.replace(/\\/g, '/'));
     }
 
     private binding(

@@ -114,7 +114,8 @@ export class WiringFormat {
             const declarations = statement.declarationList.declarations;
             const initializer = declarations.length === 1 ? declarations[0].initializer : undefined;
             if ((statement.declarationList.flags & ts.NodeFlags.Const) !== 0 && initializer !== undefined && ts.isNewExpression(initializer) &&
-                ['RuntimeClients', 'RuntimeTaskClients'].some((name: string) => this.types.isFramework(initializer.expression, name))) return;
+                ['RuntimeClients', 'RuntimeTaskClients'].some((name: string) => this.types.isFramework(initializer.expression, name)) &&
+                (initializer.arguments ?? []).every((argument: ts.Expression) => this.prepared(argument))) return;
         }
         if (ts.isIfStatement(statement) && ts.isPropertyAccessExpression(statement.expression) && statement.expression.name.text === 'enabled' && this.types.isPolicy(statement.expression.expression) && statement.elseStatement === undefined) {
             const body = ts.isBlock(statement.thenStatement) ? statement.thenStatement.statements : [statement.thenStatement];
@@ -138,6 +139,11 @@ export class WiringFormat {
         if (!ts.isPropertyAccessExpression(expression.expression)) return false;
         const receiver = expression.expression.expression;
         if (ts.isCallExpression(receiver)) return this.declarationCall(receiver);
-        return ['bind', 'bindRpc', 'bindPubSub', 'add', 'addRoutes', 'addFilter', 'load'].includes(expression.expression.name.text);
+        if (!['bind', 'bindRpc', 'bindPubSub', 'add', 'addRoutes', 'addFilter', 'load'].includes(expression.expression.name.text)) return false;
+        const declaration = this.checker.getResolvedSignature(expression)?.declaration;
+        if (declaration === undefined) return false;
+        const file = declaration.getSourceFile().fileName.replace(/\\/g, '/');
+        return /(?:\/packages\/(?:http|cloud)\/|\/node_modules\/@webpieces\/)(?:http-routing|http-client-node|http-client-browser|cloudtasks-client)\//.test(file) ||
+            /\/node_modules\/(?:@inversifyjs\/|inversify\/)/.test(file);
     }
 }
