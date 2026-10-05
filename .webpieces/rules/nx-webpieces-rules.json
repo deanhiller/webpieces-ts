@@ -107,5 +107,11 @@
         ]
       }
     ]
+  },
+  "wiring-format": {
+    "mode": "RUN_EVERY_TIME",
+    "turnOffRuleUntilEpoch": 0,
+    "turnOffRuleWhileOnBranch": null,
+    "maxLines": 200
   }
 }

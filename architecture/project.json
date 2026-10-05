@@ -4,29 +4,13 @@
     "projectType": "application",
     "targets": {
         "generate": {
-            "executor": "nx:run-commands",
-            "options": {
-                "command": "TS_NODE_PROJECT=tsconfig.base.json node -r @swc-node/register -r tsconfig-paths/register scripts/wiring-source-generate.ts"
-            }
+            "executor": "@webpieces/nx-webpieces-rules:generate"
         },
         "validate-architecture-unchanged": {
-            "executor": "@webpieces/nx-source:validate-architecture-unchanged"
+            "executor": "@webpieces/nx-webpieces-rules:validate-architecture-unchanged"
         },
         "validate-api-relations": {
-            "executor": "@webpieces/nx-source:validate-api-relations"
-        },
-        "wiring-format-source": {
-            "executor": "nx:run-commands",
-            "cache": true,
-            "inputs": [
-                "{workspaceRoot}/packages/tooling/nx-webpieces-rules/src/**/*.ts",
-                "{workspaceRoot}/**/src/**/*.ts",
-                "{workspaceRoot}/rules/wiring-source-policy.json",
-                "{workspaceRoot}/tsconfig.base.json"
-            ],
-            "options": {
-                "command": "TS_NODE_PROJECT=tsconfig.base.json node -r @swc-node/register -r tsconfig-paths/register scripts/wiring-source-check.ts"
-            }
+            "executor": "@webpieces/nx-webpieces-rules:validate-api-relations"
         }
     },
     "tags": [
