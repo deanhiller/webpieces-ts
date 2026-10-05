@@ -1,6 +1,6 @@
 /**
  * Re-exports the server2 contract this legacy service USES. The prod binding in
- * InversifyModule turns Server2Api into a real HTTP client (ClientHttpFactory)
+ * src/wiring.ts (RuntimeClientsModule) turns Server2Api into a real HTTP client (ClientHttpFactory)
  * with magic-context transfer; tests rebind it to an in-process simulator.
  *
  * Copied into legacy-server (not imported from client-server): a LEGACY app must

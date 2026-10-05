@@ -89,8 +89,8 @@
                 "SaveApi"
             ],
             "implementsVia": {
-                "PublicApi": "legacy-server#LegacyWiring/0:legacy-server#LegacyWiring/routingModules[1]:legacy-server#LegacyRoutes",
-                "SaveApi": "legacy-server#LegacyWiring/0:legacy-server#LegacyWiring/routingModules[1]:legacy-server#LegacyRoutes"
+                "PublicApi": "legacy-server#LegacyWiring/0:legacy-server#LegacyWiring/routingModules[0]:legacy-server#LegacyRoutes",
+                "SaveApi": "legacy-server#LegacyWiring/0:legacy-server#LegacyWiring/routingModules[0]:legacy-server#LegacyRoutes"
             },
             "uses": [
                 "Server2Api"
@@ -110,12 +110,12 @@
                 {
                     "api": "PublicApi",
                     "type": "rpc",
-                    "declaredVia": "legacy-server#LegacyWiring/0:legacy-server#LegacyWiring/routingModules[1]:legacy-server#LegacyRoutes"
+                    "declaredVia": "legacy-server#LegacyWiring/0:legacy-server#LegacyWiring/routingModules[0]:legacy-server#LegacyRoutes"
                 },
                 {
                     "api": "SaveApi",
                     "type": "rpc",
-                    "declaredVia": "legacy-server#LegacyWiring/0:legacy-server#LegacyWiring/routingModules[1]:legacy-server#LegacyRoutes"
+                    "declaredVia": "legacy-server#LegacyWiring/0:legacy-server#LegacyWiring/routingModules[0]:legacy-server#LegacyRoutes"
                 }
             ]
         },

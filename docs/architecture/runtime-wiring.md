@@ -18,17 +18,77 @@ getRoutingModules(): RouteModule[] { return [new ApplicationRoutes()]; }
 ```
 
 Getters contain no spreads, helpers, nested arrays, casts, or setup. Constructors store prepared
-inputs using parameter properties. Only an application can select libraries. `wiring-format`
-checks every tagged owner's canonical `src/wiring.ts`, including unchanged owners, using its explicit
-`maxLines` configuration (the agreed limit is 200). Imported implementations are resolved for graph
-facts, but their non-wiring source files are outside this format rule.
+inputs using parameter properties. Only an application can select libraries.
+
+## wiring.ts shows the actual wiring
+
+Each owner's `src/wiring.ts` contains its exported Wiring or AppWiring class AND the named
+BindingModule and RouteModule classes it selects, above or below it, with their real registrations
+in `configure`: `RuntimeClients.bindRpc`, `provideRpcClient`, `RuntimeTaskClients.bindPubSub`,
+`router.addRoutes`, `router.addFilter`, DI binds and provider recipes. A selection must resolve
+(through the compiler, never by name) to a module class declared in the SAME file, and a library
+Wiring selected by `getWirings()` must be declared in that library's own `src/wiring.ts`, where its
+modules and registrations live. Importing a module implementation from `RuntimeModules.ts`,
+`BrowserSetup.ts` or any other file fails with a diagnostic naming the module and its file, and so
+does inheriting a selection getter or `configure` from another file.
+
+```ts
+export class ProductRoutes implements RouteModule {
+    configure(router: WebpiecesRouter): void {
+        router.addRoutes(ProjectsApi, ProjectsController);
+    }
+}
+
+export class RemoteStoreBindings implements BindingModule {
+    configure(options: ContainerModuleLoadOptions): void {
+        new RuntimeClients(options).bindRpc(STORE_TYPES.StoreApi, StoreApi, 'store');
+        options.bind(JWT_HOOK).to(CompanyJwtHook).inSingletonScope();
+        options.bind(WARMUP).toDynamicValue((ctx: ResolutionContext) => ctx.get(STORE_TYPES.StoreApi)).inSingletonScope();
+    }
+}
+
+export class ProductAppWiring implements AppWiring {
+    constructor(private readonly config: ProductConfig) {}
+    getWirings(): Wiring[] { return [new AuthWiring(this.config.auth)]; }
+    getBindingModules(): BindingModule[] { return [new RemoteStoreBindings()]; }
+    getRoutingModules(): RouteModule[] { return [new ProductRoutes()]; }
+}
+```
+
+Business and preparation work stays OUT of wiring.ts: configuration building, translations,
+environment discovery, event subscriptions, initializer bodies, controller/service logic and named
+factory implementations. wiring.ts keeps the registration visible and references them by name:
+`provideAppInitializer(initializeSession)`, `{ provide: TOKEN, useFactory: chrome, deps: [Text] }`,
+`toDynamicValue(AppSecrets.fromEnvironment)`. A `configure` contains only registration declarations:
+`options.bind(...)` chains (`to`, `toSelf`, `toConstantValue`, `toDynamicValue`, `inSingletonScope`),
+short DI factory callbacks such as `(ctx) => ctx.get(Token)`, client bindings, `bindings.add(...)`
+provider recipes (`makeEnvironmentProviders`, `provide`/`useClass`/`useExisting`/`useFactory`/
+`useValue`/`deps`/`multi`, `provideRouter`, ...), routes, filters, `(await) Module.load(options)`
+for an opaque vendor or library module, `new ExternalContractUse(...)` and named `WiringPolicy`
+conditions. Loops, non-policy branches, block-bodied callbacks, environment reads, computed
+configuration and calls into this owner's own helpers (which would hide the registrations they
+return) are rejected. A loaded module's implementation is never scanned for topology: an owner's
+API clients and controllers are explicit in its wiring.ts.
+
+`wiring-format` checks every tagged owner's canonical `src/wiring.ts`, including unchanged owners,
+and never format-checks any other file. Its explicit `maxLines` configuration (the agreed limit is
+400) is a backstop behind the grammar: a complete, normally formatted lang-sized server with 25
+client/task/controller declarations measures about 265 lines. When a file outgrows it, move
+business logic out or give a cohesive group its own library owner and wiring.ts; never move an
+owner's modules or registrations into another file.
+
+Runtime extraction reads ONLY canonical wiring.ts files. The compiler still type-checks the whole
+project, so imported and re-exported APIs, tokens, controllers and prepared configuration resolve to
+their qualified identities, but no other file's body is visited for wiring facts and there is no
+fallback discovery. Separately, an `ExternalContractUse` is still backed by a production business
+consumer found among the owner's constructor dependencies; that consumer proof adds no relationship.
 
 Node binding modules implement `configure(options: ContainerModuleLoadOptions)`; asynchronous
 configuration is awaited. Route modules implement `configure(router: WebpiecesRouter)`.
 Use `new RuntimeClients(options).bindRpc(token, Api, 'deployment')` or
 `RuntimeTaskClients.bindPubSub(token, Api, 'deployment')`. Destinations are strings; `rpcTarget`
 and `RpcTarget` have been removed. API/token typing, singleton scope, filters and test tokens remain.
-Low-level implementation factories belong in imported implementation modules.
+Low-level factory bodies belong in imported implementations; their registrations stay in wiring.ts.
 
 Browser modules configure a `BrowserBindings` collector. `bindings.add(provideRpcClient(token,
 Api, 'deployment'))` remains lazy. `BrowserWiringProviders.toProviders(app)` installs the collected
@@ -123,6 +183,8 @@ resets zoom. Runtime nodes show Implements/Uses counts; hover, focus or click op
 facts and provenance. Edges keep one or two API names inline; larger sets open a Uses dropdown.
 Hidden external destinations remain in node details and queue producer inference is labeled.
 
-The producer uses the published 0.4.866 tooling family. The explicit
-`wiring-format` policy uses `RUN_EVERY_TIME` with `maxLines: 200`; canonical source proof and
-approved graph generation use the installed executors. No source-preview override is required.
+The producer uses the published 0.4.866 tooling family, whose `wiring-format` policy runs
+`RUN_EVERY_TIME`; canonical source proof and approved graph generation use the installed executors.
+No source-preview override is required. The canonical-only extraction, same-file module rule and
+400-line recommendation of issue #1146 ship in source first; the producer's explicit `maxLines`
+value moves to 400 with the pin bump to the release that carries them.

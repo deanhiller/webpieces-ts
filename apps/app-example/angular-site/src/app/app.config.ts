@@ -2,6 +2,7 @@ import { ApplicationConfig, provideZoneChangeDetection } from '@angular/core';
 import { provideRouter } from '@angular/router';
 import { routes } from './app.routes';
 import { ApplicationBrowserWiring } from '../wiring';
+import { BrowserHostFactories } from '../services/BrowserHostFactories';
 import { BrowserWiringProviders } from '@webpieces/http-client-browser';
 
 /**
@@ -33,6 +34,6 @@ export const appConfig: ApplicationConfig = {
         provideZoneChangeDetection({ eventCoalescing: true }),
         provideRouter(routes),
 
-        ...new BrowserWiringProviders().toProviders(new ApplicationBrowserWiring()),
+        ...new BrowserWiringProviders().toProviders(new ApplicationBrowserWiring(new BrowserHostFactories())),
     ],
 };

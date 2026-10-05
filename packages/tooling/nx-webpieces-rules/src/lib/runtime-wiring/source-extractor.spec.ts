@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { Fixture } from './__tests__/wiring-fixture';
-import { RuntimeWiringAssembler } from './assembler';
+import { ResolvedWiringRelationship, RuntimeWiringAssembler } from './assembler';
+import { WiringRelationship } from './declaration';
 import { RuntimeDeclarationCodec } from './codec';
 
 const leaf = `export class Clients implements BindingModule {
@@ -110,14 +111,13 @@ describe('typed Wiring/AppWiring extraction', () => {
         expect(result).toHaveLength(4);
     });
 
-    it('never runs imported module constructors while extracting prepared config paths', () => {
+    it('never runs module constructors, getters or configure while extracting prepared config paths', () => {
         const fixture = new Fixture();
-        fixture.write('app', 'Clients.ts', fixture.source(`export class Clients implements BindingModule {
-            constructor(private readonly config: { auth: { store: string } }) { throw new Error('must never execute'); }
-            configure(options: object): void { new RuntimeClients().bindRpc(SaveApi, SaveApi, this.config.auth.store); }
-        }`));
-        fixture.write('app', 'wiring.ts', fixture.source(`import { Clients } from './Clients';
-            import { prepared } from './config';
+        fixture.write('app', 'wiring.ts', fixture.source(`import { prepared } from './config';
+            export class Clients implements BindingModule {
+                constructor(private readonly config: { auth: { store: string } }) { throw new Error('must never execute'); }
+                configure(options: object): void { new RuntimeClients().bindRpc(SaveApi, SaveApi, this.config.auth.store); throw new Error('never'); }
+            }
             export class Application implements AppWiring {
                 getWirings(): Wiring[] { return []; }
                 getBindingModules(): BindingModule[] { return [new Clients(prepared)]; }
@@ -146,5 +146,110 @@ describe('typed Wiring/AppWiring extraction', () => {
         const fixture = new Fixture();
         fixture.write('app', 'wiring.ts', fixture.source(leaf + source));
         expect(() => fixture.extract()).toThrow();
+    });
+});
+
+describe('#1146: extraction reads only canonical wiring.ts', () => {
+    const selecting = (imports: string): string => `${imports}
+        export class Application implements AppWiring {
+            getWirings(): Wiring[] { return []; }
+            getBindingModules(): BindingModule[] { return [new Clients('store')]; }
+            getRoutingModules(): RouteModule[] { return [new Routes()]; }
+        }`;
+
+    it.each(['RuntimeModules.ts', 'BrowserSetup.ts'])(
+        'rejects a selected module declared in %s even though the old broad scan reproduced the same graph',
+        (file: string) => {
+            const fixture = new Fixture();
+            fixture.write('app', file, fixture.source(leaf));
+            fixture.write('app', 'wiring.ts', fixture.source(selecting(`import { Clients, Routes } from './${file.replace('.ts', '')}';`)));
+            expect(() => fixture.extract()).toThrow(new RegExp(`Application selects Clients, which is declared in .*${file}\\. Declare the BindingModule class Clients, with its registrations, beside Application in .*wiring\\.ts`));
+        },
+    );
+
+    it('never lets a non-canonical module add relationships or be discovered as a fallback', () => {
+        const fixture = new Fixture();
+        fixture.write('app', 'wiring.ts', fixture.source(leaf + app));
+        fixture.write('app', 'RuntimeModules.ts', fixture.source(`
+            export class HiddenClients implements BindingModule {
+                configure(options: object): void { new RuntimeClients().bindRpc(AuthApi, AuthApi, 'hidden'); }
+            }
+            export class HiddenWiring implements Wiring {
+                getBindingModules(): BindingModule[] { return [new HiddenClients()]; }
+                getRoutingModules(): RouteModule[] { return []; }
+            }`));
+        const declaration = fixture.extract();
+        expect(Object.keys(declaration.exports).sort()).toEqual(['Application', 'Clients', 'Routes']);
+        expect(JSON.stringify(declaration)).not.toContain('hidden');
+        const assembled = new RuntimeWiringAssembler(new Map([['app', declaration]])).assemble('app');
+        expect(assembled.map((relationship: ResolvedWiringRelationship) => `${relationship.direction}:${relationship.api}`))
+            .toEqual(['uses:SaveApi', 'implements:AuthApi']);
+    });
+
+    it('rejects a library Wiring that is not declared in its owner\'s canonical wiring.ts, even through a re-export', () => {
+        const fixture = new Fixture();
+        fixture.write('library', 'wiring.ts', fixture.source(leaf));
+        fixture.write('library', 'AuthWiring.ts', fixture.source(`import { Clients, Routes } from './wiring';
+            export class AuthWiring implements Wiring {
+                getBindingModules(): BindingModule[] { return [new Clients('auth')]; }
+                getRoutingModules(): RouteModule[] { return [new Routes()]; }
+            }`));
+        fixture.write('library', 'index.ts', "export { AuthWiring } from './AuthWiring';");
+        fixture.write('app', 'wiring.ts', fixture.source(`import { AuthWiring } from '../../library/src/index';
+            export class Application implements AppWiring {
+                getWirings(): Wiring[] { return [new AuthWiring()]; }
+                getBindingModules(): BindingModule[] { return []; }
+                getRoutingModules(): RouteModule[] { return []; }
+            }`));
+        expect(() => fixture.extract()).toThrow(/library Wiring library#AuthWiring, which is declared in .*AuthWiring\.ts\. A library Wiring and its modules belong in that library's canonical .*library\/src\/wiring\.ts/);
+    });
+
+    it('rejects selection getters or configure inherited from a non-canonical base class', () => {
+        const fixture = new Fixture();
+        fixture.write('app', 'RuntimeModules.ts', fixture.source(`
+            export class PreparedApplication {
+                getWirings(): Wiring[] { return []; }
+                getBindingModules(): BindingModule[] { return []; }
+                getRoutingModules(): RouteModule[] { return []; }
+            }
+            export class BaseClients { configure(options: object): void { new RuntimeClients().bindRpc(SaveApi, SaveApi, 'store'); } }`));
+        fixture.write('app', 'wiring.ts', fixture.source(`import { PreparedApplication } from './RuntimeModules';
+            export class Application extends PreparedApplication implements AppWiring {}`));
+        expect(() => fixture.extract()).toThrow(/selection getter is declared in .*RuntimeModules\.ts/);
+        const inherited = new Fixture();
+        inherited.write('app', 'RuntimeModules.ts', fixture.source(
+            "export class BaseClients { configure(options: object): void { new RuntimeClients().bindRpc(SaveApi, SaveApi, 'store'); } }"));
+        inherited.write('app', 'wiring.ts', fixture.source(`import { BaseClients } from './RuntimeModules';
+            export class Clients extends BaseClients implements BindingModule {}
+            export class Application implements AppWiring {
+                getWirings(): Wiring[] { return []; }
+                getBindingModules(): BindingModule[] { return [new Clients()]; }
+                getRoutingModules(): RouteModule[] { return []; }
+            }`));
+        expect(() => inherited.extract()).toThrow(/configure is inherited from .*RuntimeModules\.ts/);
+    });
+
+    it('still resolves re-exported API identities, external contracts and policies declared in wiring.ts', () => {
+        const fixture = new Fixture();
+        fixture.write('contracts', 'index.ts', "export { SaveApi as RenamedSaveApi } from './api';");
+        fixture.write('vendor', 'api.ts', 'export interface VendorApi { call(): void; }');
+        fixture.write('app', 'Consumer.ts', "import { VendorApi } from '../../vendor/src/api'; export class Consumer { constructor(private readonly vendor: VendorApi) {} }");
+        fixture.write('app', 'wiring.ts', fixture.source(`import { RenamedSaveApi as Save } from '../../contracts/src/index';
+            export class Clients implements BindingModule {
+                constructor(private readonly policy: WiringPolicy) {}
+                configure(options: object): void {
+                    new ExternalContractUse('vendor#VendorApi');
+                    if (this.policy.enabled) new RuntimeClients(options).bindRpc(Save, Save, 'store');
+                }
+            }
+            export class Application implements AppWiring {
+                getWirings(): Wiring[] { return []; }
+                getBindingModules(): BindingModule[] { return [new Clients(new WiringPolicy('clients', true))]; }
+                getRoutingModules(): RouteModule[] { return []; }
+            }`));
+        const relationships = fixture.extract().exports.Clients.relationships;
+        expect(relationships.map((relationship: WiringRelationship) => `${relationship.contract.project}#${relationship.contract.exportedName}:${relationship.transport}`))
+            .toEqual(['vendor#VendorApi:external', 'contracts#SaveApi:rpc']);
+        expect(relationships[1].policy).toBe('policy');
     });
 });

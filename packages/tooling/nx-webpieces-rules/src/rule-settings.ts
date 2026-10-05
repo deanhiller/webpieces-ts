@@ -25,7 +25,7 @@ export const optionalTuning: Readonly<Record<string, ConfigObject>> = {
 export const recommendedSeeds: Readonly<Record<string, ConfigObject>> = {
     "wiring-format": {
         "mode": "RUN_EVERY_TIME",
-        "maxLines": 200,
+        "maxLines": 400,
         "turnOffRuleUntilEpoch": 0,
         "turnOffRuleWhileOnBranch": null
     },

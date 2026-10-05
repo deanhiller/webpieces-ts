@@ -3,13 +3,6 @@
     "project": "legacy-server",
     "framework": "node",
     "exports": {
-        "AdditionalFilters": {
-            "kind": "routing",
-            "relationships": [],
-            "bindingModules": [],
-            "routingModules": [],
-            "wirings": []
-        },
         "ApplicationBindings": {
             "kind": "binding",
             "relationships": [],
@@ -59,12 +52,6 @@
                 }
             ],
             "routingModules": [
-                {
-                    "project": "legacy-server",
-                    "exportedName": "AdditionalFilters",
-                    "targets": {},
-                    "policies": {}
-                },
                 {
                     "project": "legacy-server",
                     "exportedName": "LegacyRoutes",

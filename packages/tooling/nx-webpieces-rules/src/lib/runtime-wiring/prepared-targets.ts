@@ -1,7 +1,10 @@
 import * as ts from 'typescript';
 import { WiringSourceTypes } from './source-types';
 
-/** Infer graph-relevant constructor paths from destination uses and selected named modules. */
+/**
+ * Infer graph-relevant constructor paths from destination uses and selected named modules. Only
+ * classes declared in a canonical src/wiring.ts are walked.
+ */
 export class PreparedTargets {
     private readonly types: WiringSourceTypes;
 
@@ -24,7 +27,8 @@ export class PreparedTargets {
     }
 
     private collect(declaration: ts.ClassDeclaration, active: Set<ts.ClassDeclaration>, channel: 'target' | 'policy'): string[] {
-        if (active.has(declaration)) return [];
+        // Only canonical wiring declarations carry graph-relevant paths; another file's body is never read.
+        if (active.has(declaration) || !/(?:^|[\\/])src[\\/]wiring\.ts$/.test(declaration.getSourceFile().fileName)) return [];
         const next = new Set([...active, declaration]);
         const parameters = declaration.members.filter(ts.isConstructorDeclaration).flatMap(
             (constructor: ts.ConstructorDeclaration) => constructor.parameters.map(

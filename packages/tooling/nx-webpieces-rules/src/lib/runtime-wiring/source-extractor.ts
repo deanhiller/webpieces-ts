@@ -42,19 +42,16 @@ export class WiringSourceExtractor {
         this.values = new WiringSourceValues(workspaceRoot, infos, program.getTypeChecker());
     }
 
+    /**
+     * Reads ONLY the owner's canonical src/wiring.ts. The program still type-checks every file so
+     * imports, aliases and re-exports resolve, but no other file's body is visited for wiring facts:
+     * a module declared elsewhere can neither add a relationship nor be discovered as a fallback.
+     */
     extract(): RuntimeDeclaration {
-        const wiringPath = path.resolve(this.workspaceRoot, this.info.root, 'src/wiring.ts');
-        const wiring = this.program.getSourceFile(wiringPath);
-        if (wiring === undefined) this.fail(`Missing canonical ${wiringPath}.`);
-        for (const file of this.program.getSourceFiles()) {
-            if (
-                file.isDeclarationFile ||
-                !this.owns(file.fileName) ||
-                /(?:\.spec\.|\.test\.|\/__tests__\/)/.test(file.fileName)
-            )
-                continue;
-            this.visit(file, file.fileName === wiringPath);
-        }
+        const wiring = this.program.getSourceFile(this.wiringPath);
+        if (wiring === undefined) this.fail(`Missing canonical ${this.wiringPath}.`);
+        for (const statement of wiring!.statements)
+            if (ts.isClassDeclaration(statement)) this.recordWiring(statement);
         const framework = this.info.tags.includes('framework:angular')
             ? 'angular'
             : this.info.tags.some((tag) => tag === 'framework:node' || tag === 'framework:express')
@@ -69,11 +66,6 @@ export class WiringSourceExtractor {
             this.entry,
             this.host,
         );
-    }
-
-    private visit(node: ts.Node, inWiring: boolean): void {
-        if (ts.isClassDeclaration(node)) this.recordWiring(node, inWiring);
-        ts.forEachChild(node, (child: ts.Node) => this.visit(child, inWiring));
     }
 
     private facts(node: ts.Node, owner: string): void {
@@ -159,7 +151,7 @@ export class WiringSourceExtractor {
         return /(?:\/packages\/(?:http|cloud)\/|\/node_modules\/@webpieces\/)(?:http-routing|http-client-node|http-client-browser|cloudtasks-client)\//.test(file);
     }
 
-    private recordWiring(declaration: ts.ClassDeclaration, inWiring: boolean): void {
+    private recordWiring(declaration: ts.ClassDeclaration): void {
         const types = new WiringSourceTypes(this.program.getTypeChecker());
         const kind = types.kind(declaration);
         const owner = this.exportOwner(declaration);
@@ -169,13 +161,14 @@ export class WiringSourceExtractor {
             const configure = types.method(declaration, 'configure');
             if (configure === undefined || configure.body === undefined)
                 this.fail(`${owner}: named module requires a statically resolvable configure implementation.`);
+            if (path.resolve(configure!.getSourceFile().fileName) !== this.wiringPath)
+                this.fail(`${owner}: configure is inherited from ${configure!.getSourceFile().fileName}; declare its registrations in ${owner}.configure in ${this.wiringPath}.`);
             this.facts(configure!.body!, owner);
             return;
         }
-        if (!inWiring) this.fail(`${owner}: declare Wiring/AppWiring only in canonical src/wiring.ts.`);
-        const bindings = this.moduleSelections(types.method(declaration, 'getBindingModules'), 'binding');
-        const routes = this.moduleSelections(types.method(declaration, 'getRoutingModules'), 'routing');
-        const libraries = kind === 'app' ? this.moduleSelections(types.method(declaration, 'getWirings'), 'wiring') : [];
+        const bindings = this.moduleSelections(owner, types.method(declaration, 'getBindingModules'), 'binding');
+        const routes = this.moduleSelections(owner, types.method(declaration, 'getRoutingModules'), 'routing');
+        const libraries = kind === 'app' ? this.moduleSelections(owner, types.method(declaration, 'getWirings'), 'wiring') : [];
         if (kind === 'wiring' && types.method(declaration, 'getWirings') !== undefined)
             this.fail(`${owner}: library Wiring cannot select other Wirings.`);
         this.exported[owner] = new WiringExport(kind, [], bindings, routes, libraries);
@@ -191,7 +184,9 @@ export class WiringSourceExtractor {
         }
     }
 
-    private moduleSelections(method: ts.MethodDeclaration | undefined, expected: 'binding' | 'routing' | 'wiring'): WiringSelection[] {
+    private moduleSelections(owner: string, method: ts.MethodDeclaration | undefined, expected: 'binding' | 'routing' | 'wiring'): WiringSelection[] {
+        if (method !== undefined && path.resolve(method.getSourceFile().fileName) !== this.wiringPath)
+            this.fail(`${owner}: its selection getter is declared in ${method.getSourceFile().fileName}; declare getBindingModules/getRoutingModules/getWirings on ${owner} itself in ${this.wiringPath}.`);
         const statements = method?.body?.statements;
         const expression = statements?.length === 1 && ts.isReturnStatement(statements[0]) ? statements[0].expression : undefined;
         if (expression === undefined || !ts.isArrayLiteralExpression(expression))
@@ -201,8 +196,37 @@ export class WiringSourceExtractor {
             if (!ts.isNewExpression(element) || types.kind(element.expression) !== expected)
                 this.fail(`Wrong ${expected} selection ${element.getText()}; AppWiring children, delegation and nested lists are forbidden.`);
             const identity = this.values.identity(element.expression);
+            this.assertCanonicalDeclaration(owner, element.expression, identity, expected);
             return new WiringSelection(identity.project, identity.exportedName, this.values.arguments(element), this.values.policies(element));
         });
+    }
+
+    /**
+     * A selected module must be declared in THIS wiring.ts, and a selected library Wiring in its own
+     * owner's src/wiring.ts. Proven by the resolved declaration, never by a name, and checked before
+     * any argument analysis, so an off-file module body is never read.
+     */
+    private assertCanonicalDeclaration(
+        owner: string,
+        selected: ts.Expression,
+        identity: ContractIdentity,
+        expected: 'binding' | 'routing' | 'wiring',
+    ): void {
+        const declaration = new WiringSourceTypes(this.program.getTypeChecker()).declaration(selected);
+        const declaredIn = declaration === undefined ? 'an unresolved file' : path.resolve(declaration.getSourceFile().fileName);
+        if (expected !== 'wiring') {
+            if (declaredIn === this.wiringPath) return;
+            const role = expected === 'binding' ? 'BindingModule' : 'RouteModule';
+            this.fail(
+                `${owner} selects ${identity.exportedName}, which is declared in ${declaredIn}. Declare the ${role} class ${identity.exportedName}, with its registrations, beside ${owner} in ${this.wiringPath}.`,
+            );
+        }
+        const library = this.infos.get(identity.project);
+        const canonical = library === undefined ? undefined : path.resolve(this.workspaceRoot, library.root, 'src/wiring.ts');
+        if (canonical !== undefined && declaredIn === canonical) return;
+        this.fail(
+            `${owner} selects library Wiring ${identity.project}#${identity.exportedName}, which is declared in ${declaredIn}. A library Wiring and its modules belong in that library's canonical ${canonical ?? 'src/wiring.ts'}.`,
+        );
     }
 
     private exportOwner(node: ts.Node): string | undefined {
@@ -239,15 +263,14 @@ export class WiringSourceExtractor {
         return undefined;
     }
 
-    private owns(file: string): boolean {
-        const root = path.resolve(this.workspaceRoot, this.info.root) + path.sep;
-        return path.resolve(file).startsWith(root) && !file.includes('/node_modules/');
+    private get wiringPath(): string {
+        return path.resolve(this.workspaceRoot, this.info.root, 'src/wiring.ts');
     }
 
     private fail(message: string): never {
         throw new RuleFailError('validate-runtime-architecture', message, undefined, undefined, [
             new Option(
-                'Move topology into canonical src/wiring.ts using RuntimeClients.bindRpc(token, Api, deployment), RuntimeTaskClients.bindPubSub, or provideRpcClient for supported registrations, and use the documented Wiring/AppWiring getter grammar; do not execute configuration to extract it.',
+                'Declare each owner\'s Wiring/AppWiring class AND its BindingModule/RouteModule classes, with their registrations (RuntimeClients.bindRpc(token, Api, deployment), RuntimeTaskClients.bindPubSub, provideRpcClient, addRoutes, addFilter, DI binds), together in that owner\'s canonical src/wiring.ts, and use the documented getter grammar; extraction reads only wiring.ts and never executes configuration.',
                 true,
             ),
         ]);
