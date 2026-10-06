@@ -28,15 +28,9 @@ interface DesignLinkJson {
  * Declared (not imported) because these are global scripts — see the header above.
  */
 declare class WpNodeMenuItem {
-    /** `children` makes this item open a submenu (the architecture page's "Mode ▸") instead. */
-    constructor(label: string, onSelect: () => void, children?: WpNodeMenuItem[]);
+    constructor(label: string, onSelect: () => void);
     label: string;
     onSelect: () => void;
-    children: WpNodeMenuItem[];
-    /** null: an ordinary item. true/false: one choice of a radio group, ✓ when true. */
-    checked: boolean | null;
-    /** Non-empty: the item is disabled, and this one-line reason is its tooltip. */
-    disabledReason: string;
 }
 
 declare class WpNodeMenu {
@@ -93,6 +87,13 @@ interface RenderNodeJson {
     dot: string;
     /** The architecture graph's per-mode statements (graph-color-modes.ts); null on the runtime graph. */
     modes: NodeModeDotsJson | null;
+    /** What the architecture page's Filter matches on; null on the runtime graph. */
+    tags: NodeTagsJson | null;
+}
+interface NodeTagsJson {
+    level: number;
+    role: string;
+    frameworks: string[];
 }
 interface NodeModeDotsJson {
     runtime: string;
@@ -119,6 +120,10 @@ interface ImpactJson {
     /** Transitive dependencies of the affected set that are not affected themselves. */
     buildInputs: string[];
     changedFiles: number;
+    /** Transitive dependencies of the touched set that are not touched: "Changed + what they use". */
+    dependencies: string[];
+    /** Changed files no project owns (workspace-global inputs such as pnpm-lock.yaml). */
+    globalFiles: string[];
 }
 interface Window {
     __WP_IMPACT__?: ImpactJson;

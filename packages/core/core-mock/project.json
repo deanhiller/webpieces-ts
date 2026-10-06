@@ -22,7 +22,34 @@
                     "packages/core/core-mock/README.md"
                 ]
             }
+        },
+        "react-native-compat": {
+            "executor": "nx:run-commands",
+            "dependsOn": [
+                "build",
+                "^build"
+            ],
+            "cache": true,
+            "inputs": [
+                "default",
+                "^default",
+                "{workspaceRoot}/scripts/react-native-compat.ts",
+                "{workspaceRoot}/packages/tooling/code-rules/src/react-native-compatibility.ts",
+                "{workspaceRoot}/pnpm-lock.yaml"
+            ],
+            "options": {
+                "command": "TS_NODE_PROJECT=tsconfig.base.json node -r @swc-node/register -r tsconfig-paths/register scripts/react-native-compat.ts core-mock"
+            }
+        },
+        "ci": {
+            "dependsOn": [
+                "lint",
+                "build",
+                "test",
+                "react-native-compat",
+                "architecture:validate-complete"
+            ]
         }
     },
-    "tags": ["framework:browser", "framework:node", "role:lib"]
+    "tags": ["framework:browser", "framework:node", "framework:react-native", "role:lib"]
 }

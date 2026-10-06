@@ -9,6 +9,7 @@
 class WpModeState {
     static readonly MODES = ['runtime', 'architecture', 'impact'];
     static readonly NAMES = ['Runtime', 'Architecture', 'Impact'];
+    static readonly SUBTITLES = ['where the code can run', 'servers · clients · APIs', 'what this branch touches'];
     static readonly STORAGE_KEY = 'wp-architecture-graph-mode';
     readonly impact: ImpactJson | null = window.__WP_IMPACT__ ?? null;
     mode = 'runtime';
@@ -17,10 +18,10 @@ class WpModeState {
         this.mode = this.initial();
     }
 
-    /** '' when Impact can be shown, else the one line the drawer and the menu say instead. */
+    /** '' when Impact can be shown, else the one line the drawer and the Filter popover say instead. */
     impactReason(): string {
         if (this.impact === null)
-            return 'No impact data for this branch. Run pnpm nx run architecture:generate to compute it.';
+            return 'No impact data for this branch. Run pnpm arch:visualize (nx run architecture:visualize) to compute it — no full regenerate needed.';
         return this.impact.available ? '' : `Impact unavailable: ${this.impact.reason}.`;
     }
 
@@ -30,6 +31,10 @@ class WpModeState {
 
     name(mode: string): string {
         return WpModeState.NAMES[WpModeState.MODES.indexOf(mode)] ?? mode;
+    }
+
+    subtitle(mode: string): string {
+        return WpModeState.SUBTITLES[WpModeState.MODES.indexOf(mode)] ?? '';
     }
 
     /** False (and nothing changes) for an unknown or unavailable mode. */
@@ -74,6 +79,84 @@ class WpModeState {
             void err;
             return null;
         }
+    }
+}
+
+/**
+ * One state of the Filter popover: a change scope plus the selected Runtime and Role chips. The page
+ * holds the APPLIED one; the popover edits a copy until "Show N projects".
+ */
+class WpFilterChoice {
+    scope = 'everything';
+    readonly runtimes = new Set<string>();
+    readonly roles = new Set<string>();
+
+    copy(): WpFilterChoice {
+        const copy = new WpFilterChoice();
+        copy.scope = this.scope;
+        for (const runtime of this.runtimes) copy.runtimes.add(runtime);
+        for (const role of this.roles) copy.roles.add(role);
+        return copy;
+    }
+
+    /** How many filters are active: the drawer button's badge. */
+    count(): number {
+        return (this.scope === 'everything' ? 0 : 1) + this.runtimes.size + this.roles.size;
+    }
+}
+
+/**
+ * The Filter popover's three groups, INTERSECTED: a box stays when it is in the change scope, AND has
+ * any selected runtime chip (when one is selected), AND has any selected role chip (likewise).
+ */
+class WpProjectFilter {
+    static readonly SCOPE_NAMES = new Map<string, string>([
+        ['everything', 'Everything'],
+        ['changed', 'Changed'],
+        ['dependents', 'Changed + what uses them'],
+        ['dependencies', 'Changed + what they use'],
+        ['build', 'Whole build of this branch'],
+    ]);
+
+    constructor(
+        private readonly model: RenderModelJson,
+        private readonly modes: WpModeState,
+    ) {}
+
+    /** The node ids a change scope keeps; null for "everything" (and whenever Impact is unavailable). */
+    scopeSet(scope: string): Set<string> | null {
+        const impact = this.modes.impact;
+        if (scope === 'everything' || impact === null || this.modes.impactReason() !== '') return null;
+        const ids: string[] = [...impact.touched];
+        if (scope === 'dependents' || scope === 'build') ids.push(...impact.affected);
+        if (scope === 'dependencies') ids.push(...impact.dependencies);
+        if (scope === 'build') ids.push(...impact.buildInputs);
+        return new Set(ids);
+    }
+
+    /** How many drawn projects a scope keeps on its own: the count beside each option. */
+    scopeCount(scope: string): number {
+        const set = this.scopeSet(scope);
+        return this.model.nodes.filter((node: RenderNodeJson): boolean => set === null || set.has(node.id)).length;
+    }
+
+    /** `base` (everything, or the Hide-unconnected chain) narrowed by `choice`. */
+    apply(base: Set<string>, choice: WpFilterChoice): Set<string> {
+        const scope = this.scopeSet(choice.scope);
+        const kept = new Set<string>();
+        for (const node of this.model.nodes) {
+            if (!base.has(node.id)) continue;
+            if (scope !== null && !scope.has(node.id)) continue;
+            if (!this.anyOf(choice.runtimes, node.tags?.frameworks ?? [])) continue;
+            if (!this.anyOf(choice.roles, node.tags === null ? [] : [node.tags.role])) continue;
+            kept.add(node.id);
+        }
+        return kept;
+    }
+
+    /** An empty chip group matches every box; otherwise the box must carry one of the chips. */
+    private anyOf(selected: Set<string>, carried: string[]): boolean {
+        return selected.size === 0 || carried.some((value: string): boolean => selected.has(value));
     }
 }
 
@@ -160,9 +243,102 @@ class GraphHighlighter {
                 ),
             );
             items.push(this.page.filterItem(name));
-            items.push(this.page.modeItem());
             return items;
         });
+    }
+}
+
+/**
+ * The Filter popover: edits a COPY of the page's applied filter, shows what each choice would keep,
+ * and hands the copy to the page on "Show N projects". Closing it any other way discards the edit.
+ */
+class GraphFilterPopover {
+    private draft = new WpFilterChoice();
+
+    constructor(private readonly page: GraphPage) {}
+
+    wire(): void {
+        this.byId('wp-filter-open')?.addEventListener('click', (ev: MouseEvent) => {
+            ev.stopPropagation();
+            if (this.isOpen()) this.close();
+            else this.open();
+        });
+        this.byId('wp-filter-close')?.addEventListener('click', () => this.close());
+        this.byId('wp-filter-clear')?.addEventListener('click', () => {
+            this.draft = new WpFilterChoice();
+            this.paint();
+        });
+        this.byId('wp-filter-apply')?.addEventListener('click', () => {
+            this.page.applyFilter(this.draft.copy());
+            this.close();
+        });
+        document.querySelectorAll<HTMLInputElement>('input[name="wp-scope"]').forEach((radio: HTMLInputElement) => {
+            radio.addEventListener('change', () => {
+                if (!radio.checked) return;
+                this.draft.scope = radio.value;
+                this.paint();
+            });
+        });
+        document.querySelectorAll<HTMLButtonElement>('.wp-chip[data-wp-chip]').forEach((chip: HTMLButtonElement) => {
+            chip.addEventListener('click', () => {
+                const set = chip.dataset['wpChipGroup'] === 'role' ? this.draft.roles : this.draft.runtimes;
+                const value = chip.dataset['wpChip'] ?? '';
+                if (set.has(value)) set.delete(value);
+                else set.add(value);
+                this.paint();
+            });
+        });
+    }
+
+    isOpen(): boolean {
+        return this.byId('wp-filter-pop')?.hidden === false;
+    }
+
+    open(): void {
+        const pop = this.byId('wp-filter-pop');
+        if (pop === null) return;
+        this.draft = this.page.appliedFilter().copy();
+        this.paint();
+        pop.hidden = false;
+        this.byId('wp-filter-open')?.setAttribute('aria-expanded', 'true');
+    }
+
+    close(): void {
+        const pop = this.byId('wp-filter-pop');
+        if (pop === null || pop.hidden) return;
+        pop.hidden = true;
+        this.byId('wp-filter-open')?.setAttribute('aria-expanded', 'false');
+    }
+
+    /** Repaint the controls from the draft: checked scope, pressed chips, counts and the footer. */
+    private paint(): void {
+        const reason = this.page.scopeReason();
+        const group = this.byId('wp-scope-group') as HTMLFieldSetElement | null;
+        if (group !== null) group.disabled = reason !== '';
+        const reasonEl = this.byId('wp-scope-reason');
+        if (reasonEl !== null) {
+            reasonEl.textContent = reason;
+            reasonEl.hidden = reason === '';
+        }
+        document.querySelectorAll<HTMLInputElement>('input[name="wp-scope"]').forEach((radio: HTMLInputElement) => {
+            radio.checked = radio.value === this.draft.scope;
+        });
+        document.querySelectorAll<HTMLElement>('[data-wp-scope-count]').forEach((count: HTMLElement) => {
+            count.textContent = reason === '' ? String(this.page.scopeCount(count.dataset['wpScopeCount'] ?? '')) : '';
+        });
+        document.querySelectorAll<HTMLButtonElement>('.wp-chip[data-wp-chip]').forEach((chip: HTMLButtonElement) => {
+            const set = chip.dataset['wpChipGroup'] === 'role' ? this.draft.roles : this.draft.runtimes;
+            chip.setAttribute('aria-pressed', String(set.has(chip.dataset['wpChip'] ?? '')));
+        });
+        const apply = this.byId('wp-filter-apply');
+        if (apply !== null) {
+            const shown = this.page.preview(this.draft);
+            apply.textContent = `Show ${shown} project${shown === 1 ? '' : 's'}`;
+        }
+    }
+
+    private byId(id: string): HTMLElement | null {
+        return document.getElementById(id);
     }
 }
 
@@ -171,12 +347,15 @@ class GraphHighlighter {
  * each control calls back into the page, and `sync()` repaints the controls from the page's state.
  */
 class GraphDrawer {
-    constructor(private readonly page: GraphPage) {}
+    readonly popover: GraphFilterPopover;
+
+    constructor(private readonly page: GraphPage) {
+        this.popover = new GraphFilterPopover(page);
+    }
 
     wire(): void {
-        document.querySelectorAll<HTMLButtonElement>('.wp-mode[data-wp-mode]').forEach((button: HTMLButtonElement) => {
-            button.addEventListener('click', () => this.page.setMode(button.dataset['wpMode'] ?? 'runtime'));
-        });
+        this.wireModeMenu();
+        this.popover.wire();
         this.wireLock();
         this.byId('wp-filter-toggle')?.addEventListener('click', () => this.page.toggleFilter());
         this.toggles('wp-collapse', 'wp-shell', true);
@@ -189,6 +368,43 @@ class GraphDrawer {
         this.toggles('wp-snapshot-open', 'wp-snapshot', false);
         window.addEventListener('keydown', (ev: KeyboardEvent) => this.onKey(ev), true);
         window.addEventListener('hashchange', () => this.page.setMode(location.hash.slice(1)));
+        document.addEventListener('click', (ev: MouseEvent) => {
+            const target = ev.target;
+            if (target instanceof Node && this.byId('wp-mode-menu')?.parentElement?.contains(target)) return;
+            this.closeModeMenu(false);
+        });
+    }
+
+    /** "Color by": the pill trigger opens the menu of three; picking one switches and closes it. */
+    private wireModeMenu(): void {
+        this.byId('wp-mode-trigger')?.addEventListener('click', (ev: MouseEvent) => {
+            ev.stopPropagation();
+            const menu = this.byId('wp-mode-menu');
+            if (menu === null) return;
+            if (!menu.hidden) {
+                this.closeModeMenu(false);
+                return;
+            }
+            menu.hidden = false;
+            this.byId('wp-mode-trigger')?.setAttribute('aria-expanded', 'true');
+            menu.querySelector<HTMLButtonElement>('.wp-mode[aria-checked="true"]')?.focus({ preventScroll: true });
+        });
+        document.querySelectorAll<HTMLButtonElement>('.wp-mode[data-wp-mode]').forEach((button: HTMLButtonElement) => {
+            button.addEventListener('click', (ev: MouseEvent) => {
+                ev.stopPropagation();
+                this.closeModeMenu(true);
+                this.page.setMode(button.dataset['wpMode'] ?? 'runtime');
+            });
+        });
+    }
+
+    private closeModeMenu(returnFocus: boolean): void {
+        const menu = this.byId('wp-mode-menu');
+        if (menu === null || menu.hidden) return;
+        menu.hidden = true;
+        const trigger = this.byId('wp-mode-trigger');
+        trigger?.setAttribute('aria-expanded', 'false');
+        if (returnFocus) trigger?.focus({ preventScroll: true });
     }
 
     /** Type-to-search lock: an exact project id (or a unique short name) locks, empty or Esc unlocks. */
@@ -216,10 +432,19 @@ class GraphDrawer {
 
     /**
      * Page keys, in the CAPTURE phase so the open/closed state of the node menu is read before the
-     * menu's own Escape handler closes it: Esc with a menu open only closes the menu.
+     * menu's own Escape handler closes it: Esc with a menu open only closes the menu. Esc closes an
+     * open Color-by menu or Filter popover first, too.
      */
     private onKey(ev: KeyboardEvent): void {
         if (ev.altKey || ev.ctrlKey || ev.metaKey) return;
+        if (ev.key === 'Escape' && this.byId('wp-mode-menu')?.hidden === false) {
+            this.closeModeMenu(true);
+            return;
+        }
+        if (ev.key === 'Escape' && this.popover.isOpen()) {
+            this.popover.close();
+            return;
+        }
         const target = ev.target;
         if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) return;
         const menuOpen = document.getElementById('wp-node-menu') !== null;
@@ -257,14 +482,16 @@ class GraphDrawer {
     }
 
     /** Repaint every control from the page's state. */
-    sync(modes: WpModeState, locked: string | null, filtering: boolean): void {
+    sync(modes: WpModeState, locked: string | null, filtering: boolean, filter: WpFilterChoice): void {
         const reason = modes.impactReason();
         document.querySelectorAll<HTMLButtonElement>('.wp-mode[data-wp-mode]').forEach((button: HTMLButtonElement) => {
             const mode = button.dataset['wpMode'] ?? '';
-            button.setAttribute('aria-pressed', String(mode === modes.mode));
+            button.setAttribute('aria-checked', String(mode === modes.mode));
             button.disabled = !modes.available(mode);
             if (mode === 'impact') button.title = reason === '' ? 'Key 3' : reason;
         });
+        this.text('wp-mode-current', modes.name(modes.mode));
+        this.text('wp-mode-current-sub', modes.subtitle(modes.mode));
         const reasonEl = this.byId('wp-impact-reason');
         if (reasonEl !== null) {
             reasonEl.textContent = reason;
@@ -281,6 +508,7 @@ class GraphDrawer {
         const input = this.lockInput();
         if (input !== null && document.activeElement !== input) input.value = locked ?? '';
         this.syncFilterToggle(locked, filtering);
+        this.syncFilter(filter);
         this.crumb(modes.name(modes.mode), locked);
     }
 
@@ -292,14 +520,66 @@ class GraphDrawer {
         toggle.title = toggle.disabled ? 'Lock a project first' : '';
     }
 
+    /** The drawer button's count badge, and one removable pill per active filter in the top bar. */
+    private syncFilter(filter: WpFilterChoice): void {
+        const badge = this.byId('wp-filter-badge');
+        if (badge !== null) {
+            badge.textContent = String(filter.count());
+            badge.hidden = filter.count() === 0;
+        }
+        const pills = this.byId('wp-filter-pills');
+        if (pills === null) return;
+        const items: HTMLElement[] = [];
+        if (filter.scope !== 'everything')
+            items.push(this.pill(WpProjectFilter.SCOPE_NAMES.get(filter.scope) ?? filter.scope, 'scope', filter.scope));
+        for (const runtime of filter.runtimes) items.push(this.pill(runtime, 'runtime', runtime));
+        for (const role of filter.roles) items.push(this.pill(role, 'role', role));
+        pills.replaceChildren(...items);
+    }
+
+    /** A pill, built with text nodes so no value is parsed as HTML. */
+    private pill(label: string, group: string, value: string): HTMLElement {
+        const pill = document.createElement('span');
+        pill.className = 'wp-pill';
+        pill.dataset['wpPill'] = `${group}:${value}`;
+        pill.append(label);
+        const remove = document.createElement('button');
+        remove.type = 'button';
+        remove.textContent = '✕';
+        remove.setAttribute('aria-label', `Remove filter ${label}`);
+        remove.addEventListener('click', (ev: MouseEvent) => {
+            ev.stopPropagation();
+            this.page.removeFilter(group, value);
+        });
+        pill.append(remove);
+        return pill;
+    }
+
     private impactNote(modes: WpModeState): string {
         const impact = modes.impact;
         if (impact === null || !impact.available) return '';
-        return (
+        const stats =
             `${impact.touched.length} touched · ${impact.affected.length} affected · ` +
             `${impact.buildInputs.length} build inputs — nx affected since fork point ${impact.base}, ` +
-            `${impact.changedFiles} changed files.`
-        );
+            `${impact.changedFiles} changed files.`;
+        const cause = this.globalCause(impact);
+        return cause === '' ? stats : `${cause}. ${stats}`;
+    }
+
+    /**
+     * When files changed but no project owns one, everything nx affected is affected by a
+     * workspace-global input (a lockfile, the workspace manifest). That is correct for CI, and
+     * baffling on a graph, so the note names the cause.
+     */
+    private globalCause(impact: ImpactJson): string {
+        if (impact.touched.length > 0 || impact.changedFiles === 0) return '';
+        const affected = impact.affected.length;
+        const who = affected >= this.page.projectCount() ? 'Every project affected' : `${affected} projects affected`;
+        const files = impact.globalFiles;
+        if (files.length === 0)
+            return `${who}: ${impact.changedFiles} changed files that no project owns (workspace-global input)`;
+        const named = files.slice(0, 2).join(', ') + (files.length > 2 ? ` and ${files.length - 2} more` : '');
+        return `${who}: ${named} changed (workspace-global input${files.length > 1 ? 's' : ''})`;
     }
 
     /** "Mode: <b>Runtime</b> · Locked: <b>x</b>", built with text nodes so no name is parsed as HTML. */
@@ -316,6 +596,11 @@ class GraphDrawer {
         crumb.replaceChildren(...parts);
     }
 
+    private text(id: string, value: string): void {
+        const el = this.byId(id);
+        if (el !== null) el.textContent = value;
+    }
+
     private lockInput(): HTMLInputElement | null {
         return document.getElementById('wp-lock') as HTMLInputElement | null;
     }
@@ -328,6 +613,8 @@ class GraphDrawer {
 class GraphPage extends WpFilterPage {
     private highlighter: GraphHighlighter | null = null;
     private readonly modes = new WpModeState();
+    private readonly projects = new WpProjectFilter(this.model, this.modes);
+    private applied = new WpFilterChoice();
     private readonly drawer = new GraphDrawer(this);
 
     protected override captureBinding(_svg: SVGSVGElement | null): () => void {
@@ -353,7 +640,16 @@ class GraphPage extends WpFilterPage {
     }
 
     protected override usesFullDot(): boolean {
-        return this.modes.mode === 'runtime';
+        return this.modes.mode === 'runtime' && this.applied.count() === 0;
+    }
+
+    protected override narrow(retained: Set<string>): Set<string> {
+        return this.projects.apply(retained, this.applied);
+    }
+
+    /** Filtering keeps every box in its own L-row: an emptied level stays as a thin labeled band. */
+    protected override keepsEmptyLevels(): boolean {
+        return true;
     }
 
     protected wireSvg(svg: SVGSVGElement): void {
@@ -373,6 +669,10 @@ class GraphPage extends WpFilterPage {
 
     hasNode(id: string): boolean {
         return this.model.nodes.some((node: RenderNodeJson): boolean => node.id === id);
+    }
+
+    projectCount(): number {
+        return this.model.nodes.length;
     }
 
     /** An exact id, else the one id whose short name (after any scope) is `text`; null if none or several. */
@@ -404,19 +704,46 @@ class GraphPage extends WpFilterPage {
         else if (this.locked !== null) this.filter(this.locked);
     }
 
-    /** The node menu's "Mode ▸" submenu: one radio item per mode, Impact disabled with its reason. */
-    modeItem(): WpNodeMenuItem {
-        const children = WpModeState.MODES.map((mode: string): WpNodeMenuItem => {
-            const item = new WpNodeMenuItem(this.modes.name(mode), (): void => this.setMode(mode));
-            item.checked = mode === this.modes.mode;
-            if (!this.modes.available(mode)) item.disabledReason = this.modes.impactReason();
-            return item;
-        });
-        return new WpNodeMenuItem('Mode', (): void => {}, children);
+    appliedFilter(): WpFilterChoice {
+        return this.applied;
+    }
+
+    /** '' when the change-scope group can be used, else Impact's reason (the group is disabled). */
+    scopeReason(): string {
+        return this.modes.impactReason();
+    }
+
+    scopeCount(scope: string): number {
+        return this.projects.scopeCount(scope);
+    }
+
+    /** How many boxes `choice` would show, with the current Hide-unconnected chain. */
+    preview(choice: WpFilterChoice): number {
+        const base =
+            this.anchor === null
+                ? new Set(this.model.nodes.map((node: RenderNodeJson): string => node.id))
+                : this.chain.nodes(this.anchor);
+        return this.projects.apply(base, choice).size;
+    }
+
+    applyFilter(choice: WpFilterChoice): void {
+        if (this.scopeReason() !== '') choice.scope = 'everything';
+        this.applied = choice;
+        this.syncControls();
+        this.redraw();
+    }
+
+    /** A top-bar pill's ✕. */
+    removeFilter(group: string, value: string): void {
+        const next = this.applied.copy();
+        if (group === 'scope') next.scope = 'everything';
+        else if (group === 'role') next.roles.delete(value);
+        else next.runtimes.delete(value);
+        this.applyFilter(next);
     }
 
     private syncControls(): void {
-        this.drawer.sync(this.modes, this.locked, this.anchor !== null);
+        this.drawer.sync(this.modes, this.locked, this.anchor !== null, this.applied);
     }
 
     private filterCards(): void {

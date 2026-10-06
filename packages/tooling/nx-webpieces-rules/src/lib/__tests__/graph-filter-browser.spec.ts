@@ -83,7 +83,27 @@ Viz.instance = async () => {
         await page.locator('#wp-lock').fill(id);
     }
 
-    async names(page: Page, selector = '#graph g.node'): Promise<string[]> {
+    /**
+     * Open a page with an Impact sidecar beside it. The sidecar directory is shared by every page this
+     * suite writes, so it goes as soon as this page has loaded it.
+     */
+    async openWithImpact(name: string, html: string, impactJson: string): Promise<Page> {
+        const sidecarDir = path.join(this.output, '.impact');
+        fs.mkdirSync(sidecarDir, { recursive: true });
+        fs.writeFileSync(path.join(sidecarDir, 'dependencies.impact.js'), `window.__WP_IMPACT__ = ${impactJson};`);
+        const page = await this.open(name, html);
+        fs.rmSync(sidecarDir, { recursive: true, force: true });
+        return page;
+    }
+
+    /** Pick a mode through the drawer's Color-by pulldown, exactly as a viewer does. */
+    async mode(page: Page, mode: string): Promise<void> {
+        await page.locator('#wp-mode-trigger').click();
+        await page.locator(`#wp-mode-menu .wp-mode[data-wp-mode="${mode}"]`).click();
+    }
+
+    /** Real boxes only: a level emptied by filtering is a labeled `wp-layout` band, not a project. */
+    async names(page: Page, selector = '#graph g.node:not(.wp-layout)'): Promise<string[]> {
         return (await page.locator(`${selector} > title`).allTextContents()).sort();
     }
 
@@ -260,7 +280,7 @@ describe.skipIf(!process.env.WP_GRAPH_VIZ_JS)('real Viz local-file filtering', (
                     .locator('polygon')
                     .first()
                     .evaluate((shape: SVGElement) => getComputedStyle(shape).stroke),
-            ).toBe('rgb(178, 106, 0)');
+            ).toBe('rgb(139, 60, 240)');
             expect(await fixture.cards(page)).toEqual(cards);
             await fixture.snapshot(page, `1127-hover-${hovered}`);
             await page.mouse.move(0, 0);
@@ -562,7 +582,7 @@ describe.skipIf(!process.env.WP_GRAPH_VIZ_JS)('real Viz local-file filtering', (
         await page.close();
     });
 
-    it('switches modes from the drawer, the keys and the node Mode submenu, deep-links and remembers', async () => {
+    it('switches modes from the Color-by pulldown and the keys, deep-links and remembers', async () => {
         const graph = loadBlessedGraph(process.cwd())!.projects;
         const modes = fixture.viz
             .generateRenderModel(graph)
@@ -571,10 +591,15 @@ describe.skipIf(!process.env.WP_GRAPH_VIZ_JS)('real Viz local-file filtering', (
         const page = await fixture.open('1155-modes', fixture.architecture(graph));
         const fill = (): Promise<string | null> =>
             fixture.node(page, 'code-rules').locator('polygon').first().getAttribute('fill');
-        expect(await page.locator('.wp-mode[aria-pressed="true"]').getAttribute('data-wp-mode')).toBe('runtime');
+        expect(await page.locator('.wp-mode[aria-checked="true"]').getAttribute('data-wp-mode')).toBe('runtime');
+        expect(await page.locator('#wp-mode-current').textContent()).toBe('Runtime');
+        expect(await page.locator('#wp-mode-menu').isVisible()).toBe(false);
         expect(await fill()).toBe(fillOf(modes.runtime));
-        await page.locator('.wp-mode[data-wp-mode="architecture"]').click();
+        await fixture.mode(page, 'architecture');
         await expect.poll(fill).toBe(fillOf(modes.architecture));
+        expect(await page.locator('#wp-mode-menu').isVisible()).toBe(false);
+        expect(await page.locator('#wp-mode-current').textContent()).toBe('Architecture');
+        expect(await page.locator('#wp-mode-current-sub').textContent()).toBe('servers · clients · APIs');
         expect(page.url()).toMatch(/#architecture$/);
         expect(await page.locator('#wp-crumb').textContent()).toContain('Architecture');
         expect(await page.locator('#wp-side [data-wp-legend-mode="architecture"]').isVisible()).toBe(true);
@@ -585,21 +610,20 @@ describe.skipIf(!process.env.WP_GRAPH_VIZ_JS)('real Viz local-file filtering', (
         await page.evaluate((): void => (document.activeElement as HTMLElement | null)?.blur());
         await page.keyboard.press('1');
         await expect.poll(fill).toBe(fillOf(modes.runtime));
+        // The node menu no longer carries a Mode submenu: the drawer is the one place to switch.
         await fixture.node(page, 'code-rules').locator('text').first().click();
-        await page.locator('#wp-node-menu').getByRole('button', { name: /^Mode/ }).click();
-        const sub = page.locator('#wp-node-menu .wp-node-menu-sub');
-        expect(await sub.getByRole('menuitemradio', { name: 'Runtime' }).getAttribute('aria-checked')).toBe('true');
-        expect(await sub.getByRole('menuitemradio', { name: 'Impact' }).isDisabled()).toBe(true);
-        await sub.getByRole('menuitemradio', { name: 'Architecture' }).click();
+        expect(await page.locator('#wp-node-menu').getByRole('button', { name: /^Mode/ }).count()).toBe(0);
+        await page.keyboard.press('Escape');
+        await page.keyboard.press('2');
         await expect.poll(fill).toBe(fillOf(modes.architecture));
         // Remembered per viewer: a fresh load with no hash comes back in Architecture.
         await page.goto(page.url().split('#')[0]);
         await page.locator('g.wp-node-clickable').first().waitFor();
-        expect(await page.locator('.wp-mode[aria-pressed="true"]').getAttribute('data-wp-mode')).toBe('architecture');
+        expect(await page.locator('.wp-mode[aria-checked="true"]').getAttribute('data-wp-mode')).toBe('architecture');
         // ...and a deep link wins over the remembered choice.
         await page.goto(`${page.url().split('#')[0]}#runtime`);
         await page.locator('g.wp-node-clickable').first().waitFor();
-        expect(await page.locator('.wp-mode[aria-pressed="true"]').getAttribute('data-wp-mode')).toBe('runtime');
+        expect(await page.locator('.wp-mode[aria-checked="true"]').getAttribute('data-wp-mode')).toBe('runtime');
         await page.close();
     });
 
@@ -621,7 +645,7 @@ describe.skipIf(!process.env.WP_GRAPH_VIZ_JS)('real Viz local-file filtering', (
         for (const legend of ['browser', 'node', 'react-native', 'angular', 'react', 'express', 'multi', 'none'])
             expect(await page.locator(`#wp-side [data-wp-legend="${legend}"]`).count()).toBe(1);
         await page.screenshot({ path: path.join(fixture.output, '1155-runtime-combos.png') });
-        await page.locator('.wp-mode[data-wp-mode="architecture"]').click();
+        await fixture.mode(page, 'architecture');
         await expect.poll(() => page.locator('#wp-crumb').textContent()).toContain('Architecture');
         expect(await page.locator('#wp-graph-error').isVisible()).toBe(false);
         await page.screenshot({ path: path.join(fixture.output, '1155-architecture-combos.png') });
@@ -655,12 +679,12 @@ describe.skipIf(!process.env.WP_GRAPH_VIZ_JS)('real Viz local-file filtering', (
         fs.mkdirSync(sidecarDir, { recursive: true });
         fs.writeFileSync(
             path.join(sidecarDir, 'dependencies.impact.js'),
-            'window.__WP_IMPACT__ = {"available":true,"reason":"","base":"abc1234","touched":["rules-config"],"affected":["hook-runtime","pr-gate"],"buildInputs":["repo-workflow-core","tooling-common"],"changedFiles":2};',
+            'window.__WP_IMPACT__ = {"available":true,"reason":"","base":"abc1234","touched":["rules-config"],"affected":["hook-runtime","pr-gate"],"buildInputs":["repo-workflow-core","tooling-common"],"changedFiles":2,"dependencies":["repo-workflow-core","tooling-common"],"globalFiles":[]};',
         );
         const page = await fixture.open('1155-impact', fixture.architecture(graph));
         // The sidecar is shared by every page this suite writes, so it goes as soon as this one loaded it.
         fs.rmSync(sidecarDir, { recursive: true, force: true });
-        await page.locator('.wp-mode[data-wp-mode="impact"]').click();
+        await fixture.mode(page, 'impact');
         const shape = (id: string): Locator => fixture.node(page, id).locator('polygon').first();
         await expect.poll(() => shape('rules-config').getAttribute('fill')).toBe('#f5a524');
         expect(await shape('hook-runtime').getAttribute('fill')).toBe('#fde3b0');
@@ -672,6 +696,118 @@ describe.skipIf(!process.env.WP_GRAPH_VIZ_JS)('real Viz local-file filtering', (
             '1 touched · 2 affected · 2 build inputs',
         );
         await page.screenshot({ path: path.join(fixture.output, '1155-impact.png') });
+        await page.close();
+    });
+
+    it('filters by change scope, runtime and role — intersected — keeping every L-row (#1158)', async () => {
+        const graph: EnhancedGraph = {
+            'portal-web': { level: 3, dependsOn: ['ui-kit'], framework: ['browser', 'angular'], role: 'client' },
+            'jobs-svr': { level: 3, dependsOn: ['server-auth'], framework: ['node', 'express'], role: 'server' },
+            'ui-kit': { level: 2, dependsOn: ['model'], framework: ['browser', 'angular'], role: 'lib' },
+            'server-auth': { level: 2, dependsOn: ['model'], framework: ['node'], role: 'lib' },
+            api: { level: 1, dependsOn: ['model'], framework: ['browser', 'node'], role: 'api-lib' },
+            model: { level: 0, dependsOn: [], framework: ['browser', 'node'], role: 'lib' },
+        };
+        const page = await fixture.openWithImpact(
+            '1158-filter',
+            fixture.architecture(graph),
+            '{"available":true,"reason":"","base":"abc1234","touched":["ui-kit"],"affected":["portal-web"],' +
+                '"buildInputs":["model"],"changedFiles":1,"dependencies":["model"],"globalFiles":[]}',
+        );
+        const top = await fixture.row(page, 'portal-web');
+        await page.locator('#wp-filter-open').click();
+        const count = (scope: string): Promise<string | null> =>
+            page.locator(`[data-wp-scope-count="${scope}"]`).textContent();
+        expect([await count('everything'), await count('changed'), await count('dependents'), await count('dependencies'), await count('build')])
+            .toEqual(['6', '1', '2', '2', '3']);
+        await page.locator('.wp-chip[data-wp-chip="node"]').click();
+        await page.locator('.wp-chip[data-wp-chip="lib"]').click();
+        expect(await page.locator('#wp-filter-apply').textContent()).toBe('Show 2 projects');
+        await page.locator('#wp-filter-apply').click();
+        expect(await page.locator('#wp-filter-pop').isVisible()).toBe(false);
+        // node AND lib: the two groups intersect.
+        expect(await fixture.names(page)).toEqual(['model', 'server-auth']);
+        // L0 stays the bottom row; the emptied L3 and L1 are thin labeled bands, not removed.
+        expect(await fixture.row(page, 'model')).toBeGreaterThan(await fixture.row(page, 'server-auth'));
+        expect(await page.locator('#graph g.wp-empty-level').allTextContents()).toEqual(
+            expect.arrayContaining([expect.stringContaining('L3'), expect.stringContaining('L1')]),
+        );
+        expect(await page.locator('#graph g.wp-empty-level').count()).toBe(2);
+        expect(await fixture.row(page, 'model')).toBeGreaterThan(top);
+        // Edges between remaining boxes stay drawn.
+        expect(await page.locator('#graph g.edge').count()).toBe(1);
+        expect(await page.locator('#wp-filter-badge').textContent()).toBe('2');
+        expect(await page.locator('#wp-filter-pills .wp-pill').count()).toBe(2);
+        // A pill's ✕ removes just that filter.
+        await page.locator('#wp-filter-pills [data-wp-pill="runtime:node"] button').click();
+        expect(await fixture.names(page)).toEqual(['model', 'server-auth', 'ui-kit']);
+        expect(await page.locator('#wp-filter-badge').textContent()).toBe('1');
+        // Change scope intersects too: "Changed + what they use" = ui-kit + model, still only libs.
+        await page.locator('#wp-filter-open').click();
+        await page.locator('input[name="wp-scope"][value="dependencies"]').check();
+        await page.locator('#wp-filter-apply').click();
+        expect(await fixture.names(page)).toEqual(['model', 'ui-kit']);
+        expect(await page.locator('#wp-filter-pills').textContent()).toContain('Changed + what they use');
+        await page.screenshot({ path: path.join(fixture.output, '1158-filter.png') });
+        await page.locator('#wp-filter-open').click();
+        await page.locator('#wp-filter-clear').click();
+        expect(await page.locator('#wp-filter-apply').textContent()).toBe('Show 6 projects');
+        await page.locator('#wp-filter-apply').click();
+        expect(await fixture.names(page)).toEqual(Object.keys(graph).sort());
+        expect(await page.locator('#wp-filter-badge').isVisible()).toBe(false);
+        expect(await page.locator('#graph g.wp-empty-level').count()).toBe(0);
+        await page.close();
+    });
+
+    it('glows and locks only the OUTER box of a nested and of a striped box (#1158)', async () => {
+        const graph: EnhancedGraph = {
+            'portal-web': { level: 1, dependsOn: ['model'], framework: ['browser', 'angular'], role: 'client' },
+            model: { level: 0, dependsOn: [], framework: ['browser', 'node'], role: 'lib' },
+        };
+        const page = await fixture.open('1158-glow', fixture.architecture(graph));
+        const strokes = (id: string): Promise<string[]> =>
+            fixture
+                .node(page, id)
+                .locator('polygon, path, ellipse')
+                .evaluateAll((shapes: Element[]) => shapes.map((shape: Element) => getComputedStyle(shape).strokeWidth));
+        // Nested: outline polygon, base-colored cell polygon, inner rounded <path>.
+        expect(await fixture.node(page, 'portal-web').locator('path').count()).toBe(1);
+        await fixture.node(page, 'portal-web').hover();
+        await expect.poll(() => strokes('portal-web')).toEqual(['5px', '0px', '0px']);
+        // Striped: one polygon per stripe, then the unfilled outline LAST — that is what glows.
+        await fixture.node(page, 'model').hover();
+        await expect.poll(() => strokes('model')).toEqual(['0.5px', '0.5px', '5px']);
+        await page.mouse.move(0, 0);
+        await fixture.lock(page, 'portal-web');
+        await expect.poll(async () => (await strokes('portal-web'))[0]).toBe('3px');
+        expect((await strokes('portal-web')).slice(1).every((w: string): boolean => w !== '3px')).toBe(true);
+        await page.close();
+    });
+
+    it('names the workspace-global cause when nothing is touched but everything is affected (#1158)', async () => {
+        const graph = FilterFixture.wide();
+        const ids = Object.keys(graph);
+        const page = await fixture.openWithImpact(
+            '1158-global-cause',
+            fixture.architecture(graph),
+            `{"available":true,"reason":"","base":"abc1234","touched":[],"affected":${JSON.stringify(ids)},` +
+                '"buildInputs":[],"changedFiles":2,"dependencies":[],"globalFiles":["pnpm-lock.yaml","pnpm-workspace.yaml"]}',
+        );
+        await fixture.mode(page, 'impact');
+        expect(await page.locator('#wp-side [data-wp-impact-note]').textContent()).toContain(
+            'Every project affected: pnpm-lock.yaml, pnpm-workspace.yaml changed (workspace-global inputs)',
+        );
+        await page.close();
+    });
+
+    it('disables the change scope with Impact\'s reason when there is no sidecar (#1158)', async () => {
+        const page = await fixture.open('1158-no-impact', fixture.architecture(FilterFixture.wide()));
+        await page.locator('#wp-filter-open').click();
+        expect(await page.locator('#wp-scope-group').evaluate((el: Element): boolean => (el as HTMLFieldSetElement).disabled)).toBe(true);
+        expect(await page.locator('#wp-scope-reason').textContent()).toContain('pnpm arch:visualize');
+        await page.locator('.wp-chip[data-wp-chip="lib"]').click();
+        await page.locator('#wp-filter-apply').click();
+        expect((await fixture.names(page)).length).toBeGreaterThan(0);
         await page.close();
     });
 

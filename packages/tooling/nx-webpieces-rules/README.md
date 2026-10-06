@@ -109,23 +109,27 @@ their existing checks independently of visualization.
 ### Color modes and the page shell
 
 `architecture/dependencies.html` opens with the graph filling the viewport and every control
-in a collapsible dark drawer on the left: the color mode, a type-to-search **Lock** field
-(`/` focuses it, `Esc` unlocks), a **Hide unconnected** toggle, the legend (with a pop-out
-button) and the edge key. Help is the **?** popover, zoom floats bottom-right, and
-**Responsibilities** opens a right-hand panel from the drawer footer.
+in a collapsible charcoal drawer on the left (violet accent): the **Color by** pulldown, the
+**Filter** button, a type-to-search **Lock** field (`/` focuses it, `Esc` unlocks), a **Hide
+unconnected** toggle, the legend (with a pop-out button) and the edge key. Help is the **?**
+popover, zoom floats bottom-right, and **Responsibilities** opens a right-hand panel from the
+drawer footer.
 
-The graph answers one question at a time. Pick a mode in the drawer, from **Mode ▸** in any
-box's menu, or with keys `1` `2` `3`; the choice is remembered per viewer and deep-linkable as
-`#runtime`, `#architecture` or `#impact`.
+The graph answers one question at a time. Pick a mode from the drawer's **Color by** pulldown
+(the one place to switch) or with keys `1` `2` `3`; the choice is remembered per viewer and
+deep-linkable as `#runtime`, `#architecture` or `#impact`. Every box carries the same three
+lines in every mode: `L3  name` (level dimmed, name bold), its role, and every framework tag.
 
-- **Runtime** — where the code can run. Base runtimes are equal vertical stripes in the fixed
-  order browser | node | react-native; angular and react are an inset inside the browser
-  stripe, express inside the node stripe. A box may depend on a box that carries every color it
-  has. A box with several stripes or an inset carries its name on a light plate between two
-  stripe bands, so the text never straddles two colors.
+- **Runtime** — where the code can run. One runtime is a solid fill. One runtime plus a
+  specialization (angular/react inside browser, express inside node) is nested: a frame in the
+  base color around a rounded inner box in the specialization's color, which carries the text.
+  Several runtimes are full-height vertical stripes in the fixed order browser | node |
+  react-native, the text written across them (a specialization there shows in line 3 only). A
+  box may depend on a box that carries every color it has.
 - **Architecture** — servers · clients · APIs. A solid fill by role (server, client, app, bundle,
   api-lib, api-client, designed-lib, lib); framework color is not shown.
-- **Impact** — what this branch touches. `architecture:generate` runs
+- **Impact** — what this branch touches. `architecture:generate` and `architecture:visualize`
+  (`pnpm arch:visualize`, no regenerate needed) both run
   `nx show projects --affected --base=<fork point> --json` (no `--head`, so uncommitted and
   untracked work counts). Projects that own a changed file, by nx's own file ownership, are solid
   amber ("touched — files changed on this branch"); the rest of the affected set is light amber
@@ -135,8 +139,17 @@ box's menu, or with keys `1` `2` `3`; the choice is remembered per viewer and de
   it is written to `architecture/.impact/dependencies.impact.js`, never into the committed html or
   json. That directory holds its own `.gitignore` (`*`), so a consuming repo needs no gitignore
   entry. When nx or git cannot answer, no sidecar is written and Impact is disabled with a
-  one-line reason; generation never fails over it. `architecture:visualize` leaves the sidecar
-  as it is.
+  one-line reason; neither command fails over it. Impact state is never written on a box: color
+  and legend only. When files changed but no project owns one (a lockfile, the workspace
+  manifest), the legend names that workspace-global cause for the everything-affected result.
+
+**Filter** opens a popover of three groups that INTERSECT: *Changes on this branch* (Everything ·
+Changed · Changed + what uses them (nx affected) · Changed + what they use · Whole build of this
+branch, each with its project count; disabled with Impact's reason when there is no Impact
+data), *Runtime* chips and *Role* chips (a box matches a group when it carries any selected
+chip). "Show N projects" applies it; active filters show as removable pills in the top bar and
+a count badge on the drawer button. Every remaining box keeps its own L-row, a level left empty
+is a thin labeled band, and edges between remaining boxes stay drawn.
 
 The legend is generated per mode from the projects actually drawn, and the framework colors
 are keyed off `KNOWN_FRAMEWORKS` (`@webpieces/rules-sdk`), the same list the framework-tag
@@ -152,7 +165,7 @@ APIs and systems. The anchor indicator and all surviving node menus offer **Turn
 Filter**, restoring the full layout and independent Lock state. Responsibilities
 follow the retained set intersected with architecture Lock. Architecture Lock pins
 its chain in the foreground; hover adds a temporary chain without dimming locked
-nodes or edges, and leaving restores the Lock chain. The locked anchor keeps an amber outline,
+nodes or edges, and leaving restores the Lock chain. The locked anchor keeps a violet outline,
 and hover never changes responsibilities. A filtered-out Lock is suspended until
 the full graph returns. Hover and menu dismissal
 do not clear filtering, and no filter is persisted across reloads. Saved graph facts

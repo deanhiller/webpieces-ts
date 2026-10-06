@@ -70,7 +70,8 @@ export class LevelBandLayout {
     dot(bands: LevelBand[]): string {
         let dot = '';
         for (const band of bands) {
-            dot += `  "${band.anchorName()}" ${LAYOUT_NODE_ATTRS};\n`;
+            const attrs = band.nodeNames.length === 0 ? this.emptyBandAttrs(band.level) : LAYOUT_NODE_ATTRS;
+            dot += `  "${band.anchorName()}" ${attrs};\n`;
             dot += `  { rank=same; "${band.anchorName()}"; `;
             for (const name of band.nodeNames) dot += `"${dotValue(name)}"; `;
             dot += '}\n';
@@ -79,6 +80,20 @@ export class LevelBandLayout {
             dot += this.bandGap(bands[i], bands[i + 1]);
         }
         return dot;
+    }
+
+    /**
+     * A level with NO box left in it (the page's Filter removed them all) is never dropped: the next
+     * level would slide up into its row, so L0 would stop being the bottom row. Its anchor becomes a
+     * thin plain-text band instead — visible, labeled, still in the chain — so every remaining box
+     * stays in its own L-row. Still `wp-layout`: never clickable, never walked as a dependency.
+     * graph-filter.client.ts mirrors these bytes (a global browser script cannot import).
+     */
+    emptyBandAttrs(level: number): string {
+        return (
+            '[shape=plaintext, style="", width=0.01, height=0.15, margin=0, fontsize=9, fontcolor="#9a9eab", ' +
+            `label="L${level} · no matching projects", class="${LAYOUT_CLASS} wp-empty-level"]`
+        );
     }
 
     /**

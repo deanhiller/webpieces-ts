@@ -20,6 +20,8 @@ class ReactNativeGate {
         new PortableProject('http-client-browser', 'packages/http/http-client-browser', [
             'src/index.ts',
         ]),
+        // Pure TypeScript with no @webpieces dependency, so its smoke imports nothing but itself (#1158).
+        new PortableProject('core-mock', 'packages/core/core-mock', ['src/index.ts']),
     ];
 
     async run(): Promise<void> {
@@ -117,7 +119,8 @@ class ReactNativeGate {
             const target = path.join(this.root, 'dist', project.root);
             const manifest = path.join(target, 'package.json');
             if (!fs.existsSync(manifest)) {
-                if (project.name === path.basename(fixture) || project.name === 'core-util')
+                const consumerNeedsCoreUtil = path.basename(fixture) !== 'core-mock';
+                if (project.name === path.basename(fixture) || (project.name === 'core-util' && consumerNeedsCoreUtil))
                     throw new Error(`Build output missing: ${manifest}`);
                 continue;
             }
@@ -152,6 +155,13 @@ class ReactNativeGate {
     }
 
     private consumer(name: string): string {
+        if (name === 'core-mock')
+            return (
+                `import { createMock, MockHandler } from '@webpieces/core-mock';\n` +
+                `interface PingApi { ping(text: string): Promise<string>; }\n` +
+                `const api = createMock<PingApi>('PingApi');\n` +
+                `if (typeof api.ping !== 'function' || typeof MockHandler !== 'function') throw new Error('core-mock surface missing');\n`
+            );
         const errors =
             this.reactNativeRuntimeTypes() +
             this.contractFixture() +

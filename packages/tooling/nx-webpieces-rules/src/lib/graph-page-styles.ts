@@ -1,3 +1,5 @@
+import { STRIPED_CLASS } from './graph-color-modes';
+
 /**
  * The architecture page's stylesheet: the dark drawer, the graph filling the viewport, the floating
  * popovers and the responsibilities panel. Emitted AFTER the shared menu/filter/navigation styles so
@@ -5,15 +7,24 @@
  */
 export class GraphPageStyles {
     css(): string {
-        return this.base() + this.drawer() + this.controls() + this.main() + this.overlays() + this.graph() + this.cards();
+        return (
+            this.base() +
+            this.drawer() +
+            this.controls() +
+            this.main() +
+            this.overlays() +
+            this.filterPopover() +
+            this.graph() +
+            this.cards()
+        );
     }
 
     private base(): string {
         return `
         :root {
-            --wp-side-bg: #0c0d12; --wp-side-fg: #e9eaf0; --wp-side-muted: #8b8fa0;
-            --wp-side-hover: #1f2129; --wp-side-line: #2a2c36; --wp-accent: #3559d6; --wp-accent-dark: #8aa4ff;
-            --wp-fg: #1b1e27; --wp-muted: #5d6475; --wp-line: #d9dce5; --wp-surface: #ffffff; --wp-canvas: #fbfbfd;
+            --wp-side-bg: #15161b; --wp-side-control: #1e1f25; --wp-side-fg: #e9eaf0; --wp-side-muted: #8b8fa0;
+            --wp-side-hover: #26272f; --wp-side-line: #3a3c46; --wp-accent: #8b3cf0; --wp-accent-hover: #a46bf7;
+            --wp-fg: #1b1e27; --wp-muted: #5d6475; --wp-line: #d9dce5; --wp-surface: #ffffff; --wp-canvas: #faf9f5;
         }
         html, body { height: 100%; }
         /* A class that sets display (the legend lists are grids) must not un-hide a [hidden] element. */
@@ -45,13 +56,27 @@ export class GraphPageStyles {
         .wp-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.09em; color: var(--wp-side-muted);
             font-weight: 600; padding-left: 4px; }
         .wp-label-row { display: flex; justify-content: space-between; align-items: center; }
-        .wp-modes { display: grid; gap: 1px; }
-        .wp-mode { all: unset; box-sizing: border-box; cursor: pointer; display: block; padding: 5px 10px; border-radius: 8px; }
+        .wp-pulldown { position: relative; }
+        .wp-pill-trigger { all: unset; box-sizing: border-box; cursor: pointer; display: flex; align-items: center; gap: 10px;
+            width: 100%; padding: 7px 16px; border-radius: 999px; border: 1px solid var(--wp-side-line);
+            background: var(--wp-side-control); }
+        .wp-pill-trigger:hover, .wp-pill-trigger[aria-expanded="true"] { border-color: var(--wp-accent-hover); }
+        .wp-pill-text { flex: 1 1 auto; min-width: 0; }
+        .wp-caret { color: var(--wp-side-muted); }
+        .wp-menu { position: absolute; z-index: 35; left: 0; right: 0; top: calc(100% + 6px); display: grid; gap: 2px; padding: 6px;
+            background: var(--wp-side-control); border: 1px solid var(--wp-side-line); border-radius: 12px; box-shadow: 0 10px 28px #0008; }
+        .wp-mode { all: unset; box-sizing: border-box; cursor: pointer; display: block; padding: 6px 10px; border-radius: 8px; }
         .wp-mode:hover { background: var(--wp-side-hover); }
-        .wp-mode[aria-pressed="true"] { background: #262833; box-shadow: inset 3px 0 0 var(--wp-accent-dark); }
+        .wp-mode[aria-checked="true"] { background: #2a2333; box-shadow: inset 3px 0 0 var(--wp-accent); }
         .wp-mode:disabled { cursor: not-allowed; opacity: 0.45; }
         .wp-mode-name { display: block; font-size: 14px; font-weight: 600; line-height: 1.3; }
         .wp-mode-sub { display: block; font-size: 12px; color: var(--wp-side-muted); line-height: 1.3; }
+        .wp-filter-btn { all: unset; box-sizing: border-box; cursor: pointer; display: flex; justify-content: space-between;
+            align-items: center; padding: 7px 12px; border-radius: 8px; border: 1px solid var(--wp-side-line);
+            background: var(--wp-side-control); font-size: 13px; font-weight: 600; }
+        .wp-filter-btn:hover, .wp-filter-btn[aria-expanded="true"] { border-color: var(--wp-accent-hover); }
+        .wp-badge { min-width: 18px; padding: 1px 6px; border-radius: 999px; background: var(--wp-accent); color: #fff;
+            font-size: 11.5px; text-align: center; box-sizing: border-box; }
         .wp-mode-reason { margin: 2px 4px 0; font-size: 11.5px; line-height: 1.35; color: var(--wp-side-muted); }
         .wp-legend-list { display: grid; gap: 5px; padding-left: 4px; }
         .wp-legend-row { display: flex; align-items: center; gap: 10px; line-height: 1.25; }
@@ -64,7 +89,7 @@ export class GraphPageStyles {
 
     private controls(): string {
         return `
-        .wp-side input[type="search"] { width: 100%; box-sizing: border-box; background: #17181f; color: var(--wp-side-fg);
+        .wp-side input[type="search"] { width: 100%; box-sizing: border-box; background: var(--wp-side-control); color: var(--wp-side-fg);
             border: 1px solid var(--wp-side-line); border-radius: 8px; padding: 7px 10px; font: inherit; font-size: 13px; }
         .wp-toggle { all: unset; box-sizing: border-box; cursor: pointer; display: flex; justify-content: space-between;
             align-items: center; padding: 6px 10px; border-radius: 8px; font-size: 13px; }
@@ -83,8 +108,9 @@ export class GraphPageStyles {
         .wp-icon:hover { border-color: var(--wp-accent); }
         .wp-icon-mini { width: 24px; height: 24px; font-size: 12px; }
         .wp-icon-dark { background: transparent; border-color: var(--wp-side-line); color: var(--wp-side-fg); }
-        .wp-mode:focus-visible, .wp-toggle:focus-visible, .wp-side input:focus-visible, .wp-icon:focus-visible,
-        .wp-link:focus-visible { outline: 2px solid var(--wp-accent-dark); outline-offset: 2px; }`;
+        .wp-mode:focus-visible, .wp-pill-trigger:focus-visible, .wp-filter-btn:focus-visible, .wp-chip:focus-visible,
+        .wp-primary:focus-visible, .wp-pill button:focus-visible, .wp-toggle:focus-visible, .wp-side input:focus-visible, .wp-icon:focus-visible,
+        .wp-link:focus-visible { outline: 2px solid var(--wp-accent-hover); outline-offset: 2px; }`;
     }
 
     private main(): string {
@@ -95,7 +121,42 @@ export class GraphPageStyles {
         .wp-crumb { flex: 1 1 auto; min-width: 0; font-size: 13px; color: var(--wp-muted); overflow: hidden;
             text-overflow: ellipsis; white-space: nowrap; }
         .wp-crumb b { color: var(--wp-fg); }
-        .wp-topbar #wp-filter-status, .wp-topbar #wp-graph-error { margin: 0; font-size: 13px; }`;
+        .wp-topbar #wp-filter-status, .wp-topbar #wp-graph-error { margin: 0; font-size: 13px; }
+        .wp-pills { display: flex; gap: 6px; flex-wrap: wrap; }
+        .wp-pills:empty { display: none; }
+        .wp-pill { display: inline-flex; align-items: center; gap: 4px; padding: 2px 4px 2px 10px; border-radius: 999px;
+            background: #f1e8fe; color: #4a1d8a; border: 1px solid #d6bcfa; font-size: 12.5px; }
+        .wp-pill button { all: unset; cursor: pointer; width: 18px; height: 18px; display: inline-grid; place-items: center;
+            border-radius: 50%; color: #4a1d8a; }
+        .wp-pill button:hover { background: #e2cffc; }`;
+    }
+
+    /** The Filter popover: three groups, chips, and the "Show N projects" footer. */
+    private filterPopover(): string {
+        return `
+        .wp-filter-pop { left: 12px; top: 56px; width: min(380px, calc(100% - 24px)); max-height: calc(100% - 80px); overflow: auto; }
+        .wp-fgroup { border: 0; margin: 0 0 12px; padding: 0; display: grid; gap: 4px; }
+        .wp-fgroup legend { padding: 0; margin-bottom: 4px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.09em;
+            color: var(--wp-muted); font-weight: 600; }
+        .wp-fgroup legend small { text-transform: none; letter-spacing: 0; font-weight: 400; }
+        .wp-fgroup:disabled .wp-scope { opacity: 0.45; cursor: not-allowed; }
+        .wp-scope { display: flex; align-items: center; gap: 8px; padding: 4px 6px; border-radius: 6px; cursor: pointer; }
+        .wp-scope:hover { background: #f4f1fb; }
+        .wp-scope input { accent-color: var(--wp-accent); margin: 0; }
+        .wp-scope-name { flex: 1 1 auto; }
+        .wp-count { color: var(--wp-muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+        .wp-scope-reason { margin: 2px 6px 0; font-size: 12px; color: var(--wp-muted); }
+        .wp-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+        .wp-chip { all: unset; box-sizing: border-box; cursor: pointer; padding: 3px 11px; border-radius: 999px;
+            border: 1px solid var(--wp-line); background: var(--wp-surface); font-size: 12.5px; }
+        .wp-chip:hover { border-color: var(--wp-accent-hover); }
+        .wp-chip[aria-pressed="true"] { background: var(--wp-accent); border-color: var(--wp-accent); color: #fff; }
+        .wp-filter-pop footer { display: flex; justify-content: space-between; align-items: center; gap: 8px;
+            padding-top: 10px; border-top: 1px solid var(--wp-line); }
+        .wp-text-btn { all: unset; cursor: pointer; color: var(--wp-muted); font-size: 12.5px; text-decoration: underline; }
+        .wp-primary { all: unset; box-sizing: border-box; cursor: pointer; padding: 7px 14px; border-radius: 8px;
+            background: var(--wp-accent); color: #fff; font-weight: 600; font-size: 13px; }
+        .wp-primary:hover { background: var(--wp-accent-hover); }`;
     }
 
     private overlays(): string {
@@ -116,18 +177,32 @@ export class GraphPageStyles {
     }
 
     /**
-     * The graph fills what the topbar leaves. A Runtime box with a specialization is an HTML-like
-     * table, so its cells are extra polygons inside the node: the hover glow and the lock outline are
-     * kept on the box's own outline (the FIRST polygon) instead of stroking every cell.
+     * The graph fills what the topbar leaves.
+     *
+     * The hover glow and the lock outline belong to the OUTER box only. A nested Runtime box (one
+     * runtime plus a specialization) is an HTML-like table, so after the node's own outline Graphviz
+     * emits a `<polygon>` for the base-colored cell and a `<path>` for the inner `STYLE="rounded"`
+     * table — matching only `polygon` here is what let the glow stroke the inner box (#1158). So the
+     * glow is suppressed on EVERY shape after the node's first, whatever its element type.
+     *
+     * A striped (multi-runtime) box is the one exception to "the first shape is the outline":
+     * Graphviz draws one filled polygon per stripe first and the outline LAST, as an unfilled polygon.
+     * graph-color-modes.ts stamps those boxes `wp-striped`, and for them the outline is that last,
+     * `fill="none"` polygon; the stripes keep their thin dividers.
      */
     private graph(): string {
+        const shape = ':is(polygon, ellipse, path)';
+        const later = `${shape} ~ ${shape}`;
+        const first = `${shape}:not(${later})`;
+        const glow = 'stroke: var(--wp-accent); stroke-width: 5; filter: drop-shadow(0 0 6px rgba(139, 60, 240, 0.85));';
         return `
         #graph { flex: 1 1 auto; min-height: 0; max-height: none; overflow: auto; padding: 16px 16px 64px;
             box-sizing: border-box; background: var(--wp-canvas); }
-        #graph g.wp-node-clickable:hover polygon:not(:first-of-type) { stroke: transparent; stroke-width: 0; filter: none; }
-        #graph g.node.wp-locked > polygon:first-of-type,
-        #graph g.node.wp-locked > ellipse,
-        #graph g.node.wp-locked > path { stroke: #b26a00; stroke-width: 3; }`;
+        #graph g.wp-node-clickable:hover > ${later} { stroke: none; stroke-width: 0; filter: none; }
+        #graph g.wp-node-clickable.${STRIPED_CLASS}:hover > polygon:not([fill="none"]) { stroke: #000000; stroke-width: 0.5; filter: none; }
+        #graph g.wp-node-clickable.${STRIPED_CLASS}:hover > polygon[fill="none"] { ${glow} }
+        #graph g.node.wp-locked:not(.${STRIPED_CLASS}) > ${first},
+        #graph g.node.wp-locked.${STRIPED_CLASS} > polygon[fill="none"] { stroke: var(--wp-accent); stroke-width: 3; }`;
     }
 
     private cards(): string {

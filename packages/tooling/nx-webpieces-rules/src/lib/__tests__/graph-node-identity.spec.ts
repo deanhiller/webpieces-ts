@@ -90,8 +90,8 @@ describe('generateDot node identity', () => {
     it('keys the node on the full project key and labels it with the short name', () => {
         const dot = viz.generateDot(SCOPED_GRAPH);
         expect(dot).toContain('"@mealco-internal/public-api" [style="filled"');
-        expect(dot).toContain('label="public-api\\nL0 · lib"');
-        expect(dot).toContain('label="public-api\\nL2 · server"');
+        expect(dot).toContain('<FONT COLOR="#1a1c2299">L0</FONT>&#160;&#160;<B>public-api</B><BR/>lib<BR/>');
+        expect(dot).toContain('L2</FONT>&#160;&#160;<B>public-api</B><BR/>server<BR/>');
     });
 
     it('draws the dependency as a real edge between two boxes, never as a self-loop', () => {

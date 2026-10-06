@@ -29,7 +29,7 @@ import {
 
 const SWATCH_W = 26;
 const SWATCH_H = 16;
-const FRAME = '#2b2f3a';
+const FRAME = '#3a3c46';
 
 export class GraphLegend {
     /** One section per mode; the page shows the section of the current mode and hides the rest. */

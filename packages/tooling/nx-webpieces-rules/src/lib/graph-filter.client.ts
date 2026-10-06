@@ -48,24 +48,29 @@ class WpRenderBand {
 class WpFilteredDot {
     constructor(private readonly model: RenderModelJson) {}
 
-    /** `nodeDot` picks each box's statement — the architecture page passes its current color mode's. */
+    /**
+     * `nodeDot` picks each box's statement — the architecture page passes its current color mode's.
+     * `keepEmptyLevels` keeps a level whose boxes were all filtered out as a thin labeled band, so
+     * every remaining box stays in its own L-row (the architecture page); otherwise it is dropped.
+     */
     render(
         retained: Set<string>,
         nodeDot: (node: RenderNodeJson) => string = (node: RenderNodeJson): string => node.dot,
+        keepEmptyLevels = false,
     ): string {
         const nodes = this.model.nodes.filter((node: RenderNodeJson): boolean => retained.has(node.id));
         const edges = this.model.edges.filter(
-            (edge) => retained.has(edge.from) && retained.has(edge.to),
+            (edge: RenderEdgeJson): boolean => retained.has(edge.from) && retained.has(edge.to),
         );
         const bands = this.model.bands
             .map(
-                (band) =>
+                (band: RenderBandJson): WpRenderBand =>
                     new WpRenderBand(
                         band.level,
-                        band.nodeNames.filter((id) => retained.has(id)),
+                        band.nodeNames.filter((id: string): boolean => retained.has(id)),
                     ),
             )
-            .filter((band) => band.nodeNames.length > 0);
+            .filter((band: WpRenderBand): boolean => keepEmptyLevels || band.nodeNames.length > 0);
         return (
             this.model.header +
             nodes.map((node: RenderNodeJson): string => nodeDot(node)).join('') +
@@ -82,7 +87,13 @@ class WpFilteredDot {
         let dot = '';
         for (const band of bands) {
             const anchor = `__wp_layout_L${band.level}`;
-            dot += `  "${anchor}" ${nodeAttrs};\n  { rank=same; "${anchor}"; `;
+            // The same bytes as LevelBandLayout.emptyBandAttrs (graph-level-bands.ts).
+            const attrs =
+                band.nodeNames.length > 0
+                    ? nodeAttrs
+                    : '[shape=plaintext, style="", width=0.01, height=0.15, margin=0, fontsize=9, fontcolor="#9a9eab", ' +
+                      `label="L${band.level} · no matching projects", class="wp-layout wp-empty-level"]`;
+            dot += `  "${anchor}" ${attrs};\n  { rank=same; "${anchor}"; `;
             dot += band.nodeNames.map((id) => `${JSON.stringify(id)}; `).join('') + '}\n';
         }
         for (let i = 0; i + 1 < bands.length; i++) {
@@ -145,6 +156,17 @@ abstract class WpFilterPage {
     protected usesFullDot(): boolean {
         return true;
     }
+    /**
+     * The page's own filter on top of "Hide unconnected": the architecture page intersects the set
+     * with its Filter popover (changes, runtime, role). Everything, by default.
+     */
+    protected narrow(retained: Set<string>): Set<string> {
+        return retained;
+    }
+    /** Whether a level emptied by filtering stays as a thin labeled band (see WpFilteredDot.render). */
+    protected keepsEmptyLevels(): boolean {
+        return false;
+    }
 
     /**
      * Draw again with the current filter — after a color-mode switch. A control outside the graph
@@ -169,10 +191,11 @@ abstract class WpFilterPage {
         if (this.viz === null) return;
         const host = document.getElementById('graph');
         if (host === null) return;
-        const retained =
+        const retained = this.narrow(
             anchor === null
-                ? new Set(this.model.nodes.map((node) => node.id))
-                : this.chain.nodes(anchor);
+                ? new Set(this.model.nodes.map((node: RenderNodeJson): string => node.id))
+                : this.chain.nodes(anchor),
+        );
         const previousAnchor = this.anchor;
         const previousRetained = this.retained;
         const previousSvg = host.querySelector('svg');
@@ -183,8 +206,10 @@ abstract class WpFilterPage {
             const dot =
                 anchor === null && this.usesFullDot()
                     ? this.model.fullDot
-                    : new WpFilteredDot(this.model).render(retained, (node: RenderNodeJson): string =>
-                          this.nodeDot(node),
+                    : new WpFilteredDot(this.model).render(
+                          retained,
+                          (node: RenderNodeJson): string => this.nodeDot(node),
+                          this.keepsEmptyLevels(),
                       );
             const svg = this.viz.renderSVGElement(dot);
             this.prepareSvg(svg);

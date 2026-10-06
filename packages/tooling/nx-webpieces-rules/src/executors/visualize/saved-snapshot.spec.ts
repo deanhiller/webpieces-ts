@@ -12,6 +12,7 @@ import { RuntimeHtmlPage } from '../../lib/runtime-html-page';
 import { createNodesV2 } from '../../plugin';
 import { saveGraph } from '../../lib/graph-loader';
 import { saveRuntimeGraph } from '../../lib/runtime-graph';
+import { ImpactRefresh } from '../../lib/graph-impact';
 
 vi.mock('../../lib/runtime-config', () => ({
     loadRuntimeConfig: () => ({ showExternalNodes: true }),
@@ -60,6 +61,8 @@ describe('saved architecture viewing', () => {
             return render.apply(new RuntimeHtmlPage(() => '// browser client', () => '// filter client'), args);
         });
         vi.spyOn(GraphVisualizer.prototype, 'openVisualization').mockReturnValue(false);
+        // Viewing refreshes Impact (#1158); no spec here may spawn git or nx for it.
+        vi.spyOn(ImpactRefresh.prototype, 'run').mockResolvedValue('ℹ️  Impact stubbed');
         vi.spyOn(console, 'log').mockImplementation(() => undefined);
         vi.spyOn(console, 'error').mockImplementation(() => undefined);
     });
@@ -158,6 +161,25 @@ describe('saved architecture viewing', () => {
         expect(
             fs.readFileSync(path.join(fixture.root, 'architecture/dependencies.html'), 'utf8'),
         ).toContain('refreshed');
+    });
+
+    it("refreshes this branch's Impact sidecar beside the page from the SAVED graph, before opening it", async () => {
+        const fixture = new SnapshotFixture();
+        fixture.write();
+        const before = fixture.facts();
+        expect(await visualize({ graphPath: fixture.graphPath }, fixture.context)).toEqual({ success: true });
+        const run = vi.mocked(ImpactRefresh.prototype.run);
+        expect(run).toHaveBeenCalledTimes(1);
+        const [architectureDir, workspaceRoot, graph] = run.mock.calls[0];
+        expect(architectureDir).toBe(path.join(fixture.root, 'architecture'));
+        expect(workspaceRoot).toBe(fixture.root);
+        expect(Object.keys(graph)).toEqual(['saved']);
+        // Refreshed before the browser opens, so the page loads this branch's sidecar.
+        const open = vi.mocked(GraphVisualizer.prototype.openVisualization);
+        expect(run.mock.invocationCallOrder[0]).toBeLessThan(open.mock.invocationCallOrder[0]);
+        expect(vi.mocked(console.log).mock.calls.flat().join('\n')).toContain('Impact stubbed');
+        // Viewing still never regenerates the saved architecture facts.
+        expect(fixture.facts()).toEqual(before);
     });
 
     it('fails missing artifacts with their paths and explicit refresh guidance without creating facts', async () => {
