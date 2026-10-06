@@ -1,11 +1,19 @@
 import { dotValue } from './dot-syntax';
 import { LevelBand } from './graph-level-bands';
+import { LegendFacts, NodeModeDots } from './graph-color-modes';
 
-/** Renderer-owned records, captured while emitting DOT, never recovered by parsing labels. */
+/**
+ * Renderer-owned records, captured while emitting DOT, never recovered by parsing labels.
+ *
+ * `dot` is the statement `fullDot` carries. `modes` is set only by the architecture graph, whose page
+ * switches color modes by re-rendering each box from its per-mode statement; the runtime graph has
+ * one look and leaves it null.
+ */
 export class RenderNode {
     constructor(
         public readonly id: string,
         public readonly dot: string,
+        public readonly modes: NodeModeDots | null,
     ) {}
 }
 
@@ -26,10 +34,18 @@ export class GraphRenderModel {
     fullDot = '';
     header = '';
     footer = '';
+    /** The colors and roles in use, so the page's legend lists exactly those (architecture graph). */
+    legend = new LegendFacts();
 
     node(id: string, dot: string): string {
-        this.nodes.push(new RenderNode(id, dot));
+        this.nodes.push(new RenderNode(id, dot, null));
         return dot;
+    }
+
+    /** A box drawn differently per color mode; `fullDot` carries its RUNTIME statement. */
+    styledNode(id: string, modes: NodeModeDots): string {
+        this.nodes.push(new RenderNode(id, modes.runtime, modes));
+        return modes.runtime;
     }
 
     completeEndpoints(): void {

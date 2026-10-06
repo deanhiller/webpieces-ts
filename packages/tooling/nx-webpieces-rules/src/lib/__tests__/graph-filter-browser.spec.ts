@@ -11,7 +11,7 @@ import { generateRuntimeRenderModel } from '../runtime-visualizer';
 import { loadBlessedGraph } from '../graph-loader';
 import { ResponsibilitiesRenderer } from '../graph-responsibilities';
 import type { EnhancedGraph } from '../graph-sorter';
-import type { GraphRenderModel, RenderEdge } from '../graph-render-model';
+import type { GraphRenderModel, RenderEdge, RenderNode } from '../graph-render-model';
 
 /** Opt-in browser suite: WP_GRAPH_VIZ_JS supplies Viz 3; the cross-page test additionally uses
  * WP_GRAPH_VIZ2_JS and WP_GRAPH_VIZ2_RENDER_JS for design's pinned Viz 2.1.2 scripts. */
@@ -76,6 +76,11 @@ Viz.instance = async () => {
                 hasText: new RegExp(`^${id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`),
             }),
         });
+    }
+
+    /** Lock through the drawer's type-to-search field ('' unlocks), exactly as a viewer types it. */
+    async lock(page: Page, id: string): Promise<void> {
+        await page.locator('#wp-lock').fill(id);
     }
 
     async names(page: Page, selector = '#graph g.node'): Promise<string[]> {
@@ -237,7 +242,7 @@ describe.skipIf(!process.env.WP_GRAPH_VIZ_JS)('real Viz local-file filtering', (
         const chain = FilterFixture.api().chain(model);
         const locked = chain.nodes('code-rules');
         const page = await fixture.open('1127-lock-hover', fixture.architecture(graph));
-        await page.selectOption('#wp-lock', 'code-rules');
+        await fixture.lock(page, 'code-rules');
         await fixture.foreground(page, model, locked);
         const cards = await fixture.cards(page);
         await fixture.snapshot(page, '1127-lock-before');
@@ -273,8 +278,8 @@ describe.skipIf(!process.env.WP_GRAPH_VIZ_JS)('real Viz local-file filtering', (
         const page = await fixture.open('1127-lock-changes', fixture.architecture(graph));
         await fixture.node(page, 'api-doc-model').hover();
         for (const locked of ['code-rules', 'nx-webpieces-rules', '']) {
-            // selectOption changes the control without moving the pointer off the hovered box.
-            await page.selectOption('#wp-lock', locked);
+            // Typing into the lock search changes it without moving the pointer off the hovered box.
+            await fixture.lock(page, locked);
             await fixture.foreground(
                 page,
                 model,
@@ -308,7 +313,7 @@ describe.skipIf(!process.env.WP_GRAPH_VIZ_JS)('real Viz local-file filtering', (
         const model = fixture.viz.generateRenderModel(graph);
         const chain = FilterFixture.api().chain(model);
         const page = await fixture.open('1127-filter-hover', fixture.architecture(graph));
-        await page.selectOption('#wp-lock', 'code-rules');
+        await fixture.lock(page, 'code-rules');
         for (let round = 0; round < 2; round++) {
             await fixture.filter(page, 'hook-runtime');
             const retained = await fixture.names(page);
@@ -327,7 +332,7 @@ describe.skipIf(!process.env.WP_GRAPH_VIZ_JS)('real Viz local-file filtering', (
             await fixture.foreground(page, model, chain.nodes('code-rules'));
             expect(await fixture.names(page, '#graph g.node.wp-focus')).toEqual(['code-rules']);
         }
-        await page.selectOption('#wp-lock', 'pr-gate');
+        await fixture.lock(page, 'pr-gate');
         await fixture.filter(page, 'hook-runtime');
         const retained = await fixture.names(page);
         const rows = await Promise.all(retained.map((id: string) => fixture.row(page, id)));
@@ -363,9 +368,9 @@ describe.skipIf(!process.env.WP_GRAPH_VIZ_JS)('real Viz local-file filtering', (
         );
         const fullNames = await fixture.names(page);
         await fixture.snapshot(page, 'architecture-before');
-        await page.selectOption('#wp-lock', 'hook-runtime');
+        await fixture.lock(page, 'hook-runtime');
         const lockNames = await fixture.names(page, '#graph g.node.wp-neighbor');
-        await page.selectOption('#wp-lock', 'nx-webpieces-rules');
+        await fixture.lock(page, 'nx-webpieces-rules');
         await fixture.filter(page, 'hook-runtime');
         expect(await fixture.names(page)).toEqual(lockNames);
         expect(
@@ -407,7 +412,7 @@ describe.skipIf(!process.env.WP_GRAPH_VIZ_JS)('real Viz local-file filtering', (
         await page.locator('#wp-filter-off').click();
         expect(await fixture.names(page)).toEqual(fullNames);
         expect(await page.locator('#graph svg').getAttribute('class')).toContain('wp-dim');
-        await page.selectOption('#wp-lock', '');
+        await fixture.lock(page, '');
         expect(await fixture.markup(page)).toBe(original);
         await fixture.snapshot(page, 'architecture-restored');
         for (let round = 0; round < 3; round++) {
@@ -483,7 +488,7 @@ describe.skipIf(!process.env.WP_GRAPH_VIZ_JS)('real Viz local-file filtering', (
             'binding-failure',
             fixture.architecture(FilterFixture.wide()),
         );
-        await page.selectOption('#wp-lock', 'hook-runtime');
+        await fixture.lock(page, 'hook-runtime');
         await fixture.filter(page, 'hook-runtime');
         const original = await fixture.markup(page);
         await page.evaluate(() => {
@@ -541,6 +546,135 @@ describe.skipIf(!process.env.WP_GRAPH_VIZ_JS)('real Viz local-file filtering', (
         await fixture.snapshot(page, 'real-restored');
         await page.close();
     });
+    it('shows the graph on first paint at 1440x900, with every control in the drawer', async () => {
+        const graph = loadBlessedGraph(process.cwd())!.projects;
+        const page = await fixture.open('1155-first-paint', fixture.architecture(graph));
+        await page.setViewportSize({ width: 1440, height: 900 });
+        const svg = await page.locator('#graph svg').boundingBox();
+        expect(svg!.y).toBeLessThan(120);
+        expect(svg!.x).toBeLessThan(320);
+        const zoom = await page.locator('.wp-navigation.wp-zoom').boundingBox();
+        expect(zoom!.x + zoom!.width).toBeGreaterThan(1300);
+        expect(zoom!.y + zoom!.height).toBeGreaterThan(820);
+        const legend = await page.locator('#wp-side [data-wp-legend-mode="runtime"]').boundingBox();
+        expect(legend!.y).toBeLessThan(450);
+        await page.screenshot({ path: path.join(fixture.output, '1155-first-paint.png') });
+        await page.close();
+    });
+
+    it('switches modes from the drawer, the keys and the node Mode submenu, deep-links and remembers', async () => {
+        const graph = loadBlessedGraph(process.cwd())!.projects;
+        const modes = fixture.viz
+            .generateRenderModel(graph)
+            .nodes.find((node: RenderNode): boolean => node.id === 'code-rules')!.modes!;
+        const fillOf = (dot: string): string => /fillcolor="([^"]+)"/.exec(dot)![1];
+        const page = await fixture.open('1155-modes', fixture.architecture(graph));
+        const fill = (): Promise<string | null> =>
+            fixture.node(page, 'code-rules').locator('polygon').first().getAttribute('fill');
+        expect(await page.locator('.wp-mode[aria-pressed="true"]').getAttribute('data-wp-mode')).toBe('runtime');
+        expect(await fill()).toBe(fillOf(modes.runtime));
+        await page.locator('.wp-mode[data-wp-mode="architecture"]').click();
+        await expect.poll(fill).toBe(fillOf(modes.architecture));
+        expect(page.url()).toMatch(/#architecture$/);
+        expect(await page.locator('#wp-crumb').textContent()).toContain('Architecture');
+        expect(await page.locator('#wp-side [data-wp-legend-mode="architecture"]').isVisible()).toBe(true);
+        expect(await page.locator('#wp-side [data-wp-legend-mode="runtime"]').isVisible()).toBe(false);
+        // No sidecar beside this page: Impact is disabled, with its one-line reason.
+        expect(await page.locator('.wp-mode[data-wp-mode="impact"]').isDisabled()).toBe(true);
+        expect(await page.locator('#wp-impact-reason').textContent()).toContain('No impact data');
+        await page.evaluate((): void => (document.activeElement as HTMLElement | null)?.blur());
+        await page.keyboard.press('1');
+        await expect.poll(fill).toBe(fillOf(modes.runtime));
+        await fixture.node(page, 'code-rules').locator('text').first().click();
+        await page.locator('#wp-node-menu').getByRole('button', { name: /^Mode/ }).click();
+        const sub = page.locator('#wp-node-menu .wp-node-menu-sub');
+        expect(await sub.getByRole('menuitemradio', { name: 'Runtime' }).getAttribute('aria-checked')).toBe('true');
+        expect(await sub.getByRole('menuitemradio', { name: 'Impact' }).isDisabled()).toBe(true);
+        await sub.getByRole('menuitemradio', { name: 'Architecture' }).click();
+        await expect.poll(fill).toBe(fillOf(modes.architecture));
+        // Remembered per viewer: a fresh load with no hash comes back in Architecture.
+        await page.goto(page.url().split('#')[0]);
+        await page.locator('g.wp-node-clickable').first().waitFor();
+        expect(await page.locator('.wp-mode[aria-pressed="true"]').getAttribute('data-wp-mode')).toBe('architecture');
+        // ...and a deep link wins over the remembered choice.
+        await page.goto(`${page.url().split('#')[0]}#runtime`);
+        await page.locator('g.wp-node-clickable').first().waitFor();
+        expect(await page.locator('.wp-mode[aria-pressed="true"]').getAttribute('data-wp-mode')).toBe('runtime');
+        await page.close();
+    });
+
+    it('renders every runtime combination through real Graphviz, insets and plates included', async () => {
+        const graph: EnhancedGraph = {
+            'portal-web': { level: 3, dependsOn: ['ui-kit'], framework: ['angular'], role: 'client' },
+            'mobile-app': { level: 3, dependsOn: ['shared-hooks'], framework: ['react-native'], role: 'client' },
+            'jobs-svr': { level: 3, dependsOn: ['server-auth'], framework: ['express'], role: 'server' },
+            'ui-kit': { level: 2, dependsOn: ['model'], framework: ['angular', 'browser'], role: 'lib' },
+            'shared-hooks': { level: 2, dependsOn: ['model'], framework: ['react', 'react-native'], role: 'lib' },
+            'server-auth': { level: 2, dependsOn: ['model'], framework: ['express', 'node'], role: 'designed-lib' },
+            'web+rn': { level: 1, dependsOn: ['model'], framework: ['browser', 'react-native'], role: 'api-lib' },
+            model: { level: 0, dependsOn: [], framework: ['browser', 'node', 'react-native'], role: 'lib' },
+            '<odd & "name">': { level: 0, dependsOn: [], role: 'lib' },
+        };
+        const page = await fixture.open('1155-runtime-combos', fixture.architecture(graph));
+        expect(await fixture.names(page)).toEqual(Object.keys(graph).sort());
+        expect(await page.locator('#wp-graph-error').isVisible()).toBe(false);
+        for (const legend of ['browser', 'node', 'react-native', 'angular', 'react', 'express', 'multi', 'none'])
+            expect(await page.locator(`#wp-side [data-wp-legend="${legend}"]`).count()).toBe(1);
+        await page.screenshot({ path: path.join(fixture.output, '1155-runtime-combos.png') });
+        await page.locator('.wp-mode[data-wp-mode="architecture"]').click();
+        await expect.poll(() => page.locator('#wp-crumb').textContent()).toContain('Architecture');
+        expect(await page.locator('#wp-graph-error').isVisible()).toBe(false);
+        await page.screenshot({ path: path.join(fixture.output, '1155-architecture-combos.png') });
+        await page.close();
+    });
+
+    it('locks from the search field, hides unconnected from the drawer, and unlocks on Esc', async () => {
+        const graph = FilterFixture.wide();
+        const page = await fixture.open('1155-drawer-lock', fixture.architecture(graph));
+        const full = await fixture.names(page);
+        expect(await page.locator('#wp-filter-toggle').isDisabled()).toBe(true);
+        await page.evaluate((): void => (document.activeElement as HTMLElement | null)?.blur());
+        await page.keyboard.press('/');
+        expect(await page.locator('#wp-lock').evaluate((el: Element): boolean => el === document.activeElement)).toBe(true);
+        await page.keyboard.type('hook-runtime');
+        expect(await fixture.names(page, '#graph g.node.wp-locked')).toEqual(['hook-runtime']);
+        await page.locator('#wp-filter-toggle').click();
+        expect((await fixture.names(page)).length).toBeLessThan(full.length);
+        expect(await page.locator('#wp-filter-toggle').getAttribute('aria-pressed')).toBe('true');
+        await page.locator('#wp-filter-toggle').click();
+        expect(await fixture.names(page)).toEqual(full);
+        await page.locator('#wp-lock').press('Escape');
+        expect(await page.locator('#wp-lock').inputValue()).toBe('');
+        expect(await fixture.names(page, '#graph g.node.wp-locked')).toEqual([]);
+        await page.close();
+    });
+
+    it('enables Impact from the sidecar: touched, affected, build input and untouched shades', async () => {
+        const graph = FilterFixture.wide();
+        const sidecarDir = path.join(fixture.output, '.impact');
+        fs.mkdirSync(sidecarDir, { recursive: true });
+        fs.writeFileSync(
+            path.join(sidecarDir, 'dependencies.impact.js'),
+            'window.__WP_IMPACT__ = {"available":true,"reason":"","base":"abc1234","touched":["rules-config"],"affected":["hook-runtime","pr-gate"],"buildInputs":["repo-workflow-core","tooling-common"],"changedFiles":2};',
+        );
+        const page = await fixture.open('1155-impact', fixture.architecture(graph));
+        // The sidecar is shared by every page this suite writes, so it goes as soon as this one loaded it.
+        fs.rmSync(sidecarDir, { recursive: true, force: true });
+        await page.locator('.wp-mode[data-wp-mode="impact"]').click();
+        const shape = (id: string): Locator => fixture.node(page, id).locator('polygon').first();
+        await expect.poll(() => shape('rules-config').getAttribute('fill')).toBe('#f5a524');
+        expect(await shape('hook-runtime').getAttribute('fill')).toBe('#fde3b0');
+        expect(await shape('hook-runtime').getAttribute('stroke')).toBe('#f5a524');
+        expect(await shape('tooling-common').getAttribute('fill')).toBe('#e3e9f2');
+        expect(await shape('tooling-common').getAttribute('stroke-dasharray')).not.toBeNull();
+        expect(await shape('core-mock').getAttribute('fill')).toBe('#eef0f4');
+        expect(await page.locator('#wp-side [data-wp-impact-note]').textContent()).toContain(
+            '1 touched · 2 affected · 2 build inputs',
+        );
+        await page.screenshot({ path: path.join(fixture.output, '1155-impact.png') });
+        await page.close();
+    });
+
     it('filters runtime chains through queues/externals and keeps its single-box Lock after every redraw', async () => {
         const model = generateRuntimeRenderModel(FilterFixture.runtime());
         const html = new RuntimeHtmlPage(

@@ -1,7 +1,7 @@
 import { GraphRenderModel, GraphFilterAssets } from './graph-render-model';
 import { RuntimeDetails } from './runtime-details';
 import type { RuntimeGraph } from './runtime-graph-model';
-import { GraphNavigation } from './graph-navigation';
+import { GraphNavigation, NavigationLayout } from './graph-navigation';
 import { SavedSnapshot } from './saved-snapshot';
 import { CLIENT_MODEL_PLACEHOLDER, readCompiledClient } from './graph-visualizer';
 import { GraphNodeMenu } from './graph-node-menu';
@@ -57,7 +57,7 @@ export class RuntimeHtmlPage {
     <script>${this.nodeMenu.script()}</script>
     <script>${this.filterJs()}</script>
     <script>${this.script(model)}</script>
-    <script>${new GraphNavigation().script()}</script>
+    <script>${new GraphNavigation(NavigationLayout.TOOLBAR).script()}</script>
     <script>${new RuntimeDetails(graph, showExternalNodes).script()}</script>
 </body>
 </html>`;
@@ -125,7 +125,7 @@ export class RuntimeHtmlPage {
         }
         .sw { flex: 0 0 auto; display: inline-flex; }
         code { background: #f2f2f2; padding: 1px 4px; border-radius: 3px; font-family: monospace; }
-        ${new GraphNavigation().styles()}
+        ${new GraphNavigation(NavigationLayout.TOOLBAR).styles()}
         @media (max-width: 900px) { .legend-columns { grid-template-columns: 1fr; } }`;
     }
 }

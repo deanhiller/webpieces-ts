@@ -38,6 +38,7 @@
 import { ProjectMode, FrameworkTagConfig } from "./configs/rule-configs";
 import { CodeValidator, ExecutorResult } from './code-validator';
 import { injectable, bindingScopeValues } from 'inversify';
+import { KNOWN_FRAMEWORKS } from '@webpieces/rules-sdk';
 import {
     InvalidTagProject,
     MissingTagProject,
@@ -47,7 +48,8 @@ import {
 } from './tag-rule';
 
 const FRAMEWORK_TAG_PREFIX = 'framework:';
-const DEFAULT_KNOWN_TYPES = ['browser', 'react', 'angular', 'node', 'express', 'react-native'];
+/** The shared vocabulary (rules-sdk), so the graph's colors and this validator cannot drift apart. */
+const DEFAULT_KNOWN_TYPES: string[] = [...KNOWN_FRAMEWORKS];
 
 /** The removed legacy libType, kept only to emit a targeted migration message. */
 const REMOVED_ALL_VALUE = 'all';

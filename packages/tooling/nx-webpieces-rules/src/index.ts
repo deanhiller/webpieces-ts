@@ -25,3 +25,4 @@ export type { ApiDocMode } from './configs/api-doc-rules-config';
 export { ApiClientPackagesEntry, ApiLibDependenciesConfig, ApiLibPathConfig, FrameworkFolderEntry, FrameworkFolderConfig } from './configs/tag-truth-configs';
 
 export { GraphRenderModel, RenderNode, RenderEdge } from './lib/graph-render-model';
+export { GraphMode, NodeModeDots, LegendFacts } from './lib/graph-color-modes';

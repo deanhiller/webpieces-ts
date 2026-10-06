@@ -28,41 +28,66 @@ const filterJs = (): string => ts.transpileModule(fs.readFileSync(path.join(__di
 const viz = new GraphVisualizer(clientJs, filterJs);
 
 describe('generateDot', () => {
-    it('colors each node by the first env in its set (fill) and shapes the border by role', () => {
+    it('draws Runtime mode by default: a specialization is an inset on its base, on a label plate', () => {
         const dot = viz.generateDot(GRAPH);
-        expect(dot).toContain('"angular-site" [fillcolor="#FCE4EC"'); // angular = pink
-        expect(dot).toContain('"server2" [fillcolor="#E8F5E9"'); // express = green
-        expect(dot).toContain('"http-client" [fillcolor="#EDE7F6"'); // browser = purple
-        expect(dot).toContain('color="green", penwidth=3'); // server = thick green border
-        expect(dot).toContain('color="red", penwidth=3'); // client = thick red border
+        // angular-site: browser stripe with a pink angular inset, text on the light plate.
+        expect(dot).toContain('"angular-site" [style="filled", fillcolor="#fbfbfd", margin=0, label=<<TABLE');
+        expect(dot).toContain('BGCOLOR="#b9a7e6" CELLPADDING="4"><TABLE BORDER="0" CELLSPACING="0" CELLPADDING="0" BGCOLOR="#f59ab9"');
+        // server2: express inset on the node (yellow) base.
+        expect(dot).toContain('BGCOLOR="#ffe07a" CELLPADDING="4"><TABLE BORDER="0" CELLSPACING="0" CELLPADDING="0" BGCOLOR="#9fd8a3"');
+        // http-client: browser+node, no specialization → two equal stripes behind a plate.
+        expect(dot).toContain('<TD BGCOLOR="#b9a7e6" WIDTH=');
+        expect(dot).toContain('<TD BGCOLOR="#ffe07a" WIDTH=');
     });
 
-    it('shows the level, env set, and role in every label (incl. server/client)', () => {
+    it('labels Runtime boxes with the short name plus "L# · role" (the stripes show the envs)', () => {
         const dot = viz.generateDot(GRAPH);
-        expect(dot).toContain('label="angular-site\\n(L3 · [angular, browser] · client)"');
-        expect(dot).toContain('label="server2\\n(L4 · [express, node] · server)"');
-        expect(dot).toContain('label="http-client\\n(L2 · [browser, node] · lib)"');
+        expect(dot).toContain('angular-site<BR/>L3 · client');
+        expect(dot).toContain('server2<BR/>L4 · server');
+        expect(dot).toContain('http-client<BR/>L2 · lib');
     });
 
-    it('lays every node out on its own dependency level (server/client not pinned)', () => {
-        const dot = viz.generateDot(GRAPH);
-        // server2 L4, angular-site L3, http-client L2 — each alone on its rank here, sharing the
-        // rank only with its level's invisible layout anchor.
-        expect(dot).toContain('{ rank=same; "__wp_layout_L4"; "server2"; }');
-        expect(dot).toContain('{ rank=same; "__wp_layout_L3"; "angular-site"; }');
-        expect(dot).toContain('{ rank=same; "__wp_layout_L2"; "http-client"; }');
+    it('fills a single-runtime box with no specialization plainly', () => {
+        const dot = viz.generateDot({ svc: { level: 0, dependsOn: [], framework: ['node'], role: 'lib' } });
+        expect(dot).toContain('"svc" [style="filled", fillcolor="#ffe07a", label="svc\\nL0 · lib"];');
     });
 
     it('treats an absent framework as an empty set and absent role as "lib"', () => {
         const dot = viz.generateDot({ mystery: { level: 0, dependsOn: [] } });
-        expect(dot).toContain('"mystery" [fillcolor="#F5F5F5"');
-        expect(dot).toContain('label="mystery\\n(L0 · [] · lib)"');
+        expect(dot).toContain('"mystery" [style="filled", fillcolor="#e4e6ec", label="mystery\\nL0 · lib"];');
     });
 
-    it('uses the default color for an unknown framework value', () => {
+    it('treats an unknown framework value as no runtime', () => {
         const dot = viz.generateDot({ odd: { level: 0, dependsOn: [], framework: ['vue'], role: 'lib' } });
-        expect(dot).toContain('"odd" [fillcolor="#F5F5F5"');
-        expect(dot).toContain('label="odd\\n(L0 · [vue] · lib)"');
+        expect(dot).toContain('"odd" [style="filled", fillcolor="#e4e6ec", label="odd\\nL0 · lib"];');
+    });
+
+    it('carries an Architecture statement per box: a role fill, no framework color', () => {
+        const model = viz.generateRenderModel(GRAPH);
+        const server = model.nodes.find((node) => node.id === 'server2')!;
+        expect(server.modes!.architecture).toBe(
+            '  "server2" [style="filled", fillcolor="#4caf50", fontcolor="#ffffff", label="server2\\nL4 · express+node"];\n',
+        );
+        const lib = model.nodes.find((node) => node.id === 'http-client')!;
+        expect(lib.modes!.architecture).toContain('fillcolor="#d7dae2", fontcolor="#1a1c22"');
+    });
+
+    it('carries all four Impact statements per box, since only the sidecar knows which applies', () => {
+        const modes = viz.generateRenderModel(GRAPH).nodes.find((node) => node.id === 'server2')!.modes!;
+        expect(modes.touched).toContain('fillcolor="#f5a524", label="server2\\ntouched"');
+        expect(modes.affected).toContain('fillcolor="#fde3b0", color="#f5a524", penwidth=2, label="server2\\naffected"');
+        expect(modes.buildInput).toContain(
+            'style="filled,dashed", fillcolor="#e3e9f2", color="#7c8aa3", penwidth=1.5, label="server2\\nbuild input"',
+        );
+        expect(modes.untouched).toContain('fillcolor="#eef0f4", color="#b4b9c4", fontcolor="#6b7180", label="server2\\nL4"');
+    });
+
+    it('uses the Runtime statement for fullDot, so the committed page draws Runtime first', () => {
+        const model = viz.generateRenderModel(GRAPH);
+        for (const node of model.nodes) {
+            expect(node.dot).toBe(node.modes!.runtime);
+            expect(model.fullDot).toContain(node.dot);
+        }
     });
 
     it('never emits a node URL — clicking a box opens the menu, it does not navigate', () => {
@@ -246,7 +271,6 @@ describe('generateDot edge styling', () => {
         expect(dot).toContain('"client-server" -> "client-server-api" [style=dashed, label="implements: SaveApi", fontsize=9]');
         expect(dot).toContain('"client-server" -> "server2-api" [id="wp-real-edge-1"];'); // uses = plain black solid, same as a plain dep
         expect(dot).toContain('"client-server" -> "core-util" [id="wp-real-edge-2"];'); // plain dep, unstyled
-        expect(dot).toContain('color="#EF6C00", penwidth=2'); // api-lib box border
     });
 
     it('styles a uses-implements edge distinctly', () => {
@@ -332,14 +356,35 @@ describe('generateDot drawOnGraph:false hiding', () => {
 });
 
 describe('generateHTML', () => {
-    it('renders a framework + role legend in three columns', () => {
+    it('renders the drawer shell: stacked mode items, lock search, legend, edge key, footer links', () => {
         const html = viz.generateHTML(viz.generateRenderModel(GRAPH), viz.designLinks(GRAPH));
-        expect(html).toContain('legend-columns');
-        expect(html).toContain('Fill = framework');
-        expect(html).toContain('Border = role');
-        expect(html).toContain('angular');
-        expect(html).toContain('express');
-        expect(html).toContain('designed-lib');
+        expect(html).toContain('id="wp-shell"');
+        expect(html).toContain('<span class="wp-mode-name">Runtime</span><span class="wp-mode-sub">where the code can run</span>');
+        expect(html).toContain('<span class="wp-mode-name">Architecture</span><span class="wp-mode-sub">servers · clients · APIs</span>');
+        expect(html).toContain('<span class="wp-mode-name">Impact</span><span class="wp-mode-sub">what this branch touches</span>');
+        expect(html).toContain('id="wp-legend-pop"');
+        expect(html).toContain('id="wp-resp-open"');
+        expect(html).toContain('id="wp-snapshot-open"');
+        // The two hint paragraphs moved into the "?" popover; nothing sits above the graph any more.
+        expect(html).toContain('id="wp-help"');
+        expect(html).not.toContain('<h1>');
+    });
+
+    it('loads the gitignored impact sidecar with a plain script tag, before the page scripts', () => {
+        const html = viz.generateHTML(viz.generateRenderModel(GRAPH), viz.designLinks(GRAPH));
+        expect(html).toContain('<script src=".impact/dependencies.impact.js"></script>');
+        expect(html.indexOf('.impact/dependencies.impact.js')).toBeLessThan(html.indexOf('class WpNodeMenu'));
+    });
+
+    it('generates the legend from the projects present, per mode', () => {
+        const html = viz.generateHTML(viz.generateRenderModel(GRAPH), viz.designLinks(GRAPH));
+        for (const key of ['browser', 'node', 'angular', 'express', 'multi'])
+            expect(html).toContain(`data-wp-legend="${key}"`);
+        // Nothing in GRAPH is react / react-native / an app — so no row for them.
+        for (const key of ['react', 'react-native', 'app', 'bundle'])
+            expect(html).not.toContain(`data-wp-legend="${key}"`);
+        for (const key of ['server', 'client', 'lib', 'touched', 'affected', 'build-input', 'untouched'])
+            expect(html).toContain(`data-wp-legend="${key}"`);
     });
 
     it('skips the invisible layout scaffolding when indexing, so an anchor is never a dependency', () => {
@@ -422,7 +467,7 @@ describe('generateHTML node menu', () => {
     it('carries no link for a project with no design page, so its menu omits the item', () => {
         const html = htmlFor({ plain: { level: 0, dependsOn: [], role: 'lib' } });
         // The links payload is empty — nothing for the menu to build a View Design item from.
-        expect(html).toContain('new Map([].map');
+        expect(html).toContain('for (const link of [])');
         expect(html).not.toContain('"nodeId"');
     });
 
@@ -432,13 +477,20 @@ describe('generateHTML node menu', () => {
         expect(html).toContain('isLocked');
     });
 
-    it('routes menu and dropdown through ONE lock, so each reflects the other', () => {
+    it('routes menu and lock search through ONE lock, so each reflects the other', () => {
         const html = htmlFor(DESIGNED);
-        // setLock writes the dropdown's selection, then applies the highlight + card filter — and the
-        // dropdown's own change handler calls the same applyLock, so the two can never disagree.
+        // setLock applies the highlight + card filter and repaints the search field; the field's own
+        // input handler calls the same setLock, so the two can never disagree.
         expect(html).toContain('setLock');
         expect(html).toContain('this.highlighter?.relight()');
-        expect(html).toContain('select.value =');
-        expect(html).toContain('id="wp-lock"');
+        expect(html).toContain("input.value = locked ?? ''");
+        expect(html).toContain('<input type="search" id="wp-lock" list="wp-lock-options"');
+    });
+
+    it('adds a Mode submenu after View Design / Lock / Filter Unconnected', () => {
+        const html = htmlFor(DESIGNED);
+        expect(html).toContain('items.push(this.page.modeItem())');
+        expect(html).toContain("new WpNodeMenuItem('Mode'");
+        expect(html).toContain('class WpSubmenu');
     });
 });

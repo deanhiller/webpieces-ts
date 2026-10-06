@@ -28,9 +28,15 @@ interface DesignLinkJson {
  * Declared (not imported) because these are global scripts — see the header above.
  */
 declare class WpNodeMenuItem {
-    constructor(label: string, onSelect: () => void);
+    /** `children` makes this item open a submenu (the architecture page's "Mode ▸") instead. */
+    constructor(label: string, onSelect: () => void, children?: WpNodeMenuItem[]);
     label: string;
     onSelect: () => void;
+    children: WpNodeMenuItem[];
+    /** null: an ordinary item. true/false: one choice of a radio group, ✓ when true. */
+    checked: boolean | null;
+    /** Non-empty: the item is disabled, and this one-line reason is its tooltip. */
+    disabledReason: string;
 }
 
 declare class WpNodeMenu {
@@ -46,10 +52,10 @@ declare class WpNodeMenu {
 }
 
 /**
- * The dropdown-less lock, also from graph-node-menu.ts: dim every other box in one rendered graph and
+ * The field-less lock, also from graph-node-menu.ts: dim every other box in one rendered graph and
  * light the locked one. Used by the runtime page (and, from its own emitted script, by design.html);
  * the architecture page does NOT use it — its lock is GraphHighlighter.setLock(), which also has a
- * dropdown and a responsibilities list to keep in step.
+ * lock search field and a responsibilities list to keep in step.
  */
 declare class WpNodeLock {
     constructor(svg: SVGSVGElement);
@@ -85,6 +91,37 @@ interface RenderModelJson {
 interface RenderNodeJson {
     id: string;
     dot: string;
+    /** The architecture graph's per-mode statements (graph-color-modes.ts); null on the runtime graph. */
+    modes: NodeModeDotsJson | null;
+}
+interface NodeModeDotsJson {
+    runtime: string;
+    architecture: string;
+    touched: string;
+    affected: string;
+    buildInput: string;
+    untouched: string;
+}
+
+/**
+ * Impact mode's data, set by the gitignored sidecar architecture/.impact/dependencies.impact.js
+ * (graph-impact.ts) when one exists. Absent when the page is opened without one.
+ */
+interface ImpactJson {
+    available: boolean;
+    reason: string;
+    /** The fork point's short sha. */
+    base: string;
+    /** In nx affected AND owning a changed file. */
+    touched: string[];
+    /** The rest of nx affected: their ci re-runs. */
+    affected: string[];
+    /** Transitive dependencies of the affected set that are not affected themselves. */
+    buildInputs: string[];
+    changedFiles: number;
+}
+interface Window {
+    __WP_IMPACT__?: ImpactJson;
 }
 interface RenderEdgeJson {
     from: string;

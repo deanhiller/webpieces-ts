@@ -53,7 +53,7 @@ export class ResponsibilitiesRenderer {
         return (
             `<section id="wp-responsibilities">` +
             `<h2>Responsibilities (level high → low)</h2>` +
-            `<p class="hint">Lock a box above to narrow this list to just that box's dependency chain.</p>` +
+            `<p class="hint">Lock a box (the Focus field, or a box's menu) to narrow this list to just that box's dependency chain.</p>` +
             cards.join('\n') +
             `</section>`
         );

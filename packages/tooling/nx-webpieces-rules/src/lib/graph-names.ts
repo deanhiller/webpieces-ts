@@ -3,7 +3,7 @@
  *
  * The two names a project has in the visualization, kept apart on purpose:
  *
- *  - its NODE ID — the identity every DOT node, edge endpoint, `rank=same` member, lock-dropdown
+ *  - its NODE ID — the identity every DOT node, edge endpoint, `rank=same` member, lock-search
  *    value and responsibilities `data-node` attribute is keyed on. It is the project KEY, verbatim.
  *  - its SHORT NAME — the human-facing label, with the `@scope/` prefix stripped.
  *
@@ -45,7 +45,7 @@ export class GraphNames {
      * The DOT/DOM identity of a project: its project KEY, unchanged.
      *
      * This is deliberately a named method rather than an inlined `project` at ten call sites — the
-     * node id is one decision, and it has to be made in one place or the DOT, the lock dropdown and
+     * node id is one decision, and it has to be made in one place or the DOT, the lock search and
      * the responsibilities cards drift apart and the hover/lock wiring silently stops matching.
      */
     getNodeId(projectKey: string): string {

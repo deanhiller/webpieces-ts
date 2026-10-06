@@ -28,6 +28,8 @@ import { ProjectInfo } from '../../lib/project-info';
 import type { ApiContracts, ExternalSystemDecls } from '../../lib/api-usage/api-relations';
 import type { EnhancedGraph, GraphEntry } from '../../lib/graph-sorter';
 import { GraphVisualizer } from '../../lib/graph-visualizer';
+import { ImpactRefresh } from '../../lib/graph-impact';
+import * as path from 'path';
 import { deriveRuntimeGraphReport, saveRuntimeGraph } from '../../lib/runtime-graph';
 import { printAutoHiddenServers } from '../../lib/runtime-participant-resolver';
 import { toError } from '../../toError';
@@ -152,7 +154,10 @@ function printGraphSummary(graph: EnhancedGraph): void {
  * not be separated from the throw by fifty lines of steps.
  */
 export class ArchitectureGenerator {
-    constructor(private readonly visualizer: GraphVisualizer) {}
+    constructor(
+        private readonly visualizer: GraphVisualizer,
+        private readonly impact: ImpactRefresh = new ImpactRefresh(),
+    ) {}
 
     async generate(workspaceRoot: string, graphPath: string | undefined): Promise<void> {
         // Step 1: Build the full graph from nx, then transitively reduce it to the view
@@ -199,6 +204,10 @@ export class ArchitectureGenerator {
         // dependencies.html regenerates in lock-step with dependencies.json.
         const vizPaths = this.visualizer.writeVisualization(enhancedGraph, workspaceRoot);
         console.log(`✅ Wrote ${vizPaths.htmlPath}`);
+
+        // Step 4c: The page's Impact mode — nx affected for THIS branch, into a gitignored sidecar
+        // beside the html (never into the committed files). Optional: it reports, it never throws.
+        console.log(await this.impact.run(path.dirname(vizPaths.htmlPath), workspaceRoot, enhancedGraph));
 
         // Step 5: Generate the runtime microservice graph from the same scan.
         // Projects tagged drawOnGraph:false are threaded through so the runtime

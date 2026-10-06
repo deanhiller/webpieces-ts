@@ -106,6 +106,42 @@ afterward does not establish that refresh succeeded. Browser-open failures print
 the HTML path for manual opening. Architecture/API validation and CI still run
 their existing checks independently of visualization.
 
+### Color modes and the page shell
+
+`architecture/dependencies.html` opens with the graph filling the viewport and every control
+in a collapsible dark drawer on the left: the color mode, a type-to-search **Lock** field
+(`/` focuses it, `Esc` unlocks), a **Hide unconnected** toggle, the legend (with a pop-out
+button) and the edge key. Help is the **?** popover, zoom floats bottom-right, and
+**Responsibilities** opens a right-hand panel from the drawer footer.
+
+The graph answers one question at a time. Pick a mode in the drawer, from **Mode ▸** in any
+box's menu, or with keys `1` `2` `3`; the choice is remembered per viewer and deep-linkable as
+`#runtime`, `#architecture` or `#impact`.
+
+- **Runtime** — where the code can run. Base runtimes are equal vertical stripes in the fixed
+  order browser | node | react-native; angular and react are an inset inside the browser
+  stripe, express inside the node stripe. A box may depend on a box that carries every color it
+  has. A box with several stripes or an inset carries its name on a light plate between two
+  stripe bands, so the text never straddles two colors.
+- **Architecture** — servers · clients · APIs. A solid fill by role (server, client, app, bundle,
+  api-lib, api-client, designed-lib, lib); framework color is not shown.
+- **Impact** — what this branch touches. `architecture:generate` runs
+  `nx show projects --affected --base=<fork point> --json` (no `--head`, so uncommitted and
+  untracked work counts). Projects that own a changed file, by nx's own file ownership, are solid
+  amber ("touched — files changed on this branch"); the rest of the affected set is light amber
+  ("affected — tests and build re-run"); every transitive dependency of the affected set that is
+  not itself affected is light slate with a dashed border ("build input — compiled or restored from
+  cache, unchanged"); everything else is grey. The drawer shows the counts per shade. The answer is per branch, so
+  it is written to `architecture/.impact/dependencies.impact.js`, never into the committed html or
+  json. That directory holds its own `.gitignore` (`*`), so a consuming repo needs no gitignore
+  entry. When nx or git cannot answer, no sidecar is written and Impact is disabled with a
+  one-line reason; generation never fails over it. `architecture:visualize` leaves the sidecar
+  as it is.
+
+The legend is generated per mode from the projects actually drawn, and the framework colors
+are keyed off `KNOWN_FRAMEWORKS` (`@webpieces/rules-sdk`), the same list the framework-tag
+validator checks.
+
 ### Compact graph filtering
 
 Architecture and runtime node menus offer **Filter Unconnected** alongside

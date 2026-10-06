@@ -20,4 +20,6 @@ export type { RuleConfigSection } from './rule-pack';
 export { PolicyRuntimeRequest, BuildPolicyResult } from './rule-runtime';
 export type { BuildPolicy, BuildRuleRuntime } from './rule-runtime';
 export { PolicyDebugSelection, BuildDebugRequest } from './rule-runtime';
+export { KNOWN_FRAMEWORKS } from './framework-vocabulary';
+export type { KnownFramework } from './framework-vocabulary';
 export type { BuildDebugRuntime } from './rule-runtime';

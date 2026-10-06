@@ -16,9 +16,9 @@
  * ambient globals — see viz-client-globals.d.ts.
  *
  * What the menu does NOT own is the LOCK BEHAVIOUR, because the pages genuinely differ:
- *  - the architecture page already has a `#wp-lock` dropdown backed by GraphHighlighter (chain
+ *  - the architecture page already has a `#wp-lock` search field backed by GraphHighlighter (chain
  *    highlight + responsibilities filter), and its menu item drives that, so the two stay in sync;
- *  - a design page and the runtime page have neither dropdown nor responsibilities, so they use
+ *  - a design page and the runtime page have neither lock field nor responsibilities, so they use
  *    `WpNodeLock` below — dim every other box in that graph, light the locked one.
  * All three spell the dim with the SAME class names and the SAME CSS from `dimStyles()`.
  */
@@ -62,6 +62,15 @@ export class GraphNodeMenu {
             cursor: pointer;
         }
         .wp-node-menu-item:hover { background: #E3F2FD; }
+        .wp-node-menu-item:disabled { color: #9aa0ad; cursor: not-allowed; background: none; }
+        .wp-node-menu-item[aria-checked="true"]::after { content: "✓"; float: right; margin-left: 12px; }
+        /* A submenu (e.g. the architecture page's "Mode ▸") opens beside its parent item, on hover,
+         * on click and on ArrowRight; ArrowLeft returns to the parent. */
+        .wp-node-menu-sub-host { position: relative; }
+        .wp-node-menu-arrow { float: right; margin-left: 12px; color: #777; }
+        .wp-node-menu .wp-node-menu-sub { display: none; left: 100%; top: -5px; }
+        .wp-node-menu .wp-node-menu-sub.wp-flip { left: auto; right: 100%; }
+        .wp-node-menu-sub-host.wp-open > .wp-node-menu-sub { display: block; }
         g.wp-node-clickable { cursor: pointer; outline: none; }
         /* DOM keyboard focus is independent of graph highlight/Lock and stays dim with its node. */
         g.wp-node-clickable.wp-keyboard-focus {
@@ -110,12 +119,25 @@ export class GraphNodeMenu {
      * 4px below it) and clamped so a box at the right edge of a very wide graph still shows its whole
      * menu. Opening a menu closes any other, so at most one is ever on screen.
      */
-    private menuScript(): string {
+    private itemScript(): string {
         return `
         class WpNodeMenuItem {
-            constructor(label, onSelect) { this.label = label; this.onSelect = onSelect; }
-        }
+            constructor(label, onSelect, children = []) {
+                this.label = label;
+                this.onSelect = onSelect;
+                this.children = children;
+                this.checked = null;
+                this.disabledReason = '';
+            }
+        }`;
+    }
+
+    private menuScript(): string {
+        return `${this.itemScript()}
+        ${WpMenuButton.toString()}
+        ${WpSubmenu.toString()}
         class WpNodeMenu {
+            static submenu(item) { return new WpSubmenu().build(item, WpNodeMenu.button); }
             ${this.focusScript()}
             static open(nodeEl, name, items) {
                 WpNodeMenu.close();
@@ -129,24 +151,15 @@ export class GraphNodeMenu {
                 heading.className = 'wp-node-menu-title';
                 heading.textContent = name;
                 menu.appendChild(heading);
-                for (const item of items) menu.appendChild(WpNodeMenu.button(item));
+                for (const item of items) {
+                    const hasChildren = Array.isArray(item.children) && item.children.length > 0;
+                    menu.appendChild(hasChildren ? WpNodeMenu.submenu(item) : WpNodeMenu.button(item));
+                }
                 document.body.appendChild(menu);
                 WpNodeMenu.place(menu, nodeEl);
                 menu.querySelector('button')?.focus({ preventScroll: true });
             }
-            static button(item) {
-                const button = document.createElement('button');
-                button.type = 'button';
-                button.className = 'wp-node-menu-item';
-                button.textContent = item.label;
-                button.addEventListener('click', function (ev) {
-                    ev.preventDefault();
-                    ev.stopPropagation();
-                    WpNodeMenu.close(true);
-                    item.onSelect();
-                });
-                return button;
-            }
+            static button(item) { return new WpMenuButton().build(item, WpNodeMenu.close.bind(WpNodeMenu)); }
             ${this.positionScript()}
             ${this.keyboardScript()}
             static wire(svg, itemsFor) {
@@ -240,7 +253,7 @@ export class GraphNodeMenu {
     }
 
     /**
-     * The lock the DESIGN pages and the RUNTIME page use: neither has a dropdown or a responsibilities
+     * The lock the DESIGN pages and the RUNTIME page use: neither has a lock field or a responsibilities
      * list, so locking a box dims every other box in that graph and lights the locked one.
      */
     private lockScript(): string {
@@ -298,5 +311,112 @@ export class GraphNodeMenu {
             if (active?.classList.contains('wp-node-clickable')) active.classList.add('wp-keyboard-focus');
             if (ev.key === 'Escape') WpNodeMenu.close(true);
         }, true);`;
+    }
+}
+
+/**
+ * One plain menu item. Selecting it closes the menu (returning keyboard focus to the box it was
+ * opened from) and then runs the item. A radio item (`checked` true/false) is announced as one, and
+ * an item with a `disabledReason` is disabled with that reason as its tooltip.
+ *
+ * Serialized with `toString()`, like WpSubmenu below; `close` is handed in because WpNodeMenu, which
+ * owns it, is declared after this class in the emitted script.
+ */
+class WpMenuButton {
+    build(item: WpNodeMenuItem, close: (returnFocus: boolean) => void): HTMLButtonElement {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'wp-node-menu-item';
+        button.textContent = item.label;
+        if (item.checked === true || item.checked === false) {
+            button.setAttribute('role', 'menuitemradio');
+            button.setAttribute('aria-checked', String(item.checked));
+        }
+        if (item.disabledReason) {
+            button.disabled = true;
+            button.title = item.disabledReason;
+        }
+        button.addEventListener('click', (ev: MouseEvent): void => {
+            ev.preventDefault();
+            ev.stopPropagation();
+            close(true);
+            item.onSelect();
+        });
+        return button;
+    }
+}
+
+/**
+ * A menu item that opens a nested menu beside it — the architecture page's "Mode ▸".
+ *
+ * Real TypeScript serialized into every page's menu script with `toString()` (the technique
+ * GraphNavigation uses), so it is type-checked here and still needs no compiled sibling file: the
+ * design pages render straight from a source checkout. It touches nothing but the DOM and the
+ * `button` builder it is handed, because nothing else exists where it runs.
+ *
+ * An item without children renders exactly as before, so the runtime page and the design pages —
+ * which never build one — are unaffected.
+ */
+class WpSubmenu {
+    build(
+        item: WpNodeMenuItem,
+        button: (child: WpNodeMenuItem) => HTMLButtonElement,
+    ): HTMLDivElement {
+        const host = document.createElement('div');
+        host.className = 'wp-node-menu-sub-host';
+        const parent = document.createElement('button');
+        parent.type = 'button';
+        parent.className = 'wp-node-menu-item wp-node-menu-parent';
+        parent.setAttribute('aria-haspopup', 'menu');
+        parent.setAttribute('aria-expanded', 'false');
+        parent.textContent = item.label;
+        const arrow = document.createElement('span');
+        arrow.className = 'wp-node-menu-arrow';
+        arrow.setAttribute('aria-hidden', 'true');
+        arrow.textContent = '▸';
+        parent.append(arrow);
+        const sub = document.createElement('div');
+        sub.className = 'wp-node-menu wp-node-menu-sub';
+        sub.setAttribute('role', 'menu');
+        sub.setAttribute('aria-label', item.label);
+        for (const child of item.children) sub.append(button(child));
+        host.append(parent, sub);
+        this.wire(host, parent, sub);
+        return host;
+    }
+
+    private wire(host: HTMLDivElement, parent: HTMLButtonElement, sub: HTMLDivElement): void {
+        const enter = (): void => {
+            this.show(host, parent, sub, true);
+            sub.querySelector<HTMLButtonElement>('button:not([disabled])')?.focus({ preventScroll: true });
+        };
+        host.addEventListener('mouseenter', (): void => this.show(host, parent, sub, true));
+        host.addEventListener('mouseleave', (): void => this.show(host, parent, sub, false));
+        parent.addEventListener('click', (ev: MouseEvent): void => {
+            ev.preventDefault();
+            ev.stopPropagation();
+            enter();
+        });
+        parent.addEventListener('keydown', (ev: KeyboardEvent): void => {
+            if (ev.key !== 'ArrowRight') return;
+            ev.preventDefault();
+            enter();
+        });
+        sub.addEventListener('keydown', (ev: KeyboardEvent): void => {
+            if (ev.key !== 'ArrowLeft') return;
+            ev.preventDefault();
+            this.show(host, parent, sub, false);
+            parent.focus({ preventScroll: true });
+        });
+    }
+
+    /** Opens to the right, or to the LEFT when the right would run off the viewport. */
+    private show(host: HTMLDivElement, parent: HTMLButtonElement, sub: HTMLDivElement, open: boolean): void {
+        host.classList.toggle('wp-open', open);
+        parent.setAttribute('aria-expanded', String(open));
+        if (!open) return;
+        sub.classList.remove('wp-flip');
+        const right = host.getBoundingClientRect().right + sub.offsetWidth + 8;
+        if (right > document.documentElement.clientWidth) sub.classList.add('wp-flip');
     }
 }

@@ -133,3 +133,7 @@ node_modules_*/
 # Committed once by #647 that way. Ignored so the next one never reaches a PR.
 /review.json
 /summary.json
+
+# architecture:generate writes per-branch Impact data here. The directory also ignores itself
+# (its own .gitignore holds "*"), which is what covers consuming repos; this line documents it.
+architecture/.impact/
