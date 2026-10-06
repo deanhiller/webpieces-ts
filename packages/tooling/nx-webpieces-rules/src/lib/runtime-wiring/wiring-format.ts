@@ -191,11 +191,11 @@ export class WiringFormat {
             return;
         }
         if (LEGACY_TOPOLOGY.test(expression.getText())) {
-            report(expression, 'Removed topology shape (rpcTarget, a ContainerModule, a plan wrapper, RuntimeClients/RuntimeTaskClients, provideRpcClient or ExternalContractUse); register through the binder: binder.createRpcClientAndBind(Api, deployment), binder.createPubSubClientAndBind(Api, deployment), binder.bindExternal(Api, VendorImpl).');
+            report(expression, 'Removed topology shape (rpcTarget, a ContainerModule, a plan wrapper, RuntimeClients/RuntimeTaskClients, provideRpcClient or ExternalContractUse); register through the binder: binder.createRpcClientAndBind(Api, deployment), binder.createPubSubClientAndBind(Api, deployment), binder.bindExternal(Api, VendorImpl) (browser: binder.bindExternal(Api, new UseClass(Vendor) | new UseExisting(Token))).');
             return;
         }
         if (!this.registration(expression, scope)) {
-            report(expression, 'Use a recognized registration declaration: binder.bind(...) chains, binder.createRpcClientAndBind(Api, deployment, options?), binder.createPubSubClientAndBind(Api, deployment, options?), binder.bindExternal(Api, VendorImpl), browser binder.provide(...recipes), router.addRoutes/addFilter. Move custom setup into imported implementations, and give a vendor ContainerModule its own library BindModule in that library\'s canonical wiring.ts.');
+            report(expression, 'Use a recognized registration declaration: binder.bind(...) chains, binder.createRpcClientAndBind(Api, deployment, options?), binder.createPubSubClientAndBind(Api, deployment, options?), binder.bindExternal(Api, VendorImpl) (browser: new UseClass(Vendor) | new UseExisting(Token)), browser binder.provide(...recipes), router.addRoutes/addFilter. Move custom setup into imported implementations, and give a vendor ContainerModule its own library BindModule in that library\'s canonical wiring.ts.');
             return;
         }
         for (const argument of this.registrationArguments(expression)) {

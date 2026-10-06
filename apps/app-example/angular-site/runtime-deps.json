@@ -50,6 +50,12 @@
                     "exportedName": "ApiBindings",
                     "targets": {},
                     "policies": {}
+                },
+                {
+                    "project": "angular-site",
+                    "exportedName": "VendorBindings",
+                    "targets": {},
+                    "policies": {}
                 }
             ],
             "routeModules": [],
@@ -58,6 +64,26 @@
         "BrowserHostBindings": {
             "kind": "binding",
             "relationships": [],
+            "bindModules": [],
+            "routeModules": [],
+            "wirings": []
+        },
+        "VendorBindings": {
+            "kind": "binding",
+            "relationships": [
+                {
+                    "contract": {
+                        "project": "browser-storage-api",
+                        "exportedName": "BrowserStorageApi"
+                    },
+                    "direction": "uses",
+                    "transport": "external",
+                    "target": {
+                        "kind": "unknown",
+                        "reason": "Vendor interface; destination classified by approved contract metadata"
+                    }
+                }
+            ],
             "bindModules": [],
             "routeModules": [],
             "wirings": []

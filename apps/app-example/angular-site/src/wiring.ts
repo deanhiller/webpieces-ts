@@ -8,8 +8,11 @@ import {
     ClientConfig,
     ClientHttpBrowserFactory,
     MutableContextStore,
+    UseExisting,
 } from '@webpieces/http-client-browser';
 import { SaveApi, PublicApi } from '@webpieces/client-server-api';
+import { BrowserStorageApi } from '@webpieces/browser-storage-api';
+import { LoggedLocalStorage } from './services/LoggedLocalStorage';
 import { BrowserHostFactories } from './services/BrowserHostFactories';
 import { EnvironmentConfig } from './services/EnvironmentConfig';
 
@@ -35,12 +38,23 @@ export class ApiBindings implements BindModule {
     }
 }
 
+/**
+ * Vendor seams: the external BrowserStorageApi contract aliases the root-provided LoggedLocalStorage
+ * (useExisting, so both tokens share one instance). bindExternal registers the provider AND records
+ * the `uses / external` edge in the approved runtime graph.
+ */
+export class VendorBindings implements BindModule {
+    configure(binder: Binder): void {
+        binder.bindExternal(BrowserStorageApi, new UseExisting(LoggedLocalStorage));
+    }
+}
+
 export class ApplicationBrowserWiring implements AppWiring {
     constructor(private readonly factories: BrowserHostFactories) {}
     getWirings(): Wiring[] {
         return [];
     }
     getBindModules(): BindModule[] {
-        return [new BrowserHostBindings(this.factories), new ApiBindings()];
+        return [new BrowserHostBindings(this.factories), new ApiBindings(), new VendorBindings()];
     }
 }

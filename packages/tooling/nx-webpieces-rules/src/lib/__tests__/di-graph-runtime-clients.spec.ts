@@ -127,4 +127,39 @@ describe('host binder client registrations in DI designs', () => {
         });
         expect(design?.edges.filter((edge: DiEdge) => edge.from === 'RemoteApi')).toEqual([]);
     });
+
+    it.each([
+        ['UseClass', 'VendorStorage'],
+        ['UseExisting', 'LoggedStorage'],
+    ])('resolves browser binder.bindExternal(Api, new %s(...)) through an aliased import to the implementation class', (recipe: string, impl: string) => {
+        const fixture = new Fixture({
+            'main.ts': `import { bootstrapApplication } from '@angular/platform-browser';
+                import { AppComponent } from './app.component';
+                bootstrapApplication(AppComponent, { providers: [] });`,
+            'api.ts': `export abstract class StorageApi { abstract load(): string; }`,
+            'vendor.ts': `import { Injectable } from '@angular/core';
+                import { StorageApi } from './api';
+                export class VendorStorage extends StorageApi { load(): string { return 'vendor'; } }
+                @Injectable({ providedIn: 'root' })
+                export class LoggedStorage extends StorageApi { load(): string { return 'logged'; } }`,
+            'packages/http/http-client-browser/Wiring.ts': `export abstract class ExternalImpl<T extends object> { declare readonly implementation: T; }
+                export class UseClass<T extends object> extends ExternalImpl<T> { constructor(public useClass: new () => T) { super(); } }
+                export class UseExisting<T extends object> extends ExternalImpl<T> { constructor(public useExisting: abstract new () => T) { super(); } }
+                export class Binder { bindExternal<T extends object>(api: abstract new () => T, impl: ExternalImpl<T>): void {} provide(...recipes: object[]): void {} }`,
+            'wiring.ts': `import { StorageApi } from './api';
+                import { ${impl} } from './vendor';
+                import { Binder, ${recipe} as Recipe } from './packages/http/http-client-browser/Wiring';
+                export class Vendors { configure(binder: Binder): void { binder.bindExternal(StorageApi, new Recipe(${impl})); } }`,
+            'app.component.ts': `import { Component, inject } from '@angular/core';
+                import { StorageApi } from './api'; import { Vendors } from './wiring';
+                @Component({ selector: 'app', template: '' })
+                export class AppComponent { private storage = inject(StorageApi); }`,
+        });
+        fixtures.push(fixture);
+        const graph = fixture.buildAngular();
+        const design = designFor(graph, 'AppComponent');
+        expect(allUnresolved(graph)).toEqual([]);
+        expect(nodeIn(design, impl)).toMatchObject({ api: 'StorageApi', scope: 'singleton', file: 'proj/src/vendor.ts' });
+        expect(design?.edges).toContainEqual(expect.objectContaining({ from: 'AppComponent', to: impl, token: 'StorageApi' }));
+    });
 });

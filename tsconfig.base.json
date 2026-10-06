@@ -90,6 +90,9 @@
             "@webpieces/nx-webpieces-rules": [
                 "packages/tooling/nx-webpieces-rules/src/index.ts"
             ],
+            "@webpieces/browser-storage-api": [
+                "apps/app-example/browser-storage-api/src/index.ts"
+            ],
             "@webpieces/client-server-api": [
                 "apps/app-example/client-server-api/src/index.ts"
             ],

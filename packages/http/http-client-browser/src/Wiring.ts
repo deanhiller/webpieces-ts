@@ -7,6 +7,7 @@ import type {
 } from '@webpieces/http-client-core';
 import { WiringModules } from '@webpieces/http-client-core';
 import { RpcClientProvider } from './RpcClientProvider';
+import type { ExternalImpl } from './ExternalImpl';
 
 /**
  * Options for {@link Binder.createRpcClientAndBind}. `token` is an EXTRA identity, needed only when two
@@ -36,6 +37,14 @@ export class Binder {
     ): void {
         const token: BrowserToken = options?.token ?? api;
         this.recipes.push(new RpcClientProvider<T>(token, api, deployment));
+    }
+
+    /**
+     * Registers a vendor implementation of an external contract AND records the external-contract
+     * graph edge. `impl` is `new UseClass(Vendor)` or `new UseExisting(Token)`.
+     */
+    bindExternal<T extends object>(api: ApiPrototype<T>, impl: ExternalImpl<NoInfer<T>>): void {
+        this.recipes.push(impl.provider(api));
     }
 
     get providers(): BrowserProvider[] {

@@ -2,7 +2,8 @@ import { describe, expect, it, vi } from 'vitest';
 import { ClientConfig } from './ClientConfig';
 import { ClientHttpBrowserFactory } from './ClientHttpBrowserFactory';
 import { MutableContextStore } from './MutableContextStore';
-import { BrowserValueProvider } from './BrowserProviders';
+import { BrowserClassProvider, BrowserExistingProvider, BrowserValueProvider } from './BrowserProviders';
+import { UseClass, UseExisting } from './ExternalImpl';
 import type { BrowserProvider, BrowserToken } from './BrowserProviders';
 import { RpcClientProvider } from './RpcClientProvider';
 import { AppWiring, BindModule, Binder, BrowserWiringProviders, ClientBindOptions, Wiring } from './Wiring';
@@ -13,6 +14,30 @@ abstract class Api {
 class Stub extends Api {
     read(): string {
         return 'stub';
+    }
+}
+
+abstract class LoggedApi extends Api {}
+abstract class StorageApi {
+    abstract load(): string;
+}
+class VendorStorage extends StorageApi {
+    load(): string {
+        return 'vendor';
+    }
+}
+class Externals implements BindModule {
+    configure(binder: Binder): void {
+        binder.bindExternal(StorageApi, new UseClass(VendorStorage));
+        binder.bindExternal(Api, new UseExisting(LoggedApi));
+    }
+}
+class ExternalApp implements AppWiring {
+    getBindModules(): BindModule[] {
+        return [new Externals()];
+    }
+    getWirings(): Wiring[] {
+        return [];
     }
 }
 
@@ -61,5 +86,12 @@ describe('browser Binder', () => {
         const deployments: string[] = [];
         for (const call of spy.mock.calls) deployments.push(call[1].svcName);
         expect(deployments).toEqual(['default-deployment', 'first-deployment', 'second-deployment']);
+    });
+
+    it('bindExternal registers the vendor class (useClass) or aliases an existing token (useExisting) under the contract', () => {
+        const providers = new BrowserWiringProviders().toProviders(new ExternalApp());
+        expect(providers).toEqual([new BrowserClassProvider(StorageApi, VendorStorage), new BrowserExistingProvider(Api, LoggedApi)]);
+        expect(providers[0]).toBeInstanceOf(BrowserClassProvider);
+        expect(providers[1]).toBeInstanceOf(BrowserExistingProvider);
     });
 });

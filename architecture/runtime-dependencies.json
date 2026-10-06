@@ -5,6 +5,7 @@
             "role": "client",
             "implements": [],
             "uses": [
+                "BrowserStorageApi",
                 "PublicApi",
                 "SaveApi"
             ],
@@ -12,6 +13,11 @@
                 "client-server"
             ],
             "wiringUses": [
+                {
+                    "api": "BrowserStorageApi",
+                    "type": "external",
+                    "declaredVia": "angular-site#ApplicationBrowserWiring/0:angular-site#ApplicationBrowserWiring/bindModules[2]:angular-site#VendorBindings"
+                },
                 {
                     "api": "PublicApi",
                     "type": "rpc",
@@ -141,6 +147,14 @@
         }
     },
     "apis": {
+        "BrowserStorageApi": {
+            "implementedBy": [],
+            "usedBy": [
+                "angular-site"
+            ],
+            "type": "external",
+            "owner": "browser-storage-api"
+        },
         "PublicApi": {
             "implementedBy": [
                 "client-server",
@@ -210,7 +224,12 @@
             "type": "rpc"
         }
     ],
-    "unresolvedUses": [],
+    "unresolvedUses": [
+        {
+            "service": "angular-site",
+            "api": "BrowserStorageApi"
+        }
+    ],
     "queues": {},
     "triggers": []
 }

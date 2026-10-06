@@ -35,6 +35,52 @@ describe('typed Wiring/AppWiring extraction', () => {
         expect(declaration.exports.Application.routeModules).toEqual([]);
         expect(new RuntimeWiringAssembler(new Map([['app', declaration]])).assemble('app')).toMatchObject([{ target: { service: 'browser-database' } }]);
     });
+    it.each([
+        ['UseClass', 'VendorStorage'],
+        ['UseExisting', 'LoggedStorage'],
+    ])('records browser binder.bindExternal(Api, new %s(...)) as the same uses/external edge as Node', (recipe: string, impl: string) => {
+        const fixture = new Fixture();
+        fixture.write('vendor', 'api.ts', `export abstract class StorageApi { abstract load(): string; }
+            export class VendorStorage extends StorageApi { load(): string { return 'vendor'; } }
+            export abstract class LoggedStorage extends StorageApi {}`);
+        fixture.write('app', 'RecentQueries.ts', "import { StorageApi } from '../../vendor/src/api'; export class RecentQueries { constructor(private readonly storage: StorageApi) {} }");
+        fixture.write('app', 'wiring.ts', fixture.source(`import { StorageApi, ${impl} } from '../../vendor/src/api';
+            export class BrowserVendors implements BrowserBindModule {
+                configure(binder: BrowserBinder): void { binder.bindExternal(StorageApi, new ${recipe}(${impl})); }
+            }
+            export class Application implements BrowserAppWiring {
+                getWirings(): BrowserWiring[] { return []; }
+                getBindModules(): BrowserBindModule[] { return [new BrowserVendors()]; }
+            }`));
+        expect(fixture.format()).toEqual([]);
+        const declaration = fixture.extract();
+        expect(declaration.exports.BrowserVendors.relationships).toEqual([
+            {
+                contract: { project: 'vendor', exportedName: 'StorageApi' },
+                direction: 'uses',
+                transport: 'external',
+                target: { kind: 'unknown', reason: 'Vendor interface; destination classified by approved contract metadata' },
+            },
+        ]);
+        expect(new RuntimeWiringAssembler(new Map([['app', declaration]])).assemble('app'))
+            .toMatchObject([{ owner: 'vendor', api: 'StorageApi', direction: 'uses', transport: 'external' }]);
+    });
+
+    it('browser bindExternal in an app still requires a production business consumer of the contract', () => {
+        const fixture = new Fixture();
+        fixture.write('vendor', 'api.ts', `export abstract class StorageApi { abstract load(): string; }
+            export class VendorStorage extends StorageApi { load(): string { return 'vendor'; } }`);
+        fixture.write('app', 'wiring.ts', fixture.source(`import { StorageApi, VendorStorage } from '../../vendor/src/api';
+            export class BrowserVendors implements BrowserBindModule {
+                configure(binder: BrowserBinder): void { binder.bindExternal(StorageApi, new UseClass(VendorStorage)); }
+            }
+            export class Application implements BrowserAppWiring {
+                getWirings(): BrowserWiring[] { return []; }
+                getBindModules(): BrowserBindModule[] { return [new BrowserVendors()]; }
+            }`));
+        expect(() => fixture.extract()).toThrow(/vendor#StorageApi has no production business consumer in app/);
+    });
+
     it('forwards a prepared destination and named policy through app, library and module', () => {
         const fixture = new Fixture();
         fixture.write('library', 'wiring.ts', fixture.source(`

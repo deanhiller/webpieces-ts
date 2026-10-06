@@ -169,6 +169,8 @@ importers:
         specifier: 0.15.0
         version: 0.15.0
 
+  apps/app-example/browser-storage-api: {}
+
   apps/app-example/client-server-api:
     dependencies:
       '@webpieces/core-util':

@@ -61,11 +61,23 @@
                             "targetService": "client-server"
                         }
                     ]
+                },
+                "browser-storage-api": {
+                    "kind": "uses",
+                    "implements": [],
+                    "uses": [
+                        {
+                            "api": "BrowserStorageApi",
+                            "type": "external",
+                            "declaredVia": "angular-site#ApplicationBrowserWiring/0:angular-site#ApplicationBrowserWiring/bindModules[2]:angular-site#VendorBindings"
+                        }
+                    ]
                 }
             },
             "runtimeDeclaration": "apps/app-example/angular-site/runtime-deps.json",
             "runtimeComposition": true,
             "dependsOn": [
+                "browser-storage-api",
                 "client-server-api",
                 "company-core",
                 "http-client-browser"
@@ -92,6 +104,14 @@
                 "http-client-browser",
                 "server2"
             ]
+        },
+        "browser-storage-api": {
+            "level": 0,
+            "framework": ["browser"],
+            "role": "api-lib",
+            "shortDescription": "Example browser vendor contract: the abstract `BrowserStorageApi` seam (key/value storage) that `angular-site` binds to a vendor implementation with `Binder.bindExternal`, recording a `uses / external` runtime edge.",
+            "responsibilitiesFile": "apps/app-example/browser-storage-api/responsibilities.md",
+            "dependsOn": []
         },
         "bunyan": {
             "level": 2,

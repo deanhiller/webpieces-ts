@@ -1,0 +1,8 @@
+{
+  "name": "@webpieces/browser-storage-api",
+  "version": "0.0.0-dev",
+  "type": "commonjs",
+  "main": "./src/index.js",
+  "types": "./src/index.d.ts",
+  "description": "Example browser vendor contract (an external seam) that angular-site binds with Binder.bindExternal"
+}

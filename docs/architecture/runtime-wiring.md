@@ -159,7 +159,14 @@ Low-level factory bodies belong in imported implementations; their registrations
 Browser modules configure the browser `Binder` (`@webpieces/http-client-browser`):
 `binder.createRpcClientAndBind(Api, 'deployment', new ClientBindOptions<T>(token?))` registers a
 lazy factory provider with deps `[ClientHttpBrowserFactory, ClientConfig]`, and
-`binder.provide(...recipes)` adds provider recipes, including Angular router providers.
+`binder.provide(...recipes)` adds provider recipes, including Angular router providers, and
+`binder.bindExternal(Api, new UseClass(Vendor))` /
+`binder.bindExternal(Api, new UseExisting(Token))` registers a vendor implementation of an
+external contract (#1153) — the contract constructed as `Vendor`, or aliased to the already-provided
+`Token` — AND records the same external `uses` edge as the Node call. Both a constructed vendor and
+an existing token are classes at runtime, so the recipe is named by the class carrying it
+(`UseClass` / `UseExisting`, both `ExternalImpl` subclasses) rather than guessed from the argument;
+a bare class does not compile.
 `BrowserWiringProviders.toProviders(app)` installs the collected providers through Angular's
 application configuration. Named BrowserValueProvider, BrowserFactoryProvider, BrowserClassProvider
 and BrowserExistingProvider recipes preserve provider and dependency identities without importing
@@ -201,7 +208,8 @@ or disabled selection; environment expressions stay `runtime` and retain conditi
 Extraction never evaluates the environment. Nested conditions, else branches, switches and loops
 fail explicitly; express these as separate selected modules rather than losing conditions.
 
-A vendor contract is bound with `binder.bindExternal(VendorApi, VendorClient)`, alongside ordinary
+A vendor contract is bound with `binder.bindExternal(VendorApi, VendorClient)` (browser:
+`binder.bindExternal(VendorApi, new UseClass(VendorClient))` or `new UseExisting(Token)`), alongside ordinary
 SDK bindings, usually in the vendor library's own canonical wiring.ts. The contract is an abstract
 class, so its identity resolves by symbol like any other API, and the call records the same
 external `uses` edge `ExternalContractUse` used to. In an application's own module, production
