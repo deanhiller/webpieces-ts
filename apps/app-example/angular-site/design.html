@@ -109,7 +109,7 @@
             Edge labels are injection tokens; unlabeled edges are inject-by-type.</em></div>
     </div>
     <div class="section">
-        <h2>AppComponent — component, Level 0…1</h2>
+        <h2>AppComponent — component, Level 0…2</h2>
         <div class="meta">apps/app-example/angular-site/src/app/app.component.ts</div>
         <div id="graph-0" class="graph"></div>
     </div>
@@ -277,7 +277,7 @@
             if (ev.key === 'Escape') WpNodeMenu.close(true);
         }, true);</script>
     <script>
-        const graphs = [{"id":"graph-0","dot":"digraph \"AppComponent\" {\n  rankdir=TB;\n  node [shape=box, fontname=\"Arial\"];\n  edge [fontname=\"Arial\", fontsize=11];\n\n  \"AppComponent\" [fillcolor=\"#E8F5E9\", style=\"filled\", label=\"AppComponent\\n(L0, transient)\", penwidth=2];\n  \"EnvironmentConfig\" [fillcolor=\"#F5F5F5\", style=\"filled\", label=\"EnvironmentConfig\\n(L1, singleton)\"];\n  \"PublicApi\" [fillcolor=\"#E1F5FE\", style=\"filled,rounded,bold\", label=\"PublicApi\\n(L1, singleton)\", penwidth=2, peripheries=2];\n  \"SaveApi\" [fillcolor=\"#E1F5FE\", style=\"filled,rounded,bold\", label=\"SaveApi\\n(L1, singleton)\", penwidth=2, peripheries=2];\n\n  { rank=same; \"AppComponent\"; }\n  { rank=same; \"EnvironmentConfig\"; \"PublicApi\"; \"SaveApi\"; }\n\n  \"AppComponent\" -> \"EnvironmentConfig\";\n  \"AppComponent\" -> \"PublicApi\";\n  \"AppComponent\" -> \"SaveApi\";\n\n  labelloc=\"t\";\n  label=\"AppComponent\\n(component, Level 0-1)\";\n  fontsize=16;\n}\n","stackedIds":["AppComponent"]}];
+        const graphs = [{"id":"graph-0","dot":"digraph \"AppComponent\" {\n  rankdir=TB;\n  node [shape=box, fontname=\"Arial\"];\n  edge [fontname=\"Arial\", fontsize=11];\n\n  \"AppComponent\" [fillcolor=\"#E8F5E9\", style=\"filled\", label=\"AppComponent\\n(L0, transient)\", penwidth=2];\n  \"EnvironmentConfig\" [fillcolor=\"#F5F5F5\", style=\"filled\", label=\"EnvironmentConfig\\n(L1, singleton)\"];\n  \"LoggedLocalStorage\" [fillcolor=\"#F5F5F5\", style=\"filled\", label=\"BrowserStorageApi\\n(LoggedLocalStorage)\\n(L2, singleton)\"];\n  \"PublicApi\" [fillcolor=\"#E1F5FE\", style=\"filled,rounded,bold\", label=\"PublicApi\\n(L1, singleton)\", penwidth=2, peripheries=2];\n  \"RecentQueries\" [fillcolor=\"#F5F5F5\", style=\"filled\", label=\"RecentQueries\\n(L1, singleton)\"];\n  \"SaveApi\" [fillcolor=\"#E1F5FE\", style=\"filled,rounded,bold\", label=\"SaveApi\\n(L1, singleton)\", penwidth=2, peripheries=2];\n\n  { rank=same; \"AppComponent\"; }\n  { rank=same; \"EnvironmentConfig\"; \"PublicApi\"; \"RecentQueries\"; \"SaveApi\"; }\n  { rank=same; \"LoggedLocalStorage\"; }\n\n  \"AppComponent\" -> \"EnvironmentConfig\";\n  \"AppComponent\" -> \"PublicApi\";\n  \"AppComponent\" -> \"RecentQueries\";\n  \"AppComponent\" -> \"SaveApi\";\n  \"RecentQueries\" -> \"LoggedLocalStorage\";\n\n  labelloc=\"t\";\n  label=\"AppComponent\\n(component, Level 0-2)\";\n  fontsize=16;\n}\n","stackedIds":["AppComponent"]}];
         
         function paintStacks(element, stackedIds) {
             const nodes = element.querySelectorAll('g.node');

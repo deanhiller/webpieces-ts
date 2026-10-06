@@ -25,7 +25,7 @@ export const ruleHelp: Readonly<Record<string, RuleHelp>> = {
     ),
     'validate-architecture-unchanged': new RuleHelp(
         'Keep the committed architecture graph aligned with current dependencies.',
-        'In src/wiring.ts register clients through the BindModule\'s Binder: binder.createRpcClientAndBind(Api, deployment, new ClientBindOptions(token?, filters?)) and binder.createPubSubClientAndBind(Api, deployment, new PubSubBindOptions(token?)) from @webpieces/http-routing, binder.bindExternal(Api, VendorImpl) for vendor contracts, and the browser binder.createRpcClientAndBind(Api, deployment) from @webpieces/http-client-browser. wiring-format checks canonical wiring.ts in all participating owners; preserve tokens and filters. Review graph changes and runtime-deps.json candidates explicitly.',
+        'In src/wiring.ts register clients through the BindModule\'s Binder: binder.createRpcClientAndBind(Api, deployment, new ClientBindOptions(token?, filters?)) and binder.createPubSubClientAndBind(Api, deployment, new PubSubBindOptions(token?)) from @webpieces/http-routing, binder.bindExternal(Api, VendorImpl) for vendor contracts, and the browser binder.createRpcClientAndBind(Api, deployment) and binder.bindExternal(Api, new UseClass(Vendor) | new UseExisting(Token)) from @webpieces/http-client-browser. wiring-format checks canonical wiring.ts in all participating owners; preserve tokens and filters. Review graph changes and runtime-deps.json candidates explicitly.',
     ),
     'validate-no-architecture-cycles': new RuleHelp(
         'Keep the project dependency architecture free of cycles.',

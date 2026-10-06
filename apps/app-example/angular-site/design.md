@@ -8,17 +8,21 @@ Each section below is one root's dependency tree: Level 0 is the root
 downward through Levels 1, 2, … A dependency shared by multiple roots
 appears in each root's tree.
 
-## AppComponent — component, Level 0…1
+## AppComponent — component, Level 0…2
 
 ```mermaid
 graph TD
     AppComponent["AppComponent"]:::component
     EnvironmentConfig["EnvironmentConfig"]
+    LoggedLocalStorage["BrowserStorageApi<br/>(LoggedLocalStorage)"]
     PublicApi[["PublicApi"]]:::api
+    RecentQueries["RecentQueries"]
     SaveApi[["SaveApi"]]:::api
     AppComponent --> EnvironmentConfig
     AppComponent --> PublicApi
+    AppComponent --> RecentQueries
     AppComponent --> SaveApi
+    RecentQueries --> LoggedLocalStorage
     classDef controller fill:#1f6feb,color:#ffffff,stroke:#0d419d
     classDef apiImpl fill:#0d9488,color:#ffffff,stroke:#0f766e
     classDef component fill:#2da44e,color:#ffffff,stroke:#1a7f37

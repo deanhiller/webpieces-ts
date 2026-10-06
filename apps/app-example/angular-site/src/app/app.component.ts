@@ -10,6 +10,7 @@ import {
   PublicInfoResponse
 } from '@webpieces/client-server-api';
 import { EnvironmentConfig } from '../services/EnvironmentConfig';
+import { RecentQueries } from '../services/RecentQueries';
 import { toError, LogManager } from '@webpieces/core-util';
 
 const log = LogManager.getLogger('AppComponent');
@@ -30,6 +31,7 @@ export class AppComponent implements OnInit {
   private saveApi = inject(SaveApi);
   private publicApi = inject(PublicApi);
   public envConfig = inject(EnvironmentConfig); // Public for template access
+  private recentQueries = inject(RecentQueries);
 
   title = 'WebPieces Example Client';
   apiBaseUrl = '';
@@ -37,9 +39,11 @@ export class AppComponent implements OnInit {
   publicResponse: PublicInfoResponse | null = null;
   loading = false;
   error: string | null = null;
+  lastQuery: string | undefined;
 
   ngOnInit(): void {
     this.apiBaseUrl = this.envConfig.apiBaseUrl();
+    this.lastQuery = this.recentQueries.last();
   }
 
   async callSaveApi(): Promise<void> {
@@ -65,6 +69,8 @@ export class AppComponent implements OnInit {
       };
 
       this.saveResponse = await this.saveApi.save(request);
+      this.recentQueries.remember(request.query ?? '');
+      this.lastQuery = this.recentQueries.last();
     } catch (err: unknown) {
       const error = toError(err);
       this.error = error.message || 'Failed to call SaveApi';

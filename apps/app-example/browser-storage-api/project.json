@@ -1,0 +1,21 @@
+{
+  "name": "browser-storage-api",
+  "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "apps/app-example/browser-storage-api/src",
+  "projectType": "library",
+  "tags": ["framework:browser", "role:api-lib"],
+  "targets": {
+    "build": {
+      "executor": "@nx/js:tsc",
+      "outputs": ["{options.outputPath}"],
+      "options": {
+        "outputPath": "dist/apps/app-example/browser-storage-api",
+        "main": "apps/app-example/browser-storage-api/src/index.ts",
+        "tsConfig": "apps/app-example/browser-storage-api/tsconfig.lib.json",
+        "assets": [
+          "apps/app-example/browser-storage-api/package.json"
+        ]
+      }
+    }
+  }
+}

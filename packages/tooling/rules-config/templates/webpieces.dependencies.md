@@ -156,11 +156,13 @@ binder.bindExternal(TextToSpeechApi, GcpTextToSpeechClient);
 // Browser: Binder from @webpieces/http-client-browser (no filter argument is supported)
 binder.createRpcClientAndBind(SaveApi, 'save');
 binder.provide(new BrowserValueProvider(MutableContextStore, new MutableContextStore()));
+binder.bindExternal(BrowserStorageApi, new UseExisting(LoggedBrowserStorage)); // or new UseClass(Vendor)
 ```
 
 Supply `ClientBindOptions` / `PubSubBindOptions` with a `token` only when two clients of the same
 API must coexist; filters ride on `ClientBindOptions` for RPC clients. `bindExternal(Api,
-VendorImpl)` binds a vendor implementation AND records the external-contract graph edge.
+VendorImpl)` binds a vendor implementation AND records the external-contract graph edge; the
+browser spelling names its recipe, `new UseClass(Vendor)` or `new UseExisting(Token)`.
 `RuntimeClients`, `RuntimeTaskClients`, `provideRpcClient`, `ExternalContractUse`, `ClientToken`,
 `BrowserBindings` and `BindingModule` no longer exist; `getBindingModules` / `getRoutingModules`
 are now `getBindModules` / `getRouteModules`, and `runtime-deps.json` uses `bindModules` /

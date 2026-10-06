@@ -78,9 +78,12 @@ export {
     ValidateImplementation,
 } from '@webpieces/core-util';
 
-// The browser host's wiring: bind modules only (no route channel) and the Binder they configure.
+// The browser host's wiring: bind modules only (no route channel), the Binder they configure, and
+// the ExternalImpl recipes (UseClass / UseExisting) Binder.bindExternal takes.
 export type { Wiring, AppWiring, BindModule } from './Wiring';
 export { Binder, ClientBindOptions, BrowserWiringProviders } from './Wiring';
+export { ExternalImpl, UseClass, UseExisting } from './ExternalImpl';
+export type { ExternalClassType, ExternalExistingType } from './ExternalImpl';
 export { BrowserValueProvider, BrowserClassProvider, BrowserExistingProvider, BrowserFactoryProvider } from './BrowserProviders';
 export type { BrowserProvider, BrowserToken, BrowserType } from './BrowserProviders';
 

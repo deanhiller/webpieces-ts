@@ -6,7 +6,7 @@
             "root": "AppComponent",
             "rootKind": "component",
             "file": "apps/app-example/angular-site/src/app/app.component.ts",
-            "maxLevel": 1,
+            "maxLevel": 2,
             "nodes": [
                 {
                     "id": "AppComponent",
@@ -25,6 +25,15 @@
                     "level": 1
                 },
                 {
+                    "id": "LoggedLocalStorage",
+                    "className": "LoggedLocalStorage",
+                    "kind": "class",
+                    "scope": "singleton",
+                    "file": "apps/app-example/angular-site/src/services/LoggedLocalStorage.ts",
+                    "level": 2,
+                    "api": "BrowserStorageApi"
+                },
+                {
                     "id": "PublicApi",
                     "className": "PublicApi",
                     "kind": "api",
@@ -32,6 +41,14 @@
                     "file": "apps/app-example/angular-site/src/wiring.ts",
                     "level": 1,
                     "detail": "PublicApi (api client)"
+                },
+                {
+                    "id": "RecentQueries",
+                    "className": "RecentQueries",
+                    "kind": "class",
+                    "scope": "singleton",
+                    "file": "apps/app-example/angular-site/src/services/RecentQueries.ts",
+                    "level": 1
                 },
                 {
                     "id": "SaveApi",
@@ -64,12 +81,30 @@
                 },
                 {
                     "from": "AppComponent",
+                    "to": "RecentQueries",
+                    "injection": "token",
+                    "token": "RecentQueries",
+                    "tokenKey": "class:apps/app-example/angular-site/src/services/RecentQueries.ts#RecentQueries",
+                    "paramName": "recentQueries",
+                    "paramType": "RecentQueries"
+                },
+                {
+                    "from": "AppComponent",
                     "to": "SaveApi",
                     "injection": "token",
                     "token": "SaveApi",
                     "tokenKey": "class:apps/app-example/client-server-api/src/SaveApi.ts#SaveApi",
                     "paramName": "saveApi",
                     "paramType": "SaveApi"
+                },
+                {
+                    "from": "RecentQueries",
+                    "to": "LoggedLocalStorage",
+                    "injection": "token",
+                    "token": "BrowserStorageApi",
+                    "tokenKey": "class:apps/app-example/browser-storage-api/src/BrowserStorageApi.ts#BrowserStorageApi",
+                    "paramName": "storage",
+                    "paramType": "BrowserStorageApi"
                 }
             ],
             "unresolved": []

@@ -35,9 +35,13 @@ export class Fixture {
         `);
         this.write('packages/http/http-client-browser', 'Wiring.ts', `
             export class ClientBindOptions { constructor(public token?: unknown) {} }
+            export abstract class ExternalImpl<T extends object> { declare readonly implementation: T; }
+            export class UseClass<T extends object> extends ExternalImpl<T> { constructor(public useClass: new (...args: never[]) => T) { super(); } }
+            export class UseExisting<T extends object> extends ExternalImpl<T> { constructor(public useExisting: abstract new (...args: never[]) => T) { super(); } }
             export class Binder {
                 provide(...recipes: unknown[]): void {}
                 createRpcClientAndBind(api: object, deployment: string, options?: ClientBindOptions): void {}
+                bindExternal<T extends object>(api: abstract new (...args: never[]) => T, impl: ExternalImpl<T>): void {}
             }
             export interface BindModule { configure(binder: Binder): void; }
             export interface Wiring { getBindModules(): BindModule[]; }
@@ -85,7 +89,7 @@ export class Fixture {
             import { Binder, ClientBindOptions, PubSubBindOptions } from '../../packages/http/http-routing/src/Binder';
             import {
                 AppWiring as BrowserAppWiring, Wiring as BrowserWiring, BindModule as BrowserBindModule,
-                Binder as BrowserBinder, ClientBindOptions as BrowserClientBindOptions,
+                Binder as BrowserBinder, ClientBindOptions as BrowserClientBindOptions, UseClass, UseExisting,
             } from '../../packages/http/http-client-browser/src/Wiring';
             import { ContainerModule, ResolutionContext } from '../../node_modules/inversify/index';
             import { makeEnvironmentProviders, provideAppInitializer } from '../../node_modules/@angular/core/index';

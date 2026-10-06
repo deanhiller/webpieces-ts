@@ -8,7 +8,7 @@ aliases), makes `RouteModule` Node-only, renames the getters to `getBindModules(
 `getRouteModules()` / `getWirings()` and the approval fields to `bindModules` / `routeModules`
 (schema version stays 2; the old names are rejected naming the new ones). Each `configure` receives
 its host's `Binder`: Node's `bind` / `createRpcClientAndBind` / `createPubSubClientAndBind` /
-`bindExternal`, the browser's `provide` / `createRpcClientAndBind`. `RuntimeClients`,
+`bindExternal`, the browser's `provide` / `createRpcClientAndBind` (and, since #1153, `bindExternal`). `RuntimeClients`,
 `RuntimeTaskClients`, `provideRpcClient`, `ExternalContractUse`, `ClientToken` and `BrowserBindings`
 are deleted.
 

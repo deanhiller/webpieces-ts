@@ -84,7 +84,8 @@ export class WiringSourceExtractor {
     }
 
     /**
-     * binder.bindExternal(Api, VendorImpl): the vendor contract's identity comes from the resolved
+     * binder.bindExternal(Api, VendorImpl) — browser: binder.bindExternal(Api, new UseClass(V)
+     * | new UseExisting(T)), recognized by the same name: the vendor contract's identity comes from the resolved
      * symbol, exactly like any other API. An APPLICATION owner must also prove a production business
      * consumer of it; a library module binds an adapter for whichever app selects it, so its
      * consumer lives in that app.
@@ -280,7 +281,7 @@ export class WiringSourceExtractor {
     private fail(message: string): never {
         throw new RuleFailError('validate-runtime-architecture', message, undefined, undefined, [
             new Option(
-                'Declare each owner\'s Wiring/AppWiring class AND its BindModule/RouteModule classes, with their registrations (binder.createRpcClientAndBind(Api, deployment), binder.createPubSubClientAndBind, binder.bindExternal(Api, VendorImpl), binder.bind chains, browser binder.provide recipes, router.addRoutes/addFilter), together in that owner\'s canonical src/wiring.ts (an app may also select a BindModule from a library owner\'s canonical src/wiring.ts), and use the documented getter grammar (getBindModules/getRouteModules/getWirings); extraction reads only canonical wiring.ts files and never executes configuration.',
+                'Declare each owner\'s Wiring/AppWiring class AND its BindModule/RouteModule classes, with their registrations (binder.createRpcClientAndBind(Api, deployment), binder.createPubSubClientAndBind, binder.bindExternal(Api, VendorImpl) or the browser binder.bindExternal(Api, new UseClass(Vendor) | new UseExisting(Token)), binder.bind chains, browser binder.provide recipes, router.addRoutes/addFilter), together in that owner\'s canonical src/wiring.ts (an app may also select a BindModule from a library owner\'s canonical src/wiring.ts), and use the documented getter grammar (getBindModules/getRouteModules/getWirings); extraction reads only canonical wiring.ts files and never executes configuration.',
                 true,
             ),
         ]);

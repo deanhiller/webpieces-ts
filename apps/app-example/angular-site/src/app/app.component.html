@@ -4,6 +4,9 @@
   <div class="info">
     <p><strong>API Base URL:</strong> {{ apiBaseUrl }}</p>
     <p><strong>Client URL:</strong> {{ envConfig.webBaseUrl() }}</p>
+    @if (lastQuery) {
+      <p><strong>Last saved query:</strong> {{ lastQuery }}</p>
+    }
   </div>
 
   <div class="actions">
