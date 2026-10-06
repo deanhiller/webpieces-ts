@@ -10,8 +10,8 @@ catalogs:
       specifier: 2.11.0
       version: 2.11.0
     '@webpieces/webpieces-tooling':
-      specifier: 0.4.866
-      version: 0.4.866
+      specifier: 0.4.872
+      version: 0.4.872
 
 importers:
 
@@ -128,7 +128,7 @@ importers:
         version: 8.48.0(eslint@9.39.1(jiti@1.21.7))(typescript@5.9.3)
       '@webpieces/webpieces-tooling':
         specifier: 'catalog:'
-        version: 0.4.866(@nx/devkit@22.2.1(nx@22.0.2(@swc-node/register@1.9.1(@swc/core@1.15.30(@swc/helpers@0.5.17))(@swc/types@0.1.26)(typescript@5.9.3))(@swc/core@1.15.30(@swc/helpers@0.5.17))))(eslint@9.39.1(jiti@1.21.7))(typescript@5.9.3)
+        version: 0.4.872(@nx/devkit@22.2.1(nx@22.0.2(@swc-node/register@1.9.1(@swc/core@1.15.30(@swc/helpers@0.5.17))(@swc/types@0.1.26)(typescript@5.9.3))(@swc/core@1.15.30(@swc/helpers@0.5.17))))(eslint@9.39.1(jiti@1.21.7))(typescript@5.9.3)
       eslint:
         specifier: 9.39.1
         version: 9.39.1(jiti@1.21.7)
@@ -3503,60 +3503,60 @@ packages:
   '@webassemblyjs/wast-printer@1.14.1':
     resolution: {integrity: sha512-kPSSXE6De1XOR820C90RIo2ogvZG+c3KiHzqUoO/F34Y2shGzesfqv7o57xrxovZJH/MetF5UjroJ/R/3isoiw==}
 
-  '@webpieces/agent-workflow-rules@0.4.866':
-    resolution: {integrity: sha512-geosd1yH5TUViDe+sOlSyoYRPVmdJaj3h8REloB1Glv5vY6/Pjrv3YUuinQRizJxDNLKZR/xnccd1XZeqoEwTg==}
+  '@webpieces/agent-workflow-rules@0.4.872':
+    resolution: {integrity: sha512-7eV5njuJN5yot243dm1dWq5zWf6q950k5TB9I+BAzNghZpo3wpZhM1ZXvuLs50k5uOJ4l7yNdfzaDoe9wzoczg==}
     hasBin: true
 
-  '@webpieces/ai-hook-rules@0.4.866':
-    resolution: {integrity: sha512-dS/eKUQx72Ipt3fXa5nIWZ2q52zX1AOc8uLM+CCnN9Nu+v6M0stH70ZjP/DPNP+gpVP+0cAmp+xko0fwYPR75Q==}
+  '@webpieces/ai-hook-rules@0.4.872':
+    resolution: {integrity: sha512-nElOhGYGwSO3h8QcJIMGPi3zJGvPovmT2ijJJT5gP5qtzqPpX8YyefQE3IV6l4WZOOItQMoE0vvZc+u0gwJa3w==}
     hasBin: true
 
-  '@webpieces/api-doc-model@0.4.866':
-    resolution: {integrity: sha512-xdCXIHsKUrw+OCGrgNddmq54TqiR4+qMe4HIt/tbGADwmJ0kV9KpqAdtRgp6CA1XbBdl552VTMn/BDl/BJHh6g==}
+  '@webpieces/api-doc-model@0.4.872':
+    resolution: {integrity: sha512-xkpGPNGKkL9ZuRHmG0fF/6ETwDA1eNyhRJQ+g6CnGvdiDM6r9md8Pviu+MhWNRoxXE9tHEfHa3N8Ad6wUl3oSw==}
 
-  '@webpieces/code-rules@0.4.866':
-    resolution: {integrity: sha512-mLSvooiKLCb/p0Hhjz5MXJvkt1BYkxLzCJvKVslcj3lOKXW0PZIDSXLvAsZscfcjcTxSWzFQgvduBODMSbKZXQ==}
+  '@webpieces/code-rules@0.4.872':
+    resolution: {integrity: sha512-7Dk8gs8ZSeJqZhRb5ptmzaKwxi7w5ZQJbYWMpzR+pHFLjrEX7//JE30t6hAv+coVItvt6gsM/hhuywayeNjwhA==}
     hasBin: true
 
   '@webpieces/core-util@0.2.104':
     resolution: {integrity: sha512-F9kWVtKNFAzVPl0r9cp6FttJpdTXH/+ybvDgZhAXHLuxkccOjokmRTuoNBDQggcNxKyspUX8RTGydJfiAJSdDw==}
 
-  '@webpieces/core-util@0.4.866':
-    resolution: {integrity: sha512-+R2Pa1APMHV9zexWDeVd37sjUlybyONlbu234vubTl3UCRMCUS5EGLPL6GaFAz1YNiIrj/2kE83dvBR4yiwU4A==}
+  '@webpieces/core-util@0.4.872':
+    resolution: {integrity: sha512-WDhKl1z8rHTiBgAsAG7bmgTJ71gIWelDRDa3VlnOAtfRHRDh9dx9iyKgadmokmx0xRMNu9uVe5oQOhtX5KzK4w==}
 
-  '@webpieces/eslint-rules@0.4.866':
-    resolution: {integrity: sha512-ioXOSN7tLteqrWjOuIQsdo5qSopZi52+xVWJzB7t0C9u2RDguvgo6mEMOh0CGpGlJqJRNJsSxnjpSmrw+E30dA==}
+  '@webpieces/eslint-rules@0.4.872':
+    resolution: {integrity: sha512-y75EghVFNmJORklTp2ZAYYHf91BHzIl/h9SOXcnbpUv4XUPs8M7op9xnzRrnzKOCBw0YkChet7S/B9ccCATJhw==}
     peerDependencies:
       eslint: '>=8.0.0'
 
-  '@webpieces/hook-runtime@0.4.866':
-    resolution: {integrity: sha512-QCewoZsM3jIkUNX9cvSqldFtXvFjUJVD35SQFV6BeP4O8V6TqdMtFBvi/0EEKZYar56uqyiiQSUic0++dDhi1A==}
+  '@webpieces/hook-runtime@0.4.872':
+    resolution: {integrity: sha512-+OuGhdu3RBbyj0LaO63X5Mm4V6ToGcszrWbynkRa+8kj3rJRwCOkebVT8bQV60eKY7CKJwzjGQiJ4ga3VJoBRg==}
 
-  '@webpieces/nx-webpieces-rules@0.4.866':
-    resolution: {integrity: sha512-jfbvI5t4qz/PjmIk3uSWXFaO+EdFsxl4OYI2GiMK45FDLKIThNvhdOtl8oSLQA9uRrUN1okMNPvvoWS+TE20Hg==}
+  '@webpieces/nx-webpieces-rules@0.4.872':
+    resolution: {integrity: sha512-5JETC7AQ/LXXUo2ajhdUPOKWAmQ1EqFIb8nUD2RTspfcRUmeTD9l8LXpAImuR8DNFXlNqd5a2Jhd3IyjgkToSA==}
     hasBin: true
     peerDependencies:
       '@nx/devkit': '>=18.0.0'
 
-  '@webpieces/pr-gate@0.4.866':
-    resolution: {integrity: sha512-h9PeLqlzcZ3r7yqCUTXkv6MLCf9Djn8k4lwJPpYWY1sBI+Ho5Qncx8mm850AIviUgwRVVwse5emPgS65r3PkAA==}
+  '@webpieces/pr-gate@0.4.872':
+    resolution: {integrity: sha512-BjbJJqE1bZPqM/bJjChmGUmrevpCfZAIQFZGsTiHREikhlLwH/XstqVXnbKlekwM4NXfDpMEBVUAPxBu8Fg12Q==}
     hasBin: true
 
-  '@webpieces/repo-workflow-core@0.4.866':
-    resolution: {integrity: sha512-XFzIwhotcZbtidSf+sstdGdPk02ID4POZ1iWhDV4HDweWWjYsODtBTaAjuAE0aShYub1j0LJDnIs8T735D03Ww==}
+  '@webpieces/repo-workflow-core@0.4.872':
+    resolution: {integrity: sha512-jz6IxSVpwqX6Few2RVTjBQ8yKNMO5RSbYlPYDyUy//hV+YycPd9DrnZD+dxNQTnzofYST3XEmIRfucVAYctovw==}
 
-  '@webpieces/rules-config@0.4.866':
-    resolution: {integrity: sha512-P/LBWLA9ieZOFelS4gNw9/bwAYJ53qRyHGhPiaOX90IxXqvzzvh2GUXWQ4eN7vjrKfR8wi2h+wdKUm9kgTVrzA==}
+  '@webpieces/rules-config@0.4.872':
+    resolution: {integrity: sha512-jEoXfm3dOKoq/JeG5ilQtFA0XoS/IdKDDcLMHhBM5sfGAsHkQvNGYocBRgaUCTdmUYPReSmsmFu+W9WBn8EVSg==}
     hasBin: true
 
-  '@webpieces/rules-sdk@0.4.866':
-    resolution: {integrity: sha512-0EF5w4z6uUx8aIvoFVE7TEbDsYe2ymDeHnbCEzOLcDzxIVxcuo67v7H9fUP1S2UBqAHda8oaB6pYHnlI049rzg==}
+  '@webpieces/rules-sdk@0.4.872':
+    resolution: {integrity: sha512-ZwKzgNZq4MLXBEGyomREcgb3d7ccuW1z9pXqk2PW+2NgsmZuckjkHJdqsc/sNWbXs7r2IMWq3QcIHe6beWAbWg==}
 
-  '@webpieces/tooling-common@0.4.866':
-    resolution: {integrity: sha512-JD5mm8zj1BSZiSQrxJK5uQgH0pwgLmgPxhbpAzOLmkxHkOLbZcgVMPPkxKo2Pf/eOYcmHUAswoqnxiqNBFdnIg==}
+  '@webpieces/tooling-common@0.4.872':
+    resolution: {integrity: sha512-nGkAogEv5nnbyFvARXyZ5hI7sFQBsphmVRS7o/uCcy4N0gyTMjtY2ISko7HEQXXv8qzTbTytEF19TfU+yWxkCg==}
 
-  '@webpieces/webpieces-tooling@0.4.866':
-    resolution: {integrity: sha512-KfrJ0aZSNKf2WBCCWXS98D34BpU/ApbOlIJxCGN7ehK+D4tFKdrRh0u+yjldoewhFON1Cx7SdS+wLB7rtnmc+A==}
+  '@webpieces/webpieces-tooling@0.4.872':
+    resolution: {integrity: sha512-TNIYZrG4fZFyYHdXSzJ4ErdaV97zKEpHJvReg/29veGqJ4ZI1CtKTM48+yA3pIgs5IkZyKWNgDmN+gX/lds1rw==}
 
   '@xtuc/ieee754@1.2.0':
     resolution: {integrity: sha512-DX8nKgqcGwsc0eJSqYt5lwP4DH5FlHnmuWWBRy7X0NcaGR0ZtuyeESgMwTYVEtxmsNGY+qit4QYT/MIYTOTPeA==}
@@ -11013,125 +11013,125 @@ snapshots:
       '@webassemblyjs/ast': 1.14.1
       '@xtuc/long': 4.2.2
 
-  '@webpieces/agent-workflow-rules@0.4.866':
+  '@webpieces/agent-workflow-rules@0.4.872':
     dependencies:
-      '@webpieces/hook-runtime': 0.4.866
-      '@webpieces/repo-workflow-core': 0.4.866
-      '@webpieces/rules-config': 0.4.866
-      '@webpieces/rules-sdk': 0.4.866
-      '@webpieces/tooling-common': 0.4.866
+      '@webpieces/hook-runtime': 0.4.872
+      '@webpieces/repo-workflow-core': 0.4.872
+      '@webpieces/rules-config': 0.4.872
+      '@webpieces/rules-sdk': 0.4.872
+      '@webpieces/tooling-common': 0.4.872
       inversify: 7.10.4(reflect-metadata@0.2.2)
       reflect-metadata: 0.2.2
       tslib: 2.8.1
 
-  '@webpieces/ai-hook-rules@0.4.866':
+  '@webpieces/ai-hook-rules@0.4.872':
     dependencies:
-      '@webpieces/hook-runtime': 0.4.866
-      '@webpieces/rules-config': 0.4.866
-      '@webpieces/rules-sdk': 0.4.866
-      '@webpieces/tooling-common': 0.4.866
+      '@webpieces/hook-runtime': 0.4.872
+      '@webpieces/rules-config': 0.4.872
+      '@webpieces/rules-sdk': 0.4.872
+      '@webpieces/tooling-common': 0.4.872
       inversify: 7.10.4(reflect-metadata@0.2.2)
       reflect-metadata: 0.2.2
 
-  '@webpieces/api-doc-model@0.4.866':
+  '@webpieces/api-doc-model@0.4.872':
     dependencies:
-      '@webpieces/core-util': 0.4.866
+      '@webpieces/core-util': 0.4.872
       typescript: 5.9.3
 
-  '@webpieces/code-rules@0.4.866':
+  '@webpieces/code-rules@0.4.872':
     dependencies:
       '@inversifyjs/binding-decorators': 1.1.5(inversify@7.10.4(reflect-metadata@0.2.2))(reflect-metadata@0.2.2)
-      '@webpieces/repo-workflow-core': 0.4.866
-      '@webpieces/rules-config': 0.4.866
-      '@webpieces/rules-sdk': 0.4.866
-      '@webpieces/tooling-common': 0.4.866
+      '@webpieces/repo-workflow-core': 0.4.872
+      '@webpieces/rules-config': 0.4.872
+      '@webpieces/rules-sdk': 0.4.872
+      '@webpieces/tooling-common': 0.4.872
       inversify: 7.10.4(reflect-metadata@0.2.2)
       reflect-metadata: 0.2.2
 
   '@webpieces/core-util@0.2.104': {}
 
-  '@webpieces/core-util@0.4.866': {}
+  '@webpieces/core-util@0.4.872': {}
 
-  '@webpieces/eslint-rules@0.4.866(eslint@9.39.1(jiti@1.21.7))':
+  '@webpieces/eslint-rules@0.4.872(eslint@9.39.1(jiti@1.21.7))':
     dependencies:
-      '@webpieces/rules-config': 0.4.866
-      '@webpieces/rules-sdk': 0.4.866
-      '@webpieces/tooling-common': 0.4.866
+      '@webpieces/rules-config': 0.4.872
+      '@webpieces/rules-sdk': 0.4.872
+      '@webpieces/tooling-common': 0.4.872
       eslint: 9.39.1(jiti@1.21.7)
 
-  '@webpieces/hook-runtime@0.4.866':
+  '@webpieces/hook-runtime@0.4.872':
     dependencies:
-      '@webpieces/rules-config': 0.4.866
-      '@webpieces/rules-sdk': 0.4.866
-      '@webpieces/tooling-common': 0.4.866
+      '@webpieces/rules-config': 0.4.872
+      '@webpieces/rules-sdk': 0.4.872
+      '@webpieces/tooling-common': 0.4.872
       inversify: 7.10.4(reflect-metadata@0.2.2)
       reflect-metadata: 0.2.2
       tslib: 2.8.1
 
-  '@webpieces/nx-webpieces-rules@0.4.866(@nx/devkit@22.2.1(nx@22.0.2(@swc-node/register@1.9.1(@swc/core@1.15.30(@swc/helpers@0.5.17))(@swc/types@0.1.26)(typescript@5.9.3))(@swc/core@1.15.30(@swc/helpers@0.5.17))))(eslint@9.39.1(jiti@1.21.7))(typescript@5.9.3)':
+  '@webpieces/nx-webpieces-rules@0.4.872(@nx/devkit@22.2.1(nx@22.0.2(@swc-node/register@1.9.1(@swc/core@1.15.30(@swc/helpers@0.5.17))(@swc/types@0.1.26)(typescript@5.9.3))(@swc/core@1.15.30(@swc/helpers@0.5.17))))(eslint@9.39.1(jiti@1.21.7))(typescript@5.9.3)':
     dependencies:
       '@nx/devkit': 22.2.1(nx@22.0.2(@swc-node/register@1.9.1(@swc/core@1.15.30(@swc/helpers@0.5.17))(@swc/types@0.1.26)(typescript@5.9.3))(@swc/core@1.15.30(@swc/helpers@0.5.17)))
-      '@webpieces/api-doc-model': 0.4.866
-      '@webpieces/core-util': 0.4.866
-      '@webpieces/eslint-rules': 0.4.866(eslint@9.39.1(jiti@1.21.7))
-      '@webpieces/rules-config': 0.4.866
-      '@webpieces/rules-sdk': 0.4.866
+      '@webpieces/api-doc-model': 0.4.872
+      '@webpieces/core-util': 0.4.872
+      '@webpieces/eslint-rules': 0.4.872(eslint@9.39.1(jiti@1.21.7))
+      '@webpieces/rules-config': 0.4.872
+      '@webpieces/rules-sdk': 0.4.872
       madge: 8.0.0(typescript@5.9.3)
     transitivePeerDependencies:
       - eslint
       - supports-color
       - typescript
 
-  '@webpieces/pr-gate@0.4.866':
+  '@webpieces/pr-gate@0.4.872':
     dependencies:
       '@inversifyjs/binding-decorators': 1.1.5(inversify@7.10.4(reflect-metadata@0.2.2))(reflect-metadata@0.2.2)
-      '@webpieces/hook-runtime': 0.4.866
-      '@webpieces/repo-workflow-core': 0.4.866
-      '@webpieces/rules-config': 0.4.866
-      '@webpieces/tooling-common': 0.4.866
+      '@webpieces/hook-runtime': 0.4.872
+      '@webpieces/repo-workflow-core': 0.4.872
+      '@webpieces/rules-config': 0.4.872
+      '@webpieces/tooling-common': 0.4.872
       inversify: 7.10.4(reflect-metadata@0.2.2)
       reflect-metadata: 0.2.2
 
-  '@webpieces/repo-workflow-core@0.4.866':
+  '@webpieces/repo-workflow-core@0.4.872':
     dependencies:
-      '@webpieces/tooling-common': 0.4.866
+      '@webpieces/tooling-common': 0.4.872
       inversify: 7.10.4(reflect-metadata@0.2.2)
       reflect-metadata: 0.2.2
       tslib: 2.8.1
 
-  '@webpieces/rules-config@0.4.866':
+  '@webpieces/rules-config@0.4.872':
     dependencies:
       '@inversifyjs/binding-decorators': 1.1.5(inversify@7.10.4(reflect-metadata@0.2.2))(reflect-metadata@0.2.2)
-      '@webpieces/repo-workflow-core': 0.4.866
-      '@webpieces/rules-sdk': 0.4.866
-      '@webpieces/tooling-common': 0.4.866
+      '@webpieces/repo-workflow-core': 0.4.872
+      '@webpieces/rules-sdk': 0.4.872
+      '@webpieces/tooling-common': 0.4.872
       inversify: 7.10.4(reflect-metadata@0.2.2)
       minimatch: 10.0.1
       reflect-metadata: 0.2.2
 
-  '@webpieces/rules-sdk@0.4.866':
+  '@webpieces/rules-sdk@0.4.872':
     dependencies:
       tslib: 2.8.1
 
-  '@webpieces/tooling-common@0.4.866':
+  '@webpieces/tooling-common@0.4.872':
     dependencies:
       inversify: 7.10.4(reflect-metadata@0.2.2)
       reflect-metadata: 0.2.2
       tslib: 2.8.1
 
-  '@webpieces/webpieces-tooling@0.4.866(@nx/devkit@22.2.1(nx@22.0.2(@swc-node/register@1.9.1(@swc/core@1.15.30(@swc/helpers@0.5.17))(@swc/types@0.1.26)(typescript@5.9.3))(@swc/core@1.15.30(@swc/helpers@0.5.17))))(eslint@9.39.1(jiti@1.21.7))(typescript@5.9.3)':
+  '@webpieces/webpieces-tooling@0.4.872(@nx/devkit@22.2.1(nx@22.0.2(@swc-node/register@1.9.1(@swc/core@1.15.30(@swc/helpers@0.5.17))(@swc/types@0.1.26)(typescript@5.9.3))(@swc/core@1.15.30(@swc/helpers@0.5.17))))(eslint@9.39.1(jiti@1.21.7))(typescript@5.9.3)':
     dependencies:
-      '@webpieces/agent-workflow-rules': 0.4.866
-      '@webpieces/ai-hook-rules': 0.4.866
-      '@webpieces/code-rules': 0.4.866
-      '@webpieces/eslint-rules': 0.4.866(eslint@9.39.1(jiti@1.21.7))
-      '@webpieces/hook-runtime': 0.4.866
-      '@webpieces/nx-webpieces-rules': 0.4.866(@nx/devkit@22.2.1(nx@22.0.2(@swc-node/register@1.9.1(@swc/core@1.15.30(@swc/helpers@0.5.17))(@swc/types@0.1.26)(typescript@5.9.3))(@swc/core@1.15.30(@swc/helpers@0.5.17))))(eslint@9.39.1(jiti@1.21.7))(typescript@5.9.3)
-      '@webpieces/pr-gate': 0.4.866
-      '@webpieces/repo-workflow-core': 0.4.866
-      '@webpieces/rules-config': 0.4.866
-      '@webpieces/rules-sdk': 0.4.866
-      '@webpieces/tooling-common': 0.4.866
+      '@webpieces/agent-workflow-rules': 0.4.872
+      '@webpieces/ai-hook-rules': 0.4.872
+      '@webpieces/code-rules': 0.4.872
+      '@webpieces/eslint-rules': 0.4.872(eslint@9.39.1(jiti@1.21.7))
+      '@webpieces/hook-runtime': 0.4.872
+      '@webpieces/nx-webpieces-rules': 0.4.872(@nx/devkit@22.2.1(nx@22.0.2(@swc-node/register@1.9.1(@swc/core@1.15.30(@swc/helpers@0.5.17))(@swc/types@0.1.26)(typescript@5.9.3))(@swc/core@1.15.30(@swc/helpers@0.5.17))))(eslint@9.39.1(jiti@1.21.7))(typescript@5.9.3)
+      '@webpieces/pr-gate': 0.4.872
+      '@webpieces/repo-workflow-core': 0.4.872
+      '@webpieces/rules-config': 0.4.872
+      '@webpieces/rules-sdk': 0.4.872
+      '@webpieces/tooling-common': 0.4.872
     transitivePeerDependencies:
       - '@nx/devkit'
       - eslint
