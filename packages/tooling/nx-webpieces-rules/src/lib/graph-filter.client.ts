@@ -48,8 +48,12 @@ class WpRenderBand {
 class WpFilteredDot {
     constructor(private readonly model: RenderModelJson) {}
 
-    render(retained: Set<string>): string {
-        const nodes = this.model.nodes.filter((node) => retained.has(node.id));
+    /** `nodeDot` picks each box's statement — the architecture page passes its current color mode's. */
+    render(
+        retained: Set<string>,
+        nodeDot: (node: RenderNodeJson) => string = (node: RenderNodeJson): string => node.dot,
+    ): string {
+        const nodes = this.model.nodes.filter((node: RenderNodeJson): boolean => retained.has(node.id));
         const edges = this.model.edges.filter(
             (edge) => retained.has(edge.from) && retained.has(edge.to),
         );
@@ -64,7 +68,7 @@ class WpFilteredDot {
             .filter((band) => band.nodeNames.length > 0);
         return (
             this.model.header +
-            nodes.map((node) => node.dot).join('') +
+            nodes.map((node: RenderNodeJson): string => nodeDot(node)).join('') +
             this.bandDot(bands) +
             edges.map((edge) => edge.dot).join('') +
             this.model.footer
@@ -133,6 +137,26 @@ abstract class WpFilterPage {
     protected wireControls(): void {}
     protected abstract wireSvg(svg: SVGSVGElement): void;
     protected prepareSvg(_svg: SVGSVGElement): void {}
+    /** The statement drawn for one box. The architecture page answers with its color mode's. */
+    protected nodeDot(node: RenderNodeJson): string {
+        return node.dot;
+    }
+    /** Whether an unfiltered draw may use the model's precomputed `fullDot` verbatim. */
+    protected usesFullDot(): boolean {
+        return true;
+    }
+
+    /**
+     * Draw again with the current filter — after a color-mode switch. A control outside the graph
+     * (a drawer button) keeps keyboard focus; the redraw would otherwise move it into the graph.
+     */
+    redraw(): void {
+        const active = document.activeElement;
+        const host = document.getElementById('graph');
+        const outside = active instanceof HTMLElement && host !== null && !host.contains(active);
+        this.filter(this.anchor);
+        if (outside && active.isConnected) active.focus({ preventScroll: true });
+    }
 
     filterItem(name: string): WpNodeMenuItem {
         return new WpNodeMenuItem(
@@ -157,9 +181,11 @@ abstract class WpFilterPage {
         // eslint-disable-next-line @webpieces/no-unmanaged-exceptions -- browser transaction restores the previous usable graph on failure
         try {
             const dot =
-                anchor === null
+                anchor === null && this.usesFullDot()
                     ? this.model.fullDot
-                    : new WpFilteredDot(this.model).render(retained);
+                    : new WpFilteredDot(this.model).render(retained, (node: RenderNodeJson): string =>
+                          this.nodeDot(node),
+                      );
             const svg = this.viz.renderSVGElement(dot);
             this.prepareSvg(svg);
             WpNodeMenu.close();

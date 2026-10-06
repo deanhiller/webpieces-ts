@@ -48,6 +48,23 @@ export function recordValue(value: string): string {
     return dotValue(value).replace(/[|{}<>]/g, (char: string) => `\\${char}`);
 }
 
+/**
+ * Escape a runtime value for TEXT inside a Graphviz HTML-like label (`label=<...>`).
+ *
+ * An HTML-like label is not a quoted string, so {@link dotValue} is the WRONG escape there: a `"`
+ * is harmless but a `<`, `>` or `&` in a project name would open a tag, close the label early or
+ * start an entity, and Graphviz rejects the whole graph. Graphviz parses these labels as XML, so the
+ * cure is entity escaping — `&` FIRST, so an escape we emit is never escaped twice.
+ */
+// webpieces-disable no-function-outside-class -- DOT string helpers, matching the sibling builders in runtime-visualizer.ts
+export function htmlLabelText(value: string): string {
+    return value
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+}
+
 /** Thrown when the generator produces DOT that Graphviz could not parse. */
 export class InvalidDotError extends Error {
     constructor(message: string) {

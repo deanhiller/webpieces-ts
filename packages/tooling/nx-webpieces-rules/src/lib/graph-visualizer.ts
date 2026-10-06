@@ -1,4 +1,4 @@
-import { GraphNavigation } from './graph-navigation';
+import { GraphNavigation, NavigationLayout } from './graph-navigation';
 /**
  * Graph Visualizer
  *
@@ -24,22 +24,12 @@ import { ResponsibilitiesRenderer } from './graph-responsibilities';
 import { GraphNodeMenu } from './graph-node-menu';
 import { dotValue } from './dot-syntax';
 import { GraphRenderModel, GraphFilterAssets } from './graph-render-model';
+import { NodeFacts, NodeModeStyler } from './graph-color-modes';
+import { GraphLegend } from './graph-legend';
+import { GraphPageShell, ShellParts } from './graph-page-shell';
+import { GraphPageStyles } from './graph-page-styles';
+import { IMPACT_SIDECAR_SRC } from './graph-impact';
 import { toError } from '../toError';
-
-/**
- * Framework (libType) colors for visualization — nodes are filled by the FIRST
- * env in their set that has a color, so it is obvious at a glance which side a
- * project targets. A project's full env set is shown in the label.
- */
-const FRAMEWORK_COLORS: Record<string, string> = {
-    angular: '#FCE4EC', // pink   - Angular front-end
-    react: '#E3F2FD', // blue   - React front-end
-    browser: '#EDE7F6', // purple - browser (front-end base env)
-    express: '#E8F5E9', // green  - Express / server side
-    node: '#FFF9C4', // yellow - node (server base env)
-};
-
-const DEFAULT_FRAMEWORK_COLOR = '#F5F5F5'; // grey - unknown/empty env set
 
 /**
  * Directory (repo-relative) that the committed architecture HTML lives in.
@@ -111,6 +101,11 @@ export class GraphVisualizer {
     private readonly cycles = new ProjectCycleDetector();
     /** The ONE floating-node-menu implementation, shared with the per-project design pages. */
     private readonly nodeMenu = new GraphNodeMenu();
+    private readonly styler = new NodeModeStyler();
+    private readonly legend = new GraphLegend();
+    private readonly shell = new GraphPageShell();
+    private readonly pageStyles = new GraphPageStyles();
+    private readonly navigation = new GraphNavigation(NavigationLayout.FLOATING);
 
     /**
      * How to obtain the browser client's text. Injected so HTML generation does not depend on BUILD
@@ -127,45 +122,11 @@ export class GraphVisualizer {
 
     /**
      * A project tagged `drawOnGraph:false` is hidden from the rendered graph —
-     * its node, its rank placement, its dropdown option, its responsibilities
+     * its node, its rank placement, its lock-search option, its responsibilities
      * card, and every edge touching it are all omitted. It stays in the JSON.
      */
     private isHidden(entry: EnhancedGraph[string]): boolean {
         return entry.drawOnGraph === false;
-    }
-
-    /**
-     * Fill color for an env set — the color of the first env in the set that has
-     * a known color, else the default.
-     */
-    private frameworkColor(frameworks: string[]): string {
-        for (const env of frameworks) {
-            const color = FRAMEWORK_COLORS[env];
-            if (color !== undefined) return color;
-        }
-        return DEFAULT_FRAMEWORK_COLOR;
-    }
-
-    /**
-     * Role border styling — fill stays keyed on framework; the border shows a
-     * project's ROLE at a glance. Server and client are the top-level runnable
-     * nodes, so they get bold, colored borders to stand out:
-     *   server       → thick GREEN border  (a runnable server app)
-     *   app          → thick BLUE border   (a runnable non-HTTP app, e.g. a tooling app)
-     *   bundle       → thick PURPLE border (an aggregator that bundles several apps)
-     *   client       → thick RED border    (a client app, e.g. angular)
-     *   designed-lib → bold border         (a library with a generated @DocumentDesign design)
-     *   lib / other  → plain thin border
-     */
-    private roleBorderAttrs(role: string): string {
-        if (role === 'server') return ', color="green", penwidth=3';
-        if (role === 'app') return ', color="#1976d2", penwidth=3';
-        if (role === 'bundle') return ', color="#6A1B9A", penwidth=3';
-        if (role === 'client') return ', color="red", penwidth=3';
-        if (role === 'api-lib') return ', color="#EF6C00", penwidth=2';
-        if (role === 'api-client') return ', color="#00838F", penwidth=2';
-        if (role === 'designed-lib') return ', penwidth=2';
-        return '';
     }
 
     /**
@@ -324,28 +285,25 @@ export class GraphVisualizer {
         );
     }
 
-    // Node lines: fill colored by framework env set (libType), border shaped by
-    // role; the label shows the env set + role (e.g. [browser, node] · server).
-    // No node carries a URL: EVERY box is clickable and opens the floating node
-    // menu instead, which is where a design page is reached (see designLinks).
+    // Node lines: one statement per color mode (graph-color-modes.ts) — the label is the short
+    // name plus a short meta line, because the fill now shows what the env list used to spell out.
+    // No node carries a URL: EVERY box is clickable and opens the floating node menu instead, which
+    // is where a design page is reached (see designLinks).
     private dotNodes(graph: EnhancedGraph, model: GraphRenderModel): string {
         let dot = '';
         for (const project of Object.keys(graph)) {
             const info = graph[project];
             if (this.isHidden(info)) continue;
-            const nodeId = this.names.getNodeId(project);
-            const shortName = this.names.getShortName(project);
-            const frameworks = info.framework ?? [];
-            const role = info.role ?? 'lib';
-            const color = this.frameworkColor(frameworks);
-            const border = this.roleBorderAttrs(role);
-            const envSet = `[${frameworks.join(', ')}]`;
-            const labelMeta = `L${info.level} · ${envSet} · ${role}`;
             // Identity is the project key; the LABEL is the pretty short name.
-            dot += model.node(
-                nodeId,
-                `  "${dotValue(nodeId)}" [fillcolor="${color}"${border}, label="${dotValue(shortName)}\\n(${dotValue(labelMeta)})"];\n`,
+            const facts = new NodeFacts(
+                this.names.getNodeId(project),
+                this.names.getShortName(project),
+                info.level,
+                info.role ?? 'lib',
+                info.framework ?? [],
             );
+            this.styler.record(model.legend, facts);
+            dot += model.styledNode(facts.nodeId, this.styler.dots(facts));
         }
         return dot;
     }
@@ -374,7 +332,11 @@ export class GraphVisualizer {
     }
 
     /**
-     * Generate interactive HTML with embedded SVG using viz.js
+     * Generate the interactive page: the drawer shell around a viz.js-rendered graph.
+     *
+     * The Impact sidecar is a plain `<script src>` loaded BEFORE the page scripts, so the page knows
+     * the branch's impact when it first draws. It is per-branch and gitignored (graph-impact.ts):
+     * when it is absent the browser skips it and Impact is disabled with its reason.
      */
     generateHTML(
         model: GraphRenderModel,
@@ -383,44 +345,53 @@ export class GraphVisualizer {
         lockControl: string = '',
         responsibilitiesHtml: string = '',
     ): string {
-        const styles = this.styles();
-        const legend = this.legend();
-        const script = this.script(model, links);
-
+        const parts = new ShellParts(
+            title,
+            lockControl,
+            this.legend.sections(model.legend),
+            this.legend.edgeKey(),
+            this.filterAssets.html(),
+            this.snapshot.html(),
+            responsibilitiesHtml,
+        );
         return `<!DOCTYPE html>
 <html>
 <head>
     <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>${title}</title>
     <script src="https://cdn.jsdelivr.net/npm/@viz-js/viz@3.28.0/dist/viz-global.js"></script>
-    <style>${styles}</style>
+    <script src="${IMPACT_SIDECAR_SRC}"></script>
+    <style>${this.styles()}</style>
 </head>
 <body>
-    <h1>${title}</h1>
-    ${this.snapshot.html()}
-    <p class="hint">💡 <strong>Click any box</strong> for its menu — <strong>View Design</strong> (only where that project has a generated <strong>design.html</strong>, i.e. what the AI sees inside it) and <strong>Lock/Unlock</strong>, which is the same lock as the dropdown below. <strong>Filter Unconnected</strong> removes unrelated boxes and compacts the graph while preserving each L-number row.</p>
-    <p class="hint">🔦 <strong>Hover any box</strong> to trace its <em>entire</em> dependency chain — every ancestor above it (all the way up) <em>and</em> every dependency below it (all the way down), with all the boxes and lines between — while the rest of the graph dims so you can follow one box at a glance.</p>
-    ${legend}
-    ${lockControl}
-    ${this.filterAssets.html()}
-    <div id="graph"></div>
-    ${responsibilitiesHtml}
+    ${this.shell.body(parts)}
     <script>${this.nodeMenu.script()}</script>
     <script>${this.filterJs()}</script>
-    <script>${new GraphNavigation().script()}</script>
-    <script>${script}</script>
+    <script>${this.navigation.script()}</script>
+    <script>${this.script(model, links)}</script>
 </body>
 </html>`;
     }
 
+    /** Shared menu/dim/filter/zoom rules first, then the page's own, so its `#graph` rules win. */
+    private styles(): string {
+        return (
+            this.nodeMenu.styles() +
+            this.nodeMenu.dimStyles('#graph') +
+            this.filterAssets.styles() +
+            this.navigation.styles() +
+            this.pageStyles.css()
+        );
+    }
+
     /**
-     * The lock control (a single-select dropdown, rendered below the legend).
-     * Picking a module LOCKS the graph into that box's hover view — its full
-     * ancestor + descendant chain stays lit while everything else stays dimmed —
-     * and narrows the responsibilities list below the graph to just that chain.
-     * The first option, "All", is the default and clears the lock. Hover still
-     * works on top of a lock; leaving a box returns to the locked view.
+     * The drawer's type-to-search lock field, replacing a `<select>` that listed every project and
+     * was unusable at hundreds of options. Picking a project LOCKS the graph into that box's hover
+     * view — its full ancestor + descendant chain stays lit while everything else dims — and narrows
+     * the responsibilities panel to that chain. Clearing the field, or Esc, unlocks.
      *
+     * Each option's VALUE is the node id the SVG is keyed on; its label is the level and short name.
      * Options are ordered by level DESCENDING to match the responsibilities cards.
      */
     lockControl(graph: EnhancedGraph): string {
@@ -433,212 +404,19 @@ export class GraphVisualizer {
         let options = '';
         for (const project of projects) {
             if (this.isHidden(graph[project])) continue;
-            // The VALUE is the node id the SVG is keyed on; the TEXT stays the pretty short name.
-            const nodeId = this.names.getNodeId(project);
-            const shortName = this.names.getShortName(project);
+            const nodeId = this.escapeHtml(this.names.getNodeId(project));
+            const shortName = this.escapeHtml(this.names.getShortName(project));
             options += `<option value="${nodeId}">L${graph[project].level} · ${shortName}</option>`;
         }
-        return `<div class="wp-lock-control">
-        <label for="wp-lock">🔒 Lock a box (dim the rest &amp; filter responsibilities):</label>
-        <select id="wp-lock"><option value="">All (no lock)</option>${options}</select>
-    </div>`;
+        return (
+            '<input type="search" id="wp-lock" list="wp-lock-options" placeholder="Lock a project…  ( / )" ' +
+            'autocomplete="off" spellcheck="false">' +
+            `<datalist id="wp-lock-options">${options}</datalist>`
+        );
     }
 
-    private styles(): string {
-        return `
-        body { margin: 0; padding: 20px; font-family: Arial, sans-serif; background: #f5f5f5; }
-        h1 { text-align: center; color: #333; }
-        .hint { text-align: center; color: #555; margin: 0 0 16px; }
-        /* Every box is clickable (the floating node menu replaced direct
-         * navigation), so the menu's own stylesheet carries the cursor + blue
-         * glow, and the dim/undim rules a hover or a lock toggles. Both are
-         * shared verbatim with the per-project design pages. */
-        ${this.nodeMenu.styles()}
-        ${this.nodeMenu.dimStyles('#graph')}
-        #graph g.node.wp-locked polygon,
-        #graph g.node.wp-locked ellipse,
-        #graph g.node.wp-locked path { stroke: #b26a00; stroke-width: 3; }
-        #graph {
-            text-align: center;
-            background: white;
-            padding: 20px;
-            border-radius: 8px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-        }
-        .legend {
-            margin: 20px auto;
-            max-width: 1100px;
-            padding: 15px;
-            background: white;
-            border-radius: 8px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-        }
-        .legend h2 { margin-top: 0; }
-        .legend-item { margin: 8px 0; }
-        .legend-box {
-            display: inline-block;
-            width: 20px;
-            height: 20px;
-            border: 1px solid #ccc;
-            margin-right: 10px;
-            vertical-align: middle;
-        }
-        ${this.componentStyles()}
-        ${this.filterAssets.styles()}
-    ${new GraphNavigation().styles()}`;
-    }
-
-    // Styles for the lock dropdown and the responsibilities card list below the
-    // graph. Split out of styles() to keep each method within the line limit.
-    private componentStyles(): string {
-        return `
-        /* The architecture graph is very wide, so lay the legend out as three
-         * side-by-side columns (fill / border / edge) instead of one tall
-         * column — it keeps the legend short next to the wide graph, and
-         * collapses back to a single column on narrow viewports. */
-        .legend-columns {
-            display: grid;
-            grid-template-columns: repeat(3, 1fr);
-            gap: 28px;
-            align-items: start;
-        }
-        .legend-col h3 { margin: 0 0 8px; color: #333; font-size: 15px; }
-        @media (max-width: 800px) { .legend-columns { grid-template-columns: 1fr; } }
-        .wp-lock-control {
-            max-width: 600px;
-            margin: 0 auto 16px;
-            padding: 12px 15px;
-            background: white;
-            border-radius: 8px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-            text-align: center;
-        }
-        .wp-lock-control label { font-weight: bold; color: #333; margin-right: 8px; }
-        .wp-lock-control select { font-size: 14px; padding: 4px 8px; }
-        #wp-responsibilities { max-width: 900px; margin: 24px auto 0; }
-        #wp-responsibilities h2 { color: #333; }
-        .wp-resp-card {
-            background: white;
-            border-radius: 8px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-            margin: 10px 0;
-            padding: 10px 15px;
-        }
-        .wp-resp-card > summary { cursor: pointer; color: #333; }
-        .wp-resp-level {
-            display: inline-block;
-            min-width: 26px;
-            padding: 1px 6px;
-            margin-right: 6px;
-            border-radius: 4px;
-            background: #eef;
-            font-size: 12px;
-            font-weight: bold;
-            text-align: center;
-        }
-        .wp-resp-body { margin-top: 8px; color: #444; }
-        .wp-resp-body code {
-            background: #f2f2f2;
-            padding: 1px 4px;
-            border-radius: 3px;
-            font-family: monospace;
-        }
-        .wp-hidden { display: none; }`;
-    }
-
-    // The legend is laid out in three side-by-side columns (fill / border /
-    // edge) so it stays short next to the very wide architecture graph. Each
-    // column's rows come from a helper below to keep this method within the line
-    // limit; the footnote spans the full width beneath the columns.
-    private legend(): string {
-        return `<div class="legend">
-        <h2>Legend</h2>
-        <div class="legend-columns">
-            <div class="legend-col">
-                <h3>Fill = framework (libType)</h3>
-                ${this.fillItems()}
-            </div>
-            <div class="legend-col">
-                <h3>Border = role</h3>
-                ${this.borderItems()}
-            </div>
-            <div class="legend-col">
-                <h3>Edge lines — <em>why</em> a project depends on an api-lib</h3>
-                ${this.edgeItems()}
-            </div>
-        </div>
-        <div class="legend-item" style="margin-top: 15px;">
-            <em>Each node label shows its dependency level (L#), its framework env set (e.g. [browser, node]), and its role. Every row is one dependency level and nothing else: the HIGHEST level is the top row, levels descend as you read down, and L0 — the foundation libraries everything else is built on — is always the bottom row. Transitive dependencies are allowed but not shown.</em>
-        </div>
-    </div>`;
-    }
-
-    // Column 1 — fill color keyed on the project's framework (libType) env set.
-    private fillItems(): string {
-        return `<div class="legend-item">
-            <span class="legend-box" style="background: #FCE4EC;"></span>
-            <strong>angular:</strong> Angular front-end
-        </div>
-        <div class="legend-item">
-            <span class="legend-box" style="background: #E3F2FD;"></span>
-            <strong>react:</strong> React front-end
-        </div>
-        <div class="legend-item">
-            <span class="legend-box" style="background: #EDE7F6;"></span>
-            <strong>browser:</strong> browser front-end base env
-        </div>
-        <div class="legend-item">
-            <span class="legend-box" style="background: #E8F5E9;"></span>
-            <strong>express:</strong> Express / server side
-        </div>
-        <div class="legend-item">
-            <span class="legend-box" style="background: #FFF9C4;"></span>
-            <strong>node:</strong> node server base env
-        </div>`;
-    }
-
-    // Column 2 — border style keyed on the project's role.
-    private borderItems(): string {
-        return `<div class="legend-item">
-            <span class="legend-box" style="border: 3px solid green;"></span>
-            <strong>server:</strong> runnable server app (thick green border)
-        </div>
-        <div class="legend-item">
-            <span class="legend-box" style="border: 3px solid red;"></span>
-            <strong>client:</strong> client app, e.g. angular (thick red border)
-        </div>
-        <div class="legend-item">
-            <span class="legend-box" style="border: 2px solid #333;"></span>
-            <strong>designed-lib:</strong> library with a generated @DocumentDesign design (bold border)
-        </div>
-        <div class="legend-item">
-            <span class="legend-box" style="border: 1px solid #ccc;"></span>
-            <strong>lib:</strong> plain library, no generated design (thin border)
-        </div>
-        <div class="legend-item">
-            <span class="legend-box" style="border: 2px solid #EF6C00;"></span>
-            <strong>api-lib:</strong> API-contract library (defines <code>@ApiPath</code>/<code>@Rpc</code>/<code>@PubSub</code> <code>*Api</code> classes)
-        </div>
-        <div class="legend-item">
-            <span class="legend-box" style="border: 2px solid #00838F;"></span>
-            <strong>api-client:</strong> a contract plus its default implementation that talks to an outside system through its SDK
-        </div>`;
-    }
-
-    // Column 3 — edge line style keyed on WHY a project depends on an api-lib.
-    private edgeItems(): string {
-        return `<div class="legend-item">
-            <svg width="42" height="12" style="vertical-align: middle; margin-right: 10px;"><line x1="0" y1="6" x2="42" y2="6" stroke="#333" stroke-width="2"/></svg>
-            <strong>uses:</strong> calls the API (generates an rpc/pubsub client via <code>createRpcClient</code>/<code>createPubSubClient</code>) — also covers a plain library import, since a plain dependency is just a use.
-        </div>
-        <div class="legend-item">
-            <svg width="42" height="12" style="vertical-align: middle; margin-right: 10px;"><line x1="0" y1="6" x2="42" y2="6" stroke="#333" stroke-width="2" stroke-dasharray="5,3"/></svg>
-            <strong>implements:</strong> serves the API — labeled <code>implements: &lt;contracts&gt;</code> so you can see WHICH contracts resolve to this server without opening the JSON. NOTE: this is a build-dependency diagram, so a UML <em>implements</em> arrow can't be used; we use a dashed line to signal a build dep, because this server implements the api and the api is built first, then this server after.
-        </div>
-        <div class="legend-item">
-            <svg width="42" height="12" style="vertical-align: middle; margin-right: 10px;"><line x1="0" y1="6" x2="42" y2="6" stroke="#1976d2" stroke-width="2" stroke-dasharray="5,3"/></svg>
-            <strong>uses/implements:</strong> both — implements some of the api-lib's contracts, uses others
-        </div>`;
+    private escapeHtml(text: string): string {
+        return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
     }
 
     /**

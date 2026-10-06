@@ -96,6 +96,16 @@ describe('runtime architecture page node menu', () => {
         expect(page).not.toContain('__DESIGN_LINKS__');
     });
 
+    it('shares the submenu-capable menu, but builds no submenu: its items render as plain buttons', () => {
+        const page = html();
+        // The architecture page's "Mode ▸" support ships in the SAME shared script...
+        expect(page).toContain('class WpSubmenu');
+        expect(page).toContain('WpNodeMenu.submenu(item) : WpNodeMenu.button(item)');
+        // ...and only an item WITH children takes that path; the runtime page never builds one.
+        expect(page).not.toContain('modeItem');
+        expect(page).not.toContain("new WpNodeMenuItem('Mode'");
+    });
+
     it("has no lock dropdown, so the menu is the page's only lock control", () => {
         const page = html();
         expect(page).not.toContain('wp-lock');
