@@ -23,7 +23,7 @@
         }
       ],
       "manifestApiVersion": 3,
-      "manifestDigest": "f5a2edf4e192578e7e1f32b255e66e457024e87e467925f7c7a2d0513f416786",
+      "manifestDigest": "f455a0884188e5aac0c8527b2c98d5d9ae2a97c9d0b99c52a78ad24493be0fe7",
       "ownedRules": [
         {
           "id": "branch-creation-guard",
@@ -40,7 +40,7 @@
       ],
       "package": "@webpieces/agent-workflow-rules",
       "packageName": "@webpieces/agent-workflow-rules",
-      "packageVersion": "0.4.872",
+      "packageVersion": "0.4.874",
       "safeguards": [
         {
           "activation": "fixed",
@@ -187,7 +187,7 @@
         }
       ],
       "manifestApiVersion": 3,
-      "manifestDigest": "85d29ef55eb55ebed7c3e99fa7bb7af49f022e077d4d2280589e54264d9837d8",
+      "manifestDigest": "0eda8bf67887c123d9eb82fa101efeeb4f429483eb2ce5618d57fed2acd4c362",
       "ownedRules": [
         {
           "id": "throw-cause-required",
@@ -204,7 +204,7 @@
       ],
       "package": "@webpieces/ai-hook-rules",
       "packageName": "@webpieces/ai-hook-rules",
-      "packageVersion": "0.4.872",
+      "packageVersion": "0.4.874",
       "safeguards": []
     },
     {
@@ -380,7 +380,7 @@
         }
       ],
       "manifestApiVersion": 3,
-      "manifestDigest": "9ad0852f2eea5e6b4276979d88974dac2ca9aab5e10793e7f570c669507c9fe8",
+      "manifestDigest": "74aee558dfb00a1f541850b985605ab1deabcbcf5d34c5d5162643ffae047d52",
       "ownedRules": [
         {
           "id": "max-method-lines",
@@ -497,7 +497,7 @@
       ],
       "package": "@webpieces/code-rules",
       "packageName": "@webpieces/code-rules",
-      "packageVersion": "0.4.872",
+      "packageVersion": "0.4.874",
       "safeguards": []
     },
     {
@@ -613,7 +613,7 @@
         }
       ],
       "manifestApiVersion": 3,
-      "manifestDigest": "46202fc74bd761dea794f3fdbceef27dcf477ae289cdea1fb9065126bde0a94d",
+      "manifestDigest": "7ee84a8ec879cf25d59c6f907314b5213da5688589d27403f052883e0ac3d570",
       "ownedRules": [
         {
           "id": "wiring-format",
@@ -686,7 +686,7 @@
       ],
       "package": "@webpieces/nx-webpieces-rules",
       "packageName": "@webpieces/nx-webpieces-rules",
-      "packageVersion": "0.4.872",
+      "packageVersion": "0.4.874",
       "safeguards": []
     }
   ],
