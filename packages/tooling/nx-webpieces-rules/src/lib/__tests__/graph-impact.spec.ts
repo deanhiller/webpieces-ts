@@ -152,6 +152,12 @@ describe('ImpactRefresh + ImpactSidecar', () => {
         const file = path.join(dir, IMPACT_SIDECAR_DIR, IMPACT_SIDECAR_FILE);
         expect(fs.readFileSync(file, 'utf8')).toContain('window.__WP_IMPACT__ = {"available":true');
         expect(fs.readFileSync(path.join(dir, IMPACT_SIDECAR_DIR, '.gitignore'), 'utf8')).toMatch(/^\*$/m);
+        // Both commands write it; both are named, and the data never leaves the gitignored sidecar.
+        expect(fs.readFileSync(path.join(dir, IMPACT_SIDECAR_DIR, '.gitignore'), 'utf8')).toContain(
+            'architecture:generate and architecture:visualize',
+        );
+        expect(fs.readFileSync(file, 'utf8')).toContain('architecture:generate or architecture:visualize');
+        expect(fs.readdirSync(dir).sort()).toEqual([IMPACT_SIDECAR_DIR]);
     });
 
     it('removes a stale sidecar and writes none when nx cannot answer', async () => {

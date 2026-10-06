@@ -73,6 +73,7 @@ export class SavedGraphViewer {
     }
 }
 
+// webpieces-disable no-function-outside-class -- nx executor module: nx resolves a default-export function here
 export default async function runExecutor(
     options: VisualizeExecutorOptions,
     context: ExecutorContext
