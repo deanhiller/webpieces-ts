@@ -1,19 +1,29 @@
 import { dotValue } from './dot-syntax';
 import { LevelBand } from './graph-level-bands';
-import { LegendFacts, NodeModeDots } from './graph-color-modes';
+import { LegendFacts, NodeFacts, NodeModeDots } from './graph-color-modes';
 
 /**
  * Renderer-owned records, captured while emitting DOT, never recovered by parsing labels.
  *
- * `dot` is the statement `fullDot` carries. `modes` is set only by the architecture graph, whose page
- * switches color modes by re-rendering each box from its per-mode statement; the runtime graph has
- * one look and leaves it null.
+ * `dot` is the statement `fullDot` carries. `modes` and `tags` are set only by the architecture
+ * graph, whose page switches color modes by re-rendering each box from its per-mode statement and
+ * filters boxes by their role and framework tags; the runtime graph has one look and leaves both null.
  */
 export class RenderNode {
     constructor(
         public readonly id: string,
         public readonly dot: string,
         public readonly modes: NodeModeDots | null,
+        public readonly tags: NodeTags | null,
+    ) {}
+}
+
+/** What the architecture page's Filter matches a box on: its level, role and framework tags. */
+export class NodeTags {
+    constructor(
+        public readonly level: number,
+        public readonly role: string,
+        public readonly frameworks: string[],
     ) {}
 }
 
@@ -38,13 +48,15 @@ export class GraphRenderModel {
     legend = new LegendFacts();
 
     node(id: string, dot: string): string {
-        this.nodes.push(new RenderNode(id, dot, null));
+        this.nodes.push(new RenderNode(id, dot, null, null));
         return dot;
     }
 
     /** A box drawn differently per color mode; `fullDot` carries its RUNTIME statement. */
-    styledNode(id: string, modes: NodeModeDots): string {
-        this.nodes.push(new RenderNode(id, modes.runtime, modes));
+    styledNode(facts: NodeFacts, modes: NodeModeDots): string {
+        this.nodes.push(
+            new RenderNode(facts.nodeId, modes.runtime, modes, new NodeTags(facts.level, facts.role, facts.frameworks)),
+        );
         return modes.runtime;
     }
 

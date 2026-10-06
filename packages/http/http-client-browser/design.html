@@ -70,9 +70,9 @@
         g.wp-node-clickable:hover polygon,
         g.wp-node-clickable:hover ellipse,
         g.wp-node-clickable:hover path {
-            stroke: #1976d2;
+            stroke: #8b3cf0;
             stroke-width: 5;
-            filter: drop-shadow(0 0 6px rgba(25, 118, 210, 0.85));
+            filter: drop-shadow(0 0 6px rgba(139, 60, 240, 0.85));
         }
         
         .graph .node, .graph .edge { transition: opacity 0.12s ease; }
@@ -115,8 +115,26 @@
     </div>
     <script>
         class WpNodeMenuItem {
-            constructor(label, onSelect) { this.label = label; this.onSelect = onSelect; }
+            constructor(label, onSelect) {
+                this.label = label;
+                this.onSelect = onSelect;
+            }
         }
+        class WpMenuButton {
+    build(item, close) {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'wp-node-menu-item';
+        button.textContent = item.label;
+        button.addEventListener('click', (ev)=>{
+            ev.preventDefault();
+            ev.stopPropagation();
+            close(true);
+            item.onSelect();
+        });
+        return button;
+    }
+}
         class WpNodeMenu {
                         static keyboard = false;
             static owner = null;
@@ -167,19 +185,7 @@
                 WpNodeMenu.place(menu, nodeEl);
                 menu.querySelector('button')?.focus({ preventScroll: true });
             }
-            static button(item) {
-                const button = document.createElement('button');
-                button.type = 'button';
-                button.className = 'wp-node-menu-item';
-                button.textContent = item.label;
-                button.addEventListener('click', function (ev) {
-                    ev.preventDefault();
-                    ev.stopPropagation();
-                    WpNodeMenu.close(true);
-                    item.onSelect();
-                });
-                return button;
-            }
+            static button(item) { return new WpMenuButton().build(item, WpNodeMenu.close.bind(WpNodeMenu)); }
                         static place(menu, nodeEl) {
                 const box = nodeEl.getBoundingClientRect();
                 const own = menu.getBoundingClientRect();

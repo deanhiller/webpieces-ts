@@ -303,7 +303,7 @@ export class GraphVisualizer {
                 info.framework ?? [],
             );
             this.styler.record(model.legend, facts);
-            dot += model.styledNode(facts.nodeId, this.styler.dots(facts));
+            dot += model.styledNode(facts, this.styler.dots(facts));
         }
         return dot;
     }

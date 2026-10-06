@@ -241,7 +241,7 @@
         },
         "core-mock": {
             "level": 0,
-            "framework": ["browser","node"],
+            "framework": ["browser","node","react-native"],
             "role": "lib",
             "shortDescription": "Typed mock framework for feature tests (port of Java webpieces MockSuperclass). `createMock<T>()` returns a Proxy implementing any api plus a `.mock` control facade for the prime/assert vocabulary; `MockHandler` is the underlying queue/default/drain engine.",
             "responsibilitiesFile": "packages/core/core-mock/responsibilities.md",

@@ -55,15 +55,6 @@
             cursor: pointer;
         }
         .wp-node-menu-item:hover { background: #E3F2FD; }
-        .wp-node-menu-item:disabled { color: #9aa0ad; cursor: not-allowed; background: none; }
-        .wp-node-menu-item[aria-checked="true"]::after { content: "✓"; float: right; margin-left: 12px; }
-        /* A submenu (e.g. the architecture page's "Mode ▸") opens beside its parent item, on hover,
-         * on click and on ArrowRight; ArrowLeft returns to the parent. */
-        .wp-node-menu-sub-host { position: relative; }
-        .wp-node-menu-arrow { float: right; margin-left: 12px; color: #777; }
-        .wp-node-menu .wp-node-menu-sub { display: none; left: 100%; top: -5px; }
-        .wp-node-menu .wp-node-menu-sub.wp-flip { left: auto; right: 100%; }
-        .wp-node-menu-sub-host.wp-open > .wp-node-menu-sub { display: block; }
         g.wp-node-clickable { cursor: pointer; outline: none; }
         /* DOM keyboard focus is independent of graph highlight/Lock and stays dim with its node. */
         g.wp-node-clickable.wp-keyboard-focus {
@@ -79,9 +70,9 @@
         g.wp-node-clickable:hover polygon,
         g.wp-node-clickable:hover ellipse,
         g.wp-node-clickable:hover path {
-            stroke: #1976d2;
+            stroke: #8b3cf0;
             stroke-width: 5;
-            filter: drop-shadow(0 0 6px rgba(25, 118, 210, 0.85));
+            filter: drop-shadow(0 0 6px rgba(139, 60, 240, 0.85));
         }
         
         .graph .node, .graph .edge { transition: opacity 0.12s ease; }
@@ -124,12 +115,9 @@
     </div>
     <script>
         class WpNodeMenuItem {
-            constructor(label, onSelect, children = []) {
+            constructor(label, onSelect) {
                 this.label = label;
                 this.onSelect = onSelect;
-                this.children = children;
-                this.checked = null;
-                this.disabledReason = '';
             }
         }
         class WpMenuButton {
@@ -138,14 +126,6 @@
         button.type = 'button';
         button.className = 'wp-node-menu-item';
         button.textContent = item.label;
-        if (item.checked === true || item.checked === false) {
-            button.setAttribute('role', 'menuitemradio');
-            button.setAttribute('aria-checked', String(item.checked));
-        }
-        if (item.disabledReason) {
-            button.disabled = true;
-            button.title = item.disabledReason;
-        }
         button.addEventListener('click', (ev)=>{
             ev.preventDefault();
             ev.stopPropagation();
@@ -155,69 +135,7 @@
         return button;
     }
 }
-        class WpSubmenu {
-    build(item, button) {
-        const host = document.createElement('div');
-        host.className = 'wp-node-menu-sub-host';
-        const parent = document.createElement('button');
-        parent.type = 'button';
-        parent.className = 'wp-node-menu-item wp-node-menu-parent';
-        parent.setAttribute('aria-haspopup', 'menu');
-        parent.setAttribute('aria-expanded', 'false');
-        parent.textContent = item.label;
-        const arrow = document.createElement('span');
-        arrow.className = 'wp-node-menu-arrow';
-        arrow.setAttribute('aria-hidden', 'true');
-        arrow.textContent = '▸';
-        parent.append(arrow);
-        const sub = document.createElement('div');
-        sub.className = 'wp-node-menu wp-node-menu-sub';
-        sub.setAttribute('role', 'menu');
-        sub.setAttribute('aria-label', item.label);
-        for (const child of item.children)sub.append(button(child));
-        host.append(parent, sub);
-        this.wire(host, parent, sub);
-        return host;
-    }
-    wire(host, parent, sub) {
-        const enter = ()=>{
-            this.show(host, parent, sub, true);
-            sub.querySelector('button:not([disabled])')?.focus({
-                preventScroll: true
-            });
-        };
-        host.addEventListener('mouseenter', ()=>this.show(host, parent, sub, true));
-        host.addEventListener('mouseleave', ()=>this.show(host, parent, sub, false));
-        parent.addEventListener('click', (ev)=>{
-            ev.preventDefault();
-            ev.stopPropagation();
-            enter();
-        });
-        parent.addEventListener('keydown', (ev)=>{
-            if (ev.key !== 'ArrowRight') return;
-            ev.preventDefault();
-            enter();
-        });
-        sub.addEventListener('keydown', (ev)=>{
-            if (ev.key !== 'ArrowLeft') return;
-            ev.preventDefault();
-            this.show(host, parent, sub, false);
-            parent.focus({
-                preventScroll: true
-            });
-        });
-    }
-    /** Opens to the right, or to the LEFT when the right would run off the viewport. */ show(host, parent, sub, open) {
-        host.classList.toggle('wp-open', open);
-        parent.setAttribute('aria-expanded', String(open));
-        if (!open) return;
-        sub.classList.remove('wp-flip');
-        const right = host.getBoundingClientRect().right + sub.offsetWidth + 8;
-        if (right > document.documentElement.clientWidth) sub.classList.add('wp-flip');
-    }
-}
         class WpNodeMenu {
-            static submenu(item) { return new WpSubmenu().build(item, WpNodeMenu.button); }
                         static keyboard = false;
             static owner = null;
             static ownerKeyboard = false;
@@ -262,10 +180,7 @@
                 heading.className = 'wp-node-menu-title';
                 heading.textContent = name;
                 menu.appendChild(heading);
-                for (const item of items) {
-                    const hasChildren = Array.isArray(item.children) && item.children.length > 0;
-                    menu.appendChild(hasChildren ? WpNodeMenu.submenu(item) : WpNodeMenu.button(item));
-                }
+                for (const item of items) menu.appendChild(WpNodeMenu.button(item));
                 document.body.appendChild(menu);
                 WpNodeMenu.place(menu, nodeEl);
                 menu.querySelector('button')?.focus({ preventScroll: true });

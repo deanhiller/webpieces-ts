@@ -91,6 +91,32 @@ describe('NxImpactScanner', () => {
         expect(report.buildInputs).toEqual(['core', 'lib-a']);
     });
 
+    it('exposes what the changed projects use, for the Filter popover', async () => {
+        // lib-a changed: it uses core (a dependency of the touched set, not itself touched).
+        const lib = new Map<string, string>([['libs/lib-a/x.ts', 'lib-a']]);
+        const scanner = new NxImpactScanner(new FakeDiff('b', ['libs/lib-a/x.ts']), new FakeNx('["app","lib-a"]'), new FakeOwners(lib));
+        const report = (await scanner.scan('/ws', GRAPH)) as ImpactReport;
+        expect(report.touched).toEqual(['lib-a']);
+        expect(report.affected).toEqual(['app']);
+        expect(report.dependencies).toEqual(['core']);
+        expect(report.globalFiles).toEqual([]);
+    });
+
+    it('names the workspace-global files when changes touch no project but nx affects everything', async () => {
+        const files = ['pnpm-workspace.yaml', 'pnpm-lock.yaml'];
+        const scanner = new NxImpactScanner(new FakeDiff('b', files), new FakeNx('["app","lib-a","core","other"]'), new FakeOwners(owners));
+        const report = (await scanner.scan('/ws', GRAPH)) as ImpactReport;
+        expect(report.touched).toEqual([]);
+        expect(report.affected).toHaveLength(4);
+        expect(report.globalFiles).toEqual(['pnpm-lock.yaml', 'pnpm-workspace.yaml']);
+        expect(report.dependencies).toEqual([]);
+    });
+
+    it('claims no global files when nx file ownership was unavailable', async () => {
+        const scanner = new NxImpactScanner(new FakeDiff('b', ['pnpm-lock.yaml']), new FakeNx('["core"]'), new FakeOwners(new Map()));
+        expect(((await scanner.scan('/ws', GRAPH)) as ImpactReport).globalFiles).toEqual([]);
+    });
+
     it('never counts a file owner nx did not call affected', async () => {
         const scanner = new NxImpactScanner(new FakeDiff('b', ['apps/app/main.ts']), new FakeNx('["core"]'), new FakeOwners(owners));
         const report = (await scanner.scan('/ws', GRAPH)) as ImpactReport;
@@ -131,7 +157,7 @@ describe('ImpactRefresh + ImpactSidecar', () => {
     it('removes a stale sidecar and writes none when nx cannot answer', async () => {
         const dir = specTempDirs.make('wp-impact-stale-');
         const sidecar = new ImpactSidecar();
-        sidecar.write(dir, new ImpactReport(true, '', 'old', ['core'], [], [], 1));
+        sidecar.write(dir, new ImpactReport(true, '', 'old', ['core'], [], [], 1, [], []));
         const scanner = new NxImpactScanner(new FakeDiff('b', []), new FakeNx(null), new FakeOwners(owners));
         const line = await new ImpactRefresh(scanner, sidecar).run(dir, dir, GRAPH);
         expect(line).toContain('no sidecar written');
@@ -139,7 +165,7 @@ describe('ImpactRefresh + ImpactSidecar', () => {
     });
 
     it('escapes "<" so a project name cannot close the script', () => {
-        const script = new ImpactSidecar().script(new ImpactReport(true, '', 'b', ['</script>'], [], [], 1));
+        const script = new ImpactSidecar().script(new ImpactReport(true, '', 'b', ['</script>'], [], [], 1, [], []));
         expect(script).not.toContain('</script>');
     });
 });
