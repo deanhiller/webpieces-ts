@@ -384,12 +384,31 @@ export {
     ApiErrorCodec,
     ApiErrorPayload,
     ApiErrorBoundary,
+    ApiCallSite,
+    ReportableApiFailure,
+    RpcCallFailed,
 } from './errors';
 export type {
     ApiErrorKind,
     ApiStatusCode,
     EdgeHttpStatus,
     EndUserErrorFactory,
+    CallSiteBoundary,
 } from './errors';
 export { ApiErrorHttpStatus } from './http/ApiErrorHttpStatus';
+
+// RFC 6749 / 6750 / 7591 OAuth refusals for app-hosted OAuth endpoints (#1176): the typed error,
+// its one renderer, the Bearer challenge builder and the authorization-endpoint error redirect.
+export { OAuthErrorCode, OAuthErrorStatus, OAuthText } from './oauth/OAuthErrorCode';
+export type {
+    OAuthHttpStatus,
+    InvalidClientStatus,
+    OAuthFixedStatusErrorCode,
+    BearerErrorCode,
+    AuthorizationEndpointErrorCode,
+} from './oauth/OAuthErrorCode';
+export { OAuthProtocolError, OAuthErrorExtras } from './oauth/OAuthProtocolError';
+export { OAuthBearerChallenge } from './oauth/OAuthBearerChallenge';
+export { OAuthErrorBody, OAuthErrorResponse } from './oauth/OAuthErrorResponse';
+export { OAuthAuthorizationErrorRedirect } from './oauth/OAuthAuthorizationErrorRedirect';
 export type { PublishedKind, PublishedApiError } from './http/ApiErrorHttpStatus';

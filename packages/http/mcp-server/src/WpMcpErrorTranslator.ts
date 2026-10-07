@@ -5,6 +5,9 @@ import {
     HttpResponseDto,
     HttpResponseStatus,
     LogManager,
+    OAuthErrorBody,
+    OAuthErrorResponse,
+    OAuthProtocolError,
     toError,
 } from '@webpieces/core-util';
 import { McpRegistry } from './McpRegistry';
@@ -28,6 +31,7 @@ const log = LogManager.getLogger('WpMcpErrorTranslator');
  * | Boundary                       | Who writes HTTP | Failure shape                       |
  * |--------------------------------|-----------------|-------------------------------------|
  * | pre-SDK bearer / Origin / body | **webpieces**   | `HttpResponseDto<McpHttpErrorBody>` |
+ * |   ... an `OAuthProtocolError`  | **webpieces**   | `HttpResponseDto<OAuthErrorBody>`   |
  * | `tools/list`                   | the SDK         | `throw ProtocolError`               |
  * | `tools/call`                   | the SDK         | `CallToolResult` with `isError`     |
  *
@@ -53,9 +57,17 @@ export class WpMcpErrorTranslator {
      * verification, `Origin`, a malformed body. This is 401/403/400/500 today and any status
      * tomorrow, so it produces a VALUE like every other API in the framework and `WpMcpServer` hands
      * it to the shared express writer. The BODY stays JSON-RPC shaped because an MCP client expects
-     * that; `HttpResponseDto` is generic, and its header LIST carries `WWW-Authenticate`.
+     * that — except for an {@link OAuthProtocolError}, which is answered in the RFC 6749/6750 shape; `HttpResponseDto` is generic, and its header LIST carries `WWW-Authenticate`.
      */
-    toBearerBoundaryResponse(error: Error): HttpResponseDto<McpHttpErrorBody> {
+    toBearerBoundaryResponse(
+        error: Error,
+    ): HttpResponseDto<McpHttpErrorBody> | HttpResponseDto<OAuthErrorBody> {
+        // An authorization service that refuses the bearer with an RFC 6750 code (invalid_token,
+        // insufficient_scope) is answered in the RFC shape, and a 401 without its own challenge
+        // gets this server's, so the client still finds `resource_metadata` (#1176).
+        if (error instanceof OAuthProtocolError) {
+            return OAuthErrorResponse.toResponse(error, this.challenge());
+        }
         const payload = this.boundary.encode(error);
         const generic = payload.message;
         switch (payload.kind) {

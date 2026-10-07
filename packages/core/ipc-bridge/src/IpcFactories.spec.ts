@@ -206,6 +206,23 @@ describe('portable IPC JSON boundary', () => {
         await expect(client.notify(new Value('secret'))).rejects.toBeInstanceOf(ApiEndUserError);
         expect(pair.b.sends.join('')).not.toContain('secret');
     });
+    it('parks the caller stack on the rejected error, same instance and class (#1175)', async () => {
+        class Failing extends EchoController {
+            override async echo(_request: Value): Promise<Value> {
+                throw new ApiEndUserError('Passwords do not match', 'passwordMismatch');
+            }
+        }
+        const client = new Pair(new Failing()).clients.createClient(TestApi);
+        // A NAMED caller frame: the call site's top frame must be this, not the IPC plumbing.
+        const submitPasswordForm = (): Promise<unknown> =>
+            client.echo(new Value('x')).catch((err: unknown) => err);
+        const failure = await submitPasswordForm();
+        expect(failure).toBeInstanceOf(ApiEndUserError);
+        const callSite = (failure as ApiError).callSite;
+        expect(callSite?.label).toBe('TestApi.echo');
+        expect((callSite?.stack ?? '').split('\n')[1]).toContain('submitPasswordForm');
+        expect(Object.keys(failure as object)).not.toContain('callSite');
+    });
     it('distinguishes local transport failure from a remote unavailable implementation', async () => {
         class Unavailable extends EchoController {
             override async echo(_request: Value): Promise<Value> {

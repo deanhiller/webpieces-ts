@@ -132,6 +132,65 @@ if (error instanceof ApiImplementationError) {
 }
 ```
 
+### Where the app made the failing call: `err.callSite` (#1175)
+
+An api failure is constructed when the response arrives, after the caller's stack has unwound, so its
+own `stack` is framework frames only (zone.js, `ProxyClient`, the error translator) — no app line,
+and an error reporter groups every rpc failure in the app into one issue. So every generated client
+method — HTTP (browser and node, the shared `buildClientProxy`), IPC (`IpcClientFactory`) and Cloud
+Tasks (`ClientCloudTasksFactory`) — captures an `ApiCallSite` synchronously on the caller's stack
+before it sends anything (one `new Error()`, trimmed with `Error.captureStackTrace` to the caller
+where the engine has it), and on failure parks it on the rejected error:
+
+- it is the SAME instance, rethrown, so every `instanceof` keeps working;
+- the field is `callSite: ApiCallSite` (an `Error`, with `apiName` / `methodName` / `label`), typed on
+  `ApiError` and NON-ENUMERABLE, so JSON and structured logs never see it. `ApiCallSite.of(err)` reads
+  it off any thrown value, including an app translator's own error type;
+- an existing call site is never replaced (the innermost call wins), and a frozen error or a non-Error
+  rejection is left untouched;
+- it is deliberately NOT `cause`: reporters read `cause` as "caused by", which would claim the 500 was
+  caused by the click handler.
+
+For reporting, `ReportableApiFailure.toReportableError(err)` returns a never-thrown `RpcCallFailed`
+(message `Api.method failed: <original>`, the call site's stack, `cause: err`) and a suggested
+fingerprint `[err.name, 'Api.method']`, or `undefined` when no generated client touched the error.
+webpieces has no reporter dependency; with Sentry, for example:
+
+```typescript
+const report = ReportableApiFailure.toReportableError(err);
+if (report) Sentry.captureException(report.error, { fingerprint: [...report.fingerprint] });
+else Sentry.captureException(err);
+```
+
+### OAuth refusals: `OAuthProtocolError` (#1176)
+
+An app that hosts its own OAuth endpoints (an MCP server's `/oauth/token`, `/oauth/register`, a
+bearer-protected resource) answers an OAuth CLIENT, which parses the RFC shape — never the ApiError
+envelope. `new OAuthProtocolError(OAuthErrorCode.INVALID_GRANT, 'code expired')`:
+
+- `error` is an `OAuthErrorCode` member — the RFC 6749 §5.2, RFC 6750 §3.1, RFC 6749 §4.1.2.1 and
+  RFC 7591 §3.2.2 vocabulary — so a throw site cannot invent a code;
+- the status is DERIVED from the code (400 for the request/grant/client-metadata codes, 401
+  `invalid_token`, 403 `insufficient_scope` / `access_denied`, 500 `server_error`, 503
+  `temporarily_unavailable`). Only `invalid_client` takes a status, 400 or 401 (default 401), and that
+  is enforced by the constructor overloads, not a runtime check;
+- `description` is the RFC `error_description` (sent; developer-facing), and `OAuthErrorExtras` carries
+  `errorUri`, `wwwAuthenticate` (build the Bearer form with `OAuthBearerChallenge`) and a log-only
+  `cause`.
+
+`OAuthErrorResponse` is its one renderer: `{ error, error_description?, error_uri? }` at the derived
+status, `Cache-Control: no-store`, and `WWW-Authenticate` when the error has one (or the minimal
+`Bearer error="..."` for `invalid_token` / `insufficient_scope`). Every boundary uses it:
+`WebpiecesDefaultErrorTranslator.toWire` (a webpieces `@Endpoint` that throws one), the MCP bearer
+boundary, and `OAuthExpressErrorHandler` in `@webpieces/http-server` for an app's raw express OAuth
+routes, which also logs it at INFO as an expected refusal. A server-side refusal below 500 is a
+non-failure for `WebpiecesDefaultFailureClassifier`, so `LogApiCall` records it as `resp-OTHER`, not
+`resp-FAIL`.
+
+The authorization endpoint answers with a REDIRECT, not a status (RFC 6749 §4.1.2.1):
+`new OAuthAuthorizationErrorRedirect(redirectUri, OAuthErrorCode.ACCESS_DENIED, state, description).toUrl()`
+— only ever to a `redirect_uri` validated against the client's registration.
+
 ## Factories and connection ownership
 
 See the package READMEs for typed contract, client, receiver, logging and lifecycle examples:

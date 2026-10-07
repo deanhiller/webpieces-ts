@@ -15,6 +15,8 @@ export { RecordingFilter } from './filters/RecordingFilter';
 // HttpResponseDto an app's ErrorTranslator.toWire returns, so an app wraps it ("webpieces' answer,
 // plus one header") rather than copying its status-to-message table.
 export { ExpressResponseWriter } from './ExpressResponseWriter';
+// RFC 6749/6750 rendering + INFO logging of an OAuthProtocolError on an app's raw express OAuth routes.
+export { OAuthExpressErrorHandler } from './OAuthExpressErrorHandler';
 // How ApiEndUserError is answered: 'gui' (266, default) or 'edge' (its edgeHttpStatus, else 400).
 
 // Test-case recording (contract lives in @webpieces/core-util)
