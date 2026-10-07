@@ -1,5 +1,5 @@
 import { inject } from 'inversify';
-import { DocumentDesign } from '@webpieces/core-util';
+import { ApiCallSite, DocumentDesign } from '@webpieces/core-util';
 import { Provider, bindFrameworkProvider, provideFrameworkSingleton } from '@webpieces/core-context';
 import { TASK_PROXY_CLIENT_PROVIDER, TaskProxyClient } from './TaskProxyClient';
 import { ApiPrototype, TaskClientConfig } from './TaskClientConfig';
@@ -49,6 +49,7 @@ export class ClientCloudTasksFactory {
         // Fresh instance per contract — TaskProxyClient is transient.
         const proxyClient = this.taskProxyClientProvider.get();
         proxyClient.init(apiClass, config);
+        const apiName = apiClass.name || 'UnknownApi';
 
         return new Proxy({} as T, {
             // webpieces-disable no-any-unknown -- proxy get trap returns either an endpoint method or undefined
@@ -62,8 +63,19 @@ export class ClientCloudTasksFactory {
                         `Check for typos or a missing @Endpoint() decorator.`,
                     );
                 }
+                // Same call-site capture as the HTTP clients (#1175): synchronous, trimmed to the
+                // caller, parked on the SAME rejected instance.
                 // webpieces-disable no-any-unknown -- request DTO type is erased at the proxy layer
-                return (requestDto: unknown): Promise<void> => proxyClient.enqueue(prop, requestDto);
+                const clientMethod = (requestDto: unknown): Promise<void> => {
+                    const callSite = ApiCallSite.capture(apiName, prop, clientMethod);
+                    // webpieces-disable no-any-unknown -- a rejection value is genuinely unknown
+                    return proxyClient.enqueue(prop, requestDto).catch((failure: unknown) => {
+                        callSite.attachTo(failure);
+                        // eslint-disable-next-line @webpieces/no-unmanaged-exceptions -- rethrows the caller's own failure unchanged
+                        throw failure;
+                    });
+                };
+                return clientMethod;
             },
         });
     }

@@ -10,6 +10,7 @@ import {
     ApiUnsupportedMediaTypeError,
     ApiCodedError,
 } from '../errors/ApiError';
+import { OAuthProtocolError } from '../oauth/OAuthProtocolError';
 import { ApiMethodInfo } from './ApiMethodInfo';
 import { FailureClassifier } from './FailureClassifier';
 
@@ -29,8 +30,9 @@ import { FailureClassifier } from './FailureClassifier';
  * - ApiBadRequestError (400), ApiUnauthorizedError (401), ApiForbiddenError (403),
  *   ApiNotFoundError (404), ApiConflictError (409), ApiPreconditionFailedError (412),
  *   ApiUnsupportedMediaTypeError (415), ApiUnprocessableError (422), and an ApiCodedError whose
- *   `isCallerError()` is true (below 500, except 408/429) → the server is fine, the caller erred →
- *   NON-failure.
+ *   `isCallerError()` is true (below 500, except 408/429), and an OAuthProtocolError below 500 (a
+ *   refused grant or token is the OAuth protocol working, #1176) → the server is fine, the caller
+ *   erred → NON-failure.
  * SERVER — something may actually be WRONG, so SURFACE it (failure):
  * - ApiRequestTimeoutError (408): a 4xx, but the client may NEVER have seen the response — deliberately
  *   absent below, so it counts as a failure. Implementation/dependency failures, ApiNotImplementedError
@@ -66,7 +68,8 @@ export class WebpiecesDefaultFailureClassifier implements FailureClassifier {
             error instanceof ApiUnprocessableError ||
             error instanceof ApiPreconditionFailedError ||
             error instanceof ApiUnsupportedMediaTypeError ||
-            (error instanceof ApiCodedError && error.isCallerError());
+            (error instanceof ApiCodedError && error.isCallerError()) ||
+            (error instanceof OAuthProtocolError && error.isCallerError());
         return !healthyRejection;
     }
 }

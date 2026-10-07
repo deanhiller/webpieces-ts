@@ -1,3 +1,5 @@
+import { ApiCallSite } from './ApiCallSite';
+
 export type ApiErrorKind =
     | 'end-user'
     | 'bad-request'
@@ -25,6 +27,15 @@ export type ApiErrorKind =
 export abstract class ApiError extends Error {
     abstract readonly kind: ApiErrorKind;
     public subType?: string;
+
+    /**
+     * Where the app called the generated client method that rejected with this error — present only
+     * on an error a generated api client (HTTP, IPC or Cloud Tasks) rejected with. Set by
+     * {@link ApiCallSite.attachTo} as a NON-ENUMERABLE own property, so it never reaches JSON or a
+     * structured log; `declare` emits no field, so an error that never failed a client call carries
+     * no `callSite` key at all. See {@link ApiCallSite} for why it is not `cause`.
+     */
+    declare readonly callSite?: ApiCallSite;
 
     constructor(message: string, cause?: Error) {
         super(message, { cause });

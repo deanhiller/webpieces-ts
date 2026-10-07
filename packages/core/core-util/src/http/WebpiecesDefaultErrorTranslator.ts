@@ -3,6 +3,8 @@ import { ApiErrorCodec } from '../errors/ApiErrorCodec';
 import { ApiCodedError, ApiError } from '../errors/ApiError';
 import { ClientRole } from '../errors/ClientRole';
 import { ReceivedApiErrorRule } from '../errors/ReceivedApiErrorRule';
+import { OAuthErrorResponse } from '../oauth/OAuthErrorResponse';
+import { OAuthProtocolError } from '../oauth/OAuthProtocolError';
 import { ApiCallTimeoutError } from './ApiCallTimeoutError';
 import { ApiErrorHttpStatus, PublishedKind } from './ApiErrorHttpStatus';
 import { ErrorTranslator } from './ErrorTranslator';
@@ -70,6 +72,9 @@ export class WebpiecesDefaultErrorTranslator implements ErrorTranslator {
      * error; unknown throws and caller-local failures come out as a 500 implementation failure
      * because that is what the payload says.
      *
+     * The one exception is an {@link OAuthProtocolError}: its caller is an OAuth client, so it is
+     * answered in the RFC shape by `OAuthErrorResponse`, not as a payload.
+     *
      * An `ApiEndUserError` publishes 266 here, ALWAYS. Whether a particular REQUEST republishes that
      * as a real 4xx is a property of the CALLER, not of the error, so it is decided once per request
      * from `WebpiecesCoreHeaders.SURFACE` by the server boundary (`ExpressWrapper.handleError`) —
@@ -78,6 +83,11 @@ export class WebpiecesDefaultErrorTranslator implements ErrorTranslator {
      * responsible for repeating its router's mode, and repeating it wrongly was silent.
      */
     toWire(error: Error): HttpResponseDto {
+        // An OAuth refusal is answered to an OAuth CLIENT, which parses the RFC 6749/6750 body and
+        // never the ApiError envelope (#1176). Same renderer as every other OAuth boundary.
+        if (error instanceof OAuthProtocolError) {
+            return OAuthErrorResponse.toResponse(error, undefined);
+        }
         const payload = this.boundary.encode(error);
         // The boundary never publishes kind 'connection' — that is the whole first rule above — so
         // this is the published subset ApiErrorHttpStatus.codeFor accepts.

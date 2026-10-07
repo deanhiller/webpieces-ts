@@ -238,14 +238,16 @@ MCP spec fixes each. The shared SDK catch selects protocol versus tool rendering
 
 | Boundary | Method | Reply |
 |---|---|---|
-| before the SDK: bearer, `Origin`, malformed body | `toBearerBoundaryResponse(error): HttpResponseDto<McpHttpErrorBody>` | HTTP 401 + `WWW-Authenticate` / 403 / 400, anything else 500 |
+| before the SDK: bearer, `Origin`, malformed body | `toBearerBoundaryResponse(error): HttpResponseDto<McpHttpErrorBody> \| HttpResponseDto<OAuthErrorBody>` | HTTP 401 + `WWW-Authenticate` / 403 / 400, anything else 500; an `OAuthProtocolError` gets the RFC 6749/6750 body at its own status |
 | `tools/list` | `toListError(error): never` | throws JSON-RPC `-32602` (bad request) or `-32603` `Internal Error` |
 | `tools/call`, tool found: bad arguments, endpoint policy denial, JWT/OIDC mint failure, any local or remote failure, output-schema or serialization failure | `toToolCallResult(error): CallToolResult` (delegates to `McpRegistry.getErrorTranslator().toWire`) | `isError: true` result |
 | `tools/call`, unknown or hidden tool name (including a dispatcher policy recheck denial) | `unknownTool(name)` | JSON-RPC `-32602` `Unknown tool: <name>` |
 
 The pre-SDK boundary produces a VALUE like every other API in the framework and `WpMcpServer` writes
 it through the same `ExpressResponseWriter` the ordinary HTTP path uses — it does not hand-roll
-`res.status(...).json(...)`. The body stays JSON-RPC shaped because an MCP client expects that;
+`res.status(...).json(...)`. The body stays JSON-RPC shaped because an MCP client expects that — except for an `OAuthProtocolError`
+(an authorization service refusing the bearer with `invalid_token` / `insufficient_scope`), which is
+answered in the RFC shape by `OAuthErrorResponse`, keeping this server's challenge on a 401;
 `HttpResponseDto` is generic and its header LIST carries `WWW-Authenticate`.
 
 `toListError` is typed `never` — it THROWS rather than returning a value the caller must remember to
@@ -351,6 +353,35 @@ rotation metadata. Opaque tokens remain valid implementations of the same author
 
 `protectedResourceMetadata()` returns the resource metadata an HTTP adapter can publish at the
 well-known OAuth protected-resource endpoint. OAuth token issuance remains pluggable.
+
+### Refusing in the RFC shape from your own OAuth routes
+
+Token issuance, client registration and the authorization endpoint are the app's own express routes.
+Refuse there with `OAuthProtocolError` (from `@webpieces/core-util`) and mount
+`OAuthExpressErrorHandler` (from `@webpieces/http-server`) as the error handler, so the OAuth client
+gets `{ "error": "invalid_grant", "error_description": "..." }` at the RFC status with the right
+`WWW-Authenticate`, and the refusal is logged at INFO rather than as a server ERROR:
+
+```typescript
+const oauthErrors = new OAuthExpressErrorHandler();
+app.post('/oauth/token', urlencoded({ extended: false }), async (req, res) => {
+    if (req.body.grant_type !== 'authorization_code') {
+        throw new OAuthProtocolError(OAuthErrorCode.UNSUPPORTED_GRANT_TYPE, 'only authorization_code');
+    }
+    // ...
+}, oauthErrors.middleware);
+
+// authorization endpoint: errors go back as a redirect, never a status (RFC 6749 §4.1.2.1)
+res.redirect(302, new OAuthAuthorizationErrorRedirect(
+    validatedRedirectUri, OAuthErrorCode.ACCESS_DENIED,
+    typeof req.query.state === 'string' ? req.query.state : undefined, 'The user declined').toUrl());
+```
+
+An authorization service that throws an `OAuthProtocolError` (`invalid_token`, `insufficient_scope`)
+while this server verifies a bearer is rendered the same way at the MCP boundary, and a 401 without
+its own challenge keeps this server's `resource_metadata` challenge. The status is derived from the
+code; only `invalid_client` may choose 400 or 401, and the constructor's overloads make any other
+status a compile error. See `docs/portable-ipc-and-errors.md` for the full vocabulary.
 
 That endpoint's URL is `WpMcpServerConfig.resourceMetadataUrl` — RFC 9728 §3.1 path insertion, so
 `https://host/mcp` publishes at `https://host/.well-known/oauth-protected-resource/mcp` — and it is the

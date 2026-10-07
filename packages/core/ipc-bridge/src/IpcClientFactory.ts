@@ -1,4 +1,4 @@
-import { ApiImplementationError } from '@webpieces/core-util/errors';
+import { ApiCallSite, ApiImplementationError } from '@webpieces/core-util/errors';
 import {
     ClientRole,
     IpcCallContext,
@@ -40,36 +40,59 @@ export class IpcClientFactory {
         const endpoints = getIpcEndpoints(apiClass);
         // webpieces-disable no-any-unknown -- untrusted IPC data is schema-validated; generic dispatch cannot assume a DTO type before validation
         const methods = new Map<PropertyKey, (request: unknown) => Promise<unknown>>();
+        const apiName = apiClass.name || apiId;
         for (const [key, methodId] of Object.entries(endpoints)) {
+            // Same call-site capture as the HTTP clients (#1175): synchronous on the CALLER's stack,
+            // trimmed at `clientMethod`, parked on the SAME rejected instance.
             // webpieces-disable no-any-unknown -- untrusted IPC data is schema-validated; generic dispatch cannot assume a DTO type before validation
-            methods.set(key, async (request: unknown): Promise<unknown> => {
-                const context = this.connection.newContext(this.parent);
-                return IpcCallLogger.execute(
-                    this.logging,
-                    context,
-                    'client',
-                    apiId,
-                    methodId,
-                    getIpcMaskSpec(apiClass, key) ?? new MaskSpec({}),
-                    request,
-                    async () => {
-                        if (request === null || request === undefined)
-                            throw new ApiImplementationError(
-                                'IPC requests require one non-null DTO',
-                            );
-                        const reply = await this.connection.request(
-                            new IpcRequest(apiId, methodId, context, request),
-                        );
-                        // EVERY reply passes the seam, success included, so an app can turn an
-                        // apparently-successful reply into a throw. `asserts reply is IpcSuccess`
-                        // is what leaves no `type === 'failure'` branch behind here.
-                        IpcClientErrorTranslator.throwIfFailure(reply, this.role);
-                        return reply.body === null ? undefined : reply.body;
-                    },
-                );
-            });
+            const clientMethod = (request: unknown): Promise<unknown> => {
+                const callSite = ApiCallSite.capture(apiName, key, clientMethod);
+                // webpieces-disable no-any-unknown -- a rejection value is genuinely unknown
+                return this.call(apiClass, apiId, methodId, key, request).catch((failure: unknown) => {
+                    callSite.attachTo(failure);
+                    // eslint-disable-next-line @webpieces/no-unmanaged-exceptions -- rethrows the caller's own failure unchanged
+                    throw failure;
+                });
+            };
+            methods.set(key, clientMethod);
         }
         return new Proxy(Object.create(null) as T, new IpcProxyHandler(methods));
+    }
+
+    /** One IPC request/reply, logged; the body of every generated IPC client method. */
+    private async call<T extends object>(
+        apiClass: IpcApiType<T>,
+        apiId: string,
+        methodId: string,
+        key: string,
+        // webpieces-disable no-any-unknown -- untrusted IPC data is schema-validated; generic dispatch cannot assume a DTO type before validation
+        request: unknown,
+        // webpieces-disable no-any-unknown -- untrusted IPC data is schema-validated; generic dispatch cannot assume a DTO type before validation
+    ): Promise<unknown> {
+        const context = this.connection.newContext(this.parent);
+        return IpcCallLogger.execute(
+            this.logging,
+            context,
+            'client',
+            apiId,
+            methodId,
+            getIpcMaskSpec(apiClass, key) ?? new MaskSpec({}),
+            request,
+            async () => {
+                if (request === null || request === undefined)
+                    throw new ApiImplementationError(
+                        'IPC requests require one non-null DTO',
+                    );
+                const reply = await this.connection.request(
+                    new IpcRequest(apiId, methodId, context, request),
+                );
+                // EVERY reply passes the seam, success included, so an app can turn an
+                // apparently-successful reply into a throw. `asserts reply is IpcSuccess`
+                // is what leaves no `type === 'failure'` branch behind here.
+                IpcClientErrorTranslator.throwIfFailure(reply, this.role);
+                return reply.body === null ? undefined : reply.body;
+            },
+        );
     }
 }
 

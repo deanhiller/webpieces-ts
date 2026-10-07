@@ -1,3 +1,4 @@
+import { ApiCallSite } from '@webpieces/core-util';
 import { ApiPrototype } from './ApiPrototype';
 import { ProxyClient } from './ProxyClient';
 
@@ -71,11 +72,22 @@ export function buildClientProxy<T extends object>(apiPrototype: ApiPrototype<T>
             }
 
             const route = proxyClient.getRoute(prop);
+            const apiName = apiPrototype.name || 'UnknownApi';
 
+            // NOT async: the call site must be captured synchronously, on the CALLER's stack, and
+            // `clientMethod` itself is the trim boundary so the top frame is the app's own line
+            // (#1175). On rejection the SAME error instance is rethrown, carrying it.
             // webpieces-disable no-any-unknown -- request DTO types are erased at the proxy boundary
-            return async (...args: any[]) => {
-                return proxyClient.makeRequest(route, args);
+            const clientMethod = (...args: any[]): Promise<unknown> => {
+                const callSite = ApiCallSite.capture(apiName, prop, clientMethod);
+                // webpieces-disable no-any-unknown -- a rejection value is genuinely unknown
+                return proxyClient.makeRequest(route, args).catch((failure: unknown) => {
+                    callSite.attachTo(failure);
+                    // eslint-disable-next-line @webpieces/no-unmanaged-exceptions -- rethrows the caller's own failure unchanged
+                    throw failure;
+                });
             };
+            return clientMethod;
         },
     });
 }

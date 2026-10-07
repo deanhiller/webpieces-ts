@@ -10,6 +10,7 @@ import {
     Endpoint,
     HeaderRegistry,
     ApiCallTimeoutError,
+    ApiCallSite,
     toError,
     CLOUDTASKS,
     POST,
@@ -229,6 +230,9 @@ describe('tasks generated client deadlines', () => {
         await expect(h.invoke()).rejects.toBe(failure);
         expect(h.transport.calls).toBe(1);
         expect(vi.getTimerCount()).toBe(0);
+        // #1175: the SAME instance carries where the app enqueued it, non-enumerably.
+        expect(ApiCallSite.of(failure)?.label).toBe('TaskApi.work');
+        expect(Object.keys(failure)).not.toContain('callSite');
     });
 
     it('cleans the default timer on success', async () => {
