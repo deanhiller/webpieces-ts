@@ -40,18 +40,23 @@ export class CallRegistry {
         CallRegistry.policy(scope[0], scope[1]).strategy = strategy;
     }
 
+    /**
+     * Run one call under its registered policy. `context` names the method (its `methodName` selects
+     * the per-method policy) and carries the endpoint's declared operation, so the SAME context a
+     * strategy sees is the one the transport's deadline puts on an `ApiCallTimeoutError`.
+     */
     // webpieces-disable no-function-outside-class -- transport-independent policy execution
     static async execute<T>(
         api: Function,
-        methodName: string,
+        context: CallContext,
         attempt: Attempt<T>,
         defaultMs: number,
     ): Promise<T> {
         const policies = CallRegistry.apis.get(api);
-        const method = policies?.methods.get(methodName);
+        const method = policies?.methods.get(context.methodName);
         const strategy = method?.strategy ?? policies?.policy.strategy ?? CallRegistry.all.strategy;
         if (strategy !== undefined) {
-            return (await strategy(attempt, new CallContext(api.name, methodName))) as T;
+            return (await strategy(attempt, context)) as T;
         }
         return attempt(
             method?.timeoutMs ??

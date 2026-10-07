@@ -2,6 +2,7 @@ import { ApiErrorBoundary } from '../errors/ApiErrorBoundary';
 import { ApiErrorCodec } from '../errors/ApiErrorCodec';
 import { ApiCodedError, ApiError } from '../errors/ApiError';
 import { ReceivedApiErrorRule } from '../errors/ReceivedApiErrorRule';
+import { ApiCallTimeoutError } from './ApiCallTimeoutError';
 import { ApiErrorHttpStatus, PublishedKind } from './ApiErrorHttpStatus';
 import { ErrorTranslator } from './ErrorTranslator';
 import { HttpHeader, HttpResponseDto, HttpResponseStatus } from './HttpResponseDto';
@@ -28,6 +29,9 @@ import { HttpHeader, HttpResponseDto, HttpResponseStatus } from './HttpResponseD
  * your own costs nothing and reads better at a delegation site.
  */
 export class WebpiecesDefaultErrorTranslator implements ErrorTranslator {
+    /** Reason phrase for a client deadline; see {@link ApiCallTimeoutError}. Never 'Gateway Timeout'. */
+    static readonly CALL_TIMEOUT_REASON = 'Network Timeout';
+
     private readonly boundary = new ApiErrorBoundary();
 
     private readonly genericMessages: Map<number, string> = new Map<number, string>([
@@ -78,10 +82,23 @@ export class WebpiecesDefaultErrorTranslator implements ErrorTranslator {
                 ? [new HttpHeader('retry-after', String(payload.retryAfterSeconds))]
                 : [];
         return new HttpResponseDto(
-            new HttpResponseStatus(status, this.genericMessage(status)),
+            new HttpResponseStatus(status, this.reasonPhrase(error, status)),
             headers,
             payload,
         );
+    }
+
+    /**
+     * The reason phrase for `error`. An {@link ApiCallTimeoutError} is THIS process's own client
+     * deadline firing on an outbound call: no gateway was involved, so it is never titled
+     * 'Gateway Timeout' (issue #1170). It keeps its 504 status and `dependency-timeout` payload —
+     * retry semantics are unchanged — and only the human framing differs.
+     */
+    private reasonPhrase(error: Error, status: number): string {
+        if (error instanceof ApiCallTimeoutError) {
+            return WebpiecesDefaultErrorTranslator.CALL_TIMEOUT_REASON;
+        }
+        return this.genericMessage(status);
     }
 
     /**

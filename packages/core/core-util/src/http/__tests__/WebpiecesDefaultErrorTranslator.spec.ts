@@ -16,6 +16,9 @@ import { toError } from '../../lib/errorUtils';
 import { HttpResponseDto, HttpResponseStatus } from '../HttpResponseDto';
 import { SurfaceEndUserStatus } from '../Surface';
 import { WebpiecesDefaultErrorTranslator } from '../WebpiecesDefaultErrorTranslator';
+import { ApiCallTimeoutError } from '../ApiCallTimeoutError';
+import { CallContext } from '../CallStrategy';
+import { WRITE } from '../HttpEndpointOptions';
 
 const translator = new WebpiecesDefaultErrorTranslator();
 
@@ -197,6 +200,19 @@ describe('WebpiecesDefaultErrorTranslator.toWire', () => {
 
         expect(wire.status.code).toBe(266);
         expect((wire.body as ApiErrorPayload).edgeHttpStatus).toBe(404);
+    });
+
+    it('a client deadline is never titled Gateway Timeout, but keeps its 504 semantics (#1170)', () => {
+        const wire = wireOf(
+            new ApiCallTimeoutError(30_000, new CallContext('SaveApi', 'save', WRITE)),
+        );
+        expect(wire.status.code).toBe(504);
+        expect(wire.status.reason).toBe('Network Timeout');
+        expect((wire.body as ApiErrorPayload).kind).toBe('dependency-timeout');
+        // A genuine timeout reported by a dependency keeps the standard phrase.
+        expect(wireOf(new ApiDependencyTimeoutError('upstream')).status.reason).toBe(
+            'Gateway Timeout',
+        );
     });
 
     it('publishes an unknown throw as a generic 500, disclosing nothing', () => {

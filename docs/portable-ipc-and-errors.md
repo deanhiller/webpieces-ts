@@ -50,7 +50,9 @@ keeps its `ApiEndUserError` verbatim. The rule is shared by node, browser, and I
 
 `ApiEndpointNotFoundError` remains distinct from domain `ApiNotFoundError`.
 `ApiCallTimeoutError(timeoutMs, CallContext)` is a subtype of `ApiDependencyTimeoutError` while
-retaining its local deadline and call context. `ApiConnectionError` remains available for actual
+retaining its local deadline and call context. Its `userMessage` is end-user text chosen by
+`context.operation` (IPC reports the conservative `WRITE`, since IPC contracts declare no operation);
+`message` stays the developer text. `ApiConnectionError` remains available for actual
 offline classification; IPC disconnection uses the local `IpcTransportError`.
 
 `ApiErrorCodec` uses a fixed allowlist of semantic kinds, not a remote JavaScript class name. End-user messages and explicitly safe `callerMessage` validation text are bounded; implementation messages become generic. Semantic causes cross the boundary up to three levels deep using the same safe field policy; cycles are bounded. Stack traces and arbitrary error object properties never cross the boundary. A locally constructed `ApiImplementationError` has `serverError === false`; a remote decoder sets it to `true`. Browser and native global reporters can therefore distinguish server failures from local website/mobile code failures without trusting a wire flag.

@@ -18,7 +18,9 @@ import {
     CallRegistry,
     CallDeadline,
     CallContext,
+    getEndpointOperation,
 } from '@webpieces/core-util';
+import type { EndpointOperation } from '@webpieces/core-util';
 import {
     RequestContextApiCallContext,
     RequestContextHeaders,
@@ -38,11 +40,20 @@ class EndpointPlan {
     /** @MaskLog spec for this endpoint's request DTO, read once here so the enqueue log path masks
      *  a secret on the task payload without a per-enqueue reflection hit. Undefined = log verbatim. */
     mask?: MaskSpec;
+    /** The endpoint's declared @Endpoint operation; an enqueue deadline reports it on its timeout. */
+    operation: EndpointOperation;
 
-    constructor(path: string, queueName: string, authMode: AuthMode, mask?: MaskSpec) {
+    constructor(
+        path: string,
+        queueName: string,
+        authMode: AuthMode,
+        operation: EndpointOperation,
+        mask?: MaskSpec,
+    ) {
         this.path = path;
         this.queueName = queueName;
         this.authMode = authMode;
+        this.operation = operation;
         this.mask = mask;
     }
 }
@@ -137,37 +148,34 @@ export class TaskProxyClient {
         // uniformly, without touching either invoker impl.
         const info = new ApiMethodInfo('client', this.apiName, methodName, undefined, plan.mask);
         await this.logApiCall.execute(info, requestDto, async () => {
+            const callContext = new CallContext(this.apiName, methodName, plan.operation);
             const jobRef = await CallRegistry.execute(
                 this.apiClass,
-                methodName,
+                callContext,
                 (timeoutMs: number) =>
-                    CallDeadline.run(
-                        timeoutMs,
-                        new CallContext(this.apiName, methodName),
-                        async (signal: AbortSignal) => {
-                            // Resolved lazily (not at client construction) so building a client stays synchronous.
-                            // Every metadata read beneath resolveUrl is memoized process-wide, so only the first
-                            // enqueue in the process pays a lookup.
-                            const targetUrl = await this.config.resolveUrl();
-                            CallDeadline.throwIfAborted(signal);
+                    CallDeadline.run(timeoutMs, callContext, async (signal: AbortSignal) => {
+                        // Resolved lazily (not at client construction) so building a client stays synchronous.
+                        // Every metadata read beneath resolveUrl is memoized process-wide, so only the first
+                        // enqueue in the process pays a lookup.
+                        const targetUrl = await this.config.resolveUrl();
+                        CallDeadline.throwIfAborted(signal);
 
-                            const request = new TaskRequest(
-                                targetUrl,
-                                plan.path,
-                                plan.queueName,
-                                requestDto,
-                                this.buildContextHeaders(plan.authMode),
-                                plan.authMode,
-                                frame.info ?? new ScheduleInfo(),
-                            );
+                        const request = new TaskRequest(
+                            targetUrl,
+                            plan.path,
+                            plan.queueName,
+                            requestDto,
+                            this.buildContextHeaders(plan.authMode),
+                            plan.authMode,
+                            frame.info ?? new ScheduleInfo(),
+                        );
 
-                            // svcName, not the URL, is the stable name across demo/qa/prod.
-                            log.debug(
-                                `enqueue task ${plan.queueName} -> ${this.config.svcName}${plan.path}`,
-                            );
-                            return this.invoker.enqueue(request);
-                        },
-                    ),
+                        // svcName, not the URL, is the stable name across demo/qa/prod.
+                        log.debug(
+                            `enqueue task ${plan.queueName} -> ${this.config.svcName}${plan.path}`,
+                        );
+                        return this.invoker.enqueue(request);
+                    }),
                 30_000,
             );
             // Only the winning attempt may publish the reference. A late enqueue cannot overwrite it.
@@ -196,6 +204,7 @@ export class TaskProxyClient {
                 basePath + endpoints[methodName],
                 getQueueName(apiClass, methodName),
                 authMode,
+                getEndpointOperation(apiClass, methodName),
                 getMaskSpec(apiClass, methodName),
             );
             plans.set(methodName, plan);

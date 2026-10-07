@@ -122,7 +122,10 @@ export abstract class ProxyClient {
 
     protected selectAuthMethod(route: RouteMetadata): import('@webpieces/core-util').AuthMode {
         const methods = route.authMeta?.methods;
-        if (!methods || methods.length !== 1) throw new Error('This client must select one configured credential from the endpoint alternatives.');
+        if (!methods || methods.length !== 1)
+            throw new Error(
+                'This client must select one configured credential from the endpoint alternatives.',
+            );
         return methods[0];
     }
 
@@ -377,7 +380,9 @@ export abstract class ProxyClient {
             this.apiName,
             (): Promise<string> => this.resolveBaseUrl(),
             (current: RouteMetadata): Map<string, string> =>
-                this.outboundContextHeaders(DestinationTrust.forAuthMode(current.authMeta?.methods[0])),
+                this.outboundContextHeaders(
+                    DestinationTrust.forAuthMode(current.authMeta?.methods[0]),
+                ),
             (request: ClientRequest, signal: AbortSignal): Promise<Response> =>
                 this.chain.execute(request, () => this.sendOnce(request, signal)),
             (response: Response, current: RouteMetadata): Promise<DtoValue> =>
@@ -402,13 +407,14 @@ export abstract class ProxyClient {
         let response: Response | undefined;
         // eslint-disable-next-line @webpieces/no-unmanaged-exceptions -- lifecycle reports the original handshake failure
         try {
+            const callContext = new CallContext(this.apiName, route.methodName, route.operation);
             const requestStream = await CallRegistry.execute(
                 this.apiClass,
-                route.methodName,
+                callContext,
                 (timeoutMs: number) =>
                     CallDeadline.run(
                         timeoutMs,
-                        new CallContext(this.apiName, route.methodName),
+                        callContext,
                         async (deadlineSignal: AbortSignal) => {
                             const call = new DuplexStreamingCall(
                                 this.apiName,
@@ -483,25 +489,22 @@ export abstract class ProxyClient {
         // webpieces-disable no-unmanaged-exceptions -- report one logical END, preserving the original thrown value
         // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
         try {
+            const callContext = new CallContext(this.apiName, route.methodName, route.operation);
             result = await CallRegistry.execute(
                 this.apiClass,
-                route.methodName,
+                callContext,
                 (timeoutMs: number) => {
                     response = undefined;
-                    return CallDeadline.run(
-                        timeoutMs,
-                        new CallContext(this.apiName, route.methodName),
-                        async (signal: AbortSignal) => {
-                            const request = await this.prepareRequest(route, args);
-                            CallDeadline.throwIfAborted(signal);
-                            const received = await this.chain.execute(request, () =>
-                                this.sendOnce(request, signal),
-                            );
-                            CallDeadline.throwIfAborted(signal);
-                            response = received;
-                            return this.readResponse(received, route);
-                        },
-                    );
+                    return CallDeadline.run(timeoutMs, callContext, async (signal: AbortSignal) => {
+                        const request = await this.prepareRequest(route, args);
+                        CallDeadline.throwIfAborted(signal);
+                        const received = await this.chain.execute(request, () =>
+                            this.sendOnce(request, signal),
+                        );
+                        CallDeadline.throwIfAborted(signal);
+                        response = received;
+                        return this.readResponse(received, route);
+                    });
                 },
                 30_000,
             );

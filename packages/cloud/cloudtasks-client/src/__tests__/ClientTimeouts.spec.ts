@@ -73,7 +73,7 @@ class Harness {
         let settled = false;
         const pending = this.invoke(method);
         const checked = expect(pending).rejects.toEqual(
-            new ApiCallTimeoutError(timeoutMs, new CallContext(this.api.name, method)),
+            new ApiCallTimeoutError(timeoutMs, new CallContext(this.api.name, method, WRITE)),
         );
         void pending.then(
             () => {
@@ -146,7 +146,7 @@ describe('tasks generated client deadlines', () => {
         await h.expectTimeout(200);
         CallRegistry.setStrategy(undefined, h.api);
         await h.expectTimeout(300);
-        expect(seen).toEqual(Array.from({ length: 3 }, () => new CallContext(h.api.name, 'work')));
+        expect(seen).toEqual(Array.from({ length: 3 }, () => new CallContext(h.api.name, 'work', WRITE)));
         CallRegistry.setStrategy(undefined, 'ALL');
         await h.expectTimeout(1);
     });
@@ -170,7 +170,7 @@ describe('tasks generated client deadlines', () => {
         }, h.api);
         const pending = h.invoke();
         const checked = expect(pending).rejects.toEqual(
-            new ApiCallTimeoutError(20_000, new CallContext(h.api.name, 'work')),
+            new ApiCallTimeoutError(20_000, new CallContext(h.api.name, 'work', WRITE)),
         );
         await vi.advanceTimersByTimeAsync(30_000);
         expect(firstError).toBeInstanceOf(ApiCallTimeoutError);

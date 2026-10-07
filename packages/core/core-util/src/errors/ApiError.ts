@@ -72,9 +72,20 @@ export class ApiRequestTimeoutError extends ApiError {
     override readonly kind = 'request-timeout' as const;
 }
 
-/** A caller-local connection failure. HTTP servers normalize this to ApiImplementationError. */
+/**
+ * A caller-local connection failure. HTTP servers normalize this to ApiImplementationError.
+ *
+ * `message` is the developer text (it names the url and the transport's own reason); `userMessage`
+ * is the stable text an app renders verbatim to an end user, matching `ApiCallTimeoutError.userMessage`
+ * so the two transport failures read consistently.
+ */
 export class ApiConnectionError extends ApiError {
+    static readonly USER_MESSAGE =
+        "We couldn't reach the server. Please check your network connection and try again.";
+
     override readonly kind = 'connection' as const;
+    /** End-user text; `message` stays the developer text. */
+    readonly userMessage: string = ApiConnectionError.USER_MESSAGE;
 }
 
 /** The API operation is missing, distinct from an absent domain entity. */
