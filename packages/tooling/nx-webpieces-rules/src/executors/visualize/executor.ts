@@ -1,11 +1,14 @@
 /**
  * Visualize Executor
  *
- * Renders the SAVED architecture graph (DOT + HTML), refreshes this branch's Impact sidecar, and opens
- * the visualization in a browser. It never regenerates the graph: the architecture facts stay the
- * saved snapshot. Impact, though, is per-branch and gitignored (graph-impact.ts) — it is exactly the
- * thing that goes stale when you switch branches — so viewing refreshes it with the same
- * `nx show projects --affected --base=<fork point>` scan generate runs, against the saved graph.
+ * Renders the SAVED architecture graph (DOT + HTML), refreshes the Impact sidecar, and opens the
+ * visualization in a browser. It never regenerates the graph: the architecture facts stay the saved
+ * snapshot. Impact, though, is per-checkout and gitignored (graph-impact.ts) — it is exactly the thing
+ * that goes stale when you switch branches or check out a commit — so viewing refreshes it against
+ * the saved graph, with one `nx show projects --affected --base=<base>` scan per comparison that
+ * exists here: "Changed on this branch" (fork point → working tree) and "Last commit" (HEAD^ →
+ * working tree). On main or a detached HEAD only the last commit exists, so checking out a commit
+ * and running `pnpm arch:visualize` shows what that commit changed.
  *
  * Usage:
  * nx run architecture:visualize   (pnpm arch:visualize)
@@ -16,7 +19,7 @@ import type { ExecutorContext } from '@nx/devkit';
 import { SavedSnapshot } from '../../lib/saved-snapshot';
 import { DEFAULT_GRAPH_PATH } from '../../lib/graph-loader';
 import { GraphVisualizer } from '../../lib/graph-visualizer';
-import { ImpactRefresh } from '../../lib/graph-impact';
+import { ImpactRefresh, VISUALIZE_IMPACT_KINDS } from '../../lib/graph-impact';
 import { RuleFailError, renderRuleFailForHuman } from '@webpieces/rules-config';
 import { toError } from '../../toError';
 
@@ -53,8 +56,8 @@ export class SavedGraphViewer {
             console.log(`✅ Generated: ${vizPaths.htmlPath}`);
 
             // Impact is optional: it reports, it never throws, and it never touches committed files.
-            console.log('🟠 Refreshing this branch\'s impact (nx affected since the fork point)...');
-            console.log(await this.impact.run(path.dirname(vizPaths.htmlPath), workspaceRoot, graph));
+            console.log('🟠 Refreshing impact (nx affected: changed on this branch, and since the last commit)...');
+            console.log(await this.impact.run(path.dirname(vizPaths.htmlPath), workspaceRoot, graph, VISUALIZE_IMPACT_KINDS));
 
             console.log('\n🌐 Opening visualization in browser...');
             if (this.visualizer.openVisualization(vizPaths.htmlPath)) {

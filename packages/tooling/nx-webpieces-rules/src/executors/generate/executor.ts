@@ -28,7 +28,7 @@ import { ProjectInfo } from '../../lib/project-info';
 import type { ApiContracts, ExternalSystemDecls } from '../../lib/api-usage/api-relations';
 import type { EnhancedGraph, GraphEntry } from '../../lib/graph-sorter';
 import { GraphVisualizer } from '../../lib/graph-visualizer';
-import { ImpactRefresh } from '../../lib/graph-impact';
+import { GENERATE_IMPACT_KINDS, ImpactRefresh } from '../../lib/graph-impact';
 import * as path from 'path';
 import { deriveRuntimeGraphReport, saveRuntimeGraph } from '../../lib/runtime-graph';
 import { printAutoHiddenServers } from '../../lib/runtime-participant-resolver';
@@ -205,9 +205,12 @@ export class ArchitectureGenerator {
         const vizPaths = this.visualizer.writeVisualization(enhancedGraph, workspaceRoot);
         console.log(`✅ Wrote ${vizPaths.htmlPath}`);
 
-        // Step 4c: The page's Impact mode — nx affected for THIS branch, into a gitignored sidecar
-        // beside the html (never into the committed files). Optional: it reports, it never throws.
-        console.log(await this.impact.run(path.dirname(vizPaths.htmlPath), workspaceRoot, enhancedGraph));
+        // Step 4c: The page's Impact mode — nx affected for "Changed on this branch" ONLY, into a
+        // gitignored sidecar beside the html (never into the committed files). Generate never scans
+        // the last commit; that comparison is arch:visualize's. Optional: it reports, it never throws.
+        console.log(
+            await this.impact.run(path.dirname(vizPaths.htmlPath), workspaceRoot, enhancedGraph, GENERATE_IMPACT_KINDS),
+        );
 
         // Step 5: Generate the runtime microservice graph from the same scan.
         // Projects tagged drawOnGraph:false are threaded through so the runtime

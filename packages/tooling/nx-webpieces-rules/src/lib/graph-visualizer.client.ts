@@ -5,24 +5,65 @@
  * one) and remembered per viewer in localStorage. Storage can be missing or throw (a private window,
  * blocked site data, a file:// page in some browsers), so every access is wrapped and the page works
  * without it.
+ *
+ * Impact can carry two scans (#1163): "Changed on this branch" (kind `branch`) and "Last commit"
+ * (kind `commit`). The ACTIVE one starts as the sidecar's `defaultKind` (or the viewer's remembered
+ * choice, when that scan exists and is available) and is what every Impact color, note and Filter
+ * set reads.
  */
 class WpModeState {
     static readonly MODES = ['runtime', 'architecture', 'impact'];
     static readonly NAMES = ['Runtime', 'Architecture', 'Impact'];
-    static readonly SUBTITLES = ['where the code can run', 'servers · clients · APIs', 'what this branch touches'];
+    static readonly SUBTITLES = ['where the code can run', 'servers · clients · APIs', 'what changed'];
     static readonly STORAGE_KEY = 'wp-architecture-graph-mode';
-    readonly impact: ImpactJson | null = window.__WP_IMPACT__ ?? null;
+    static readonly KIND_STORAGE_KEY = 'wp-architecture-graph-impact-kind';
+    readonly scans: ImpactJson[] = window.__WP_IMPACT__?.scans ?? [];
+    kind = '';
     mode = 'runtime';
 
     constructor() {
+        this.kind = this.initialKind();
         this.mode = this.initial();
+    }
+
+    /** The active scan; null when the page has no Impact data. */
+    get impact(): ImpactJson | null {
+        return this.scans.find((scan: ImpactJson): boolean => scan.kind === this.kind) ?? null;
     }
 
     /** '' when Impact can be shown, else the one line the drawer and the Filter popover say instead. */
     impactReason(): string {
-        if (this.impact === null)
-            return 'No impact data for this branch. Run pnpm arch:visualize (nx run architecture:visualize) to compute it — no full regenerate needed.';
-        return this.impact.available ? '' : `Impact unavailable: ${this.impact.reason}.`;
+        const impact = this.impact;
+        if (impact === null)
+            return 'No impact data here. Run pnpm arch:visualize (nx run architecture:visualize) to compute it — no full regenerate needed.';
+        return impact.available ? '' : `Impact unavailable (${impact.label}): ${impact.reason}.`;
+    }
+
+    /** Switch the active scan; false (and nothing changes) for a missing or unavailable one. */
+    setKind(kind: string): boolean {
+        if (!this.kindAvailable(kind)) return false;
+        this.kind = kind;
+        // eslint-disable-next-line @webpieces/no-unmanaged-exceptions -- storage is a per-viewer convenience; a blocked store must not break the page
+        try {
+            localStorage.setItem(WpModeState.KIND_STORAGE_KEY, kind);
+            // webpieces-disable no-any-unknown -- browsers may throw any value from blocked storage
+        } catch (err: unknown) {
+            //const error = toError(err);
+            void err;
+        }
+        return true;
+    }
+
+    kindAvailable(kind: string): boolean {
+        return this.scans.some((scan: ImpactJson): boolean => scan.kind === kind && scan.available);
+    }
+
+    private initialKind(): string {
+        const stored = this.read(WpModeState.KIND_STORAGE_KEY);
+        if (stored !== null && this.kindAvailable(stored)) return stored;
+        const preferred = window.__WP_IMPACT__?.defaultKind ?? '';
+        if (this.scans.some((scan: ImpactJson): boolean => scan.kind === preferred)) return preferred;
+        return this.scans[0]?.kind ?? '';
     }
 
     available(mode: string): boolean {
@@ -53,26 +94,27 @@ class WpModeState {
         return true;
     }
 
-    /** Which impact shade a box gets. */
+    /** Which impact shade a box gets, from the ACTIVE scan. */
     status(id: string): 'touched' | 'affected' | 'buildInput' | 'untouched' {
-        if (this.impact?.touched.includes(id)) return 'touched';
-        if (this.impact?.affected.includes(id)) return 'affected';
-        if (this.impact?.buildInputs.includes(id)) return 'buildInput';
+        const impact = this.impact;
+        if (impact?.touched.includes(id)) return 'touched';
+        if (impact?.affected.includes(id)) return 'affected';
+        if (impact?.buildInputs.includes(id)) return 'buildInput';
         return 'untouched';
     }
 
     private initial(): string {
         const hashed = location.hash.slice(1);
         if (this.available(hashed)) return hashed;
-        const stored = this.stored();
+        const stored = this.read(WpModeState.STORAGE_KEY);
         if (stored !== null && this.available(stored)) return stored;
         return 'runtime';
     }
 
-    private stored(): string | null {
+    private read(key: string): string | null {
         // eslint-disable-next-line @webpieces/no-unmanaged-exceptions -- storage is a per-viewer convenience; a blocked store reads as "nothing stored"
         try {
-            return localStorage.getItem(WpModeState.STORAGE_KEY);
+            return localStorage.getItem(key);
             // webpieces-disable no-any-unknown -- browsers may throw any value from blocked storage
         } catch (err: unknown) {
             //const error = toError(err);
@@ -294,6 +336,11 @@ class GraphFilterPopover {
         return this.byId('wp-filter-pop')?.hidden === false;
     }
 
+    /** The active Impact scan changed: an open popover's counts and labels follow it. */
+    refresh(): void {
+        if (this.isOpen()) this.paint();
+    }
+
     open(): void {
         const pop = this.byId('wp-filter-pop');
         if (pop === null) return;
@@ -356,6 +403,7 @@ class GraphDrawer {
     wire(): void {
         this.wireModeMenu();
         this.popover.wire();
+        this.wireImpactKinds();
         this.wireLock();
         this.byId('wp-filter-toggle')?.addEventListener('click', () => this.page.toggleFilter());
         this.toggles('wp-collapse', 'wp-shell', true);
@@ -396,6 +444,34 @@ class GraphDrawer {
                 this.page.setMode(button.dataset['wpMode'] ?? 'runtime');
             });
         });
+    }
+
+    /** The "Changed on this branch" / "Last commit" toggle, in the drawer and in the Filter popover. */
+    private wireImpactKinds(): void {
+        document.querySelectorAll<HTMLButtonElement>('[data-wp-impact-kind]').forEach((button: HTMLButtonElement) => {
+            button.addEventListener('click', (ev: MouseEvent) => {
+                ev.stopPropagation();
+                this.page.setImpactKind(button.dataset['wpImpactKind'] ?? '');
+                this.popover.refresh();
+            });
+        });
+    }
+
+    /** Shown only when two scans exist; the drawer's copy only while Impact colors the graph. */
+    private syncImpactKinds(modes: WpModeState): void {
+        document.querySelectorAll<HTMLElement>('[data-wp-impact-kinds]').forEach((group: HTMLElement) => {
+            const inDrawer = group.dataset['wpImpactKinds'] === 'drawer';
+            group.hidden = modes.scans.length < 2 || (inDrawer && modes.mode !== 'impact');
+        });
+        document.querySelectorAll<HTMLButtonElement>('[data-wp-impact-kind]').forEach((button: HTMLButtonElement) => {
+            const kind = button.dataset['wpImpactKind'] ?? '';
+            button.setAttribute('aria-pressed', String(kind === modes.kind));
+            button.disabled = !modes.kindAvailable(kind);
+            const scan = modes.scans.find((candidate: ImpactJson): boolean => candidate.kind === kind);
+            button.title = scan === undefined ? '' : scan.available ? scan.label : scan.reason;
+        });
+        const legend = this.byId('wp-scope-legend');
+        if (legend !== null) legend.textContent = modes.impact?.label ?? 'Changes on this branch';
     }
 
     private closeModeMenu(returnFocus: boolean): void {
@@ -503,6 +579,7 @@ class GraphDrawer {
         document.querySelectorAll<HTMLElement>('[data-wp-impact-note]').forEach((note: HTMLElement) => {
             note.textContent = this.impactNote(modes);
         });
+        this.syncImpactKinds(modes);
         const title = this.byId('wp-legend-pop-title');
         if (title !== null) title.textContent = `Legend · ${modes.name(modes.mode)}`;
         const input = this.lockInput();
@@ -558,10 +635,11 @@ class GraphDrawer {
     private impactNote(modes: WpModeState): string {
         const impact = modes.impact;
         if (impact === null || !impact.available) return '';
+        // An available scan with a note is an EMPTY one, e.g. "Nothing changed on this branch yet".
+        if (impact.reason !== '') return `${impact.label}: ${impact.reason}.`;
         const stats =
-            `${impact.touched.length} touched · ${impact.affected.length} affected · ` +
-            `${impact.buildInputs.length} build inputs — nx affected since fork point ${impact.base}, ` +
-            `${impact.changedFiles} changed files.`;
+            `${impact.label}: ${impact.touched.length} touched · ${impact.affected.length} affected · ` +
+            `${impact.buildInputs.length} build inputs — nx affected, ${impact.changedFiles} changed files.`;
         const cause = this.globalCause(impact);
         return cause === '' ? stats : `${cause}. ${stats}`;
     }
@@ -694,6 +772,13 @@ class GraphPage extends WpFilterPage {
 
     setMode(mode: string): void {
         if (mode === this.modes.mode || !this.modes.set(mode)) return;
+        this.syncControls();
+        this.redraw();
+    }
+
+    /** Switch the active Impact scan: Impact recolours and an active change-scope filter re-applies. */
+    setImpactKind(kind: string): void {
+        if (kind === this.modes.kind || !this.modes.setKind(kind)) return;
         this.syncControls();
         this.redraw();
     }

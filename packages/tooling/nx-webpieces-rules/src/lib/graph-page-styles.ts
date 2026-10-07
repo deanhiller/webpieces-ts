@@ -151,6 +151,9 @@ export class GraphPageStyles {
             border: 1px solid var(--wp-line); background: var(--wp-surface); font-size: 12.5px; }
         .wp-chip:hover { border-color: var(--wp-accent-hover); }
         .wp-chip[aria-pressed="true"] { background: var(--wp-accent); border-color: var(--wp-accent); color: #fff; }
+        .wp-chip:disabled { opacity: 0.45; cursor: default; }
+        .wp-impact-kinds { margin: 6px 0 4px; }
+        .wp-side .wp-chip:not([aria-pressed="true"]) { background: var(--wp-side-control); border-color: var(--wp-side-line); }
         .wp-filter-pop footer { display: flex; justify-content: space-between; align-items: center; gap: 8px;
             padding-top: 10px; border-top: 1px solid var(--wp-line); }
         .wp-text-btn { all: unset; cursor: pointer; color: var(--wp-muted); font-size: 12.5px; text-decoration: underline; }

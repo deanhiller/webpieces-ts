@@ -392,7 +392,7 @@ describe('generateHTML', () => {
         expect(html).toContain('id="wp-filter-pills"');
         expect(html).toContain('<span class="wp-mode-name">Runtime</span><span class="wp-mode-sub">where the code can run</span>');
         expect(html).toContain('<span class="wp-mode-name">Architecture</span><span class="wp-mode-sub">servers · clients · APIs</span>');
-        expect(html).toContain('<span class="wp-mode-name">Impact</span><span class="wp-mode-sub">what this branch touches</span>');
+        expect(html).toContain('<span class="wp-mode-name">Impact</span><span class="wp-mode-sub">what changed</span>');
         expect(html).toContain('id="wp-legend-pop"');
         expect(html).toContain('id="wp-resp-open"');
         expect(html).toContain('id="wp-snapshot-open"');
