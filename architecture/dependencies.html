@@ -203,6 +203,9 @@
             border: 1px solid var(--wp-line); background: var(--wp-surface); font-size: 12.5px; }
         .wp-chip:hover { border-color: var(--wp-accent-hover); }
         .wp-chip[aria-pressed="true"] { background: var(--wp-accent); border-color: var(--wp-accent); color: #fff; }
+        .wp-chip:disabled { opacity: 0.45; cursor: default; }
+        .wp-impact-kinds { margin: 6px 0 4px; }
+        .wp-side .wp-chip:not([aria-pressed="true"]) { background: var(--wp-side-control); border-color: var(--wp-side-line); }
         .wp-filter-pop footer { display: flex; justify-content: space-between; align-items: center; gap: 8px;
             padding-top: 10px; border-top: 1px solid var(--wp-line); }
         .wp-text-btn { all: unset; cursor: pointer; color: var(--wp-muted); font-size: 12.5px; text-decoration: underline; }
@@ -237,9 +240,10 @@
                 <button type="button" class="wp-pill-trigger" id="wp-mode-trigger" aria-haspopup="menu" aria-controls="wp-mode-menu" aria-expanded="false">
                     <span class="wp-pill-text"><span class="wp-mode-name" id="wp-mode-current">Runtime</span><span class="wp-mode-sub" id="wp-mode-current-sub">where the code can run</span></span><span class="wp-caret" aria-hidden="true">▾</span>
                 </button>
-                <div class="wp-menu" id="wp-mode-menu" role="menu" aria-label="Color by" hidden><button type="button" class="wp-mode" role="menuitemradio" data-wp-mode="runtime" aria-checked="true" title="Key 1"><span class="wp-mode-name">Runtime</span><span class="wp-mode-sub">where the code can run</span></button><button type="button" class="wp-mode" role="menuitemradio" data-wp-mode="architecture" aria-checked="false" title="Key 2"><span class="wp-mode-name">Architecture</span><span class="wp-mode-sub">servers · clients · APIs</span></button><button type="button" class="wp-mode" role="menuitemradio" data-wp-mode="impact" aria-checked="false" title="Key 3"><span class="wp-mode-name">Impact</span><span class="wp-mode-sub">what this branch touches</span></button></div>
+                <div class="wp-menu" id="wp-mode-menu" role="menu" aria-label="Color by" hidden><button type="button" class="wp-mode" role="menuitemradio" data-wp-mode="runtime" aria-checked="true" title="Key 1"><span class="wp-mode-name">Runtime</span><span class="wp-mode-sub">where the code can run</span></button><button type="button" class="wp-mode" role="menuitemradio" data-wp-mode="architecture" aria-checked="false" title="Key 2"><span class="wp-mode-name">Architecture</span><span class="wp-mode-sub">servers · clients · APIs</span></button><button type="button" class="wp-mode" role="menuitemradio" data-wp-mode="impact" aria-checked="false" title="Key 3"><span class="wp-mode-name">Impact</span><span class="wp-mode-sub">what changed</span></button></div>
             </div>
             <p class="wp-mode-reason" id="wp-impact-reason" hidden></p>
+            <div class="wp-chips wp-impact-kinds" data-wp-impact-kinds="drawer" role="group" aria-label="Compare" hidden><button type="button" class="wp-chip" data-wp-impact-kind="branch" aria-pressed="false">Changed on this branch</button><button type="button" class="wp-chip" data-wp-impact-kind="commit" aria-pressed="false">Last commit</button></div>
         </div>
         <div class="wp-group">
             <button type="button" class="wp-filter-btn" id="wp-filter-open" aria-controls="wp-filter-pop" aria-expanded="false"><span>Filter</span><span class="wp-badge" id="wp-filter-badge" hidden>0</span></button>
@@ -251,7 +255,7 @@
         </div>
         <div class="wp-group">
             <div class="wp-label wp-label-row">Legend <button type="button" class="wp-icon wp-icon-mini wp-icon-dark" id="wp-legend-pop" title="Pop the legend out over the graph" aria-label="Pop the legend out over the graph">⇱</button></div>
-            <div class="wp-legend-list" data-wp-legend-mode="runtime"><div class="wp-legend-row" data-wp-legend="browser"><svg width="26" height="16" viewBox="0 0 26 16" aria-hidden="true"><rect width="26" height="16" fill="#7d8cf2"/><rect x="0.5" y="0.5" width="25" height="15" fill="none" stroke="#3a3c46"/></svg><span>browser<small>browser base runtime</small></span></div><div class="wp-legend-row" data-wp-legend="node"><svg width="26" height="16" viewBox="0 0 26 16" aria-hidden="true"><rect width="26" height="16" fill="#6fcf8a"/><rect x="0.5" y="0.5" width="25" height="15" fill="none" stroke="#3a3c46"/></svg><span>node<small>node base runtime</small></span></div><div class="wp-legend-row" data-wp-legend="react-native"><svg width="26" height="16" viewBox="0 0 26 16" aria-hidden="true"><rect width="26" height="16" fill="#34b8a6"/><rect x="0.5" y="0.5" width="25" height="15" fill="none" stroke="#3a3c46"/></svg><span>react-native<small>its own runtime, not a browser</small></span></div><div class="wp-legend-row" data-wp-legend="angular"><svg width="26" height="16" viewBox="0 0 26 16" aria-hidden="true"><rect width="26" height="16" fill="#7d8cf2"/><rect x="4" y="4" width="18" height="8" rx="2" fill="#c8243f"/><rect x="0.5" y="0.5" width="25" height="15" fill="none" stroke="#3a3c46"/></svg><span>angular<small>inside browser</small></span></div><div class="wp-legend-row" data-wp-legend="express"><svg width="26" height="16" viewBox="0 0 26 16" aria-hidden="true"><rect width="26" height="16" fill="#6fcf8a"/><rect x="4" y="4" width="18" height="8" rx="2" fill="#2e7d4f"/><rect x="0.5" y="0.5" width="25" height="15" fill="none" stroke="#3a3c46"/></svg><span>express<small>inside node</small></span></div><div class="wp-legend-row" data-wp-legend="multi"><svg width="26" height="16" viewBox="0 0 26 16" aria-hidden="true"><rect x="0.00" width="8.67" height="16" fill="#7d8cf2"/><rect x="8.67" width="8.67" height="16" fill="#6fcf8a"/><rect x="17.33" width="8.67" height="16" fill="#34b8a6"/><rect x="0.5" y="0.5" width="25" height="15" fill="none" stroke="#3a3c46"/></svg><span>several runtimes<small>one equal stripe per runtime</small></span></div></div><div class="wp-legend-list" data-wp-legend-mode="architecture" hidden><div class="wp-legend-row" data-wp-legend="server"><svg width="26" height="16" viewBox="0 0 26 16" aria-hidden="true"><rect width="26" height="16" fill="#4caf50"/><rect x="0.5" y="0.5" width="25" height="15" fill="none" stroke="#3a3c46"/></svg><span>server<small>runnable server</small></span></div><div class="wp-legend-row" data-wp-legend="client"><svg width="26" height="16" viewBox="0 0 26 16" aria-hidden="true"><rect width="26" height="16" fill="#e5533d"/><rect x="0.5" y="0.5" width="25" height="15" fill="none" stroke="#3a3c46"/></svg><span>client<small>browser or mobile client app</small></span></div><div class="wp-legend-row" data-wp-legend="app"><svg width="26" height="16" viewBox="0 0 26 16" aria-hidden="true"><rect width="26" height="16" fill="#1e88e5"/><rect x="0.5" y="0.5" width="25" height="15" fill="none" stroke="#3a3c46"/></svg><span>app<small>runnable non-HTTP app</small></span></div><div class="wp-legend-row" data-wp-legend="bundle"><svg width="26" height="16" viewBox="0 0 26 16" aria-hidden="true"><rect width="26" height="16" fill="#4b44c8"/><rect x="0.5" y="0.5" width="25" height="15" fill="none" stroke="#3a3c46"/></svg><span>bundle<small>bundles several apps</small></span></div><div class="wp-legend-row" data-wp-legend="api-lib"><svg width="26" height="16" viewBox="0 0 26 16" aria-hidden="true"><rect width="26" height="16" fill="#f08a24"/><rect x="0.5" y="0.5" width="25" height="15" fill="none" stroke="#3a3c46"/></svg><span>api-lib<small>contract + DTOs</small></span></div><div class="wp-legend-row" data-wp-legend="designed-lib"><svg width="26" height="16" viewBox="0 0 26 16" aria-hidden="true"><rect width="26" height="16" fill="#7d8597"/><rect x="0.5" y="0.5" width="25" height="15" fill="none" stroke="#3a3c46"/></svg><span>designed-lib<small>library with a generated design</small></span></div><div class="wp-legend-row" data-wp-legend="lib"><svg width="26" height="16" viewBox="0 0 26 16" aria-hidden="true"><rect width="26" height="16" fill="#d7dae2"/><rect x="0.5" y="0.5" width="25" height="15" fill="none" stroke="#3a3c46"/></svg><span>lib<small>plain library</small></span></div></div><div class="wp-legend-list" data-wp-legend-mode="impact" hidden><div class="wp-legend-row" data-wp-legend="touched"><svg width="26" height="16" viewBox="0 0 26 16" aria-hidden="true"><rect width="26" height="16" fill="#f5a524"/><rect x="0.5" y="0.5" width="25" height="15" fill="none" stroke="#3a3c46"/></svg><span>touched<small>files changed on this branch</small></span></div><div class="wp-legend-row" data-wp-legend="affected"><svg width="26" height="16" viewBox="0 0 26 16" aria-hidden="true"><rect width="26" height="16" fill="#fde3b0"/><rect x="2" y="2" width="22" height="12" fill="none" stroke="#f5a524" stroke-width="2"/><rect x="0.5" y="0.5" width="25" height="15" fill="none" stroke="#3a3c46"/></svg><span>affected<small>tests and build re-run</small></span></div><div class="wp-legend-row" data-wp-legend="build-input"><svg width="26" height="16" viewBox="0 0 26 16" aria-hidden="true"><rect width="26" height="16" fill="#e3e9f2"/><rect x="2" y="2" width="22" height="12" fill="none" stroke="#7c8aa3" stroke-width="2" stroke-dasharray="3 2"/><rect x="0.5" y="0.5" width="25" height="15" fill="none" stroke="#3a3c46"/></svg><span>build input<small>compiled or restored from cache, unchanged</small></span></div><div class="wp-legend-row" data-wp-legend="untouched"><svg width="26" height="16" viewBox="0 0 26 16" aria-hidden="true"><rect width="26" height="16" fill="#eef0f4"/><rect x="0.5" y="0.5" width="25" height="15" fill="none" stroke="#3a3c46"/></svg><span>untouched<small>not part of this build</small></span></div><p class="wp-impact-note" data-wp-impact-note></p></div>
+            <div class="wp-legend-list" data-wp-legend-mode="runtime"><div class="wp-legend-row" data-wp-legend="browser"><svg width="26" height="16" viewBox="0 0 26 16" aria-hidden="true"><rect width="26" height="16" fill="#7d8cf2"/><rect x="0.5" y="0.5" width="25" height="15" fill="none" stroke="#3a3c46"/></svg><span>browser<small>browser base runtime</small></span></div><div class="wp-legend-row" data-wp-legend="node"><svg width="26" height="16" viewBox="0 0 26 16" aria-hidden="true"><rect width="26" height="16" fill="#6fcf8a"/><rect x="0.5" y="0.5" width="25" height="15" fill="none" stroke="#3a3c46"/></svg><span>node<small>node base runtime</small></span></div><div class="wp-legend-row" data-wp-legend="react-native"><svg width="26" height="16" viewBox="0 0 26 16" aria-hidden="true"><rect width="26" height="16" fill="#34b8a6"/><rect x="0.5" y="0.5" width="25" height="15" fill="none" stroke="#3a3c46"/></svg><span>react-native<small>its own runtime, not a browser</small></span></div><div class="wp-legend-row" data-wp-legend="angular"><svg width="26" height="16" viewBox="0 0 26 16" aria-hidden="true"><rect width="26" height="16" fill="#7d8cf2"/><rect x="4" y="4" width="18" height="8" rx="2" fill="#c8243f"/><rect x="0.5" y="0.5" width="25" height="15" fill="none" stroke="#3a3c46"/></svg><span>angular<small>inside browser</small></span></div><div class="wp-legend-row" data-wp-legend="express"><svg width="26" height="16" viewBox="0 0 26 16" aria-hidden="true"><rect width="26" height="16" fill="#6fcf8a"/><rect x="4" y="4" width="18" height="8" rx="2" fill="#2e7d4f"/><rect x="0.5" y="0.5" width="25" height="15" fill="none" stroke="#3a3c46"/></svg><span>express<small>inside node</small></span></div><div class="wp-legend-row" data-wp-legend="multi"><svg width="26" height="16" viewBox="0 0 26 16" aria-hidden="true"><rect x="0.00" width="8.67" height="16" fill="#7d8cf2"/><rect x="8.67" width="8.67" height="16" fill="#6fcf8a"/><rect x="17.33" width="8.67" height="16" fill="#34b8a6"/><rect x="0.5" y="0.5" width="25" height="15" fill="none" stroke="#3a3c46"/></svg><span>several runtimes<small>one equal stripe per runtime</small></span></div></div><div class="wp-legend-list" data-wp-legend-mode="architecture" hidden><div class="wp-legend-row" data-wp-legend="server"><svg width="26" height="16" viewBox="0 0 26 16" aria-hidden="true"><rect width="26" height="16" fill="#4caf50"/><rect x="0.5" y="0.5" width="25" height="15" fill="none" stroke="#3a3c46"/></svg><span>server<small>runnable server</small></span></div><div class="wp-legend-row" data-wp-legend="client"><svg width="26" height="16" viewBox="0 0 26 16" aria-hidden="true"><rect width="26" height="16" fill="#e5533d"/><rect x="0.5" y="0.5" width="25" height="15" fill="none" stroke="#3a3c46"/></svg><span>client<small>browser or mobile client app</small></span></div><div class="wp-legend-row" data-wp-legend="app"><svg width="26" height="16" viewBox="0 0 26 16" aria-hidden="true"><rect width="26" height="16" fill="#1e88e5"/><rect x="0.5" y="0.5" width="25" height="15" fill="none" stroke="#3a3c46"/></svg><span>app<small>runnable non-HTTP app</small></span></div><div class="wp-legend-row" data-wp-legend="bundle"><svg width="26" height="16" viewBox="0 0 26 16" aria-hidden="true"><rect width="26" height="16" fill="#4b44c8"/><rect x="0.5" y="0.5" width="25" height="15" fill="none" stroke="#3a3c46"/></svg><span>bundle<small>bundles several apps</small></span></div><div class="wp-legend-row" data-wp-legend="api-lib"><svg width="26" height="16" viewBox="0 0 26 16" aria-hidden="true"><rect width="26" height="16" fill="#f08a24"/><rect x="0.5" y="0.5" width="25" height="15" fill="none" stroke="#3a3c46"/></svg><span>api-lib<small>contract + DTOs</small></span></div><div class="wp-legend-row" data-wp-legend="designed-lib"><svg width="26" height="16" viewBox="0 0 26 16" aria-hidden="true"><rect width="26" height="16" fill="#7d8597"/><rect x="0.5" y="0.5" width="25" height="15" fill="none" stroke="#3a3c46"/></svg><span>designed-lib<small>library with a generated design</small></span></div><div class="wp-legend-row" data-wp-legend="lib"><svg width="26" height="16" viewBox="0 0 26 16" aria-hidden="true"><rect width="26" height="16" fill="#d7dae2"/><rect x="0.5" y="0.5" width="25" height="15" fill="none" stroke="#3a3c46"/></svg><span>lib<small>plain library</small></span></div></div><div class="wp-legend-list" data-wp-legend-mode="impact" hidden><div class="wp-legend-row" data-wp-legend="touched"><svg width="26" height="16" viewBox="0 0 26 16" aria-hidden="true"><rect width="26" height="16" fill="#f5a524"/><rect x="0.5" y="0.5" width="25" height="15" fill="none" stroke="#3a3c46"/></svg><span>touched<small>its files changed</small></span></div><div class="wp-legend-row" data-wp-legend="affected"><svg width="26" height="16" viewBox="0 0 26 16" aria-hidden="true"><rect width="26" height="16" fill="#fde3b0"/><rect x="2" y="2" width="22" height="12" fill="none" stroke="#f5a524" stroke-width="2"/><rect x="0.5" y="0.5" width="25" height="15" fill="none" stroke="#3a3c46"/></svg><span>affected<small>tests and build re-run</small></span></div><div class="wp-legend-row" data-wp-legend="build-input"><svg width="26" height="16" viewBox="0 0 26 16" aria-hidden="true"><rect width="26" height="16" fill="#e3e9f2"/><rect x="2" y="2" width="22" height="12" fill="none" stroke="#7c8aa3" stroke-width="2" stroke-dasharray="3 2"/><rect x="0.5" y="0.5" width="25" height="15" fill="none" stroke="#3a3c46"/></svg><span>build input<small>compiled or restored from cache, unchanged</small></span></div><div class="wp-legend-row" data-wp-legend="untouched"><svg width="26" height="16" viewBox="0 0 26 16" aria-hidden="true"><rect width="26" height="16" fill="#eef0f4"/><rect x="0.5" y="0.5" width="25" height="15" fill="none" stroke="#3a3c46"/></svg><span>untouched<small>not part of this build</small></span></div><p class="wp-impact-note" data-wp-impact-note></p></div>
         </div>
         <div class="wp-group">
             <div class="wp-label">Edges</div>
@@ -273,20 +277,20 @@
         <div id="graph"></div>
         <div class="wp-pop wp-legend-popout" id="wp-legend-popout" hidden>
             <header><span id="wp-legend-pop-title">Legend · Runtime</span><button type="button" class="wp-icon wp-icon-mini" id="wp-legend-close" aria-label="Close the legend">✕</button></header>
-            <div class="wp-legend-list" data-wp-legend-mode="runtime"><div class="wp-legend-row" data-wp-legend="browser"><svg width="26" height="16" viewBox="0 0 26 16" aria-hidden="true"><rect width="26" height="16" fill="#7d8cf2"/><rect x="0.5" y="0.5" width="25" height="15" fill="none" stroke="#3a3c46"/></svg><span>browser<small>browser base runtime</small></span></div><div class="wp-legend-row" data-wp-legend="node"><svg width="26" height="16" viewBox="0 0 26 16" aria-hidden="true"><rect width="26" height="16" fill="#6fcf8a"/><rect x="0.5" y="0.5" width="25" height="15" fill="none" stroke="#3a3c46"/></svg><span>node<small>node base runtime</small></span></div><div class="wp-legend-row" data-wp-legend="react-native"><svg width="26" height="16" viewBox="0 0 26 16" aria-hidden="true"><rect width="26" height="16" fill="#34b8a6"/><rect x="0.5" y="0.5" width="25" height="15" fill="none" stroke="#3a3c46"/></svg><span>react-native<small>its own runtime, not a browser</small></span></div><div class="wp-legend-row" data-wp-legend="angular"><svg width="26" height="16" viewBox="0 0 26 16" aria-hidden="true"><rect width="26" height="16" fill="#7d8cf2"/><rect x="4" y="4" width="18" height="8" rx="2" fill="#c8243f"/><rect x="0.5" y="0.5" width="25" height="15" fill="none" stroke="#3a3c46"/></svg><span>angular<small>inside browser</small></span></div><div class="wp-legend-row" data-wp-legend="express"><svg width="26" height="16" viewBox="0 0 26 16" aria-hidden="true"><rect width="26" height="16" fill="#6fcf8a"/><rect x="4" y="4" width="18" height="8" rx="2" fill="#2e7d4f"/><rect x="0.5" y="0.5" width="25" height="15" fill="none" stroke="#3a3c46"/></svg><span>express<small>inside node</small></span></div><div class="wp-legend-row" data-wp-legend="multi"><svg width="26" height="16" viewBox="0 0 26 16" aria-hidden="true"><rect x="0.00" width="8.67" height="16" fill="#7d8cf2"/><rect x="8.67" width="8.67" height="16" fill="#6fcf8a"/><rect x="17.33" width="8.67" height="16" fill="#34b8a6"/><rect x="0.5" y="0.5" width="25" height="15" fill="none" stroke="#3a3c46"/></svg><span>several runtimes<small>one equal stripe per runtime</small></span></div></div><div class="wp-legend-list" data-wp-legend-mode="architecture" hidden><div class="wp-legend-row" data-wp-legend="server"><svg width="26" height="16" viewBox="0 0 26 16" aria-hidden="true"><rect width="26" height="16" fill="#4caf50"/><rect x="0.5" y="0.5" width="25" height="15" fill="none" stroke="#3a3c46"/></svg><span>server<small>runnable server</small></span></div><div class="wp-legend-row" data-wp-legend="client"><svg width="26" height="16" viewBox="0 0 26 16" aria-hidden="true"><rect width="26" height="16" fill="#e5533d"/><rect x="0.5" y="0.5" width="25" height="15" fill="none" stroke="#3a3c46"/></svg><span>client<small>browser or mobile client app</small></span></div><div class="wp-legend-row" data-wp-legend="app"><svg width="26" height="16" viewBox="0 0 26 16" aria-hidden="true"><rect width="26" height="16" fill="#1e88e5"/><rect x="0.5" y="0.5" width="25" height="15" fill="none" stroke="#3a3c46"/></svg><span>app<small>runnable non-HTTP app</small></span></div><div class="wp-legend-row" data-wp-legend="bundle"><svg width="26" height="16" viewBox="0 0 26 16" aria-hidden="true"><rect width="26" height="16" fill="#4b44c8"/><rect x="0.5" y="0.5" width="25" height="15" fill="none" stroke="#3a3c46"/></svg><span>bundle<small>bundles several apps</small></span></div><div class="wp-legend-row" data-wp-legend="api-lib"><svg width="26" height="16" viewBox="0 0 26 16" aria-hidden="true"><rect width="26" height="16" fill="#f08a24"/><rect x="0.5" y="0.5" width="25" height="15" fill="none" stroke="#3a3c46"/></svg><span>api-lib<small>contract + DTOs</small></span></div><div class="wp-legend-row" data-wp-legend="designed-lib"><svg width="26" height="16" viewBox="0 0 26 16" aria-hidden="true"><rect width="26" height="16" fill="#7d8597"/><rect x="0.5" y="0.5" width="25" height="15" fill="none" stroke="#3a3c46"/></svg><span>designed-lib<small>library with a generated design</small></span></div><div class="wp-legend-row" data-wp-legend="lib"><svg width="26" height="16" viewBox="0 0 26 16" aria-hidden="true"><rect width="26" height="16" fill="#d7dae2"/><rect x="0.5" y="0.5" width="25" height="15" fill="none" stroke="#3a3c46"/></svg><span>lib<small>plain library</small></span></div></div><div class="wp-legend-list" data-wp-legend-mode="impact" hidden><div class="wp-legend-row" data-wp-legend="touched"><svg width="26" height="16" viewBox="0 0 26 16" aria-hidden="true"><rect width="26" height="16" fill="#f5a524"/><rect x="0.5" y="0.5" width="25" height="15" fill="none" stroke="#3a3c46"/></svg><span>touched<small>files changed on this branch</small></span></div><div class="wp-legend-row" data-wp-legend="affected"><svg width="26" height="16" viewBox="0 0 26 16" aria-hidden="true"><rect width="26" height="16" fill="#fde3b0"/><rect x="2" y="2" width="22" height="12" fill="none" stroke="#f5a524" stroke-width="2"/><rect x="0.5" y="0.5" width="25" height="15" fill="none" stroke="#3a3c46"/></svg><span>affected<small>tests and build re-run</small></span></div><div class="wp-legend-row" data-wp-legend="build-input"><svg width="26" height="16" viewBox="0 0 26 16" aria-hidden="true"><rect width="26" height="16" fill="#e3e9f2"/><rect x="2" y="2" width="22" height="12" fill="none" stroke="#7c8aa3" stroke-width="2" stroke-dasharray="3 2"/><rect x="0.5" y="0.5" width="25" height="15" fill="none" stroke="#3a3c46"/></svg><span>build input<small>compiled or restored from cache, unchanged</small></span></div><div class="wp-legend-row" data-wp-legend="untouched"><svg width="26" height="16" viewBox="0 0 26 16" aria-hidden="true"><rect width="26" height="16" fill="#eef0f4"/><rect x="0.5" y="0.5" width="25" height="15" fill="none" stroke="#3a3c46"/></svg><span>untouched<small>not part of this build</small></span></div><p class="wp-impact-note" data-wp-impact-note></p></div>
+            <div class="wp-legend-list" data-wp-legend-mode="runtime"><div class="wp-legend-row" data-wp-legend="browser"><svg width="26" height="16" viewBox="0 0 26 16" aria-hidden="true"><rect width="26" height="16" fill="#7d8cf2"/><rect x="0.5" y="0.5" width="25" height="15" fill="none" stroke="#3a3c46"/></svg><span>browser<small>browser base runtime</small></span></div><div class="wp-legend-row" data-wp-legend="node"><svg width="26" height="16" viewBox="0 0 26 16" aria-hidden="true"><rect width="26" height="16" fill="#6fcf8a"/><rect x="0.5" y="0.5" width="25" height="15" fill="none" stroke="#3a3c46"/></svg><span>node<small>node base runtime</small></span></div><div class="wp-legend-row" data-wp-legend="react-native"><svg width="26" height="16" viewBox="0 0 26 16" aria-hidden="true"><rect width="26" height="16" fill="#34b8a6"/><rect x="0.5" y="0.5" width="25" height="15" fill="none" stroke="#3a3c46"/></svg><span>react-native<small>its own runtime, not a browser</small></span></div><div class="wp-legend-row" data-wp-legend="angular"><svg width="26" height="16" viewBox="0 0 26 16" aria-hidden="true"><rect width="26" height="16" fill="#7d8cf2"/><rect x="4" y="4" width="18" height="8" rx="2" fill="#c8243f"/><rect x="0.5" y="0.5" width="25" height="15" fill="none" stroke="#3a3c46"/></svg><span>angular<small>inside browser</small></span></div><div class="wp-legend-row" data-wp-legend="express"><svg width="26" height="16" viewBox="0 0 26 16" aria-hidden="true"><rect width="26" height="16" fill="#6fcf8a"/><rect x="4" y="4" width="18" height="8" rx="2" fill="#2e7d4f"/><rect x="0.5" y="0.5" width="25" height="15" fill="none" stroke="#3a3c46"/></svg><span>express<small>inside node</small></span></div><div class="wp-legend-row" data-wp-legend="multi"><svg width="26" height="16" viewBox="0 0 26 16" aria-hidden="true"><rect x="0.00" width="8.67" height="16" fill="#7d8cf2"/><rect x="8.67" width="8.67" height="16" fill="#6fcf8a"/><rect x="17.33" width="8.67" height="16" fill="#34b8a6"/><rect x="0.5" y="0.5" width="25" height="15" fill="none" stroke="#3a3c46"/></svg><span>several runtimes<small>one equal stripe per runtime</small></span></div></div><div class="wp-legend-list" data-wp-legend-mode="architecture" hidden><div class="wp-legend-row" data-wp-legend="server"><svg width="26" height="16" viewBox="0 0 26 16" aria-hidden="true"><rect width="26" height="16" fill="#4caf50"/><rect x="0.5" y="0.5" width="25" height="15" fill="none" stroke="#3a3c46"/></svg><span>server<small>runnable server</small></span></div><div class="wp-legend-row" data-wp-legend="client"><svg width="26" height="16" viewBox="0 0 26 16" aria-hidden="true"><rect width="26" height="16" fill="#e5533d"/><rect x="0.5" y="0.5" width="25" height="15" fill="none" stroke="#3a3c46"/></svg><span>client<small>browser or mobile client app</small></span></div><div class="wp-legend-row" data-wp-legend="app"><svg width="26" height="16" viewBox="0 0 26 16" aria-hidden="true"><rect width="26" height="16" fill="#1e88e5"/><rect x="0.5" y="0.5" width="25" height="15" fill="none" stroke="#3a3c46"/></svg><span>app<small>runnable non-HTTP app</small></span></div><div class="wp-legend-row" data-wp-legend="bundle"><svg width="26" height="16" viewBox="0 0 26 16" aria-hidden="true"><rect width="26" height="16" fill="#4b44c8"/><rect x="0.5" y="0.5" width="25" height="15" fill="none" stroke="#3a3c46"/></svg><span>bundle<small>bundles several apps</small></span></div><div class="wp-legend-row" data-wp-legend="api-lib"><svg width="26" height="16" viewBox="0 0 26 16" aria-hidden="true"><rect width="26" height="16" fill="#f08a24"/><rect x="0.5" y="0.5" width="25" height="15" fill="none" stroke="#3a3c46"/></svg><span>api-lib<small>contract + DTOs</small></span></div><div class="wp-legend-row" data-wp-legend="designed-lib"><svg width="26" height="16" viewBox="0 0 26 16" aria-hidden="true"><rect width="26" height="16" fill="#7d8597"/><rect x="0.5" y="0.5" width="25" height="15" fill="none" stroke="#3a3c46"/></svg><span>designed-lib<small>library with a generated design</small></span></div><div class="wp-legend-row" data-wp-legend="lib"><svg width="26" height="16" viewBox="0 0 26 16" aria-hidden="true"><rect width="26" height="16" fill="#d7dae2"/><rect x="0.5" y="0.5" width="25" height="15" fill="none" stroke="#3a3c46"/></svg><span>lib<small>plain library</small></span></div></div><div class="wp-legend-list" data-wp-legend-mode="impact" hidden><div class="wp-legend-row" data-wp-legend="touched"><svg width="26" height="16" viewBox="0 0 26 16" aria-hidden="true"><rect width="26" height="16" fill="#f5a524"/><rect x="0.5" y="0.5" width="25" height="15" fill="none" stroke="#3a3c46"/></svg><span>touched<small>its files changed</small></span></div><div class="wp-legend-row" data-wp-legend="affected"><svg width="26" height="16" viewBox="0 0 26 16" aria-hidden="true"><rect width="26" height="16" fill="#fde3b0"/><rect x="2" y="2" width="22" height="12" fill="none" stroke="#f5a524" stroke-width="2"/><rect x="0.5" y="0.5" width="25" height="15" fill="none" stroke="#3a3c46"/></svg><span>affected<small>tests and build re-run</small></span></div><div class="wp-legend-row" data-wp-legend="build-input"><svg width="26" height="16" viewBox="0 0 26 16" aria-hidden="true"><rect width="26" height="16" fill="#e3e9f2"/><rect x="2" y="2" width="22" height="12" fill="none" stroke="#7c8aa3" stroke-width="2" stroke-dasharray="3 2"/><rect x="0.5" y="0.5" width="25" height="15" fill="none" stroke="#3a3c46"/></svg><span>build input<small>compiled or restored from cache, unchanged</small></span></div><div class="wp-legend-row" data-wp-legend="untouched"><svg width="26" height="16" viewBox="0 0 26 16" aria-hidden="true"><rect width="26" height="16" fill="#eef0f4"/><rect x="0.5" y="0.5" width="25" height="15" fill="none" stroke="#3a3c46"/></svg><span>untouched<small>not part of this build</small></span></div><p class="wp-impact-note" data-wp-impact-note></p></div>
         </div>
         <div class="wp-pop wp-help" id="wp-help" role="dialog" aria-label="How to read this graph" hidden>
             <header><span>Reading the graph</span><button type="button" class="wp-icon wp-icon-mini" id="wp-help-close" aria-label="Close help">✕</button></header>
             <p>Every row is one dependency level: the HIGHEST level is the top row and L0, the foundation libraries, is always the bottom row. Transitive dependencies are allowed but not drawn.</p>
             <p>💡 <strong>Click any box</strong> for its menu: <strong>View Design</strong> (only where the project has a generated <strong>design.html</strong>, i.e. what the AI sees inside it), <strong>Lock/Unlock</strong> (the same lock as the Focus field), <strong>Filter Unconnected</strong> (removes unrelated boxes, keeping each L-number row).</p>
-            <p><strong>Filter</strong> narrows the graph by what this branch changed, by runtime and by role; the three groups combine. Every box keeps its own L-row, and a level left empty shows as a thin labeled band.</p>
+            <p><strong>Filter</strong> narrows the graph by what changed on this branch or in the last commit, by runtime and by role; the three groups combine. Every box keeps its own L-row, and a level left empty shows as a thin labeled band.</p>
             <p>🔦 <strong>Hover any box</strong> to trace its <em>entire</em> dependency chain — every ancestor above it and every dependency below it, with the lines between — while the rest of the graph dims.</p>
-            <p><strong>Runtime</strong>: a box may depend on a box carrying every color it has. <strong>Architecture</strong>: what each box is in the system. <strong>Impact</strong>: what this branch changed (amber) and what depends on it (amber outline).</p>
+            <p><strong>Runtime</strong>: a box may depend on a box carrying every color it has. <strong>Architecture</strong>: what each box is in the system. <strong>Impact</strong>: what changed on this branch or in the last commit (amber) and what depends on it (amber outline); with both available, a toggle picks which.</p>
             <p><kbd>/</kbd> focus the lock search · <kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd> switch mode · <kbd>Esc</kbd> unlock</p>
         </div>
         <div class="wp-pop wp-filter-pop" id="wp-filter-pop" role="dialog" aria-label="Filter projects" hidden>
             <header><span>Filter</span><button type="button" class="wp-icon wp-icon-mini" id="wp-filter-close" aria-label="Close the filter">✕</button></header>
-            <fieldset class="wp-fgroup" id="wp-scope-group"><legend>Changes on this branch</legend><label class="wp-scope"><input type="radio" name="wp-scope" value="everything" checked><span class="wp-scope-name">Everything</span><span class="wp-count" data-wp-scope-count="everything"></span></label><label class="wp-scope"><input type="radio" name="wp-scope" value="changed"><span class="wp-scope-name">Changed</span><span class="wp-count" data-wp-scope-count="changed"></span></label><label class="wp-scope"><input type="radio" name="wp-scope" value="dependents"><span class="wp-scope-name">Changed + what uses them</span><span class="wp-count" data-wp-scope-count="dependents"></span></label><label class="wp-scope"><input type="radio" name="wp-scope" value="dependencies"><span class="wp-scope-name">Changed + what they use</span><span class="wp-count" data-wp-scope-count="dependencies"></span></label><label class="wp-scope"><input type="radio" name="wp-scope" value="build"><span class="wp-scope-name">Whole build of this branch</span><span class="wp-count" data-wp-scope-count="build"></span></label><p class="wp-scope-reason" id="wp-scope-reason" hidden></p></fieldset>
+            <fieldset class="wp-fgroup" id="wp-scope-group"><legend id="wp-scope-legend">Changes on this branch</legend><div class="wp-chips wp-impact-kinds" data-wp-impact-kinds="filter" role="group" aria-label="Compare" hidden><button type="button" class="wp-chip" data-wp-impact-kind="branch" aria-pressed="false">Changed on this branch</button><button type="button" class="wp-chip" data-wp-impact-kind="commit" aria-pressed="false">Last commit</button></div><label class="wp-scope"><input type="radio" name="wp-scope" value="everything" checked><span class="wp-scope-name">Everything</span><span class="wp-count" data-wp-scope-count="everything"></span></label><label class="wp-scope"><input type="radio" name="wp-scope" value="changed"><span class="wp-scope-name">Changed</span><span class="wp-count" data-wp-scope-count="changed"></span></label><label class="wp-scope"><input type="radio" name="wp-scope" value="dependents"><span class="wp-scope-name">Changed + what uses them</span><span class="wp-count" data-wp-scope-count="dependents"></span></label><label class="wp-scope"><input type="radio" name="wp-scope" value="dependencies"><span class="wp-scope-name">Changed + what they use</span><span class="wp-count" data-wp-scope-count="dependencies"></span></label><label class="wp-scope"><input type="radio" name="wp-scope" value="build"><span class="wp-scope-name">Whole build of this branch</span><span class="wp-count" data-wp-scope-count="build"></span></label><p class="wp-scope-reason" id="wp-scope-reason" hidden></p></fieldset>
             <fieldset class="wp-fgroup"><legend>Runtime <small>any match</small></legend><div class="wp-chips"><button type="button" class="wp-chip" data-wp-chip-group="runtime" data-wp-chip="browser" aria-pressed="false">browser</button><button type="button" class="wp-chip" data-wp-chip-group="runtime" data-wp-chip="node" aria-pressed="false">node</button><button type="button" class="wp-chip" data-wp-chip-group="runtime" data-wp-chip="react-native" aria-pressed="false">react-native</button><button type="button" class="wp-chip" data-wp-chip-group="runtime" data-wp-chip="angular" aria-pressed="false">angular</button><button type="button" class="wp-chip" data-wp-chip-group="runtime" data-wp-chip="react" aria-pressed="false">react</button><button type="button" class="wp-chip" data-wp-chip-group="runtime" data-wp-chip="express" aria-pressed="false">express</button></div></fieldset>
             <fieldset class="wp-fgroup"><legend>Role <small>any match</small></legend><div class="wp-chips"><button type="button" class="wp-chip" data-wp-chip-group="role" data-wp-chip="server" aria-pressed="false">server</button><button type="button" class="wp-chip" data-wp-chip-group="role" data-wp-chip="client" aria-pressed="false">client</button><button type="button" class="wp-chip" data-wp-chip-group="role" data-wp-chip="app" aria-pressed="false">app</button><button type="button" class="wp-chip" data-wp-chip-group="role" data-wp-chip="bundle" aria-pressed="false">bundle</button><button type="button" class="wp-chip" data-wp-chip-group="role" data-wp-chip="api-lib" aria-pressed="false">api-lib</button><button type="button" class="wp-chip" data-wp-chip-group="role" data-wp-chip="api-client" aria-pressed="false">api-client</button><button type="button" class="wp-chip" data-wp-chip-group="role" data-wp-chip="designed-lib" aria-pressed="false">designed-lib</button><button type="button" class="wp-chip" data-wp-chip-group="role" data-wp-chip="lib" aria-pressed="false">lib</button></div></fieldset>
             <footer><button type="button" class="wp-text-btn" id="wp-filter-clear">Clear all</button><button type="button" class="wp-primary" id="wp-filter-apply">Show all projects</button></footer>
@@ -1857,22 +1861,63 @@ class WpFilterPage {
  * one) and remembered per viewer in localStorage. Storage can be missing or throw (a private window,
  * blocked site data, a file:// page in some browsers), so every access is wrapped and the page works
  * without it.
+ *
+ * Impact can carry two scans (#1163): "Changed on this branch" (kind `branch`) and "Last commit"
+ * (kind `commit`). The ACTIVE one starts as the sidecar's `defaultKind` (or the viewer's remembered
+ * choice, when that scan exists and is available) and is what every Impact color, note and Filter
+ * set reads.
  */
 class WpModeState {
     static MODES = ['runtime', 'architecture', 'impact'];
     static NAMES = ['Runtime', 'Architecture', 'Impact'];
-    static SUBTITLES = ['where the code can run', 'servers · clients · APIs', 'what this branch touches'];
+    static SUBTITLES = ['where the code can run', 'servers · clients · APIs', 'what changed'];
     static STORAGE_KEY = 'wp-architecture-graph-mode';
-    impact = window.__WP_IMPACT__ ?? null;
+    static KIND_STORAGE_KEY = 'wp-architecture-graph-impact-kind';
+    scans = window.__WP_IMPACT__?.scans ?? [];
+    kind = '';
     mode = 'runtime';
     constructor() {
+        this.kind = this.initialKind();
         this.mode = this.initial();
+    }
+    /** The active scan; null when the page has no Impact data. */
+    get impact() {
+        return this.scans.find((scan) => scan.kind === this.kind) ?? null;
     }
     /** '' when Impact can be shown, else the one line the drawer and the Filter popover say instead. */
     impactReason() {
-        if (this.impact === null)
-            return 'No impact data for this branch. Run pnpm arch:visualize (nx run architecture:visualize) to compute it — no full regenerate needed.';
-        return this.impact.available ? '' : `Impact unavailable: ${this.impact.reason}.`;
+        const impact = this.impact;
+        if (impact === null)
+            return 'No impact data here. Run pnpm arch:visualize (nx run architecture:visualize) to compute it — no full regenerate needed.';
+        return impact.available ? '' : `Impact unavailable (${impact.label}): ${impact.reason}.`;
+    }
+    /** Switch the active scan; false (and nothing changes) for a missing or unavailable one. */
+    setKind(kind) {
+        if (!this.kindAvailable(kind))
+            return false;
+        this.kind = kind;
+        // eslint-disable-next-line @webpieces/no-unmanaged-exceptions -- storage is a per-viewer convenience; a blocked store must not break the page
+        try {
+            localStorage.setItem(WpModeState.KIND_STORAGE_KEY, kind);
+            // webpieces-disable no-any-unknown -- browsers may throw any value from blocked storage
+        }
+        catch (err) {
+            //const error = toError(err);
+            void err;
+        }
+        return true;
+    }
+    kindAvailable(kind) {
+        return this.scans.some((scan) => scan.kind === kind && scan.available);
+    }
+    initialKind() {
+        const stored = this.read(WpModeState.KIND_STORAGE_KEY);
+        if (stored !== null && this.kindAvailable(stored))
+            return stored;
+        const preferred = window.__WP_IMPACT__?.defaultKind ?? '';
+        if (this.scans.some((scan) => scan.kind === preferred))
+            return preferred;
+        return this.scans[0]?.kind ?? '';
     }
     available(mode) {
         return WpModeState.MODES.includes(mode) && (mode !== 'impact' || this.impactReason() === '');
@@ -1901,13 +1946,14 @@ class WpModeState {
         }
         return true;
     }
-    /** Which impact shade a box gets. */
+    /** Which impact shade a box gets, from the ACTIVE scan. */
     status(id) {
-        if (this.impact?.touched.includes(id))
+        const impact = this.impact;
+        if (impact?.touched.includes(id))
             return 'touched';
-        if (this.impact?.affected.includes(id))
+        if (impact?.affected.includes(id))
             return 'affected';
-        if (this.impact?.buildInputs.includes(id))
+        if (impact?.buildInputs.includes(id))
             return 'buildInput';
         return 'untouched';
     }
@@ -1915,15 +1961,15 @@ class WpModeState {
         const hashed = location.hash.slice(1);
         if (this.available(hashed))
             return hashed;
-        const stored = this.stored();
+        const stored = this.read(WpModeState.STORAGE_KEY);
         if (stored !== null && this.available(stored))
             return stored;
         return 'runtime';
     }
-    stored() {
+    read(key) {
         // eslint-disable-next-line @webpieces/no-unmanaged-exceptions -- storage is a per-viewer convenience; a blocked store reads as "nothing stored"
         try {
-            return localStorage.getItem(WpModeState.STORAGE_KEY);
+            return localStorage.getItem(key);
             // webpieces-disable no-any-unknown -- browsers may throw any value from blocked storage
         }
         catch (err) {
@@ -2150,6 +2196,11 @@ class GraphFilterPopover {
     isOpen() {
         return this.byId('wp-filter-pop')?.hidden === false;
     }
+    /** The active Impact scan changed: an open popover's counts and labels follow it. */
+    refresh() {
+        if (this.isOpen())
+            this.paint();
+    }
     open() {
         const pop = this.byId('wp-filter-pop');
         if (pop === null)
@@ -2211,6 +2262,7 @@ class GraphDrawer {
     wire() {
         this.wireModeMenu();
         this.popover.wire();
+        this.wireImpactKinds();
         this.wireLock();
         this.byId('wp-filter-toggle')?.addEventListener('click', () => this.page.toggleFilter());
         this.toggles('wp-collapse', 'wp-shell', true);
@@ -2252,6 +2304,33 @@ class GraphDrawer {
                 this.page.setMode(button.dataset['wpMode'] ?? 'runtime');
             });
         });
+    }
+    /** The "Changed on this branch" / "Last commit" toggle, in the drawer and in the Filter popover. */
+    wireImpactKinds() {
+        document.querySelectorAll('[data-wp-impact-kind]').forEach((button) => {
+            button.addEventListener('click', (ev) => {
+                ev.stopPropagation();
+                this.page.setImpactKind(button.dataset['wpImpactKind'] ?? '');
+                this.popover.refresh();
+            });
+        });
+    }
+    /** Shown only when two scans exist; the drawer's copy only while Impact colors the graph. */
+    syncImpactKinds(modes) {
+        document.querySelectorAll('[data-wp-impact-kinds]').forEach((group) => {
+            const inDrawer = group.dataset['wpImpactKinds'] === 'drawer';
+            group.hidden = modes.scans.length < 2 || (inDrawer && modes.mode !== 'impact');
+        });
+        document.querySelectorAll('[data-wp-impact-kind]').forEach((button) => {
+            const kind = button.dataset['wpImpactKind'] ?? '';
+            button.setAttribute('aria-pressed', String(kind === modes.kind));
+            button.disabled = !modes.kindAvailable(kind);
+            const scan = modes.scans.find((candidate) => candidate.kind === kind);
+            button.title = scan === undefined ? '' : scan.available ? scan.label : scan.reason;
+        });
+        const legend = this.byId('wp-scope-legend');
+        if (legend !== null)
+            legend.textContent = modes.impact?.label ?? 'Changes on this branch';
     }
     closeModeMenu(returnFocus) {
         const menu = this.byId('wp-mode-menu');
@@ -2366,6 +2445,7 @@ class GraphDrawer {
         document.querySelectorAll('[data-wp-impact-note]').forEach((note) => {
             note.textContent = this.impactNote(modes);
         });
+        this.syncImpactKinds(modes);
         const title = this.byId('wp-legend-pop-title');
         if (title !== null)
             title.textContent = `Legend · ${modes.name(modes.mode)}`;
@@ -2424,9 +2504,11 @@ class GraphDrawer {
         const impact = modes.impact;
         if (impact === null || !impact.available)
             return '';
-        const stats = `${impact.touched.length} touched · ${impact.affected.length} affected · ` +
-            `${impact.buildInputs.length} build inputs — nx affected since fork point ${impact.base}, ` +
-            `${impact.changedFiles} changed files.`;
+        // An available scan with a note is an EMPTY one, e.g. "Nothing changed on this branch yet".
+        if (impact.reason !== '')
+            return `${impact.label}: ${impact.reason}.`;
+        const stats = `${impact.label}: ${impact.touched.length} touched · ${impact.affected.length} affected · ` +
+            `${impact.buildInputs.length} build inputs — nx affected, ${impact.changedFiles} changed files.`;
         const cause = this.globalCause(impact);
         return cause === '' ? stats : `${cause}. ${stats}`;
     }
@@ -2547,6 +2629,13 @@ class GraphPage extends WpFilterPage {
     }
     setMode(mode) {
         if (mode === this.modes.mode || !this.modes.set(mode))
+            return;
+        this.syncControls();
+        this.redraw();
+    }
+    /** Switch the active Impact scan: Impact recolours and an active change-scope filter re-applies. */
+    setImpactKind(kind) {
+        if (kind === this.modes.kind || !this.modes.setKind(kind))
             return;
         this.syncControls();
         this.redraw();
