@@ -22,6 +22,7 @@ export {
     WEBPIECES_DEFAULT_IPC_ERROR_TRANSLATOR,
 } from './WebpiecesDefaultIpcErrorTranslator';
 export { ApiErrorPayload } from '../errors/ApiErrorCodec';
+export { ClientRole } from '../errors/ClientRole';
 export type { IpcTransport, IpcScheduler, IpcErrorOwner } from './IpcConnection';
 export { IpcCallLogger } from './IpcLogging';
 export type { IpcLogging } from './IpcLogging';

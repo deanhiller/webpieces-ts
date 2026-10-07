@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import {
+    ClientRole,
     ApiDependencyError,
     ApiEndUserError,
     ApiErrorPayload,
@@ -38,9 +39,9 @@ class AiErrorTranslator implements ErrorTranslator {
         return new HttpResponseDto(new HttpResponseStatus(460, 'AI Bad Request'), [], pe);
     }
 
-    fromWire(response: HttpResponseDto): void {
+    fromWire(response: HttpResponseDto, role: ClientRole): void {
         if (response.status.code !== 460) {
-            this.fallback.fromWire(response); // not mine -> the webpieces default answers
+            this.fallback.fromWire(response, role); // not mine -> the webpieces default answers
             return;
         }
         throw new AiBadRequestError((response.body as ApiErrorPayload).message ?? 'AI bad request');
@@ -90,20 +91,23 @@ describe('ClientErrorTranslator', () => {
     });
 
     it('with nothing registered, applies the webpieces default: 4xx is MY bug', () => {
-        expect(() => ClientErrorTranslator.throwIfFailure(fakeResponse(404))).toThrow(
-            ApiImplementationError,
-        );
+        expect(() =>
+            ClientErrorTranslator.throwIfFailure(fakeResponse(404), ClientRole.SERVER),
+        ).toThrow(ApiImplementationError);
     });
 
     it('with nothing registered, 5xx is the PEER bug, not ours', () => {
-        expect(() => ClientErrorTranslator.throwIfFailure(fakeResponse(503))).toThrow(
-            ApiDependencyError,
-        );
+        expect(() =>
+            ClientErrorTranslator.throwIfFailure(fakeResponse(503), ClientRole.SERVER),
+        ).toThrow(ApiDependencyError);
     });
 
     it('an ordinary 2xx passes straight through — every response reaches the seam, not just failures', () => {
         expect(() =>
-            ClientErrorTranslator.throwIfFailure(fakeResponse(200, { ok: true })),
+            ClientErrorTranslator.throwIfFailure(
+                fakeResponse(200, { ok: true }),
+                ClientRole.SERVER,
+            ),
         ).not.toThrow();
     });
 
@@ -112,25 +116,27 @@ describe('ClientErrorTranslator', () => {
         const pe = new ApiErrorPayload('bad-request', 'Bad Request');
         pe.message = 'bad ai input';
 
-        expect(() => ClientErrorTranslator.throwIfFailure(fakeResponse(460, pe))).toThrow(
-            AiBadRequestError,
-        );
+        expect(() =>
+            ClientErrorTranslator.throwIfFailure(fakeResponse(460, pe), ClientRole.SERVER),
+        ).toThrow(AiBadRequestError);
     });
 
     it('a status the app does not claim DELEGATES to the default, not to a sentinel', () => {
         ClientRegistry.setErrorTranslator(new AiErrorTranslator()); // only claims 460
 
-        expect(() => ClientErrorTranslator.throwIfFailure(fakeResponse(403))).toThrow(
-            ApiImplementationError,
-        );
+        expect(() =>
+            ClientErrorTranslator.throwIfFailure(fakeResponse(403), ClientRole.SERVER),
+        ).toThrow(ApiImplementationError);
     });
 
     it('registering a translator that only delegates is identical to registering nothing', () => {
-        const withNothing = catchOf(() => ClientErrorTranslator.throwIfFailure(fakeResponse(500)));
+        const withNothing = catchOf(() =>
+            ClientErrorTranslator.throwIfFailure(fakeResponse(500), ClientRole.SERVER),
+        );
 
         ClientRegistry.setErrorTranslator(new WebpiecesDefaultErrorTranslator());
         const withDelegating = catchOf(() =>
-            ClientErrorTranslator.throwIfFailure(fakeResponse(500)),
+            ClientErrorTranslator.throwIfFailure(fakeResponse(500), ClientRole.SERVER),
         );
 
         expect(withDelegating.constructor).toBe(withNothing.constructor);
@@ -141,15 +147,18 @@ describe('ClientErrorTranslator', () => {
         class PaymentDeclined extends Error {}
         ClientRegistry.setErrorTranslator({
             toWire: (error: Error) => new WebpiecesDefaultErrorTranslator().toWire(error),
-            fromWire: (dto: HttpResponseDto) => {
+            fromWire: (dto: HttpResponseDto, role: ClientRole) => {
                 const body = dto.body as { status?: string } | undefined;
                 if (body?.status === 'DECLINED') throw new PaymentDeclined('card declined');
-                new WebpiecesDefaultErrorTranslator().fromWire(dto);
+                new WebpiecesDefaultErrorTranslator().fromWire(dto, role);
             },
         });
 
         expect(() =>
-            ClientErrorTranslator.throwIfFailure(fakeResponse(200, { status: 'DECLINED' })),
+            ClientErrorTranslator.throwIfFailure(
+                fakeResponse(200, { status: 'DECLINED' }),
+                ClientRole.SERVER,
+            ),
         ).toThrow(PaymentDeclined);
     });
 
@@ -158,7 +167,7 @@ describe('ClientErrorTranslator', () => {
             new ApiEndUserError('say it again'),
         );
 
-        const error = catchOf(() => ClientErrorTranslator.throwIfFailure(wire));
+        const error = catchOf(() => ClientErrorTranslator.throwIfFailure(wire, ClientRole.SERVER));
         expect(error).toBeInstanceOf(ApiEndUserError);
         expect(error.message).toBe('say it again');
     });
@@ -172,17 +181,20 @@ describe('ClientErrorTranslator', () => {
         it('an app translator that silently returns is backstopped by the webpieces default', () => {
             ClientRegistry.setErrorTranslator(new SilentTranslator());
 
-            expect(() => ClientErrorTranslator.throwIfFailure(fakeResponse(404))).toThrow(
-                ApiImplementationError,
-            );
-            expect(() => ClientErrorTranslator.throwIfFailure(fakeResponse(500))).toThrow(
-                ApiDependencyError,
-            );
+            expect(() =>
+                ClientErrorTranslator.throwIfFailure(fakeResponse(404), ClientRole.SERVER),
+            ).toThrow(ApiImplementationError);
+            expect(() =>
+                ClientErrorTranslator.throwIfFailure(fakeResponse(500), ClientRole.SERVER),
+            ).toThrow(ApiDependencyError);
         });
 
         it('throwFailure is typed never, and is a loud framework bug if handed a plain 2xx', () => {
             expect(() =>
-                ClientErrorTranslator.throwFailure(fakeResponse(200, { ok: true })),
+                ClientErrorTranslator.throwFailure(
+                    fakeResponse(200, { ok: true }),
+                    ClientRole.SERVER,
+                ),
             ).toThrow(/ordinary success/);
         });
     });

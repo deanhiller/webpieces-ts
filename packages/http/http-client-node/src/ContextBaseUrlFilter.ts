@@ -11,7 +11,7 @@ import { SsrfPolicy } from './SsrfPolicy';
  * implements OUR contract at their own base URL:
  *
  * ```ts
- * const tenant = factory.createRpcClient(TenantApi, new ClientConfig('tenant-svc'), [
+ * const tenant = factory.createRpcClient(TenantApi, new ClientConfig('tenant-svc', ClientRole.SERVER), [
  *     new ClientFilterDefinition(1000, new ContextBaseUrlFilter()),
  * ]);
  *

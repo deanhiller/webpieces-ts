@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
+import { ClientRole } from '@webpieces/core-util';
 import {
     ApiBadRequestError,
     ApiConnectionError,
@@ -32,7 +33,7 @@ const success = (): IpcReply => new IpcSuccess(context, { ok: true });
 const caught = (reply: IpcReply): Error => {
     // eslint-disable-next-line @webpieces/no-unmanaged-exceptions -- this helper IS the catch
     try {
-        IpcClientErrorTranslator.throwIfFailure(reply);
+        IpcClientErrorTranslator.throwIfFailure(reply, ClientRole.SERVER);
     } catch (err: unknown) {
         const error = toError(err);
         return error;
@@ -126,7 +127,9 @@ describe('WebpiecesDefaultIpcErrorTranslator.fromWire applies the uniform rule',
     });
 
     it('a SUCCESS reply returns without throwing', () => {
-        expect(() => IpcClientErrorTranslator.throwIfFailure(success())).not.toThrow();
+        expect(() =>
+            IpcClientErrorTranslator.throwIfFailure(success(), ClientRole.SERVER),
+        ).not.toThrow();
     });
 });
 
@@ -136,8 +139,8 @@ describe('an app IpcErrorTranslator', () => {
         toWire(error: Error): ApiErrorPayload {
             return this.fallback.toWire(error);
         }
-        fromWire(reply: IpcReply): void {
-            this.fallback.fromWire(reply);
+        fromWire(reply: IpcReply, role: ClientRole): void {
+            this.fallback.fromWire(reply, role);
         }
     }
 
@@ -161,13 +164,15 @@ describe('an app IpcErrorTranslator', () => {
         class Declined extends Error {}
         IpcRegistry.setErrorTranslator({
             toWire: (error: Error) => new WebpiecesDefaultIpcErrorTranslator().toWire(error),
-            fromWire: (reply: IpcReply) => {
+            fromWire: (reply: IpcReply, role: ClientRole) => {
                 if (reply.type === 'success') throw new Declined('the body said no');
-                new WebpiecesDefaultIpcErrorTranslator().fromWire(reply);
+                new WebpiecesDefaultIpcErrorTranslator().fromWire(reply, role);
             },
         });
 
-        expect(() => IpcClientErrorTranslator.throwIfFailure(success())).toThrow(Declined);
+        expect(() => IpcClientErrorTranslator.throwIfFailure(success(), ClientRole.SERVER)).toThrow(
+            Declined,
+        );
     });
 
     it('that silently returns for a FAILURE is backstopped by the webpieces default', () => {

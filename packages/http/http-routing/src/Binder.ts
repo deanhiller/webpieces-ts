@@ -8,6 +8,7 @@ import type {
 import type { ApiPrototype, ClientFilterDefinition } from '@webpieces/http-client-core';
 import { ClientConfig, ClientHttpFactory } from '@webpieces/http-client-node';
 import { ClientCloudTasksFactory, TaskClientConfig } from '@webpieces/cloudtasks-client';
+import { ClientRole } from '@webpieces/core-util';
 
 /**
  * Options for {@link Binder.createRpcClientAndBind}. Both are optional.
@@ -73,7 +74,9 @@ export class ContainerBinder implements Binder {
             .toDynamicValue((context: ResolutionContext) =>
                 context
                     .get(ClientHttpFactory)
-                    .createRpcClient(api, new ClientConfig(deployment), filters),
+                    // This Binder is a webpieces SERVER's DI: its clients present the server's own
+                    // credentials, so a 401 they receive is this service's bug (#1173).
+                    .createRpcClient(api, new ClientConfig(deployment, ClientRole.SERVER), filters),
             )
             .inSingletonScope();
     }

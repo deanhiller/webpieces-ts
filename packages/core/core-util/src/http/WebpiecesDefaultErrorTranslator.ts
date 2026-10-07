@@ -1,6 +1,7 @@
 import { ApiErrorBoundary } from '../errors/ApiErrorBoundary';
 import { ApiErrorCodec } from '../errors/ApiErrorCodec';
 import { ApiCodedError, ApiError } from '../errors/ApiError';
+import { ClientRole } from '../errors/ClientRole';
 import { ReceivedApiErrorRule } from '../errors/ReceivedApiErrorRule';
 import { ApiCallTimeoutError } from './ApiCallTimeoutError';
 import { ApiErrorHttpStatus, PublishedKind } from './ApiErrorHttpStatus';
@@ -25,6 +26,10 @@ import { HttpHeader, HttpResponseDto, HttpResponseStatus } from './HttpResponseD
  * {@link ApiErrorBoundary} + {@link ApiErrorHttpStatus}, the inbound half wants
  * {@link ApiErrorCodec} + {@link ReceivedApiErrorRule}, and all four were already here.
  *
+ * It holds no ROLE: who is receiving ({@link ClientRole}) is an argument of `fromWire`, supplied by
+ * the client that read the response from its own setup, so one stateless instance serves a server's
+ * clients and a browser's alike.
+ *
  * Stateless, so {@link WEBPIECES_DEFAULT_ERROR_TRANSLATOR} is a shared instance — but constructing
  * your own costs nothing and reads better at a delegation site.
  */
@@ -45,6 +50,7 @@ export class WebpiecesDefaultErrorTranslator implements ErrorTranslator {
         [412, 'Precondition Failed'],
         [415, 'Unsupported Media Type'],
         [422, 'Unprocessable Content'],
+        [426, 'Upgrade Required'],
         [429, 'Too Many Requests'],
         [500, 'Internal Server Error'],
         [501, 'Not Implemented'],
@@ -111,9 +117,12 @@ export class WebpiecesDefaultErrorTranslator implements ErrorTranslator {
      *
      * The rule applied is {@link ReceivedApiErrorRule}, shared verbatim with IPC: ordinary 4xx is MY
      * bug, ordinary 5xx is THEIRS, retry-relevant statuses retain their specific timeout/gateway/
-     * backoff/unavailable meaning, and 266 is the end user's own answer.
+     * backoff/unavailable meaning, 266 is the end user's own answer, a 426 `client-too-old` stays
+     * {@link ApiClientTooOldError}, and a 401 depends on `role` (see {@link ClientRole}).
+     *
+     * @param role - who is receiving, declared at the client's setup. No default.
      */
-    fromWire(response: HttpResponseDto): void {
+    fromWire(response: HttpResponseDto, role: ClientRole): void {
         const code = response.status.code;
         if (code >= 200 && code < 300 && code !== 266) {
             return;
@@ -122,6 +131,7 @@ export class WebpiecesDefaultErrorTranslator implements ErrorTranslator {
         const message =
             decoded?.message ?? this.fallbackMessage(response.body, response.status.reason);
         throw ReceivedApiErrorRule.adapt(
+            role,
             code,
             message,
             decoded,

@@ -15,6 +15,7 @@ import {
     SECRETS,
     TestCaseRecorder,
     toError,
+    ClientRole,
 } from '@webpieces/core-util';
 import {
     RequestContext,
@@ -116,6 +117,10 @@ export class NodeProxyClient extends ProxyClient {
      * Resolved per call, never at construction, so building a client stays synchronous. Any metadata
      * read beneath a deriver is memoized process-wide, so only the first call pays.
      */
+    protected override clientRole(): ClientRole {
+        return this.config.role;
+    }
+
     protected override resolveBaseUrl(): Promise<string> {
         return ClientRegistry.resolve(this.config.svcName);
     }

@@ -1,4 +1,4 @@
-import { WpAuthorization, AuthorizationType } from '@webpieces/core-util';
+import { ClientRole, WpAuthorization, AuthorizationType } from '@webpieces/core-util';
 import 'reflect-metadata';
 import { AddressInfo, createServer, IncomingMessage, Server, ServerResponse } from 'node:http';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -213,7 +213,7 @@ describe('Node generated typed streaming client', () => {
             new StubOidc() as unknown as GcpOidc,
             new NeverResolveAddress(),
         );
-        proxy.init(DuplexApi, new ClientConfig('stream-service'), []);
+        proxy.init(DuplexApi, new ClientConfig('stream-service', ClientRole.SERVER), []);
         const client = buildClientProxy(DuplexApi, proxy);
         const received: ServerEvent[] = [];
         let completed!: () => void;
@@ -244,7 +244,7 @@ describe('Node generated typed streaming client', () => {
             new StubOidc() as unknown as GcpOidc,
             new NeverResolveAddress(),
         );
-        proxy.init(DuplexApi, new ClientConfig('stream-service'), []);
+        proxy.init(DuplexApi, new ClientConfig('stream-service', ClientRole.SERVER), []);
         const client = buildClientProxy(DuplexApi, proxy);
         await RequestContext.run(async (): Promise<void> => {
             const requests = await client.upload({ value: 'open' });
@@ -271,7 +271,7 @@ describe('Node generated typed streaming client', () => {
             new StubOidc() as unknown as GcpOidc,
             new NeverResolveAddress(),
         );
-        proxy.init(StreamingApi, new ClientConfig('stream-service'), []);
+        proxy.init(StreamingApi, new ClientConfig('stream-service', ClientRole.SERVER), []);
         const client = buildClientProxy(StreamingApi, proxy);
 
         await RequestContext.run(async () => {
@@ -303,7 +303,7 @@ describe('Node generated typed streaming client', () => {
             new StubOidc() as unknown as GcpOidc,
             new NeverResolveAddress(),
         );
-        proxy.init(StreamingApi, new ClientConfig('stream-service'), []);
+        proxy.init(StreamingApi, new ClientConfig('stream-service', ClientRole.SERVER), []);
         const client = buildClientProxy(StreamingApi, proxy);
         const responses = new StreamWriter<ServerEvent>(async () => undefined);
 

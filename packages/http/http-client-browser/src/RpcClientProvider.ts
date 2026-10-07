@@ -16,6 +16,11 @@ export class RpcClientProvider<T extends object> {
         private readonly destination: string,
     ) {}
 
-    readonly useFactory = (factory: ClientHttpBrowserFactory, _config: ClientConfig): T =>
-        factory.createRpcClient(this.api, new ClientConfig(this.destination));
+    /**
+     * The app's own DI-provided {@link ClientConfig} is where this browser host DECLARED its
+     * {@link ClientConfig.role}; every bound client takes the role from it and only the destination
+     * from the binding, so the role is stated once, by the app, with no default.
+     */
+    readonly useFactory = (factory: ClientHttpBrowserFactory, config: ClientConfig): T =>
+        factory.createRpcClient(this.api, new ClientConfig(this.destination, config.role));
 }

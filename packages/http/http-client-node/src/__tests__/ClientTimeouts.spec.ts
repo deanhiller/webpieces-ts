@@ -1,4 +1,4 @@
-import { WpAuthorization, AuthorizationType } from '@webpieces/core-util';
+import { ClientRole, WpAuthorization, AuthorizationType } from '@webpieces/core-util';
 import 'reflect-metadata';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
@@ -83,7 +83,7 @@ class Harness {
                         new DnsAddressResolver(),
                     ),
             ),
-        ).createRpcClient(RpcApi, new ClientConfig('timeout-test'));
+        ).createRpcClient(RpcApi, new ClientConfig('timeout-test', ClientRole.SERVER));
         this.invoke = (method = 'work') => RequestContext.run(() => client[method](new Payload()));
     }
     async expectTimeout(timeoutMs: number, method: 'work' | 'other' = 'work'): Promise<void> {

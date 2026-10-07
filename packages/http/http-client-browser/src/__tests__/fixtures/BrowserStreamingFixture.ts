@@ -1,4 +1,4 @@
-import { WpAuthorization, AuthorizationType } from '@webpieces/core-util';
+import { ClientRole, WpAuthorization, AuthorizationType } from '@webpieces/core-util';
 import 'reflect-metadata';
 import {
     ApiPath,
@@ -69,7 +69,7 @@ class BrowserFixture {
         HeaderRegistry.configure([], true);
         const client = new ClientHttpBrowserFactory(new MutableContextStore()).createRpcClient(
             BrowserApi,
-            new ClientConfig('same-origin'),
+            new ClientConfig('same-origin', ClientRole.END_USER_CLIENT),
         );
         this.destination = {
             event: async (event: ResponseEvent): Promise<void> => {

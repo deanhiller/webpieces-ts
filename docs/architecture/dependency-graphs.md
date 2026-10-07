@@ -17,7 +17,7 @@ Per-project it carries:
 - `apiRelations` — per API class, a `"kind": "implements" | "uses"` with a transport `type`
   (`rpc` | `pubsub`). Example: `angular-site` **uses** `client-server-api`; `client-server`
   **implements** it. A `uses` also carries `targetService` when the call site named one —
-  `createRpcClient(WarmupApi, new ClientConfig('helper-fsdb'))` → `"targetService": "helper-fsdb"`.
+  `createRpcClient(WarmupApi, new ClientConfig('helper-fsdb', ClientRole.SERVER))` → `"targetService": "helper-fsdb"`.
 - A contract whose destination is not a module at all — the base URL arrives per call, from data —
   says so on the CONTRACT, with `@externalSystem runtime partner-webhooks`. That lands in
   `externalSystems` exactly as `@externalSystem saas twilio` does, and is drawn as an external system

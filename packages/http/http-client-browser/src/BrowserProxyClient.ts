@@ -5,6 +5,7 @@ import {
     LogApiCallImpl,
     RouteMetadata,
     StreamDirection,
+    ClientRole,
 } from '@webpieces/core-util';
 import { BrowserApiCallContext } from './BrowserApiCallContext';
 import {
@@ -68,6 +69,10 @@ export class BrowserProxyClient extends ProxyClient {
      * on :8201, while the same bundle served BY that backend in prod registers nothing and goes
      * relative. No `window` access, so this stays SSR-safe and testable.
      */
+    protected override clientRole(): ClientRole {
+        return this.config.role;
+    }
+
     protected override async resolveBaseUrl(): Promise<string> {
         return (await ClientRegistry.tryResolve(this.config.svcName)) ?? '';
     }

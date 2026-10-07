@@ -5,10 +5,14 @@ the Cloud Tasks twin — calling a method makes the HTTP request that contract d
 
 ```ts
 // inject the factory (a framework singleton), then one client per contract
-const server2 = factory.createRpcClient(Server2Api, new ClientConfig('server2'));
+const server2 = factory.createRpcClient(Server2Api, new ClientConfig('server2', ClientRole.SERVER));
 const res = await server2.fetchValue(req);          // inside a RequestContext
 ```
 
+- `ClientRole` is REQUIRED, with no default: `ClientRole.SERVER` for a server calling a server (a
+  401 it receives is its own credential bug, `ApiImplementationError`), `ClientRole.END_USER_CLIENT`
+  for a node process acting for a person, such as a remote MCP client (a 401 is
+  `ApiUnauthorizedError`, "log in again"). See `docs/portable-ipc-and-errors.md`.
 - `svcName` becomes a URL through `ClientRegistry.resolve` — ONE chain, the same one the browser
   client and Cloud Tasks run:
   1. a registered mapping wins: `ClientRegistry.addMapping(svcName, port)` (localhost) or
@@ -78,7 +82,7 @@ export class PartnerWebhookApi {
     deliver(envelope: WebhookEnvelope): Promise<DeliveryAck>;
 }
 
-const partner = factory.createRpcClient(PartnerWebhookApi, new ClientConfig('partner-webhooks'), [
+const partner = factory.createRpcClient(PartnerWebhookApi, new ClientConfig('partner-webhooks', ClientRole.SERVER), [
     new ClientFilterDefinition(1000, new ContextFullUrlFilter()),
 ]);
 

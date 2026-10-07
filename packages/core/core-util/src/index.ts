@@ -374,10 +374,22 @@ export {
     ApiUnsupportedMediaTypeError,
     ApiNotImplementedError,
     ApiCodedError,
+    ApiClientTooOldError,
+    ApiEndUserNotFoundError,
+    ApiEndUserForbiddenError,
+    ApiEndUserBadRequestError,
+    EndUserErrorCode,
+    EndUserErrorRegistry,
+    ClientRole,
     ApiErrorCodec,
     ApiErrorPayload,
     ApiErrorBoundary,
 } from './errors';
-export type { ApiErrorKind, ApiStatusCode, EdgeHttpStatus } from './errors';
+export type {
+    ApiErrorKind,
+    ApiStatusCode,
+    EdgeHttpStatus,
+    EndUserErrorFactory,
+} from './errors';
 export { ApiErrorHttpStatus } from './http/ApiErrorHttpStatus';
 export type { PublishedKind, PublishedApiError } from './http/ApiErrorHttpStatus';

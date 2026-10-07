@@ -1,3 +1,4 @@
+import { ClientRole } from '../errors/ClientRole';
 import { HttpResponseDto } from './HttpResponseDto';
 
 /**
@@ -79,9 +80,9 @@ import { HttpResponseDto } from './HttpResponseDto';
  *         );
  *     }
  *
- *     fromWire(response: HttpResponseDto): void {
+ *     fromWire(response: HttpResponseDto, role: ClientRole): void {
  *         if (response.status.code !== 460) {
- *             this.fallback.fromWire(response);          // not mine -> webpieces default
+ *             this.fallback.fromWire(response, role);    // not mine -> webpieces default
  *             return;
  *         }
  *         throw new OrderNotFoundError(String(response.body));
@@ -107,11 +108,16 @@ export interface ErrorTranslator {
      * Called for EVERY response, including a 2xx — deliberately, so an app whose 200 body signals
      * failure can turn it into a throw. Returning normally means "let this response through"; the
      * webpieces default returns normally for any 2xx that is not 266 and throws otherwise. Decline by
-     * calling `new WebpiecesDefaultErrorTranslator().fromWire(response)`.
+     * calling `new WebpiecesDefaultErrorTranslator().fromWire(response, role)`.
+     *
+     * `role` is WHO is receiving ({@link ClientRole}): the end-user client or a server. The client
+     * that read the response passes the role ITS setup declared (`ClientConfig`), so one translator
+     * registered in a process serves every client there. It decides what a received 401 means; pass
+     * it through unchanged when declining.
      *
      * A non-2xx response can never reach a typed caller even if an app translator forgets to throw:
      * `ClientErrorTranslator.throwIfFailure` applies the webpieces default behind it. That is bug
      * containment, not a "was one registered" branch.
      */
-    fromWire(response: HttpResponseDto): void;
+    fromWire(response: HttpResponseDto, role: ClientRole): void;
 }

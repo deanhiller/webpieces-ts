@@ -22,7 +22,7 @@ import { RequestLifecycleListener } from './RequestLifecycleListener';
  * const store = new MutableContextStore();
  * const factory = new ClientHttpBrowserFactory(store);
  *
- * const saveApi = factory.createRpcClient(SaveApi, new ClientConfig('server'));
+ * const saveApi = factory.createRpcClient(SaveApi, new ClientConfig('server', ClientRole.END_USER_CLIENT));
  * const response = await saveApi.save({ query: 'test' }); // type-safe
  *
  * // later, when the user logs in / picks a tenant — every subsequent call carries them:

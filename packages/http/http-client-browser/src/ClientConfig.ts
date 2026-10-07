@@ -1,3 +1,5 @@
+import { ClientRole } from '@webpieces/core-util';
+
 /**
  * Per-client STATE for a browser HTTP client — nothing else. A plain class; it extends nothing and
  * is unrelated to the server package's ClientConfig.
@@ -15,5 +17,14 @@ export class ClientConfig {
     constructor(
         /** Service name; resolved to a base URL via ClientRegistry (registered at app startup). */
         public readonly svcName: string,
+        /**
+         * WHO receives this client's responses — {@link ClientRole.SERVER} for a server calling
+         * another server, {@link ClientRole.END_USER_CLIENT} for a client acting for a person (a
+         * browser bundle, an Expo shell, a remote MCP client). REQUIRED, with no default (#1173): it
+         * decides what a received 401 means — "the user must log in again" for an end-user client,
+         * "this service's own credential is broken" (a 500 to its caller) for a server — and the
+         * right answer is opposite for the two, so no default could be right for both.
+         */
+        public readonly role: ClientRole,
     ) {}
 }

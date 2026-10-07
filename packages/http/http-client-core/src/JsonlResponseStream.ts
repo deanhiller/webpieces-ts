@@ -1,4 +1,5 @@
 import {
+    ClientRole,
     DtoValue,
     ResponseStream,
     RouteMetadata,
@@ -16,6 +17,9 @@ import { ByteReadResult } from './ByteStream';
 export class JsonlResponseStream {
     private readonly validator = new StreamEventValidator();
     private readonly controls = new StreamErrorControl();
+
+    /** @param role - who is reading the stream; an error control record is decoded as that role. */
+    constructor(private readonly role: ClientRole) {}
 
     async consume(
         route: RouteMetadata,
@@ -143,7 +147,7 @@ export class JsonlResponseStream {
 
     private parseData(line: string): DtoValue {
         this.checkLength(line);
-        if (line.charCodeAt(0) === 0x1e) throw this.controls.decode(line);
+        if (line.charCodeAt(0) === 0x1e) throw this.controls.decode(line, this.role);
         // eslint-disable-next-line @webpieces/no-unmanaged-exceptions -- JSON.parse is the untrusted JSONL boundary
         try {
             return JSON.parse(line) as DtoValue;

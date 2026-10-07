@@ -14,11 +14,11 @@
  * import { ClientHttpFactory, ClientConfig } from '@webpieces/http-client-node';
  *
  * // inject the factory, then one client per contract
- * const server2 = factory.createRpcClient(Server2Api, new ClientConfig('server2'));
+ * const server2 = factory.createRpcClient(Server2Api, new ClientConfig('server2', ClientRole.SERVER));
  * const response = await server2.fetchValue(req);
  *
  * // a client whose destination arrives per call: ONE filter, and nothing else changes
- * const partner = factory.createRpcClient(PartnerWebhookApi, new ClientConfig('partner-webhooks'), [
+ * const partner = factory.createRpcClient(PartnerWebhookApi, new ClientConfig('partner-webhooks', ClientRole.SERVER), [
  *     new ClientFilterDefinition(1000, new ContextFullUrlFilter()),
  * ]);
  * ```
@@ -27,6 +27,8 @@
 export { ClientHttpFactory } from './ClientHttpFactory';
 export { NodeProxyClient, NODE_PROXY_CLIENT_PROVIDER } from './NodeProxyClient';
 export { ClientConfig } from './ClientConfig';
+// ClientConfig's required `role` argument, re-exported so a client is set up from one import.
+export { ClientRole } from '@webpieces/core-util';
 
 // Install this on the ONE client whose destination is data. Installing it IS the opt-in; a client
 // without it ignores an ambient OVERRIDE_BASE_URL entirely.

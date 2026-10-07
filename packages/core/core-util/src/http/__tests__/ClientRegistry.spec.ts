@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
+import { ClientRole } from '../../errors/ClientRole';
 import { ClientRegistry } from '../ClientRegistry';
 import { ErrorTranslator } from '../ErrorTranslator';
 import { WebpiecesDefaultErrorTranslator } from '../WebpiecesDefaultErrorTranslator';
@@ -155,9 +156,9 @@ class AiErrorTranslator implements ErrorTranslator {
         );
     }
 
-    fromWire(response: HttpResponseDto): void {
+    fromWire(response: HttpResponseDto, role: ClientRole): void {
         if (response.status.code !== 460) {
-            this.fallback.fromWire(response); // not mine -> the webpieces default answers
+            this.fallback.fromWire(response, role); // not mine -> the webpieces default answers
             return;
         }
         const pe = response.body as ApiErrorPayload;
@@ -192,7 +193,7 @@ describe('ClientRegistry error translator', () => {
         expect(wire.status.reason).toBe('AI Bad Request');
         expect(wire.headers.map((h: HttpHeader) => h.name)).toEqual(['x-ai-hint']);
 
-        expect(() => translator.fromWire(wire)).toThrowError(
+        expect(() => translator.fromWire(wire, ClientRole.SERVER)).toThrowError(
             expect.objectContaining({ message: 'bad ai input' }),
         );
     });
@@ -204,7 +205,7 @@ describe('ClientRegistry error translator', () => {
         expect(translator.toWire(new Error('other')).status.code).toBe(500);
         // 503 is not claimed, so the webpieces default answers — and its answer for a 5xx is
         // ApiDependencyError: the peer broke, not us.
-        expect(() => translator.fromWire(wireResponse(503))).toThrow(ApiDependencyError);
+        expect(() => translator.fromWire(wireResponse(503), ClientRole.SERVER)).toThrow(ApiDependencyError);
     });
 
     it('registering a translator that only delegates is byte-identical to registering nothing', () => {
@@ -222,7 +223,7 @@ describe('ClientRegistry error translator', () => {
     it('can OVERRIDE a built-in status (400) — the app replaces webpieces, it is not consulted first', () => {
         const override: ErrorTranslator = {
             toWire: (error: Error) => new WebpiecesDefaultErrorTranslator().toWire(error),
-            fromWire: (response: HttpResponseDto) => {
+            fromWire: (response: HttpResponseDto, role: ClientRole) => {
                 if (response.status.code !== 400) return;
                 throw new AiBadRequestError(
                     (response.body as ApiErrorPayload).message ?? 'overridden 400',
@@ -231,7 +232,7 @@ describe('ClientRegistry error translator', () => {
         };
         ClientRegistry.setErrorTranslator(override);
 
-        expect(() => ClientRegistry.getErrorTranslator().fromWire(wireResponse(400))).toThrow(
+        expect(() => ClientRegistry.getErrorTranslator().fromWire(wireResponse(400), ClientRole.SERVER)).toThrow(
             AiBadRequestError,
         );
     });

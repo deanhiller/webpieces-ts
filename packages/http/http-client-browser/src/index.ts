@@ -17,7 +17,7 @@
  * const store = new MutableContextStore();
  * const factory = new ClientHttpBrowserFactory(store);
  *
- * const client = factory.createRpcClient(SaveApi, new ClientConfig('save-svc'));
+ * const client = factory.createRpcClient(SaveApi, new ClientConfig('save-svc', ClientRole.END_USER_CLIENT));
  * const response = await client.save({ query: 'test' });
  * ```
  *
@@ -51,6 +51,7 @@ export {
     ContextKey,
     HeaderRegistry,
     ClientRegistry,
+    ClientRole,
     templateDeriver,
     WebpiecesCoreHeaders,
 } from '@webpieces/core-util';

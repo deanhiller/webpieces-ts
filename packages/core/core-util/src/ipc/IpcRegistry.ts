@@ -1,3 +1,4 @@
+import { ClientRole } from '../errors/ClientRole';
 import { IpcErrorTranslator } from './IpcErrorTranslator';
 import { IpcReply, IpcSuccess } from './IpcProtocol';
 import { WEBPIECES_DEFAULT_IPC_ERROR_TRANSLATOR } from './WebpiecesDefaultIpcErrorTranslator';
@@ -65,10 +66,12 @@ export class IpcClientErrorTranslator {
      * normally for a failure reply has a bug whose symptom would otherwise be `undefined` arriving
      * where the contract promised a DTO. For a genuine success the default returns immediately, so
      * the normal path costs one comparison.
+     *
+     * @param role - who is receiving, from the `IpcClientFactory` that sent the request.
      */
     // webpieces-disable no-function-outside-class -- stateless boundary shared by every IPC client proxy
-    static throwIfFailure(reply: IpcReply): asserts reply is IpcSuccess {
-        IpcRegistry.getErrorTranslator().fromWire(reply);
-        WEBPIECES_DEFAULT_IPC_ERROR_TRANSLATOR.fromWire(reply);
+    static throwIfFailure(reply: IpcReply, role: ClientRole): asserts reply is IpcSuccess {
+        IpcRegistry.getErrorTranslator().fromWire(reply, role);
+        WEBPIECES_DEFAULT_IPC_ERROR_TRANSLATOR.fromWire(reply, role);
     }
 }

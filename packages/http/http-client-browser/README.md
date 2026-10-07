@@ -12,9 +12,12 @@ HeaderRegistry.configure(AppHeaders.getAllHeaders(), CompanyHeaders.getAllHeader
 
 const store = new MutableContextStore();
 const factory = new ClientHttpBrowserFactory(store);
-const saveApi = factory.createRpcClient(SaveApi, new ClientConfig('server'));
+const saveApi = factory.createRpcClient(SaveApi, new ClientConfig('server', ClientRole.END_USER_CLIENT));
 
 const res = await saveApi.save({ query: 'test' });   // type-safe
+
+// ClientRole is required, with no default. A browser bundle acts for a person, so it declares
+// END_USER_CLIENT and a received 401 decodes as ApiUnauthorizedError ("log in again").
 
 // later, after login — every subsequent call carries these
 store.set(WebpiecesCoreHeaders.AUTHORIZATION, token);

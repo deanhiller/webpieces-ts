@@ -25,12 +25,12 @@ bindFrameworkProvider(NODE_PROXY_CLIENT_PROVIDER, NodeProxyClient);
  * Inject it and ask for a typed client per contract:
  * ```typescript
  * // same project + region as this container; the URL is derived, you maintain nothing
- * const server2 = factory.createRpcClient(Server2Api, new ClientConfig('server2'));
+ * const server2 = factory.createRpcClient(Server2Api, new ClientConfig('server2', ClientRole.SERVER));
  *
  * // to reach somewhere derivation cannot describe (other region/project, non-Cloud-Run, localhost),
  * // register it once at startup — the client still carries only the svcName:
  * //   ClientRegistry.addUrlMapping('legacy', 'https://legacy.corp');
- * const legacy = factory.createRpcClient(LegacyApi, new ClientConfig('legacy'));
+ * const legacy = factory.createRpcClient(LegacyApi, new ClientConfig('legacy', ClientRole.SERVER));
  *
  * const response = await server2.fetchValue(req);   // inside a RequestContext
  * ```
@@ -39,7 +39,7 @@ bindFrameworkProvider(NODE_PROXY_CLIENT_PROVIDER, NodeProxyClient);
  * a different kind of client. Install `ContextBaseUrlFilter` on the one client that may be
  * re-pointed, and set the URL per call:
  * ```typescript
- * const partner = factory.createRpcClient(PartnerWebhookApi, new ClientConfig('partner-webhooks'), [
+ * const partner = factory.createRpcClient(PartnerWebhookApi, new ClientConfig('partner-webhooks', ClientRole.SERVER), [
  *     new ClientFilterDefinition(1000, new ContextBaseUrlFilter()),
  * ]);
  * ```

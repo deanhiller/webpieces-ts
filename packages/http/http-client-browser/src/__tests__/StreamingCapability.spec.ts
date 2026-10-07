@@ -1,4 +1,4 @@
-import { WpAuthorization, AuthorizationType } from '@webpieces/core-util';
+import { ClientRole, WpAuthorization, AuthorizationType } from '@webpieces/core-util';
 import 'reflect-metadata';
 import { describe, expect, it, vi } from 'vitest';
 import {
@@ -91,7 +91,7 @@ describe('browser streaming capability', () => {
         expect(() =>
             new ClientHttpBrowserFactory(new MutableContextStore()).createRpcClient(
                 BrowserStreamingApi,
-                new ClientConfig('same-origin'),
+                new ClientConfig('same-origin', ClientRole.END_USER_CLIENT),
             ),
         ).toThrow(StreamingCapabilityError);
         expect(fetchMock).not.toHaveBeenCalled();
@@ -119,7 +119,7 @@ describe('browser streaming capability', () => {
         vi.stubGlobal('fetch', fetchMock);
         const client = new ClientHttpBrowserFactory(new MutableContextStore()).createRpcClient(
             BrowserResponseStreamingApi,
-            new ClientConfig('same-origin'),
+            new ClientConfig('same-origin', ClientRole.END_USER_CLIENT),
         );
         const received: BrowserOutput[] = [];
         const responses = new StreamWriter<BrowserOutput>(async (envelope): Promise<void> => {

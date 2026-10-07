@@ -15,6 +15,7 @@ import {
     CallContext,
     DtoValue,
     StreamDirection,
+    ClientRole,
 } from '@webpieces/core-util';
 import { ApiPrototype } from './ApiPrototype';
 import { ClientFilterDefinition } from './ClientFilter';
@@ -102,6 +103,13 @@ export abstract class ProxyClient {
 
     /** The callee's base URL. Async because a server may derive it from container metadata. */
     protected abstract resolveBaseUrl(): Promise<string>;
+
+    /**
+     * WHO is receiving this client's responses: an end-user client or a server (see
+     * {@link ClientRole}). Read from the client's `ClientConfig`, where it is a required argument with
+     * no default, and handed to the error translator, where it decides what a received 401 means.
+     */
+    protected abstract clientRole(): ClientRole;
 
     /**
      * Context headers to put on the wire. Server reads RequestContext; browser reads its store.
@@ -385,16 +393,22 @@ export abstract class ProxyClient {
                 ),
             (request: ClientRequest, signal: AbortSignal): Promise<Response> =>
                 this.chain.execute(request, () => this.sendOnce(request, signal)),
-            (response: Response, current: RouteMetadata): Promise<DtoValue> =>
-                this.readResponse(response, current) as Promise<DtoValue>,
+            this.readStreamingResponse,
             (current: RouteMetadata, response?: Response): void =>
                 this.readResponseContext(current, response),
             (current: RouteMetadata): void => this.onRequestStart(current),
             (current: RouteMetadata, outcome: RequestOutcome): void =>
                 this.onRequestEnd(current, outcome),
+            this.clientRole(),
         );
         return this.execute(route, args[0], () => call.open(route, args));
     }
+
+    /** A streaming handshake's non-success response, read exactly like a unary one. */
+    private readonly readStreamingResponse = (
+        response: Response,
+        current: RouteMetadata,
+    ): Promise<DtoValue> => this.readResponse(response, current) as Promise<DtoValue>;
 
     /** One streaming handshake. Subsequent events stay on this established transport. */
     // webpieces-disable no-any-unknown -- generated proxy arguments are runtime-validated here
@@ -436,14 +450,8 @@ export abstract class ProxyClient {
                                             response = received;
                                             return received;
                                         }),
-                                (
-                                    currentResponse: Response,
-                                    current: RouteMetadata,
-                                ): Promise<DtoValue> =>
-                                    this.readResponse(
-                                        currentResponse,
-                                        current,
-                                    ) as Promise<DtoValue>,
+                                this.readStreamingResponse,
+                                this.clientRole(),
                             );
                             const result = await call.open(route, args, deadlineSignal);
                             response = result.response;
@@ -626,7 +634,10 @@ export abstract class ProxyClient {
             // EVERY response passes the seam, 2xx included: an app whose 200 body signals failure
             // turns it into a throw here. The webpieces default returns silently, so the success
             // path is unchanged — and the body is parsed ONCE, because a fetch body reads once.
-            ClientErrorTranslator.throwIfFailure(this.responseDtoFactory.fromFetch(response, body));
+            ClientErrorTranslator.throwIfFailure(
+                this.responseDtoFactory.fromFetch(response, body),
+                this.clientRole(),
+            );
             return body;
         }
         const protocolError = await this.bodyReader.readErrorBody(response, callId);
@@ -635,6 +646,7 @@ export abstract class ProxyClient {
         // translator that forgets to, so the guarantee does not depend on app code being correct.
         ClientErrorTranslator.throwFailure(
             this.responseDtoFactory.fromFetch(response, protocolError),
+            this.clientRole(),
         );
     }
 

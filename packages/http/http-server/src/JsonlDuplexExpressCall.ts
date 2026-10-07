@@ -1,6 +1,7 @@
 import { once } from 'node:events';
 import { Request, Response } from 'express';
 import {
+    ClientRole,
     StreamErrorControl,
     DtoValue,
     RequestStream,
@@ -207,7 +208,8 @@ export class JsonlDuplexExpressCall {
                 const line = await reader.nextLine();
                 if (line === undefined) break;
                 if (line.charCodeAt(0) === 0x1e) {
-                    const error = new StreamErrorControl().decode(line);
+                    // The SERVER is the receiver of a record its caller wrote mid-upload (#1173).
+                    const error = new StreamErrorControl().decode(line, ClientRole.SERVER);
                     await inbound.cancel(error);
                     await outbound.cancel(error);
                     return;

@@ -240,3 +240,52 @@ export class ApiCodedError extends ApiError {
         return this.statusCode < 500 && this.statusCode !== 408 && this.statusCode !== 429;
     }
 }
+
+/**
+ * The CALLER's build is too old for this server: HTTP **426 Upgrade Required**, errorCode
+ * {@link ApiClientTooOldError.CODE}. It means "upgrade", never "bug".
+ *
+ * WHO THROWS IT: a server gate that compares the build the caller DECLARED (a header, a version in
+ * the request) against the minimum this server still supports. Every webpieces client and server
+ * deployed separately hits this skew (a browser tab left open across a release, a mobile WebView
+ * pinned to an old bundle), and only the SERVER can tell that its caller is too old.
+ *
+ * WHY 426 AND NOT 266: a 266 means "the user must fix something" and its message is shown verbatim,
+ * so a bundle built before the gate existed would print the server's developer text as a user
+ * instruction. A non-266 status reaches every bundle already in the field as a non-user failure.
+ *
+ * WHAT RECEIVERS DO: `ReceivedApiErrorRule` decodes it back into THIS type on every hop
+ * (server-to-server and browser, HTTP and IPC) instead of the `ApiImplementationError` an ordinary
+ * received 4xx becomes. A client treats it as "reload / install the new build", never as a red bug
+ * dialog. It pairs with `allowUpgradeInFlight` (`HttpEndpointOptions`), which declares which calls
+ * an upgrade may cut off: that flag is the client deciding WHEN it may upgrade, this error is the
+ * server saying that it MUST.
+ *
+ * NO user-facing copy: `message` is developer text like every non-end-user kind (it is not published
+ * across the wire), and the receiving client owns the wording it shows. The status and the code are
+ * FIXED here, so a throw site cannot send a 426 that the receivers would not recognise.
+ *
+ * It is an {@link ApiCodedError} on purpose: the wire form is exactly `kind: 'coded'`,
+ * `statusCode: 426`, `errorCode: 'client-too-old'`, which is what an app's own hand-rolled
+ * client-too-old error already publishes, so a bundle in the field and a server on the new release
+ * agree without either side changing its payload.
+ */
+export class ApiClientTooOldError extends ApiCodedError {
+    /** The fixed `errorCode`; together with status 426 it is what a receiver matches on. */
+    static readonly CODE = 'client-too-old';
+    /** HTTP 426 Upgrade Required. */
+    static readonly STATUS_CODE = 426;
+
+    constructor(message: string, cause?: Error) {
+        super(message, ApiClientTooOldError.STATUS_CODE, ApiClientTooOldError.CODE, cause);
+    }
+
+    /** True when a coded failure's status and code are this error's wire identity. */
+    // webpieces-disable no-function-outside-class -- stateless wire-identity predicate
+    static matches(statusCode: number, errorCode: string | undefined): boolean {
+        return (
+            statusCode === ApiClientTooOldError.STATUS_CODE &&
+            errorCode === ApiClientTooOldError.CODE
+        );
+    }
+}

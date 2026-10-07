@@ -1,4 +1,4 @@
-import { WpAuthorization, AuthorizationType } from '@webpieces/core-util';
+import { ClientRole, WpAuthorization, AuthorizationType } from '@webpieces/core-util';
 import 'reflect-metadata';
 import { Container, ContainerModule, ResolutionContext } from 'inversify';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
@@ -153,8 +153,8 @@ afterEach(() => {
 
 describe('createRpcClient filters are genuinely optional', () => {
     it('an empty array and an omitted argument produce the same call on the wire', async () => {
-        const omitted = newFactory().createRpcClient(SvcApi, new ClientConfig('svc'));
-        const empty = newFactory().createRpcClient(SvcApi, new ClientConfig('svc'), []);
+        const omitted = newFactory().createRpcClient(SvcApi, new ClientConfig('svc', ClientRole.SERVER));
+        const empty = newFactory().createRpcClient(SvcApi, new ClientConfig('svc', ClientRole.SERVER), []);
 
         await RequestContext.run(() => omitted.work(new WorkRequest('a')));
         await RequestContext.run(() => empty.work(new WorkRequest('a')));
@@ -173,7 +173,7 @@ describe('createRpcClient filters are genuinely optional', () => {
                 options
                     .bind(SvcApi)
                     .toDynamicValue((context: ResolutionContext) =>
-                        context.get(ClientHttpFactory).createRpcClient(SvcApi, new ClientConfig('svc'), filters),
+                        context.get(ClientHttpFactory).createRpcClient(SvcApi, new ClientConfig('svc', ClientRole.SERVER), filters),
                     )
                     .inSingletonScope();
             }),
@@ -196,7 +196,7 @@ describe('createRpcClient filters are genuinely optional', () => {
         if (perTenant) filters.push(new ClientFilterDefinition(1000, new OutboundLogFilter()));
         if (verbose) filters.push(new ClientFilterDefinition(500, new OutboundLogFilter()));
 
-        const client = newFactory().createRpcClient(SvcApi, new ClientConfig('svc'), filters);
+        const client = newFactory().createRpcClient(SvcApi, new ClientConfig('svc', ClientRole.SERVER), filters);
         await RequestContext.run(() => client.work(new WorkRequest('a')));
 
         expect(sent).toHaveLength(1);
@@ -210,8 +210,8 @@ describe('createRpcClient filters are genuinely optional', () => {
         if (perTenant) filters.push(new ClientFilterDefinition(1000, new OutboundLogFilter()));
         if (verbose) filters.push(new ClientFilterDefinition(500, new OutboundLogFilter()));
 
-        const built = newFactory().createRpcClient(SvcApi, new ClientConfig('svc'), filters);
-        const omitted = newFactory().createRpcClient(SvcApi, new ClientConfig('svc'));
+        const built = newFactory().createRpcClient(SvcApi, new ClientConfig('svc', ClientRole.SERVER), filters);
+        const omitted = newFactory().createRpcClient(SvcApi, new ClientConfig('svc', ClientRole.SERVER));
 
         await RequestContext.run(() => built.work(new WorkRequest('a')));
         await RequestContext.run(() => omitted.work(new WorkRequest('a')));
@@ -226,7 +226,7 @@ describe('createRpcClient filters are genuinely optional', () => {
         // createRpcClient copies with [...filters], so the client is not a live view of the caller's
         // array. Worth pinning now that passing a mutable array is the normal case.
         const filters: ClientFilterDefinition[] = [];
-        const client = newFactory().createRpcClient(SvcApi, new ClientConfig('svc'), filters);
+        const client = newFactory().createRpcClient(SvcApi, new ClientConfig('svc', ClientRole.SERVER), filters);
         filters.push(new ClientFilterDefinition(500, new OutboundLogFilter()));
 
         await RequestContext.run(() => client.work(new WorkRequest('a')));

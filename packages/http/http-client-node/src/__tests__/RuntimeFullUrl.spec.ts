@@ -1,4 +1,4 @@
-import { WpAuthorization, AuthorizationType, WpAuth, oidc as oidcAuth } from '@webpieces/core-util';
+import { ClientRole, WpAuthorization, AuthorizationType, WpAuth, oidc as oidcAuth } from '@webpieces/core-util';
 import 'reflect-metadata';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { ApiPath, ClientRegistry, DestinationTrust, Endpoint, QueryParam, Rpc, Secrets, TestCaseRecorder, WebpiecesCoreHeaders, WpAuthPublic, POST, RPC, WRITE } from '@webpieces/core-util';
@@ -152,7 +152,7 @@ function client<T extends object>(
         new StubSecrets() as unknown as Secrets,
         undefined,
     );
-    proxyClient.init(api, new ClientConfig('partner-webhooks'), filters);
+    proxyClient.init(api, new ClientConfig('partner-webhooks', ClientRole.SERVER), filters);
     return buildClientProxy(api, proxyClient);
 }
 

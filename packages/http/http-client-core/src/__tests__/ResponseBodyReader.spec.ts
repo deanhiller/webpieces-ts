@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { ApiDependencyError, ApiErrorPayload, toError } from '@webpieces/core-util';
+import { ClientRole, ApiDependencyError, ApiErrorPayload, toError } from '@webpieces/core-util';
 import { ClientErrorTranslator } from '../ClientErrorTranslator';
 import { HttpResponseDtoFactory } from '../HttpResponseDtoFactory';
 import { ResponseBodyReader } from '../ResponseBodyReader';
@@ -32,7 +32,10 @@ function jsonResponse(status: number, body: string, contentType = 'application/j
 function caughtFrom(response: Response, protocolError: ApiErrorPayload): Error {
     // eslint-disable-next-line @webpieces/no-unmanaged-exceptions -- this helper IS the catch
     try {
-        ClientErrorTranslator.throwFailure(dtoFactory.fromFetch(response, protocolError));
+        ClientErrorTranslator.throwFailure(
+            dtoFactory.fromFetch(response, protocolError),
+            ClientRole.SERVER,
+        );
     } catch (err: unknown) {
         const error = toError(err);
         return error;

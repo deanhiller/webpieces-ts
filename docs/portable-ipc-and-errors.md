@@ -48,6 +48,72 @@ present). Typed Webpieces dependency errors pass through unchanged. Other receiv
 `ApiImplementationError` (my bug), other 5xx is generic `ApiDependencyError` (their bug), and 266
 keeps its `ApiEndUserError` verbatim. The rule is shared by node, browser, and IPC.
 
+### Who is receiving: `ClientRole` (the 401 exception)
+
+Every client declares WHO receives its responses, at setup, with no default (issue #1173):
+`new ClientConfig(svcName, ClientRole.SERVER)` (node), `new ClientConfig(svcName,
+ClientRole.END_USER_CLIENT)` (browser), `new IpcClientFactory(connection, logging, role)`. The role
+reaches every translator as the second argument of `fromWire(response, role)`, so an app translator
+passes it through when it declines. The node `Binder.createRpcClientAndBind` of a webpieces server
+declares `SERVER`; the browser `Binder` takes the role from the app's DI-provided `ClientConfig`.
+
+It decides exactly one thing, a received **401**, because a 401 means "the credential I presented was
+rejected", and whose credential that was depends on the receiver:
+
+| who received the 401 | decodes to | why |
+|---|---|---|
+| a server calling another server (`SERVER`) | `ApiImplementationError`, a 500 to its own caller | its own credential or configuration bug; relaying 401 would log the user out for a backend misconfiguration and stop paging the owning team |
+| an end-user client (`END_USER_CLIENT`): browser bundle, Expo shell, remote MCP client | `ApiUnauthorizedError` (only when the body is the webpieces `unauthorized` payload) | the credential it sent IS the user's session, so this means "log in again", not a bug |
+
+A server that rejects the INCOMING user's token throws `ApiUnauthorizedError` itself: that is a 401
+it originates, which the end-user client then decodes typed. Every other status reads the same in
+both roles.
+
+### Client too old: `ApiClientTooOldError` (HTTP 426)
+
+`new ApiClientTooOldError(message, cause?)` is HTTP **426 Upgrade Required** with the fixed
+`errorCode` `'client-too-old'` (issue #1172). It is thrown by a server gate that compares the build
+the caller declared against the minimum it still supports. It carries no user-facing copy: the
+receiving client owns its wording. Every receiver, on every hop (server-to-server and browser, HTTP
+and IPC), decodes it back into `ApiClientTooOldError` instead of `ApiImplementationError`, and should
+treat it as an upgrade (reload, install the new build), never as a bug. It is the server's half of
+the upgrade story; `allowUpgradeInFlight` on an endpoint is the client's half (which calls an upgrade
+may cut off). Why 426 and not 266: a 266 message is shown verbatim as a user instruction, which a
+bundle built before the gate existed would do with the server's developer text. On the wire it is an
+`ApiCodedError` (`kind: 'coded'`, `statusCode: 426`, `errorCode: 'client-too-old'`).
+
+### End-user error subclasses: `EndUserErrorRegistry`
+
+`errorCode` follows the grammar `<code>[:<detail>]` (`EndUserErrorCode.format/codeOf/detailOf`):
+`<code>` names WHICH mistake it was, `<detail>` is data the client acts on, never prose. An app
+subclasses `ApiEndUserError` so the receiving side can `instanceof` the mistake, and follows one
+pattern: the constructor FIXES `CODE`, so a throw site cannot send a missing or misspelled code, and
+the subclass is REGISTERED ONCE at startup in every process that may receive it (browser bundle, Expo
+shell and every server, since a server relays a decoded error to its own caller):
+
+```typescript
+export class TermsNotAcceptedError extends ApiEndUserError {
+    static readonly CODE = 'terms-not-accepted';
+    constructor(message: string, detail?: string, cause?: Error) {
+        super(message, EndUserErrorCode.format(TermsNotAcceptedError.CODE, detail), undefined, cause);
+    }
+}
+
+EndUserErrorRegistry.register(TermsNotAcceptedError.CODE,
+    (message: string, detail: string | undefined) => new TermsNotAcceptedError(message, detail));
+```
+
+`ApiErrorCodec` consults the registry for every decoded `end-user` payload, so one registration
+covers HTTP, IPC and JSONL streams, and `fromWire(toWire(new X(...)))` is an `X` on both ends of every
+hop. Matching is on `<code>`. An unknown code decodes to the base `ApiEndUserError` with `errorCode`
+intact, so an old client receiving a new code still shows the message. Registering a code twice, or a
+code containing `:`, throws.
+
+webpieces ships, and PRE-REGISTERS, three generic subclasses: `ApiEndUserNotFoundError`
+(`user-not-found`, edge 404), `ApiEndUserForbiddenError` (`user-forbidden`) and
+`ApiEndUserBadRequestError` (`user-bad-request`, edge 400). They decode typed with no setup.
+App-specific subclasses (terms, domain refusals) stay in the app.
+
 `ApiEndpointNotFoundError` remains distinct from domain `ApiNotFoundError`.
 `ApiCallTimeoutError(timeoutMs, CallContext)` is a subtype of `ApiDependencyTimeoutError` while
 retaining its local deadline and call context. Its `userMessage` is end-user text chosen by

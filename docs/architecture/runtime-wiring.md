@@ -143,7 +143,7 @@ Route modules implement `configure(router: WebpiecesRouter)`. The Node `Binder`
 
 - `bind(token)` — plain Inversify fluent syntax.
 - `createRpcClientAndBind(Api, 'deployment', options?)` — registers
-  `toDynamicValue(ctx => ctx.get(ClientHttpFactory).createRpcClient(Api, new ClientConfig(deployment), filters))`
+  `toDynamicValue(ctx => ctx.get(ClientHttpFactory).createRpcClient(Api, new ClientConfig(deployment, ClientRole.SERVER), filters))`
   in singleton scope, so the client resolves lazily from the already-bound factory.
 - `createPubSubClientAndBind(Api, 'deployment', options?)` — the same over `ClientCloudTasksFactory`.
 - `bindExternal(Api, VendorImpl)` — binds the vendor implementation to its external contract and

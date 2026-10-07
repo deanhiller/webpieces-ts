@@ -1,7 +1,7 @@
-import { WpAuthorization, AuthorizationType, WpAuth, oidc as oidcAuth, sharedSecret as sharedSecretAuth, apiKey as apiKeyAuth } from '@webpieces/core-util';
+import { ClientRole, WpAuthorization, AuthorizationType, WpAuth, oidc as oidcAuth, sharedSecret as sharedSecretAuth, apiKey as apiKeyAuth } from '@webpieces/core-util';
 import 'reflect-metadata';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { ApiPath, ClientRegistry, ContextKey, Endpoint, HeaderRegistry, ApiDependencyError, ApiEndUserError, ApiImplementationError, LogManager, ApiConnectionError, WpAuthPublic, Rpc, WebpiecesCoreHeaders, POST, READ, RPC, WRITE } from '@webpieces/core-util';
+import { ApiPath, ClientRegistry, ContextKey, Endpoint, HeaderRegistry, ApiDependencyError, ApiEndUserError, ApiImplementationError, ApiUnauthorizedError, LogManager, ApiConnectionError, WpAuthPublic, Rpc, WebpiecesCoreHeaders, POST, READ, RPC, WRITE } from '@webpieces/core-util';
 import type { ApiCallInfo, Logger, LoggerFactory } from '@webpieces/core-util';
 import { BrowserApiCallContext } from '../BrowserApiCallContext';
 import { RouteMetadata } from '@webpieces/core-util';
@@ -162,13 +162,13 @@ class RecordedCall {
 
 /** The ordinary client: no lifecycle listener, just the caller's view of a call. */
 function client(): PublicApi {
-    return factory.createRpcClient(PublicApi, new ClientConfig('save-svc'));
+    return factory.createRpcClient(PublicApi, new ClientConfig('save-svc', ClientRole.END_USER_CLIENT));
 }
 
 /** Build a client whose calls report their lifecycle to `listener`. */
 function clientWith(listener: RecordingListener): PublicApi {
     const withListener = new ClientHttpBrowserFactory(new MutableContextStore(), listener);
-    return withListener.createRpcClient(PublicApi, new ClientConfig('save-svc'));
+    return withListener.createRpcClient(PublicApi, new ClientConfig('save-svc', ClientRole.END_USER_CLIENT));
 }
 
 /** A recording RequestLifecycleListener — captures every callback, in order, for assertion. */
@@ -198,7 +198,7 @@ class RecordingListener implements RequestLifecycleListener {
 describe('BrowserProxyClient resolves a base URL without ever throwing', () => {
     it('an UNREGISTERED svcName yields a RELATIVE url (same origin)', async () => {
         const fetched = stubFetch();
-        const client = factory.createRpcClient(PublicApi, new ClientConfig('never-registered'));
+        const client = factory.createRpcClient(PublicApi, new ClientConfig('never-registered', ClientRole.END_USER_CLIENT));
 
         await client.save(new SaveRequest('q'));
 
@@ -208,7 +208,7 @@ describe('BrowserProxyClient resolves a base URL without ever throwing', () => {
     it('a registered mapping still WINS — the Angular dev server on :4201 reaching :8201', async () => {
         const fetched = stubFetch();
         ClientRegistry.addMapping('save-svc', 8201);
-        const client = factory.createRpcClient(PublicApi, new ClientConfig('save-svc'));
+        const client = factory.createRpcClient(PublicApi, new ClientConfig('save-svc', ClientRole.END_USER_CLIENT));
 
         await client.save(new SaveRequest('q'));
 
@@ -218,7 +218,7 @@ describe('BrowserProxyClient resolves a base URL without ever throwing', () => {
     it('an installed deriver is honored in the browser too', async () => {
         const fetched = stubFetch();
         ClientRegistry.setDeriver((svc: string) => Promise.resolve(`https://${svc}.example.com`));
-        const client = factory.createRpcClient(PublicApi, new ClientConfig('save-svc'));
+        const client = factory.createRpcClient(PublicApi, new ClientConfig('save-svc', ClientRole.END_USER_CLIENT));
 
         await client.save(new SaveRequest('q'));
 
@@ -235,25 +235,25 @@ describe('BrowserProxyClient resolves a base URL without ever throwing', () => {
  */
 describe('BrowserProxyClient rejects endpoints a browser cannot satisfy', () => {
     it('throws for an @WpAuthOidc contract', () => {
-        expect(() => factory.createRpcClient(OidcApi, new ClientConfig('save-svc'))).toThrow(
+        expect(() => factory.createRpcClient(OidcApi, new ClientConfig('save-svc', ClientRole.END_USER_CLIENT))).toThrow(
             /oidc.*browser cannot hold.*server-side/s,
         );
     });
 
     it('throws for an @WpAuthSharedSecret contract', () => {
         expect(() =>
-            factory.createRpcClient(SharedSecretApi, new ClientConfig('save-svc')),
+            factory.createRpcClient(SharedSecretApi, new ClientConfig('save-svc', ClientRole.END_USER_CLIENT)),
         ).toThrow(/shared-secret.*browser cannot hold.*server-side/s);
     });
 
     it('throws for an @WpAuthApiKey contract, naming the regime and who may actually call it', () => {
-        expect(() => factory.createRpcClient(ApiKeyApi, new ClientConfig('save-svc'))).toThrow(
+        expect(() => factory.createRpcClient(ApiKeyApi, new ClientConfig('save-svc', ClientRole.END_USER_CLIENT))).toThrow(
             /apiKey\('onetablet-partner'.*browser cannot hold.*server-side/s,
         );
     });
 
     it('accepts a @WpAuthPublic contract and binds its routes', () => {
-        const client = factory.createRpcClient(PublicApi, new ClientConfig('save-svc'));
+        const client = factory.createRpcClient(PublicApi, new ClientConfig('save-svc', ClientRole.END_USER_CLIENT));
 
         // The Proxy resolves the declared endpoint...
         expect(typeof client.save).toBe('function');
@@ -280,7 +280,7 @@ describe('BrowserProxyClient reports the request lifecycle to a registered liste
     it('with NO listener the client still works — the seam is a no-op', async () => {
         const fetched = stubFetch();
         const bareFactory = new ClientHttpBrowserFactory(new MutableContextStore());
-        const client = bareFactory.createRpcClient(PublicApi, new ClientConfig('save-svc'));
+        const client = bareFactory.createRpcClient(PublicApi, new ClientConfig('save-svc', ClientRole.END_USER_CLIENT));
 
         await client.save(new SaveRequest('q'));
 
@@ -447,8 +447,8 @@ describe('BrowserProxyClient applies the SAME received-status rule as node', () 
         expect((error as Error).message).toContain('404');
     });
 
-    it('400 / 401 / 403 are all caller-side defects on this hop, so all three are MY bug', async () => {
-        for (const status of [400, 401, 403]) {
+    it('400 / 403 are caller-side defects on this hop, so both are MY bug', async () => {
+        for (const status of [400, 403]) {
             stubFetchApiErrorPayload(status, 'nope');
             // webpieces-disable no-unmanaged-exceptions -- asserting the type of the rejection IS the test
             const error = await client()
@@ -456,6 +456,15 @@ describe('BrowserProxyClient applies the SAME received-status rule as node', () 
                 .catch((err: unknown) => err);
             expect(error, `HTTP ${status}`).toBeInstanceOf(ApiImplementationError);
         }
+    });
+
+    it('401 with the unauthorized payload is the USER session expiring: an end-user client gets ApiUnauthorizedError (#1173)', async () => {
+        stubFetchApiErrorPayload(401, 'nope');
+        // webpieces-disable no-unmanaged-exceptions -- asserting the type of the rejection IS the test
+        const error = await client()
+            .save(new SaveRequest('q'))
+            .catch((err: unknown) => err);
+        expect(error).toBeInstanceOf(ApiUnauthorizedError);
     });
 
     it('an HTML 404 from misrouted infra keeps the diagnostic text in the message', async () => {
@@ -555,7 +564,7 @@ describe('BrowserProxyClient stamps the api tag with no factory install and no b
 
         const other = new ClientHttpBrowserFactory(new MutableContextStore()).createRpcClient(
             PublicApi,
-            new ClientConfig('save-svc'),
+            new ClientConfig('save-svc', ClientRole.END_USER_CLIENT),
         );
         await client().save(new SaveRequest('q'));
         await other.save(new SaveRequest('q'));
