@@ -30,6 +30,7 @@ import {
     ClientHttpFactory,
     ClientRequest,
     ClientConfig,
+    ClientRole,
     DnsAddressResolver,
     NodeProxyClient,
 } from '@webpieces/http-client-node'; // eslint-disable-line @webpieces/enforce-architecture -- test-only end-to-end proof that the topology-neutral MCP binding accepts a real generated Node client
@@ -150,14 +151,18 @@ describe('McpApiBinding.remote generated Node client integration', () => {
         outbound = new OutboundWireProbe();
         const factory = clientFactory(minter);
         binding = McpApiBinding.remote(RemoteMcpApi, () =>
-            factory.createRpcClient(RemoteMcpApi, new ClientConfig(REMOTE_SERVICE), [
-                new ClientFilterDefinition(1_000, outbound),
-            ]),
+            factory.createRpcClient(
+                RemoteMcpApi,
+                new ClientConfig(REMOTE_SERVICE, ClientRole.SERVER),
+                [new ClientFilterDefinition(1_000, outbound)],
+            ),
         );
         missingBinding = McpApiBinding.remote(MissingRemoteMcpApi, () =>
-            factory.createRpcClient(MissingRemoteMcpApi, new ClientConfig(REMOTE_SERVICE), [
-                new ClientFilterDefinition(1_000, outbound),
-            ]),
+            factory.createRpcClient(
+                MissingRemoteMcpApi,
+                new ClientConfig(REMOTE_SERVICE, ClientRole.SERVER),
+                [new ClientFilterDefinition(1_000, outbound)],
+            ),
         );
         tool = requiredTool(
             new McpToolRegistry([binding], [REMOTE_MCP_CATALOG], new AuthorizationService()),
@@ -220,25 +225,28 @@ describe('McpApiBinding.remote generated Node client integration', () => {
                 [
                     McpApiBinding.local(LocalThrowApi, router),
                     McpApiBinding.remote(RemoteThrowApi, () =>
-                        factory.createRpcClient(RemoteThrowApi, new ClientConfig(REMOTE_SERVICE)),
+                        factory.createRpcClient(
+                            RemoteThrowApi,
+                            new ClientConfig(REMOTE_SERVICE, ClientRole.SERVER),
+                        ),
                     ),
                     missingBinding,
                     McpApiBinding.remote(RefusedRemoteApi, () =>
                         factory.createRpcClient(
                             RefusedRemoteApi,
-                            new ClientConfig(REFUSED_SERVICE),
+                            new ClientConfig(REFUSED_SERVICE, ClientRole.SERVER),
                         ),
                     ),
                     McpApiBinding.remote(GarbageRemoteApi, () =>
                         factory.createRpcClient(
                             GarbageRemoteApi,
-                            new ClientConfig(GARBAGE_SERVICE),
+                            new ClientConfig(GARBAGE_SERVICE, ClientRole.SERVER),
                         ),
                     ),
                     McpApiBinding.remote(OidcFailRemoteApi, () =>
                         failingOidc.createRpcClient(
                             OidcFailRemoteApi,
-                            new ClientConfig(REMOTE_SERVICE),
+                            new ClientConfig(REMOTE_SERVICE, ClientRole.SERVER),
                         ),
                     ),
                 ],
@@ -398,7 +406,10 @@ describe('McpApiBinding.remote generated Node client integration', () => {
 
     it('rejects delegated identity context from a caller that fails remote OIDC', async () => {
         const forging = clientFactory(new RecordingOidcMinter(undefined, 'forged-oidc-token'));
-        const client = forging.createRpcClient(RemoteMcpApi, new ClientConfig(REMOTE_SERVICE));
+        const client = forging.createRpcClient(
+            RemoteMcpApi,
+            new ClientConfig(REMOTE_SERVICE, ClientRole.SERVER),
+        );
         const callsBefore = controller.calls;
         await RequestContext.run(async () => {
             const incoming = new HttpRequest('POST', '/forged', new Map<string, string[]>());

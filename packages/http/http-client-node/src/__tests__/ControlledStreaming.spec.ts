@@ -1,4 +1,4 @@
-import { WpAuthorization, AuthorizationType } from '@webpieces/core-util';
+import { ClientRole, WpAuthorization, AuthorizationType } from '@webpieces/core-util';
 import 'reflect-metadata';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
@@ -100,10 +100,10 @@ class OrderTranslator implements ErrorTranslator {
         }
         return new WebpiecesDefaultErrorTranslator().toWire(error);
     }
-    fromWire(response: HttpResponseDto): void {
+    fromWire(response: HttpResponseDto, role: ClientRole): void {
         if (response.status.code === 460)
             throw new OrderError((response.body as OrderErrorBody).orderId);
-        new WebpiecesDefaultErrorTranslator().fromWire(response);
+        new WebpiecesDefaultErrorTranslator().fromWire(response, role);
     }
 }
 
@@ -142,7 +142,7 @@ class ControlledFeature {
         HeaderRegistry.configure([], true);
         ClientRegistry.addUrlMapping('controlled', 'http://127.0.0.1');
         const proxy = new ControlledProxy(this.transport);
-        proxy.init(ControlledApi, new ClientConfig('controlled'), []);
+        proxy.init(ControlledApi, new ClientConfig('controlled', ClientRole.SERVER), []);
         this.client = buildClientProxy(ControlledApi, proxy);
     }
 
@@ -170,7 +170,7 @@ describe('generated-client streaming features over controlled transport', () => 
             const requests = await opening;
             response.enqueueJsonLine({ received: true });
             const control = await call.nextRawLine();
-            expect(new StreamErrorControl().decode(control!)).toMatchObject({
+            expect(new StreamErrorControl().decode(control!, ClientRole.SERVER)).toMatchObject({
                 orderId: 'client-handler',
             });
             await vi.waitFor(() => expect(feature.cancelled).toEqual([error]));
@@ -275,7 +275,9 @@ describe('generated-client streaming features over controlled transport', () => 
             const cancellation = requests.cancel(new OrderError('o-18'));
             const line = await call.nextRawLine();
             expect(line?.charCodeAt(0)).toBe(0x1e);
-            expect(new StreamErrorControl().decode(line!)).toMatchObject({ orderId: 'o-18' });
+            expect(new StreamErrorControl().decode(line!, ClientRole.SERVER)).toMatchObject({
+                orderId: 'o-18',
+            });
             await cancellation;
             response.end();
         });
@@ -309,9 +311,9 @@ describe('generated-client streaming features over controlled transport', () => 
             fromWire: (): void => undefined,
         });
         const control = new StreamErrorControl();
-        expect(control.decode(control.encode(new Error('failure')))).toBeInstanceOf(
-            StreamProtocolError,
-        );
+        expect(
+            control.decode(control.encode(new Error('failure')), ClientRole.SERVER),
+        ).toBeInstanceOf(StreamProtocolError);
     });
 
     it('aborts when the application translator cannot encode cancellation', async () => {

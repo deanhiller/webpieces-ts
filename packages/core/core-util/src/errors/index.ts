@@ -21,7 +21,17 @@ export {
     ApiUnsupportedMediaTypeError,
     ApiNotImplementedError,
     ApiCodedError,
+    ApiClientTooOldError,
 } from './ApiError';
+export {
+    ApiEndUserNotFoundError,
+    ApiEndUserForbiddenError,
+    ApiEndUserBadRequestError,
+} from './EndUserErrors';
+export { EndUserErrorCode } from './EndUserErrorCode';
+export { EndUserErrorRegistry } from './EndUserErrorRegistry';
+export type { EndUserErrorFactory } from './EndUserErrorRegistry';
+export { ClientRole } from './ClientRole';
 export type { ApiErrorKind, ApiStatusCode, EdgeHttpStatus } from './ApiError';
 export { ApiErrorCodec, ApiErrorPayload } from './ApiErrorCodec';
 export { ApiErrorBoundary } from './ApiErrorBoundary';

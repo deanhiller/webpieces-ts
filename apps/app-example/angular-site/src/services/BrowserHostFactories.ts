@@ -1,4 +1,4 @@
-import { ClientConfig, ClientHttpBrowserFactory, ClientRegistry, MutableContextStore } from '@webpieces/http-client-browser';
+import { ClientConfig, ClientRole, ClientHttpBrowserFactory, ClientRegistry, MutableContextStore } from '@webpieces/http-client-browser';
 import { EnvironmentConfig } from './EnvironmentConfig';
 
 /**
@@ -12,6 +12,6 @@ export class BrowserHostFactories {
     /** Maps the backend's svcName to the dev/prod base URL once, then hands out its ClientConfig. */
     readonly clientConfig = (environment: EnvironmentConfig): ClientConfig => {
         ClientRegistry.addUrlMapping('client-server', environment.apiBaseUrl());
-        return new ClientConfig('client-server');
+        return new ClientConfig('client-server', ClientRole.END_USER_CLIENT);
     };
 }

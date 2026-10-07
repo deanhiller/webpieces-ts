@@ -1,4 +1,5 @@
 import {
+    ClientRole,
     DtoValue,
     ResponseStream,
     RouteMetadata,
@@ -24,7 +25,7 @@ export type StreamingLifecycleEnd = (route: RouteMetadata, outcome: RequestOutco
 /** Owns one RESPONSE-direction handshake and its lifecycle reporting. */
 export class ResponseStreamingCall {
     private readonly requests = new ResponseStreamingRequestFactory();
-    private readonly responses = new JsonlResponseStream();
+    private readonly responses: JsonlResponseStream;
 
     constructor(
         private readonly apiName: string,
@@ -35,7 +36,10 @@ export class ResponseStreamingCall {
         private readonly acceptContext: StreamingResponseContext,
         private readonly start: StreamingLifecycleStart,
         private readonly end: StreamingLifecycleEnd,
-    ) {}
+        role: ClientRole,
+    ) {
+        this.responses = new JsonlResponseStream(role);
+    }
 
     // webpieces-disable no-any-unknown -- generated proxy arguments are validated here
     async open(route: RouteMetadata, args: unknown[]): Promise<DtoValue> {

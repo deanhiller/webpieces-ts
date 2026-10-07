@@ -1,6 +1,7 @@
 import {
     ApiBadRequestError,
     ApiBadGatewayError,
+    ApiClientTooOldError,
     ApiCodedError,
     ApiConflictError,
     ApiConnectionError,
@@ -25,6 +26,7 @@ import {
     EdgeHttpStatus,
 } from './ApiError';
 import { toError } from '../lib/errorUtils';
+import { EndUserErrorRegistry } from './EndUserErrorRegistry';
 
 /** Allowlisted transport-neutral envelope. It never contains stacks or arbitrary properties. */
 export class ApiErrorPayload {
@@ -132,7 +134,8 @@ export class ApiErrorCodec {
         const message = this.text(field('message')) ?? this.message(kind);
         switch (kind) {
             case 'end-user':
-                return new ApiEndUserError(
+                // The registered SUBCLASS for this errorCode, else the base type with the code intact.
+                return EndUserErrorRegistry.create(
                     message,
                     this.text(field('errorCode')),
                     this.edgeStatus(field('edgeHttpStatus')),
@@ -192,7 +195,12 @@ export class ApiErrorCodec {
     // webpieces-disable no-function-outside-class -- coded wire decode; webpieces-disable no-any-unknown -- wire fields require validation
     private static coded(message: string, statusCode: unknown, errorCode: unknown): ApiError {
         if (!ApiCodedError.isStatusCode(statusCode)) return this.remoteImplementationError();
-        return new ApiCodedError(message, statusCode, this.text(errorCode));
+        const code = this.text(errorCode);
+        // The one coded failure webpieces names: rebuilt as its own type so a receiver sees
+        // "upgrade", never a generic coded 4xx (issue #1172).
+        if (ApiClientTooOldError.matches(statusCode, code))
+            return new ApiClientTooOldError(message);
+        return new ApiCodedError(message, statusCode, code);
     }
 
     // webpieces-disable no-function-outside-class -- concrete normalization for malformed remote errors

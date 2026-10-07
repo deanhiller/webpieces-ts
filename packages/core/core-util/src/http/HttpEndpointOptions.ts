@@ -90,6 +90,14 @@ export interface EndpointOptions {
      * webpieces only declares and carries it (`RouteMetadata.allowUpgradeInFlight`); the app's
      * `RequestLifecycleListener` / upgrade logic decides what to do with it. Default false.
      * `grep -rn allowUpgradeInFlight` lists every endpoint an upgrade may cut off.
+     *
+     * THE SERVER'S HALF of the upgrade story is `ApiClientTooOldError` (HTTP 426,
+     * `errorCode: 'client-too-old'`). This flag is the CLIENT deciding WHEN it may upgrade; that
+     * error is a SERVER saying the client MUST. Who throws it: a server gate that compares the build
+     * the caller declared (a header, a version in the request) against the minimum it still
+     * supports. Receivers decode it back into `ApiClientTooOldError` on every hop, server-to-server
+     * and browser, HTTP and IPC, and treat it as an upgrade, never as a bug: the app's upgrade logic
+     * reloads or installs the new build, typically honouring this flag for the calls still in flight.
      */
     allowUpgradeInFlight?: boolean;
     /**

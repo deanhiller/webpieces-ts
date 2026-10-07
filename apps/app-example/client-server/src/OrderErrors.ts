@@ -5,6 +5,7 @@ import {
     HttpResponseDto,
     HttpResponseStatus,
     WebpiecesDefaultErrorTranslator,
+    ClientRole,
 } from '@webpieces/core-util';
 import { RequestContext } from '@webpieces/core-context';
 
@@ -84,9 +85,9 @@ export class OrderErrorTranslator implements ErrorTranslator {
      * THROWS because its whole job is to stop a failure response reaching a typed caller. Declining
      * is a call to the default, which throws for anything that is not an ordinary 2xx.
      */
-    fromWire(response: HttpResponseDto): void {
+    fromWire(response: HttpResponseDto, role: ClientRole): void {
         if (response.status.code !== 460) {
-            this.fallback.fromWire(response);
+            this.fallback.fromWire(response, role);
             return;
         }
         const body = response.body as OrderErrorPayload;

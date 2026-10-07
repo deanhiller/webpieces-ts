@@ -13,6 +13,7 @@ import { GcpOidc } from '@webpieces/gcp-identity';
 import { Provider, RequestContext, RequestContextHeaders } from '@webpieces/core-context';
 import {
     ClientConfig,
+    ClientRole,
     ClientHttpFactory,
     DnsAddressResolver,
     NodeProxyClient,
@@ -53,7 +54,7 @@ const publicApiClient = (): PublicApi => {
     );
     return new ClientHttpFactory(provider).createRpcClient(
         PublicApi,
-        new ClientConfig('client-server'),
+        new ClientConfig('client-server', ClientRole.SERVER),
     );
 };
 

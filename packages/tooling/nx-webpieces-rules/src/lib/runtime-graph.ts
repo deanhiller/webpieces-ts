@@ -558,7 +558,7 @@ class RuntimeGraphDeriver {
             this.warnings.push(
                 `${user} uses "${ref.api}" with no literal client config, and ${implementers.length} services ` +
                     `implement it (${implementers.join(', ')}) — an edge is drawn to EVERY one, so all but one ` +
-                    `are fiction. Name the target: createRpcClient(${ref.api}, new ClientConfig('<serviceName>')); ` +
+                    `are fiction. Name the target: createRpcClient(${ref.api}, new ClientConfig('<serviceName>', ClientRole.SERVER)); ` +
                     `or, when the client is built in a shared library (no literal can sit at the call site), ` +
                     `declare metadata.webpieces.callsService: '<serviceName>' on ${user}'s project.json.`,
             );

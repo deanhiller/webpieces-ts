@@ -444,7 +444,7 @@ describe('SaveApi Client', () => {
       json: async () => ({ success: true }),
     });
 
-    const config = new ClientConfig('http://localhost:3000');
+    const config = new ClientConfig('http://localhost:3000', ClientRole.SERVER);
     const client = createClient(SaveApiPrototype, config);
 
     const response = await client.save(new SaveRequest('test'));
@@ -637,7 +637,7 @@ export abstract class SaveApiPrototype {
 }
 
 // Create client
-const config = new ClientConfig('http://localhost:3000');
+const config = new ClientConfig('http://localhost:3000', ClientRole.SERVER);
 const client = createClient(SaveApiPrototype, config);
 
 // Type-safe method call

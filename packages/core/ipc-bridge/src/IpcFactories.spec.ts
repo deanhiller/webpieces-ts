@@ -1,4 +1,10 @@
-import { WpAuthorization, AuthorizationType, WpAuth, jwt as jwtAuth } from '@webpieces/core-util';
+import {
+    WpAuthorization,
+    AuthorizationType,
+    WpAuth,
+    jwt as jwtAuth,
+    ClientRole,
+} from '@webpieces/core-util';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { IpcClientFactory, IpcServerFactory } from '@webpieces/ipc-bridge';
 import {
@@ -122,7 +128,7 @@ class Pair {
         this.reverse.create(TestApi, new EchoController());
         this.right.setHandler(this.server.handle);
         this.left.setHandler(this.reverse.handle);
-        this.clients = new IpcClientFactory(this.left, this.logging);
+        this.clients = new IpcClientFactory(this.left, this.logging, ClientRole.END_USER_CLIENT);
     }
 }
 class EchoController extends TestApi {
@@ -162,7 +168,11 @@ describe('portable IPC JSON boundary', () => {
     it('supports duplex calls, acknowledged void and explicit IDs', async () => {
         const pair = new Pair();
         const client = pair.clients.createClient(TestApi);
-        const reverse = new IpcClientFactory(pair.right, pair.logging).createClient(TestApi);
+        const reverse = new IpcClientFactory(
+            pair.right,
+            pair.logging,
+            ClientRole.SERVER,
+        ).createClient(TestApi);
         expect(await client.echo(new Value('secret'))).toEqual(new Value('secret'));
         expect(await reverse.echo(new Value('reverse'))).toEqual(new Value('reverse'));
         expect(await client.notify(new Value('event'))).toBeUndefined();

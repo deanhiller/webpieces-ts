@@ -11,7 +11,7 @@ import { SsrfPolicy } from './SsrfPolicy';
  * gave us one opaque url (a database row) rather than implementing our contract at their host:
  *
  * ```ts
- * const partner = factory.createRpcClient(PartnerWebhookApi, new ClientConfig('partner-webhooks'), [
+ * const partner = factory.createRpcClient(PartnerWebhookApi, new ClientConfig('partner-webhooks', ClientRole.SERVER), [
  *     new ClientFilterDefinition(1000, new ContextFullUrlFilter()),
  * ]);
  *

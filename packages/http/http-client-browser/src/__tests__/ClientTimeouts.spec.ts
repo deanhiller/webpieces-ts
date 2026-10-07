@@ -1,4 +1,4 @@
-import { WpAuthorization, AuthorizationType } from '@webpieces/core-util';
+import { ClientRole, WpAuthorization, AuthorizationType } from '@webpieces/core-util';
 import 'reflect-metadata';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
@@ -88,7 +88,7 @@ class Harness {
         const client = new ClientHttpBrowserFactory(
             new MutableContextStore(),
             this.lifecycle,
-        ).createRpcClient(RpcApi, new ClientConfig('timeout-test'));
+        ).createRpcClient(RpcApi, new ClientConfig('timeout-test', ClientRole.END_USER_CLIENT));
         this.invoke = (method = 'work') => client[method](new Payload());
     }
     async expectTimeout(timeoutMs: number, method: 'work' | 'other' = 'work'): Promise<void> {

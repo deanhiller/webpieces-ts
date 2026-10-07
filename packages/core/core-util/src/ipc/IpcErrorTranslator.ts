@@ -1,4 +1,5 @@
 import { ApiErrorPayload } from '../errors/ApiErrorCodec';
+import { ClientRole } from '../errors/ClientRole';
 import { IpcReply } from './IpcProtocol';
 
 /**
@@ -35,7 +36,10 @@ export interface IpcErrorTranslator {
      * HTTP side, so an app can turn a "successful" reply into a throw. Returning normally means "let
      * this reply through"; the webpieces default returns for an `IpcSuccess` and throws for an
      * `IpcFailure`. Decline by calling
-     * `new WebpiecesDefaultIpcErrorTranslator().fromWire(reply)`.
+     * `new WebpiecesDefaultIpcErrorTranslator().fromWire(reply, role)`.
+     *
+     * `role` is WHO is receiving ({@link ClientRole}), declared once at `IpcClientFactory` setup with
+     * no default. It decides what a received `unauthorized` means; pass it through when declining.
      */
-    fromWire(reply: IpcReply): void;
+    fromWire(reply: IpcReply, role: ClientRole): void;
 }

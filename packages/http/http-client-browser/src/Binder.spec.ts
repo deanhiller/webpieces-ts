@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { ClientRole } from '@webpieces/core-util';
 import { ClientConfig } from './ClientConfig';
 import { ClientHttpBrowserFactory } from './ClientHttpBrowserFactory';
 import { MutableContextStore } from './MutableContextStore';
@@ -82,7 +83,7 @@ describe('browser Binder', () => {
         const factory = new ClientHttpBrowserFactory(new MutableContextStore());
         const spy = vi.spyOn(factory, 'createRpcClient').mockReturnValue(new Stub());
         expect(spy).not.toHaveBeenCalled();
-        for (const provider of clients) provider.useFactory(factory, new ClientConfig('shared-default'));
+        for (const provider of clients) provider.useFactory(factory, new ClientConfig('shared-default', ClientRole.END_USER_CLIENT));
         const deployments: string[] = [];
         for (const call of spy.mock.calls) deployments.push(call[1].svcName);
         expect(deployments).toEqual(['default-deployment', 'first-deployment', 'second-deployment']);

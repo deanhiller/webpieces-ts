@@ -1,4 +1,4 @@
-import { WpAuthorization, AuthorizationType, WpAuth, oidc as oidcAuth, sharedSecret as sharedSecretAuth, webhook as webhookAuth } from '@webpieces/core-util';
+import { ClientRole, WpAuthorization, AuthorizationType, WpAuth, oidc as oidcAuth, sharedSecret as sharedSecretAuth, webhook as webhookAuth } from '@webpieces/core-util';
 import 'reflect-metadata';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { ApiPath, ClientRegistry, DestinationTrust, Endpoint, Filter, WpAuthPublic, Rpc, Secrets, Service, TestCaseRecorder, WebpiecesCoreHeaders, POST, RPC, WRITE } from '@webpieces/core-util';
@@ -220,7 +220,7 @@ function client<T extends object>(api: ApiPrototype<T>, config: ClientConfig, fi
 
 /** The target shape: one filter, no second ClientConfig argument, nothing else. */
 function partnerClient(filters: ClientFilterDefinition[] = [], doubles: Doubles = new Doubles()): PartnerWebhookApi {
-    return client(PartnerWebhookApi, new ClientConfig('partner-webhooks'), [new ClientFilterDefinition(1000, new ContextBaseUrlFilter()), ...filters], doubles);
+    return client(PartnerWebhookApi, new ClientConfig('partner-webhooks', ClientRole.SERVER), [new ClientFilterDefinition(1000, new ContextBaseUrlFilter()), ...filters], doubles);
 }
 
 /** Run `fn` with an OVERRIDE_BASE_URL in scope, exactly as a fan-out loop would. */
@@ -282,7 +282,7 @@ describe('the runtime base-URL override, as ONE app filter', () => {
 
 describe('a client with NO ContextBaseUrlFilter', () => {
     it('resolves through ClientRegistry and IGNORES an ambient OVERRIDE_BASE_URL', async () => {
-        const deployed = client(PartnerWebhookApi, new ClientConfig('server2'), []);
+        const deployed = client(PartnerWebhookApi, new ClientConfig('server2', ClientRole.SERVER), []);
 
         // The key IS set — this is the fan-out hazard: a delivery loop sets it, then calls some
         // OTHER client. A client that never installed the filter must not be re-pointed.
@@ -293,7 +293,7 @@ describe('a client with NO ContextBaseUrlFilter', () => {
 
     it('is not SSRF-checked at all: no DNS, and the transport keeps its own redirect handling', async () => {
         const doubles = new Doubles();
-        const deployed = client(PartnerWebhookApi, new ClientConfig('server2'), [], doubles);
+        const deployed = client(PartnerWebhookApi, new ClientConfig('server2', ClientRole.SERVER), [], doubles);
         await RequestContext.run(() => deployed.deliver(new DeliverRequest('e1')));
 
         expect(sentUrls()).toEqual(['https://server2.example/webhooks/deliver']);
@@ -305,7 +305,7 @@ describe('a client with NO ContextBaseUrlFilter', () => {
 
     it('reaches a localhost emulator with no opt-out of any kind, because the registry is not judged', async () => {
         ClientRegistry.addUrlMapping('local-svc', 'http://localhost:8202');
-        const local = client(PartnerWebhookApi, new ClientConfig('local-svc'), []);
+        const local = client(PartnerWebhookApi, new ClientConfig('local-svc', ClientRole.SERVER), []);
 
         await RequestContext.run(() => local.deliver(new DeliverRequest('e1')));
 
@@ -363,7 +363,7 @@ describe('the SSRF policy, armed by the ACT of re-pointing', () => {
     });
 
     it('the named opt-out reaches an internal address, and only when named', async () => {
-        const local = client(PartnerWebhookApi, new ClientConfig('partner-webhooks'), [
+        const local = client(PartnerWebhookApi, new ClientConfig('partner-webhooks', ClientRole.SERVER), [
             new ClientFilterDefinition(1000, new ContextBaseUrlFilter(new SsrfTestingPolicy('exercising the partner path against a local fake'))),
         ]);
 
@@ -416,7 +416,7 @@ describe('outbound auth against a re-pointed URL', () => {
         // the audience has to be the url we are ACTUALLY talking to, which is why the minter moved
         // into the chain.
         const doubles = new Doubles();
-        const oidcClient = client(OidcApi, new ClientConfig('partner-webhooks'), [new ClientFilterDefinition(1000, new ContextBaseUrlFilter())], doubles);
+        const oidcClient = client(OidcApi, new ClientConfig('partner-webhooks', ClientRole.SERVER), [new ClientFilterDefinition(1000, new ContextBaseUrlFilter())], doubles);
 
         await withOverride('https://api.partner.example', () => oidcClient.work(new DeliverRequest('e1')));
 
@@ -425,7 +425,7 @@ describe('outbound auth against a re-pointed URL', () => {
     });
 
     it('@WpAuthSharedSecret WORKS — N services behind ONE agreed secret is a real topology', async () => {
-        const secretClient = client(SharedSecretApi, new ClientConfig('partner-webhooks'), [new ClientFilterDefinition(1000, new ContextBaseUrlFilter())]);
+        const secretClient = client(SharedSecretApi, new ClientConfig('partner-webhooks', ClientRole.SERVER), [new ClientFilterDefinition(1000, new ContextBaseUrlFilter())]);
 
         await withOverride('https://api.partner.example', () => secretClient.work(new DeliverRequest('e1')));
 
@@ -435,7 +435,7 @@ describe('outbound auth against a re-pointed URL', () => {
 
     it('mints AFTER the SSRF guard has judged the destination, so a refused url never gets a token', async () => {
         const doubles = new Doubles();
-        const oidcClient = client(OidcApi, new ClientConfig('partner-webhooks'), [new ClientFilterDefinition(1000, new ContextBaseUrlFilter())], doubles);
+        const oidcClient = client(OidcApi, new ClientConfig('partner-webhooks', ClientRole.SERVER), [new ClientFilterDefinition(1000, new ContextBaseUrlFilter())], doubles);
 
         await expect(withOverride('https://169.254.169.254', () => oidcClient.work(new DeliverRequest('e1')))).rejects.toBeInstanceOf(SsrfRefusedError);
 
@@ -449,7 +449,7 @@ describe('@WpAuthWebhook, outbound — WE are the vendor', () => {
         const signer = new RecordingWebhookSigner();
         const signedClient = client(
             SignedWebhookApi,
-            new ClientConfig('partner-webhooks'),
+            new ClientConfig('partner-webhooks', ClientRole.SERVER),
             [new ClientFilterDefinition(1000, new ContextBaseUrlFilter())],
             new Doubles(signer),
         );
@@ -471,7 +471,7 @@ describe('@WpAuthWebhook, outbound — WE are the vendor', () => {
     it('FAILS CLOSED with no signer bound — it does not deliver unsigned', async () => {
         const unsigned = client(
             SignedWebhookApi,
-            new ClientConfig('partner-webhooks'),
+            new ClientConfig('partner-webhooks', ClientRole.SERVER),
             [new ClientFilterDefinition(1000, new ContextBaseUrlFilter())],
             new Doubles(undefined),
         );
@@ -483,7 +483,7 @@ describe('@WpAuthWebhook, outbound — WE are the vendor', () => {
     });
 
     it('is callable at all — binding the client no longer throws for @WpAuthWebhook', () => {
-        expect(() => client(SignedWebhookApi, new ClientConfig('partner-webhooks'), [], new Doubles(new RecordingWebhookSigner()))).not.toThrow();
+        expect(() => client(SignedWebhookApi, new ClientConfig('partner-webhooks', ClientRole.SERVER), [], new Doubles(new RecordingWebhookSigner()))).not.toThrow();
     });
 });
 
@@ -581,7 +581,7 @@ describe('app filters', () => {
         const doubles = new Doubles();
         const rewriter = client(
             OidcApi,
-            new ClientConfig('partner-webhooks'),
+            new ClientConfig('partner-webhooks', ClientRole.SERVER),
             [
                 new ClientFilterDefinition(Number.MAX_SAFE_INTEGER, new ContextBaseUrlFilter()),
                 new ClientFilterDefinition(Number.MIN_SAFE_INTEGER, new LateRePointingFilter('https://169.254.169.254')),
@@ -598,7 +598,7 @@ describe('app filters', () => {
         const doubles = new Doubles();
         const rewriter = client(
             OidcApi,
-            new ClientConfig('partner-webhooks'),
+            new ClientConfig('partner-webhooks', ClientRole.SERVER),
             [
                 new ClientFilterDefinition(1000, new ContextBaseUrlFilter()),
                 new ClientFilterDefinition(1, new LateRePointingFilter('https://redirector.partner.example')),

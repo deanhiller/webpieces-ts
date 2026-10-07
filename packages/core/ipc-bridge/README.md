@@ -17,10 +17,12 @@ abstract class PlaybackApi {
     @WpIpcEndpoint('play.v1')
     abstract play(request: PlayRequest): Promise<void>;
 }
-const clients = new IpcClientFactory(connection, logging);
+const clients = new IpcClientFactory(connection, logging, ClientRole.END_USER_CLIENT);
 const playback = clients.createClient(PlaybackApi);
 await playback.play(new PlayRequest('track-id'));
 ```
+
+The third `IpcClientFactory` argument is the `ClientRole` (from `@webpieces/core-util/ipc`), required with no default: `END_USER_CLIENT` when this side acts for a person (a WebView or app shell), so an `unauthorized` reply decodes as `ApiUnauthorizedError` ("log in again"); `SERVER` when the credential this side presents is its own, so the same reply is its own bug (`ApiImplementationError`). See `docs/portable-ipc-and-errors.md`.
 
 The DTO, IDs and metadata live in the shared API package. The names of the abstract class and controller are never sent on the wire. Proxy inspection, symbols and `then` do not send requests. Added JSON fields are naturally ignored by typed consumers; missing fields may fail in application logic.
 

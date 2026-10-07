@@ -25,7 +25,7 @@ import { WebpiecesCoreHeaders } from './WebpiecesCoreHeaders';
  *
  * const store = new MutableContextStore();
  * const factory = new ClientHttpBrowserFactory(store);
- * const client = factory.createRpcClient(SaveApi, new ClientConfig('http://api.example.com'));
+ * const client = factory.createRpcClient(SaveApi, new ClientConfig('http://api.example.com', ClientRole.SERVER));
  * ```
  */
 export class ContextMgr {

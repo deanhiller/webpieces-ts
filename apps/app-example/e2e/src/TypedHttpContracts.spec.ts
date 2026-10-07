@@ -1,4 +1,4 @@
-import { WpAuthorization, AuthorizationType, WpAuth, jwt as jwtAuth } from '@webpieces/core-util';
+import { ClientRole, WpAuthorization, AuthorizationType, WpAuth, jwt as jwtAuth } from '@webpieces/core-util';
 import 'reflect-metadata';
 import express from 'express';
 import type { Server as HttpServer } from 'http';
@@ -206,7 +206,7 @@ function nodeClient<T extends object>(api: abstract new (...args: never[]) => T)
     );
     return new ClientHttpFactory(provider).createRpcClient(
         api,
-        new NodeClientConfig('typed-http-test'),
+        new NodeClientConfig('typed-http-test', ClientRole.SERVER),
     );
 }
 
@@ -239,7 +239,7 @@ describe('real server + browser/node typed HTTP transports', () => {
         browserStore = new MutableContextStore();
         browserClient = new ClientHttpBrowserFactory(browserStore).createRpcClient(
             TypedTransportApi,
-            new BrowserClientConfig('typed-http-test'),
+            new BrowserClientConfig('typed-http-test', ClientRole.END_USER_CLIENT),
         );
         nodeTransportClient = nodeClient(TypedTransportApi);
     });

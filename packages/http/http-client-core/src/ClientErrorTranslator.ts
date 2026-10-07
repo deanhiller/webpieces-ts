@@ -1,5 +1,6 @@
 import {
     ApiImplementationError,
+    ClientRole,
     ClientRegistry,
     HttpResponseDto,
     WEBPIECES_DEFAULT_ERROR_TRANSLATOR,
@@ -27,11 +28,13 @@ export class ClientErrorTranslator {
      * normally for a non-2xx has a bug whose symptom would otherwise be `undefined` arriving where
      * the contract promised a DTO. The webpieces default answers instead — and for a genuine 2xx it
      * returns silently, so the normal path costs one predicate.
+     *
+     * @param role - who is receiving, from the calling client's `ClientConfig` (see {@link ClientRole}).
      */
     // webpieces-disable no-function-outside-class -- pure stateless mapping shared by browser and node
-    static throwIfFailure(response: HttpResponseDto): void {
-        ClientRegistry.getErrorTranslator().fromWire(response);
-        WEBPIECES_DEFAULT_ERROR_TRANSLATOR.fromWire(response);
+    static throwIfFailure(response: HttpResponseDto, role: ClientRole): void {
+        ClientRegistry.getErrorTranslator().fromWire(response, role);
+        WEBPIECES_DEFAULT_ERROR_TRANSLATOR.fromWire(response, role);
     }
 
     /**
@@ -43,8 +46,8 @@ export class ClientErrorTranslator {
      * called with an ordinary 2xx, which is a framework bug in the caller, and says so.
      */
     // webpieces-disable no-function-outside-class -- pure stateless mapping shared by browser and node
-    static throwFailure(response: HttpResponseDto): never {
-        ClientErrorTranslator.throwIfFailure(response);
+    static throwFailure(response: HttpResponseDto, role: ClientRole): never {
+        ClientErrorTranslator.throwIfFailure(response, role);
         throw new ApiImplementationError(
             `ClientErrorTranslator.throwFailure was called for HTTP ${response.status.code}, ` +
                 `which is an ordinary success. Only a non-2xx (or a 266) response reaches here; ` +

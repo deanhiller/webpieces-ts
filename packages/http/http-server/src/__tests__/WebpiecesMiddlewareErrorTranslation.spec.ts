@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import {
+    ClientRole,
     ClientRegistry,
     ApiErrorPayload,
     ApiBadRequestError,
@@ -40,9 +41,9 @@ class AiErrorTranslator implements ErrorTranslator {
         const pe = new AiErrorPayload(error.message, error.name);
         return new HttpResponseDto(new HttpResponseStatus(460, 'AI Bad Request'), [], pe);
     }
-    fromWire(response: HttpResponseDto): void {
+    fromWire(response: HttpResponseDto, role: ClientRole): void {
         if (response.status.code !== 460) {
-            this.fallback.fromWire(response);
+            this.fallback.fromWire(response, role);
             return;
         }
         throw new AiBadRequestError((response.body as AiErrorPayload).message ?? 'AI bad request');

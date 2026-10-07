@@ -1,6 +1,7 @@
 import { ApiErrorBoundary } from '../errors/ApiErrorBoundary';
 import { ApiErrorCodec, ApiErrorPayload } from '../errors/ApiErrorCodec';
 import { ApiCodedError } from '../errors/ApiError';
+import { ClientRole } from '../errors/ClientRole';
 import { ReceivedApiErrorRule } from '../errors/ReceivedApiErrorRule';
 import { ApiErrorHttpStatus } from '../http/ApiErrorHttpStatus';
 import { IpcErrorTranslator } from './IpcErrorTranslator';
@@ -19,7 +20,9 @@ import { IpcReply } from './IpcProtocol';
  * caller-error kind coming back means I sent a bad IPC request (MY bug ->
  * `ApiImplementationError`), a server-side kind means the peer broke (NOT my bug ->
  * `ApiDependencyError`), an incoming `ApiDependencyError` is already attributed and rethrows as-is,
- * and an `ApiEndUserError` is the actor's own answer and passes through.
+ * an `ApiEndUserError` is the actor's own answer and passes through (as its registered subclass), an
+ * `ApiClientTooOldError` passes through on every hop, and an `unauthorized` reply depends on the
+ * receiving {@link ClientRole}.
  *
  * The two protocols share ONE rule object rather than two copies for the obvious reason: an app that
  * moves a call from IPC to HTTP or back must not thereby change which team gets paged.
@@ -31,7 +34,8 @@ export class WebpiecesDefaultIpcErrorTranslator implements IpcErrorTranslator {
         return this.boundary.encode(error);
     }
 
-    fromWire(reply: IpcReply): void {
+    /** @param role - who is receiving, declared at `IpcClientFactory` setup. Decides what a 401 means. */
+    fromWire(reply: IpcReply, role: ClientRole): void {
         if (reply.type === 'success') {
             return;
         }
@@ -42,7 +46,7 @@ export class WebpiecesDefaultIpcErrorTranslator implements IpcErrorTranslator {
         const equivalent = ApiErrorHttpStatus.hasCode(decoded)
             ? ApiErrorHttpStatus.codeFor(decoded.kind, statusCode)
             : 500;
-        throw ReceivedApiErrorRule.adapt(equivalent, decoded.message, decoded);
+        throw ReceivedApiErrorRule.adapt(role, equivalent, decoded.message, decoded);
     }
 }
 

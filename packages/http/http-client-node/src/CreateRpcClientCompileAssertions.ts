@@ -18,7 +18,7 @@
  * Nothing here runs. The class is never constructed and never exported from the barrel.
  */
 
-import { Filter, Service } from '@webpieces/core-util';
+import { ClientRole, Filter, Service } from '@webpieces/core-util';
 import { ClientFilterDefinition, ClientRequest } from '@webpieces/http-client-core';
 import { ClientConfig } from './ClientConfig';
 import { ClientHttpFactory } from './ClientHttpFactory';
@@ -41,24 +41,24 @@ class OutboundLogFilter extends Filter<ClientRequest, Response> {
 class CreateRpcClientCompileAssertions {
     /** No app filters, said by omitting the argument. */
     noFilters(): void {
-        factory.createRpcClient(someApi, new ClientConfig('server2'));
+        factory.createRpcClient(someApi, new ClientConfig('server2', ClientRole.SERVER));
     }
 
     /** No app filters, said with an empty array — the same thing, normalized to the same value. */
     emptyArray(): void {
-        factory.createRpcClient(someApi, new ClientConfig('server2'), []);
+        factory.createRpcClient(someApi, new ClientConfig('server2', ClientRole.SERVER), []);
     }
 
     /** One app filter. */
     oneFilter(): void {
-        factory.createRpcClient(someApi, new ClientConfig('partner-webhooks'), [
+        factory.createRpcClient(someApi, new ClientConfig('partner-webhooks', ClientRole.SERVER), [
             new ClientFilterDefinition(1000, new ContextBaseUrlFilter()),
         ]);
     }
 
     /** Several app filters. */
     severalFilters(): void {
-        factory.createRpcClient(someApi, new ClientConfig('partner-webhooks'), [
+        factory.createRpcClient(someApi, new ClientConfig('partner-webhooks', ClientRole.SERVER), [
             new ClientFilterDefinition(1000, new ContextBaseUrlFilter()),
             new ClientFilterDefinition(500, new ContextFullUrlFilter()),
         ]);
@@ -73,7 +73,7 @@ class CreateRpcClientCompileAssertions {
         const filters: ClientFilterDefinition[] = [];
         if (perTenant) filters.push(new ClientFilterDefinition(1000, new ContextBaseUrlFilter()));
         if (verbose) filters.push(new ClientFilterDefinition(500, new OutboundLogFilter()));
-        factory.createRpcClient(someApi, new ClientConfig('partner-webhooks'), filters);
+        factory.createRpcClient(someApi, new ClientConfig('partner-webhooks', ClientRole.SERVER), filters);
     }
 }
 

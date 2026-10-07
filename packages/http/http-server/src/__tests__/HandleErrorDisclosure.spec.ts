@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
 import {
+    ClientRole,
     ClientRegistry,
     ApiErrorPayload,
     ApiError,
@@ -131,9 +132,9 @@ class VendorPortalTranslator implements ErrorTranslator {
             pe,
         );
     }
-    fromWire(response: HttpResponseDto): void {
+    fromWire(response: HttpResponseDto, role: ClientRole): void {
         if (response.status.code !== 461) {
-            this.fallback.fromWire(response);
+            this.fallback.fromWire(response, role);
             return;
         }
         throw new VendorPortalError((response.body as VendorPortalPayload).message ?? 'portal');

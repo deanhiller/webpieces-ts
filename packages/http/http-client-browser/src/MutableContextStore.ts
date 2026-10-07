@@ -14,7 +14,7 @@ import { AnyContextKey, AnyUntrustedContextKey, ContextStore } from '@webpieces/
  * // startup:
  * HeaderRegistry.configure(CompanyHeaders.ALL_HEADERS, true);
  * const factory = new ClientHttpFactory(new ContextMgr(store));
- * const client = factory.createRpcClient(SaveApi, new ClientConfig('server'));
+ * const client = factory.createRpcClient(SaveApi, new ClientConfig('server', ClientRole.END_USER_CLIENT));
  *
  * // later, when the user logs in / picks a tenant:
  * store.set(AppHeaders.AUTHORIZATION, token);   // an app-defined key, if it wants auto-attach

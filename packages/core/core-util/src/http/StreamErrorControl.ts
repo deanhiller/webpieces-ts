@@ -1,3 +1,4 @@
+import { ClientRole } from '../errors/ClientRole';
 import { ClientRegistry } from './ClientRegistry';
 import { HttpHeader, HttpResponseDto, HttpResponseStatus } from './HttpResponseDto';
 import { WEBPIECES_DEFAULT_ERROR_TRANSLATOR } from './WebpiecesDefaultErrorTranslator';
@@ -37,12 +38,13 @@ export class StreamErrorControl {
         return `${String.fromCharCode(0x1e)}${JSON.stringify({ control: 'error', response })}\n`;
     }
 
-    decode(line: string): Error {
+    /** @param role - who is receiving the record, declared at the reading side's setup. */
+    decode(line: string, role: ClientRole): Error {
         const response = this.response(line);
         // eslint-disable-next-line @webpieces/no-unmanaged-exceptions -- fromWire returns its typed result by throwing
         try {
-            ClientRegistry.getErrorTranslator().fromWire(response);
-            WEBPIECES_DEFAULT_ERROR_TRANSLATOR.fromWire(response);
+            ClientRegistry.getErrorTranslator().fromWire(response, role);
+            WEBPIECES_DEFAULT_ERROR_TRANSLATOR.fromWire(response, role);
         } catch (err: unknown) {
             const error = toError(err);
             return error;

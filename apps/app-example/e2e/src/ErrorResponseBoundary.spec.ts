@@ -12,7 +12,7 @@ import { Provider, RequestContext, RequestContextHeaders } from '@webpieces/core
 import { type ApiFactory } from '@webpieces/http-routing';
 import { WebpiecesExpressRouter } from '@webpieces/http-server';
 import { ClientFilterDefinition, ClientRequest } from '@webpieces/http-client-core';
-import { ClientHttpFactory, ClientConfig, NodeProxyClient, DnsAddressResolver } from '@webpieces/http-client-node';
+import { ClientHttpFactory, ClientConfig, ClientRole, NodeProxyClient, DnsAddressResolver } from '@webpieces/http-client-node';
 import { GcpOidc } from '@webpieces/gcp-identity';
 import { PublicApi, SecureApi } from '@webpieces/client-server-api';
 import { setupCompanyRuntime } from '@webpieces/company-svc-core';
@@ -44,10 +44,10 @@ class SurfaceTranslator implements ErrorTranslator {
         );
     }
 
-    fromWire(response: HttpResponseDto): void {
+    fromWire(response: HttpResponseDto, role: ClientRole): void {
         this.received = response;
         if (response.status.code !== 422) {
-            this.fallback.fromWire(response);
+            this.fallback.fromWire(response, role);
             return;
         }
         throw new SurfaceError(String(response.body));
@@ -153,7 +153,7 @@ describe('example app: the API boundary and the HTTP boundary (#862)', () => {
             new RequestContextHeaders(), new GcpOidc(), new DnsAddressResolver(), new Secrets({}),
         ));
         const client = new ClientHttpFactory(provider).createRpcClient(
-            PublicApi, new ClientConfig('boundary-demo'),
+            PublicApi, new ClientConfig('boundary-demo', ClientRole.SERVER),
             [new ClientFilterDefinition(1000, new MalformedBodyFilter())],
         );
         await RequestContext.run(async () => {

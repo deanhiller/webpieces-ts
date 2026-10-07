@@ -1,5 +1,6 @@
 import { ApiImplementationError } from '@webpieces/core-util/errors';
 import {
+    ClientRole,
     IpcCallContext,
     IpcClientErrorTranslator,
     IpcConnection,
@@ -15,15 +16,23 @@ import {
 
 /** Typed proxies on one trusted duplex connection; no HTTP decorators or container required. */
 export class IpcClientFactory {
+    /**
+     * @param role - WHO receives this factory's replies (see {@link ClientRole}). REQUIRED, with no
+     *   default (#1173): it decides what an `unauthorized` reply means. An end-user client (the
+     *   WebView or app shell acting for the person) decodes it as `ApiUnauthorizedError` ("log in
+     *   again"); a server decodes it as `ApiImplementationError`, because the credential it presented
+     *   was its own.
+     */
     constructor(
         private readonly connection: IpcConnection,
         private readonly logging: IpcLogging,
+        private readonly role: ClientRole,
         private readonly parent?: IpcCallContext,
     ) {}
 
     /** Explicit scope propagation is safe across concurrent async calls in browser and RN. */
     withContext(context: IpcCallContext): IpcClientFactory {
-        return new IpcClientFactory(this.connection, this.logging, context);
+        return new IpcClientFactory(this.connection, this.logging, this.role, context);
     }
 
     createClient<T extends object>(apiClass: IpcApiType<T>): T {
@@ -54,7 +63,7 @@ export class IpcClientFactory {
                         // EVERY reply passes the seam, success included, so an app can turn an
                         // apparently-successful reply into a throw. `asserts reply is IpcSuccess`
                         // is what leaves no `type === 'failure'` branch behind here.
-                        IpcClientErrorTranslator.throwIfFailure(reply);
+                        IpcClientErrorTranslator.throwIfFailure(reply, this.role);
                         return reply.body === null ? undefined : reply.body;
                     },
                 );

@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { ClientRole } from '../../errors/ClientRole';
 import {
     ApiBadGatewayError,
     ApiBadRequestError,
@@ -31,7 +32,7 @@ const wireOf = (error: Error): HttpResponseDto => translator.toWire(error);
 const caught = (dto: HttpResponseDto): Error => {
     // eslint-disable-next-line @webpieces/no-unmanaged-exceptions -- this spec IS the catch
     try {
-        translator.fromWire(dto);
+        translator.fromWire(dto, ClientRole.SERVER);
     } catch (err: unknown) {
         const error = toError(err);
         return error;
@@ -160,37 +161,39 @@ describe('WebpiecesDefaultErrorTranslator.fromWire — every response, 2xx inclu
     it('an ordinary 2xx returns SILENTLY, so the caller gets its DTO', () => {
         for (const code of [200, 201, 202, 204]) {
             expect(
-                () => translator.fromWire(response(code, { ok: true })),
+                () => translator.fromWire(response(code, { ok: true }), ClientRole.SERVER),
                 `HTTP ${code}`,
             ).not.toThrow();
         }
     });
 
     it('266 is the one 2xx that throws — protocol success, expected user exception', () => {
-        expect(() => translator.fromWire(wireOf(new ApiEndUserError('nope')))).toThrow(
-            ApiEndUserError,
-        );
+        expect(() =>
+            translator.fromWire(wireOf(new ApiEndUserError('nope')), ClientRole.SERVER),
+        ).toThrow(ApiEndUserError);
     });
 
     it('an APP translator can turn a 200 into a throw, which is why 2xx reaches the seam at all', () => {
         class PaymentDeclined extends Error {}
         const appTranslator = {
             toWire: (error: Error): HttpResponseDto => translator.toWire(error),
-            fromWire: (dto: HttpResponseDto): void => {
+            fromWire: (dto: HttpResponseDto, role: ClientRole): void => {
                 if (ApiErrorCodec.isPayload(dto.body)) {
-                    translator.fromWire(dto);
+                    translator.fromWire(dto, ClientRole.SERVER);
                     return;
                 }
                 const body = dto.body as { status?: string } | undefined;
                 if (body?.status === 'DECLINED') throw new PaymentDeclined('card declined');
-                translator.fromWire(dto);
+                translator.fromWire(dto, ClientRole.SERVER);
             },
         };
 
-        expect(() => appTranslator.fromWire(response(200, { status: 'DECLINED' }))).toThrow(
-            PaymentDeclined,
-        );
-        expect(() => appTranslator.fromWire(response(200, { status: 'OK' }))).not.toThrow();
+        expect(() =>
+            appTranslator.fromWire(response(200, { status: 'DECLINED' }), ClientRole.SERVER),
+        ).toThrow(PaymentDeclined);
+        expect(() =>
+            appTranslator.fromWire(response(200, { status: 'OK' }), ClientRole.SERVER),
+        ).not.toThrow();
     });
 });
 

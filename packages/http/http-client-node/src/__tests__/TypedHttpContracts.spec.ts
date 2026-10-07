@@ -1,4 +1,4 @@
-import { WpAuthorization, AuthorizationType } from '@webpieces/core-util';
+import { ClientRole, WpAuthorization, AuthorizationType } from '@webpieces/core-util';
 import 'reflect-metadata';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
@@ -74,7 +74,7 @@ function client(): NodeTypedApi {
         new StubOidc() as unknown as GcpOidc,
         new UnusedResolver(),
     );
-    proxy.init(NodeTypedApi, new ClientConfig('inventory'), []);
+    proxy.init(NodeTypedApi, new ClientConfig('inventory', ClientRole.SERVER), []);
     return buildClientProxy(NodeTypedApi, proxy);
 }
 

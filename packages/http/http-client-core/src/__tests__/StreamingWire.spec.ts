@@ -1,6 +1,7 @@
 import 'reflect-metadata';
 import { describe, expect, it, vi } from 'vitest';
 import {
+    ClientRole,
     ApiJsonSchema,
     ObjectSchemaBuilder,
     DtoValue,
@@ -74,7 +75,7 @@ describe('streaming wire invariants', () => {
         const response = new Response('{"value":"accepted"}\n{"value":"truncated"', {
             headers: { 'content-type': 'application/x-webpieces-jsonl' },
         });
-        const initial = await new JsonlResponseStream().consume(route, response, {
+        const initial = await new JsonlResponseStream(ClientRole.SERVER).consume(route, response, {
             event: async (_value: DtoValue): Promise<void> => undefined,
             close: async (): Promise<void> => undefined,
             cancel: async (error?: Error): Promise<void> => {

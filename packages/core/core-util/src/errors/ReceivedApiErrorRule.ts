@@ -1,13 +1,16 @@
 import {
     ApiBadGatewayError,
+    ApiClientTooOldError,
     ApiDependencyBackoffError,
     ApiDependencyError,
     ApiDependencyTimeoutError,
     ApiEndUserError,
     ApiError,
     ApiImplementationError,
+    ApiUnauthorizedError,
     ApiUnavailableError,
 } from './ApiError';
+import { ClientRole } from './ClientRole';
 
 /**
  * THE rule for an error this process RECEIVED from another one — identical over HTTP and over IPC,
@@ -27,9 +30,13 @@ import {
  * - **408/429/502/503/504 preserve retry-relevant semantics.** Timeout, backoff, bad-gateway and
  *   unavailable must not collapse into the generic non-retryable dependency bucket.
  * - **266 / `end-user` -> {@link ApiEndUserError}**, the intended user-facing message, published
- *   verbatim. It is the one message the taxonomy lets a peer write for a human.
+ *   verbatim. It is the one message the taxonomy lets a peer write for a human. `ApiErrorCodec` has
+ *   already rebuilt the registered SUBCLASS for its `errorCode` (see `EndUserErrorRegistry`).
+ * - **426 / `client-too-old` -> {@link ApiClientTooOldError}, rethrown AS-IS, on EVERY hop and for
+ *   every {@link ClientRole}.** It is not "I called wrong", it is "the build on the calling side is
+ *   older than the server allows", and every receiver must see "upgrade", never a bug report.
  *
- * # Why this is UNIFORM, in a browser as much as in a server
+ * # Why this is UNIFORM, in a browser as much as in a server — with ONE exception, 401
  *
  * An earlier design made the browser pass a received status through unchanged on the theory that
  * "the browser IS the user's agent, so a 404 is the user's answer". That is wrong. If a browser
@@ -38,11 +45,27 @@ import {
  * as intended: `ApiImplementationError` means the client has a bug, `ApiDependencyError` means the
  * server has one.
  *
+ * **401 is the exception, and it is why the rule takes a {@link ClientRole}.** A received 401 means
+ * "the credential I presented was rejected", and WHOSE credential that was depends on who I am:
+ *
+ * - an {@link ClientRole.END_USER_CLIENT} (browser bundle, Expo shell, remote MCP client) presented
+ *   the USER's session, so a 401 carrying the webpieces `unauthorized` payload is decoded as
+ *   {@link ApiUnauthorizedError}: "log in again" (and, for a remote MCP client, "go find the
+ *   authorization server"), not a bug.
+ * - a {@link ClientRole.SERVER} presented ITS OWN credential, so a 401 stays
+ *   {@link ApiImplementationError} -> a 500 to its own caller. Relaying it as 401 would tell the
+ *   browser "your session expired" and log the user out for a backend misconfiguration, and it would
+ *   stop paging the team whose credential is broken.
+ *
+ * Every other status reads the same in both roles, so the role is consulted for 401 alone. The role
+ * has no default: each client states it at setup (see {@link ClientRole}).
+ *
  * An app that genuinely wants a peer's status relayed as its OWN typed error says so out loud, in one
  * greppable place, by throwing it from its registered translator's `fromWire`.
  */
 export class ReceivedApiErrorRule {
     /**
+     * @param role - who received it, declared at the client's setup. Decides what a 401 means.
      * @param statusCode - the HTTP status the peer published. IPC has no wire status, so it derives
      *   the equivalent from the payload's `kind` through the same `ApiErrorHttpStatus` table — one
      *   table, so the two protocols cannot drift apart.
@@ -53,6 +76,7 @@ export class ReceivedApiErrorRule {
      */
     // webpieces-disable no-function-outside-class -- stateless shared rule, called by both protocol translators
     static adapt(
+        role: ClientRole,
         statusCode: number,
         message: string,
         decoded?: ApiError,
@@ -63,11 +87,8 @@ export class ReceivedApiErrorRule {
             return decoded instanceof ApiEndUserError ? decoded : new ApiEndUserError(message);
         }
         if (
-            decoded instanceof ApiDependencyError ||
-            decoded instanceof ApiBadGatewayError ||
-            decoded instanceof ApiUnavailableError ||
-            decoded instanceof ApiDependencyTimeoutError ||
-            decoded instanceof ApiDependencyBackoffError
+            decoded !== undefined &&
+            ReceivedApiErrorRule.passesThrough(role, statusCode, decoded)
         ) {
             return decoded;
         }
@@ -110,6 +131,29 @@ export class ReceivedApiErrorRule {
                 `whether the dependency is deployed, and our service credentials. ` +
                 `Downstream said: ${message}`,
             decoded,
+        );
+    }
+
+    /**
+     * The peer's own typed error, rethrown AS-IS, when re-classifying it would change its meaning:
+     *
+     * - {@link ApiClientTooOldError}: an upgrade, never a bug, on every hop and for every role.
+     * - a 401 {@link ApiUnauthorizedError} received by an END-USER client: the credential it sent IS
+     *   the user's session, so this is "log in again". A SERVER's 401 is its own bug and falls through.
+     * - a dependency failure: already attributed further downstream.
+     */
+    // webpieces-disable no-function-outside-class -- stateless shared rule, called by both protocol translators
+    private static passesThrough(role: ClientRole, statusCode: number, decoded: Error): boolean {
+        if (decoded instanceof ApiClientTooOldError) return true;
+        if (statusCode === 401 && decoded instanceof ApiUnauthorizedError) {
+            return role === ClientRole.END_USER_CLIENT;
+        }
+        return (
+            decoded instanceof ApiDependencyError ||
+            decoded instanceof ApiBadGatewayError ||
+            decoded instanceof ApiUnavailableError ||
+            decoded instanceof ApiDependencyTimeoutError ||
+            decoded instanceof ApiDependencyBackoffError
         );
     }
 }

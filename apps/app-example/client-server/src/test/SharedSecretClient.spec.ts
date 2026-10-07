@@ -8,7 +8,7 @@ import { Secrets, ClientRegistry } from '@webpieces/core-util';
 import { GcpOidc } from '@webpieces/gcp-identity';
 import { Provider, RequestContext, RequestContextHeaders } from '@webpieces/core-context';
 import {
-    ClientConfig,
+    ClientConfig, ClientRole,
     ClientHttpFactory,
     DnsAddressResolver,
     NodeProxyClient,
@@ -59,7 +59,7 @@ function clientSending(value: string): SecureApi {
     // server started and configured the registry), never at module scope.
     const provider = new Provider(() => new NodeProxyClient(new RequestContextHeaders(), new GcpOidc(), new DnsAddressResolver(), secrets));
     const factory = new ClientHttpFactory(provider);
-    return factory.createRpcClient(SecureApi, new ClientConfig('client-server'));
+    return factory.createRpcClient(SecureApi, new ClientConfig('client-server', ClientRole.SERVER));
 }
 
 describe('shared-secret over HTTP: client sends from Secrets, server accepts either', () => {

@@ -1,5 +1,5 @@
 import { AuthenticatedMachineIdentity } from '@webpieces/http-routing';
-import { WpAuthorization, AuthorizationType, WpAuth, oidc as oidcAuth, jwt as jwtAuth } from '@webpieces/core-util';
+import { ClientRole, WpAuthorization, AuthorizationType, WpAuth, oidc as oidcAuth, jwt as jwtAuth } from '@webpieces/core-util';
 import 'reflect-metadata';
 import { injectable } from 'inversify';
 import { ApiBadRequestError, ApiCodedError, ApiConflictError, ApiConnectionError, ApiDependencyBackoffError, ApiDependencyError, ApiDependencyTimeoutError, ApiEndpointNotFoundError, ApiEndUserError, ApiErrorCodec, ApiErrorHttpStatus, ApiForbiddenError, ApiImplementationError, ApiNotFoundError, ApiNotImplementedError, ApiPath, ApiType, ApiPreconditionFailedError, ApiRateLimitedError, ApiRequestTimeoutError, ApiUnauthorizedError, ApiUnavailableError, ApiUnprocessableError, ApiUnsupportedMediaTypeError, ContextKey, Endpoint, ErrorTranslator, Filter, WebpiecesDefaultErrorTranslator, HttpResponseDto, LogLevel, Service, WebpiecesCoreHeaders, ApiJsonSchema, McpToolCatalogFile, McpToolDefinition, ObjectSchemaBuilder, WpMcpTool, WpMcpToolHints, MCP, POST, READ, RPC, SVC_TO_SVC } from '@webpieces/core-util';
@@ -391,7 +391,7 @@ export class RelayWebpiecesPeerErrors implements ErrorTranslator {
         return this.fallback.toWire(error);
     }
 
-    fromWire(response: HttpResponseDto): void {
+    fromWire(response: HttpResponseDto, role: ClientRole): void {
         if (this.relay && ApiErrorCodec.isPayload(response.body)) {
             const decoded = ApiErrorCodec.decode(response.body);
             const statusCode = decoded instanceof ApiCodedError ? decoded.statusCode : undefined;
@@ -402,6 +402,6 @@ export class RelayWebpiecesPeerErrors implements ErrorTranslator {
                 throw decoded;
             }
         }
-        this.fallback.fromWire(response);
+        this.fallback.fromWire(response, role);
     }
 }

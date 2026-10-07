@@ -1,4 +1,5 @@
 import {
+    ClientRole,
     DtoValue,
     RequestStream,
     ResponseStream,
@@ -33,7 +34,7 @@ export class OpenedJsonlExchange {
 
 /** Opens the REQUEST/FULL JSONL exchange and resolves only after its typed acknowledgement. */
 export class DuplexStreamingCall {
-    private readonly responses = new JsonlResponseStream();
+    private readonly responses: JsonlResponseStream;
 
     constructor(
         private readonly apiName: string,
@@ -41,7 +42,10 @@ export class DuplexStreamingCall {
         private readonly contextHeaders: StreamingContextHeaders,
         private readonly send: DuplexStreamingSend,
         private readonly readError: StreamingReadError,
-    ) {}
+        role: ClientRole,
+    ) {
+        this.responses = new JsonlResponseStream(role);
+    }
 
     // webpieces-disable no-any-unknown -- generated proxy arguments are runtime-validated here
     async open(

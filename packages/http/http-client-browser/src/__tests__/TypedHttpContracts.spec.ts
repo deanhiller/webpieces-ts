@@ -1,4 +1,4 @@
-import { WpAuthorization, AuthorizationType } from '@webpieces/core-util';
+import { ClientRole, WpAuthorization, AuthorizationType } from '@webpieces/core-util';
 import 'reflect-metadata';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
@@ -69,7 +69,7 @@ describe('browser generated typed HTTP contracts', () => {
         ClientRegistry.addUrlMapping('oauth', 'https://api.example.test');
         client = new ClientHttpBrowserFactory(new MutableContextStore()).createRpcClient(
             BrowserTypedApi,
-            new ClientConfig('oauth'),
+            new ClientConfig('oauth', ClientRole.END_USER_CLIENT),
         );
     });
 

@@ -1,4 +1,4 @@
-import { WpAuthorization, AuthorizationType } from '@webpieces/core-util';
+import { ClientRole, WpAuthorization, AuthorizationType } from '@webpieces/core-util';
 import 'reflect-metadata';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import {
@@ -98,7 +98,7 @@ function client(): DbStoresApi {
         // Never consulted: every url here comes from ClientRegistry, so the SSRF guard steps aside.
         new ThrowingAddressResolver(),
     );
-    proxyClient.init(DbStoresApi, new ClientConfig('pg-dataaccess'), []);
+    proxyClient.init(DbStoresApi, new ClientConfig('pg-dataaccess', ClientRole.SERVER), []);
     return buildClientProxy(DbStoresApi, proxyClient);
 }
 
@@ -388,9 +388,9 @@ describe('an app-installed fromWire WINS over the uniform rule', () => {
             return this.fallback.toWire(error);
         }
 
-        fromWire(response: HttpResponseDto): void {
+        fromWire(response: HttpResponseDto, role: ClientRole): void {
             if (response.status.code !== 404) {
-                this.fallback.fromWire(response); // not mine -> the webpieces default answers
+                this.fallback.fromWire(response, role); // not mine -> the webpieces default answers
                 return;
             }
             throw new ApiNotFoundError((response.body as ApiErrorPayload).message ?? 'relayed 404');
