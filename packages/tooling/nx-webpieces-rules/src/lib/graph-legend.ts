@@ -90,7 +90,7 @@ export class GraphLegend {
     /** Which box is which is only known from the branch's sidecar, so all four rows always show. */
     private impactRows(): string {
         return (
-            this.row('touched', this.solid(IMPACT_TOUCHED, '', ''), 'touched', 'files changed on this branch') +
+            this.row('touched', this.solid(IMPACT_TOUCHED, '', ''), 'touched', 'its files changed') +
             this.row('affected', this.solid(IMPACT_AFFECTED, IMPACT_TOUCHED, ''), 'affected', 'tests and build re-run') +
             this.row(
                 'build-input',

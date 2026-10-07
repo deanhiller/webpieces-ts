@@ -13,12 +13,12 @@
  *                 fixed order browser | node | react-native, with the text written across them. The
  *                 dependency rule becomes visual: a box may depend on a box carrying every color it has.
  *  - ARCHITECTURE "servers · clients · APIs". A solid fill by ROLE; framework color is not shown.
- *  - IMPACT       "what this branch touches". Projects owning a changed file are solid amber
- *                 ("touched"); the rest of nx's affected set is light amber ("affected": their ci
+ *  - IMPACT       "what changed" — on this branch, or in the last commit (graph-impact.ts).
+ *                 Projects owning a changed file are solid amber ("touched"); the rest of nx's affected set is light amber ("affected": their ci
  *                 re-runs); every transitive dependency of the affected set that is not itself
  *                 affected is light slate with a dashed border ("build input": compiled or restored
  *                 from cache, unchanged); everything else is grey. Which box is which is only known
- *                 per branch, so every box carries all four variants and the page picks one from the
+ *                 per checkout, so every box carries all four variants and the page picks one from the
  *                 sidecar (graph-impact.ts). The state is never written on the box: color + legend.
  */
 
@@ -44,7 +44,7 @@ export class ModeInfo {
 export const GRAPH_MODES: readonly ModeInfo[] = [
     new ModeInfo(GraphMode.RUNTIME, 'Runtime', 'where the code can run'),
     new ModeInfo(GraphMode.ARCHITECTURE, 'Architecture', 'servers · clients · APIs'),
-    new ModeInfo(GraphMode.IMPACT, 'Impact', 'what this branch touches'),
+    new ModeInfo(GraphMode.IMPACT, 'Impact', 'what changed'),
 ];
 
 /** Text on a light fill. */

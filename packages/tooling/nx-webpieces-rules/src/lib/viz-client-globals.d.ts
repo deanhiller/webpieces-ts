@@ -108,10 +108,25 @@ interface NodeModeDotsJson {
  * Impact mode's data, set by the gitignored sidecar architecture/.impact/dependencies.impact.js
  * (graph-impact.ts) when one exists. Absent when the page is opened without one.
  */
+interface ImpactDataJson {
+    /** One scan per comparison that exists here: "branch" (fork point) and/or "commit" (HEAD^). */
+    scans: ImpactJson[];
+    /** The scan the page shows until the viewer picks another. */
+    defaultKind: string;
+}
+
+/** One comparison's scan. */
 interface ImpactJson {
+    /** 'branch' (fork point → working tree) or 'commit' (HEAD^ → working tree). */
+    kind: string;
+    /** What the page says the scan compares, e.g. "Changed on this branch (since abc1234)". */
+    label: string;
+    /** Uncommitted or untracked work counted (the label already says so). */
+    dirty: boolean;
     available: boolean;
+    /** Why the scan is unavailable; for an available but empty scan, the note to show. */
     reason: string;
-    /** The fork point's short sha. */
+    /** The base's short sha. */
     base: string;
     /** In nx affected AND owning a changed file. */
     touched: string[];
@@ -126,7 +141,7 @@ interface ImpactJson {
     globalFiles: string[];
 }
 interface Window {
-    __WP_IMPACT__?: ImpactJson;
+    __WP_IMPACT__?: ImpactDataJson;
 }
 interface RenderEdgeJson {
     from: string;

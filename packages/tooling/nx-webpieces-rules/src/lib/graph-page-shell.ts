@@ -74,6 +74,7 @@ export class GraphPageShell {
             <div class="wp-label">Color by</div>
             ${this.modePulldown()}
             <p class="wp-mode-reason" id="wp-impact-reason" hidden></p>
+            ${this.impactKinds('drawer')}
         </div>
         <div class="wp-group">
             <button type="button" class="wp-filter-btn" id="wp-filter-open" aria-controls="wp-filter-pop" aria-expanded="false"><span>Filter</span><span class="wp-badge" id="wp-filter-badge" hidden>0</span></button>
@@ -141,11 +142,24 @@ export class GraphPageShell {
                 .join('');
         return `<div class="wp-pop wp-filter-pop" id="wp-filter-pop" role="dialog" aria-label="Filter projects" hidden>
             <header><span>Filter</span><button type="button" class="wp-icon wp-icon-mini" id="wp-filter-close" aria-label="Close the filter">✕</button></header>
-            <fieldset class="wp-fgroup" id="wp-scope-group"><legend>Changes on this branch</legend>${scopes}<p class="wp-scope-reason" id="wp-scope-reason" hidden></p></fieldset>
+            <fieldset class="wp-fgroup" id="wp-scope-group"><legend id="wp-scope-legend">Changes on this branch</legend>${this.impactKinds('filter')}${scopes}<p class="wp-scope-reason" id="wp-scope-reason" hidden></p></fieldset>
             <fieldset class="wp-fgroup"><legend>Runtime <small>any match</small></legend><div class="wp-chips">${chips('runtime', FRAMEWORK_ORDER)}</div></fieldset>
             <fieldset class="wp-fgroup"><legend>Role <small>any match</small></legend><div class="wp-chips">${chips('role', ROLE_STYLES.map((style: RoleStyle): string => style.role))}</div></fieldset>
             <footer><button type="button" class="wp-text-btn" id="wp-filter-clear">Clear all</button><button type="button" class="wp-primary" id="wp-filter-apply">Show all projects</button></footer>
         </div>`;
+    }
+
+    /**
+     * Which Impact scan the page shows (#1163): "Changed on this branch" (fork point → working tree)
+     * or "Last commit" (HEAD^ → working tree). Hidden until the page finds TWO scans in the sidecar;
+     * `where` tells the drawer's copy (shown only in Impact mode) from the Filter popover's.
+     */
+    private impactKinds(where: string): string {
+        return (
+            `<div class="wp-chips wp-impact-kinds" data-wp-impact-kinds="${where}" role="group" aria-label="Compare" hidden>` +
+            '<button type="button" class="wp-chip" data-wp-impact-kind="branch" aria-pressed="false">Changed on this branch</button>' +
+            '<button type="button" class="wp-chip" data-wp-impact-kind="commit" aria-pressed="false">Last commit</button></div>'
+        );
     }
 
     private topbar(parts: ShellParts): string {
@@ -178,9 +192,9 @@ export class GraphPageShell {
             <header><span>Reading the graph</span><button type="button" class="wp-icon wp-icon-mini" id="wp-help-close" aria-label="Close help">✕</button></header>
             <p>Every row is one dependency level: the HIGHEST level is the top row and L0, the foundation libraries, is always the bottom row. Transitive dependencies are allowed but not drawn.</p>
             <p>💡 <strong>Click any box</strong> for its menu: <strong>View Design</strong> (only where the project has a generated <strong>design.html</strong>, i.e. what the AI sees inside it), <strong>Lock/Unlock</strong> (the same lock as the Focus field), <strong>Filter Unconnected</strong> (removes unrelated boxes, keeping each L-number row).</p>
-            <p><strong>Filter</strong> narrows the graph by what this branch changed, by runtime and by role; the three groups combine. Every box keeps its own L-row, and a level left empty shows as a thin labeled band.</p>
+            <p><strong>Filter</strong> narrows the graph by what changed on this branch or in the last commit, by runtime and by role; the three groups combine. Every box keeps its own L-row, and a level left empty shows as a thin labeled band.</p>
             <p>🔦 <strong>Hover any box</strong> to trace its <em>entire</em> dependency chain — every ancestor above it and every dependency below it, with the lines between — while the rest of the graph dims.</p>
-            <p><strong>Runtime</strong>: a box may depend on a box carrying every color it has. <strong>Architecture</strong>: what each box is in the system. <strong>Impact</strong>: what this branch changed (amber) and what depends on it (amber outline).</p>
+            <p><strong>Runtime</strong>: a box may depend on a box carrying every color it has. <strong>Architecture</strong>: what each box is in the system. <strong>Impact</strong>: what changed on this branch or in the last commit (amber) and what depends on it (amber outline); with both available, a toggle picks which.</p>
             <p><kbd>/</kbd> focus the lock search · <kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd> switch mode · <kbd>Esc</kbd> unlock</p>
         </div>`;
     }

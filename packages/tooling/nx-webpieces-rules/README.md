@@ -128,14 +128,21 @@ lines in every mode: `L3  name` (level dimmed, name bold), its role, and every f
   box may depend on a box that carries every color it has.
 - **Architecture** — servers · clients · APIs. A solid fill by role (server, client, app, bundle,
   api-lib, api-client, designed-lib, lib); framework color is not shown.
-- **Impact** — what this branch touches. `architecture:generate` and `architecture:visualize`
-  (`pnpm arch:visualize`, no regenerate needed) both run
-  `nx show projects --affected --base=<fork point> --json` (no `--head`, so uncommitted and
-  untracked work counts). Projects that own a changed file, by nx's own file ownership, are solid
-  amber ("touched — files changed on this branch"); the rest of the affected set is light amber
+- **Impact** — what changed. There are two comparisons, both ending at the working tree (no
+  `--head`, so uncommitted and untracked work counts, and the label says "+ uncommitted changes"):
+  **Changed on this branch** (`nx show projects --affected --base=<fork point> --json`) and
+  **Last commit** (`--base=HEAD^`, labelled with `HEAD`'s subject, so a squash commit's `(#NNNN)`
+  names the PR). Which exist depends on where you are: on `main` (by branch name) and on a detached
+  HEAD only *Last commit*; on a feature branch with commits of its own both, with a toggle
+  (default *Changed on this branch*); on a fresh feature branch only *Changed on this branch*
+  ("Nothing changed on this branch yet" while the tree is clean). To see what any commit changed,
+  `git checkout <hash>` and run `pnpm arch:visualize`. `architecture:visualize` (no regenerate
+  needed) scans every comparison that exists; `architecture:generate` refreshes only *Changed on
+  this branch*, so on `main` it leaves Impact asking for `pnpm arch:visualize`. Projects that own a
+  changed file, by nx's own file ownership, are solid amber ("touched"); the rest of the affected set is light amber
   ("affected — tests and build re-run"); every transitive dependency of the affected set that is
   not itself affected is light slate with a dashed border ("build input — compiled or restored from
-  cache, unchanged"); everything else is grey. The drawer shows the counts per shade. The answer is per branch, so
+  cache, unchanged"); everything else is grey. The drawer shows the counts per shade. The answer is per checkout, so
   it is written to `architecture/.impact/dependencies.impact.js`, never into the committed html or
   json. That directory holds its own `.gitignore` (`*`), so a consuming repo needs no gitignore
   entry. When nx or git cannot answer, no sidecar is written and Impact is disabled with a
@@ -143,7 +150,8 @@ lines in every mode: `L3  name` (level dimmed, name bold), its role, and every f
   and legend only. When files changed but no project owns one (a lockfile, the workspace
   manifest), the legend names that workspace-global cause for the everything-affected result.
 
-**Filter** opens a popover of three groups that INTERSECT: *Changes on this branch* (Everything ·
+**Filter** opens a popover of three groups that INTERSECT: the changes of the active Impact
+comparison, headed by its label and carrying the same branch / last-commit toggle (Everything ·
 Changed · Changed + what uses them (nx affected) · Changed + what they use · Whole build of this
 branch, each with its project count; disabled with Impact's reason when there is no Impact
 data), *Runtime* chips and *Role* chips (a box matches a group when it carries any selected
