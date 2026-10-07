@@ -1,6 +1,7 @@
 import { toError } from '../lib/errorUtils';
 import { ApiCallTimeoutError } from '../http/ApiCallTimeoutError';
 import { CallContext } from '../http/CallStrategy';
+import { WRITE } from '../http/HttpEndpointOptions';
 import { ApiEndpointNotFoundError, ApiImplementationError } from '../errors';
 import { IpcRegistry } from './IpcRegistry';
 import {
@@ -126,7 +127,9 @@ export class IpcConnection {
                     request.context.callId,
                     new ApiCallTimeoutError(
                         this.options.timeoutMs,
-                        new CallContext(request.apiId, request.methodId),
+                        // IPC contracts declare no @Endpoint operation, so the deadline reports the
+                        // conservative WRITE: the user is told to check before repeating the call.
+                        new CallContext(request.apiId, request.methodId, WRITE),
                     ),
                     'expired',
                 );

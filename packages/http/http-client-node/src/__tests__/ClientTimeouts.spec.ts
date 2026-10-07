@@ -14,6 +14,7 @@ import {
     toError,
     POST,
     RPC,
+    READ,
     WRITE,
 } from '@webpieces/core-util';
 import { WpAuthPublic, Rpc } from '@webpieces/core-util';
@@ -27,19 +28,28 @@ class Payload {
     constructor(public readonly value = 'hello') {}
 }
 
+/** The declared @Endpoint operation of each RpcApi method, as the deadline must report it. */
+const OPERATIONS = { work: WRITE, other: READ } as const;
+
 @Rpc()
 @ApiPath('/timeout-test')
 abstract class RpcApi {
     @Endpoint(POST, '/work', WRITE, RPC)
     @WpAuthPublic('Anonymous access is intentionally required')
-    @WpAuthorization({ authType: AuthorizationType.ANONYMOUS, reason: 'Anonymous access is intentionally required' })
+    @WpAuthorization({
+        authType: AuthorizationType.ANONYMOUS,
+        reason: 'Anonymous access is intentionally required',
+    })
     work(_request: Payload): Promise<Payload> {
         throw new Error('contract only');
     }
 
-    @Endpoint(POST, '/other', WRITE, RPC)
+    @Endpoint(POST, '/other', READ, RPC)
     @WpAuthPublic('Anonymous access is intentionally required')
-    @WpAuthorization({ authType: AuthorizationType.ANONYMOUS, reason: 'Anonymous access is intentionally required' })
+    @WpAuthorization({
+        authType: AuthorizationType.ANONYMOUS,
+        reason: 'Anonymous access is intentionally required',
+    })
     other(_request: Payload): Promise<Payload> {
         throw new Error('contract only');
     }
@@ -80,7 +90,10 @@ class Harness {
         let settled = false;
         const pending = this.invoke(method);
         const checked = expect(pending).rejects.toEqual(
-            new ApiCallTimeoutError(timeoutMs, new CallContext(this.api.name, method)),
+            new ApiCallTimeoutError(
+                timeoutMs,
+                new CallContext(this.api.name, method, OPERATIONS[method]),
+            ),
         );
         void pending.then(
             () => {
@@ -114,6 +127,21 @@ afterEach(() => {
 });
 
 describe('node generated client deadlines', () => {
+    it('carries the endpoint operation and an operation-aware userMessage (#1170)', async () => {
+        const h = new Harness();
+        const write = h.invoke('work').catch((err: unknown) => err);
+        const read = h.invoke('other').catch((err: unknown) => err);
+        await vi.advanceTimersByTimeAsync(30_000);
+        const writeError = (await write) as ApiCallTimeoutError;
+        const readError = (await read) as ApiCallTimeoutError;
+        expect(writeError).toBeInstanceOf(ApiCallTimeoutError);
+        expect(writeError.context.operation).toBe(WRITE);
+        expect(writeError.userMessage).toBe(ApiCallTimeoutError.WRITE_USER_MESSAGE);
+        expect(writeError.message).toBe(`${h.api.name}.work timed out after 30000ms`);
+        expect(readError.context.operation).toBe(READ);
+        expect(readError.userMessage).toBe(ApiCallTimeoutError.RETRY_SAFE_USER_MESSAGE);
+    });
+
     it('rejects at exactly 30 seconds without configuration or automatic retries', async () => {
         const h = new Harness();
         await h.expectTimeout(30_000);
@@ -157,7 +185,9 @@ describe('node generated client deadlines', () => {
         await h.expectTimeout(200);
         CallRegistry.setStrategy(undefined, h.api);
         await h.expectTimeout(300);
-        expect(seen).toEqual(Array.from({ length: 3 }, () => new CallContext(h.api.name, 'work')));
+        expect(seen).toEqual(
+            Array.from({ length: 3 }, () => new CallContext(h.api.name, 'work', WRITE)),
+        );
         CallRegistry.setStrategy(undefined, 'ALL');
         await h.expectTimeout(1);
     });
@@ -181,7 +211,7 @@ describe('node generated client deadlines', () => {
         }, h.api);
         const pending = h.invoke();
         const checked = expect(pending).rejects.toEqual(
-            new ApiCallTimeoutError(20_000, new CallContext(h.api.name, 'work')),
+            new ApiCallTimeoutError(20_000, new CallContext(h.api.name, 'work', WRITE)),
         );
         await vi.advanceTimersByTimeAsync(30_000);
         expect(firstError).toBeInstanceOf(ApiCallTimeoutError);

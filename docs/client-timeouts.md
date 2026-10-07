@@ -43,7 +43,18 @@ CallRegistry.setStrategy(patientRetry, CatalogApi, 'upload');
 
 `Attempt<T>` is `(timeoutMs: number) => Promise<T>`.
 `CallStrategy<T>` is `(call: Attempt<T>, ctx: CallContext) => Promise<T>`.
-Context has readonly `apiName` and `methodName`. `ApiCallTimeoutError` carries `timeoutMs` and `context`. Whatever a strategy throws reaches the caller unchanged, preserving error identity and `instanceof` checks.
+Context has readonly `apiName`, `methodName` and `operation` — the endpoint's declared `@Endpoint` operation (`READ`, `WRITE_IDEMPOTENT` or `WRITE`), so a strategy can decide whether repeating the call is safe. IPC contracts declare no operation, so an IPC deadline reports the conservative `WRITE`. `CallRegistry.execute(api, context, attempt, defaultMs)` takes that same `CallContext`. `ApiCallTimeoutError` carries `timeoutMs` and `context`. Whatever a strategy throws reaches the caller unchanged, preserving error identity and `instanceof` checks.
+
+## Showing a timeout to an end user
+
+`ApiCallTimeoutError.message` is the developer text (`SaveApi.save timed out after 30000ms`) — keep reporting it to your error tracker. `ApiCallTimeoutError.userMessage` is the stable text to render verbatim, chosen by `context.operation`:
+
+| operation | `userMessage` |
+|---|---|
+| `READ`, `WRITE_IDEMPOTENT` | The network timed out. It probably just flaked. Please try your request again. |
+| `WRITE` | The network timed out. Your change may or may not have been saved — please check before trying again. |
+
+A client deadline is not a gateway failure: check `instanceof ApiCallTimeoutError` before the broader `ApiDependencyTimeoutError`, and never title it "Gateway Timeout" (`WebpiecesDefaultErrorTranslator` gives it the reason phrase `Network Timeout`). `ApiConnectionError.userMessage` is the matching text for a call that could not reach the server at all.
 
 There is deliberately **no default strategy or retry**: retrying a non-idempotent POST can duplicate writes. A timeout only says the client stopped waiting, not that the server stopped executing. Idempotency and deduplication belong to the strategy author.
 
