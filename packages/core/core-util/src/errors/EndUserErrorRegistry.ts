@@ -97,9 +97,9 @@ export class EndUserErrorRegistry {
     // webpieces-disable no-function-outside-class -- static global singleton (like ClientRegistry/HeaderRegistry); populated once at startup, never DI-injected
     static resetForTests(): void {
         EndUserErrorRegistry.factories.clear();
-        for (const [code, factory] of EndUserErrorRegistry.builtIns()) {
-            EndUserErrorRegistry.factories.set(code, factory);
-        }
+        EndUserErrorRegistry.builtIns().forEach((factory: EndUserErrorFactory, code: string) =>
+            EndUserErrorRegistry.factories.set(code, factory),
+        );
     }
 
     // webpieces-disable no-function-outside-class -- the built-in table, shared by the initializer and resetForTests
