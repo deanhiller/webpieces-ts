@@ -56,7 +56,6 @@ import type {
 } from './runtime-graph';
 import { dotValue, recordValue, assertValidDot } from './dot-syntax';
 import { GraphRenderModel } from './graph-render-model';
-import type { EnhancedGraph } from './graph-sorter';
 import { RuntimeViewerAdapter } from './runtime-viewer-adapter';
 import { RuntimeHtmlPage } from './runtime-html-page';
 import {
@@ -79,19 +78,8 @@ const APIS_PER_LABEL_LINE = 3;
 /** Separator for the (service, external-library) grouping key; illegal in both project names. */
 const PAIR_SEP = '|';
 
-/** Render options for the runtime graph. */
-export class RuntimeVizOptions {
-    constructor(
-        /**
-         * Draw the dashed terminal nodes for contracts nothing in-repo implements. On by default;
-         * a repo whose external surface is noisy can turn them off in the declared Nx owner file's
-         * direct policy-ID map (runtime-architecture.showExternalNodes).
-         */
-        public readonly showExternalNodes: boolean = true,
-        public readonly projects: EnhancedGraph | null = null,
-        public readonly workspaceRoot: string = '',
-    ) {}
-}
+import { RuntimeVizOptions } from './runtime-viz-options';
+export { RuntimeVizOptions } from './runtime-viz-options';
 
 /**
  * The DISPLAY name of a project/service: scope stripped. LABELS ONLY.

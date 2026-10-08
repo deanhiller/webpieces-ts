@@ -4,7 +4,7 @@ import { DesignLink } from './graph-visualizer';
 import { GraphRenderModel, GraphFilterAssets } from './graph-render-model';
 import { RuntimeDetails } from './runtime-details';
 import type { RuntimeGraph } from './runtime-graph-model';
-import { RuntimeVizOptions } from './runtime-visualizer';
+import { RuntimeVizOptions } from './runtime-viz-options';
 import { GraphNavigation, NavigationLayout } from './graph-navigation';
 import { SavedSnapshot } from './saved-snapshot';
 import {

@@ -92,7 +92,36 @@ class QueueCylinders {
 
         const ry = box.halfHeight();
         const rx = this.capRadius(box, ry, separator);
-        const body =
+        const body = this.bodyPath(box, rx, ry);
+        // Only the NEAR end cap is drawn: that single arc is what reads as "tube" rather than
+        // "stadium", and a real cylinder hides the far one behind the body.
+        const cap =
+            'M' +
+            (box.x0 + rx) +
+            ',' +
+            box.y0 +
+            ' A' +
+            rx +
+            ',' +
+            ry +
+            ' 0 0 1 ' +
+            (box.x0 + rx) +
+            ',' +
+            box.y1;
+
+        const anchor = node.firstChild;
+        if (anchor === null || anchor.nextSibling === null) return;
+        node.insertBefore(this.pathEl(fill, stroke, body), anchor.nextSibling);
+        node.insertBefore(this.pathEl('none', stroke, cap), anchor.nextSibling.nextSibling);
+
+        // The label is deliberately NOT nudged. QUEUE_LABEL_PREFIX already gives the node an empty
+        // leading record field, so Graphviz has centred the text in the space to the RIGHT of where the
+        // cap lands. Shifting it again double-counts that offset and pushes the longest line out
+        // through the far end of the cylinder.
+    }
+
+    private bodyPath(box: Bounds, rx: number, ry: number): string {
+        return
             'M' +
             (box.x0 + rx) +
             ',' +
@@ -122,31 +151,6 @@ class QueueCylinders {
             ',' +
             box.y0 +
             ' Z';
-        // Only the NEAR end cap is drawn: that single arc is what reads as "tube" rather than
-        // "stadium", and a real cylinder hides the far one behind the body.
-        const cap =
-            'M' +
-            (box.x0 + rx) +
-            ',' +
-            box.y0 +
-            ' A' +
-            rx +
-            ',' +
-            ry +
-            ' 0 0 1 ' +
-            (box.x0 + rx) +
-            ',' +
-            box.y1;
-
-        const anchor = node.firstChild;
-        if (anchor === null || anchor.nextSibling === null) return;
-        node.insertBefore(this.pathEl(fill, stroke, body), anchor.nextSibling);
-        node.insertBefore(this.pathEl('none', stroke, cap), anchor.nextSibling.nextSibling);
-
-        // The label is deliberately NOT nudged. QUEUE_LABEL_PREFIX already gives the node an empty
-        // leading record field, so Graphviz has centred the text in the space to the RIGHT of where the
-        // cap lands. Shifting it again double-counts that offset and pushes the longest line out
-        // through the far end of the cylinder.
     }
 
     /**

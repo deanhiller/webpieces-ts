@@ -468,7 +468,9 @@ class GraphDrawer {
         if (!(target instanceof Node)) return;
         const filter = this.byId('wp-filter-pop');
         if (this.popover.isOpen() && !filter?.contains(target) && !this.byId('wp-filter-open')?.contains(target)) this.popover.close();
-        for (const [id, opener] of this.openers) {
+        for (const entry of this.openers) {
+            const id = entry[0];
+            const opener = entry[1];
             const panel = this.byId(id);
             if (panel && !panel.hidden && !panel.contains(target) && !opener.contains(target)) {
                 panel.hidden = true;

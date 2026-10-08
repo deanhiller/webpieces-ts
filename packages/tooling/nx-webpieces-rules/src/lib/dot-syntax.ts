@@ -89,7 +89,7 @@ export function assertValidDot(dot: string, source: string): void {
     const code = blankComments(dot);
     let index = 0;
     while (index < code.length) {
-        if (code[index] === '<') { index = DotHtml.end(code, index, source); continue; }
+        if (code[index] === '<') { index = new DotHtml().end(code, index, source); continue; }
         if (code[index] !== '"') {
             index++;
             continue;
@@ -121,7 +121,7 @@ function blankComments(dot: string): string {
             else if (dot[index] === '"') inString = false;
             index++;
         } else if (dot[index] === '<') {
-            index = DotHtml.end(dot, index, 'DOT HTML label');
+            index = new DotHtml().end(dot, index, 'DOT HTML label');
         } else if (dot[index] === '"') {
             inString = true;
             index++;
@@ -184,7 +184,7 @@ function describe(dot: string, offset: number): string {
 
 /** Skip balanced HTML labels so entity # characters and attribute quotes are not DOT tokens. */
 class DotHtml {
-    static end(code: string, start: number, source: string): number {
+    end(code: string, start: number, source: string): number {
         let depth = 0;
         let quoted = false;
         for (let index = start; index < code.length; index++) {

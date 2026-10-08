@@ -54,6 +54,51 @@ class RuntimeParityFixture {
         }
     }
 
+    addLoad(graph: RuntimeGraph, projects: EnhancedGraph): void {
+        // Add forty realistic client→service→saved-system chains to stress a laptop-sized canvas.
+        for (let index = 0; index < 40; index++) {
+            const client = `load/client-${index}`;
+            const server = `load/server-${index}`;
+            graph.services[client] = {
+                level: 3,
+                role: 'client',
+                implements: [],
+                uses: ['LoadApi'],
+                dependsOn: [server],
+                products: ['load'],
+            };
+            graph.services[server] = {
+                level: 2,
+                role: 'server',
+                implements: ['LoadApi'],
+                uses: [],
+                dependsOn: [],
+                products: ['load'],
+            };
+            projects[client] = {
+                level: 3,
+                role: 'client',
+                framework: ['browser', 'react'],
+                dependsOn: [server],
+            };
+            projects[server] = {
+                level: 2,
+                role: 'server',
+                framework: ['node', 'express'],
+                dependsOn: [],
+            };
+            graph.runtimeEdges.push({ from: client, to: server, via: ['LoadApi'], type: 'rpc' });
+        }
+        graph.apis.LoadApi = {
+            owner: 'load-contracts',
+            implementedBy: Object.keys(graph.services).filter((name) =>
+                name.startsWith('load/server'),
+            ),
+            usedBy: [],
+            type: 'rpc',
+        };
+    }
+
     async panels(page: import('@playwright/test').Page, prefix: string): Promise<void> {
         for (const [open, close, name] of [
             ['wp-mode-trigger', 'wp-mode-trigger', 'modes'],
@@ -287,48 +332,7 @@ describe.skipIf(!process.env.WP_GRAPH_VIZ_JS)('runtime viewer parity in file:// 
                   }
               ).projects
             : fixture.projects;
-        // Add forty realistic client→service→saved-system chains to stress a laptop-sized canvas.
-        for (let index = 0; index < 40; index++) {
-            const client = `load/client-${index}`;
-            const server = `load/server-${index}`;
-            graph.services[client] = {
-                level: 3,
-                role: 'client',
-                implements: [],
-                uses: ['LoadApi'],
-                dependsOn: [server],
-                products: ['load'],
-            };
-            graph.services[server] = {
-                level: 2,
-                role: 'server',
-                implements: ['LoadApi'],
-                uses: [],
-                dependsOn: [],
-                products: ['load'],
-            };
-            projects[client] = {
-                level: 3,
-                role: 'client',
-                framework: ['browser', 'react'],
-                dependsOn: [server],
-            };
-            projects[server] = {
-                level: 2,
-                role: 'server',
-                framework: ['node', 'express'],
-                dependsOn: [],
-            };
-            graph.runtimeEdges.push({ from: client, to: server, via: ['LoadApi'], type: 'rpc' });
-        }
-        graph.apis.LoadApi = {
-            owner: 'load-contracts',
-            implementedBy: Object.keys(graph.services).filter((name) =>
-                name.startsWith('load/server'),
-            ),
-            usedBy: [],
-            type: 'rpc',
-        };
+        fixture.addLoad(graph, projects);
         const started = Date.now();
         const page = await fixture.browser.open(
             '1185-runtime-large',
