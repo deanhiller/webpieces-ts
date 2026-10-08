@@ -19,6 +19,7 @@ export class RenderNode {
         public readonly modes: NodeModeDots | null,
         public readonly tags: NodeTags | null,
         public readonly products: string[],
+        public readonly queueKeys: string[] = [],
     ) {}
 }
 
@@ -52,8 +53,8 @@ export class GraphRenderModel {
     /** The colors and roles in use, so the page's legend lists exactly those (architecture graph). */
     legend = new LegendFacts();
 
-    node(id: string, dot: string, products: string[] = []): string {
-        this.nodes.push(new RenderNode(id, dot, null, null, products));
+    node(id: string, dot: string, products: string[] = [], queueKeys: string[] = []): string {
+        this.nodes.push(new RenderNode(id, dot, null, null, products, queueKeys));
         return dot;
     }
 
@@ -71,12 +72,20 @@ export class GraphRenderModel {
             if (isService(node.id)) continue;
             const inherited = new Set<string>();
             for (const edge of this.edges) {
-                const other = edge.from === node.id ? edge.to : edge.to === node.id ? edge.from : null;
+                const other =
+                    edge.from === node.id ? edge.to : edge.to === node.id ? edge.from : null;
                 if (other === null || !isService(other)) continue;
                 for (const product of byId.get(other)?.products ?? []) inherited.add(product);
             }
             if (inherited.size === 0) continue;
-            this.nodes[index] = new RenderNode(node.id, node.dot, node.modes, node.tags, [...inherited].sort());
+            this.nodes[index] = new RenderNode(
+                node.id,
+                node.dot,
+                node.modes,
+                node.tags,
+                [...inherited].sort(),
+                node.queueKeys,
+            );
         }
     }
 

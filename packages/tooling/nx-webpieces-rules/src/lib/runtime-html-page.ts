@@ -80,7 +80,7 @@ export class RuntimeHtmlPage {
 .wp-graph-details button { cursor:pointer; } .wp-api-detail { cursor:pointer; text-decoration:underline; }
 .wp-api-detail:focus-visible { outline:3px solid var(--wp-accent); } #wp-context-count { font-size:11px; color:var(--wp-muted); }
 .wp-empty { position:absolute; top:70px; left:16px; padding:16px; background:var(--wp-surface); border-radius:10px; }
-</style></head><body>${new GraphPageShell().body(parts)}
+</style></head><body data-wp-project-facts="${options.projects !== null}">${new GraphPageShell().body(parts)}
 <script>${this.menu.script()}</script><script>${this.filterJs()}</script><script>${this.navigation.script()}</script>
 <script>${new RuntimeDetails(graph, options.showExternalNodes, model).script()}</script>
 <script>${this.clientJs()}</script><script>${shared}</script></body></html>`;

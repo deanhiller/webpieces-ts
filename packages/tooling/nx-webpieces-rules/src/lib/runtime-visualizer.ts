@@ -177,6 +177,7 @@ function queueBoxDot(
     consumers: string[],
     model: GraphRenderModel,
     contractCount: number,
+    queueKeys: string[],
 ): string {
     // Record-mode label: the text must clear recordValue(), and QUEUE_LABEL_PREFIX supplies the
     // empty leading field that draws the cylinder's end cap. Drop it and the node silently
@@ -185,6 +186,8 @@ function queueBoxDot(
         id,
         `  "${id}" [shape=${QUEUE_SHAPE}, style="filled", fillcolor="${QUEUE_FILL}", ` +
             `class="${QUEUE_CLASS}", label="${QUEUE_LABEL_PREFIX}${body}"];\n`,
+        [],
+        queueKeys,
     );
     for (const producer of producers)
         dot += model.edge(
@@ -269,6 +272,7 @@ function queuesDot(graph: RuntimeGraph, hidden: Set<string>, model: GraphRenderM
                 [to],
                 model,
                 edge.via.length,
+                [`${from}->${to}`],
             );
             continue;
         }
@@ -288,6 +292,7 @@ function queuesDot(graph: RuntimeGraph, hidden: Set<string>, model: GraphRenderM
             group.consumers,
             model,
             1,
+            group.members,
         );
     }
     return dot;
@@ -572,7 +577,15 @@ export function generateRuntimeRenderModel(
         dot += adapter.service(model, name, svc);
     }
 
-    model.bands = [...new Set(model.nodes.map(node => node.tags!.level))].sort((a, b) => b - a).map(level => new LevelBand(level, model.nodes.filter(node => node.tags?.level === level).map(node => node.id)));
+    model.bands = [...new Set(model.nodes.map((node) => node.tags!.level))]
+        .sort((a, b) => b - a)
+        .map(
+            (level) =>
+                new LevelBand(
+                    level,
+                    model.nodes.filter((node) => node.tags?.level === level).map((node) => node.id),
+                ),
+        );
     dot += new LevelBandLayout().dot(model.bands);
     dot += '\n';
 
@@ -629,11 +642,7 @@ export function writeRuntimeVisualization(
     fs.writeFileSync(dotPath, dot, 'utf-8');
 
     const htmlPath = path.join(outputDir, 'runtime-architecture.html');
-    fs.writeFileSync(
-        htmlPath,
-        new RuntimeHtmlPage().render(model, title, graph, options),
-        'utf-8',
-    );
+    fs.writeFileSync(htmlPath, new RuntimeHtmlPage().render(model, title, graph, options), 'utf-8');
 
     return { dotPath, htmlPath };
 }

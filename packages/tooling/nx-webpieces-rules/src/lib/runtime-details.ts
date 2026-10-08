@@ -94,7 +94,7 @@ export class RuntimeDetails {
                 if (call.from !== service && call.to !== service) return false;
                 return (
                     queue !== undefined &&
-                    (call.queue === undefined || queue.dot.includes(call.queue))
+                    queue.queueKeys.includes(call.queue ?? `${call.from}->${call.to}`)
                 );
             });
             const entries = [...(this.edges[identity] ?? [])];

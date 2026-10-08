@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { RuntimeGraph } from './runtime-graph-model';
 import { RuntimeDetails } from './runtime-details';
-import { generateRuntimeDot } from './runtime-visualizer';
+import { generateRuntimeDot, generateRuntimeRenderModel } from './runtime-visualizer';
 
 function graph(apis: string[]): RuntimeGraph {
     return {
@@ -38,6 +38,32 @@ function graph(apis: string[]): RuntimeGraph {
 }
 
 describe('compact runtime graph details', () => {
+    it('matches exact queue identities when method names share a prefix', () => {
+        const data = graph(['MailApi']);
+        data.services.second = { ...data.services.target };
+        data.runtimeEdges = [
+            {
+                from: 'source',
+                to: 'target',
+                via: ['MailApi'],
+                type: 'pubsub',
+                queue: 'MailApi.send',
+            },
+            {
+                from: 'source',
+                to: 'second',
+                via: ['MailApi'],
+                type: 'pubsub',
+                queue: 'MailApi.sendEmail',
+            },
+        ];
+        const model = generateRuntimeRenderModel(data);
+        const details = new RuntimeDetails(data, true, model);
+        const longer = details.edges['source->queue__MailApi_sendEmail'];
+        expect(longer.join('\n')).toContain('→ second');
+        expect(longer.join('\n')).not.toContain('→ target');
+        expect(details.edges['source->queue__MailApi_send'].join('\n')).not.toContain('→ second');
+    });
     for (const count of [0, 1, 2, 3, 10]) {
         it(`keeps ${count} edge relationships complete with the correct inline/dropdown threshold`, () => {
             const apis = Array.from({ length: count }, (_, index) => `Api${index}`);

@@ -39,6 +39,12 @@ class WpModeState {
     /** '' when Impact can be shown, else the one line the drawer and the Filter popover say instead. */
     impactReason(): string {
         const impact = this.impact;
+        if (
+            impact === null &&
+            this.viewer === 'runtime' &&
+            document.body.dataset.wpProjectFacts === 'false'
+        )
+            return 'No saved project facts for Impact. Run pnpm nx run architecture:generate, then pnpm arch:visualize-runtime.';
         if (impact === null)
             return `No impact data here. Run pnpm arch:visualize${this.viewer === 'runtime' ? '-runtime' : ''} to compute it — no full regenerate needed.`;
         return impact.available ? '' : `Impact unavailable (${impact.label}): ${impact.reason}.`;

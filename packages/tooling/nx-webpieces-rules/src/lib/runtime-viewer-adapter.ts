@@ -54,7 +54,10 @@ export class RuntimeViewerAdapter {
                       : colors.join(':');
             // Graphviz cylinders cannot stripe; a gradient preserves recognizable kind geometry.
             const recolored = node.dot.replace(/fillcolor="[^"]*"/, `fillcolor="${fill}"`);
-            const product = colors.length === 0 ? recolored.replace(/style="[^"]*"/, 'style="filled,dashed"') : recolored;
+            const product =
+                colors.length === 0
+                    ? recolored.replace(/style="[^"]*"/, 'style="filled,dashed"')
+                    : recolored;
             const modes = new NodeModeDots(
                 node.dot,
                 node.dot,
@@ -64,7 +67,14 @@ export class RuntimeViewerAdapter {
                 node.dot,
                 product,
             );
-            model.nodes[index] = new RenderNode(node.id, node.dot, modes, null, node.products);
+            model.nodes[index] = new RenderNode(
+                node.id,
+                node.dot,
+                modes,
+                null,
+                node.products,
+                node.queueKeys,
+            );
         }
     }
 }
