@@ -76,7 +76,7 @@ export interface MoveWindowResponse {
 @ApiPath('/deliveries')
 export abstract class McpUnionApi {
     /** Reads one delivery, whose window is a discriminated union. */
-    @WpMcpTool('fetch_delivery')
+    @WpMcpTool('fetch_delivery', 'Fetch a delivery')
     @WpAuth([jwtAuth()])
     @WpAuthorization({ authType: AuthorizationType.ALL_USERS })
 
@@ -86,7 +86,7 @@ export abstract class McpUnionApi {
     }
 
     /** Moves a delivery window. Its REQUEST is a union, which no tool schema may publish. */
-    @WpMcpTool('move_window')
+    @WpMcpTool('move_window', 'Move a delivery window')
     @WpAuth([jwtAuth()])
     @WpAuthorization({ authType: AuthorizationType.ALL_USERS })
 

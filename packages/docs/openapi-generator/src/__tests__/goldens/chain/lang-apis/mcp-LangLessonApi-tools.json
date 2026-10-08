@@ -1,6 +1,7 @@
 [
   {
     "name": "list_passages",
+    "title": "List passages",
     "methodName": "listPassages",
     "description": "Lists a lesson's passages.",
     "hints": {

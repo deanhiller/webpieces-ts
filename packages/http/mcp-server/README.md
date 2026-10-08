@@ -28,20 +28,27 @@ abstract class OrdersApi {
     @WpAuth([jwt()])
     @WpAuthorization({ authType: AuthorizationType.ALL_USERS })
     @Endpoint(POST, '/find', READ, RPC)
-    @WpMcpTool('orders_find')
+    @WpMcpTool('orders_find', 'Find orders')
     find(request: FindOrderRequest): Promise<FindOrderResponse> {
         throw new Error('contract only');
     }
 }
 ```
 
-## Everything but the tool NAME comes from the source
+## Everything but the tool NAME and TITLE comes from the source
 
-`@WpMcpTool` takes one argument, the stable protocol name, because that is the only fact the source
-cannot state. Everything else is read off the contract by `@webpieces/api-doc-model` at BUILD time:
+`@WpMcpTool(name, title)` takes two REQUIRED arguments, because they are the only facts the source
+cannot state: the stable protocol name, and the human-readable title clients and the Claude Connectors
+Directory display. `tools/list` publishes the title as BOTH the top-level `Tool.title` and
+`annotations.title` (#1180). An empty or whitespace title throws at decoration time, the one-argument
+spelling does not compile, and a catalog entry with no title is refused when it is loaded — so a catalog
+generated before titles existed fails the boot instead of publishing untitled tools. Write the title a
+person would read ("Find orders"); never derive it from the name. Everything else is read off the
+contract by `@webpieces/api-doc-model` at BUILD time:
 
 | fact | source |
 |---|---|
+| `title` / `annotations.title` | `@WpMcpTool`'s second argument |
 | `description` | the method's JSDoc body, or its `@mcp` tag — the same words the partner reads in OpenAPI |
 | `inputSchema` / `outputSchema` | the declared request and response types, with each field's JSDoc as its description |
 | `readOnlyHint` / `destructiveHint` / `idempotentHint` | `@Endpoint`'s `operation` — `READ`, `WRITE_IDEMPOTENT` or `WRITE` |

@@ -184,7 +184,7 @@ export class ExampleApi {
     @Endpoint(POST, SAVE_PATH, WRITE, RPC)
     @WpAuth([jwtAuth()])
     @WpAuthorization<{llmRoles: readonly [string, ...string[]]}>({ authType: AuthorizationType.CUSTOM, appPolicy: {llmRoles: ['admin']} })
-    @WpMcpTool('save_customer')
+    @WpMcpTool('save_customer', 'Save a customer')
 
     @MaskLog({ secretToken: 'full' })
     save(request: SaveRequest): Promise<SaveResponse> {

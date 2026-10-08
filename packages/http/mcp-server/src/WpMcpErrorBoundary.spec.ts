@@ -58,7 +58,7 @@ abstract class PassageApi {
     @WpAuth([jwtAuth()])
     @WpAuthorization({ authType: AuthorizationType.ALL_USERS })
     @Endpoint(POST, '/passages', READ, RPC)
-    @WpMcpTool('passages_find')
+    @WpMcpTool('passages_find', 'Find passages')
     passages(_request: PassageRequest): Promise<PassageResponse> {
         throw new Error('contract only');
     }
@@ -88,6 +88,7 @@ const PASSAGE_CATALOG = new McpToolCatalog(
     new McpToolCatalogFile('PassageApi', [
         new McpToolDefinition(
             'passages_find',
+            'Find passages',
             'passages',
             'Find passages with their translations keyed by locale.',
             new WpMcpToolHints(true, false, true, false),

@@ -165,7 +165,7 @@ export class McpSchemaRenderer {
                 throw new McpToolCatalogError(
                     `Duplicate MCP tool name '${tool.name}': declared by both ${owner} and ${contractName}.`,
                     'Tool names are the protocol identity and must be globally unique — rename one ' +
-                        "of the two @WpMcpTool('...') declarations.",
+                        "of the two @WpMcpTool('<name>', '<title>') declarations.",
                 );
             }
             owners.set(tool.name, contractName);
@@ -191,8 +191,19 @@ export class McpSchemaRenderer {
                 'Declare both: one request parameter and a Promise<Response> return type.',
             );
         }
+        const title = endpoint.mcpTool!.title;
+        if (title.trim() === '') {
+            throw new McpRenderError(
+                'an MCP tool has no human-readable title',
+                where,
+                `Write it as the second argument, a string literal: @WpMcpTool('${endpoint.mcpTool!.name}', ` +
+                    "'<Human-readable title>'). tools/list publishes it as title and annotations.title " +
+                    '(#1180); never derive it from the name.',
+            );
+        }
         return new McpToolDefinition(
             endpoint.mcpTool!.name,
+            title,
             endpoint.methodName,
             description,
             mcpHintsForOperation(

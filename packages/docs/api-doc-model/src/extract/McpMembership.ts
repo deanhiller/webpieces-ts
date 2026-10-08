@@ -50,8 +50,8 @@ export function assertApiTypeMatchesMcpTools(
         throw new ApiDocExtractionError(
             `@${API_TYPE} names MCP but no method carries @${MCP_TOOL}`,
             SourceLocation.of(contract),
-            `Add @${MCP_TOOL}('<stable_tool_name>') to the methods agents may call, or drop MCP ` +
-                `from the @${API_TYPE} list.`,
+            `Add @${MCP_TOOL}('<stable_tool_name>', '<Human-readable title>') to the methods ` +
+                `agents may call, or drop MCP from the @${API_TYPE} list.`,
         );
     }
     if (!declaresMcp && tools.length > 0) {

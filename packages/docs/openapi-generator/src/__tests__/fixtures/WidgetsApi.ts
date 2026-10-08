@@ -63,7 +63,7 @@ export class WidgetsApi {
     @Endpoint(POST, '/list', READ, RPC)
     @WpAuth([apiKeyAuth('partner', PARTNER_CREDENTIALS)])
     @WpAuthorization<{llmRoles: readonly string[]}>({ authType: AuthorizationType.CUSTOM, appPolicy: {llmRoles: ['agent']} })
-    @WpMcpTool('list_widgets')
+    @WpMcpTool('list_widgets', 'List widgets')
 
     list(request: ListWidgetsRequest): Promise<ListWidgetsResponse> {
         throw new Error('contract');

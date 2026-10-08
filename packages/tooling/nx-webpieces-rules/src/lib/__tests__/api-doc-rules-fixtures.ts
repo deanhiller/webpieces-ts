@@ -108,7 +108,7 @@ export const MCP_API = `/** Orders a partner may fetch. */
         @Endpoint('POST', '/fetch', 'read', 'rpc')
         @WpAuth([jwt()])
         @WpAuthorization({authType: AuthorizationType.ALL_USERS})
-        @WpMcpTool('fetch_order')
+        @WpMcpTool('fetch_order', 'Fetch an order')
         abstract fetch(request: FetchRequest): Promise<FetchResponse>;
     }
 
@@ -261,18 +261,18 @@ export const BAD_MCP_API = `/** Search. */
         @Endpoint('POST', '/reindex', 'write', 'cloudtasks')
         @WpAuth([jwt()])
         @WpAuthorization({authType: AuthorizationType.ALL_USERS})
-        @WpMcpTool('reindex_store')
+        @WpMcpTool('reindex_store', 'Reindex a store')
         abstract reindex(request: SearchRequest): Promise<SearchResponse>;
 
         /** Search with no credential declared at all. */
         @Endpoint('POST', '/open', 'read', 'rpc')
-        @WpMcpTool('open_search')
+        @WpMcpTool('open_search', 'Open search')
         abstract open(request: SearchRequest): Promise<SearchResponse>;
 
         @Endpoint('POST', '/quiet', 'read', 'rpc')
         @WpAuth([jwt()])
         @WpAuthorization({authType: AuthorizationType.ALL_USERS})
-        @WpMcpTool('quiet_search')
+        @WpMcpTool('quiet_search', 'Quiet search')
         abstract quiet(request: SearchRequest): Promise<SearchResponse>;
     }
 
@@ -298,7 +298,7 @@ export const UNDOCUMENTED_FIELD_API = `/** Widgets. */
         @Endpoint('POST', '/list', 'read', 'rpc')
         @WpAuth([jwt()])
         @WpAuthorization({authType: AuthorizationType.ALL_USERS})
-        @WpMcpTool('list_widgets')
+        @WpMcpTool('list_widgets', 'List widgets')
         abstract list(request: ListRequest): Promise<ListResponse>;
     }
 
@@ -326,7 +326,7 @@ export const EXCLUDED_API = `/** Webhooks. */
         @Endpoint('POST', '/search', 'read', 'rpc')
         @WpAuth([jwt()])
         @WpAuthorization({authType: AuthorizationType.ALL_USERS})
-        @WpMcpTool('search_deliveries')
+        @WpMcpTool('search_deliveries', 'Search deliveries')
         abstract search(request: SearchRequest): Promise<SearchResponse>;
 
         /** Fan a partner event out to its subscribers. */
@@ -372,7 +372,7 @@ export const CONTRADICTS_API = `/** Search. */
         @Endpoint('POST', '/search', 'read', 'rpc')
         @WpAuth([jwt()])
         @WpAuthorization({authType: AuthorizationType.ALL_USERS})
-        @WpMcpTool('contradicting_search')
+        @WpMcpTool('contradicting_search', 'Contradicting search')
         @InvalidEndpointForMcp('a transport envelope body is opaque by design')
         abstract search(request: SearchRequest): Promise<SearchResponse>;
     }

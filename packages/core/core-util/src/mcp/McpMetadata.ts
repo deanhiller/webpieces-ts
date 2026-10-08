@@ -31,36 +31,53 @@ export class WpMcpToolMetadata {
     constructor(
         public readonly methodName: string,
         public readonly name: string,
+        /** The human-readable display name; `tools/list` publishes it as `title` AND `annotations.title`. */
+        public readonly title: string,
     ) {}
 }
 
 /**
  * Explicitly publishes an existing `@Endpoint(POST, path, WRITE, RPC)` method as an MCP tool, under
- * the STABLE protocol name given here.
+ * the STABLE protocol name and the human-readable TITLE given here.
  *
- * The name is the whole argument, and deliberately the only one. It is independent of the method
- * name because renaming a method must not break a saved agent workflow, and nothing else about a
- * tool is unsayable in the source:
+ * ```typescript
+ * @WpMcpTool('learner_get_passages', 'Get your passages')
+ * ```
+ *
+ * Those two are the whole argument list — the only facts about a tool the source cannot otherwise
+ * state:
  *
  * | fact | where it comes from |
  * |---|---|
+ * | `name` | this decorator — the stable protocol identity, independent of the method name because renaming a method must not break a saved agent workflow |
+ * | `title` | this decorator — the display name clients and the Claude Connectors Directory show; published as BOTH `Tool.title` and `annotations.title` |
  * | `description` | the method's JSDoc body, or its `@mcp` tag — the same words the partner reads |
  * | `readOnlyHint` / `destructiveHint` / `idempotentHint` | `@Endpoint`'s `operation`, via {@link mcpHintsForOperation} |
  * | `openWorldHint` | `@Endpoint`'s `openWorld` option |
  * | `inputSchema` / `outputSchema` | the declared request and response types |
  *
- * ```typescript
- * @WpMcpTool('search_stores')
- * ```
+ * ## Why the title is REQUIRED and never derived (#1180)
  *
- * Until #984 it also took a `description`, duplicating the JSDoc. Two authored copies of one
- * paragraph drift the first time somebody edits one, and nothing catches it — the partner reads the
- * OpenAPI text and the agent reads the decorator text. With `description` gone the options object
- * held one field, so it is a plain string and `WpMcpToolOptions` is deleted with it.
+ * The Connectors Directory flags every tool without `annotations.title`. An optional title gets
+ * skipped and the miss surfaces only at directory-submission time, so it is a compile-time
+ * requirement and an empty or whitespace one throws at decoration time. It is never computed from
+ * the name: `learner_get_passages` → "Learner get passages" is exactly the mechanical listing text
+ * reviewers push back on, and the area prefix means nothing to an end user.
+ *
+ * Until #984 the decorator also took a `description`, duplicating the JSDoc. Two authored copies of
+ * one paragraph drift the first time somebody edits one, so it is gone; the title is a short NAME,
+ * not a second copy of the description.
  */
 // webpieces-disable no-function-outside-class -- decorator factories are inherently module-scope
-export function WpMcpTool(name: string): WpMcpMethodDecorator {
+export function WpMcpTool(name: string, title: string): WpMcpMethodDecorator {
     if (name.trim() === '') throw new Error('@WpMcpTool requires a non-empty stable name.');
+    if (title.trim() === '') {
+        throw new Error(
+            `@WpMcpTool('${name}', ...) requires a non-empty human-readable title, e.g. ` +
+                "@WpMcpTool('learner_get_passages', 'Get your passages'). tools/list publishes it as " +
+                'title and annotations.title, and the Claude Connectors Directory flags a tool without one.',
+        );
+    }
     return <TMethod extends AsyncObjectMethod>(
         target: object,
         propertyKey: string | symbol,
@@ -70,7 +87,7 @@ export function WpMcpTool(name: string): WpMcpMethodDecorator {
         const tools: Record<string, WpMcpToolMetadata> =
             Reflect.getMetadata(METADATA_KEYS.MCP_TOOLS, apiClass) ?? {};
         const methodName = String(propertyKey);
-        tools[methodName] = new WpMcpToolMetadata(methodName, name);
+        tools[methodName] = new WpMcpToolMetadata(methodName, name, title);
         Reflect.defineMetadata(METADATA_KEYS.MCP_TOOLS, tools, apiClass);
     };
 }

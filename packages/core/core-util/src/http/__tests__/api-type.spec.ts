@@ -75,7 +75,7 @@ class ToolWithoutMcpApi {
     @Endpoint(POST, '/go', READ, RPC)
     @WpAuthPublic('Test fixture.')
     @WpAuthorization({ authType: AuthorizationType.ANONYMOUS, reason: 'Test fixture.' })
-    @WpMcpTool('go')
+    @WpMcpTool('go', 'Go')
     go(request: Request): Promise<Response> {
         throw new Error('contract');
     }
@@ -87,7 +87,7 @@ class AgreesApi {
     @Endpoint(POST, '/go', READ, RPC)
     @WpAuthPublic('Test fixture.')
     @WpAuthorization({ authType: AuthorizationType.ANONYMOUS, reason: 'Test fixture.' })
-    @WpMcpTool('go')
+    @WpMcpTool('go', 'Go')
     go(request: Request): Promise<Response> {
         throw new Error('contract');
     }
@@ -99,7 +99,7 @@ class MixedMcpApi {
     @Endpoint(POST, '/go', READ, RPC)
     @WpAuthPublic('Test fixture.')
     @WpAuthorization({ authType: AuthorizationType.ANONYMOUS, reason: 'Test fixture.' })
-    @WpMcpTool('go')
+    @WpMcpTool('go', 'Go')
     go(request: Request): Promise<Response> {
         throw new Error('contract');
     }
@@ -119,7 +119,7 @@ class ContradictsApi {
     @Endpoint(POST, '/go', READ, RPC)
     @WpAuthPublic('Test fixture.')
     @WpAuthorization({ authType: AuthorizationType.ANONYMOUS, reason: 'Test fixture.' })
-    @WpMcpTool('go')
+    @WpMcpTool('go', 'Go')
     @InvalidEndpointForMcp(TRANSPORT_REASON)
     go(request: Request): Promise<Response> {
         throw new Error('contract');

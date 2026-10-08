@@ -62,12 +62,14 @@ function searchOutputSchema(): ApiJsonSchema {
 
 function searchTool(
     name: string,
+    title: string,
     methodName: string,
     description: string,
     hints: WpMcpToolHints,
 ): McpToolDefinition {
     return new McpToolDefinition(
         name,
+        title,
         methodName,
         description,
         hints,
@@ -83,12 +85,14 @@ export const SEARCH_API_CATALOG = new McpToolCatalog(
     new McpToolCatalogFile('SearchApi', [
         searchTool(
             'account_search',
+            'Search accounts',
             'search',
             'Search records owned by the authenticated user.',
             new WpMcpToolHints(true, false, true, false),
         ),
         searchTool(
             'admin_search',
+            'Admin search',
             'admin',
             'Administrative search.',
             new WpMcpToolHints(false, true, false, false),
@@ -101,6 +105,7 @@ export const REMOTE_SEARCH_API_CATALOG = new McpToolCatalog(
     new McpToolCatalogFile('RemoteSearchApi', [
         searchTool(
             'remote_search',
+            'Remote search',
             'search',
             'Search a remote binding.',
             new WpMcpToolHints(false, true, false, false),
@@ -117,7 +122,7 @@ export abstract class SearchApi {
     @WpAuth([jwtAuth()])
     @WpAuthorization({ authType: AuthorizationType.ALL_USERS })
     @Endpoint(POST, '/search', READ, RPC)
-    @WpMcpTool('account_search')
+    @WpMcpTool('account_search', 'Search accounts')
     search(_request: SearchRequest): Promise<SearchResponse> {
         throw new Error('contract only');
     }
@@ -127,7 +132,7 @@ export abstract class SearchApi {
     @WpAuth([jwtAuth()])
     @WpAuthorization({ authType: AuthorizationType.ROLES, roles: ['admin'] })
     @Endpoint(POST, '/admin', WRITE, RPC)
-    @WpMcpTool('admin_search')
+    @WpMcpTool('admin_search', 'Admin search')
     admin(_request: SearchRequest): Promise<SearchResponse> {
         throw new Error('contract only');
     }
@@ -141,7 +146,7 @@ export abstract class RemoteSearchApi {
     @WpAuth([oidcAuth()])
     @WpAuthorization({ authType: AuthorizationType.USERS_OR_SERVICES })
     @Endpoint(POST, '/search', WRITE, RPC)
-    @WpMcpTool('remote_search')
+    @WpMcpTool('remote_search', 'Remote search')
     search(_request: SearchRequest): Promise<SearchResponse> {
         throw new Error('contract only');
     }

@@ -40,7 +40,7 @@ export class LangLessonApi {
     @Endpoint(POST, '/passages', READ, RPC)
     @WpAuthPublic('Fixture only.')
     @WpAuthorization({ authType: AuthorizationType.ANONYMOUS, reason: 'Fixture only.' })
-    @WpMcpTool('list_passages')
+    @WpMcpTool('list_passages', 'List passages')
     listPassages(request: PassageListRequest): Promise<PassageListResponse> {
         throw new Error('contract');
     }

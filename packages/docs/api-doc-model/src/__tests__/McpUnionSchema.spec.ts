@@ -92,12 +92,31 @@ describe('a union in an MCP tool schema', () => {
      * so the renderer is measured directly against a model that carries the union without one.
      */
     it('publishes an un-narrowable union WITHOUT a discriminator rather than inventing one', () => {
-        const schema = new McpSchemaRenderer(unnarrowableModel()).render()[0].outputSchema;
+        const schema = new McpSchemaRenderer(unnarrowableModel('Ask either way')).render()[0].outputSchema;
         const either = schema.properties!['either'];
 
         expect(either.oneOf?.length).toBe(2);
         expect(either.discriminator).toBe(undefined);
         expect(either.oneOf![0].properties!['left'].type).toBe('string');
+    });
+
+    it('carries the @WpMcpTool title into the catalog entry (#1180)', () => {
+        expect(new McpSchemaRenderer(unnarrowableModel('Ask either way')).render()[0].title).toBe(
+            'Ask either way',
+        );
+    });
+
+    it('REFUSES a tool with no title — one that did not fold to a string — naming the decorator to write (#1180)', () => {
+        const render = (): void => {
+            new McpSchemaRenderer(unnarrowableModel(' ')).render();
+        };
+        expect(render).toThrow(McpRenderError);
+        expect(render).toThrow(/an MCP tool has no human-readable title/);
+        expect(render).toThrow(
+            expect.objectContaining({
+                cure: expect.stringContaining("@WpMcpTool('ask_either', '<Human-readable title>')"),
+            }),
+        );
     });
 });
 
@@ -122,7 +141,7 @@ function rootUnionCure(): string {
 
 /** A model whose union carries NO discriminator, which the extractor will never build by itself. */
 // webpieces-disable no-function-outside-class -- spec fixture builder, beside the one test that uses it
-function unnarrowableModel(): ApiDocModel {
+function unnarrowableModel(title: string): ApiDocModel {
     const types = new Map<string, DocumentedType>();
     types.set('Left', objectType('Left', 'left'));
     types.set('Right', objectType('Right', 'right'));
@@ -155,7 +174,7 @@ function unnarrowableModel(): ApiDocModel {
         ),
     );
     types.set('Ask', objectType('Ask', 'question'));
-    return new ApiDocModel('EitherApi', ['mcp'], '/either', 'Either.', [endpoint()], types, [], []);
+    return new ApiDocModel('EitherApi', ['mcp'], '/either', 'Either.', [endpoint(title)], types, [], []);
 }
 
 // webpieces-disable no-function-outside-class -- spec fixture builder
@@ -191,7 +210,7 @@ function field(name: string, type: TypeRef): DocumentedField {
 }
 
 // webpieces-disable no-function-outside-class -- spec fixture builder
-function endpoint(): DocumentedEndpoint {
+function endpoint(title: string): DocumentedEndpoint {
     return new DocumentedEndpoint(
         'ask',
         'POST',
@@ -202,7 +221,7 @@ function endpoint(): DocumentedEndpoint {
         false,
         new DocumentedEndpointOptions(false, undefined, undefined),
         undefined,
-        new DocumentedMcpTool('ask_either'),
+        new DocumentedMcpTool('ask_either', title),
         undefined,
         undefined,
         new Map<string, string>(),

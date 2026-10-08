@@ -70,6 +70,27 @@ class McpEdgeRequest {
     constructor(public readonly step: string) {}
 }
 
+/**
+ * `Tool.annotations` exactly as tools/list publishes it: the four hints PLUS the human-readable
+ * `title` (#1180). The Claude Connectors Directory checks `annotations.title`; clients on the
+ * 2025-06-18+ spec render the top-level `Tool.title`, so both carry the one `@WpMcpTool` title.
+ */
+class McpPublishedToolAnnotations {
+    readonly title: string;
+    readonly readOnlyHint: boolean;
+    readonly destructiveHint: boolean;
+    readonly idempotentHint: boolean;
+    readonly openWorldHint: boolean;
+
+    constructor(tool: RegisteredMcpTool) {
+        this.title = tool.title;
+        this.readOnlyHint = tool.annotations.readOnlyHint;
+        this.destructiveHint = tool.annotations.destructiveHint;
+        this.idempotentHint = tool.annotations.idempotentHint;
+        this.openWorldHint = tool.annotations.openWorldHint;
+    }
+}
+
 /** Body of the 405 answered for every non-POST method at the bound MCP endpoint path. */
 class McpMethodNotAllowedBody {
     readonly error = 'method_not_allowed';
@@ -429,10 +450,11 @@ export class WpMcpServer<TGrant> {
     private toolDefinition(tool: RegisteredMcpTool): Tool {
         return {
             name: tool.name,
+            title: tool.title,
             description: tool.description,
             inputSchema: tool.inputSchema as Tool['inputSchema'],
             outputSchema: tool.outputSchema as Tool['outputSchema'],
-            annotations: tool.annotations,
+            annotations: new McpPublishedToolAnnotations(tool),
             _meta: { webpiecesRegistryRevision: this.revision },
         };
     }
@@ -629,6 +651,7 @@ export class WpMcpServer<TGrant> {
     private calculateRegistryRevision(registry: McpToolRegistry): string {
         const surface = registry.tools.map((tool: RegisteredMcpTool) => [
             tool.name,
+            tool.title,
             tool.description,
             tool.inputSchema,
             tool.outputSchema,

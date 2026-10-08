@@ -153,7 +153,7 @@ export abstract class McpEquivalenceApi {
     @WpAuth([jwtAuth()])
     @WpAuthorization({ authType: AuthorizationType.ALL_USERS })
 
-    @WpMcpTool('lookup_orders')
+    @WpMcpTool('lookup_orders', 'Look up orders')
     lookup(_request: LookupRequest): Promise<LookupResponse> {
         throw new Error('contract only');
     }
@@ -165,7 +165,7 @@ export abstract class McpEquivalenceApi {
     @WpAuth([jwtAuth()])
     @WpAuthorization({ authType: AuthorizationType.ALL_USERS })
 
-    @WpMcpTool('cancel_order')
+    @WpMcpTool('cancel_order', 'Cancel an order')
     cancel(_request: CancelRequest): Promise<CancelResponse> {
         throw new Error('contract only');
     }
@@ -177,7 +177,7 @@ export abstract class McpEquivalenceApi {
     @WpAuth([jwtAuth()])
     @WpAuthorization({ authType: AuthorizationType.ALL_USERS })
 
-    @WpMcpTool('reindex_store')
+    @WpMcpTool('reindex_store', 'Reindex a store')
     reindex(_request: ReindexRequest): Promise<ReindexResponse> {
         throw new Error('contract only');
     }
