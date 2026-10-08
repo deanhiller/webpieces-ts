@@ -11,5 +11,5 @@
             }
         }
     },
-    "tags": ["framework:express", "role:server"]
+    "tags": ["framework:express", "role:server", "product:platform"]
 }

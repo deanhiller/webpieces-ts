@@ -32,5 +32,5 @@
             }
         }
     },
-    "tags": ["type:tooling", "role:app", "framework:node"]
+    "tags": ["type:tooling", "role:app", "framework:node", "product:rules"]
 }

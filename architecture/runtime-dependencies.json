@@ -30,6 +30,9 @@
                     "declaredVia": "angular-site#ApplicationBrowserWiring/0:angular-site#ApplicationBrowserWiring/bindModules[1]:angular-site#ApiBindings",
                     "targetService": "client-server"
                 }
+            ],
+            "products": [
+                "platform"
             ]
         },
         "app-example-e2e": {
@@ -38,7 +41,10 @@
             "implements": [],
             "uses": [],
             "dependsOn": [],
-            "drawOnGraph": false
+            "drawOnGraph": false,
+            "products": [
+                "platform"
+            ]
         },
         "client-server": {
             "level": 1,
@@ -84,6 +90,9 @@
                     "type": "rpc",
                     "declaredVia": "client-server#ClientServerWiring/0:client-server#ClientServerWiring/routeModules[0]:client-server#AppRoutes"
                 }
+            ],
+            "products": [
+                "platform"
             ]
         },
         "legacy-server": {
@@ -123,6 +132,9 @@
                     "type": "rpc",
                     "declaredVia": "legacy-server#LegacyWiring/0:legacy-server#LegacyWiring/routeModules[0]:legacy-server#LegacyRoutes"
                 }
+            ],
+            "products": [
+                "platform"
             ]
         },
         "server2": {
@@ -143,6 +155,9 @@
                     "type": "rpc",
                     "declaredVia": "server2#Server2Wiring/0:server2#Server2Wiring/routeModules[0]:server2#Server2Routes"
                 }
+            ],
+            "products": [
+                "platform"
             ]
         }
     },

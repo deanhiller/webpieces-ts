@@ -13,9 +13,5 @@
             "executor": "@webpieces/nx-webpieces-rules:validate-api-relations"
         }
     },
-    "tags": [
-        "type:tooling",
-        "role:app",
-        "framework:node"
-    ]
+    "tags": ["type:tooling", "role:app", "framework:node", "product:rules"]
 }
