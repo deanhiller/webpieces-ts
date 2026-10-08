@@ -20,7 +20,8 @@ interface FilterApi {
 
 export class FilterFixture {
     static client(name: string): string {
-        return ts.transpileModule(fs.readFileSync(path.join(__dirname, '..', name), 'utf8'), {
+        const prefix = name === 'graph-visualizer.client.ts' ? FilterFixture.client('graph-mode-state.client.ts') : '';
+        return prefix + ts.transpileModule(fs.readFileSync(path.join(__dirname, '..', name), 'utf8'), {
             compilerOptions: { target: ts.ScriptTarget.ES2022 },
         }).outputText;
     }

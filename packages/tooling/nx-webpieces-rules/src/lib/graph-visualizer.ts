@@ -90,7 +90,8 @@ export function readCompiledClient(name: string): string {
                 'by tsc, so it only exists after a build — run the package build, or inject the text.',
         );
     }
-    return fs.readFileSync(file, 'utf-8');
+    const source = fs.readFileSync(file, 'utf-8');
+    return name === 'graph-visualizer.client.js' ? readCompiledClient('graph-mode-state.client.js') + source : source;
 }
 
 export class GraphVisualizer {

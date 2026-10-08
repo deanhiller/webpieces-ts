@@ -3,6 +3,7 @@
  * graph-impact-browser.spec.ts): launches headless chromium, serves Viz from WP_GRAPH_VIZ_JS, and
  * opens generated pages straight from disk, optionally beside an Impact sidecar.
  */
+import { randomUUID } from 'crypto';
 import { expect } from 'vitest';
 import { chromium, type Browser, type Page, type Locator } from '@playwright/test';
 import * as fs from 'fs';
@@ -35,7 +36,7 @@ export function impactScan(
 /** Opt-in browser suite: WP_GRAPH_VIZ_JS supplies Viz 3; the cross-page test additionally uses
  * WP_GRAPH_VIZ2_JS and WP_GRAPH_VIZ2_RENDER_JS for design's pinned Viz 2.1.2 scripts. */
 export class BrowserFixture {
-    readonly output = path.resolve('.webpieces/1118-browser-evidence');
+    constructor(readonly output: string = path.resolve('.webpieces/1118-browser-evidence', randomUUID())) {}
     readonly viz = FilterFixture.visualizer();
     browser!: Browser;
 

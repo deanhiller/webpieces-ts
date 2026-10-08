@@ -89,6 +89,7 @@ export function assertValidDot(dot: string, source: string): void {
     const code = blankComments(dot);
     let index = 0;
     while (index < code.length) {
+        if (code[index] === '<') { index = new DotHtml().end(code, index, source); continue; }
         if (code[index] !== '"') {
             index++;
             continue;
@@ -119,6 +120,8 @@ function blankComments(dot: string): string {
             if (dot[index] === '\\') index++;
             else if (dot[index] === '"') inString = false;
             index++;
+        } else if (dot[index] === '<') {
+            index = new DotHtml().end(dot, index, 'DOT HTML label');
         } else if (dot[index] === '"') {
             inString = true;
             index++;
@@ -177,4 +180,20 @@ function describe(dot: string, offset: number): string {
     const lineNumber = dot.slice(0, offset).split('\n').length;
     const line = dot.split('\n')[lineNumber - 1];
     return `line ${lineNumber}: ${line.trim()}`;
+}
+
+/** Skip balanced HTML labels so entity # characters and attribute quotes are not DOT tokens. */
+class DotHtml {
+    end(code: string, start: number, source: string): number {
+        let depth = 0;
+        let quoted = false;
+        for (let index = start; index < code.length; index++) {
+            const character = code[index];
+            if (character === '"') quoted = !quoted;
+            if (quoted) continue;
+            if (character === '<') depth++;
+            if (character === '>' && --depth === 0) return index + 1;
+        }
+        throw new InvalidDotError(`${source}: unterminated HTML label at ${describe(code, start)}`);
+    }
 }

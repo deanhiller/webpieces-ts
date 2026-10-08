@@ -65,6 +65,10 @@ export class ShellParts {
         public readonly responsibilities: string,
         /** Every declared product, sorted (#1179); empty hides the Filter's Product group. */
         public readonly products: string[],
+        public readonly runtime: boolean = false,
+        public readonly frameworks: readonly string[] = FRAMEWORK_ORDER,
+        public readonly roles: readonly string[] = ROLE_STYLES.map((style: RoleStyle): string => style.role),
+        public readonly emptyState: string = '',
     ) {}
 }
 
@@ -95,6 +99,7 @@ export class GraphPageShell {
         <div class="wp-group">
             <label class="wp-label" for="wp-lock">Focus</label>
             ${parts.lockControl}
+            <button type="button" class="wp-toggle" id="wp-lock-toggle" aria-pressed="false">Lock <span class="wp-sw" aria-hidden="true"></span></button>
             <button type="button" class="wp-toggle" id="wp-filter-toggle" aria-pressed="false">Hide unconnected <span class="wp-sw" aria-hidden="true"></span></button>
         </div>
         <div class="wp-group">
@@ -142,12 +147,12 @@ export class GraphPageShell {
      * (when any is selected) AND belongs to any selected product (when any is selected). Nothing
      * applies until "Show N projects".
      */
-    private filterPopover(products: string[]): string {
+    private filterPopover(parts: ShellParts): string {
         const scopes = SCOPE_OPTIONS.map(
             (option: ScopeOption): string =>
                 `<label class="wp-scope"><input type="radio" name="wp-scope" value="${option.scope}"${option.scope === ChangeScope.EVERYTHING ? ' checked' : ''}>` +
                 `<span class="wp-scope-text"><span class="wp-scope-name" data-wp-scope-label="${option.scope}">${option.label}</span>` +
-                `<span class="wp-scope-sub">${option.subtitle}</span></span>` +
+                `<span class="wp-scope-sub">${parts.runtime && option.scope === ChangeScope.EVERYTHING ? 'every service' : option.subtitle}</span></span>` +
                 `<span class="wp-count" data-wp-scope-count="${option.scope}"></span></label>`,
         ).join('');
         const chips = (group: string, values: readonly string[]): string =>
@@ -157,13 +162,13 @@ export class GraphPageShell {
                         `<button type="button" class="wp-chip" data-wp-chip-group="${group}" data-wp-chip="${value}" aria-pressed="false">${value}</button>`,
                 )
                 .join('');
-        return `<div class="wp-pop wp-filter-pop" id="wp-filter-pop" role="dialog" aria-label="Filter projects" hidden>
+        return `<div class="wp-pop wp-filter-pop" id="wp-filter-pop" role="dialog" aria-label="Filter ${parts.runtime ? 'services' : 'projects'}" hidden>
             <header><span>Filter</span><button type="button" class="wp-icon wp-icon-mini" id="wp-filter-close" aria-label="Close the filter">✕</button></header>
             <fieldset class="wp-fgroup" id="wp-scope-group"><legend id="wp-scope-legend">Changes on this branch</legend>${this.impactKinds('filter')}${scopes}<p class="wp-scope-reason" id="wp-scope-reason" hidden></p></fieldset>
-            <fieldset class="wp-fgroup"><legend>Runtime <small>any match</small></legend><div class="wp-chips">${chips('runtime', FRAMEWORK_ORDER)}</div></fieldset>
-            <fieldset class="wp-fgroup"><legend>Role <small>any match</small></legend><div class="wp-chips">${chips('role', ROLE_STYLES.map((style: RoleStyle): string => style.role))}</div></fieldset>
-            ${this.productGroup(products)}
-            <footer><button type="button" class="wp-text-btn" id="wp-filter-clear">Clear all</button><button type="button" class="wp-primary" id="wp-filter-apply">Show all projects</button></footer>
+            <fieldset class="wp-fgroup"><legend>Runtime <small>any match</small></legend><div class="wp-chips">${chips('runtime', parts.frameworks)}</div>${parts.runtime && parts.frameworks.length === 0 ? '<p>No declared framework metadata in the saved project graph. Refresh explicitly with architecture:generate.</p>' : ''}</fieldset>
+            <fieldset class="wp-fgroup"><legend>Role <small>any match</small></legend><div class="wp-chips">${chips('role', parts.roles)}</div></fieldset>
+            ${this.productGroup(parts.products)}
+            <footer><button type="button" class="wp-text-btn" id="wp-filter-clear">Clear all</button><button type="button" class="wp-primary" id="wp-filter-apply">Show all ${parts.runtime ? 'services' : 'projects'}</button></footer>
         </div>`;
     }
 
@@ -210,12 +215,12 @@ export class GraphPageShell {
     }
 
     private overlays(parts: ShellParts): string {
-        return `<div class="wp-pop wp-legend-popout" id="wp-legend-popout" hidden>
+        return `${parts.emptyState}<div class="wp-pop wp-legend-popout" id="wp-legend-popout" hidden>
             <header><span id="wp-legend-pop-title">Legend · Runtime</span><button type="button" class="wp-icon wp-icon-mini" id="wp-legend-close" aria-label="Close the legend">✕</button></header>
             ${parts.legend}
         </div>
-        ${this.help()}
-        ${this.filterPopover(parts.products)}
+        ${this.help(parts.runtime)}
+        ${this.filterPopover(parts)}
         <div class="wp-pop wp-snapshot" id="wp-snapshot" hidden>${parts.snapshot}</div>
         <aside class="wp-panel" id="wp-resp-panel" aria-label="Responsibilities" hidden>
             <header><span>Responsibilities</span><button type="button" class="wp-icon wp-icon-mini" id="wp-resp-close" aria-label="Close responsibilities">✕</button></header>
@@ -224,7 +229,16 @@ export class GraphPageShell {
     }
 
     /** The two hint paragraphs that used to sit above the graph, plus the keyboard shortcuts. */
-    private help(): string {
+    private help(runtime: boolean): string {
+        if (runtime) return `<div class="wp-pop wp-help" id="wp-help" role="dialog" aria-label="How to read this graph" hidden>
+            <header><span>Reading the runtime graph</span><button type="button" class="wp-icon wp-icon-mini" id="wp-help-close" aria-label="Close help">✕</button></header>
+            <p>Rows preserve saved runtime call-depth levels. Boxes are services; horizontal cylinders are queues, upright cylinders datastores, and clocks scheduled triggers. Solid arrows are RPC calls, dashed arrows queued events; red arrows admit legacy cycles.</p>
+            <p>Click a box for Lock, Filter Unconnected, or Implements. Implements in the box is a plain summary. Click Uses on a relationship line for its complete details. Hover traces chains without opening details.</p>
+            <p>Lock pins separate incoming and outgoing chains; hover adds another chain temporarily. Hide unconnected removes unrelated boxes independently. Clear all clears facets, leaving Lock and chain filtering intact.</p>
+            <p>Filters intersect declared runtime, role, product closure and Nx build scope. Counts describe services; attached contextual nodes are counted separately. Impact uses compile-project sets, never runtime reachability. Queues and vendors are context, never source owners or CI projects.</p>
+            <p>Runtime uses declared framework colors, Architecture declared roles; contextual nodes keep their kind colors. Product colors include inherited membership. Unknown metadata is neutral. Missing saved metadata requires explicit architecture:generate.</p>
+            <p><kbd>/</kbd> Focus search · <kbd>1</kbd>–<kbd>4</kbd> modes · <kbd>Esc</kbd> dismiss or unlock</p>
+        </div>`;
         return `<div class="wp-pop wp-help" id="wp-help" role="dialog" aria-label="How to read this graph" hidden>
             <header><span>Reading the graph</span><button type="button" class="wp-icon wp-icon-mini" id="wp-help-close" aria-label="Close help">✕</button></header>
             <p>Every row is one dependency level: the HIGHEST level is the top row and L0, the foundation libraries, is always the bottom row. Servers, clients and apps always form the top row (a bundle sits above the apps it aggregates). Transitive dependencies are allowed but not drawn.</p>

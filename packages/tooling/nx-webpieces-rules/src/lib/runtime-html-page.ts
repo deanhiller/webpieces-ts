@@ -1,163 +1,165 @@
+import * as fs from 'fs';
+import * as path from 'path';
+import { DesignLink } from './graph-visualizer';
 import { GraphRenderModel, GraphFilterAssets } from './graph-render-model';
 import { RuntimeDetails } from './runtime-details';
 import type { RuntimeGraph } from './runtime-graph-model';
+import { RuntimeVizOptions } from './runtime-viz-options';
 import { GraphNavigation, NavigationLayout } from './graph-navigation';
 import { SavedSnapshot } from './saved-snapshot';
-import { CLIENT_MODEL_PLACEHOLDER, readCompiledClient } from './graph-visualizer';
+import {
+    CLIENT_MODEL_PLACEHOLDER,
+    CLIENT_DESIGN_LINKS_PLACEHOLDER,
+    readCompiledClient,
+} from './graph-visualizer';
 import { GraphNodeMenu } from './graph-node-menu';
-import { legendHtml } from './runtime-viz-theme';
+import { GraphPageShell, ShellParts } from './graph-page-shell';
+import { GraphPageStyles } from './graph-page-styles';
+import { GraphLegend } from './graph-legend';
+import { ProductPalette } from './graph-products';
+import { FRAMEWORK_STYLES, ROLE_STYLES } from './graph-color-modes';
+import { IMPACT_SIDECAR_SRC } from './graph-impact';
+import { ResponsibilitiesRenderer } from './graph-responsibilities';
+import { htmlLabelText } from './dot-syntax';
+import type { EnhancedGraph } from './graph-sorter';
 
-/**
- * The runtime-architecture HTML page: its styles, the shared floating node menu, the graph host
- * and the legend.
- *
- * A CLASS rather than a bag of module functions so the client-text seam can be a constructor
- * parameter the way GraphVisualizer's is: the default reads the COMPILED sibling, which exists in
- * dist and in the published tarball but NOT in a source checkout, and a unit test running from
- * source hands in the text itself instead of requiring the package to have been built first.
- */
+/** Runtime facts and shape adapter inside the same shell/controller as the project viewer. */
 export class RuntimeHtmlPage {
-    private readonly filterAssets = new GraphFilterAssets();
-    private readonly snapshot = new SavedSnapshot();
-    /** The ONE floating-node-menu implementation, shared with dependencies.html and every design.html. */
-    private readonly nodeMenu = new GraphNodeMenu();
+    private readonly assets = new GraphFilterAssets();
+    private readonly menu = new GraphNodeMenu();
+    private readonly navigation = new GraphNavigation(NavigationLayout.FLOATING);
 
     constructor(
         private readonly clientJs: () => string = (): string =>
             readCompiledClient('runtime-visualizer.client.js'),
         private readonly filterJs: () => string = (): string =>
             readCompiledClient('graph-filter.client.js'),
+        private readonly sharedJs: () => string = (): string =>
+            readCompiledClient('graph-visualizer.client.js'),
     ) {}
 
     render(
         model: GraphRenderModel,
         title: string,
         graph: RuntimeGraph,
-        showExternalNodes: boolean = true,
+        options: RuntimeVizOptions = new RuntimeVizOptions(),
     ): string {
-        return `<!DOCTYPE html>
-<html>
-<head>
-    <!-- REQUIRED: the cron node's label is a literal ⏰, and the DOT is embedded in this file. With
-         no declared charset the browser falls back to a locale guess and renders it as mojibake
-         ("â °") whenever the page is served without a charset header. -->
-    <meta charset="utf-8">
-    <title>${title}</title>
-    <script src="https://cdn.jsdelivr.net/npm/@viz-js/viz@3.28.0/dist/viz-global.js"></script>
-    <style>${this.styles()}</style>
-</head>
-<body>
-    <h1>${title}</h1>
-    ${this.snapshot.html()}
-    <p class="hint">💡 <strong>Click any box</strong> for its menu — <strong>Lock</strong> dims every other box and every arrow so one service, queue, datastore or external system stands alone; <strong>Unlock</strong> restores the whole picture.</p>
-    <p class="hint"><strong>Filter Unconnected</strong> keeps incoming and outgoing chains and compacts the picture. <strong>Turn off Filter</strong> restores it.</p>
-    ${this.productChips(graph)}
-    ${this.filterAssets.html()}
-    <div id="graph"></div>
-    ${legendHtml()}
-    <script>${this.nodeMenu.script()}</script>
-    <script>${this.filterJs()}</script>
-    <script>${this.script(model)}</script>
-    <script>${new GraphNavigation(NavigationLayout.TOOLBAR).script()}</script>
-    <script>${new RuntimeDetails(graph, showExternalNodes).script()}</script>
-</body>
-</html>`;
+        model.viewer = 'runtime';
+        const frameworks = [
+            ...new Set(model.nodes.flatMap((node) => node.tags?.frameworks ?? [])),
+        ].sort();
+        const roles = [
+            ...new Set(model.nodes.flatMap((node) => (node.tags === null ? [] : [node.tags.role]))),
+        ].sort();
+        const products = [...new Set(model.nodes.flatMap((node) => node.products))].sort();
+        const parts = new ShellParts(
+            title,
+            this.lockControl(model),
+            this.legend(model),
+            this.edgeKey(),
+            this.assets.html() + '<span id="wp-context-count"></span>',
+            new SavedSnapshot().html(),
+            this.responsibilities(graph, options),
+            products,
+            true,
+            frameworks,
+            roles,
+            '<div class="wp-empty" id="wp-empty" hidden>No matching services. Open Filter and Clear all, or turn off Hide unconnected.</div>',
+        );
+        const shared = this.sharedJs()
+            .split(CLIENT_MODEL_PLACEHOLDER)
+            .join(this.assets.json(model))
+            .split(CLIENT_DESIGN_LINKS_PLACEHOLDER)
+            .join(this.assets.json(this.designLinks(graph, options)));
+        return `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>${htmlLabelText(title)}</title>
+<script src="https://cdn.jsdelivr.net/npm/@viz-js/viz@3.28.0/dist/viz-global.js"></script>
+<script src="${IMPACT_SIDECAR_SRC}"></script>
+<style>${this.menu.styles()}${this.menu.dimStyles('#graph')}${this.assets.styles()}${this.navigation.styles()}${new GraphPageStyles().css()}
+.wp-graph-details { position:fixed; z-index:60; max-width:min(520px,calc(100vw - 24px)); max-height:70vh; overflow:auto; background:var(--wp-surface); border:1px solid var(--wp-line); border-radius:10px; padding:14px; box-shadow:0 8px 24px #0002; }
+.wp-graph-details button { cursor:pointer; } .wp-api-detail { cursor:pointer; text-decoration:underline; }
+.wp-api-detail:focus-visible { outline:3px solid var(--wp-accent); } #wp-context-count { font-size:11px; color:var(--wp-muted); }
+.wp-empty { position:absolute; top:70px; left:16px; padding:16px; background:var(--wp-surface); border-radius:10px; }
+</style></head><body data-wp-project-facts="${options.projects !== null}">${new GraphPageShell().body(parts)}
+<script>${this.menu.script()}</script><script>${this.filterJs()}</script><script>${this.navigation.script()}</script>
+<script>${new RuntimeDetails(graph, options.showExternalNodes, model).script()}</script>
+<script>${this.clientJs()}</script><script>${shared}</script></body></html>`;
     }
 
-    /**
-     * The product chip row (#1179): one chip per product a service belongs to. Pressing chips keeps
-     * the UNION of their services (each product's tagged services plus everything they reach at
-     * runtime) and the queues, triggers and systems attached to them; it intersects with Filter
-     * Unconnected. Omitted when no service belongs to a product. The page always opens unfiltered.
-     */
-    productChips(graph: RuntimeGraph): string {
-        const products = new Set<string>();
-        for (const service of Object.values(graph.services)) {
-            if (service.drawOnGraph === false) continue;
-            for (const product of service.products ?? []) products.add(product);
+    private designLinks(graph: RuntimeGraph, options: RuntimeVizOptions): DesignLink[] {
+        const links: DesignLink[] = [];
+        for (const name of Object.keys(graph.services).sort()) {
+            if (graph.services[name].drawOnGraph === false) continue;
+            const design = options.projects?.[name]?.designFile?.replace(
+                /design\.json$/,
+                'design.html',
+            );
+            if (
+                !design ||
+                !options.workspaceRoot ||
+                !fs.existsSync(path.join(options.workspaceRoot, design))
+            )
+                continue;
+            links.push(new DesignLink(name, path.posix.relative('tmp/webpieces', design)));
         }
-        if (products.size === 0) return '';
-        const chips = [...products]
-            .sort()
+        return links;
+    }
+
+    private lockControl(model: GraphRenderModel): string {
+        const entries = model.nodes
             .map(
-                (product: string): string =>
-                    `<button type="button" class="wp-chip" data-wp-product="${product}" aria-pressed="false">${product}</button>`,
+                (node) =>
+                    `<option value="${htmlLabelText(node.id)}">${htmlLabelText(node.id)} · ${node.tags?.role ?? 'context'}</option>`,
             )
             .join('');
+        return `<input type="search" id="wp-lock" list="wp-lock-options" placeholder="Lock a node… ( / )" autocomplete="off" spellcheck="false"><datalist id="wp-lock-options">${entries}</datalist>`;
+    }
+
+    private legend(model: GraphRenderModel): string {
+        const tag = (group: string, value: string, color: string): string =>
+            `<div class="wp-legend-row" data-wp-legend-group="${group}" data-wp-legend-value="${htmlLabelText(value)}"><svg width="20" height="14"><rect width="20" height="14" rx="2" fill="${color}"/></svg>${htmlLabelText(value)}</div>`;
+        const frameworks = Object.values(FRAMEWORK_STYLES)
+            .filter((style) => model.legend.frameworks.includes(style.framework))
+            .map((style) => tag('runtime', style.framework, style.color))
+            .join('');
+        const roles = [
+            ...new Set(model.nodes.flatMap((node) => (node.tags === null ? [] : [node.tags.role]))),
+        ]
+            .map((role) =>
+                tag(
+                    'role',
+                    role,
+                    ROLE_STYLES.find((style) => style.role === role)?.fill ?? '#e4e6ec',
+                ),
+            )
+            .join('');
+        const products = new ProductPalette(
+            model.legend.products.map((count) => count.product),
+        ).colors
+            .map((color) => tag('product', color.product, color.color))
+            .join('');
         return (
-            `<div class="wp-product-filter" id="wp-product-filter" role="group" aria-label="Product filter">` +
-            `<span class="wp-product-label">Product <small>any match</small></span>${chips}</div>`
+            `<section data-wp-legend-mode="runtime" class="wp-legend-list">${frameworks}${tag('runtime', 'unknown', '#e4e6ec')}<p>Neutral: unknown runtime. Nested: specialization; stripes: multiple runtimes. Context retains kind colors.</p></section>
+<section data-wp-legend-mode="architecture" class="wp-legend-list" hidden>${roles}<p>Auxiliary nodes use kind colors, never project roles.</p></section>` +
+            `<section data-wp-legend-mode="impact" class="wp-legend-list" hidden>${new GraphLegend().impactRows()}</section><section data-wp-legend-mode="product" class="wp-legend-list" hidden>${products}<p>Stripes: several products; neutral: all products; white/dashed: no product. Context inherits adjacent service memberships.</p></section>` +
+            '<p>Queues, clocks, datastores and vendors remain context in Impact; no source ownership or CI status is implied.</p>'
         );
     }
 
-    /**
-     * The browser half lives in runtime-visualizer.client.ts (matching graph-visualizer.client.ts)
-     * rather than in a template literal here: it renders with @viz-js/viz v3, redraws every queue
-     * node as a true horizontal cylinder, and wires the shared node menu onto every box — more
-     * logic than belongs inline in a .ts string. The substitution is a blind split/join, so the
-     * render-model placeholder must appear EXACTLY ONCE in the client.
-     */
-    private script(model: GraphRenderModel): string {
-        return this.clientJs().split(CLIENT_MODEL_PLACEHOLDER).join(this.filterAssets.json(model));
+    private edgeKey(): string {
+        return '<div class="wp-legend-list"><p>→ RPC · ⇢ queued/event · red: legacy cycle</p><p>Horizontal cylinder: queue<br>Upright cylinder: datastore<br>⏰: scheduler<br>Dashed box: external system</p></div>';
     }
 
-    /**
-     * Page styles, including the shared menu stylesheet: the clickable cursor + blue glow on every
-     * box, and the dim/undim rules the lock toggles, scoped to this page's `#graph` host. Those two
-     * blocks are shared verbatim with architecture/dependencies.html and every design.html.
-     *
-     * The legend swatches are hand-drawn inline SVG on purpose: the alternative is shelling out to
-     * Graphviz at generate time, which would make writing the HTML depend on a `dot` binary being
-     * installed — a dependency this tool does not otherwise have, since rendering is client-side.
-     */
-    private styles(): string {
-        return `
-        body { margin: 0; padding: 20px; font-family: Arial, sans-serif; background: #f5f5f5; }
-        h1 { text-align: center; color: #333; }
-        .hint { text-align: center; color: #555; margin: 0 0 16px; }
-        /* Every box is clickable and opens the shared floating menu, so the menu's own stylesheet
-         * carries the cursor + blue glow and the dim/undim rules the lock toggles. Shared verbatim
-         * with architecture/dependencies.html and every project's design.html. */
-        ${this.nodeMenu.styles()}
-        ${this.filterAssets.styles()}
-        ${this.nodeMenu.dimStyles('#graph')}
-        #graph { text-align: center; background: white; padding: 20px; border-radius: 8px; overflow-x: auto; }
-        #graph svg { max-width: 100%; height: auto; }
-        .legend {
-            margin: 20px auto;
-            max-width: 1100px;
-            padding: 15px 20px;
-            background: white;
-            border-radius: 8px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    private responsibilities(graph: RuntimeGraph, options: RuntimeVizOptions): string {
+        const projects: EnhancedGraph = {};
+        for (const [name, service] of Object.entries(graph.services)) {
+            projects[name] = {
+                ...options.projects?.[name],
+                level: service.level,
+                dependsOn: service.dependsOn,
+                drawOnGraph: service.drawOnGraph,
+            };
         }
-        .legend h2 { margin-top: 0; color: #333; }
-        .legend-columns { display: grid; grid-template-columns: repeat(3, 1fr); gap: 28px; align-items: start; }
-        .legend-col h3 { margin: 0 0 10px; color: #333; font-size: 15px; border-bottom: 1px solid #eee; padding-bottom: 5px; }
-        .legend-item { margin: 9px 0; display: flex; align-items: center; gap: 10px; line-height: 1.4; color: #444; }
-        /* Prose rows carry no swatch, so they must NOT be flex containers: flex would promote every
-         * inline <strong>/<em>/<code> to a flex item and shred the sentence into columns. */
-        .legend-note { margin: 9px 0; line-height: 1.5; color: #444; }
-        .legend-box-anatomy {
-            margin: 0 0 12px;
-            padding: 8px 10px;
-            background: #f7f7f7;
-            border-radius: 4px;
-            font-family: monospace;
-            font-size: 12px;
-            line-height: 1.5;
-            color: #333;
-            white-space: pre;
-            overflow-x: auto;
-        }
-        .sw { flex: 0 0 auto; display: inline-flex; }
-        .wp-product-filter { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 6px; margin: 0 0 14px; }
-        .wp-product-label { color: #555; margin-right: 4px; }
-        .wp-product-label small { color: #888; }
-        .wp-chip { border: 1px solid #b8bcc8; background: white; color: #333; border-radius: 999px; padding: 3px 11px; font: inherit; font-size: 13px; cursor: pointer; }
-        .wp-chip[aria-pressed="true"] { background: #4b44c8; border-color: #4b44c8; color: white; }
-        code { background: #f2f2f2; padding: 1px 4px; border-radius: 3px; font-family: monospace; }
-        ${new GraphNavigation(NavigationLayout.TOOLBAR).styles()}
-        @media (max-width: 900px) { .legend-columns { grid-template-columns: 1fr; } }`;
+        return new ResponsibilitiesRenderer().generateSection(projects, options.workspaceRoot);
     }
 }

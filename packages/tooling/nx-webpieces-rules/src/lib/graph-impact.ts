@@ -570,6 +570,7 @@ export class ImpactRefresh {
             return [...lines, file === null ? `⚠️  Impact sidecar not written (${cost})` : `→ ${file} (${cost})`].join('\n');
         } catch (err: unknown) {
             const error = toError(err);
+            this.sidecar.remove(architectureDir);
             return `⚠️  Impact skipped: ${error.message}`;
         }
     }

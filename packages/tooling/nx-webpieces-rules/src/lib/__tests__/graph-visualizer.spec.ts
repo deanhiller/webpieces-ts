@@ -24,7 +24,7 @@ const GRAPH: EnhancedGraph = {
 // then run against the very source that ships, not against a stand-in.
 const CLIENT_TS = path.join(__dirname, '..', 'graph-visualizer.client.ts');
 const clientJs = (): string => ts.transpileModule(
-    fs.readFileSync(CLIENT_TS, 'utf-8'), { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
+    fs.readFileSync(path.join(__dirname, '..', 'graph-mode-state.client.ts'), 'utf-8') + fs.readFileSync(CLIENT_TS, 'utf-8'), { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
 const filterJs = (): string => ts.transpileModule(fs.readFileSync(path.join(__dirname, '..', 'graph-filter.client.ts'), 'utf-8'), { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
 const viz = new GraphVisualizer(clientJs, filterJs);
 
@@ -514,7 +514,7 @@ describe('generateHTML node menu', () => {
         // input handler calls the same setLock, so the two can never disagree.
         expect(html).toContain('setLock');
         expect(html).toContain('this.highlighter?.relight()');
-        expect(html).toContain("input.value = locked ?? ''");
+        expect(html).toContain("input.value = this.page.focusSelection() ?? ''");
         expect(html).toContain('<input type="search" id="wp-lock" list="wp-lock-options"');
     });
 

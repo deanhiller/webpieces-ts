@@ -5,9 +5,9 @@ import { LegendFacts, NodeFacts, NodeModeDots } from './graph-color-modes';
 /**
  * Renderer-owned records, captured while emitting DOT, never recovered by parsing labels.
  *
- * `dot` is the statement `fullDot` carries. `modes` and `tags` are set only by the architecture
- * graph, whose page switches color modes by re-rendering each box from its per-mode statement and
- * filters boxes by their role and framework tags; the runtime graph has one look and leaves both null.
+ * `dot` is the statement `fullDot` carries. `modes` carries per-mode statements in both viewers; `tags` carries declared service/project
+ * metadata. Runtime auxiliary entities leave tags null so facets count services and retain context
+ * separately.
  *
  * `products` is set on BOTH graphs (#1179): the products a box belongs to, which each page's product
  * filter matches on. Empty for a box in no product.
@@ -19,6 +19,7 @@ export class RenderNode {
         public readonly modes: NodeModeDots | null,
         public readonly tags: NodeTags | null,
         public readonly products: string[],
+        public readonly queueKeys: string[] = [],
     ) {}
 }
 
@@ -42,6 +43,7 @@ export class RenderEdge {
 
 /** The immutable drawable snapshot carried by a generated page. */
 export class GraphRenderModel {
+    viewer: 'architecture' | 'runtime' = 'architecture';
     readonly nodes: RenderNode[] = [];
     readonly edges: RenderEdge[] = [];
     bands: LevelBand[] = [];
@@ -51,8 +53,8 @@ export class GraphRenderModel {
     /** The colors and roles in use, so the page's legend lists exactly those (architecture graph). */
     legend = new LegendFacts();
 
-    node(id: string, dot: string, products: string[] = []): string {
-        this.nodes.push(new RenderNode(id, dot, null, null, products));
+    node(id: string, dot: string, products: string[] = [], queueKeys: string[] = []): string {
+        this.nodes.push(new RenderNode(id, dot, null, null, products, queueKeys));
         return dot;
     }
 
@@ -70,12 +72,20 @@ export class GraphRenderModel {
             if (isService(node.id)) continue;
             const inherited = new Set<string>();
             for (const edge of this.edges) {
-                const other = edge.from === node.id ? edge.to : edge.to === node.id ? edge.from : null;
+                const other =
+                    edge.from === node.id ? edge.to : edge.to === node.id ? edge.from : null;
                 if (other === null || !isService(other)) continue;
                 for (const product of byId.get(other)?.products ?? []) inherited.add(product);
             }
             if (inherited.size === 0) continue;
-            this.nodes[index] = new RenderNode(node.id, node.dot, node.modes, node.tags, [...inherited].sort());
+            this.nodes[index] = new RenderNode(
+                node.id,
+                node.dot,
+                node.modes,
+                node.tags,
+                [...inherited].sort(),
+                node.queueKeys,
+            );
         }
     }
 
@@ -130,7 +140,7 @@ export class GraphFilterAssets {
         return (
             '#wp-filter-status { text-align:center; } #wp-graph-error { color:#b71c1c; } ' +
             '#graph .wp-filter-anchor polygon, #graph .wp-filter-anchor path, ' +
-            '#graph .wp-filter-anchor ellipse { stroke:#1565c0; stroke-width:3; }'
+            '#graph .wp-filter-anchor ellipse { stroke:#8b3cf0; stroke-width:3; }'
         );
     }
 }

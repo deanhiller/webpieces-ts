@@ -58,7 +58,7 @@ describe('saved architecture viewing', () => {
         });
         const render = RuntimeHtmlPage.prototype.render;
         vi.spyOn(RuntimeHtmlPage.prototype, 'render').mockImplementation(function (...args) {
-            return render.apply(new RuntimeHtmlPage(() => '// browser client', () => '// filter client'), args);
+            return render.apply(new RuntimeHtmlPage(() => '// browser client', () => '// filter client', () => '// shared client'), args);
         });
         vi.spyOn(GraphVisualizer.prototype, 'openVisualization').mockReturnValue(false);
         // Viewing refreshes Impact (#1158); no spec here may spawn git or nx for it.

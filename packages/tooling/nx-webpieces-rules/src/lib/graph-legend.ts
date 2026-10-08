@@ -101,7 +101,7 @@ export class GraphLegend {
      * Which box is which is only known from the branch's sidecar, so all four rows always show. The
      * words are the Filter's (#1179): changed · dependent · dependency · not in this build.
      */
-    private impactRows(): string {
+    impactRows(): string {
         return (
             this.row('touched', this.solid(IMPACT_TOUCHED, '', ''), 'changed', 'owns a changed file') +
             this.row(

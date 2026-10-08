@@ -30,6 +30,7 @@ describe.skipIf(!process.env.WP_GRAPH_VIZ_JS)('real Viz local-file filtering', (
             const runtime = new RuntimeHtmlPage(
                 () => FilterFixture.client('runtime-visualizer.client.ts'),
                 () => FilterFixture.client('graph-filter.client.ts'),
+            () => FilterFixture.client('graph-visualizer.client.ts'),
             ).render(
                 generateRuntimeRenderModel(FilterFixture.runtime()),
                 'Runtime',
@@ -674,6 +675,7 @@ describe.skipIf(!process.env.WP_GRAPH_VIZ_JS)('real Viz local-file filtering', (
         const html = new RuntimeHtmlPage(
             () => FilterFixture.client('runtime-visualizer.client.ts'),
             () => FilterFixture.client('graph-filter.client.ts'),
+            () => FilterFixture.client('graph-visualizer.client.ts'),
         ).render(model, 'Runtime', FilterFixture.runtime());
         const page = await fixture.open('runtime', html);
         const fullNames = await fixture.names(page);

@@ -171,6 +171,7 @@ export class NodeFacts {
         public readonly frameworks: string[],
         /** The products the project belongs to (dependencies.json `products`), sorted; empty for none. */
         public readonly products: string[],
+        public readonly summary: string = '',
     ) {}
 }
 
@@ -319,7 +320,8 @@ export class NodeModeStyler {
     labelText(facts: NodeFacts, fontColor: string): string {
         return (
             `<FONT COLOR="${fontColor}99">L${facts.level}</FONT>&#160;&#160;<B>${htmlLabelText(facts.shortName)}</B>` +
-            `<BR/>${htmlLabelText(facts.role)}<BR/>${htmlLabelText(this.frameworkLine(facts.frameworks))}`
+            `<BR/>${htmlLabelText(facts.role)}<BR/>${htmlLabelText(this.frameworkLine(facts.frameworks))}` +
+            (facts.summary === '' ? '' : `<BR/>${htmlLabelText(facts.summary)}`)
         );
     }
 

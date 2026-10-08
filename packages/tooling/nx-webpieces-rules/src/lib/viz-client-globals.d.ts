@@ -47,8 +47,8 @@ declare class WpNodeMenu {
 
 /**
  * The field-less lock, also from graph-node-menu.ts: dim every other box in one rendered graph and
- * light the locked one. Used by the runtime page (and, from its own emitted script, by design.html);
- * the architecture page does NOT use it — its lock is GraphHighlighter.setLock(), which also has a
+ * light the locked one. Used by design.html;
+ * the two architecture viewers do NOT use it — its lock is GraphHighlighter.setLock(), which also has a
  * lock search field and a responsibilities list to keep in step.
  */
 declare class WpNodeLock {
@@ -74,6 +74,7 @@ interface VizInstance {
 /** JSON renderer records; structural types because the browser receives deserialized data. */
 declare const __RENDER_MODEL__: RenderModelJson;
 interface RenderModelJson {
+    viewer: 'architecture' | 'runtime';
     nodes: RenderNodeJson[];
     edges: RenderEdgeJson[];
     bands: RenderBandJson[];
@@ -85,9 +86,9 @@ interface RenderModelJson {
 interface RenderNodeJson {
     id: string;
     dot: string;
-    /** The architecture graph's per-mode statements (graph-color-modes.ts); null on the runtime graph. */
+    /** The architecture graph's per-mode statements (graph-color-modes.ts); present on runtime services; contextual nodes retain kind styling. */
     modes: NodeModeDotsJson | null;
-    /** What the architecture page's Filter matches on; null on the runtime graph. */
+    /** What the architecture page's Filter matches on; present on runtime services; contextual nodes retain kind styling. */
     tags: NodeTagsJson | null;
     /** The products the box belongs to (#1179), on BOTH graphs — what each page's product filter matches. */
     products: string[];
@@ -146,6 +147,11 @@ interface ImpactJson {
 }
 interface Window {
     __WP_IMPACT__?: ImpactDataJson;
+    __WP_RUNTIME__?: RuntimeViewerBinding;
+}
+interface RuntimeViewerBinding {
+    prepare(svg: SVGSVGElement): void;
+    implementsItem(name: string, node: SVGGElement): WpNodeMenuItem | null;
 }
 interface RenderEdgeJson {
     from: string;

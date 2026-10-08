@@ -149,7 +149,7 @@ describe('directed chain membership and reduced drawable records', () => {
             const script = FilterFixture.client(client);
             expect(script).not.toMatch(/require\(|exports\./);
             expect(script.split('__RENDER_MODEL__').length - 1).toBe(
-                client === 'graph-filter.client.ts' ? 0 : 1,
+                client === 'graph-visualizer.client.ts' ? 1 : 0,
             );
         }
         expect(html).not.toContain('__RENDER_MODEL__');
