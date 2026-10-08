@@ -19,6 +19,7 @@ import {
     ApiLibDependenciesConfig,
     ApiLibPathConfig,
     FrameworkFolderConfig,
+    ProductTagsConfig,
 } from './configs/tag-truth-configs';
 import { NativeActions, NativeAction } from './native-actions';
 import { WiringFormatConfig } from './configs/wiring-format-config';
@@ -226,6 +227,18 @@ export const NX_POLICIES: readonly NxPolicy[] = [
             recommendedSeeds['framework-folder'],
             'rules',
             ruleHelp['framework-folder'],
+        ),
+        actions.graphPolicies,
+    ),
+    new NxPolicy(
+        new OwnedRuleDefinition(
+            'product-tags',
+            ProductTagsConfig.SCHEMA,
+            RULE_SCHEMA_API_VERSION,
+            optionalTuning['product-tags'],
+            recommendedSeeds['product-tags'],
+            'rules',
+            ruleHelp['product-tags'],
         ),
         actions.graphPolicies,
     ),

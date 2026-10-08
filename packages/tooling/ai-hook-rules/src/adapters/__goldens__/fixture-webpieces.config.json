@@ -266,6 +266,12 @@
             "turnOffRuleUntilEpoch": 0,
             "turnOffRuleWhileOnBranch": null
         },
+        "product-tags": {
+            "mode": "OFF",
+            "roles": ["server", "client", "app"],
+            "turnOffRuleUntilEpoch": 0,
+            "turnOffRuleWhileOnBranch": null
+        },
         "framework-tsconfig": {
             "mode": "OFF",
             "turnOffRuleUntilEpoch": 0,

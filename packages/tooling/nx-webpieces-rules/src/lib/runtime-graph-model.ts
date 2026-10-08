@@ -60,6 +60,13 @@ export interface RuntimeService {
      * nx tag.
      */
     drawOnGraph?: boolean;
+    /**
+     * The products this service belongs to (#1179), sorted: every product whose tagged service
+     * (its dependencies.json `products`) reaches it over RUNTIME `dependsOn`, through a queue to its
+     * consumers included — so a call into another product's service shows in this product's view.
+     * Absent for a service in no product. See graph-products.ts.
+     */
+    products?: string[];
 }
 
 export interface RuntimeApi {

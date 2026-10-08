@@ -89,6 +89,8 @@ interface RenderNodeJson {
     modes: NodeModeDotsJson | null;
     /** What the architecture page's Filter matches on; null on the runtime graph. */
     tags: NodeTagsJson | null;
+    /** The products the box belongs to (#1179), on BOTH graphs — what each page's product filter matches. */
+    products: string[];
 }
 interface NodeTagsJson {
     level: number;
@@ -102,6 +104,8 @@ interface NodeModeDotsJson {
     affected: string;
     buildInput: string;
     untouched: string;
+    /** Product color mode (#1179). */
+    product: string;
 }
 
 /**
@@ -135,7 +139,7 @@ interface ImpactJson {
     /** Transitive dependencies of the affected set that are not affected themselves. */
     buildInputs: string[];
     changedFiles: number;
-    /** Transitive dependencies of the touched set that are not touched: "Changed + what they use". */
+    /** Transitive dependencies of the touched set that are not touched: "Changed + dependencies". */
     dependencies: string[];
     /** Changed files no project owns (workspace-global inputs such as pnpm-lock.yaml). */
     globalFiles: string[];

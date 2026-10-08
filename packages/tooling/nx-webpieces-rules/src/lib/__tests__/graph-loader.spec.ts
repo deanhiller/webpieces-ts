@@ -89,6 +89,25 @@ describe('webpiecesRuntime persistence', () => {
     });
 });
 
+describe('products persistence (#1179)', () => {
+    it('round-trips products, and omits the line for a project in no product', () => {
+        const graph = makeEnrichedGraph();
+        graph['core-util'].products = ['bugfixer', 'lang'];
+
+        saveGraph(graph, tmpRoot, 'products/dependencies.json');
+        const text = fs.readFileSync(path.join(tmpRoot, 'products/dependencies.json'), 'utf-8');
+        const raw = JSON.parse(text);
+
+        expect(text).toContain('"products": ["bugfixer","lang"],');
+        expect(raw.projects['core-util'].products).toEqual(['bugfixer', 'lang']);
+        expect('products' in raw.projects['http-routing']).toBe(false);
+        expect(loadBlessedGraph(tmpRoot, 'products/dependencies.json')!.projects['core-util'].products).toEqual([
+            'bugfixer',
+            'lang',
+        ]);
+    });
+});
+
 describe('graph-loader wrapper format', () => {
     it('round-trips an enriched graph with aiInstructions', () => {
         const graph = makeEnrichedGraph();

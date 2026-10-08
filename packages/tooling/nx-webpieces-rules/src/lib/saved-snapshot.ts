@@ -88,11 +88,15 @@ export class SavedSnapshot {
                     !this.isMap(entry) ||
                     !Number.isFinite(entry.level) ||
                     !Array.isArray(entry.dependsOn) ||
-                    entry.dependsOn.some((dep) => typeof dep !== 'string'),
+                    entry.dependsOn.some((dep: string) => typeof dep !== 'string') ||
+                    // Optional (#1179): absent in a file written before products existed.
+                    (entry.products !== undefined &&
+                        (!Array.isArray(entry.products) ||
+                            entry.products.some((product: string) => typeof product !== 'string'))),
             )
         ) {
             throw this.failure(
-                `Unusable saved project graph at ${graphPath}: expected projects with numeric level and string dependsOn arrays`,
+                `Unusable saved project graph at ${graphPath}: expected projects with numeric level, string dependsOn arrays and (when present) string products arrays`,
             );
         }
     }

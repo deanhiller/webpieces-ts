@@ -722,5 +722,48 @@
         }
       ]
     }
+  },
+  "product-tags": {
+    "schema": {
+      "mode": {
+        "type": "string",
+        "enumValues": [
+          "OFF",
+          "RUN_EVERY_TIME"
+        ],
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "roles": {
+        "type": "string[]",
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": true
+      },
+      "turnOffRuleUntilEpoch": {
+        "type": "number",
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "turnOffRuleWhileOnBranch": {
+        "type": "string",
+        "optional": false,
+        "nullable": true,
+        "nonEmpty": false
+      }
+    },
+    "optionalTuning": {},
+    "recommendedSeed": {
+      "mode": "RUN_EVERY_TIME",
+      "roles": [
+        "server",
+        "client",
+        "app"
+      ],
+      "turnOffRuleUntilEpoch": 0,
+      "turnOffRuleWhileOnBranch": null
+    }
   }
 }

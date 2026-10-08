@@ -322,8 +322,8 @@ describe('ImpactRefresh + ImpactSidecar', () => {
         const resolver = new FixedResolver(plan(new FakeGit('dean/x', PARENT, false), FORK));
         const line = await new ImpactRefresh(scanner, new ImpactSidecar(), resolver).run(dir, dir, GRAPH, VISUALIZE_IMPACT_KINDS);
         // One result line per comparison.
-        expect(line).toContain('Changed on this branch (since aaaa000): 1 touched · 1 affected · 1 build inputs');
-        expect(line).toContain('Changed since eeee000 — Upgrade the thing (#1162): 1 touched');
+        expect(line).toContain('Changed on this branch (since aaaa000): 1 changed · 1 dependents · 1 dependencies');
+        expect(line).toContain('Changed since eeee000 — Upgrade the thing (#1162): 1 changed');
         expect(sidecarOf(dir)).toContain('window.__WP_IMPACT__ = {"scans":[{"kind":"branch"');
         const data = sidecarData(dir);
         expect(data.defaultKind).toBe('branch');

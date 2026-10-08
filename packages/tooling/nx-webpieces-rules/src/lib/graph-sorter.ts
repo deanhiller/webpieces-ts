@@ -26,6 +26,11 @@ import { ProjectCycleDetector } from './graph-cycles';
  *    transport (rpc | pubsub). Derived by scanning source (see api-usage/).
  */
 export interface GraphEntry {
+    /**
+     * The project's row: its dependency depth (0 = no deps) — except that every server, client and
+     * app (APP_ROLES) is pinned to the TOP level, and a bundle above the apps it aggregates (#1179,
+     * graph-entry-levels.ts). Every dependency still sits strictly below its dependent.
+     */
     level: number;
     dependsOn: string[];
     framework?: string[];
@@ -59,6 +64,14 @@ export interface GraphEntry {
      * Absent (the overwhelmingly normal case) means this project cuts nothing.
      */
     cutLegacyCycle?: string[];
+    /**
+     * The products this project belongs to (#1179), sorted: every product whose `product:<name>`-tagged
+     * project reaches it by a downward walk over `dependsOn` (a tagged project is in its own products).
+     * It is the project's blast radius — a change here is a change to each of these products. DERIVED,
+     * never declared on a library; absent when no product reaches it (and everywhere when no project
+     * carries a `product:` tag). See graph-products.ts.
+     */
+    products?: string[];
     shortDescription?: string;
     responsibilitiesFile?: string;
     designFile?: string;

@@ -64,7 +64,7 @@ describe('committed artifacts from the resolved rule registry', () => {
             fs.readFileSync(path.join(fixture.root, RULE_LOCK_FILE), 'utf8'),
         ) as DecodedRuleLock;
         expect(lock.packs).toHaveLength(4);
-        expect(lock.packs.flatMap((pack: DecodedLockPack) => pack.ownedRules)).toHaveLength(50);
+        expect(lock.packs.flatMap((pack: DecodedLockPack) => pack.ownedRules)).toHaveLength(51);
         expect(first.catalog).toContain('.webpieces/rules/code-rules.json');
         expect(first.catalog).not.toContain('{configFile}');
     });

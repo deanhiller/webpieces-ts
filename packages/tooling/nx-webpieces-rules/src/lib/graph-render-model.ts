@@ -8,6 +8,9 @@ import { LegendFacts, NodeFacts, NodeModeDots } from './graph-color-modes';
  * `dot` is the statement `fullDot` carries. `modes` and `tags` are set only by the architecture
  * graph, whose page switches color modes by re-rendering each box from its per-mode statement and
  * filters boxes by their role and framework tags; the runtime graph has one look and leaves both null.
+ *
+ * `products` is set on BOTH graphs (#1179): the products a box belongs to, which each page's product
+ * filter matches on. Empty for a box in no product.
  */
 export class RenderNode {
     constructor(
@@ -15,6 +18,7 @@ export class RenderNode {
         public readonly dot: string,
         public readonly modes: NodeModeDots | null,
         public readonly tags: NodeTags | null,
+        public readonly products: string[],
     ) {}
 }
 
@@ -47,15 +51,44 @@ export class GraphRenderModel {
     /** The colors and roles in use, so the page's legend lists exactly those (architecture graph). */
     legend = new LegendFacts();
 
-    node(id: string, dot: string): string {
-        this.nodes.push(new RenderNode(id, dot, null, null));
+    node(id: string, dot: string, products: string[] = []): string {
+        this.nodes.push(new RenderNode(id, dot, null, null, products));
         return dot;
+    }
+
+    /**
+     * Every product a declared box (a queue, a cron trigger, an external system) inherits from the
+     * services its edges touch (#1179): it belongs to whichever product's services it is attached to.
+     * Called by the runtime graph once every edge is emitted; RenderNode is immutable, so a node gains
+     * its products by being replaced.
+     */
+    attachProducts(isService: (id: string) => boolean): void {
+        const byId = new Map<string, RenderNode>();
+        for (const node of this.nodes) byId.set(node.id, node);
+        for (let index = 0; index < this.nodes.length; index++) {
+            const node = this.nodes[index];
+            if (isService(node.id)) continue;
+            const inherited = new Set<string>();
+            for (const edge of this.edges) {
+                const other = edge.from === node.id ? edge.to : edge.to === node.id ? edge.from : null;
+                if (other === null || !isService(other)) continue;
+                for (const product of byId.get(other)?.products ?? []) inherited.add(product);
+            }
+            if (inherited.size === 0) continue;
+            this.nodes[index] = new RenderNode(node.id, node.dot, node.modes, node.tags, [...inherited].sort());
+        }
     }
 
     /** A box drawn differently per color mode; `fullDot` carries its RUNTIME statement. */
     styledNode(facts: NodeFacts, modes: NodeModeDots): string {
         this.nodes.push(
-            new RenderNode(facts.nodeId, modes.runtime, modes, new NodeTags(facts.level, facts.role, facts.frameworks)),
+            new RenderNode(
+                facts.nodeId,
+                modes.runtime,
+                modes,
+                new NodeTags(facts.level, facts.role, facts.frameworks),
+                facts.products,
+            ),
         );
         return modes.runtime;
     }

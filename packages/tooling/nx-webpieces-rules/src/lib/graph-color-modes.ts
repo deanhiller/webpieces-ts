@@ -20,15 +20,25 @@
  *                 from cache, unchanged); everything else is grey. Which box is which is only known
  *                 per checkout, so every box carries all four variants and the page picks one from the
  *                 sidecar (graph-impact.ts). The state is never written on the box: color + legend.
+ *                 The words are the Filter's: changed · dependent · dependency (built, unchanged) ·
+ *                 not in this build.
+ *  - PRODUCT      "which products it belongs to" (#1179, graph-products.ts). One product is a solid
+ *                 fill in that product's palette color; two or more (but not all) are the same
+ *                 vertical stripes the multi-runtime box uses, one per product; a box shared by EVERY
+ *                 product is one neutral fill (otherwise a shared foundation would be four-stripe
+ *                 noise); a box in no product is white with a dashed border. The Filter HIDES other
+ *                 products' boxes; this mode keeps every box and makes ownership visible.
  */
 
 import { KNOWN_FRAMEWORKS, KnownFramework } from '@webpieces/rules-sdk';
 import { dotValue, htmlLabelText } from './dot-syntax';
+import { PRODUCT_NONE_BORDER, PRODUCT_NONE_FILL, PRODUCT_SHARED_FILL, ProductColor, ProductPalette } from './graph-products';
 
 export enum GraphMode {
     RUNTIME = 'runtime',
     ARCHITECTURE = 'architecture',
     IMPACT = 'impact',
+    PRODUCT = 'product',
 }
 
 /** One selectable mode as the drawer's Color-by pulldown shows it. */
@@ -40,11 +50,12 @@ export class ModeInfo {
     ) {}
 }
 
-/** In key order: `1` selects the first, `2` the second, `3` the third. */
+/** In key order: `1` selects the first, `2` the second, `3` the third, `4` the fourth. */
 export const GRAPH_MODES: readonly ModeInfo[] = [
     new ModeInfo(GraphMode.RUNTIME, 'Runtime', 'where the code can run'),
     new ModeInfo(GraphMode.ARCHITECTURE, 'Architecture', 'servers · clients · APIs'),
     new ModeInfo(GraphMode.IMPACT, 'Impact', 'what changed'),
+    new ModeInfo(GraphMode.PRODUCT, 'Product', 'which products it belongs to'),
 ];
 
 /** Text on a light fill. */
@@ -158,6 +169,8 @@ export class NodeFacts {
         public readonly level: number,
         public readonly role: string,
         public readonly frameworks: string[],
+        /** The products the project belongs to (dependencies.json `products`), sorted; empty for none. */
+        public readonly products: string[],
     ) {}
 }
 
@@ -170,6 +183,16 @@ export class NodeModeDots {
         public readonly affected: string,
         public readonly buildInput: string,
         public readonly untouched: string,
+        public readonly product: string,
+    ) {}
+}
+
+/** How many drawn boxes one product holds, and how many of them no other product does. */
+export class ProductCount {
+    constructor(
+        public readonly product: string,
+        public total: number,
+        public only: number,
     ) {}
 }
 
@@ -179,6 +202,16 @@ export class LegendFacts {
     roles: string[] = [];
     multiRuntime = false;
     noRuntime = false;
+    /** One count per declared product, in palette (sorted-name) order; empty when none is declared. */
+    products: ProductCount[] = [];
+    /** Boxes shared by every product (two or more declared). */
+    sharedByAll = 0;
+    /** Boxes in no product. */
+    noProduct = 0;
+    /** Some box belongs to two or more products, but not to every one: it is striped. */
+    multiProduct = false;
+    /** Some product is past the palette's eight and is painted with the neutral fill. */
+    productOverflow = false;
 }
 
 export class NodeModeStyler {
@@ -217,7 +250,7 @@ export class NodeModeStyler {
         return undefined;
     }
 
-    dots(facts: NodeFacts): NodeModeDots {
+    dots(facts: NodeFacts, palette: ProductPalette): NodeModeDots {
         return new NodeModeDots(
             this.runtime(facts),
             this.plain(facts, this.roleStyle(facts.role).fill, this.roleStyle(facts.role).fontColor, ''),
@@ -231,11 +264,13 @@ export class NodeModeStyler {
                 'filled,dashed',
             ),
             this.plain(facts, IMPACT_UNTOUCHED, IMPACT_UNTOUCHED_TEXT, ', color="#b4b9c4"'),
+            this.product(facts, palette),
         );
     }
 
     /** Fold one drawn box into the legend facts. */
-    record(legend: LegendFacts, facts: NodeFacts): void {
+    record(legend: LegendFacts, facts: NodeFacts, palette: ProductPalette): void {
+        this.recordProducts(legend, facts, palette);
         for (const framework of facts.frameworks) {
             if (this.styleOf(framework) !== undefined && !legend.frameworks.includes(framework))
                 legend.frameworks.push(framework);
@@ -245,6 +280,22 @@ export class NodeModeStyler {
         const bases = this.bases(facts.frameworks);
         if (bases.length > 1) legend.multiRuntime = true;
         if (bases.length === 0) legend.noRuntime = true;
+    }
+
+    /** The Product section's counts: per product (total, and only-this-product), shared-by-all, none. */
+    private recordProducts(legend: LegendFacts, facts: NodeFacts, palette: ProductPalette): void {
+        if (legend.products.length === 0 && palette.colors.length > 0) {
+            legend.products = palette.names().map((product: string): ProductCount => new ProductCount(product, 0, 0));
+            legend.productOverflow = palette.overflows();
+        }
+        if (facts.products.length === 0) legend.noProduct++;
+        if (palette.sharedByAll(facts.products)) legend.sharedByAll++;
+        else if (facts.products.length > 1) legend.multiProduct = true;
+        for (const count of legend.products) {
+            if (!facts.products.includes(count.product)) continue;
+            count.total++;
+            if (facts.products.length === 1) count.only++;
+        }
     }
 
     /**
@@ -274,7 +325,14 @@ export class NodeModeStyler {
 
     /** `filled` for one runtime; equal `striped` weights for several (the last takes the remainder). */
     stripeAttrs(bases: KnownFramework[]): string {
-        const colors = bases.map((base: KnownFramework): string => FRAMEWORK_STYLES[base].color);
+        return this.stripes(bases.map((base: KnownFramework): string => FRAMEWORK_STYLES[base].color));
+    }
+
+    /**
+     * One equal vertical stripe per color — the renderer the multi-runtime box and the multi-product
+     * box share. A single color is a plain fill.
+     */
+    stripes(colors: string[]): string {
         if (colors.length === 1) return `style="filled", fillcolor="${colors[0]}"`;
         const share = (1 / colors.length).toFixed(3);
         const weighted = colors.map((color: string, index: number): string =>
@@ -293,6 +351,23 @@ export class NodeModeStyler {
             facts,
             `style="${style}", fillcolor="${fill}", fontcolor="${fontColor}"${extra}`,
             this.labelText(facts, fontColor),
+        );
+    }
+
+    /**
+     * Product mode (#1179): one product solid in its color; several (not all) striped, one stripe per
+     * product; every product the neutral shared fill; no product a white box with a dashed border.
+     */
+    private product(facts: NodeFacts, palette: ProductPalette): string {
+        if (facts.products.length === 0)
+            return this.plain(facts, PRODUCT_NONE_FILL, DARK_TEXT, `, color="${PRODUCT_NONE_BORDER}", penwidth=1.5`, 'filled,dashed');
+        if (palette.sharedByAll(facts.products)) return this.plain(facts, PRODUCT_SHARED_FILL, DARK_TEXT, '');
+        const colors = facts.products.map((product: string): ProductColor => palette.colorOf(product));
+        if (colors.length === 1) return this.plain(facts, colors[0].color, colors[0].fontColor, '');
+        return this.statement(
+            facts,
+            `${this.stripes(colors.map((color: ProductColor): string => color.color))}, fontcolor="${DARK_TEXT}"`,
+            this.labelText(facts, DARK_TEXT),
         );
     }
 

@@ -1,7 +1,7 @@
 import { specTempDirs } from '@webpieces/tooling-testkit';
 /**
- * The three graph rules that make a tag true (#1064): api-lib-dependencies (D2), api-lib-path (D10)
- * and framework-folder (D9). Each has a red case and a green case; the "missing config entry fails the
+ * The four graph rules that make a tag true (#1064, #1179): api-lib-dependencies (D2), api-lib-path
+ * (D10), framework-folder (D9) and product-tags. Each has a red case and a green case; the "missing config entry fails the
  * load" half is proven in rules-config's tag-truth-configs.spec.ts, where the schemas live.
  */
 import { describe, it, expect } from 'vitest';
@@ -15,6 +15,7 @@ import {
     ApiLibPathRule,
     FrameworkFolder,
     FrameworkFolderRule,
+    ProductTagsRule,
     ProjectImports,
     TagTruthCheck,
     TagTruthRules,
@@ -30,6 +31,7 @@ class Proj {
         readonly dependsOn: string[] = [],
         readonly packageName: string | null = null,
         readonly imports: string[] = [],
+        readonly tags: string[] = [],
     ) {}
 }
 
@@ -46,7 +48,7 @@ class Fixture {
                 role: p.role,
                 framework: p.framework,
             };
-            this.infos.set(p.name, new ProjectInfo(p.name, p.root, []));
+            this.infos.set(p.name, new ProjectInfo(p.name, p.root, p.tags));
             this.imports.set(p.name, new ProjectImports(p.packageName, new Set(p.imports)));
         }
     }
@@ -61,6 +63,7 @@ const UNIVERSAL = ['browser', 'node', 'react-native'];
 function depsRule(apiLibPackages: string[], clients: Record<string, string[]> = {}): TagTruthRules {
     return new TagTruthRules(
         new ApiLibDependenciesRule(apiLibPackages, new Map(Object.entries(clients))),
+        null,
         null,
         null,
     );
@@ -228,7 +231,7 @@ describe('api-lib-dependencies (D2)', () => {
 });
 
 describe('api-lib-path (D10)', () => {
-    const rules = new TagTruthRules(null, new ApiLibPathRule(['libraries/apis/**']), null);
+    const rules = new TagTruthRules(null, new ApiLibPathRule(['libraries/apis/**']), null, null);
 
     it('GREEN: api projects under the api globs, everything else outside them', () => {
         const fx = new Fixture([
@@ -283,6 +286,7 @@ describe('framework-folder (D9)', () => {
                 ['api-lib'],
             ),
         ]),
+        null,
     );
 
     it('canonicalises a framework set whatever order it is written in', () => {
@@ -341,6 +345,57 @@ describe('framework-folder (D9)', () => {
     it('a library whose set no folder maps is not placed', () => {
         const fx = new Fixture([new Proj('web', 'libraries/web/w', 'lib', ['react'])]);
         expect(fx.problems(rules)).toEqual([]);
+    });
+});
+
+describe('product-tags (#1179)', () => {
+    const rules = new TagTruthRules(null, null, null, new ProductTagsRule(['server', 'client', 'app']));
+
+    it('RED: a server, a client and an app with no product tag are each refused', () => {
+        const fx = new Fixture([
+            new Proj('lang-server', 'apps/lang-server', 'server', ['node']),
+            new Proj('lang-angular', 'apps/lang-angular', 'client', ['angular']),
+            new Proj('wp-cli', 'apps/wp-cli', 'app', ['node']),
+        ]);
+        expect(fx.problems(rules)).toEqual([
+            expect.stringContaining("product-tags: 'lang-angular' is role:client but carries no product tag"),
+            expect.stringContaining("product-tags: 'lang-server' is role:server but carries no product tag"),
+            expect.stringContaining("product-tags: 'wp-cli' is role:app but carries no product tag"),
+        ]);
+    });
+
+    it('the refusal names the project.json and the line to add', () => {
+        const fx = new Fixture([new Proj('lang-server', 'apps/lang-server', 'server', ['node'])]);
+        const [problem] = fx.problems(rules);
+        expect(problem).toContain('apps/lang-server/project.json');
+        expect(problem).toContain('"product:<name>"');
+    });
+
+    it('GREEN: a tagged entry point passes, several products allowed', () => {
+        const fx = new Fixture([
+            new Proj('lang-server', 'apps/lang-server', 'server', ['node'], [], null, [], ['product:lang']),
+            new Proj('shared-svc', 'apps/shared-svc', 'server', ['node'], [], null, [], ['product:bugfixer', 'product:helper']),
+        ]);
+        expect(fx.problems(rules)).toEqual([]);
+    });
+
+    it('a malformed tag does not count as a product tag', () => {
+        const fx = new Fixture([new Proj('svc', 'apps/svc', 'server', ['node'], [], null, [], ['product:Lang'])]);
+        expect(fx.problems(rules)).toHaveLength(1);
+    });
+
+    it('ignores a role the rule does not list', () => {
+        const fx = new Fixture([
+            new Proj('core', 'libraries/universal/core', 'lib', UNIVERSAL),
+            new Proj('bundle', 'packages/bundle', 'bundle', ['node']),
+        ]);
+        expect(fx.problems(rules)).toEqual([]);
+    });
+
+    it('OFF (a null rule) passes an untagged server', () => {
+        const fx = new Fixture([new Proj('svc', 'apps/svc', 'server', ['node'])]);
+        expect(fx.problems(TagTruthRules.none())).toEqual([]);
+        expect(new TagTruthRules(null, null, null, new ProductTagsRule(['client'])).anyEnabled()).toBe(true);
     });
 });
 

@@ -67,4 +67,8 @@ export const ruleHelp: Readonly<Record<string, RuleHelp>> = {
         'Align framework declarations with their project folder layout.',
         'Apply this policy in source, or review its explicit settings in {configFile}. An intentional opt-out requires complete OFF settings.',
     ),
+    'product-tags': new RuleHelp(
+        'Require a product:<name> nx tag on every project whose role is listed, so the architecture graphs can show one product.',
+        'Add "product:<name>" to the tags in the named project.json, or review the listed roles in {configFile}. An intentional opt-out requires complete OFF settings.',
+    ),
 };

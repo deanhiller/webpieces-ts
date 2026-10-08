@@ -23,9 +23,18 @@ import {
     IMPACT_UNTOUCHED,
     LegendFacts,
     NO_RUNTIME_COLOR,
+    ProductCount,
     ROLE_STYLES,
     RoleStyle,
 } from './graph-color-modes';
+import {
+    PRODUCT_NONE_BORDER,
+    PRODUCT_NONE_FILL,
+    PRODUCT_PALETTE_SIZE,
+    PRODUCT_SHARED_FILL,
+    ProductColor,
+    ProductPalette,
+} from './graph-products';
 
 const SWATCH_W = 26;
 const SWATCH_H = 16;
@@ -37,7 +46,8 @@ export class GraphLegend {
         return (
             this.section(GraphMode.RUNTIME, this.runtimeRows(facts), false) +
             this.section(GraphMode.ARCHITECTURE, this.architectureRows(facts), true) +
-            this.section(GraphMode.IMPACT, this.impactRows(), true)
+            this.section(GraphMode.IMPACT, this.impactRows(), true) +
+            this.section(GraphMode.PRODUCT, this.productRows(facts), true)
         );
     }
 
@@ -87,20 +97,68 @@ export class GraphLegend {
         return rows;
     }
 
-    /** Which box is which is only known from the branch's sidecar, so all four rows always show. */
+    /**
+     * Which box is which is only known from the branch's sidecar, so all four rows always show. The
+     * words are the Filter's (#1179): changed · dependent · dependency · not in this build.
+     */
     private impactRows(): string {
         return (
-            this.row('touched', this.solid(IMPACT_TOUCHED, '', ''), 'touched', 'its files changed') +
-            this.row('affected', this.solid(IMPACT_AFFECTED, IMPACT_TOUCHED, ''), 'affected', 'tests and build re-run') +
+            this.row('touched', this.solid(IMPACT_TOUCHED, '', ''), 'changed', 'owns a changed file') +
+            this.row(
+                'affected',
+                this.solid(IMPACT_AFFECTED, IMPACT_TOUCHED, ''),
+                'dependent',
+                'uses a changed project: its tests and build re-run',
+            ) +
             this.row(
                 'build-input',
                 this.solid(IMPACT_BUILD_INPUT, IMPACT_BUILD_INPUT_BORDER, '3 2'),
-                'build input',
-                'compiled or restored from cache, unchanged',
+                'dependency (built, unchanged)',
+                'compiled or restored from cache for this build',
             ) +
-            this.row('untouched', this.solid(IMPACT_UNTOUCHED, '', ''), 'untouched', 'not part of this build') +
+            this.row('untouched', this.solid(IMPACT_UNTOUCHED, '', ''), 'not in this build', 'nothing here changed or depends on a change') +
             '<p class="wp-impact-note" data-wp-impact-note></p>'
         );
+    }
+
+    /**
+     * Product mode (#1179): one row per product with its counts, then the shared, several-products and
+     * no-product rows that some drawn box actually uses.
+     */
+    productRows(facts: LegendFacts): string {
+        if (facts.products.length === 0)
+            return this.row(
+                'no-products',
+                this.solid(PRODUCT_NONE_FILL, PRODUCT_NONE_BORDER, '3 2'),
+                'no products declared',
+                'tag servers, clients and apps product:<name> to see each product',
+            );
+        const palette = new ProductPalette(facts.products.map((count: ProductCount): string => count.product));
+        let rows = '';
+        for (const count of facts.products) {
+            const color = palette.colorOf(count.product);
+            const detail = color.inPalette
+                ? `${count.only} only ${count.product}`
+                : `${count.only} only ${count.product} — past the palette's ${PRODUCT_PALETTE_SIZE}: neutral fill`;
+            rows += this.row(`product:${count.product}`, this.solid(color.color, '', ''), `${count.product} · ${count.total}`, detail);
+        }
+        if (facts.sharedByAll > 0)
+            rows += this.row(
+                'shared',
+                this.solid(PRODUCT_SHARED_FILL, '', ''),
+                `shared by every product · ${facts.sharedByAll}`,
+                'a change here is a change to every product',
+            );
+        if (facts.multiProduct)
+            rows += this.row('several', this.productStripes(palette), 'several products', 'one stripe per product');
+        if (facts.noProduct > 0)
+            rows += this.row(
+                'no-product',
+                this.solid(PRODUCT_NONE_FILL, PRODUCT_NONE_BORDER, '3 2'),
+                `no product · ${facts.noProduct}`,
+                'no tagged server, client or app reaches it',
+            );
+        return rows;
     }
 
     private row(key: string, swatch: string, title: string, detail: string): string {
@@ -132,6 +190,19 @@ export class GraphLegend {
             (base: KnownFramework, index: number): string =>
                 `<rect x="${(index * width).toFixed(2)}" width="${width.toFixed(2)}" height="${SWATCH_H}" fill="${FRAMEWORK_STYLES[base].color}"/>`,
         ).join('');
+        return this.open() + stripes + this.frame();
+    }
+
+    /** The first three product colors as stripes: the "several products" swatch. */
+    private productStripes(palette: ProductPalette): string {
+        const colors = palette.colors.slice(0, 3);
+        const width = SWATCH_W / colors.length;
+        const stripes = colors
+            .map(
+                (color: ProductColor, index: number): string =>
+                    `<rect x="${(index * width).toFixed(2)}" width="${width.toFixed(2)}" height="${SWATCH_H}" fill="${color.color}"/>`,
+            )
+            .join('');
         return this.open() + stripes + this.frame();
     }
 

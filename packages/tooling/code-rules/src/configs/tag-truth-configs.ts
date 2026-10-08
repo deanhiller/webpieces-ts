@@ -1,12 +1,13 @@
 import { FieldDef, SchemaShape, BaseRuleConfig, BASE_RULE_SCHEMA } from "@webpieces/rules-sdk";
 /**
- * The five rules that make an nx `framework:*` / `role:*` tag TRUE (#1064). Before them a tag was a
- * promise only the dependency graph checked; the code inside a library, the folder it lives in and the
- * packages it imports were never compared with it.
+ * The six rules that make an nx `framework:*` / `role:*` / `product:*` tag TRUE (#1064, #1179). Before
+ * them a tag was a promise only the dependency graph checked; the code inside a library, the folder it
+ * lives in and the packages it imports were never compared with it.
  *
- * Three are GRAPH rules (they read the whole nx project graph, so they run in `architecture:generate`
+ * Four are GRAPH rules (they read the whole nx project graph, so they run in `architecture:generate`
  * and `validate-architecture-unchanged` beside `library-types-match-client`): `api-lib-dependencies`,
- * `api-lib-path` and `framework-folder`. Two are PROJECT rules in `@webpieces/code-rules`:
+ * `api-lib-path`, `framework-folder` and `product-tags` (every server, client and app names its
+ * product), all owned by `@webpieces/nx-webpieces-rules`. Two are PROJECT rules in `@webpieces/code-rules`:
  * `framework-tsconfig` and `framework-packages`.
  *
  * Every field that decides behaviour is REQUIRED with no default (`.claude/rules/no-rule-defaults.md`):
