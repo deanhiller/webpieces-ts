@@ -3,6 +3,7 @@ import type { RuntimeGraph, RuntimeService } from './runtime-graph-model';
 import { GraphRenderModel, RenderNode } from './graph-render-model';
 import { NodeFacts, NodeModeDots, NodeModeStyler } from './graph-color-modes';
 import { ProductPalette, PRODUCT_SHARED_FILL, PRODUCT_NONE_FILL } from './graph-products';
+import { LevelBand } from './graph-level-bands';
 
 /** Saved project facts enrich presentation without changing runtime derivation or topology. */
 export class RuntimeViewerAdapter {
@@ -38,6 +39,18 @@ export class RuntimeViewerAdapter {
         );
         this.styler.record(model.legend, facts, this.palette);
         return model.styledNode(facts, this.styler.dots(facts, this.palette));
+    }
+
+    levelBands(model: GraphRenderModel): LevelBand[] {
+        return [...new Set(model.nodes.map((node: RenderNode) => node.tags!.level))]
+            .sort((a: number, b: number) => b - a)
+            .map(
+                (level: number) =>
+                    new LevelBand(
+                        level,
+                        model.nodes.filter((node: RenderNode) => node.tags?.level === level).map((node: RenderNode) => node.id),
+                    ),
+            );
     }
 
     /** Context keeps its shape/kind palette; Impact never paints a queue as a source owner. */

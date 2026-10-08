@@ -1,4 +1,4 @@
-import { LevelBand, LevelBandLayout } from './graph-level-bands';
+import { LevelBandLayout } from './graph-level-bands';
 /**
  * Runtime Visualizer
  *
@@ -577,15 +577,7 @@ export function generateRuntimeRenderModel(
         dot += adapter.service(model, name, svc);
     }
 
-    model.bands = [...new Set(model.nodes.map((node) => node.tags!.level))]
-        .sort((a, b) => b - a)
-        .map(
-            (level) =>
-                new LevelBand(
-                    level,
-                    model.nodes.filter((node) => node.tags?.level === level).map((node) => node.id),
-                ),
-        );
+    model.bands = adapter.levelBands(model);
     dot += new LevelBandLayout().dot(model.bands);
     dot += '\n';
 

@@ -42,7 +42,7 @@ class WpModeState {
         if (
             impact === null &&
             this.viewer === 'runtime' &&
-            document.body.dataset.wpProjectFacts === 'false'
+            document.body.dataset['wpProjectFacts'] === 'false'
         )
             return 'No saved project facts for Impact. Run pnpm nx run architecture:generate, then pnpm arch:visualize-runtime.';
         if (impact === null)
