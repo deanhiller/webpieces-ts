@@ -51,6 +51,7 @@ export class RuntimeHtmlPage {
     ${this.snapshot.html()}
     <p class="hint">💡 <strong>Click any box</strong> for its menu — <strong>Lock</strong> dims every other box and every arrow so one service, queue, datastore or external system stands alone; <strong>Unlock</strong> restores the whole picture.</p>
     <p class="hint"><strong>Filter Unconnected</strong> keeps incoming and outgoing chains and compacts the picture. <strong>Turn off Filter</strong> restores it.</p>
+    ${this.productChips(graph)}
     ${this.filterAssets.html()}
     <div id="graph"></div>
     ${legendHtml()}
@@ -61,6 +62,32 @@ export class RuntimeHtmlPage {
     <script>${new RuntimeDetails(graph, showExternalNodes).script()}</script>
 </body>
 </html>`;
+    }
+
+    /**
+     * The product chip row (#1179): one chip per product a service belongs to. Pressing chips keeps
+     * the UNION of their services (each product's tagged services plus everything they reach at
+     * runtime) and the queues, triggers and systems attached to them; it intersects with Filter
+     * Unconnected. Omitted when no service belongs to a product. The page always opens unfiltered.
+     */
+    productChips(graph: RuntimeGraph): string {
+        const products = new Set<string>();
+        for (const service of Object.values(graph.services)) {
+            if (service.drawOnGraph === false) continue;
+            for (const product of service.products ?? []) products.add(product);
+        }
+        if (products.size === 0) return '';
+        const chips = [...products]
+            .sort()
+            .map(
+                (product: string): string =>
+                    `<button type="button" class="wp-chip" data-wp-product="${product}" aria-pressed="false">${product}</button>`,
+            )
+            .join('');
+        return (
+            `<div class="wp-product-filter" id="wp-product-filter" role="group" aria-label="Product filter">` +
+            `<span class="wp-product-label">Product <small>any match</small></span>${chips}</div>`
+        );
     }
 
     /**
@@ -124,6 +151,11 @@ export class RuntimeHtmlPage {
             overflow-x: auto;
         }
         .sw { flex: 0 0 auto; display: inline-flex; }
+        .wp-product-filter { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 6px; margin: 0 0 14px; }
+        .wp-product-label { color: #555; margin-right: 4px; }
+        .wp-product-label small { color: #888; }
+        .wp-chip { border: 1px solid #b8bcc8; background: white; color: #333; border-radius: 999px; padding: 3px 11px; font: inherit; font-size: 13px; cursor: pointer; }
+        .wp-chip[aria-pressed="true"] { background: #4b44c8; border-color: #4b44c8; color: white; }
         code { background: #f2f2f2; padding: 1px 4px; border-radius: 3px; font-family: monospace; }
         ${new GraphNavigation(NavigationLayout.TOOLBAR).styles()}
         @media (max-width: 900px) { .legend-columns { grid-template-columns: 1fr; } }`;

@@ -24,7 +24,8 @@ import { ResponsibilitiesRenderer } from './graph-responsibilities';
 import { GraphNodeMenu } from './graph-node-menu';
 import { dotValue } from './dot-syntax';
 import { GraphRenderModel, GraphFilterAssets } from './graph-render-model';
-import { NodeFacts, NodeModeStyler } from './graph-color-modes';
+import { NodeFacts, NodeModeStyler, ProductCount } from './graph-color-modes';
+import { ProductPalette } from './graph-products';
 import { GraphLegend } from './graph-legend';
 import { GraphPageShell, ShellParts } from './graph-page-shell';
 import { GraphPageStyles } from './graph-page-styles';
@@ -225,7 +226,7 @@ export class GraphVisualizer {
         const bands = this.levelBands(graph);
         model.bands = bands;
 
-        dot += this.dotNodes(graph, model);
+        dot += this.dotNodes(graph, model, ProductPalette.fromGraph(graph));
         dot += '\n';
         dot += this.bandLayout.dot(bands);
         dot += '\n';
@@ -289,7 +290,7 @@ export class GraphVisualizer {
     // name plus a short meta line, because the fill now shows what the env list used to spell out.
     // No node carries a URL: EVERY box is clickable and opens the floating node menu instead, which
     // is where a design page is reached (see designLinks).
-    private dotNodes(graph: EnhancedGraph, model: GraphRenderModel): string {
+    private dotNodes(graph: EnhancedGraph, model: GraphRenderModel, palette: ProductPalette): string {
         let dot = '';
         for (const project of Object.keys(graph)) {
             const info = graph[project];
@@ -301,9 +302,10 @@ export class GraphVisualizer {
                 info.level,
                 info.role ?? 'lib',
                 info.framework ?? [],
+                info.products ?? [],
             );
-            this.styler.record(model.legend, facts);
-            dot += model.styledNode(facts, this.styler.dots(facts));
+            this.styler.record(model.legend, facts, palette);
+            dot += model.styledNode(facts, this.styler.dots(facts, palette));
         }
         return dot;
     }
@@ -353,6 +355,7 @@ export class GraphVisualizer {
             this.filterAssets.html(),
             this.snapshot.html(),
             responsibilitiesHtml,
+            model.legend.products.map((count: ProductCount): string => count.product),
         );
         return `<!DOCTYPE html>
 <html>

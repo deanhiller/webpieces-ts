@@ -116,9 +116,15 @@ popover, zoom floats bottom-right, and **Responsibilities** opens a right-hand p
 drawer footer.
 
 The graph answers one question at a time. Pick a mode from the drawer's **Color by** pulldown
-(the one place to switch) or with keys `1` `2` `3`; the choice is remembered per viewer and
-deep-linkable as `#runtime`, `#architecture` or `#impact`. Every box carries the same three
-lines in every mode: `L3  name` (level dimmed, name bold), its role, and every framework tag.
+(the one place to switch) or with keys `1` `2` `3` `4`; the choice is remembered per viewer and
+deep-linkable as `#runtime`, `#architecture`, `#impact` or `#product`. Every box carries the same
+three lines in every mode: `L3  name` (level dimmed, name bold), its role, and every framework tag.
+
+Every row is one level. A library's level is its dependency depth, but every server, client and
+app (`role:server` / `role:client` / `role:app`) is pinned to the TOP row, one above the highest
+library, so the top row is exactly the entry points (a `role:bundle` sits above the apps it
+aggregates; a server orchestrator above the servers it boots). The `level` in `dependencies.json`
+is that promoted level. The runtime graph keeps its call-depth levels.
 
 - **Runtime** — where the code can run. One runtime is a solid fill. One runtime plus a
   specialization (angular/react inside browser, express inside node) is nested: a frame in the
@@ -139,10 +145,10 @@ lines in every mode: `L3  name` (level dimmed, name bold), its role, and every f
   `git checkout <hash>` and run `pnpm arch:visualize`. `architecture:visualize` (no regenerate
   needed) scans every comparison that exists; `architecture:generate` refreshes only *Changed on
   this branch*, so on `main` it leaves Impact asking for `pnpm arch:visualize`. Projects that own a
-  changed file, by nx's own file ownership, are solid amber ("touched"); the rest of the affected set is light amber
-  ("affected — tests and build re-run"); every transitive dependency of the affected set that is
-  not itself affected is light slate with a dashed border ("build input — compiled or restored from
-  cache, unchanged"); everything else is grey. The drawer shows the counts per shade. The answer is per checkout, so
+  changed file, by nx's own file ownership, are solid amber ("changed"); the rest of the affected set is light amber
+  ("dependent — tests and build re-run"); every transitive dependency of the affected set that is
+  not itself affected is light slate with a dashed border ("dependency (built, unchanged)" — compiled
+  or restored from cache); everything else is grey ("not in this build"). The drawer shows the counts per shade. The answer is per checkout, so
   it is written to `architecture/.impact/dependencies.impact.js`, never into the committed html or
   json. That directory holds its own `.gitignore` (`*`), so a consuming repo needs no gitignore
   entry. When nx or git cannot answer, no sidecar is written and Impact is disabled with a
@@ -150,12 +156,26 @@ lines in every mode: `L3  name` (level dimmed, name bold), its role, and every f
   and legend only. When files changed but no project owns one (a lockfile, the workspace
   manifest), the legend names that workspace-global cause for the everything-affected result.
 
-**Filter** opens a popover of three groups that INTERSECT: the changes of the active Impact
-comparison, headed by its label and carrying the same branch / last-commit toggle (Everything ·
-Changed · Changed + what uses them (nx affected) · Changed + what they use · Whole build of this
-branch, each with its project count; disabled with Impact's reason when there is no Impact
-data), *Runtime* chips and *Role* chips (a box matches a group when it carries any selected
-chip). "Show N projects" applies it; active filters show as removable pills in the top bar and
+- **Product** — which products it belongs to. A project declares a product with the nx tag
+  `product:<name>` (lowercase kebab, several allowed; the `product-tags` rule makes it required on
+  servers, clients and apps). A library is never tagged: it belongs to every product whose tagged
+  project reaches it over `dependsOn`, written per project as `"products": [...]` into
+  `dependencies.json`. One product is a solid fill in that product's color (a fixed palette of 8 in
+  sorted-name order; any product past 8 uses the neutral fill and the legend says so); two or more,
+  but not all, are vertical stripes, one per product; a box shared by every product is one neutral
+  fill; a box in no product is white with a dashed border. The legend counts each product's boxes
+  and how many belong to it alone.
+
+**Filter** opens a popover of four groups that INTERSECT: the changes of the active Impact
+comparison, headed by its label and carrying the same branch / last-commit toggle (All ·
+Changed · Changed + dependents (+ everything that uses them: their tests re-run) · Changed +
+dependencies (+ everything they use) · Changed + dependents + dependencies (everything CI builds for
+this branch — the dependencies of the dependents too, so it is more than the union of the two rows
+above it), each with its project count; disabled with Impact's reason when there is no Impact
+data), *Runtime* chips, *Role* chips and *Product* chips (a box matches a group when it carries any
+selected chip; several products select the union of their closures; the Product group is hidden when
+nothing declares a product). *Product* ∩ *Changed + dependents + dependencies* is exactly what this
+branch builds that can affect that product. "Show N projects" applies it; active filters show as removable pills in the top bar and
 a count badge on the drawer button. Every remaining box keeps its own L-row, a level left empty
 is a thin labeled band, and edges between remaining boxes stay drawn.
 
@@ -180,3 +200,10 @@ do not clear filtering, and no filter is persisted across reloads. Saved graph f
 and visibility options remain untouched. See
 [dependency graphs](../../../docs/architecture/dependency-graphs.md#filter-unconnected)
 for traversal examples and browser verification.
+
+The runtime page also carries a **Product** chip row above the graph when any service belongs to a
+product. A product's runtime services are its tagged services plus every service they reach over
+runtime `dependsOn` (through a queue to its consumers too), so a call into another product's
+service stays visible; queues, clocks and systems attached to a kept service stay with it. Several
+chips keep the union, and the row intersects with Filter Unconnected. The page always opens
+unfiltered. `runtime-dependencies.json` carries each service's `products`.

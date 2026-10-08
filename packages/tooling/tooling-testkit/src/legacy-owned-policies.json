@@ -1772,6 +1772,36 @@
         "nullable": true,
         "nonEmpty": false
       }
+    },
+    "product-tags": {
+      "mode": {
+        "type": "string",
+        "enumValues": [
+          "OFF",
+          "RUN_EVERY_TIME"
+        ],
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "roles": {
+        "type": "string[]",
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": true
+      },
+      "turnOffRuleUntilEpoch": {
+        "type": "number",
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "turnOffRuleWhileOnBranch": {
+        "type": "string",
+        "optional": false,
+        "nullable": true,
+        "nonEmpty": false
+      }
     }
   },
   "tuning": {
@@ -1858,6 +1888,7 @@
     "api-lib-dependencies": {},
     "api-lib-path": {},
     "framework-folder": {},
+    "product-tags": {},
     "framework-tsconfig": {},
     "framework-packages": {},
     "branch-creation-guard": {},
@@ -2284,6 +2315,16 @@
           ]
         }
       ]
+    },
+    "product-tags": {
+      "mode": "RUN_EVERY_TIME",
+      "roles": [
+        "server",
+        "client",
+        "app"
+      ],
+      "turnOffRuleUntilEpoch": 0,
+      "turnOffRuleWhileOnBranch": null
     }
   },
   "migrations": [
@@ -2513,7 +2554,8 @@
       "api-rules-for-mcp",
       "api-lib-dependencies",
       "api-lib-path",
-      "framework-folder"
+      "framework-folder",
+      "product-tags"
     ],
     "@webpieces/eslint-rules": [
       "enforce-architecture",

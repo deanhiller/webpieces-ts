@@ -42,6 +42,7 @@ import { RelationSink } from './runtime-graph-decls';
 import type { ScanDecl } from './runtime-graph-decls';
 import { dedupApiRefs, sortedQueues, sortedRecord, sortUnresolved } from './runtime-graph-sorters';
 import { attachExternalSystems, resolveExternalSystems } from './api-usage/external-systems';
+import { RuntimeProductMembership } from './graph-products';
 import type {
     RuntimeApi,
     RuntimeEdge,
@@ -203,6 +204,8 @@ class RuntimeGraphDeriver {
             queues: edgeResult.queues,
             triggers: this.buildTriggers(decls),
         };
+        // #1179: each product's services — its tagged ones plus everything they reach at runtime.
+        new RuntimeProductMembership().apply(graph, this.projects);
         // A destination whose address arrives at RUNTIME is declared on its CONTRACT
         // (`@externalSystem runtime partner-webhooks`), so it needs no branch of its own here: it is
         // resolved by the same call every other declared system is, converges on one node when two

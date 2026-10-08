@@ -91,6 +91,7 @@ const CODE_RULE_NAMES = [
     'framework-folder',
     'framework-tsconfig',
     'framework-packages',
+    'product-tags',
 ];
 
 // Required fields beyond `mode` (the escape-hatch fields are all optional). Kept as data so adding
@@ -112,6 +113,8 @@ const EXTRA_REQUIRED: Record<string, Record<string, unknown>> = {
         entries: [{ paths: ['libraries/node/**'], frameworkSets: ['node'], roles: ['lib'] }],
     },
     'framework-packages': { entries: [{ packages: ['@angular/*'], frameworks: ['angular'] }] },
+    // Schema-required (#1179): which roles must carry a product tag decides which projects fail.
+    'product-tags': { roles: ['server', 'client', 'app'] },
 };
 
 function offEntries(names: string[], overrides: Record<string, unknown>): Record<string, unknown> {

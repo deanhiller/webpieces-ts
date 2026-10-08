@@ -4,7 +4,9 @@ import { dotValue } from './dot-syntax';
  * Level bands for the architecture graph.
  *
  * Every row of architecture/dependencies.html is ONE dependency level: the highest level on top,
- * descending as you read down, L0 — the foundation everything is built on — always last.
+ * descending as you read down, L0 — the foundation everything is built on — always last. The level
+ * is the one stored in dependencies.json, where every server, client and app is already pinned to the
+ * top level (graph-entry-levels.ts, #1179), so the top band is exactly the entry points.
  *
  * `{ rank=same; ... }` alone does not deliver that, and assuming it did was the bug. It ties a
  * level's boxes to one row but says nothing about where that row goes, so graphviz derived each

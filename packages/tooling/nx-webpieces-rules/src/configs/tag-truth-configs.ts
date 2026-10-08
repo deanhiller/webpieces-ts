@@ -99,3 +99,24 @@ export class FrameworkFolderConfig extends BaseRuleConfig {
         ...BASE_RULE_SCHEMA,
     };
 }
+
+/**
+ * `product-tags` (#1179) — every project whose role is in `roles` carries at least one well-formed
+ * `product:<name>` nx tag (lowercase kebab, several allowed). The product filter and the Product color
+ * mode of `arch:visualize` / `arch:visualize-runtime` seed a product's membership from exactly those
+ * tags, so an untagged server, client or app silently drops out of every product view.
+ *
+ * - `mode` — OFF | RUN_EVERY_TIME (a graph rule: it reads every project, every run).
+ * - `roles` — required, non-empty: WHICH roles are refused without a tag, e.g.
+ *   `["server", "client", "app"]`. It decides which projects fail, so it is behaviour, never a default.
+ */
+export class ProductTagsConfig extends BaseRuleConfig {
+    declare mode?: StructuralMode;
+    roles!: string[];
+
+    static readonly SCHEMA: SchemaShape<ProductTagsConfig> = {
+        mode: new FieldDef('string', STRUCTURAL_MODES),
+        roles: FieldDef.nonEmptyStrings(),
+        ...BASE_RULE_SCHEMA,
+    };
+}

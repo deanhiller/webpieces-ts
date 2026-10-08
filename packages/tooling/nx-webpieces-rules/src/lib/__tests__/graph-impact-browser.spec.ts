@@ -47,7 +47,7 @@ describe.skipIf(!process.env.WP_GRAPH_VIZ_JS)('Impact comparisons in a real brow
         await expect.poll(() => fill('ui-kit')).toBe('#f5a524');
         expect(await fill('server-auth')).toBe('#eef0f4');
         const note = (): Promise<string | null> => page.locator('#wp-side [data-wp-impact-note]').textContent();
-        expect(await note()).toContain(`${BRANCH_LABEL}: 1 touched · 1 affected · 1 build inputs`);
+        expect(await note()).toContain(`${BRANCH_LABEL}: 1 changed · 1 dependents · 1 dependencies`);
 
         // The Filter popover's change group is headed by the ACTIVE label and carries the toggle too.
         await page.locator('#wp-filter-open').click();
@@ -62,7 +62,7 @@ describe.skipIf(!process.env.WP_GRAPH_VIZ_JS)('Impact comparisons in a real brow
         await expect.poll(() => fixture.names(page)).toEqual(['server-auth']);
         await expect.poll(() => fill('server-auth')).toBe('#f5a524');
         expect([await pressed('drawer', 'branch'), await pressed('drawer', 'commit')]).toEqual(['false', 'true']);
-        expect(await note()).toContain(`${dirtyCommit}: 1 touched · 1 affected · 1 build inputs`);
+        expect(await note()).toContain(`${dirtyCommit}: 1 changed · 1 dependents · 1 dependencies`);
         expect(await page.evaluate(() => localStorage.getItem('wp-architecture-graph-impact-kind'))).toBe('commit');
 
         // The popover's own toggle switches back, and its heading and counts follow.

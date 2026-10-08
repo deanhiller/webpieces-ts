@@ -179,6 +179,36 @@ class RuntimeNodeMenu {
 
 class RuntimePage extends WpFilterPage {
     private lock: WpNodeLock | null = null;
+    /** The pressed product chips (#1179); empty keeps every box. */
+    private readonly products = new Set<string>();
+
+    /** Each product chip toggles itself and redraws; the narrowing happens in narrow(). */
+    protected override wireControls(): void {
+        document.querySelectorAll<HTMLButtonElement>('[data-wp-product]').forEach((chip: HTMLButtonElement): void => {
+            chip.addEventListener('click', (): void => {
+                const product = chip.dataset['wpProduct'] ?? '';
+                if (this.products.has(product)) this.products.delete(product);
+                else this.products.add(product);
+                chip.setAttribute('aria-pressed', String(this.products.has(product)));
+                this.redraw();
+            });
+        });
+    }
+
+    /** Pressed chips keep the UNION of their products' boxes, intersected with Filter Unconnected. */
+    protected override narrow(retained: Set<string>): Set<string> {
+        if (this.products.size === 0) return retained;
+        const kept = new Set<string>();
+        for (const node of this.model.nodes) {
+            if (!retained.has(node.id)) continue;
+            if (node.products.some((product: string): boolean => this.products.has(product))) kept.add(node.id);
+        }
+        return kept;
+    }
+
+    protected override usesFullDot(): boolean {
+        return this.products.size === 0;
+    }
 
     protected override captureBinding(svg: SVGSVGElement | null): () => void {
         const previous = this.lock;

@@ -18,7 +18,8 @@ export const optionalTuning: Readonly<Record<string, ConfigObject>> = {
     "api-rules-for-mcp": {},
     "api-lib-dependencies": {},
     "api-lib-path": {},
-    "framework-folder": {}
+    "framework-folder": {},
+    "product-tags": {}
 };
 
 /** Written for review by setup/sync; never used as a loader fallback. */
@@ -212,5 +213,15 @@ export const recommendedSeeds: Readonly<Record<string, ConfigObject>> = {
                 ]
             }
         ]
+    },
+    "product-tags": {
+        "mode": "RUN_EVERY_TIME",
+        "roles": [
+            "server",
+            "client",
+            "app"
+        ],
+        "turnOffRuleUntilEpoch": 0,
+        "turnOffRuleWhileOnBranch": null
     }
 };

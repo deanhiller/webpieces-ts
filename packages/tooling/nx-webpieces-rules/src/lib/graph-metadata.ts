@@ -3,6 +3,8 @@
  *
  * Fills the AI-oriented fields on each architecture/dependencies.json entry:
  *   framework            — from `framework:<x>` nx tag or package.json inference
+ *   products             — the products reaching it, from the `product:<name>` nx tags (#1179)
+ *   level                — re-levelled so servers, clients and apps form the top row (#1179)
  *   serviceName          — from project.json metadata.webpieces.serviceName; the
  *                          name clients address this app by at runtime
  *   shortDescription     — first paragraph of the project's responsibilities.md
@@ -24,6 +26,9 @@ import { resolveFramework } from './framework-resolver';
 import { resolveRole } from './role-resolver';
 import { resolveDrawOnGraph } from './draw-on-graph-resolver';
 import { resolveCutLegacyCycles } from './cut-legacy-cycle-resolver';
+import { ProductResolver } from './product-resolver';
+import { ProductMembership } from './graph-products';
+import { EntryPointLevels } from './graph-entry-levels';
 import { resolveRuntimeParticipant } from './runtime-participant-resolver';
 import { resolveCallsService, resolveServiceName, validateUniqueServiceNames } from './service-name-resolver';
 import { extractShortDescription, validateShortDescription } from './responsibilities';
@@ -71,6 +76,9 @@ export function enrichGraph(
     const problems: string[] = [];
     // project -> declared serviceName, collected so duplicates can be reported across the workspace.
     const serviceNames = new Map<string, string>();
+    // project -> the products it DECLARES (`product:` tags); membership is derived from these below.
+    const productSeeds = new Map<string, string[]>();
+    const products = new ProductResolver();
 
     for (const [projectName, entry] of Object.entries(graph)) {
         const info = infos.get(projectName);
@@ -80,6 +88,9 @@ export function enrichGraph(
         }
 
         enrichDeclarations(entry, info, workspaceRoot, problems);
+        const declared = products.resolve(info);
+        problems.push(...declared.problems);
+        if (declared.products.length > 0) productSeeds.set(projectName, declared.products);
         enrichClientNames(entry, info, workspaceRoot, projectName, serviceNames, problems);
         enrichResponsibilities(entry, info, workspaceRoot, problems);
 
@@ -102,6 +113,14 @@ export function enrichGraph(
     if (problems.length > 0) {
         throw new MetadataValidationError(problems);
     }
+
+    // #1179: a library belongs to every product whose tagged project reaches it — derived, never tagged.
+    new ProductMembership().compute(productSeeds, graph).forEach((member: string[], projectName: string): void => {
+        graph[projectName].products = member;
+    });
+    // #1179: servers, clients and apps form the top row. Here, once roles are resolved, so generate,
+    // validate-architecture-unchanged and validate-api-relations all compute identical levels.
+    new EntryPointLevels(APP_ROLES).promote(graph);
 }
 
 /**

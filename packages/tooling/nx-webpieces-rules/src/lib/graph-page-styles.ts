@@ -143,7 +143,9 @@ export class GraphPageStyles {
         .wp-scope { display: flex; align-items: center; gap: 8px; padding: 4px 6px; border-radius: 6px; cursor: pointer; }
         .wp-scope:hover { background: #f4f1fb; }
         .wp-scope input { accent-color: var(--wp-accent); margin: 0; }
-        .wp-scope-name { flex: 1 1 auto; }
+        .wp-scope-text { flex: 1 1 auto; display: grid; }
+        .wp-scope-sub { font-size: 11.5px; color: var(--wp-muted); line-height: 1.3; }
+        .wp-chip-swatch { vertical-align: -1px; margin-right: 5px; }
         .wp-count { color: var(--wp-muted); font-size: 12px; font-variant-numeric: tabular-nums; }
         .wp-scope-reason { margin: 2px 6px 0; font-size: 12px; color: var(--wp-muted); }
         .wp-chips { display: flex; flex-wrap: wrap; gap: 6px; }

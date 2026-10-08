@@ -5,7 +5,7 @@ import { describe, it, expect } from 'vitest';
 import { validateWebpiecesConfig, seedEntryForRule } from './validate-config';
 
 /**
- * The five tag-truth rules (#1064) — the config validator: each required field is demanded, a
+ * The six tag-truth rules (#1064, #1179) — the config validator: each required field is demanded, a
  * non-empty list refuses `[]`, every list element is checked against its own schema, and a config that
  * names none of them FAILS THE LOAD naming each one (no default lets an unconfigured rule run).
  */
@@ -113,16 +113,37 @@ describe('framework-packages — config validation', () => {
     });
 });
 
+describe('product-tags — config validation (#1179)', () => {
+    it('accepts the seeded roles', () => {
+        expect(errorsFor('product-tags', { mode: 'RUN_EVERY_TIME', roles: ['server', 'client', 'app'], ...HATCHES })).toEqual([]);
+    });
+
+    it('demands a NON-EMPTY roles — which projects are refused is the consumer\'s decision', () => {
+        expect(errorsFor('product-tags', { mode: 'OFF', ...HATCHES }))
+            .toEqual([expect.stringContaining('Missing required field "roles"')]);
+        expect(errorsFor('product-tags', { mode: 'OFF', roles: [], ...HATCHES }))
+            .toEqual([expect.stringContaining('"roles" must not be empty')]);
+    });
+
+    it('refuses a mode a graph rule does not have', () => {
+        expect(errorsFor('product-tags', { mode: 'MODIFIED_PROJECTS', roles: ['server'], ...HATCHES })).not.toEqual([]);
+    });
+});
+
+const TAG_TRUTH_RULES = [
+    'api-lib-dependencies', 'api-lib-path', 'framework-folder', 'framework-tsconfig', 'framework-packages', 'product-tags',
+];
+
 describe('the tag-truth rules have no default', () => {
     it('a config naming none of them fails the load, naming each one', () => {
         const errors = validateWebpiecesConfig({}, fixtureRuleRegistry);
-        for (const rule of ['api-lib-dependencies', 'api-lib-path', 'framework-folder', 'framework-tsconfig', 'framework-packages']) {
+        for (const rule of TAG_TRUTH_RULES) {
             expect(errors.some((e: string) => e.includes(rule)), rule).toBe(true);
         }
     });
 
     it('every seeded entry validates clean', () => {
-        for (const rule of ['api-lib-dependencies', 'api-lib-path', 'framework-folder', 'framework-tsconfig', 'framework-packages']) {
+        for (const rule of TAG_TRUTH_RULES) {
             expect(errorsFor(rule, seedEntryForRule(rule, fixtureRuleRegistry)), rule).toEqual([]);
         }
     });

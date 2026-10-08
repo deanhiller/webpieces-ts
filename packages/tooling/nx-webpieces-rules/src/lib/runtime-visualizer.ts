@@ -594,6 +594,7 @@ export function generateRuntimeRenderModel(
         dot += model.node(
             name,
             `  "${serviceNodeId(name)}" [fillcolor="${color}", label="${nodeLabel(name, svc, details.nodes[name].used.length)}"];\n`,
+            svc.products ?? [],
         );
     }
 
@@ -624,6 +625,8 @@ export function generateRuntimeRenderModel(
     assertValidDot(dot, 'runtime-architecture.dot');
     model.footer = dot.slice(footerStart);
     model.completeEndpoints();
+    // #1179: a queue, trigger or external system belongs to the products of the services it touches.
+    model.attachProducts((id: string): boolean => graph.services[id] !== undefined);
     model.fullDot = dot;
     return model;
 }

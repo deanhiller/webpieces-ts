@@ -36,6 +36,17 @@ describe('compareGraphs metadata fields', () => {
         expect(result.summary).toContain('framework: "browser, node" -> "express, node"');
     });
 
+    it('#1179: detects a product membership change, so validate sees it', () => {
+        const current: EnhancedGraph = { x: { ...baseEntry(), products: ['helper', 'lang'] } };
+        const saved: EnhancedGraph = { x: { ...baseEntry(), products: ['lang'] } };
+        const result = compareGraphs(current, saved);
+        expect(result.identical).toBe(false);
+        expect(result.diff.modified[0].changedFields).toEqual([
+            { field: 'products', from: 'lang', to: 'helper, lang' },
+        ]);
+        expect(compareGraphs({ x: { ...baseEntry(), products: ['lang'] } }, { x: baseEntry() }).identical).toBe(false);
+    });
+
     it('treats a reordered env set of the same members as a change (order is significant)', () => {
         const current: EnhancedGraph = { x: { ...baseEntry(), framework: ['node', 'browser'] } };
         const saved: EnhancedGraph = { x: baseEntry() };

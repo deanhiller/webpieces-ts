@@ -116,8 +116,8 @@ export class ImpactReport {
         public readonly changedFiles: number,
         /**
          * Transitive dependencies of the TOUCHED set that are not touched themselves (node ids): the
-         * Filter popover's "Changed + what they use". ("Changed + what uses them" is touched +
-         * affected, which nx already computed as the dependents whose tests re-run.)
+         * Filter popover's "Changed + dependencies". ("Changed + dependents" is touched + affected,
+         * which nx already computed as the dependents whose tests re-run.)
          */
         public readonly dependencies: string[],
         /**
@@ -415,7 +415,7 @@ export class NxImpactScanner {
     /**
      * Every transitive dependency of `roots` that is not itself one of them: a pure downward walk over
      * the graph's own dependsOn edges, no nx call. Of the affected set these are the build inputs; of
-     * the touched set, "what they use".
+     * the touched set, "Changed + dependencies".
      */
     buildInputs(roots: string[], graph: EnhancedGraph): string[] {
         const inSet = new Set<string>(roots);
@@ -591,8 +591,8 @@ export class ImpactRefresh {
             return `ℹ️  Impact · ${result.label}: unavailable — ${result.reason}`;
         if (result.reason !== '') return `✅ Impact · ${result.label}: ${result.reason}`;
         return (
-            `✅ Impact · ${result.label}: ${result.touched.length} touched · ${result.affected.length} affected · ` +
-            `${result.buildInputs.length} build inputs, from ${result.changedFiles} changed file(s)`
+            `✅ Impact · ${result.label}: ${result.touched.length} changed · ${result.affected.length} dependents · ` +
+            `${result.buildInputs.length} dependencies, from ${result.changedFiles} changed file(s)`
         );
     }
 }

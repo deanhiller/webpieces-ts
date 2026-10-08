@@ -37,6 +37,8 @@ export interface GraphDiff {
 const METADATA_FIELDS: ReadonlyArray<keyof GraphEntry & string> = [
     'framework',
     'webpiecesRuntime',
+    // #1179: a product gaining or losing a project is an architecture change validate must report.
+    'products',
     'shortDescription',
     'responsibilitiesFile',
     'designFile',

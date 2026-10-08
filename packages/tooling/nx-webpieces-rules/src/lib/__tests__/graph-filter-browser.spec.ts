@@ -547,7 +547,7 @@ describe.skipIf(!process.env.WP_GRAPH_VIZ_JS)('real Viz local-file filtering', (
         expect(await shape('tooling-common').getAttribute('stroke-dasharray')).not.toBeNull();
         expect(await shape('core-mock').getAttribute('fill')).toBe('#eef0f4');
         expect(await page.locator('#wp-side [data-wp-impact-note]').textContent()).toContain(
-            `${BRANCH_LABEL}: 1 touched · 2 affected · 2 build inputs`,
+            `${BRANCH_LABEL}: 1 changed · 2 dependents · 2 dependencies`,
         );
         await page.screenshot({ path: path.join(fixture.output, '1155-impact.png') });
         await page.close();
@@ -598,12 +598,12 @@ describe.skipIf(!process.env.WP_GRAPH_VIZ_JS)('real Viz local-file filtering', (
         await page.locator('#wp-filter-pills [data-wp-pill="runtime:node"] button').click();
         expect(await fixture.names(page)).toEqual(['model', 'server-auth', 'ui-kit']);
         expect(await page.locator('#wp-filter-badge').textContent()).toBe('1');
-        // Change scope intersects too: "Changed + what they use" = ui-kit + model, still only libs.
+        // Change scope intersects too: "Changed + dependencies" = ui-kit + model, still only libs.
         await page.locator('#wp-filter-open').click();
         await page.locator('input[name="wp-scope"][value="dependencies"]').check();
         await page.locator('#wp-filter-apply').click();
         expect(await fixture.names(page)).toEqual(['model', 'ui-kit']);
-        expect(await page.locator('#wp-filter-pills').textContent()).toContain('Changed + what they use');
+        expect(await page.locator('#wp-filter-pills').textContent()).toContain('Changed + dependencies');
         await page.screenshot({ path: path.join(fixture.output, '1158-filter.png') });
         await page.locator('#wp-filter-open').click();
         await page.locator('#wp-filter-clear').click();

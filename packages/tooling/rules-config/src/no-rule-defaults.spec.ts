@@ -120,13 +120,14 @@ describe('a rule has no default', () => {
         ]);
     });
 
-    it('the five tag-truth rules (#1064) demand every field that decides behaviour, and default none of them', () => {
+    it('the six tag-truth rules (#1064, #1179) demand every field that decides behaviour, and default none of them', () => {
         const required: Record<string, string[]> = {
             'api-lib-dependencies': ['mode', 'apiLibPackages', 'apiClients'],
             'api-lib-path': ['mode', 'paths'],
             'framework-folder': ['mode', 'entries'],
             'framework-tsconfig': ['mode'],
             'framework-packages': ['mode', 'entries'],
+            'product-tags': ['mode', 'roles'],
         };
         for (const [rule, fields] of Object.entries(required)) {
             const schema = RULE_SCHEMAS[rule];
@@ -139,5 +140,6 @@ describe('a rule has no default', () => {
         expect(RULE_SCHEMAS['api-lib-path']['paths'].nonEmpty).toBe(true);
         expect(RULE_SCHEMAS['framework-folder']['entries'].nonEmpty).toBe(true);
         expect(RULE_SCHEMAS['framework-packages']['entries'].nonEmpty).toBe(true);
+        expect(RULE_SCHEMAS['product-tags']['roles'].nonEmpty).toBe(true);
     });
 });

@@ -9,7 +9,7 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import type { EnhancedGraph } from '../graph-sorter';
+import type { EnhancedGraph, GraphEntry } from '../graph-sorter';
 import { ProjectInfo } from '../project-info';
 import { resolveFramework } from '../framework-resolver';
 import {
@@ -513,6 +513,58 @@ describe('enrichGraph', () => {
         expect(thrown.message).toContain('missing required bad/missing/responsibilities.md');
         expect(thrown.message).toContain('no summary paragraph');
         expect(thrown.message).toContain('max ' + MAX_SHORT_DESCRIPTION_LENGTH);
+    });
+
+    it('#1179: derives products from product:<name> tags down dependsOn, and pins entry points to the top row', () => {
+        const md = (name: string): string => `# R — ${name}\n\nDoes ${name} things.\n`;
+        const infos = setupWorkspace('products', [
+            new FixtureProject('lang-angular', md('lang-angular'), true, ['framework:angular', 'role:client', 'product:lang']),
+            new FixtureProject('lang-server', md('lang-server'), true, ['framework:node', 'role:server', 'product:lang']),
+            new FixtureProject('helper-server', md('helper-server'), true, ['framework:node', 'role:server', 'product:helper']),
+            new FixtureProject('lang-apis', md('lang-apis'), true, ['framework:browser', 'framework:node', 'role:api-lib']),
+            new FixtureProject('core', md('core'), true, ['framework:browser', 'framework:node', 'role:lib']),
+            new FixtureProject('orphan', md('orphan'), true, ['framework:node', 'role:lib']),
+        ]);
+        const graph: EnhancedGraph = {
+            core: { level: 0, dependsOn: [] },
+            orphan: { level: 0, dependsOn: [] },
+            'lang-apis': { level: 1, dependsOn: ['core'] },
+            'helper-server': { level: 1, dependsOn: ['core'] },
+            'lang-server': { level: 2, dependsOn: ['lang-apis'] },
+            'lang-angular': { level: 2, dependsOn: ['lang-apis'] },
+        };
+
+        enrichGraph(graph, infos, enrichTmpRoot);
+
+        expect(graph['lang-apis'].products).toEqual(['lang']);
+        expect(graph['core'].products).toEqual(['helper', 'lang']);
+        expect(graph['lang-server'].products).toEqual(['lang']);
+        expect(graph['orphan'].products).toBeUndefined();
+        // top = 1 + the highest library (lang-apis at L1) = 2; helper-server was L1.
+        expect(graph['helper-server'].level).toBe(2);
+        expect(graph['lang-server'].level).toBe(2);
+        expect(graph['lang-angular'].level).toBe(2);
+    });
+
+    it('#1179: a workspace with no product tag writes no products field anywhere', () => {
+        const infos = setupWorkspace('noproducts', [
+            new FixtureProject('svc', '# R — svc\n\nServes.\n', true, ['framework:node', 'role:server']),
+            new FixtureProject('lib', '# R — lib\n\nLibs.\n', true, ['framework:node', 'role:lib']),
+        ]);
+        const graph: EnhancedGraph = { lib: { level: 0, dependsOn: [] }, svc: { level: 1, dependsOn: ['lib'] } };
+        enrichGraph(graph, infos, enrichTmpRoot);
+        expect(Object.values(graph).some((entry: GraphEntry): boolean => 'products' in entry)).toBe(false);
+    });
+
+    it('#1179: a malformed product tag fails generation, naming the project', () => {
+        const infos = setupWorkspace('badproduct', [
+            new FixtureProject('svc', '# R — svc\n\nServes.\n', true, ['framework:node', 'role:server', 'product:Lang']),
+            new FixtureProject('empty', '# R — empty\n\nEmpty.\n', true, ['framework:node', 'role:server', 'product:']),
+        ]);
+        const graph: EnhancedGraph = { svc: { level: 0, dependsOn: [] }, empty: { level: 0, dependsOn: [] } };
+        const thrown = enrichAndCatch(graph, infos);
+        expect(thrown.message).toContain("svc: product tag 'product:Lang' is malformed");
+        expect(thrown.message).toContain("empty: product tag 'product:' is malformed");
     });
 
     it('reports projects absent from the nx project graph', () => {

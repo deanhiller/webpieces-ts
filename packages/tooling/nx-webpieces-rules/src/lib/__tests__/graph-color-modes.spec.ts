@@ -21,16 +21,26 @@ import { KNOWN_ROLES } from '../role-resolver';
 import { htmlLabelText } from '../dot-syntax';
 import { GraphPageStyles } from '../graph-page-styles';
 import { LevelBand, LevelBandLayout } from '../graph-level-bands';
+import {
+    PRODUCT_NONE_BORDER,
+    PRODUCT_NONE_FILL,
+    PRODUCT_PALETTE_SIZE,
+    PRODUCT_SHARED_FILL,
+    ProductColor,
+    ProductPalette,
+} from '../graph-products';
 
 const styler = new NodeModeStyler();
 const legend = new GraphLegend();
+/** A workspace that declares no product. */
+const NO_PRODUCTS = new ProductPalette([]);
 
 /** Legend facts as if every framework and every role were drawn. */
 const everything = (): LegendFacts => {
     const facts = new LegendFacts();
     for (const framework of KNOWN_FRAMEWORKS)
-        styler.record(facts, new NodeFacts(framework, framework, 0, 'lib', [framework]));
-    for (const role of KNOWN_ROLES) styler.record(facts, new NodeFacts(role, role, 0, role, []));
+        styler.record(facts, new NodeFacts(framework, framework, 0, 'lib', [framework], []), NO_PRODUCTS);
+    for (const role of KNOWN_ROLES) styler.record(facts, new NodeFacts(role, role, 0, role, [], []), NO_PRODUCTS);
     return facts;
 };
 
@@ -66,7 +76,7 @@ describe('every role the renderer styles has a color and a legend row', () => {
 
     it('lists only the roles in use', () => {
         const facts = new LegendFacts();
-        styler.record(facts, new NodeFacts('svc', 'svc', 1, 'server', ['node']));
+        styler.record(facts, new NodeFacts('svc', 'svc', 1, 'server', ['node'], []), NO_PRODUCTS);
         const rows = legend.architectureRows(facts);
         expect(rows).toContain('data-wp-legend="server"');
         expect(rows).not.toContain('data-wp-legend="app"');
@@ -108,14 +118,14 @@ describe('the brand palette (#1158)', () => {
 
 describe('Runtime boxes: solid, nested or striped — never bands or a plate', () => {
     it('stripes a universal library full height, equally, in the fixed order browser | node | react-native', () => {
-        const dot = styler.dots(new NodeFacts('u', 'u', 0, 'lib', ['react-native', 'node', 'browser'])).runtime;
+        const dot = styler.dots(new NodeFacts('u', 'u', 0, 'lib', ['react-native', 'node', 'browser'], []), NO_PRODUCTS).runtime;
         expect(dot).toContain('style="striped", fillcolor="#7d8cf2;0.333:#6fcf8a;0.333:#34b8a6", class="wp-striped"');
         expect(dot).not.toContain('<TABLE');
         expect(dot).toContain('<BR/>browser · node · react-native>');
     });
 
     it('draws a react-native-only box teal, as a plain fill with the three lines', () => {
-        const dot = styler.dots(new NodeFacts('rn', 'rn', 0, 'client', ['react-native'])).runtime;
+        const dot = styler.dots(new NodeFacts('rn', 'rn', 0, 'client', ['react-native'], []), NO_PRODUCTS).runtime;
         expect(dot).toBe(
             '  "rn" [style="filled", fillcolor="#34b8a6", fontcolor="#1a1c22", label=<<FONT COLOR="#1a1c2299">L0</FONT>' +
                 '&#160;&#160;<B>rn</B><BR/>client<BR/>react-native>];\n',
@@ -123,19 +133,19 @@ describe('Runtime boxes: solid, nested or striped — never bands or a plate', (
     });
 
     it('NESTS one runtime plus a specialization: base frame, rounded inner box, text color of the inner', () => {
-        const dot = styler.dots(new NodeFacts('site', 'site', 3, 'client', ['browser', 'angular'])).runtime;
+        const dot = styler.dots(new NodeFacts('site', 'site', 3, 'client', ['browser', 'angular'], []), NO_PRODUCTS).runtime;
         expect(dot).toContain('fillcolor="#7d8cf2", fontcolor="#ffffff", margin=0');
         expect(dot).toContain(
             '<TD BGCOLOR="#7d8cf2" CELLPADDING="5"><TABLE BORDER="0" CELLBORDER="0" CELLSPACING="0" CELLPADDING="6" BGCOLOR="#c8243f" STYLE="rounded"><TR><TD><FONT COLOR="#ffffff99">L3</FONT>',
         );
         // react is light, so its text stays dark.
-        const react = styler.dots(new NodeFacts('r', 'r', 1, 'lib', ['react'])).runtime;
+        const react = styler.dots(new NodeFacts('r', 'r', 1, 'lib', ['react'], []), NO_PRODUCTS).runtime;
         expect(react).toContain('fontcolor="#1a1c22", margin=0');
         expect(react).toContain('BGCOLOR="#7fd8ff" STYLE="rounded"');
     });
 
     it('shows a specialization on a multi-runtime box in line 3 only', () => {
-        const dot = styler.dots(new NodeFacts('hooks', 'hooks', 4, 'lib', ['react', 'react-native'])).runtime;
+        const dot = styler.dots(new NodeFacts('hooks', 'hooks', 4, 'lib', ['react', 'react-native'], []), NO_PRODUCTS).runtime;
         expect(dot).toContain('style="striped", fillcolor="#7d8cf2;0.500:#34b8a6"');
         expect(dot).not.toContain('#7fd8ff');
         expect(dot).toContain('<BR/>react-native · react>');
@@ -143,7 +153,7 @@ describe('Runtime boxes: solid, nested or striped — never bands or a plate', (
 
     it('entity-escapes names inside HTML-like labels', () => {
         expect(htmlLabelText('a<b>&"c"')).toBe('a&lt;b&gt;&amp;&quot;c&quot;');
-        const dot = styler.dots(new NodeFacts('x', 'a<b>', 0, 'lib', ['angular'])).runtime;
+        const dot = styler.dots(new NodeFacts('x', 'a<b>', 0, 'lib', ['angular'], []), NO_PRODUCTS).runtime;
         expect(dot).toContain('<B>a&lt;b&gt;</B>');
         expect(dot).not.toContain('a<b>');
     });
@@ -178,3 +188,73 @@ describe('an emptied level is a thin labeled band, never dropped', () => {
     });
 });
 
+
+describe('Product mode (#1179): one product solid, several striped, all neutral, none dashed', () => {
+    const palette = new ProductPalette(['lang', 'helper', 'bugfixer']);
+    const lang = palette.colorOf('lang');
+    const helper = palette.colorOf('helper');
+    const product = (products: string[]): string =>
+        styler.dots(new NodeFacts('p', 'p', 2, 'lib', ['node'], products), palette).product;
+
+    it('assigns the palette in sorted product-name order', () => {
+        expect(palette.names()).toEqual(['bugfixer', 'helper', 'lang']);
+        expect(new Set(palette.colors.map((color: ProductColor): string => color.color)).size).toBe(3);
+    });
+
+    it('fills a one-product box solid in that product\'s color', () => {
+        expect(product(['lang'])).toContain(`style="filled", fillcolor="${lang.color}", fontcolor="${lang.fontColor}"`);
+    });
+
+    it('stripes a box of two products (not all), one stripe each, reusing the multi-runtime renderer', () => {
+        expect(product(['helper', 'lang'])).toContain(
+            `style="striped", fillcolor="${helper.color};0.500:${lang.color}", class="wp-striped"`,
+        );
+    });
+
+    it('paints a box shared by EVERY product with the one neutral fill', () => {
+        expect(product(['bugfixer', 'helper', 'lang'])).toContain(`fillcolor="${PRODUCT_SHARED_FILL}"`);
+        expect(product(['bugfixer', 'helper', 'lang'])).not.toContain('striped');
+    });
+
+    it('draws a box in no product white with a dashed border', () => {
+        const dot = product([]);
+        expect(dot).toContain(`style="filled,dashed", fillcolor="${PRODUCT_NONE_FILL}"`);
+        expect(dot).toContain(`color="${PRODUCT_NONE_BORDER}"`);
+    });
+
+    it('a lone declared product is never "shared by every product": it is its own color', () => {
+        const one = new ProductPalette(['lang']);
+        const dot = styler.dots(new NodeFacts('p', 'p', 0, 'lib', [], ['lang']), one).product;
+        expect(dot).toContain(`fillcolor="${one.colorOf('lang').color}"`);
+    });
+
+    it('a product past the palette uses the neutral fill, and the legend says so', () => {
+        const names = Array.from({ length: PRODUCT_PALETTE_SIZE + 1 }, (_: unknown, i: number): string => `p${i + 10}`);
+        const big = new ProductPalette(names);
+        const last = big.colorOf(names[names.length - 1]);
+        expect(last.inPalette).toBe(false);
+        expect(last.color).toBe(PRODUCT_SHARED_FILL);
+        expect(big.overflows()).toBe(true);
+        const facts = new LegendFacts();
+        styler.record(facts, new NodeFacts('x', 'x', 0, 'lib', [], [names[names.length - 1]]), big);
+        expect(legend.productRows(facts)).toContain("past the palette's 8: neutral fill");
+    });
+
+    it('the legend counts each product (total and only-this-product), shared, several and none', () => {
+        const facts = new LegendFacts();
+        styler.record(facts, new NodeFacts('a', 'a', 0, 'server', [], ['lang']), palette);
+        styler.record(facts, new NodeFacts('b', 'b', 0, 'lib', [], ['helper', 'lang']), palette);
+        styler.record(facts, new NodeFacts('c', 'c', 0, 'lib', [], ['bugfixer', 'helper', 'lang']), palette);
+        styler.record(facts, new NodeFacts('d', 'd', 0, 'lib', [], []), palette);
+        const rows = legend.productRows(facts);
+        expect(rows).toContain('lang · 3<small>1 only lang</small>');
+        expect(rows).toContain('helper · 2<small>0 only helper</small>');
+        expect(rows).toContain('shared by every product · 1');
+        expect(rows).toContain('data-wp-legend="several"');
+        expect(rows).toContain('no product · 1');
+    });
+
+    it('says how to declare a product when the workspace declares none', () => {
+        expect(legend.productRows(new LegendFacts())).toContain('no products declared');
+    });
+});

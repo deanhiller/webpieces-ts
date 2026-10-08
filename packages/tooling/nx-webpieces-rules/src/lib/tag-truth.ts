@@ -1,5 +1,6 @@
 /**
- * Tag truth — the three GRAPH rules that make an nx `role:*` / `framework:*` tag true (#1064):
+ * Tag truth — the four GRAPH rules that make an nx `role:*` / `framework:*` / `product:*` tag true
+ * (#1064, #1179):
  *
  *   api-lib-dependencies (D2) — a `role:api-lib` depends only on other `role:api-lib` projects plus a
  *                               stated list of outside packages; a `role:api-client` may also import
@@ -8,6 +9,9 @@
  *                               everything under them carries one of those two roles.
  *   framework-folder     (D9) — the folder a library lives in and its framework set + role agree,
  *                               both directions.
+ *   product-tags      (#1179) — every project whose role is listed (seed: server, client, app)
+ *                               carries a well-formed `product:<name>` tag, the seed the product
+ *                               filter and Product color mode derive membership from.
  *
  * They run beside `library-types-match-client` and `role-dependency` (graph-metadata.ts), in
  * `architecture:generate` and `validate-architecture-unchanged`, AFTER enrichGraph has resolved every
@@ -26,6 +30,7 @@ import { ApiClientPackagesEntry, FrameworkFolderEntry } from "../configs/tag-tru
 import type { EnhancedGraph, GraphEntry } from './graph-sorter';
 import { APP_ROLES, MetadataValidationError } from './graph-metadata';
 import { ProjectInfo } from './project-info';
+import { ProductResolver } from './product-resolver';
 import { RuleGate } from './rule-gate';
 import { DepUsageScanner } from './dep-usage-scanner';
 import { toError } from '../toError';
@@ -83,8 +88,13 @@ export class FrameworkFolderRule {
     constructor(public readonly folders: readonly FrameworkFolder[]) {}
 }
 
+/** `product-tags`, resolved: the roles whose every project must declare a `product:<name>` tag. */
+export class ProductTagsRule {
+    constructor(public readonly roles: readonly string[]) {}
+}
+
 /**
- * The three rules' switches, read from webpieces.config.json once. A rule that is OFF (or time-boxed /
+ * The four rules' switches, read from webpieces.config.json once. A rule that is OFF (or time-boxed /
  * branch-scoped off) is `null`.
  */
 export class TagTruthRules {
@@ -92,16 +102,22 @@ export class TagTruthRules {
         public readonly apiLibDependencies: ApiLibDependenciesRule | null,
         public readonly apiLibPath: ApiLibPathRule | null,
         public readonly frameworkFolder: FrameworkFolderRule | null,
+        public readonly productTags: ProductTagsRule | null,
     ) {}
 
     /** Every rule off — what a caller that configured nothing asked for. */
     // webpieces-disable no-function-outside-class -- static factory of this class
     static none(): TagTruthRules {
-        return new TagTruthRules(null, null, null);
+        return new TagTruthRules(null, null, null, null);
     }
 
     anyEnabled(): boolean {
-        return this.apiLibDependencies !== null || this.apiLibPath !== null || this.frameworkFolder !== null;
+        return (
+            this.apiLibDependencies !== null ||
+            this.apiLibPath !== null ||
+            this.frameworkFolder !== null ||
+            this.productTags !== null
+        );
     }
 
     /** `mode: OFF` and both escape hatches come from RuleGate, so there is ONE reading of them. */
@@ -116,12 +132,14 @@ export class TagTruthRules {
         const deps = optionsOf("api-lib-dependencies");
         const where = optionsOf("api-lib-path");
         const folder = optionsOf("framework-folder");
+        const products = optionsOf("product-tags");
         return new TagTruthRules(
             deps === null ? null : TagTruthRules.dependenciesRule(deps),
             where === null ? null : new ApiLibPathRule(where['paths'] as string[]),
             folder === null
                 ? null
                 : new FrameworkFolderRule((folder['entries'] as FrameworkFolderEntry[]).map(FrameworkFolder.fromEntry)),
+            products === null ? null : new ProductTagsRule(products['roles'] as string[]),
         );
     }
 
@@ -167,8 +185,29 @@ export class TagTruthValidator {
             if (this.rules.frameworkFolder !== null) {
                 problems.push(...this.folderProblems(name, root, entry, this.rules.frameworkFolder));
             }
+            if (this.rules.productTags !== null) {
+                problems.push(...this.productTagProblems(info, root, entry, this.rules.productTags));
+            }
         }
         return problems;
+    }
+
+    /**
+     * #1179 — a project whose role the rule lists declares at least one well-formed `product:<name>`.
+     * The DECLARED tags are read, never the derived `products`: a server inheriting membership from an
+     * orchestrator that depends on it still states its own product. A malformed tag is not counted here
+     * because enrichGraph already fails on it, naming the tag.
+     */
+    private productTagProblems(info: ProjectInfo, root: string, entry: GraphEntry, rule: ProductTagsRule): string[] {
+        const role = entry.role;
+        if (role === undefined || !rule.roles.includes(role)) return [];
+        if (new ProductResolver().resolve(info).products.length > 0) return [];
+        return [
+            `${"product-tags"}: '${info.name}' is role:${role} but carries no product tag — every ` +
+                `${rule.roles.map((each: string) => `role:${each}`).join(' / ')} must name the product(s) it belongs ` +
+                `to, so the architecture graphs can show one product. Add "product:<name>" (lowercase kebab, ` +
+                `several allowed) to the "tags" in ${root}/project.json, e.g. "tags": [..., "product:<name>"].`,
+        ];
     }
 
     /** D2 — the workspace edges and the outside packages of ONE api-lib / api-client. */

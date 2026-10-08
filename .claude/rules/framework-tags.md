@@ -1,7 +1,7 @@
 # Framework and role tags are TRUE, and the machine says so
 
-Read this when you add or change a `framework:*` or `role:*` nx tag, the framework lattice, the
-`role:api-lib` / `role:api-client` split, or one of the five tag-truth rules. Decided by Dean on issue
+Read this when you add or change a `framework:*`, `role:*` or `product:*` nx tag, the framework lattice,
+the `role:api-lib` / `role:api-client` split, or one of the six tag-truth rules. Decided by Dean on issue
 [#1064](https://github.com/deanhiller/webpieces-ts/issues/1064) (D1–D10), from measurements in the
 reference consumer (`ctoteachings/monorepo`); the consumer half is ctoteachings/monorepo#1553.
 
@@ -46,7 +46,7 @@ also export literal/structural protocol data, but not functions, function-valued
 classes with behavior. `role:api-client` must export its proven contract. Streaming / listening external
 APIs are not supported yet.
 
-## The five tag-truth rules
+## The six tag-truth rules
 
 None has a default (`.claude/rules/no-rule-defaults.md`): each must be stated in `webpieces.config.json`
 or the config fails to load. The values below are the SEEDS a fresh config gets, and the reference
@@ -126,6 +126,28 @@ source only; a package no entry names is not judged; the per-site hatch is
 ]
 ```
 
+### `product-tags` (#1179) — graph rule, `OFF | RUN_EVERY_TIME`
+
+A monorepo can hold several PRODUCTS, each with its own clients and servers. A project names the
+products it belongs to with the nx tag `product:<name>` — lowercase kebab, several allowed
+(`product:bugfixer` + `product:helper`); a malformed one (`product:`, `product:Lang`) fails
+`architecture:generate` naming the project. Every project whose role is in `roles` must carry at least
+one; the refusal names the project, its role, its project.json and the line to add. A library is never
+tagged: it belongs to every product whose tagged project reaches it over `dependsOn`, written as
+`"products"` into `dependencies.json`, and the architecture pages filter and color by it.
+
+```json
+"product-tags": {
+  "mode": "RUN_EVERY_TIME",
+  "roles": ["server", "client", "app"],
+  "turnOffRuleUntilEpoch": 0, "turnOffRuleWhileOnBranch": null
+}
+```
+
+`roles` is required and non-empty: it decides which projects are refused, so it is behaviour, not tuning.
+A consumer that is not ready writes `"mode": "OFF"` itself — a visible choice, not a default. WHICH
+projects carry which product is each consumer repo's own decision, made in its own repo.
+
 ## Related: the wire closure and `generate:openapi-components`
 
 Every type an `@ApiPath` contract reaches must be declared in a `role:api-lib` project and carry its
@@ -138,4 +160,5 @@ These rules ship in SOURCE first (`.claude/rules/published-vs-local-source.md`).
 `webpieces.config.json` gains the five entries — and this repo's projects their retags — only in a
 follow-up PR after the release that carries them is published and the pin is bumped: the running
 validator is one release behind and would reject the unknown keys. That follow-up is
-[#1065](https://github.com/deanhiller/webpieces-ts/issues/1065).
+[#1065](https://github.com/deanhiller/webpieces-ts/issues/1065); for `product-tags` (#1179) it is
+[#1182](https://github.com/deanhiller/webpieces-ts/issues/1182).

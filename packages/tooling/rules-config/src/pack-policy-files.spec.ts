@@ -54,7 +54,7 @@ describe('strict owner-specific policy files', () => {
             fixture.selected.map((pack: SelectedPolicyPack) => pack.declaration),
         );
         const result = fixture.files.resolve(fixture.root, selected);
-        expect(result.registry.ruleIds()).toHaveLength(50);
+        expect(result.registry.ruleIds()).toHaveLength(51);
         expect(result.values['max-file-lines']['limit']).toBeUndefined();
         expect(result.registry.optionalTuningFor('max-file-lines')['limit']).toBe(900);
         expect(result.targetFiles.get('max-file-lines')).toBe(

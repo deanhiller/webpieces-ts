@@ -9,10 +9,16 @@
  *     "aiInstructions": "...how AI should use the per-project fields...",
  *     "apiContractFiles": { "<ApiName>": "apis/<ApiName>.json" },
  *     "projects": {
- *         "<project>": { level, framework, shortDescription,
+ *         "<project>": { level, framework, products, shortDescription,
  *                        responsibilitiesFile, designFile, dependsOn }
  *     }
  * }
+ *
+ * `level` is the project's dependency depth, except that every server, client and app is pinned to
+ * the TOP level (bundles above them), so the top row is exactly the entry points (#1179).
+ *
+ * `products` (#1179) is the sorted list of products whose `product:<name>`-tagged projects reach
+ * this project over `dependsOn` — its blast radius. Absent when no product reaches it.
  *
  * `framework` is the project's libType — the SET of runtime environments it is
  * validated to run in, drawn from browser | react | angular | node | express
@@ -274,6 +280,9 @@ function formatEntryLines(entry: GraphEntry): string[] {
     // MUST be persisted: validate re-derives the runtime graph from this file, so a cut written only
     // in-memory by generate would make generate and validate level (and cycle-check) different graphs.
     pushOptionalArrayField(lines, 'cutLegacyCycle', entry.cutLegacyCycle);
+    // MUST be persisted: the runtime graph's product membership is re-derived from this file during
+    // validate, and the page's Product filter / color mode read it (#1179).
+    pushOptionalArrayField(lines, 'products', entry.products);
     pushOptionalField(lines, 'shortDescription', entry.shortDescription);
     pushOptionalField(lines, 'responsibilitiesFile', entry.responsibilitiesFile);
     pushOptionalField(lines, 'designFile', entry.designFile);

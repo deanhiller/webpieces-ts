@@ -190,6 +190,9 @@ export class ArchitectureGenerator {
         console.log('🏷️  Enriching graph with framework + responsibilities metadata...');
         const projectInfos = await collectProjectInfo();
         enrichGraph(enhancedGraph, projectInfos, workspaceRoot);
+        // enrichGraph pinned servers, clients and apps to the top row (#1179): prove the promotion
+        // kept every dependency strictly below its dependent before anything is written.
+        cycles.assertLevelsDescend(reducedGraph, cycles.levelsOf(enhancedGraph), 'the entry-point-promoted graph');
         new TagTruthCheck().assertTrue(enhancedGraph, projectInfos, workspaceRoot); // #1064, before any write
 
         // Step 3b: Classify each api-lib edge (implements/uses + rpc/pubsub) by
