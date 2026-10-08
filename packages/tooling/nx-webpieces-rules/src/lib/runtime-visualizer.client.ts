@@ -121,7 +121,7 @@ class QueueCylinders {
     }
 
     private bodyPath(box: Bounds, rx: number, ry: number): string {
-        return
+        return (
             'M' +
             (box.x0 + rx) +
             ',' +
@@ -150,7 +150,8 @@ class QueueCylinders {
             (box.x0 + rx) +
             ',' +
             box.y0 +
-            ' Z';
+            ' Z'
+        );
     }
 
     /**
