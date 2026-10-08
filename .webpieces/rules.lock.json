@@ -23,7 +23,7 @@
         }
       ],
       "manifestApiVersion": 3,
-      "manifestDigest": "8d83204104a9636a9542fa81a88c899ac453b84d24a9672a2c9a7bebb17cf2dd",
+      "manifestDigest": "1868c07e21bd7d8bb821496d037b9125eff1bc5b2ca0d01870a9cf5838209bae",
       "ownedRules": [
         {
           "id": "branch-creation-guard",
@@ -40,7 +40,7 @@
       ],
       "package": "@webpieces/agent-workflow-rules",
       "packageName": "@webpieces/agent-workflow-rules",
-      "packageVersion": "0.4.876",
+      "packageVersion": "0.4.883",
       "safeguards": [
         {
           "activation": "fixed",
@@ -187,7 +187,7 @@
         }
       ],
       "manifestApiVersion": 3,
-      "manifestDigest": "fa26a320f42723f7302a7b6961b46122fff38a6eefe2dab880fd2b0c0f9c06bf",
+      "manifestDigest": "c08fc867a6d188311e0280be7f2aa19ec384f7e7a925206f54a036a886973ee7",
       "ownedRules": [
         {
           "id": "throw-cause-required",
@@ -204,7 +204,7 @@
       ],
       "package": "@webpieces/ai-hook-rules",
       "packageName": "@webpieces/ai-hook-rules",
-      "packageVersion": "0.4.876",
+      "packageVersion": "0.4.883",
       "safeguards": []
     },
     {
@@ -380,7 +380,7 @@
         }
       ],
       "manifestApiVersion": 3,
-      "manifestDigest": "edf8b84d8efbd88e5d634ca900d728ee9f059dec7ee22e6693bfdc6ae51f9d90",
+      "manifestDigest": "4e88e82cef1edb7c6e9f4a6dd64a7a735bcdb3c74bfb3d8f7e49db9ca74c8f09",
       "ownedRules": [
         {
           "id": "max-method-lines",
@@ -497,7 +497,7 @@
       ],
       "package": "@webpieces/code-rules",
       "packageName": "@webpieces/code-rules",
-      "packageVersion": "0.4.876",
+      "packageVersion": "0.4.883",
       "safeguards": []
     },
     {
@@ -608,12 +608,18 @@
         {
           "executionKind": "build",
           "implementationModule": "@webpieces/nx-webpieces-rules/rule-runtime",
+          "ownerPack": "@webpieces/nx-webpieces-rules",
+          "ruleId": "product-tags"
+        },
+        {
+          "executionKind": "build",
+          "implementationModule": "@webpieces/nx-webpieces-rules/rule-runtime",
           "ownerPack": "@webpieces/ai-hook-rules",
           "ruleId": "validate-ts-in-src"
         }
       ],
       "manifestApiVersion": 3,
-      "manifestDigest": "fb54a26cfc3ea4b11d32be394817f53db7a2e231549e923f3909cd8b242bb215",
+      "manifestDigest": "f1fa11a6f3f75d3253f2ad72f848c1292fa45e2538715f0e4885a9552829646a",
       "ownedRules": [
         {
           "id": "wiring-format",
@@ -682,11 +688,15 @@
         {
           "id": "framework-folder",
           "schemaApiVersion": 1
+        },
+        {
+          "id": "product-tags",
+          "schemaApiVersion": 1
         }
       ],
       "package": "@webpieces/nx-webpieces-rules",
       "packageName": "@webpieces/nx-webpieces-rules",
-      "packageVersion": "0.4.876",
+      "packageVersion": "0.4.883",
       "safeguards": []
     }
   ],

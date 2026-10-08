@@ -37,9 +37,10 @@
             ]
         },
         "angular-site": {
-            "level": 3,
+            "level": 8,
             "framework": ["angular"],
             "role": "client",
+            "products": ["platform"],
             "shortDescription": "Angular single-page frontend demonstrating the webpieces browser client. It injects `SaveApi`/`PublicApi` as generated HTTP clients from `client-server-api` and calls the client-server service, wiring a HeaderRegistry from `company-core` for context header transfer.",
             "responsibilitiesFile": "apps/app-example/angular-site/responsibilities.md",
             "designFile": "apps/app-example/angular-site/design.json",
@@ -94,9 +95,10 @@
             ]
         },
         "app-example-e2e": {
-            "level": 8,
+            "level": 9,
             "framework": ["express"],
             "role": "server",
+            "products": ["platform"],
             "shortDescription": "End-to-end test project for the two-service example. Boots both `client-server` and `server2` on test ports with real HTTP between them and asserts the magic context (correlation/transaction id, per-hop request-id chain, tenant) flows through both servers' logs, with secured headers masked.",
             "responsibilitiesFile": "apps/app-example/e2e/responsibilities.md",
             "dependsOn": [
@@ -109,6 +111,7 @@
             "level": 0,
             "framework": ["browser"],
             "role": "api-lib",
+            "products": ["platform"],
             "shortDescription": "Example browser vendor contract: the abstract `BrowserStorageApi` seam (key/value storage) that `angular-site` binds to a vendor implementation with `Binder.bindExternal`, recording a `uses / external` runtime edge.",
             "responsibilitiesFile": "apps/app-example/browser-storage-api/responsibilities.md",
             "dependsOn": []
@@ -124,10 +127,11 @@
             ]
         },
         "client-server": {
-            "level": 7,
+            "level": 8,
             "framework": ["express"],
             "role": "server",
             "serviceName": "client-server",
+            "products": ["platform"],
             "shortDescription": "Runnable example webpieces service (port 8200) implementing the `client-server-api` contract (SaveController, PublicController). It also acts as a client that calls `server2` over real HTTP, demonstrating DI modules, filters, and magic-context header transfer.",
             "responsibilitiesFile": "apps/app-example/client-server/responsibilities.md",
             "designFile": "apps/app-example/client-server/design.json",
@@ -179,6 +183,7 @@
             "level": 1,
             "framework": ["browser","node"],
             "role": "api-lib",
+            "products": ["platform"],
             "shortDescription": "Shared API contract for the client-server service: `SaveApi`/`PublicApi` abstract classes plus request/response DTOs, annotated with webpieces routing/auth decorators. Single source of truth implemented server-side and consumed by browser clients.",
             "responsibilitiesFile": "apps/app-example/client-server-api/responsibilities.md",
             "dependsOn": [
@@ -189,6 +194,7 @@
             "level": 3,
             "framework": ["node"],
             "role": "designed-lib",
+            "products": ["platform"],
             "shortDescription": "Cloud Tasks enqueue client generated from a shared `@PubSub` API contract — the fire-and-forget twin of http-client. Owns the enqueue proxy, the scheduler, and the TaskInvoker transports (GCP + in-memory), both of which deliver a task over real HTTP.",
             "responsibilitiesFile": "packages/cloud/cloudtasks-client/responsibilities.md",
             "designFile": "packages/cloud/cloudtasks-client/design.json",
@@ -210,6 +216,7 @@
             "level": 1,
             "framework": ["browser","node"],
             "role": "lib",
+            "products": ["platform"],
             "shortDescription": "Company-wide shared core library, browser-safe, brought in by ALL example projects. Defines the second-tier `CompanyHeaders` (tenant id, api version) as `PlatformHeader` constants that servers bind and browsers register — the company layer between framework core headers and app headers.",
             "responsibilitiesFile": "apps/app-example/company-core/responsibilities.md",
             "dependsOn": [
@@ -221,6 +228,7 @@
             "framework": ["express"],
             "role": "lib",
             "webpiecesRuntime": ["@webpieces/http-routing","@webpieces/http-server"],
+            "products": ["platform"],
             "shortDescription": "Company-wide shared SERVER core (node-only, `framework:express`). Holds the single shared server bootstrap and shared server DI so every express service starts the same way. It is the node-only counterpart to the browser-safe `company-core` and is NOT imported by Angular.",
             "responsibilitiesFile": "apps/app-example/company-svc-core/responsibilities.md",
             "runtimeDeclaration": "apps/app-example/company-svc-core/runtime-deps.json",
@@ -233,6 +241,7 @@
             "level": 1,
             "framework": ["node"],
             "role": "lib",
+            "products": ["platform"],
             "shortDescription": "AsyncLocalStorage-based request-scoped context (a TypeScript port of Java webpieces' ThreadLocal Context/MDC). Exposes the RequestContext singleton to run(), get/put/remove/clear, and to capture/restore a whole scope (as an opaque `CapturedContext`) for work that leaves the request's async chain.",
             "responsibilitiesFile": "packages/core/core-context/responsibilities.md",
             "dependsOn": [
@@ -243,6 +252,7 @@
             "level": 0,
             "framework": ["browser","node","react-native"],
             "role": "lib",
+            "products": ["platform"],
             "shortDescription": "Typed mock framework for feature tests (port of Java webpieces MockSuperclass). `createMock<T>()` returns a Proxy implementing any api plus a `.mock` control facade for the prime/assert vocabulary; `MockHandler` is the underlying queue/default/drain engine.",
             "responsibilitiesFile": "packages/core/core-mock/responsibilities.md",
             "dependsOn": []
@@ -251,6 +261,7 @@
             "level": 0,
             "framework": ["browser","node","react-native"],
             "role": "lib",
+            "products": ["platform"],
             "shortDescription": "Lowest-level, zero-dependency utilities shared across webpieces (browser and Node). Provides `toError()` for standardized catch handling, plus the `Header` interface and `ContextKey` class that higher packages build request-context and HTTP-header abstractions on.",
             "responsibilitiesFile": "packages/core/core-util/responsibilities.md",
             "dependsOn": []
@@ -277,6 +288,7 @@
             "level": 2,
             "framework": ["node"],
             "role": "lib",
+            "products": ["platform"],
             "shortDescription": "GCP runtime identity for Node services: project/region/service-account metadata, Cloud Run URL derivation, and OIDC token mint/verify — with deterministic localhost/dev fallbacks off-GCP so tests and local dev need no GCP.",
             "responsibilitiesFile": "packages/cloud/gcp-identity/responsibilities.md",
             "dependsOn": [
@@ -287,6 +299,7 @@
             "level": 3,
             "framework": ["node"],
             "role": "lib",
+            "products": ["rules"],
             "shortDescription": "Neutral hook protocol, event normalization, contributed rule evaluation and fail-closed application boundary.",
             "responsibilitiesFile": "packages/tooling/hook-runtime/responsibilities.md",
             "dependsOn": [
@@ -297,6 +310,7 @@
             "level": 2,
             "framework": ["browser","react-native","node"],
             "role": "designed-lib",
+            "products": ["platform"],
             "shortDescription": "The browser-side HTTP client: generates type-safe clients from the SAME API contract the server implements. Deliberately DI-free, because it may be bundled by React just as easily as by Angular, so it ships no `inversify` and no node-only `core-context`.",
             "responsibilitiesFile": "packages/http/http-client-browser/responsibilities.md",
             "designFile": "packages/http/http-client-browser/design.json",
@@ -308,6 +322,7 @@
             "level": 1,
             "framework": ["browser","node","react-native"],
             "role": "lib",
+            "products": ["platform"],
             "shortDescription": "The isomorphic engine of the webpieces HTTP client: reads an API contract's decorators and turns each method call into an HTTP request. It takes no position on where the magic context comes from or whether a DI container exists, so `http-client-node` and `http-client-browser` both build on it.",
             "responsibilitiesFile": "packages/http/http-client-core/responsibilities.md",
             "dependsOn": [
@@ -318,6 +333,7 @@
             "level": 3,
             "framework": ["node"],
             "role": "designed-lib",
+            "products": ["platform"],
             "shortDescription": "The server-side HTTP client: generates type-safe clients from the SAME API contract the callee's controller implements. Node-only, so it is fully inversify-wired, reads the magic context straight out of the `RequestContext`, and mints its own delivery auth.",
             "responsibilitiesFile": "packages/http/http-client-node/responsibilities.md",
             "designFile": "packages/http/http-client-node/design.json",
@@ -331,6 +347,7 @@
             "framework": ["node"],
             "role": "designed-lib",
             "webpiecesRuntime": ["@webpieces/cloudtasks-client","@webpieces/http-client-node"],
+            "products": ["platform"],
             "shortDescription": "Server-side routing layer: `@Controller`/DI decorators, `WebAppMeta`/`Routes`/`RouteBuilder` wiring, `RouteDefinition`/`FilterDefinition`, `MethodMeta`, `FilterMatcher` (glob-based filter-to-route matching), and `ApiRoutingFactory` that maps http-api decorators to controller handlers.",
             "responsibilitiesFile": "packages/http/http-routing/responsibilities.md",
             "designFile": "packages/http/http-routing/design.json",
@@ -344,6 +361,7 @@
             "framework": ["express"],
             "role": "lib",
             "webpiecesRuntime": ["@webpieces/http-routing"],
+            "products": ["platform"],
             "shortDescription": "Server runtime that assembles the HTTP layer: bootstraps the Inversify DI container, builds routes/filter chains from `WebAppMeta`, serves them over Express, ships built-in filters (Context, LogApi, Recording, ServiceAuth), the in-process test client, and the test-case recorder.",
             "responsibilitiesFile": "packages/http/http-server/responsibilities.md",
             "dependsOn": [
@@ -361,10 +379,11 @@
             ]
         },
         "legacy-server": {
-            "level": 7,
+            "level": 8,
             "framework": ["express"],
             "role": "server",
             "serviceName": "legacy-server",
+            "products": ["platform"],
             "shortDescription": "Example of INCREMENTAL webpieces adoption: a pre-existing express app (own routes, untouched) with the webpieces api → filters → controller pipeline bolted on via `WebpiecesRouteCreator`, using the SAME shared `setupCompanyRuntime` startup as the greenfield server. Proven by an integration test.",
             "responsibilitiesFile": "apps/app-example/legacy-server/responsibilities.md",
             "designFile": "apps/app-example/legacy-server/design.json",
@@ -450,9 +469,10 @@
             ]
         },
         "pr-gate": {
-            "level": 4,
+            "level": 8,
             "framework": ["node"],
             "role": "app",
+            "products": ["rules"],
             "shortDescription": "Standalone CLIs for the gated PR workflow — start/finish-upsert-pr, start/finish-update (update from main), merge start/end — plus the red/yellow/green PR dashboard that computes merge-gate results and counts newly added rule disables.",
             "responsibilitiesFile": "packages/tooling/pr-gate/responsibilities.md",
             "designFile": "packages/tooling/pr-gate/design.json",
@@ -464,6 +484,7 @@
             "level": 1,
             "framework": ["node"],
             "role": "lib",
+            "products": ["rules"],
             "shortDescription": "Repository mechanics shared by workflow guards and PR gate: sync state, merged-branch classification, worktree discovery/locks, branch identity and reaping, and identity stamps.",
             "responsibilitiesFile": "packages/tooling/repo-workflow-core/responsibilities.md",
             "dependsOn": [
@@ -471,9 +492,10 @@
             ]
         },
         "rules": {
-            "level": 0,
+            "level": 8,
             "framework": ["node"],
             "role": "app",
+            "products": ["rules"],
             "shortDescription": "This project owns validation of the repository-level `webpieces.config.json` policy without making that configuration a shared input of product projects.",
             "responsibilitiesFile": "rules/responsibilities.md",
             "dependsOn": []
@@ -482,6 +504,7 @@
             "level": 2,
             "framework": ["node"],
             "role": "designed-lib",
+            "products": ["rules"],
             "shortDescription": "Shared tooling configuration: validates webpieces.config.json, discovers owner-provided rule schemas, supplies diagnostics, path and diff scoping, and owns PR-gate review state.",
             "responsibilitiesFile": "packages/tooling/rules-config/responsibilities.md",
             "designFile": "packages/tooling/rules-config/design.json",
@@ -494,15 +517,17 @@
             "level": 0,
             "framework": ["node"],
             "role": "lib",
+            "products": ["rules"],
             "shortDescription": "Own the pure, versioned rule-pack data contracts and universal schema/value definitions. No filesystem, Git, Nx, dependency injection, execution engine, or concrete rule implementation belongs here. Keep API and schema versions independent from release versions.",
             "responsibilitiesFile": "packages/tooling/rules-sdk/responsibilities.md",
             "dependsOn": []
         },
         "server2": {
-            "level": 7,
+            "level": 8,
             "framework": ["express"],
             "role": "server",
             "serviceName": "server2",
+            "products": ["platform"],
             "shortDescription": "Runnable downstream example service (port 8202) implementing the `server2-api` contract. Server2Controller echoes received magic-context headers (request-id chain, previous-id, tenant) back in its response so callers and the e2e test can prove end-to-end context transfer.",
             "responsibilitiesFile": "apps/app-example/server2/responsibilities.md",
             "designFile": "apps/app-example/server2/design.json",
@@ -530,6 +555,7 @@
             "level": 1,
             "framework": ["browser","node"],
             "role": "api-lib",
+            "products": ["platform"],
             "shortDescription": "Shared API contract for server2: the `Server2Api` abstract class (fetchValue) plus its request/response DTOs, annotated with webpieces routing/auth decorators. Implemented by `server2` and consumed by `client-server` as an HTTP client.",
             "responsibilitiesFile": "apps/app-example/server2-api/responsibilities.md",
             "dependsOn": [
@@ -540,6 +566,7 @@
             "level": 0,
             "framework": ["node"],
             "role": "lib",
+            "products": ["rules"],
             "shortDescription": "Generic file operations, error normalization, harness config paths, and repository state path primitives. No config loader, rule policy, or workflow classification.",
             "responsibilitiesFile": "packages/tooling/tooling-common/responsibilities.md",
             "dependsOn": []
@@ -549,6 +576,7 @@
             "framework": ["node"],
             "role": "lib",
             "drawOnGraph": false,
+            "products": ["rules"],
             "shortDescription": "Own shared development fixtures, including scratch directory creation and cleanup. Consumers declare this package through devDependencies.",
             "responsibilitiesFile": "packages/tooling/tooling-testkit/responsibilities.md",
             "dependsOn": [
@@ -557,7 +585,7 @@
             ]
         },
         "webpieces-tooling": {
-            "level": 5,
+            "level": 9,
             "framework": ["node"],
             "role": "bundle",
             "shortDescription": "Thin installation umbrella for the complete webpieces toolchain and the single combined OpenClaw write/edit hook. Owns package materialization and composition smoke checks.",

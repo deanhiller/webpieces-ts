@@ -21,7 +21,7 @@
             }
         }
     },
-    "tags": ["framework:express", "role:server", "webpieces"],
+    "tags": ["framework:express", "role:server", "webpieces", "product:platform"],
     "metadata": {
         "webpieces": {
             "serviceName": "legacy-server"
