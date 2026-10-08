@@ -1,6 +1,7 @@
 [
   {
     "name": "cancel_order",
+    "title": "Cancel an order",
     "methodName": "cancel",
     "description": "Cancels one order.",
     "hints": {
@@ -47,6 +48,7 @@
   },
   {
     "name": "lookup_orders",
+    "title": "Look up orders",
     "methodName": "lookup",
     "description": "Looks up orders at one store, newest first.",
     "hints": {
@@ -202,6 +204,7 @@
   },
   {
     "name": "reindex_store",
+    "title": "Reindex a store",
     "methodName": "reindex",
     "description": "Rebuilds a store's menu cache.",
     "hints": {

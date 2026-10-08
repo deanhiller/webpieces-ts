@@ -7,14 +7,20 @@ import { WpMcpTool } from './McpMetadata';
  * with TS2578 the moment one of these starts compiling.
  */
 abstract class InvalidMcpContract {
-    // @ts-expect-error @WpMcpTool takes the stable protocol NAME, not an options object
+    // @ts-expect-error @WpMcpTool takes the stable protocol NAME and a TITLE, not an options object
     @WpMcpTool({ name: 'invalid' })
     options(_request: object): Promise<object> {
         throw new Error('contract only');
     }
 
+    // @ts-expect-error the title is REQUIRED (#1180) — the one-argument spelling is gone, not optional
+    @WpMcpTool('missing_title')
+    untitled(_request: object): Promise<object> {
+        throw new Error('contract only');
+    }
+
     // @ts-expect-error side-effect claims belong on @Endpoint.operation, never @WpMcpTool
-    @WpMcpTool('invalid', true)
+    @WpMcpTool('invalid', 'Invalid tool', true)
     hints(_request: object): Promise<object> {
         throw new Error('contract only');
     }
@@ -22,13 +28,13 @@ abstract class InvalidMcpContract {
 
 abstract class InvalidMcpArities {
     // @ts-expect-error MCP tools require exactly one request DTO
-    @WpMcpTool('zero-arity')
+    @WpMcpTool('zero-arity', 'Zero arity')
     zero(): Promise<object> {
         throw new Error('contract only');
     }
 
     // @ts-expect-error MCP tools require exactly one request DTO
-    @WpMcpTool('multi-arity')
+    @WpMcpTool('multi-arity', 'Multi arity')
     multi(_first: object, _second: object): Promise<object> {
         throw new Error('contract only');
     }

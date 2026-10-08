@@ -55,7 +55,7 @@ abstract class LockApi {
     @WpAuth([jwtAuth()])
     @WpAuthorization({ authType: AuthorizationType.ALL_USERS })
     @Endpoint(POST, '/open', WRITE_IDEMPOTENT, RPC)
-    @WpMcpTool('passage_open')
+    @WpMcpTool('passage_open', 'Open a passage')
     open(_request: LockRequest): Promise<LockResponse> {
         throw new Error('contract only');
     }
@@ -72,6 +72,7 @@ const LOCK_CATALOG = new McpToolCatalog(
     new McpToolCatalogFile('LockApi', [
         new McpToolDefinition(
             'passage_open',
+            'Open a passage',
             'open',
             'Open a passage for editing.',
             new WpMcpToolHints(false, true, true, false),

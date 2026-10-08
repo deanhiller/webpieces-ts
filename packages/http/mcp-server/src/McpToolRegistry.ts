@@ -27,6 +27,8 @@ export class RegisteredMcpTool {
         public readonly apiClass: ClassType,
         public readonly methodName: string,
         public readonly name: string,
+        /** The human-readable display name; published as BOTH `Tool.title` and `annotations.title` (#1180). */
+        public readonly title: string,
         public readonly description: string,
         public readonly annotations: WpMcpToolHints,
         public readonly operation: EndpointOperation,
@@ -141,6 +143,7 @@ export class McpToolRegistry {
             apiClass,
             metadata.methodName,
             metadata.name,
+            published.title,
             published.description,
             published.hints,
             getEndpointOperation(apiClass, metadata.methodName),
@@ -167,6 +170,15 @@ export class McpToolRegistry {
                     `${catalog.names().join(', ') || '(nothing)'}. The catalog is older than the contract — ` +
                     'rebuild the api library; a tool the build never saw is a tool whose schema nobody checked.',
             );
+            return undefined;
+        }
+        if (published.title !== metadata.title) {
+            pairing.problem(
+                `@WpMcpTool ${apiClass.name}.${metadata.methodName} is titled '${metadata.title}', but ` +
+                    `${catalog.file.fileName} (${catalog.directory}) publishes '${metadata.name}' as ` +
+                    `'${published.title}'. The catalog is older than the contract — rebuild the api library.`,
+            );
+            return undefined;
         }
         return published;
     }

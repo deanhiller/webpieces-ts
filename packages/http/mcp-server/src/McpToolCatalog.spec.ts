@@ -4,7 +4,7 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { McpToolCatalogError, McpToolCatalogFile } from '@webpieces/core-util';
+import { McpToolCatalogError, McpToolCatalogFile, McpToolDefinition } from '@webpieces/core-util';
 import { ApiClient, ApiFactory } from '@webpieces/http-routing';
 import { McpApiBinding } from './McpApiBinding';
 import { McpToolCatalog } from './McpToolCatalog';
@@ -261,6 +261,44 @@ describe('McpToolRegistry pairs each binding with ITS contract’s catalog', () 
         expect(() => new McpToolRegistry([search()], [SEARCH_API_CATALOG, clash], factory.authorizationService())).toThrow(
             /Two MCP tool catalogs for SearchApi/,
         );
+    });
+
+    it('refuses a catalog whose title is older than the contract’s @WpMcpTool title (#1180)', () => {
+        const account = SEARCH_API_CATALOG.find('account_search')!;
+        const admin = SEARCH_API_CATALOG.find('admin_search')!;
+        const stale = new McpToolCatalog(
+            new McpToolCatalogFile('SearchApi', [
+                new McpToolDefinition(
+                    account.name,
+                    'Account search (old title)',
+                    account.methodName,
+                    account.description,
+                    account.hints,
+                    account.inputSchema,
+                    account.outputSchema,
+                ),
+                admin,
+            ]),
+            IN_MEMORY,
+        );
+
+        expect(() => new McpToolRegistry([search()], [stale], factory.authorizationService())).toThrow(
+            /SearchApi\.search is titled 'Search accounts', but mcp-SearchApi-tools\.json[\s\S]*'Account search \(old title\)'[\s\S]*rebuild the api library/,
+        );
+    });
+
+    it('refuses to LOAD a stale on-disk catalog whose tools carry no title (#1180)', () => {
+        const layout = track(new Layout());
+        layout.write('dist/libraries/apis/package.json', JSON.stringify({ name: '@myorg/apis' }));
+        const untitled = JSON.parse(SEARCH_API_CATALOG.file.toJsonText()) as Array<Record<string, string>>;
+        for (const entry of untitled) delete entry['title'];
+        layout.write('dist/libraries/apis/mcp-SearchApi-tools.json', JSON.stringify(untitled));
+        layout.write('dist/services/server/src/mountMcp.js', '');
+        layout.link('node_modules/@myorg/apis', 'dist/libraries/apis');
+
+        expect(() =>
+            McpToolCatalog.fromPackages(['@myorg/apis'], path.join(layout.root, 'dist/services/server/src')),
+        ).toThrow(/no 'title' on tool 'account_search'/);
     });
 
     it('refuses an empty catalog list, saying so', () => {

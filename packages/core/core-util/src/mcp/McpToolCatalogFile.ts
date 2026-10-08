@@ -14,8 +14,14 @@ import { WpMcpToolHints } from './McpMetadata';
  */
 export class McpToolDefinition {
     constructor(
-        /** The stable protocol name from `@WpMcpTool('...')`. */
+        /** The stable protocol name from `@WpMcpTool('<name>', '<title>')`. */
         readonly name: string,
+        /**
+         * The human-readable display name from `@WpMcpTool('<name>', '<title>')`. REQUIRED (#1180):
+         * `tools/list` publishes it as both `Tool.title` and `annotations.title`, and a catalog entry
+         * without one is refused on load rather than silently publishing an untitled tool.
+         */
+        readonly title: string,
         /** The contract method it was rendered from, so a mismatch report can name the source. */
         readonly methodName: string,
         /**
@@ -96,7 +102,7 @@ export class McpToolCatalogFile {
                 throw new McpToolCatalogError(
                     `Duplicate MCP tool name '${tool.name}' in the generated catalog of ${contractName}.`,
                     'Tool names are the protocol identity and must be globally unique — rename one ' +
-                        "of the two @WpMcpTool('...') declarations.",
+                        "of the two @WpMcpTool('<name>', '<title>') declarations.",
                 );
             }
             byName.set(tool.name, tool);
@@ -189,6 +195,7 @@ class McpCatalogJson {
         const hints = this.record(record['hints'], 'a tool definition hints block');
         return new McpToolDefinition(
             this.text(record['name'], 'name'),
+            this.title(record['title'], record['name']),
             this.text(record['methodName'], 'methodName'),
             this.text(record['description'], 'description'),
             new WpMcpToolHints(
@@ -266,6 +273,23 @@ class McpCatalogJson {
         }
         // webpieces-disable no-any-unknown -- the narrowed result of the check above
         return value as Record<string, unknown>;
+    }
+
+    /**
+     * The REQUIRED, non-blank `title` (#1180). A catalog generated before titles existed has none, and
+     * is refused here so a stale artifact fails the boot loudly instead of publishing untitled tools.
+     */
+    // webpieces-disable no-any-unknown -- parsing JSON is exactly where unknown belongs
+    private title(value: unknown, name: unknown): string {
+        if (typeof value !== 'string' || value.trim() === '') {
+            throw new McpToolCatalogError(
+                `The MCP tool catalog has no 'title' on tool '${String(name)}'; every tool needs a ` +
+                    "human-readable title from @WpMcpTool('<name>', '<title>'). The catalog predates " +
+                    'required titles (#1180).',
+                REGENERATE,
+            );
+        }
+        return value;
     }
 
     // webpieces-disable no-any-unknown -- parsing JSON is exactly where unknown belongs

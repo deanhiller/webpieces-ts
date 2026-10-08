@@ -1,6 +1,7 @@
 [
   {
     "name": "fetch_orders",
+    "title": "Fetch your orders",
     "methodName": "fetchOrders",
     "description": "Read-only. Call this before answering any question about recent orders; do not reuse an\nearlier answer, order state changes minute to minute.",
     "hints": {

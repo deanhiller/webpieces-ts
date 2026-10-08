@@ -1,6 +1,7 @@
 [
   {
     "name": "read_passage",
+    "title": "Read a passage",
     "methodName": "readPassage",
     "description": "Reads one stored passage.",
     "hints": {

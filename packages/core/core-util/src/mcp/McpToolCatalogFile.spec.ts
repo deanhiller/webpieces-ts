@@ -13,6 +13,7 @@ function tool(name: string): McpToolDefinition {
     const output = new ObjectSchemaBuilder().required('ok', new ApiJsonSchema('boolean')).build();
     return new McpToolDefinition(
         name,
+        `Title of ${name}`,
         'fetchOrders',
         'Read-only. Call this before answering.',
         new WpMcpToolHints(true, false, true, false),
@@ -61,6 +62,29 @@ describe('McpToolCatalogFile', () => {
         expect(() => McpToolCatalogFile.fromJsonText(FILE, '{}')).toThrow(/openapi-generate/);
         expect(() => McpToolCatalogFile.fromJsonText(FILE, '[{"name":"a"}]')).toThrow(
             /is missing a tool definition hints block/,
+        );
+    });
+
+    it('round-trips the REQUIRED title (#1180)', () => {
+        const text = new McpToolCatalogFile('OrdersApi', [tool('lookup_orders')]).toJsonText();
+
+        expect(JSON.parse(text)[0].title).toBe('Title of lookup_orders');
+        expect(McpToolCatalogFile.fromJsonText(FILE, text).find('lookup_orders')?.title).toBe(
+            'Title of lookup_orders',
+        );
+    });
+
+    it('REFUSES a stale catalog entry with no title, or a blank one, naming the tool and the cure (#1180)', () => {
+        const entry = JSON.parse(new McpToolCatalogFile('OrdersApi', [tool('lookup_orders')]).toJsonText())[0];
+        delete entry.title;
+        expect(() => McpToolCatalogFile.fromJsonText(FILE, JSON.stringify([entry]))).toThrow(McpToolCatalogError);
+        expect(() => McpToolCatalogFile.fromJsonText(FILE, JSON.stringify([entry]))).toThrow(
+            /no 'title' on tool 'lookup_orders'.*openapi-generate/s,
+        );
+
+        entry.title = '  ';
+        expect(() => McpToolCatalogFile.fromJsonText(FILE, JSON.stringify([entry]))).toThrow(
+            /no 'title' on tool 'lookup_orders'/,
         );
     });
 

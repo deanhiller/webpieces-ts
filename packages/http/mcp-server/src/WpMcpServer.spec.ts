@@ -221,6 +221,29 @@ describe('WpMcpServer HTTP bridge', () => {
         );
     });
 
+    it('publishes the @WpMcpTool title as BOTH Tool.title and annotations.title on every tool (#1180)', async () => {
+        const tools = resultOf((await post(request('tools/list'))).payload)['tools'] as Array<
+            Record<string, unknown>
+        >;
+        expect(tools).toHaveLength(2);
+        expect(tools[0]).toMatchObject({
+            name: 'account_search',
+            title: 'Search accounts',
+            annotations: {
+                title: 'Search accounts',
+                readOnlyHint: true,
+                destructiveHint: false,
+                idempotentHint: true,
+                openWorldHint: false,
+            },
+        });
+        expect(tools[1]).toMatchObject({
+            name: 'remote_search',
+            title: 'Remote search',
+            annotations: { title: 'Remote search', destructiveHint: true },
+        });
+    });
+
     it('opens request-scoped SSE for subscriptions and distributes tool invalidation', async () => {
         const body = request('subscriptions/listen', { notifications: { toolsListChanged: true } });
         const abort = new AbortController();
@@ -535,7 +558,7 @@ describe('WpMcpServer HTTP bridge', () => {
             /** Invalid: missing common authorization. */
             @WpAuth([jwtAuth()])
             @Endpoint(POST, '/tool', WRITE, RPC)
-            @WpMcpTool('missing_mcp_auth')
+            @WpMcpTool('missing_mcp_auth', 'Missing MCP auth')
             tool(_request: SearchRequest): Promise<SearchResponse> {
                 throw new Error('contract only');
             }

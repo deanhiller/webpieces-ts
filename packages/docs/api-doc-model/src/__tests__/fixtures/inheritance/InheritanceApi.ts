@@ -54,7 +54,7 @@ export interface LearnerLookupRequest extends LearnerNamedDto, AgedDto {
 @ApiPath('/lessons')
 export abstract class InheritanceApi {
     /** Renders one lesson. */
-    @WpMcpTool('render_lesson')
+    @WpMcpTool('render_lesson', 'Render a lesson')
     @WpAuth([jwtAuth()])
     @WpAuthorization({ authType: AuthorizationType.ALL_USERS })
 
@@ -64,7 +64,7 @@ export abstract class InheritanceApi {
     }
 
     /** Looks one learner up. */
-    @WpMcpTool('lookup_learner')
+    @WpMcpTool('lookup_learner', 'Look up a learner')
     @WpAuth([jwtAuth()])
     @WpAuthorization({ authType: AuthorizationType.ALL_USERS })
 

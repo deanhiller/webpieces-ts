@@ -129,7 +129,7 @@ export interface OverlapRequest {
 @ApiPath('/stories')
 export abstract class McpEnumApi {
     /** Writes one story. */
-    @WpMcpTool('write_story')
+    @WpMcpTool('write_story', 'Write a story')
     @WpAuth([jwtAuth()])
     @WpAuthorization({ authType: AuthorizationType.ALL_USERS })
 
@@ -139,7 +139,7 @@ export abstract class McpEnumApi {
     }
 
     /** Refused: its request holds a union TypeScript cannot narrow. */
-    @WpMcpTool('overlap_story')
+    @WpMcpTool('overlap_story', 'Overlap a story')
     @WpAuth([jwtAuth()])
     @WpAuthorization({ authType: AuthorizationType.ALL_USERS })
 

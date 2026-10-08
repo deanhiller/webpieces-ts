@@ -64,9 +64,15 @@ function describedString(description: string): ApiJsonSchema {
     return schema;
 }
 
-function searchTool(name: string, methodName: string, description: string): McpToolDefinition {
+function searchTool(
+    name: string,
+    title: string,
+    methodName: string,
+    description: string,
+): McpToolDefinition {
     return new McpToolDefinition(
         name,
+        title,
         methodName,
         description,
         new WpMcpToolHints(true, false, true, false),
@@ -86,23 +92,23 @@ function contractCatalog(contractName: string, tool: McpToolDefinition): McpTool
 
 export const REMOTE_MCP_CATALOG = contractCatalog(
     'RemoteMcpApi',
-    searchTool('remote_integration_search', 'search', 'Calls a remote Webpieces API.'),
+    searchTool('remote_integration_search', 'Remote integration search', 'search', 'Calls a remote Webpieces API.'),
 );
 
 /** The catalogs of every contract the gateway binds — one per contract, exactly as a build writes them. */
 export const GATEWAY_CATALOGS: readonly McpToolCatalog[] = [
     contractCatalog(
         'MissingRemoteMcpApi',
-        searchTool('missing_remote_integration_search', 'search', 'Intentionally absent route.'),
+        searchTool('missing_remote_integration_search', 'Missing remote integration search', 'search', 'Intentionally absent route.'),
     ),
-    contractCatalog('RefusedRemoteApi', searchTool('refused_remote', 'search', 'Nothing listens on this port.')),
-    contractCatalog('GarbageRemoteApi', searchTool('garbage_remote', 'search', 'Answers an undecodable body.')),
+    contractCatalog('RefusedRemoteApi', searchTool('refused_remote', 'Refused remote call', 'search', 'Nothing listens on this port.')),
+    contractCatalog('GarbageRemoteApi', searchTool('garbage_remote', 'Garbage remote response', 'search', 'Answers an undecodable body.')),
     contractCatalog(
         'OidcFailRemoteApi',
-        searchTool('oidc_fail_remote', 'search', 'Its OIDC token cannot be minted.'),
+        searchTool('oidc_fail_remote', 'OIDC failure on remote', 'search', 'Its OIDC token cannot be minted.'),
     ),
-    contractCatalog('LocalThrowApi', searchTool('local_throw', 'fail', 'Throws the requested failure in-process.')),
-    contractCatalog('RemoteThrowApi', searchTool('remote_throw', 'fail', 'Throws the requested failure remotely.')),
+    contractCatalog('LocalThrowApi', searchTool('local_throw', 'Local throw', 'fail', 'Throws the requested failure in-process.')),
+    contractCatalog('RemoteThrowApi', searchTool('remote_throw', 'Remote throw', 'fail', 'Throws the requested failure remotely.')),
 ];
 
 @ApiPath('/remote-mcp')
@@ -113,7 +119,7 @@ export abstract class RemoteMcpApi {
     @WpAuth([oidcAuth('mcp-gateway')])
     @WpAuthorization({ authType: AuthorizationType.USERS_OR_SERVICES })
     @Endpoint(POST, '/search', READ, RPC)
-    @WpMcpTool('remote_integration_search')
+    @WpMcpTool('remote_integration_search', 'Remote integration search')
     search(_request: RemoteRequest): Promise<RemoteResponse> {
         throw new Error('contract only');
     }
@@ -127,7 +133,7 @@ export abstract class MissingRemoteMcpApi {
     @WpAuth([oidcAuth('mcp-gateway')])
     @WpAuthorization({ authType: AuthorizationType.USERS_OR_SERVICES })
     @Endpoint(POST, '/search', READ, RPC)
-    @WpMcpTool('missing_remote_integration_search')
+    @WpMcpTool('missing_remote_integration_search', 'Missing remote integration search')
     search(_request: RemoteRequest): Promise<RemoteResponse> {
         throw new Error('contract only');
     }
@@ -141,7 +147,7 @@ export abstract class RefusedRemoteApi {
     @WpAuth([oidcAuth('mcp-gateway')])
     @WpAuthorization({ authType: AuthorizationType.USERS_OR_SERVICES })
     @Endpoint(POST, '/search', READ, RPC)
-    @WpMcpTool('refused_remote')
+    @WpMcpTool('refused_remote', 'Refused remote call')
     search(_request: RemoteRequest): Promise<RemoteResponse> {
         throw new Error('contract only');
     }
@@ -155,7 +161,7 @@ export abstract class GarbageRemoteApi {
     @WpAuth([oidcAuth('mcp-gateway')])
     @WpAuthorization({ authType: AuthorizationType.USERS_OR_SERVICES })
     @Endpoint(POST, '/search', READ, RPC)
-    @WpMcpTool('garbage_remote')
+    @WpMcpTool('garbage_remote', 'Garbage remote response')
     search(_request: RemoteRequest): Promise<RemoteResponse> {
         throw new Error('contract only');
     }
@@ -169,7 +175,7 @@ export abstract class OidcFailRemoteApi {
     @WpAuth([oidcAuth('mcp-gateway')])
     @WpAuthorization({ authType: AuthorizationType.USERS_OR_SERVICES })
     @Endpoint(POST, '/search', READ, RPC)
-    @WpMcpTool('oidc_fail_remote')
+    @WpMcpTool('oidc_fail_remote', 'OIDC failure on remote')
     search(_request: RemoteRequest): Promise<RemoteResponse> {
         throw new Error('contract only');
     }
@@ -183,7 +189,7 @@ export abstract class LocalThrowApi {
     @WpAuth([jwtAuth()])
     @WpAuthorization({ authType: AuthorizationType.ALL_USERS })
     @Endpoint(POST, '/throw', READ, RPC)
-    @WpMcpTool('local_throw')
+    @WpMcpTool('local_throw', 'Local throw')
     fail(_request: RemoteRequest): Promise<RemoteResponse> {
         throw new Error('contract only');
     }
@@ -197,7 +203,7 @@ export abstract class RemoteThrowApi {
     @WpAuth([oidcAuth('mcp-gateway')])
     @WpAuthorization({ authType: AuthorizationType.USERS_OR_SERVICES })
     @Endpoint(POST, '/throw', READ, RPC)
-    @WpMcpTool('remote_throw')
+    @WpMcpTool('remote_throw', 'Remote throw')
     fail(_request: RemoteRequest): Promise<RemoteResponse> {
         throw new Error('contract only');
     }

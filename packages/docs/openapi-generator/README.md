@@ -141,8 +141,10 @@ from any package, exactly as before, and require no components document anywhere
 does not declare `MCP` is an error. Membership has one spelling.
 
 The agent reads the SAME `description` a human does — the method's JSDoc, byte for byte. Two authored
-copies of one paragraph drift the first time somebody edits one, so `@WpMcpTool('search_stores')`
-carries only what JSDoc cannot say: the stable protocol name. `readOnlyHint`, `destructiveHint` and
+copies of one paragraph drift the first time somebody edits one, so
+`@WpMcpTool('search_stores', 'Search stores')` carries only what JSDoc cannot say: the stable protocol
+name and the REQUIRED human-readable title, which each catalog entry carries as `title` and `tools/list`
+publishes as `title` and `annotations.title` (#1180). `readOnlyHint`, `destructiveHint` and
 `idempotentHint` are computed from the endpoint's declared `operation`; `openWorldHint` comes from
 `{ openWorld: true }` on the endpoint.
 

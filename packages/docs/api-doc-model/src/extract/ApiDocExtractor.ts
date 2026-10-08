@@ -587,8 +587,9 @@ export class ApiDocExtractor {
     }
 
     /**
-     * `@WpMcpTool('search_stores')` — the stable protocol name, which is the ONE fact the source
-     * cannot otherwise state.
+     * `@WpMcpTool('search_stores', 'Search stores')` — the stable protocol name and the REQUIRED
+     * human-readable title (#1180), the two facts the source cannot otherwise state. A title that
+     * does not fold to a string is read as the empty string, which the MCP renderer refuses.
      *
      * Nothing else is read because nothing else is declared there any more (#984): the method's JSDoc
      * is the description for the agent and the partner alike, the three side-effect hints are computed
@@ -605,7 +606,9 @@ export class ApiDocExtractor {
         if (argument === undefined) {
             return undefined;
         }
-        return new DocumentedMcpTool(folder.tryFoldString(argument) ?? '');
+        const titleArgument = call?.arguments[1];
+        const title = titleArgument === undefined ? '' : (folder.tryFoldString(titleArgument) ?? '');
+        return new DocumentedMcpTool(folder.tryFoldString(argument) ?? '', title);
     }
 
     /**

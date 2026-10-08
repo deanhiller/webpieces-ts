@@ -42,7 +42,7 @@ export class FsdbApi {
     @Endpoint(POST, '/passage', READ, RPC)
     @WpAuthPublic('Fixture only.')
     @WpAuthorization({ authType: AuthorizationType.ANONYMOUS, reason: 'Fixture only.' })
-    @WpMcpTool('read_passage')
+    @WpMcpTool('read_passage', 'Read a passage')
     readPassage(request: StoredPassageRequest): Promise<StoredPassageResponse> {
         throw new Error('contract');
     }
