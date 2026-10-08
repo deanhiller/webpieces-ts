@@ -1,4 +1,4 @@
-import { RuntimeDetails } from './runtime-details';
+import { LevelBand, LevelBandLayout } from './graph-level-bands';
 /**
  * Runtime Visualizer
  *
@@ -38,8 +38,7 @@ import { RuntimeDetails } from './runtime-details';
  *
  * EVERY node on the rendered page is clickable and opens the SHARED floating menu
  * (graph-node-menu.ts — one implementation, also used by architecture/dependencies.html
- * and every project's design.html). Lock/Unlock dims every
- * other node and every edge and lights the locked box alone. There is no "View Design"
+ * and every project's design.html). Lock/Unlock pins separate complete incoming/outgoing chains, with hover adding a temporary chain. There is no "View Design"
  * item here — a node is a running service, queue, datastore or third-party system, not
  * an nx project, so no design.html exists to point at and the item is absent rather than
  * dead. Filter Unconnected follows separate incoming/outgoing chains and compacts the rendered
@@ -57,9 +56,10 @@ import type {
 } from './runtime-graph';
 import { dotValue, recordValue, assertValidDot } from './dot-syntax';
 import { GraphRenderModel } from './graph-render-model';
+import type { EnhancedGraph } from './graph-sorter';
+import { RuntimeViewerAdapter } from './runtime-viewer-adapter';
 import { RuntimeHtmlPage } from './runtime-html-page';
 import {
-    LEVEL_COLORS,
     QUEUE_FILL,
     QUEUE_SHAPE,
     QUEUE_LABEL_PREFIX,
@@ -88,6 +88,8 @@ export class RuntimeVizOptions {
          * direct policy-ID map (runtime-architecture.showExternalNodes).
          */
         public readonly showExternalNodes: boolean = true,
+        public readonly projects: EnhancedGraph | null = null,
+        public readonly workspaceRoot: string = '',
     ) {}
 }
 
@@ -117,21 +119,6 @@ function labelList(entries: string[]): string {
         lines.push(safe.slice(i, i + APIS_PER_LABEL_LINE).join(', '));
     }
     return lines.join('\\n');
-}
-
-/** Compact affordances carry full details in the HTML, including hidden external uses. */
-// webpieces-disable no-function-outside-class -- DOT label builder, matching getShortName in this file
-function nodeLabel(name: string, svc: RuntimeService, usesCount: number): string {
-    // The DECLARED role when the graph carries one; the old inference only as a fallback for a
-    // runtime-dependencies.json committed before `role` existed. Inferring it labelled every server
-    // with no implements as a "client", which is exactly wrong for a queue-driven service.
-    const role = svc.role ?? (svc.implements.length > 0 ? 'server' : 'client');
-    // The declared name is quoted for the reader — those quotes MUST be DOT-escaped, or they end
-    // the label string and the whole graph stops parsing.
-    const declared = svc.serviceName === undefined ? '' : `, \\"${dotValue(svc.serviceName)}\\"`;
-    let label = `${dotValue(getShortName(name))}\\n(${role}, L${svc.level}${declared})`;
-    label += `\\nImplements (${svc.implements.length})\\nUses (${usesCount})`;
-    return label;
 }
 
 /**
@@ -201,6 +188,7 @@ function queueBoxDot(
     producers: string[],
     consumers: string[],
     model: GraphRenderModel,
+    contractCount: number,
 ): string {
     // Record-mode label: the text must clear recordValue(), and QUEUE_LABEL_PREFIX supplies the
     // empty leading field that draws the cylinder's end cap. Drop it and the node silently
@@ -214,13 +202,13 @@ function queueBoxDot(
         dot += model.edge(
             producer,
             id,
-            `  "${serviceNodeId(producer)}" -> "${id}" [label="enqueue", style=dashed];\n`,
+            `  "${serviceNodeId(producer)}" -> "${id}" [label="Uses (${contractCount}) ▾\\nenqueue", style=dashed];\n`,
         );
     for (const consumer of consumers)
         dot += model.edge(
             id,
             consumer,
-            `  "${id}" -> "${serviceNodeId(consumer)}" [label="deliver", style=dashed];\n`,
+            `  "${id}" -> "${serviceNodeId(consumer)}" [label="Uses (${contractCount}) ▾\\ndeliver", style=dashed];\n`,
         );
     return dot;
 }
@@ -292,6 +280,7 @@ function queuesDot(graph: RuntimeGraph, hidden: Set<string>, model: GraphRenderM
                 [from],
                 [to],
                 model,
+                edge.via.length,
             );
             continue;
         }
@@ -310,6 +299,7 @@ function queuesDot(graph: RuntimeGraph, hidden: Set<string>, model: GraphRenderM
             group.producers,
             group.consumers,
             model,
+            1,
         );
     }
     return dot;
@@ -571,7 +561,8 @@ export function generateRuntimeRenderModel(
     options: RuntimeVizOptions = new RuntimeVizOptions(),
 ): GraphRenderModel {
     const model = new GraphRenderModel();
-    const details = new RuntimeDetails(graph, options.showExternalNodes);
+    model.viewer = 'runtime';
+    const adapter = new RuntimeViewerAdapter(graph, options.projects);
     let dot = 'digraph RuntimeArchitecture {\n';
     dot += '  rankdir=TB;\n';
     dot += '  node [shape=box, style="filled,rounded", fontname="Arial"];\n';
@@ -590,14 +581,11 @@ export function generateRuntimeRenderModel(
     for (const name of Object.keys(graph.services)) {
         if (hidden.has(name)) continue;
         const svc = graph.services[name];
-        const color = LEVEL_COLORS[svc.level] || '#F5F5F5';
-        dot += model.node(
-            name,
-            `  "${serviceNodeId(name)}" [fillcolor="${color}", label="${nodeLabel(name, svc, details.nodes[name].used.length)}"];\n`,
-            svc.products ?? [],
-        );
+        dot += adapter.service(model, name, svc);
     }
 
+    model.bands = [...new Set(model.nodes.map(node => node.tags!.level))].sort((a, b) => b - a).map(level => new LevelBand(level, model.nodes.filter(node => node.tags?.level === level).map(node => node.id)));
+    dot += new LevelBandLayout().dot(model.bands);
     dot += '\n';
 
     for (const edge of graph.runtimeEdges) {
@@ -627,6 +615,7 @@ export function generateRuntimeRenderModel(
     model.completeEndpoints();
     // #1179: a queue, trigger or external system belongs to the products of the services it touches.
     model.attachProducts((id: string): boolean => graph.services[id] !== undefined);
+    adapter.contextModes(model);
     model.fullDot = dot;
     return model;
 }
@@ -654,7 +643,7 @@ export function writeRuntimeVisualization(
     const htmlPath = path.join(outputDir, 'runtime-architecture.html');
     fs.writeFileSync(
         htmlPath,
-        new RuntimeHtmlPage().render(model, title, graph, options.showExternalNodes),
+        new RuntimeHtmlPage().render(model, title, graph, options),
         'utf-8',
     );
 

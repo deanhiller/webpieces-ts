@@ -132,19 +132,26 @@ describe.skipIf(!process.env.WP_GRAPH_VIZ_JS)('products in a real browser (#1179
         const html = new RuntimeHtmlPage(
             () => FilterFixture.client('runtime-visualizer.client.ts'),
             () => FilterFixture.client('graph-filter.client.ts'),
+            () => FilterFixture.client('graph-visualizer.client.ts'),
         ).render(generateRuntimeRenderModel(runtime), 'Runtime', runtime);
         const page = await fixture.open('1179-runtime-products', html);
         const full = await fixture.names(page);
-        expect(await page.locator('#wp-product-filter .wp-chip').allTextContents()).toEqual(['helper', 'lang']);
-        await page.locator('#wp-product-filter [data-wp-product="lang"]').click();
+        expect(await page.locator('#wp-product-group .wp-chip').allTextContents()).toEqual(['helper', 'lang']);
+        await page.locator('#wp-filter-open').click();
+        await page.locator('#wp-product-group [data-wp-chip="lang"]').click();
+        await page.locator('#wp-filter-apply').click();
         await expect
             .poll(() => fixture.names(page))
             .toEqual(['consumer', 'cron__SweepApi_run', 'external__@vendor/api', 'producer', 'queue__TaskApi_send', 'system__db']);
-        expect(await page.locator('#wp-product-filter [data-wp-product="lang"]').getAttribute('aria-pressed')).toBe('true');
-        await page.locator('#wp-product-filter [data-wp-product="helper"]').click();
+        expect(await page.locator('#wp-product-group [data-wp-chip="lang"]').getAttribute('aria-pressed')).toBe('true');
+        await page.locator('#wp-filter-open').click();
+        await page.locator('#wp-product-group [data-wp-chip="helper"]').click();
+        await page.locator('#wp-filter-apply').click();
         await expect.poll(async () => (await fixture.names(page)).includes('unrelated')).toBe(true);
-        await page.locator('#wp-product-filter [data-wp-product="lang"]').click();
-        await page.locator('#wp-product-filter [data-wp-product="helper"]').click();
+        await page.locator('#wp-filter-open').click();
+        await page.locator('#wp-product-group [data-wp-chip="lang"]').click();
+        await page.locator('#wp-product-group [data-wp-chip="helper"]').click();
+        await page.locator('#wp-filter-apply').click();
         await expect.poll(() => fixture.names(page)).toEqual(full);
         await page.close();
     });
@@ -154,6 +161,7 @@ describe.skipIf(!process.env.WP_GRAPH_VIZ_JS)('products in a real browser (#1179
         const html = new RuntimeHtmlPage(
             () => FilterFixture.client('runtime-visualizer.client.ts'),
             () => FilterFixture.client('graph-filter.client.ts'),
+            () => FilterFixture.client('graph-visualizer.client.ts'),
         ).render(generateRuntimeRenderModel(runtime), 'Runtime', runtime);
         const page = await fixture.open('1179-runtime-no-products', html);
         expect(await page.locator('#wp-product-filter').count()).toBe(0);

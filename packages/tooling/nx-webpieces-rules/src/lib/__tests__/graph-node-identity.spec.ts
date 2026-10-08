@@ -191,8 +191,8 @@ describe('generateRuntimeDot node identity', () => {
 
     it('keys each service box on its project key while labeling it with the short name', () => {
         const dot = generateRuntimeDot(RUNTIME);
-        expect(dot).toContain('"@mealco-internal/public-api" [fillcolor=');
-        expect(dot).toContain('label="public-api\\n(server, L0)');
+        expect(dot).toContain('"@mealco-internal/public-api" [style="filled", fillcolor=');
+        expect(dot).toContain('<B>public-api</B><BR/>server');
     });
 
     it('draws the call as a real arrow between two boxes, never as a self-loop', () => {

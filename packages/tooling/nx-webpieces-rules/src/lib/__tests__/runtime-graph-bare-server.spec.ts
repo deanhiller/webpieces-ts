@@ -67,7 +67,7 @@ describe('a role:server with no apiRelations at all', () => {
     });
 
     it('is labelled (server, L0) rather than the old implements-inferred "client"', () => {
-        expect(generateRuntimeDot(derived)).toContain('crm-manager\\n(server, L0)');
+        expect(generateRuntimeDot(derived)).toContain('<B>crm-manager</B><BR/>server');
     });
 
     it('is removed from the DOT by drawOnGraph:false — and by nothing else', () => {
@@ -94,7 +94,7 @@ describe('a bare server that DOES speak the webpieces runtime, once markers are 
         const report = deriveRuntimeGraphReport(graphWithMarkers());
         expect(report.graph.services['crm-manager'].drawOnGraph).toBeUndefined();
         expect(report.autoHidden).toEqual([]);
-        expect(generateRuntimeDot(report.graph)).toContain('crm-manager\\n(server, L0)');
+        expect(generateRuntimeDot(report.graph)).toContain('<B>crm-manager</B><BR/>server');
     });
 
     it('is hidden from the DRAWING but KEPT in the data once the markers go away', () => {

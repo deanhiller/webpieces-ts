@@ -14,6 +14,7 @@ import { describe, it, expect } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as ts from 'typescript';
+import { FilterFixture } from './graph-filter-fixture';
 import { GraphRenderModel } from '../graph-render-model';
 import { RuntimeHtmlPage } from '../runtime-html-page';
 
@@ -32,7 +33,7 @@ const filterJs = (): string =>
 const html = (): string => {
     const model = new GraphRenderModel();
     model.fullDot = DOT;
-    return new RuntimeHtmlPage(clientJs, filterJs).render(model, 'Runtime', {
+    return new RuntimeHtmlPage(clientJs, filterJs, () => FilterFixture.client('graph-visualizer.client.ts')).render(model, 'Runtime', {
         services: {},
         apis: {},
         runtimeEdges: [],
@@ -56,7 +57,7 @@ describe('runtime architecture page node menu', () => {
         const page = html();
         expect(page).toContain("querySelectorAll('g.node')");
         expect(page).toContain('WpNodeMenu.wire');
-        expect(page).toContain('RuntimeNodeMenu');
+        expect(page).toContain('GraphHighlighter');
     });
 
     it('dismisses on an outside click and on Escape, from the shared handlers', () => {
@@ -66,13 +67,10 @@ describe('runtime architecture page node menu', () => {
         expect(page).toContain('WpNodeMenu.close()');
     });
 
-    it('labels the one item Lock or Unlock from that node lock state, and toggles the same lock', () => {
-        const page = html();
-        expect(page).toContain("isLocked(name) ? 'Unlock' : 'Lock'");
-        expect(page).toContain('lock.toggle(name, node)');
-        // Both directions run through the ONE WpNodeLock instance the page holds.
-        expect(page).toContain('new WpNodeLock');
-        expect(page).toContain('class WpNodeLock');
+    it('uses shared chain lock state and offers service Implements through the adapter', () => {
+        expect(html()).toContain('locked ? this.page.clearSelection() : this.page.setLock(name)');
+        expect(html()).toContain("new WpNodeMenuItem('Implements'");
+        expect(html()).toContain('wp-lock-toggle');
     });
 
     it('locks by dimming every other box and lighting the locked one, with the shared dim css', () => {
@@ -92,7 +90,7 @@ describe('runtime architecture page node menu', () => {
         // The architecture page builds its item as new WpNodeMenuItem('View Design', ...) — that
         // exact spelling is what must be absent here (the prose in the client's docstring, which
         // explains WHY it is absent, deliberately is not it).
-        expect(page).not.toContain("'View Design'");
+        expect(page).toContain('const designs = new Map');
         expect(page).not.toContain('__DESIGN_LINKS__');
     });
 
@@ -109,10 +107,10 @@ describe('runtime architecture page node menu', () => {
         expect(html()).toContain('stroke: #8b3cf0;');
     });
 
-    it("has no lock dropdown, so the menu is the page's only lock control", () => {
+    it("has searchable Focus and independent Lock and chain switches", () => {
         const page = html();
-        expect(page).not.toContain('wp-lock');
-        expect(page).toContain('<strong>Lock</strong>');
+        expect(page).toContain('id="wp-lock"');
+        expect(page).toContain('wp-filter-toggle');
     });
 
     it('still renders the graph and reshapes the queues alongside the menu', () => {

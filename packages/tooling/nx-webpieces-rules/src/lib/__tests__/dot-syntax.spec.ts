@@ -79,3 +79,12 @@ describe('recordValue', () => {
         expect(() => assertValidDot(dot, 'test.dot')).not.toThrow();
     });
 });
+
+describe('HTML labels in runtime mode statements', () => {
+    it('accepts nested tables, attribute quotes and # entities without treating them as DOT comments', () => {
+        expect(() => assertValidDot('digraph G { "n" [label=<<TABLE BGCOLOR="#7d8cf2"><TR><TD>&#160;Implements (1)</TD></TR></TABLE>>]; }', 'runtime')).not.toThrow();
+    });
+    it('rejects an unterminated HTML label', () => {
+        expect(() => assertValidDot('digraph G { "n" [label=<<B>broken</B>]; }', 'runtime')).toThrow(/unterminated HTML label/);
+    });
+});

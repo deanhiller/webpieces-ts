@@ -564,7 +564,7 @@ describe('the runtime node says what it implements and where that came from', ()
         expect(dot).not.toContain('uses: HelperFsdbApi');
         // The declared runtime name is on the node too, so the ClientConfig string is discoverable.
         // The quotes around it are ESCAPED — a bare `"` here ends the label and kills the graph.
-        expect(dot).toContain(', \\"helper-portal\\")');
+        expect(dot).toContain('&quot;helper-portal&quot;');
     });
 
     it('keeps a service name containing DOT-special characters from breaking the graph', () => {
@@ -572,7 +572,7 @@ describe('the runtime node says what it implements and where that came from', ()
         withQuote.services['helper-svr'].serviceName = 'odd"name\\path';
         const dot = generateRuntimeDot(withQuote);
         // Escaped, not merely assumed harmless — and generateRuntimeDot parse-checks what it emits.
-        expect(dot).toContain('odd\\"name\\\\path');
+        expect(dot).toContain('odd&quot;name\\path');
     });
 
     it('shows an api that a server serves and NOTHING in-repo calls', () => {
@@ -654,10 +654,10 @@ describe('generateRuntimeDot — rpc direct, pubsub via queue', () => {
     it('draws the pubsub edge through a cylinder queue node', () => {
         expect(dot).toContain('"queue__producer__consumer" [shape=Mrecord');
         expect(dot).toContain(
-            '"producer" -> "queue__producer__consumer" [label="enqueue", style=dashed] [id="wp-real-edge-1"];',
+            '"producer" -> "queue__producer__consumer" [label="Uses (1) ▾\\nenqueue", style=dashed] [id="wp-real-edge-1"];',
         );
         expect(dot).toContain(
-            '"queue__producer__consumer" -> "consumer" [label="deliver", style=dashed] [id="wp-real-edge-2"];',
+            '"queue__producer__consumer" -> "consumer" [label="Uses (1) ▾\\ndeliver", style=dashed] [id="wp-real-edge-2"];',
         );
     });
 });

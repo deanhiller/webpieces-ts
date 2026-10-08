@@ -7,6 +7,10 @@
  * Usage: nx run architecture:visualize-runtime
  */
 
+import * as fs from 'fs';
+import * as path from 'path';
+import { DEFAULT_GRAPH_PATH } from '../../lib/graph-loader';
+import { ImpactRefresh, ImpactSidecar, VISUALIZE_IMPACT_KINDS } from '../../lib/graph-impact';
 import type { ExecutorContext } from '@nx/devkit';
 import { SavedSnapshot } from '../../lib/saved-snapshot';
 import { RuleFailError, renderRuleFailForHuman } from '@webpieces/rules-config';
@@ -37,10 +41,13 @@ export default async function runExecutor(
     try {
         const graph = snapshot.loadRuntime(workspaceRoot);
         const config = loadRuntimeConfig(workspaceRoot);
-        const options = new RuntimeVizOptions(config.showExternalNodes);
+        const projects = fs.existsSync(path.join(workspaceRoot, DEFAULT_GRAPH_PATH)) ? snapshot.loadProjects(workspaceRoot, DEFAULT_GRAPH_PATH).projects : null;
+        const options = new RuntimeVizOptions(config.showExternalNodes, projects, workspaceRoot);
         const vizPaths = writeRuntimeVisualization(graph, workspaceRoot, undefined, options);
         console.log(`✅ Generated: ${vizPaths.dotPath}`);
         console.log(`✅ Generated: ${vizPaths.htmlPath}`);
+        if (projects !== null) console.log(await new ImpactRefresh().run(path.dirname(vizPaths.htmlPath), workspaceRoot, projects, VISUALIZE_IMPACT_KINDS));
+        else { new ImpactSidecar().remove(path.dirname(vizPaths.htmlPath)); console.log('Impact and framework metadata unavailable: no saved project graph. Refresh explicitly with architecture:generate.'); }
 
         console.log('\n🌐 Opening visualization in browser...');
         if (new GraphVisualizer().openVisualization(vizPaths.htmlPath)) {

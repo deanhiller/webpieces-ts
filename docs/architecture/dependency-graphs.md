@@ -192,11 +192,11 @@ rewrites saved JSON or runtime visibility settings.
 A page has one active filter. Every surviving node menu and the visible indicator
 naming the anchor offer **Turn off Filter**. Turn it off before choosing another
 anchor. Hover, Escape and outside clicks leave filtering active. Lock is independent:
-architecture Lock pins its full chain in the foreground. Hover adds its own chain
+both viewers’ Lock pins its full chain in the foreground. Hover adds its own chain
 temporarily without dimming any locked node or edge; leaving removes only that
 temporary highlight. The locked box keeps a violet outline while hovering another box.
 Lock filters responsibilities to
-the intersection with the retained nodes; runtime Lock still focuses one box. A
+the intersection with the retained nodes. Both drawers expose separate Lock and Hide unconnected switches; disabling Lock retains the selected Focus anchor for reuse, while menu Unlock clears it. A
 locked node hidden by filtering keeps its selection without dimming the whole graph.
 Clearing the filter restores the original full layout and Lock. Reloading clears
 both controls. Rendering failures leave the previous graph usable and show a recovery
@@ -215,3 +215,17 @@ surviving node when it is removed. Outside clicks keep focus on their clicked ta
 Keyboard focus uses a thin dashed violet outline that stays dim with an unrelated
 node. It is separate from blue hover, amber Lock, and the filter anchor. Pointer menu
 opening and dismissal do not leave a node focus outline.
+
+
+The runtime viewer shares the architecture shell, modes and staged facet controls. Runtime
+metadata comes from saved project facts; older snapshots show unknown metadata rather than
+inferring frameworks from names. Runtime product closure stays distinct from Nx build scope:
+Impact projects Nx’s compile sets onto service identities, so a library change affects services
+without marking those services as owners of the changed file. Context nodes keep their kind
+styling in Impact and never imply CI execution. Viewing stores comparison data beside the
+runtime HTML under `tmp/webpieces/.impact`, without regenerating saved graph facts.
+
+Service boxes show plain Implements summaries. Their node menu opens implemented-contract
+details; relationship line controls open Uses details. API panels never open on hover or mere
+keyboard focus. Enter/Space explicitly activates a control; Close/Escape/outside click dismiss.
+See [verification and screenshots](runtime-viewer-parity.md) for runtime browser parity evidence.

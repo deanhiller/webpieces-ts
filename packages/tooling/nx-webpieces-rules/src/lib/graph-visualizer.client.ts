@@ -1,147 +1,4 @@
 /**
- * The four color modes (graph-color-modes.ts), the viewer's remembered choice, and Impact's data.
- *
- * The mode is deep-linkable (`#runtime`, `#architecture`, `#impact`, `#product`, which win over the
- * remembered one) and remembered per viewer in localStorage. Product is unavailable on a page whose
- * workspace declares no `product:` tag. Storage can be missing or throw (a private window,
- * blocked site data, a file:// page in some browsers), so every access is wrapped and the page works
- * without it.
- *
- * Impact can carry two scans (#1163): "Changed on this branch" (kind `branch`) and "Last commit"
- * (kind `commit`). The ACTIVE one starts as the sidecar's `defaultKind` (or the viewer's remembered
- * choice, when that scan exists and is available) and is what every Impact color, note and Filter
- * set reads.
- */
-class WpModeState {
-    static readonly MODES = ['runtime', 'architecture', 'impact', 'product'];
-    static readonly NAMES = ['Runtime', 'Architecture', 'Impact', 'Product'];
-    static readonly SUBTITLES = [
-        'where the code can run',
-        'servers · clients · APIs',
-        'what changed',
-        'which products it belongs to',
-    ];
-    static readonly STORAGE_KEY = 'wp-architecture-graph-mode';
-    static readonly KIND_STORAGE_KEY = 'wp-architecture-graph-impact-kind';
-    readonly scans: ImpactJson[] = window.__WP_IMPACT__?.scans ?? [];
-    kind = '';
-    mode = 'runtime';
-
-    /** @param hasProducts some box belongs to a product, so the Product mode has something to show */
-    constructor(private readonly hasProducts: boolean) {
-        this.kind = this.initialKind();
-        this.mode = this.initial();
-    }
-
-    /** '' when Product can be shown, else why not. */
-    productReason(): string {
-        return this.hasProducts
-            ? ''
-            : 'No products here: tag servers, clients and apps product:<name> in their project.json, then regenerate.';
-    }
-
-    /** The active scan; null when the page has no Impact data. */
-    get impact(): ImpactJson | null {
-        return this.scans.find((scan: ImpactJson): boolean => scan.kind === this.kind) ?? null;
-    }
-
-    /** '' when Impact can be shown, else the one line the drawer and the Filter popover say instead. */
-    impactReason(): string {
-        const impact = this.impact;
-        if (impact === null)
-            return 'No impact data here. Run pnpm arch:visualize (nx run architecture:visualize) to compute it — no full regenerate needed.';
-        return impact.available ? '' : `Impact unavailable (${impact.label}): ${impact.reason}.`;
-    }
-
-    /** Switch the active scan; false (and nothing changes) for a missing or unavailable one. */
-    setKind(kind: string): boolean {
-        if (!this.kindAvailable(kind)) return false;
-        this.kind = kind;
-        // eslint-disable-next-line @webpieces/no-unmanaged-exceptions -- storage is a per-viewer convenience; a blocked store must not break the page
-        try {
-            localStorage.setItem(WpModeState.KIND_STORAGE_KEY, kind);
-            // webpieces-disable no-any-unknown -- browsers may throw any value from blocked storage
-        } catch (err: unknown) {
-            //const error = toError(err);
-            void err;
-        }
-        return true;
-    }
-
-    kindAvailable(kind: string): boolean {
-        return this.scans.some((scan: ImpactJson): boolean => scan.kind === kind && scan.available);
-    }
-
-    private initialKind(): string {
-        const stored = this.read(WpModeState.KIND_STORAGE_KEY);
-        if (stored !== null && this.kindAvailable(stored)) return stored;
-        const preferred = window.__WP_IMPACT__?.defaultKind ?? '';
-        if (this.scans.some((scan: ImpactJson): boolean => scan.kind === preferred)) return preferred;
-        return this.scans[0]?.kind ?? '';
-    }
-
-    available(mode: string): boolean {
-        if (!WpModeState.MODES.includes(mode)) return false;
-        if (mode === 'impact') return this.impactReason() === '';
-        if (mode === 'product') return this.productReason() === '';
-        return true;
-    }
-
-    name(mode: string): string {
-        return WpModeState.NAMES[WpModeState.MODES.indexOf(mode)] ?? mode;
-    }
-
-    subtitle(mode: string): string {
-        return WpModeState.SUBTITLES[WpModeState.MODES.indexOf(mode)] ?? '';
-    }
-
-    /** False (and nothing changes) for an unknown or unavailable mode. */
-    set(mode: string): boolean {
-        if (!this.available(mode)) return false;
-        this.mode = mode;
-        // eslint-disable-next-line @webpieces/no-unmanaged-exceptions -- storage is a per-viewer convenience; a blocked store must not break the page
-        try {
-            localStorage.setItem(WpModeState.STORAGE_KEY, mode);
-            if (location.hash !== `#${mode}`) history.replaceState(null, '', `#${mode}`);
-            // webpieces-disable no-any-unknown -- browsers may throw any value from blocked storage
-        } catch (err: unknown) {
-            //const error = toError(err);
-            void err;
-        }
-        return true;
-    }
-
-    /** Which impact shade a box gets, from the ACTIVE scan. */
-    status(id: string): 'touched' | 'affected' | 'buildInput' | 'untouched' {
-        const impact = this.impact;
-        if (impact?.touched.includes(id)) return 'touched';
-        if (impact?.affected.includes(id)) return 'affected';
-        if (impact?.buildInputs.includes(id)) return 'buildInput';
-        return 'untouched';
-    }
-
-    private initial(): string {
-        const hashed = location.hash.slice(1);
-        if (this.available(hashed)) return hashed;
-        const stored = this.read(WpModeState.STORAGE_KEY);
-        if (stored !== null && this.available(stored)) return stored;
-        return 'runtime';
-    }
-
-    private read(key: string): string | null {
-        // eslint-disable-next-line @webpieces/no-unmanaged-exceptions -- storage is a per-viewer convenience; a blocked store reads as "nothing stored"
-        try {
-            return localStorage.getItem(key);
-            // webpieces-disable no-any-unknown -- browsers may throw any value from blocked storage
-        } catch (err: unknown) {
-            //const error = toError(err);
-            void err;
-            return null;
-        }
-    }
-}
-
-/**
  * One state of the Filter popover: a change scope plus the selected Runtime, Role and Product chips.
  * The page holds the APPLIED one; the popover edits a copy until "Show N projects".
  */
@@ -198,7 +55,7 @@ class WpProjectFilter {
     /** How many drawn projects a scope keeps on its own: the count beside each option. */
     scopeCount(scope: string): number {
         const set = this.scopeSet(scope);
-        return this.model.nodes.filter((node: RenderNodeJson): boolean => set === null || set.has(node.id)).length;
+        return this.model.nodes.filter((node: RenderNodeJson): boolean => this.isService(node) && (set === null || set.has(node.id))).length;
     }
 
     /** `base` (everything, or the Hide-unconnected chain) narrowed by `choice`. */
@@ -206,15 +63,23 @@ class WpProjectFilter {
         const scope = this.scopeSet(choice.scope);
         const kept = new Set<string>();
         for (const node of this.model.nodes) {
-            if (!base.has(node.id)) continue;
+            if (!base.has(node.id) || !this.isService(node)) continue;
             if (scope !== null && !scope.has(node.id)) continue;
             if (!this.anyOf(choice.runtimes, node.tags?.frameworks ?? [])) continue;
             if (!this.anyOf(choice.roles, node.tags === null ? [] : [node.tags.role])) continue;
             if (!this.anyOf(choice.products, node.products)) continue;
             kept.add(node.id);
         }
+        if (this.model.viewer === 'runtime') {
+            for (const node of this.model.nodes) {
+                if (node.tags !== null || !base.has(node.id)) continue;
+                if (this.model.edges.some(edge => (edge.from === node.id && kept.has(edge.to)) || (edge.to === node.id && kept.has(edge.from)))) kept.add(node.id);
+            }
+        }
         return kept;
     }
+
+    isService(node: RenderNodeJson): boolean { return this.model.viewer !== 'runtime' || node.tags !== null; }
 
     /** An empty chip group matches every box; otherwise the box must carry one of the chips. */
     private anyOf(selected: Set<string>, carried: string[]): boolean {
@@ -293,7 +158,7 @@ class GraphHighlighter {
     private wireMenu(): void {
         const designs = new Map<string, string>();
         for (const link of __DESIGN_LINKS__) designs.set(link.nodeId, link.href);
-        WpNodeMenu.wire(this.svg, (name: string): WpNodeMenuItem[] => {
+        WpNodeMenu.wire(this.svg, (name: string, node: SVGGElement): WpNodeMenuItem[] => {
             const items: WpNodeMenuItem[] = [];
             const href = designs.get(name);
             if (href !== undefined)
@@ -301,10 +166,12 @@ class GraphHighlighter {
             const locked = this.page.lockSelection() === name;
             items.push(
                 new WpNodeMenuItem(locked ? 'Unlock' : 'Lock', () =>
-                    this.page.setLock(locked ? null : name),
+                    locked ? this.page.clearSelection() : this.page.setLock(name),
                 ),
             );
             items.push(this.page.filterItem(name));
+            const implemented = window.__WP_RUNTIME__?.implementsItem(name, node);
+            if (implemented) items.push(implemented);
             return items;
         });
     }
@@ -400,7 +267,7 @@ class GraphFilterPopover {
         const apply = this.byId('wp-filter-apply');
         if (apply !== null) {
             const shown = this.page.preview(this.draft);
-            apply.textContent = `Show ${shown} project${shown === 1 ? '' : 's'}`;
+            apply.textContent = `Show ${shown} ${this.page.noun()}${shown === 1 ? '' : 's'}`;
         }
     }
 
@@ -415,6 +282,7 @@ class GraphFilterPopover {
  */
 class GraphDrawer {
     readonly popover: GraphFilterPopover;
+    private readonly openers = new Map<string, HTMLElement>();
 
     constructor(private readonly page: GraphPage) {
         this.popover = new GraphFilterPopover(page);
@@ -425,6 +293,7 @@ class GraphDrawer {
         this.popover.wire();
         this.wireImpactKinds();
         this.wireLock();
+        this.byId('wp-lock-toggle')?.addEventListener('click', () => this.page.toggleLock());
         this.byId('wp-filter-toggle')?.addEventListener('click', () => this.page.toggleFilter());
         this.toggles('wp-collapse', 'wp-shell', true);
         this.toggles('wp-help-btn', 'wp-help', false);
@@ -440,6 +309,7 @@ class GraphDrawer {
             const target = ev.target;
             if (target instanceof Node && this.byId('wp-mode-menu')?.parentElement?.contains(target)) return;
             this.closeModeMenu(false);
+            this.dismissOutside(target);
         });
     }
 
@@ -509,7 +379,7 @@ class GraphDrawer {
         if (input === null) return;
         input.addEventListener('input', () => {
             const value = input.value.trim();
-            if (value === '') this.page.setLock(null);
+            if (value === '') this.page.clearSelection();
             else if (this.page.hasNode(value)) this.page.setLock(value);
         });
         input.addEventListener('change', () => {
@@ -521,7 +391,7 @@ class GraphDrawer {
             if (ev.key !== 'Escape') return;
             ev.preventDefault();
             input.value = '';
-            this.page.setLock(null);
+            this.page.clearSelection();
             input.blur();
         });
     }
@@ -541,10 +411,13 @@ class GraphDrawer {
             this.popover.close();
             return;
         }
+        if (ev.key === 'Escape' && this.dismissOverlay()) return;
         const target = ev.target;
         if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) return;
-        const menuOpen = document.getElementById('wp-node-menu') !== null;
+        const menuOpen = document.getElementById('wp-node-menu') !== null || document.querySelector('.wp-graph-details:not([hidden])') !== null;
         if (ev.key === '/') {
+            this.byId('wp-shell')?.classList.remove('wp-collapsed');
+            this.byId('wp-collapse')?.setAttribute('aria-expanded', 'true');
             ev.preventDefault();
             this.lockInput()?.focus();
             return;
@@ -570,11 +443,38 @@ class GraphDrawer {
             } else {
                 target.hidden = !target.hidden;
                 expanded = !target.hidden;
+                if (expanded) this.openers.set(targetId, button);
+                else this.openers.get(targetId)?.focus({ preventScroll: true });
             }
             document.querySelectorAll(`[aria-controls="${targetId}"], #${buttonId}[aria-expanded]`).forEach(
                 (el: Element) => el.setAttribute('aria-expanded', String(expanded)),
             );
         });
+    }
+
+    private dismissOverlay(): boolean {
+        for (const id of ['wp-help', 'wp-legend-popout', 'wp-snapshot', 'wp-resp-panel']) {
+            const panel = this.byId(id);
+            if (!panel || panel.hidden) continue;
+            panel.hidden = true;
+            this.openers.get(id)?.focus({ preventScroll: true });
+            this.openers.get(id)?.setAttribute('aria-expanded', 'false');
+            return true;
+        }
+        return false;
+    }
+
+    private dismissOutside(target: EventTarget | null): void {
+        if (!(target instanceof Node)) return;
+        const filter = this.byId('wp-filter-pop');
+        if (this.popover.isOpen() && !filter?.contains(target) && !this.byId('wp-filter-open')?.contains(target)) this.popover.close();
+        for (const [id, opener] of this.openers) {
+            const panel = this.byId(id);
+            if (panel && !panel.hidden && !panel.contains(target) && !opener.contains(target)) {
+                panel.hidden = true;
+                opener.setAttribute('aria-expanded', 'false');
+            }
+        }
     }
 
     /** Repaint every control from the page's state. */
@@ -604,7 +504,13 @@ class GraphDrawer {
         const title = this.byId('wp-legend-pop-title');
         if (title !== null) title.textContent = `Legend · ${modes.name(modes.mode)}`;
         const input = this.lockInput();
-        if (input !== null && document.activeElement !== input) input.value = locked ?? '';
+        if (input !== null && document.activeElement !== input) input.value = this.page.focusSelection() ?? '';
+        const lockToggle = this.byId('wp-lock-toggle') as HTMLButtonElement | null;
+        if (lockToggle !== null) {
+            lockToggle.setAttribute('aria-pressed', String(locked !== null));
+            lockToggle.disabled = locked === null && this.page.focusSelection() === null;
+            lockToggle.title = lockToggle.disabled ? 'Select a node in Focus first' : '';
+        }
         this.syncFilterToggle(locked, filtering);
         this.syncFilter(filter);
         this.crumb(modes.name(modes.mode), locked);
@@ -716,8 +622,10 @@ class GraphDrawer {
 
 class GraphPage extends WpFilterPage {
     private highlighter: GraphHighlighter | null = null;
+    private selected: string | null = null;
     private readonly modes = new WpModeState(
         this.model.nodes.some((node: RenderNodeJson): boolean => node.products.length > 0),
+        this.model.viewer ?? 'architecture',
     );
     private readonly projects = new WpProjectFilter(this.model, this.modes);
     private applied = new WpFilterChoice();
@@ -759,6 +667,8 @@ class GraphPage extends WpFilterPage {
         return true;
     }
 
+    protected override prepareSvg(svg: SVGSVGElement): void { window.__WP_RUNTIME__?.prepare(svg); }
+
     protected wireSvg(svg: SVGSVGElement): void {
         this.highlighter = new GraphHighlighter(svg, this.chain, this.model, this);
         this.highlighter.wire();
@@ -778,8 +688,15 @@ class GraphPage extends WpFilterPage {
         return this.model.nodes.some((node: RenderNodeJson): boolean => node.id === id);
     }
 
-    projectCount(): number {
-        return this.model.nodes.length;
+    noun(): string { return this.model.viewer === 'runtime' ? 'service' : 'project'; }
+
+    projectCount(): number { return this.model.nodes.filter(node => this.projects.isService(node)).length; }
+
+    focusSelection(): string | null { return this.selected; }
+
+    toggleLock(): void {
+        if (this.locked !== null) this.setLock(null);
+        else if (this.selected !== null) this.setLock(this.selected);
     }
 
     /** An exact id, else the one id whose short name (after any scope) is `text`; null if none or several. */
@@ -794,10 +711,13 @@ class GraphPage extends WpFilterPage {
 
     setLock(name: string | null): void {
         this.locked = name;
+        if (name !== null) this.selected = name;
         this.highlighter?.relight();
         this.filterCards();
         this.syncControls();
     }
+
+    clearSelection(): void { this.selected = null; this.setLock(null); }
 
     setMode(mode: string): void {
         if (mode === this.modes.mode || !this.modes.set(mode)) return;
@@ -828,7 +748,9 @@ class GraphPage extends WpFilterPage {
     }
 
     scopeCount(scope: string): number {
-        return this.projects.scopeCount(scope);
+        if (this.model.viewer !== 'runtime') return this.projects.scopeCount(scope);
+        const choice = new WpFilterChoice(); choice.scope = scope;
+        return this.preview(choice);
     }
 
     /** How many boxes `choice` would show, with the current Hide-unconnected chain. */
@@ -837,7 +759,8 @@ class GraphPage extends WpFilterPage {
             this.anchor === null
                 ? new Set(this.model.nodes.map((node: RenderNodeJson): string => node.id))
                 : this.chain.nodes(this.anchor);
-        return this.projects.apply(base, choice).size;
+        const kept = this.projects.apply(base, choice);
+        return this.model.nodes.filter(node => kept.has(node.id) && this.projects.isService(node)).length;
     }
 
     applyFilter(choice: WpFilterChoice): void {
@@ -857,6 +780,21 @@ class GraphPage extends WpFilterPage {
 
     private syncControls(): void {
         this.drawer.sync(this.modes, this.locked, this.anchor !== null, this.applied);
+        const count = this.model.nodes.filter(node => this.retained.has(node.id) && this.projects.isService(node)).length;
+        const empty = document.getElementById('wp-empty');
+        if (empty !== null) empty.hidden = count !== 0;
+        const context = document.getElementById('wp-context-count');
+        if (context !== null) context.textContent = `${count} services · ${this.retained.size - count} contextual nodes`;
+        this.syncLegend();
+    }
+
+    private syncLegend(): void {
+        document.querySelectorAll<HTMLElement>('[data-wp-legend-value]').forEach(row => {
+            const group = row.dataset['wpLegendGroup'];
+            const value = row.dataset['wpLegendValue'] ?? '';
+            row.hidden = !this.model.nodes.some(node => this.retained.has(node.id) &&
+                (group === 'runtime' ? (value === 'unknown' ? node.tags !== null && node.tags.frameworks.length === 0 : node.tags?.frameworks.includes(value)) : group === 'role' ? node.tags?.role === value : node.products.includes(value)));
+        });
     }
 
     private filterCards(): void {

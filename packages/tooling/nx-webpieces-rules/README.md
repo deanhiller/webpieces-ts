@@ -110,7 +110,7 @@ their existing checks independently of visualization.
 
 `architecture/dependencies.html` opens with the graph filling the viewport and every control
 in a collapsible charcoal drawer on the left (violet accent): the **Color by** pulldown, the
-**Filter** button, a type-to-search **Lock** field (`/` focuses it, `Esc` unlocks), a **Hide
+**Filter** button, a type-to-search **Focus** field (`/` focuses it, `Esc` unlocks), a separate **Lock** switch, a **Hide
 unconnected** toggle, the legend (with a pop-out button) and the edge key. Help is the **?**
 popover, zoom floats bottom-right, and **Responsibilities** opens a right-hand panel from the
 drawer footer.
@@ -191,7 +191,7 @@ incoming and outgoing chains, then reruns Graphviz. Architecture L-number rows k
 their original identities; runtime chains include rendered queues, clocks, external
 APIs and systems. The anchor indicator and all surviving node menus offer **Turn off
 Filter**, restoring the full layout and independent Lock state. Responsibilities
-follow the retained set intersected with architecture Lock. Architecture Lock pins
+follow the retained set intersected with architecture Lock. Both viewers’ Lock pins
 its chain in the foreground; hover adds a temporary chain without dimming locked
 nodes or edges, and leaving restores the Lock chain. The locked anchor keeps a violet outline,
 and hover never changes responsibilities. A filtered-out Lock is suspended until
@@ -201,9 +201,42 @@ and visibility options remain untouched. See
 [dependency graphs](../../../docs/architecture/dependency-graphs.md#filter-unconnected)
 for traversal examples and browser verification.
 
-The runtime page also carries a **Product** chip row above the graph when any service belongs to a
-product. A product's runtime services are its tagged services plus every service they reach over
-runtime `dependsOn` (through a queue to its consumers too), so a call into another product's
-service stays visible; queues, clocks and systems attached to a kept service stay with it. Several
-chips keep the union, and the row intersects with Filter Unconnected. The page always opens
-unfiltered. `runtime-dependencies.json` carries each service's `products`.
+The runtime viewer uses the same drawer, staged Filter popover, legend pop-out, help,
+saved-snapshot panel and floating navigation. **Color by** supports Runtime, Architecture,
+Impact and Product, with `1`–`4` shortcuts, URL hashes and a separately remembered runtime
+choice. Runtime/framework and responsibility metadata comes from saved `dependencies.json`;
+viewing never regenerates it. Older runtime snapshots still open: missing framework/role facts
+are explicitly unknown. Missing project facts disable Impact, leaving the runtime viewer usable.
+
+Filters combine OR within Runtime/Role/Product groups and AND between groups and change scope.
+Draft changes apply only with **Show N services**; closing cancels them. Clear all resets facets,
+leaving Lock and Hide unconnected alone. Counts describe services, with contextual nodes reported
+separately. Products preserve saved runtime closure across calls and queues. Attached queues,
+clocks and external systems remain as context without resurrecting excluded services.
+
+Impact refreshes the existing Nx/git comparisons into a local sidecar beside the runtime page in
+`tmp/webpieces/.impact`. The service set is the intersection of runtime identities with Nx project
+sets: changing a shared library can affect several services, but only a service owning a changed
+file is **Changed**. Build input sets come from compile dependencies, never runtime-call traversal.
+Main/detached HEAD compares the last commit; a fresh feature branch compares its fork point only;
+a feature with commits offers both. Missing git/Nx data disables Impact-dependent controls.
+Queues/vendors never claim source ownership or CI status: Runtime/Architecture/Impact retain
+kind colors and shapes; Product uses inherited product colors (a gradient on contextual shapes).
+No product is white, membership shared by all products is neutral. Runtime services use the
+established nested/striped framework palette and Architecture uses declared roles.
+
+Lock from Focus, the sidebar switch, or a box menu pins separate complete incoming/outgoing
+chains; hover temporarily adds its own chain. Lock does not change layout. Hide unconnected
+removes unrelated nodes and compacts the graph while preserving original runtime L-identities.
+Switching Lock off retains the explicit Focus selection so it can be pinned again; menu Unlock
+or clearing Focus clears that selection. A filtered-out lock is suspended and restored when visible.
+
+**API details are click-only.** Every service shows plain **Implements (N)** summary text.
+Click anywhere in the box for its menu, then **Implements** for full contracts/provenance and
+conditions, including an explicit empty state. Auxiliary nodes have no Implements action.
+**Uses** belongs exclusively on relationship lines: click or press Enter/Space on the edge
+control for its targets, queue, owner, conditions and inference details. Hover/focus never opens
+API panels. Close, Escape and outside-click dismiss them; explicit close returns focus to the
+owner. Controls rebind after filtering or recoloring, and panels follow zoom/scroll.
+
+Browser verification and screenshots: [runtime viewer evidence](../../../docs/architecture/runtime-viewer-parity.md).

@@ -63,7 +63,9 @@ class QueueCylinders {
     private static readonly SVG_NS = 'http://www.w3.org/2000/svg';
 
     applyTo(svg: SVGSVGElement): void {
-        svg.querySelectorAll('g.wp_queue').forEach((node: Element): void => { this.reshape(node); });
+        svg.querySelectorAll('g.wp_queue').forEach((node: Element): void => {
+            this.reshape(node);
+        });
     }
 
     /**
@@ -84,21 +86,57 @@ class QueueCylinders {
         const stroke = first.getAttribute('stroke') ?? 'black';
         // Measured BEFORE the shapes go: the record separator is where the label text starts.
         const separator = this.separatorX(shapes);
-        shapes.forEach((shape: Element): void => { shape.remove(); });
+        shapes.forEach((shape: Element): void => {
+            shape.remove();
+        });
 
         const ry = box.halfHeight();
         const rx = this.capRadius(box, ry, separator);
         const body =
-            'M' + (box.x0 + rx) + ',' + box.y0 +
-            ' L' + (box.x1 - rx) + ',' + box.y0 +
-            ' A' + rx + ',' + ry + ' 0 0 1 ' + (box.x1 - rx) + ',' + box.y1 +
-            ' L' + (box.x0 + rx) + ',' + box.y1 +
-            ' A' + rx + ',' + ry + ' 0 0 1 ' + (box.x0 + rx) + ',' + box.y0 + ' Z';
+            'M' +
+            (box.x0 + rx) +
+            ',' +
+            box.y0 +
+            ' L' +
+            (box.x1 - rx) +
+            ',' +
+            box.y0 +
+            ' A' +
+            rx +
+            ',' +
+            ry +
+            ' 0 0 1 ' +
+            (box.x1 - rx) +
+            ',' +
+            box.y1 +
+            ' L' +
+            (box.x0 + rx) +
+            ',' +
+            box.y1 +
+            ' A' +
+            rx +
+            ',' +
+            ry +
+            ' 0 0 1 ' +
+            (box.x0 + rx) +
+            ',' +
+            box.y0 +
+            ' Z';
         // Only the NEAR end cap is drawn: that single arc is what reads as "tube" rather than
         // "stadium", and a real cylinder hides the far one behind the body.
         const cap =
-            'M' + (box.x0 + rx) + ',' + box.y0 +
-            ' A' + rx + ',' + ry + ' 0 0 1 ' + (box.x0 + rx) + ',' + box.y1;
+            'M' +
+            (box.x0 + rx) +
+            ',' +
+            box.y0 +
+            ' A' +
+            rx +
+            ',' +
+            ry +
+            ' 0 0 1 ' +
+            (box.x0 + rx) +
+            ',' +
+            box.y1;
 
         const anchor = node.firstChild;
         if (anchor === null || anchor.nextSibling === null) return;
@@ -165,69 +203,40 @@ class QueueCylinders {
     }
 }
 
-/** Runtime keeps the single-box Lock while Filter follows the full directed chain. */
-class RuntimeNodeMenu {
-    constructor(private readonly svg: SVGSVGElement, private readonly lock: WpNodeLock, private readonly page: RuntimePage) {}
+/** Shape adapter for the shared viewer controller; no separate runtime control state. */
+class RuntimeImplementsPayload {
+    constructor(
+        readonly name: string,
+        readonly node: SVGGElement,
+    ) {}
+}
 
-    wire(): void {
-        WpNodeMenu.wire(this.svg, (name: string, node: SVGGElement): WpNodeMenuItem[] => {
-            const label = this.lock.isLocked(name) ? 'Unlock' : 'Lock';
-            return [new WpNodeMenuItem(label, (): void => { this.lock.toggle(name, node); }), this.page.filterItem(name)];
+class RuntimeViewerBindingImpl implements RuntimeViewerBinding {
+    prepare(svg: SVGSVGElement): void {
+        new QueueCylinders().applyTo(svg);
+        // Keep identity titles readable by shared controllers without native SVG tooltips.
+        svg.querySelectorAll('g.node > title, g.edge > title').forEach((title) => {
+            title.parentElement?.setAttribute('aria-label', title.textContent ?? '');
+            const identity = document.createElement('title');
+            identity.textContent = title.textContent;
+            title.replaceWith(identity);
+        });
+    }
+    implementsItem(name: string, node: SVGGElement): WpNodeMenuItem | null {
+        if (
+            !node.querySelector('text') ||
+            !Array.from(node.querySelectorAll('text')).some((text) =>
+                text.textContent?.startsWith('Implements ('),
+            )
+        )
+            return null;
+        return new WpNodeMenuItem('Implements', (): void => {
+            document.dispatchEvent(
+                new CustomEvent('wp-runtime-implements', {
+                    detail: new RuntimeImplementsPayload(name, node),
+                }),
+            );
         });
     }
 }
-
-class RuntimePage extends WpFilterPage {
-    private lock: WpNodeLock | null = null;
-    /** The pressed product chips (#1179); empty keeps every box. */
-    private readonly products = new Set<string>();
-
-    /** Each product chip toggles itself and redraws; the narrowing happens in narrow(). */
-    protected override wireControls(): void {
-        document.querySelectorAll<HTMLButtonElement>('[data-wp-product]').forEach((chip: HTMLButtonElement): void => {
-            chip.addEventListener('click', (): void => {
-                const product = chip.dataset['wpProduct'] ?? '';
-                if (this.products.has(product)) this.products.delete(product);
-                else this.products.add(product);
-                chip.setAttribute('aria-pressed', String(this.products.has(product)));
-                this.redraw();
-            });
-        });
-    }
-
-    /** Pressed chips keep the UNION of their products' boxes, intersected with Filter Unconnected. */
-    protected override narrow(retained: Set<string>): Set<string> {
-        if (this.products.size === 0) return retained;
-        const kept = new Set<string>();
-        for (const node of this.model.nodes) {
-            if (!retained.has(node.id)) continue;
-            if (node.products.some((product: string): boolean => this.products.has(product))) kept.add(node.id);
-        }
-        return kept;
-    }
-
-    protected override usesFullDot(): boolean {
-        return this.products.size === 0;
-    }
-
-    protected override captureBinding(svg: SVGSVGElement | null): () => void {
-        const previous = this.lock;
-        return (): void => {
-            this.lock = previous;
-            if (svg !== null) this.lock?.rebind(svg);
-        };
-    }
-
-    protected override prepareSvg(svg: SVGSVGElement): void { new QueueCylinders().applyTo(svg); }
-
-    protected wireSvg(svg: SVGSVGElement): void {
-        if (this.lock === null) this.lock = new WpNodeLock(svg);
-        else this.lock.rebind(svg);
-        new RuntimeNodeMenu(svg, this.lock, this).wire();
-        svg.querySelectorAll<SVGGElement>('g.node').forEach(node => {
-            if (node.querySelector('title')?.textContent === this.anchor) node.classList.add('wp-filter-anchor');
-        });
-    }
-}
-
-new RuntimePage(__RENDER_MODEL__).render();
+window.__WP_RUNTIME__ = new RuntimeViewerBindingImpl();
