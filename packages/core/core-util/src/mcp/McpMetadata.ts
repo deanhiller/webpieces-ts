@@ -1,5 +1,5 @@
 import 'reflect-metadata';
-import { Mcp, WpMcpToolOptions } from './Mcp';
+import { Mcp, McpToolProfilesOptions } from './Mcp';
 import { METADATA_KEYS } from '../http/decorators';
 import { EndpointOperation, READ, WRITE_IDEMPOTENT, WRITE } from '../http/HttpEndpointOptions';
 
@@ -75,7 +75,7 @@ export class WpMcpToolMetadata {
 export function WpMcpTool(
     name: string,
     title: string,
-    options?: WpMcpToolOptions,
+    options?: McpToolProfilesOptions,
 ): WpMcpMethodDecorator {
     if (
         options !== undefined &&

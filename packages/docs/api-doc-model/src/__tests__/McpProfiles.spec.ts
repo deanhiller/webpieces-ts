@@ -14,7 +14,7 @@ class ProfileExpression {
         );
         const statement = source.statements[0] as ts.VariableStatement;
         const expression = statement.declarationList.declarations[0].initializer!;
-        return McpProfiles.read(
+        return new McpProfiles().read(
             expression,
             new ConstantFolder(ts.createProgram([], {}).getTypeChecker()),
         );

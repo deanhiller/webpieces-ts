@@ -204,6 +204,7 @@ describe('every @WpMcpTool in this repo, read by the compiler', () => {
             'packages/docs/openapi-generator/src/__tests__/fixtures/chain/libs/agent-api/src/AgentApi.ts',
             'packages/docs/openapi-generator/src/__tests__/fixtures/chain/libs/fsdb-api/src/FsdbApi.ts',
             'packages/docs/openapi-generator/src/__tests__/fixtures/chain/libs/lang-apis/src/LangLessonApi.ts',
+            'packages/http/mcp-server/src/__tests__/McpProfileFixtures.ts',
             'packages/http/mcp-server/src/__tests__/McpRemoteFixtures.ts',
             'packages/http/mcp-server/src/__tests__/WpMcpServerTestFixtures.ts',
         ]);
@@ -244,6 +245,10 @@ describe('every @WpMcpTool in this repo, read by the compiler', () => {
             'AgentApi/ask_provider',
             'FsdbApi/read_passage',
             'LangLessonApi/list_passages',
+            'ProfileApi/learner',
+            'ProfileApi/admin',
+            'ProfileApi/shared',
+            'ProfileApi/course',
             'RemoteMcpApi/remote_integration_search',
             'MissingRemoteMcpApi/missing_remote_integration_search',
             'RefusedRemoteApi/refused_remote',

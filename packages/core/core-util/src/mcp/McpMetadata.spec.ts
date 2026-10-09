@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { READ, WRITE_IDEMPOTENT, WRITE } from '../http/HttpEndpointOptions';
 import { getWpMcpTools, mcpHintsForOperation, WpMcpTool } from './McpMetadata';
 import { WpMcpToolMetadata } from './McpMetadata';
-import { Mcp, WpMcpToolOptions } from './Mcp';
+import { Mcp, McpToolProfilesOptions } from './Mcp';
 
 describe('MCP profile declarations', () => {
     it('defaults only on omission and snapshots explicit membership', () => {
@@ -45,7 +45,7 @@ describe('MCP profile declarations', () => {
     it.each([null, [], 'admin', { roles: ['admin'] }, { profiles: undefined }, { profiles: [1] }])(
         'rejects malformed options %j',
         (options: object | string | null) => {
-            expect(() => WpMcpTool('tool', 'Title', options as WpMcpToolOptions)).toThrow(
+            expect(() => WpMcpTool('tool', 'Title', options as McpToolProfilesOptions)).toThrow(
                 /options|profiles|profile/,
             );
         },

@@ -222,11 +222,8 @@ class McpCatalogJson {
                 REGENERATE,
             );
         }
-        try {
-            return Mcp.profiles(value, 'MCP catalog profiles');
-        } catch (error) {
-            throw new McpToolCatalogError(String(error), REGENERATE);
-        }
+        return Mcp.profiles(value, 'MCP catalog profiles',
+            (message: string) => new McpToolCatalogError(message, REGENERATE));
     }
 
     // webpieces-disable no-any-unknown -- parsing JSON is exactly where unknown belongs

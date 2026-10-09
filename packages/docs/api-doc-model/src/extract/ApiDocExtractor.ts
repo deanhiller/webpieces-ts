@@ -609,7 +609,7 @@ export class ApiDocExtractor {
         }
         const titleArgument = call?.arguments[1];
         const title = titleArgument === undefined ? '' : (folder.tryFoldString(titleArgument) ?? '');
-        return new DocumentedMcpTool(folder.tryFoldString(argument) ?? '', title, McpProfiles.read(call?.arguments[2], folder));
+        return new DocumentedMcpTool(folder.tryFoldString(argument) ?? '', title, new McpProfiles().read(call?.arguments[2], folder));
     }
 
     /**
