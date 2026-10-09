@@ -154,7 +154,7 @@ export class WpMcpServerConfig<TGrant> {
 
     /** OPTIONAL. Standard MCP icons; copied and frozen, with no network access. */
     setIcons(icons: readonly Icon[]): this {
-        this.iconsValue = McpIcon.snapshot(icons);
+        this.iconsValue = this.snapshotIcons(icons);
         return this;
     }
 
@@ -315,6 +315,23 @@ export class WpMcpServerConfig<TGrant> {
             this.resource,
             this.authorizationServers,
             this.requiredScopes,
+        );
+    }
+
+    /** Copies caller-owned descriptors and nested size arrays before freezing the snapshot. */
+    private snapshotIcons(icons: readonly Icon[]): readonly McpIcon[] {
+        if (!Array.isArray(icons)) {
+            throw new Error(
+                'WpMcpServerConfig.setIcons(...) requires an array of icon descriptors.',
+            );
+        }
+        return Object.freeze(
+            icons.map((icon: Icon) => {
+                if (!icon || typeof icon !== 'object') {
+                    throw new Error('WpMcpServerConfig.setIcons(...) requires icon descriptors.');
+                }
+                return new McpIcon(icon.src, icon.mimeType, icon.sizes, icon.theme);
+            }),
         );
     }
 

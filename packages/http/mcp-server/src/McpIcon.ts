@@ -38,7 +38,15 @@ export class McpIcon implements Icon {
             this.invalid('src must be an absolute HTTPS image URL or base64 image data URI');
         }
         const url = new URL(src);
-        if (url.protocol === 'https:' && url.hostname && !url.username && !url.password) return;
+        if (
+            /^https:\/\//i.test(src) &&
+            !/[\s\\]/.test(src) &&
+            url.protocol === 'https:' &&
+            url.hostname &&
+            !url.username &&
+            !url.password
+        )
+            return;
         if (
             /^data:image\/[a-z0-9.+-]+;base64,(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/i.test(
                 src,
@@ -51,22 +59,5 @@ export class McpIcon implements Icon {
 
     private invalid(reason: string): never {
         throw new Error(`WpMcpServerConfig.setIcons(...): ${reason}.`);
-    }
-
-    /** Copies caller-owned descriptors and nested size arrays before freezing the snapshot. */
-    static snapshot(icons: readonly Icon[]): readonly McpIcon[] {
-        if (!Array.isArray(icons)) {
-            throw new Error(
-                'WpMcpServerConfig.setIcons(...) requires an array of icon descriptors.',
-            );
-        }
-        return Object.freeze(
-            icons.map((icon: Icon) => {
-                if (!icon || typeof icon !== 'object') {
-                    throw new Error('WpMcpServerConfig.setIcons(...) requires icon descriptors.');
-                }
-                return new McpIcon(icon.src, icon.mimeType, icon.sizes, icon.theme);
-            }),
-        );
     }
 }
