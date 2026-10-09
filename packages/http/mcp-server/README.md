@@ -441,3 +441,50 @@ Discovery, schema lookup, and execution share the same profile-and-authorization
 is catalog metadata, never a nonstandard MCP Tool field. Catalog entries now require `profiles`;
 artifacts from before this change are rejected with a cure to rebuild the contract library's
 `openapi-generate` target. Regenerate catalogs when upgrading; there is no schema reflection fallback.
+# Product icons
+
+Configure optional standard MCP implementation icons through the fluent config:
+
+```ts
+import { McpIcon, WpMcpServerConfig } from '@webpieces/mcp-server';
+
+const config = new WpMcpServerConfig<MyGrant>()
+    .setName('my-product')
+    .setVersion('1.0.0')
+    .setResource('https://api.example.com/mcp')
+    .setIcons([
+        new McpIcon(
+            'https://api.example.com/branding/product-v1-128.png',
+            'image/png',
+            ['128x128'],
+            'light',
+        ),
+    ]);
+// Supply the remaining required authority, authorization and scope setters as usual.
+```
+
+`setIcons` accepts standard SDK `Icon` descriptors (`src`, optional `mimeType`, `sizes`,
+and `theme`) as well as `McpIcon` instances. Multiple descriptors support resolutions and
+light/dark backgrounds. Sizes use positive `widthxheight` values or `any`. The configuration
+copies and freezes descriptors, including size arrays; binding captures that snapshot, so later
+caller mutation or configuration setters cannot change a running bridge's icons. Omitting icons
+leaves the metadata absent; an explicitly empty array advertises no icons.
+
+Host the example PNG at a publicly readable HTTPS URL on the MCP resource's own origin.
+It must require no cookie, bearer header or other credentials, and must not redirect to another
+origin or scheme. Hosting and image contents are application-owned: this package adds no static
+asset route and never fetches icons on startup or during requests. HTTPS URLs containing user
+credentials, other URI schemes and malformed descriptors are rejected. Resource-origin validation
+runs at bind time, so setter order does not matter. Clients must still enforce safe redirects,
+image parsing and resource limits when fetching/rendering untrusted image bytes.
+
+Alternatively embed a non-empty base64 image data URI, for example
+`new McpIcon('data:image/png;base64,...', 'image/png')` with actual base64 image bytes in place
+of `...`. PNG is the broadly compatible choice. SVG support is optional for clients and requires
+additional sanitization; valid metadata does not guarantee safe image contents.
+
+The SDK renders icons in legacy `initialize.result.serverInfo.icons` and current
+`result._meta['io.modelcontextprotocol/serverInfo'].icons` (2026-07-28). Advertising icons
+does not guarantee every MCP client renders them or invalidate a provider's branding cache.
+See the [MCP icon specification and security guidance](https://github.com/modelcontextprotocol/modelcontextprotocol/blob/main/docs/specification/2026-07-28/basic/index.mdx#icons).
+

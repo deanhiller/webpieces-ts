@@ -1,5 +1,7 @@
 import { Mcp, McpToolProfiles } from '@webpieces/core-util';
 import { AuthenticatedCaller, AuthorizationService } from '@webpieces/http-routing';
+import { Icon } from '@modelcontextprotocol/server';
+import { McpIcon } from './McpIcon';
 
 export const MAX_MCP_ACCESS_TOKEN_LIFETIME_SECONDS = 30 * 24 * 60 * 60;
 export const MAX_MCP_ACCOUNT_VALIDATION_AGE_SECONDS = 60 * 60;
@@ -120,6 +122,7 @@ export class WpMcpServerConfig<TGrant> {
     private toolProfilesValue: readonly string[] = Object.freeze([Mcp.DEFAULT]);
     private nameValue?: string;
     private versionValue?: string;
+    private iconsValue?: readonly McpIcon[];
     private resourceValue?: string;
     private accessTokenAuthorityValue?: McpAccessTokenAuthority<TGrant>;
     private authorizationServiceValue?: AuthorizationService;
@@ -147,6 +150,17 @@ export class WpMcpServerConfig<TGrant> {
     setVersion(version: string): this {
         this.versionValue = this.requireText(version, 'setVersion');
         return this;
+    }
+
+    /** OPTIONAL. Standard MCP icons; copied and frozen, with no network access. */
+    setIcons(icons: readonly Icon[]): this {
+        this.iconsValue = McpIcon.snapshot(icons);
+        return this;
+    }
+
+    /** Immutable snapshot; omitted icons remain absent from SDK implementation metadata. */
+    get icons(): readonly McpIcon[] | undefined {
+        return this.iconsValue;
     }
 
     /**
@@ -238,6 +252,14 @@ export class WpMcpServerConfig<TGrant> {
         if (this.requiredScopesValue === undefined) missing.push('setRequiredScopes(...)');
         if (missing.length > 0) {
             throw new Error(`WpMcpServerConfig is missing ${missing.join(', ')}`);
+        }
+        for (const icon of this.iconsValue ?? []) {
+            const url = new URL(icon.src);
+            if (url.protocol === 'https:' && url.origin !== new URL(this.resource).origin) {
+                throw new Error(
+                    'WpMcpServerConfig.setIcons(...) requires HTTPS icons on the resource origin.',
+                );
+            }
         }
     }
 

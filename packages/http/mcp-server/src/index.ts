@@ -7,6 +7,8 @@ export {
     WpMcpServerConfig,
 } from './McpAuth';
 export type { McpAccessTokenAuthority } from './McpAuth';
+export type { Icon } from '@modelcontextprotocol/server';
+export { McpIcon } from './McpIcon';
 export { McpToolRegistry, RegisteredMcpTool } from './McpToolRegistry';
 export { McpApiBinding } from './McpApiBinding';
 export type { McpBindingTopology } from './McpApiBinding';

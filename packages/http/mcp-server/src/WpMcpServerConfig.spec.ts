@@ -82,9 +82,7 @@ describe('WpMcpServerConfig fluent setters', () => {
     });
 
     it('bind() lists EVERY missing required setter in one startup failure', () => {
-        const config = new WpMcpServerConfig<string>()
-            .setName('half-built')
-            .setVersion('1.0.0');
+        const config = new WpMcpServerConfig<string>().setName('half-built').setVersion('1.0.0');
         expect(() => bind(config)).toThrow(
             'WpMcpServerConfig is missing setResource(...), setAccessTokenAuthority(...), ' +
                 'setAuthorizationService(...), ' +
@@ -144,6 +142,16 @@ describe('WpMcpServerConfig fluent setters', () => {
         expect(() => complete().setRequiredScopes([])).not.toThrow();
     });
 
+    it('validates icon origins at bind, regardless of setter order', () => {
+        const config = complete().setIcons([{ src: 'https://other.example.test/icon.png' }]);
+        expect(() => bind(config)).toThrow('requires HTTPS icons on the resource origin');
+        expect(() =>
+            complete()
+                .setIcons([{ src: 'data:image/png;base64,aWNvbg==' }])
+                .validate(),
+        ).not.toThrow();
+    });
+
     it('the ceilings keep their range validation', () => {
         const config = new WpMcpServerConfig<string>();
         expect(() => config.setMaxAccountValidationAgeSeconds(0)).toThrow(
@@ -152,7 +160,6 @@ describe('WpMcpServerConfig fluent setters', () => {
         expect(() => config.setMaxAccountValidationAgeSeconds(3601)).toThrow(
             'requires 1..3600 seconds, got 3601.',
         );
-
     });
 
     it('derives the RFC 9728 metadata URL by path insertion, for every resource shape', () => {

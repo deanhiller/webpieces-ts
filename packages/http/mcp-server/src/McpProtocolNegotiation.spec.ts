@@ -16,6 +16,7 @@ import { VerifiedMcpCredential, WpMcpServerConfig } from './McpAuth';
 import { McpBindOptions } from './McpBindOptions';
 import { McpDeployment } from './McpDeployment';
 import { WpMcpServer } from './WpMcpServer';
+import { McpIcon } from './McpIcon';
 import { LegacyMcpHttpTestHarness } from './__tests__/LegacyMcpHttpTestHarness';
 import { McpHttpTestHarness } from './__tests__/McpHttpTestHarness';
 import {
@@ -37,165 +38,200 @@ import {
  * speaks the 2025 family — so each one here asserts the NEGOTIATED outcome, and the last asserts
  * that a revision no era knows is still refused.
  */
-describe('WpMcpServer protocol negotiation', () => {
-    let bridge: WpMcpServer<string>;
-    let httpServer: Server;
-    let baseUrl: string;
-    let legacy: LegacyMcpHttpTestHarness;
-    let modern: McpHttpTestHarness;
+const ICONS = [
+    new McpIcon(
+        'https://api.example.test/branding/product-v1.png',
+        'image/png',
+        ['128x128'],
+        'light',
+    ),
+    new McpIcon('data:image/png;base64,aWNvbg==', 'image/png', ['64x64'], 'dark'),
+];
 
-    beforeAll(async () => {
-        HeaderRegistry.configure([USER_ID], true);
-        const jwtHook = new TestJwtHook();
-        const module = new ContainerModule((options: ContainerModuleLoadOptions) => {
-            options.bind(JWT_HOOK).toConstantValue(jwtHook);
-        });
-        const router: WebpiecesRouter = await WebpiecesRouterFactory.create({
-            appBindings: [module],
-        });
-        router.addRoutes(SearchApi, SearchController);
-        bridge = new WpMcpServer(
-            new WpMcpServerConfig<string>()
+describe.each([false, true])(
+    'WpMcpServer protocol negotiation (icons: %s)',
+    (withIcons: boolean) => {
+        let bridge: WpMcpServer<string>;
+        let httpServer: Server;
+        let baseUrl: string;
+        let legacy: LegacyMcpHttpTestHarness;
+        let modern: McpHttpTestHarness;
+
+        beforeAll(async () => {
+            HeaderRegistry.configure([USER_ID], true);
+            const jwtHook = new TestJwtHook();
+            const module = new ContainerModule((options: ContainerModuleLoadOptions) => {
+                options.bind(JWT_HOOK).toConstantValue(jwtHook);
+            });
+            const router: WebpiecesRouter = await WebpiecesRouterFactory.create({
+                appBindings: [module],
+            });
+            router.addRoutes(SearchApi, SearchController);
+            const config = new WpMcpServerConfig<string>()
                 .setName('test-server')
                 .setVersion('1.0.0')
                 .setResource('https://api.example.test/app-owned/mcp')
                 .setAccessTokenAuthority(new TestTokenAuthority())
                 .setAuthorizationService(router.authorizationService())
                 .setAuthorizationServers(['https://login.example.test'])
-                .setRequiredScopes(['tools']),
-        );
-        const app: Express = express();
-        bridge.bind(
-            app,
-            new McpBindOptions(
-                ENDPOINT_PATH,
-                [McpApiBinding.local(SearchApi, router)],
-                [SEARCH_API_CATALOG],
-                McpDeployment.singleProcess(),
-            ),
-        );
-        httpServer = createServer(app);
-        await new Promise<void>((resolve: () => void, reject: (error: Error) => void) => {
-            httpServer.once('error', reject);
-            httpServer.listen(0, '127.0.0.1', resolve);
+                .setRequiredScopes(['tools']);
+            if (withIcons) config.setIcons(ICONS);
+            bridge = new WpMcpServer(config);
+            const app: Express = express();
+            bridge.bind(
+                app,
+                new McpBindOptions(
+                    ENDPOINT_PATH,
+                    [McpApiBinding.local(SearchApi, router)],
+                    [SEARCH_API_CATALOG],
+                    McpDeployment.singleProcess(),
+                ),
+            );
+            // A later setter must not change the identity of the already-bound bridge.
+            config.setIcons([new McpIcon('https://api.example.test/replacement.png')]);
+            httpServer = createServer(app);
+            await new Promise<void>((resolve: () => void, reject: (error: Error) => void) => {
+                httpServer.once('error', reject);
+                httpServer.listen(0, '127.0.0.1', resolve);
+            });
+            const address = httpServer.address();
+            if (!address || typeof address === 'string') throw new Error('test server has no port');
+            baseUrl = `http://127.0.0.1:${address.port}`;
+            legacy = new LegacyMcpHttpTestHarness(baseUrl, ENDPOINT_PATH);
+            modern = new McpHttpTestHarness(baseUrl, ENDPOINT_PATH);
         });
-        const address = httpServer.address();
-        if (!address || typeof address === 'string') throw new Error('test server has no port');
-        baseUrl = `http://127.0.0.1:${address.port}`;
-        legacy = new LegacyMcpHttpTestHarness(baseUrl, ENDPOINT_PATH);
-        modern = new McpHttpTestHarness(baseUrl, ENDPOINT_PATH);
-    });
 
-    afterAll(async () => {
-        await bridge.close();
-        await new Promise<void>((resolve: () => void, reject: (error: Error) => void) => {
-            httpServer.close((error?: Error) => (error ? reject(error) : resolve()));
+        afterAll(async () => {
+            await bridge.close();
+            await new Promise<void>((resolve: () => void, reject: (error: Error) => void) => {
+                httpServer.close((error?: Error) => (error ? reject(error) : resolve()));
+            });
         });
-    });
 
-    it.each([LEGACY_VERSION, OLDER_LEGACY_VERSION])(
-        'negotiates a 2025-era initialize asking for %s instead of refusing it',
-        async (requested: string) => {
-            const reply = await legacy.post(legacy.initialize(requested));
-            expect(reply.response.status).toBe(200);
-            const result = legacy.resultOf(reply.payload);
-            expect(result['protocolVersion']).toBe(requested);
-            expect(result['serverInfo']).toMatchObject({ name: 'test-server' });
-        },
-    );
-
-    it('still serves the modern era from the same endpoint', async () => {
-        const reply = await modern.post(modern.request('tools/list'));
-        expect(reply.response.status).toBe(200);
-        const tools = modern.resultOf(reply.payload)['tools'] as Array<Record<string, unknown>>;
-        expect(tools.map((tool: Record<string, unknown>) => String(tool['name']))).toContain(
-            'account_search',
-        );
-    });
-
-    it('lists and calls the same tools over the 2025-era wire', async () => {
-        const handshake = await legacy.post(legacy.initialize(LEGACY_VERSION));
-        const negotiated = String(legacy.resultOf(handshake.payload)['protocolVersion']);
-        const listed = await legacy.post(legacy.request('tools/list'), 'mcp-user', negotiated);
-        const tools = legacy.resultOf(listed.payload)['tools'] as Array<Record<string, unknown>>;
-        expect(tools.map((tool: Record<string, unknown>) => String(tool['name']))).toContain(
-            'account_search',
-        );
-        const called = await legacy.post(
-            legacy.request('tools/call', {
-                name: 'account_search',
-                arguments: { query: 'mine' },
-            }),
-            'mcp-user',
-            negotiated,
-        );
-        const result = legacy.resultOf(called.payload);
-        expect(result['isError']).toBeFalsy();
-        expect(result['structuredContent']).toMatchObject({ userId: 'user-7', result: 'mine' });
-    });
-
-    it('reports controller progress over the 2025-era wire too', async () => {
-        // A 2025 progressToken lives in params._meta WITHOUT a protocol-version claim, so this also
-        // pins that `hasProgressToken` routing to the streaming handler never modernises a request.
-        const body = legacy.request('tools/call', {
-            name: 'account_search',
-            arguments: { query: 'progress' },
-            _meta: { progressToken: 'legacy-progress' },
-        });
-        const response = await fetch(`${baseUrl}${ENDPOINT_PATH}`, {
-            method: 'POST',
-            headers: {
-                authorization: 'Bearer mcp-user',
-                accept: 'application/json, text/event-stream',
-                'content-type': 'application/json',
-                'mcp-protocol-version': LEGACY_VERSION,
+        it.each([LEGACY_VERSION, OLDER_LEGACY_VERSION])(
+            'negotiates a 2025-era initialize asking for %s instead of refusing it',
+            async (requested: string) => {
+                const reply = await legacy.post(legacy.initialize(requested));
+                expect(reply.response.status).toBe(200);
+                const result = legacy.resultOf(reply.payload);
+                expect(result['protocolVersion']).toBe(requested);
+                expect(result['serverInfo']).toMatchObject({
+                    name: 'test-server',
+                    version: `1.0.0+${bridge.registryRevision}`,
+                });
+                expect(result['serverInfo']).toHaveProperty('name', 'test-server');
+                const info = result['serverInfo'] as Record<string, unknown>;
+                if (withIcons) expect(info['icons']).toEqual(ICONS);
+                else expect(info).not.toHaveProperty('icons');
             },
-            body: JSON.stringify(body),
+        );
+
+        it('still serves the modern era from the same endpoint', async () => {
+            const reply = await modern.post(modern.request('tools/list'));
+            expect(reply.response.status).toBe(200);
+            const result = modern.resultOf(reply.payload);
+            const meta = result['_meta'] as Record<string, unknown>;
+            const info = meta['io.modelcontextprotocol/serverInfo'] as Record<string, unknown>;
+            expect(info).toMatchObject({
+                name: 'test-server',
+                version: `1.0.0+${bridge.registryRevision}`,
+            });
+            if (withIcons) expect(info['icons']).toEqual(ICONS);
+            else expect(info).not.toHaveProperty('icons');
+            const tools = result['tools'] as Array<Record<string, unknown>>;
+            expect(tools.map((tool: Record<string, unknown>) => String(tool['name']))).toContain(
+                'account_search',
+            );
         });
-        expect(response.status).toBe(200);
-        const stream = await response.text();
-        expect(stream).toContain('notifications/progress');
-        expect(stream).toContain('"progressToken":"legacy-progress"');
-        expect(stream).toContain('"result":"progress"');
-    });
 
-    it('still verifies the bind boundary bearer on the 2025-era wire', async () => {
-        const anonymous = await legacy.post(legacy.initialize(LEGACY_VERSION), null);
-        expect(anonymous.response.status).toBe(401);
-        expect(anonymous.response.headers.get('www-authenticate')).toContain('resource_metadata=');
-        const rejected = await legacy.post(legacy.initialize(LEGACY_VERSION), 'invalid');
-        expect(rejected.response.status).toBe(401);
-        const expired = await legacy.post(legacy.initialize(LEGACY_VERSION), 'expired');
-        expect(expired.response.status).toBe(401);
-    });
+        it('lists and calls the same tools over the 2025-era wire', async () => {
+            const handshake = await legacy.post(legacy.initialize(LEGACY_VERSION));
+            const negotiated = String(legacy.resultOf(handshake.payload)['protocolVersion']);
+            const listed = await legacy.post(legacy.request('tools/list'), 'mcp-user', negotiated);
+            const tools = legacy.resultOf(listed.payload)['tools'] as Array<
+                Record<string, unknown>
+            >;
+            expect(tools.map((tool: Record<string, unknown>) => String(tool['name']))).toContain(
+                'account_search',
+            );
+            const called = await legacy.post(
+                legacy.request('tools/call', {
+                    name: 'account_search',
+                    arguments: { query: 'mine' },
+                }),
+                'mcp-user',
+                negotiated,
+            );
+            const result = legacy.resultOf(called.payload);
+            expect(result['isError']).toBeFalsy();
+            expect(result['structuredContent']).toMatchObject({ userId: 'user-7', result: 'mine' });
+        });
 
-    it.each(['GET', 'DELETE'])(
-        'answers a 2025 session %s with 405, as the stateless legacy leg does',
-        async (method: string) => {
-            const response = await fetch(`${baseUrl}${ENDPOINT_PATH}`, { method });
-            expect(response.status).toBe(405);
-            expect(response.headers.get('allow')).toBe('POST');
-        },
-    );
+        it('reports controller progress over the 2025-era wire too', async () => {
+            // A 2025 progressToken lives in params._meta WITHOUT a protocol-version claim, so this also
+            // pins that `hasProgressToken` routing to the streaming handler never modernises a request.
+            const body = legacy.request('tools/call', {
+                name: 'account_search',
+                arguments: { query: 'progress' },
+                _meta: { progressToken: 'legacy-progress' },
+            });
+            const response = await fetch(`${baseUrl}${ENDPOINT_PATH}`, {
+                method: 'POST',
+                headers: {
+                    authorization: 'Bearer mcp-user',
+                    accept: 'application/json, text/event-stream',
+                    'content-type': 'application/json',
+                    'mcp-protocol-version': LEGACY_VERSION,
+                },
+                body: JSON.stringify(body),
+            });
+            expect(response.status).toBe(200);
+            const stream = await response.text();
+            expect(stream).toContain('notifications/progress');
+            expect(stream).toContain('"progressToken":"legacy-progress"');
+            expect(stream).toContain('"result":"progress"');
+        });
 
-    it('refuses a revision no era knows, naming what it does serve', async () => {
-        const reply = await modern.post(
-            {
-                jsonrpc: '2.0',
-                id: 1,
-                method: 'tools/list',
-                params: {
-                    _meta: {
-                        [PROTOCOL_VERSION_META_KEY]: UNKNOWN_VERSION,
-                        [CLIENT_INFO_META_KEY]: { name: 'from-the-future', version: '1' },
-                        [CLIENT_CAPABILITIES_META_KEY]: {},
+        it('still verifies the bind boundary bearer on the 2025-era wire', async () => {
+            const anonymous = await legacy.post(legacy.initialize(LEGACY_VERSION), null);
+            expect(anonymous.response.status).toBe(401);
+            expect(anonymous.response.headers.get('www-authenticate')).toContain(
+                'resource_metadata=',
+            );
+            const rejected = await legacy.post(legacy.initialize(LEGACY_VERSION), 'invalid');
+            expect(rejected.response.status).toBe(401);
+            const expired = await legacy.post(legacy.initialize(LEGACY_VERSION), 'expired');
+            expect(expired.response.status).toBe(401);
+        });
+
+        it.each(['GET', 'DELETE'])(
+            'answers a 2025 session %s with 405, as the stateless legacy leg does',
+            async (method: string) => {
+                const response = await fetch(`${baseUrl}${ENDPOINT_PATH}`, { method });
+                expect(response.status).toBe(405);
+                expect(response.headers.get('allow')).toBe('POST');
+            },
+        );
+
+        it('refuses a revision no era knows, naming what it does serve', async () => {
+            const reply = await modern.post(
+                {
+                    jsonrpc: '2.0',
+                    id: 1,
+                    method: 'tools/list',
+                    params: {
+                        _meta: {
+                            [PROTOCOL_VERSION_META_KEY]: UNKNOWN_VERSION,
+                            [CLIENT_INFO_META_KEY]: { name: 'from-the-future', version: '1' },
+                            [CLIENT_CAPABILITIES_META_KEY]: {},
+                        },
                     },
                 },
-            },
-            'mcp-user',
-            { 'mcp-protocol-version': UNKNOWN_VERSION },
-        );
-        expect(reply.payload.error?.code).toBe(-32_022);
-        expect(reply.payload.error?.data?.['requested']).toBe(UNKNOWN_VERSION);
-    });
-});
+                'mcp-user',
+                { 'mcp-protocol-version': UNKNOWN_VERSION },
+            );
+            expect(reply.payload.error?.code).toBe(-32_022);
+            expect(reply.payload.error?.data?.['requested']).toBe(UNKNOWN_VERSION);
+        });
+    },
+);
