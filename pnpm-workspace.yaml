@@ -15,7 +15,7 @@ packages:
 # webpieces-tooling is the complete installation umbrella; its children are pinned
 # together by the release. nx.json still registers @webpieces/nx-webpieces-rules.
 catalog:
-  '@webpieces/webpieces-tooling': 0.4.883
+  '@webpieces/webpieces-tooling': 0.4.885
   # The OpenAPI 3.1 validator the openapi-generator suite checks every generated document against
   # (#1058). A test-only dependency, pinned exact; it is not a @webpieces release.
   '@seriousme/openapi-schema-validator': 2.11.0
