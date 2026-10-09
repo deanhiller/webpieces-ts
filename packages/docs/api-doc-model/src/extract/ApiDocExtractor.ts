@@ -1,3 +1,4 @@
+import { McpProfiles } from './McpProfiles';
 import * as ts from 'typescript';
 import {
     ApiPath,
@@ -591,7 +592,7 @@ export class ApiDocExtractor {
      * human-readable title (#1180), the two facts the source cannot otherwise state. A title that
      * does not fold to a string is read as the empty string, which the MCP renderer refuses.
      *
-     * Nothing else is read because nothing else is declared there any more (#984): the method's JSDoc
+     * Profile membership is read from the optional third argument (#1187). Otherwise, the method's JSDoc
      * is the description for the agent and the partner alike, the three side-effect hints are computed
      * from the endpoint's `operation`, and `openWorldHint` is `@Endpoint`'s `openWorld`. See
      * {@link DocumentedMcpTool}.
@@ -608,7 +609,7 @@ export class ApiDocExtractor {
         }
         const titleArgument = call?.arguments[1];
         const title = titleArgument === undefined ? '' : (folder.tryFoldString(titleArgument) ?? '');
-        return new DocumentedMcpTool(folder.tryFoldString(argument) ?? '', title);
+        return new DocumentedMcpTool(folder.tryFoldString(argument) ?? '', title, McpProfiles.read(call?.arguments[2], folder));
     }
 
     /**

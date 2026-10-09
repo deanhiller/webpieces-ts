@@ -1,3 +1,4 @@
+import { Mcp } from '@webpieces/core-util';
 import { AuthorizationService } from '@webpieces/http-routing';
 import 'reflect-metadata';
 import * as fs from 'node:fs';
@@ -275,7 +276,7 @@ describe('McpToolRegistry pairs each binding with ITS contract’s catalog', () 
                     account.description,
                     account.hints,
                     account.inputSchema,
-                    account.outputSchema,
+                    account.outputSchema, [Mcp.DEFAULT],
                 ),
                 admin,
             ]),

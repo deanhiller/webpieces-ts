@@ -1,3 +1,4 @@
+import { Mcp } from '@webpieces/core-util';
 import { AuthenticatedCaller, AuthorizationService } from '@webpieces/http-routing';
 
 export const MAX_MCP_ACCESS_TOKEN_LIFETIME_SECONDS = 30 * 24 * 60 * 60;
@@ -116,6 +117,7 @@ export class McpProtectedResourceMetadata {
  * ```
  */
 export class WpMcpServerConfig<TGrant> {
+    private toolProfilesValue: readonly string[] = Object.freeze([Mcp.DEFAULT]);
     private nameValue?: string;
     private versionValue?: string;
     private resourceValue?: string;
@@ -124,6 +126,16 @@ export class WpMcpServerConfig<TGrant> {
     private authorizationServersValue?: readonly string[];
     private requiredScopesValue?: readonly string[];
     private maxAccountValidationAgeSecondsValue = MAX_MCP_ACCOUNT_VALIDATION_AGE_SECONDS;
+
+    /** OPTIONAL. Union of groups exposed by this instance; defaults to [Mcp.DEFAULT]. */
+    setToolProfiles(profiles: readonly string[]): this {
+        this.toolProfilesValue = Mcp.profiles(profiles, 'WpMcpServerConfig.setToolProfiles');
+        return this;
+    }
+
+    get toolProfiles(): readonly string[] {
+        return this.toolProfilesValue;
+    }
 
     /** REQUIRED. The MCP server name reported by `initialize`. */
     setName(name: string): this {

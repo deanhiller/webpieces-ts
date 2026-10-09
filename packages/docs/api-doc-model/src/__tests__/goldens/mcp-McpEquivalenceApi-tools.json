@@ -44,7 +44,10 @@
         "phase"
       ],
       "additionalProperties": false
-    }
+    },
+    "profiles": [
+      "admin"
+    ]
   },
   {
     "name": "lookup_orders",
@@ -200,7 +203,10 @@
         "orders"
       ],
       "additionalProperties": false
-    }
+    },
+    "profiles": [
+      "default"
+    ]
   },
   {
     "name": "reindex_store",
@@ -238,6 +244,10 @@
         "itemsRead"
       ],
       "additionalProperties": false
-    }
+    },
+    "profiles": [
+      "admin",
+      "default"
+    ]
   }
 ]

@@ -1,8 +1,9 @@
 import { ApiJsonSchema, ApiJsonSchemaDiscriminator, ApiJsonSchemaType } from './DtoSchema';
+import { Mcp } from './Mcp';
 import { WpMcpToolHints } from './McpMetadata';
 
 /**
- * ONE MCP tool, as `tools/list` publishes it.
+ * ONE generated MCP tool definition, including server-only profile membership.
  *
  * It is BUILT from the source by `@webpieces/api-doc-model`'s `McpSchemaRenderer` at build time, and
  * READ here at boot — so the tool an agent is shown and the tool the server accepts are the same
@@ -38,7 +39,10 @@ export class McpToolDefinition {
         readonly hints: WpMcpToolHints,
         readonly inputSchema: ApiJsonSchema,
         readonly outputSchema: ApiJsonSchema,
-    ) {}
+        readonly profiles: readonly string[],
+    ) {
+        this.profiles = Mcp.profiles(profiles, 'MCP catalog tool');
+    }
 }
 
 /** Thrown when a catalog is not one this release can read or write. */
@@ -206,7 +210,23 @@ class McpCatalogJson {
             ),
             this.schemaFrom(record['inputSchema']),
             this.schemaFrom(record['outputSchema']),
+            this.profiles(record['profiles']),
         );
+    }
+
+    // webpieces-disable no-any-unknown -- JSON catalog parse boundary
+    private profiles(value: unknown): readonly string[] {
+        if (!Array.isArray(value) || !value.every((entry: unknown) => typeof entry === 'string')) {
+            throw new McpToolCatalogError(
+                'The MCP tool catalog requires profiles (#1187); stale artifacts are refused.',
+                REGENERATE,
+            );
+        }
+        try {
+            return Mcp.profiles(value, 'MCP catalog profiles');
+        } catch (error) {
+            throw new McpToolCatalogError(String(error), REGENERATE);
+        }
     }
 
     // webpieces-disable no-any-unknown -- parsing JSON is exactly where unknown belongs

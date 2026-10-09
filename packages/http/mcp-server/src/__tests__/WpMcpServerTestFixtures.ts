@@ -1,3 +1,4 @@
+import { Mcp } from '@webpieces/core-util';
 import { WpAuthorization, AuthorizationType, WpAuth, jwt as jwtAuth, oidc as oidcAuth } from '@webpieces/core-util';
 import 'reflect-metadata';
 import { injectable } from 'inversify';
@@ -74,7 +75,7 @@ function searchTool(
         description,
         hints,
         searchInputSchema(),
-        searchOutputSchema(),
+        searchOutputSchema(), [Mcp.DEFAULT],
     );
 }
 

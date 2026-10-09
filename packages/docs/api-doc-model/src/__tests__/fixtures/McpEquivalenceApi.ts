@@ -1,3 +1,4 @@
+import { Mcp } from '@webpieces/core-util';
 import { WpAuthorization, AuthorizationType, WpAuth, jwt as jwtAuth } from '@webpieces/core-util';
 import 'reflect-metadata';
 import { ApiPath, ApiType, Endpoint, Integer, MCP, POST, READ, RPC, SVC_TO_SVC, WRITE, WRITE_IDEMPOTENT, WpMax, WpMcpTool, WpMin } from '@webpieces/core-util';
@@ -165,7 +166,7 @@ export abstract class McpEquivalenceApi {
     @WpAuth([jwtAuth()])
     @WpAuthorization({ authType: AuthorizationType.ALL_USERS })
 
-    @WpMcpTool('cancel_order', 'Cancel an order')
+    @WpMcpTool('cancel_order', 'Cancel an order', { profiles: ['admin'] })
     cancel(_request: CancelRequest): Promise<CancelResponse> {
         throw new Error('contract only');
     }
@@ -177,7 +178,7 @@ export abstract class McpEquivalenceApi {
     @WpAuth([jwtAuth()])
     @WpAuthorization({ authType: AuthorizationType.ALL_USERS })
 
-    @WpMcpTool('reindex_store', 'Reindex a store')
+    @WpMcpTool('reindex_store', 'Reindex a store', { profiles: [Mcp.DEFAULT, 'admin'] })
     reindex(_request: ReindexRequest): Promise<ReindexResponse> {
         throw new Error('contract only');
     }

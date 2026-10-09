@@ -412,3 +412,5 @@ export { OAuthBearerChallenge } from './oauth/OAuthBearerChallenge';
 export { OAuthErrorBody, OAuthErrorResponse } from './oauth/OAuthErrorResponse';
 export { OAuthAuthorizationErrorRedirect } from './oauth/OAuthAuthorizationErrorRedirect';
 export type { PublishedKind, PublishedApiError } from './http/ApiErrorHttpStatus';
+
+export { Mcp, WpMcpToolOptions } from './mcp/Mcp';

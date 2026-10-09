@@ -153,3 +153,12 @@ is reported locally as `StreamTransportError`.
 ## License
 
 Apache-2.0
+
+### MCP profile membership
+
+`Mcp.DEFAULT` is the reserved base tool group. `@WpMcpTool(name, title)` and an omitted
+`profiles` option select only that group. `{ profiles: ['admin'] }` selects only admin;
+`{ profiles: [Mcp.DEFAULT, 'admin'] }` explicitly shares a tool between both groups. Membership is
+independent of `@WpAuthorization` roles and never grants account permissions. Identifiers match
+`[a-z][a-z0-9-]{0,63}`; empty lists, duplicates and malformed options are rejected.
+See `@webpieces/mcp-server` for independent endpoint/resource configuration and union selection.

@@ -68,6 +68,13 @@ describe('the MCP tool catalog rendered from a contract', () => {
         expect(catalog.toJsonText()).toEqual(fs.readFileSync(GOLDEN, 'utf8'));
     });
 
+    it('propagates exclusive and shared profiles through extraction and catalog loading', () => {
+        const loaded = McpToolCatalogFile.fromJsonText(catalog.fileName, catalog.toJsonText());
+        expect(loaded.find('lookup_orders')?.profiles).toEqual(['default']);
+        expect(loaded.find('cancel_order')?.profiles).toEqual(['admin']);
+        expect(loaded.find('reindex_store')?.profiles).toEqual(['admin', 'default']);
+    });
+
     it('publishes every @WpMcpTool of the contract under its stable protocol name', () => {
         expect(catalog.names()).toEqual(['cancel_order', 'lookup_orders', 'reindex_store']);
     });

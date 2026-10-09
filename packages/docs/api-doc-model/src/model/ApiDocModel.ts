@@ -189,6 +189,7 @@ export class DocumentedMcpTool {
          * EMPTY STRING when the argument does not fold to a string; the MCP renderer refuses that.
          */
         readonly title: string,
+        readonly profiles: readonly string[],
     ) {}
 }
 

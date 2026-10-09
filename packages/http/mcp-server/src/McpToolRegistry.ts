@@ -38,6 +38,7 @@ export class RegisteredMcpTool {
         public readonly binding: McpApiBinding,
         public readonly inputSchema: ApiJsonSchema,
         public readonly outputSchema: ApiJsonSchema,
+        public readonly profiles: readonly string[],
     ) {}
 }
 
@@ -70,7 +71,11 @@ export class RegisteredMcpTool {
 export class McpToolRegistry {
     readonly tools: readonly RegisteredMcpTool[];
 
-    constructor(bindings: readonly McpApiBinding[], catalogs: readonly McpToolCatalog[], private readonly authorizationService: AuthorizationService) {
+    constructor(
+        bindings: readonly McpApiBinding[],
+        catalogs: readonly McpToolCatalog[],
+        private readonly authorizationService: AuthorizationService,
+    ) {
         const pairing = new McpCatalogPairing(catalogs);
         const registered: RegisteredMcpTool[] = [];
         const names = new Set<string>();
@@ -82,6 +87,13 @@ export class McpToolRegistry {
             assertApiTypeMatchesMcpTools(apiClass);
             const declared = getWpMcpTools(apiClass);
             const catalog = pairing.claim(apiClass, declared.length);
+            for (const entry of catalog?.file.tools ?? []) {
+                if (!declared.some((metadata: WpMcpToolMetadata) => metadata.name === entry.name)) {
+                    pairing.problem(
+                        `Stale tool '${entry.name}' in ${catalog!.file.fileName}; rebuild the api library.`,
+                    );
+                }
+            }
             for (const metadata of declared) {
                 if (names.has(metadata.name)) {
                     pairing.problem(
@@ -152,6 +164,7 @@ export class McpToolRegistry {
             binding,
             published.inputSchema,
             published.outputSchema,
+            published.profiles,
         );
     }
 
@@ -169,6 +182,15 @@ export class McpToolRegistry {
                     `${catalog.file.fileName} (${catalog.directory}) does not contain. It has: ` +
                     `${catalog.names().join(', ') || '(nothing)'}. The catalog is older than the contract — ` +
                     'rebuild the api library; a tool the build never saw is a tool whose schema nobody checked.',
+            );
+            return undefined;
+        }
+        if (
+            published.methodName !== metadata.methodName ||
+            published.profiles.join(',') !== metadata.profiles.join(',')
+        ) {
+            pairing.problem(
+                `MCP tool '${metadata.name}' has stale method/profile metadata in ${catalog.file.fileName}; rebuild the api library.`,
             );
             return undefined;
         }
@@ -269,10 +291,14 @@ export class AuthorizedMcpTools {
     static async create(
         registry: McpToolRegistry,
         policy: AuthorizationService,
+        profiles: readonly string[],
     ): Promise<AuthorizedMcpTools> {
         const tools: RegisteredMcpTool[] = [];
         const authorization = new McpToolPolicy(policy);
-        for (const tool of registry.tools) {
+        for (const tool of [...registry.tools].sort((a: RegisteredMcpTool, b: RegisteredMcpTool) =>
+            a.name.localeCompare(b.name),
+        )) {
+            if (!tool.profiles.some((profile: string) => profiles.includes(profile))) continue;
             if (await authorization.permits(tool.authorization)) tools.push(tool);
         }
         return new AuthorizedMcpTools(tools);

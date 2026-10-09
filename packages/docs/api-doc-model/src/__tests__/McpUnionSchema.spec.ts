@@ -1,3 +1,4 @@
+import { Mcp } from '@webpieces/core-util';
 import { describe, it, expect, beforeAll } from 'vitest';
 import * as path from 'node:path';
 import * as ts from 'typescript';
@@ -221,7 +222,7 @@ function endpoint(title: string): DocumentedEndpoint {
         false,
         new DocumentedEndpointOptions(false, undefined, undefined),
         undefined,
-        new DocumentedMcpTool('ask_either', title),
+        new DocumentedMcpTool('ask_either', title, [Mcp.DEFAULT]),
         undefined,
         undefined,
         new Map<string, string>(),
