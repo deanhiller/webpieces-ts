@@ -221,7 +221,7 @@ describe('renderPrBody', () => {
         expect(body.startsWith('https://github.com/o/r/pull/42\n')).toBe(true);
         expect(body.indexOf('https://github.com/o/r/pull/42')).toBeLessThan(body.indexOf('Risk: '));
         expect(body).toContain('20/100 🟢 (green)');
-        expect(body).toContain('Flags: 🟢 all green');
+        expect(body).not.toContain('Flags:');
         expect(body).toContain('One thing. Two thing. Three thing.');
         // The old `PR: <url>` label is gone — the bare URL leads instead.
         expect(body).not.toContain('PR: ');
@@ -248,7 +248,7 @@ describe('renderPrBody', () => {
      */
     it('always ends the flag list with the pointer to the comments — green case included', () => {
         const green = renderPrBody(baseInput(), 'https://github.com/o/r/pull/42');
-        expect(green).toContain('Flags: 🟢 all green');
+        expect(green).not.toContain('Flags:');
         expect(green).toContain('- (Full dashboard in 1st comment, reviewer checklist in 2nd — kept out of git log)');
 
         const red = renderPrBody(
@@ -437,13 +437,41 @@ describe('renderDetailComment checklists — the detail still lives in the comme
         expect(md).not.toContain('**Checklists:** '); // the dashboard row belongs to the PR body only
     });
 
-    // The compact commit body is a separate artifact and keeps its per-checklist flags.
-    it('carries matched checklists into the compact commit body unchanged', () => {
-        const rows = [new ChecklistRow('hasura-reviewer', CK_PASS), new ChecklistRow('api-reviewer', CK_WARN, 'no rate limit')];
+    it('omits passed reviewers while retaining every non-green verdict in the compact commit body', () => {
+        const rows = [
+            new ChecklistRow('hasura-reviewer', CK_PASS),
+            new ChecklistRow('ticket-required-reviewer', CK_PASS),
+            new ChecklistRow('api-reviewer', CK_WARN, 'no rate limit'),
+            new ChecklistRow('failed-reviewer', CK_FAIL),
+            new ChecklistRow('missing-reviewer', CK_MISSING),
+            new ChecklistRow('overridden-reviewer', CK_OVERRIDDEN, 'accepted risk'),
+            new ChecklistRow('fixed-reviewer', CK_ORANGE_FIXED, 'author-fixed'),
+            new ChecklistRow('unknown-reviewer', 'new-verdict'),
+        ];
         const input = new DashboardInput('My PR', computeGateResults([], []), countAddedDisables(''), true, 'a', 'b', 'c', review(), rows, 'pnpm nx affected --target=ci', 0, AUTHOR, false);
         const body = renderPrBody(input, '');
-        expect(body).toContain('Checklist — hasura-reviewer: 🟢 passed');
+        expect(body).not.toContain('hasura-reviewer');
+        expect(body).not.toContain('ticket-required-reviewer');
         expect(body).toContain('Checklist — api-reviewer: 🟡 passed with concerns');
+        expect(body).toContain('Checklist — failed-reviewer: 🔴 FAILED review');
+        expect(body).toContain('Checklist — missing-reviewer: ⚪ not reviewed');
+        expect(body).toContain('Checklist — overridden-reviewer: 🟠 OVERRIDDEN — override: accepted risk');
+        expect(body).toContain('Checklist — fixed-reviewer: 🟠 author-fixed');
+        expect(body).toContain('Checklist — unknown-reviewer: ⚪ unknown verdict (new-verdict)');
+    });
+
+    it('keeps passing evidence in comments and only the comment pointer in an all-passed flag list', () => {
+        const rows = [new ChecklistRow('api-reviewer', CK_PASS), new ChecklistRow('ticket-required-reviewer', CK_PASS)];
+        const input = new DashboardInput('My PR', computeGateResults([], []), countAddedDisables(''), true, 'a', 'b', 'c', review(), rows, 'pnpm nx affected --target=ci', 0, AUTHOR, false);
+        const body = renderPrBody(input, '');
+        expect(body).not.toContain('Checklist —');
+        expect(body).not.toContain('Flags:');
+        expect(body).not.toContain('all green');
+        expect(body).toContain('- (Full dashboard in 1st comment, reviewer checklist in 2nd — kept out of git log)');
+        expect(renderDetailComment(input)).toContain('**Checklists:** 🟢 2 ran — all passed');
+        const comment = renderChecklistComment([alwaysRow('api-reviewer', CK_PASS), alwaysRow('ticket-required-reviewer', CK_PASS)], true);
+        expect(comment).toContain('#### 🟢 api-reviewer');
+        expect(comment).toContain('#### 🟢 ticket-required-reviewer');
     });
 });
 
