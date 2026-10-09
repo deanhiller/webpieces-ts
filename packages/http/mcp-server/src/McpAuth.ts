@@ -1,5 +1,7 @@
 import { Mcp, McpToolProfiles } from '@webpieces/core-util';
 import { AuthenticatedCaller, AuthorizationService } from '@webpieces/http-routing';
+import { Icon } from '@modelcontextprotocol/server';
+import { McpIcon } from './McpIcon';
 
 export const MAX_MCP_ACCESS_TOKEN_LIFETIME_SECONDS = 30 * 24 * 60 * 60;
 export const MAX_MCP_ACCOUNT_VALIDATION_AGE_SECONDS = 60 * 60;
@@ -120,6 +122,7 @@ export class WpMcpServerConfig<TGrant> {
     private toolProfilesValue: readonly string[] = Object.freeze([Mcp.DEFAULT]);
     private nameValue?: string;
     private versionValue?: string;
+    private iconsValue?: readonly McpIcon[];
     private resourceValue?: string;
     private accessTokenAuthorityValue?: McpAccessTokenAuthority<TGrant>;
     private authorizationServiceValue?: AuthorizationService;
@@ -147,6 +150,17 @@ export class WpMcpServerConfig<TGrant> {
     setVersion(version: string): this {
         this.versionValue = this.requireText(version, 'setVersion');
         return this;
+    }
+
+    /** OPTIONAL. Standard MCP icons; copied and frozen, with no network access. */
+    setIcons(icons: readonly Icon[]): this {
+        this.iconsValue = this.snapshotIcons(icons);
+        return this;
+    }
+
+    /** Immutable snapshot; omitted icons remain absent from SDK implementation metadata. */
+    get icons(): readonly McpIcon[] | undefined {
+        return this.iconsValue;
     }
 
     /**
@@ -239,6 +253,14 @@ export class WpMcpServerConfig<TGrant> {
         if (missing.length > 0) {
             throw new Error(`WpMcpServerConfig is missing ${missing.join(', ')}`);
         }
+        for (const icon of this.iconsValue ?? []) {
+            const url = new URL(icon.src);
+            if (url.protocol === 'https:' && url.origin !== new URL(this.resource).origin) {
+                throw new Error(
+                    'WpMcpServerConfig.setIcons(...) requires HTTPS icons on the resource origin.',
+                );
+            }
+        }
     }
 
     get name(): string {
@@ -293,6 +315,23 @@ export class WpMcpServerConfig<TGrant> {
             this.resource,
             this.authorizationServers,
             this.requiredScopes,
+        );
+    }
+
+    /** Copies caller-owned descriptors and nested size arrays before freezing the snapshot. */
+    private snapshotIcons(icons: readonly Icon[]): readonly McpIcon[] {
+        if (!Array.isArray(icons)) {
+            throw new Error(
+                'WpMcpServerConfig.setIcons(...) requires an array of icon descriptors.',
+            );
+        }
+        return Object.freeze(
+            icons.map((icon: Icon) => {
+                if (!icon || typeof icon !== 'object') {
+                    throw new Error('WpMcpServerConfig.setIcons(...) requires icon descriptors.');
+                }
+                return new McpIcon(icon.src, icon.mimeType, icon.sizes, icon.theme);
+            }),
         );
     }
 

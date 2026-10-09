@@ -15,6 +15,7 @@ import {
     ServerOptions,
     Tool,
     Implementation,
+    Icon,
 } from '@modelcontextprotocol/server';
 import { NodeMcpRequestHandler, toNodeHandler } from '@modelcontextprotocol/node';
 import { Express, json, NextFunction, Request, Response } from 'express';
@@ -169,6 +170,7 @@ export class WpMcpServer<TGrant> {
     private nodeHandler?: NodeMcpRequestHandler;
     private streamingNodeHandler?: NodeMcpRequestHandler;
     private revision?: string;
+    private icons?: readonly Icon[];
 
     constructor(private readonly config: WpMcpServerConfig<TGrant>) {
         this.translator = new WpMcpErrorTranslator((): string => this.challenge());
@@ -207,7 +209,12 @@ export class WpMcpServer<TGrant> {
             );
         }
         this.toolProfiles = this.config.toolProfiles;
-        this.registry = new McpToolRegistry(options.bindings, options.toolCatalogs, this.config.authorizationService);
+        this.icons = this.config.icons;
+        this.registry = new McpToolRegistry(
+            options.bindings,
+            options.toolCatalogs,
+            this.config.authorizationService,
+        );
         this.revision = this.calculateRegistryRevision(this.registry);
         this.handler = this.createHandler(options, 'auto');
         this.streamingHandler = this.createHandler(options, 'sse');
@@ -399,7 +406,11 @@ export class WpMcpServer<TGrant> {
             );
         }
         const server = new WpSdkMcpServer(
-            { name: this.config.name, version: `${this.config.version}+${this.revision}` },
+            {
+                name: this.config.name,
+                version: `${this.config.version}+${this.revision}`,
+                ...(this.icons === undefined ? {} : { icons: [...this.icons] }),
+            },
             {
                 capabilities: { tools: { listChanged: true } },
                 cacheHints: {
@@ -661,7 +672,10 @@ export class WpMcpServer<TGrant> {
             tool.annotations,
             tool.profiles,
         ]);
-        return createHash('sha256').update(JSON.stringify([this.toolProfiles, surface])).digest('hex').slice(0, 12);
+        return createHash('sha256')
+            .update(JSON.stringify([this.toolProfiles, surface]))
+            .digest('hex')
+            .slice(0, 12);
     }
 
     private requireRegistry(): McpToolRegistry {
