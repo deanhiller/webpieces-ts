@@ -1,3 +1,6 @@
+/** Explicit selections contain at least one profile; runtime validation handles dynamic data. */
+export type McpToolProfiles = readonly [string, ...string[]];
+
 /** Profile identifiers are application groups, independent of paths and account roles. */
 export class Mcp {
     static readonly DEFAULT = 'default';
@@ -8,7 +11,7 @@ export class Mcp {
         profiles: readonly string[],
         source: string,
         failure: (message: string) => Error = (message: string): Error => new Error(message),
-    ): readonly string[] {
+    ): McpToolProfiles {
         if (!Array.isArray(profiles) || profiles.length === 0) {
             throw failure(`${source} requires a non-empty profiles array, e.g. [Mcp.DEFAULT].`);
         }
@@ -20,11 +23,11 @@ export class Mcp {
             if (seen.has(profile)) throw failure(`${source}: duplicate profile '${profile}'.`);
             seen.add(profile);
         }
-        return Object.freeze([...profiles].sort());
+        return Object.freeze([...profiles].sort()) as McpToolProfiles;
     }
 }
 
 /** Optional membership for @WpMcpTool; omission means only Mcp.DEFAULT. */
 export class McpToolProfilesOptions {
-    readonly profiles?: readonly string[];
+    readonly profiles?: McpToolProfiles;
 }

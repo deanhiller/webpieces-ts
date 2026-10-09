@@ -3,7 +3,7 @@ import { Server } from 'node:http';
 import express from 'express';
 import { ContainerModule, ContainerModuleLoadOptions } from 'inversify';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { HeaderRegistry, Mcp, McpToolCatalogFile, McpToolDefinition } from '@webpieces/core-util';
+import { HeaderRegistry, Mcp, McpToolProfiles, McpToolCatalogFile, McpToolDefinition } from '@webpieces/core-util';
 import { JWT_HOOK, WebpiecesRouterFactory, WebpiecesRouter } from '@webpieces/http-routing';
 import { McpApiBinding } from './McpApiBinding';
 import { WpMcpServerConfig, VerifiedMcpCredential } from './McpAuth';
@@ -29,7 +29,7 @@ class ResourceAuthority extends TestTokenAuthority {
 class ProfileMount {
     constructor(
         readonly path: string,
-        readonly profiles: readonly string[],
+        readonly profiles: McpToolProfiles,
     ) {}
     bridge!: WpMcpServer<string>;
     client!: McpHttpTestHarness;
@@ -68,7 +68,7 @@ describe('bound MCP profile and resource isolation', () => {
         controller = router.getContainer().get(ProfileController);
         const app = express();
         for (const mount of mounts) {
-            const profiles = [...mount.profiles];
+            const profiles: [string, ...string[]] = [mount.profiles[0], ...mount.profiles.slice(1)];
             const config = new WpMcpServerConfig<string>()
                 .setName('profiles')
                 .setVersion('1')

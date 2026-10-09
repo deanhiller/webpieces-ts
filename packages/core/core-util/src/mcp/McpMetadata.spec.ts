@@ -6,7 +6,7 @@ import { Mcp, McpToolProfilesOptions } from './Mcp';
 
 describe('MCP profile declarations', () => {
     it('defaults only on omission and snapshots explicit membership', () => {
-        const profiles = ['admin', Mcp.DEFAULT];
+        const profiles: [string, ...string[]] = ['admin', Mcp.DEFAULT];
         abstract class ProfileApi {
             @WpMcpTool('implicit', 'Implicit')
             implicit(_request: object): Promise<object> {
@@ -38,7 +38,7 @@ describe('MCP profile declarations', () => {
     it.each([[], [''], [' '], ['Admin'], ['/admin'], ['admin', 'admin'], ['x'.repeat(65)]])(
         'rejects invalid membership %j',
         (profiles: string[]) => {
-            expect(() => WpMcpTool('tool', 'Title', { profiles })).toThrow(/profiles|profile/);
+            expect(() => WpMcpTool('tool', 'Title', { profiles } as McpToolProfilesOptions)).toThrow(/profiles|profile/);
         },
     );
 

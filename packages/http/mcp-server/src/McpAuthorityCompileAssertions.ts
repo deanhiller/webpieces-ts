@@ -1,5 +1,5 @@
 import { AuthenticatedCaller, JwtHook, MintedJwt } from '@webpieces/http-routing';
-import { McpAccessTokenAuthority, MintedMcpAccessToken, VerifiedMcpCredential } from './McpAuth';
+import { McpAccessTokenAuthority, MintedMcpAccessToken, VerifiedMcpCredential, WpMcpServerConfig } from './McpAuth';
 
 class ExampleJwtMintRequest {
     constructor(public readonly subject: string) {}
@@ -54,5 +54,13 @@ export class McpPrincipalCompileAssertions {
         // @ts-expect-error listingRoles was replaced by principalRoles derived from the canonical caller
         credential.listingRoles;
         return credential.principalRoles;
+    }
+}
+
+/** Profile-selection arity is checked by tsc, not only by runtime specs. */
+export class McpProfilesCompileAssertions {
+    empty(config: WpMcpServerConfig<string>): void {
+        // @ts-expect-error an explicit server selection must include at least one group
+        config.setToolProfiles([]);
     }
 }

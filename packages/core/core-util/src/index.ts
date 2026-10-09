@@ -414,3 +414,4 @@ export { OAuthAuthorizationErrorRedirect } from './oauth/OAuthAuthorizationError
 export type { PublishedKind, PublishedApiError } from './http/ApiErrorHttpStatus';
 
 export { Mcp, McpToolProfilesOptions } from './mcp/Mcp';
+export type { McpToolProfiles } from './mcp/Mcp';
