@@ -307,7 +307,7 @@ export class Dashboard {
         lines.push(new ReviewIdentityRenderer().renderAuthor(input.author.harness, input.author.model, false));
         lines.push('');
         const flags = this.nonGreenFlags(input);
-        lines.push(flags.length === 0 ? 'Flags: 🟢 all green' : 'Non-green Flags (full list in first comment to avoid large git logs)');
+        if (flags.length > 0) lines.push('Non-green Flags (full list in first comment to avoid large git logs)');
         for (const flag of flags) lines.push(`- ${flag}`);
         // ALWAYS the last bullet, green case included. Without it the compact body reads as the whole
         // record, and the reader never learns that every green row, the full summary and each reviewer's
@@ -385,7 +385,7 @@ export class Dashboard {
             flags.push(`Webpieces Disables Added: 🟡 ${input.disables.webpiecesCount} line(s)${which}`);
         }
         if (input.disables.eslintCount > 0) flags.push(`ESLint Disables Added: 🟡 ${input.disables.eslintCount} line(s)`);
-        // A triggered checklist is noteworthy in main's history — carry each into the commit body.
+        // Passing reviews are implicit in main's history; only non-green verdicts belong here.
         //
         // SUPPRESSED replaces those N bullets with exactly ONE, whatever N is. Not because the per-reviewer
         // bullets would lie — `checklistStatusText` was already hardened against a false "passed" — but
@@ -398,6 +398,7 @@ export class Dashboard {
             flags.push(`Checklists — ${this.suppressedTail(input.suppressedChecklistCount)}`);
         }
         for (const row of input.checklists) {
+            if (row.status === CK_PASS) continue;
             flags.push(`Checklist — ${row.title}: ${this.checklistStatusText(row)}`);
         }
         if (input.notBriefed.length > 0) flags.push(`Checklists — ${this.notBriefedLine(input.notBriefed)}`);
