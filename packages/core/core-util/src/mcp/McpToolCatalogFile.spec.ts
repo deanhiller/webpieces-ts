@@ -1,3 +1,4 @@
+import { Mcp } from './Mcp';
 import { describe, expect, it } from 'vitest';
 import { ApiJsonSchema, ObjectSchemaBuilder } from './DtoSchema';
 import { WpMcpToolHints } from './McpMetadata';
@@ -19,12 +20,26 @@ function tool(name: string): McpToolDefinition {
         new WpMcpToolHints(true, false, true, false),
         input,
         output,
+        [Mcp.DEFAULT],
     );
 }
 
 const FILE = 'mcp-OrdersApi-tools.json';
 
 describe('McpToolCatalogFile', () => {
+    it('refuses artifacts predating profiles and malformed membership with a regeneration cure', () => {
+        const entry = JSON.parse(new McpToolCatalogFile('OrdersApi', [tool('a')]).toJsonText())[0];
+        for (const profiles of [undefined, [], ['admin', 'admin'], [' '], [7]]) {
+            entry.profiles = profiles;
+            expect(() => McpToolCatalogFile.fromJsonText(FILE, JSON.stringify([entry]))).toThrow(
+                /openapi-generate/,
+            );
+        }
+        entry.profiles = [Mcp.DEFAULT, 'admin'];
+        expect(
+            McpToolCatalogFile.fromJsonText(FILE, JSON.stringify([entry])).find('a')?.profiles,
+        ).toEqual(['admin', Mcp.DEFAULT]);
+    });
     it('round-trips through the generated artifact, rebuilding real class instances', () => {
         const source = new McpToolCatalogFile('OrdersApi', [tool('lookup_orders')]);
 
@@ -41,7 +56,10 @@ describe('McpToolCatalogFile', () => {
     });
 
     it('preserves a nullable type through the artifact', () => {
-        const parsed = McpToolCatalogFile.fromJsonText(FILE, new McpToolCatalogFile('OrdersApi', [tool('a')]).toJsonText());
+        const parsed = McpToolCatalogFile.fromJsonText(
+            FILE,
+            new McpToolCatalogFile('OrdersApi', [tool('a')]).toJsonText(),
+        );
 
         const nullable = parsed.find('a')?.inputSchema.properties?.['externalId'];
         expect(nullable?.type).toEqual(['string', 'null']);
@@ -49,13 +67,18 @@ describe('McpToolCatalogFile', () => {
     });
 
     it('sorts the artifact by tool name so the generated file is diffable', () => {
-        const text = new McpToolCatalogFile('OrdersApi', [tool('zebra'), tool('alpha')]).toJsonText();
+        const text = new McpToolCatalogFile('OrdersApi', [
+            tool('zebra'),
+            tool('alpha'),
+        ]).toJsonText();
 
         expect(text.indexOf('"alpha"')).toBeLessThan(text.indexOf('"zebra"'));
     });
 
     it('REFUSES two tools sharing one protocol name', () => {
-        expect(() => new McpToolCatalogFile('OrdersApi', [tool('same'), tool('same')])).toThrow(McpToolCatalogError);
+        expect(() => new McpToolCatalogFile('OrdersApi', [tool('same'), tool('same')])).toThrow(
+            McpToolCatalogError,
+        );
     });
 
     it('REFUSES a catalog that is not an array of tool definitions, naming the cure', () => {
@@ -75,9 +98,13 @@ describe('McpToolCatalogFile', () => {
     });
 
     it('REFUSES a stale catalog entry with no title, or a blank one, naming the tool and the cure (#1180)', () => {
-        const entry = JSON.parse(new McpToolCatalogFile('OrdersApi', [tool('lookup_orders')]).toJsonText())[0];
+        const entry = JSON.parse(
+            new McpToolCatalogFile('OrdersApi', [tool('lookup_orders')]).toJsonText(),
+        )[0];
         delete entry.title;
-        expect(() => McpToolCatalogFile.fromJsonText(FILE, JSON.stringify([entry]))).toThrow(McpToolCatalogError);
+        expect(() => McpToolCatalogFile.fromJsonText(FILE, JSON.stringify([entry]))).toThrow(
+            McpToolCatalogError,
+        );
         expect(() => McpToolCatalogFile.fromJsonText(FILE, JSON.stringify([entry]))).toThrow(
             /no 'title' on tool 'lookup_orders'.*openapi-generate/s,
         );
@@ -101,7 +128,12 @@ describe('McpToolCatalogFile', () => {
     });
 
     it('is not fooled by the documents and the retired single-file name', () => {
-        for (const name of ['mcp-tools.json', 'mcp-openapi.json', 'public-openapi.json', 'mcp-a-b-tools.json']) {
+        for (const name of [
+            'mcp-tools.json',
+            'mcp-openapi.json',
+            'public-openapi.json',
+            'mcp-a-b-tools.json',
+        ]) {
             expect(McpToolCatalogFile.contractNameOf(name), name).toBeUndefined();
         }
         expect(() => McpToolCatalogFile.fromJsonText('mcp-tools.json', '[]')).toThrow(

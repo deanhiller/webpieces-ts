@@ -1,3 +1,4 @@
+import { Mcp } from '@webpieces/core-util';
 import { AuthorizationService } from '@webpieces/http-routing';
 import { WpAuthorization, AuthorizationType, WpAuth, jwt as jwtAuth } from '@webpieces/core-util';
 import 'reflect-metadata';
@@ -100,7 +101,7 @@ const PASSAGE_CATALOG = new McpToolCatalog(
                 .build(),
             new ObjectSchemaBuilder()
                 .required('sentencesByLocale', typedMap('Sentences by locale', sentenceSchema()))
-                .build(),
+                .build(), [Mcp.DEFAULT],
         ),
     ]),
     IN_MEMORY,

@@ -1,3 +1,4 @@
+import { Mcp } from '@webpieces/core-util';
 import { AuthorizationService } from '@webpieces/http-routing';
 import { WpAuthorization, AuthorizationType, WpAuth, jwt as jwtAuth } from '@webpieces/core-util';
 import 'reflect-metadata';
@@ -81,7 +82,7 @@ const LOCK_CATALOG = new McpToolCatalog(
                 .build(),
             new ObjectSchemaBuilder()
                 .required('open', described('boolean', 'Whether the passage is open'))
-                .build(),
+                .build(), [Mcp.DEFAULT],
         ),
     ]),
     IN_MEMORY,

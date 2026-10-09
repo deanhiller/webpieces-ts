@@ -163,6 +163,7 @@ export class WpMcpServer<TGrant> {
     /** tools/call reads `McpRegistry`; every other reply stays framework-owned. See McpErrorTranslator. */
     private readonly translator: WpMcpErrorTranslator;
     private registry?: McpToolRegistry;
+    private toolProfiles: readonly string[] = [];
     private handler?: McpHttpHandler;
     private streamingHandler?: McpHttpHandler;
     private nodeHandler?: NodeMcpRequestHandler;
@@ -205,6 +206,7 @@ export class WpMcpServer<TGrant> {
                     `'${this.config.resource}' and the bound route are the same endpoint.`,
             );
         }
+        this.toolProfiles = this.config.toolProfiles;
         this.registry = new McpToolRegistry(options.bindings, options.toolCatalogs, this.config.authorizationService);
         this.revision = this.calculateRegistryRevision(this.registry);
         this.handler = this.createHandler(options, 'auto');
@@ -366,6 +368,7 @@ export class WpMcpServer<TGrant> {
         const tools = await AuthorizedMcpTools.create(
             this.requireRegistry(),
             this.config.authorizationService,
+            this.toolProfiles,
         );
         return new McpPostAuthentication(token, credential, this.disconnectSignal(req), tools);
     }
@@ -656,8 +659,9 @@ export class WpMcpServer<TGrant> {
             tool.inputSchema,
             tool.outputSchema,
             tool.annotations,
+            tool.profiles,
         ]);
-        return createHash('sha256').update(JSON.stringify(surface)).digest('hex').slice(0, 12);
+        return createHash('sha256').update(JSON.stringify([this.toolProfiles, surface])).digest('hex').slice(0, 12);
     }
 
     private requireRegistry(): McpToolRegistry {

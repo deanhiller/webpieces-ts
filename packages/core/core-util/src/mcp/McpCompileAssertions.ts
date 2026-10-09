@@ -27,6 +27,12 @@ abstract class InvalidMcpContract {
 }
 
 abstract class InvalidMcpArities {
+    // @ts-expect-error explicit profile membership is nonempty; omit options for Mcp.DEFAULT
+    @WpMcpTool('empty_profiles', 'Empty profiles', { profiles: [] })
+    emptyProfiles(_request: object): Promise<object> {
+        throw new Error('contract only');
+    }
+
     // @ts-expect-error MCP tools require exactly one request DTO
     @WpMcpTool('zero-arity', 'Zero arity')
     zero(): Promise<object> {

@@ -1,4 +1,5 @@
 import 'reflect-metadata';
+import { Mcp, McpToolProfilesOptions } from './Mcp';
 import { METADATA_KEYS } from '../http/decorators';
 import { EndpointOperation, READ, WRITE_IDEMPOTENT, WRITE } from '../http/HttpEndpointOptions';
 
@@ -33,6 +34,7 @@ export class WpMcpToolMetadata {
         public readonly name: string,
         /** The human-readable display name; `tools/list` publishes it as `title` AND `annotations.title`. */
         public readonly title: string,
+        public readonly profiles: readonly string[],
     ) {}
 }
 
@@ -44,7 +46,8 @@ export class WpMcpToolMetadata {
  * @WpMcpTool('learner_get_passages', 'Get your passages')
  * ```
  *
- * Those two are the whole argument list — the only facts about a tool the source cannot otherwise
+ * The optional third argument selects profiles; omission selects only Mcp.DEFAULT.
+ * The name and title are facts the source cannot otherwise
  * state:
  *
  * | fact | where it comes from |
@@ -69,7 +72,24 @@ export class WpMcpToolMetadata {
  * not a second copy of the description.
  */
 // webpieces-disable no-function-outside-class -- decorator factories are inherently module-scope
-export function WpMcpTool(name: string, title: string): WpMcpMethodDecorator {
+export function WpMcpTool(
+    name: string,
+    title: string,
+    options?: McpToolProfilesOptions,
+): WpMcpMethodDecorator {
+    if (
+        options !== undefined &&
+        (typeof options !== 'object' ||
+            options === null ||
+            Array.isArray(options) ||
+            Object.keys(options).some((key: string) => key !== 'profiles'))
+    ) {
+        throw new Error('@WpMcpTool options must be an object containing only profiles.');
+    }
+    const profiles = Mcp.profiles(
+        options !== undefined && 'profiles' in options ? options.profiles! : [Mcp.DEFAULT],
+        '@WpMcpTool',
+    );
     if (name.trim() === '') throw new Error('@WpMcpTool requires a non-empty stable name.');
     if (title.trim() === '') {
         throw new Error(
@@ -87,7 +107,7 @@ export function WpMcpTool(name: string, title: string): WpMcpMethodDecorator {
         const tools: Record<string, WpMcpToolMetadata> =
             Reflect.getMetadata(METADATA_KEYS.MCP_TOOLS, apiClass) ?? {};
         const methodName = String(propertyKey);
-        tools[methodName] = new WpMcpToolMetadata(methodName, name, title);
+        tools[methodName] = new WpMcpToolMetadata(methodName, name, title, profiles);
         Reflect.defineMetadata(METADATA_KEYS.MCP_TOOLS, tools, apiClass);
     };
 }

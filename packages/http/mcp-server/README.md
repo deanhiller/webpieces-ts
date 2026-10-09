@@ -395,3 +395,49 @@ That endpoint's URL is `WpMcpServerConfig.resourceMetadataUrl` — RFC 9728 §3.
 value of `resource_metadata` in the 401 `WWW-Authenticate` challenge. RFC 9728 §5.1 defines that
 parameter as the URL of the metadata DOCUMENT, never the resource identifier itself. The framework
 mounts no `.well-known` route; the app publishes the document there.
+
+## Tool profiles and independent endpoints
+
+Profile membership partitions tool exposure; account roles still belong exclusively to
+`@WpAuthorization`. Selecting an admin profile never grants admin authority. Import `Mcp` and
+`WpMcpTool` from the browser-safe `@webpieces/core-util` package:
+
+```ts
+@WpMcpTool('learner_get_passages', 'Get your passages') // only Mcp.DEFAULT
+@WpMcpTool('admin_list_users', 'List users', { profiles: ['admin'] }) // only admin
+@WpMcpTool('shared_tool', 'Shared tool', { profiles: [Mcp.DEFAULT, 'admin'] })
+```
+
+Each declaration also needs the usual endpoint, DTO, authentication, and authorization declarations.
+Two arguments, an omitted `profiles` property, and explicit `[Mcp.DEFAULT]` all select only the base
+group. An explicit list replaces that membership; it never implicitly adds the base group.
+Identifiers match `[a-z][a-z0-9-]{0,63}` (1–64 lowercase ASCII letters, digits or hyphens, starting
+with a letter). `Mcp.DEFAULT` reserves `default` for the base group. Empty lists, duplicates, unknown
+option keys, whitespace, paths, and invalid identifiers are rejected. Lists are snapshotted and sorted.
+
+Configure one independent `WpMcpServer` per mount with the same bindings, complete catalogs, and
+receiving router's `AuthorizationService`. Start from the required fluent configuration shown above:
+
+```ts
+baseConfig.setResource('https://api.example.com/mcp').setToolProfiles([Mcp.DEFAULT]);
+adminConfig.setResource('https://api.example.com/mcp/admin').setToolProfiles(['admin']);
+bothConfig.setResource('https://api.example.com/mcp/both').setToolProfiles([Mcp.DEFAULT, 'admin']);
+```
+
+Bind each instance with `McpBindOptions.endpointPath` equal to its resource path: `/mcp`,
+`/mcp/admin`, or `/mcp/both`. Omitting `setToolProfiles` selects `[Mcp.DEFAULT]`.
+A combined selection is the union, with shared tools listed once in stable name order. Further groups
+such as `course-authoring` work identically. No caller-controlled profile route or hint exists.
+Configure instances before binding; the selected groups are fixed when bound.
+
+Publish each instance's `protectedResourceMetadata()` at its configuration's `resourceMetadataUrl`,
+e.g. `/.well-known/oauth-protected-resource/mcp/admin`. Token authorities must verify the fixed exact
+resource, trusted issuer, expiry, scopes, and fresh account state. A `/mcp` token is rejected on
+`/mcp/admin`. Never derive audiences from Host headers. OAuth consent, grants, and connector setup
+remain application-owned; framework tests do not establish Claude.ai's simultaneous credential behavior.
+
+All supplied contracts/catalogs are validated before profile projection, including excluded entries.
+Discovery, schema lookup, and execution share the same profile-and-authorization view. Membership
+is catalog metadata, never a nonstandard MCP Tool field. Catalog entries now require `profiles`;
+artifacts from before this change are rejected with a cure to rebuild the contract library's
+`openapi-generate` target. Regenerate catalogs when upgrading; there is no schema reflection fallback.

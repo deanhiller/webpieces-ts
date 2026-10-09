@@ -156,6 +156,9 @@
         "orders"
       ],
       "additionalProperties": false
-    }
+    },
+    "profiles": [
+      "default"
+    ]
   }
 ]

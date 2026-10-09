@@ -1,3 +1,4 @@
+import { Mcp } from '@webpieces/core-util';
 import { AuthenticatedMachineIdentity } from '@webpieces/http-routing';
 import { ClientRole, WpAuthorization, AuthorizationType, WpAuth, oidc as oidcAuth, jwt as jwtAuth } from '@webpieces/core-util';
 import 'reflect-metadata';
@@ -81,7 +82,7 @@ function searchTool(
             .required('user', describedString('Delegated user'))
             .required('roles', describedString('Delegated roles'))
             .required('result', describedString('Result'))
-            .build(),
+            .build(), [Mcp.DEFAULT],
     );
 }
 

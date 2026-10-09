@@ -212,6 +212,7 @@ export class McpSchemaRenderer {
             ),
             this.rootSchema(endpoint.request, where, 'request'),
             this.rootSchema(endpoint.response, where, 'response'),
+            endpoint.mcpTool!.profiles,
         );
     }
 

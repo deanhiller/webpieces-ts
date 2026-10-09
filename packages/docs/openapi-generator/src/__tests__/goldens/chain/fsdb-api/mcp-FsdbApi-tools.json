@@ -93,6 +93,9 @@
         "descriptions"
       ],
       "additionalProperties": false
-    }
+    },
+    "profiles": [
+      "default"
+    ]
   }
 ]

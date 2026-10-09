@@ -137,6 +137,9 @@
         "translations"
       ],
       "additionalProperties": false
-    }
+    },
+    "profiles": [
+      "default"
+    ]
   }
 ]
