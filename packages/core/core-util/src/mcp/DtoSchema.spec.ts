@@ -106,6 +106,25 @@ describe('ApiJsonSchemaValidator', () => {
         );
     });
 
+    it('checks a NULLABLE enum against its enum as well as its type, as JSON Schema does (#1197)', () => {
+        const nullable = new ApiJsonSchema(['string', 'null']);
+        nullable.enum = ['open', 'closed', null];
+        const nullInTypeOnly = new ApiJsonSchema(['string', 'null']);
+        nullInTypeOnly.enum = ['open', 'closed'];
+        const required = stringSchema();
+        required.enum = ['open', 'closed'];
+
+        expect(validator.validate(nullable, null)).toBe(undefined);
+        expect(validator.validate(nullable, 'open')).toBe(undefined);
+        expect(messageOf(validator.validate(nullable, 'other'))).toBe(
+            '$ must be one of: open, closed, null',
+        );
+        expect(messageOf(validator.validate(nullInTypeOnly, null))).toBe(
+            '$ must be one of: open, closed',
+        );
+        expect(messageOf(validator.validate(required, null))).toBe('$ must not be null');
+    });
+
     it('walks array items and reports the offending index', () => {
         const list = new ApiJsonSchema('array');
         list.items = stringSchema();

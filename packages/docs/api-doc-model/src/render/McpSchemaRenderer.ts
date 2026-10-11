@@ -66,7 +66,7 @@ export class McpCatalogRender {
  *
  * The three reproductions #983 documented were runtime capability gaps, and two of them are closed:
  *
- * - **NULLABLE is rendered**, as `type: [T, "null"]`. `ApiJsonSchema.type` used to hold one string,
+ * - **NULLABLE is rendered**, as `type: [T, "null"]` — and, on an enum, with `null` added to `enum` too. `ApiJsonSchema.type` used to hold one string,
  *   so the runtime could not write it down even where the compiler could see `externalId: string | null`
  *   — and `{}` and `{externalId: null}` are different wire documents. `type` is now
  *   `ApiJsonSchemaType | readonly ApiJsonSchemaType[]` and the union is emitted.
@@ -453,6 +453,12 @@ export class McpSchemaRenderer {
         }
         if (field.nullable) {
             schema.type = McpSchemaRenderer.nullable(schema, where);
+            if (schema.enum !== undefined && !schema.enum.includes(null)) {
+                // JSON Schema checks `enum` independently of `type`: without `null` here the widened
+                // type admits null and the enum still rejects it, so a nullable string enum
+                // (`x: SomeEnumDto | null`, or `'a' | 'b' | null`) failed output validation (#1197).
+                schema.enum = [...schema.enum, null];
+            }
         }
         return schema;
     }

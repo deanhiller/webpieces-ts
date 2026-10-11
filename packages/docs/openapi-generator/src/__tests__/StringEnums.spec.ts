@@ -68,6 +68,22 @@ describe('a string enum in the OpenAPI document', () => {
     it('renders ONE enum member used as a type as a one-value enum', () => {
         expect(doc.property('StoryRequest', 'only')).toEqual({ type: 'string', enum: ['fixed'] });
     });
+
+    it('admits null on a NULLABLE inline enum in BOTH type and enum — enum is checked on its own (#1197)', () => {
+        expect(doc.property('StoryResponse', 'tone')).toEqual({
+            type: ['string', 'null'],
+            enum: ['calm', 'loud', null],
+            description: 'Not chosen yet: a NULLABLE string-literal union, rendered inline (#1197).',
+        });
+    });
+
+    it('admits null on a NULLABLE named enum beside its $ref, leaving the shared component non-null', () => {
+        expect(doc.property('StoryResponse', 'chosenGender')).toEqual({
+            anyOf: [{ $ref: '#/components/schemas/SpeakerGender' }, { type: 'null' }],
+            description: 'Not chosen yet: a NULLABLE named enum (#1197).',
+        });
+        expect(doc.schema('SpeakerGender')['enum']).toEqual(['female', 'male']);
+    });
 });
 
 describe('a discriminator whose value is a union on one branch', () => {

@@ -236,7 +236,7 @@ class McpCatalogJson {
         if (typeof record['minimum'] === 'number') schema.minimum = record['minimum'];
         if (typeof record['maximum'] === 'number') schema.maximum = record['maximum'];
         if (Array.isArray(record['required'])) schema.required = record['required'] as string[];
-        if (Array.isArray(record['enum'])) schema.enum = record['enum'] as string[];
+        if (Array.isArray(record['enum'])) schema.enum = record['enum'] as (string | null)[];
         if (typeof record['x-mcp-header'] === 'string') {
             schema['x-mcp-header'] = record['x-mcp-header'];
         }

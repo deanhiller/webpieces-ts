@@ -144,6 +144,30 @@ describe('a string enum in an MCP tool schema', () => {
         expect(output.properties!['gender'].enum).toEqual(GENDERS);
     });
 
+    it('admits null on a NULLABLE string enum in BOTH type and enum — JSON Schema checks enum on its own (#1197)', () => {
+        const output = fixture.rendered.catalogs[0]!.find('write_story')!.outputSchema;
+        expect(output.properties!['chosenGender'].type).toEqual(['string', 'null']);
+        expect(output.properties!['chosenGender'].enum).toEqual([...GENDERS, null]);
+    });
+
+    it('admits null on a NULLABLE string-literal union in BOTH type and enum (#1197)', () => {
+        const output = fixture.rendered.catalogs[0]!.find('write_story')!.outputSchema;
+        expect(output.properties!['tone'].type).toEqual(['string', 'null']);
+        expect(output.properties!['tone'].enum).toEqual(['calm', 'loud', null]);
+    });
+
+    it('keeps null OUT of a non-nullable enum, so null is still refused there', () => {
+        const output = fixture.rendered.catalogs[0]!.find('write_story')!.outputSchema;
+        expect(output.properties!['gender'].type).toBe('string');
+        expect(output.properties!['gender'].enum).not.toContain(null);
+        const validator = new ApiJsonSchemaValidator();
+        const base = { gender: 'female', chosenGender: null, tone: null };
+        expect(validator.validate(output, base)).toBeUndefined();
+        expect(validator.validate(output, { ...base, chosenGender: 'male', tone: 'calm' })).toBeUndefined();
+        expect(validator.validate(output, { ...base, gender: null })?.field).toBe('$.gender');
+        expect(validator.validate(output, { ...base, tone: 'quiet' })?.field).toBe('$.tone');
+    });
+
     it('publishes the discriminator mapping with several values pointing at one branch', () => {
         const voice = fixture.input().properties!['voice'];
         expect(voice.discriminator?.propertyName).toBe('mode');
