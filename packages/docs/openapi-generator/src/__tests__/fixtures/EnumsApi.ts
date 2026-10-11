@@ -65,6 +65,10 @@ export interface StoryRequest {
 
 export interface StoryResponse {
     gender: SpeakerGender;
+    /** Not chosen yet: a NULLABLE named enum (#1197). */
+    chosenGender: SpeakerGender | null;
+    /** Not chosen yet: a NULLABLE string-literal union, rendered inline (#1197). */
+    tone: 'calm' | 'loud' | null;
 }
 
 /** Stories. */

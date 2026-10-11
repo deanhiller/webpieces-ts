@@ -65,7 +65,12 @@ export class ApiJsonSchema {
     /** `false` closes an object; a schema makes it a typed map whose values all match that schema. */
     additionalProperties?: boolean | ApiJsonSchema;
     items?: ApiJsonSchema;
-    enum?: string[];
+    /**
+     * The allowed values. A NULLABLE enum carries `null` here as well as in {@link type}: JSON Schema
+     * checks `enum` independently of `type`, so `{type: ["string","null"], enum: ["a"]}` still rejects
+     * `null` (#1197).
+     */
+    enum?: (string | null)[];
     minimum?: number;
     maximum?: number;
     /**
@@ -188,9 +193,19 @@ export class ApiJsonSchemaValidator {
         path: string,
     ): DtoValidationFailure | undefined {
         if (value === null) {
-            return ApiJsonSchema.allowsNull(schema)
-                ? undefined
-                : new DtoValidationFailure(path, `${path} must not be null`);
+            if (!ApiJsonSchema.allowsNull(schema)) {
+                return new DtoValidationFailure(path, `${path} must not be null`);
+            }
+            // `enum` is checked independently of `type`, exactly as every JSON Schema client checks
+            // it: a nullable enum whose `enum` omits null is refused HERE rather than by the agent's
+            // client after the call already ran (#1197).
+            if (schema.enum && !schema.enum.includes(null)) {
+                return new DtoValidationFailure(
+                    path,
+                    `${path} must be one of: ${schema.enum.map(String).join(', ')}`,
+                );
+            }
+            return undefined;
         }
         if (schema.oneOf !== undefined) {
             return this.validateUnion(schema, value, path);
@@ -285,7 +300,7 @@ export class ApiJsonSchemaValidator {
     private static branchValuesOf(branch: ApiJsonSchema, property: string): readonly string[] {
         const declared = Object.getOwnPropertyDescriptor(branch.properties ?? {}, property)
             ?.value as ApiJsonSchema | undefined;
-        return declared?.enum ?? [];
+        return (declared?.enum ?? []).filter((value: string | null): value is string => value !== null);
     }
 
     private validateObject(
@@ -359,7 +374,7 @@ export class ApiJsonSchemaValidator {
         if (schema.enum && !schema.enum.includes(value)) {
             return new DtoValidationFailure(
                 path,
-                `${path} must be one of: ${schema.enum.join(', ')}`,
+                `${path} must be one of: ${schema.enum.map(String).join(', ')}`,
             );
         }
         return undefined;

@@ -214,6 +214,12 @@ export class SchemaRenderer {
         }
         const declared = schema.get('type');
         if (typeof declared === 'string') {
+            const values = schema.get('enum');
+            if (Array.isArray(values) && !values.includes(null)) {
+                // `enum` is checked independently of `type`, so a nullable inline enum
+                // (`'a' | 'b' | null`) must list `null` too or the document rejects it (#1197).
+                schema.set('enum', [...values, null]);
+            }
             return schema.set('type', [declared, 'null']);
         }
         return new JsonObject().set('anyOf', [schema, new JsonObject().set('type', 'null')]);

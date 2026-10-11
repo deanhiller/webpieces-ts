@@ -116,6 +116,12 @@ export interface StoryRequest {
 export interface StoryResponse {
     /** The gender actually used. */
     gender: SpeakerGender;
+
+    /** The gender the caller picked, or null when none was picked yet: a NULLABLE string enum (#1197). */
+    chosenGender: SpeakerGender | null;
+
+    /** The tone, or null when none was picked yet: a NULLABLE string-literal union (#1197). */
+    tone: 'calm' | 'loud' | null;
 }
 
 /** Asks with a union no discriminator can be derived for. */
