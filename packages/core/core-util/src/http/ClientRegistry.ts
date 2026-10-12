@@ -1,6 +1,6 @@
 import { ErrorTranslator } from './ErrorTranslator';
-import { FailureClassifier } from './FailureClassifier';
-import { WEBPIECES_DEFAULT_FAILURE_CLASSIFIER } from './WebpiecesDefaultFailureClassifier';
+import { CallOutcome, ErrorClassifier, KeyedErrorClassifier } from './ErrorClassifier';
+import { WEBPIECES_DEFAULT_ERROR_CLASSIFIER } from './WebpiecesDefaultErrorClassifier';
 import { WEBPIECES_DEFAULT_ERROR_TRANSLATOR } from './WebpiecesDefaultErrorTranslator';
 import { ApiMethodInfo } from './ApiMethodInfo';
 
@@ -76,22 +76,21 @@ export class ClientRegistry {
     private static errorTranslator: ErrorTranslator = WEBPIECES_DEFAULT_ERROR_TRANSLATOR;
 
     /**
-     * The app/company DEFAULT {@link FailureClassifier} — ONE per process, reads {@link ApiMethodInfo.side}
-     * so a single strategy covers the server router AND all internal clients. NEVER undefined: it
-     * starts life holding the webpieces built-in ({@link WEBPIECES_DEFAULT_FAILURE_CLASSIFIER}) and
-     * {@link ClientRegistry.setDefaultFailureClassifier} replaces it. Populated once at startup on the
+     * The app/company DEFAULT {@link ErrorClassifier} — ONE per process, reads {@link ApiMethodInfo.side}
+     * so a single classifier covers the server router AND all internal clients. NEVER undefined: it
+     * starts life holding the webpieces built-in ({@link WEBPIECES_DEFAULT_ERROR_CLASSIFIER}) and
+     * {@link ClientRegistry.setDefaultErrorClassifier} replaces it. Populated once at startup on the
      * SERVER and in the BROWSER — same no-DI pattern as {@link ClientRegistry.mappings}.
      */
-    private static appDefaultFailureClassifier: FailureClassifier =
-        WEBPIECES_DEFAULT_FAILURE_CLASSIFIER;
+    private static appDefaultErrorClassifier: ErrorClassifier = WEBPIECES_DEFAULT_ERROR_CLASSIFIER;
 
     /**
-     * Per-EXTERNAL-client {@link FailureClassifier}s, keyed by {@link ApiMethodInfo.apiClass}
+     * Per-EXTERNAL-client {@link ErrorClassifier}s, keyed by {@link ApiMethodInfo.apiClass}
      * ('FirestoreAdminClient', 'ClaudeApi', ...). Consulted BEFORE the default tier, so an external
      * client overrides the default for its own apiClass only. Internal clients / the server register
-     * nothing here and fall through to the default. See {@link ClientRegistry.classifyFailure}.
+     * nothing here and fall through to the default. See {@link ClientRegistry.classify}.
      */
-    private static readonly failureClassifiersByApiClass = new Map<string, FailureClassifier>();
+    private static readonly errorClassifiersByApiClass = new Map<string, ErrorClassifier>();
 
     /** Map a service name to `http://localhost:<port>`. */
     // webpieces-disable no-function-outside-class -- static global singleton (like HeaderRegistry/LogManager); populated once at startup, never DI-injected
@@ -211,48 +210,50 @@ export class ClientRegistry {
     }
 
     /**
-     * Set the app/company DEFAULT failure classifier — ONE per process, covering the server router and
+     * Set the app/company DEFAULT error classifier — ONE per process, covering the server router and
      * all internal clients (it branches on {@link ApiMethodInfo.side}). Call ONCE at startup, on the
      * server AND in the browser. Overrides the webpieces built-in for calls no per-apiClass classifier
-     * claims. See {@link FailureClassifier}.
+     * claims. See {@link ErrorClassifier}.
      */
     // webpieces-disable no-function-outside-class -- static global singleton (like HeaderRegistry/LogManager); populated once at startup, never DI-injected
-    static setDefaultFailureClassifier(classifier: FailureClassifier): void {
-        ClientRegistry.appDefaultFailureClassifier = classifier;
+    static setDefaultErrorClassifier(classifier: ErrorClassifier): void {
+        ClientRegistry.appDefaultErrorClassifier = classifier;
     }
 
     /**
-     * Register a per-EXTERNAL-client failure classifier, keyed by {@link ApiMethodInfo.apiClass}
-     * (e.g. 'FirestoreAdminClient'). Consulted BEFORE the default tier for calls with that apiClass.
-     * Call ONCE at startup. See {@link FailureClassifier}.
+     * Register a per-EXTERNAL-client error classifier, keyed by its
+     * {@link KeyedErrorClassifier.apiClass} (e.g. 'FirestoreAdminClient'). Consulted BEFORE the
+     * default tier for calls with that apiClass. Call ONCE at startup. See {@link ErrorClassifier}.
      */
     // webpieces-disable no-function-outside-class -- static global singleton (like HeaderRegistry/LogManager); populated once at startup, never DI-injected
-    static addFailureClassifier(apiClass: string, classifier: FailureClassifier): void {
-        ClientRegistry.failureClassifiersByApiClass.set(apiClass, classifier);
+    static addErrorClassifier(keyed: KeyedErrorClassifier): void {
+        ClientRegistry.errorClassifiersByApiClass.set(keyed.apiClass, keyed.classifier);
     }
 
     /**
-     * Is this thrown API-call error a real FAILURE (true) or an expected non-failure (false)?
-     * Resolved most-specific-first, and ALWAYS definitive (returns a boolean):
+     * The {@link CallOutcome} of a thrown API-call error. Resolved most-specific-first, and ALWAYS
+     * definitive:
      *   1. the per-apiClass classifier, if one is registered for `methodInfo.apiClass` — unless it defers;
-     *   2. else the app default classifier, if one was set — unless it defers;
-     *   3. else the webpieces built-in ({@link WEBPIECES_DEFAULT_FAILURE_CLASSIFIER}), which never defers.
-     * A `?? true` backstop keeps an unexpectedly-deferring built-in fail-safe (treat as failure).
+     *   2. else the app default classifier — unless it defers;
+     *   3. else the webpieces built-in ({@link WEBPIECES_DEFAULT_ERROR_CLASSIFIER}), which never defers.
+     *
+     * The ONE verdict read by `RetryStrategy` (retry only TRANSIENT), `CallRegistry`'s per-attempt
+     * log line, `LogApiCall` (EXPECTED → OTHER, else FAIL) and the MCP renderer's retry advice.
      */
     // webpieces-disable no-function-outside-class -- static global singleton (like HeaderRegistry/LogManager); populated once at startup, never DI-injected
-    static classifyFailure(error: Error, methodInfo: ApiMethodInfo): boolean {
-        const perClient = ClientRegistry.failureClassifiersByApiClass.get(methodInfo.apiClass);
+    static classify(error: Error, methodInfo: ApiMethodInfo): CallOutcome {
+        const perClient = ClientRegistry.errorClassifiersByApiClass.get(methodInfo.apiClass);
         if (perClient !== undefined) {
-            const verdict = perClient.isFailure(error, methodInfo);
+            const verdict = perClient.classify(error, methodInfo);
             if (verdict !== undefined) {
                 return verdict;
             }
         }
-        const verdict = ClientRegistry.appDefaultFailureClassifier.isFailure(error, methodInfo);
+        const verdict = ClientRegistry.appDefaultErrorClassifier.classify(error, methodInfo);
         if (verdict !== undefined) {
             return verdict;
         }
-        return WEBPIECES_DEFAULT_FAILURE_CLASSIFIER.isFailure(error, methodInfo) ?? true;
+        return WEBPIECES_DEFAULT_ERROR_CLASSIFIER.classify(error, methodInfo);
     }
 
     /**
@@ -260,7 +261,7 @@ export class ClientRegistry {
      * cannot leak its registrations into the next.
      *
      * It RESTORES the webpieces defaults rather than emptying the pluggable slots, which is the whole
-     * reason it is not called `clear()` any more: `getErrorTranslator()` and the default failure
+     * reason it is not called `clear()` any more: `getErrorTranslator()` and the default error
      * classifier are non-optional now, so "cleared" is not a state they have. A spec that wants
      * webpieces' own behaviour back asks for exactly that.
      */
@@ -269,7 +270,7 @@ export class ClientRegistry {
         ClientRegistry.mappings.clear();
         ClientRegistry.deriver = undefined;
         ClientRegistry.errorTranslator = WEBPIECES_DEFAULT_ERROR_TRANSLATOR;
-        ClientRegistry.appDefaultFailureClassifier = WEBPIECES_DEFAULT_FAILURE_CLASSIFIER;
-        ClientRegistry.failureClassifiersByApiClass.clear();
+        ClientRegistry.appDefaultErrorClassifier = WEBPIECES_DEFAULT_ERROR_CLASSIFIER;
+        ClientRegistry.errorClassifiersByApiClass.clear();
     }
 }

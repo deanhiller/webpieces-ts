@@ -18,15 +18,19 @@ import {
     CallRegistry,
     CallDeadline,
     CallContext,
-    getEndpointOperation,
+    RetryStrategy,
+    TransportDefault,
+    WRITE_IDEMPOTENT,
+    toError,
 } from '@webpieces/core-util';
-import type { EndpointOperation } from '@webpieces/core-util';
 import {
     RequestContextApiCallContext,
     RequestContextHeaders,
     provideFrameworkTransient,
 } from '@webpieces/core-context';
-import { TaskInvoker, TaskRequest, ScheduleInfo } from './TaskTypes';
+import { TaskInvoker, TaskRequest, ScheduleInfo, EnqueuePlan, JobReference } from './TaskTypes';
+import { TaskAlreadyExistsError } from './TaskAlreadyExistsError';
+import { GcpTaskRegistry } from './GcpTaskRegistry';
 import { currentScheduleFrame } from './ScheduleContext';
 import { ApiPrototype, TaskClientConfig } from './TaskClientConfig';
 
@@ -40,20 +44,11 @@ class EndpointPlan {
     /** @MaskLog spec for this endpoint's request DTO, read once here so the enqueue log path masks
      *  a secret on the task payload without a per-enqueue reflection hit. Undefined = log verbatim. */
     mask?: MaskSpec;
-    /** The endpoint's declared @Endpoint operation; an enqueue deadline reports it on its timeout. */
-    operation: EndpointOperation;
 
-    constructor(
-        path: string,
-        queueName: string,
-        authMode: AuthMode,
-        operation: EndpointOperation,
-        mask?: MaskSpec,
-    ) {
+    constructor(path: string, queueName: string, authMode: AuthMode, mask?: MaskSpec) {
         this.path = path;
         this.queueName = queueName;
         this.authMode = authMode;
-        this.operation = operation;
         this.mask = mask;
     }
 }
@@ -79,6 +74,20 @@ class EndpointPlan {
  */
 @provideFrameworkTransient()
 export class TaskProxyClient {
+    /**
+     * The enqueue transport's default for `CallRegistry.execute` (Path A): 30 s if a caller only
+     * registers a strategy-free timeout ladder, otherwise webpieces' shared `RetryStrategy` — 5 s per
+     * attempt, 3 retries, backoff 500 ms x2 capped at 4 s. RPC passes `new TransportDefault(30_000)`
+     * (no retry); this is the ONLY place the two transports differ.
+     */
+    static readonly ENQUEUE_TRANSPORT_DEFAULT = new TransportDefault(
+        30_000,
+        new RetryStrategy(5_000, 3, 500, 2, 4_000).run,
+    );
+
+    /** Path B's safety cap when no timeout is registered: caller-owned gax timing still ends. */
+    static readonly ENQUEUE_SAFETY_CAP_MS = 30_000;
+
     // Assigned by init(), which the factory calls immediately after construction.
     private plans!: Map<string, EndpointPlan>;
     private apiName!: string;
@@ -124,7 +133,24 @@ export class TaskProxyClient {
     /**
      * Enqueue one task for the named endpoint. Must run inside a CloudTaskScheduler lambda
      * (which supplies the ScheduleInfo) within an active RequestContext, e.g.:
-     *   scheduler.addToQueue(() => taskClient.foo(req), { dedupName });
+     *   scheduler.addToQueue(() => taskClient.foo(req), new ScheduleOptions(TaskName.dedup(id)));
+     *
+     * Before any attempt it resolves, ONCE: the task name (so every attempt carries the same one),
+     * and the effective customizer and gax options (call site, else `GcpTaskRegistry` method -> API
+     * -> ALL). Then exactly ONE retry layer runs:
+     *
+     * - **Path A, no gax — webpieces owns timing.** `CallRegistry.execute` with
+     *   {@link TaskProxyClient.ENQUEUE_TRANSPORT_DEFAULT}: a registered strategy (method -> API -> ALL), else a
+     *   registered timeout, else `RetryStrategy(5_000, 3, 500, 2, 4_000)`. Each attempt sends
+     *   `createTask(request, { timeout: attemptMs })`.
+     * - **Path B, gax set — you own timing.** No strategy lookup and ONE attempt, sending
+     *   `createTask(request, yourGax)` under a safety cap from the timeout ladder (method -> API ->
+     *   ALL -> 30 s) so a hung channel cannot block forever.
+     *
+     * Either way the endpoint reports `WRITE_IDEMPOTENT`: one name for every attempt makes a repeat
+     * safe (delivery is at-least-once anyway, and `TaskName.serverAssigned()` accepts duplicates).
+     * A `TaskAlreadyExistsError` is caught HERE, above the retry layer: `WARN [ENQUEUE-DEDUP]`, then
+     * success with `JobReference.alreadyExisted = true`.
      */
     // webpieces-disable no-any-unknown -- the request DTO's type is erased at the proxy boundary
     async enqueue(methodName: string, requestDto: unknown): Promise<void> {
@@ -137,55 +163,91 @@ export class TaskProxyClient {
         if (!frame) {
             throw new Error(
                 'Cloud task enqueue must run inside a CloudTaskScheduler lambda, e.g. ' +
-                    'scheduler.addToQueue(() => taskClient.method(req), { dedupName }).',
+                    'scheduler.addToQueue(() => taskClient.method(req), new ScheduleOptions(TaskName.dedup(id))).',
             );
         }
+        const enqueuePlan = new EnqueuePlan(
+            frame.info.taskName.resolve(),
+            frame.info.customizeTask ?? GcpTaskRegistry.customizerFor(this.apiClass, methodName),
+            frame.info.gax ?? GcpTaskRegistry.gaxFor(this.apiClass, methodName),
+        );
 
         // Route through LogApiCall exactly like ProxyClient does for http. TaskProxyClient.enqueue is
         // the ONE seam above BOTH GcpTaskInvoker (prod) and InMemoryTaskInvoker (localhost) — whichever
         // TaskInvoker is bound, this method sits above it — so the enqueue edge gets structured
-        // `jsonPayload.api.*` logging (and, once recording is unified at LogApiCall, is recorded)
-        // uniformly, without touching either invoker impl.
+        // `jsonPayload.api.*` logging uniformly, without touching either invoker impl.
         const info = new ApiMethodInfo('client', this.apiName, methodName, undefined, plan.mask);
         await this.logApiCall.execute(info, requestDto, async () => {
-            const callContext = new CallContext(this.apiName, methodName, plan.operation);
-            const jobRef = await CallRegistry.execute(
-                this.apiClass,
-                callContext,
-                (timeoutMs: number) =>
-                    CallDeadline.run(timeoutMs, callContext, async (signal: AbortSignal) => {
-                        // Resolved lazily (not at client construction) so building a client stays synchronous.
-                        // Every metadata read beneath resolveUrl is memoized process-wide, so only the first
-                        // enqueue in the process pays a lookup.
-                        const targetUrl = await this.config.resolveUrl();
-                        CallDeadline.throwIfAborted(signal);
-
-                        const request = new TaskRequest(
-                            targetUrl,
-                            plan.path,
-                            plan.queueName,
-                            requestDto,
-                            this.buildContextHeaders(plan.authMode),
-                            plan.authMode,
-                            frame.info ?? new ScheduleInfo(),
-                        );
-
-                        // svcName, not the URL, is the stable name across demo/qa/prod.
-                        log.debug(
-                            `enqueue task ${plan.queueName} -> ${this.config.svcName}${plan.path}`,
-                        );
-                        return this.invoker.enqueue(request);
-                    }),
-                30_000,
-            );
+            const callContext = new CallContext(this.apiName, methodName, WRITE_IDEMPOTENT);
+            const attempt = (timeoutMs: number): Promise<JobReference> =>
+                CallDeadline.run(timeoutMs, callContext, (signal: AbortSignal) =>
+                    this.attempt(plan, enqueuePlan, frame.info, requestDto, timeoutMs, signal),
+                );
             // Only the winning attempt may publish the reference. A late enqueue cannot overwrite it.
-            frame.jobRef = jobRef;
-
-            // Fire-and-forget: the enqueue ack is not a meaningful response. Return a non-null value so
-            // LogApiCall's null-response guard passes; a recorded test asserts the enqueued REQUEST
-            // (payload), never this ack.
-            return frame.jobRef ?? { enqueued: true };
+            frame.jobRef = await this.dedupAware(methodName, () =>
+                enqueuePlan.gax === undefined
+                    ? CallRegistry.execute(this.apiClass, callContext, attempt, TaskProxyClient.ENQUEUE_TRANSPORT_DEFAULT)
+                    : attempt(CallRegistry.resolveTimeout(this.apiClass, methodName, TaskProxyClient.ENQUEUE_SAFETY_CAP_MS)),
+            );
+            // Fire-and-forget: the enqueue ack is not a meaningful response, but it is non-null so
+            // LogApiCall's null-response guard passes; a recorded test asserts the enqueued REQUEST.
+            return frame.jobRef;
         });
+    }
+
+    /** ALREADY_EXISTS is the task the caller asked for, already there: success, logged once. */
+    private async dedupAware(
+        methodName: string,
+        enqueue: () => Promise<JobReference>,
+    ): Promise<JobReference> {
+        // webpieces-disable no-unmanaged-exceptions -- ALREADY_EXISTS is success; everything else propagates unchanged
+        // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
+        try {
+            return await enqueue();
+        } catch (err: unknown) {
+            const error = toError(err);
+            if (!(error instanceof TaskAlreadyExistsError)) {
+                // eslint-disable-next-line @webpieces/no-unmanaged-exceptions -- rethrows the enqueue's own failure unchanged
+                throw err;
+            }
+            log.warn(
+                `[ENQUEUE-DEDUP] ${this.apiName}.${methodName} task ${error.taskName} already exists ` +
+                    '(a retry whose earlier attempt landed, or a dedup name reused) — treated as success',
+            );
+            return new JobReference(error.taskName, true);
+        }
+    }
+
+    /** ONE enqueue attempt: a fresh TaskRequest, handed to the bound invoker. */
+    private async attempt(
+        plan: EndpointPlan,
+        enqueuePlan: EnqueuePlan,
+        scheduleInfo: ScheduleInfo,
+        // webpieces-disable no-any-unknown -- the request DTO's type is erased at the proxy boundary
+        requestDto: unknown,
+        timeoutMs: number,
+        signal: AbortSignal,
+    ): Promise<JobReference> {
+        // Resolved lazily (not at client construction) so building a client stays synchronous.
+        // Every metadata read beneath resolveUrl is memoized process-wide, so only the first
+        // enqueue in the process pays a lookup.
+        const targetUrl = await this.config.resolveUrl();
+        CallDeadline.throwIfAborted(signal);
+
+        const request = new TaskRequest(
+            targetUrl,
+            plan.path,
+            plan.queueName,
+            requestDto,
+            this.buildContextHeaders(plan.authMode),
+            plan.authMode,
+            scheduleInfo,
+            enqueuePlan,
+        );
+
+        // svcName, not the URL, is the stable name across demo/qa/prod.
+        log.debug(`enqueue task ${plan.queueName} -> ${this.config.svcName}${plan.path}`);
+        return this.invoker.enqueue(request, timeoutMs, signal);
     }
 
     /** Endpoint name -> its resolved path / queue / auth mode, read once from the decorators. */
@@ -204,7 +266,6 @@ export class TaskProxyClient {
                 basePath + endpoints[methodName],
                 getQueueName(apiClass, methodName),
                 authMode,
-                getEndpointOperation(apiClass, methodName),
                 getMaskSpec(apiClass, methodName),
             );
             plans.set(methodName, plan);

@@ -15,6 +15,7 @@ export {
     ApiBadRequestError,
     ApiUnauthorizedError,
     ApiDependencyBackoffError,
+    ApiRetriesExhaustedError,
     ApiConflictError,
     ApiUnprocessableError,
     ApiPreconditionFailedError,

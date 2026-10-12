@@ -15,6 +15,9 @@ import {
     ApiNotFoundError,
     ApiUnavailableError,
     ApiDependencyBackoffError,
+    ApiRetriesExhaustedError,
+    ApiMethodInfo,
+    CallOutcome,
     ApiErrorPayload,
     WpAuthPublic,
     Rpc,
@@ -304,6 +307,17 @@ describe('NodeProxyClient reports a 5xx as the DEPENDENCY failing, not as its ow
 
         expect(error).toBeInstanceOf(ApiDependencyError);
         expect((error as Error).message).toContain('dependency is rate limiting us');
+    });
+
+    it('502 retries-exhausted decodes as itself and is classified FAILURE, so this hop never retries it', async () => {
+        stubApiErrorPayload(502, 'Retries Exhausted', 'retries-exhausted');
+
+        const error = await callAndCatch();
+
+        expect(error).toBeInstanceOf(ApiRetriesExhaustedError);
+        expect(
+            ClientRegistry.classify(error as Error, new ApiMethodInfo('client', 'SaveApi', 'save')),
+        ).toBe(CallOutcome.FAILURE);
     });
 
     /**

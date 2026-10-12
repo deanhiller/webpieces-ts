@@ -6,7 +6,14 @@ import { ApiCallContext } from '../ApiCallContext';
 import { ContextKey, AnyContextKey } from '../../ContextKey';
 import { WebpiecesCoreHeaders } from '../WebpiecesCoreHeaders';
 import { ClientRegistry } from '../ClientRegistry';
-import { ApiBadRequestError, ApiEndUserError, ApiNotFoundError } from '../../errors';
+import {
+    ApiBadRequestError,
+    ApiEndUserError,
+    ApiNotFoundError,
+    ApiRetriesExhaustedError,
+    ApiUnavailableError,
+} from '../../errors';
+import { CallOutcome, ErrorClassifier, KeyedErrorClassifier } from '../ErrorClassifier';
 import { MaskSpec } from '../LogFieldMask';
 import { LogManager } from '../../logging/LogManager';
 import { HeaderRegistry } from '../HeaderRegistry';
@@ -167,6 +174,13 @@ describe('LogApiCall.execute — error result mapping', () => {
     });
 });
 
+/** Firestore-style: a not-found miss is EXPECTED; every other error DEFERS to the next tier. */
+class NotFoundIsExpected implements ErrorClassifier {
+    classify(error: Error): CallOutcome | undefined {
+        return error instanceof ApiNotFoundError ? CallOutcome.EXPECTED : undefined;
+    }
+}
+
 describe('LogApiCall.execute — pluggable per-client failure classification', () => {
     // The registry is a process-global; clear it so a registered classifier does not leak into the
     // other specs in this file (which assert the built-in behavior).
@@ -176,9 +190,7 @@ describe('LogApiCall.execute — pluggable per-client failure classification', (
 
     it('a per-apiClass classifier flips a client-side error from failure → success (OTHER)', async () => {
         // Firestore-style: a not-found miss on this client is EXPECTED, not a failure.
-        ClientRegistry.addFailureClassifier('SaveApi', {
-            isFailure: (error: Error) => (error instanceof ApiNotFoundError ? false : undefined),
-        });
+        ClientRegistry.addErrorClassifier(new KeyedErrorClassifier('SaveApi', new NotFoundIsExpected()));
 
         const ctx = new RecordingApiCallContext();
 
@@ -197,9 +209,7 @@ describe('LogApiCall.execute — pluggable per-client failure classification', (
     });
 
     it('an error the classifier DEFERS on still uses the built-in (client → failure)', async () => {
-        ClientRegistry.addFailureClassifier('SaveApi', {
-            isFailure: (error: Error) => (error instanceof ApiNotFoundError ? false : undefined),
-        });
+        ClientRegistry.addErrorClassifier(new KeyedErrorClassifier('SaveApi', new NotFoundIsExpected()));
 
         const ctx = new RecordingApiCallContext();
 
@@ -521,21 +531,34 @@ describe('LogApiCall.execute — opt-in field masking', () => {
     });
 });
 
-describe('LogApiCall.isUserError (side-dependent)', () => {
-    // isUserError never touches the context; any instance answers identically.
-    const LogApiCall = new LogApiCallImpl(new RecordingApiCallContext());
+describe('LogApiCall outcome mapping (ClientRegistry.classify, final by position)', () => {
+    const resultOf = async (side: ApiSide, error: Error): Promise<string | undefined> => {
+        const ctx = new RecordingApiCallContext();
+        await expect(
+            ctx.logApiCall.execute(info(side), { q: 'x' }, async () => {
+                throw error;
+            }),
+        ).rejects.toBe(error);
+        return ctx.values().at(-1)?.result;
+    };
 
-    it('ApiEndUserError is a non-failure on both sides', () => {
-        expect(LogApiCall.isUserError(new ApiEndUserError('x'), /*server*/ true)).toBe(true);
-        expect(LogApiCall.isUserError(new ApiEndUserError('x'), /*server*/ false)).toBe(true);
+    it('EXPECTED → success (OTHER): a 266 on both sides, a 4xx only on the SERVER', async () => {
+        expect(await resultOf('server', new ApiEndUserError('x'))).toBe('success');
+        expect(await resultOf('client', new ApiEndUserError('x'))).toBe('success');
+        expect(await resultOf('server', new ApiBadRequestError('x'))).toBe('success');
+        expect(await resultOf('client', new ApiBadRequestError('x'))).toBe('failure');
     });
-    it('a 4xx is a non-failure for the SERVER but a failure for the CLIENT', () => {
-        expect(LogApiCall.isUserError(new ApiBadRequestError('x'), /*server*/ true)).toBe(true);
-        expect(LogApiCall.isUserError(new ApiBadRequestError('x'), /*server*/ false)).toBe(false);
+
+    it('TRANSIENT_FAILURE → failure (FAIL): nothing above retried it, so it is final', async () => {
+        expect(await resultOf('client', new ApiUnavailableError('x'))).toBe('failure');
+        expect(await resultOf('server', new ApiUnavailableError('x'))).toBe('failure');
     });
-    it('a plain server error is a failure on both sides', () => {
-        expect(LogApiCall.isUserError(new Error('x'), true)).toBe(false);
-        expect(LogApiCall.isUserError(new Error('x'), false)).toBe(false);
+
+    it('FAILURE → failure (FAIL), including a retries-exhausted', async () => {
+        expect(await resultOf('client', new Error('x'))).toBe('failure');
+        expect(
+            await resultOf('client', new ApiRetriesExhaustedError(4, new ApiUnavailableError('x'))),
+        ).toBe('failure');
     });
 });
 

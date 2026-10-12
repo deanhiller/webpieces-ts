@@ -10,6 +10,7 @@ import {
     SECRETS,
 } from '@webpieces/core-util';
 import { TaskInvoker, TaskRequest, JobReference } from './TaskTypes';
+import { TaskAlreadyExistsError } from './TaskAlreadyExistsError';
 
 const log = LogManager.getLogger('InMemoryTaskInvoker');
 
@@ -34,6 +35,8 @@ export class InMemoryTaskInvoker extends TaskInvoker {
     private counter = 0;
     /** Scheduled (not-yet-delivered) jobs, so delete() can cancel them. */
     private readonly pending = new Map<string, ReturnType<typeof setTimeout>>();
+    /** Every task name this process enqueued: a reuse is ALREADY_EXISTS, like Cloud Tasks. */
+    private readonly usedNames = new Set<string>();
     /** Sharpens the delivery-failure LOG: "unreachable target" vs a bare "Failed to fetch". */
     private readonly networkRejectClassifier = new NetworkRejectClassifier();
 
@@ -54,10 +57,23 @@ export class InMemoryTaskInvoker extends TaskInvoker {
         return selected;
     }
 
-    override async enqueue(request: TaskRequest): Promise<JobReference> {
+    /**
+     * ONE attempt, like the GCP invoker — `TaskProxyClient` still runs Path A (webpieces retries) or
+     * Path B (one capped attempt) above it, so local timing matches prod. The customizer and gax are
+     * IGNORED: there is no Google request here. A reused task name throws
+     * {@link TaskAlreadyExistsError}, which the proxy reports as success, exactly as ALREADY_EXISTS is.
+     */
+    override async enqueue(
+        request: TaskRequest,
+        _timeoutMs: number,
+        _signal: AbortSignal,
+    ): Promise<JobReference> {
         this.counter += 1;
-        const taskId =
-            request.scheduleInfo.dedupName ?? `inmem-${request.queueName}-${this.counter}`;
+        const taskId = request.plan.taskId ?? `inmem-${request.queueName}-${this.counter}`;
+        if (this.usedNames.has(taskId)) {
+            throw new TaskAlreadyExistsError(taskId);
+        }
+        this.usedNames.add(taskId);
         const delayMs = this.computeDelayMs(request.scheduleInfo.epochMsToRunAt);
 
         // Break from the caller: queue the HTTP delivery and return the reference NOW.
@@ -72,7 +88,7 @@ export class InMemoryTaskInvoker extends TaskInvoker {
         log.debug(
             `queued local task ${taskId} -> ${request.targetUrl}${request.path} (delay ${delayMs}ms)`,
         );
-        return new JobReference(taskId);
+        return new JobReference(taskId, false);
     }
 
     override async delete(ref: JobReference): Promise<void> {

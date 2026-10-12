@@ -3,7 +3,7 @@ import { AuthenticatedMachineIdentity } from '@webpieces/http-routing';
 import { ClientRole, WpAuthorization, AuthorizationType, WpAuth, oidc as oidcAuth, jwt as jwtAuth } from '@webpieces/core-util';
 import 'reflect-metadata';
 import { injectable } from 'inversify';
-import { ApiBadRequestError, ApiCodedError, ApiConflictError, ApiConnectionError, ApiDependencyBackoffError, ApiDependencyError, ApiDependencyTimeoutError, ApiEndpointNotFoundError, ApiEndUserError, ApiErrorCodec, ApiErrorHttpStatus, ApiForbiddenError, ApiImplementationError, ApiNotFoundError, ApiNotImplementedError, ApiPath, ApiType, ApiPreconditionFailedError, ApiRateLimitedError, ApiRequestTimeoutError, ApiUnauthorizedError, ApiUnavailableError, ApiUnprocessableError, ApiUnsupportedMediaTypeError, ContextKey, Endpoint, ErrorTranslator, Filter, WebpiecesDefaultErrorTranslator, HttpResponseDto, LogLevel, Service, WebpiecesCoreHeaders, ApiJsonSchema, McpToolCatalogFile, McpToolDefinition, ObjectSchemaBuilder, WpMcpTool, WpMcpToolHints, MCP, POST, READ, RPC, SVC_TO_SVC } from '@webpieces/core-util';
+import { ApiBadRequestError, ApiCodedError, ApiConflictError, ApiConnectionError, ApiDependencyBackoffError, ApiDependencyError, ApiDependencyTimeoutError, ApiEndpointNotFoundError, ApiEndUserError, ApiErrorCodec, ApiErrorHttpStatus, ApiForbiddenError, ApiImplementationError, ApiNotFoundError, ApiNotImplementedError, ApiPath, ApiType, ApiPreconditionFailedError, ApiRateLimitedError, ApiRequestTimeoutError, ApiRetriesExhaustedError, ApiUnauthorizedError, ApiUnavailableError, ApiUnprocessableError, ApiUnsupportedMediaTypeError, ContextKey, Endpoint, ErrorTranslator, Filter, WebpiecesDefaultErrorTranslator, HttpResponseDto, LogLevel, Service, WebpiecesCoreHeaders, ApiJsonSchema, McpToolCatalogFile, McpToolDefinition, ObjectSchemaBuilder, WpMcpTool, WpMcpToolHints, MCP, POST, READ, RPC, SVC_TO_SVC } from '@webpieces/core-util';
 import { RequestContext } from '@webpieces/core-context';
 import { MethodMeta, OidcHook, WpResponse } from '@webpieces/http-routing';
 import { McpToolCatalog } from '../McpToolCatalog';
@@ -287,6 +287,10 @@ export const THROW_CASES: readonly ThrowCase[] = [
     }),
     new ThrowCase('dependency-backoff', 'dependency-backoff', 'error', () => {
         throw new ApiDependencyBackoffError('backoff internals', 42);
+    }),
+    // A lower layer already retried and gave up: 502, decoded as itself on the remote hop, retry never.
+    new ThrowCase('retries-exhausted', 'retries-exhausted', 'error', () => {
+        throw new ApiRetriesExhaustedError(4, new ApiUnavailableError('createTask reset internals'));
     }),
     new ThrowCase('connection', 'implementation', 'error', () => {
         throw new ApiConnectionError('ECONNRESET internals');

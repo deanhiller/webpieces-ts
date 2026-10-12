@@ -4,7 +4,7 @@ import { ClientRegistry } from '../ClientRegistry';
 import { ErrorTranslator } from '../ErrorTranslator';
 import { WebpiecesDefaultErrorTranslator } from '../WebpiecesDefaultErrorTranslator';
 import { HttpHeader, HttpResponseDto, HttpResponseStatus } from '../HttpResponseDto';
-import { FailureClassifier } from '../FailureClassifier';
+import { CallOutcome, ErrorClassifier, KeyedErrorClassifier } from '../ErrorClassifier';
 import { ApiMethodInfo } from '../ApiMethodInfo';
 import {
     ApiBadRequestError,
@@ -251,5 +251,60 @@ describe('ClientRegistry error translator', () => {
         ClientRegistry.resetForTests();
 
         expect(ClientRegistry.getErrorTranslator()).toBeInstanceOf(WebpiecesDefaultErrorTranslator);
+    });
+});
+
+/** A classifier that answers `verdict` for one error type and DEFERS (undefined) for everything else. */
+class OneTypeClassifier implements ErrorClassifier {
+    constructor(
+        private readonly type: Function,
+        private readonly verdict: CallOutcome,
+    ) {}
+
+    classify(error: Error): CallOutcome | undefined {
+        return error instanceof this.type ? this.verdict : undefined;
+    }
+}
+
+describe('ClientRegistry.classify tiers (per-apiClass -> app default -> webpieces built-in)', () => {
+    const twilio = new ApiMethodInfo('client', 'TwilioApi', 'send');
+    const internal = new ApiMethodInfo('client', 'SaveApi', 'save');
+    const server = new ApiMethodInfo('server', 'SaveApi', 'save');
+
+    beforeEach(() => ClientRegistry.resetForTests());
+
+    it('falls to the webpieces built-in when nothing is registered', () => {
+        expect(ClientRegistry.classify(new ApiNotFoundError('x'), twilio)).toBe(CallOutcome.FAILURE);
+        expect(ClientRegistry.classify(new ApiBadRequestError('x'), server)).toBe(CallOutcome.EXPECTED);
+    });
+
+    it('a per-apiClass classifier wins for its apiClass only', () => {
+        ClientRegistry.addErrorClassifier(
+            new KeyedErrorClassifier('TwilioApi', new OneTypeClassifier(ApiNotFoundError, CallOutcome.EXPECTED)),
+        );
+        expect(ClientRegistry.classify(new ApiNotFoundError('x'), twilio)).toBe(CallOutcome.EXPECTED);
+        expect(ClientRegistry.classify(new ApiNotFoundError('x'), internal)).toBe(CallOutcome.FAILURE);
+    });
+
+    it('a deferring per-apiClass classifier falls to the app default, which falls to the built-in', () => {
+        ClientRegistry.addErrorClassifier(
+            new KeyedErrorClassifier('TwilioApi', new OneTypeClassifier(ApiNotFoundError, CallOutcome.EXPECTED)),
+        );
+        ClientRegistry.setDefaultErrorClassifier(
+            new OneTypeClassifier(ApiDependencyError, CallOutcome.TRANSIENT_FAILURE),
+        );
+        expect(ClientRegistry.classify(new ApiDependencyError('x'), twilio)).toBe(
+            CallOutcome.TRANSIENT_FAILURE,
+        );
+        expect(ClientRegistry.classify(new Error('boom'), twilio)).toBe(CallOutcome.FAILURE);
+    });
+
+    it('resetForTests restores the built-in default and forgets per-apiClass classifiers', () => {
+        ClientRegistry.setDefaultErrorClassifier(new OneTypeClassifier(Error, CallOutcome.EXPECTED));
+        ClientRegistry.addErrorClassifier(
+            new KeyedErrorClassifier('TwilioApi', new OneTypeClassifier(Error, CallOutcome.EXPECTED)),
+        );
+        ClientRegistry.resetForTests();
+        expect(ClientRegistry.classify(new Error('boom'), twilio)).toBe(CallOutcome.FAILURE);
     });
 });

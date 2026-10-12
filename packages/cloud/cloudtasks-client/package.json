@@ -26,8 +26,13 @@
         "@webpieces/core-context": "workspace:*",
         "@webpieces/core-util": "workspace:*",
         "@webpieces/gcp-identity": "workspace:*",
-        "@google-cloud/tasks": "5.5.2",
+        "@google-cloud/tasks": "6.3.0",
+        "google-gax": "5.0.8",
         "inversify": "7.10.4",
         "reflect-metadata": "0.2.2"
+    },
+    "devDependencies": {
+        "@grpc/grpc-js": "1.14.4",
+        "@grpc/proto-loader": "0.8.1"
     }
 }

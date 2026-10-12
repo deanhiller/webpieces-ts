@@ -288,12 +288,16 @@ precise `kind`, a small ownership `category`, explicit `retry` guidance, a safe 
 `requestId`. It may also carry safe fields such as `field`, `callerMessage`, `errorCode`,
 `retryAfterSeconds`, and `statusCode`. It never repeats `isError` inside the content.
 
-Implementation failures are `category: "bug", retry: "never"` and tell the caller to give the
-request ID to support; operator details remain redacted. Generic dependency failures are also
-non-retryable. Specific gateway, timeout, unavailable, throttling, and backoff failures are
-temporary, but a retry is described as safe only for a `read` or `write-idempotent` endpoint. A
-`write` reports `retry: "unsafe-outcome-unknown"`, because a lost response does not prove the write
-failed to commit.
+MCP keeps no retry table of its own: the advice is a function of the ONE outcome
+`ClientRegistry.classify` gives every reader (`RetryStrategy`, `LogApiCall`), the endpoint's
+operation, and `retryAfterSeconds`. Implementation failures are `category: "bug", retry: "never"` and
+tell the caller to give the request ID to support; operator details remain redacted. Generic
+dependency failures are also non-retryable, and so is `retries-exhausted` (`category: "dependency",
+retry: "never"`): this service already retried that dependency, so the model must not retry it again.
+A `CallOutcome.TRANSIENT_FAILURE` — gateway, timeout, unavailable, throttling, backoff, or anything an
+app's classifier marks transient — is temporary, but a retry is described as safe only for a `read`
+or `write-idempotent` endpoint. A `write` reports `retry: "unsafe-outcome-unknown"`, because a lost
+response does not prove the write failed to commit.
 
 Every reply carries the requestId so a user can quote it: `_meta["webpieces/requestId"]` on every
 `tools/call` result (success or `isError`), `requestId` in the `isError` payload, and

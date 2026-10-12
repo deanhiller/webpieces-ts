@@ -2,7 +2,8 @@ import { describe, it, expect } from 'vitest';
 import { ApiMethodInfo } from '../http/ApiMethodInfo';
 import { HttpHeader } from '../http/HttpResponseDto';
 import { WebpiecesDefaultErrorTranslator } from '../http/WebpiecesDefaultErrorTranslator';
-import { WebpiecesDefaultFailureClassifier } from '../http/WebpiecesDefaultFailureClassifier';
+import { WebpiecesDefaultErrorClassifier } from '../http/WebpiecesDefaultErrorClassifier';
+import { CallOutcome } from '../http/ErrorClassifier';
 import { OAuthAuthorizationErrorRedirect } from './OAuthAuthorizationErrorRedirect';
 import { OAuthBearerChallenge } from './OAuthBearerChallenge';
 import { OAuthErrorCode, OAuthFixedStatusErrorCode } from './OAuthErrorCode';
@@ -157,18 +158,18 @@ describe('the webpieces default translator and classifier know OAuthProtocolErro
     });
 
     it('a server refusing a caller is NOT a failure; server_error still is; a client receiving one is', () => {
-        const classifier = new WebpiecesDefaultFailureClassifier();
+        const classifier = new WebpiecesDefaultErrorClassifier();
         const server = new ApiMethodInfo('server', 'OAuthApi', 'token');
         const client = new ApiMethodInfo('client', 'OAuthApi', 'token');
         expect(
-            classifier.isFailure(new OAuthProtocolError(OAuthErrorCode.INVALID_GRANT), server),
-        ).toBe(false);
+            classifier.classify(new OAuthProtocolError(OAuthErrorCode.INVALID_GRANT), server),
+        ).toBe(CallOutcome.EXPECTED);
         expect(
-            classifier.isFailure(new OAuthProtocolError(OAuthErrorCode.SERVER_ERROR), server),
-        ).toBe(true);
+            classifier.classify(new OAuthProtocolError(OAuthErrorCode.SERVER_ERROR), server),
+        ).toBe(CallOutcome.FAILURE);
         expect(
-            classifier.isFailure(new OAuthProtocolError(OAuthErrorCode.INVALID_GRANT), client),
-        ).toBe(true);
+            classifier.classify(new OAuthProtocolError(OAuthErrorCode.INVALID_GRANT), client),
+        ).toBe(CallOutcome.FAILURE);
     });
 });
 

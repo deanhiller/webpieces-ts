@@ -13,11 +13,13 @@ appears in each root's tree.
 ```mermaid
 graph TD
     ClientCloudTasksFactory["ClientCloudTasksFactory"]:::apiImpl
+    CloudTasksClientProvider["CloudTasksClientProvider"]
     GcpTaskInvoker["TaskInvoker<br/>(GcpTaskInvoker)"]
     RequestContextHeaders["RequestContextHeaders"]
     Secrets{{"Secrets ?"}}:::unresolved
     TaskProxyClient["TaskProxyClient"]:::many
     ClientCloudTasksFactory --> TaskProxyClient
+    GcpTaskInvoker --> CloudTasksClientProvider
     GcpTaskInvoker --> Secrets
     TaskProxyClient --> GcpTaskInvoker
     TaskProxyClient --> RequestContextHeaders

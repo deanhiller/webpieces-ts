@@ -75,7 +75,8 @@ HTTP `ProxyClient`:
 `assertEveryEndpointHasAuthMode`, reads `getApiPath`/`getEndpoints`/`getAuthMeta`/`getQueueName`).
 The `TaskInvoker` contract is bound to a default impl exactly like the HTTP pattern:
 - `GcpTaskInvoker` (`@provideFrameworkSingletonDefaultForApi(TaskInvoker)`) — real
-  `@google-cloud/tasks`, OIDC or shared-secret delivery auth, dedup via deterministic task name.
+  `@google-cloud/tasks`, OIDC or shared-secret delivery auth; every enqueue is named once (`TaskName`)
+  so its retries are idempotent, and ALREADY_EXISTS is success (`JobReference.alreadyExisted`).
 - `InMemoryTaskInvoker` — local dev/tests, delivers over **real HTTP** to the target's real filter
   chain (not in-process), so localhost behaves like production.
 

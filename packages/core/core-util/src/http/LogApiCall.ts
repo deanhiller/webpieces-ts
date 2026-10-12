@@ -6,7 +6,7 @@ import { ApiCallContext } from './ApiCallContext';
 import { WebpiecesCoreHeaders } from './WebpiecesCoreHeaders';
 import { LOG_API_CALL_LOGGER_NAME } from './ApiCallLogName';
 import { ClientRegistry } from './ClientRegistry';
-import { WEBPIECES_DEFAULT_FAILURE_CLASSIFIER } from './WebpiecesDefaultFailureClassifier';
+import { CallOutcome } from './ErrorClassifier';
 
 // The console backends special-case THIS logger name into a self-describing [API.{side}.{phase}]
 // bracket (see ApiCallLogName) — so the name here and the name they match are the one constant.
@@ -40,8 +40,8 @@ const log = LogManager.getLogger(LOG_API_CALL_LOGGER_NAME);
  * Logging format patterns:
  * - [API-{side}-req] ClassName.methodName request={...}
  * - [API-{side}-resp-SUCCESS] ClassName.methodName response={...}
- * - [API-{side}-resp-OTHER] ClassName.methodName errorType={...} error={...}  (user errors)
- * - [API-{side}-resp-FAIL] ClassName.methodName error={...}  (server errors)
+ * - [API-{side}-resp-OTHER] ClassName.methodName errorType={...} error={...}  (CallOutcome.EXPECTED)
+ * - [API-{side}-resp-FAIL] ClassName.methodName error={...}  (TRANSIENT_FAILURE or FAILURE — final by position; each retried attempt is logged by CallRegistry as [API-client-attempt-TRANSIENT])
  */
 export class LogApiCallImpl {
     /**
@@ -274,8 +274,10 @@ export class LogApiCallImpl {
         // Pluggable classification (ClientRegistry): a per-apiClass EXTERNAL-client classifier wins,
         // else the app default, else the webpieces built-in — which is side-dependent (a 4xx the SERVER
         // raised is a handled non-failure; the same 4xx a CLIENT receives means its call FAILED; 266 is
-        // never a failure either side). `isUser` = "treat as non-failure (OTHER / result:'success')".
-        const isUser = !ClientRegistry.classifyFailure(error, methodInfo);
+        // never a failure either side). This line is FINAL BY POSITION: it only sees what escaped every
+        // retry, so a TRANSIENT_FAILURE here was never retried (no strategy, or a WRITE) or gave up —
+        // it logs FAIL exactly like a FAILURE. Only EXPECTED is "OTHER / result:'success'".
+        const isUser = ClientRegistry.classify(error, methodInfo) === CallOutcome.EXPECTED;
 
         stamp(
             new ApiCallInfo(
@@ -311,27 +313,5 @@ export class LogApiCallImpl {
             bytes += code <= 0x7f ? 1 : code <= 0x7ff ? 2 : code <= 0xffff ? 3 : 4;
         }
         return bytes;
-    }
-
-    /**
-     * Is this error a NON-failure for HEALTH/METRICS — the process working CORRECTLY (log OTHER, api
-     * result:'success') — rather than a real failure to surface (log FAIL, result:'failure')?
-     *
-     * BACK-COMPAT SHIM: the canonical logic now lives in {@link WebpiecesDefaultFailureClassifier}
-     * (the webpieces built-in tier), and the LIVE classification path is
-     * {@link ClientRegistry.classifyFailure} (per-apiClass → app default → built-in). This method
-     * delegates to the built-in so existing callers/tests keep the exact old behavior; it does NOT
-     * consult registered classifiers. `apiClass`/`methodName` are irrelevant to the built-in (it reads
-     * only `side`), hence the empty strings.
-     *
-     * @param error  - The already-normalized error (callers pass toError(err), never a raw catch value)
-     * @param server - True when this side is the SERVER handling an inbound call; false for a CLIENT's outbound call
-     * @returns true if this should be treated as a non-failure (OTHER / result:'success')
-     */
-    isUserError(error: Error, server: boolean): boolean {
-        return !WEBPIECES_DEFAULT_FAILURE_CLASSIFIER.isFailure(
-            error,
-            new ApiMethodInfo(server ? 'server' : 'client', '', ''),
-        );
     }
 }

@@ -7,7 +7,12 @@
  * delivered to the same endpoint through the full server filter chain.
  */
 
-export { ScheduleInfo, JobReference, TaskRequest, TaskInvoker } from './TaskTypes';
+export { ScheduleInfo, JobReference, TaskRequest, TaskInvoker, EnqueuePlan } from './TaskTypes';
+export type { TaskCustomizer, ICreateTaskRequest } from './TaskTypes';
+export { TaskName } from './TaskName';
+export { TaskAlreadyExistsError } from './TaskAlreadyExistsError';
+export { GcpTaskRegistry } from './GcpTaskRegistry';
+export { GrpcErrorMapper } from './GrpcErrorMapper';
 export { ClientCloudTasksFactory } from './ClientCloudTasksFactory';
 export { TaskProxyClient, TASK_PROXY_CLIENT_PROVIDER } from './TaskProxyClient';
 export { TaskClientConfig } from './TaskClientConfig';
@@ -16,6 +21,8 @@ export { CloudTaskScheduler, ScheduleOptions } from './CloudTaskScheduler';
 // The two task transports (local HTTP-queue + remote GCP), both delivering over real HTTP.
 export { InMemoryTaskInvoker } from './InMemoryTaskInvoker';
 export { GcpTaskInvoker } from './GcpTaskInvoker';
+// Process-wide CloudTasksClient settings (keepalive, endpoint): override this provider at startup.
+export { CloudTasksClientProvider } from './CloudTasksClientProvider';
 // NOTE: server-side delivery-auth is enforced by the framework AuthFilter (AuthMode-driven)
 // in @webpieces/http-routing — a client library has no server filters / routing machinery.
 export {

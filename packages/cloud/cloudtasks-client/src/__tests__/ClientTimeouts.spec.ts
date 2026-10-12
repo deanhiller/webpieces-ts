@@ -3,6 +3,8 @@ import 'reflect-metadata';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
     ApiPath,
+    ApiRetriesExhaustedError,
+    ApiUnavailableError,
     Attempt,
     CallContext,
     CallRegistry,
@@ -11,17 +13,22 @@ import {
     HeaderRegistry,
     ApiCallTimeoutError,
     ApiCallSite,
+    RetryStrategy,
     toError,
     CLOUDTASKS,
     POST,
     WRITE,
+    WRITE_IDEMPOTENT,
 } from '@webpieces/core-util';
 import { PubSub } from '@webpieces/core-util';
 import { Provider, RequestContext, RequestContextHeaders } from '@webpieces/core-context';
 import { ClientCloudTasksFactory } from '../ClientCloudTasksFactory';
-import { CloudTaskScheduler } from '../CloudTaskScheduler';
+import { CloudTaskScheduler, ScheduleOptions } from '../CloudTaskScheduler';
 import { TaskClientConfig } from '../TaskClientConfig';
 import { TaskProxyClient } from '../TaskProxyClient';
+import { TaskName } from '../TaskName';
+import { GcpTaskRegistry } from '../GcpTaskRegistry';
+import { TaskAlreadyExistsError } from '../TaskAlreadyExistsError';
 import { JobReference, TaskInvoker, TaskRequest } from '../TaskTypes';
 class Payload {
     constructor(public readonly value = 'hello') {}
@@ -48,34 +55,39 @@ abstract class TaskApi {
 class ControlledTransport extends TaskInvoker {
     calls = 0;
     readonly requests: TaskRequest[] = [];
+    readonly timeouts: number[] = [];
     work: () => Promise<void> = () => new Promise<void>(() => {});
-    override async enqueue(request: TaskRequest): Promise<JobReference> {
+    override async enqueue(request: TaskRequest, timeoutMs: number): Promise<JobReference> {
         const id = ++this.calls;
         this.requests.push(request);
+        this.timeouts.push(timeoutMs);
         await this.work();
-        return new JobReference('task-' + id);
+        return new JobReference('task-' + id, false);
     }
     override async delete(_ref: JobReference): Promise<void> {}
 }
+
+/** Enqueue is WRITE_IDEMPOTENT in every naming mode: one name for every attempt. */
+const ctx = (method: 'work' | 'other'): CallContext =>
+    new CallContext(TaskApi.name, method, WRITE_IDEMPOTENT);
+
 class Harness {
     readonly transport = new ControlledTransport();
     readonly api = TaskApi;
-    readonly invoke: (method?: 'work' | 'other') => Promise<object>;
+    readonly invoke: (method?: 'work' | 'other', opts?: ScheduleOptions) => Promise<JobReference>;
     constructor() {
         const factory = new ClientCloudTasksFactory(
             new Provider(() => new TaskProxyClient(this.transport, new RequestContextHeaders())),
         );
         const client = factory.createPubSubClient(TaskApi, new TaskClientConfig('timeout-test'));
         const scheduler = new CloudTaskScheduler(this.transport);
-        this.invoke = (method = 'work') =>
-            RequestContext.run(() => scheduler.addToQueue(() => client[method](new Payload())));
+        this.invoke = (method = 'work', opts?: ScheduleOptions) =>
+            RequestContext.run(() => scheduler.addToQueue(() => client[method](new Payload()), opts));
     }
     async expectTimeout(timeoutMs: number, method: 'work' | 'other' = 'work'): Promise<void> {
         let settled = false;
         const pending = this.invoke(method);
-        const checked = expect(pending).rejects.toEqual(
-            new ApiCallTimeoutError(timeoutMs, new CallContext(this.api.name, method, WRITE)),
-        );
+        const checked = expect(pending).rejects.toEqual(new ApiCallTimeoutError(timeoutMs, ctx(method)));
         void pending.then(
             () => {
                 settled = true;
@@ -90,12 +102,33 @@ class Harness {
         await checked;
         expect(vi.getTimerCount()).toBe(0);
     }
+
+    /**
+     * The enqueue default, unconfigured: RetryStrategy(5_000, 3, 500, 2, 4_000) — 4 attempts of 5 s
+     * with 500 / 1000 / 2000 ms between them, then ApiRetriesExhaustedError at exactly 23.5 s.
+     */
+    async expectDefaultRetriesExhausted(): Promise<ApiRetriesExhaustedError> {
+        let failure: Error | undefined;
+        const pending = this.invoke().catch((err: unknown) => {
+            const error = toError(err);
+            failure = error;
+            return undefined;
+        });
+        await vi.advanceTimersByTimeAsync(23_499);
+        expect(failure).toBeUndefined();
+        await vi.advanceTimersByTimeAsync(1);
+        await pending;
+        expect(failure).toBeInstanceOf(ApiRetriesExhaustedError);
+        expect(vi.getTimerCount()).toBe(0);
+        return failure as ApiRetriesExhaustedError;
+    }
 }
 
 beforeEach(() => {
     vi.useFakeTimers();
     HeaderRegistry.configure([], true);
     CallRegistry.clear();
+    GcpTaskRegistry.clear();
     ClientRegistry.resetForTests();
     ClientRegistry.addUrlMapping('timeout-test', 'https://timeout.example');
 });
@@ -104,17 +137,38 @@ afterEach(() => {
     vi.useRealTimers();
     vi.unstubAllGlobals();
     CallRegistry.clear();
+    GcpTaskRegistry.clear();
     ClientRegistry.resetForTests();
 });
 
-describe('tasks generated client deadlines', () => {
-    it('rejects at exactly 30 seconds without configuration or automatic retries', async () => {
+describe('tasks generated client deadlines — Path A, webpieces owns timing', () => {
+    it('with no configuration runs the enqueue RetryStrategy: 4 x 5 s attempts, then retries-exhausted', async () => {
         const h = new Harness();
-        await h.expectTimeout(30_000);
-        expect(h.transport.calls).toBe(1);
+        const exhausted = await h.expectDefaultRetriesExhausted();
+        expect(h.transport.timeouts).toEqual([5_000, 5_000, 5_000, 5_000]);
+        expect(exhausted.attempts).toBe(4);
+        expect(exhausted.lastError).toEqual(new ApiCallTimeoutError(5_000, ctx('work')));
+        // Every attempt carries the SAME name: resolved once, before the first attempt.
+        const names = new Set(h.transport.requests.map((request: TaskRequest) => request.plan.taskId));
+        expect(names.size).toBe(1);
+        expect([...names][0]).toMatch(/^[0-9a-f-]{36}$/);
     });
 
-    it('resolves timeout method -> API -> ALL and removes overrides with undefined', async () => {
+    it('retries a transient transport failure and returns the next attempt', async () => {
+        const h = new Harness();
+        let first = true;
+        h.transport.work = () => {
+            if (!first) return Promise.resolve();
+            first = false;
+            return Promise.reject(new ApiUnavailableError('connection reset'));
+        };
+        const pending = h.invoke();
+        await vi.advanceTimersByTimeAsync(500);
+        await expect(pending).resolves.toEqual(new JobReference('task-2', false));
+        expect(h.transport.requests[0].plan.taskId).toBe(h.transport.requests[1].plan.taskId);
+    });
+
+    it('resolves timeout method -> API -> ALL; a registered timeout is a single attempt', async () => {
         const h = new Harness();
         CallRegistry.setTimeout(300, 'ALL');
         CallRegistry.setTimeout(200, h.api);
@@ -126,7 +180,7 @@ describe('tasks generated client deadlines', () => {
         CallRegistry.setTimeout(undefined, h.api);
         await h.expectTimeout(300);
         CallRegistry.setTimeout(undefined, 'ALL');
-        await h.expectTimeout(30_000);
+        await h.expectDefaultRetriesExhausted();
     });
 
     it('resolves strategy method -> API -> ALL before even the most specific timeout', async () => {
@@ -134,8 +188,8 @@ describe('tasks generated client deadlines', () => {
         const seen: CallContext[] = [];
         const strategy =
             (ms: number) =>
-            (call: Attempt<unknown>, ctx: CallContext): Promise<unknown> => {
-                seen.push(ctx);
+            (call: Attempt<unknown>, context: CallContext): Promise<unknown> => {
+                seen.push(context);
                 return call(ms);
             };
         CallRegistry.setTimeout(1, h.api, 'work');
@@ -147,9 +201,24 @@ describe('tasks generated client deadlines', () => {
         await h.expectTimeout(200);
         CallRegistry.setStrategy(undefined, h.api);
         await h.expectTimeout(300);
-        expect(seen).toEqual(Array.from({ length: 3 }, () => new CallContext(h.api.name, 'work', WRITE)));
+        expect(seen).toEqual(Array.from({ length: 3 }, () => ctx('work')));
         CallRegistry.setStrategy(undefined, 'ALL');
         await h.expectTimeout(1);
+    });
+
+    it('tunes OUR retries per API with a registered RetryStrategy', async () => {
+        const h = new Harness();
+        CallRegistry.setStrategy(new RetryStrategy(1_000, 1, 100, 2, 100).run, h.api);
+        let failure: Error | undefined;
+        const pending = h.invoke().catch((err: unknown) => {
+            const error = toError(err);
+            failure = error;
+            return undefined;
+        });
+        await vi.advanceTimersByTimeAsync(2_100);
+        await pending;
+        expect(failure).toBeInstanceOf(ApiRetriesExhaustedError);
+        expect(h.transport.timeouts).toEqual([1_000, 1_000]);
     });
 
     it('supports 30s attempt, 60s backoff, then 20s attempt with one final error', async () => {
@@ -170,9 +239,7 @@ describe('tasks generated client deadlines', () => {
             }
         }, h.api);
         const pending = h.invoke();
-        const checked = expect(pending).rejects.toEqual(
-            new ApiCallTimeoutError(20_000, new CallContext(h.api.name, 'work', WRITE)),
-        );
+        const checked = expect(pending).rejects.toEqual(new ApiCallTimeoutError(20_000, ctx('work')));
         await vi.advanceTimersByTimeAsync(30_000);
         expect(firstError).toBeInstanceOf(ApiCallTimeoutError);
         expect(h.transport.calls).toBe(1);
@@ -204,7 +271,7 @@ describe('tasks generated client deadlines', () => {
         const pending = h.invoke();
         await vi.advanceTimersByTimeAsync(10);
         const result = await pending;
-        expect(result).toEqual(new JobReference('task-2'));
+        expect(result).toEqual(new JobReference('task-2', false));
         finishFirst();
         await vi.advanceTimersByTimeAsync(0);
         expect(h.transport.calls).toBe(2);
@@ -223,7 +290,7 @@ describe('tasks generated client deadlines', () => {
         expect(vi.getTimerCount()).toBe(0);
     });
 
-    it('does not retry real transport failures and cleans the timer', async () => {
+    it('does not retry a non-transient transport failure and cleans the timer', async () => {
         const h = new Harness();
         const failure = new Error('real failure');
         h.transport.work = () => Promise.reject(failure);
@@ -238,7 +305,7 @@ describe('tasks generated client deadlines', () => {
     it('cleans the default timer on success', async () => {
         const h = new Harness();
         h.transport.work = () => Promise.resolve();
-        await expect(h.invoke()).resolves.toEqual(new JobReference('task-1'));
+        await expect(h.invoke()).resolves.toEqual(new JobReference('task-1', false));
         expect(vi.getTimerCount()).toBe(0);
     });
 
@@ -263,10 +330,50 @@ describe('tasks generated client deadlines', () => {
                     resolveUrl = resolve;
                 }),
         );
-        await h.expectTimeout(30_000);
+        await h.expectDefaultRetriesExhausted();
         expect(h.transport.calls).toBe(0);
         resolveUrl('https://late.example');
         await vi.advanceTimersByTimeAsync(0);
         expect(h.transport.calls).toBe(0);
+    });
+});
+
+describe('tasks generated client — Path B, the caller owns timing (gax set)', () => {
+    it('makes exactly ONE attempt under the 30 s safety cap, ignoring every registered strategy', async () => {
+        const h = new Harness();
+        CallRegistry.setStrategy(new RetryStrategy(1_000, 5, 1, 1, 1).run, 'ALL');
+        h.transport.work = () => Promise.reject(new ApiUnavailableError('reset'));
+        const opts = new ScheduleOptions(TaskName.dedup('order-1'), undefined, undefined, { timeout: 10_000 });
+        await expect(h.invoke('work', opts)).rejects.toBeInstanceOf(ApiUnavailableError);
+        expect(h.transport.timeouts).toEqual([30_000]);
+        expect(h.transport.requests[0].plan.gax).toEqual({ timeout: 10_000 });
+    });
+
+    it('the safety cap follows the timeout ladder and holds on a hung transport', async () => {
+        const h = new Harness();
+        GcpTaskRegistry.setGax({ timeout: 10_000 }, h.api, 'work');
+        CallRegistry.setTimeout(300, h.api);
+        await h.expectTimeout(300);
+        expect(h.transport.calls).toBe(1);
+        expect(h.transport.timeouts).toEqual([300]);
+    });
+});
+
+describe('tasks generated client — ALREADY_EXISTS', () => {
+    it('is success with alreadyExisted, caught above the retry layer', async () => {
+        const h = new Harness();
+        let calls = 0;
+        h.transport.work = () => {
+            calls += 1;
+            return calls === 1
+                ? Promise.reject(new ApiUnavailableError('reset after the task landed'))
+                : Promise.reject(new TaskAlreadyExistsError('projects/p/locations/l/queues/q/tasks/order-9'));
+        };
+        const pending = h.invoke('work', new ScheduleOptions(TaskName.dedup('order-9')));
+        await vi.advanceTimersByTimeAsync(500);
+        await expect(pending).resolves.toEqual(
+            new JobReference('projects/p/locations/l/queues/q/tasks/order-9', true),
+        );
+        expect(h.transport.calls).toBe(2);
     });
 });

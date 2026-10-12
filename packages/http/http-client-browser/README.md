@@ -29,5 +29,9 @@ A browser cannot hold service credentials, so a contract with an `oidc(...)` end
 
 Calls have a **30-second default timeout**, including reading the response body. Configure
 `CallRegistry` from `@webpieces/core-util` for ALL, API or API-method overrides and explicit retry
-strategies. Any strategy replaces the entire timeout ladder; there is no default retry because
-POSTs may not be idempotent. See [client timeouts and testing](../../../docs/client-timeouts.md).
+strategies — the same `CallRegistry.execute` the node and Cloud Tasks clients run. Any strategy
+replaces the entire timeout ladder; there is no default retry because POSTs may not be idempotent.
+Opt a contract in with `CallRegistry.setStrategy(new RetryStrategy(...).run, CatalogApi)`: it retries
+only a `CallOutcome.TRANSIENT_FAILURE` (from `ClientRegistry.classify`) on a `READ` /
+`WRITE_IDEMPOTENT` endpoint, logs each retried attempt as `[API-client-attempt-TRANSIENT]`, and gives
+up with a 502 `ApiRetriesExhaustedError`. See [client timeouts and testing](../../../docs/client-timeouts.md).

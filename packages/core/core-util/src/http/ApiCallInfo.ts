@@ -45,7 +45,7 @@ export type ApiCallDirection = 'request' | 'response';
 
 /**
  * Response outcome. 'success' covers 2xx AND user errors (400/401/403/404/266 — a successfully
- * handled "you made a mistake"); 'failure' is a genuine server error. See {@link LogApiCallImpl.isUserError}.
+ * handled "you made a mistake"); 'failure' is a genuine server error. `success` = {@link CallOutcome.EXPECTED} from {@link ClientRegistry.classify}.
  */
 export type ApiResult = 'success' | 'failure';
 
@@ -68,7 +68,7 @@ export class ApiCallInfo {
          * There is deliberately no `statusCode` beside this. LogApiCall runs deep in the stack over
          * in-process calls, pubsub handlers, and cloud-task enqueues — none of which have an HTTP
          * status — and business logic must not know about HTTP. `result` (see {@link ApiResult}) is
-         * the transport-neutral outcome, exactly as {@link LogApiCallImpl.isUserError} classifies by
+         * the transport-neutral outcome, exactly as {@link ClientRegistry.classify} (a {@link CallOutcome}) classifies by
          * portable Error TYPE rather than by status code.
          */
         readonly durationMs?: number,

@@ -2,8 +2,8 @@ import {
     LoggerFactory,
     ConsoleLoggerFactory,
     ErrorTranslator,
-    FailureClassifier,
-    KeyedFailureClassifier,
+    ErrorClassifier,
+    KeyedErrorClassifier,
     Locality,
 } from '@webpieces/core-util';
 import { ContainerModule } from 'inversify';
@@ -35,10 +35,10 @@ export class CompanySetupOptions {
      *   same on the browser/Angular side, since `fromWire` runs client-side). ONE object, not a
      *   list: an app with several layers of error policy composes them inside its own `toWire`,
      *   where the precedence is written down.
-     * @param defaultFailureClassifier - Optional app/company DEFAULT failure classifier installed on
-     *   ClientRegistry at startup (see {@link FailureClassifier}). ONE per app; reads `side`, so it
+     * @param defaultErrorClassifier - Optional app/company DEFAULT error classifier installed on
+     *   ClientRegistry at startup (see {@link ErrorClassifier}). ONE per app; reads `side`, so it
      *   covers the server router AND all internal clients. Unset ⇒ webpieces' built-in classification.
-     * @param failureClassifiers - Per-EXTERNAL-client classifiers, each keyed by apiClass
+     * @param errorClassifiers - Per-EXTERNAL-client classifiers, each keyed by apiClass
      *   ('FirestoreAdminClient', ...). Installed on ClientRegistry at startup. Same "only when express
      *   is used" binding as errorTranslators; the browser side registers its own via ClientRegistry.
      * @param svcName - This service's name, forwarded into RuntimeSetupOptions so {@link setupRuntime}
@@ -69,8 +69,8 @@ export class CompanySetupOptions {
         public readonly appOverrides?: ContainerModule,
         public readonly config?: WebpiecesConfig,
         public readonly errorTranslators?: ErrorTranslator,
-        public readonly defaultFailureClassifier?: FailureClassifier,
-        public readonly failureClassifiers: KeyedFailureClassifier[] = [],
+        public readonly defaultErrorClassifier?: ErrorClassifier,
+        public readonly errorClassifiers: KeyedErrorClassifier[] = [],
         public readonly svcName: string = 'app-example',
         public readonly svcVersion: string = 'local-dev',
         public readonly locality: Locality = 'deployed',
