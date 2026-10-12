@@ -174,7 +174,7 @@ export class GraphPageShell {
 
     /**
      * The Product group (#1179): one chip per declared product, each with its palette swatch. Several
-     * chips select the UNION of their closures; the group intersects with the others. Omitted when the
+     * chips select the UNION of their members; the group intersects with the others. Omitted when the
      * workspace declares no product.
      */
     private productGroup(products: string[]): string {
@@ -236,7 +236,7 @@ export class GraphPageShell {
             <p>Click a box for Lock, Filter Unconnected, or Implements. Implements in the box is a plain summary. Click Uses on a relationship line for its complete details. Hover traces chains without opening details.</p>
             <p>Lock pins separate incoming and outgoing chains; hover adds another chain temporarily. Hide unconnected removes unrelated boxes independently. Clear all clears facets, leaving Lock and chain filtering intact.</p>
             <p>Filters intersect declared runtime, role, product closure and Nx build scope. Counts describe services; attached contextual nodes are counted separately. Impact uses compile-project sets, never runtime reachability. Queues and vendors are context, never source owners or CI projects.</p>
-            <p>Runtime uses declared framework colors, Architecture declared roles; contextual nodes keep their kind colors. Product colors include inherited membership. Unknown metadata is neutral. Missing saved metadata requires explicit architecture:generate.</p>
+            <p>Runtime uses declared framework colors, Architecture declared roles; contextual nodes keep their kind colors. Product colors come from each project's declared product: tags; contextual nodes inherit adjacent memberships. Unknown metadata is neutral. Missing saved metadata requires explicit architecture:generate.</p>
             <p><kbd>/</kbd> Focus search · <kbd>1</kbd>–<kbd>4</kbd> modes · <kbd>Esc</kbd> dismiss or unlock</p>
         </div>`;
         return `<div class="wp-pop wp-help" id="wp-help" role="dialog" aria-label="How to read this graph" hidden>

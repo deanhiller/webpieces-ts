@@ -221,8 +221,8 @@ export class TagTruthValidator {
 
     /**
      * #1179 — a project whose role the rule lists declares at least one well-formed `product:<name>`.
-     * The DECLARED tags are read, never the derived `products`: a server inheriting membership from an
-     * orchestrator that depends on it still states its own product. A malformed tag is not counted here
+     * The DECLARED tags are read straight from the project's tags, not from the graph's `products`
+     * field, so this check does not depend on enrichment order. A malformed tag is not counted here
      * because enrichGraph already fails on it, naming the tag.
      */
     private productTagProblems(info: ProjectInfo, root: string, entry: GraphEntry, rule: ProductTagsRule): string[] {

@@ -16,9 +16,11 @@
  *    only on itself; `[]` as the whole field means no product depends on another.
  *  - An edge A -> B of the DEPENDENCY graph is legal when, for EVERY product p of A, B carries p or a
  *    product p's entry allows. A multi-product B satisfies p when ANY of its products is allowed.
- *  - The check reads the RESOLVED membership (`products` in dependencies.json): a project's own tags
- *    are final, an untagged project inherits from the tagged projects that reach it. A project in no
- *    product constrains nothing.
+ *  - The check reads `products` in dependencies.json, which is exactly each project's declared tags
+ *    (#1216). An edge with an UNTAGGED end is skipped: an untagged project is in no product and
+ *    constrains nothing. So an untagged library is a hole in the check (example app -> untagged lib
+ *    -> platform lib is never judged); a consumer closes it by listing its library roles in
+ *    `product-tags.roles`, which makes every such project carry a tag.
  *  - An entry `name`, or an `allowedToDependOn` value, that no `product:` tag uses fails naming it, and
  *    so does a duplicate `name`: a typo must never silently allow or forbid nothing.
  *
@@ -97,8 +99,7 @@ export class ProductDependencyMatrix {
             if (from.length === 0) continue;
             for (const dep of [...(graph[name].dependsOn ?? [])].sort()) {
                 const to = graph[dep]?.products ?? [];
-                // Membership is inherited down every edge, so a product's dependency always carries a
-                // product; a target with none is outside the graph and constrains nothing.
+                // #1216: an untagged target is in no product and constrains nothing — see the header.
                 if (to.length === 0) continue;
                 for (const product of from) {
                     if (this.satisfies(product, to)) continue;

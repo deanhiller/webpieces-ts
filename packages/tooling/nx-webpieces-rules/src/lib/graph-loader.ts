@@ -18,8 +18,8 @@
  * `level` is the project's dependency depth, except that every server, client and app is pinned to
  * the TOP level (bundles above them), so the top row is exactly the entry points (#1179).
  *
- * `products` (#1179) is the sorted list of products whose `product:<name>`-tagged projects reach
- * this project over `dependsOn` — its blast radius. Absent when no product reaches it.
+ * `products` (#1179) is the sorted list of the project's own declared `product:<name>` tags (#1216).
+ * Absent for an untagged project.
  *
  * `framework` is the project's libType — the SET of runtime environments it is
  * validated to run in, drawn from browser | react | angular | node | express

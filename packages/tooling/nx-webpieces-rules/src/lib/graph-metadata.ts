@@ -3,7 +3,7 @@
  *
  * Fills the AI-oriented fields on each architecture/dependencies.json entry:
  *   framework            — from `framework:<x>` nx tag or package.json inference
- *   products             — the products reaching it, from the `product:<name>` nx tags (#1179)
+ *   products             — exactly its declared `product:<name>` nx tags (#1179, #1216)
  *   level                — re-levelled so servers, clients and apps form the top row (#1179)
  *   serviceName          — from project.json metadata.webpieces.serviceName; the
  *                          name clients address this app by at runtime
@@ -76,7 +76,7 @@ export function enrichGraph(
     const problems: string[] = [];
     // project -> declared serviceName, collected so duplicates can be reported across the workspace.
     const serviceNames = new Map<string, string>();
-    // project -> the products it DECLARES (`product:` tags); membership is derived from these below.
+    // project -> the products it DECLARES (`product:` tags); membership is exactly these (#1216).
     const productSeeds = new Map<string, string[]>();
     const products = new ProductResolver();
 
@@ -114,8 +114,7 @@ export function enrichGraph(
         throw new MetadataValidationError(problems);
     }
 
-    // #1179/#1201: declared product tags are final; an untagged library belongs to every product whose
-    // tagged project reaches it without passing through another tagged project.
+    // #1179/#1216: a project's products are exactly its declared product tags; an untagged one has none.
     new ProductMembership().compute(productSeeds, graph).forEach((member: string[], projectName: string): void => {
         graph[projectName].products = member;
     });

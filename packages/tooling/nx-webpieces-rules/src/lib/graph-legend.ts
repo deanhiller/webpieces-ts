@@ -132,7 +132,7 @@ export class GraphLegend {
                 'no-products',
                 this.solid(PRODUCT_NONE_FILL, PRODUCT_NONE_BORDER, '3 2'),
                 'no products declared',
-                'tag servers, clients and apps product:<name> to see each product',
+                'tag each project product:<name> to see each product',
             );
         const palette = new ProductPalette(facts.products.map((count: ProductCount): string => count.product));
         let rows = '';
@@ -157,7 +157,7 @@ export class GraphLegend {
                 'no-product',
                 this.solid(PRODUCT_NONE_FILL, PRODUCT_NONE_BORDER, '3 2'),
                 `no product · ${facts.noProduct}`,
-                'no tagged server, client or app reaches it',
+                'needs a product:<name> tag',
             );
         return rows + this.boundaryRows(facts, palette);
     }

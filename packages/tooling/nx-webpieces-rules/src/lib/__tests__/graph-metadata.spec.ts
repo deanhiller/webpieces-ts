@@ -515,7 +515,7 @@ describe('enrichGraph', () => {
         expect(thrown.message).toContain('max ' + MAX_SHORT_DESCRIPTION_LENGTH);
     });
 
-    it('#1179: derives products from product:<name> tags down dependsOn, and pins entry points to the top row', () => {
+    it('#1179/#1216: products are exactly the declared product:<name> tags, and entry points are pinned to the top row', () => {
         const md = (name: string): string => `# R — ${name}\n\nDoes ${name} things.\n`;
         const infos = setupWorkspace('products', [
             new FixtureProject('lang-angular', md('lang-angular'), true, ['framework:angular', 'role:client', 'product:lang']),
@@ -536,9 +536,11 @@ describe('enrichGraph', () => {
 
         enrichGraph(graph, infos, enrichTmpRoot);
 
-        expect(graph['lang-apis'].products).toEqual(['lang']);
-        expect(graph['core'].products).toEqual(['helper', 'lang']);
         expect(graph['lang-server'].products).toEqual(['lang']);
+        expect(graph['helper-server'].products).toEqual(['helper']);
+        // #1216: an untagged library is in no product, however many tagged projects depend on it.
+        expect(graph['lang-apis'].products).toBeUndefined();
+        expect(graph['core'].products).toBeUndefined();
         expect(graph['orphan'].products).toBeUndefined();
         // top = 1 + the highest library (lang-apis at L1) = 2; helper-server was L1.
         expect(graph['helper-server'].level).toBe(2);

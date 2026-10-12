@@ -217,7 +217,7 @@ class RuntimeGraphDeriver {
             queues: edgeResult.queues,
             triggers: this.buildTriggers(decls),
         };
-        // #1179: each product's services — its tagged ones plus everything they reach at runtime.
+        // #1179/#1216: each service's products are exactly its project's declared product tags.
         new RuntimeProductMembership().apply(graph, this.projects);
         // A destination whose address arrives at RUNTIME is declared on its CONTRACT
         // (`@externalSystem runtime partner-webhooks`), so it needs no branch of its own here: it is

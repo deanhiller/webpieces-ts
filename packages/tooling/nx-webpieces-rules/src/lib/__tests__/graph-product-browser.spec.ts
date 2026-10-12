@@ -149,7 +149,7 @@ describe.skipIf(!process.env.WP_GRAPH_VIZ_JS)('products in a real browser (#1179
     it('runtime: chips narrow to a product and keep its cross-product callees, queues, clocks and systems', async () => {
         const runtime: RuntimeGraph = FilterFixture.runtime();
         runtime.services['producer'] = { ...runtime.services['producer'], products: ['lang'] };
-        // consumer belongs to both products, and lang's producer reaches it through the queue.
+        // consumer is tagged with both products; lang's producer feeds it through the queue.
         runtime.services['consumer'] = { ...runtime.services['consumer'], products: ['helper', 'lang'] };
         runtime.services['unrelated'] = { ...runtime.services['unrelated'], products: ['helper'] };
         const html = new RuntimeHtmlPage(

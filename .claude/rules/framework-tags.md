@@ -135,21 +135,19 @@ products it belongs to with the nx tag `product:<name>` — lowercase kebab, sev
 one; the refusal names the project, its role, its project.json and the line to add. Membership is
 written as `"products"` into `dependencies.json`, and the architecture pages filter and color by it.
 
-**A project's declared `product:` tags are FINAL** (#1201). A tagged project belongs to exactly the
-products it declares — no other product's walk adds to it. An UNTAGGED project belongs to every product
-whose tagged project reaches it over `dependsOn`, and that walk STOPS at a tagged project: the tagged
-project's own dependencies are reached by its own seed walk. So an untagged library two products reach
-carries both, while a library tagged `product:platform` stays `platform` even though every example app
-depends on it — a project is example OR platform, never both by accident. The runtime graph applies
-the same rule to services: a service with products keeps exactly them, and a runtime walk paints only
-services that have none.
+**Membership is TAGS ONLY** (#1216). A project belongs to exactly the products its own `product:`
+tags declare, on BOTH graphs: nothing is inherited down a dependency, and a runtime service's products
+are exactly its project's declared tags — never inherited from a service that calls it or feeds its
+queue (a call from one product into another still shows, as the runtime EDGE). An UNTAGGED project is
+in NO product and renders as "no product" on the Product color mode — a box that still needs
+assignment. So a library tagged `product:platform` stays `platform` even though every example app
+depends on it, and an untagged library two products depend on is in neither until somebody tags it.
 
-A library carries its own `product:` tag when its product's entry points live OUTSIDE the repo — a
-PUBLISHED library, which no in-repo walk can reach correctly. webpieces-ts is that case: its `platform`
-libraries (`packages/{core,http,cloud,logging}/**`) are consumed by other repos' servers, its `openapi`
-generator by other repos' builds, and its `rules` engines through the `webpieces-tooling` bundle, so
-each of those is tagged. A library that an in-repo project tagged with the SAME product already reaches
-stays untagged (e.g. `server2-api` inherits `example`).
+Because nothing is inherited, the rule only REQUIRES a tag on the roles in `roles`. A consumer that wants
+every project assigned — and wants the product dependency matrix below to judge every edge — lists its
+library roles there too (`lib`, `designed-lib`, `api-lib`, …): the matrix SKIPS any edge with an
+untagged end, so with only entry-point roles listed, `example app -> untagged lib -> platform lib` is
+never checked.
 
 ```json
 "product-tags": {
@@ -173,8 +171,8 @@ the config load; the seed is `[]`) and `[]` is valid — no product may depend o
 product that DOES depend on others; a product with no entry may depend only on itself, and a product may
 always depend on itself without listing it. An edge A -> B of the DEPENDENCY graph is legal when, for
 EVERY product p of A, B carries p or a product in p's `allowedToDependOn` — a multi-product B satisfies p
-when ANY of its products is allowed. Membership is the RESOLVED one (a project's own tags are final; an
-untagged project inherits). A violation fails `architecture:generate` / `validate-architecture-unchanged`
+when ANY of its products is allowed. Membership is the declared tags only; an edge with an UNTAGGED end
+is skipped, which is why `roles` should cover library roles too (above). A violation fails `architecture:generate` / `validate-architecture-unchanged`
 naming the edge, both products and the two cures: move the code, or add the product to the entry. A
 `name` or `allowedToDependOn` value no `product:` tag uses, and a duplicate `name`, fail naming it. The
 runtime graph is NOT checked: a cross-product HTTP / queue call shows on it as coupling for review. In
