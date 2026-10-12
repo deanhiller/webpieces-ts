@@ -90,7 +90,7 @@
             "level": 1,
             "framework": ["node"],
             "role": "lib",
-            "products": ["openapi"],
+            "products": ["api-model"],
             "shortDescription": "Read a webpieces API contract with the **TypeScript compiler API** and produce ONE in-memory `ApiDocModel`. It is the single extraction pass both the OpenAPI documents and the MCP tool list are rendered from (#982), and it renders nothing itself.",
             "responsibilitiesFile": "packages/docs/api-doc-model/responsibilities.md",
             "dependsOn": [
@@ -266,7 +266,7 @@
             "level": 0,
             "framework": ["browser","node","react-native"],
             "role": "lib",
-            "products": ["platform","rules"],
+            "products": ["core"],
             "shortDescription": "Lowest-level, zero-dependency utilities shared across webpieces (browser and Node). Provides `toError()` for standardized catch handling, plus the `Header` interface and `ContextKey` class that higher packages build request-context and HTTP-header abstractions on.",
             "responsibilitiesFile": "packages/core/core-util/responsibilities.md",
             "dependsOn": []

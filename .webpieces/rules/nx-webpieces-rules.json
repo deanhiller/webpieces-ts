@@ -122,6 +122,42 @@
       "app"
     ],
     "turnOffRuleUntilEpoch": 0,
-    "turnOffRuleWhileOnBranch": null
+    "turnOffRuleWhileOnBranch": null,
+    "productDependencies": [
+      {
+        "name": "example",
+        "allowedToDependOn": [
+          "platform",
+          "openapi",
+          "core"
+        ]
+      },
+      {
+        "name": "openapi",
+        "allowedToDependOn": [
+          "api-model",
+          "core"
+        ]
+      },
+      {
+        "name": "api-model",
+        "allowedToDependOn": [
+          "core"
+        ]
+      },
+      {
+        "name": "platform",
+        "allowedToDependOn": [
+          "core"
+        ]
+      },
+      {
+        "name": "rules",
+        "allowedToDependOn": [
+          "api-model",
+          "core"
+        ]
+      }
+    ]
   }
 }
