@@ -192,6 +192,31 @@ export interface RuntimeExternalSystem {
     apis: string[];
 }
 
+/**
+ * One caller's calls into a {@link RuntimeRemoteService}, one entry per (caller, transport): `via`
+ * lists the contracts it calls there.
+ */
+export interface RuntimeRemoteCall {
+    from: string;
+    via: string[];
+    type: ApiTransport;
+}
+
+/**
+ * A service OUTSIDE this workspace (another repo, a VM, partner endpoints) declared in the reviewed
+ * `remoteServices` table of dependencies.json (#1203). It is a SERVICE — it implements our contracts —
+ * so it is drawn as a service node, distinct from a vendor external system. Render-only, like the
+ * external systems: it is never leveled or cycle-checked, because its own calls are not in this repo.
+ */
+export interface RuntimeRemoteService {
+    /** Display text from the reviewed declaration; the key is the identity. */
+    label?: string;
+    /** The contracts it is declared to implement, as `Api (transport)`, in reviewed order. */
+    implements: string[];
+    /** Workspace services that target it, sorted by caller then transport. */
+    calledBy: RuntimeRemoteCall[];
+}
+
 export interface RuntimeGraph {
     services: Record<string, RuntimeService>;
     apis: Record<string, RuntimeApi>;
@@ -206,4 +231,9 @@ export interface RuntimeGraph {
      * existed still parses — an absent map means "nothing declared", which renders exactly as before.
      */
     externalSystems?: Record<string, RuntimeExternalSystem>;
+    /**
+     * Reviewed out-of-workspace services, keyed by service name (#1203). Absent when none are
+     * declared, so every graph written before this existed parses and renders exactly as before.
+     */
+    remoteServices?: Record<string, RuntimeRemoteService>;
 }

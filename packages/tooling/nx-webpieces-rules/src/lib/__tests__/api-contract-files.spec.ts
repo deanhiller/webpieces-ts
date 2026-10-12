@@ -237,7 +237,7 @@ describe('validate-architecture-unchanged ignores endpoint changes', () => {
             operation: 'write',
         });
 
-        const current = new CurrentArchitecture(graph(), new ApiContractFiles().refsFor(grown), {});
+        const current = new CurrentArchitecture(graph(), new ApiContractFiles().refsFor(grown), {}, {});
         expect(describeTableDrift(current, saved)).toBeNull();
     });
 
@@ -247,7 +247,7 @@ describe('validate-architecture-unchanged ignores endpoint changes', () => {
         const grown = contracts();
         grown.NewApi = { owner: 'task-api', apiKind: 'rpc', basePath: '/new', methods: [] };
 
-        const current = new CurrentArchitecture(graph(), new ApiContractFiles().refsFor(grown), {});
+        const current = new CurrentArchitecture(graph(), new ApiContractFiles().refsFor(grown), {}, {});
         expect(describeTableDrift(current, saved)).toContain('NewApi');
     });
 });

@@ -8,6 +8,7 @@
  * {
  *     "aiInstructions": "...how AI should use the per-project fields...",
  *     "apiContractFiles": { "<ApiName>": "apis/<ApiName>.json" },
+ *     "remoteServices": { "<serviceName>": { "label"?, "implements": [{ "api", "type" }] } },
  *     "projects": {
  *         "<project>": { level, framework, products, shortDescription,
  *                        responsibilitiesFile, designFile, dependsOn }
@@ -37,6 +38,8 @@ import { RuleFailError, Option } from '@webpieces/rules-config';
 import type { ExternalSystemDecls, ProjectApiRelations } from './api-usage/api-relations';
 import { API_CONTRACT_FILES_RULE, API_CONTRACTS_DIR } from './api-contract-files';
 import type { ApiContractFileRefs } from './api-contract-files';
+import { RemoteServicesCodec } from './remote-services';
+import type { RemoteServices } from './remote-services';
 import { toError } from '../toError';
 
 /**
@@ -113,6 +116,12 @@ export class DependenciesFile {
          * not written would make generate and validate disagree.
          */
         public readonly externalSystems: ExternalSystemDecls = {},
+        /**
+         * REVIEWED out-of-workspace services a `uses` may target (#1203), keyed by service name. Like
+         * `apiContractFiles` it is approval metadata: generation reads it and writes it back verbatim,
+         * and never infers or adds an entry. See remote-services.ts.
+         */
+        public readonly remoteServices: RemoteServices = {},
     ) {}
 }
 
@@ -156,6 +165,7 @@ export function loadBlessedGraph(
                 parsed.externalSystems !== null && typeof parsed.externalSystems === 'object'
                     ? (parsed.externalSystems as ExternalSystemDecls)
                     : {},
+                new RemoteServicesCodec().decode(parsed.remoteServices, fullPath),
             );
         }
         // Legacy flat format: the whole object is the project map
@@ -207,6 +217,7 @@ function formatGraphJson(file: DependenciesFile): string {
     lines.push(`    },`);
     lines.push(...apiContractFilesLines(file.apiContractFiles));
     lines.push(...externalSystemsLines(file.externalSystems));
+    lines.push(...remoteServicesLines(file.remoteServices));
     lines.push(`    "projects": {`);
 
     const keys = Object.keys(file.projects).sort();
@@ -255,6 +266,24 @@ function externalSystemsLines(systems: ExternalSystemDecls): string[] {
     const pretty = JSON.stringify(sorted, null, 4).split('\n');
     return pretty.map((line: string, index: number) => {
         const prefix = index === 0 ? '"externalSystems": ' : '';
+        const suffix = index === pretty.length - 1 ? ',' : '';
+        return `    ${prefix}${line}${suffix}`;
+    });
+}
+
+/**
+ * The reviewed `"remoteServices": {...}` block (4-space indent), with a trailing comma since `projects`
+ * always follows. Omitted entirely when empty, so a repo that declares none keeps its exact file shape.
+ * Service names are sorted; each entry is written as it was reviewed.
+ */
+// webpieces-disable no-function-outside-class -- module-scope formatter, matches the sibling formatters here
+function remoteServicesLines(services: RemoteServices): string[] {
+    if (Object.keys(services).length === 0) return [];
+    const sorted: RemoteServices = {};
+    for (const name of Object.keys(services).sort()) sorted[name] = services[name];
+    const pretty = JSON.stringify(sorted, null, 4).split('\n');
+    return pretty.map((line: string, index: number) => {
+        const prefix = index === 0 ? '"remoteServices": ' : '';
         const suffix = index === pretty.length - 1 ? ',' : '';
         return `    ${prefix}${line}${suffix}`;
     });
@@ -384,6 +413,7 @@ export function saveGraph(
     graphPath: string = DEFAULT_GRAPH_PATH,
     apiContractFiles: ApiContractFileRefs = {},
     externalSystems: ExternalSystemDecls = {},
+    remoteServices: RemoteServices = {},
 ): void {
     const fullPath = path.join(workspaceRoot, graphPath);
     const dir = path.dirname(fullPath);
@@ -407,6 +437,7 @@ export function saveGraph(
             sortedGraph,
             apiContractFiles,
             externalSystems,
+            remoteServices,
         ),
     );
     fs.writeFileSync(fullPath, content, 'utf-8');

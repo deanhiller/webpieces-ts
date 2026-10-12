@@ -26,6 +26,7 @@ import { ApprovedWiringGraph } from '../../lib/runtime-wiring/approved-graph';
 import type { ExternalSystemDecls } from '../../lib/api-usage/api-relations';
 import { ApiContractFiles } from '../../lib/api-contract-files';
 import type { ApiContractFileRefs } from '../../lib/api-contract-files';
+import type { RemoteServices } from '../../lib/remote-services';
 import { RuleGate } from '../../lib/rule-gate';
 import type { EnhancedGraph } from '../../lib/graph-sorter';
 import { toError } from '../../toError';
@@ -107,7 +108,29 @@ export function describeTableDrift(
 ): string | null {
     const linkDrift = describeContractLinkDrift(current.apiContractFiles, saved.apiContractFiles);
     if (linkDrift !== null) return linkDrift;
-    return describeExternalSystemDrift(current.externalSystems, saved.externalSystems);
+    const systemDrift = describeExternalSystemDrift(current.externalSystems, saved.externalSystems);
+    if (systemDrift !== null) return systemDrift;
+    return describeRemoteServiceDrift(current.remoteServices, saved.remoteServices);
+}
+
+/**
+ * The same drift report for the reviewed remote services (#1203), or null when they match. The table
+ * is approval metadata, so a difference means the file changed under the generated graph.
+ */
+// webpieces-disable no-function-outside-class -- executor step helper, matches describeContractLinkDrift above
+function describeRemoteServiceDrift(current: RemoteServices, saved: RemoteServices): string | null {
+    const names = [...new Set([...Object.keys(current), ...Object.keys(saved)])].sort();
+    const changes: string[] = [];
+    for (const name of names) {
+        const a = current[name];
+        const b = saved[name];
+        if (a === undefined) changes.push(`  - ${name}: in dependencies.json but no longer approved`);
+        else if (b === undefined) changes.push(`  + ${name}: approved but missing from dependencies.json`);
+        else if (JSON.stringify(a) !== JSON.stringify(b))
+            changes.push(`  ~ ${name}: label/implements changed`);
+    }
+    if (changes.length === 0) return null;
+    return `remoteServices drift (${changes.length} service(s)):\n${changes.join('\n')}`;
 }
 
 /**
@@ -165,16 +188,22 @@ export class CurrentGraphBuilder {
                     ),
                 ],
             );
-        return new CurrentArchitecture(currentGraph, saved.apiContractFiles, saved.externalSystems);
+        return new CurrentArchitecture(
+            currentGraph,
+            saved.apiContractFiles,
+            saved.externalSystems,
+            saved.remoteServices,
+        );
     }
 }
 
-/** The regenerated graph plus the two tables beside it — everything dependencies.json holds. */
+/** The regenerated graph plus the tables beside it — everything dependencies.json holds. */
 export class CurrentArchitecture {
     constructor(
         public readonly graph: EnhancedGraph,
         public readonly apiContractFiles: ApiContractFileRefs,
         public readonly externalSystems: ExternalSystemDecls,
+        public readonly remoteServices: RemoteServices,
     ) {}
 }
 
@@ -188,7 +217,7 @@ function reportMissingGraph(): never {
         undefined,
         [
             new Option(
-                'Run owning API source build checks to emit contract candidates, review and copy them into architecture/apis/<ApiName>.json, and create dependencies.json with projects:{}, apiContractFiles:{"<ApiName>":"apis/<ApiName>.json"}, and reviewed externalSystems. Approve tagged owners runtime-deps.json candidates, then run architecture:generate and review the resulting graph.',
+                'Run owning API source build checks to emit contract candidates, review and copy them into architecture/apis/<ApiName>.json, and create dependencies.json with projects:{}, apiContractFiles:{"<ApiName>":"apis/<ApiName>.json"}, reviewed externalSystems, and (only when a uses targets a service outside this workspace) reviewed remoteServices. Approve tagged owners runtime-deps.json candidates, then run architecture:generate and review the resulting graph.',
                 true,
             ),
         ],
