@@ -60,11 +60,6 @@
             "schema": "./src/executors/validate-checklist-docs/schema.json",
             "description": "Validate the pr-gate checklists[] block: docs exist, patterns compile, ids unique, blockMessage on BLOCK"
         },
-        "validate-rules-config": {
-            "implementation": "./src/executors/validate-rules-config/executor",
-            "schema": "./src/executors/validate-rules-config/schema.json",
-            "description": "Validate webpieces.config.json once at the scoped rules:check boundary"
-        },
         "validate-code": {
             "implementation": "./src/executors/validate-code/executor",
             "schema": "./src/executors/validate-code/schema.json",

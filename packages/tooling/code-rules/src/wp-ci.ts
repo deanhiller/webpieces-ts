@@ -141,13 +141,12 @@ async function main(): Promise<void> {
         );
         const hotfix = new BranchIdentity().isHotfix();
 
-        // Validate the root policy exactly once. webpieces.config.json is deliberately NOT a
-        // sharedGlobal Nx input: making every project hash depend on it turned a policy-only edit into
-        // a workspace-wide compile/lint/test. The scoped rules project preserves the gate without that
-        // fan-out.
-        const rules = await runner.run(['run', 'rules:check'], 'rules:check');
-        // webpieces-disable no-process-exit-outside-main -- this file's main() is the wp-ci bin boundary
-        if (rules !== 0) process.exit(rules);
+        // Validate the root policy exactly once, in-process, before any nx step. webpieces.config.json
+        // is deliberately NOT an Nx input of any project (#1075): making project hashes depend on it
+        // turned a policy-only edit into a workspace-wide compile/lint/test. An invalid config throws
+        // a RuleFailError / InformAiError to the handler below, which exits non-zero.
+        loadAndValidate(root);
+        console.log('✅ webpieces.config.json is valid');
 
         // Run the architecture + code validators next (this also runs the wiring guard,
         // which fails loudly if nx.json no longer wires validators into the build).

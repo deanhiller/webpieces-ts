@@ -38,7 +38,6 @@ import { BRANCH_IDENTITY_INPUTS } from './branch-identity-inputs';
 import { ValidationTargets } from './validation-targets';
 import { createDiGraphGenerateTarget } from './di-graph-targets';
 import { GenerateTargets, RawProjectJson, RawProjectJsonReader } from './generate-targets';
-import { RulesTarget } from './rules-target';
 
 /**
  * Circular dependency checking options
@@ -181,14 +180,8 @@ async function createNodesFunction(
     // Add workspace-level architecture targets
     addArchitectureProject(results, projectFiles, opts, context);
 
-    // One root policy target. webpieces.config.json is not a shared input of every product project;
-    // this virtual project is its sole Nx owner and the gate runs it before affected CI.
     // Add per-project targets (circular-deps, ci, di-graph)
     addPerProjectTargets(results, projectFiles, opts, context);
-
-    // Append the virtual root project after concrete projects so callers that select the first result
-    // for a project.json still receive that project's inferred targets.
-    new RulesTarget().add(results, projectFiles);
 
     return results;
 }
