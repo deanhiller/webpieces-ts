@@ -27,5 +27,5 @@
             "dependsOn": ["lint", "build", "test", "architecture:validate-complete"]
         }
     },
-    "tags": ["framework:node", "role:lib", "product:openapi"]
+    "tags": ["framework:node", "role:lib", "product:api-model"]
 }
