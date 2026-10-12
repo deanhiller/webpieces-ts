@@ -58,6 +58,7 @@ import { dotValue, recordValue, assertValidDot } from './dot-syntax';
 import { GraphRenderModel } from './graph-render-model';
 import { RuntimeViewerAdapter } from './runtime-viewer-adapter';
 import { RuntimeHtmlPage } from './runtime-html-page';
+import { RemoteServiceNodeId } from './remote-service-node-id';
 import {
     QUEUE_FILL,
     QUEUE_SHAPE,
@@ -70,6 +71,8 @@ import {
     CRON_FILL,
     CRON_BORDER,
     CUT_CYCLE_EDGE_ATTRS,
+    REMOTE_SERVICE_FILL,
+    REMOTE_SERVICE_BORDER,
 } from './runtime-viz-theme';
 
 /** Apis per line inside a node label — beyond this the box grows wider than it is readable. */
@@ -536,6 +539,53 @@ function externalDot(graph: RuntimeGraph, hidden: Set<string>, model: GraphRende
     return dot;
 }
 
+/**
+ * The reviewed out-of-workspace services (#1203): service-shaped nodes (rounded, teal, bold outline,
+ * "(remote service)"), with an arrow from every workspace service that targets one. An rpc call is a
+ * solid arrow and a queued call a dashed "enqueue" arrow, exactly as between two in-repo services.
+ *
+ * Drawn whatever `showExternalNodes` says: these are OUR services, not vendor systems, and hiding them
+ * would hide calls the reviewed graph asserts exist.
+ */
+// webpieces-disable no-function-outside-class -- DOT string builder, matching getShortName in this file
+function remoteServicesDot(graph: RuntimeGraph, hidden: Set<string>, model: GraphRenderModel): string {
+    const remotes = graph.remoteServices ?? {};
+    const names = Object.keys(remotes).sort();
+    if (names.length === 0) return '';
+
+    let dot = '\n  // Remote services — ours, but outside this workspace (reviewed remoteServices).\n';
+    for (const name of names) {
+        const remote = remotes[name];
+        const id = new RemoteServiceNodeId().of(name);
+        // The label is display text; the service name stays visible because it is what `uses` target.
+        const title =
+            remote.label === undefined
+                ? dotValue(name)
+                : `${dotValue(remote.label)}\\n${dotValue(name)}`;
+        dot += model.node(
+            id,
+            `  "${id}" [shape=box, style="filled,rounded,bold", fillcolor="${REMOTE_SERVICE_FILL}", ` +
+                `color="${REMOTE_SERVICE_BORDER}", label="${title}\\n(remote service)\\n` +
+                `Implements (${remote.implements.length})"];\n`,
+        );
+    }
+    for (const name of names) {
+        const id = new RemoteServiceNodeId().of(name);
+        for (const call of remotes[name].calledBy) {
+            if (hidden.has(call.from)) continue;
+            const via = call.via.length > 2 ? `Uses (${call.via.length}) ▾` : labelList(call.via);
+            const label = call.type === 'pubsub' ? `${via}\\nenqueue` : via;
+            const style = call.type === 'pubsub' ? ', style=dashed' : '';
+            dot += model.edge(
+                call.from,
+                id,
+                `  "${serviceNodeId(call.from)}" -> "${id}" [label="${label}", color="${REMOTE_SERVICE_BORDER}"${style}];\n`,
+            );
+        }
+    }
+    return dot;
+}
+
 /** Build the Graphviz DOT for the runtime service graph. */
 // webpieces-disable no-function-outside-class -- module entry point, matching the sibling builders here
 export function generateRuntimeDot(
@@ -589,6 +639,7 @@ export function generateRuntimeRenderModel(
     }
 
     dot += queuesDot(graph, hidden, model);
+    dot += remoteServicesDot(graph, hidden, model);
     dot += triggerDot(graph, hidden, options, model);
 
     if (options.showExternalNodes) {

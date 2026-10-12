@@ -43,6 +43,8 @@ import type { ScanDecl } from './runtime-graph-decls';
 import { dedupApiRefs, sortedQueues, sortedRecord, sortUnresolved } from './runtime-graph-sorters';
 import { attachExternalSystems, resolveExternalSystems } from './api-usage/external-systems';
 import { RuntimeProductMembership } from './graph-products';
+import { RemoteCallCollector } from './runtime-remote-calls';
+import type { RemoteServices } from './remote-services';
 import type {
     RuntimeApi,
     RuntimeEdge,
@@ -63,6 +65,8 @@ export type {
     RuntimeExternalSystem,
     RuntimeGraph,
     RuntimeQueue,
+    RuntimeRemoteCall,
+    RuntimeRemoteService,
     RuntimeService,
     RuntimeTrigger,
     RuntimeUnresolved,
@@ -132,6 +136,8 @@ class RuntimeGraphDeriver {
     private readonly problems: string[] = [];
     /** role:server nodes hidden by isNonParticipantServer, in the order buildServices met them. */
     private readonly autoHidden: string[] = [];
+    /** Uses aimed at a reviewed out-of-workspace service (#1203); built once the names are claimed. */
+    private readonly remoteCalls: RemoteCallCollector;
 
     /**
      * False when NO project in the graph carries `webpiecesRuntime`, i.e. the file was written
@@ -157,6 +163,8 @@ class RuntimeGraphDeriver {
          * was declared, which renders exactly as it did before declarations existed.
          */
         private readonly externalSystemDecls: ExternalSystemDecls = {},
+        /** Reviewed out-of-workspace services from dependencies.json `remoteServices` (#1203). */
+        remoteServices: RemoteServices = {},
     ) {
         this.markersKnown = Object.values(projects).some(
             (entry: GraphEntry) => entry.webpiecesRuntime !== undefined,
@@ -183,6 +191,11 @@ class RuntimeGraphDeriver {
                 );
             }
         }
+        this.remoteCalls = new RemoteCallCollector(
+            remoteServices,
+            (name: string): boolean => this.nodeByServiceName.has(name),
+            this.problems,
+        );
     }
 
     assemble(): RuntimeGraphReport {
@@ -212,6 +225,7 @@ class RuntimeGraphDeriver {
         // services deliver over the same contract, and is watched by the same drift check.
         const systems = resolveExternalSystems(this.externalSystemDecls, services);
         attachExternalSystems(graph, systems);
+        this.remoteCalls.attach(graph);
         return new RuntimeGraphReport(
             graph,
             this.warnings,
@@ -400,6 +414,10 @@ class RuntimeGraphDeriver {
         const queues = new Map<string, RuntimeQueue>();
         for (const decl of decls) {
             for (const ref of decl.usesApis) {
+                // A named target outside this workspace (#1203) is a remote service, not an implementer
+                // to resolve among the nodes and not an unresolved vendor call.
+                const wanted = ref.targetService ?? this.callsServiceFor(decl.name, ref.api);
+                if (this.remoteCalls.claim(decl.name, ref, wanted)) continue;
                 const implementers = apis.get(ref.api)?.implementedBy ?? [];
                 if (implementers.length === 0) {
                     // Nobody in-repo serves it. For a vendor contract that is the ANSWER, not a gap:
@@ -674,12 +692,14 @@ export function deriveRuntimeGraphReport(
     hiddenProjects: Set<string> = new Set<string>(),
     apiContracts: ApiContracts = {},
     externalSystems: ExternalSystemDecls = {},
+    remoteServices: RemoteServices = {},
 ): RuntimeGraphReport {
     return new RuntimeGraphDeriver(
         projects,
         hiddenProjects,
         apiContracts,
         externalSystems,
+        remoteServices,
     ).assemble();
 }
 

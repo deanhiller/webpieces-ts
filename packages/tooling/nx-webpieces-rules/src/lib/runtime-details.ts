@@ -1,5 +1,6 @@
 import type { GraphRenderModel } from './graph-render-model';
-import type { RuntimeGraph } from './runtime-graph-model';
+import type { RuntimeGraph, RuntimeRemoteCall } from './runtime-graph-model';
+import { RemoteServiceNodeId } from './remote-service-node-id';
 
 export class RuntimeNodeDetails {
     constructor(
@@ -36,9 +37,11 @@ export class RuntimeDetails {
                 if (service.wiringUses === undefined) used.push(...entries);
                 if (edge.type !== 'pubsub') this.edges[`${edge.from}->${edge.to}`] = entries;
             }
+            const remoteApis = this.remoteCalls(graph, name, service.wiringUses === undefined ? used : []);
             for (const api of service.wiringUses === undefined ? service.uses : []) {
                 if (graph.runtimeEdges.some((edge) => edge.from === name && edge.via.includes(api)))
                     continue;
+                if (remoteApis.has(api)) continue;
                 const contract = graph.apis[api];
                 const external =
                     contract?.type === 'external' || contract?.implementedBy.length === 0;
@@ -78,7 +81,32 @@ export class RuntimeDetails {
             }
             this.nodes[name] = new RuntimeNodeDetails(implemented, [...new Set(used)]);
         }
+        for (const [name, remote] of Object.entries(graph.remoteServices ?? {}))
+            this.nodes[new RemoteServiceNodeId().of(name)] = new RuntimeNodeDetails(
+                remote.implements.map((api: string) => `${api} — declared in remoteServices.${name}`),
+                [],
+            );
         if (model !== null) this.renderEdges(graph, model);
+    }
+
+    /**
+     * The edge details for `name`'s calls into reviewed remote services (#1203), also appended to
+     * `used`; returns the contracts covered so they are not reported as an unknown target.
+     */
+    private remoteCalls(graph: RuntimeGraph, name: string, used: string[]): Set<string> {
+        const covered = new Set<string>();
+        for (const [remoteName, remote] of Object.entries(graph.remoteServices ?? {}))
+            for (const call of remote.calledBy.filter((entry: RuntimeRemoteCall) => entry.from === name)) {
+                const entries = call.via.map(
+                    (api: string) =>
+                        `${graph.apis[api]?.owner ?? '?'}#${api} → ${remoteName} (remote service, ${call.type})`,
+                );
+                for (const api of call.via) covered.add(api);
+                used.push(...entries);
+                const key = `${name}->${new RemoteServiceNodeId().of(remoteName)}`;
+                this.edges[key] = [...(this.edges[key] ?? []), ...entries];
+            }
+        return covered;
     }
 
     /** Bind detail facts to renderer-owned identities, including grouped queue hops. */

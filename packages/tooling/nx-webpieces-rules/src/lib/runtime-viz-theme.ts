@@ -85,6 +85,14 @@ export const EXTERNAL_FILLS: Record<string, string> = {
 export const EXTERNAL_FILL = '#FAFAFA';
 export const EXTERNAL_BORDER = '#9E9E9E';
 
+/**
+ * Fill + border for a REMOTE SERVICE (#1203): one of OUR services that lives outside this workspace
+ * (another repo, a VM). Rounded like an in-repo service, because it is one — it implements our
+ * contracts — but teal with a bold outline, so it never reads as a vendor box or as a deployable here.
+ */
+export const REMOTE_SERVICE_FILL = '#E0F2F1';
+export const REMOTE_SERVICE_BORDER = '#00796B';
+
 /** Fill + border for the clock node standing for a scheduler-driven endpoint. */
 /** The colour of a `cutLegacyCycle` edge — red, because it is drawing DEBT, not a design. */
 export const CUT_CYCLE_COLOR = '#D32F2F';
@@ -116,6 +124,9 @@ class LegendSwatches {
     readonly external =
         `<svg width="46" height="26"><rect x="1" y="3" width="44" height="20" fill="${EXTERNAL_FILL}" ` +
         `stroke="${EXTERNAL_BORDER}" stroke-dasharray="4,3"/></svg>`;
+    readonly remote =
+        `<svg width="46" height="26"><rect x="1" y="3" width="44" height="20" rx="7" fill="${REMOTE_SERVICE_FILL}" ` +
+        `stroke="${REMOTE_SERVICE_BORDER}" stroke-width="2"/></svg>`;
     readonly cron =
         `<svg width="46" height="26"><circle cx="23" cy="13" r="11" fill="${CRON_FILL}" stroke="${CRON_BORDER}"/>` +
         '<text x="23" y="18" font-size="12" text-anchor="middle">&#9200;</text></svg>';
@@ -146,6 +157,7 @@ export function legendHtml(): string {
             <div class="legend-col">
                 <h3>Node shapes &mdash; <em>what a box is</em></h3>
                 ${item(sw.service, '<strong>service</strong> &mdash; a deployable in this repo; fill is its dependency level')}
+                ${item(sw.remote, '<strong>remote service</strong> &mdash; one of our services that lives OUTSIDE this workspace (another repo, a VM, partner endpoints), declared in the reviewed <code>remoteServices</code> table of dependencies.json. It implements our contracts, so it is a service, not a vendor system.')}
                 ${item(sw.queue, '<strong>queue</strong> &mdash; each <em>line</em> in the box is one Cloud Tasks queue, the unit Terraform actually creates. Queues of one contract that flow between the <em>same</em> producer and consumer share a box; every one is still named, so you can always see <em>which</em> queue is stuck.')}
                 ${item(sw.database, '<strong>database</strong> &mdash; a datastore outside this repo')}
                 ${item(sw.storage, '<strong>object storage</strong> &mdash; a bucket outside this repo')}

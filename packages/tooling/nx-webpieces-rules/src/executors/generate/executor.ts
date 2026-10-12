@@ -27,6 +27,7 @@ import { TagTruthCheck } from '../../lib/tag-truth';
 import { ProjectInfo } from '../../lib/project-info';
 import type { ApiContracts, ExternalSystemDecls } from '../../lib/api-usage/api-relations';
 import type { EnhancedGraph, GraphEntry } from '../../lib/graph-sorter';
+import type { RemoteServices } from '../../lib/remote-services';
 import { GraphVisualizer } from '../../lib/graph-visualizer';
 import { GENERATE_IMPACT_KINDS, ImpactRefresh } from '../../lib/graph-impact';
 import * as path from 'path';
@@ -55,9 +56,16 @@ function generateRuntimeGraph(
     hiddenProjects: Set<string>,
     apiContracts: ApiContracts,
     externalSystems: ExternalSystemDecls,
+    remoteServices: RemoteServices,
 ): void {
     console.log('📡 Deriving runtime graph from dependencies.json (implements × uses per API)...');
-    const report = deriveRuntimeGraphReport(graph, hiddenProjects, apiContracts, externalSystems);
+    const report = deriveRuntimeGraphReport(
+        graph,
+        hiddenProjects,
+        apiContracts,
+        externalSystems,
+        remoteServices,
+    );
     saveRuntimeGraph(report.graph, workspaceRoot);
     const serviceCount = Object.keys(report.graph.services).length;
     const queueCount = Object.keys(report.graph.queues).length;
@@ -119,14 +127,17 @@ function scanApiRelations(
     return new ScannedTables(
         new ApiContractFiles().load(workspaceRoot, graphPath, saved.apiContractFiles),
         saved.externalSystems,
+        saved.remoteServices,
     );
 }
 
-/** The two committed tables one scan produces, kept together so callers cannot persist just one. */
+/** The committed tables one scan produces, kept together so callers cannot persist just one. */
 class ScannedTables {
     constructor(
         public readonly apiContracts: ApiContracts,
         public readonly externalSystems: ExternalSystemDecls,
+        /** Reviewed remote services (#1203): read from the saved file, written back verbatim. */
+        public readonly remoteServices: RemoteServices,
     ) {}
 }
 
@@ -224,6 +235,7 @@ export class ArchitectureGenerator {
             hiddenProjectsIn(enhancedGraph),
             apiContracts,
             scanned.externalSystems,
+            scanned.remoteServices,
         );
 
         printGraphSummary(enhancedGraph);
@@ -258,6 +270,7 @@ function saveApprovedGraph(
         effectiveGraphPath,
         contractRefs,
         scanned.externalSystems,
+        scanned.remoteServices,
     );
     console.log('✅ Graph saved successfully');
 }

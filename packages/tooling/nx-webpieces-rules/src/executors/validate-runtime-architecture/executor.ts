@@ -71,7 +71,8 @@ function deriveOrRender(
         const apiContracts = new ApiContractFiles().load(
             workspaceRoot, DEFAULT_GRAPH_PATH, depsFile.apiContractFiles);
         return deriveRuntimeGraphReport(
-            depsFile.projects, hiddenProjects, apiContracts, depsFile.externalSystems);
+            depsFile.projects, hiddenProjects, apiContracts, depsFile.externalSystems,
+            depsFile.remoteServices);
     } catch (err: unknown) {
         const error = toError(err);
         if (error instanceof RuleFailError) return renderRuleFailForHuman(error);

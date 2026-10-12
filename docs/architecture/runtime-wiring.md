@@ -245,6 +245,40 @@ For older saved files containing `apiContracts`, explicitly move each existing v
 per-contract file and replace the old key with reviewed `apiContractFiles` references, preserving
 external systems. Generation never migrates or approves contract source on the caller's behalf.
 
+### Services outside the workspace: `remoteServices`
+
+A `uses` relation's target must answer to its name. Generation checks every `targetService` against
+the workspace projects' `metadata.webpieces.serviceName`, so a call to one of your OWN services that
+is not an Nx project here — a service in another repo, a VM, partner endpoints whose host is set per
+call — is refused (`target reporter-vm … is neither a workspace serviceName nor a declared remote
+service`) until it is declared. Declare it in `architecture/dependencies.json`, keyed by the name the
+`uses` targets:
+
+```json
+"remoteServices": {
+    "reporter-vm": { "label": "reporter VM", "implements": [{ "api": "ReporterTriggerApi", "type": "rpc" }] },
+    "partner-webhooks": { "implements": [{ "api": "PartnerWebhookApi", "type": "rpc" }] }
+}
+```
+
+- `label` is optional display text; the key is the identity. `implements` is a non-empty list of
+  `{ api, type }`, `type` being `rpc` or `pubsub` (a vendor seam is an `externalSystems` entry, not a
+  remote service). Any other key fails the load, naming the entry.
+- A `uses` may target a remote only for a contract + transport it declares; a wrong api or transport,
+  and an undeclared name, fail generation.
+- A remote name may not be a workspace `serviceName` or project name — one name cannot mean two
+  services.
+- Every declared api must be an approved contract (`architecture/apis/<ApiName>.json`) of that
+  transport; otherwise it is an `unknown qualified contract`, exactly as for a workspace project.
+- It is REVIEWED metadata, like `apiContractFiles`: generation reads it and writes it back unchanged,
+  and never writes, infers or adds an entry. `validate-architecture-unchanged` compares it like the
+  rest of the saved graph. Absent means the workspace calls no service outside itself.
+- `visualize-runtime` draws each remote service as a service node (rounded, teal, "(remote service)")
+  with an arrow from every caller — distinct from the grey vendor boxes of external systems — and
+  records it under `remoteServices` in `runtime-dependencies.json`. `visualize` draws the compile-time
+  project graph, which has no runtime service nodes at all; the call stays in the caller's
+  `apiRelations` there.
+
 ## Release and migration
 
 Publish the compatible declaration tooling and runtime family first. Upgrade the producer's installed catalog to
@@ -252,6 +286,13 @@ that release before enabling the new public rule configuration, approving per-pr
 architecture. Consumers then upgrade their installed tooling and migrate all saved runtime owners
 in one reviewed change. Declaration-only generation fails clearly on unmigrated owners; this failure
 does not prevent rendering committed snapshots with `visualize` or `visualize-runtime`.
+
+Saved graphs written before declaration-only generation could hold `uses` edges to services outside
+the workspace, because the old generator never validated targets. Migrating does not require dropping
+them: declare each such target under `remoteServices` (see the Bootstrap section) in the same reviewed
+change, then regenerate. The table ships in the tooling source first; a repo adds its entries after it
+pins the release that carries it, because an older installed validator ignores the key and still
+refuses the targets.
 
 Keep existing dependency, authentication, filter, URL, context and test override behavior while
 moving route/client construction to canonical wiring. Compare the generated runtime graph against

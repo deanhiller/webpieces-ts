@@ -9,6 +9,7 @@ import type { ProjectInfo } from '../project-info';
 import type { ApiRef, ProjectApiRelations } from '../api-usage/api-relations';
 import { loadBlessedGraph, DEFAULT_GRAPH_PATH } from '../graph-loader';
 import { ApiContractFiles } from '../api-contract-files';
+import { ServiceTargetValidator } from './service-targets';
 
 /** Assembly consumes approvals only. Source verification is a separate per-project build target. */
 export class ApprovedWiringGraph {
@@ -82,15 +83,6 @@ export class ApprovedWiringGraph {
     }
 
     private validateTargets(workspaceRoot: string, graphPath: string, graph: EnhancedGraph): void {
-        const hosts = new Map<string, string>();
-        for (const [name, entry] of Object.entries(graph)) {
-            if (entry.serviceName === undefined) continue;
-            if (hosts.has(entry.serviceName))
-                this.fail(
-                    `Duplicate service identity ${entry.serviceName}: ${hosts.get(entry.serviceName)} and ${name}.`,
-                );
-            hosts.set(entry.serviceName, name);
-        }
         const saved = loadBlessedGraph(workspaceRoot, graphPath);
         if (saved === null)
             this.fail('Missing saved contract references for approved runtime wiring.');
@@ -99,35 +91,12 @@ export class ApprovedWiringGraph {
             graphPath,
             saved.apiContractFiles,
         );
-        for (const [name, entry] of Object.entries(graph))
-            for (const [owner, relation] of Object.entries(entry.apiRelations ?? {})) {
-                for (const ref of [...relation.implements, ...relation.uses]) {
-                    if (
-                        ref.type !== 'external' &&
-                        (contracts[ref.api]?.owner !== owner ||
-                            contracts[ref.api]?.apiKind !== ref.type)
-                    )
-                        this.fail(`${name}: unknown qualified contract ${owner}#${ref.api}.`);
-                }
-                for (const ref of relation.uses) {
-                    if (ref.targetService === undefined) continue;
-                    if (
-                        Object.values(saved!.externalSystems).some((system) =>
-                            system.apis.includes(ref.api),
-                        )
-                    )
-                        continue;
-                    const provider = hosts.get(ref.targetService);
-                    const implemented =
-                        provider === undefined
-                            ? undefined
-                            : graph[provider].apiRelations?.[owner]?.implements;
-                    if (!implemented?.some((api) => api.api === ref.api && api.type === ref.type))
-                        this.fail(
-                            `${name}: target ${ref.targetService} does not implement ${owner}#${ref.api} (${ref.type}).`,
-                        );
-                }
-            }
+        new ServiceTargetValidator().validate(
+            graph,
+            contracts,
+            saved.externalSystems,
+            saved.remoteServices,
+        );
     }
 
     private fail(message: string): never {
