@@ -126,7 +126,7 @@ source only; a package no entry names is not judged; the per-site hatch is
 ]
 ```
 
-### `product-tags` (#1179) — graph rule, `OFF | RUN_EVERY_TIME`
+### `product-tags` (#1179, #1204) — graph rule, `OFF | RUN_EVERY_TIME`
 
 A monorepo can hold several PRODUCTS, each with its own clients and servers. A project names the
 products it belongs to with the nx tag `product:<name>` — lowercase kebab, several allowed
@@ -155,6 +155,10 @@ stays untagged (e.g. `server2-api` inherits `example`).
 "product-tags": {
   "mode": "RUN_EVERY_TIME",
   "roles": ["server", "client", "app"],
+  "productDependencies": [
+    { "name": "example", "allowedToDependOn": ["platform", "openapi"] },
+    { "name": "openapi", "allowedToDependOn": ["platform"] }
+  ],
   "turnOffRuleUntilEpoch": 0, "turnOffRuleWhileOnBranch": null
 }
 ```
@@ -162,6 +166,20 @@ stays untagged (e.g. `server2-api` inherits `example`).
 `roles` is required and non-empty: it decides which projects are refused, so it is behaviour, not tuning.
 A consumer that is not ready writes `"mode": "OFF"` itself — a visible choice, not a default. WHICH
 projects carry which product is each consumer repo's own decision, made in its own repo.
+
+**The product dependency matrix (#1204).** `productDependencies` is the rule's second half, behind the
+same switch: ON enforces both the tags and the matrix, OFF neither. It is REQUIRED (an omitted field fails
+the config load; the seed is `[]`) and `[]` is valid — no product may depend on another. One entry per
+product that DOES depend on others; a product with no entry may depend only on itself, and a product may
+always depend on itself without listing it. An edge A -> B of the DEPENDENCY graph is legal when, for
+EVERY product p of A, B carries p or a product in p's `allowedToDependOn` — a multi-product B satisfies p
+when ANY of its products is allowed. Membership is the RESOLVED one (a project's own tags are final; an
+untagged project inherits). A violation fails `architecture:generate` / `validate-architecture-unchanged`
+naming the edge, both products and the two cures: move the code, or add the product to the entry. A
+`name` or `allowedToDependOn` value no `product:` tag uses, and a duplicate `name`, fail naming it. The
+runtime graph is NOT checked: a cross-product HTTP / queue call shows on it as coupling for review. In
+`arch:visualize`'s Product color mode a crossing edge is dashed in the color of the product it depends
+on, and the legend lists the matrix.
 
 ## Related: the wire closure and `generate:openapi-components`
 
@@ -176,4 +194,6 @@ These rules ship in SOURCE first (`.claude/rules/published-vs-local-source.md`).
 follow-up PR after the release that carries them is published and the pin is bumped: the running
 validator is one release behind and would reject the unknown keys. That follow-up is
 [#1065](https://github.com/deanhiller/webpieces-ts/issues/1065); for `product-tags` (#1179) it is
-[#1182](https://github.com/deanhiller/webpieces-ts/issues/1182).
+[#1182](https://github.com/deanhiller/webpieces-ts/issues/1182). `product-tags.productDependencies`
+(#1204) follows the same order: this repo's config gains it with the pin bump to the release that ships
+it, since the running validator would reject the field until then.

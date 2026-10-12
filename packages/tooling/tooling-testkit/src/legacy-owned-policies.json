@@ -1790,6 +1790,26 @@
         "nullable": false,
         "nonEmpty": true
       },
+      "productDependencies": {
+        "type": "object[]",
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false,
+        "elementSchema": {
+          "name": {
+            "type": "string",
+            "optional": false,
+            "nullable": false,
+            "nonEmpty": false
+          },
+          "allowedToDependOn": {
+            "type": "string[]",
+            "optional": false,
+            "nullable": false,
+            "nonEmpty": false
+          }
+        }
+      },
       "turnOffRuleUntilEpoch": {
         "type": "number",
         "optional": false,
@@ -2323,6 +2343,7 @@
         "client",
         "app"
       ],
+      "productDependencies": [],
       "turnOffRuleUntilEpoch": 0,
       "turnOffRuleWhileOnBranch": null
     }

@@ -11,7 +11,19 @@ interface ChainReader {
     nodes(anchor: string): Set<string>;
 }
 interface DotReader {
-    render(retained: Set<string>): string;
+    render(
+        retained: Set<string>,
+        nodeDot?: (node: RenderNodeShape) => string,
+        keepEmptyLevels?: boolean,
+        edgeDot?: (edge: RenderEdgeShape) => string,
+    ): string;
+}
+interface RenderNodeShape {
+    dot: string;
+}
+interface RenderEdgeShape {
+    dot: string;
+    productDot: string | null;
 }
 interface FilterApi {
     chain(model: GraphRenderModel): ChainReader;

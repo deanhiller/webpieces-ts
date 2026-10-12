@@ -25,7 +25,8 @@ import { GraphNodeMenu } from './graph-node-menu';
 import { dotValue } from './dot-syntax';
 import { GraphRenderModel, GraphFilterAssets } from './graph-render-model';
 import { NodeFacts, NodeModeStyler, ProductCount } from './graph-color-modes';
-import { ProductPalette } from './graph-products';
+import { ProductBoundary, ProductPalette } from './graph-products';
+import { ProductDependencyMatrix } from './product-dependencies';
 import { GraphLegend } from './graph-legend';
 import { GraphPageShell, ShellParts } from './graph-page-shell';
 import { GraphPageStyles } from './graph-page-styles';
@@ -108,6 +109,7 @@ export class GraphVisualizer {
     private readonly shell = new GraphPageShell();
     private readonly pageStyles = new GraphPageStyles();
     private readonly navigation = new GraphNavigation(NavigationLayout.FLOATING);
+    private readonly boundary = new ProductBoundary();
 
     /**
      * How to obtain the browser client's text. Injected so HTML generation does not depend on BUILD
@@ -227,11 +229,12 @@ export class GraphVisualizer {
         const bands = this.levelBands(graph);
         model.bands = bands;
 
-        dot += this.dotNodes(graph, model, ProductPalette.fromGraph(graph));
+        const palette = ProductPalette.fromGraph(graph);
+        dot += this.dotNodes(graph, model, palette);
         dot += '\n';
         dot += this.bandLayout.dot(bands);
         dot += '\n';
-        dot += this.dotEdges(graph, model);
+        dot += this.dotEdges(graph, model, palette);
 
         const footerStart = dot.length;
         dot += '\n  labelloc="t";\n';
@@ -313,8 +316,9 @@ export class GraphVisualizer {
 
     // Edge lines (dependencies). An edge to an api-lib is styled by WHY it exists
     // (implements/uses/uses-implements, from apiRelations); every other dependency
-    // keeps the default plain arrow.
-    private dotEdges(graph: EnhancedGraph, model: GraphRenderModel): string {
+    // keeps the default plain arrow. In the Product color mode an edge crossing into another
+    // product is ALSO dashed in that product's color (#1204), so product boundaries read at a glance.
+    private dotEdges(graph: EnhancedGraph, model: GraphRenderModel, palette: ProductPalette): string {
         let dot = '';
         for (const project of Object.keys(graph)) {
             const info = graph[project];
@@ -328,10 +332,27 @@ export class GraphVisualizer {
                     nodeId,
                     this.names.getNodeId(dep),
                     this.edgeDot(nodeId, this.names.getNodeId(dep), info.apiRelations?.[dep]),
+                    this.crossProductAttrs(info.products ?? [], graph[dep]?.products ?? [], model, palette),
                 );
             }
         }
         return dot;
+    }
+
+    /**
+     * The Product color mode's extra attributes for one dependency: dashed, thicker and in the color
+     * of the product it crosses into, or '' for an edge that stays inside its source's products.
+     */
+    private crossProductAttrs(
+        from: readonly string[],
+        to: readonly string[],
+        model: GraphRenderModel,
+        palette: ProductPalette,
+    ): string {
+        const into = this.boundary.crossedInto(from, to);
+        if (into === null) return '';
+        model.legend.crossProductEdges++;
+        return `style=dashed, color="${palette.colorOf(into).color}", penwidth=2`;
     }
 
     /**
@@ -449,10 +470,14 @@ export class GraphVisualizer {
      * come and go. The DOT is embedded in the HTML (rendered client-side by
      * viz.js). Output is deterministic (sorted graph in → same bytes out) so git
      * only shows a diff when the architecture actually changed.
+     *
+     * `productDependencies` is the `product-tags` rule's matrix, listed in the Product legend; null
+     * when the rule is OFF, and the legend then lists no matrix.
      */
     writeVisualization(
         graph: EnhancedGraph,
         workspaceRoot: string,
+        productDependencies: ProductDependencyMatrix | null,
         title: string = 'Monorepo Dependency Architecture',
     ): VisualizationPaths {
         const outputDir = path.join(workspaceRoot, ARCH_OUTPUT_DIR);
@@ -463,8 +488,10 @@ export class GraphVisualizer {
 
         const lockControl = this.lockControl(graph);
         const responsibilities = this.responsibilities.generateSection(graph, workspaceRoot);
+        const model = this.generateRenderModel(graph, title);
+        model.legend.productDependencies = productDependencies === null ? null : [...productDependencies.entries];
         const html = this.generateHTML(
-            this.generateRenderModel(graph, title),
+            model,
             this.designLinks(graph),
             title,
             lockControl,

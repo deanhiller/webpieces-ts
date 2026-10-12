@@ -7,6 +7,22 @@ import { FilterFixture } from './graph-filter-fixture';
 const api = FilterFixture.api();
 const viz = FilterFixture.visualizer();
 
+describe('the Product mode edge statement (#1204)', () => {
+    it('draws each edge through the page-supplied edgeDot, so a cross-product edge can be dashed', () => {
+        const model = viz.generateRenderModel({
+            app: { level: 1, dependsOn: ['plat'], products: ['example'] },
+            plat: { level: 0, dependsOn: [], products: ['platform'] },
+        });
+        const all = new Set(['app', 'plat']);
+        expect(api.dot(model).render(all)).not.toContain('penwidth=2');
+        const product = api
+            .dot(model)
+            .render(all, (node) => node.dot, true, (edge) => edge.productDot ?? edge.dot);
+        expect(product).toContain('[style=dashed, color=');
+        expect(product).toContain('penwidth=2];');
+    });
+});
+
 describe('directed chain membership and reduced drawable records', () => {
     it('walks each direction from the anchor, excluding shared-library siblings', () => {
         const model = viz.generateRenderModel({

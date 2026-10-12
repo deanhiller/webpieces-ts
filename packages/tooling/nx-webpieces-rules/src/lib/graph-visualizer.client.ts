@@ -656,6 +656,12 @@ class GraphPage extends WpFilterPage {
         return modes.runtime;
     }
 
+    /** Product mode dashes a dependency that crosses into another product (#1204); every other mode draws it plain. */
+    protected override edgeDot(edge: RenderEdgeJson): string {
+        if (this.modes.mode === 'product' && edge.productDot !== null) return edge.productDot;
+        return edge.dot;
+    }
+
     protected override usesFullDot(): boolean {
         return this.modes.mode === 'runtime' && this.applied.count() === 0;
     }

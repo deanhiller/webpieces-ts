@@ -142,13 +142,15 @@ ORDER=(
     # Logging backends depend only on core-util.
     packages/logging/winston
     packages/logging/bunyan
-    packages/http/http-routing
     # http-client-core is browser+node and depends only on core-util; its two environment
     # packages depend on it (and http-client-node also on gcp-identity + core-context).
     packages/http/http-client-core
     packages/http/http-client-browser
     packages/http/http-client-node
     packages/cloud/cloudtasks-client
+    # http-routing depends on http-client-core, http-client-node and cloudtasks-client, so it
+    # publishes after all three (publish-packages.spec.ts re-derives this from the manifests).
+    packages/http/http-routing
     packages/http/http-server
     # mcp-server was bootstrapped manually at 0.4.765 because trusted publishing cannot create a
     # new scoped package. Its npm Trusted Publisher is now configured, so CI owns every later release.

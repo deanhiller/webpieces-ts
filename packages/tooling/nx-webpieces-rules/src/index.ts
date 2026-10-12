@@ -22,10 +22,11 @@ export { WiringFormatConfig } from './configs/wiring-format-config';
 export { NoRootUnionApiTypeConfig } from './configs/no-root-union-config';
 export { API_DOC_MODES, ApiRulesForOpenApiConfig, ApiRulesForMcpConfig } from './configs/api-doc-rules-config';
 export type { ApiDocMode } from './configs/api-doc-rules-config';
-export { ApiClientPackagesEntry, ApiLibDependenciesConfig, ApiLibPathConfig, FrameworkFolderEntry, FrameworkFolderConfig, ProductTagsConfig } from './configs/tag-truth-configs';
+export { ApiClientPackagesEntry, ApiLibDependenciesConfig, ApiLibPathConfig, FrameworkFolderEntry, FrameworkFolderConfig, ProductDependencyEntry, ProductTagsConfig } from './configs/tag-truth-configs';
 
 export { GraphRenderModel, RenderNode, RenderEdge, NodeTags } from './lib/graph-render-model';
 export { GraphMode, NodeModeDots, LegendFacts, ProductCount } from './lib/graph-color-modes';
-export { ProductMembership, RuntimeProductMembership, ProductPalette, ProductColor } from './lib/graph-products';
+export { ProductMembership, RuntimeProductMembership, ProductPalette, ProductColor, ProductBoundary } from './lib/graph-products';
+export { ProductDependencyMatrix } from './lib/product-dependencies';
 export { ProductResolver, ProductResolution, PRODUCT_TAG_PREFIX } from './lib/product-resolver';
 export { EntryPointLevels } from './lib/graph-entry-levels';

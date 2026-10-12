@@ -23,7 +23,7 @@ import { ProjectCycleDetector } from '../../lib/graph-cycles';
 import { saveGraph, DEFAULT_GRAPH_PATH } from '../../lib/graph-loader';
 import { ApiContractFiles } from '../../lib/api-contract-files';
 import { collectProjectInfo, enrichGraph, MetadataValidationError } from '../../lib/graph-metadata';
-import { TagTruthCheck } from '../../lib/tag-truth';
+import { TagTruthCheck, TagTruthRules } from '../../lib/tag-truth';
 import { ProjectInfo } from '../../lib/project-info';
 import type { ApiContracts, ExternalSystemDecls } from '../../lib/api-usage/api-relations';
 import type { EnhancedGraph, GraphEntry } from '../../lib/graph-sorter';
@@ -214,9 +214,9 @@ export class ArchitectureGenerator {
 
         saveApprovedGraph(workspaceRoot, graphPath ?? DEFAULT_GRAPH_PATH, enhancedGraph, scanned);
 
-        // Step 4b: Write the committed, clickable HTML view next to the JSON so
-        // dependencies.html regenerates in lock-step with dependencies.json.
-        const vizPaths = this.visualizer.writeVisualization(enhancedGraph, workspaceRoot);
+        // Step 4b: the committed, clickable HTML view, regenerated in lock-step with dependencies.json.
+        const productDependencies = TagTruthRules.fromConfig(workspaceRoot).productTags?.dependencies ?? null;
+        const vizPaths = this.visualizer.writeVisualization(enhancedGraph, workspaceRoot, productDependencies);
         console.log(`✅ Wrote ${vizPaths.htmlPath}`);
 
         // Step 4c: The page's Impact mode — nx affected for "Changed on this branch" ONLY, into a

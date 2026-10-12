@@ -21,6 +21,8 @@ import {
     TagTruthRules,
     TagTruthValidator,
 } from '../tag-truth';
+import { ProductDependencyMatrix } from '../product-dependencies';
+import { ProductDependencyEntry } from '../../configs/tag-truth-configs';
 
 class Proj {
     constructor(
@@ -349,7 +351,7 @@ describe('framework-folder (D9)', () => {
 });
 
 describe('product-tags (#1179)', () => {
-    const rules = new TagTruthRules(null, null, null, new ProductTagsRule(['server', 'client', 'app']));
+    const rules = new TagTruthRules(null, null, null, new ProductTagsRule(['server', 'client', 'app'], new ProductDependencyMatrix([])));
 
     it('RED: a server, a client and an app with no product tag are each refused', () => {
         const fx = new Fixture([
@@ -395,7 +397,98 @@ describe('product-tags (#1179)', () => {
     it('OFF (a null rule) passes an untagged server', () => {
         const fx = new Fixture([new Proj('svc', 'apps/svc', 'server', ['node'])]);
         expect(fx.problems(TagTruthRules.none())).toEqual([]);
-        expect(new TagTruthRules(null, null, null, new ProductTagsRule(['client'])).anyEnabled()).toBe(true);
+        expect(new TagTruthRules(null, null, null, new ProductTagsRule(['client'], new ProductDependencyMatrix([]))).anyEnabled()).toBe(true);
+    });
+});
+
+describe('product-tags productDependencies (#1204)', () => {
+    const entry = (name: string, allowed: string[]): ProductDependencyEntry =>
+        Object.assign(new ProductDependencyEntry(), { name, allowedToDependOn: allowed });
+    const rulesWith = (entries: ProductDependencyEntry[]): TagTruthRules =>
+        new TagTruthRules(null, null, null, new ProductTagsRule(['server'], new ProductDependencyMatrix(entries)));
+
+    /** example-app (example) -> core-util (platform, rules), openapi-gen (openapi) -> core-util. */
+    const fixture = (): Fixture => {
+        const fx = new Fixture([
+            new Proj('example-app', 'apps/example-app', 'server', ['node'], ['core-util', 'openapi-gen'], null, [], ['product:example']),
+            new Proj('openapi-gen', 'packages/openapi-gen', 'lib', ['node'], ['core-util'], null, [], ['product:openapi']),
+            new Proj('core-util', 'packages/core-util', 'lib', ['node'], [], null, [], ['product:platform', 'product:rules']),
+        ]);
+        fx.graph['example-app'].products = ['example'];
+        fx.graph['openapi-gen'].products = ['openapi'];
+        fx.graph['core-util'].products = ['platform', 'rules'];
+        return fx;
+    };
+
+    it('RED: [] forbids every cross-product edge, naming the edge, both products and both cures', () => {
+        const problems = fixture().problems(rulesWith([]));
+        expect(problems).toHaveLength(3);
+        expect(problems[0]).toContain("'example-app' [example] -> 'core-util' [platform, rules] crosses a product boundary");
+        expect(problems[0]).toContain("product 'example' may depend only on [example]");
+        expect(problems[0]).toContain('move the code');
+        expect(problems[0]).toContain(
+            'add { "name": "example", "allowedToDependOn": ["platform"] } to product-tags.productDependencies ' +
+                '(any one of [platform, rules] is enough) in webpieces.config.json',
+        );
+        expect(problems[1]).toContain("'example-app' [example] -> 'openapi-gen' [openapi]");
+        expect(problems[2]).toContain("'openapi-gen' [openapi] -> 'core-util' [platform, rules]");
+    });
+
+    it('GREEN: every edge allowed — a multi-product target satisfies when ANY of its products is allowed', () => {
+        const problems = fixture().problems(
+            rulesWith([entry('example', ['platform', 'openapi']), entry('openapi', ['platform'])]),
+        );
+        expect(problems).toEqual([]);
+    });
+
+    it('RED: an entry that allows some products names the entry to extend', () => {
+        const problems = fixture().problems(rulesWith([entry('example', ['platform']), entry('openapi', ['rules'])]));
+        expect(problems).toEqual([
+            expect.stringContaining(`add "openapi" to the "example" entry's allowedToDependOn`),
+        ]);
+    });
+
+    it('a product may always depend on itself, and a project in no product constrains nothing', () => {
+        const fx = new Fixture([
+            new Proj('a', 'apps/a', 'server', ['node'], ['b'], null, [], ['product:lang']),
+            new Proj('b', 'libs/b', 'lib', ['node']),
+            new Proj('loose', 'libs/loose', 'lib', ['node'], ['b']),
+        ]);
+        fx.graph['a'].products = ['lang'];
+        fx.graph['b'].products = ['lang'];
+        expect(fx.problems(rulesWith([]))).toEqual([]);
+    });
+
+    it('a multi-product SOURCE needs every one of its products satisfied', () => {
+        const fx = new Fixture([
+            new Proj('shared', 'libs/shared', 'lib', ['node'], ['plat'], null, [], ['product:example', 'product:openapi']),
+            new Proj('plat', 'libs/plat', 'lib', ['node'], [], null, [], ['product:platform']),
+        ]);
+        fx.graph['shared'].products = ['example', 'openapi'];
+        fx.graph['plat'].products = ['platform'];
+        expect(fx.problems(rulesWith([entry('example', ['platform'])]))).toEqual([
+            expect.stringContaining("product 'openapi' may depend only on [openapi]"),
+        ]);
+    });
+
+    it('RED: an unknown name, an unknown allowedToDependOn value, and a duplicate name are each refused', () => {
+        const problems = fixture().problems(
+            rulesWith([
+                entry('example', ['platform', 'openapi']),
+                entry('openapi', ['platfrom', 'platform']),
+                entry('exampel', []),
+                entry('example', []),
+            ]),
+        );
+        expect(problems).toEqual([
+            expect.stringContaining('"openapi" allowedToDependOn "platfrom", which matches no product: tag'),
+            expect.stringContaining('"name": "exampel" matches no product: tag (products in use: example, openapi, platform, rules)'),
+            expect.stringContaining("product 'example' has two entries"),
+        ]);
+    });
+
+    it('OFF (a null rule) checks no edge', () => {
+        expect(fixture().problems(TagTruthRules.none())).toEqual([]);
     });
 });
 

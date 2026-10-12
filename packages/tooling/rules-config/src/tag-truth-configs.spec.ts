@@ -113,20 +113,45 @@ describe('framework-packages — config validation', () => {
     });
 });
 
-describe('product-tags — config validation (#1179)', () => {
-    it('accepts the seeded roles', () => {
-        expect(errorsFor('product-tags', { mode: 'RUN_EVERY_TIME', roles: ['server', 'client', 'app'], ...HATCHES })).toEqual([]);
+describe('product-tags — config validation (#1179, #1204)', () => {
+    const MATRIX = [
+        { name: 'example', allowedToDependOn: ['platform', 'openapi'] },
+        { name: 'openapi', allowedToDependOn: ['platform'] },
+    ];
+
+    it('accepts the seeded roles and an EMPTY productDependencies — no product may depend on another', () => {
+        expect(
+            errorsFor('product-tags', { mode: 'RUN_EVERY_TIME', roles: ['server', 'client', 'app'], productDependencies: [], ...HATCHES }),
+        ).toEqual([]);
+    });
+
+    it('accepts a productDependencies matrix', () => {
+        expect(errorsFor('product-tags', { mode: 'RUN_EVERY_TIME', roles: ['server'], productDependencies: MATRIX, ...HATCHES })).toEqual([]);
     });
 
     it('demands a NON-EMPTY roles — which projects are refused is the consumer\'s decision', () => {
-        expect(errorsFor('product-tags', { mode: 'OFF', ...HATCHES }))
+        expect(errorsFor('product-tags', { mode: 'OFF', productDependencies: [], ...HATCHES }))
             .toEqual([expect.stringContaining('Missing required field "roles"')]);
-        expect(errorsFor('product-tags', { mode: 'OFF', roles: [], ...HATCHES }))
+        expect(errorsFor('product-tags', { mode: 'OFF', roles: [], productDependencies: [], ...HATCHES }))
             .toEqual([expect.stringContaining('"roles" must not be empty')]);
     });
 
+    it('demands productDependencies — which edges are refused is the consumer\'s decision, never a default', () => {
+        expect(errorsFor('product-tags', { mode: 'OFF', roles: ['server'], ...HATCHES }))
+            .toEqual([expect.stringContaining('Missing required field "productDependencies"')]);
+    });
+
+    it('refuses an entry missing name or allowedToDependOn', () => {
+        expect(
+            errorsFor('product-tags', { mode: 'OFF', roles: ['server'], productDependencies: [{ name: 'example' }], ...HATCHES }),
+        ).not.toEqual([]);
+        expect(
+            errorsFor('product-tags', { mode: 'OFF', roles: ['server'], productDependencies: [{ allowedToDependOn: [] }], ...HATCHES }),
+        ).not.toEqual([]);
+    });
+
     it('refuses a mode a graph rule does not have', () => {
-        expect(errorsFor('product-tags', { mode: 'MODIFIED_PROJECTS', roles: ['server'], ...HATCHES })).not.toEqual([]);
+        expect(errorsFor('product-tags', { mode: 'MODIFIED_PROJECTS', roles: ['server'], productDependencies: [], ...HATCHES })).not.toEqual([]);
     });
 });
 

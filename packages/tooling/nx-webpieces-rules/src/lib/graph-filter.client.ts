@@ -49,7 +49,8 @@ class WpFilteredDot {
     constructor(private readonly model: RenderModelJson) {}
 
     /**
-     * `nodeDot` picks each box's statement — the architecture page passes its current color mode's.
+     * `nodeDot` picks each box's statement — the architecture page passes its current color mode's —
+     * and `edgeDot` each edge's (the Product mode dashes a cross-product dependency).
      * `keepEmptyLevels` keeps a level whose boxes were all filtered out as a thin labeled band, so
      * every remaining box stays in its own L-row (the architecture page); otherwise it is dropped.
      */
@@ -57,6 +58,7 @@ class WpFilteredDot {
         retained: Set<string>,
         nodeDot: (node: RenderNodeJson) => string = (node: RenderNodeJson): string => node.dot,
         keepEmptyLevels = false,
+        edgeDot: (edge: RenderEdgeJson) => string = (edge: RenderEdgeJson): string => edge.dot,
     ): string {
         const nodes = this.model.nodes.filter((node: RenderNodeJson): boolean => retained.has(node.id));
         const edges = this.model.edges.filter(
@@ -75,7 +77,7 @@ class WpFilteredDot {
             this.model.header +
             nodes.map((node: RenderNodeJson): string => nodeDot(node)).join('') +
             this.bandDot(bands) +
-            edges.map((edge) => edge.dot).join('') +
+            edges.map((edge: RenderEdgeJson): string => edgeDot(edge)).join('') +
             this.model.footer
         );
     }
@@ -152,6 +154,10 @@ abstract class WpFilterPage {
     protected nodeDot(node: RenderNodeJson): string {
         return node.dot;
     }
+    /** The statement drawn for one edge. The architecture page answers with its color mode's. */
+    protected edgeDot(edge: RenderEdgeJson): string {
+        return edge.dot;
+    }
     /** Whether an unfiltered draw may use the model's precomputed `fullDot` verbatim. */
     protected usesFullDot(): boolean {
         return true;
@@ -210,6 +216,7 @@ abstract class WpFilterPage {
                           retained,
                           (node: RenderNodeJson): string => this.nodeDot(node),
                           this.keepsEmptyLevels(),
+                          (edge: RenderEdgeJson): string => this.edgeDot(edge),
                       );
             const svg = this.viz.renderSVGElement(dot);
             this.prepareSvg(svg);

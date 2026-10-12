@@ -113,8 +113,9 @@ const EXTRA_REQUIRED: Record<string, Record<string, unknown>> = {
         entries: [{ paths: ['libraries/node/**'], frameworkSets: ['node'], roles: ['lib'] }],
     },
     'framework-packages': { entries: [{ packages: ['@angular/*'], frameworks: ['angular'] }] },
-    // Schema-required (#1179): which roles must carry a product tag decides which projects fail.
-    'product-tags': { roles: ['server', 'client', 'app'] },
+    // Schema-required (#1179): which roles must carry a product tag decides which projects fail; and
+    // (#1204) which products may depend on which decides which edges fail — [] allows no crossing.
+    'product-tags': { roles: ['server', 'client', 'app'], productDependencies: [] },
 };
 
 function offEntries(names: string[], overrides: Record<string, unknown>): Record<string, unknown> {

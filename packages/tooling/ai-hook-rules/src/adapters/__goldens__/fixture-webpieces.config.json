@@ -269,6 +269,7 @@
         "product-tags": {
             "mode": "OFF",
             "roles": ["server", "client", "app"],
+            "productDependencies": [],
             "turnOffRuleUntilEpoch": 0,
             "turnOffRuleWhileOnBranch": null
         },

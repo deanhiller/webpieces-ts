@@ -33,6 +33,7 @@
 import { KNOWN_FRAMEWORKS, KnownFramework } from '@webpieces/rules-sdk';
 import { dotValue, htmlLabelText } from './dot-syntax';
 import { PRODUCT_NONE_BORDER, PRODUCT_NONE_FILL, PRODUCT_SHARED_FILL, ProductColor, ProductPalette } from './graph-products';
+import type { ProductDependencyEntry } from '../configs/tag-truth-configs';
 
 export enum GraphMode {
     RUNTIME = 'runtime',
@@ -213,6 +214,13 @@ export class LegendFacts {
     multiProduct = false;
     /** Some product is past the palette's eight and is painted with the neutral fill. */
     productOverflow = false;
+    /** Dependency edges crossing into another product (#1204), drawn dashed in the Product mode. */
+    crossProductEdges = 0;
+    /**
+     * The `product-tags` rule's matrix (#1204), listed in the Product legend; null when the rule is
+     * OFF or the page was drawn without it.
+     */
+    productDependencies: ProductDependencyEntry[] | null = null;
 }
 
 export class NodeModeStyler {
