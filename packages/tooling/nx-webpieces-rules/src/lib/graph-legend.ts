@@ -35,6 +35,7 @@ import {
     ProductColor,
     ProductPalette,
 } from './graph-products';
+import type { ProductDependencyEntry } from '../configs/tag-truth-configs';
 
 const SWATCH_W = 26;
 const SWATCH_H = 16;
@@ -158,6 +159,42 @@ export class GraphLegend {
                 `no product · ${facts.noProduct}`,
                 'no tagged server, client or app reaches it',
             );
+        return rows + this.boundaryRows(facts, palette);
+    }
+
+    /**
+     * #1204: the dashed cross-product edge, and the product dependency matrix that allows each such
+     * edge — `example → openapi, platform` — when the `product-tags` rule supplied one.
+     */
+    boundaryRows(facts: LegendFacts, palette: ProductPalette): string {
+        let rows = '';
+        if (facts.crossProductEdges > 0)
+            rows += this.row(
+                'cross-product',
+                this.line(PRODUCT_NONE_BORDER, '4 3'),
+                `crosses into another product · ${facts.crossProductEdges}`,
+                "dashed, in the color of the product it depends on",
+            );
+        const matrix = facts.productDependencies;
+        if (matrix === null) return rows;
+        const stated = matrix.filter((entry: ProductDependencyEntry): boolean => entry.allowedToDependOn.length > 0);
+        if (stated.length === 0)
+            return (
+                rows +
+                this.row(
+                    'allowed-none',
+                    this.line(PRODUCT_NONE_BORDER, ''),
+                    'no product may depend on another',
+                    'product-tags.productDependencies allows no crossing',
+                )
+            );
+        for (const entry of [...stated].sort((a: ProductDependencyEntry, b: ProductDependencyEntry): number => a.name.localeCompare(b.name)))
+            rows += this.row(
+                `allowed:${entry.name}`,
+                this.line(palette.colorOf(entry.name).color, ''),
+                `${entry.name} → ${[...entry.allowedToDependOn].sort().join(', ')}`,
+                'allowed by product-tags.productDependencies',
+            );
         return rows;
     }
 
@@ -221,8 +258,12 @@ export class GraphLegend {
     }
 
     private edgeRow(color: string, dash: string, title: string, detail: string): string {
+        return this.row(title, this.line(color, dash), title, detail);
+    }
+
+    /** An edge swatch: a short line, dashed when `dash` is set. */
+    private line(color: string, dash: string): string {
         const dashed = dash === '' ? '' : ` stroke-dasharray="${dash}"`;
-        const line = `<svg width="28" height="10" aria-hidden="true"><line x1="0" y1="5" x2="28" y2="5" stroke="${color}" stroke-width="1.6"${dashed}/></svg>`;
-        return this.row(title, line, title, detail);
+        return `<svg width="28" height="10" aria-hidden="true"><line x1="0" y1="5" x2="28" y2="5" stroke="${color}" stroke-width="1.6"${dashed}/></svg>`;
     }
 }

@@ -158,6 +158,8 @@ interface RenderEdgeJson {
     to: string;
     dot: string;
     id: string;
+    /** The Product color mode's statement for a cross-product dependency (#1204); null draws `dot`. */
+    productDot: string | null;
 }
 interface RenderBandJson {
     level: number;

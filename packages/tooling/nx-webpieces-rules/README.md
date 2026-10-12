@@ -166,7 +166,11 @@ is that promoted level. The runtime graph keeps its call-depth levels.
   sorted-name order; any product past 8 uses the neutral fill and the legend says so); two or more,
   but not all, are vertical stripes, one per product; a box shared by every product is one neutral
   fill; a box in no product is white with a dashed border. The legend counts each product's boxes
-  and how many belong to it alone.
+  and how many belong to it alone. A dependency that crosses into another product (its target does
+  not carry every product of its source) is drawn dashed in the color of the product it depends on, so
+  product boundaries read at a glance while same-product edges stay plain (#1204); the legend counts
+  those edges and lists the `product-tags` rule's allowed matrix (`example → openapi, platform`).
+  Which crossings are ALLOWED is `product-tags.productDependencies`: generation refuses any other.
 
 **Filter** opens a popover of four groups that INTERSECT: the changes of the active Impact
 comparison, headed by its label and carrying the same branch / last-commit toggle (All ·

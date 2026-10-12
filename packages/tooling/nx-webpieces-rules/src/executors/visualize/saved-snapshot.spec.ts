@@ -13,6 +13,7 @@ import { createNodesV2 } from '../../plugin';
 import { saveGraph } from '../../lib/graph-loader';
 import { saveRuntimeGraph } from '../../lib/runtime-graph';
 import { ImpactRefresh } from '../../lib/graph-impact';
+import { TagTruthRules } from '../../lib/tag-truth';
 
 vi.mock('../../lib/runtime-config', () => ({
     loadRuntimeConfig: () => ({ showExternalNodes: true }),
@@ -61,6 +62,8 @@ describe('saved architecture viewing', () => {
             return render.apply(new RuntimeHtmlPage(() => '// browser client', () => '// filter client', () => '// shared client'), args);
         });
         vi.spyOn(GraphVisualizer.prototype, 'openVisualization').mockReturnValue(false);
+        // The page lists the product-tags matrix (#1204); these fixtures carry no webpieces.config.json.
+        vi.spyOn(TagTruthRules, 'fromConfig').mockReturnValue(TagTruthRules.none());
         // Viewing refreshes Impact (#1158); no spec here may spawn git or nx for it.
         vi.spyOn(ImpactRefresh.prototype, 'run').mockResolvedValue('ℹ️  Impact stubbed');
         vi.spyOn(console, 'log').mockImplementation(() => undefined);

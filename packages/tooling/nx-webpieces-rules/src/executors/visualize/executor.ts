@@ -19,6 +19,7 @@ import type { ExecutorContext } from '@nx/devkit';
 import { SavedSnapshot } from '../../lib/saved-snapshot';
 import { DEFAULT_GRAPH_PATH } from '../../lib/graph-loader';
 import { GraphVisualizer } from '../../lib/graph-visualizer';
+import { TagTruthRules } from '../../lib/tag-truth';
 import { ImpactRefresh, VISUALIZE_IMPACT_KINDS } from '../../lib/graph-impact';
 import { RuleFailError, renderRuleFailForHuman } from '@webpieces/rules-config';
 import { toError } from '../../toError';
@@ -52,7 +53,8 @@ export class SavedGraphViewer {
             const graph = this.snapshot.loadProjects(workspaceRoot, graphPath).projects;
 
             console.log('🎨 Generating visualization...');
-            const vizPaths = this.visualizer.writeVisualization(graph, workspaceRoot);
+            const productDependencies = TagTruthRules.fromConfig(workspaceRoot).productTags?.dependencies ?? null;
+            const vizPaths = this.visualizer.writeVisualization(graph, workspaceRoot, productDependencies);
             console.log(`✅ Generated: ${vizPaths.htmlPath}`);
 
             // Impact is optional: it reports, it never throws, and it never touches committed files.

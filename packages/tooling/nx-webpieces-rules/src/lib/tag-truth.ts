@@ -11,7 +11,9 @@
  *                               both directions.
  *   product-tags      (#1179) — every project whose role is listed (seed: server, client, app)
  *                               carries a well-formed `product:<name>` tag, the seed the product
- *                               filter and Product color mode derive membership from.
+ *                               filter and Product color mode derive membership from; and (#1204)
+ *                               every dependency edge respects the product dependency matrix
+ *                               (product-dependencies.ts), read on the RESOLVED membership.
  *
  * They run beside `library-types-match-client` and `role-dependency` (graph-metadata.ts), in
  * `architecture:generate` and `validate-architecture-unchanged`, AFTER enrichGraph has resolved every
@@ -26,11 +28,12 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { loadAndValidate, matchesAnyGlob, RuleOptions } from "@webpieces/rules-config";
-import { ApiClientPackagesEntry, FrameworkFolderEntry } from "../configs/tag-truth-configs";
+import { ApiClientPackagesEntry, FrameworkFolderEntry, ProductDependencyEntry } from "../configs/tag-truth-configs";
 import type { EnhancedGraph, GraphEntry } from './graph-sorter';
 import { APP_ROLES, MetadataValidationError } from './graph-metadata';
 import { ProjectInfo } from './project-info';
 import { ProductResolver } from './product-resolver';
+import { ProductDependencyMatrix } from './product-dependencies';
 import { RuleGate } from './rule-gate';
 import { DepUsageScanner } from './dep-usage-scanner';
 import { toError } from '../toError';
@@ -88,9 +91,15 @@ export class FrameworkFolderRule {
     constructor(public readonly folders: readonly FrameworkFolder[]) {}
 }
 
-/** `product-tags`, resolved: the roles whose every project must declare a `product:<name>` tag. */
+/**
+ * `product-tags`, resolved: the roles whose every project must declare a `product:<name>` tag, and the
+ * product dependency matrix every dependency edge must respect (#1204).
+ */
 export class ProductTagsRule {
-    constructor(public readonly roles: readonly string[]) {}
+    constructor(
+        public readonly roles: readonly string[],
+        public readonly dependencies: ProductDependencyMatrix,
+    ) {}
 }
 
 /**
@@ -139,7 +148,12 @@ export class TagTruthRules {
             folder === null
                 ? null
                 : new FrameworkFolderRule((folder['entries'] as FrameworkFolderEntry[]).map(FrameworkFolder.fromEntry)),
-            products === null ? null : new ProductTagsRule(products['roles'] as string[]),
+            products === null
+                ? null
+                : new ProductTagsRule(
+                      products['roles'] as string[],
+                      new ProductDependencyMatrix(products['productDependencies'] as ProductDependencyEntry[]),
+                  ),
         );
     }
 
@@ -189,7 +203,20 @@ export class TagTruthValidator {
                 problems.push(...this.productTagProblems(info, root, entry, this.rules.productTags));
             }
         }
+        if (this.rules.productTags !== null) {
+            problems.push(...this.rules.productTags.dependencies.problems(graph, this.declaredProducts(infos)));
+        }
         return problems;
+    }
+
+    /** Every product some project's `product:` tag names — what a matrix entry may refer to. */
+    private declaredProducts(infos: Map<string, ProjectInfo>): Set<string> {
+        const resolver = new ProductResolver();
+        const declared = new Set<string>();
+        for (const info of infos.values()) {
+            for (const product of resolver.resolve(info).products) declared.add(product);
+        }
+        return declared;
     }
 
     /**

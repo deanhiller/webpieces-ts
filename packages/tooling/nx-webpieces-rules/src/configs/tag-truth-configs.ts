@@ -101,22 +101,54 @@ export class FrameworkFolderConfig extends BaseRuleConfig {
 }
 
 /**
- * `product-tags` (#1179) — every project whose role is in `roles` carries at least one well-formed
- * `product:<name>` nx tag (lowercase kebab, several allowed). The product filter and the Product color
- * mode of `arch:visualize` / `arch:visualize-runtime` seed a product's membership from exactly those
- * tags, so an untagged server, client or app silently drops out of every product view.
+ * One row of the product dependency matrix (#1204): the OTHER products a product may depend on.
+ * Data-only.
+ */
+export class ProductDependencyEntry {
+    /** The product this row is about — the name after `product:` in some project's tags, e.g. `example`. */
+    name!: string;
+    /**
+     * The other products a project of `name` may depend on, e.g. `["platform", "openapi"]`. A product
+     * may always depend on itself, so it is never listed; `[]` states that it depends on no other.
+     */
+    allowedToDependOn!: string[];
+
+    static readonly SCHEMA: SchemaShape<ProductDependencyEntry> = {
+        name: new FieldDef('string'),
+        allowedToDependOn: new FieldDef('string[]'),
+    };
+}
+
+/**
+ * `product-tags` (#1179, #1204) — two halves behind ONE switch:
+ *  - every project whose role is in `roles` carries at least one well-formed `product:<name>` nx tag
+ *    (lowercase kebab, several allowed). The product filter and the Product color mode of
+ *    `arch:visualize` / `arch:visualize-runtime` seed a product's membership from exactly those tags,
+ *    so an untagged server, client or app silently drops out of every product view;
+ *  - every edge of the DEPENDENCY graph respects `productDependencies`: an edge A -> B is legal when,
+ *    for EVERY product p of A, B carries p or a product p's entry allows. Membership is the resolved
+ *    one (a project's own tags are final; an untagged project inherits). The runtime graph is not
+ *    checked.
  *
- * - `mode` — OFF | RUN_EVERY_TIME (a graph rule: it reads every project, every run).
+ * - `mode` — OFF | RUN_EVERY_TIME (a graph rule: it reads every project, every run). OFF turns off
+ *   both halves.
  * - `roles` — required, non-empty: WHICH roles are refused without a tag, e.g.
  *   `["server", "client", "app"]`. It decides which projects fail, so it is behaviour, never a default.
+ * - `productDependencies` — required; `[]` is valid and means no product may depend on another. One
+ *   entry per product that DOES depend on others, e.g.
+ *   `[{ "name": "example", "allowedToDependOn": ["platform", "openapi"] }]`. A product with no entry
+ *   may depend only on itself. A `name` or `allowedToDependOn` value that no `product:` tag uses, and a
+ *   duplicate `name`, fail generation naming it — a typo can never silently allow or forbid nothing.
  */
 export class ProductTagsConfig extends BaseRuleConfig {
     declare mode?: StructuralMode;
     roles!: string[];
+    productDependencies!: ProductDependencyEntry[];
 
     static readonly SCHEMA: SchemaShape<ProductTagsConfig> = {
         mode: new FieldDef('string', STRUCTURAL_MODES),
         roles: FieldDef.nonEmptyStrings(),
+        productDependencies: FieldDef.objects(ProductDependencyEntry.SCHEMA),
         ...BASE_RULE_SCHEMA,
     };
 }

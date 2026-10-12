@@ -24,6 +24,8 @@
  *  - ProductPalette — the Product color mode's colors: a fixed palette of eight assigned in sorted
  *    product-name order, a neutral fill for a box shared by EVERY product, and a dashed white box for
  *    one in no product.
+ *  - ProductBoundary — which dependency edges cross from one product into another (#1204), drawn
+ *    dashed in the target product's color in the Product color mode.
  *
  * Membership is stable per checkout (it depends on tags and edges, never on a diff), so it is written
  * into the committed dependencies.json / runtime-dependencies.json rather than into a sidecar.
@@ -110,6 +112,23 @@ export class ProductPalette {
     /** True when some product is past the palette's eight, so the legend must say it is neutral. */
     overflows(): boolean {
         return this.colors.some((color: ProductColor): boolean => !color.inPalette);
+    }
+}
+
+/**
+ * Where a dependency edge crosses a product boundary (#1204), for the Product color mode: an edge
+ * A -> B crosses when B does not carry every product of A, and it is drawn dashed in the color of the
+ * product it crosses INTO, so the boundaries read at a glance while same-product edges stay quiet.
+ * Whether a crossing is ALLOWED is the product dependency matrix's call (product-dependencies.ts):
+ * with `product-tags` ON, generation already refused every crossing the matrix does not allow, so
+ * every crossing drawn is an allowed one.
+ */
+export class ProductBoundary {
+    /** The product the edge crosses into, or null when the target carries every product of the source. */
+    crossedInto(from: readonly string[], to: readonly string[]): string | null {
+        if (from.length === 0 || to.length === 0) return null;
+        if (from.every((product: string): boolean => to.includes(product))) return null;
+        return to.find((product: string): boolean => !from.includes(product)) ?? to[0];
     }
 }
 

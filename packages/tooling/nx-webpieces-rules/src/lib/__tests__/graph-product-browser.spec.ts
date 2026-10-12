@@ -113,6 +113,29 @@ describe.skipIf(!process.env.WP_GRAPH_VIZ_JS)('products in a real browser (#1179
         await page.close();
     });
 
+    it('#1204: Product mode dashes a cross-product edge in the target product color; other modes draw it plain', async () => {
+        const graph: EnhancedGraph = {
+            app: { level: 1, dependsOn: ['lib', 'plat'], framework: ['node'], role: 'server', products: ['example'] },
+            lib: { level: 0, dependsOn: [], framework: ['node'], role: 'lib', products: ['example'] },
+            plat: { level: 0, dependsOn: [], framework: ['node'], role: 'lib', products: ['platform'] },
+        };
+        const edges = fixture.viz.generateRenderModel(graph).edges;
+        const cross = edges.find((edge): boolean => edge.to === 'plat')!.id;
+        const same = edges.find((edge): boolean => edge.to === 'lib')!.id;
+        const page = await fixture.open('1204-product-boundary', fixture.architecture(graph));
+        const path = (id: string): Locator => page.locator(`[id="${id}"] path`).first();
+        expect(await path(cross).getAttribute('stroke-dasharray')).toBeNull();
+        await page.evaluate((): void => (document.activeElement as HTMLElement | null)?.blur());
+        await page.keyboard.press('4');
+        await expect.poll(() => path(cross).getAttribute('stroke-dasharray')).not.toBeNull();
+        expect(await path(cross).getAttribute('stroke')).toBe(new ProductPalette(['example', 'platform']).colorOf('platform').color);
+        expect(await path(same).getAttribute('stroke-dasharray')).toBeNull();
+        expect(await page.locator('#wp-side [data-wp-legend-mode="product"]').textContent()).toContain(
+            'crosses into another product · 1',
+        );
+        await page.close();
+    });
+
     it('hides the Product group and disables the mode where nothing declares a product', async () => {
         const page = await fixture.open('1179-no-products', fixture.architecture(FilterFixture.wide()));
         expect(await page.locator('#wp-product-group').count()).toBe(0);

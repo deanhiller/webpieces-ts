@@ -26,9 +26,14 @@ import {
     PRODUCT_NONE_FILL,
     PRODUCT_PALETTE_SIZE,
     PRODUCT_SHARED_FILL,
+    ProductBoundary,
     ProductColor,
     ProductPalette,
 } from '../graph-products';
+import { GraphVisualizer } from '../graph-visualizer';
+import { RenderEdge } from '../graph-render-model';
+import type { EnhancedGraph } from '../graph-sorter';
+import { ProductDependencyEntry } from '../../configs/tag-truth-configs';
 
 const styler = new NodeModeStyler();
 const legend = new GraphLegend();
@@ -256,5 +261,61 @@ describe('Product mode (#1179): one product solid, several striped, all neutral,
 
     it('says how to declare a product when the workspace declares none', () => {
         expect(legend.productRows(new LegendFacts())).toContain('no products declared');
+    });
+});
+
+describe('Product mode (#1204): product boundaries — dashed cross-product edges and the allowed matrix', () => {
+    const boundary = new ProductBoundary();
+    const entry = (name: string, allowed: string[]): ProductDependencyEntry =>
+        Object.assign(new ProductDependencyEntry(), { name, allowedToDependOn: allowed });
+
+    it('an edge crosses when its target misses some product of its source, into the first product it adds', () => {
+        expect(boundary.crossedInto(['example'], ['platform'])).toBe('platform');
+        expect(boundary.crossedInto(['openapi'], ['platform', 'rules'])).toBe('platform');
+        expect(boundary.crossedInto(['example', 'platform'], ['platform'])).toBe('platform');
+        expect(boundary.crossedInto(['lang'], ['lang'])).toBeNull();
+        expect(boundary.crossedInto(['lang'], ['helper', 'lang'])).toBeNull();
+        expect(boundary.crossedInto([], ['lang'])).toBeNull();
+        expect(boundary.crossedInto(['lang'], [])).toBeNull();
+    });
+
+    it('draws a cross-product edge dashed in the TARGET product color in Product mode only; same-product edges stay plain', () => {
+        const graph: EnhancedGraph = {
+            app: { level: 1, dependsOn: ['lib', 'plat'], role: 'server', framework: ['node'], products: ['example'] },
+            lib: { level: 0, dependsOn: [], role: 'lib', framework: ['node'], products: ['example'] },
+            plat: { level: 0, dependsOn: [], role: 'lib', framework: ['node'], products: ['platform'] },
+        };
+        const model = new GraphVisualizer(() => '', () => '').generateRenderModel(graph);
+        const palette = new ProductPalette(['example', 'platform']);
+        const toPlat = model.edges.find((edge: RenderEdge): boolean => edge.to === 'plat')!;
+        const toLib = model.edges.find((edge: RenderEdge): boolean => edge.to === 'lib')!;
+        expect(toLib.productDot).toBeNull();
+        expect(toPlat.dot).not.toContain('dashed');
+        expect(toPlat.productDot).toContain(
+            `[id="${toPlat.id}"] [style=dashed, color="${palette.colorOf('platform').color}", penwidth=2];`,
+        );
+        expect(model.fullDot).not.toContain('penwidth=2');
+        expect(model.legend.crossProductEdges).toBe(1);
+        expect(legend.productRows(model.legend)).toContain('crosses into another product · 1');
+    });
+
+    it('the legend lists the allowed matrix, sorted, when the rule supplies one', () => {
+        const palette = new ProductPalette(['example', 'openapi', 'platform']);
+        const facts = new LegendFacts();
+        styler.record(facts, new NodeFacts('a', 'a', 0, 'server', [], ['example']), palette);
+        facts.productDependencies = [entry('openapi', ['platform']), entry('example', ['platform', 'openapi'])];
+        const rows = legend.productRows(facts);
+        expect(rows).toContain('example → openapi, platform');
+        expect(rows.indexOf('example →')).toBeLessThan(rows.indexOf('openapi →'));
+        expect(rows).toContain('allowed by product-tags.productDependencies');
+    });
+
+    it('says no product may depend on another for an empty matrix, and lists nothing when the rule is OFF', () => {
+        const palette = new ProductPalette(['example']);
+        const facts = new LegendFacts();
+        styler.record(facts, new NodeFacts('a', 'a', 0, 'server', [], ['example']), palette);
+        expect(legend.productRows(facts)).not.toContain('productDependencies');
+        facts.productDependencies = [];
+        expect(legend.productRows(facts)).toContain('no product may depend on another');
     });
 });

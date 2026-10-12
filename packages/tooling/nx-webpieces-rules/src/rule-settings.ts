@@ -221,6 +221,7 @@ export const recommendedSeeds: Readonly<Record<string, ConfigObject>> = {
             "client",
             "app"
         ],
+        "productDependencies": [],
         "turnOffRuleUntilEpoch": 0,
         "turnOffRuleWhileOnBranch": null
     }
