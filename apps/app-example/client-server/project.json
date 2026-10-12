@@ -30,7 +30,7 @@
             }
         }
     },
-    "tags": ["framework:express", "role:server", "webpieces", "product:platform"],
+    "tags": ["framework:express", "role:server", "webpieces", "product:example"],
     "metadata": {
         "webpieces": {
             "serviceName": "client-server"

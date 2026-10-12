@@ -32,7 +32,7 @@
                 }
             ],
             "products": [
-                "platform"
+                "example"
             ]
         },
         "app-example-e2e": {
@@ -43,7 +43,7 @@
             "dependsOn": [],
             "drawOnGraph": false,
             "products": [
-                "platform"
+                "example"
             ]
         },
         "client-server": {
@@ -92,7 +92,7 @@
                 }
             ],
             "products": [
-                "platform"
+                "example"
             ]
         },
         "legacy-server": {
@@ -134,7 +134,7 @@
                 }
             ],
             "products": [
-                "platform"
+                "example"
             ]
         },
         "server2": {
@@ -157,7 +157,7 @@
                 }
             ],
             "products": [
-                "platform"
+                "example"
             ]
         }
     },

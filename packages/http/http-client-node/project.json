@@ -28,6 +28,7 @@
     },
     "tags": [
         "framework:node",
-        "role:designed-lib"
+        "role:designed-lib",
+        "product:platform"
     ]
 }
