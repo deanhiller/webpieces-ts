@@ -81,12 +81,17 @@ export class RuntimeDetails {
             }
             this.nodes[name] = new RuntimeNodeDetails(implemented, [...new Set(used)]);
         }
+        this.remoteNodes(graph);
+        if (model !== null) this.renderEdges(graph, model);
+    }
+
+    /** A reviewed remote service's node details: the contracts its declaration says it implements. */
+    private remoteNodes(graph: RuntimeGraph): void {
         for (const [name, remote] of Object.entries(graph.remoteServices ?? {}))
             this.nodes[new RemoteServiceNodeId().of(name)] = new RuntimeNodeDetails(
                 remote.implements.map((api: string) => `${api} — declared in remoteServices.${name}`),
                 [],
             );
-        if (model !== null) this.renderEdges(graph, model);
     }
 
     /**

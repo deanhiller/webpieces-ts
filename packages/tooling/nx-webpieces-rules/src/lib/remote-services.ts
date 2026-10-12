@@ -95,25 +95,30 @@ export class RemoteServicesCodec {
             );
         const seen = new Set<string>();
         const result: RemoteServiceApi[] = [];
-        (value as unknown[]).forEach((item: unknown, index: number) => {
-            const at = `${where}.implements[${index}]`;
-            const entry = this.record(item, fullPath, at);
-            this.onlyKeys(entry, API_KEYS, fullPath, at);
-            const api = entry['api'];
-            const type = entry['type'];
-            if (typeof api !== 'string' || api.trim() === '')
-                this.fail(fullPath, `${at}.api must be the contract's class name (e.g. "ReporterTriggerApi").`);
-            if (type !== 'rpc' && type !== 'pubsub')
-                this.fail(
-                    fullPath,
-                    `${at}.type must be "rpc" or "pubsub", got ${JSON.stringify(type)}. A vendor contract is an externalSystem, not a remote service.`,
-                );
-            if (seen.has(api as string))
-                this.fail(fullPath, `${at}: ${String(api)} is declared twice in ${where}.implements.`);
-            seen.add(api as string);
-            result.push(new RemoteServiceApi(api as string, type));
-        });
+        for (let index = 0; index < value.length; index++) {
+            const entry = this.implementation(value[index], fullPath, `${where}.implements[${index}]`);
+            if (seen.has(entry.api))
+                this.fail(fullPath, `${where}.implements[${index}]: ${entry.api} is declared twice in ${where}.implements.`);
+            seen.add(entry.api);
+            result.push(entry);
+        }
         return result;
+    }
+
+    // webpieces-disable no-any-unknown -- untrusted JSON is narrowed and validated at the input boundary
+    private implementation(item: unknown, fullPath: string, at: string): RemoteServiceApi {
+        const entry = this.record(item, fullPath, at);
+        this.onlyKeys(entry, API_KEYS, fullPath, at);
+        const api = entry['api'];
+        const type = entry['type'];
+        if (typeof api !== 'string' || api.trim() === '')
+            this.fail(fullPath, `${at}.api must be the contract's class name (e.g. "ReporterTriggerApi").`);
+        if (type !== 'rpc' && type !== 'pubsub')
+            this.fail(
+                fullPath,
+                `${at}.type must be "rpc" or "pubsub", got ${JSON.stringify(type)}. A vendor contract is an externalSystem, not a remote service.`,
+            );
+        return new RemoteServiceApi(api, type);
     }
 
     // webpieces-disable no-any-unknown -- untrusted JSON is narrowed and validated at the input boundary
