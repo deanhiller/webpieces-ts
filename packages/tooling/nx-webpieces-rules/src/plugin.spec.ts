@@ -3,7 +3,7 @@ import { describe, it, expect } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
 import { isInsideNestedGitRepo, createCiTarget, createHotfixCiTarget, createNodesV2 } from './plugin';
-import type { CreateNodesContextV2, CreateNodesResultV2, ProjectConfiguration } from '@nx/devkit';
+import type { CreateNodesContextV2, CreateNodesResultV2 } from '@nx/devkit';
 import { BRANCH_IDENTITY_INPUTS } from './branch-identity-inputs';
 import { ValidationTargets } from './validation-targets';
 
@@ -84,8 +84,8 @@ describe('createHotfixCiTarget', () => {
     });
 });
 
-describe('rules:check root policy target', () => {
-    it('is inferred once with only the scoped rulesConfig named input', async (): Promise<void> => {
+describe('webpieces.config.json has no nx project (#1202)', () => {
+    it('infers no virtual rules project in a workspace without one', async (): Promise<void> => {
         const root = tmpRoot();
         fs.mkdirSync(path.join(root, 'architecture'));
         fs.writeFileSync(path.join(root, 'package.json'), '{}\n');
@@ -95,23 +95,20 @@ describe('rules:check root policy target', () => {
             {},
             { workspaceRoot: root } as CreateNodesContextV2,
         );
-        let rules: ProjectConfiguration | undefined;
-        for (const row of results) rules = rules ?? row[1].projects?.['rules'];
-        expect(rules?.root).toBe('.');
-        expect(rules?.targets?.['check']).toMatchObject({
-            executor: '@webpieces/nx-webpieces-rules:validate-rules-config',
-            cache: true,
-            inputs: ['rulesConfig'],
-        });
+        const inferred: string[] = [];
+        for (const row of results) {
+            for (const [key, project] of Object.entries(row[1].projects ?? {})) {
+                inferred.push(key, project.name ?? '');
+            }
+        }
+        expect(inferred).not.toContain('rules');
     });
 
-    it('keeps webpieces.config.json out of project default inputs', (): void => {
+    it('keeps webpieces.config.json out of project default inputs (#1075)', (): void => {
         const nx = JSON.parse(fs.readFileSync(path.join(process.cwd(), 'nx.json'), 'utf8')) as {
             namedInputs: Record<string, string[]>;
         };
         expect(nx.namedInputs['default']).toEqual(['{projectRoot}/**/*']);
-        expect(nx.namedInputs['rulesConfig']).toContain('{workspaceRoot}/webpieces.config.json');
-        expect(JSON.stringify(nx.namedInputs['default'])).not.toContain('rulesConfig');
         expect(JSON.stringify(nx.namedInputs['default'])).not.toContain('webpieces.config.json');
     });
 });
@@ -120,7 +117,7 @@ describe('rules:check root policy target', () => {
 // A rule that turnOffRuleWhileOnBranch can switch off produces a BRANCH-DEPENDENT verdict, so a CACHED
 // target that runs one must carry the branch in its hash. Without this, a hatched branch caches a green
 // under hash H and any later PR that leaves the same files untouched hashes to H and replays it — the
-// relaxation escapes the branch that opted in. Root config validity is owned separately by rules:check;
+// relaxation escapes the branch that opted in. Root config validity is checked in-process by wp-ci;
 // branch-sensitive rule targets still need this identity input for their own cached verdicts.
 // ---------------------------------------------------------------------------------------------------
 describe('branch identity is in the hash of every CACHED rule-running target', () => {
