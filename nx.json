@@ -11,19 +11,6 @@
             "!{projectRoot}/tsconfig.spec.json",
             "!{projectRoot}/.eslintrc.json",
             "!{projectRoot}/eslint.config.js"
-        ],
-        "rulesConfig": [
-            "{workspaceRoot}/nx.json",
-            "{workspaceRoot}/rules/project.json",
-            "{workspaceRoot}/webpieces.config.json",
-            "{workspaceRoot}/packages/tooling/nx-webpieces-rules/src/executors/validate-rules-config/**/*",
-            "{workspaceRoot}/packages/tooling/rules-config/src/*config*.ts",
-            "{workspaceRoot}/packages/tooling/rules-config/src/*schema*.ts",
-            "{workspaceRoot}/packages/tooling/rules-config/src/default-rules.ts",
-            "{workspaceRoot}/packages/tooling/rules-sdk/src/**/*.ts",
-            "{workspaceRoot}/packages/tooling/rules-config/src/seed-entry.ts",
-            "{workspaceRoot}/packages/tooling/rules-config/src/sections.ts",
-            "{workspaceRoot}/packages/tooling/rules-config/src/types.ts"
         ]
     },
     "targetDefaults": {
