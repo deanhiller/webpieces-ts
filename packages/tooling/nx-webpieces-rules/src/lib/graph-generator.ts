@@ -10,11 +10,15 @@
  *                             This is what build order follows via `^build`.
  *  - generateReducedGraph() → transitive reduction of the full graph: the minimal
  *                             edge set with identical reachability, used as the
- *                             architecture VIEW written to dependencies.json.
+ *                             architecture VIEW written to dependencies.json. A path
+ *                             through a `drawOnGraph:false` project never removes a
+ *                             visible edge (see visible-transitive-reduction.ts).
  */
 
 import { createProjectGraphAsync } from '@nx/devkit';
-import { transitiveReduction } from './transitive-reduction';
+import { collectProjectInfo } from './graph-metadata';
+import { resolveDrawOnGraph } from './draw-on-graph-resolver';
+import { VisibleTransitiveReduction } from './visible-transitive-reduction';
 
 /**
  * Projects to exclude from graph validation (tools, configs, etc.)
@@ -76,5 +80,20 @@ export async function generateGraph(): Promise<Record<string, string[]>> {
  */
 export async function generateReducedGraph(): Promise<Record<string, string[]>> {
     const full = await generateGraph();
-    return transitiveReduction(full);
+    const hidden = await new HiddenProjectFinder().find();
+    return new VisibleTransitiveReduction().reduce(full, hidden);
+}
+
+/**
+ * The projects tagged `drawOnGraph:false`. A malformed tag is NOT reported here: enrichGraph
+ * reports it with every other metadata problem, and such a project is treated as drawn.
+ */
+class HiddenProjectFinder {
+    async find(): Promise<Set<string>> {
+        const hidden = new Set<string>();
+        for (const info of (await collectProjectInfo()).values()) {
+            if (resolveDrawOnGraph(info).drawOnGraph === false) hidden.add(info.name);
+        }
+        return hidden;
+    }
 }
