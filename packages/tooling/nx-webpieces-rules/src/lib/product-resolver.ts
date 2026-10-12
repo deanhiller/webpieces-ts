@@ -5,12 +5,11 @@
  *
  *   "tags": ["framework:angular", "role:client", "product:lang"]
  *
- * A monorepo holding several products tags each product's ENTRY POINTS (servers, clients, apps —
- * the `product-tags` rule makes that required) and the architecture graphs derive the rest: an
- * UNTAGGED library belongs to every product whose tagged project reaches it (graph-products.ts).
- * A library MAY carry its own tag — a published library whose entry points live in other repos, which
- * no in-repo walk can reach correctly — and a project's declared tags are FINAL (#1201): a tagged
- * project keeps exactly its declared set, and no other product's walk paints it or passes through it.
+ * Membership on both architecture graphs is TAGS ONLY (#1216, graph-products.ts): a project belongs
+ * to exactly the products it declares here, and an UNTAGGED project is in no product — it renders as
+ * "no product", a box that still needs a tag. Nothing is inherited over a dependency or a runtime call.
+ * The `product-tags` rule requires a tag on every project whose role it lists; a consumer that wants
+ * every project assigned lists its library roles there too.
  *
  * Several tags are allowed (`product:bugfixer` + `product:helper`). Each name must be lowercase
  * kebab (`lang`, `job-finder`); a malformed tag (`product:`, `product:Lang`) is a problem that fails

@@ -1,34 +1,28 @@
 /**
  * Products on the architecture graphs (#1179).
  *
- * A monorepo can hold several PRODUCTS, each with its own clients and servers. A product is declared
- * on its entry points with the nx tag `product:<name>` (product-resolver.ts); everything else a
- * product consists of is DERIVED here, never declared:
+ * A monorepo can hold several PRODUCTS, each with its own clients and servers. A project declares the
+ * products it belongs to with the nx tag `product:<name>` (product-resolver.ts). Membership is TAGS
+ * ONLY (#1216) on both graphs — nothing is inherited over an edge:
  *
- *  - ProductMembership — the dependency graph. A project's OWN `product:` tags are FINAL (#1201): a
- *    project that declares any keeps exactly its declared set. An UNTAGGED project belongs to every
- *    product whose tagged project reaches it by a downward walk over `dependsOn` — and that walk stops
- *    at a tagged project, whose own dependencies are reached by its own seed walk. That closure is
- *    everything that can change the product's behaviour, so it is what a reviewer of that product
- *    reviews. It must start from EVERY entry point, clients and servers both: a client reaches its
- *    server only over HTTP, never through an nx edge, so a server is in its product only because it is
- *    tagged. Why final: a project is one product's, never two by accident — the example apps depend on
- *    the platform libraries, and a platform library tagged `product:platform` must not be painted
- *    `example` because an example reaches it. A published library whose entry points live in OTHER
- *    repos carries its own tag for exactly that reason: no in-repo walk can ever reach it correctly.
- *  - RuntimeProductMembership — the runtime graph, under the same rule. A service that already carries
- *    products (declared, or derived on the dependency graph above) keeps exactly them; a service with
- *    none belongs to every product whose service reaches it over RUNTIME `dependsOn`, including through
- *    a queue to its consumers, and that walk stops at a service with products of its own. A call from
- *    one product into another product's service still shows — as the runtime EDGE between them.
+ *  - ProductMembership — the dependency graph. A project's products are exactly its own declared
+ *    `product:` tags. An UNTAGGED project is in no product, however many tagged projects depend on it,
+ *    and renders as "no product" — a box that still needs a tag. A consumer that wants every project
+ *    assigned lists the library roles in `product-tags.roles`, so an untagged library fails generation
+ *    instead of quietly sitting outside every product (and outside the product dependency matrix,
+ *    which skips any edge with an untagged end — product-dependencies.ts).
+ *  - RuntimeProductMembership — the runtime graph. A service's products are exactly its project's
+ *    declared `product:` tags. A service is never put in a product because another service calls it or
+ *    feeds its queue; a call from one product into another product's service shows as the runtime EDGE
+ *    between them. A service whose project carries no tag is in no product.
  *  - ProductPalette — the Product color mode's colors: a fixed palette of eight assigned in sorted
  *    product-name order, a neutral fill for a box shared by EVERY product, and a dashed white box for
  *    one in no product.
  *  - ProductBoundary — which dependency edges cross from one product into another (#1204), drawn
  *    dashed in the target product's color in the Product color mode.
  *
- * Membership is stable per checkout (it depends on tags and edges, never on a diff), so it is written
- * into the committed dependencies.json / runtime-dependencies.json rather than into a sidecar.
+ * Membership is stable per checkout (it depends on tags only, never on a diff), so it is written into
+ * the committed dependencies.json / runtime-dependencies.json rather than into a sidecar.
  */
 
 import type { EnhancedGraph } from './graph-sorter';
@@ -133,124 +127,38 @@ export class ProductBoundary {
 }
 
 /**
- * The architecture graph's product membership: declared seeds walked DOWN over `dependsOn`, where a
- * project's own declared products are final.
+ * The architecture graph's product membership: exactly each project's declared `product:` tags (#1216).
  */
 export class ProductMembership {
     /**
      * @param seeds project → the products it DECLARES (its `product:` tags)
-     * @returns project → its sorted products: exactly its declared set when it declares any; otherwise
-     *          every product whose tagged project reaches it without passing through another tagged
-     *          project. A project in no product is absent, so with no tag anywhere the map is empty.
+     * @returns project → its sorted declared products. An untagged project is absent — it is in no
+     *          product, however many tagged projects depend on it — so with no tag anywhere the map is
+     *          empty.
      */
     compute(seeds: ReadonlyMap<string, readonly string[]>, graph: EnhancedGraph): Map<string, string[]> {
-        const declared = new Map<string, readonly string[]>();
-        seeds.forEach((products: readonly string[], seed: string): void => {
-            if (products.length > 0 && graph[seed] !== undefined) declared.set(seed, products);
-        });
-        const members = new Map<string, Set<string>>();
-        declared.forEach((products: readonly string[], seed: string): void => {
-            members.set(seed, new Set(products));
-        });
-        declared.forEach((products: readonly string[], seed: string): void => {
-            for (const project of this.closure(seed, graph, declared)) {
-                const set = members.get(project) ?? new Set<string>();
-                for (const product of products) set.add(product);
-                members.set(project, set);
-            }
-        });
         const result = new Map<string, string[]>();
-        members.forEach((set: Set<string>, project: string): void => {
-            result.set(project, [...set].sort());
+        seeds.forEach((products: readonly string[], project: string): void => {
+            if (products.length > 0 && graph[project] !== undefined) result.set(project, [...new Set(products)].sort());
         });
         return result;
-    }
-
-    /**
-     * Every UNTAGGED project `seed` reaches through `dependsOn`. A tagged project is neither collected
-     * nor walked through: its products are final, and its own seed walk covers its dependencies.
-     */
-    private closure(seed: string, graph: EnhancedGraph, declared: ReadonlyMap<string, readonly string[]>): Set<string> {
-        const seen = new Set<string>([seed]);
-        const reached = new Set<string>();
-        const stack = [seed];
-        while (stack.length > 0) {
-            const project = stack.pop() as string;
-            for (const dep of graph[project]?.dependsOn ?? []) {
-                if (seen.has(dep)) continue;
-                seen.add(dep);
-                if (declared.has(dep)) continue;
-                reached.add(dep);
-                stack.push(dep);
-            }
-        }
-        return reached;
     }
 }
 
 /**
- * The runtime graph's product membership: services that carry products walked over RUNTIME
- * `dependsOn`, where a service's own products are final.
+ * The runtime graph's product membership: exactly each service's project's declared `product:` tags
+ * (#1216). Never derived from who calls a service or feeds its queue.
  */
 export class RuntimeProductMembership {
     /**
-     * Stamp `products` onto every service of `graph` that some product reaches. Seeds are the
-     * services whose dependencies.json entry carries `products`, and each keeps exactly those; a
-     * service with none gets every product whose seed reaches it without passing through another
-     * seed. A `queue:<Api.method>` dependency is followed to that queue's consumers. A service in no
-     * product gets no field.
+     * Stamp `products` onto every service of `graph` whose project declares any. `projects` is the
+     * dependency graph, whose `products` are exactly each project's declared tags (ProductMembership);
+     * a service whose project declares none gets no field.
      */
     apply(graph: RuntimeGraph, projects: EnhancedGraph): void {
-        const seeds = new Map<string, readonly string[]>();
-        for (const name of Object.keys(graph.services)) {
-            const own = projects[name]?.products ?? [];
-            if (own.length > 0) seeds.set(name, own);
+        for (const [name, service] of Object.entries(graph.services)) {
+            const declared = projects[name]?.products ?? [];
+            if (declared.length > 0) service.products = [...declared].sort();
         }
-        const members = new Map<string, Set<string>>();
-        seeds.forEach((own: readonly string[], name: string): void => {
-            members.set(name, new Set(own));
-        });
-        seeds.forEach((own: readonly string[], name: string): void => {
-            for (const reached of this.closure(name, graph, seeds)) {
-                const set = members.get(reached) ?? new Set<string>();
-                for (const product of own) set.add(product);
-                members.set(reached, set);
-            }
-        });
-        members.forEach((set: Set<string>, name: string): void => {
-            const service = graph.services[name];
-            if (service !== undefined) service.products = [...set].sort();
-        });
-    }
-
-    /** Every service WITHOUT products of its own that `seed` reaches; a seed is neither collected nor walked through. */
-    private closure(seed: string, graph: RuntimeGraph, seeds: ReadonlyMap<string, readonly string[]>): Set<string> {
-        const seen = new Set<string>([seed]);
-        const reached = new Set<string>();
-        const stack = [seed];
-        while (stack.length > 0) {
-            const name = stack.pop() as string;
-            for (const next of this.callees(name, graph)) {
-                if (seen.has(next) || graph.services[next] === undefined) continue;
-                seen.add(next);
-                if (seeds.has(next)) continue;
-                reached.add(next);
-                stack.push(next);
-            }
-        }
-        return reached;
-    }
-
-    /** The services one service calls: direct ones, and the consumers behind every queue it feeds. */
-    private callees(name: string, graph: RuntimeGraph): string[] {
-        const callees: string[] = [];
-        for (const dep of graph.services[name]?.dependsOn ?? []) {
-            if (!dep.startsWith('queue:')) {
-                callees.push(dep);
-                continue;
-            }
-            callees.push(...(graph.queues[dep.slice('queue:'.length)]?.consumedBy ?? []));
-        }
-        return callees;
     }
 }

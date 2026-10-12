@@ -28,7 +28,7 @@ class WpModeState {
     productReason(): string {
         return this.hasProducts
             ? ''
-            : 'No products here: tag servers, clients and apps product:<name> in their project.json, then regenerate.';
+            : 'No products here: tag each project product:<name> in its project.json, then regenerate.';
     }
 
     /** The active scan; null when the page has no Impact data. */
