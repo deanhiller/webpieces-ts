@@ -2,10 +2,10 @@ import { specTempDirs } from '@webpieces/tooling-testkit';
 import { describe, it, expect, afterEach, beforeEach } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
-import { PrGateConfig, RequiredChecklist, REVIEWER_AGENTS_PLACEHOLDER, ReviewerAgentPolicy, ReviewJsonService, ReviewProvenanceService, ReviewerInstructionsService, SubagentProvenanceService, ProvenanceResult, PROVENANCE_MISSING } from '@webpieces/rules-config';
+import { PrGateConfig, RequiredChecklist, REVIEWER_AGENTS_PLACEHOLDER, ReviewerAgentPolicy, ReviewJsonService, ReviewProvenanceService, ReviewerInstructionsService, SubagentProvenanceService, ProvenanceResult, PROVENANCE_MISSING, summaryJsonPath } from '@webpieces/rules-config';
 import { AtomicFile } from '@webpieces/tooling-common';
 import { toError } from '@webpieces/tooling-common/to-error';
-import { VerdictProvenanceService } from '../workflow/verdict-provenance';
+import { SubmittedVerdict, VerdictProvenance, VerdictProvenanceService } from '../workflow/verdict-provenance';
 import { ProvenanceEnforcer } from '../workflow/provenance-enforcer';
 import { AiBranchName } from '../workflow/git-readAiBranchName';
 
@@ -354,5 +354,62 @@ describe('ProvenanceEnforcer refuses on the STATUS, not the length of the name l
         const repoRoot = specTempDirs.make('wp-fin-repo-');
 
         expect(() => enforcer.enforce([], 'dean/feat', repoRoot, new PrGateConfig())).toThrow(/^1 checklist\(s\) failed/);
+    });
+});
+
+/**
+ * ISSUE #1211, end to end through the enforcer: the reviewer's ONLY evidence is a wp-write-review call, and
+ * its harness stamp names another worktree's branch. The enforcer must read WHO the bin recorded as this
+ * branch's submitter and credit the transcript of that same agent — and only that agent.
+ */
+// A reviewer transcript `agent-<agentId>` stamped with ANOTHER branch, whose one tool call submits `id`.
+function writeReviewOnlyHarness(sessionId: string, agentId: string, id: string): string {
+    const home = specTempDirs.make('wp-fin-1211-');
+    const projects = path.join(home, '.claude', 'projects', '-Slug');
+    const subagents = path.join(projects, sessionId, 'subagents');
+    fs.mkdirSync(subagents, { recursive: true });
+    fs.writeFileSync(path.join(projects, `${sessionId}.jsonl`), '{}\n');
+    fs.writeFileSync(path.join(subagents, `agent-${agentId}.meta.json`), JSON.stringify({ agentType: 'webpieces-reviewer', spawnDepth: 1 }));
+    fs.writeFileSync(path.join(subagents, `agent-${agentId}.jsonl`),
+        JSON.stringify({ isSidechain: true, gitBranch: 'deanhiller/1204/product-dependency-matrix', cwd: home }) + '\n' +
+        JSON.stringify({ message: { content: [{ type: 'tool_use', input: { command: `pnpm -s wp-write-review --checklist ${id} <<'EOF'` } }] } }) + '\n');
+    return home;
+}
+
+// The verdict AND its bin provenance, exactly as wp-write-review leaves them, submitted by `submitter`.
+function submitThroughBin(repoRoot: string, id: string, submitter: string): void {
+    const reviewJsonService = new ReviewJsonService();
+    const record = new VerdictProvenance(id, 'claude-code', 'sess', submitter, 'webpieces-reviewer', 'sha', 'scope');
+    record.round = 1;
+    new VerdictProvenanceService(reviewJsonService, new AtomicFile())
+        .write(summaryJsonPath(repoRoot, 'dean/feat'), new SubmittedVerdict(id, 'green', 'webpieces-reviewer', 'opus', 'ok'), record);
+}
+
+describe('ProvenanceEnforcer — issue #1211: a wp-write-review submission is credited to its own submitter', () => {
+    it('passes when the mis-stamped reviewer’s wp-write-review call matches the recorded submitter', () => {
+        process.env['HOME'] = writeReviewOnlyHarness('sess-1211a', 'rev', 'envvars');
+        process.env['CLAUDE_CODE_SESSION_ID'] = 'sess-1211a';
+        const repoRoot = specTempDirs.make('wp-fin-repo-');
+        submitThroughBin(repoRoot, 'envvars', 'rev');
+
+        expect(refusalFor(repoRoot, [new RequiredChecklist('envvars', agent('webpieces-reviewer'), '', [])])).toBe('');
+    });
+
+    it('refuses when the recorded submitter is a DIFFERENT agent, and names every missing proof', () => {
+        process.env['HOME'] = writeReviewOnlyHarness('sess-1211b', 'rev', 'envvars');
+        process.env['CLAUDE_CODE_SESSION_ID'] = 'sess-1211b';
+        const repoRoot = specTempDirs.make('wp-fin-repo-');
+        submitThroughBin(repoRoot, 'envvars', 'someone-else');
+
+        const message = refusalFor(repoRoot, [new RequiredChecklist('envvars', agent('webpieces-reviewer'), '', [])]);
+        expect(message).toMatch(/cannot attribute to them: envvars/);
+        // The real cause, not "unrecoverable": the three proofs it looked for and did not find.
+        expect(message).toMatch(/never named its verdict/);
+        expect(message).toMatch(/absolute or relative to its own cwd/);
+        expect(message).toMatch(/wp-write-review call of its own matches/);
+        expect(message).toMatch(/It is not unrecoverable/);
+        // The warning that stays: a re-spawn cannot replace a verdict this round already holds.
+        expect(message).toMatch(/Do NOT re-spawn them into this round: a round's verdict is never overwritten/);
+        expect(message).not.toMatch(/overwrites the verdict file it already wrote/);
     });
 });

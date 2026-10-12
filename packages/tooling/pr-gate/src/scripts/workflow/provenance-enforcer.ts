@@ -162,27 +162,32 @@ export class ProvenanceEnforcer {
      * The verdict exists but nothing can prove WHICH branch its reviewer looked at — or, in the one case
      * below, provenance never found the session's transcripts AT ALL and this is not about reviewers.
      *
-     * The cwd paragraph is reachable when a session rooted in the PRIMARY CLONE spawns reviewers for a
-     * branch that lives in a linked worktree: the harness stamps record 0 from the spawning session's cwd
-     * (the Agent tool has no cwd parameter), so every respawn is stamped identically and re-spawning
-     * cannot change the outcome. Saying so is the whole point of that message — the remedy is a session
-     * rooted in the worktree, or a reviewer that names this branch's own files.
+     * The re-spawn warning stays, scoped to what is TRUE: a round's verdict is never overwritten
+     * (wp-write-review refuses a second one), so a re-spawn into this round records nothing. What the
+     * message no longer says is that the reviewer is unrecoverable (issue #1211). It used to, and that was
+     * false for the case that hit it: the reviewer HAD read the diff (relative to its repo-root cwd) and HAD
+     * submitted through wp-write-review — provenance just did not look at either. Both are credit channels
+     * now, so when this prints, the message names exactly which proofs were missing, and that a reviewer
+     * which reads the diff dir or submits through wp-write-review in a later round IS credited.
      *
-     * It is GATED on having found the session, because it was printed for a completely different fault
-     * and sent two debugging rounds in the wrong direction: see {@link transcriptRootProblem}.
+     * The cwd option stays too: a reviewer stamped with a pinned worktree cwd on this branch is credited
+     * on the stamp alone. It is GATED on having found the session, because it was printed for a completely
+     * different fault and sent two debugging rounds in the wrong direction: see {@link transcriptRootProblem}.
      */
     private unattributedMessage(unattributed: readonly string[], context: ReviewerContext): string {
         const head = `these reviewers WROTE a verdict for this branch that provenance cannot attribute to them: ${unattributed.join(', ')}\n` +
-            `    Do NOT re-spawn them. A re-spawn overwrites the verdict file it already wrote, so that loop destroys\n` +
-            `    the verdicts and cannot change the outcome.\n`;
+            `    Do NOT re-spawn them into this round: a round's verdict is never overwritten (wp-write-review refuses\n` +
+            `    a second one), so a re-spawn records nothing and cannot change the outcome.\n`;
         const rootProblem = this.transcriptRootProblem();
         if (rootProblem !== '') return head + rootProblem;
         return head +
-            `    A reviewer is attributed when it names this branch's own files: its verdict\n` +
-            `    (${context.verdictPaths[unattributed[0]] ?? '<verdict path>'}) or the extracted diff (${context.diffDir}).\n` +
-            `    It is stamped with the cwd of the session that spawned it, so if the reviewers ran before\n` +
-            `    pnpm wp-review-upsert-pr materialized that diff, re-run this from a Claude Code session whose\n` +
-            `    cwd IS the worktree holding ${context.branch} — that is the only cwd the harness will stamp on them.`;
+            `    WHY: each one's harness branch stamp is not ${context.branch}, and its transcript holds none of the\n` +
+            `    three branch-specific proofs — it never named its verdict (${context.verdictPaths[unattributed[0]] ?? '<verdict path>'}),\n` +
+            `    never read the extracted diff (${context.diffDir}, absolute or relative to its own cwd),\n` +
+            `    and no pnpm wp-write-review call of its own matches the agent this branch's verdict provenance records.\n` +
+            `    It is not unrecoverable: a reviewer in a later round that reads that diff dir or submits through\n` +
+            `    pnpm wp-write-review IS credited wherever it was spawned from, and so is one spawned by a Claude Code\n` +
+            `    session whose cwd IS the worktree holding ${context.branch}.`;
     }
 
     /**
@@ -218,13 +223,19 @@ export class ProvenanceEnforcer {
      */
     private contextFor(repoRoot: string, required: readonly RequiredChecklist[], branch: string): ReviewerContext {
         const featureName = this.aiBranchName.getFeatureName();
+        const summaryPath = summaryJsonPath(repoRoot, featureName);
         const docPaths: Record<string, string> = {};
         const verdictPaths: Record<string, string> = {};
+        const submittedBy: Record<string, string> = {};
         for (const req of required) {
             docPaths[req.id] = req.doc.trim() === '' ? '' : path.resolve(repoRoot, req.doc);
-            verdictPaths[req.id] = this.reviewJsonService.latestChecklistResultPath(summaryJsonPath(repoRoot, featureName), req.id);
+            verdictPaths[req.id] = this.reviewJsonService.latestChecklistResultPath(summaryPath, req.id);
+            // WHO wp-write-review recorded as this branch's submitter — what ties a transcript's
+            // `wp-write-review --checklist <id>` call to THIS branch (see ReviewerContext.submittedBy).
+            const record = this.verdictProvenance.read(summaryPath, req.id, this.reviewJsonService.latestVerdictRound(summaryPath, req.id));
+            if (record !== null && record.agentId.trim() !== '') submittedBy[req.id] = record.agentId;
         }
-        return new ReviewerContext(branch, path.join(prDirFor(repoRoot, featureName), 'diff'), docPaths, verdictPaths);
+        return new ReviewerContext(branch, path.join(prDirFor(repoRoot, featureName), 'diff'), docPaths, verdictPaths, submittedBy);
     }
 
     /**
