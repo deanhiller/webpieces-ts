@@ -677,3 +677,116 @@ describe('SubagentProvenanceService — $CLAUDE_CONFIG_DIR (issue #963)', () => 
         expect(verifyDistinct(new SubagentProvenanceService(), ['webpieces-reviewer'], ctx('dean/feat')).status).toBe(PROVENANCE_OK);
     });
 });
+
+/**
+ * ISSUE #1211 — the reviewer that really reviewed, refused on all four checklists.
+ *
+ * Measured: the main session sat in the PRIMARY CLONE on branch A while another agent worked in a linked
+ * worktree on branch B. The reviewer's record 0 carried `gitBranch: B` (the OTHER worktree's branch — a
+ * mis-stamp) and `cwd: <primary clone>` (not pinned, so it settles nothing). It then read the diff forty
+ * times as `D=.webpieces/pr-review/<slug>/diff/files; cat $D/...` — RELATIVE to its repo-root cwd — and
+ * submitted every verdict through `pnpm -s wp-write-review --checklist <id> <<'EOF'`. Neither was a credit
+ * channel: only the ABSOLUTE diff path matched, and a wp-write-review call was trusted for authorship but
+ * never for the branch.
+ */
+const SLUG = 'deanhiller-1202-upgrade';
+
+// A reviewer stamped exactly like the incident: another worktree's branch, the primary clone as cwd.
+function misStampedReviewer(sessionId: string, cwd: string, commands: readonly string[]): string {
+    const home = specTempDirs.make('wp-home-1211-');
+    const dir = path.join(home, '.claude', 'projects', '-Slug', sessionId, 'subagents');
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, 'agent-rev.meta.json'), JSON.stringify({ agentType: 'webpieces-reviewer', spawnDepth: 1 }));
+    const records = [JSON.stringify({ isSidechain: true, gitBranch: 'deanhiller/1204/product-dependency-matrix', cwd })];
+    for (const command of commands) {
+        records.push(JSON.stringify({ cwd, message: { content: [{ type: 'tool_use', input: { command } }] } }));
+    }
+    fs.writeFileSync(path.join(dir, 'agent-rev.jsonl'), records.join('\n') + '\n');
+    return home;
+}
+
+// The context wp-finish-upsert-pr builds in that primary clone for branch A.
+function incidentContext(repoRoot: string, submittedBy: Record<string, string> = {}): ReviewerContext {
+    const prDir = path.join(repoRoot, '.webpieces', 'pr-review', SLUG);
+    return new ReviewerContext('deanhiller/1202/upgrade', path.join(prDir, 'diff'), {},
+        { 'checklist-reviewer': path.join(prDir, 'review-round1-checklist-reviewer.json') }, submittedBy);
+}
+
+// eslint-disable-next-line @typescript-eslint/max-params
+function verify1211(sessionId: string, cwd: string, commands: readonly string[], context: ReviewerContext): ProvenanceResult {
+    process.env['HOME'] = misStampedReviewer(sessionId, cwd, commands);
+    process.env['CLAUDE_CODE_SESSION_ID'] = sessionId;
+    return verifyDistinct(new SubagentProvenanceService(), ['checklist-reviewer'], context);
+}
+
+describe('SubagentProvenanceService — issue #1211: a relative diff read and a wp-write-review call are credited', () => {
+    it('credits a reviewer that read THIS branch’s diff RELATIVE to its repo-root cwd', () => {
+        const repoRoot = clone();
+        const res = verify1211('sess-1211a', repoRoot,
+            [`D=.webpieces/pr-review/${SLUG}/diff/files; cat $D/packages/a.ts`], incidentContext(repoRoot));
+        expect(res.status).toBe(PROVENANCE_OK);
+        expect(res.agentIds['checklist-reviewer']).toBe('rev');
+    });
+
+    it('reports readDiff on the evidence row for a relative read, not only an absolute one', () => {
+        const repoRoot = clone();
+        const context = incidentContext(repoRoot);
+        const res = verify1211('sess-1211b', repoRoot, [`cat ./.webpieces/pr-review/${SLUG}/diff/ALL.diff`], context);
+        expect(evidenceFor(new SubagentProvenanceService(), context, res.agentIds)[0]?.readDiff).toBe(true);
+    });
+
+    it('credits a reviewer that named its verdict file relative to its cwd', () => {
+        const repoRoot = clone();
+        const res = verify1211('sess-1211c', repoRoot,
+            [`cat .webpieces/pr-review/${SLUG}/review-round1-checklist-reviewer.json`], incidentContext(repoRoot));
+        expect(res.status).toBe(PROVENANCE_OK);
+    });
+
+    it('credits a reviewer whose wp-write-review call matches the submitter this branch’s verdict provenance records', () => {
+        const repoRoot = clone();
+        const res = verify1211('sess-1211d', repoRoot,
+            ["pnpm -s wp-write-review --checklist checklist-reviewer <<'EOF'\n{\"status\":\"green\"}\nEOF"],
+            incidentContext(repoRoot, { 'checklist-reviewer': 'rev' }));
+        expect(res.status).toBe(PROVENANCE_OK);
+        expect(res.agentIds['checklist-reviewer']).toBe('rev');
+    });
+
+    // ─── …and neither channel credits a reviewer of ANOTHER branch ──────────────────────────────────
+    it('does NOT credit a mis-stamped reviewer that read ANOTHER branch’s diff relatively', () => {
+        const repoRoot = clone();
+        const res = verify1211('sess-1211e', repoRoot,
+            ['D=.webpieces/pr-review/deanhiller-1204-product-dependency-matrix/diff/files; cat $D/a.ts'], incidentContext(repoRoot));
+        expect(res.status).toBe(PROVENANCE_MISSING);
+    });
+
+    it('does NOT credit a relative read made from ANOTHER tree, which resolves to that tree’s diff', () => {
+        const repoRoot = clone();
+        const otherTree = specTempDirs.make('wp-other-tree-');
+        const res = verify1211('sess-1211f', otherTree,
+            [`cat .webpieces/pr-review/${SLUG}/diff/ALL.diff`], incidentContext(repoRoot));
+        expect(res.status).toBe(PROVENANCE_MISSING);
+    });
+
+    it('does NOT let another tree’s ABSOLUTE path satisfy the relative spelling as a substring', () => {
+        const repoRoot = clone();
+        const res = verify1211('sess-1211g', repoRoot,
+            [`cat /elsewhere/clone/.webpieces/pr-review/${SLUG}/diff/ALL.diff`], incidentContext(repoRoot));
+        expect(res.status).toBe(PROVENANCE_MISSING);
+    });
+
+    // Checklist ids are shared by every branch, so the call alone proves authorship of SOME verdict.
+    it('does NOT credit a wp-write-review call when this branch’s verdict was submitted by a DIFFERENT agent', () => {
+        const repoRoot = clone();
+        const res = verify1211('sess-1211h', repoRoot,
+            ['pnpm -s wp-write-review --checklist checklist-reviewer --file v.json'],
+            incidentContext(repoRoot, { 'checklist-reviewer': 'someone-else' }));
+        expect(res.status).toBe(PROVENANCE_MISSING);
+    });
+
+    it('does NOT credit a wp-write-review call when this branch has no verdict provenance at all', () => {
+        const repoRoot = clone();
+        const res = verify1211('sess-1211i', repoRoot,
+            ['pnpm -s wp-write-review --checklist checklist-reviewer --file v.json'], incidentContext(repoRoot));
+        expect(res.status).toBe(PROVENANCE_MISSING);
+    });
+});

@@ -23,8 +23,8 @@ export class ProvenanceResult {
      *
      * Structured rather than only spelled into `detail` because the remedy depends on something this
      * service cannot see: whether that reviewer already wrote a verdict file. "It never ran" and "it ran
-     * and cannot be attributed" need OPPOSITE instructions — spawn one, versus do not re-spawn, because a
-     * re-spawn overwrites the verdict and is stamped identically. Handing the caller a pre-worded
+     * and cannot be attributed" need OPPOSITE instructions — spawn one, versus do not re-spawn into this
+     * round, because a round's verdict is never overwritten and the re-spawn records nothing. Handing the caller a pre-worded
      * imperative is what produced the destructive loop this field exists to end; see ProvenanceEnforcer.
      */
     missing: string[];
@@ -125,10 +125,17 @@ export class ReviewerEvidence {
 export class TranscriptScan {
     inputs: string[];   // every tool_use input, JSON-stringified
     models: string[];   // distinct message.model values, first-seen order
+    /**
+     * The harness-written `cwd` of the transcript's FIRST record that carries one ('' when none does) —
+     * what a relative path in a tool input resolves against. See
+     * {@link SubagentProvenanceService.namesPath} for why a relative path has to be matched at all.
+     */
+    cwd: string;
 
-    constructor(inputs: string[] = [], models: string[] = []) {
+    constructor(inputs: string[] = [], models: string[] = [], cwd = '') {
         this.inputs = inputs;
         this.models = models;
+        this.cwd = cwd;
     }
 }
 
@@ -154,13 +161,25 @@ export class ReviewerContext {
      * verdict for that branch. `diffDir` proves the branch but not the checklist.
      */
     verdictPaths: Record<string, string>;
+    /**
+     * checklist id → the agentId `pnpm wp-write-review` recorded in THIS branch's verdict provenance
+     * (`review-round<N>-<id>.provenance.json`); absent when there is none.
+     *
+     * What makes a `wp-write-review --checklist <id>` invocation in a transcript BRANCH-specific. The command
+     * line names only the checklist, and checklist ids are shared by every branch (a universal checklist is
+     * reviewed on every PR), so an invocation alone proves authorship of SOME verdict, never which branch's.
+     * The bin wrote this branch's verdict from the harness's own `agent_id` for that call, so a transcript
+     * of that same agentId that invoked it is the reviewer that submitted this branch's verdict.
+     */
+    submittedBy: Record<string, string>;
 
     // eslint-disable-next-line @typescript-eslint/max-params
-    constructor(branch: string, diffDir = '', docPaths: Record<string, string> = {}, verdictPaths: Record<string, string> = {}) {
+    constructor(branch: string, diffDir = '', docPaths: Record<string, string> = {}, verdictPaths: Record<string, string> = {}, submittedBy: Record<string, string> = {}) {
         this.branch = branch;
         this.diffDir = diffDir;
         this.docPaths = docPaths;
         this.verdictPaths = verdictPaths;
+        this.submittedBy = submittedBy;
     }
 }
 
@@ -301,12 +320,12 @@ export class SubagentProvenanceService {
         const verdictPath = context.verdictPaths[want.checklistId] ?? '';
         return new ReviewerEvidence(
             want.checklistId, want.agentType, agentId, this.readDiffDir(scan, context),
-            docPath !== '' && this.mentions(inputs, docPath),
+            this.namesPath(scan, docPath),
             inputs.length,
             inputs.filter((i: string): boolean => i.includes('node_modules')).length,
             jsonl,
             scan.models,
-            this.submittedVerdict(inputs, want.checklistId, verdictPath),
+            this.submittedVerdict(scan, want.checklistId, verdictPath),
         );
     }
 
@@ -314,7 +333,34 @@ export class SubagentProvenanceService {
     // the reviewer is told to open first, and it inlines the diff paths. A reviewer that opened it and
     // then its own diff files is the intended path; treating only the diff dir as proof would flag it.
     private readDiffDir(scan: TranscriptScan, context: ReviewerContext): boolean {
-        return context.diffDir !== '' && this.mentions(scan.inputs, context.diffDir);
+        return this.namesPath(scan, context.diffDir);
+    }
+
+    /**
+     * Did a tool input name `absPath` — absolutely, or RELATIVE to the transcript's own recorded `cwd`?
+     *
+     * Relative because that is how a reviewer whose cwd IS the repo root naturally spells it. Measured
+     * (issue #1211): a reviewer read the diff forty times as `D=.webpieces/pr-review/<slug>/diff/files;
+     * cat $D/...` and was refused as never having opened it, because only the absolute spelling matched.
+     *
+     * Still branch-specific: the relative form is derived from `absPath` itself, so it carries the same
+     * `<featureSlug>`, and it is only tried when `absPath` lies UNDER the recorded cwd — i.e. when the
+     * relative spelling, resolved where the harness says the reviewer stood, IS this file. A reviewer of
+     * another branch names another slug; a reviewer standing in another tree resolves to another path.
+     * The relative needle must START a path token, so `/other/root/.webpieces/...` cannot satisfy it as a
+     * mere substring.
+     */
+    private namesPath(scan: TranscriptScan, absPath: string): boolean {
+        if (absPath === '') return false;
+        if (this.mentions(scan.inputs, absPath)) return true;
+        if (scan.cwd === '' || !path.isAbsolute(scan.cwd)) return false;
+        const relative = path.relative(scan.cwd, absPath);
+        if (relative === '' || relative.startsWith('..') || path.isAbsolute(relative)) return false;
+        const escaped = relative.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        // A token starts after whitespace, a quote, a shell separator, or JSON's own escaped `\n` / `\t`
+        // (inputs are JSON-stringified, so a heredoc line break reaches here as a literal backslash-n).
+        const token = new RegExp(`(?:^|[\\s"'=(:;|&<>\`]|\\\\[nt]|\\./)${escaped}`);
+        return scan.inputs.some((i: string): boolean => token.test(i));
     }
 
     /**
@@ -373,6 +419,8 @@ export class SubagentProvenanceService {
             for (const line of fs.readFileSync(jsonl, 'utf8').split('\n')) {
                 if (line.trim() === '') continue;
                 const rec = this.parseLine(line);
+                const cwd = rec?.['cwd'];
+                if (scan.cwd === '' && typeof cwd === 'string') scan.cwd = cwd;
                 const message = rec?.['message'];
                 if (typeof message !== 'object' || message === null) continue;
                 // webpieces-disable no-any-unknown -- opaque transcript record, narrowed by the guard above
@@ -464,13 +512,17 @@ export class SubagentProvenanceService {
     // eslint-disable-next-line @typescript-eslint/max-params
     private namedVerdict(dir: string, agentId: string, checklistId: string, context: ReviewerContext): boolean {
         const jsonl = path.join(dir, `agent-${agentId}.jsonl`);
-        return fs.existsSync(jsonl) && this.submittedVerdict(this.scanTranscript(jsonl).inputs, checklistId, context.verdictPaths[checklistId] ?? '');
+        return fs.existsSync(jsonl) && this.submittedVerdict(this.scanTranscript(jsonl), checklistId, context.verdictPaths[checklistId] ?? '');
     }
 
     // Named its verdict file, or submitted it via wp-write-review (#863). Proves authorship, never branch.
-    private submittedVerdict(inputs: readonly string[], checklistId: string, verdictPath: string): boolean {
-        if (verdictPath !== '' && this.mentions(inputs, verdictPath)) return true;
-        return inputs.some((i: string): boolean => reviewIdentityStamps.invokedChecklists(i).includes(checklistId));
+    private submittedVerdict(scan: TranscriptScan, checklistId: string, verdictPath: string): boolean {
+        if (this.namesPath(scan, verdictPath)) return true;
+        return this.invokedWriteReview(scan, checklistId);
+    }
+
+    private invokedWriteReview(scan: TranscriptScan, checklistId: string): boolean {
+        return scan.inputs.some((i: string): boolean => reviewIdentityStamps.invokedChecklists(i).includes(checklistId));
     }
 
     /**
@@ -571,7 +623,7 @@ export class SubagentProvenanceService {
         const want = this.stripWp(context.branch);
         if (this.stripWp(gitBranch) === want) return true;
         if (want !== '' && this.stripWp(this.branchOfCwd(rec['cwd'])) === want) return true;
-        return this.creditedByWhatItTouched(jsonl, checklistId, context);
+        return this.creditedByWhatItTouched(jsonl, agentId, checklistId, context);
     }
 
     /**
@@ -584,13 +636,22 @@ export class SubagentProvenanceService {
      * `gitBranch` lacks — this file's own sweep of 961 record-0s found the mis-stamp is the MAJORITY
      * case among subagents in dedicated worktrees.
      *
-     * Two channels, either sufficient:
+     * Three channels, any one sufficient:
      *   1. it WROTE this checklist's verdict file — proves branch AND checklist, and is the act the whole
      *      gate is trying to attribute. Matched as a substring of any tool input, so a Write, an Edit and
      *      a `cat > <path>` heredoc all count; the point is that the path was named, not which tool named it.
      *   2. it READ this branch's materialized diff dir — proves the branch. Kept as a second channel
      *      because a reviewer whose verdict was relayed by its parent still demonstrably reviewed this
      *      branch, and refusing that would re-open a narrower version of the same unrecoverable deadlock.
+     *   3. it SUBMITTED this checklist through `pnpm wp-write-review --checklist <id>` AND this branch's
+     *      verdict provenance names this very agentId as the submitter (issue #1211). The invocation alone
+     *      proves authorship of some verdict, not which branch's — checklist ids are shared by every branch —
+     *      so the bin's own record is what ties it to this one. See {@link ReviewerContext.submittedBy}.
+     *
+     * Channels 1 and 2 match a path absolutely or relative to the transcript's recorded cwd; see
+     * {@link namesPath}. The measured miss behind both additions: a reviewer with cwd = the repo root read
+     * the diff through a relative path and submitted through wp-write-review, and was refused on all four
+     * checklists because its gitBranch carried a DIFFERENT concurrent worktree's branch.
      *
      * Independence is NOT weakened by either: `isSidechain === true` and `spawnDepth >= 1` are checked
      * before we get here (so the main loop's own transcript can never qualify), and `verifyReviewers`
@@ -598,11 +659,13 @@ export class SubagentProvenanceService {
      * the way the class doc already states — forging this now means forging a transcript rather than a
      * meta.json, which is the same bar, not a lower one.
      */
-    private creditedByWhatItTouched(jsonl: string, checklistId: string, context: ReviewerContext): boolean {
+    // eslint-disable-next-line @typescript-eslint/max-params
+    private creditedByWhatItTouched(jsonl: string, agentId: string, checklistId: string, context: ReviewerContext): boolean {
         const scan = this.scanTranscript(jsonl);
-        const verdictPath = context.verdictPaths[checklistId] ?? '';
-        if (verdictPath !== '' && this.mentions(scan.inputs, verdictPath)) return true;
-        return this.readDiffDir(scan, context);
+        if (this.namesPath(scan, context.verdictPaths[checklistId] ?? '')) return true;
+        if (this.readDiffDir(scan, context)) return true;
+        const submitter = context.submittedBy[checklistId] ?? '';
+        return submitter !== '' && submitter === agentId && this.invokedWriteReview(scan, checklistId);
     }
 
     /**
