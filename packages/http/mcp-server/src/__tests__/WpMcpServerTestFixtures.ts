@@ -2,7 +2,7 @@ import { Mcp } from '@webpieces/core-util';
 import { WpAuthorization, AuthorizationType, WpAuth, jwt as jwtAuth, oidc as oidcAuth } from '@webpieces/core-util';
 import 'reflect-metadata';
 import { injectable } from 'inversify';
-import { ApiBadRequestError, ApiBadGatewayError, ApiConnectionError, ApiDependencyBackoffError, ApiDependencyError, ApiDependencyTimeoutError, ApiEndUserError, ApiPath, ApiType, ApiUnauthorizedError, ApiUnavailableError, Logger, LoggerFactory, LogLevel, ContextKey, ContextTuple, Endpoint, ApiJsonSchema, McpToolCatalogFile, McpToolDefinition, ObjectSchemaBuilder, WpMcpTool, WpMcpToolHints, MCP, POST, READ, RPC, SVC_TO_SVC, WRITE } from '@webpieces/core-util';
+import { ApiBadRequestError, ApiBadGatewayError, ApiConnectionError, ApiDependencyBackoffError, ApiDependencyError, ApiDependencyTimeoutError, ApiEndUserError, ApiRetriesExhaustedError, ApiPath, ApiType, ApiUnauthorizedError, ApiUnavailableError, Logger, LoggerFactory, LogLevel, ContextKey, ContextTuple, Endpoint, ApiJsonSchema, McpToolCatalogFile, McpToolDefinition, ObjectSchemaBuilder, WpMcpTool, WpMcpToolHints, MCP, POST, READ, RPC, SVC_TO_SVC, WRITE } from '@webpieces/core-util';
 import { RequestContext } from '@webpieces/core-context';
 import { AuthenticatedCaller, JwtHook, MintedJwt } from '@webpieces/http-routing';
 import { McpAccessTokenAuthority, VerifiedMcpCredential } from '../McpAuth';
@@ -181,6 +181,9 @@ export class SearchController extends SearchApi {
             throw new ApiDependencyBackoffError('private throttling detail', 37);
         }
         if (request.query === 'unavailable') throw new ApiUnavailableError('private deployment');
+        if (request.query === 'exhausted') {
+            throw new ApiRetriesExhaustedError(4, new ApiUnavailableError('private retries'));
+        }
         const invocation = RequestContext.getTrusted(MCP_INVOCATION_CONTEXT);
         if (request.query === 'progress') {
             await invocation?.reportProgress?.(1, 2, 'halfway');

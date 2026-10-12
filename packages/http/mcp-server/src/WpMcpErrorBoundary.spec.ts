@@ -355,6 +355,16 @@ describe('WpMcpServer error boundary (WpMcpErrorTranslator)', () => {
             category: 'dependency',
             retry: 'never',
         });
+        // A lower layer already retried: classified FAILURE, so the model is told never to retry,
+        // even though this tool is read-only and its last error was a transient one.
+        const exhausted = modelErrorOf(await callTool('account_search', { query: 'exhausted' }));
+        expect(exhausted).toMatchObject({
+            kind: 'retries-exhausted',
+            category: 'dependency',
+            retry: 'never',
+        });
+        expect(exhausted['message']).toContain('already retried');
+        expect(JSON.stringify(exhausted)).not.toContain('private retries');
         expect(
             modelErrorOf(await callTool('account_search', { query: 'bad-gateway' })),
         ).toMatchObject({

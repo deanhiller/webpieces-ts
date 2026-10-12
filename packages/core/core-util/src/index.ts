@@ -254,6 +254,9 @@ export {
 export { HeaderRegistry } from './http/HeaderRegistry';
 export { ClientRegistry } from './http/ClientRegistry';
 export { CallRegistry } from './http/CallRegistry';
+export type { CallScope } from './http/CallRegistry';
+export { TransportDefault } from './http/TransportDefault';
+export { RetryStrategy } from './http/RetryStrategy';
 export { CallDeadline } from './http/CallDeadline';
 export { CallContext } from './http/CallStrategy';
 export type { Attempt, CallStrategy } from './http/CallStrategy';
@@ -285,14 +288,15 @@ export { SurfaceEndUserStatus } from './http/Surface';
 export type { Surface } from './http/Surface';
 // The ONE rule for an error RECEIVED from another process, shared verbatim by HTTP and IPC.
 export { ReceivedApiErrorRule } from './errors/ReceivedApiErrorRule';
-// Pluggable per-client failure classification (is a thrown API-call error a real failure or an
-// expected non-failure?). Registered on ClientRegistry at startup; consulted by LogApiCall.
-export type { FailureClassifier } from './http/FailureClassifier';
-export { KeyedFailureClassifier } from './http/FailureClassifier';
+// Pluggable per-client error classification: one CallOutcome (EXPECTED / TRANSIENT_FAILURE /
+// FAILURE) per thrown API-call error. Registered on ClientRegistry at startup; read by RetryStrategy,
+// CallRegistry's per-attempt log line, LogApiCall and the MCP renderer's retry advice.
+export type { ErrorClassifier } from './http/ErrorClassifier';
+export { CallOutcome, KeyedErrorClassifier } from './http/ErrorClassifier';
 export {
-    WebpiecesDefaultFailureClassifier,
-    WEBPIECES_DEFAULT_FAILURE_CLASSIFIER,
-} from './http/WebpiecesDefaultFailureClassifier';
+    WebpiecesDefaultErrorClassifier,
+    WEBPIECES_DEFAULT_ERROR_CLASSIFIER,
+} from './http/WebpiecesDefaultErrorClassifier';
 export { templateDeriver } from './http/templateDeriver';
 export { WebpiecesCoreHeaders } from './http/WebpiecesCoreHeaders';
 export { ContextReader } from './http/ContextReader';
@@ -366,6 +370,7 @@ export {
     ApiBadRequestError,
     ApiUnauthorizedError,
     ApiDependencyBackoffError,
+    ApiRetriesExhaustedError,
     ApiConnectionError,
     ApiEndpointNotFoundError,
     ApiConflictError,

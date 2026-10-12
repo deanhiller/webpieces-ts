@@ -14,7 +14,7 @@ import { describe, expect, it } from 'vitest';
  * PRODUCING our own typed errors is fine and stays — this is about what we ACCEPT.
  *
  * The allowlist below is the mapper layer, where the taxonomy is the whole point: the errors
- * themselves, their codec, their HTTP status table, the default failure classifier and the received-error rule. Everything
+ * themselves, their codec, their HTTP status table, the default error classifier and the received-error rule. Everything
  * else takes `Error`. A new entry here needs the same justification those five have.
  */
 const ALLOWED = [
@@ -22,7 +22,7 @@ const ALLOWED = [
     'packages/core/core-util/src/errors/ApiErrorCodec.ts',
     'packages/core/core-util/src/http/ApiErrorHttpStatus.ts',
     'packages/core/core-util/src/http/ApiErrorHttpStatusCompileAssertions.ts',
-    'packages/core/core-util/src/http/WebpiecesDefaultFailureClassifier.ts',
+    'packages/core/core-util/src/http/WebpiecesDefaultErrorClassifier.ts',
     // The uniform rule for an error RECEIVED from a peer: it takes the DECODED peer error, which is
     // an ApiError by construction (ApiErrorCodec.decode produces one) and is never app input.
     'packages/core/core-util/src/errors/ReceivedApiErrorRule.ts',

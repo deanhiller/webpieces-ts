@@ -7,7 +7,7 @@
  */
 
 import * as fs from 'fs';
-import * as os from 'os';
+import { specTempDirs } from '@webpieces/tooling-testkit';
 import * as path from 'path';
 import { describe, it, expect } from 'vitest';
 import { RuleFailError } from '@webpieces/rules-config';
@@ -229,7 +229,7 @@ describe('the runtime graph draws remote services as service nodes', () => {
 
 describe('dependencies.json carries the reviewed table unchanged', () => {
     it('round-trips through saveGraph and loadBlessedGraph', () => {
-        const root = fs.mkdtempSync(path.join(os.tmpdir(), 'remote-services-'));
+        const root = specTempDirs.make('remote-services-');
         saveGraph(graph('reporter-vm'), root, FILE, {}, {}, remotes());
         const text = fs.readFileSync(path.join(root, FILE), 'utf-8');
         expect(text).toContain('"remoteServices": {');
@@ -238,13 +238,13 @@ describe('dependencies.json carries the reviewed table unchanged', () => {
     });
 
     it('omits the block when nothing is declared', () => {
-        const root = fs.mkdtempSync(path.join(os.tmpdir(), 'remote-services-'));
+        const root = specTempDirs.make('remote-services-');
         saveGraph(graph('reporter-vm'), root, FILE);
         expect(fs.readFileSync(path.join(root, FILE), 'utf-8')).not.toContain('remoteServices');
     });
 
     it('reports remoteServices drift like the other saved tables', () => {
-        const root = fs.mkdtempSync(path.join(os.tmpdir(), 'remote-services-'));
+        const root = specTempDirs.make('remote-services-');
         saveGraph(graph('reporter-vm'), root, FILE);
         const saved = loadBlessedGraph(root, FILE)!;
         const current = new CurrentArchitecture(graph('reporter-vm'), {}, {}, remotes());

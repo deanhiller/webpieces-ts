@@ -11,6 +11,7 @@ import {
     RouteMetadataFactory,
     FilterChain,
     CallRegistry,
+    TransportDefault,
     CallDeadline,
     CallContext,
     DtoValue,
@@ -458,7 +459,7 @@ export abstract class ProxyClient {
                             return result.upload;
                         },
                     ),
-                30_000,
+                new TransportDefault(30_000),
             );
             this.readResponseContext(route, response);
             this.onRequestEnd(
@@ -514,7 +515,7 @@ export abstract class ProxyClient {
                         return this.readResponse(received, route);
                     });
                 },
-                30_000,
+                new TransportDefault(30_000),
             );
         } catch (err: unknown) {
             const error = toError(err);

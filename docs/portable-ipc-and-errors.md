@@ -48,6 +48,33 @@ present). Typed Webpieces dependency errors pass through unchanged. Other receiv
 `ApiImplementationError` (my bug), other 5xx is generic `ApiDependencyError` (their bug), and 266
 keeps its `ApiEndUserError` verbatim. The rule is shared by node, browser, and IPC.
 
+### One verdict per error: `ErrorClassifier` and `CallOutcome`
+
+`ClientRegistry.classify(error, methodInfo)` answers ONE question for every reader — `RetryStrategy`
+(retry only transient), `CallRegistry`'s per-attempt log line, `LogApiCall` (OTHER vs FAIL) and the
+MCP renderer's model-visible `retry` advice — with a `CallOutcome`:
+
+| outcome | means | examples (webpieces default) |
+|---|---|---|
+| `EXPECTED` | it threw, but things are WORKING | a 266; a 4xx the SERVER raised; an external client's "404 = miss" (registered) |
+| `TRANSIENT_FAILURE` | broken now, may work if repeated | unavailable, connection, timeouts, 429 / backoff, bad-gateway |
+| `FAILURE` | broken, repeating will not help | a 4xx a CLIENT received (our bug), implementation, 501, a generic dependency defect, retries exhausted |
+
+Tiers, most specific first: `ClientRegistry.addErrorClassifier(new KeyedErrorClassifier(apiClass,
+c))` per external client, then `ClientRegistry.setDefaultErrorClassifier(c)` (one per app; reads
+`side`), then `WebpiecesDefaultErrorClassifier`. A classifier returns `undefined` to defer to the next
+tier. The classifier judges the ERROR; whether repeating is safe for the ENDPOINT is
+`CallContext.operation`'s question (`READ` / `WRITE_IDEMPOTENT` / `WRITE`) — a transient error on a
+`WRITE` may already have happened, so `RetryStrategy` never retries one.
+
+`ApiRetriesExhaustedError` (kind `retries-exhausted`, an `ApiDependencyError`) is what a
+`RetryStrategy` throws when it actually retried and ran out; `cause` is the last attempt's error. It is
+classified `FAILURE` — never transient — and published as **502** (Bad Gateway: "the thing behind me
+failed"), not 503, which generic clients and load balancers retry. A webpieces peer decodes it back as
+itself, so an upstream does not retry what a lower layer already retried: retries happen at ONE layer
+(otherwise 4 × 4 × 4 attempts across three hops is 64 calls into a struggling dependency). A Cloud
+Tasks handler returning it is still re-delivered by the queue, which is the outermost retry layer.
+
 ### Who is receiving: `ClientRole` (the 401 exception)
 
 Every client declares WHO receives its responses, at setup, with no default (issue #1173):
@@ -184,7 +211,7 @@ status, `Cache-Control: no-store`, and `WWW-Authenticate` when the error has one
 `WebpiecesDefaultErrorTranslator.toWire` (a webpieces `@Endpoint` that throws one), the MCP bearer
 boundary, and `OAuthExpressErrorHandler` in `@webpieces/http-server` for an app's raw express OAuth
 routes, which also logs it at INFO as an expected refusal. A server-side refusal below 500 is a
-non-failure for `WebpiecesDefaultFailureClassifier`, so `LogApiCall` records it as `resp-OTHER`, not
+`CallOutcome.EXPECTED` for `WebpiecesDefaultErrorClassifier`, so `LogApiCall` records it as `resp-OTHER`, not
 `resp-FAIL`.
 
 The authorization endpoint answers with a REDIRECT, not a status (RFC 6749 §4.1.2.1):

@@ -19,6 +19,7 @@ import {
     ApiPreconditionFailedError,
     ApiRateLimitedError,
     ApiRequestTimeoutError,
+    ApiRetriesExhaustedError,
     ApiUnauthorizedError,
     ApiUnavailableError,
     ApiUnprocessableError,
@@ -183,6 +184,8 @@ export class ApiErrorCodec {
                     message,
                     this.wait(field('retryAfterSeconds')),
                 );
+            case 'retries-exhausted':
+                return ApiRetriesExhaustedError.received(message);
             case 'connection':
                 return new ApiConnectionError(message);
             case 'implementation':
@@ -273,6 +276,8 @@ export class ApiErrorCodec {
                 return 'Dependency Timeout';
             case 'dependency-backoff':
                 return 'Dependency Unavailable';
+            case 'retries-exhausted':
+                return 'Retries Exhausted';
             case 'connection':
                 return 'Connection Error';
             default:
@@ -301,6 +306,7 @@ export class ApiErrorCodec {
         'unavailable',
         'dependency-timeout',
         'dependency-backoff',
+        'retries-exhausted',
         'connection',
     ]);
 }

@@ -17,6 +17,14 @@
                     "level": 0
                 },
                 {
+                    "id": "CloudTasksClientProvider",
+                    "className": "CloudTasksClientProvider",
+                    "kind": "class",
+                    "scope": "singleton",
+                    "file": "packages/cloud/cloudtasks-client/src/CloudTasksClientProvider.ts",
+                    "level": 3
+                },
+                {
                     "id": "GcpTaskInvoker",
                     "className": "GcpTaskInvoker",
                     "kind": "class",
@@ -60,6 +68,15 @@
                     "tokenKey": "class:packages/cloud/cloudtasks-client/src/TaskProxyClient.ts#TaskProxyClient",
                     "paramName": "taskProxyClientProvider",
                     "paramType": "Provider<TaskProxyClient>"
+                },
+                {
+                    "from": "GcpTaskInvoker",
+                    "to": "CloudTasksClientProvider",
+                    "injection": "token",
+                    "token": "CloudTasksClientProvider",
+                    "tokenKey": "class:packages/cloud/cloudtasks-client/src/CloudTasksClientProvider.ts#CloudTasksClientProvider",
+                    "paramName": "clientProvider",
+                    "paramType": "CloudTasksClientProvider"
                 },
                 {
                     "from": "GcpTaskInvoker",

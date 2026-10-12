@@ -162,5 +162,9 @@ one.
 
 Calls have a **30-second default timeout**, including URL resolution, filters/auth, fetch and body
 reading. `CallRegistry` from `@webpieces/core-util` shares ALL, API and API-method overrides with the
-browser and Cloud Tasks clients. Any strategy replaces the entire timeout ladder; there is no
-default retry because POSTs may not be idempotent. See [client timeouts](../../../docs/client-timeouts.md).
+browser and Cloud Tasks clients — one `CallRegistry.execute` for every transport. Any strategy replaces
+the entire timeout ladder. RPC has no
+default retry because POSTs may not be idempotent; opt a contract in with
+`CallRegistry.setStrategy(new RetryStrategy(...).run, CatalogApi)`, which retries only a
+`CallOutcome.TRANSIENT_FAILURE` on a `READ` / `WRITE_IDEMPOTENT` endpoint and gives up with a 502
+`ApiRetriesExhaustedError`. See [client timeouts](../../../docs/client-timeouts.md).

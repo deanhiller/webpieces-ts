@@ -21,6 +21,7 @@ export type ApiErrorKind =
     | 'unavailable'
     | 'dependency-timeout'
     | 'dependency-backoff'
+    | 'retries-exhausted'
     | 'connection';
 
 /** Category for portable API failures. Concrete subclasses alone define protocol mappings. */
@@ -58,6 +59,43 @@ export class ApiUnavailableError extends ApiDependencyError {
 }
 export class ApiDependencyTimeoutError extends ApiDependencyError {
     override readonly kind = 'dependency-timeout' as const;
+}
+
+/**
+ * A `RetryStrategy` retried a TRANSIENT failure and ran out of attempts. Thrown ONLY by the strategy,
+ * and only when it actually retried — a single attempt rethrows its own error unchanged. `cause` is
+ * the LAST attempt's error.
+ *
+ * Classified `CallOutcome.FAILURE`, never transient: that is the anti-amplification property. Retries
+ * happen at ONE layer; without it, 4 attempts x 4 attempts x 4 attempts across three hops is 64 calls
+ * into a struggling dependency. For the same reason it publishes HTTP 502 (Bad Gateway: "the thing
+ * behind me failed"), not 503 — generic clients and load balancers retry a 503.
+ *
+ * A webpieces peer decodes `kind: 'retries-exhausted'` back into this class (see
+ * {@link ApiRetriesExhaustedError.received}), so the upstream classifies it FAILURE and does not
+ * retry; a foreign caller just sees a 502.
+ */
+export class ApiRetriesExhaustedError extends ApiDependencyError {
+    override readonly kind = 'retries-exhausted' as const;
+
+    constructor(
+        public readonly attempts: number,
+        public readonly lastError: Error,
+    ) {
+        super(`gave up after ${attempts} attempts: ${lastError.message}`, lastError);
+    }
+
+    /**
+     * The error as DECODED from a peer's wire payload. The peer published neither its attempt count
+     * nor its last error (an operator message never crosses the wire), so `attempts` is 0 — "unknown,
+     * a peer gave up" — and `lastError` carries the published message.
+     */
+    // webpieces-disable no-function-outside-class -- wire-decode factory owned by this error
+    static received(message: string): ApiRetriesExhaustedError {
+        const error = new ApiRetriesExhaustedError(0, new ApiDependencyError(message));
+        error.message = message;
+        return error;
+    }
 }
 
 /** A bug or invalid implementation state. Local errors become server errors only after a remote decode. */

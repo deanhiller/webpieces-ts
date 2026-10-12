@@ -5,15 +5,19 @@ import 'reflect-metadata';
 // (no metadata-server probe / network). Must be set before the module is imported.
 process.env['METADATA_SERVER_DETECTION'] = 'none';
 
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { ApiPath, ContextKey, Endpoint, HeaderRegistry, ClientRegistry, PubSub, Queue, WebpiecesCoreHeaders, CLOUDTASKS, POST, WRITE } from '@webpieces/core-util';
 import { RequestContext } from '@webpieces/core-context';
 import { Provider, RequestContextHeaders } from '@webpieces/core-context';
 import { ClientCloudTasksFactory } from '../ClientCloudTasksFactory';
-import { CloudTaskScheduler } from '../CloudTaskScheduler';
+import { CloudTaskScheduler, ScheduleOptions } from '../CloudTaskScheduler';
+import { TaskName } from '../TaskName';
+import { GcpTaskRegistry } from '../GcpTaskRegistry';
+import { InMemoryTaskInvoker } from '../InMemoryTaskInvoker';
 import { TaskClientConfig } from '../TaskClientConfig';
 import { TaskProxyClient } from '../TaskProxyClient';
-import { TaskInvoker, TaskRequest, JobReference } from '../TaskTypes';
+import { TaskInvoker, TaskRequest, JobReference, ICreateTaskRequest } from '../TaskTypes';
+import { GcpOidc } from '@webpieces/gcp-identity';
 
 class SendEmailRequest {
     to: string;
@@ -41,9 +45,9 @@ abstract class EmailApi {
 class CapturingTaskInvoker extends TaskInvoker {
     captured?: TaskRequest;
 
-    override async enqueue(request: TaskRequest): Promise<JobReference> {
+    override async enqueue(request: TaskRequest, _timeoutMs: number, _signal: AbortSignal): Promise<JobReference> {
         this.captured = request;
-        return new JobReference('captured-task-1');
+        return new JobReference('captured-task-1', false);
     }
 
     override async delete(_ref: JobReference): Promise<void> {
@@ -83,7 +87,7 @@ describe('TaskProxyClient enqueue', () => {
         await RequestContext.run(async () => {
             const ref = await scheduler.addToQueue(
                 () => emailTasks.sendEmail(new SendEmailRequest('a@b.com')),
-                { dedupName: 'dedup-42' },
+                new ScheduleOptions(TaskName.dedup('dedup-42')),
             );
             expect(ref.taskId).toBe('captured-task-1');
         });
@@ -93,7 +97,7 @@ describe('TaskProxyClient enqueue', () => {
         expect(request.path).toBe('/email/send');
         expect(request.queueName).toBe('email-send-queue'); // @Queue override, not EmailApi-sendEmail
         expect(request.authMode.kind).toBe('oidc');
-        expect(request.scheduleInfo.dedupName).toBe('dedup-42');
+        expect(request.plan.taskId).toBe('dedup-42');
         expect((request.body as SendEmailRequest).to).toBe('a@b.com');
     });
 
@@ -178,5 +182,77 @@ describe('TaskProxyClient enqueues from a host that never ran setupRuntime', () 
         });
 
         expect((invoker.captured!.body as SendEmailRequest).to).toBe('nest@host.example');
+    });
+});
+
+describe('TaskProxyClient task naming and per-enqueue resolution (#1199)', () => {
+    const send = (opts?: ScheduleOptions): Promise<JobReference> =>
+        RequestContext.run(() =>
+            scheduler.addToQueue(() => emailTasks.sendEmail(new SendEmailRequest('a@b.com')), opts),
+        );
+
+    afterEach(() => GcpTaskRegistry.clear());
+
+    it('names every enqueue by default with a generated UUID, and serverAssigned() sends no name', async () => {
+        await send();
+        expect(invoker.captured!.plan.taskId).toMatch(/^[0-9a-f-]{36}$/);
+        const first = invoker.captured!.plan.taskId;
+        await send();
+        expect(invoker.captured!.plan.taskId).not.toBe(first);
+
+        await send(new ScheduleOptions(TaskName.serverAssigned()));
+        expect(invoker.captured!.plan.taskId).toBeUndefined();
+    });
+
+    it('rejects a dedup name Cloud Tasks would refuse, before anything is sent', () => {
+        expect(() => TaskName.dedup('has/slash')).toThrow(RangeError);
+        expect(() => TaskName.dedup('')).toThrow(RangeError);
+        expect(TaskName.dedup('Order_42-a').resolve()).toBe('Order_42-a');
+    });
+
+    it('resolves customizer and gax: call site, else GcpTaskRegistry method -> API -> ALL', async () => {
+        const global = (request: ICreateTaskRequest): ICreateTaskRequest => request;
+        const perApi = (request: ICreateTaskRequest): ICreateTaskRequest => request;
+        const callSite = (request: ICreateTaskRequest): ICreateTaskRequest => request;
+        GcpTaskRegistry.setCustomizer(global, 'ALL');
+        GcpTaskRegistry.setGax({ timeout: 1_000 }, 'ALL');
+        await send();
+        expect(invoker.captured!.plan.customizeTask).toBe(global);
+        expect(invoker.captured!.plan.gax).toEqual({ timeout: 1_000 });
+
+        GcpTaskRegistry.setCustomizer(perApi, EmailApi);
+        GcpTaskRegistry.setGax({ timeout: 3_000 }, EmailApi, 'sendEmail');
+        await send();
+        expect(invoker.captured!.plan.customizeTask).toBe(perApi);
+        expect(invoker.captured!.plan.gax).toEqual({ timeout: 3_000 });
+
+        await send(new ScheduleOptions(TaskName.generated(), undefined, callSite, { timeout: 7 }));
+        expect(invoker.captured!.plan.customizeTask).toBe(callSite);
+        expect(invoker.captured!.plan.gax).toEqual({ timeout: 7 });
+    });
+
+    it('in-memory: a reused dedup name is ALREADY_EXISTS, reported as success with alreadyExisted', async () => {
+        const inMemory = new InMemoryTaskInvoker(new GcpOidc());
+        const provider = new Provider(() => new TaskProxyClient(inMemory, new RequestContextHeaders()));
+        const client = new ClientCloudTasksFactory(provider).createPubSubClient(
+            EmailApi,
+            new TaskClientConfig('email-svc'),
+        );
+        const local = new CloudTaskScheduler(inMemory);
+        const later = Date.now() + 3_600_000;
+        const enqueue = (): Promise<JobReference> =>
+            RequestContext.run(() =>
+                local.schedule(
+                    () => client.sendEmail(new SendEmailRequest('a@b.com')),
+                    later,
+                    new ScheduleOptions(TaskName.dedup('order-42')),
+                ),
+            );
+
+        const first = await enqueue();
+        const second = await enqueue();
+        expect(first).toEqual(new JobReference('order-42', false));
+        expect(second).toEqual(new JobReference('order-42', true));
+        await local.cancelJob(first);
     });
 });

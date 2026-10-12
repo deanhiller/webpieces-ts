@@ -5,7 +5,7 @@ import {
     toError,
     LogManager,
     ClientRegistry,
-    KeyedFailureClassifier,
+    KeyedErrorClassifier,
 } from '@webpieces/core-util';
 import { BootstrapOptions } from './BootstrapOptions';
 import { CompanySetupOptions } from './CompanySetupOptions';
@@ -32,15 +32,13 @@ export async function setupCompanyRuntime(
         ClientRegistry.setErrorTranslator(options.errorTranslators);
     }
 
-    // Same "only when express is used" install point for failure classification: the app default
+    // Same "only when express is used" install point for error classification: the app default
     // (server + internal clients) and any per-external-client classifiers (keyed by apiClass). The
-    // browser/Angular side registers its own via ClientRegistry directly. See FailureClassifier.
-    if (options.defaultFailureClassifier !== undefined) {
-        ClientRegistry.setDefaultFailureClassifier(options.defaultFailureClassifier);
+    // browser/Angular side registers its own via ClientRegistry directly. See ErrorClassifier.
+    if (options.defaultErrorClassifier !== undefined) {
+        ClientRegistry.setDefaultErrorClassifier(options.defaultErrorClassifier);
     }
-    options.failureClassifiers.forEach((k: KeyedFailureClassifier) =>
-        ClientRegistry.addFailureClassifier(k.apiClass, k.classifier),
-    );
+    options.errorClassifiers.forEach((k: KeyedErrorClassifier) => ClientRegistry.addErrorClassifier(k));
     return setupRuntime(
         new RuntimeSetupOptions(
             options.svcName,

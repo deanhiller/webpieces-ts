@@ -27,7 +27,7 @@ const FRAMEWORK_INSPECTION_PROPERTIES = new Set<string>([
  * ```typescript
  * // same project + region as this container; the URL is derived, you maintain nothing
  * const emailTasks = factory.createPubSubClient(EmailApi, new TaskClientConfig('email-svc'));
- * await scheduler.addToQueue(() => emailTasks.sendEmail(req), { dedupName });
+ * await scheduler.addToQueue(() => emailTasks.sendEmail(req), new ScheduleOptions(TaskName.dedup(id)));
  * ```
  *
  * Every client it builds gets its OWN {@link TaskProxyClient} from the injected

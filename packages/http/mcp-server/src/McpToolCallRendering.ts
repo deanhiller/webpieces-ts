@@ -2,6 +2,9 @@ import { CallToolResult } from '@modelcontextprotocol/server';
 import {
     ApiErrorBoundary,
     ApiErrorPayload,
+    ApiMethodInfo,
+    CallOutcome,
+    ClientRegistry,
     ContextKey,
     DtoValue,
     EndpointOperation,
@@ -161,7 +164,7 @@ export class McpDefaultToolCallRenderer implements McpErrorTranslator {
     toWire(error: Error): CallToolResult {
         const requestId = McpCorrelation.requestId();
         const visible = new ModelVisibleToolErrorEnvelope(
-            this.modelVisible(this.boundary.encode(error), requestId),
+            this.modelVisible(error, this.boundary.encode(error), requestId),
         );
         const text = JSON.stringify(visible as DtoValue);
         return {
@@ -171,8 +174,39 @@ export class McpDefaultToolCallRenderer implements McpErrorTranslator {
         };
     }
 
-    private modelVisible(payload: ApiErrorPayload, requestId: string): ModelVisibleToolError {
+    /**
+     * MCP has no retry table of its own: the advice is f(outcome, operation, retryAfterSeconds), and
+     * the outcome is the ONE verdict `ClientRegistry.classify` gives every other reader (RetryStrategy,
+     * LogApiCall). A TRANSIENT_FAILURE becomes operation-aware retry guidance; everything else is
+     * rendered by kind, with `retry: 'never'` or `'after-correction'`.
+     *
+     * The one thing decided before the classifier is the published `implementation` kind: the
+     * boundary has already ruled that this server is at fault — including a caller-local
+     * `ApiConnectionError` (#959) — so it is a bug, and a model is never told a bug is worth retrying.
+     */
+    private modelVisible(
+        error: Error,
+        payload: ApiErrorPayload,
+        requestId: string,
+    ): ModelVisibleToolError {
         const support = `Give requestId ${requestId} to support so the internal failure can be located and fixed.`;
+        if (payload.kind === 'implementation') {
+            return this.bug(payload, requestId, support);
+        }
+        const toolName = McpCorrelation.current().toolName ?? 'unknown';
+        const methodInfo = new ApiMethodInfo('server', 'WpMcpServer', toolName);
+        if (ClientRegistry.classify(error, methodInfo) === CallOutcome.TRANSIENT_FAILURE) {
+            return this.transient(payload, requestId, this.transientMessage(payload));
+        }
+        return this.settled(payload, requestId, support);
+    }
+
+    /** Rendering for an outcome that repeating will not change: EXPECTED or FAILURE. */
+    private settled(
+        payload: ApiErrorPayload,
+        requestId: string,
+        support: string,
+    ): ModelVisibleToolError {
         switch (payload.kind) {
             case 'end-user':
                 return this.visible(
@@ -212,6 +246,18 @@ export class McpDefaultToolCallRenderer implements McpErrorTranslator {
                     'after-correction',
                     `${payload.message}. Correct the request or current resource state before trying again.`,
                 );
+            default:
+                return this.settledFailure(payload, requestId, support);
+        }
+    }
+
+    /** A FAILURE the caller cannot correct: a missing operation, an exhausted or broken dependency. */
+    private settledFailure(
+        payload: ApiErrorPayload,
+        requestId: string,
+        support: string,
+    ): ModelVisibleToolError {
+        switch (payload.kind) {
             case 'not-implemented':
                 return this.visible(
                     payload,
@@ -220,7 +266,17 @@ export class McpDefaultToolCallRenderer implements McpErrorTranslator {
                     'never',
                     `The tool does not implement this operation. Retrying or changing arguments will not help. ${support}`,
                 );
-            case 'dependency':
+            case 'retries-exhausted':
+                return this.visible(
+                    payload,
+                    requestId,
+                    'dependency',
+                    'never',
+                    `A downstream dependency kept failing after this service already retried it. Retrying now will not help. If the failure persists, ${support}`,
+                );
+            case 'coded':
+                return this.coded(payload, requestId, support);
+            default:
                 return this.visible(
                     payload,
                     requestId,
@@ -228,52 +284,26 @@ export class McpDefaultToolCallRenderer implements McpErrorTranslator {
                     'never',
                     `A downstream dependency failed. Retrying or changing arguments will not help. If the failure persists, ${support}`,
                 );
-            default:
-                return this.modelVisibleRuntime(payload, requestId, support);
         }
     }
 
-    private modelVisibleRuntime(
-        payload: ApiErrorPayload,
-        requestId: string,
-        support: string,
-    ): ModelVisibleToolError {
+    /** The situation text for a TRANSIENT_FAILURE; `transient` adds the operation-aware advice. */
+    private transientMessage(payload: ApiErrorPayload): string {
         switch (payload.kind) {
             case 'request-timeout':
             case 'dependency-timeout':
-                return this.transient(
-                    payload,
-                    requestId,
-                    'The operation timed out; the previous operation may already have completed.',
-                );
+                return 'The operation timed out; the previous operation may already have completed.';
             case 'bad-gateway':
-                return this.transient(
-                    payload,
-                    requestId,
-                    'A gateway returned an invalid upstream response; the previous operation may already have completed.',
-                );
-            case 'unavailable':
-                return this.transient(
-                    payload,
-                    requestId,
-                    'A required service is temporarily unavailable; the previous operation may already have completed.',
-                );
+                return 'A gateway returned an invalid upstream response; the previous operation may already have completed.';
             case 'rate-limited':
             case 'dependency-backoff':
-                return this.transient(
-                    payload,
-                    requestId,
-                    payload.retryAfterSeconds === undefined
-                        ? 'The operation was throttled. Do not retry immediately.'
-                        : `The operation was throttled. Wait at least ${payload.retryAfterSeconds} seconds before retrying.`,
-                );
+                return payload.retryAfterSeconds === undefined
+                    ? 'The operation was throttled. Do not retry immediately.'
+                    : `The operation was throttled. Wait at least ${payload.retryAfterSeconds} seconds before retrying.`;
             case 'coded':
-                return this.coded(payload, requestId, support);
-            case 'implementation':
-            case 'connection':
-                return this.bug(payload, requestId, support);
+                return `The operation failed with HTTP ${payload.statusCode ?? 500}; the previous operation's outcome may be unknown.`;
             default:
-                return this.bug(payload, requestId, support);
+                return 'A required service is temporarily unavailable; the previous operation may already have completed.';
         }
     }
 
@@ -282,13 +312,6 @@ export class McpDefaultToolCallRenderer implements McpErrorTranslator {
         requestId: string,
         support: string,
     ): ModelVisibleToolError {
-        if (payload.statusCode === 408 || payload.statusCode === 429) {
-            return this.transient(
-                payload,
-                requestId,
-                `The operation failed with HTTP ${payload.statusCode}; the previous operation's outcome may be unknown.`,
-            );
-        }
         if ((payload.statusCode ?? 500) >= 500) {
             return this.visible(
                 payload,
@@ -362,3 +385,4 @@ export class McpDefaultToolCallRenderer implements McpErrorTranslator {
         );
     }
 }
+

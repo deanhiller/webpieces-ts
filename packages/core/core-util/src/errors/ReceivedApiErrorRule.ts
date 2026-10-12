@@ -26,7 +26,10 @@ import { ClientRole } from './ClientRole';
  *   so this process's failure metrics stay clean and page the right team.
  * - **an {@link ApiDependencyError} coming back -> rethrown AS-IS.** The fault is already attributed,
  *   somewhere further downstream; this hop adds nothing by re-wrapping it, and re-wrapping would bury
- *   the original message one `cause` deeper on every hop of a chain.
+ *   the original message one `cause` deeper on every hop of a chain. That includes
+ *   `ApiRetriesExhaustedError` (502, `kind: 'retries-exhausted'`): it IS an `ApiDependencyError`, so it
+ *   passes through as itself, is classified `CallOutcome.FAILURE`, and the upstream does not retry a
+ *   dependency that a lower layer already retried.
  * - **408/429/502/503/504 preserve retry-relevant semantics.** Timeout, backoff, bad-gateway and
  *   unavailable must not collapse into the generic non-retryable dependency bucket.
  * - **266 / `end-user` -> {@link ApiEndUserError}**, the intended user-facing message, published
@@ -140,7 +143,8 @@ export class ReceivedApiErrorRule {
      * - {@link ApiClientTooOldError}: an upgrade, never a bug, on every hop and for every role.
      * - a 401 {@link ApiUnauthorizedError} received by an END-USER client: the credential it sent IS
      *   the user's session, so this is "log in again". A SERVER's 401 is its own bug and falls through.
-     * - a dependency failure: already attributed further downstream.
+     * - a dependency failure: already attributed further downstream (including a peer's
+     *   `ApiRetriesExhaustedError`, a subclass of `ApiDependencyError`).
      */
     // webpieces-disable no-function-outside-class -- stateless shared rule, called by both protocol translators
     private static passesThrough(role: ClientRole, statusCode: number, decoded: Error): boolean {

@@ -64,6 +64,9 @@ export class ApiErrorHttpStatus {
                 return statusCode ?? 500;
             case 'dependency':
             case 'bad-gateway':
+            // 502, never 503: a 503 invites generic clients and load balancers to retry, and
+            // retries-exhausted exists precisely so that retries happen at ONE layer.
+            case 'retries-exhausted':
                 return 502;
             case 'unavailable':
             case 'dependency-backoff':

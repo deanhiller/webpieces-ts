@@ -6,6 +6,7 @@ Cloud Tasks enqueue client generated from a shared `@PubSub` API contract — th
 
 - Enqueue client generation from a `@PubSub` contract (`ClientCloudTasksFactory.createPubSubClient`, `TaskProxyClient`, `TaskClientConfig`)
 - `CloudTaskScheduler` (addToQueue / schedule / cancelJob) + the out-of-band schedule-frame bridge
+- Enqueue-attempt naming (`TaskName`), ALREADY_EXISTS-as-success (`TaskAlreadyExistsError`, `[ENQUEUE-DEDUP]`), gRPC → webpieces error mapping (`GrpcErrorMapper`), the process-wide Google-request customizer / gax defaults (`GcpTaskRegistry`) and the overridable `CloudTasksClientProvider`. The retry itself is NOT here: it is core-util's shared `RetryStrategy` via `CallRegistry`
 - `TaskInvoker` abstraction and impls: `GcpTaskInvoker` (real @google-cloud/tasks) and `InMemoryTaskInvoker` (in-process queue that delivers via a real HTTP `fetch` to `targetUrl + path`, e.g. `localhost:{port}`, for tests/local dev)
 
 ## Out of Scope
@@ -18,4 +19,4 @@ Cloud Tasks enqueue client generated from a shared `@PubSub` API contract — th
 ## Notes
 
 - Node-only. Shares ONE abstract API class between the enqueue client and the controller, exactly like RPC. Reads the magic context straight from `RequestContext` (via `RequestContextHeaders`) and refuses to enqueue outside `RequestContext.run(...)`.
-- API methods take ONLY the business request. Queue/scheduling knobs (dedupName, run-in-the-future, taskTimeoutSeconds, cancel) are per-enqueue transport concerns the delivered controller cannot use, so they live on `CloudTaskScheduler` / `ScheduleOptions`, never on a `@PubSub` method. Adding them to an API method is a design error.
+- API methods take ONLY the business request. Queue/scheduling knobs (TaskName, run-in-the-future, taskTimeoutSeconds, the Google-request customizer, gax CallOptions, cancel) are per-enqueue transport concerns the delivered controller cannot use, so they live on `CloudTaskScheduler` / `ScheduleOptions`, never on a `@PubSub` method. Adding them to an API method is a design error.
