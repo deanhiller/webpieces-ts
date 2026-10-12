@@ -114,7 +114,8 @@ export function enrichGraph(
         throw new MetadataValidationError(problems);
     }
 
-    // #1179: a library belongs to every product whose tagged project reaches it — derived, never tagged.
+    // #1179/#1201: declared product tags are final; an untagged library belongs to every product whose
+    // tagged project reaches it without passing through another tagged project.
     new ProductMembership().compute(productSeeds, graph).forEach((member: string[], projectName: string): void => {
         graph[projectName].products = member;
     });

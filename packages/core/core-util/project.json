@@ -58,6 +58,8 @@
         "framework:browser",
         "framework:node",
         "role:lib",
-        "framework:react-native"
+        "framework:react-native",
+        "product:platform",
+        "product:rules"
     ]
 }

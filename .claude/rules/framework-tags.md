@@ -132,9 +132,24 @@ A monorepo can hold several PRODUCTS, each with its own clients and servers. A p
 products it belongs to with the nx tag `product:<name>` — lowercase kebab, several allowed
 (`product:bugfixer` + `product:helper`); a malformed one (`product:`, `product:Lang`) fails
 `architecture:generate` naming the project. Every project whose role is in `roles` must carry at least
-one; the refusal names the project, its role, its project.json and the line to add. A library is never
-tagged: it belongs to every product whose tagged project reaches it over `dependsOn`, written as
-`"products"` into `dependencies.json`, and the architecture pages filter and color by it.
+one; the refusal names the project, its role, its project.json and the line to add. Membership is
+written as `"products"` into `dependencies.json`, and the architecture pages filter and color by it.
+
+**A project's declared `product:` tags are FINAL** (#1201). A tagged project belongs to exactly the
+products it declares — no other product's walk adds to it. An UNTAGGED project belongs to every product
+whose tagged project reaches it over `dependsOn`, and that walk STOPS at a tagged project: the tagged
+project's own dependencies are reached by its own seed walk. So an untagged library two products reach
+carries both, while a library tagged `product:platform` stays `platform` even though every example app
+depends on it — a project is example OR platform, never both by accident. The runtime graph applies
+the same rule to services: a service with products keeps exactly them, and a runtime walk paints only
+services that have none.
+
+A library carries its own `product:` tag when its product's entry points live OUTSIDE the repo — a
+PUBLISHED library, which no in-repo walk can reach correctly. webpieces-ts is that case: its `platform`
+libraries (`packages/{core,http,cloud,logging}/**`) are consumed by other repos' servers, its `openapi`
+generator by other repos' builds, and its `rules` engines through the `webpieces-tooling` bundle, so
+each of those is tagged. A library that an in-repo project tagged with the SAME product already reaches
+stays untagged (e.g. `server2-api` inherits `example`).
 
 ```json
 "product-tags": {

@@ -61,10 +61,12 @@ export interface RuntimeService {
      */
     drawOnGraph?: boolean;
     /**
-     * The products this service belongs to (#1179), sorted: every product whose tagged service
-     * (its dependencies.json `products`) reaches it over RUNTIME `dependsOn`, through a queue to its
-     * consumers included — so a call into another product's service shows in this product's view.
-     * Absent for a service in no product. See graph-products.ts.
+     * The products this service belongs to (#1179), sorted. A service whose dependencies.json entry
+     * carries `products` keeps exactly those — they are final (#1201). A service with none gets every
+     * product whose service reaches it over RUNTIME `dependsOn` (through a queue to its consumers
+     * included) without passing through another service that carries products; a call into another
+     * product's service shows as the runtime edge, not as a product. Absent for a service in no
+     * product. See graph-products.ts.
      */
     products?: string[];
 }

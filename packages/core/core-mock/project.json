@@ -51,5 +51,5 @@
             ]
         }
     },
-    "tags": ["framework:browser", "framework:node", "framework:react-native", "role:lib"]
+    "tags": ["framework:browser", "framework:node", "framework:react-native", "role:lib", "product:platform"]
 }

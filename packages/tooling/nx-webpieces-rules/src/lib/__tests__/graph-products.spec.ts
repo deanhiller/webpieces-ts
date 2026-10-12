@@ -1,6 +1,7 @@
 /**
- * Product membership and palette (#1179): a library belongs to every product whose tagged project
- * reaches it; the runtime graph walks runtime dependsOn, through queues to their consumers.
+ * Product membership and palette (#1179): an untagged library belongs to every product whose tagged
+ * project reaches it; a project's declared tags are final and stop the walk (#1201); the runtime graph
+ * walks runtime dependsOn, through queues to their consumers, under the same rule.
  */
 import { describe, it, expect } from 'vitest';
 import type { EnhancedGraph } from '../graph-sorter';
@@ -52,6 +53,56 @@ describe('ProductMembership', () => {
         expect(members.get('core')).toEqual(['bugfixer', 'helper']);
     });
 
+    it('a tagged library reached by another product keeps ONLY its own products (#1201)', () => {
+        const members = membership.compute(
+            new Map([
+                ['lang-angular', ['example']],
+                ['lang-apis', ['platform']],
+            ]),
+            GRAPH,
+        );
+        expect(members.get('lang-apis')).toEqual(['platform']);
+        expect(members.get('lang-angular')).toEqual(['example']);
+    });
+
+    it('an untagged library reached by two products gets both', () => {
+        const members = membership.compute(
+            new Map([
+                ['lang-server', ['lang']],
+                ['shared-server', ['helper']],
+            ]),
+            GRAPH,
+        );
+        expect(members.get('core')).toEqual(['helper', 'lang']);
+    });
+
+    it('the walk stops at a tagged project — its dependencies are reached only by its own walk', () => {
+        // lang-angular -> lang-apis (tagged platform) -> core: core is platform's, never example's.
+        const members = membership.compute(
+            new Map([
+                ['lang-angular', ['example']],
+                ['lang-apis', ['platform']],
+            ]),
+            GRAPH,
+        );
+        expect(members.get('core')).toEqual(['platform']);
+    });
+
+    it('a tagged project with several products keeps exactly those even when reached', () => {
+        const graph: EnhancedGraph = {
+            lib: { level: 0, dependsOn: [] },
+            app: { level: 1, dependsOn: ['lib'] },
+        };
+        const members = membership.compute(
+            new Map([
+                ['app', ['example']],
+                ['lib', ['platform', 'rules']],
+            ]),
+            graph,
+        );
+        expect(members.get('lib')).toEqual(['platform', 'rules']);
+    });
+
     it('no tags anywhere means no membership at all', () => {
         expect(membership.compute(new Map(), GRAPH).size).toBe(0);
     });
@@ -100,10 +151,40 @@ describe('RuntimeProductMembership', () => {
         new RuntimeProductMembership().apply(runtime, projects);
 
         expect(runtime.services['lang-angular'].products).toEqual(['lang']);
-        // A cross-product callee shows in the caller's product too — the coupling a reviewer needs.
-        expect(runtime.services['helper-fsdb'].products).toEqual(['helper', 'lang']);
+        // A cross-product callee keeps ONLY its own products (#1201); the coupling shows as the edge.
+        expect(runtime.services['helper-fsdb'].products).toEqual(['helper']);
         expect(runtime.services['mail-worker'].products).toEqual(['lang']);
         expect(runtime.services['bugfixer-server'].products).toEqual(['bugfixer']);
+    });
+
+    it('stops at a service with products of its own; an untagged service reached by two products gets both', () => {
+        const runtime: RuntimeGraph = {
+            services: {
+                'lang-server': service(['helper-server', 'shared-worker']),
+                'helper-server': service(['helper-only-worker']),
+                'helper-only-worker': service([]),
+                'shared-worker': service([]),
+                'bugfixer-server': service(['shared-worker']),
+            },
+            apis: {},
+            runtimeEdges: [],
+            unresolvedUses: [],
+            queues: {},
+            triggers: [],
+        };
+        const projects: EnhancedGraph = {
+            'lang-server': { level: 3, dependsOn: [], products: ['lang'] },
+            'helper-server': { level: 3, dependsOn: [], products: ['helper'] },
+            'helper-only-worker': { level: 3, dependsOn: [] },
+            'shared-worker': { level: 3, dependsOn: [] },
+            'bugfixer-server': { level: 3, dependsOn: [], products: ['bugfixer'] },
+        };
+
+        new RuntimeProductMembership().apply(runtime, projects);
+
+        expect(runtime.services['helper-server'].products).toEqual(['helper']);
+        expect(runtime.services['helper-only-worker'].products).toEqual(['helper']);
+        expect(runtime.services['shared-worker'].products).toEqual(['bugfixer', 'lang']);
     });
 
     it('writes no field when nothing declares a product', () => {

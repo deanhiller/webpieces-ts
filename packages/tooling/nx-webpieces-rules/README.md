@@ -158,9 +158,11 @@ is that promoted level. The runtime graph keeps its call-depth levels.
 
 - **Product** — which products it belongs to. A project declares a product with the nx tag
   `product:<name>` (lowercase kebab, several allowed; the `product-tags` rule makes it required on
-  servers, clients and apps). A library is never tagged: it belongs to every product whose tagged
-  project reaches it over `dependsOn`, written per project as `"products": [...]` into
-  `dependencies.json`. One product is a solid fill in that product's color (a fixed palette of 8 in
+  servers, clients and apps). A project's declared tags are FINAL: it belongs to exactly those
+  products. An untagged library belongs to every product whose tagged project reaches it over
+  `dependsOn` without passing through another tagged project, written per project as
+  `"products": [...]` into `dependencies.json`. A published library whose entry points live in other
+  repos carries its own tag. One product is a solid fill in that product's color (a fixed palette of 8 in
   sorted-name order; any product past 8 uses the neutral fill and the legend says so); two or more,
   but not all, are vertical stripes, one per product; a box shared by every product is one neutral
   fill; a box in no product is white with a dashed border. The legend counts each product's boxes

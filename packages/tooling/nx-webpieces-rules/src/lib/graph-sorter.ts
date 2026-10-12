@@ -65,11 +65,12 @@ export interface GraphEntry {
      */
     cutLegacyCycle?: string[];
     /**
-     * The products this project belongs to (#1179), sorted: every product whose `product:<name>`-tagged
-     * project reaches it by a downward walk over `dependsOn` (a tagged project is in its own products).
-     * It is the project's blast radius — a change here is a change to each of these products. DERIVED,
-     * never declared on a library; absent when no product reaches it (and everywhere when no project
-     * carries a `product:` tag). See graph-products.ts.
+     * The products this project belongs to (#1179), sorted. A project carrying `product:<name>` tags
+     * has exactly those — its declared tags are FINAL (#1201). An untagged project has every product
+     * whose tagged project reaches it by a downward walk over `dependsOn` that does not pass through
+     * another tagged project. It is the project's blast radius — a change here is a change to each of
+     * these products. Absent when no product reaches it (and everywhere when no project carries a
+     * `product:` tag). See graph-products.ts.
      */
     products?: string[];
     shortDescription?: string;

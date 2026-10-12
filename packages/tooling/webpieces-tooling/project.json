@@ -41,6 +41,7 @@
     "tags": [
         "type:tooling",
         "framework:node",
-        "role:bundle"
+        "role:bundle",
+        "product:rules"
     ]
 }
