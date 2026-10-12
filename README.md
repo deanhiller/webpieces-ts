@@ -1,5 +1,7 @@
 # WebPieces TypeScript
 
+[![GitHub stars](https://img.shields.io/github/stars/deanhiller/webpieces-ts?style=social)](https://github.com/deanhiller/webpieces-ts)
+
 **Two things ship from this repository, and the second is the larger one:**
 
 1. **A microservices framework** — a TypeScript port of [WebPieces](https://github.com/deanhiller/webpieces),
