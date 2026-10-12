@@ -90,7 +90,7 @@
             "level": 1,
             "framework": ["node"],
             "role": "lib",
-            "products": ["example","openapi","rules"],
+            "products": ["openapi"],
             "shortDescription": "Read a webpieces API contract with the **TypeScript compiler API** and produce ONE in-memory `ApiDocModel`. It is the single extraction pass both the OpenAPI documents and the MCP tool list are rendered from (#982), and it renders nothing itself.",
             "responsibilitiesFile": "packages/docs/api-doc-model/responsibilities.md",
             "dependsOn": [
@@ -198,7 +198,7 @@
             "level": 3,
             "framework": ["node"],
             "role": "designed-lib",
-            "products": ["example","platform"],
+            "products": ["platform"],
             "shortDescription": "Cloud Tasks enqueue client generated from a shared `@PubSub` API contract — the fire-and-forget twin of http-client. Owns the enqueue proxy, the scheduler, and the TaskInvoker transports (GCP + in-memory), both of which deliver a task over real HTTP.",
             "responsibilitiesFile": "packages/cloud/cloudtasks-client/responsibilities.md",
             "designFile": "packages/cloud/cloudtasks-client/design.json",
@@ -246,7 +246,7 @@
             "level": 1,
             "framework": ["node"],
             "role": "lib",
-            "products": ["example","platform"],
+            "products": ["platform"],
             "shortDescription": "AsyncLocalStorage-based request-scoped context (a TypeScript port of Java webpieces' ThreadLocal Context/MDC). Exposes the RequestContext singleton to run(), get/put/remove/clear, and to capture/restore a whole scope (as an opaque `CapturedContext`) for work that leaves the request's async chain.",
             "responsibilitiesFile": "packages/core/core-context/responsibilities.md",
             "dependsOn": [
@@ -257,7 +257,7 @@
             "level": 0,
             "framework": ["browser","node","react-native"],
             "role": "lib",
-            "products": ["example","platform"],
+            "products": ["platform"],
             "shortDescription": "Typed mock framework for feature tests (port of Java webpieces MockSuperclass). `createMock<T>()` returns a Proxy implementing any api plus a `.mock` control facade for the prime/assert vocabulary; `MockHandler` is the underlying queue/default/drain engine.",
             "responsibilitiesFile": "packages/core/core-mock/responsibilities.md",
             "dependsOn": []
@@ -266,7 +266,7 @@
             "level": 0,
             "framework": ["browser","node","react-native"],
             "role": "lib",
-            "products": ["example","openapi","platform","rules"],
+            "products": ["platform","rules"],
             "shortDescription": "Lowest-level, zero-dependency utilities shared across webpieces (browser and Node). Provides `toError()` for standardized catch handling, plus the `Header` interface and `ContextKey` class that higher packages build request-context and HTTP-header abstractions on.",
             "responsibilitiesFile": "packages/core/core-util/responsibilities.md",
             "dependsOn": []
@@ -275,7 +275,7 @@
             "level": 0,
             "framework": ["node"],
             "role": "lib",
-            "products": ["example","openapi"],
+            "products": ["openapi"],
             "shortDescription": "Render a static, three-pane API reference site from **any** conforming OpenAPI 3.0-or-3.1 document plus a directory of markdown prose, and ship the `wp-docs-site` bin.",
             "responsibilitiesFile": "packages/docs/docs-site/responsibilities.md",
             "dependsOn": []
@@ -295,7 +295,7 @@
             "level": 2,
             "framework": ["node"],
             "role": "lib",
-            "products": ["example","platform"],
+            "products": ["platform"],
             "shortDescription": "GCP runtime identity for Node services: project/region/service-account metadata, Cloud Run URL derivation, and OIDC token mint/verify — with deterministic localhost/dev fallbacks off-GCP so tests and local dev need no GCP.",
             "responsibilitiesFile": "packages/cloud/gcp-identity/responsibilities.md",
             "dependsOn": [
@@ -317,7 +317,7 @@
             "level": 2,
             "framework": ["browser","react-native","node"],
             "role": "designed-lib",
-            "products": ["example","platform"],
+            "products": ["platform"],
             "shortDescription": "The browser-side HTTP client: generates type-safe clients from the SAME API contract the server implements. Deliberately DI-free, because it may be bundled by React just as easily as by Angular, so it ships no `inversify` and no node-only `core-context`.",
             "responsibilitiesFile": "packages/http/http-client-browser/responsibilities.md",
             "designFile": "packages/http/http-client-browser/design.json",
@@ -329,7 +329,7 @@
             "level": 1,
             "framework": ["browser","node","react-native"],
             "role": "lib",
-            "products": ["example","platform"],
+            "products": ["platform"],
             "shortDescription": "The isomorphic engine of the webpieces HTTP client: reads an API contract's decorators and turns each method call into an HTTP request. It takes no position on where the magic context comes from or whether a DI container exists, so `http-client-node` and `http-client-browser` both build on it.",
             "responsibilitiesFile": "packages/http/http-client-core/responsibilities.md",
             "dependsOn": [
@@ -340,7 +340,7 @@
             "level": 3,
             "framework": ["node"],
             "role": "designed-lib",
-            "products": ["example","platform"],
+            "products": ["platform"],
             "shortDescription": "The server-side HTTP client: generates type-safe clients from the SAME API contract the callee's controller implements. Node-only, so it is fully inversify-wired, reads the magic context straight out of the `RequestContext`, and mints its own delivery auth.",
             "responsibilitiesFile": "packages/http/http-client-node/responsibilities.md",
             "designFile": "packages/http/http-client-node/design.json",
@@ -354,7 +354,7 @@
             "framework": ["node"],
             "role": "designed-lib",
             "webpiecesRuntime": ["@webpieces/cloudtasks-client","@webpieces/http-client-node"],
-            "products": ["example","platform"],
+            "products": ["platform"],
             "shortDescription": "Server-side routing layer: `@Controller`/DI decorators, `WebAppMeta`/`Routes`/`RouteBuilder` wiring, `RouteDefinition`/`FilterDefinition`, `MethodMeta`, `FilterMatcher` (glob-based filter-to-route matching), and `ApiRoutingFactory` that maps http-api decorators to controller handlers.",
             "responsibilitiesFile": "packages/http/http-routing/responsibilities.md",
             "designFile": "packages/http/http-routing/design.json",
@@ -368,7 +368,7 @@
             "framework": ["express"],
             "role": "lib",
             "webpiecesRuntime": ["@webpieces/http-routing"],
-            "products": ["example","platform"],
+            "products": ["platform"],
             "shortDescription": "Server runtime that assembles the HTTP layer: bootstraps the Inversify DI container, builds routes/filter chains from `WebAppMeta`, serves them over Express, ships built-in filters (Context, LogApi, Recording, ServiceAuth), the in-process test client, and the test-case recorder.",
             "responsibilitiesFile": "packages/http/http-server/responsibilities.md",
             "dependsOn": [
@@ -461,7 +461,7 @@
             "level": 2,
             "framework": ["node"],
             "role": "lib",
-            "products": ["example","openapi"],
+            "products": ["openapi"],
             "shortDescription": "Render an `ApiDocModel` (from `@webpieces/api-doc-model`) to **OpenAPI 3.1.0**, and ship the `wp-openapi` bin. ONE render function produces every generated document.",
             "responsibilitiesFile": "packages/docs/openapi-generator/responsibilities.md",
             "dependsOn": [
@@ -502,15 +502,6 @@
             "dependsOn": [
                 "tooling-common"
             ]
-        },
-        "rules": {
-            "level": 8,
-            "framework": ["node"],
-            "role": "app",
-            "products": ["rules"],
-            "shortDescription": "This project owns validation of the repository-level `webpieces.config.json` policy without making that configuration a shared input of product projects.",
-            "responsibilitiesFile": "rules/responsibilities.md",
-            "dependsOn": []
         },
         "rules-config": {
             "level": 2,
