@@ -163,9 +163,7 @@ describe('generateRuntimeDot — contract queues, clocks, inbound external', () 
         // CHANGED from toContain: `TaskApi-send` is the DERIVED `${Api}-${method}` name, so the
         // `queue:` line only restated the line above it. Only a @Queue(...) OVERRIDE prints now.
         expect(dot).not.toContain('queue: TaskApi-send');
-        expect(dot).toContain(
-            '"worker" -> "queue__TaskApi" [label="Uses (1) ▾\\nenqueue", style=dashed]',
-        );
+        expect(dot).toContain('"worker" -> "queue__TaskApi" [label="enqueue", style=dashed]');
         expect(dot).toContain('"queue__TaskApi" -> "worker" [style=dashed]');
     });
 
@@ -284,16 +282,10 @@ describe('generateRuntimeDot — queues with different endpoints stay separate',
         expect(dot).toContain('"queue__TaskApi_retry" [shape=Mrecord');
         expect(dot).toContain('"queue__TaskApi_send" [shape=Mrecord');
         // The two-producer queue keeps BOTH its enqueue arrows.
-        expect(dot).toContain(
-            '"p1" -> "queue__TaskApi_retry" [label="Uses (1) ▾\\nenqueue", style=dashed]',
-        );
-        expect(dot).toContain(
-            '"p2" -> "queue__TaskApi_retry" [label="Uses (1) ▾\\nenqueue", style=dashed]',
-        );
-        expect(dot).toContain(
-            '"p1" -> "queue__TaskApi_send" [label="Uses (1) ▾\\nenqueue", style=dashed]',
-        );
-        expect(countLines(dot, '[label="Uses')).toBe(3);
+        expect(dot).toContain('"p1" -> "queue__TaskApi_retry" [label="enqueue", style=dashed]');
+        expect(dot).toContain('"p2" -> "queue__TaskApi_retry" [label="enqueue", style=dashed]');
+        expect(dot).toContain('"p1" -> "queue__TaskApi_send" [label="enqueue", style=dashed]');
+        expect(countLines(dot, '[label="enqueue')).toBe(3);
         expect(dot).toContain('"queue__TaskApi_retry" -> "c" [style=dashed]');
         expect(dot).toContain('"queue__TaskApi_send" -> "c" [style=dashed]');
     });
@@ -317,9 +309,7 @@ describe('generateRuntimeDot — the contract-only per-API queue', () => {
     it('still renders an edge that carries no queue key', () => {
         expect(dot).toContain('"queue__EmailApi" [shape=Mrecord');
         expect(dot).toContain('label=" |EmailApi queue"');
-        expect(dot).toContain(
-            '"p1" -> "queue__EmailApi" [label="Uses (1) ▾\\nenqueue", style=dashed]',
-        );
+        expect(dot).toContain('"p1" -> "queue__EmailApi" [label="enqueue", style=dashed]');
         expect(dot).toContain('"queue__EmailApi" -> "c" [style=dashed]');
     });
 });

@@ -161,7 +161,7 @@ export function legendHtml(): string {
                 ${item(sw.queue, '<strong>queue</strong> &mdash; each <em>line</em> in the box is one Cloud Tasks queue, the unit Terraform actually creates. Queues of one contract that flow between the <em>same</em> producer and consumer share a box; every one is still named, so you can always see <em>which</em> queue is stuck.')}
                 ${item(sw.database, '<strong>database</strong> &mdash; a datastore outside this repo')}
                 ${item(sw.storage, '<strong>object storage</strong> &mdash; a bucket outside this repo')}
-                ${item(sw.external, '<strong>external system</strong> &mdash; outside this repo; nothing here implements it. Pointing <strong>OUT</strong> = a system this repo calls (firestore, gmail). Pointing <strong>IN</strong> = an endpoint driven from outside, and the box names the <strong>CALLER</strong> (<code>twilio</code>), not our contract &mdash; the contract and method are on the arrow. One vendor is ONE box however many endpoints it posts to, and the same box whether we call it or it calls us. A dotted box labelled <code>? unknown caller</code> means the endpoint never declared one.')}
+                ${item(sw.external, '<strong>external system</strong> &mdash; outside this repo; nothing here implements it. Pointing <strong>OUT</strong> = a system this repo calls (firestore, gmail). Pointing <strong>IN</strong> = an endpoint driven from outside, and the box names the <strong>CALLER</strong> (<code>twilio</code>), not our contract &mdash; the arrow names a single contract/method or groups multiple APIs in a Uses dropdown. One vendor is ONE box however many endpoints it posts to, and the same box whether we call it or it calls us. A dotted box labelled <code>? unknown caller</code> means the endpoint never declared one.')}
                 ${item(sw.cron, '<strong>cron</strong> &mdash; a scheduler fires this endpoint')}
             </div>
             <div class="legend-col">
@@ -178,7 +178,7 @@ export function legendHtml(): string {
 Implements (N)
 Uses (N)
 </pre>
-                <div class="legend-note">Hover, focus, or click <strong>Implements</strong> and <strong>Uses</strong> for complete qualified lists. One/two API arrows show names; larger groups have a Uses dropdown.</div>
+                <div class="legend-note">Click <strong>Implements</strong> in the node menu or a <strong>Uses</strong> dropdown for complete qualified lists. A single API is named inline; two or more APIs have a Uses dropdown. Single-API queue arrows say enqueue; their box names the contract.</div>
                 <div class="legend-note"><code>(via &lt;lib&gt;)</code> = served through an embedded library, not its own source.</div>
             </div>
         </div>

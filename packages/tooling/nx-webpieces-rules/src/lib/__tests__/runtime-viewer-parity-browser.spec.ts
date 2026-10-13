@@ -2,6 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
 import { BrowserFixture, BRANCH_LABEL, impactScan } from './graph-browser-fixture';
+import { RuntimeTriggerFixture } from './runtime-trigger-fixture';
 import { FilterFixture } from './graph-filter-fixture';
 import { RuntimeHtmlPage } from '../runtime-html-page';
 import { generateRuntimeRenderModel, RuntimeVizOptions } from '../runtime-visualizer';
@@ -111,6 +112,27 @@ class RuntimeParityFixture {
         }
     }
 
+    withRpcDetails(): RuntimeGraph {
+        const graph = structuredClone(this.graph);
+        graph.runtimeEdges.push({
+            from: 'producer',
+            to: 'consumer',
+            via: ['FirstApi', 'SecondApi'],
+            type: 'rpc',
+        });
+        graph.apis.FirstApi = {
+            owner: 'contracts',
+            implementedBy: ['consumer'],
+            usedBy: ['producer'],
+        };
+        graph.apis.SecondApi = {
+            owner: 'contracts',
+            implementedBy: ['consumer'],
+            usedBy: ['producer'],
+        };
+        return graph;
+    }
+
     html(graph: RuntimeGraph = this.graph, projects: EnhancedGraph = this.projects): string {
         const options = new RuntimeVizOptions(true, projects);
         return new RuntimeHtmlPage(
@@ -204,7 +226,10 @@ describe.skipIf(!process.env.WP_GRAPH_VIZ_JS)('runtime viewer parity in file:// 
     });
 
     it('opens Implements only from the node menu, Uses only from edges, and keeps compact contract rows after recoloring', async () => {
-        const page = await fixture.browser.open('1185-runtime-details', fixture.html());
+        const page = await fixture.browser.open(
+            '1185-runtime-details',
+            fixture.html(fixture.withRpcDetails()),
+        );
         const summary = fixture.browser
             .node(page, 'consumer')
             .locator('text')
@@ -233,9 +258,16 @@ describe.skipIf(!process.env.WP_GRAPH_VIZ_JS)('runtime viewer parity in file:// 
         expect(await delivery.count()).toBe(1);
         expect(await delivery.locator('path').count()).toBeGreaterThan(0);
         expect(await delivery.locator('text, .wp-api-detail, [role="button"]').count()).toBe(0);
+        const enqueue = page.locator('g.edge').filter({
+            has: page.locator('title', { hasText: /^producer->queue__TaskApi_send$/ }),
+        });
+        expect(await enqueue.locator('text').allTextContents()).toEqual(['enqueue']);
+        expect(await enqueue.locator('.wp-api-detail, [role="button"], [tabindex]').count()).toBe(
+            0,
+        );
         const edge = page
             .locator('g.edge')
-            .filter({ has: page.locator('title', { hasText: /^producer->queue__TaskApi_send$/ }) })
+            .filter({ has: page.locator('title', { hasText: /^producer->consumer$/ }) })
             .locator('text')
             .first();
         await edge.hover();
@@ -243,7 +275,8 @@ describe.skipIf(!process.env.WP_GRAPH_VIZ_JS)('runtime viewer parity in file:// 
         expect(await page.locator('.wp-graph-details').isVisible()).toBe(false);
         await edge.press('Enter');
         expect(await page.locator('.wp-graph-details li').allTextContents()).toEqual([
-            'task-contracts#TaskApi',
+            'contracts#FirstApi',
+            'contracts#SecondApi',
         ]);
         expect(await page.locator('.wp-graph-details').textContent()).not.toContain(
             'shared-client',
@@ -256,6 +289,35 @@ describe.skipIf(!process.env.WP_GRAPH_VIZ_JS)('runtime viewer parity in file:// 
         await fixture.browser.snapshot(page, '1185-runtime-details');
         await page.locator('.wp-graph-details button').click();
         expect(await page.locator('.wp-graph-details').isVisible()).toBe(false);
+        await page.close();
+    });
+
+    it('opens nine unique APIs on a grouped external edge and leaves single APIs non-interactive', async () => {
+        const graph = new RuntimeTriggerFixture().graph;
+        const page = await fixture.browser.open('1232-external-triggers', fixture.html(graph, {}));
+        const grouped = page.locator('g.edge').filter({
+            has: page.locator('title', { hasText: /^system__external_customers->public$/ }),
+        });
+        expect(await grouped.count()).toBe(1);
+        expect(await grouped.locator('text').allTextContents()).toEqual(['Uses (9) ▾']);
+        const control = grouped.locator('[role="button"]');
+        await control.focus();
+        expect(await page.locator('.wp-graph-details').isVisible()).toBe(false);
+        await control.press('Enter');
+        expect(await page.locator('.wp-graph-details li').allTextContents()).toEqual(
+            Array.from({ length: 9 }, (_: unknown, index: number) => `contracts#Api${index}`),
+        );
+        await page.keyboard.press('Escape');
+        const single = page.locator('g.edge').filter({
+            has: page.locator('title', { hasText: /^system__external_customers->second$/ }),
+        });
+        expect(await single.locator('text').allTextContents()).toEqual(['Api0.receive']);
+        expect(await single.locator('[role="button"], [tabindex]').count()).toBe(0);
+        await single.locator('text').click();
+        expect(await page.locator('.wp-graph-details').isVisible()).toBe(false);
+        await fixture.browser.mode(page, 'architecture');
+        await grouped.locator('[role="button"]').click();
+        expect(await page.locator('.wp-graph-details li').count()).toBe(9);
         await page.close();
     });
 

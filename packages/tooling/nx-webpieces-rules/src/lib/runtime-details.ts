@@ -1,5 +1,6 @@
 import type { GraphRenderModel } from './graph-render-model';
 import type { RuntimeGraph, RuntimeRemoteCall } from './runtime-graph-model';
+import { RuntimeExternalTriggers } from './runtime-external-triggers';
 import { RemoteServiceNodeId } from './remote-service-node-id';
 
 export class RuntimeNodeDetails {
@@ -67,6 +68,11 @@ export class RuntimeDetails {
                 (this.edges[key] ??= []).push(`${owner}#${use.api}`);
             }
             this.nodes[name] = new RuntimeNodeDetails(implemented, [...new Set(used)]);
+        }
+        for (const group of new RuntimeExternalTriggers(graph.triggers).groups) {
+            this.edges[`${group.from}->${group.to}`] = group
+                .apis()
+                .map((api: string) => `${graph.apis[api]?.owner ?? '?'}#${api}`);
         }
         this.remoteNodes(graph);
         if (model !== null) this.renderEdges(graph, model);
@@ -245,7 +251,7 @@ class RuntimeDetailsController {
         for (const group of Array.from(this.host?.querySelectorAll<SVGGElement>('g.edge') ?? [])) {
             const identity = group.querySelector('title')?.textContent ?? '';
             const entries = this.data.edges[identity];
-            if (entries === undefined || entries.length === 0) continue;
+            if (entries === undefined || entries.length < 2) continue;
             const element = group.querySelector('text');
             if (element !== null && element.dataset['wpDetails'] !== 'true')
                 this.attachElement(element, entries, identity);

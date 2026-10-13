@@ -230,7 +230,10 @@ runtime HTML under `tmp/webpieces/.impact`, without regenerating saved graph fac
 
 Service boxes show plain Implements summaries. Implements popups use the deduplicated API list
 that supplies the box count, with one `pkg#Api` row per contract. Uses popups also show only
-`pkg#Api`; the arrow already identifies the destination and transport. The node menu opens
+`pkg#Api`; the arrow already identifies the destination and transport. A single API is named inline,
+while two or more APIs get a Uses dropdown. Single-API queue enqueue edges say `enqueue` and have no
+popup. External triggers share one edge per caller/service pair, counting distinct APIs across
+all its methods; cron nodes and their schedule labels remain per method. The node menu opens
 implemented-contract details; relationship line controls open Uses details. API panels never open on hover or mere
 keyboard focus. Enter/Space explicitly activates a control; Close/Escape/outside click dismiss.
 See [verification and screenshots](runtime-viewer-parity.md) for runtime browser parity evidence.
