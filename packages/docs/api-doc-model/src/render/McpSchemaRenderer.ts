@@ -371,7 +371,7 @@ export class McpSchemaRenderer {
             for (const branch of type.unionRefNames) {
                 // The branch's NAME, never its model key: a branch declared by another package is
                 // keyed `<package>:<name>` (#1058), and the published mapping names the type.
-                const branchName = this.namedType(branch, type.name).name;
+                const branchName = this.namedType(branch, type.name).schemaName;
                 for (const value of type.discriminator.branchValues.get(branch) ?? []) {
                     mapping[value] = branchName;
                 }

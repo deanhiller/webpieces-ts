@@ -20,6 +20,8 @@ export class FieldDef {
         // For `object[]` only: the schema EVERY element is validated against (unknown keys, missing
         // required keys, types, non-emptiness), exactly like a rule entry's own fields.
         readonly elementSchema?: Readonly<Record<string, FieldDef>>,
+        /** Owner-supplied cure appended when a required non-empty array is empty. */
+        readonly emptyInstruction?: string,
     ) {}
 
     /** Marks a field as optional (omittable) in the config schema. */
@@ -36,8 +38,8 @@ export class FieldDef {
 
     /** A REQUIRED `string[]` that must hold at least one string. */
     // webpieces-disable no-function-outside-class -- static factory, matches sibling FieldDef.optional
-    static nonEmptyStrings(): FieldDef {
-        return new FieldDef('string[]', undefined, false, false, true);
+    static nonEmptyStrings(emptyInstruction?: string): FieldDef {
+        return new FieldDef('string[]', undefined, false, false, true, undefined, emptyInstruction);
     }
 
     /** A REQUIRED list of objects (possibly empty), each validated against `elementSchema`. */

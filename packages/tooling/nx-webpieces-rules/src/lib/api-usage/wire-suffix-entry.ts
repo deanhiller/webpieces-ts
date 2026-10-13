@@ -2,4 +2,5 @@
 export class WireSuffixEntry {
     paths!: string[];
     suffixes!: string[];
+    exempt!: boolean;
 }

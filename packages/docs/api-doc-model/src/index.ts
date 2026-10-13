@@ -9,6 +9,7 @@
  * `responsibilities.md` for why that import is not the coupling it looks like.
  */
 export { ApiDocExtractor } from './extract/ApiDocExtractor';
+export { SchemaNames, SchemaNameEntry } from './model/SchemaNames';
 export { ApiDocExtractionError } from './extract/ApiDocExtractionError';
 export { DeclaringPackage, PackageOfFile } from './extract/PackageOfFile';
 export {

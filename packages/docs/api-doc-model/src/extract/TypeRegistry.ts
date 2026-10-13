@@ -8,6 +8,7 @@ import {
 import { TypeRef } from '../model/TypeRef';
 import { PackageOfFile } from './PackageOfFile';
 import { SourceLocation } from './SourceLocation';
+import { SchemaNames } from '../model/SchemaNames';
 
 /**
  * The named types a {@link TypeResolver} has registered, by KEY (#1058): the bare name for a type the
@@ -29,6 +30,7 @@ export class TypeRegistry {
     constructor(
         private readonly packages: PackageOfFile,
         private readonly homePackage: string | undefined,
+        private readonly schemaNames: SchemaNames,
     ) {}
 
     /** The key `name`, declared at `node`, is registered under. */
@@ -93,6 +95,7 @@ export class TypeRegistry {
             indexSignatureValue,
             this.packageOf(declaration),
             SourceLocation.of(declaration),
+            this.schemaNames.nameOf(name, declaration.getSourceFile().fileName),
         );
     }
 }

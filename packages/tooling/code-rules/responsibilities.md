@@ -19,8 +19,8 @@ Build-time code validation gate. Standalone (no Nx dependency) CLI that validate
   globs: refuses `Omit` / `Pick` / `Partial` / `Required` / `Exclude` / `Extract` in an api contract (an
   `extends` clause, a field, an alias, a generic argument), printing the write-the-fields-out cure.
 - `required-type-suffix` (#1037), also on `ApiLibSourceRule`, scoped by its required `entries` (each a
-  `paths` glob list plus the `suffixes` allowed there; the first entry in config order whose glob matches
-  governs a file, so a narrower entry is listed first): every
+  `paths` glob list plus non-empty `suffixes` and a required `exempt` boolean; the first entry in config order whose glob matches
+  governs a file, so a narrower entry is listed first and `exempt: true` explicitly skips its suffix policy): every unexempt
   exported interface / class / enum / type alias must end in an allowed suffix, and the failure prints
   the rename.
 - The two PROJECT rules that make a `framework:` tag true (#1064), sharing `ProjectScanTargets`

@@ -1,5 +1,5 @@
-import { FieldDef, SchemaShape, BaseRuleConfig, BASE_RULE_SCHEMA } from "@webpieces/rules-sdk";
-import { ModifiedCodeMode, MODIFIED_CODE_MODES } from "@webpieces/rules-sdk";
+import { FieldDef, SchemaShape, BaseRuleConfig, BASE_RULE_SCHEMA } from '@webpieces/rules-sdk';
+import { ModifiedCodeMode, MODIFIED_CODE_MODES } from '@webpieces/rules-sdk';
 /**
  * One `required-type-suffix` entry: the path globs it covers and the suffixes a type exported from a
  * file under them may end in. Data-only.
@@ -7,12 +7,17 @@ import { ModifiedCodeMode, MODIFIED_CODE_MODES } from "@webpieces/rules-sdk";
 export class RequiredTypeSuffixEntry {
     /** Workspace-relative globs, e.g. `["libraries/apis/internal/**"]`. Non-empty. */
     paths!: string[];
-    /** Case-sensitive name suffixes, e.g. `["Request", "Response", "Event", "Dto", "Api"]`. Non-empty. */
+    /** Case-sensitive suffixes, retained even while this path is explicitly exempt. Non-empty. */
     suffixes!: string[];
+    /** Explicit per-path opt-out. Required so an exemption is a named, greppable decision. */
+    exempt!: boolean;
 
     static readonly SCHEMA: SchemaShape<RequiredTypeSuffixEntry> = {
         paths: FieldDef.nonEmptyStrings(),
-        suffixes: FieldDef.nonEmptyStrings(),
+        suffixes: FieldDef.nonEmptyStrings(
+            'To exempt this path, set exempt: true and retain a non-empty suffixes list; suffixes: [] is not an exemption.',
+        ),
+        exempt: new FieldDef('boolean'),
     };
 }
 
@@ -28,11 +33,12 @@ export class RequiredTypeSuffixEntry {
  *   renamed type — so legacy names are grandfathered) | NEW_AND_MODIFIED_FILES (every exported type in a
  *   changed file) | MODIFIED_PROJECTS / RUN_EVERY_TIME (every exported type in each touched project / the
  *   whole repo — #1027).
- * - `entries` — non-empty; each entry has non-empty `paths` and `suffixes`. For example:
+ * - `entries` — non-empty; each entry has non-empty `paths` and `suffixes`, and an explicit `exempt` boolean. For example:
  *
  *       "entries": [
- *         { "paths": ["libraries/apis/internal/**"], "suffixes": ["Request", "Response", "Event", "Dto", "Api"] },
- *         { "paths": ["libraries/browser-node/fs-*-model/**"], "suffixes": ["Fs"] }
+ *         { "paths": ["libraries/apis/partner/**"], "suffixes": ["Dto", "Api"], "exempt": true },
+ *         { "paths": ["libraries/apis/internal/**"], "suffixes": ["Request", "Response", "Event", "Dto", "Api"], "exempt": false },
+ *         { "paths": ["libraries/browser-node/fs-*-model/**"], "suffixes": ["Fs"], "exempt": false }
  *       ]
  *
  * OVERLAP — the FIRST MATCH in `entries` order wins; suffixes are never unioned. A file is governed by

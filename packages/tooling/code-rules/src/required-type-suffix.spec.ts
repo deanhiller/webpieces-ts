@@ -28,10 +28,11 @@ const API_SUFFIXES = ['Request', 'Response', 'Event', 'Dto', 'Api'];
 
 class Entries {
     // webpieces-disable no-function-outside-class -- static factory of this spec helper
-    static of(paths: string[], suffixes: string[]): RequiredTypeSuffixEntry {
+    static of(paths: string[], suffixes: string[], exempt: boolean = false): RequiredTypeSuffixEntry {
         const entry = new RequiredTypeSuffixEntry();
         entry.paths = paths;
         entry.suffixes = suffixes;
+        entry.exempt = exempt;
         return entry;
     }
 
@@ -46,14 +47,19 @@ class Entries {
 
 class Source {
     // webpieces-disable no-function-outside-class -- static factory of this spec helper
-    static sites(text: string, suffixes: string[] = API_SUFFIXES): ApiLibSite[] {
+    static sites(text: string, suffixes: string[] = API_SUFFIXES, exempt: boolean = false): ApiLibSite[] {
         const file = new ApiLibFile('libraries/apis/internal/x/src/Dtos.ts',
             ts.createSourceFile('Dtos.ts', text, ts.ScriptTarget.Latest, true), '/nowhere');
-        return new ExportedTypeScanner().scan(file, Entries.of(['libraries/apis/internal/**'], suffixes), 'libraries/apis/internal/**');
+        return new ExportedTypeScanner().scan(file, Entries.of(['libraries/apis/internal/**'], suffixes, exempt), 'libraries/apis/internal/**');
     }
 }
 
 describe('required-type-suffix — the scanner', () => {
+    it('exempts a path only through the explicit exemption flag', () => {
+        expect(Source.sites('export class PublishedName {}', ['Dto'], true)).toEqual([]);
+        expect(Source.sites('export class PublishedName {}', ['Dto'], false)).toHaveLength(1);
+    });
+
     it('refuses an exported interface, class, abstract class, enum and type alias with a bad suffix', () => {
         const sites = Source.sites([
             'export interface TopNamePlaceInput { name: string; }',

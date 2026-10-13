@@ -6,6 +6,7 @@ import {
     ApiDocExtractor,
     DocumentedType,
     PackageOfFile,
+    SchemaNames,
 } from '@webpieces/api-doc-model';
 import { EXTERNAL_CUSTOMER, SVC_TO_SVC } from '@webpieces/core-util';
 import { OpenApiGenerationError } from '../OpenApiGenerationError';
@@ -59,7 +60,7 @@ const FALLBACK_OPTIONS: ts.CompilerOptions = {
 export class InputsLoader {
     private readonly manifests = new ManifestLoader();
     private readonly constants = new ExportedConstantFolder();
-    private readonly extractor = new ApiDocExtractor();
+    private extractor = new ApiDocExtractor();
     private readonly packages = new PackageOfFile();
     private readonly locator = new ComponentsLocator();
     private options: ts.CompilerOptions = FALLBACK_OPTIONS;
@@ -71,6 +72,7 @@ export class InputsLoader {
 
     load(manifestPath: string): GenerationInputs {
         const manifest = this.manifests.load(manifestPath);
+        this.extractor = new ApiDocExtractor(new SchemaNames(manifest.schemaNames));
         this.options = this.compilerOptions(manifestPath);
         const contracts = this.contracts(manifestPath, manifest);
         const errorType = this.errorType(manifestPath, manifest);
@@ -101,6 +103,7 @@ export class InputsLoader {
     /** A DTO library's components manifest, its exported types, and the libraries THEY reach. */
     loadComponents(manifestPath: string): ComponentsInputs {
         const manifest = this.manifests.loadComponents(manifestPath);
+        this.extractor = new ApiDocExtractor(new SchemaNames(manifest.schemaNames));
         this.options = this.compilerOptions(manifestPath);
         const files = manifest.entries.map((entry: string) => {
             const file = this.manifests.resolve(manifestPath, entry);

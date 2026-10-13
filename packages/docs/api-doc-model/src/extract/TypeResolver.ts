@@ -1,3 +1,4 @@
+import { SchemaNames } from '../model/SchemaNames';
 import * as ts from 'typescript';
 import { WpInt, WpMax, WpMin } from '@webpieces/core-util';
 import {
@@ -81,13 +82,15 @@ export class TypeResolver {
         packages: PackageOfFile,
         /** The package of the file being extracted — its types are keyed by their bare name. */
         homePackage: string | undefined,
+        private readonly schemaNames: SchemaNames,
     ) {
         this.bases = new ObjectShapeBases(checker);
-        this.registry = new TypeRegistry(packages, homePackage);
+        this.registry = new TypeRegistry(packages, homePackage, schemaNames);
     }
 
     /** Every named type reached so far, by key — see {@link DocumentedType.keyOf}. */
     collectedTypes(): ReadonlyMap<string, DocumentedType> {
+        this.schemaNames.validate(this.registry.types.values());
         return this.registry.types;
     }
 

@@ -2,10 +2,11 @@ import { FirstPathMatch, PathMatchCandidate } from '@webpieces/rules-config';
 /**
  * `required-type-suffix` (#1037) — a type's name says which layer it belongs to.
  *
- * Configured as a list of entries, each pairing path globs with the suffixes allowed there:
+ * Configured as a list of entries, each pairing path globs with allowed suffixes and an explicit exemption:
+ * `exempt: true` skips suffix enforcement for the matching entry; `exempt: false` enforces its suffixes.
  *
- *   { "paths": ["libraries/apis/internal/**"], "suffixes": ["Request", "Response", "Event", "Dto", "Api"] }
- *   { "paths": ["libraries/browser-node/fs-*-model/**"], "suffixes": ["Fs"] }
+ *   { "paths": ["libraries/apis/internal/**"], "suffixes": ["Request", "Response", "Event", "Dto", "Api"], "exempt": false }
+ *   { "paths": ["libraries/browser-node/fs-*-model/**"], "suffixes": ["Fs"], "exempt": false }
  *
  * Every EXPORTED `interface`, `class` (abstract too), `enum` and `type` alias in a non-test `.ts` file under
  * an entry's paths must end in one of that entry's suffixes — a plain, case-sensitive `endsWith`, and the
@@ -125,6 +126,7 @@ export class ExportedTypeScanner {
     private readonly rename = new SuffixRename();
 
     scan(file: ApiLibFile, entry: RequiredTypeSuffixEntry, glob: string): ApiLibSite[] {
+        if (entry.exempt) return [];
         const sites: ApiLibSite[] = [];
         const locals = new Map<string, ts.DeclarationStatement>();
         for (const statement of file.source.statements) {

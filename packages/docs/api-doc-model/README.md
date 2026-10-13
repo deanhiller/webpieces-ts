@@ -22,6 +22,14 @@ model.unmapped; // UnmappedType[] — recorded, never dropped
 
 It depends on `typescript` and `@webpieces/core-util`, from which it takes every decorator NAME it matches on — so renaming a decorator is a compile error here rather than a literal that quietly stops matching and empties a generated document. See `responsibilities.md` for what is in and out of scope, why that import is not the coupling it looks like, and why both `Integer` and `@WpInt()` are accepted spellings of integer-ness.
 
+For generation-time naming, construct `ApiDocExtractor` with a `SchemaNames` policy
+containing ordered `SchemaNameEntry` values. Their globs match absolute declaration
+paths; the OpenAPI manifest loader resolves its relative globs before constructing
+the policy. `DocumentedType.name` is always the source name, while `schemaName` is
+the published name. Keys and `TypeRef`s keep source identity so validation is not
+changed by publication settings. Stripping collisions throw `ApiDocExtractionError`
+with both declarations. MCP discriminator mappings use the published names.
+
 ```typescript
 import { ApiDocExtractor, McpSchemaRenderer } from '@webpieces/api-doc-model';
 

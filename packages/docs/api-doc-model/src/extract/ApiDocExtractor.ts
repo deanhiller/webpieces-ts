@@ -1,3 +1,4 @@
+import { SchemaNames } from '../model/SchemaNames';
 import { McpProfiles } from './McpProfiles';
 import * as ts from 'typescript';
 import {
@@ -129,12 +130,13 @@ const DEFAULT_API_TYPES: readonly string[] = [SVC_TO_SVC];
  * render out means the two renderers cannot drift apart about what the contract SAYS.
  */
 export class ApiDocExtractor {
+    constructor(private readonly schemaNames: SchemaNames = new SchemaNames([])) {}
     /** Which package declares each file — the owner of every schema (#1058). Cached per directory. */
     private readonly packages = new PackageOfFile();
     /** A resolver whose HOME is the package declaring `source` — see {@link TypeResolver}. */
     private resolverFor(program: ts.Program, source: ts.SourceFile): TypeResolver {
         const home = this.packages.of(source.fileName)?.name;
-        return new TypeResolver(program.getTypeChecker(), this.packages, home);
+        return new TypeResolver(program.getTypeChecker(), this.packages, home, this.schemaNames);
     }
 
     /**
@@ -297,7 +299,7 @@ export class ApiDocExtractor {
         entryFiles: readonly string[],
         compilerOptions: ts.CompilerOptions = {},
     ): ApiComponentsModel {
-        return new ComponentsExtractor(this.packages).extract(entryFiles, compilerOptions);
+        return new ComponentsExtractor(this.packages, this.schemaNames).extract(entryFiles, compilerOptions);
     }
 
     /** The interface / class / type alias / enum declared under `name` at the file's top level. */

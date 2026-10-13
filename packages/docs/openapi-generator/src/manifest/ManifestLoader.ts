@@ -2,6 +2,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { OpenApiGenerationError } from '../OpenApiGenerationError';
 import { JsonReader } from './JsonReader';
+import { SchemaNameEntry } from '@webpieces/api-doc-model';
 import {
     ApiEntry,
     ComponentsManifest,
@@ -24,7 +25,10 @@ const COMPONENTS = 'components';
 /** Keys a components manifest must not carry, each with why — a contract-manifest key is a mix-up. */
 const NOT_IN_COMPONENTS: ReadonlyMap<string, string> = new Map<string, string>([
     ['apis', 'a components document has no paths; list the library\'s entry files in "entries"'],
-    ['version', "a library document's info.version is the package version, read from its package.json"],
+    [
+        'version',
+        "a library document's info.version is the package version, read from its package.json",
+    ],
     ['servers', 'a components document has no operations to serve'],
     ['errors', 'the error contract belongs to a contract document'],
     ['responseHeaders', 'response headers belong to a contract document'],
@@ -82,7 +86,7 @@ export class ManifestLoader {
                 'Name the library\'s entry files, e.g. "entries": ["src/index.ts"]; the document holds every type they export.',
             );
         }
-        return new ComponentsManifest(raw.string('title'), entries);
+        return new ComponentsManifest(raw.string('title'), entries, this.schemaNames(raw));
     }
 
     private read(manifestPath: string): JsonReader {
@@ -115,6 +119,7 @@ export class ManifestLoader {
             raw.strings('securitySchemeNames'),
             this.errors(raw),
             this.responseHeaders(raw),
+            this.schemaNames(raw),
         );
     }
 
@@ -125,6 +130,29 @@ export class ManifestLoader {
                 (server: JsonReader) =>
                     new ServerEntry(server.string('url'), server.optionalString('description')),
             );
+    }
+
+    private schemaNames(raw: JsonReader): readonly SchemaNameEntry[] {
+        return raw.objects('schemaNames').map((entry: JsonReader) => {
+            const paths = entry.strings('paths');
+            const suffixes = entry.strings('stripSuffixes');
+            if (
+                paths.length === 0 ||
+                paths.some((glob: string) => glob.trim() === '') ||
+                !entry.has('stripSuffixes') ||
+                suffixes.some((suffix: string) => suffix.length === 0)
+            ) {
+                throw new OpenApiGenerationError(
+                    'invalid schemaNames entry',
+                    raw.where,
+                    'Provide non-empty paths and an explicit stripSuffixes array of non-empty suffixes (or [] to preserve names). First matching path wins.',
+                );
+            }
+            return new SchemaNameEntry(
+                paths.map((glob: string) => path.resolve(path.dirname(raw.where), glob)),
+                suffixes,
+            );
+        });
     }
 
     private apis(raw: JsonReader): readonly ApiEntry[] {

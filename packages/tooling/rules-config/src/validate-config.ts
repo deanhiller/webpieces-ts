@@ -261,7 +261,8 @@ function arrayFieldErrors(label: string, value: unknown, def: FieldDef): string[
     }
     if (def.nonEmpty && value.length === 0) {
         return [
-            `${label} must not be empty — an empty list judges nothing while reading as configured. Add ${valueHint(def)}.`,
+            `${label} must not be empty — an empty list judges nothing while reading as configured. Add ${valueHint(def)}.` +
+                (def.emptyInstruction === undefined ? '' : ` ${def.emptyInstruction}`),
         ];
     }
     if (!isObjects || def.elementSchema === undefined) return [];
