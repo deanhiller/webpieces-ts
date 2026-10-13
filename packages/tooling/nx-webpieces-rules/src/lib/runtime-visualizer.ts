@@ -202,7 +202,7 @@ function queueBoxDot(
         dot += model.edge(
             id,
             consumer,
-            `  "${id}" -> "${serviceNodeId(consumer)}" [label="Uses (${contractCount}) ▾\\ndeliver", style=dashed];\n`,
+            `  "${id}" -> "${serviceNodeId(consumer)}" [style=dashed];\n`,
         );
     return dot;
 }

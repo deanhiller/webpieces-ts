@@ -169,7 +169,7 @@ export function legendHtml(): string {
                 ${item(sw.solid, '<strong>solid = rpc</strong> &mdash; the request follows the arrow, the response flows back')}
                 ${item(sw.dashed, '<strong>dashed = event</strong> &mdash; asynchronous: the event flows in the direction of the arrow and returns once it is in the queue')}
                 ${item(sw.scheduled, '<strong>scheduled</strong> &mdash; a cron invocation')}
-                <div class="legend-note"><em>Every line names its contracts inline or exposes them in a Uses dropdown. A service that enqueues to itself loops through its own queue &mdash; a queue decouples the two sides, so it is not a dependency cycle.</em></div>
+                <div class="legend-note"><em>Calls name their contracts inline or expose them in a Uses dropdown. Queue delivery arrows are unlabelled; the queue box names the contract. A service that enqueues to itself loops through its own queue &mdash; a queue decouples the two sides, so it is not a dependency cycle.</em></div>
             </div>
             <div class="legend-col">
                 <h3>Reading a box</h3>

@@ -173,7 +173,7 @@ describe('generateRuntimeDot — per-method queues, clocks, inbound external', (
         // `queue:` line only restated the line above it. Only a @Queue(...) OVERRIDE prints now.
         expect(dot).not.toContain('queue: TaskApi-send');
         expect(dot).toContain('"worker" -> "queue__TaskApi_send" [label="Uses (1) ▾\\nenqueue", style=dashed]');
-        expect(dot).toContain('"queue__TaskApi_send" -> "worker" [label="Uses (1) ▾\\ndeliver", style=dashed]');
+        expect(dot).toContain('"queue__TaskApi_send" -> "worker" [style=dashed]');
     });
 
     it('hangs the cron endpoint off a clock pointing INTO the service', () => {
@@ -238,12 +238,12 @@ describe('generateRuntimeDot — merging queues of one contract into one box', (
         expect(label).toContain('TaskApi.retry');
         expect(label).toContain('TaskApi.send');
         expect(countLines(dot, '[label="Uses (1) ▾\\nenqueue"')).toBe(1);
-        expect(countLines(dot, '[label="Uses (1) ▾\\ndeliver"')).toBe(1);
+        expect(countLines(dot, '[label="Uses')).toBe(1);
         expect(dot).toContain(
             '"worker" -> "queue__TaskApi_blast" [label="Uses (1) ▾\\nenqueue", style=dashed]',
         );
         expect(dot).toContain(
-            '"queue__TaskApi_blast" -> "worker" [label="Uses (1) ▾\\ndeliver", style=dashed]',
+            '"queue__TaskApi_blast" -> "worker" [style=dashed]',
         );
     });
 
@@ -317,7 +317,9 @@ describe('generateRuntimeDot — queues with different endpoints stay separate',
         expect(dot).toContain('"p1" -> "queue__TaskApi_retry" [label="Uses (1) ▾\\nenqueue", style=dashed]');
         expect(dot).toContain('"p2" -> "queue__TaskApi_retry" [label="Uses (1) ▾\\nenqueue", style=dashed]');
         expect(dot).toContain('"p1" -> "queue__TaskApi_send" [label="Uses (1) ▾\\nenqueue", style=dashed]');
-        expect(countLines(dot, '[label="Uses (1) ▾\\ndeliver"')).toBe(2);
+        expect(countLines(dot, '[label="Uses')).toBe(3);
+        expect(dot).toContain('"queue__TaskApi_retry" -> "c" [style=dashed]');
+        expect(dot).toContain('"queue__TaskApi_send" -> "c" [style=dashed]');
     });
 });
 
@@ -340,7 +342,7 @@ describe('generateRuntimeDot — the legacy unnamed per-pair queue', () => {
         expect(dot).toContain('"queue__p1__c" [shape=Mrecord');
         expect(dot).toContain('label=" |EmailApi\\nqueue"');
         expect(dot).toContain('"p1" -> "queue__p1__c" [label="Uses (1) ▾\\nenqueue", style=dashed]');
-        expect(dot).toContain('"queue__p1__c" -> "c" [label="Uses (1) ▾\\ndeliver", style=dashed]');
+        expect(dot).toContain('"queue__p1__c" -> "c" [style=dashed]');
     });
 });
 
