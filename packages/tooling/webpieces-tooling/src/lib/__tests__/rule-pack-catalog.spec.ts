@@ -2,7 +2,7 @@ import { fixtureSchemas as RULE_SCHEMAS } from '@webpieces/tooling-testkit';
 import { describe, it, expect } from 'vitest';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { RulePackManifest } from '@webpieces/rules-sdk';
+import { FieldDef, RulePackManifest } from '@webpieces/rules-sdk';
 import { RulePackRegistry } from '@webpieces/rules-config';
 
 class PackPackage {
@@ -36,7 +36,19 @@ describe('complete compatibility pack catalog', () => {
         const registry = new RulePackRegistry(manifests);
         const configured = registry.ruleIds().filter(id => Object.hasOwn(RULE_SCHEMAS, id));
         expect(configured.sort()).toEqual(Object.keys(RULE_SCHEMAS).sort());
-        for (const id of configured) expect(registry.schemaFor(id)).toEqual(RULE_SCHEMAS[id]);
+        // #1200 deliberately permits explicit path exemptions; all other migration-era fields stay pinned.
+        const suffix = RULE_SCHEMAS['required-type-suffix'];
+        const expected = {
+            ...RULE_SCHEMAS,
+            'required-type-suffix': {
+                ...suffix,
+                entries: FieldDef.nonEmptyObjects({
+                    ...suffix.entries.elementSchema,
+                    suffixes: new FieldDef('string[]'),
+                }),
+            },
+        };
+        for (const id of configured) expect(registry.schemaFor(id)).toEqual(expected[id]);
         expect(registry.ruleIds().filter(id => !Object.hasOwn(RULE_SCHEMAS, id)).sort()).toEqual([
             'enforce-architecture', 'no-json-property-primitive-type', 'no-mat-cell-def', 'require-typed-template', 'wiring-format',
         ]);

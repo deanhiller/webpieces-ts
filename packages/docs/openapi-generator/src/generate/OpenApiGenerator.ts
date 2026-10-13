@@ -269,14 +269,7 @@ export class OpenApiGenerator {
             .set('schemas', renderedSchemas)
             .set(
                 'securitySchemes',
-                this.security
-                    .addBuiltinSchemes(
-                        apiKey === undefined
-                            ? new JsonObject()
-                            : this.security.schemes(apiKey, schemeNames, inputs.manifestPath),
-                        this.selectedEndpoints(contracts, selection),
-                    )
-                    .orUndefined(),
+                this.renderSecuritySchemes(inputs, contracts, selection, apiKey),
             )
             .set('headers', this.headers(inputs));
 
@@ -290,6 +283,25 @@ export class OpenApiGenerator {
             .set('webhooks', webhooks.orUndefined())
             .set('components', components.orUndefined());
         return new RenderedDocument(document, schemas);
+    }
+
+    private renderSecuritySchemes(
+        inputs: GenerationInputs,
+        contracts: readonly ContractModel[],
+        selection: DocumentSelection,
+        apiKey: DocumentedApiKey | undefined,
+    ): JsonObject | undefined {
+        const schemes =
+            apiKey === undefined
+                ? new JsonObject()
+                : this.security.schemes(
+                      apiKey,
+                      inputs.manifest.securitySchemeNames,
+                      inputs.manifestPath,
+                  );
+        return this.security
+            .addBuiltinSchemes(schemes, this.selectedEndpoints(contracts, selection))
+            .orUndefined();
     }
 
     /** Same-named, different declarations in one package, across every contract a document reads. */
