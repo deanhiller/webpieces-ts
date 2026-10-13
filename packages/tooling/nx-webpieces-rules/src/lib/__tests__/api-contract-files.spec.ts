@@ -182,8 +182,8 @@ describe('the runtime graph reads the per-api files', () => {
 
         const derived = deriveRuntimeGraph(loaded.projects, new Set<string>(), fromFiles);
         expect(derived).toEqual(deriveRuntimeGraph(graph(), new Set<string>(), contracts()));
-        expect(Object.keys(derived.queues)).toEqual(['TaskApi.send']);
-        expect(derived.queues['TaskApi.send'].queueName).toBe('TaskApi-send');
+        expect(derived.queues).toEqual({});
+        expect(derived.runtimeEdges.every((edge) => edge.queue === undefined)).toBe(true);
         expect(derived.triggers).toEqual([
             {
                 kind: 'cron',
@@ -237,7 +237,12 @@ describe('validate-architecture-unchanged ignores endpoint changes', () => {
             operation: 'write',
         });
 
-        const current = new CurrentArchitecture(graph(), new ApiContractFiles().refsFor(grown), {}, {});
+        const current = new CurrentArchitecture(
+            graph(),
+            new ApiContractFiles().refsFor(grown),
+            {},
+            {},
+        );
         expect(describeTableDrift(current, saved)).toBeNull();
     });
 
@@ -247,7 +252,12 @@ describe('validate-architecture-unchanged ignores endpoint changes', () => {
         const grown = contracts();
         grown.NewApi = { owner: 'task-api', apiKind: 'rpc', basePath: '/new', methods: [] };
 
-        const current = new CurrentArchitecture(graph(), new ApiContractFiles().refsFor(grown), {}, {});
+        const current = new CurrentArchitecture(
+            graph(),
+            new ApiContractFiles().refsFor(grown),
+            {},
+            {},
+        );
         expect(describeTableDrift(current, saved)).toContain('NewApi');
     });
 });

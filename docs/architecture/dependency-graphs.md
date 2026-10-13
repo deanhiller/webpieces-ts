@@ -95,7 +95,9 @@ the graph is enforced, not just documentation.
   `runtime-architecture.showExternalNodes: false` in `webpieces.config.json`.
 - `rpc` edges → a direct labeled arrow.
 - `pubsub` edges → producer → **queue cylinder** → consumer, with dashed `enqueue` / `deliver`
-  arrows. The legend: "the producer enqueues a Cloud Task and the consumer is delivered it later."
+  arrows. Client wiring declares the contract, so the queue box and Uses panel show that contract,
+  without guessing which methods the producer enqueues. Endpoint tables do not prove client usage.
+  The legend: "the producer enqueues a Cloud Task and the consumer is delivered it later."
 
 So the picture literally shows the [one-contract-many-transports](./one-contract-many-transports.md)
 pub-sub path as a producer, a queue, and a consumer — the visual twin of the propagation-through-a-

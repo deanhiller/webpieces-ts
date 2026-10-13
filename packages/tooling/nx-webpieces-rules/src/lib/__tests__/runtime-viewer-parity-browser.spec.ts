@@ -32,7 +32,6 @@ class RuntimeParityFixture {
                 api: 'TaskApi',
                 declaredVia: 'shared-client',
                 targetService: 'consumer',
-                methodsInferred: true,
                 conditional: 'TASKS_ENABLED',
             },
         ];
@@ -244,8 +243,12 @@ describe.skipIf(!process.env.WP_GRAPH_VIZ_JS)('runtime viewer parity in file:// 
         await edge.focus();
         expect(await page.locator('.wp-graph-details').isVisible()).toBe(false);
         await edge.press('Enter');
-        expect(await page.locator('.wp-graph-details').textContent()).toContain('shared-client');
-        expect(await page.locator('.wp-graph-details').textContent()).toContain('methods inferred');
+        expect(await page.locator('.wp-graph-details li').allTextContents()).toEqual([
+            'task-contracts#TaskApi → consumer (pubsub) via TaskApi.send',
+        ]);
+        expect(await page.locator('.wp-graph-details').textContent()).not.toContain(
+            'shared-client',
+        );
         expect(await page.locator('#wp-node-menu').count()).toBe(0);
         await fixture.browser.mode(page, 'architecture');
         // Clicking outside explicitly dismisses before the mode redraw; new SVG controls rebind.

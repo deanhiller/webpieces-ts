@@ -65,8 +65,6 @@ export class ApprovedWiringGraph {
                 ref.declaredVia = resolved.via;
                 if (resolved.target?.kind === 'service')
                     ref.targetService = resolved.target.service;
-                if (resolved.transport === 'pubsub' && resolved.direction === 'uses')
-                    ref.methodsInferred = true;
                 relation[resolved.direction].push(ref);
                 relation.kind =
                     relation.implements.length === 0

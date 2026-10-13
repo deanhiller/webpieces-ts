@@ -40,7 +40,7 @@ import type {
 import { sortApiRefs } from './api-usage/api-relations';
 import { RelationSink } from './runtime-graph-decls';
 import type { ScanDecl } from './runtime-graph-decls';
-import { dedupApiRefs, sortedQueues, sortedRecord, sortUnresolved } from './runtime-graph-sorters';
+import { dedupApiRefs, sortedRecord, sortUnresolved } from './runtime-graph-sorters';
 import { attachExternalSystems, resolveExternalSystems } from './api-usage/external-systems';
 import { RuntimeProductMembership } from './graph-products';
 import { RemoteCallCollector } from './runtime-remote-calls';
@@ -154,8 +154,8 @@ class RuntimeGraphDeriver {
         private readonly hiddenProjects: Set<string>,
         /**
          * The per-contract method tables, read from the generated `architecture/apis/<Api>.json`
-         * files (ApiContractFiles). A contract with no entry — no file, or no endpoints — makes every
-         * pubsub edge through it fall back to one unnamed queue per service pair instead of failing.
+         * files (ApiContractFiles). Pubsub edges remain at the contract level, independently
+         * of method metadata: an endpoint table does not declare which methods a client uses.
          */
         private readonly apiContracts: ApiContracts = {},
         /**
@@ -411,7 +411,6 @@ class RuntimeGraphDeriver {
     private buildEdges(decls: ScanDecl[], apis: Map<string, RuntimeApi>): EdgeResult {
         const viaByKey = new Map<string, Set<string>>();
         const unresolved: RuntimeUnresolved[] = [];
-        const queues = new Map<string, RuntimeQueue>();
         for (const decl of decls) {
             for (const ref of decl.usesApis) {
                 // A named target outside this workspace (#1203) is a remote service, not an implementer
@@ -430,10 +429,6 @@ class RuntimeGraphDeriver {
                     // itself is a real, common topology (deferring its own work), and dropping it
                     // was hiding the single most interesting thing about a queue.
                     if (target === decl.name && ref.type !== 'pubsub') continue;
-                    if (ref.type === 'pubsub') {
-                        this.addQueuedEdges(decl.name, target, ref.api, viaByKey, queues);
-                        continue;
-                    }
                     const key = `${decl.name} ${target} ${ref.type}`;
                     if (!viaByKey.has(key)) viaByKey.set(key, new Set());
                     viaByKey.get(key)!.add(ref.api);
@@ -443,56 +438,9 @@ class RuntimeGraphDeriver {
         return {
             edges: this.edgesFromKeys(viaByKey),
             unresolved: sortUnresolved(unresolved),
-            queues: sortedQueues(queues),
+            // Client wiring declares contracts, never the methods a producer enqueues.
+            queues: {},
         };
-    }
-
-    /**
-     * One edge PER QUEUED METHOD of `api`, plus the queue each flows through.
-     *
-     * Per method rather than per service pair because that is the unit Cloud Tasks and Terraform
-     * create: two services exchanging three queued methods run three independently-configured,
-     * independently-backed-up queues, and collapsing them into one arrow hides which one is stuck.
-     *
-     * A contract with no method table (no `architecture/apis/<Api>.json` for it)
-     * degrades to a single unnamed queue for the pair — the old behavior — rather than vanishing.
-     */
-    private addQueuedEdges(
-        from: string,
-        to: string,
-        api: string,
-        viaByKey: Map<string, Set<string>>,
-        queues: Map<string, RuntimeQueue>,
-    ): void {
-        const queued = this.methodsOf(api).filter((m: ApiMethodMeta) => m.kind === 'cloudtasks');
-        if (queued.length === 0) {
-            const key = `${from} ${to} pubsub `;
-            if (!viaByKey.has(key)) viaByKey.set(key, new Set());
-            viaByKey.get(key)!.add(api);
-            return;
-        }
-        for (const method of queued) {
-            const queueKey = `${api}.${method.name}`;
-            const key = `${from} ${to} pubsub ${queueKey}`;
-            if (!viaByKey.has(key)) viaByKey.set(key, new Set());
-            viaByKey.get(key)!.add(api);
-
-            let queue = queues.get(queueKey);
-            if (queue === undefined) {
-                queue = {
-                    api,
-                    method: method.name,
-                    // Every cloudtasks method carries a queueName; the fallback covers a
-                    // dependencies.json written before queueName became kind-specific.
-                    queueName: method.queueName ?? `${api}-${method.name}`,
-                    producedBy: [],
-                    consumedBy: [],
-                };
-                queues.set(queueKey, queue);
-            }
-            if (!queue.producedBy.includes(from)) queue.producedBy.push(from);
-            if (!queue.consumedBy.includes(to)) queue.consumedBy.push(to);
-        }
     }
 
     /**
@@ -625,8 +573,10 @@ class RuntimeGraphDeriver {
                 new Set(
                     edges
                         .filter((e: RuntimeEdge) => e.from === decl.name)
-                        .map((e: RuntimeEdge) =>
-                            e.queue === undefined ? e.to : `queue:${e.queue}`,
+                        .flatMap((e: RuntimeEdge) =>
+                            e.type === 'pubsub'
+                                ? e.via.map((api) => `queue:${e.queue ?? api}`)
+                                : [e.to],
                         ),
                 ),
             ).sort();
