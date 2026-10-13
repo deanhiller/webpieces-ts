@@ -158,15 +158,15 @@ describe('generateRuntimeDot — contract queues, clocks, inbound external', () 
     it('names the queue box after the declared contract', () => {
         // Mrecord + an empty leading field = a cylinder on its side; the upright cylinder now means
         // a database, so the two never look alike.
-        expect(dot).toContain('"queue__worker__worker" [shape=Mrecord');
+        expect(dot).toContain('"queue__TaskApi" [shape=Mrecord');
         expect(dot).toContain('label=" |TaskApi');
         // CHANGED from toContain: `TaskApi-send` is the DERIVED `${Api}-${method}` name, so the
         // `queue:` line only restated the line above it. Only a @Queue(...) OVERRIDE prints now.
         expect(dot).not.toContain('queue: TaskApi-send');
         expect(dot).toContain(
-            '"worker" -> "queue__worker__worker" [label="Uses (1) ▾\\nenqueue", style=dashed]',
+            '"worker" -> "queue__TaskApi" [label="Uses (1) ▾\\nenqueue", style=dashed]',
         );
-        expect(dot).toContain('"queue__worker__worker" -> "worker" [style=dashed]');
+        expect(dot).toContain('"queue__TaskApi" -> "worker" [style=dashed]');
     });
 
     it('hangs the cron endpoint off a clock pointing INTO the service', () => {
@@ -223,7 +223,7 @@ describe('generateRuntimeDot — merging queues of one contract into one box', (
 
     it('draws the declared contract with one enqueue and one deliver arrow', () => {
         expect(countLines(dot, '[shape=Mrecord')).toBe(1);
-        expect(dot).toContain('"queue__worker__worker" [shape=Mrecord');
+        expect(dot).toContain('"queue__TaskApi" [shape=Mrecord');
         expect(dot).toContain('label=" |TaskApi');
         for (const method of ['blast', 'retry', 'send'])
             expect(dot).not.toContain(`TaskApi.${method}`);
@@ -311,16 +311,16 @@ function legacyQueueGraph(): RuntimeGraph {
     };
 }
 
-describe('generateRuntimeDot — the contract-only per-pair queue', () => {
+describe('generateRuntimeDot — the contract-only per-API queue', () => {
     const dot = generateRuntimeDot(legacyQueueGraph());
 
     it('still renders an edge that carries no queue key', () => {
-        expect(dot).toContain('"queue__p1__c" [shape=Mrecord');
-        expect(dot).toContain('label=" |EmailApi\\nqueue"');
+        expect(dot).toContain('"queue__EmailApi" [shape=Mrecord');
+        expect(dot).toContain('label=" |EmailApi queue"');
         expect(dot).toContain(
-            '"p1" -> "queue__p1__c" [label="Uses (1) ▾\\nenqueue", style=dashed]',
+            '"p1" -> "queue__EmailApi" [label="Uses (1) ▾\\nenqueue", style=dashed]',
         );
-        expect(dot).toContain('"queue__p1__c" -> "c" [style=dashed]');
+        expect(dot).toContain('"queue__EmailApi" -> "c" [style=dashed]');
     });
 });
 

@@ -203,7 +203,7 @@ describe.skipIf(!process.env.WP_GRAPH_VIZ_JS)('runtime viewer parity in file:// 
         await page.close();
     });
 
-    it('opens Implements only from the node menu, Uses only from edges, and preserves provenance after recoloring', async () => {
+    it('opens Implements only from the node menu, Uses only from edges, and keeps compact contract rows after recoloring', async () => {
         const page = await fixture.browser.open('1185-runtime-details', fixture.html());
         const summary = fixture.browser
             .node(page, 'consumer')
@@ -222,10 +222,9 @@ describe.skipIf(!process.env.WP_GRAPH_VIZ_JS)('runtime viewer parity in file:// 
             .locator('#wp-node-menu')
             .getByRole('button', { name: 'Implements', exact: true })
             .click();
-        expect(await page.locator('.wp-graph-details').textContent()).toContain(
+        expect(await page.locator('.wp-graph-details li').allTextContents()).toEqual([
             'task-contracts#TaskApi',
-        );
-        expect(await page.locator('.wp-graph-details').textContent()).toContain('TASKS_ENABLED');
+        ]);
         await page.keyboard.press('Escape');
         expect(await page.locator('.wp-graph-details').isVisible()).toBe(false);
         const delivery = page.locator('g.edge').filter({
@@ -244,7 +243,7 @@ describe.skipIf(!process.env.WP_GRAPH_VIZ_JS)('runtime viewer parity in file:// 
         expect(await page.locator('.wp-graph-details').isVisible()).toBe(false);
         await edge.press('Enter');
         expect(await page.locator('.wp-graph-details li').allTextContents()).toEqual([
-            'task-contracts#TaskApi → consumer (pubsub) via TaskApi.send',
+            'task-contracts#TaskApi',
         ]);
         expect(await page.locator('.wp-graph-details').textContent()).not.toContain(
             'shared-client',

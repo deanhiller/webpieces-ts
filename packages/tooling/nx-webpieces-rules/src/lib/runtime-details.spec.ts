@@ -96,8 +96,8 @@ describe('compact runtime graph details', () => {
         const details = new RuntimeDetails(data, true, generateRuntimeRenderModel(data));
         const expected = ['contracts#MailApi → target (pubsub)'];
         expect(details.nodes.source.used).toEqual(expected);
-        expect(details.edges['source->queue__source__target']).toEqual(expected);
-        expect(details.edges['queue__source__target->target']).toEqual(expected);
+        expect(details.edges['source->queue__MailApi']).toEqual(['contracts#MailApi']);
+        expect(details.edges['queue__MailApi->target']).toEqual(['contracts#MailApi']);
         expect(JSON.stringify(details)).not.toContain(via);
         expect(JSON.stringify(details)).not.toContain('inferred');
         expect(data.queues).toEqual({});
@@ -106,7 +106,7 @@ describe('compact runtime graph details', () => {
         ]);
     });
     it('matches exact queue identities when method names share a prefix', () => {
-        const data = graph(['MailApi']);
+        const data = graph(['MailApi', 'OtherApi']);
         data.services.second = { ...data.services.target };
         data.runtimeEdges = [
             {
@@ -119,7 +119,7 @@ describe('compact runtime graph details', () => {
             {
                 from: 'source',
                 to: 'second',
-                via: ['MailApi'],
+                via: ['OtherApi'],
                 type: 'pubsub',
                 queue: 'MailApi.sendEmail',
             },
@@ -127,9 +127,8 @@ describe('compact runtime graph details', () => {
         const model = generateRuntimeRenderModel(data);
         const details = new RuntimeDetails(data, true, model);
         const longer = details.edges['source->queue__MailApi_sendEmail'];
-        expect(longer.join('\n')).toContain('→ second');
-        expect(longer.join('\n')).not.toContain('→ target');
-        expect(details.edges['source->queue__MailApi_send'].join('\n')).not.toContain('→ second');
+        expect(longer).toEqual(['contracts#OtherApi']);
+        expect(details.edges['source->queue__MailApi_send']).toEqual(['contracts#MailApi']);
     });
     for (const count of [0, 1, 2, 3, 10]) {
         it(`keeps ${count} edge relationships complete with the correct inline/dropdown threshold`, () => {
@@ -142,13 +141,53 @@ describe('compact runtime graph details', () => {
             if (count > 2) expect(dot).toContain(`label="Uses (${count}) ▾"`);
             else if (count > 0) expect(dot).toContain(`label="${apis.join(', ')}"`);
             expect(dot).toContain(`Implements (${count})`);
-            expect(
-                details.nodes.target.implemented.every((value) =>
-                    value.includes('via shared#Routes'),
-                ),
-            ).toBe(true);
+            expect(details.nodes.target.implemented).toEqual(apis.map((api) => `contracts#${api}`));
+            expect(details.edges['source->target'] ?? []).toEqual(
+                apis.map((api) => `contracts#${api}`),
+            );
         });
     }
+    it('renders one Implements row for one registration with wiring provenance', () => {
+        const data = graph(['UberEatsApi']);
+        data.services.target.wiringImplements = [
+            { api: 'UberEatsApi', type: 'rpc', declaredVia: 'target#Wiring/0:Routes' },
+        ];
+        const details = new RuntimeDetails(data, true);
+        expect(details.nodes.target.implemented).toEqual(['contracts#UberEatsApi']);
+        expect(generateRuntimeDot(data)).toContain('Implements (1)');
+        // Saved duplicate identities cannot make the box count disagree with its popup.
+        data.services.target.implements.push('UberEatsApi');
+        expect(new RuntimeDetails(data, true).nodes.target.implemented).toEqual([
+            'contracts#UberEatsApi',
+        ]);
+        expect(generateRuntimeDot(data)).toContain('Implements (1)');
+    });
+    it('converges multiple enqueuers by contract and keeps each popup scoped to its API', () => {
+        const data = graph(['MailApi', 'OtherApi']);
+        data.services.second = { ...data.services.source };
+        data.runtimeEdges = [
+            { from: 'source', to: 'target', via: ['MailApi', 'OtherApi'], type: 'pubsub' },
+            { from: 'second', to: 'target', via: ['MailApi'], type: 'pubsub' },
+        ];
+        const model = generateRuntimeRenderModel(data);
+        const queues = model.nodes.filter((node) => node.queueKeys.length > 0);
+        expect(queues.map((node) => node.queueKeys)).toEqual([
+            ['queue:MailApi'],
+            ['queue:OtherApi'],
+        ]);
+        expect(queues[0].dot).toContain('MailApi queue');
+        expect(
+            model.edges.filter((edge) => edge.to === 'queue__MailApi').map((edge) => edge.from),
+        ).toEqual(['second', 'source']);
+        expect(
+            model.edges.filter((edge) => edge.from === 'queue__MailApi').map((edge) => edge.to),
+        ).toEqual(['target']);
+        const details = new RuntimeDetails(data, true, model);
+        expect(details.edges['source->queue__MailApi']).toEqual(['contracts#MailApi']);
+        expect(details.edges['second->queue__MailApi']).toEqual(['contracts#MailApi']);
+        expect(details.edges['source->queue__OtherApi']).toEqual(['contracts#OtherApi']);
+        expect(details.edges['queue__MailApi->target']).toEqual(['contracts#MailApi']);
+    });
     it('retains two providers of one API and hidden external uses in the node list', () => {
         const data = graph(['AuthApi']);
         data.runtimeEdges.push({ from: 'source', to: 'second', via: ['AuthApi'], type: 'rpc' });

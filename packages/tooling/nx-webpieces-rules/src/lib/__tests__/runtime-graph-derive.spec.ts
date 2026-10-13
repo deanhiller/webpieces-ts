@@ -181,7 +181,7 @@ describe('drawOnGraph:false hides a service from the runtime render but keeps it
         const dot = generateRuntimeDot(derived);
         expect(dot).not.toContain('"consumer" [');
         expect(dot).not.toContain('-> "consumer"');
-        expect(dot).not.toContain('queue__producer__consumer');
+        expect(dot).not.toContain('queue__EmailApi');
         expect(dot).toContain('"producer" [');
     });
 });
@@ -558,7 +558,7 @@ describe('the runtime node says what it implements and where that came from', ()
         expect(dot).toContain('Implements (2)');
         expect(
             new RuntimeDetails(derived, true).nodes['helper-fsdb-svr'].implemented.join(', '),
-        ).toContain('WarmupApi via svc-core');
+        ).toContain('WarmupApi');
         // What a node USES is deliberately absent: every use already draws an outgoing arrow
         // labeled with the same contract, so repeating it only widened every box.
         expect(dot).not.toContain('uses: HelperFsdbApi');
@@ -652,12 +652,12 @@ describe('generateRuntimeDot — rpc direct, pubsub via queue', () => {
     });
 
     it('draws the pubsub edge through a cylinder queue node', () => {
-        expect(dot).toContain('"queue__producer__consumer" [shape=Mrecord');
+        expect(dot).toContain('"queue__EmailApi" [shape=Mrecord');
         expect(dot).toContain(
-            '"producer" -> "queue__producer__consumer" [label="Uses (1) ▾\\nenqueue", style=dashed] [id="wp-real-edge-1"];',
+            '"producer" -> "queue__EmailApi" [label="Uses (1) ▾\\nenqueue", style=dashed] [id="wp-real-edge-1"];',
         );
         expect(dot).toContain(
-            '"queue__producer__consumer" -> "consumer" [style=dashed] [id="wp-real-edge-2"];',
+            '"queue__EmailApi" -> "consumer" [style=dashed] [id="wp-real-edge-2"];',
         );
     });
 });
