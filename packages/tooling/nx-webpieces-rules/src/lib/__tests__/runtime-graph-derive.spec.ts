@@ -623,9 +623,7 @@ describe('external systems are drawn as terminal nodes (render-only)', () => {
         const dot = generateRuntimeDot(derived);
         expect(dot).toContain('"external__lib-firestore" [shape=box, style="dashed,filled"');
         expect(dot).toContain('(external)"');
-        expect(dot).toContain(
-            '"fsdb-svr" -> "external__lib-firestore" [label="FirestoreReadApi, FirestoreWriteApi"',
-        );
+        expect(dot).toContain('"fsdb-svr" -> "external__lib-firestore" [label="Uses (2) ▾"');
     });
 
     it('keeps them OUT of the graph data — no service, no level, no cycle input', () => {
@@ -654,7 +652,7 @@ describe('generateRuntimeDot — rpc direct, pubsub via queue', () => {
     it('draws the pubsub edge through a cylinder queue node', () => {
         expect(dot).toContain('"queue__EmailApi" [shape=Mrecord');
         expect(dot).toContain(
-            '"producer" -> "queue__EmailApi" [label="Uses (1) ▾\\nenqueue", style=dashed] [id="wp-real-edge-1"];',
+            '"producer" -> "queue__EmailApi" [label="enqueue", style=dashed] [id="wp-real-edge-1"];',
         );
         expect(dot).toContain(
             '"queue__EmailApi" -> "consumer" [style=dashed] [id="wp-real-edge-2"];',

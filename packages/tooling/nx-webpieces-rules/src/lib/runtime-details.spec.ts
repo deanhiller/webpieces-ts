@@ -138,7 +138,7 @@ describe('compact runtime graph details', () => {
             const dot = generateRuntimeDot(data);
             expect(details.nodes.source.used).toHaveLength(count);
             expect(details.nodes.target.implemented).toHaveLength(count);
-            if (count > 2) expect(dot).toContain(`label="Uses (${count}) ▾"`);
+            if (count > 1) expect(dot).toContain(`label="Uses (${count}) ▾"`);
             else if (count > 0) expect(dot).toContain(`label="${apis.join(', ')}"`);
             expect(dot).toContain(`Implements (${count})`);
             expect(details.nodes.target.implemented).toEqual(apis.map((api) => `contracts#${api}`));

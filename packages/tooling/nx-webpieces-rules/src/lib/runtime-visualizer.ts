@@ -58,6 +58,7 @@ import { dotValue, recordValue, assertValidDot } from './dot-syntax';
 import { GraphRenderModel } from './graph-render-model';
 import { RuntimeViewerAdapter } from './runtime-viewer-adapter';
 import { RuntimeHtmlPage } from './runtime-html-page';
+import { RuntimeExternalTriggers } from './runtime-external-triggers';
 import { RemoteServiceNodeId } from './remote-service-node-id';
 import {
     QUEUE_FILL,
@@ -127,7 +128,7 @@ function edgeDot(edge: RuntimeEdge): string {
     const from = serviceNodeId(edge.from);
     const to = serviceNodeId(edge.to);
     const viaRaw =
-        edge.via.length > 2
+        edge.via.length > 1
             ? `Uses (${edge.via.length}) ▾`
             : edge.via.map((v: string) => getShortName(v)).join(', ');
     const cut = edge.cutLegacyCycle === true;
@@ -179,7 +180,6 @@ function queueBoxDot(
     producers: string[],
     consumers: string[],
     model: GraphRenderModel,
-    contractCount: number,
     queueKeys: string[],
 ): string {
     // Record-mode label: the text must clear recordValue(), and QUEUE_LABEL_PREFIX supplies the
@@ -196,7 +196,7 @@ function queueBoxDot(
         dot += model.edge(
             producer,
             id,
-            `  "${serviceNodeId(producer)}" -> "${id}" [label="Uses (${contractCount}) ▾\\nenqueue", style=dashed];\n`,
+            `  "${serviceNodeId(producer)}" -> "${id}" [label="enqueue", style=dashed];\n`,
         );
     for (const consumer of consumers)
         dot += model.edge(
@@ -277,7 +277,6 @@ function queuesDot(graph: RuntimeGraph, hidden: Set<string>, model: GraphRenderM
             [...ends.producers].sort(),
             [...ends.consumers].sort(),
             model,
-            1,
             [`queue:${api}`],
         );
     }
@@ -292,7 +291,6 @@ function queuesDot(graph: RuntimeGraph, hidden: Set<string>, model: GraphRenderM
             group.producers,
             group.consumers,
             model,
-            1,
             group.members,
         );
     }
@@ -355,7 +353,7 @@ function externalSystemNodeDot(
  *
  * Identity is the caller's label in the SAME `system__` space {@link externalSystemsDot} uses, which
  * buys three things at once: two vendors hitting one contract are two boxes, one vendor hitting three
- * methods is one box with three arrows, and a vendor this repo also CALLS is that same single box.
+ * methods is one box with one arrow per service, and a vendor this repo also CALLS is that same single box.
  * `options` is passed in for the last of those — when that outbound half will be drawn, this half
  * must not restate the node statement.
  */
@@ -376,33 +374,32 @@ function triggerDot(
     const emitted = new Set<string>();
     let dot =
         '\n  // Entry points nothing in this repo calls: a clock, or a system outside the repo.\n';
-    for (const trigger of triggers) {
+    for (const trigger of triggers.filter((trigger: RuntimeTrigger) => trigger.kind === 'cron')) {
         const service = serviceNodeId(trigger.service);
         const label = dotValue(`${trigger.api}.${trigger.method}`);
-        if (trigger.kind === 'cron') {
-            const id = `cron__${dotId(`${trigger.api}_${trigger.method}`)}`;
-            const schedule = dotValue(trigger.queueName ?? `${trigger.api}-${trigger.method}`);
-            dot +=
-                model.node(
-                    id,
-                    `  "${id}" [shape=circle, style="filled", fillcolor="${CRON_FILL}", ` +
-                        `color="${CRON_BORDER}", label="⏰\\ncron"];\n`,
-                ) +
-                model.edge(
-                    id,
-                    trigger.service,
-                    `  "${id}" -> "${service}" [label="${label}\\n${schedule}", color="${CRON_BORDER}"];\n`,
-                );
-            continue;
-        }
+        const id = `cron__${dotId(`${trigger.api}_${trigger.method}`)}`;
+        const schedule = dotValue(trigger.queueName ?? `${trigger.api}-${trigger.method}`);
+        dot +=
+            model.node(
+                id,
+                `  "${id}" [shape=circle, style="filled", fillcolor="${CRON_FILL}", ` +
+                    `color="${CRON_BORDER}", label="⏰\\ncron"];\n`,
+            ) +
+            model.edge(
+                id,
+                trigger.service,
+                `  "${id}" -> "${service}" [label="${label}\\n${schedule}", color="${CRON_BORDER}"];\n`,
+            );
+    }
+    for (const group of new RuntimeExternalTriggers(triggers).groups) {
+        const trigger = group.triggers[0];
+        const service = serviceNodeId(group.to);
+        const label = dotValue(group.label());
         const caller = trigger.caller;
         // Undeclared: only possible for a graph generated BEFORE the caller was required (generation
         // now fails instead). DOTTED and question-marked, so "we were never told who this is" cannot
         // be mistaken for a named vendor.
-        const id =
-            caller === undefined
-                ? `inbound__${dotId(trigger.api)}`
-                : `system__${dotId(caller.label)}`;
+        const id = group.from;
         if (!emitted.has(id) && !(caller !== undefined && drawnOutbound.has(caller.label))) {
             emitted.add(id);
             dot +=
@@ -466,7 +463,7 @@ function externalSystemsDot(
         const via =
             system.apis.length === 0
                 ? ''
-                : ` [label="${system.apis.length > 2 ? `Uses (${system.apis.length}) ▾` : labelList([...system.apis].sort())}"]`;
+                : ` [label="${system.apis.length > 1 ? `Uses (${system.apis.length}) ▾` : labelList([...system.apis].sort())}"]`;
         for (const service of [...system.usedBy].sort()) {
             if (hidden.has(service)) continue;
             dot += model.edge(
@@ -524,7 +521,7 @@ function externalDot(graph: RuntimeGraph, hidden: Set<string>, model: GraphRende
         const service = parts[0];
         const external = parts[1];
         const apis = apisByPair.get(key)!.sort();
-        const via = apis.length > 2 ? `Uses (${apis.length}) ▾` : labelList(apis);
+        const via = apis.length > 1 ? `Uses (${apis.length}) ▾` : labelList(apis);
         // SOLID: this is a synchronous call that returns a value. Dashed is reserved for events, and
         // "outside the repo" is already said by the node's dashed border.
         dot += model.edge(
@@ -576,7 +573,7 @@ function remoteServicesDot(
         const id = new RemoteServiceNodeId().of(name);
         for (const call of remotes[name].calledBy) {
             if (hidden.has(call.from)) continue;
-            const via = call.via.length > 2 ? `Uses (${call.via.length}) ▾` : labelList(call.via);
+            const via = call.via.length > 1 ? `Uses (${call.via.length}) ▾` : labelList(call.via);
             const label = call.type === 'pubsub' ? `${via}\\nenqueue` : via;
             const style = call.type === 'pubsub' ? ', style=dashed' : '';
             dot += model.edge(
