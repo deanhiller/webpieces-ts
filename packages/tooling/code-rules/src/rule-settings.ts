@@ -205,7 +205,8 @@ export const recommendedSeeds: Readonly<Record<string, ConfigObject>> = {
                     "Event",
                     "Dto",
                     "Api"
-                ]
+                ],
+                "exempt": false
             }
         ]
     },

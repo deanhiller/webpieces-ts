@@ -126,7 +126,7 @@ export class WireClosure {
         );
         if (
             governing !== undefined &&
-            governing.entry.suffixes.length > 0 &&
+            !governing.entry.exempt &&
             this.rule.scope?.includes(
                 type.name,
                 relFile,

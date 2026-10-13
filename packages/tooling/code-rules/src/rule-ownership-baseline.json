@@ -1190,6 +1190,13 @@
             "type": "string[]",
             "optional": false,
             "nullable": false,
+            "nonEmpty": true,
+            "emptyInstruction": "To exempt this path, set exempt: true and retain a non-empty suffixes list; suffixes: [] is not an exemption."
+          },
+          "exempt": {
+            "type": "boolean",
+            "optional": false,
+            "nullable": false,
             "nonEmpty": false
           }
         }
@@ -1229,7 +1236,8 @@
             "Event",
             "Dto",
             "Api"
-          ]
+          ],
+          "exempt": false
         }
       ]
     }

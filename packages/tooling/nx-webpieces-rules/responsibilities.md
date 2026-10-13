@@ -21,7 +21,7 @@ Nx inference plugin that auto-wires webpieces build gates with no manual project
   exports from `role:api-lib`. Inside the `api-rules-for-openapi` / `api-rules-for-mcp` scan, the
   WIRE CLOSURE (`wire-closure.ts`) requires every type a contract reaches to be declared in a
   `role:api-lib` project and to carry its `required-type-suffix` suffix (using that rule's own mode,
-  allowedPaths, declaration-site disables, and first-match `suffixes: []` exemptions); `generate:openapi-components` is
+  allowedPaths, declaration-site disables, and first-match `exempt: true` entries); `generate:openapi-components` is
   refused on anything but a `role:api-lib` (`ComponentsWiring` and the executor). See
   `.claude/rules/framework-tags.md`.
 - Runtime microservice graph tooling: `runtime-graph`, `runtime-cycles`, `runtime-markers`, `runtime-visualizer`, `runtime-config`.

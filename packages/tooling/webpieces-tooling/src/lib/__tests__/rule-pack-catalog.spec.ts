@@ -44,7 +44,8 @@ describe('complete compatibility pack catalog', () => {
                 ...suffix,
                 entries: FieldDef.nonEmptyObjects({
                     ...suffix.entries.elementSchema,
-                    suffixes: new FieldDef('string[]'),
+                    suffixes: FieldDef.nonEmptyStrings('To exempt this path, set exempt: true and retain a non-empty suffixes list; suffixes: [] is not an exemption.'),
+                    exempt: new FieldDef('boolean'),
                 }),
             },
         };

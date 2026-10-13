@@ -357,6 +357,9 @@ export class RulePackRegistry {
                         `Invalid ${flag} for ${location}.${key}. Supply a boolean.`,
                     );
             }
+            if (field.emptyInstruction !== undefined && typeof field.emptyInstruction !== 'string') {
+                throw new InformAiError(`Invalid emptyInstruction for ${location}.${key}. Supply owner-authored cure text.`);
+            }
             if (
                 field.enumValues !== undefined &&
                 (!Array.isArray(field.enumValues) ||
@@ -418,7 +421,8 @@ export class RulePackRegistry {
                 errors.push(`${label} must be one of ${field.enumValues.join(', ')}.`);
             if (Array.isArray(entry)) {
                 if (field.nonEmpty && entry.length === 0)
-                    errors.push(`${label} must contain at least one entry.`);
+                    errors.push(`${label} must contain at least one entry.` +
+                        (field.emptyInstruction === undefined ? '' : ` ${field.emptyInstruction}`));
                 if (
                     field.type === 'string[]' &&
                     entry.some((item: ConfigValue) => typeof item !== 'string')

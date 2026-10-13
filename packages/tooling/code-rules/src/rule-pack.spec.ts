@@ -84,12 +84,28 @@ it('accepts an explicit suffix exemption through the real owner schema', () => {
         {
             'required-type-suffix': {
                 mode: 'RUN_EVERY_TIME',
-                entries: [{ paths: ['published/**'], suffixes: [] }],
+                entries: [{ paths: ['published/**'], suffixes: ['Dto'], exempt: true }],
                 turnOffRuleUntilEpoch: 0,
                 turnOffRuleWhileOnBranch: null,
             },
         },
         registry,
     );
-    expect(errors.filter((error) => error.includes('[required-type-suffix]'))).toEqual([]);
+    expect(errors.filter((error: string) => error.includes('[required-type-suffix]'))).toEqual([]);
+    const empty = {
+        mode: 'RUN_EVERY_TIME',
+        entries: [{ paths: ['published/**'], suffixes: [], exempt: true }],
+        turnOffRuleUntilEpoch: 0,
+        turnOffRuleWhileOnBranch: null,
+    };
+    expect(registry.validateRuleConfig('required-type-suffix', empty).join('\n')).toContain(
+        'set exempt: true',
+    );
+    expect(
+        validateWebpiecesConfig({ 'required-type-suffix': empty }, registry).join('\n'),
+    ).toContain('set exempt: true');
+    const missingChoice = { ...empty, entries: [{ paths: ['published/**'], suffixes: ['Dto'] }] };
+    expect(registry.validateRuleConfig('required-type-suffix', missingChoice).join('\n')).toContain(
+        'exempt is required',
+    );
 });

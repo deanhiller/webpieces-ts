@@ -107,11 +107,16 @@ Configure matching policies on **every producer and consumer** in a components
 chain. The downstream generator checks that the upstream document actually exports
 the expected schema name; a missing or inconsistent policy fails generation.
 
-This combines with `required-type-suffix`: use an entry with `suffixes: []` to
-preserve published source names, or enforce `Dto` gradually with
+This combines with `required-type-suffix`: use an entry with `exempt: true` to
+preserve published source names, or set `exempt: false` and enforce `Dto` gradually with
 `NEW_AND_MODIFIED_CODE` while stripping it from generated documentation. The
 chained-components regression test renames source declarations and checks that all
 generated OpenAPI and MCP artifacts remain byte-identical.
+
+Every suffix-enforcement entry requires an explicit `exempt` boolean and non-empty
+`suffixes`, including exempt entries. Retaining the suffixes records the policy that
+re-enabling the entry will enforce. `suffixes: []` is rejected with migration advice.
+For example: `{ "paths": ["published/**"], "suffixes": ["Dto", "Api"], "exempt": true }`.
 
 **The ORDER of `apis[]` is the published sidebar order.** Alphabetising it is not a cleanup.
 

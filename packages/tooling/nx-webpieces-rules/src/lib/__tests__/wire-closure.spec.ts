@@ -84,6 +84,7 @@ function suffixes(...list: string[]): WireClosureRule {
     const entry = new WireSuffixEntry();
     entry.paths = ['libraries/**'];
     entry.suffixes = list;
+    entry.exempt = false;
     return new WireClosureRule(
         [entry],
         new WireSuffixScope(root, 'RUN_EVERY_TIME', [], new DiffScope()),
@@ -141,11 +142,12 @@ describe('wire closure (D4)', () => {
         expect(findings.openApi.isEmpty() && findings.mcp.isEmpty()).toBe(true);
     });
 
-    it('uses the first matching empty suffix list as an exemption without exempting the role check', () => {
+    it('uses the first matching explicit exemption without exempting the role check', () => {
         const broad = suffixes('Request', 'Response', 'Dto');
         const exempt = new WireSuffixEntry();
         exempt.paths = ['libraries/company-core/**'];
-        exempt.suffixes = [];
+        exempt.suffixes = ['Dto'];
+        exempt.exempt = true;
         const scope = new WireSuffixScope(root, 'RUN_EVERY_TIME', [], new DiffScope());
         expect(
             wireDefects('api-lib', new WireClosureRule([exempt, ...broad.suffixEntries], scope)),
