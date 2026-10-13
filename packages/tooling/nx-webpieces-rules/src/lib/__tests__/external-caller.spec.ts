@@ -251,7 +251,7 @@ describe('drawing the inbound caller', () => {
         expect(dot).toContain('"system__twilio" -> "ai-chat" [label="WhatsAppApi.inbound"');
     });
 
-    it('converges ONE caller on ONE box however many methods it posts to', () => {
+    it('converges ONE caller on ONE box and edge however many methods it posts to', () => {
         const dot = generateRuntimeDot(
             deriveRuntimeGraph(
                 chatGraph(),
@@ -275,7 +275,9 @@ describe('drawing the inbound caller', () => {
             ),
         );
         expect(nodeStatements(dot, 'system__twilio')).toHaveLength(1);
-        expect(arrowsFrom(dot, 'system__twilio')).toHaveLength(2);
+        expect(arrowsFrom(dot, 'system__twilio')).toEqual([
+            expect.stringContaining('label="WhatsAppApi"'),
+        ]);
     });
 
     it('splits TWO callers on one contract into two boxes', () => {

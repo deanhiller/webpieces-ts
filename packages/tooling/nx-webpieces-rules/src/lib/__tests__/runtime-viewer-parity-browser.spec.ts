@@ -112,6 +112,27 @@ class RuntimeParityFixture {
         }
     }
 
+    withRpcDetails(): RuntimeGraph {
+        const graph = structuredClone(this.graph);
+        graph.runtimeEdges.push({
+            from: 'producer',
+            to: 'consumer',
+            via: ['FirstApi', 'SecondApi'],
+            type: 'rpc',
+        });
+        graph.apis.FirstApi = {
+            owner: 'contracts',
+            implementedBy: ['consumer'],
+            usedBy: ['producer'],
+        };
+        graph.apis.SecondApi = {
+            owner: 'contracts',
+            implementedBy: ['consumer'],
+            usedBy: ['producer'],
+        };
+        return graph;
+    }
+
     html(graph: RuntimeGraph = this.graph, projects: EnhancedGraph = this.projects): string {
         const options = new RuntimeVizOptions(true, projects);
         return new RuntimeHtmlPage(
@@ -205,24 +226,10 @@ describe.skipIf(!process.env.WP_GRAPH_VIZ_JS)('runtime viewer parity in file:// 
     });
 
     it('opens Implements only from the node menu, Uses only from edges, and keeps compact contract rows after recoloring', async () => {
-        const graph = structuredClone(fixture.graph);
-        graph.runtimeEdges.push({
-            from: 'producer',
-            to: 'consumer',
-            via: ['FirstApi', 'SecondApi'],
-            type: 'rpc',
-        });
-        graph.apis.FirstApi = {
-            owner: 'contracts',
-            implementedBy: ['consumer'],
-            usedBy: ['producer'],
-        };
-        graph.apis.SecondApi = {
-            owner: 'contracts',
-            implementedBy: ['consumer'],
-            usedBy: ['producer'],
-        };
-        const page = await fixture.browser.open('1185-runtime-details', fixture.html(graph));
+        const page = await fixture.browser.open(
+            '1185-runtime-details',
+            fixture.html(fixture.withRpcDetails()),
+        );
         const summary = fixture.browser
             .node(page, 'consumer')
             .locator('text')
