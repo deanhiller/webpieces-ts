@@ -29,3 +29,20 @@ itself. An omitted entry permits no outward product dependencies.
 Run `pnpm nx run architecture:generate` after changing ownership or dependencies.
 Run `npm run arch:visualize` to open the saved graph; its Product color mode and
 legend show ownership, cross-product edges, and the allowed dependency matrix.
+
+## Stable graph colors
+
+Product colors are derived from the exact `product:<name>` name using SHA-256.
+Adding, removing, or reordering other products does not change an existing
+product's color. Architecture and runtime use the same assignment, even when
+runtime shows only a subset. Nodes, crossing edges, legends, and filter swatches
+use that assignment. Renaming a product changes its identity and therefore its
+color. There is no eight-product limit or overflow into the shared neutral fill.
+
+Colors are automatic; consumers do not need to configure them. Name-based colors
+can be similar, so the product labels remain the ownership key. Neutral means a
+box belongs to every product in that graph; white/dashed means no product.
+
+Runtime framework colors, Architecture role colors, and Impact status colors are
+fixed semantic palettes. A box changes those colors only when its framework, role,
+or impact status changes. Runtime context shapes retain their fixed kind colors.

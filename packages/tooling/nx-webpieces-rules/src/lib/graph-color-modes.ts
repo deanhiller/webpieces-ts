@@ -212,8 +212,6 @@ export class LegendFacts {
     noProduct = 0;
     /** Some box belongs to two or more products, but not to every one: it is striped. */
     multiProduct = false;
-    /** Some product is past the palette's eight and is painted with the neutral fill. */
-    productOverflow = false;
     /** Dependency edges crossing into another product (#1204), drawn dashed in the Product mode. */
     crossProductEdges = 0;
     /**
@@ -295,7 +293,6 @@ export class NodeModeStyler {
     private recordProducts(legend: LegendFacts, facts: NodeFacts, palette: ProductPalette): void {
         if (legend.products.length === 0 && palette.colors.length > 0) {
             legend.products = palette.names().map((product: string): ProductCount => new ProductCount(product, 0, 0));
-            legend.productOverflow = palette.overflows();
         }
         if (facts.products.length === 0) legend.noProduct++;
         if (palette.sharedByAll(facts.products)) legend.sharedByAll++;

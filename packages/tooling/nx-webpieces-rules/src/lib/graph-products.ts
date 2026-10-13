@@ -15,9 +15,9 @@
  *    declared `product:` tags. A service is never put in a product because another service calls it or
  *    feeds its queue; a call from one product into another product's service shows as the runtime EDGE
  *    between them. A service whose project carries no tag is in no product.
- *  - ProductPalette — the Product color mode's colors: a fixed palette of eight assigned in sorted
- *    product-name order, a neutral fill for a box shared by EVERY product, and a dashed white box for
- *    one in no product.
+ *  - ProductPalette — colors derived only from the product name, shared by both viewers. Adding or
+ *    removing another product never reassigns an existing color. Neutral means shared by EVERY
+ *    product; a dashed white box belongs to none.
  *  - ProductBoundary — which dependency edges cross from one product into another (#1204), drawn
  *    dashed in the target product's color in the Product color mode.
  *
@@ -25,14 +25,14 @@
  * the committed dependencies.json / runtime-dependencies.json rather than into a sidecar.
  */
 
+import { createHash } from 'node:crypto';
 import type { EnhancedGraph } from './graph-sorter';
 import type { RuntimeGraph } from './runtime-graph-model';
 
-// The same two text colors graph-color-modes.ts writes on every fill. Spelled here rather than
+// The same dark text color graph-color-modes.ts writes on light fills. Spelled here rather than
 // imported because graph-color-modes.ts imports THIS file (for the palette), and a file-import cycle
 // is refused by `no-file-import-cycles`.
 const DARK_TEXT = '#1a1c22';
-const LIGHT_TEXT = '#ffffff';
 
 /** One product's color, and the text color that reads on it. Data-only. */
 export class ProductColor {
@@ -40,27 +40,10 @@ export class ProductColor {
         public readonly product: string,
         public readonly color: string,
         public readonly fontColor: string,
-        /** False for a product past the palette's eight, which is painted with the neutral fill. */
-        public readonly inPalette: boolean,
     ) {}
 }
 
-/** The eight product colors, in assignment order. Distinct from every runtime and role color. */
-const PRODUCT_COLORS: readonly (readonly [string, string])[] = [
-    ['#3f6fb5', LIGHT_TEXT],
-    ['#f28e2b', DARK_TEXT],
-    ['#c0392b', LIGHT_TEXT],
-    ['#5cb8b2', DARK_TEXT],
-    ['#3d8b3d', LIGHT_TEXT],
-    ['#edc948', DARK_TEXT],
-    ['#8e5ea2', LIGHT_TEXT],
-    ['#ff9da7', DARK_TEXT],
-];
-
-/** How many products get a color of their own; any further product uses the neutral fill. */
-export const PRODUCT_PALETTE_SIZE = PRODUCT_COLORS.length;
-
-/** A box shared by EVERY product, and every product past the palette's eight. */
+/** A box shared by EVERY product. */
 export const PRODUCT_SHARED_FILL = '#c9ced8';
 /** A box in no product: white, with a dashed border. */
 export const PRODUCT_NONE_FILL = '#ffffff';
@@ -72,11 +55,7 @@ export class ProductPalette {
 
     constructor(products: readonly string[]) {
         const sorted = [...new Set(products)].sort();
-        this.colors = sorted.map((product: string, index: number): ProductColor => {
-            const entry = PRODUCT_COLORS[index];
-            if (entry === undefined) return new ProductColor(product, PRODUCT_SHARED_FILL, DARK_TEXT, false);
-            return new ProductColor(product, entry[0], entry[1], true);
-        });
+        this.colors = sorted.map((product: string): ProductColor => this.colorOf(product));
     }
 
     /** Every product carried by a project of the graph, as one palette. */
@@ -92,20 +71,18 @@ export class ProductPalette {
     }
 
     colorOf(product: string): ProductColor {
-        return (
-            this.colors.find((color: ProductColor): boolean => color.product === product) ??
-            new ProductColor(product, PRODUCT_SHARED_FILL, DARK_TEXT, false)
-        );
+        // SHA-256 and these channel bounds are the assignment contract. Never use the product's
+        // index, the graph's product set, or collision resolution: each would recolor other products.
+        const digest = createHash('sha256').update(product, 'utf8').digest();
+        // Keep every channel light enough for dark text, including text spanning product stripes.
+        const channels = [digest[0], digest[1], digest[2]].map((value: number): number => 136 + value % 96);
+        const color = '#' + channels.map((value: number): string => value.toString(16).padStart(2, '0')).join('');
+        return new ProductColor(product, color, DARK_TEXT);
     }
 
     /** True for a box carrying every product of a workspace that declares two or more. */
     sharedByAll(products: readonly string[]): boolean {
         return this.colors.length > 1 && this.colors.every((color: ProductColor): boolean => products.includes(color.product));
-    }
-
-    /** True when some product is past the palette's eight, so the legend must say it is neutral. */
-    overflows(): boolean {
-        return this.colors.some((color: ProductColor): boolean => !color.inPalette);
     }
 }
 

@@ -7,7 +7,6 @@ import { describe, it, expect } from 'vitest';
 import type { EnhancedGraph } from '../graph-sorter';
 import type { RuntimeGraph, RuntimeService } from '../runtime-graph-model';
 import {
-    PRODUCT_PALETTE_SIZE,
     PRODUCT_SHARED_FILL,
     ProductColor,
     ProductMembership,
@@ -174,15 +173,25 @@ describe('ProductPalette', () => {
         expect(a.colorOf('lang').color).toBe(b.colorOf('lang').color);
     });
 
-    it(`gives the first ${PRODUCT_PALETTE_SIZE} distinct colors and the neutral fill past them`, () => {
-        const names = Array.from({ length: PRODUCT_PALETTE_SIZE + 2 }, (_: unknown, i: number): string => `p${i + 10}`);
+    it('locks a product color across additions, removals, duplicates and runtime subsets', () => {
+        const products = ['api-model', 'core', 'example', 'openapi', 'platform', 'rules'];
+        for (const product of products) {
+            const full = new ProductPalette(products).colorOf(product);
+            expect(new ProductPalette([product]).colorOf(product)).toEqual(full);
+            expect(new ProductPalette(['aaa', ...products, 'zzz', product]).colorOf(product)).toEqual(full);
+            expect(new ProductPalette([...products].reverse()).colorOf(product)).toEqual(full);
+        }
+    });
+
+    it('pins name-based colors so future refactors cannot silently reassign them', () => {
+        expect(new ProductPalette(['core']).colorOf('core').color).toBe('#95cdbd');
+    });
+
+    it('colors more than eight products without treating any as shared', () => {
+        const names = Array.from({ length: 20 }, (_: unknown, i: number): string => `product-${i}`);
         const palette = new ProductPalette(names);
-        const colored = palette.colors.filter((color: ProductColor): boolean => color.inPalette);
-        expect(colored).toHaveLength(PRODUCT_PALETTE_SIZE);
-        expect(new Set(colored.map((color: ProductColor): string => color.color)).size).toBe(PRODUCT_PALETTE_SIZE);
-        expect(palette.colorOf(names[PRODUCT_PALETTE_SIZE]).color).toBe(PRODUCT_SHARED_FILL);
-        expect(palette.overflows()).toBe(true);
-        expect(new ProductPalette(['lang']).overflows()).toBe(false);
+        expect(new Set(palette.colors.map((color: ProductColor): string => color.color)).size).toBe(20);
+        expect(palette.colors.every((color: ProductColor): boolean => color.color !== PRODUCT_SHARED_FILL)).toBe(true);
     });
 
     it('a box is shared by every product only when two or more are declared', () => {
