@@ -115,6 +115,8 @@ export class DocumentedType {
         readonly packageName: string | undefined,
         /** Pointer-style `path/to/File.ts:12:5` of the declaration, for a refusal that names it. */
         readonly location: string,
+        /** Published schema name; the source name stays in name for validation and diagnostics. */
+        readonly schemaName: string,
     ) {}
 
     /**
@@ -228,11 +230,18 @@ export class DocumentedApiKey {
 
 /** Structurally extracted credential alternatives, with OR semantics. */
 export class DocumentedAuthMethod {
-    constructor(readonly kind: string, readonly argumentTexts: readonly string[], readonly apiKey: DocumentedApiKey | undefined) {}
+    constructor(
+        readonly kind: string,
+        readonly argumentTexts: readonly string[],
+        readonly apiKey: DocumentedApiKey | undefined,
+    ) {}
 }
 
 export class DocumentedAuth {
-    constructor(readonly publicReason: string | undefined, readonly methods: readonly DocumentedAuthMethod[]) {}
+    constructor(
+        readonly publicReason: string | undefined,
+        readonly methods: readonly DocumentedAuthMethod[],
+    ) {}
 }
 
 /** One `@Endpoint` method of one contract. */

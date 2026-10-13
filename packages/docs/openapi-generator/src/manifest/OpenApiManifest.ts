@@ -25,6 +25,8 @@
  * It is rendered into `tags[]` in that order, and a docs theme builds its sidebar from `tags[]`.
  * Alphabetising this array is not a cleanup; it reorders partner-facing navigation.
  */
+import { SchemaNameEntry } from '@webpieces/api-doc-model';
+
 export class ServerEntry {
     constructor(
         readonly url: string,
@@ -107,6 +109,7 @@ export class OpenApiManifest {
         readonly securitySchemeNames: readonly string[],
         readonly errors: ErrorsEntry | undefined,
         readonly responseHeaders: readonly ResponseHeaderEntry[],
+        readonly schemaNames: readonly SchemaNameEntry[],
     ) {}
 }
 
@@ -124,5 +127,6 @@ export class ComponentsManifest {
         readonly title: string,
         /** The library's entry files (usually `src/index.ts`), relative to the manifest's directory. */
         readonly entries: readonly string[],
+        readonly schemaNames: readonly SchemaNameEntry[],
     ) {}
 }

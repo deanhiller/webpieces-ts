@@ -1,5 +1,5 @@
-import { FieldDef, SchemaShape, BaseRuleConfig, BASE_RULE_SCHEMA } from "@webpieces/rules-sdk";
-import { ModifiedCodeMode, MODIFIED_CODE_MODES } from "@webpieces/rules-sdk";
+import { FieldDef, SchemaShape, BaseRuleConfig, BASE_RULE_SCHEMA } from '@webpieces/rules-sdk';
+import { ModifiedCodeMode, MODIFIED_CODE_MODES } from '@webpieces/rules-sdk';
 /**
  * One `required-type-suffix` entry: the path globs it covers and the suffixes a type exported from a
  * file under them may end in. Data-only.
@@ -7,12 +7,12 @@ import { ModifiedCodeMode, MODIFIED_CODE_MODES } from "@webpieces/rules-sdk";
 export class RequiredTypeSuffixEntry {
     /** Workspace-relative globs, e.g. `["libraries/apis/internal/**"]`. Non-empty. */
     paths!: string[];
-    /** Case-sensitive name suffixes, e.g. `["Request", "Response", "Event", "Dto", "Api"]`. Non-empty. */
+    /** Case-sensitive suffixes. An explicit empty list exempts this first-matching path. */
     suffixes!: string[];
 
     static readonly SCHEMA: SchemaShape<RequiredTypeSuffixEntry> = {
         paths: FieldDef.nonEmptyStrings(),
-        suffixes: FieldDef.nonEmptyStrings(),
+        suffixes: new FieldDef('string[]'),
     };
 }
 
@@ -28,7 +28,7 @@ export class RequiredTypeSuffixEntry {
  *   renamed type — so legacy names are grandfathered) | NEW_AND_MODIFIED_FILES (every exported type in a
  *   changed file) | MODIFIED_PROJECTS / RUN_EVERY_TIME (every exported type in each touched project / the
  *   whole repo — #1027).
- * - `entries` — non-empty; each entry has non-empty `paths` and `suffixes`. For example:
+ * - `entries` — non-empty; each entry has non-empty `paths`; explicit `suffixes: []` exempts its first-matching paths. For example:
  *
  *       "entries": [
  *         { "paths": ["libraries/apis/internal/**"], "suffixes": ["Request", "Response", "Event", "Dto", "Api"] },

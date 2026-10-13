@@ -74,3 +74,22 @@ it('requires explicit settings for every owned policy, including future addition
         }
     }
 });
+
+it('accepts an explicit suffix exemption through the real owner schema', () => {
+    const own = rulePackManifest.contributions.filter(
+        (entry) => entry.ownerPack === rulePackManifest.packageName,
+    );
+    const registry = new RulePackRegistry([{ ...rulePackManifest, contributions: own }]);
+    const errors = validateWebpiecesConfig(
+        {
+            'required-type-suffix': {
+                mode: 'RUN_EVERY_TIME',
+                entries: [{ paths: ['published/**'], suffixes: [] }],
+                turnOffRuleUntilEpoch: 0,
+                turnOffRuleWhileOnBranch: null,
+            },
+        },
+        registry,
+    );
+    expect(errors.filter((error) => error.includes('[required-type-suffix]'))).toEqual([]);
+});

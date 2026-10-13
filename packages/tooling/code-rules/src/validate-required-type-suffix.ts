@@ -125,6 +125,7 @@ export class ExportedTypeScanner {
     private readonly rename = new SuffixRename();
 
     scan(file: ApiLibFile, entry: RequiredTypeSuffixEntry, glob: string): ApiLibSite[] {
+        if (entry.suffixes.length === 0) return [];
         const sites: ApiLibSite[] = [];
         const locals = new Map<string, ts.DeclarationStatement>();
         for (const statement of file.source.statements) {

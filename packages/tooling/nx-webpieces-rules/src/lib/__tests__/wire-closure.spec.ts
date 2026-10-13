@@ -8,6 +8,8 @@ import { specTempDirs } from '@webpieces/tooling-testkit';
  * dependency rule cannot see, because no nx edge is involved.
  */
 import * as fs from 'fs';
+import { DiffScope } from '@webpieces/rules-config';
+import { WireSuffixScope } from '../api-usage/wire-suffix-scope';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { WireSuffixEntry } from '../api-usage/wire-suffix-entry';
 import { ProjectInfo } from '../project-info';
@@ -82,7 +84,10 @@ function suffixes(...list: string[]): WireClosureRule {
     const entry = new WireSuffixEntry();
     entry.paths = ['libraries/**'];
     entry.suffixes = list;
-    return new WireClosureRule([entry]);
+    return new WireClosureRule(
+        [entry],
+        new WireSuffixScope(root, 'RUN_EVERY_TIME', [], new DiffScope()),
+    );
 }
 
 function wireDefects(companyCoreRole: string, rule: WireClosureRule): string[] {
@@ -134,5 +139,22 @@ describe('wire closure (D4)', () => {
             ApiDocRule.off(MCP_RULE),
         ).run();
         expect(findings.openApi.isEmpty() && findings.mcp.isEmpty()).toBe(true);
+    });
+
+    it('uses the first matching empty suffix list as an exemption without exempting the role check', () => {
+        const broad = suffixes('Request', 'Response', 'Dto');
+        const exempt = new WireSuffixEntry();
+        exempt.paths = ['libraries/company-core/**'];
+        exempt.suffixes = [];
+        const scope = new WireSuffixScope(root, 'RUN_EVERY_TIME', [], new DiffScope());
+        expect(
+            wireDefects('api-lib', new WireClosureRule([exempt, ...broad.suffixEntries], scope)),
+        ).toEqual([]);
+        expect(
+            wireDefects('api-lib', new WireClosureRule([...broad.suffixEntries, exempt], scope)),
+        ).toHaveLength(1);
+        expect(
+            wireDefects('lib', new WireClosureRule([exempt, ...broad.suffixEntries], scope)),
+        ).toHaveLength(2);
     });
 });

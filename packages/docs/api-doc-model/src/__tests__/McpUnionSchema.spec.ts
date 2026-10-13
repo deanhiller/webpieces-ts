@@ -56,7 +56,8 @@ describe('a union in an MCP tool schema', () => {
     }, 60_000);
 
     it('renders a NESTED discriminated union as oneOf plus its derived discriminator', () => {
-        const window = rendered.catalogs[0]!.find('fetch_delivery')!.outputSchema.properties!['window'];
+        const window =
+            rendered.catalogs[0]!.find('fetch_delivery')!.outputSchema.properties!['window'];
 
         expect(window.oneOf?.length).toBe(2);
         expect(window.discriminator?.propertyName).toBe('kind');
@@ -93,7 +94,8 @@ describe('a union in an MCP tool schema', () => {
      * so the renderer is measured directly against a model that carries the union without one.
      */
     it('publishes an un-narrowable union WITHOUT a discriminator rather than inventing one', () => {
-        const schema = new McpSchemaRenderer(unnarrowableModel('Ask either way')).render()[0].outputSchema;
+        const schema = new McpSchemaRenderer(unnarrowableModel('Ask either way')).render()[0]
+            .outputSchema;
         const either = schema.properties!['either'];
 
         expect(either.oneOf?.length).toBe(2);
@@ -158,6 +160,7 @@ function unnarrowableModel(title: string): ApiDocModel {
             undefined,
             undefined,
             'McpUnionSchema.spec.ts',
+            'Either',
         ),
     );
     types.set(
@@ -172,10 +175,20 @@ function unnarrowableModel(title: string): ApiDocModel {
             undefined,
             undefined,
             'McpUnionSchema.spec.ts',
+            'Answer',
         ),
     );
     types.set('Ask', objectType('Ask', 'question'));
-    return new ApiDocModel('EitherApi', ['mcp'], '/either', 'Either.', [endpoint(title)], types, [], []);
+    return new ApiDocModel(
+        'EitherApi',
+        ['mcp'],
+        '/either',
+        'Either.',
+        [endpoint(title)],
+        types,
+        [],
+        [],
+    );
 }
 
 // webpieces-disable no-function-outside-class -- spec fixture builder
@@ -190,6 +203,7 @@ function objectType(name: string, fieldName: string): DocumentedType {
         undefined,
         undefined,
         'McpUnionSchema.spec.ts',
+        name,
     );
 }
 

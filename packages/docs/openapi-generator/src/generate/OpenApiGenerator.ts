@@ -269,7 +269,14 @@ export class OpenApiGenerator {
             .set('schemas', renderedSchemas)
             .set(
                 'securitySchemes',
-                this.security.addBuiltinSchemes(apiKey === undefined ? new JsonObject() : this.security.schemes(apiKey, schemeNames, inputs.manifestPath), this.selectedEndpoints(contracts, selection)).orUndefined(),
+                this.security
+                    .addBuiltinSchemes(
+                        apiKey === undefined
+                            ? new JsonObject()
+                            : this.security.schemes(apiKey, schemeNames, inputs.manifestPath),
+                        this.selectedEndpoints(contracts, selection),
+                    )
+                    .orUndefined(),
             )
             .set('headers', this.headers(inputs));
 
@@ -337,15 +344,21 @@ export class OpenApiGenerator {
             const owner = type.packageName;
             const declared = `${type.name} — declared in ${owner ?? 'no package'} (${type.location})`;
             if (owner === undefined) {
-                unpublished.push(`${declared}: its file belongs to no package, so no document can own its schema`);
+                unpublished.push(
+                    `${declared}: its file belongs to no package, so no document can own its schema`,
+                );
                 continue;
             }
             const published = upstream.publishedBy(owner);
             if (published === undefined) {
                 const reason = upstream.missingFor(owner)?.reason ?? 'it was never located';
-                unpublished.push(`${declared}: ${owner} publishes no components document — ${reason}`);
-            } else if (!published.schemaNames.has(type.name)) {
-                stale.push(`${declared}: ${published.documentPath} has no schema '${type.name}'`);
+                unpublished.push(
+                    `${declared}: ${owner} publishes no components document — ${reason}`,
+                );
+            } else if (!published.schemaNames.has(type.schemaName)) {
+                stale.push(
+                    `${declared}: ${published.documentPath} has no schema '${type.schemaName}'`,
+                );
             }
         }
         if (unpublished.length > 0) {
@@ -445,11 +458,25 @@ export class OpenApiGenerator {
      */
     private mergedTypes(inputs: GenerationInputs): ReadonlyMap<string, DocumentedType> {
         const merged = new Map<string, DocumentedType>();
+        const published = new Map<string, DocumentedType>();
         const sources = inputs.contracts.map((each: ContractModel) => each.model);
         const all = inputs.errorType === undefined ? sources : sources.concat([inputs.errorType]);
         for (const model of all) {
             for (const name of Array.from(model.types.keys())) {
                 const incoming = model.types.get(name)!;
+                const previous = published.get(incoming.schemaName);
+                if (
+                    previous !== undefined &&
+                    previous.location !== incoming.location &&
+                    (previous.name !== previous.schemaName || incoming.name !== incoming.schemaName)
+                ) {
+                    throw new OpenApiGenerationError(
+                        `stripped schema name '${incoming.schemaName}' collides: '${previous.name}' at ${previous.location} and '${incoming.name}' at ${incoming.location}`,
+                        inputs.manifestPath,
+                        'Change schemaNames so every reached declaration has a distinct published name.',
+                    );
+                }
+                published.set(incoming.schemaName, incoming);
                 const existing = merged.get(name);
                 if (
                     existing !== undefined &&
@@ -488,7 +515,9 @@ export class OpenApiGenerator {
     ): DocumentedApiKey | undefined {
         let found: DocumentedApiKey | undefined;
         for (const endpoint of this.selectedEndpoints(contracts, selection)) {
-            const apiKey = endpoint.auth?.methods.find((method: DocumentedAuthMethod) => method.apiKey !== undefined)?.apiKey;
+            const apiKey = endpoint.auth?.methods.find(
+                (method: DocumentedAuthMethod) => method.apiKey !== undefined,
+            )?.apiKey;
             if (apiKey === undefined) {
                 continue;
             }
@@ -523,7 +552,10 @@ export class OpenApiGenerator {
         const served = this.selectedEndpoints(contracts, selection);
         return (
             served.length > 0 &&
-            served.every((e: DocumentedEndpoint) => e.auth?.methods.length === 1 && e.auth.methods[0].apiKey !== undefined)
+            served.every(
+                (e: DocumentedEndpoint) =>
+                    e.auth?.methods.length === 1 && e.auth.methods[0].apiKey !== undefined,
+            )
         );
     }
 

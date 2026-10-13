@@ -308,6 +308,9 @@ importers:
       '@webpieces/core-util':
         specifier: workspace:*
         version: link:../../core/core-util
+      minimatch:
+        specifier: 10.0.1
+        version: 10.0.1
       typescript:
         specifier: 5.9.3
         version: 5.9.3

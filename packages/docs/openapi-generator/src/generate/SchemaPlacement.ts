@@ -1,3 +1,4 @@
+import { OpenApiGenerationError } from '../OpenApiGenerationError';
 import { DocumentedType } from '@webpieces/api-doc-model';
 import { GeneratedApiDocsLayout } from '@webpieces/core-util';
 
@@ -59,14 +60,14 @@ export class SplitPlacement implements SchemaPlacement {
     }
 
     localName(_key: string, type: DocumentedType): string {
-        return type.name;
+        return type.schemaName;
     }
 
     pointer(key: string, type: DocumentedType): string {
         if (this.isLocal(key, type)) {
-            return `${LOCAL_POINTER}${type.name}`;
+            return `${LOCAL_POINTER}${type.schemaName}`;
         }
-        return ComponentsReference.to(type.packageName ?? '<no package>', type.name);
+        return ComponentsReference.to(type.packageName ?? '<no package>', type.schemaName);
     }
 }
 
@@ -82,7 +83,7 @@ export class BundledPlacement implements SchemaPlacement {
     }
 
     localName(key: string, type: DocumentedType): string {
-        return this.names.get(key) ?? type.name;
+        return this.names.get(key) ?? type.schemaName;
     }
 
     pointer(key: string, type: DocumentedType): string {
@@ -131,13 +132,24 @@ export class BundledNames {
             if (type === undefined) {
                 continue;
             }
-            const group = byName.get(type.name) ?? [];
+            const group = byName.get(type.schemaName) ?? [];
             group.push(key);
-            byName.set(type.name, group);
+            byName.set(type.schemaName, group);
         }
         const names = new Map<string, string>();
         for (const name of byName.keys()) {
             const keys = byName.get(name)!;
+            const declarations = keys.map((key: string) => types.get(key)!);
+            if (
+                keys.length > 1 &&
+                declarations.some((type: DocumentedType) => type.name !== type.schemaName)
+            ) {
+                throw new OpenApiGenerationError(
+                    `stripped schema name '${name}' collides: ${declarations.map((type: DocumentedType) => `'${type.name}' at ${type.location}`).join(' and ')}`,
+                    '<bundled document>',
+                    'Change schemaNames so every reached declaration has a distinct published name.',
+                );
+            }
             for (const key of keys) {
                 const type = types.get(key)!;
                 const keepsBareName = keys.length === 1 || type.packageName === homePackage;

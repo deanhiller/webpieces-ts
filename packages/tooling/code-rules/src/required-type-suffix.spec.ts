@@ -54,6 +54,10 @@ class Source {
 }
 
 describe('required-type-suffix — the scanner', () => {
+    it('exempts an explicitly empty suffix list', () => {
+        expect(Source.sites('export class PublishedName {}', [])).toEqual([]);
+    });
+
     it('refuses an exported interface, class, abstract class, enum and type alias with a bad suffix', () => {
         const sites = Source.sites([
             'export interface TopNamePlaceInput { name: string; }',

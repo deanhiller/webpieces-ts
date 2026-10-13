@@ -80,6 +80,39 @@ It carries exactly what is **not a property of the code**:
 
 Every path is relative to the manifest's own directory.
 
+### Source suffixes and published schema names
+
+An optional `schemaNames` list controls published type names independently of source
+validation. It works in contract manifests and `"kind": "components"` manifests:
+
+```json
+"schemaNames": [
+  { "paths": ["../keep-my-names/**"], "stripSuffixes": [] },
+  { "paths": ["../partner-apis/**", "../shared-dtos/**"], "stripSuffixes": ["Dto"] }
+]
+```
+
+Globs match the type's declaring file, relative to the manifest's directory. The
+first matching entry wins; no match or an explicit empty list preserves the name.
+Only one exact, case-sensitive trailing suffix is removed, in configured order.
+`OrderDto` becomes `Order`; `Dto` alone and `OrderDTO` remain unchanged.
+
+The same published names are used for schema keys, every reference and discriminator
+mapping, bundled documents, MCP tool schemas, and streaming schemas. Source names
+remain available to validation and diagnostics. If stripping makes two reached
+declarations share a published name, generation fails naming both declarations and
+their locations. Existing unstripped package-qualified homonyms remain supported.
+
+Configure matching policies on **every producer and consumer** in a components
+chain. The downstream generator checks that the upstream document actually exports
+the expected schema name; a missing or inconsistent policy fails generation.
+
+This combines with `required-type-suffix`: use an entry with `suffixes: []` to
+preserve published source names, or enforce `Dto` gradually with
+`NEW_AND_MODIFIED_CODE` while stripping it from generated documentation. The
+chained-components regression test renames source declarations and checks that all
+generated OpenAPI and MCP artifacts remain byte-identical.
+
 **The ORDER of `apis[]` is the published sidebar order.** Alphabetising it is not a cleanup.
 
 **`securitySchemeNames` holds the published KEYS only.** The schemes themselves, and the AND-ed

@@ -26,17 +26,23 @@ import { WireSuffixEntry } from './wire-suffix-entry';
 import { ProjectInfo } from '../project-info';
 import { resolveRole } from '../role-resolver';
 import { RuleGate } from '../rule-gate';
+import { DiffScope } from '@webpieces/rules-config';
+import { ModifiedCodeMode } from '@webpieces/rules-sdk';
+import { WireSuffixScope } from './wire-suffix-scope';
 
 const API_LIB_ROLE = 'api-lib';
 
 /** The `required-type-suffix` entries the wire closure enforces; empty when that rule is OFF. */
 export class WireClosureRule {
-    constructor(public readonly suffixEntries: readonly WireSuffixEntry[]) {}
+    constructor(
+        public readonly suffixEntries: readonly WireSuffixEntry[],
+        public readonly scope: WireSuffixScope | undefined,
+    ) {}
 
     /** Only the role check — what a unit test or a repo with `required-type-suffix` OFF gets. */
     // webpieces-disable no-function-outside-class -- static factory of this class
     static withoutSuffixes(): WireClosureRule {
-        return new WireClosureRule([]);
+        return new WireClosureRule([], undefined);
     }
 
     /** `required-type-suffix`'s entries, unless that rule is OFF or time-boxed / branch-scoped off. */
@@ -45,9 +51,16 @@ export class WireClosureRule {
         if (new RuleGate().skipReason(workspaceRoot, 'required-type-suffix', true) !== null) {
             return WireClosureRule.withoutSuffixes();
         }
-        const rule = loadAndValidate(workspaceRoot).resolved.rules.get('required-type-suffix');
-        const entries = rule?.options['entries'];
-        return new WireClosureRule(Array.isArray(entries) ? (entries as WireSuffixEntry[]) : []);
+        const rule = loadAndValidate(workspaceRoot).resolved.rules.get('required-type-suffix')!;
+        return new WireClosureRule(
+            rule.options['entries'] as WireSuffixEntry[],
+            new WireSuffixScope(
+                workspaceRoot,
+                rule.options['mode'] as ModifiedCodeMode,
+                (rule.options['allowedPaths'] as string[] | undefined) ?? [],
+                new DiffScope(),
+            ),
+        );
     }
 }
 
@@ -111,7 +124,18 @@ export class WireClosure {
                 (entry: WireSuffixEntry) => new PathMatchCandidate(entry.paths, entry),
             ),
         );
-        if (governing !== undefined && !this.endsInSuffix(type.name, governing.entry.suffixes)) {
+        if (
+            governing !== undefined &&
+            governing.entry.suffixes.length > 0 &&
+            this.rule.scope?.includes(
+                type.name,
+                relFile,
+                owner.root,
+                type.location,
+                this.roots.map((root: OwnedRoot) => root.info.root),
+            ) === true &&
+            !this.endsInSuffix(type.name, governing.entry.suffixes)
+        ) {
             verdicts.push(
                 new WireClosureVerdict(
                     `'${type.name}' goes over the wire from ${relFile} but does not end in one of ` +

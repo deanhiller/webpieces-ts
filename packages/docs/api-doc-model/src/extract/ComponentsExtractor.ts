@@ -1,3 +1,4 @@
+import { SchemaNames } from '../model/SchemaNames';
 import * as ts from 'typescript';
 import { ApiComponentsModel } from '../model/ApiDocModel';
 import { ApiDocExtractionError } from './ApiDocExtractionError';
@@ -18,7 +19,10 @@ class ExportedDeclaration {
  * components-only OpenAPI document the library publishes. See `ApiDocExtractor.extractComponents`.
  */
 export class ComponentsExtractor {
-    constructor(private readonly packages: PackageOfFile) {}
+    constructor(
+        private readonly packages: PackageOfFile,
+        private readonly schemaNames: SchemaNames,
+    ) {}
 
     /**
      * EVERY type a DTO LIBRARY exports and declares — not only the ones some contract reaches, so the
@@ -51,7 +55,7 @@ export class ComponentsExtractor {
         });
         const home = this.libraryPackage(sources);
         const checker = program.getTypeChecker();
-        const resolver = new TypeResolver(checker, this.packages, home.name);
+        const resolver = new TypeResolver(checker, this.packages, home.name, this.schemaNames);
         const exported: string[] = [];
         for (const source of sources) {
             for (const each of this.exportedDeclarations(checker, source)) {

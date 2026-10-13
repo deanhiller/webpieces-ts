@@ -1190,7 +1190,7 @@
             "type": "string[]",
             "optional": false,
             "nullable": false,
-            "nonEmpty": true
+            "nonEmpty": false
           }
         }
       },
