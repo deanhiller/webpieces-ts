@@ -1,5 +1,5 @@
 import type { GraphRenderModel } from './graph-render-model';
-import type { RuntimeGraph, RuntimeRemoteCall } from './runtime-graph-model';
+import type { RuntimeEdge, RuntimeGraph, RuntimeRemoteCall } from './runtime-graph-model';
 import { RemoteServiceNodeId } from './remote-service-node-id';
 
 export class RuntimeNodeDetails {
@@ -37,7 +37,11 @@ export class RuntimeDetails {
                 if (service.wiringUses === undefined) used.push(...entries);
                 if (edge.type !== 'pubsub') this.edges[`${edge.from}->${edge.to}`] = entries;
             }
-            const remoteApis = this.remoteCalls(graph, name, service.wiringUses === undefined ? used : []);
+            const remoteApis = this.remoteCalls(
+                graph,
+                name,
+                service.wiringUses === undefined ? used : [],
+            );
             for (const api of service.wiringUses === undefined ? service.uses : []) {
                 if (graph.runtimeEdges.some((edge) => edge.from === name && edge.via.includes(api)))
                     continue;
@@ -56,15 +60,7 @@ export class RuntimeDetails {
                         (ref.conditional === undefined ? '' : ` conditional on ${ref.conditional}`),
                 );
             }
-            for (const ref of service.wiringUses ?? []) {
-                used.push(
-                    `${graph.apis[ref.api]?.owner ?? '?'}#${ref.api} → ${ref.targetService ?? 'unknown external target'} via ${ref.declaredVia ?? name}` +
-                        (ref.conditional === undefined
-                            ? ''
-                            : ` conditional on ${ref.conditional}`) +
-                        (ref.methodsInferred ? ' — queue methods inferred from contract' : ''),
-                );
-            }
+            used.push(...this.wiringUses(graph, name));
             for (const [identity, system] of Object.entries(graph.externalSystems ?? {})) {
                 if (!system.usedBy.includes(name)) continue;
                 this.edges[`${name}->system__${identity.replace(/[^a-zA-Z0-9_]/g, '_')}`] =
@@ -85,11 +81,21 @@ export class RuntimeDetails {
         if (model !== null) this.renderEdges(graph, model);
     }
 
+    private wiringUses(graph: RuntimeGraph, name: string): string[] {
+        return (graph.services[name].wiringUses ?? []).map(
+            (ref) =>
+                `${graph.apis[ref.api]?.owner ?? '?'}#${ref.api} → ${ref.targetService ?? 'unknown external target'} (${ref.type})` +
+                (ref.conditional === undefined ? '' : ` conditional on ${ref.conditional}`),
+        );
+    }
+
     /** A reviewed remote service's node details: the contracts its declaration says it implements. */
     private remoteNodes(graph: RuntimeGraph): void {
         for (const [name, remote] of Object.entries(graph.remoteServices ?? {}))
             this.nodes[new RemoteServiceNodeId().of(name)] = new RuntimeNodeDetails(
-                remote.implements.map((api: string) => `${api} — declared in remoteServices.${name}`),
+                remote.implements.map(
+                    (api: string) => `${api} — declared in remoteServices.${name}`,
+                ),
                 [],
             );
     }
@@ -101,7 +107,9 @@ export class RuntimeDetails {
     private remoteCalls(graph: RuntimeGraph, name: string, used: string[]): Set<string> {
         const covered = new Set<string>();
         for (const [remoteName, remote] of Object.entries(graph.remoteServices ?? {}))
-            for (const call of remote.calledBy.filter((entry: RuntimeRemoteCall) => entry.from === name)) {
+            for (const call of remote.calledBy.filter(
+                (entry: RuntimeRemoteCall) => entry.from === name,
+            )) {
                 const entries = call.via.map(
                     (api: string) =>
                         `${graph.apis[api]?.owner ?? '?'}#${api} → ${remoteName} (remote service, ${call.type})`,
@@ -135,38 +143,28 @@ export class RuntimeDetails {
                 for (const api of call.via) {
                     entries.push(
                         `${graph.apis[api]?.owner ?? '?'}#${api} → ${call.to} (${call.type ?? 'rpc'})` +
-                            (call.queue === undefined ? '' : ` via ${call.queue}`),
+                            (call.queue === undefined ? '' : ` via ${call.queue}`) +
+                            this.conditions(graph, call, api),
                     );
-                    for (const ref of graph.services[call.from]?.wiringUses ?? []) {
-                        if (
-                            ref.api !== api ||
-                            (ref.targetService !== undefined && ref.targetService !== call.to)
-                        )
-                            continue;
-                        entries.push(
-                            `${ref.api} via ${ref.declaredVia ?? call.from}` +
-                                (ref.conditional === undefined
-                                    ? ''
-                                    : ` conditional on ${ref.conditional}`) +
-                                (ref.methodsInferred
-                                    ? ' — queue methods inferred from contract'
-                                    : ''),
-                        );
-                    }
                 }
-            }
-            for (const ref of graph.services[service]?.wiringUses ?? []) {
-                if (!entries.some((entry) => entry.includes(`#${ref.api} →`))) continue;
-                entries.push(
-                    `${ref.api} via ${ref.declaredVia ?? service}` +
-                        (ref.conditional === undefined
-                            ? ''
-                            : ` conditional on ${ref.conditional}`) +
-                        (ref.methodsInferred ? ' — queue methods inferred from contract' : ''),
-                );
             }
             this.edges[identity] = [...new Set(entries)];
         }
+    }
+
+    private conditions(graph: RuntimeGraph, call: RuntimeEdge, api: string): string {
+        const conditions = (graph.services[call.from]?.wiringUses ?? [])
+            .filter(
+                (ref) =>
+                    ref.api === api &&
+                    ref.type === call.type &&
+                    (ref.targetService === undefined || ref.targetService === call.to),
+            )
+            .map((ref) => ref.conditional)
+            .filter((condition) => condition !== undefined);
+        return conditions.length === 0
+            ? ''
+            : ` conditional on ${[...new Set(conditions)].join(' or ')}`;
     }
 
     script(): string {

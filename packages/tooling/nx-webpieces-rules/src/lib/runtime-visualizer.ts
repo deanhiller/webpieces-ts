@@ -256,8 +256,8 @@ function queuesDot(graph: RuntimeGraph, hidden: Set<string>, model: GraphRenderM
         '\n  // Queued hops. Each LINE in a box is one Cloud Tasks queue; queues of one contract\n' +
         '  // sharing the same producers AND consumers are drawn in a single box.\n';
 
-    // A contract with no method table (no architecture/apis/<Api>.json for it) has no
-    // per-method queue at all, so it keeps the historical unnamed per-pair box.
+    // Contract-only client wiring has no method queue, even with a complete endpoint table.
+    // Show only the declared contracts in a per-pair box.
     const byQueue = new Map<string, QueueEndpoints>();
     for (const edge of queued) {
         const from = edge.from;
@@ -548,12 +548,17 @@ function externalDot(graph: RuntimeGraph, hidden: Set<string>, model: GraphRende
  * would hide calls the reviewed graph asserts exist.
  */
 // webpieces-disable no-function-outside-class -- DOT string builder, matching getShortName in this file
-function remoteServicesDot(graph: RuntimeGraph, hidden: Set<string>, model: GraphRenderModel): string {
+function remoteServicesDot(
+    graph: RuntimeGraph,
+    hidden: Set<string>,
+    model: GraphRenderModel,
+): string {
     const remotes = graph.remoteServices ?? {};
     const names = Object.keys(remotes).sort();
     if (names.length === 0) return '';
 
-    let dot = '\n  // Remote services — ours, but outside this workspace (reviewed remoteServices).\n';
+    let dot =
+        '\n  // Remote services — ours, but outside this workspace (reviewed remoteServices).\n';
     for (const name of names) {
         const remote = remotes[name];
         const id = new RemoteServiceNodeId().of(name);

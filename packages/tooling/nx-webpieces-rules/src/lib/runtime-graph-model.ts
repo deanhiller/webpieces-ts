@@ -117,10 +117,8 @@ export interface RuntimeEdge {
 /**
  * One Cloud Tasks queue: the async seam between a producer and a consumer, at METHOD granularity.
  *
- * `producedBy` and `consumedBy` are deliberately not symmetric in confidence — see
- * {@link ApiRef.methodsInferred}. The consumer is derived from `addRoutes` plus the contract's
- * method table and is exact; the producer is attributed to every queued method of the contract it
- * built a client for, because which methods it enqueues is not statically recoverable.
+ * Only exact method declarations may populate producer facts. Contract-only client wiring
+ * produces contract-level edges without a method queue, regardless of the endpoint table.
  */
 export interface RuntimeQueue {
     api: string;

@@ -114,17 +114,6 @@ export interface ApiRef {
     /** Qualified selected library export that contributed this relationship. */
     declaredVia?: string;
     conditional?: string;
-    /**
-     * ONLY on a `pubsub` uses ref. True means "this producer was attributed to EVERY cloudtasks
-     * method of the contract, not to the methods it actually enqueues".
-     *
-     * A producer builds one client for the whole contract (`createPubSubClient(EmailTaskApi, cfg)`)
-     * and enqueues through a proxy (`emailTasks.send(req)`) somewhere else entirely — often after
-     * the client has been stored in a DI binding — so WHICH methods it enqueues is not statically
-     * recoverable. The consumer side IS exact (addRoutes + the contract's method table). Recording
-     * the difference keeps a producer-side queue from being read as proof that queue is used.
-     */
-    methodsInferred?: boolean;
 }
 
 /**

@@ -2,8 +2,8 @@
  * Queues, clocks and outside-driven entry points.
  *
  * The half of the runtime graph that is NOT a service calling another service:
- *  - a `cloudtasks` method is a QUEUE between producer and consumer, one per METHOD (the unit Cloud
- *    Tasks and Terraform create) — and a producer enqueueing to ITSELF is legal, not a cycle;
+ *  - pubsub client wiring declares a contract-level queue hop. Its method table cannot prove
+ *    which methods a producer enqueues; enqueueing to ITSELF is legal, not a cycle;
  *  - a `cron` method has no caller at all, only a clock;
  *  - an `external` method is driven from outside the repo (a push subscription, a webhook).
  *
@@ -115,23 +115,14 @@ describe('queues + triggers from the api contract tables', () => {
                 to: 'worker',
                 via: ['TaskApi'],
                 type: 'pubsub',
-                queue: 'TaskApi.send',
             },
         ]);
     });
 
-    it('builds ONE queue per cloudtasks METHOD, carrying the Terraform-matched name', () => {
-        expect(derived.queues).toEqual({
-            'TaskApi.send': {
-                api: 'TaskApi',
-                method: 'send',
-                queueName: 'TaskApi-send',
-                producedBy: ['worker'],
-                consumedBy: ['worker'],
-            },
-        });
-        // The cron method is NOT a queue between two services — nobody enqueues it.
-        expect(Object.keys(derived.queues)).not.toContain('TaskApi.nightly');
+    it('does not attribute contract methods or method queues to a producer', () => {
+        expect(derived.queues).toEqual({});
+        expect(JSON.stringify(derived.runtimeEdges)).not.toContain('TaskApi.send');
+        expect(JSON.stringify(derived.runtimeEdges)).not.toContain('TaskApi.nightly');
     });
 
     it('records the cron method as a trigger pointing at its implementer', () => {
@@ -149,7 +140,7 @@ describe('queues + triggers from the api contract tables', () => {
     it('depends on the QUEUE, not on the peer service', () => {
         // Naming the peer would assert a coupling that does not exist, and would make a service
         // deferring its own work look self-dependent.
-        expect(derived.services['worker'].dependsOn).toEqual(['queue:TaskApi.send']);
+        expect(derived.services['worker'].dependsOn).toEqual(['queue:TaskApi']);
     });
 
     it('leaves the self-loop out of levels and cycle detection', () => {
@@ -159,21 +150,23 @@ describe('queues + triggers from the api contract tables', () => {
     });
 });
 
-describe('generateRuntimeDot — per-method queues, clocks, inbound external', () => {
+describe('generateRuntimeDot — contract queues, clocks, inbound external', () => {
     const dot = generateRuntimeDot(
         deriveRuntimeGraph(selfQueueGraph(), new Set<string>(), TASK_CONTRACTS),
     );
 
-    it('names the queue node after the METHOD so producers/consumers converge on one box', () => {
+    it('names the queue box after the declared contract', () => {
         // Mrecord + an empty leading field = a cylinder on its side; the upright cylinder now means
         // a database, so the two never look alike.
-        expect(dot).toContain('"queue__TaskApi_send" [shape=Mrecord');
-        expect(dot).toContain('label=" |TaskApi.send');
+        expect(dot).toContain('"queue__worker__worker" [shape=Mrecord');
+        expect(dot).toContain('label=" |TaskApi');
         // CHANGED from toContain: `TaskApi-send` is the DERIVED `${Api}-${method}` name, so the
         // `queue:` line only restated the line above it. Only a @Queue(...) OVERRIDE prints now.
         expect(dot).not.toContain('queue: TaskApi-send');
-        expect(dot).toContain('"worker" -> "queue__TaskApi_send" [label="Uses (1) ▾\\nenqueue", style=dashed]');
-        expect(dot).toContain('"queue__TaskApi_send" -> "worker" [style=dashed]');
+        expect(dot).toContain(
+            '"worker" -> "queue__worker__worker" [label="Uses (1) ▾\\nenqueue", style=dashed]',
+        );
+        expect(dot).toContain('"queue__worker__worker" -> "worker" [style=dashed]');
     });
 
     it('hangs the cron endpoint off a clock pointing INTO the service', () => {
@@ -185,8 +178,7 @@ describe('generateRuntimeDot — per-method queues, clocks, inbound external', (
 });
 
 /**
- * TaskApi with THREE queued methods: two on derived names, one carrying a `@Queue('custom-blast')`
- * override. All three flow worker -> worker, so all three belong in ONE box.
+ * Three contract methods must not become three claims about the worker client.
  */
 const MERGE_CONTRACTS: ApiContracts = {
     TaskApi: {
@@ -229,42 +221,21 @@ describe('generateRuntimeDot — merging queues of one contract into one box', (
         deriveRuntimeGraph(selfQueueGraph(), new Set<string>(), MERGE_CONTRACTS),
     );
 
-    it('draws ONE box listing every queue, with one enqueue and one deliver arrow', () => {
-        // Node id comes from the group's FIRST member by sorted key — TaskApi.blast.
+    it('draws the declared contract with one enqueue and one deliver arrow', () => {
         expect(countLines(dot, '[shape=Mrecord')).toBe(1);
-        expect(dot).toContain('"queue__TaskApi_blast" [shape=Mrecord');
-        const label = dot.split('\n').find((line: string) => line.includes('[shape=Mrecord'))!;
-        expect(label).toContain(' |TaskApi.blast');
-        expect(label).toContain('TaskApi.retry');
-        expect(label).toContain('TaskApi.send');
-        expect(countLines(dot, '[label="Uses (1) ▾\\nenqueue"')).toBe(1);
-        expect(countLines(dot, '[label="Uses')).toBe(1);
-        expect(dot).toContain(
-            '"worker" -> "queue__TaskApi_blast" [label="Uses (1) ▾\\nenqueue", style=dashed]',
-        );
-        expect(dot).toContain(
-            '"queue__TaskApi_blast" -> "worker" [style=dashed]',
-        );
+        expect(dot).toContain('"queue__worker__worker" [shape=Mrecord');
+        expect(dot).toContain('label=" |TaskApi');
+        for (const method of ['blast', 'retry', 'send'])
+            expect(dot).not.toContain(`TaskApi.${method}`);
+        expect(dot).not.toContain('custom-blast');
     });
 
-    it('keeps a @Queue(...) OVERRIDE name and drops the derived ones', () => {
-        // 'custom-blast' appears nowhere else on the graph and is what Terraform must match.
-        expect(dot).toContain('queue: custom-blast');
-        expect(dot).not.toContain('queue: TaskApi-send');
-        expect(dot).not.toContain('queue: TaskApi-retry');
-    });
-
-    it('leaves runtime-dependencies.json at ONE entry per method', () => {
-        // RENDER-ONLY: the merge is a drawing decision, never a change to the committed data.
+    it('keeps serialized producer facts at contract granularity', () => {
         const derived = deriveRuntimeGraph(selfQueueGraph(), new Set<string>(), MERGE_CONTRACTS);
-        expect(Object.keys(derived.queues).sort()).toEqual([
-            'TaskApi.blast',
-            'TaskApi.retry',
-            'TaskApi.send',
+        expect(derived.queues).toEqual({});
+        expect(derived.runtimeEdges).toEqual([
+            { from: 'worker', to: 'worker', via: ['TaskApi'], type: 'pubsub' },
         ]);
-        expect(derived.runtimeEdges.filter((e: RuntimeEdge) => e.type === 'pubsub')).toHaveLength(
-            3,
-        );
     });
 });
 
@@ -284,9 +255,8 @@ function service(): RuntimeService {
 
 /**
  * Two queues of ONE contract whose PRODUCER sets differ: {p1} -> {c} and {p1,p2} -> {c}. Hand-built
- * because the derivation attributes every queued method of a contract to every producer of it, so
- * differing sets cannot come out of one apiRelations table — but they CAN come out of a hand-edited
- * or future graph, and merging them would invent a producer nobody wrote.
+ * because client wiring cannot declare methods today. A saved graph with exact method facts
+ * must not merge different producer sets and invent a producer nobody declared.
  */
 function splitProducerGraph(): RuntimeGraph {
     return {
@@ -314,16 +284,22 @@ describe('generateRuntimeDot — queues with different endpoints stay separate',
         expect(dot).toContain('"queue__TaskApi_retry" [shape=Mrecord');
         expect(dot).toContain('"queue__TaskApi_send" [shape=Mrecord');
         // The two-producer queue keeps BOTH its enqueue arrows.
-        expect(dot).toContain('"p1" -> "queue__TaskApi_retry" [label="Uses (1) ▾\\nenqueue", style=dashed]');
-        expect(dot).toContain('"p2" -> "queue__TaskApi_retry" [label="Uses (1) ▾\\nenqueue", style=dashed]');
-        expect(dot).toContain('"p1" -> "queue__TaskApi_send" [label="Uses (1) ▾\\nenqueue", style=dashed]');
+        expect(dot).toContain(
+            '"p1" -> "queue__TaskApi_retry" [label="Uses (1) ▾\\nenqueue", style=dashed]',
+        );
+        expect(dot).toContain(
+            '"p2" -> "queue__TaskApi_retry" [label="Uses (1) ▾\\nenqueue", style=dashed]',
+        );
+        expect(dot).toContain(
+            '"p1" -> "queue__TaskApi_send" [label="Uses (1) ▾\\nenqueue", style=dashed]',
+        );
         expect(countLines(dot, '[label="Uses')).toBe(3);
         expect(dot).toContain('"queue__TaskApi_retry" -> "c" [style=dashed]');
         expect(dot).toContain('"queue__TaskApi_send" -> "c" [style=dashed]');
     });
 });
 
-/** A pubsub edge from a dependencies.json predating `apiContracts`: no per-method queue at all. */
+/** A contract-only pubsub edge has no per-method queue. */
 function legacyQueueGraph(): RuntimeGraph {
     return {
         services: { p1: service(), c: service() },
@@ -335,13 +311,15 @@ function legacyQueueGraph(): RuntimeGraph {
     };
 }
 
-describe('generateRuntimeDot — the legacy unnamed per-pair queue', () => {
+describe('generateRuntimeDot — the contract-only per-pair queue', () => {
     const dot = generateRuntimeDot(legacyQueueGraph());
 
     it('still renders an edge that carries no queue key', () => {
         expect(dot).toContain('"queue__p1__c" [shape=Mrecord');
         expect(dot).toContain('label=" |EmailApi\\nqueue"');
-        expect(dot).toContain('"p1" -> "queue__p1__c" [label="Uses (1) ▾\\nenqueue", style=dashed]');
+        expect(dot).toContain(
+            '"p1" -> "queue__p1__c" [label="Uses (1) ▾\\nenqueue", style=dashed]',
+        );
         expect(dot).toContain('"queue__p1__c" -> "c" [style=dashed]');
     });
 });

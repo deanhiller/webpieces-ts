@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { RuntimeGraph } from './runtime-graph-model';
+import { deriveRuntimeGraph } from './runtime-graph';
+import type { EnhancedGraph } from './graph-sorter';
 import { RuntimeDetails } from './runtime-details';
 import { generateRuntimeDot, generateRuntimeRenderModel } from './runtime-visualizer';
 
@@ -38,6 +40,71 @@ function graph(apis: string[]): RuntimeGraph {
 }
 
 describe('compact runtime graph details', () => {
+    it('shows one contract use on both queue hops without DI paths or method guesses', () => {
+        const via = 'source#AppWiring/0:source#AppWiring/bindModules[0]:source#BindModule';
+        const projects: EnhancedGraph = {
+            contracts: { level: 0, dependsOn: [], role: 'api-lib', framework: ['node'] },
+            source: {
+                level: 1,
+                dependsOn: ['contracts'],
+                role: 'server',
+                framework: ['node'],
+                apiRelations: {
+                    contracts: {
+                        kind: 'uses',
+                        implements: [],
+                        uses: [
+                            {
+                                api: 'MailApi',
+                                type: 'pubsub',
+                                targetService: 'target',
+                                declaredVia: via,
+                            },
+                        ],
+                    },
+                },
+            },
+            target: {
+                level: 1,
+                dependsOn: ['contracts'],
+                role: 'server',
+                framework: ['node'],
+                serviceName: 'target',
+                apiRelations: {
+                    contracts: {
+                        kind: 'implements',
+                        uses: [],
+                        implements: [{ api: 'MailApi', type: 'pubsub' }],
+                    },
+                },
+            },
+        };
+        const data = deriveRuntimeGraph(projects, new Set(), {
+            MailApi: {
+                owner: 'contracts',
+                apiKind: 'pubsub',
+                basePath: '/mail',
+                methods: ['deliver', 'fanout', 'menuPublicationCompleted'].map((name) => ({
+                    name,
+                    path: `/${name}`,
+                    kind: 'cloudtasks',
+                    operation: 'write',
+                    queueName: name,
+                })),
+            },
+        });
+        const details = new RuntimeDetails(data, true, generateRuntimeRenderModel(data));
+        const expected = ['contracts#MailApi → target (pubsub)'];
+        expect(details.nodes.source.used).toEqual(expected);
+        expect(details.edges['source->queue__source__target']).toEqual(expected);
+        expect(details.edges['queue__source__target->target']).toEqual(expected);
+        expect(JSON.stringify(details)).not.toContain(via);
+        expect(JSON.stringify(details)).not.toContain('inferred');
+        expect(data.queues).toEqual({});
+        expect(data.runtimeEdges).toEqual([
+            { from: 'source', to: 'target', type: 'pubsub', via: ['MailApi'] },
+        ]);
+    });
     it('matches exact queue identities when method names share a prefix', () => {
         const data = graph(['MailApi']);
         data.services.second = { ...data.services.target };
