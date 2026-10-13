@@ -96,7 +96,8 @@ the graph is enforced, not just documentation.
 - `rpc` edges → a direct labeled arrow.
 - `pubsub` edges → producer → **queue cylinder** → consumer, with dashed `enqueue` / `deliver`
   arrows. Client wiring declares the contract, so the queue box and Uses panel show that contract,
-  without guessing which methods the producer enqueues. Endpoint tables do not prove client usage.
+  without guessing which methods the producer enqueues. One contract queue node collects every
+  enqueuer, rather than creating one node per service pair. Endpoint tables do not prove client usage.
   The legend: "the producer enqueues a Cloud Task and the consumer is delivered it later."
 
 So the picture literally shows the [one-contract-many-transports](./one-contract-many-transports.md)
@@ -227,7 +228,9 @@ without marking those services as owners of the changed file. Context nodes keep
 styling in Impact and never imply CI execution. Viewing stores comparison data beside the
 runtime HTML under `tmp/webpieces/.impact`, without regenerating saved graph facts.
 
-Service boxes show plain Implements summaries. Their node menu opens implemented-contract
+Service boxes show plain Implements summaries. Implements popups use the deduplicated API list
+that supplies the box count, with one `pkg#Api` row per contract. Uses popups also show only
+`pkg#Api`; the arrow already identifies the destination and transport. Their node menu opens implemented-contract
 details; relationship line controls open Uses details. API panels never open on hover or mere
 keyboard focus. Enter/Space explicitly activates a control; Close/Escape/outside click dismiss.
 See [verification and screenshots](runtime-viewer-parity.md) for runtime browser parity evidence.

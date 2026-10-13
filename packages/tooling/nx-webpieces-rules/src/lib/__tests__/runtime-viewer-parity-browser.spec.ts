@@ -244,7 +244,7 @@ describe.skipIf(!process.env.WP_GRAPH_VIZ_JS)('runtime viewer parity in file:// 
         expect(await page.locator('.wp-graph-details').isVisible()).toBe(false);
         await edge.press('Enter');
         expect(await page.locator('.wp-graph-details li').allTextContents()).toEqual([
-            'task-contracts#TaskApi → consumer (pubsub) via TaskApi.send',
+            'task-contracts#TaskApi',
         ]);
         expect(await page.locator('.wp-graph-details').textContent()).not.toContain(
             'shared-client',

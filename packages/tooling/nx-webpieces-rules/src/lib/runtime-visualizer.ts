@@ -238,7 +238,8 @@ function groupQueues(byQueue: Map<string, QueueEndpoints>, graph: RuntimeGraph):
  * The queued half of the graph: producer → QUEUE → consumer, drawn with a sideways-cylinder node and
  * DASHED arrows (an event returns as soon as it is queued).
  *
- * One BOX may list several queues, one per line. The unit Cloud Tasks and Terraform create is still
+ * Contract-only edges converge on one box per API across all producers and consumers.
+ * For exact method declarations, one BOX may list several queues, one per line. The unit Cloud Tasks and Terraform create is still
  * the METHOD — that is what runtime-dependencies.json records and this render never changes it — but
  * two methods of one contract flowing between exactly the same producers and consumers drew two
  * adjacent boxes whose only difference was the method name, and each carried a `queue:` line that
@@ -256,32 +257,28 @@ function queuesDot(graph: RuntimeGraph, hidden: Set<string>, model: GraphRenderM
         '\n  // Queued hops. Each LINE in a box is one Cloud Tasks queue; queues of one contract\n' +
         '  // sharing the same producers AND consumers are drawn in a single box.\n';
 
-    // Contract-only client wiring has no method queue, even with a complete endpoint table.
-    // Show only the declared contracts in a per-pair box.
+    // Contract-only declarations converge by API, independently of the enqueuer/consumer pair.
+    const byContract = new Map<string, QueueEndpoints>();
     const byQueue = new Map<string, QueueEndpoints>();
     for (const edge of queued) {
-        const from = edge.from;
-        const to = edge.to;
-        if (edge.queue === undefined) {
-            // Kept RAW: recordValue already applies dotValue, so escaping here would double it.
-            const viaRaw =
-                edge.via.length > 2
-                    ? `Uses (${edge.via.length}) ▾`
-                    : edge.via.map((v: string) => getShortName(v)).join(', ');
-            dot += queueBoxDot(
-                `queue__${dotId(edge.from)}__${dotId(edge.to)}`,
-                `${recordValue(viaRaw)}\\nqueue`,
-                [from],
-                [to],
-                model,
-                edge.via.length,
-                [`${from}->${to}`],
-            );
-            continue;
+        const keys = edge.queue === undefined ? edge.via : [edge.queue];
+        const endpoints = edge.queue === undefined ? byContract : byQueue;
+        for (const key of keys) {
+            if (!endpoints.has(key)) endpoints.set(key, new QueueEndpoints());
+            endpoints.get(key)!.producers.add(edge.from);
+            endpoints.get(key)!.consumers.add(edge.to);
         }
-        if (!byQueue.has(edge.queue)) byQueue.set(edge.queue, new QueueEndpoints());
-        byQueue.get(edge.queue)!.producers.add(from);
-        byQueue.get(edge.queue)!.consumers.add(to);
+    }
+    for (const [api, ends] of [...byContract.entries()].sort(([a], [b]) => a.localeCompare(b))) {
+        dot += queueBoxDot(
+            `queue__${dotId(api)}`,
+            `${recordValue(getShortName(api))} queue`,
+            [...ends.producers].sort(),
+            [...ends.consumers].sort(),
+            model,
+            1,
+            [`queue:${api}`],
+        );
     }
 
     for (const group of groupQueues(byQueue, graph)) {

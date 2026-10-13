@@ -1,5 +1,5 @@
 import type { GraphRenderModel } from './graph-render-model';
-import type { RuntimeEdge, RuntimeGraph, RuntimeRemoteCall } from './runtime-graph-model';
+import type { RuntimeGraph, RuntimeRemoteCall } from './runtime-graph-model';
 import { RemoteServiceNodeId } from './remote-service-node-id';
 
 export class RuntimeNodeDetails {
@@ -20,12 +20,9 @@ export class RuntimeDetails {
         model: GraphRenderModel | null = null,
     ) {
         for (const [name, service] of Object.entries(graph.services)) {
-            const implemented = service.implements.map(
-                (api) =>
-                    `${graph.apis[api]?.owner ?? '?'}#${api}` +
-                    (service.implementsVia?.[api] === undefined
-                        ? ''
-                        : ` via ${service.implementsVia[api]}`),
+            // implements is the complete derived API list; wiringImplements is provenance only.
+            const implemented = [...new Set(service.implements)].map(
+                (api) => `${graph.apis[api]?.owner ?? '?'}#${api}`,
             );
             const used: string[] = [];
             for (const edge of graph.runtimeEdges.filter((edge) => edge.from === name)) {
@@ -35,7 +32,10 @@ export class RuntimeDetails {
                         (edge.queue === undefined ? '' : ` via ${edge.queue}`),
                 );
                 if (service.wiringUses === undefined) used.push(...entries);
-                if (edge.type !== 'pubsub') this.edges[`${edge.from}->${edge.to}`] = entries;
+                if (edge.type !== 'pubsub')
+                    this.edges[`${edge.from}->${edge.to}`] = edge.via.map(
+                        (api) => `${graph.apis[api]?.owner ?? '?'}#${api}`,
+                    );
             }
             const remoteApis = this.remoteCalls(
                 graph,
@@ -54,26 +54,17 @@ export class RuntimeDetails {
                         ` (${contract?.type ?? 'rpc'})${external && !showExternalNodes ? ' — destination hidden' : ''}`,
                 );
             }
-            for (const ref of service.wiringImplements ?? []) {
-                implemented.push(
-                    `${graph.apis[ref.api]?.owner ?? '?'}#${ref.api} via ${ref.declaredVia ?? name}` +
-                        (ref.conditional === undefined ? '' : ` conditional on ${ref.conditional}`),
-                );
-            }
             used.push(...this.wiringUses(graph, name));
             for (const [identity, system] of Object.entries(graph.externalSystems ?? {})) {
                 if (!system.usedBy.includes(name)) continue;
                 this.edges[`${name}->system__${identity.replace(/[^a-zA-Z0-9_]/g, '_')}`] =
-                    system.apis.map(
-                        (api) =>
-                            `${graph.apis[api]?.owner ?? '?'}#${api} → ${system.label} (${system.kind})`,
-                    );
+                    system.apis.map((api) => `${graph.apis[api]?.owner ?? '?'}#${api}`);
             }
             for (const use of graph.unresolvedUses.filter((use) => use.service === name)) {
                 if (graph.apis[use.api]?.externalSystem !== undefined) continue;
                 const owner = graph.apis[use.api]?.owner ?? use.api;
                 const key = `${name}->external__${owner}`;
-                (this.edges[key] ??= []).push(`${owner}#${use.api} → ${owner} (external)`);
+                (this.edges[key] ??= []).push(`${owner}#${use.api}`);
             }
             this.nodes[name] = new RuntimeNodeDetails(implemented, [...new Set(used)]);
         }
@@ -93,9 +84,7 @@ export class RuntimeDetails {
     private remoteNodes(graph: RuntimeGraph): void {
         for (const [name, remote] of Object.entries(graph.remoteServices ?? {}))
             this.nodes[new RemoteServiceNodeId().of(name)] = new RuntimeNodeDetails(
-                remote.implements.map(
-                    (api: string) => `${api} — declared in remoteServices.${name}`,
-                ),
+                [...new Set(remote.implements)],
                 [],
             );
     }
@@ -117,7 +106,10 @@ export class RuntimeDetails {
                 for (const api of call.via) covered.add(api);
                 used.push(...entries);
                 const key = `${name}->${new RemoteServiceNodeId().of(remoteName)}`;
-                this.edges[key] = [...(this.edges[key] ?? []), ...entries];
+                this.edges[key] = [
+                    ...(this.edges[key] ?? []),
+                    ...call.via.map((api) => `${graph.apis[api]?.owner ?? '?'}#${api}`),
+                ];
             }
         return covered;
     }
@@ -135,36 +127,25 @@ export class RuntimeDetails {
                 if (call.from !== service && call.to !== service) return false;
                 return (
                     queue !== undefined &&
-                    queue.queueKeys.includes(call.queue ?? `${call.from}->${call.to}`)
+                    (call.queue === undefined
+                        ? call.via.some((api) => queue.queueKeys.includes(`queue:${api}`))
+                        : queue.queueKeys.includes(call.queue))
                 );
             });
             const entries = [...(this.edges[identity] ?? [])];
             for (const call of via) {
                 for (const api of call.via) {
-                    entries.push(
-                        `${graph.apis[api]?.owner ?? '?'}#${api} → ${call.to} (${call.type ?? 'rpc'})` +
-                            (call.queue === undefined ? '' : ` via ${call.queue}`) +
-                            this.conditions(graph, call, api),
-                    );
+                    if (
+                        call.queue === undefined &&
+                        call.type === 'pubsub' &&
+                        !queue?.queueKeys.includes(`queue:${api}`)
+                    )
+                        continue;
+                    entries.push(`${graph.apis[api]?.owner ?? '?'}#${api}`);
                 }
             }
             this.edges[identity] = [...new Set(entries)];
         }
-    }
-
-    private conditions(graph: RuntimeGraph, call: RuntimeEdge, api: string): string {
-        const conditions = (graph.services[call.from]?.wiringUses ?? [])
-            .filter(
-                (ref) =>
-                    ref.api === api &&
-                    ref.type === call.type &&
-                    (ref.targetService === undefined || ref.targetService === call.to),
-            )
-            .map((ref) => ref.conditional)
-            .filter((condition) => condition !== undefined);
-        return conditions.length === 0
-            ? ''
-            : ` conditional on ${[...new Set(conditions)].join(' or ')}`;
     }
 
     script(): string {

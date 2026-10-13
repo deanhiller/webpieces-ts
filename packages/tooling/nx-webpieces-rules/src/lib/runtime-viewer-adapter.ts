@@ -35,7 +35,7 @@ export class RuntimeViewerAdapter {
             role,
             project?.framework ?? [],
             service.products ?? [],
-            `Implements (${service.implements.length})${service.serviceName === undefined ? '' : ` · "${service.serviceName}"`}`,
+            `Implements (${new Set(service.implements).size})${service.serviceName === undefined ? '' : ` · "${service.serviceName}"`}`,
         );
         this.styler.record(model.legend, facts, this.palette);
         return model.styledNode(facts, this.styler.dots(facts, this.palette));
@@ -48,7 +48,9 @@ export class RuntimeViewerAdapter {
                 (level: number) =>
                     new LevelBand(
                         level,
-                        model.nodes.filter((node: RenderNode) => node.tags?.level === level).map((node: RenderNode) => node.id),
+                        model.nodes
+                            .filter((node: RenderNode) => node.tags?.level === level)
+                            .map((node: RenderNode) => node.id),
                     ),
             );
     }
