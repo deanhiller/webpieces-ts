@@ -657,7 +657,7 @@ describe('generateRuntimeDot — rpc direct, pubsub via queue', () => {
             '"producer" -> "queue__producer__consumer" [label="Uses (1) ▾\\nenqueue", style=dashed] [id="wp-real-edge-1"];',
         );
         expect(dot).toContain(
-            '"queue__producer__consumer" -> "consumer" [label="Uses (1) ▾\\ndeliver", style=dashed] [id="wp-real-edge-2"];',
+            '"queue__producer__consumer" -> "consumer" [style=dashed] [id="wp-real-edge-2"];',
         );
     });
 });

@@ -229,6 +229,12 @@ describe.skipIf(!process.env.WP_GRAPH_VIZ_JS)('runtime viewer parity in file:// 
         expect(await page.locator('.wp-graph-details').textContent()).toContain('TASKS_ENABLED');
         await page.keyboard.press('Escape');
         expect(await page.locator('.wp-graph-details').isVisible()).toBe(false);
+        const delivery = page.locator('g.edge').filter({
+            has: page.locator('title', { hasText: /^queue__TaskApi_send->consumer$/ }),
+        });
+        expect(await delivery.count()).toBe(1);
+        expect(await delivery.locator('path').count()).toBeGreaterThan(0);
+        expect(await delivery.locator('text, .wp-api-detail, [role="button"]').count()).toBe(0);
         const edge = page
             .locator('g.edge')
             .filter({ has: page.locator('title', { hasText: /^producer->queue__TaskApi_send$/ }) })
