@@ -24,7 +24,6 @@ import { LevelBand, LevelBandLayout } from '../graph-level-bands';
 import {
     PRODUCT_NONE_BORDER,
     PRODUCT_NONE_FILL,
-    PRODUCT_PALETTE_SIZE,
     PRODUCT_SHARED_FILL,
     ProductBoundary,
     ProductColor,
@@ -233,16 +232,16 @@ describe('Product mode (#1179): one product solid, several striped, all neutral,
         expect(dot).toContain(`fillcolor="${one.colorOf('lang').color}"`);
     });
 
-    it('a product past the palette uses the neutral fill, and the legend says so', () => {
-        const names = Array.from({ length: PRODUCT_PALETTE_SIZE + 1 }, (_: unknown, i: number): string => `p${i + 10}`);
+    it('uses the same product fill in nodes and legend even beyond eight products', () => {
+        const names = Array.from({ length: 12 }, (_: unknown, i: number): string => `product-${i}`);
         const big = new ProductPalette(names);
         const last = big.colorOf(names[names.length - 1]);
-        expect(last.inPalette).toBe(false);
-        expect(last.color).toBe(PRODUCT_SHARED_FILL);
-        expect(big.overflows()).toBe(true);
         const facts = new LegendFacts();
-        styler.record(facts, new NodeFacts('x', 'x', 0, 'lib', [], [names[names.length - 1]]), big);
-        expect(legend.productRows(facts)).toContain("past the palette's 8: neutral fill");
+        const node = new NodeFacts('x', 'x', 0, 'lib', [], [last.product]);
+        styler.record(facts, node, big);
+        expect(styler.dots(node, big).product).toContain(`fillcolor="${last.color}"`);
+        expect(legend.productRows(facts)).toContain(last.color);
+        expect(legend.productRows(facts)).not.toContain('past the palette');
     });
 
     it('the legend counts each product (total and only-this-product), shared, several and none', () => {

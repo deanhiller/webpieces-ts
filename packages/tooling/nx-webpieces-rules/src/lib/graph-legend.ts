@@ -30,7 +30,6 @@ import {
 import {
     PRODUCT_NONE_BORDER,
     PRODUCT_NONE_FILL,
-    PRODUCT_PALETTE_SIZE,
     PRODUCT_SHARED_FILL,
     ProductColor,
     ProductPalette,
@@ -138,9 +137,7 @@ export class GraphLegend {
         let rows = '';
         for (const count of facts.products) {
             const color = palette.colorOf(count.product);
-            const detail = color.inPalette
-                ? `${count.only} only ${count.product}`
-                : `${count.only} only ${count.product} — past the palette's ${PRODUCT_PALETTE_SIZE}: neutral fill`;
+            const detail = `${count.only} only ${count.product}`;
             rows += this.row(`product:${count.product}`, this.solid(color.color, '', ''), `${count.product} · ${count.total}`, detail);
         }
         if (facts.sharedByAll > 0)

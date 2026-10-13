@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'vitest';
+import { ProductPalette } from '../graph-products';
+import { GraphLegend } from '../graph-legend';
 import { FilterFixture } from './graph-filter-fixture';
 import { generateRuntimeRenderModel, RuntimeVizOptions } from '../runtime-visualizer';
 import { NO_RUNTIME_COLOR, IMPACT_AFFECTED, IMPACT_TOUCHED } from '../graph-color-modes';
@@ -51,6 +53,15 @@ describe('saved runtime presentation adapter', () => {
         expect(node.modes?.affected).toContain(IMPACT_AFFECTED);
         expect(model.nodes.filter((node) => node.id.endsWith('/worker'))).toHaveLength(2);
         expect(model.bands.find((band) => band.level === 7)?.nodeNames).toContain('@a/worker');
+    });
+    it('keeps runtime subset colors aligned with the architecture palette and legend', () => {
+        const graph = FilterFixture.runtime();
+        graph.services.producer.products = ['platform'];
+        const palette = new ProductPalette(['api-model', 'core', 'example', 'openapi', 'platform', 'rules']);
+        const model = generateRuntimeRenderModel(graph);
+        const color = palette.colorOf('platform').color;
+        expect(model.nodes.find((node) => node.id === 'producer')?.modes?.product).toContain(`fillcolor="${color}"`);
+        expect(new GraphLegend().productRows(model.legend)).toContain(color);
     });
     it('never guesses framework or role from a legacy service name; queues keep context styling', () => {
         const graph = FilterFixture.runtime();
