@@ -230,7 +230,7 @@ runtime HTML under `tmp/webpieces/.impact`, without regenerating saved graph fac
 
 Service boxes show plain Implements summaries. Implements popups use the deduplicated API list
 that supplies the box count, with one `pkg#Api` row per contract. Uses popups also show only
-`pkg#Api`; the arrow already identifies the destination and transport. Their node menu opens implemented-contract
-details; relationship line controls open Uses details. API panels never open on hover or mere
+`pkg#Api`; the arrow already identifies the destination and transport. The node menu opens
+implemented-contract details; relationship line controls open Uses details. API panels never open on hover or mere
 keyboard focus. Enter/Space explicitly activates a control; Close/Escape/outside click dismiss.
 See [verification and screenshots](runtime-viewer-parity.md) for runtime browser parity evidence.

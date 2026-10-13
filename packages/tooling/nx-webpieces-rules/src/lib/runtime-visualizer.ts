@@ -269,7 +269,8 @@ function queuesDot(graph: RuntimeGraph, hidden: Set<string>, model: GraphRenderM
             endpoints.get(key)!.consumers.add(edge.to);
         }
     }
-    for (const [api, ends] of [...byContract.entries()].sort(([a], [b]) => a.localeCompare(b))) {
+    for (const api of [...byContract.keys()].sort()) {
+        const ends = byContract.get(api)!;
         dot += queueBoxDot(
             `queue__${dotId(api)}`,
             `${recordValue(getShortName(api))} queue`,
