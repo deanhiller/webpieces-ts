@@ -44,7 +44,7 @@ name, the other the cached merged flag — and because each carries its own mess
 
 ## The cache
 
-`<primary clone>/.webpieces/main-sync-status.json`, written by a **detached single-flight
+the main-sync status file in the primary clone's state directory, written by a **detached single-flight
 refresher**. It is fire-and-forget: it populates the cache for the NEXT call, never the current
 one — so the first tool call of every session sees no cache and takes row 11. That is intended,
 and it is why the on-main write block (row 5) must not depend on the cache.
@@ -213,7 +213,7 @@ purpose never says whether it also writes, which is why the shape there is defau
 
 ## How a log line joins to a row
 
-Every L2 decision is written to `.webpieces/logs/L2-decisions/<writer>.log` with `layer=L2` and
+Every L2 decision is written to the L2-decisions log (one file per writer) with `layer=L2` and
 `row=<n>`, where `<n>` is a row number from the table above. So `row=8` means "this call was judged
 by row 8" and you read the state, the verdict and the cure straight off this page.
 

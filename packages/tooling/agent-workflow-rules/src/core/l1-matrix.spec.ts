@@ -438,7 +438,7 @@ describe('guards/L1-location.md is generated from the rows the guard consults', 
     it('tells a reader how a `row=` in the L1 log joins back to the table', () => {
         const doc = renderL1Doc();
         expect(doc).toContain('## How a log line joins to a row');
-        expect(doc).toContain('.webpieces/logs/L1-location/<writer>.log');
+        expect(doc).toContain('the L1-location log (one file per writer)');
     });
 
     // The prose sections are literal lines in the renderer, and this is the one that must never be
