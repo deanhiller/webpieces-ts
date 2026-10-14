@@ -144,8 +144,8 @@ class QueueEndpoints {
 
 /**
  * One drawn queue BOX: the queue keys (`Api.method`) it shows, and the endpoints they all share.
- * Several keys land in one box only when they agree on all three of contract, producers and
- * consumers — see {@link queuesDot}.
+ * Several keys land in one box only when they agree on contract, producers, consumers and
+ * their persisted level — see {@link queuesDot}.
  */
 class QueueGroup {
     constructor(
@@ -209,7 +209,8 @@ function queueBoxDot(
 
 /**
  * Group the queued hops into boxes. The key is (contract, producer SET, consumer SET) — NOT the
- * (from,to) pair of some edge.
+ * (from,to) pair of some edge. Persisted levels must also match: hiding a foreign producer
+ * can make a foreign queue look self-only without changing its generated level.
  *
  * A queue node converges EVERY producer and consumer of its method onto one box, so keying by a
  * service PAIR would re-split a two-producer queue into two boxes and invent topology nobody wrote.
@@ -225,7 +226,12 @@ function groupQueues(byQueue: Map<string, QueueEndpoints>, graph: RuntimeGraph):
         const producers = [...ends.producers].sort();
         const consumers = [...ends.consumers].sort();
         const api = graph.queues[key]?.api ?? key.split('.')[0];
-        const mergeKey = [api, producers.join(','), consumers.join(',')].join(PAIR_SEP);
+        const mergeKey = [
+            api,
+            graph.queues[key].level,
+            producers.join(','),
+            consumers.join(','),
+        ].join(PAIR_SEP);
         const existing = groups.get(mergeKey);
         if (existing === undefined)
             groups.set(mergeKey, new QueueGroup([key], producers, consumers));

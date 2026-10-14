@@ -145,6 +145,18 @@ describe('runtime levels across every node kind', () => {
         );
     });
 
+    it('keeps queue boxes at distinct saved levels when hiding a foreign producer makes visible endpoints match', () => {
+        const graph = new LayerFixture().graph;
+        graph.services.orders.drawOnGraph = false;
+        const model = generateRuntimeRenderModel(graph);
+        expect(model.bands.find((band) => band.level === 3)?.nodeNames).toContain(
+            'queue__WebhookApi_fanout',
+        );
+        expect(model.bands.find((band) => band.level === 2)?.nodeNames).toContain(
+            'queue__WebhookApi_deliver',
+        );
+    });
+
     it('throws a structured cycle finding naming the foreign queue rather than dropping its edge', () => {
         const graph = new LayerFixture().graph;
         graph.runtimeEdges.push({ from: 'data', to: 'orders', via: ['OrdersApi'], type: 'rpc' });
