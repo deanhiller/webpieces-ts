@@ -58,6 +58,8 @@ export class GraphRenderModel {
     footer = '';
     /** The colors and roles in use, so the page's legend lists exactly those (architecture graph). */
     legend = new LegendFacts();
+    /** Runtime pages only (#1239): the Goal vs Current overlay, or why it is unavailable. */
+    comparison: RuntimeComparisonView | null = null;
 
     node(id: string, dot: string, products: string[] = [], queueKeys: string[] = []): string {
         this.nodes.push(new RenderNode(id, dot, null, null, products, queueKeys));
@@ -133,6 +135,33 @@ export class GraphRenderModel {
         this.edges.push(new RenderEdge(from, to, statement, id, productDot));
         return statement;
     }
+}
+
+/**
+ * What a runtime page carries for its Goal vs Current color mode (#1239), serialized into the page
+ * with the render model so it works opened straight from disk (`file://`, no fetch).
+ *
+ * Never a silent "no differences": an unavailable comparison says why (a missing or unusable input,
+ * naming its path and repair), and identical inputs say so explicitly with the normal graph context.
+ */
+export class RuntimeComparisonView {
+    constructor(
+        public readonly available: boolean,
+        /** Why the mode is unavailable; '' when available. */
+        public readonly reason: string,
+        /** Always "Current → Goal": the direction every added/removed word is read in. */
+        public readonly direction: string,
+        /** One line: counts per status, or the explicit no-differences result. */
+        public readonly summary: string,
+        /** The overlay drawn in this mode; null when unavailable. */
+        public readonly model: GraphRenderModel | null,
+        /** Overlay render-node id -> before/after detail lines. */
+        public readonly nodeDetails: Record<string, string[]>,
+        /** Overlay render-edge id (`wp-real-edge-N`) -> before/after detail lines. */
+        public readonly edgeDetails: Record<string, string[]>,
+        /** Every added, removed and changed fact, one line each, for the legend. */
+        public readonly differences: string[],
+    ) {}
 }
 
 /** Shared filter chrome and script-safe JSON for pages opened directly from disk. */

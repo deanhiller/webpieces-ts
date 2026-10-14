@@ -131,15 +131,29 @@ class WpFilteredDot {
 
 /** Page-owned state survives replacements; rendering failures leave the usable SVG intact. */
 abstract class WpFilterPage {
-    protected readonly chain: WpGraphChain;
+    protected chain: WpGraphChain;
     protected locked: string | null = null;
     protected anchor: string | null = null;
     protected retained: Set<string>;
     private viz: VizInstance | null = null;
 
-    constructor(protected readonly model: RenderModelJson) {
+    constructor(protected model: RenderModelJson) {
         this.chain = new WpGraphChain(model);
         this.retained = new Set(model.nodes.map((node) => node.id));
+    }
+
+    /**
+     * Swap the drawn topology — the runtime page's Goal vs Current overlay and its own graph (#1239) —
+     * so a mode switch genuinely changes which boxes and arrows exist, and switching back leaves none of
+     * the overlay's removed-only boxes behind. A Hide-unconnected anchor the new topology lacks is
+     * dropped rather than filtering everything away; a Lock survives and relights when its box exists.
+     */
+    protected useModel(model: RenderModelJson): void {
+        if (model === this.model) return;
+        this.model = model;
+        this.chain = new WpGraphChain(model);
+        this.retained = new Set(model.nodes.map((node: RenderNodeJson): string => node.id));
+        if (this.anchor !== null && !model.nodes.some((node: RenderNodeJson): boolean => node.id === this.anchor)) this.anchor = null;
     }
 
     render(): void {

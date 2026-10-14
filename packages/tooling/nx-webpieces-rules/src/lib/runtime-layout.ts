@@ -19,6 +19,11 @@ export class RuntimeLayout {
                 edge.productDot === null ? null : this.unconstrained(edge.productDot),
             );
         }
+        return this.assemble(model);
+    }
+
+    /** The DOT for the model's current statements, without re-deciding constraints (restyled overlays). */
+    assemble(model: GraphRenderModel): string {
         return (
             model.header +
             model.nodes.map((node) => node.dot).join('') +

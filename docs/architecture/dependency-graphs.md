@@ -100,6 +100,10 @@ the graph is enforced, not just documentation.
   enqueuer, rather than creating one node per service pair. Endpoint tables do not prove client usage.
   The legend: "the producer enqueues a Cloud Task and the consumer is delivered it later."
 
+To propose a runtime architecture before implementing it, edit a checked-in goal file and view it
+with `architecture:visualize-runtime-goal`; both runtime pages compare it with the current graph in
+Color by → Goal vs Current. See [runtime-goal](./runtime-goal.md).
+
 So the picture literally shows the [one-contract-many-transports](./one-contract-many-transports.md)
 pub-sub path as a producer, a queue, and a consumer — the visual twin of the propagation-through-a-
 queue story in [context-propagation](./context-propagation.md).

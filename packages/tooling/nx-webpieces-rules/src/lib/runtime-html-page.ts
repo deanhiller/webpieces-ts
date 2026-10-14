@@ -4,7 +4,11 @@ import { DesignLink } from './graph-visualizer';
 import { GraphRenderModel, GraphFilterAssets } from './graph-render-model';
 import { RuntimeDetails } from './runtime-details';
 import type { RuntimeGraph } from './runtime-graph-model';
-import { RuntimeVizOptions } from './runtime-viz-options';
+import { RuntimeVizOptions, RuntimePageKind } from './runtime-viz-options';
+import { RuntimeGoalProvenance } from './runtime-goal-file';
+import { RuntimeGoalDetails } from './runtime-goal-details';
+import { DIFF_STYLES } from './runtime-goal-styles';
+import { RuntimeDiffStatus } from './runtime-graph-diff';
 import { GraphNavigation, NavigationLayout } from './graph-navigation';
 import { SavedSnapshot } from './saved-snapshot';
 import {
@@ -58,7 +62,7 @@ export class RuntimeHtmlPage {
             this.legend(model),
             this.edgeKey(),
             this.assets.html() + '<span id="wp-context-count"></span>',
-            new SavedSnapshot().html(),
+            options.page === RuntimePageKind.GOAL ? new RuntimeGoalProvenance().html() : new SavedSnapshot().html(),
             this.responsibilities(graph, options),
             products,
             true,
@@ -76,13 +80,15 @@ export class RuntimeHtmlPage {
 <script src="https://cdn.jsdelivr.net/npm/@viz-js/viz@3.28.0/dist/viz-global.js"></script>
 <script src="${IMPACT_SIDECAR_SRC}"></script>
 <style>${this.menu.styles()}${this.menu.dimStyles('#graph')}${this.assets.styles()}${this.navigation.styles()}${new GraphPageStyles().css()}
-.wp-graph-details { position:fixed; z-index:60; max-width:min(520px,calc(100vw - 24px)); max-height:70vh; overflow:auto; background:var(--wp-surface); border:1px solid var(--wp-line); border-radius:10px; padding:14px; box-shadow:0 8px 24px #0002; }
-.wp-graph-details button { cursor:pointer; } .wp-api-detail { cursor:pointer; text-decoration:underline; }
+.wp-graph-details, .wp-goal-details { position:fixed; z-index:60; max-width:min(520px,calc(100vw - 24px)); max-height:70vh; overflow:auto; background:var(--wp-surface); border:1px solid var(--wp-line); border-radius:10px; padding:14px; box-shadow:0 8px 24px #0002; }
+.wp-graph-details button, .wp-goal-details button { cursor:pointer; } .wp-api-detail { cursor:pointer; text-decoration:underline; }
 .wp-api-detail:focus-visible { outline:3px solid var(--wp-accent); } #wp-context-count { font-size:11px; color:var(--wp-muted); }
+.wp-goal-edge { cursor:pointer; } .wp-goal-diff ul { margin:4px 0 0; padding-left:16px; max-height:220px; overflow:auto; }
 .wp-empty { position:absolute; top:70px; left:16px; padding:16px; background:var(--wp-surface); border-radius:10px; }
 </style></head><body data-wp-project-facts="${options.projects !== null}">${new GraphPageShell().body(parts)}
 <script>${this.menu.script()}</script><script>${this.filterJs()}</script><script>${this.navigation.script()}</script>
 <script>${new RuntimeDetails(graph, options.showExternalNodes, model).script()}</script>
+<script>${new RuntimeGoalDetails(model.comparison).script()}</script>
 <script>${this.clientJs()}</script><script>${shared}</script></body></html>`;
     }
 
@@ -140,6 +146,7 @@ export class RuntimeHtmlPage {
             `<section data-wp-legend-mode="runtime" class="wp-legend-list">${frameworks}${tag('runtime', 'unknown', '#e4e6ec')}<p>Neutral: unknown runtime. Nested: specialization; stripes: multiple runtimes. Context retains kind colors.</p></section>
 <section data-wp-legend-mode="architecture" class="wp-legend-list" hidden>${roles}<p>Auxiliary nodes use kind colors, never project roles.</p></section>` +
             `<section data-wp-legend-mode="impact" class="wp-legend-list" hidden>${new GraphLegend().impactRows()}</section><section data-wp-legend-mode="product" class="wp-legend-list" hidden>${products}<p>Stripes: several products; neutral: all products; white/dashed: no product. Context inherits adjacent service memberships.</p></section>` +
+            this.goalLegend(model) +
             '<p>Queues, clocks, datastores and vendors remain context in Impact; no source ownership or CI status is implied.</p>'
         );
     }
@@ -152,6 +159,27 @@ export class RuntimeHtmlPage {
     private shownProducts(model: GraphRenderModel): ProductColor[] {
         const shown = new Set(model.nodes.flatMap((node) => node.products));
         return model.legend.palette.colors.filter((color: ProductColor): boolean => shown.has(color.product));
+    }
+
+    /** Goal vs Current (#1239): the direction, the counts (or why it is unavailable), the key and every difference. */
+    private goalLegend(model: GraphRenderModel): string {
+        const comparison = model.comparison;
+        if (comparison === null || !comparison.available)
+            return `<section data-wp-legend-mode="goal" class="wp-legend-list" hidden><p>Goal vs Current unavailable: ${htmlLabelText(comparison?.reason ?? 'no comparison data on this page')}</p></section>`;
+        const rows = [RuntimeDiffStatus.ADDED, RuntimeDiffStatus.REMOVED, RuntimeDiffStatus.CHANGED, RuntimeDiffStatus.UNCHANGED]
+            .map((status: RuntimeDiffStatus) => {
+                const style = DIFF_STYLES[status];
+                const dash = status === RuntimeDiffStatus.REMOVED ? ' stroke-dasharray="3 2"' : '';
+                return `<div class="wp-legend-row wp-goal-row"><svg width="20" height="14"><rect x="1" y="1" width="18" height="12" rx="2" fill="${style.fill}" stroke="${style.border}" stroke-width="2"${dash}/></svg>${style.word}</div>`;
+            })
+            .join('');
+        const differences = comparison.differences.map((line: string) => `<li>${htmlLabelText(line)}</li>`).join('');
+        return (
+            `<section data-wp-legend-mode="goal" class="wp-legend-list wp-goal-diff" hidden><p><strong>${htmlLabelText(comparison.direction)}</strong> · ${htmlLabelText(comparison.summary)}</p>${rows}` +
+            '<p>Arrows use the same colors; a removed arrow is dotted. A moved level reads L4 → L2. Click a box (Goal vs Current details) or an arrow for before/after.</p>' +
+            (differences === '' ? '' : `<details><summary>Differences (${comparison.differences.length})</summary><ul>${differences}</ul></details>`) +
+            '</section>'
+        );
     }
 
     private edgeKey(): string {

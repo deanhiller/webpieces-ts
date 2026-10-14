@@ -1,20 +1,26 @@
 class WpModeState {
-    static readonly MODES = ['runtime', 'architecture', 'impact', 'product'];
-    static readonly NAMES = ['Runtime', 'Architecture', 'Impact', 'Product'];
+    /** `goal` (Goal vs Current, #1239) exists on runtime pages only; the shell renders it nowhere else. */
+    static readonly MODES = ['runtime', 'architecture', 'impact', 'product', 'goal'];
+    static readonly NAMES = ['Runtime', 'Architecture', 'Impact', 'Product', 'Goal vs Current'];
     static readonly SUBTITLES = [
         'where the code can run',
         'servers · clients · APIs',
         'what changed',
         'which products it belongs to',
+        'Current → Goal proposal',
     ];
     readonly scans: ImpactJson[] = window.__WP_IMPACT__?.scans ?? [];
     kind = '';
     mode = 'runtime';
 
-    /** @param hasProducts some box belongs to a product, so the Product mode has something to show */
+    /**
+     * @param hasProducts some box belongs to a product, so the Product mode has something to show
+     * @param goalUnavailable '' when Goal vs Current can be shown, else why not (#1239)
+     */
     constructor(
         private readonly hasProducts: boolean,
         private readonly viewer: string,
+        private readonly goalUnavailable: string,
     ) {
         this.kind = this.initialKind();
         this.mode = this.initial();
@@ -29,6 +35,11 @@ class WpModeState {
         return this.hasProducts
             ? ''
             : 'No products here: tag each project product:<name> in its project.json, then regenerate.';
+    }
+
+    /** '' when Goal vs Current can be shown, else why not (a missing or unusable input, never "no differences"). */
+    goalReason(): string {
+        return this.goalUnavailable;
     }
 
     /** The active scan; null when the page has no Impact data. */
@@ -82,6 +93,7 @@ class WpModeState {
         if (!WpModeState.MODES.includes(mode)) return false;
         if (mode === 'impact') return this.impactReason() === '';
         if (mode === 'product') return this.productReason() === '';
+        if (mode === 'goal') return this.goalReason() === '';
         return true;
     }
 

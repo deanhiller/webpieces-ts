@@ -2,7 +2,9 @@
  * Visualize Runtime Executor
  *
  * Renders the runtime microservice graph (committed
- * architecture/runtime-dependencies.json) to DOT + HTML and opens it.
+ * architecture/runtime-dependencies.json) to DOT + HTML and opens it. When a runtime goal
+ * (architecture/runtime-dependencies-goal.json, #1239) is present, the page also carries the
+ * Goal vs Current comparison; when it is absent or unusable, the page says why instead.
  *
  * Usage: nx run architecture:visualize-runtime
  */
@@ -14,9 +16,10 @@ import { ImpactRefresh, ImpactSidecar, VISUALIZE_IMPACT_KINDS } from '../../lib/
 import type { ExecutorContext } from '@nx/devkit';
 import { SavedSnapshot } from '../../lib/saved-snapshot';
 import { RuleFailError, renderRuleFailForHuman } from '@webpieces/rules-config';
-import { writeRuntimeVisualization, RuntimeVizOptions } from '../../lib/runtime-visualizer';
+import { writeRuntimeVisualization, RuntimeVizOptions, RuntimePageKind } from '../../lib/runtime-visualizer';
 import { loadRuntimeConfig } from '../../lib/runtime-config';
 import { GraphVisualizer } from '../../lib/graph-visualizer';
+import { RuntimeComparisonInputs } from '../../lib/runtime-goal-view';
 import { toError } from '../../toError';
 
 export interface VisualizeRuntimeOptions {
@@ -42,8 +45,11 @@ export default async function runExecutor(
         const graph = snapshot.loadRuntime(workspaceRoot);
         const config = loadRuntimeConfig(workspaceRoot);
         const projects = fs.existsSync(path.join(workspaceRoot, DEFAULT_GRAPH_PATH)) ? snapshot.loadProjects(workspaceRoot, DEFAULT_GRAPH_PATH).projects : null;
-        const options = new RuntimeVizOptions(config.showExternalNodes, projects, workspaceRoot);
-        const vizPaths = writeRuntimeVisualization(graph, workspaceRoot, undefined, options);
+        const options = new RuntimeVizOptions(config.showExternalNodes, projects, workspaceRoot, RuntimePageKind.CURRENT);
+        const inputs = new RuntimeComparisonInputs(snapshot);
+        const comparison = inputs.view(graph, inputs.goal(workspaceRoot), options);
+        console.log(comparison.available ? `Goal vs Current: ${comparison.summary}` : `Goal vs Current unavailable: ${comparison.reason}`);
+        const vizPaths = writeRuntimeVisualization(graph, workspaceRoot, 'WebPieces Runtime Architecture', options, comparison);
         console.log(`✅ Generated: ${vizPaths.dotPath}`);
         console.log(`✅ Generated: ${vizPaths.htmlPath}`);
         if (projects !== null) console.log(await new ImpactRefresh().run(path.dirname(vizPaths.htmlPath), workspaceRoot, projects, VISUALIZE_IMPACT_KINDS));

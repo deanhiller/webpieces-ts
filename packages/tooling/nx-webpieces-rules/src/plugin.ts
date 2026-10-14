@@ -32,6 +32,7 @@ import type {
 } from '@nx/devkit';
 import {
     createVisualizeRuntimeTarget,
+    createVisualizeRuntimeGoalTarget,
     createValidateRuntimeArchitectureTarget,
 } from './runtime-targets';
 import { BRANCH_IDENTITY_INPUTS } from './branch-identity-inputs';
@@ -410,9 +411,7 @@ function createWorkspaceTargetsWithoutPrefix(
     const validations = opts.workspace.validations!;
     // One ValidationTargets instance, injected below to build each target config.
     const targetFactory = new ValidationTargets();
-
-    // Add help target (always available)
-    targets['help'] = createHelpTarget();
+    targets['help'] = createHelpTarget(); // always available
 
     if (opts.workspace.features!.generate) {
         targets['generate'] = createGenerateTarget(graphPath);
@@ -422,6 +421,7 @@ function createWorkspaceTargetsWithoutPrefix(
     }
     if (opts.workspace.features!.visualizeRuntime) {
         targets['visualize-runtime'] = createVisualizeRuntimeTarget();
+        targets['visualize-runtime-goal'] = createVisualizeRuntimeGoalTarget();
     }
     if (validations.noCycles) {
         targets['validate-no-architecture-cycles'] = targetFactory.noCycles();
