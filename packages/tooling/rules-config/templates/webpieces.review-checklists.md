@@ -154,8 +154,8 @@ that is usually a missing `patterns` rather than an intent.
 Where patterns DO apply, matching is deliberately **coarse** — the reviewer subagent makes the fine,
 content-level judgment by reading the actual diff.
 
-The changed files + the exact base sha the gate uses are in
-`.webpieces-logs/pr-review/<featureSlug>/pr-context.json`:
+The changed files + the exact base sha the gate uses are in the `pr-context.json` whose path
+`wp-review-upsert-pr` printed:
 
 ```json
 { "base": "<merge-base sha>", "head": "<HEAD sha>", "changedFiles": ["path/a.ts", "db/003.sql", ...] }
@@ -311,7 +311,7 @@ only then opens/updates the PR.
 
 ## `provenance.json` (the tooling writes this; you never do)
 
-`wp-finish-upsert-pr` writes `.webpieces-logs/pr-review/<featureSlug>/provenance.json` — the audit record of **how
+`wp-finish-upsert-pr` writes `provenance.json` beside it — the audit record of **how
 the review was done**, as opposed to what it concluded. Per reviewer it links the verdict to the
 transcript of the subagent that produced it, plus what that reviewer was *offered* (its instructions file,
 the diff dir, its checklist doc) against what it demonstrably *read*, and its tool-call counts.

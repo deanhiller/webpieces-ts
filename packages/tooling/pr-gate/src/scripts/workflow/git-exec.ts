@@ -4,7 +4,7 @@ import { injectable, bindingScopeValues } from 'inversify';
 import { GitStatusEntry, GitStatusParser } from './git-status';
 
 const SEP = '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n';
-// The AI-facing doc the failure messages point at (generated under `.webpieces-logs/instruct-ai`, at the
+// The AI-facing doc the failure messages point at (generated under `.webpieces/instruct-ai`, at the
 // REPO ROOT — resolved absolute so the AI opens it regardless of the cwd it reads the message from).
 const GIT_WORKFLOW_DOC_NAME = 'webpieces.git-workflow.md';
 
@@ -47,7 +47,7 @@ export class GitExec {
      * calls {@link statusEntries} and reads booleans instead of re-parsing a string.
      *
      * Tracked changes (staged + unstaged) AND untracked files, EXCLUDING gitignored paths — so
-     * `.webpieces-logs/` tooling artifacts never count. Empty string = fully committed.
+     * `.webpieces/` tooling artifacts never count. Empty string = fully committed.
      */
     porcelainStatus(cwd: string): string {
         return this.rawGitQuery(['status', '--porcelain'], cwd,

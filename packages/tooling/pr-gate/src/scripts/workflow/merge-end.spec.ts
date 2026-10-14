@@ -31,7 +31,7 @@ class TestMergeEnd extends MergeEnd {
     constructor(private readonly fakeGit: FakeGitExec, private readonly backupExists: boolean) {
         super(
             new BranchNaming(),
-            // One root only: `{repo}/.webpieces-logs`. There is no machine-global state left to sweep.
+            // One root only: `{repo}/.webpieces`. There is no machine-global state left to sweep.
             new CleanTmp(new RepoRootFinder(), new AgedTreeSweeper(), new TmpScratchSweeper()),
             fakeGit,
             new MergeState());

@@ -70,7 +70,7 @@ export class MergeHashRecord {
 const CONFLICT_MARKER_RE = /^(<{7}|={7}|>{7})/m;
 
 /**
- * The two halves of `.webpieces-logs/merge-info/`.
+ * The two halves of `.webpieces/merge-info/`.
  *
  * `staged/` mirrors branches that STILL EXIST — it answers "what am I working on right now", and it
  * self-cleans when a PR lands (the whole dir is MOVED to `merged/`) instead of growing forever.
@@ -104,7 +104,7 @@ export const MERGE_INDEX_FILE = 'index.json';
 export class MergeState {
     constructor(private readonly dotDir: DotWebpieces = dotWebpieces) {}
 
-    // The per-feature "home" dir `.webpieces-logs/merge-info/<slug>/`. It no longer holds the marker/context
+    // The per-feature "home" dir `.webpieces/merge-info/<slug>/`. It no longer holds the marker/context
     // directly — each sync gets its own numbered `merge-<n>/` run dir underneath (mergeRunDirFor),
     // paired with the sync's `<feature>PreMerge<n>` backup branch. This keeps merge N from ever reusing
     // merge N-1's stale per-file context / merge-explanation.md.
@@ -115,24 +115,24 @@ export class MergeState {
     }
 
     /**
-     * `<local .webpieces-logs>/merge-info/staged/<feature>/` — the in-flight home.
+     * `<local .webpieces>/merge-info/staged/<feature>/` — the in-flight home.
      *
      * LOCAL scope throughout this class: a 3-point merge belongs to the worktree performing it, and
      * two worktrees are on two different branches, so these paths are disjoint by construction and need
      * no locking. In a linked worktree they now resolve under
-     * `<primary>/.webpieces-logs/worktrees/<name>/merge-info/…`, which also means an in-flight merge is not
+     * `<primary>/.webpieces/worktrees/<name>/merge-info/…`, which also means an in-flight merge is not
      * destroyed by removing the worktree directory.
      */
     stagedDirFor(repoRoot: string, featureName: string): string {
         return this.dotDir.localFile(repoRoot, MERGE_INFO_DIR, STAGED_DIR, featureName);
     }
 
-    /** `<local .webpieces-logs>/merge-info/merged/<feature>/` — the landed home. */
+    /** `<local .webpieces>/merge-info/merged/<feature>/` — the landed home. */
     mergedDirFor(repoRoot: string, featureName: string): string {
         return this.dotDir.localFile(repoRoot, MERGE_INFO_DIR, MERGED_DIR, featureName);
     }
 
-    /** `<local .webpieces-logs>/merge-info/` itself — holds `staged/`, `merged/` and `index.json`. */
+    /** `<local .webpieces>/merge-info/` itself — holds `staged/`, `merged/` and `index.json`. */
     mergeInfoRoot(repoRoot: string): string {
         return this.dotDir.localFile(repoRoot, MERGE_INFO_DIR);
     }
@@ -150,7 +150,7 @@ export class MergeState {
      * `staged/<feature>/`. `fs.renameSync` is atomic within a filesystem and moves the whole tree with no
      * copying, so no merge record can be half-migrated. If `staged/<feature>` already exists the legacy
      * dir is left untouched — never merged, never deleted — because two homes for one feature is exactly
-     * the ambiguity a human must resolve. `.webpieces-logs/` is gitignored local state, so nothing here is
+     * the ambiguity a human must resolve. `.webpieces/` is gitignored local state, so nothing here is
      * ever part of a commit.
      */
     private migrateLegacyHome(repoRoot: string, featureName: string, staged: string): void {

@@ -153,7 +153,7 @@ describe('StageOutputLog file placement', () => {
      */
     it('namespaces a linked worktree under the primary clone', async () => {
         await stage.withCapture(worktree, REVIEW_CONSOLE_LOG, (): Promise<void> => Promise.resolve());
-        const expected = path.join(primary, '.webpieces-logs', 'worktrees', 'wt-feature', 'logs', REVIEW_CONSOLE_LOG);
+        const expected = path.join(primary, '.webpieces', 'worktrees', 'wt-feature', 'logs', REVIEW_CONSOLE_LOG);
         expect(fs.existsSync(expected)).toBe(true);
     });
 

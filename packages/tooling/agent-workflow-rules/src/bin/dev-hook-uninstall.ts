@@ -26,7 +26,7 @@ interface DevHookBackup {
 export async function runDevHookUninstall(): Promise<void> {
     const cwd = process.cwd();
     const homeDir = homedir();
-    const backupPath = join(homeDir, '.webpieces-logs', 'dev-hook-backup.json');
+    const backupPath = join(homeDir, '.webpieces', 'dev-hook-backup.json');
     const claudeSettingsPath = join(homeDir, '.claude', 'settings.json');
 
     if (!existsSync(backupPath)) {

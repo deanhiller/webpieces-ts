@@ -6,7 +6,7 @@ import { L0_FAULT_NONE, L0_LAYER, L0_SH_FAULT_CODES, L0_ROW_ALLOWLISTED, L0_ROW_
 
 // ---------------------------------------------------------------------------
 // THE L0 AUDIT LOG, in POSIX sh — the shim half of
-// `.webpieces-logs/**/logs/L0-shim/<session>-<agent|coordinator>-<binName>.log`. The writer key is
+// `.webpieces/**/logs/L0-shim/<session>-<agent|coordinator>-<binName>.log`. The writer key is
 // the sh twin of agent-workflow-rules' LogStream.writerFile(): wp-ai-guards-hook and wp-ai-rules-hook are run
 // IN PARALLEL by Claude Code on every file edit, so an unsplit name means two writers, one file, and
 // torn appends above PIPE_BUF. A payload with no session_id renders 'unknown', never a bare name —
@@ -26,7 +26,7 @@ import { L0_FAULT_NONE, L0_LAYER, L0_SH_FAULT_CODES, L0_ROW_ALLOWLISTED, L0_ROW_
 // against the documented matrix in guards/L0-tooling.md rather than merely spot-checked.
 //
 // Two more defects went with it:
-//   • it wrote to a hardcoded `$ROOT/.webpieces-logs/logs`, so every worktree's lines landed in one flat
+//   • it wrote to a hardcoded `$ROOT/.webpieces/logs`, so every worktree's lines landed in one flat
 //     file (or, worse, in whichever tree happened to hold the shim) instead of the per-tree namespace
 //     the L1 binary has used since the state-dir split;
 //   • it had NO rotation, on a file now written on EVERY tool call.
@@ -178,7 +178,7 @@ export const SHIM_LOG_PRINTF =
  * for what the drift guard MEASURES — this fragment changes only where the log is WRITTEN.
  *
  * Fails soft, exactly like the TS side: when git cannot answer, the log collapses to
- * `<cwd>/.webpieces-logs/logs`, which is the pre-change behaviour.
+ * `<cwd>/.webpieces/logs`, which is the pre-change behaviour.
  */
 export const RESOLVE_LOG_DIR_SH = `wp_resolve_log_dir() {
   _wp_rp="$(git -C "$WP_CWD" rev-parse --git-dir --git-common-dir 2>/dev/null)"

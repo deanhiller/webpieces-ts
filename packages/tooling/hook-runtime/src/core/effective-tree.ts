@@ -66,7 +66,7 @@ import { ShellSegmentScan } from './rules/shell-segment-scan';
  * `primary`. Row 8 (VersionSyncGuard) matches on `w`, so it could not fire for exactly the agents it
  * exists to protect: measured 2026-08-10, a worktree bumped its pin to 0.4.624 and ran its own
  * `pnpm install` while the main clone stayed on 0.4.616, and nothing said a word. In the SAME tool call
- * the `.webpieces-logs/` log resolver — which asks git — correctly stamped `tree=agent-abfdc0aaf1f981f3f`.
+ * the `.webpieces/` log resolver — which asks git — correctly stamped `tree=agent-abfdc0aaf1f981f3f`.
  * Two resolvers in one process disagreeing at the same instant is the shape this module exists to make
  * impossible, so K is now git's answer and ONLY git's answer.
  *

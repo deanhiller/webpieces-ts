@@ -5,7 +5,7 @@ import { AtomicFile } from '@webpieces/tooling-common';
 import { toError } from '@webpieces/tooling-common/to-error';
 
 /**
- * The ON-DISK SHAPE of `<primary>/.webpieces-logs/main-sync-status.json`, and nothing else.
+ * The ON-DISK SHAPE of `<primary>/.webpieces/main-sync-status.json`, and nothing else.
  *
  * WHY this is its own module rather than more of main-sync-status.ts: that file already owns the lock
  * state machine plus the whole slow git/gh computation, and adding the map shape to it pushed it past

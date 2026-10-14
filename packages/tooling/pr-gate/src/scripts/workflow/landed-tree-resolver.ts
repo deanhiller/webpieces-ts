@@ -29,7 +29,7 @@ import { injectable, bindingScopeValues } from 'inversify';
  * name-only match is never enough to remove or archive anything — in this process or in the child that
  * re-verifies it (see ReapWorktreeCommand).
  *
- * ─── WHY NOT A `.webpieces-logs/**` RECEIPT ────────────────────────────────────────────────────────────
+ * ─── WHY NOT A `.webpieces/**` RECEIPT ────────────────────────────────────────────────────────────
  * The obvious alternative is for `wp-finish-upsert-pr` to write `{ pr, branch, worktreePath, headRefOid }`
  * to a sidecar and for landing to read it back. `decisions/0005-the-pr-description-is-the-merge-body.md`
  * already deleted that pattern once: a recorded claim can only ever be missing, stale, or on the wrong

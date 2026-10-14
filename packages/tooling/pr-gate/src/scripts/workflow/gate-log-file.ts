@@ -16,12 +16,12 @@ import { injectable, bindingScopeValues } from 'inversify';
 // can `grep` it without first working out which subsystem wrote it.
 //
 // ─── WHERE the files land, and why that shape ──────────────────────────────────────────────────────────
-// Through `dotWebpieces` — never `path.join(repoRoot, '.webpieces-logs')`. In a LINKED WORKTREE `local()`
-// resolves to `<primary>/.webpieces-logs/worktrees/<git worktree name>/`, so:
+// Through `dotWebpieces` — never `path.join(repoRoot, '.webpieces')`. In a LINKED WORKTREE `local()`
+// resolves to `<primary>/.webpieces/worktrees/<git worktree name>/`, so:
 //   • N agents in N worktrees never write one another's log, by construction rather than by naming;
 //   • the history OUTLIVES the worktree — `wp-cleanup` reaps a tree's directory and the logs it wrote are
 //     still there under the primary clone, which is exactly when you want them;
-//   • it self-limits, because `.webpieces-logs/worktrees/**` is already swept once a namespace goes stale.
+//   • it self-limits, because `.webpieces/worktrees/**` is already swept once a namespace goes stale.
 //     Nothing here needs a retention policy of its own.
 
 /** The suffix of the ONE previous generation kept beside a log. */
@@ -46,7 +46,7 @@ export class GateLogFile {
 
     /**
      * `<local()>/<name>` — the ROOT of the state dir, for the one log a PERSON types from memory
-     * (`.webpieces-logs/build.log`). Creates the directory. Reach for `logsPath` unless the path itself has
+     * (`.webpieces/build.log`). Creates the directory. Reach for `logsPath` unless the path itself has
      * to be memorable.
      */
     localPath(repoRoot: string, name: string): string {

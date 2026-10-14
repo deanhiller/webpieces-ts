@@ -186,7 +186,7 @@ describe('an L1 deny names the L1 matrix, by absolute path and by row', () => {
         outer = specTempDirs.makeReal('wp-l1ptr-');
         initTempRepo(outer);
         writeGuardConfig(outer);
-        matrixPath = path.join(outer, '.webpieces-logs', 'instruct-ai', LOCATION_MATRIX_DOC);
+        matrixPath = path.join(outer, '.webpieces', 'instruct-ai', LOCATION_MATRIX_DOC);
     });
 
     it(`row ${L1_PRESTAGE_ROW} (the misplaced-\`cd\` pre-stage): absolute path + the row`, () => {
@@ -216,7 +216,7 @@ describe('an L1 deny names the L1 matrix, by absolute path and by row', () => {
         writeGuardConfig(clean);
         expect(runBash('pnpm build && pnpm test', clean, 'guards', 'claude-code')).toBeNull();
         expect(
-            fs.existsSync(path.join(clean, '.webpieces-logs', 'instruct-ai', LOCATION_MATRIX_DOC)),
+            fs.existsSync(path.join(clean, '.webpieces', 'instruct-ai', LOCATION_MATRIX_DOC)),
         ).toBe(false);
     });
 

@@ -71,7 +71,7 @@ export const L0_JS_FAULT_CODES = [
 //
 // There are three, and until now they could not be grepped together:
 //   1. THE DENY the agent reads in the moment (shim-deny-reason.ts for S; DENY_REASON_SH for D/X/U/K)
-//   2. THE AUDIT LINE (`.webpieces-logs/logs/**`), which carries `layer=` `row=` `fault=`
+//   2. THE AUDIT LINE (`.webpieces/logs/**`), which carries `layer=` `row=` `fault=`
 //   3. THE MATRIX DOC (webpieces.guard-matrix.md, rendered from L0_FAULTS + L0_ALLOWLIST)
 //
 // The deny had NONE of them: no fault letter, no row, and — the highest-value omission — no guard NAME,

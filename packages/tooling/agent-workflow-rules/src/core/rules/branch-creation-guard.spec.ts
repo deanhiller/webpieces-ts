@@ -6,7 +6,7 @@ import { BashContext } from '@webpieces/hook-runtime';
 
 // Mutable git state the mocked execSync/spawnSync read. vi.hoisted so the vi.mock factories (hoisted
 // above imports) can close over it without a TDZ error. `localBranches` feeds the cap check's
-// `git for-each-ref`; `cacheJson` is the .webpieces-logs/merged-branches.json the cap check reads (null =
+// `git for-each-ref`; `cacheJson` is the .webpieces/merged-branches.json the cap check reads (null =
 // no cache on disk, which must fail OPEN).
 const git = vi.hoisted(() => ({
     branch: 'main',

@@ -46,7 +46,7 @@ export function isPathExcluded(relPath: string, excludePaths: readonly string[])
  * DOTFILE PATHS COUNT (`{ dot: true }`). minimatch's default hides any path segment starting with `.`
  * from a wildcard, so `**` does not match `.github/workflows/deploy.yml` and `.claude/**` does not match
  * `.claude/agents/x.md`. For a repo-path classifier that default is simply wrong: `.github/`, `.claude/`
- * and `.webpieces-logs/` are ordinary, frequently-changed directories here, and a pattern author writing
+ * and `.webpieces/` are ordinary, frequently-changed directories here, and a pattern author writing
  * `**` means all of it. Shell-style dot-hiding protects against globbing up `.` and `..`, which is not a
  * hazard any caller here has.
  *

@@ -42,7 +42,7 @@ export class ExcludedPathReference {
  * Finds the paths a BASH command names that the top-level `excludePaths` already exempts.
  *
  * WHY this exists: the bash guards judge the shell's effective CWD, not the paths in the command, so
- * `cat .webpieces-logs/tasks.md` at the repo root is DENIED even though that exact file is exempt from
+ * `cat .webpieces/tasks.md` at the repo root is DENIED even though that exact file is exempt from
  * every guard and was reachable, that instant, through Read/Write. Every remedy the deny body printed
  * was a git state change — strictly more destructive than the one it omitted. This class supplies the
  * missing sentence; it changes no verdict.
@@ -60,7 +60,7 @@ export class ExcludedPathEscapeScan {
      * `effectiveCwd` is the directory the command really runs in, after its own leading `cd` — the
      * same base ContentReadScan resolves relative operands against. RELATIVE tokens are resolved
      * there and ABSOLUTE ones normalised straight to workspace-relative, which is how
-     * `cat /abs/path/to/repo/.webpieces-logs/tasks.md` reaches the same verdict as `cat .webpieces-logs/tasks.md`.
+     * `cat /abs/path/to/repo/.webpieces/tasks.md` reaches the same verdict as `cat .webpieces/tasks.md`.
      */
     constructor(scanner: CommandScanner, workspaceRoot: string, effectiveCwd: string) {
         this.scanner = scanner;
@@ -103,8 +103,8 @@ export class ExcludedPathEscapeScan {
      * A directory the agent may `cd` into and have the guards actually stand down, or null.
      *
      * THE TRAP: the bash path matches the relative cwd with `globMatches`, which compiles
-     * `.webpieces-logs/**` to the anchored `/^\.webpieces-logs\/.*$/` — the `/` is a LITERAL, so the bare
-     * directory `.webpieces-logs` does NOT match its own glob. `cd .webpieces-logs && cat tasks.md` is still
+     * `.webpieces/**` to the anchored `/^\.webpieces\/.*$/` — the `/` is a LITERAL, so the bare
+     * directory `.webpieces` does NOT match its own glob. `cd .webpieces && cat tasks.md` is still
      * denied. Emitting that would be worse than emitting nothing: it looks authoritative and costs a
      * turn to disprove. So the directory is only offered when it passes the very same matcher the
      * runner will use, and the renderer says so plainly when nothing does.
@@ -190,7 +190,7 @@ export class ExcludedPathEscapeHint {
         for (const glob of ex.paths) lines.push(`     ${glob}`);
         lines.push(`   Your command referenced: ${references.map((r: ExcludedPathReference): string => r.referencedPath).join(', ')}`);
         // Scoped to the FILE, deliberately. The stanza fires on any rule block whose command names an
-        // exempt path, and `git push … && cat .webpieces-logs/tasks.md` is blocked for the push — for which
+        // exempt path, and `git push … && cat .webpieces/tasks.md` is blocked for the push — for which
         // Read/Write substitutes for nothing. Claiming the remedies below were optional would be false.
         lines.push('   Read/Write/Edit reaches that file RIGHT NOW, with no git operation at all.');
         lines.push('   Anything ELSE this command does — a git/gh operation, a build — still needs the');

@@ -59,7 +59,7 @@ export async function runDevHookInstall(): Promise<void> {
     }
 
     const homeDir = homedir();
-    const webpiecesDir = join(homeDir, '.webpieces-logs');
+    const webpiecesDir = join(homeDir, '.webpieces');
     const backupPath = join(webpiecesDir, 'dev-hook-backup.json');
     const claudeSettingsPath = join(homeDir, '.claude', 'settings.json');
 

@@ -7,7 +7,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
  * Only git is faked, and only two of its questions matter: `worktree list --porcelain` (every
  * `(path, branch, HEAD sha)` in the repo, readable from any tree because the list lives in the common
  * dir) and `rev-parse <branch>` (the branch ref when no worktree holds it). Nothing here reads state,
- * which is the point — see the class doc on why a `.webpieces-logs/**` receipt was rejected.
+ * which is the point — see the class doc on why a `.webpieces/**` receipt was rejected.
  */
 const world = vi.hoisted(() => ({
     porcelain: '',

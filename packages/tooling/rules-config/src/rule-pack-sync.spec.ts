@@ -101,7 +101,7 @@ describe('explicit owner config sync and upgrade', () => {
         fixture.run('sync');
         expect(loadAndValidate(fixture.root).rulesConfig['max-file-lines']['mode']).toBe('OFF');
         expect(loadAndValidate(fixture.root).rulesConfig['max-file-lines']['limit']).toBe(432);
-        expect(fs.existsSync(path.join(fixture.root, '.webpieces'))).toBe(false);
+        expect(fs.existsSync(path.join(fixture.root, '.webpieces/rules.lock.json'))).toBe(false);
     });
 
     it('writes reviewed seeds only during sync, and fills missing required fields without tuning defaults', () => {

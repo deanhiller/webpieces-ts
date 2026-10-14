@@ -219,7 +219,7 @@ export class PrGateConfig {
      */
     landPr: LandPrConfig = defaultLandPrConfig();
     /**
-     * Globs whose diffs are NOT extracted into `.webpieces-logs/pr-review/<feature>/diff/` — regenerated noise a
+     * Globs whose diffs are NOT extracted into `.webpieces/pr-review/<feature>/diff/` — regenerated noise a
      * reviewer should not spend context reading (lockfiles, generated graphs). Default [].
      *
      * They are still MATCHED against checklists and still listed in the manifest, with a stub naming the

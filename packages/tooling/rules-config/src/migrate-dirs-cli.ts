@@ -32,7 +32,7 @@ export class MigrateDirsCli {
             );
         }
         console.log(
-            `Webpieces directories migrated. Review and commit .webpieces-config/ and webpieces.config.json; ignore only .webpieces-logs/.\n${changed.join('\n')}`,
+            `Webpieces directories migrated. Review and commit .webpieces-config/ and webpieces.config.json; ignore only .webpieces/.\n${changed.join('\n')}`,
         );
     }
 }

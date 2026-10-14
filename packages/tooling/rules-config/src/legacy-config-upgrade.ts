@@ -65,9 +65,9 @@ function seedRule(ruleName: string, registry: RulePackRegistry): RuleEntry {
 // Required excludePaths block: ONE glob list suppressing hook enforcement per file path. Seeded empty
 // (enforce everywhere) — a client adds paths (e.g. "repositories/**") to exempt vendored trees.
 //
-// Deliberately NOT seeded with webpieces' own `.webpieces-logs/` state dir. That exemption lives in CODE
+// Deliberately NOT seeded with webpieces' own `.webpieces/` state dir. That exemption lives in CODE
 // (`isWebpiecesStateDir`, consulted by `filterByExcludedPaths` ahead of this list and regardless of it),
-// and a glob here would be a second, weaker spelling of it — weaker because `.webpieces-logs/**` compiles to
+// and a glob here would be a second, weaker spelling of it — weaker because `.webpieces/**` compiles to
 // an anchored regex that misses the bare directory the predicate matches, and because a config entry
 // invites a consumer to delete it and believe the exemption went with it.
 

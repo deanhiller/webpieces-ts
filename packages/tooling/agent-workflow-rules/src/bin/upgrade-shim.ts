@@ -49,7 +49,7 @@ import { toError } from '@webpieces/tooling-common/to-error';
 // second copy of the sweep here would be a second spelling of it, which is worse again.
 //
 // It does not need to be here. The sweep rides the `wp-*` startup pass that regenerates
-// `.webpieces-logs/instruct-ai/*`, so ANY `wp-*` command heals the tree — including the `pnpm install` +
+// `.webpieces/instruct-ai/*`, so ANY `wp-*` command heals the tree — including the `pnpm install` +
 // `pnpm exec wp-upgrade-shim` sequence this bin's own advice ends with.
 //
 // It also DELETES the retired `.claude/webpieces/guarantee-root.sh` and any settings entry still naming

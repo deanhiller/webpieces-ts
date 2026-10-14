@@ -27,7 +27,7 @@ import { TreeRecovery } from './tree-recovery';
  *   2. Branch already merged into main (merged PR)   → block: your work is in main, branch off fresh.
  *   3. No fork point with origin/main                → block: squash onto a new branch.
  *   4. origin/main moved & touches your files        → block: merge main first.
- * States 2–4 are PRECOMPUTED into `.webpieces-logs/main-sync-status.json` by the detached refresher, so
+ * States 2–4 are PRECOMPUTED into `.webpieces/main-sync-status.json` by the detached refresher, so
  * this check does NO network git (only a fast local `git rev-parse` for state 1). On every call it
  * fire-and-forget spawns the refresher so the NEXT call is fresh. Runs in the GUARDS hook (it's a
  * hookGuard); file-scoped, so only Write/Edit/MultiEdit are guarded — Bash passes through so the AI

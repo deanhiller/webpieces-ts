@@ -21,7 +21,7 @@ export class PolicyTracking {
             );
         if (ignored.stdout.trim())
             throw new InformAiError(
-                `Committed Webpieces policy is gitignored:\n${ignored.stdout}Remove the matching ignore patterns. Only .webpieces-logs/ belongs in .gitignore; .webpieces-config/ must be tracked.`,
+                `Committed Webpieces policy is gitignored:\n${ignored.stdout}Remove the matching ignore patterns. Only .webpieces/ belongs in .gitignore; .webpieces-config/ must be tracked.`,
             );
         const tracked = spawnSync(
             'git',
@@ -38,15 +38,17 @@ export class PolicyTracking {
     }
 
     stage(root: string, declarations: readonly PackPolicyDeclaration[]): void {
-        const retired = spawnSync('git', ['ls-files', '-z', '--', '.webpieces'], {
-            cwd: root,
-            encoding: 'utf8',
-        });
+        // `.webpieces/` is the gitignored state directory, so `git add` refuses its paths. Untrack whatever
+        // policy older releases committed there with `rm --cached`, which keeps every file on disk.
+        const retired = spawnSync(
+            'git',
+            ['rm', '-r', '-q', '--cached', '--ignore-unmatch', '--', '.webpieces'],
+            { cwd: root, encoding: 'utf8' },
+        );
         if (retired.status !== 0)
             throw new InformAiError(
-                `Cannot inspect retired policy paths for staging: ${retired.stderr}. Verify git access before retrying.`,
+                `Cannot untrack retired policy paths in .webpieces/: ${retired.stderr}. Verify git access before retrying.`,
             );
-        const deletions = retired.stdout.split('\0').filter((filename) => filename.length > 0);
         const result = spawnSync(
             'git',
             [
@@ -57,7 +59,6 @@ export class PolicyTracking {
                 'webpieces.config.json',
                 '.gitignore',
                 ...this.files(root, declarations),
-                ...deletions,
             ],
             { cwd: root, encoding: 'utf8' },
         );

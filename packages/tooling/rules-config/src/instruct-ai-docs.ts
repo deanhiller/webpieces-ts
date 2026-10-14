@@ -47,7 +47,7 @@ export class InstructAiDoc {
      * written into.
      *
      * `root` is not decoration: every webpieces state path is per-tree (a linked worktree's state lives
-     * under `<primary>/.webpieces-logs/worktrees/<name>/`), so a doc that names one must RESOLVE it for the
+     * under `<primary>/.webpieces/worktrees/<name>/`), so a doc that names one must RESOLVE it for the
      * tree the reader is standing in. A template that restated a relative path instead shipped a path
      * that does not exist in a worktree — see `GitWorkflowDoc`.
      */
@@ -87,13 +87,13 @@ export class MergeProcessDoc extends InstructAiDoc {
     }
 }
 
-/** The rules-config template name, and the file name it lands under in `.webpieces-logs/instruct-ai/`. */
+/** The rules-config template name, and the file name it lands under in `.webpieces/instruct-ai/`. */
 export const GIT_WORKFLOW_DOC = 'webpieces.git-workflow.md';
 
 /**
  * `webpieces.git-workflow.md` — the one doc that names the branch-mutation log by path.
  *
- * It used to restate `.webpieces-logs/logs/branch-mutations.log` as a literal. That log is deliberately
+ * It used to restate `.webpieces/logs/branch-mutations.log` as a literal. That log is deliberately
  * PER-WORKTREE (one appender each), so in a linked worktree the literal names a file that does not
  * exist: the reader greps nothing, and the silence reads as "no deletions were logged" — the exact
  * opposite of the truth, from the one file whose job is to prove every deletion is recoverable.

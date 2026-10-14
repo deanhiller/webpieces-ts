@@ -52,10 +52,10 @@ function repo(branch: string): string {
 }
 
 describe('BuildGateLog paths', () => {
-    it('names the log for the stage, the branch and the short sha, under .webpieces-logs/logs', () => {
+    it('names the log for the stage, the branch and the short sha, under .webpieces/logs', () => {
         const dir = repo('dean/my-feature');
         const log = newLog().pathFor(dir, REVIEW_STAGE);
-        expect(log.startsWith(path.join(dir, '.webpieces-logs', 'logs') + path.sep)).toBe(true);
+        expect(log.startsWith(path.join(dir, '.webpieces', 'logs') + path.sep)).toBe(true);
         expect(path.basename(log)).toBe(
             `build-gate-review-dean-my-feature-${git(dir, 'rev-parse', '--short', 'HEAD')}.log`,
         );
@@ -63,12 +63,12 @@ describe('BuildGateLog paths', () => {
 
     /**
      * `wp-build`'s log is the ONE path a person or an agent types from memory — `grep -n error
-     * .webpieces-logs/build.log` — so it is fixed, and history comes from the `.bak` rotation instead of from
+     * .webpieces/build.log` — so it is fixed, and history comes from the `.bak` rotation instead of from
      * the filename.
      */
-    it('gives wp-build the fixed .webpieces-logs/build.log, with no branch or sha in it', () => {
+    it('gives wp-build the fixed .webpieces/build.log, with no branch or sha in it', () => {
         const dir = repo('dean/my-feature');
-        expect(newLog().pathFor(dir, BUILD_STAGE)).toBe(path.join(dir, '.webpieces-logs', 'build.log'));
+        expect(newLog().pathFor(dir, BUILD_STAGE)).toBe(path.join(dir, '.webpieces', 'build.log'));
     });
 
     /**
@@ -220,22 +220,22 @@ describe('BuildLogHeartbeat', () => {
     it('reports the growing line count', () => {
         const dir = repo('dean/x');
         const p = path.join(dir, 'build.log');
-        const beat = new BuildLogHeartbeat(new GateLogFile(), p, '.webpieces-logs/build.log');
+        const beat = new BuildLogHeartbeat(new GateLogFile(), p, '.webpieces/build.log');
         fs.writeFileSync(p, 'a\nb\n');
-        expect(beat.tick()).toBe('.webpieces-logs/build.log size 2 lines');
+        expect(beat.tick()).toBe('.webpieces/build.log size 2 lines');
         fs.appendFileSync(p, 'c\nd\ne\n');
-        expect(beat.tick()).toBe('.webpieces-logs/build.log size 5 lines');
+        expect(beat.tick()).toBe('.webpieces/build.log size 5 lines');
     });
 
     it('appends `still` when the count has not changed since the previous tick', () => {
         const dir = repo('dean/x');
         const p = path.join(dir, 'build.log');
-        const beat = new BuildLogHeartbeat(new GateLogFile(), p, '.webpieces-logs/build.log');
+        const beat = new BuildLogHeartbeat(new GateLogFile(), p, '.webpieces/build.log');
         fs.writeFileSync(p, 'a\nb\n');
-        expect(beat.tick()).toBe('.webpieces-logs/build.log size 2 lines');
-        expect(beat.tick()).toBe('.webpieces-logs/build.log size 2 lines still');
+        expect(beat.tick()).toBe('.webpieces/build.log size 2 lines');
+        expect(beat.tick()).toBe('.webpieces/build.log size 2 lines still');
         fs.appendFileSync(p, 'c\n');
-        expect(beat.tick()).toBe('.webpieces-logs/build.log size 3 lines');
+        expect(beat.tick()).toBe('.webpieces/build.log size 3 lines');
     });
 
     // The FIRST tick can never say `still`: there is nothing it has not changed since.
@@ -244,10 +244,10 @@ describe('BuildLogHeartbeat', () => {
         const beat = new BuildLogHeartbeat(
             new GateLogFile(),
             path.join(dir, 'missing.log'),
-            '.webpieces-logs/build.log',
+            '.webpieces/build.log',
         );
-        expect(beat.tick()).toBe('.webpieces-logs/build.log size 0 lines');
-        expect(beat.tick()).toBe('.webpieces-logs/build.log size 0 lines still');
+        expect(beat.tick()).toBe('.webpieces/build.log size 0 lines');
+        expect(beat.tick()).toBe('.webpieces/build.log size 0 lines still');
     });
 
     it('ticks every 10 seconds', () => {

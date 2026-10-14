@@ -2,8 +2,8 @@ import { specTempDirs } from '@webpieces/tooling-testkit';
 /**
  * `webpieces.git-workflow.md` names the branch-mutation log by PATH, and that path is per-worktree.
  *
- * The bug: the template restated `.webpieces-logs/logs/branch-mutations.log`. In a linked worktree the log
- * actually lives at `<primary>/.webpieces-logs/worktrees/<name>/logs/branch-mutations.log`, so the doc — the
+ * The bug: the template restated `.webpieces/logs/branch-mutations.log`. In a linked worktree the log
+ * actually lives at `<primary>/.webpieces/worktrees/<name>/logs/branch-mutations.log`, so the doc — the
  * one an agent is handed by absolute path as instruction — named a file that does not exist there. The
  * reader greps nothing, and the silence reads as "no deletions were logged", which is the opposite of
  * the truth from the one file whose job is to prove every deletion is recoverable.
@@ -43,7 +43,7 @@ describe('webpieces.git-workflow.md — the branch-mutation log path it delivers
         git(primary, 'init -q -b main');
         git(primary, 'config user.email test@example.com');
         git(primary, 'config user.name Test');
-        fs.writeFileSync(path.join(primary, '.gitignore'), '.webpieces-logs/\n');
+        fs.writeFileSync(path.join(primary, '.gitignore'), '.webpieces/\n');
         git(primary, 'add -A');
         git(primary, 'commit -q -m init');
         git(primary, `worktree add -q -b feature ${worktree}`);
@@ -62,7 +62,7 @@ describe('webpieces.git-workflow.md — the branch-mutation log path it delivers
         const template = loadTemplate(GIT_WORKFLOW_DOC);
 
         expect(template).toContain('{{BRANCH_MUTATION_LOG}}');
-        expect(template).not.toContain('.webpieces-logs/logs/branch-mutations.log');
+        expect(template).not.toContain('.webpieces/logs/branch-mutations.log');
     });
 
     it('the PRIMARY clone gets its own resolved path, and no placeholder survives', () => {
@@ -84,7 +84,7 @@ describe('webpieces.git-workflow.md — the branch-mutation log path it delivers
         const forWorktree = new BranchMutationLog().branchMutationLogPath(worktree);
         expect(delivered).toContain(forWorktree);
         expect(forWorktree).not.toBe(new BranchMutationLog().branchMutationLogPath(primary));
-        expect(forWorktree).toContain(path.join('.webpieces-logs', 'worktrees'));
+        expect(forWorktree).toContain(path.join('.webpieces', 'worktrees'));
         expect(delivered).not.toContain('{{BRANCH_MUTATION_LOG}}');
     });
 

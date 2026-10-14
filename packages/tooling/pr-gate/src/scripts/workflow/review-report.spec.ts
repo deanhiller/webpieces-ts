@@ -9,7 +9,7 @@ import { ReviewRoundText } from './review-round-text';
 import { STANDING_CURRENT, STANDING_REJECTED, STANDING_STALE, VerdictStanding } from './verdict-provenance';
 
 const POLICY = new ReviewerAgentPolicy('webpieces-reviewer', REVIEWER_AGENTS_PLACEHOLDER);
-const REVIEW_PATH = '/repo/.webpieces-logs/pr-review/dean-feature/summary.json';
+const REVIEW_PATH = '/repo/.webpieces/pr-review/dean-feature/summary.json';
 const report = new ReviewReport(
     new ChecklistNotice(), new ReviewerInstructionsService(new ReviewJsonService()),
     new ChecklistInstructionsService(new ReviewJsonService()), new ReviewRoundText());
@@ -199,7 +199,7 @@ describe('reviewerAgents — how many reviewer subagents stage ② asks for', ()
         expect(text).toContain('AT MOST 3 subagent(s) of type `webpieces-reviewer` (commands.pr-gate.reviewerAgents = 3)');
         expect(text).not.toContain('a SEPARATE `webpieces-reviewer` subagent for each');
         expect(text.split('subagent_type: webpieces-reviewer').length - 1).toBe(1);
-        expect(text).toContain('/repo/.webpieces-logs/pr-review/dean-feature/instructions/b.instructions.md');
+        expect(text).toContain('/repo/.webpieces/pr-review/dean-feature/instructions/b.instructions.md');
     });
 
     it('with reviewerAgents = 1: one subagent for all of them, subagent_type stated once', () => {
@@ -209,7 +209,7 @@ describe('reviewerAgents — how many reviewer subagents stage ② asks for', ()
         expect(text.split('subagent_type: webpieces-reviewer').length - 1).toBe(1);
         expect(text).toContain('submit ONE verdict per');
         for (const id of ['a', 'b', 'c', 'd']) {
-            expect(text).toContain(`instructions:  /repo/.webpieces-logs/pr-review/dean-feature/instructions/${id}.instructions.md`);
+            expect(text).toContain(`instructions:  /repo/.webpieces/pr-review/dean-feature/instructions/${id}.instructions.md`);
         }
         expect(text).not.toContain('SEPARATE');
     });
@@ -253,7 +253,7 @@ describe('reviewers still owed', () => {
     it('prints one spawn block naming the subagent and its generated instructions file', () => {
         const text = oneOwed();
         expect(text).toContain('subagent_type: db-migration-reviewer');
-        expect(text).toContain('/repo/.webpieces-logs/pr-review/dean-feature/instructions/db-migration-reviewer.instructions.md');
+        expect(text).toContain('/repo/.webpieces/pr-review/dean-feature/instructions/db-migration-reviewer.instructions.md');
         expect(text).toContain('file(s) matched "**/*.sql"');
     });
 

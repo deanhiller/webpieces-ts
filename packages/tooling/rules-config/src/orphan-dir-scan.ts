@@ -89,7 +89,7 @@ export class OrphanDirScanner {
     /**
      * The two structural exclusions, both about where a moved nx PROJECT can possibly live.
      *
-     * DOT SEGMENTS: `.nx/`, `.idea/`, `.webpieces-logs/` and friends are reported whole by `clean -Xdn` (their
+     * DOT SEGMENTS: `.nx/`, `.idea/`, `.webpieces/` and friends are reported whole by `clean -Xdn` (their
      * contents are ignored, the directories themselves are not) and would otherwise pass the discriminator
      * above perfectly. They are tool state, they are supposed to be there, and no nx project is named with
      * a leading dot. Excluding the whole class by shape beats naming today's four and meeting a fifth.

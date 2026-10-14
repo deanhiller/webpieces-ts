@@ -66,22 +66,22 @@ segment and its quoted `cd` is never picked up.
 Read/Write/Edit, `effectiveCwd` for Bash. An empty rule list means allow. This is a filter, not a row:
 "exempt" is what emerges when the list empties.
 
-ONE path is filtered out BEFORE the list is consulted and cannot be put back: **`.webpieces-logs/`**,
+ONE path is filtered out BEFORE the list is consulted and cannot be put back: **`.webpieces/`**,
 the tooling's own state dir (`isWebpiecesStateDir`). It is gitignored in every consumer, so nothing
 under it can reach a branch, be reviewed or be reverted — every reason L2 prints for protecting
 `main` is vacuous there. It was config-only once, which made the exemption optional on exactly the
 directory webpieces itself writes to: `wp-review-upsert-pr` hands a reviewer subagent a
-`<primary>/.webpieces-logs/worktrees/agent-＜id＞/pr-review/…` path, that write resolves to the PRIMARY
+`<primary>/.webpieces/worktrees/agent-＜id＞/pr-review/…` path, that write resolves to the PRIMARY
 clone, and L2 judged the primary's live branch — so the reviewer was denied "You should not be
 working on main" whenever an unrelated session had left the primary there. There is deliberately
-NO companion `".webpieces-logs/**"` glob seeded into `excludePaths`: a config entry that changes
+NO companion `".webpieces/**"` glob seeded into `excludePaths`: a config entry that changes
 nothing is a second and WEAKER spelling — the matcher below misses the bare directory that the
 predicate matches — and it invites a consumer to delete it and believe the exemption went too.
 
 <!-- webpieces-disable no-state-paths-in-templates -- this paragraph's subject IS the two spellings of the state dir; a computed path would print one of them and lose the contrast -->
 The skip is asked about the path relative to the tree that **OWNS** the file, not to the governed
-root, and the two differ in exactly one place: a linked worktree. `<primary>/.webpieces-logs/…` was
-exempt while `<primary>/.claude/worktrees/agent-＜id＞/.webpieces-logs/pr-review/…/summary.json` — the same
+root, and the two differ in exactly one place: a linked worktree. `<primary>/.webpieces/…` was
+exempt while `<primary>/.claude/worktrees/agent-＜id＞/.webpieces/pr-review/…/summary.json` — the same
 kind of file, in a worktree's own state dir — was not, because governed-root-relative it begins
 `.claude`. That is the file `wp-review-upsert-pr` REQUIRES before `wp-finish-upsert-pr` will open a
 PR, so the guard could forbid a file the gate demands (issue #851). `GovernedPath` carries both
@@ -159,7 +159,7 @@ not weaken it.
 
 ## How a log line joins to a row
 
-Every L1 decision is written to `.webpieces-logs/logs/L1-location/<writer>.log` with `layer=L1` and
+Every L1 decision is written to `.webpieces/logs/L1-location/<writer>.log` with `layer=L1` and
 `row=<n>`, where `<n>` is a row number from the table above. So `row=6` means "this call was judged
 by row 6" and you read the dimensions, the verdict, the reason and the cure straight off that line. Row `0` is
 the pre-stage; it is in the table for exactly this reason.
@@ -201,8 +201,8 @@ section head (neither the shell's cwd nor a `cd`'s persistence can be assumed).
 | 17 | the printed cure REPLACES your `cd`, it does not stack in front of it | `pw` / `y` / `sub` — row 5, on the cure itself | BLOCK_AI_CURE | Option 1 (preferred): run the printed line VERBATIM — `cd <root> && <the work>`, with your own leading `cd` dropped<br>Do NOT: paste `cd <root> && cd <subdir> && <work>`; `effectiveCwd` resolves the leading `cd`s left to right, so that lands in `<subdir>` again and re-fires this exact block |
 | 18 | every command from a worktree another agent REAPED mid-session is blocked | `m` — row 7 | BLOCK_AI_CURE | Option 1 (preferred): run the printed `cd <root> && <the work>` line — it does NOT route back through the dead path<br>Do NOT: re-`cd` into the worktree, or `git worktree add` it back expecting your uncommitted work; that work is gone |
 | 19 | the same block for a NON-git command there — `m` does not care about G | `m` — row 7; K alone decides it | BLOCK_AI_CURE | Option 1 (preferred): the same printed line. A vanished cwd is not a git question — nothing at all can run in a directory that does not exist |
-| 20 | Write `.webpieces-logs/worktrees/agent-＊/pr-review/…/review-＊.json` allowed on main, with `excludePaths` empty | filter — `.webpieces-logs/` is HARD-CODED exempt (`isWebpiecesStateDir`), ahead of the config list | ALLOW_EXEMPT | none needed — the dir is gitignored, so no config can put it back under governance |
-| 21 | Write a reviewer verdict into a WORKTREE's own state dir — the `.webpieces-logs` under `.claude/worktrees/agent-＊`, not the primary's | filter — the state-dir skip is asked about the path relative to the tree that OWNS it, not the governed root | ALLOW_EXEMPT | none — it was NOT exempt before (governed-root-relative that path begins `.claude`), and `wp-review-upsert-pr` requires the file before a PR can be opened |
+| 20 | Write `.webpieces/worktrees/agent-＊/pr-review/…/review-＊.json` allowed on main, with `excludePaths` empty | filter — `.webpieces/` is HARD-CODED exempt (`isWebpiecesStateDir`), ahead of the config list | ALLOW_EXEMPT | none needed — the dir is gitignored, so no config can put it back under governance |
+| 21 | Write a reviewer verdict into a WORKTREE's own state dir — the `.webpieces` under `.claude/worktrees/agent-＊`, not the primary's | filter — the state-dir skip is asked about the path relative to the tree that OWNS it, not the governed root | ALLOW_EXEMPT | none — it was NOT exempt before (governed-root-relative that path begins `.claude`), and `wp-review-upsert-pr` requires the file before a PR can be opened |
 
 Row 8 is the one that changed. It used to be ALLOWED, because the predicate was
 `shellAtRoot || cdsToRoot` — two variables OR'd, so the same destination got opposite verdicts
@@ -258,4 +258,4 @@ That resolver has three consumers — L1's K, L2's scope dimension, and `exclude
 | the filter | `hook-runtime/src/core/excluded-paths.ts` | `filterByExcludedPaths` |
 | which tree owns a TARGET PATH | `hook-runtime/src/core/target-tree.ts` | `TargetTreeResolver`, `GovernedPath` |
 | `excludePaths` shape | `rules-config/src/exclude-hook-paths.ts`, `validate-config.ts`, `retired-config-keys.ts` | `ExcludePaths`, `validateExcludePaths` |
-| the `.webpieces-logs/` skip | `rules-config/src/exclude-hook-paths.ts` | `isWebpiecesStateDir` |
+| the `.webpieces/` skip | `rules-config/src/exclude-hook-paths.ts` | `isWebpiecesStateDir` |

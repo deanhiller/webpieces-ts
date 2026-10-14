@@ -30,7 +30,7 @@ function tmpRoot(): string {
 }
 
 function readLog(root: string, stream: string): string {
-    return fs.readFileSync(path.join(root, '.webpieces-logs', 'logs', stream, new LogStream().writerFile('.log')), 'utf8');
+    return fs.readFileSync(path.join(root, '.webpieces', 'logs', stream, new LogStream().writerFile('.log')), 'utf8');
 }
 
 /** Drive every JS-side writer once, and return what each stream recorded. */

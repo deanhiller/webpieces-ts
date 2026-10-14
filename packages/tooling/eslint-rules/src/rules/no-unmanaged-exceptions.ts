@@ -53,7 +53,7 @@ function isTestFile(filename: string): boolean {
 
 /**
  * Ensures the exception documentation markdown file exists at
- * <repoRoot>/.webpieces-logs/instruct-ai/webpieces.exceptions.md. Sourced from @webpieces/rules-config.
+ * <repoRoot>/.webpieces/instruct-ai/webpieces.exceptions.md. Sourced from @webpieces/rules-config.
  */
 function ensureExceptionDoc(context: Rule.RuleContext): void {
     if (exceptionDocCreated) return;
@@ -85,7 +85,7 @@ const rule: Rule.RuleModule = {
         },
         messages: {
             noUnmanagedExceptions:
-                'AI Agent: READ .webpieces-logs/instruct-ai/webpieces.exceptions.md (at the repo root) for context. Try-catch blocks are discouraged - use global error handlers instead. Only allowed in test files or with eslint-disable comment.',
+                'AI Agent: READ .webpieces/instruct-ai/webpieces.exceptions.md (at the repo root) for context. Try-catch blocks are discouraged - use global error handlers instead. Only allowed in test files or with eslint-disable comment.',
         },
         fixable: undefined,
         schema: [],

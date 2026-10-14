@@ -217,7 +217,7 @@ wp_resolve_log_dir() {
   _wp_gd="$(printf '%s\n' "$_wp_rp" | sed -n 1p)"
   _wp_cd="$(printf '%s\n' "$_wp_rp" | sed -n 2p)"
   if [ -z "$_wp_gd" ] || [ -z "$_wp_cd" ]; then
-    WP_TREE=primary; WP_LOG_DIR="$WP_CWD/.webpieces-logs/logs"
+    WP_TREE=primary; WP_LOG_DIR="$WP_CWD/.webpieces/logs"
     WP_PRIMARY_LOG_DIR="$WP_LOG_DIR"; return 0
   fi
   # git prints a BARE .git from the primary clone and an absolute path from a linked worktree; the TS
@@ -234,7 +234,7 @@ wp_resolve_log_dir() {
   # audit trail is (the inverse-drift escalation in shim.ts) must be able to name both the tree it is
   # standing in and the primary — a subagent has no reach into the second one, so the deny has to quote
   # that path rather than send anyone to go and look.
-  WP_PRIMARY_LOG_DIR="$_wp_primary/.webpieces-logs/logs"
+  WP_PRIMARY_LOG_DIR="$_wp_primary/.webpieces/logs"
   if [ "$_wp_gd" = "$_wp_cd" ]; then
     WP_TREE=primary
     WP_LOG_DIR="$WP_PRIMARY_LOG_DIR"
@@ -242,7 +242,7 @@ wp_resolve_log_dir() {
     # git's OWN name for the worktree (the basename of <primary>/.git/worktrees/<name>), not the
     # directory's basename — two worktrees under different parents may share a directory name.
     WP_TREE="${_wp_gd##*/}"
-    WP_LOG_DIR="$_wp_primary/.webpieces-logs/worktrees/$WP_TREE/logs"
+    WP_LOG_DIR="$_wp_primary/.webpieces/worktrees/$WP_TREE/logs"
   fi
 }
 wp_clean() {                 # one path segment from an UNTRUSTED payload id — twin of LogStream's segment()

@@ -1,17 +1,17 @@
 /**
  * Validate No State Paths In Templates
  *
- * FAILS when a GENERATED-doc template restates a webpieces state path (`.webpieces-logs/…`) as a literal
+ * FAILS when a GENERATED-doc template restates a webpieces state path (`.webpieces/…`) as a literal
  * instead of rendering it from the resolver that already computes it.
  *
  * ## The incident this exists for
  *
- * `webpieces.git-workflow.md` — an AI-instruction doc regenerated into `.webpieces-logs/instruct-ai/` of
+ * `webpieces.git-workflow.md` — an AI-instruction doc regenerated into `.webpieces/instruct-ai/` of
  * every governed repo on every `wp-*` command — carried the literal
- * `.webpieces-logs/logs/branch-mutations.log`. That log is deliberately PER-WORKTREE (one appender each):
+ * `.webpieces/logs/branch-mutations.log`. That log is deliberately PER-WORKTREE (one appender each):
  *
- *   primary clone   → `<primary>/.webpieces-logs/logs/branch-mutations.log`
- *   linked worktree → `<primary>/.webpieces-logs/worktrees/<name>/logs/branch-mutations.log`
+ *   primary clone   → `<primary>/.webpieces/logs/branch-mutations.log`
+ *   linked worktree → `<primary>/.webpieces/worktrees/<name>/logs/branch-mutations.log`
  *
  * So in a linked worktree the doc named a file that DOES NOT EXIST. The reader greps nothing, and the
  * silence reads as "no deletions were logged" — the opposite of the truth, from the one file whose
@@ -141,8 +141,8 @@ export class NoStatePathsInTemplatesValidator extends CodeValidator<NoStatePaths
             "no-state-paths-in-templates",
             'A generated-doc template RESTATES a webpieces state path instead of computing it. These docs are '
             + 'regenerated into every governed repo and handed to an agent by absolute path AS INSTRUCTION, and '
-            + 'every .webpieces-logs/ path is per-tree — a linked worktree keeps its state under '
-            + `<primary>/.webpieces-logs/worktrees/<name>/ — so the relative spelling names a file that DOES NOT EXIST `
+            + 'every .webpieces/ path is per-tree — a linked worktree keeps its state under '
+            + `<primary>/.webpieces/worktrees/<name>/ — so the relative spelling names a file that DOES NOT EXIST `
             + `in half the trees that read it. Current mode: ${mode}.\n${detail}`,
             first?.line,
             first?.detail,

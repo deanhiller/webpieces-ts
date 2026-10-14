@@ -65,8 +65,8 @@ export class BuildOptions {
  *
  * ─── The output goes to a FILE, unconditionally ────────────────────────────────────────────────────
  * Every caller of the gate captures, and there is no flag or config key that selects otherwise. That is
- * the reason this bin is worth running: the build's full stdout+stderr land in `.webpieces-logs/build.log`
- * (previous run kept as `.webpieces-logs/build.log.bak`), and the console gets a heartbeat plus a pointer at
+ * the reason this bin is worth running: the build's full stdout+stderr land in `.webpieces/build.log`
+ * (previous run kept as `.webpieces/build.log.bak`), and the console gets a heartbeat plus a pointer at
  * that file. A measured session burned ~19 minutes re-running `nx affected` five times with no code
  * change in between, purely to see a different slice of output that had scrolled past. Reading a
  * different slice must cost a `grep`, not a build — see BuildGateLog.

@@ -19,7 +19,7 @@ class TrackingFixture {
         for (const name of ['rules/client.json', 'rules.lock.json', 'rules-catalog.md'])
             fs.writeFileSync(path.join(this.root, '.webpieces-config', name), '{}');
         fs.writeFileSync(path.join(this.root, 'webpieces.config.json'), '{}');
-        fs.writeFileSync(path.join(this.root, '.gitignore'), '.webpieces-logs/\n');
+        fs.writeFileSync(path.join(this.root, '.gitignore'), '.webpieces/\n');
     }
 }
 
@@ -31,8 +31,8 @@ describe('policy must be committed inputs', () => {
         );
         fixture.tracking.stage(fixture.root, fixture.declarations);
         expect(() => fixture.tracking.check(fixture.root, fixture.declarations)).not.toThrow();
-        fs.mkdirSync(path.join(fixture.root, '.webpieces-logs'), { recursive: true });
-        fs.writeFileSync(path.join(fixture.root, '.webpieces-logs/build.log'), 'runtime');
+        fs.mkdirSync(path.join(fixture.root, '.webpieces'), { recursive: true });
+        fs.writeFileSync(path.join(fixture.root, '.webpieces/build.log'), 'runtime');
         expect(
             execFileSync('git', ['status', '--short', '--untracked-files=all'], {
                 cwd: fixture.root,
@@ -44,7 +44,7 @@ describe('policy must be committed inputs', () => {
         const fixture = new TrackingFixture();
         fs.mkdirSync(path.join(fixture.root, '.webpieces/rules'), { recursive: true });
         fs.writeFileSync(path.join(fixture.root, '.webpieces/rules/client.json'), '{}');
-        execFileSync('git', ['add', '--', '.webpieces/rules/client.json'], { cwd: fixture.root });
+        execFileSync('git', ['add', '-f', '--', '.webpieces/rules/client.json'], { cwd: fixture.root });
         new RepositoryLayout().migrate(fixture.root);
         fixture.tracking.stage(fixture.root, fixture.declarations);
         expect(

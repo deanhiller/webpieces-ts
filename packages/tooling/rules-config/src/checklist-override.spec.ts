@@ -69,12 +69,12 @@ describe('ChecklistOverrideService.load', () => {
 });
 
 describe('ChecklistOverrideService.writeCommand', () => {
-    const REVIEW = '/repo/.webpieces-logs/pr-review/feat/summary.json';
+    const REVIEW = '/repo/.webpieces/pr-review/feat/summary.json';
 
     it('is a complete, copy-pasteable heredoc with the real id and path', () => {
         const cmd = SVC.writeCommand(REVIEW, 'backwards-compat-reviewer');
         expect(cmd.startsWith(
-            "cat > /repo/.webpieces-logs/pr-review/feat/override-backwards-compat-reviewer.json <<'JSON'")).toBe(true);
+            "cat > /repo/.webpieces/pr-review/feat/override-backwards-compat-reviewer.json <<'JSON'")).toBe(true);
         expect(cmd).toContain('"checklistId": "backwards-compat-reviewer"');
         expect(cmd).toContain('"authorizedBy": "human, in-session"');
         // The closing delimiter must be at column 0, or the pasted command hangs the shell.

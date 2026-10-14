@@ -3,7 +3,7 @@
 **READ THIS BEFORE RUNNING ANY GIT COMMANDS ON A FEATURE BRANCH.**
 
 > The always-current, authoritative version of this flow is regenerated on every `wp-*` command at
-> **`.webpieces-logs/instruct-ai/webpieces.git-workflow.md`** (it can't drift). This file is the human
+> **`.webpieces/instruct-ai/webpieces.git-workflow.md`** (it can't drift). This file is the human
 > overview; when in doubt, read the generated one.
 
 ## The 3-Point Fork-Point System
@@ -60,7 +60,7 @@ worktree cap, *not* the branch cap — so 5 worktrees plus 5 parked branches is 
 is blocked at creation until you reap the dead ones.
 
 Creation is the gate because it is the only moment cleanup is both cheap and obviously worth it. When
-blocked, the guard names exactly what is dead and hands you the command; `.webpieces-logs/merged-branches.json`
+blocked, the guard names exactly what is dead and hands you the command; `.webpieces/merged-branches.json`
 carries the per-branch and per-worktree reason. Reaping a worktree is always prune → remove → delete, in
 that order — git refuses to delete a branch a worktree still holds:
 ```bash
@@ -122,7 +122,7 @@ git fetch origin main                                 # refresh the ref, no merg
 git merge-base --is-ancestor origin/main HEAD         # exit 0 = already contains main
 git rev-list --left-right --count origin/main...HEAD  # "<behind>  <ahead>"
 git log --oneline HEAD..origin/main                   # what main has that you do not
-cat .webpieces-logs/main-sync-status.json                  # the tooling's own answer + predicted conflicts
+cat .webpieces/main-sync-status.json                  # the tooling's own answer + predicted conflicts
 ```
 
 ### Creating a PR
@@ -162,7 +162,7 @@ Any commits here mean the squash-update was bypassed. Fix by running `pnpm wp-st
 ## Merge conflict resolution
 
 When `wp-start-update` / `wp-start-upsert-pr` hit conflicts, they write the 3-point context under
-`.webpieces-logs/merge-info/<slug>/merge-<n>/` (A-forkpoint / B-feature / C-main plus `B-A.diff` / `C-A.diff`
+`.webpieces/merge-info/<slug>/merge-<n>/` (A-forkpoint / B-feature / C-main plus `B-A.diff` / `C-A.diff`
 per conflicted file) and hand resolution to you. The AI merge command lives at
 `.claude/commands/wp-merge.md` and is launched with `/wp-merge`. After resolving, finish with
 `pnpm wp-finish-update` (standalone) or `pnpm wp-finish-upsert-pr` (PR flow) — the tooling makes the

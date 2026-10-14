@@ -248,7 +248,7 @@ export class MergeEnd {
             : `snapshotted your pre-merge state → ${backupBranch} (auto-removed — clean merge, no undo needed)`;
         const trailer = backupKept
             ? `   Pre-merge snapshot trail:  git branch --list '${feature}PreMerge*'\n` +
-              `   Its conflict context lives in the paired  merge-<n>/  folder under .webpieces-logs/merge-info/\n` +
+              `   Its conflict context lives in the paired  merge-<n>/  folder under .webpieces/merge-info/\n` +
               `   Prune this run's snapshot when safe:  git branch -D ${backupBranch}\n\n`
             : '\n';
         process.stdout.write(

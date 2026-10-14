@@ -641,7 +641,7 @@ export const L0_ALLOWLIST: readonly L0AllowEntry[] = [
         new L0Call('Bash', CODEX_READ_CMD, ''),
         [
             new L0Call('Bash', 'cat webpieces.config.json', ''),
-            new L0Call('Bash', 'head -50 .webpieces-logs/instruct-ai/webpieces.guard-matrix.md', ''),
+            new L0Call('Bash', 'head -50 .webpieces/instruct-ai/webpieces.guard-matrix.md', ''),
             new L0Call('Bash', 'tail -n 20 package.json', ''),
             new L0Call('Bash', "cat '/Users/dean hiller/repo/package.json'", ''),
         ],

@@ -143,8 +143,8 @@ describe('main-sync status IO', () => {
     });
 
     it('returns null for malformed JSON (fail-open)', () => {
-        fs.mkdirSync(path.join(root, '.webpieces-logs'), { recursive: true });
-        fs.writeFileSync(path.join(root, '.webpieces-logs', 'main-sync-status.json'), '{ not json');
+        fs.mkdirSync(path.join(root, '.webpieces'), { recursive: true });
+        fs.writeFileSync(path.join(root, '.webpieces', 'main-sync-status.json'), '{ not json');
         expect(readMainSyncStatus(root, 'dean/x')).toBeNull();
     });
 });

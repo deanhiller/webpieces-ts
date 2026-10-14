@@ -56,7 +56,7 @@ const report = new ReviewReport(
     new ChecklistInstructionsService(new ReviewJsonService()), new ReviewRoundText());
 
 const reviewInput = (definedCount: number, applicableCount: number, briefings: ReviewerBriefing[]): ReviewReportInput => {
-    const built = new ReviewReportInput('/repo', 'dean-feature', '/repo/.webpieces-logs/pr-review/dean-feature/summary.json');
+    const built = new ReviewReportInput('/repo', 'dean-feature', '/repo/.webpieces/pr-review/dean-feature/summary.json');
     built.definedCount = definedCount;
     built.applicableCount = applicableCount;
     built.briefings = briefings;

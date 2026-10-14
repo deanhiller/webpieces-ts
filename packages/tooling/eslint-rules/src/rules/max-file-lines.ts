@@ -55,7 +55,7 @@ const rule: Rule.RuleModule = {
         },
         messages: {
             tooLong:
-                'AI Agent: READ .webpieces-logs/instruct-ai/webpieces.filesize.md (at the repo root) for fix instructions. File has {{actual}} lines (max: {{max}})',
+                'AI Agent: READ .webpieces/instruct-ai/webpieces.filesize.md (at the repo root) for fix instructions. File has {{actual}} lines (max: {{max}})',
         },
         fixable: undefined,
         schema: [
