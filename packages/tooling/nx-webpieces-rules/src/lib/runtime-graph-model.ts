@@ -17,8 +17,12 @@ import type {
     ExternalSystemKind,
 } from './api-usage/api-relations';
 
-export interface RuntimeService {
-    level: number;
+export class RuntimeLevel {
+    level = 0;
+    levelBecause = '';
+}
+
+export interface RuntimeService extends RuntimeLevel {
     /**
      * The project's declared nx role — 'server' or 'client' (a library is never a node). Carried so
      * the viz can LABEL the node with what it actually is: it used to infer the role from
@@ -120,13 +124,17 @@ export interface RuntimeEdge {
  * Only exact method declarations may populate producer facts. Contract-only client wiring
  * produces contract-level edges without a method queue, regardless of the endpoint table.
  */
-export interface RuntimeQueue {
+export class RuntimeQueueFlow extends RuntimeLevel {
+    selfQueue = false;
+    producedBy: string[] = [];
+    consumedBy: string[] = [];
+}
+
+export interface RuntimeQueue extends RuntimeQueueFlow {
     api: string;
     method: string;
     /** `@Queue(...)` override, else `${Api}-${method}` — the name Terraform must match 1:1. */
     queueName: string;
-    producedBy: string[];
-    consumedBy: string[];
 }
 
 /**
@@ -135,7 +143,7 @@ export interface RuntimeQueue {
  * invisible until now: a nightly sweep and a GCP push subscription are real runtime entry points
  * with real Terraform behind them, and the graph showed neither.
  */
-export interface RuntimeTrigger {
+export interface RuntimeTrigger extends RuntimeLevel {
     /** 'cron' → a scheduler fires it; 'external' → a system outside this repo posts to it. */
     kind: 'cron' | 'external';
     api: string;
@@ -148,9 +156,8 @@ export interface RuntimeTrigger {
      * Present for 'external': WHO outside this repo posts to it, declared as
      * `@Endpoint(POST, p, WRITE, EXTERNAL, { calledBy: 'twilio' })`.
      *
-     * The SAME `(kind,label)` an OUTBOUND {@link RuntimeExternalSystem} carries, so an inbound
-     * `saas twilio` and an outbound `saas twilio` share a node identity and converge on ONE box —
-     * `label` is the identity here too, not display text.
+     * The caller is drawn separately from an outbound system with the same label: callers
+     * start the flow on the top row, while outbound systems are sinks on L0.
      *
      * Optional only for graphs generated BEFORE the caller was required; generation now fails rather
      * than emitting an `external` method without one.
@@ -158,7 +165,7 @@ export interface RuntimeTrigger {
     caller?: ExternalSystemDeclaration;
 }
 
-export interface RuntimeUnresolved {
+export interface RuntimeUnresolved extends RuntimeLevel {
     service: string;
     api: string;
 }
@@ -180,7 +187,7 @@ export interface RuntimeUnresolved {
  * `label` is the node IDENTITY, not just display text: two services declaring `postgres` converge on
  * ONE node with two arrows into it, rather than drawing a database each.
  */
-export interface RuntimeExternalSystem {
+export interface RuntimeExternalSystem extends RuntimeLevel {
     kind: ExternalSystemKind;
     /** Display name AND node identity — declarations sharing a label share a node. */
     label: string;
@@ -203,10 +210,10 @@ export interface RuntimeRemoteCall {
 /**
  * A service OUTSIDE this workspace (another repo, a VM, partner endpoints) declared in the reviewed
  * `remoteServices` table of dependencies.json (#1203). It is a SERVICE — it implements our contracts —
- * so it is drawn as a service node, distinct from a vendor external system. Render-only, like the
- * external systems: it is never leveled or cycle-checked, because its own calls are not in this repo.
+ * so it is drawn as a service node, distinct from a vendor external system. Its level is zero:
+ * outbound calls from outside this workspace are not part of this graph.
  */
-export interface RuntimeRemoteService {
+export interface RuntimeRemoteService extends RuntimeLevel {
     /** Display text from the reviewed declaration; the key is the identity. */
     label?: string;
     /** The contracts it is declared to implement, as `Api (transport)`, in reviewed order. */
@@ -216,6 +223,9 @@ export interface RuntimeRemoteService {
 }
 
 export interface RuntimeGraph {
+    maxLevel: number;
+    /** Contract-only pubsub flows; these do not assert any method-level producers. */
+    contractQueues: Record<string, RuntimeQueueFlow>;
     services: Record<string, RuntimeService>;
     apis: Record<string, RuntimeApi>;
     runtimeEdges: RuntimeEdge[];

@@ -71,7 +71,8 @@ export type {
     RuntimeTrigger,
     RuntimeUnresolved,
 } from './runtime-graph-model';
-import { adjacencyFromEdges, applyCycleCuts, assignLevels } from './runtime-graph-levels';
+import { applyCycleCuts } from './runtime-graph-levels';
+import { RuntimeNodeLevels } from './runtime-node-levels';
 
 // Persistence lives in runtime-graph-io.ts; re-exported for the same reason as the model types.
 export {
@@ -210,6 +211,8 @@ class RuntimeGraphDeriver {
         const apisObj: Record<string, RuntimeApi> = {};
         for (const api of Array.from(apis.keys()).sort()) apisObj[api] = apis.get(api)!;
         const graph: RuntimeGraph = {
+            maxLevel: 0,
+            contractQueues: {},
             services,
             apis: apisObj,
             runtimeEdges: edgeResult.edges,
@@ -226,6 +229,7 @@ class RuntimeGraphDeriver {
         const systems = resolveExternalSystems(this.externalSystemDecls, services);
         attachExternalSystems(graph, systems);
         this.remoteCalls.attach(graph);
+        new RuntimeNodeLevels().apply(graph);
         return new RuntimeGraphReport(
             graph,
             this.warnings,
@@ -248,6 +252,8 @@ class RuntimeGraphDeriver {
                 for (const method of this.methodsOf(ref.api)) {
                     if (method.kind !== 'cron' && method.kind !== 'external') continue;
                     const trigger: RuntimeTrigger = {
+                        level: 0,
+                        levelBecause: '',
                         kind: method.kind,
                         api: ref.api,
                         method: method.name,
@@ -421,7 +427,12 @@ class RuntimeGraphDeriver {
                 if (implementers.length === 0) {
                     // Nobody in-repo serves it. For a vendor contract that is the ANSWER, not a gap:
                     // the call leaves the repo, and the viz terminates it at a dashed vendor node.
-                    unresolved.push({ service: decl.name, api: ref.api });
+                    unresolved.push({
+                        level: 0,
+                        levelBecause: 'outbound sink',
+                        service: decl.name,
+                        api: ref.api,
+                    });
                     continue;
                 }
                 for (const target of this.targetsFor(decl.name, ref, implementers)) {
@@ -584,6 +595,7 @@ class RuntimeGraphDeriver {
             // the committed JSON stays clean AND deterministic without conditional assembly.
             const service: RuntimeService = {
                 level: 0,
+                levelBecause: '',
                 role: this.projects[decl.name]?.role, // labels a relation-less node for what it IS
                 serviceName: this.projects[decl.name]?.serviceName,
                 callsService: this.projects[decl.name]?.callsService,
@@ -609,8 +621,6 @@ class RuntimeGraphDeriver {
                 this.autoHidden.push(decl.name);
             }
         }
-        const levels = assignLevels(adjacencyFromEdges(Object.keys(services), edges));
-        for (const name of Object.keys(services)) services[name].level = levels[name] ?? 0;
         return services;
     }
 }
@@ -655,4 +665,4 @@ export function deriveRuntimeGraphReport(
 
 // Levels + adjacency live in runtime-graph-levels.ts; re-exported for the same reason the model types
 // and the io helpers above are — one obvious place to import the runtime graph from.
-export { runtimeAdjacency } from './runtime-graph-levels';
+export { runtimeAdjacency } from './runtime-node-levels';

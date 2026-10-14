@@ -612,10 +612,20 @@ function externalCallGraph(): EnhancedGraph {
 describe('external systems are drawn as terminal nodes (render-only)', () => {
     const derived = deriveRuntimeGraph(externalCallGraph());
 
-    it('leaves unresolvedUses exactly as before — this CONSUMES that data, it does not redefine it', () => {
+    it('records terminal levels on unresolved vendor seams', () => {
         expect(derived.unresolvedUses).toEqual([
-            { service: 'fsdb-svr', api: 'FirestoreReadApi' },
-            { service: 'fsdb-svr', api: 'FirestoreWriteApi' },
+            {
+                level: 0,
+                levelBecause: 'outbound sink',
+                service: 'fsdb-svr',
+                api: 'FirestoreReadApi',
+            },
+            {
+                level: 0,
+                levelBecause: 'outbound sink',
+                service: 'fsdb-svr',
+                api: 'FirestoreWriteApi',
+            },
         ]);
     });
 

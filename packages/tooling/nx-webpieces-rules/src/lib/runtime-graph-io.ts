@@ -11,6 +11,8 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
+import { RuleFailError, Option } from '@webpieces/rules-config';
+import { RUNTIME_RULE_NAME } from './runtime-config';
 import type { RuntimeGraph } from './runtime-graph-model';
 import { toError } from '../toError';
 
@@ -49,17 +51,58 @@ export function loadRuntimeGraph(
 ): RuntimeGraph | null {
     const fullPath = path.join(workspaceRoot, graphPath);
     if (!fs.existsSync(fullPath)) return null;
+    let graph: RuntimeGraph;
     // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
     try {
-        return JSON.parse(fs.readFileSync(fullPath, 'utf-8')) as RuntimeGraph;
+        graph = JSON.parse(fs.readFileSync(fullPath, 'utf-8')) as RuntimeGraph;
     } catch (err: unknown) {
         const error = toError(err);
         throw new Error(`Failed to load runtime graph from ${fullPath}`, { cause: error });
     }
+    new RuntimeLevelSchema().validate(graph);
+    return graph;
 }
 
 /** Serialize for an in-memory equality check (matches the on-disk format). */
 // webpieces-disable no-function-outside-class -- module-scope file IO, matching saveGraph/loadBlessedGraph in graph-loader.ts
 export function serializeRuntimeGraph(graph: RuntimeGraph): string {
     return formatRuntimeJson(graph);
+}
+
+/** Old RPC-only JSON must be regenerated, never silently rendered with missing ranks. */
+class RuntimeLevelSchema {
+    validate(graph: RuntimeGraph): void {
+        const nodes = [
+            ...Object.values(graph.services),
+            ...Object.values(graph.queues),
+            ...Object.values(graph.contractQueues ?? {}),
+            ...graph.triggers,
+            ...Object.values(graph.externalSystems ?? {}),
+            ...Object.values(graph.remoteServices ?? {}),
+            ...graph.unresolvedUses,
+        ];
+        if (
+            graph.contractQueues !== undefined &&
+            Number.isInteger(graph.maxLevel) &&
+            nodes.every(
+                (node) =>
+                    Number.isInteger(node.level) &&
+                    node.level >= 0 &&
+                    typeof node.levelBecause === 'string',
+            )
+        )
+            return;
+        throw new RuleFailError(
+            RUNTIME_RULE_NAME,
+            'runtime-dependencies.json requires levels for every node and contractQueues. Regenerate with architecture:generate.',
+            undefined,
+            undefined,
+            [
+                new Option(
+                    'Run pnpm nx run architecture:generate and commit runtime-dependencies.json.',
+                    true,
+                ),
+            ],
+        );
+    }
 }

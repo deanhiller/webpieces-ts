@@ -12,6 +12,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
+import { RuntimeNodeLevels } from '../runtime-node-levels';
 import { deriveRuntimeGraph, runtimeAdjacency } from '../runtime-graph';
 import type { RuntimeEdge, RuntimeGraph, RuntimeQueue, RuntimeService } from '../runtime-graph';
 import type { EnhancedGraph } from '../graph-sorter';
@@ -128,6 +129,8 @@ describe('queues + triggers from the api contract tables', () => {
     it('records the cron method as a trigger pointing at its implementer', () => {
         expect(derived.triggers).toEqual([
             {
+                level: 2,
+                levelBecause: 'above every non-trigger node (L1)',
                 kind: 'cron',
                 api: 'TaskApi',
                 method: 'nightly',
@@ -146,7 +149,7 @@ describe('queues + triggers from the api contract tables', () => {
     it('leaves the self-loop out of levels and cycle detection', () => {
         // A queue decouples producer from consumer, so this must NOT be an architecture cycle.
         expect(runtimeAdjacency(derived)['worker']).toEqual([]);
-        expect(derived.services['worker'].level).toBe(0);
+        expect(derived.services['worker'].level).toBe(1);
     });
 });
 
@@ -244,11 +247,26 @@ function queue(
     producedBy: string[],
     consumedBy: string[],
 ): RuntimeQueue {
-    return { api, method, queueName: `${api}-${method}`, producedBy, consumedBy };
+    return {
+        level: 2,
+        levelBecause: 'above consumer c (L1)',
+        selfQueue: false,
+        api,
+        method,
+        queueName: `${api}-${method}`,
+        producedBy,
+        consumedBy,
+    };
 }
 
 function service(): RuntimeService {
-    return { level: 0, implements: [], uses: [], dependsOn: [] };
+    return {
+        level: 1,
+        levelBecause: 'no callees (service starts at L1)',
+        implements: [],
+        uses: [],
+        dependsOn: [],
+    };
 }
 
 /**
@@ -257,7 +275,9 @@ function service(): RuntimeService {
  * must not merge different producer sets and invent a producer nobody declared.
  */
 function splitProducerGraph(): RuntimeGraph {
-    return {
+    const graph: RuntimeGraph = {
+        maxLevel: 3,
+        contractQueues: {},
         services: { p1: service(), p2: service(), c: service() },
         apis: {},
         runtimeEdges: [
@@ -272,6 +292,8 @@ function splitProducerGraph(): RuntimeGraph {
         },
         triggers: [],
     };
+    new RuntimeNodeLevels().apply(graph);
+    return graph;
 }
 
 describe('generateRuntimeDot — queues with different endpoints stay separate', () => {
@@ -293,7 +315,9 @@ describe('generateRuntimeDot — queues with different endpoints stay separate',
 
 /** A contract-only pubsub edge has no per-method queue. */
 function legacyQueueGraph(): RuntimeGraph {
-    return {
+    const graph: RuntimeGraph = {
+        maxLevel: 3,
+        contractQueues: {},
         services: { p1: service(), c: service() },
         apis: {},
         runtimeEdges: [{ from: 'p1', to: 'c', via: ['EmailApi'], type: 'pubsub' }],
@@ -301,6 +325,8 @@ function legacyQueueGraph(): RuntimeGraph {
         queues: {},
         triggers: [],
     };
+    new RuntimeNodeLevels().apply(graph);
+    return graph;
 }
 
 describe('generateRuntimeDot — the contract-only per-API queue', () => {
@@ -351,6 +377,8 @@ describe('external (outside-driven) endpoints', () => {
     it('records an inbound trigger for the service that SERVES it, carrying the caller', () => {
         expect(derived.triggers).toEqual([
             {
+                level: 4,
+                levelBecause: 'above every non-trigger node (L3)',
                 kind: 'external',
                 api: 'RpcApi',
                 method: 'notify',
@@ -364,11 +392,11 @@ describe('external (outside-driven) endpoints', () => {
         const dot = generateRuntimeDot(derived);
         // Was "inbound__RpcApi" labelled `RpcApi\n(external caller)` — our own contract name, which
         // the service box below already prints. The caller now owns the box AND its identity.
-        expect(dot).toContain('"system__pubsub_push" [shape=box');
+        expect(dot).toContain('"system__caller__pubsub_push" [shape=box');
         expect(dot).toContain('label="pubsub-push\\n(external caller)"');
         expect(dot).not.toContain('inbound__RpcApi');
         expect(dot).toContain(
-            '"system__pubsub_push" -> "consumer" [label="RpcApi.notify", style=dashed',
+            '"system__caller__pubsub_push" -> "consumer" [label="RpcApi.notify", style=dashed',
         );
     });
 

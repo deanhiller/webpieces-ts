@@ -25,6 +25,7 @@ class SnapshotFixture {
     readonly graphPath = 'saved/custom.json';
     readonly projects = { saved: { level: 0, dependsOn: [], role: 'lib', framework: ['node'] } };
     readonly runtime = {
+        maxLevel: 0, contractQueues: {},
         services: {},
         apis: {},
         queues: {},
@@ -126,7 +127,7 @@ describe('saved architecture viewing', () => {
         expect(targets['validate-complete'].dependsOn).toContain('validate-runtime-architecture');
     });
 
-    it('renders older saved data with custom paths and leaves all facts unchanged after source edits', async () => {
+    it('renders saved data with custom paths and leaves all facts unchanged after source edits', async () => {
         const fixture = new SnapshotFixture();
         fixture.write();
         const before = fixture.facts();

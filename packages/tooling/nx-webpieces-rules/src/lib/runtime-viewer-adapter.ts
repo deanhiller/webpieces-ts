@@ -4,6 +4,8 @@ import { GraphRenderModel, RenderNode } from './graph-render-model';
 import { NodeFacts, NodeModeDots, NodeModeStyler } from './graph-color-modes';
 import { ProductPalette, PRODUCT_SHARED_FILL, PRODUCT_NONE_FILL } from './graph-products';
 import { LevelBand } from './graph-level-bands';
+import { RemoteServiceNodeId } from './remote-service-node-id';
+import { RuntimeExternalTriggers } from './runtime-external-triggers';
 
 /** Saved project facts enrich presentation without changing runtime derivation or topology. */
 export class RuntimeViewerAdapter {
@@ -42,17 +44,42 @@ export class RuntimeViewerAdapter {
     }
 
     levelBands(model: GraphRenderModel): LevelBand[] {
-        return [...new Set(model.nodes.map((node: RenderNode) => node.tags!.level))]
-            .sort((a: number, b: number) => b - a)
-            .map(
-                (level: number) =>
-                    new LevelBand(
-                        level,
-                        model.nodes
-                            .filter((node: RenderNode) => node.tags?.level === level)
-                            .map((node: RenderNode) => node.id),
-                    ),
-            );
+        const levels = new Map<string, number>();
+        const safe = (name: string): string => name.replace(/[^A-Za-z0-9_]/g, '_');
+        for (const [name, service] of Object.entries(this.graph.services))
+            levels.set(name, service.level);
+        for (const node of model.nodes) {
+            if (node.queueKeys.length === 0) continue;
+            const key = node.queueKeys[0];
+            const queue = key.startsWith('queue:')
+                ? this.graph.contractQueues[key.slice(6)]
+                : this.graph.queues[key];
+            levels.set(node.id, queue.level);
+        }
+        for (const [name, system] of Object.entries(this.graph.externalSystems ?? {}))
+            levels.set(`system__${safe(name)}`, system.level);
+        for (const [name, remote] of Object.entries(this.graph.remoteServices ?? {}))
+            levels.set(new RemoteServiceNodeId().of(name), remote.level);
+        for (const trigger of this.graph.triggers) {
+            if (trigger.kind === 'cron')
+                levels.set(`cron__${safe(`${trigger.api}_${trigger.method}`)}`, trigger.level);
+        }
+        for (const group of new RuntimeExternalTriggers(this.graph.triggers).groups)
+            levels.set(group.from, group.triggers[0].level);
+        // Undeclared vendor seams are terminal sinks too, independent of their grouping for display.
+        for (const use of this.graph.unresolvedUses) {
+            const owner = this.graph.apis[use.api]?.owner ?? use.api;
+            levels.set(`external__${owner}`, use.level);
+        }
+        const bands = new Map<number, string[]>();
+        for (const node of model.nodes) {
+            const level = levels.get(node.id)!;
+            if (!bands.has(level)) bands.set(level, []);
+            bands.get(level)!.push(node.id);
+        }
+        return [...bands.entries()]
+            .sort((a, b) => b[0] - a[0])
+            .map((entry) => new LevelBand(entry[0], entry[1]));
     }
 
     /** Context keeps its shape/kind palette; Impact never paints a queue as a source owner. */

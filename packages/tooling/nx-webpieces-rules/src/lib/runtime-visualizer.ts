@@ -31,8 +31,8 @@ import { LevelBandLayout } from './graph-level-bands';
  *
  * The same is true in the other direction for endpoints nothing in-repo CALLS: a
  * `cron` method hangs off a clock and an `external` method off a box naming the
- * CALLER that posts to it (`twilio`), in the same id space as the outbound
- * systems, so a vendor we both call and are called by is ONE box. Those are the
+ * CALLER that posts to it (`twilio`), separately from an outbound sink for the same
+ * vendor, so callers can sit on the top row and sinks on L0. Those are the
  * entry points that wake a service up at 3am, and a graph built only from in-repo
  * callers cannot show them at all.
  *
@@ -144,8 +144,8 @@ class QueueEndpoints {
 
 /**
  * One drawn queue BOX: the queue keys (`Api.method`) it shows, and the endpoints they all share.
- * Several keys land in one box only when they agree on all three of contract, producers and
- * consumers — see {@link queuesDot}.
+ * Several keys land in one box only when they agree on contract, producers, consumers and
+ * their persisted level — see {@link queuesDot}.
  */
 class QueueGroup {
     constructor(
@@ -209,7 +209,8 @@ function queueBoxDot(
 
 /**
  * Group the queued hops into boxes. The key is (contract, producer SET, consumer SET) — NOT the
- * (from,to) pair of some edge.
+ * (from,to) pair of some edge. Persisted levels must also match: hiding a foreign producer
+ * can make a foreign queue look self-only without changing its generated level.
  *
  * A queue node converges EVERY producer and consumer of its method onto one box, so keying by a
  * service PAIR would re-split a two-producer queue into two boxes and invent topology nobody wrote.
@@ -225,7 +226,12 @@ function groupQueues(byQueue: Map<string, QueueEndpoints>, graph: RuntimeGraph):
         const producers = [...ends.producers].sort();
         const consumers = [...ends.consumers].sort();
         const api = graph.queues[key]?.api ?? key.split('.')[0];
-        const mergeKey = [api, producers.join(','), consumers.join(',')].join(PAIR_SEP);
+        const mergeKey = [
+            api,
+            graph.queues[key].level,
+            producers.join(','),
+            consumers.join(','),
+        ].join(PAIR_SEP);
         const existing = groups.get(mergeKey);
         if (existing === undefined)
             groups.set(mergeKey, new QueueGroup([key], producers, consumers));
@@ -308,9 +314,8 @@ function dotId(raw: string): string {
  * parenthesised subtitle saying which way it faces.
  *
  * Shared by the OUTBOUND systems ({@link externalSystemsDot}) and the INBOUND callers
- * ({@link triggerDot}) on purpose. They emit into the SAME `system__<identity>` id space, so a
- * vendor this repo both calls and is called by is one box with arrows in both directions — and a
- * copy-pasted attribute string would have let the two drift until they stopped being one box.
+ * ({@link triggerDot}) on purpose. Callers use a separate identity from outbound sinks
+ * because their generated levels differ, while sharing the same shape and color palette.
  */
 // webpieces-disable no-function-outside-class -- DOT string builder, matching getShortName in this file
 function externalSystemNodeDot(
@@ -351,26 +356,14 @@ function externalSystemNodeDot(
  * exists to convey — which vendor is posting to us — appeared nowhere. The contract keeps its place
  * on the EDGE label, where `WhatsAppApi.inbound` reads as "…posts to this method".
  *
- * Identity is the caller's label in the SAME `system__` space {@link externalSystemsDot} uses, which
- * buys three things at once: two vendors hitting one contract are two boxes, one vendor hitting three
- * methods is one box with one arrow per service, and a vendor this repo also CALLS is that same single box.
- * `options` is passed in for the last of those — when that outbound half will be drawn, this half
- * must not restate the node statement.
+ * Inbound identities are separate from outbound sinks so each has its own generated level.
+ * Several methods called by the same vendor still share one caller box.
  */
 // webpieces-disable no-function-outside-class -- DOT string builder, matching getShortName in this file
-function triggerDot(
-    graph: RuntimeGraph,
-    hidden: Set<string>,
-    options: RuntimeVizOptions,
-    model: GraphRenderModel,
-): string {
+function triggerDot(graph: RuntimeGraph, hidden: Set<string>, model: GraphRenderModel): string {
     const triggers = graph.triggers.filter((t: RuntimeTrigger) => !hidden.has(t.service));
     if (triggers.length === 0) return '';
 
-    // Identities externalSystemsDot is about to draw; skipped here so the node is stated ONCE.
-    const drawnOutbound = new Set(
-        options.showExternalNodes ? Object.keys(graph.externalSystems ?? {}) : [],
-    );
     const emitted = new Set<string>();
     let dot =
         '\n  // Entry points nothing in this repo calls: a clock, or a system outside the repo.\n';
@@ -400,7 +393,7 @@ function triggerDot(
         // now fails instead). DOTTED and question-marked, so "we were never told who this is" cannot
         // be mistaken for a named vendor.
         const id = group.from;
-        if (!emitted.has(id) && !(caller !== undefined && drawnOutbound.has(caller.label))) {
+        if (!emitted.has(id)) {
             emitted.add(id);
             dot +=
                 caller === undefined
@@ -410,7 +403,7 @@ function triggerDot(
                               `color="${EXTERNAL_BORDER}", label="${dotValue(trigger.api)}\\n? unknown caller"];\n`,
                       )
                     : externalSystemNodeDot(
-                          caller.label,
+                          `caller__${caller.label}`,
                           caller.kind,
                           caller.label,
                           'external caller',
@@ -482,8 +475,8 @@ function externalSystemsDot(
  * computes and which was, until now, only ever printed as a warning.
  *
  * Grouped by the api-lib that owns the contracts, so a service reaching three firestore contracts
- * draws ONE `lib-firestore (external)` box rather than three. These are drawn, never derived: they
- * are absent from levels, cycle detection and the transitive implements attribution.
+ * draws ONE `lib-firestore (external)` box rather than three. The unresolved uses carry their
+ * terminal level in the generated graph; grouping changes presentation only.
  *
  * A contract carrying an `@externalSystem` declaration is skipped here — {@link externalSystemsDot}
  * has already drawn it with a real shape, and rendering it in both places would double the node.
@@ -627,8 +620,6 @@ export function generateRuntimeRenderModel(
         dot += adapter.service(model, name, svc);
     }
 
-    model.bands = adapter.levelBands(model);
-    dot += new LevelBandLayout().dot(model.bands);
     dot += '\n';
 
     for (const edge of graph.runtimeEdges) {
@@ -640,13 +631,15 @@ export function generateRuntimeRenderModel(
 
     dot += queuesDot(graph, hidden, model);
     dot += remoteServicesDot(graph, hidden, model);
-    dot += triggerDot(graph, hidden, options, model);
+    dot += triggerDot(graph, hidden, model);
 
     if (options.showExternalNodes) {
         dot += externalSystemsDot(graph, hidden, model);
         dot += externalDot(graph, hidden, model);
     }
 
+    model.bands = adapter.levelBands(model);
+    dot += new LevelBandLayout().dot(model.bands);
     const footerStart = dot.length;
     dot += '\n  labelloc="t";\n';
     dot += `  label="${dotValue(title)}\\n(from architecture/runtime-dependencies.json)";\n`;
