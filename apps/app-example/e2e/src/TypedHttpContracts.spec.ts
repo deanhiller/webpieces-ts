@@ -20,11 +20,6 @@ import {
     DnsAddressResolver,
     NodeProxyClient,
 } from '@webpieces/http-client-node';
-import {
-    ClientConfig as BrowserClientConfig,
-    ClientHttpBrowserFactory,
-    MutableContextStore,
-} from '@webpieces/http-client-browser';
 import { GcpOidc } from '@webpieces/gcp-identity';
 import { Provider } from '@webpieces/core-context';
 
@@ -210,11 +205,9 @@ function nodeClient<T extends object>(api: abstract new (...args: never[]) => T)
     );
 }
 
-describe('real server + browser/node typed HTTP transports', () => {
+describe('real server + node typed HTTP transport', () => {
     let server: HttpServer;
     let apiRouter: WebpiecesRouter;
-    let browserStore: MutableContextStore;
-    let browserClient: TypedTransportApi;
     let nodeTransportClient: TypedTransportApi;
 
     beforeAll(async () => {
@@ -236,11 +229,6 @@ describe('real server + browser/node typed HTTP transports', () => {
         apiRouter.addRoutes(TypedTransportApi, TypedTransportController);
         server = await new WebpiecesExpressRouter(apiRouter).bindAndStartExpress(express(), PORT);
 
-        browserStore = new MutableContextStore();
-        browserClient = new ClientHttpBrowserFactory(browserStore).createRpcClient(
-            TypedTransportApi,
-            new BrowserClientConfig('typed-http-test', ClientRole.END_USER_CLIENT),
-        );
         nodeTransportClient = nodeClient(TypedTransportApi);
     });
 
@@ -249,8 +237,10 @@ describe('real server + browser/node typed HTTP transports', () => {
         await new Promise<void>((resolve: () => void) => server.close(() => resolve()));
     });
 
-    it('browser GET reaches the normal server context/filter boundary and supports a nested Node RPC', async () => {
-        const response = await browserClient.lookup('Dean / Київ', 7, true, ['red & blue', '✓']);
+    it('GET reaches the normal server context/filter boundary and supports a nested Node RPC', async () => {
+        const response = await RequestContext.run(() =>
+            nodeTransportClient.lookup('Dean / Київ', 7, true, ['red & blue', '✓']),
+        );
 
         expect(response).toEqual({
             owner: 'Dean / Київ',
@@ -298,10 +288,13 @@ describe('real server + browser/node typed HTTP transports', () => {
     });
 
     it('@WpAuthPublic still gets context, while @WpAuthJwt GET still enforces its credential', async () => {
-        await expect(browserClient.secure(4)).rejects.toThrow();
+        await expect(RequestContext.run(() => nodeTransportClient.secure(4))).rejects.toThrow();
 
-        browserStore.set(AUTHORIZATION, 'Bearer test-token');
-        await expect(browserClient.secure(4)).resolves.toEqual({ id: 4, contextActive: true });
+        const authorized = await RequestContext.run(() => {
+            RequestContext.putUntrusted(AUTHORIZATION, 'Bearer test-token');
+            return nodeTransportClient.secure(4);
+        });
+        expect(authorized).toEqual({ id: 4, contextActive: true });
 
         const malformed = await fetch(`http://localhost:${PORT}/typed/secure/not-a-number`, {
             headers: { authorization: 'Bearer test-token' },

@@ -19,6 +19,6 @@ The browser-side HTTP client: generates type-safe clients from the SAME API cont
 
 ## Notes
 
-Tagged `framework:browser`, so the `library-types-match-client` rule structurally forbids it from depending on any `framework:node` package — that lattice check, not a source grep, is what guarantees no node import reaches the bundle. The server twin is `http-client-node`; both sit on `http-client-core`.
+Tagged `framework:browser` + `framework:react-native`, so the `library-types-match-client` rule structurally forbids it from depending on any `framework:node` package — that lattice check, not a source grep, is what guarantees no node import reaches the bundle. The server twin is `http-client-node`; both sit on `http-client-core`.
 
-Also tagged `framework:node`: modern Node provides compatible `fetch`, so real HTTP integration tests can exercise this exact client. That widens where the package can run; it does not permit Node-only dependencies because its browser/react-native promises remain in force.
+Deliberately NOT tagged `framework:node` (#1245): its context lives in one app-managed `MutableContextStore` with no AsyncLocalStorage, so on a node server two concurrent requests would share it. A node project uses `http-client-node`, and the lattice therefore refuses a `node`/`express` project depending on this package.
