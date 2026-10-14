@@ -127,6 +127,8 @@ export function resolveExternalSystems(
         out[identity] = {
             kind: decl.kind,
             label: decl.label,
+            level: 0,
+            levelBecause: 'outbound sink',
             usedBy: [...usedBy].sort(),
             apis: [...decl.apis].sort(),
         };

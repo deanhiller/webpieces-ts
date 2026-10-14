@@ -66,6 +66,8 @@ export class RemoteCallCollector {
         for (const name of names) {
             const decl = this.remotes[name];
             remoteServices[name] = {
+                level: 0,
+                levelBecause: 'outbound sink',
                 label: decl.label,
                 implements: decl.implements.map(
                     (entry: RemoteServiceApi) => `${entry.api} (${entry.type})`,

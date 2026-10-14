@@ -32,7 +32,7 @@ export class RuntimeExternalTriggers {
             const from =
                 caller === undefined
                     ? `inbound__${trigger.api.replace(/[^A-Za-z0-9_]/g, '_')}`
-                    : `system__${caller.label.replace(/[^A-Za-z0-9_]/g, '_')}`;
+                    : `system__caller__${caller.label.replace(/[^A-Za-z0-9_]/g, '_')}`;
             const key = JSON.stringify([from, trigger.service]);
             if (!groups.has(key))
                 groups.set(key, new RuntimeExternalTriggerGroup(from, trigger.service));

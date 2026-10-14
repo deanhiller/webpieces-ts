@@ -98,6 +98,7 @@ describe('the derived runtime graph', () => {
 
     it('draws the destination as an external system of kind runtime', () => {
         expect(derived.externalSystems?.['partner-webhooks']).toEqual({
+            level: 0, levelBecause: 'outbound sink',
             kind: 'runtime',
             label: 'partner-webhooks',
             usedBy: ['sender'],
@@ -133,7 +134,7 @@ describe('the derived runtime graph', () => {
         // whose contract carries an externalSystem. Keeping that one rule, rather than a second
         // suppression path just for `runtime`, is the whole point of routing this through the
         // existing declaration pipeline.
-        expect(derived.unresolvedUses).toEqual([{ service: 'sender', api: 'PartnerWebhookApi' }]);
+        expect(derived.unresolvedUses).toEqual([{ level: 0, levelBecause: 'outbound sink', service: 'sender', api: 'PartnerWebhookApi' }]);
         const dot = generateRuntimeDot(derived);
         // Node DEFINITIONS only — a line that starts with the id (an edge line starts with its source).
         const definitions = dot
@@ -172,6 +173,6 @@ describe('a graph with nothing declared', () => {
         const derived = deriveRuntimeGraphReport(graphWithSender()).graph;
 
         expect(derived.externalSystems).toBeUndefined();
-        expect(derived.unresolvedUses).toEqual([{ service: 'sender', api: 'PartnerWebhookApi' }]);
+        expect(derived.unresolvedUses).toEqual([{ level: 0, levelBecause: 'outbound sink', service: 'sender', api: 'PartnerWebhookApi' }]);
     });
 });

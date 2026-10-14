@@ -4,7 +4,7 @@ import type { GraphEntry, EnhancedGraph } from './graph-sorter';
 import { ProjectCycleDetector, ProjectCycle } from './graph-cycles';
 import { CUT_LEGACY_CYCLE_TAG_PREFIX } from './cut-legacy-cycle-resolver';
 import { RUNTIME_RULE_NAME } from './runtime-config';
-import type { RuntimeEdge, RuntimeGraph } from './runtime-graph-model';
+import type { RuntimeEdge } from './runtime-graph-model';
 
 /**
  * LEVELS and ADJACENCY for the runtime graph — how deep each service sits, and who calls whom.
@@ -14,23 +14,7 @@ import type { RuntimeEdge, RuntimeGraph } from './runtime-graph-model';
  * computation over the result, with no knowledge of contracts at all. Splitting it also keeps
  * runtime-graph.ts under the file-size limit, which is the visible symptom of the same thing.
  */
-/**
- * Adjacency (service -> [targets]) used for leveling + cycle checks.
- *
- * TWO KINDS OF EDGE ARE EXCLUDED, and the second is modelled on the first:
- *
- * PUBSUB EDGES. A queue is precisely the thing that decouples producer from consumer: the producer
- * returns as soon as the task is enqueued and never waits on the consumer, so a queued hop is not a
- * runtime dependency in the sense levels and cycle detection mean. Counting them would make the
- * common and correct `A → queue → A` (a service deferring its own work) an architecture cycle, and
- * would rank services by an ordering that does not constrain deploy or startup.
- *
- * EDGES STAMPED `cutLegacyCycle`. The calling project carries a `cutLegacyCycle:<target>` nx tag
- * (see cut-legacy-cycle-resolver.ts) ADMITTING that this hop closes a real cycle which is being
- * tolerated as legacy debt. Unlike a queued hop the coupling is real, so the edge is still drawn —
- * it is only kept out of leveling and cycle detection, which are the two things a cycle makes
- * meaningless.
- */
+/** RPC adjacency for callers working with an edge list alone. Full runtime layering uses RuntimeNodeLevels. */
 // webpieces-disable no-function-outside-class -- pure graph helper, matches the sibling helpers in this file
 export function adjacencyFromEdges(
     serviceNames: string[],
@@ -88,8 +72,7 @@ export function applyCycleCuts(
                 );
                 continue;
             }
-            // A queued hop is already excluded from leveling, so it can never be part of a cycle and
-            // never needs cutting; only a direct call edge is cuttable.
+            // Legacy cuts apply to direct calls only. Foreign queues remain visible to cycle detection.
             const cut = edges.filter(
                 (e: RuntimeEdge) => e.from === name && e.to === node && e.type !== 'pubsub',
             );
@@ -106,12 +89,6 @@ export function applyCycleCuts(
     return problems;
 }
 
-/** Adjacency (service -> [targets]) from a loaded runtime graph. */
-// webpieces-disable no-function-outside-class -- pure graph helper, sibling of the one above
-export function runtimeAdjacency(graph: RuntimeGraph): Record<string, string[]> {
-    return adjacencyFromEdges(Object.keys(graph.services), graph.runtimeEdges);
-}
-
 /** The cures for a cyclic runtime graph, honest ones first and the IOU last. */
 // webpieces-disable no-function-outside-class -- cure list for the throw below, sibling of the helpers in this file
 function cycleCures(): Option[] {
@@ -123,9 +100,8 @@ function cycleCures(): Option[] {
             true,
         ),
         new Option(
-            'Make the hop asynchronous. A contract marked `@PubSub()` is delivered through a Cloud ' +
-                'Tasks queue, and queued edges are excluded from leveling and cycle detection ' +
-                'because the producer returns without waiting on the consumer.',
+            'Break the feedback path through the named queue or RPC hop. Foreign queues count ' +
+                'toward runtime layering; only a service enqueueing to itself is exempt.',
         ),
         new Option(
             'Extract the shared contract into a `role:api-lib` project that both sides depend on, ' +
@@ -134,7 +110,7 @@ function cycleCures(): Option[] {
         new Option(
             'Last resort — admit the debt. Add `' +
                 CUT_LEGACY_CYCLE_TAG_PREFIX +
-                '<targetService>` to the CALLING project\'s project.json tags, naming the service on ' +
+                "<targetService>` to the CALLING project's project.json tags, naming the service on " +
                 'the other end of the one edge you are cutting. This does NOT say the edge is ' +
                 'harmless; it records that the cycle is real and is being tolerated as legacy debt. ' +
                 'The edge stays on the drawing as a dashed "legacy cycle" arrow, and ' +
@@ -162,7 +138,9 @@ function cycleCures(): Option[] {
 export function assignLevels(adjacency: Record<string, string[]>): Record<string, number> {
     const cycles = new ProjectCycleDetector().find(adjacency);
     if (cycles.length > 0) {
-        const listed = cycles.map((cycle: ProjectCycle): string => `  ${cycle.describe()}`).join('\n');
+        const listed = cycles
+            .map((cycle: ProjectCycle): string => `  ${cycle.describe()}`)
+            .join('\n');
         const plural = cycles.length === 1 ? 'cycle' : 'cycles';
         throw new RuleFailError(
             RUNTIME_RULE_NAME,

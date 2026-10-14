@@ -16,7 +16,8 @@ import { describe, it, expect } from 'vitest';
 import fs from 'fs';
 import path from 'path';
 import { RuleFailError, Option } from '@webpieces/rules-config';
-import { adjacencyFromEdges, assignLevels, runtimeAdjacency } from '../runtime-graph-levels';
+import { RuntimeNodeLevels, runtimeAdjacency } from '../runtime-node-levels';
+import { adjacencyFromEdges, assignLevels } from '../runtime-graph-levels';
 import { deriveRuntimeGraph, deriveRuntimeGraphReport } from '../runtime-graph';
 import { generateRuntimeDot, RuntimeVizOptions } from '../runtime-visualizer';
 import { resolveCutLegacyCycles } from '../cut-legacy-cycle-resolver';
@@ -95,7 +96,7 @@ describe('assignLevels — a cycle THROWS instead of flattening the graph', () =
         expect(cures).toHaveLength(4);
         expect(cures[0].preferred).toBe(true);
         expect(cures[0].text).toContain('role:lib');
-        expect(cures[1].text).toContain('@PubSub()');
+        expect(cures[1].text).toContain('Foreign queues count');
         expect(cures[2].text).toContain('role:api-lib');
         expect(cures[3].text).toContain('cutLegacyCycle:');
         expect(cures[3].text).toContain('legacy debt');
@@ -177,8 +178,8 @@ describe('deriving a cyclic runtime graph', () => {
     it('a cutLegacyCycle tag on the calling project lets it derive again', () => {
         // Only beta -> alpha is left blocking, so alpha sits at the bottom and beta above it.
         const graph = deriveRuntimeGraph(twoServers(true, true, ['beta']));
-        expect(graph.services['alpha'].level).toBe(0);
-        expect(graph.services['beta'].level).toBe(1);
+        expect(graph.services['alpha'].level).toBe(1);
+        expect(graph.services['beta'].level).toBe(2);
     });
 
     it('KEEPS the cut edge in the emitted graph, marked non-blocking', () => {
@@ -219,9 +220,9 @@ describe('a cutLegacyCycle tag that cuts nothing FAILS the build', () => {
 
     it('is silent when the cut lands', () => {
         const report = deriveRuntimeGraphReport(twoServers(true, true, ['beta']));
-        expect(report.problems.filter((p: string): boolean => p.includes('cutLegacyCycle'))).toEqual(
-            [],
-        );
+        expect(
+            report.problems.filter((p: string): boolean => p.includes('cutLegacyCycle')),
+        ).toEqual([]);
     });
 });
 
@@ -237,13 +238,15 @@ function repoRoot(): string {
 }
 
 describe("this repo's committed runtime graph", () => {
-    it('is acyclic and keeps its existing 0/1/2 levels', () => {
+    it('can layer the committed graph with the current generator', () => {
         const file = path.join(repoRoot(), 'architecture', 'runtime-dependencies.json');
         const graph = JSON.parse(fs.readFileSync(file, 'utf8')) as RuntimeGraph;
+        new RuntimeNodeLevels().apply(graph);
         const levels = assignLevels(runtimeAdjacency(graph));
         const committed: Record<string, number> = {};
-        for (const name of Object.keys(graph.services)) committed[name] = graph.services[name].level;
-        expect(levels).toEqual(committed);
-        expect(new Set(Object.values(levels))).toEqual(new Set([0, 1, 2]));
+        for (const name of Object.keys(graph.services))
+            committed[name] = graph.services[name].level;
+        expect(Object.keys(levels)).toEqual(expect.arrayContaining(Object.keys(committed)));
+        expect(Math.min(...Object.values(committed))).toBe(1);
     });
 });

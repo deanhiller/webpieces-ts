@@ -3,9 +3,25 @@ import type { RuntimeGraph } from '../runtime-graph-model';
 /** The reported shape: nine APIs, thirty-three methods, and a second service. */
 export class RuntimeTriggerFixture {
     readonly graph: RuntimeGraph = {
+        maxLevel: 2,
+        contractQueues: {},
         services: {
-            public: { level: 0, role: 'server', implements: [], uses: [], dependsOn: [] },
-            second: { level: 0, role: 'server', implements: [], uses: [], dependsOn: [] },
+            public: {
+                level: 1,
+                levelBecause: 'no callees',
+                role: 'server',
+                implements: [],
+                uses: [],
+                dependsOn: [],
+            },
+            second: {
+                level: 1,
+                levelBecause: 'no callees',
+                role: 'server',
+                implements: [],
+                uses: [],
+                dependsOn: [],
+            },
         },
         apis: {},
         runtimeEdges: [],
@@ -22,6 +38,8 @@ export class RuntimeTriggerFixture {
         }
         for (let index = 0; index < 33; index++) {
             this.graph.triggers.push({
+                level: 2,
+                levelBecause: 'above every non-trigger node (L1)',
                 kind: 'external',
                 api: `Api${index % 9}`,
                 method: `method${index}`,
@@ -30,6 +48,8 @@ export class RuntimeTriggerFixture {
             });
         }
         this.graph.triggers.push({
+            level: 2,
+            levelBecause: 'above every non-trigger node (L1)',
             kind: 'external',
             api: 'Api0',
             method: 'receive',

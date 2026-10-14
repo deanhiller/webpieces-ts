@@ -188,6 +188,7 @@ describe('the runtime graph draws remote services as service nodes', () => {
         expect(report.graph.unresolvedUses).toEqual([]);
         expect(report.graph.remoteServices).toEqual({
             'reporter-vm': {
+                level: 0, levelBecause: 'outbound sink',
                 label: 'reporter VM',
                 implements: ['ReporterTriggerApi (rpc)'],
                 calledBy: [{ from: 'dispatcher', via: ['ReporterTriggerApi'], type: 'rpc' }],
@@ -198,7 +199,7 @@ describe('the runtime graph draws remote services as service nodes', () => {
     it('omits the table entirely when nothing is declared, so existing graphs are byte-identical', () => {
         const report = deriveRuntimeGraphReport(graph('reporter-vm'), new Set(), contracts());
         expect(report.graph.remoteServices).toBeUndefined();
-        expect(report.graph.unresolvedUses).toEqual([{ service: 'dispatcher', api: 'ReporterTriggerApi' }]);
+        expect(report.graph.unresolvedUses).toEqual([{ level: 0, levelBecause: 'outbound sink', service: 'dispatcher', api: 'ReporterTriggerApi' }]);
     });
 
     it('reports a remote that does not declare the called api', () => {

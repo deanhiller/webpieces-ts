@@ -191,7 +191,13 @@ export abstract class HookApi {
 // ---------------------------------------------------------------------------------------------
 
 function service(implementsApis: string[]): RuntimeService {
-    return { level: 0, implements: implementsApis, uses: [], dependsOn: [] };
+    return {
+        level: 1,
+        levelBecause: 'no callees',
+        implements: implementsApis,
+        uses: [],
+        dependsOn: [],
+    };
 }
 
 /** `ai-chat` implements one contract with two external methods. */
@@ -248,7 +254,7 @@ describe('drawing the inbound caller', () => {
         );
         expect(dot).toContain('label="twilio\\n(external caller)"');
         expect(dot).not.toContain('WhatsAppApi\\n(external caller)');
-        expect(dot).toContain('"system__twilio" -> "ai-chat" [label="WhatsAppApi.inbound"');
+        expect(dot).toContain('"system__caller__twilio" -> "ai-chat" [label="WhatsAppApi.inbound"');
     });
 
     it('converges ONE caller on ONE box and edge however many methods it posts to', () => {
@@ -274,8 +280,8 @@ describe('drawing the inbound caller', () => {
                 ]),
             ),
         );
-        expect(nodeStatements(dot, 'system__twilio')).toHaveLength(1);
-        expect(arrowsFrom(dot, 'system__twilio')).toEqual([
+        expect(nodeStatements(dot, 'system__caller__twilio')).toHaveLength(1);
+        expect(arrowsFrom(dot, 'system__caller__twilio')).toEqual([
             expect.stringContaining('label="WhatsAppApi"'),
         ]);
     });
@@ -305,10 +311,10 @@ describe('drawing the inbound caller', () => {
                 ]),
             ),
         );
-        expect(nodeStatements(dot, 'system__twilio')).toHaveLength(1);
-        expect(nodeStatements(dot, 'system__gmail')).toHaveLength(1);
-        expect(arrowsFrom(dot, 'system__twilio')).toHaveLength(1);
-        expect(arrowsFrom(dot, 'system__gmail')).toHaveLength(1);
+        expect(nodeStatements(dot, 'system__caller__twilio')).toHaveLength(1);
+        expect(nodeStatements(dot, 'system__caller__gmail')).toHaveLength(1);
+        expect(arrowsFrom(dot, 'system__caller__twilio')).toHaveLength(1);
+        expect(arrowsFrom(dot, 'system__caller__gmail')).toHaveLength(1);
     });
 
     it('draws the shape of the caller KIND, not always a box', () => {
@@ -327,12 +333,12 @@ describe('drawing the inbound caller', () => {
                 ]),
             ),
         );
-        expect(dot).toContain('"system__sqs_inbox" [shape=Mrecord');
+        expect(dot).toContain('"system__caller__sqs_inbox" [shape=Mrecord');
         expect(dot).toContain('class="wp_queue"');
     });
 });
 
-describe('inbound and outbound converge on ONE node for the same vendor', () => {
+describe('inbound callers and outbound sinks occupy separate rows for the same vendor', () => {
     /** `ai-chat` is POSTED TO by twilio and also CALLS a twilio seam — the same vendor, both ways. */
     function bothWays(showExternalNodes: boolean = true): string {
         const graph: RuntimeGraph = deriveRuntimeGraph(
@@ -350,19 +356,28 @@ describe('inbound and outbound converge on ONE node for the same vendor', () => 
         );
         graph.services['ai-chat'] = service(['WhatsAppApi']);
         attachExternalSystems(graph, {
-            twilio: { kind: 'saas', label: 'twilio', usedBy: ['ai-chat'], apis: ['TwilioSendApi'] },
+            twilio: {
+                level: 0,
+                levelBecause: 'outbound sink',
+                kind: 'saas',
+                label: 'twilio',
+                usedBy: ['ai-chat'],
+                apis: ['TwilioSendApi'],
+            },
         });
         return generateRuntimeDot(graph, 'T', new RuntimeVizOptions(showExternalNodes));
     }
 
-    it('states the node ONCE, with an arrow in each direction', () => {
+    it('states separate caller and sink nodes with their own arrows', () => {
         const dot = bothWays();
-        // Reusing ExternalSystemDeclaration is what buys this: the same (kind,label) on both halves
-        // means one identity, so twilio is one box rather than two facing opposite ways.
-        expect(nodeStatements(dot, 'system__twilio')).toHaveLength(1);
-        expect(arrowsFrom(dot, 'system__twilio')).toEqual([
-            expect.stringContaining('"system__twilio" -> "ai-chat" [label="WhatsAppApi.inbound"'),
+        // One vendor has two directional roles: a top-row caller and an L0 sink.
+        expect(nodeStatements(dot, 'system__caller__twilio')).toHaveLength(1);
+        expect(arrowsFrom(dot, 'system__caller__twilio')).toEqual([
+            expect.stringContaining(
+                '"system__caller__twilio" -> "ai-chat" [label="WhatsAppApi.inbound"',
+            ),
         ]);
+        expect(nodeStatements(dot, 'system__twilio')).toHaveLength(1);
         expect(dot).toContain('"ai-chat" -> "system__twilio"');
     });
 
@@ -370,7 +385,7 @@ describe('inbound and outbound converge on ONE node for the same vendor', () => 
         // showExternalNodes:false suppresses the OUTBOUND half only; an inbound entry point is not
         // vendor noise, it is how the service gets woken up.
         const dot = bothWays(false);
-        expect(nodeStatements(dot, 'system__twilio')).toHaveLength(1);
+        expect(nodeStatements(dot, 'system__caller__twilio')).toHaveLength(1);
         expect(dot).not.toContain('"ai-chat" -> "system__twilio"');
     });
 });

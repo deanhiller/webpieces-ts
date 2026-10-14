@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { RuntimeNodeLevels } from './runtime-node-levels';
 import type { RuntimeGraph } from './runtime-graph-model';
 import { deriveRuntimeGraph } from './runtime-graph';
 import type { EnhancedGraph } from './graph-sorter';
@@ -7,10 +8,20 @@ import { generateRuntimeDot, generateRuntimeRenderModel } from './runtime-visual
 
 function graph(apis: string[]): RuntimeGraph {
     return {
+        maxLevel: 2,
+        contractQueues: {},
         services: {
-            source: { level: 1, role: 'client', implements: [], uses: [...apis], dependsOn: [] },
+            source: {
+                level: 2,
+                levelBecause: 'rpc:target (L1)',
+                role: 'client',
+                implements: [],
+                uses: [...apis],
+                dependsOn: [],
+            },
             target: {
-                level: 0,
+                level: 1,
+                levelBecause: 'no callees',
                 role: 'server',
                 implements: [...apis],
                 uses: [],
@@ -124,6 +135,19 @@ describe('compact runtime graph details', () => {
                 queue: 'MailApi.sendEmail',
             },
         ];
+        for (const edge of data.runtimeEdges) {
+            data.queues[edge.queue!] = {
+                level: 2,
+                levelBecause: 'above consumer',
+                selfQueue: false,
+                api: edge.via[0],
+                method: edge.queue!.split('.')[1],
+                queueName: edge.queue!,
+                producedBy: [edge.from],
+                consumedBy: [edge.to],
+            };
+        }
+        new RuntimeNodeLevels().apply(data);
         const model = generateRuntimeRenderModel(data);
         const details = new RuntimeDetails(data, true, model);
         const longer = details.edges['source->queue__MailApi_sendEmail'];
@@ -169,6 +193,7 @@ describe('compact runtime graph details', () => {
             { from: 'source', to: 'target', via: ['MailApi', 'OtherApi'], type: 'pubsub' },
             { from: 'second', to: 'target', via: ['MailApi'], type: 'pubsub' },
         ];
+        new RuntimeNodeLevels().apply(data);
         const model = generateRuntimeRenderModel(data);
         const queues = model.nodes.filter((node) => node.queueKeys.length > 0);
         expect(queues.map((node) => node.queueKeys)).toEqual([

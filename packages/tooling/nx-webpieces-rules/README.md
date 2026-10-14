@@ -124,7 +124,16 @@ Every row is one level. A library's level is its dependency depth, but every ser
 app (`role:server` / `role:client` / `role:app`) is pinned to the TOP row, one above the highest
 library, so the top row is exactly the entry points (a `role:bundle` sits above the apps it
 aggregates; a server orchestrator above the servers it boots). The `level` in `dependencies.json`
-is that promoted level. The runtime graph keeps its call-depth levels.
+is that promoted level. The runtime graph stores a level and `levelBecause` for every service, queue, external system,
+remote service and trigger in `runtime-dependencies.json`. Outbound systems and remote services are
+L0; services start at L1 and sit one above their highest callee. Foreign queues sit one above their
+consumer and one below their foreign producers. A self-queue shares its consumer's level and does
+not raise it. Contract-only pubsub flows are stored under `contractQueues`, without inventing method
+producers. Foreign queue cycles fail with the queue named in the cycle path; existing explicit legacy
+RPC cuts remain honored. Every trigger shares the top row, one above the highest non-trigger node.
+`maxLevel` records the highest generated level. The renderer ranks all visible node kinds using these
+stored numbers; inbound callers and outbound sinks for the same vendor have separate boxes.
+After upgrading, regenerate old RPC-only JSON with `pnpm nx run architecture:generate`.
 
 - **Runtime** — where the code can run. One runtime is a solid fill. One runtime plus a
   specialization (angular/react inside browser, express inside node) is nested: a frame in the

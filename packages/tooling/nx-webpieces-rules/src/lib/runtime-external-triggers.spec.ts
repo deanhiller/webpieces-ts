@@ -11,10 +11,10 @@ describe('grouped external trigger edges', () => {
         const model = generateRuntimeRenderModel(graph);
         expect(model.edges).toHaveLength(2);
         const edge = model.edges.find((edge: RenderEdge) => edge.to === 'public')!;
-        expect(edge.from).toBe('system__external_customers');
+        expect(edge.from).toBe('system__caller__external_customers');
         expect(edge.dot).toContain('label="Uses (9) ▾"');
         const details = new RuntimeDetails(graph, true, model);
-        expect(details.edges['system__external_customers->public']).toEqual(
+        expect(details.edges['system__caller__external_customers->public']).toEqual(
             Array.from({ length: 9 }, (_: unknown, index: number) => `contracts#Api${index}`),
         );
         expect(model.edges.find((edge: RenderEdge) => edge.to === 'second')!.dot).toContain(
@@ -50,7 +50,9 @@ describe('grouped external trigger edges', () => {
         expect(model.edges.filter((edge: RenderEdge) => edge.to === 'public')).toHaveLength(2);
         expect(model.edges.some((edge: RenderEdge) => edge.to === 'second')).toBe(false);
         expect(
-            model.nodes.filter((node: RenderNode) => node.id === 'system__external_customers'),
+            model.nodes.filter(
+                (node: RenderNode) => node.id === 'system__caller__external_customers',
+            ),
         ).toHaveLength(1);
         const hiddenOutbound = generateRuntimeRenderModel(
             graph,
@@ -59,7 +61,7 @@ describe('grouped external trigger edges', () => {
         );
         expect(
             hiddenOutbound.nodes.filter(
-                (node: RenderNode) => node.id === 'system__external_customers',
+                (node: RenderNode) => node.id === 'system__caller__external_customers',
             ),
         ).toHaveLength(1);
     });

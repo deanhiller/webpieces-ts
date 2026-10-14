@@ -186,6 +186,8 @@ describe('the runtime graph reads the per-api files', () => {
         expect(derived.runtimeEdges.every((edge) => edge.queue === undefined)).toBe(true);
         expect(derived.triggers).toEqual([
             {
+                level: 2,
+                levelBecause: 'above every non-trigger node (L1)',
                 kind: 'cron',
                 api: 'TaskApi',
                 method: 'nightly',

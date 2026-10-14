@@ -31,13 +31,13 @@ function bareServerGraph(): EnhancedGraph {
 describe('a role:server with no apiRelations at all', () => {
     const derived = deriveRuntimeGraph(bareServerGraph());
 
-    it('IS a node — empty implements/uses/dependsOn, level 0', () => {
+    it('IS a node — empty implements/uses/dependsOn, level 1', () => {
         const svc = derived.services['crm-manager'];
         expect(svc).toBeDefined();
         expect(svc.implements).toEqual([]);
         expect(svc.uses).toEqual([]);
         expect(svc.dependsOn).toEqual([]);
-        expect(svc.level).toBe(0);
+        expect(svc.level).toBe(1);
     });
 
     it('carries its DECLARED role, so nothing has to infer it from implements', () => {
