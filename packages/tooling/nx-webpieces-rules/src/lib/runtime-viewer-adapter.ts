@@ -45,6 +45,7 @@ export class RuntimeViewerAdapter {
 
     levelBands(model: GraphRenderModel): LevelBand[] {
         const levels = new Map<string, number>();
+        const selfQueues = new Set<string>();
         const safe = (name: string): string => name.replace(/[^A-Za-z0-9_]/g, '_');
         for (const [name, service] of Object.entries(this.graph.services))
             levels.set(name, service.level);
@@ -55,6 +56,7 @@ export class RuntimeViewerAdapter {
                 ? this.graph.contractQueues[key.slice(6)]
                 : this.graph.queues[key];
             levels.set(node.id, queue.level);
+            if (queue.selfQueue && queue.producedBy.length > 0) selfQueues.add(node.id);
         }
         for (const [name, system] of Object.entries(this.graph.externalSystems ?? {}))
             levels.set(`system__${safe(name)}`, system.level);
@@ -79,7 +81,11 @@ export class RuntimeViewerAdapter {
         }
         return [...bands.entries()]
             .sort((a, b) => b[0] - a[0])
-            .map((entry) => new LevelBand(entry[0], entry[1]));
+            .map((entry) => {
+                const band = new LevelBand(entry[0], entry[1]);
+                band.selfQueueNames = entry[1].filter((id) => selfQueues.has(id));
+                return band;
+            });
     }
 
     /** Context keeps its shape/kind palette; Impact never paints a queue as a source owner. */

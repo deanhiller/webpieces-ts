@@ -1,4 +1,4 @@
-import { LevelBandLayout } from './graph-level-bands';
+import { RuntimeLayout } from './runtime-layout';
 /**
  * Runtime Visualizer
  *
@@ -181,6 +181,7 @@ function queueBoxDot(
     consumers: string[],
     model: GraphRenderModel,
     queueKeys: string[],
+    level: number,
 ): string {
     // Record-mode label: the text must clear recordValue(), and QUEUE_LABEL_PREFIX supplies the
     // empty leading field that draws the cylinder's end cap. Drop it and the node silently
@@ -188,7 +189,7 @@ function queueBoxDot(
     let dot = model.node(
         id,
         `  "${id}" [shape=${QUEUE_SHAPE}, style="filled", fillcolor="${QUEUE_FILL}", ` +
-            `class="${QUEUE_CLASS}", label="${QUEUE_LABEL_PREFIX}${body}"];\n`,
+            `class="${QUEUE_CLASS}", label="${QUEUE_LABEL_PREFIX}L${level}  ${body}"];\n`,
         [],
         queueKeys,
     );
@@ -284,6 +285,7 @@ function queuesDot(graph: RuntimeGraph, hidden: Set<string>, model: GraphRenderM
             [...ends.consumers].sort(),
             model,
             [`queue:${api}`],
+            graph.contractQueues[api].level,
         );
     }
 
@@ -298,6 +300,7 @@ function queuesDot(graph: RuntimeGraph, hidden: Set<string>, model: GraphRenderM
             group.consumers,
             model,
             group.members,
+            graph.queues[group.members[0]].level,
         );
     }
     return dot;
@@ -639,7 +642,6 @@ export function generateRuntimeRenderModel(
     }
 
     model.bands = adapter.levelBands(model);
-    dot += new LevelBandLayout().dot(model.bands);
     const footerStart = dot.length;
     dot += '\n  labelloc="t";\n';
     dot += `  label="${dotValue(title)}\\n(from architecture/runtime-dependencies.json)";\n`;
@@ -647,13 +649,13 @@ export function generateRuntimeRenderModel(
     dot += '}\n';
     // Nothing downstream parses this DOT until a human opens the page, so parse-shape is checked
     // HERE — a graph that cannot render is a generation failure, not a blank page to discover later.
-    assertValidDot(dot, 'runtime-architecture.dot');
     model.footer = dot.slice(footerStart);
     model.completeEndpoints();
     // #1179: a queue, trigger or external system belongs to the products of the services it touches.
     model.attachProducts((id: string): boolean => graph.services[id] !== undefined);
     adapter.contextModes(model);
-    model.fullDot = dot;
+    model.fullDot = new RuntimeLayout().render(model);
+    assertValidDot(model.fullDot, 'runtime-architecture.dot');
     return model;
 }
 

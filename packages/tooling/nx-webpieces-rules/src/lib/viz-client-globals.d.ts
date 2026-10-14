@@ -162,6 +162,7 @@ interface RenderEdgeJson {
     productDot: string | null;
 }
 interface RenderBandJson {
+    selfQueueNames: string[];
     level: number;
     nodeNames: string[];
 }

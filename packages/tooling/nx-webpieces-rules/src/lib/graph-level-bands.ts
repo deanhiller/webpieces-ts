@@ -37,8 +37,7 @@ const SPACER_MIN_BAND_SIZE = 10;
 const LAYOUT_CLASS = 'wp-layout';
 
 /** Attributes shared by every invisible layout node (rank anchors and spacer bands). */
-const LAYOUT_NODE_ATTRS =
-    `[style=invis, shape=point, width=0.01, height=0.01, label="", class="${LAYOUT_CLASS}"]`;
+const LAYOUT_NODE_ATTRS = `[style=invis, shape=point, width=0.01, height=0.01, label="", class="${LAYOUT_CLASS}"]`;
 
 /** Attributes for the invisible edges that force one band strictly above the next. */
 const LAYOUT_EDGE_ATTRS = `[style=invis, class="${LAYOUT_CLASS}"]`;
@@ -48,6 +47,8 @@ const LAYOUT_EDGE_ATTRS = `[style=invis, class="${LAYOUT_CLASS}"]`;
  * invisible anchor that pins the band's vertical position.
  */
 export class LevelBand {
+    /** Pure self-queues retain this level but occupy a presentation-only row below its services. */
+    selfQueueNames: string[] = [];
     level: number;
     /** Short names of the visible projects on this level, sorted for deterministic output. */
     nodeNames: string[];
@@ -72,16 +73,31 @@ export class LevelBandLayout {
     dot(bands: LevelBand[]): string {
         let dot = '';
         for (const band of bands) {
-            const attrs = band.nodeNames.length === 0 ? this.emptyBandAttrs(band.level) : LAYOUT_NODE_ATTRS;
+            const attrs =
+                band.nodeNames.length === 0 ? this.emptyBandAttrs(band.level) : LAYOUT_NODE_ATTRS;
             dot += `  "${band.anchorName()}" ${attrs};\n`;
             dot += `  { rank=same; "${band.anchorName()}"; `;
-            for (const name of band.nodeNames) dot += `"${dotValue(name)}"; `;
+            for (const name of band.nodeNames.filter((node) => !band.selfQueueNames.includes(node)))
+                dot += `"${dotValue(name)}"; `;
             dot += '}\n';
+            dot += this.selfQueueRow(band);
         }
         for (let i = 0; i + 1 < bands.length; i++) {
             dot += this.bandGap(bands[i], bands[i + 1]);
         }
         return dot;
+    }
+
+    private selfQueueRow(band: LevelBand): string {
+        if (band.selfQueueNames.length === 0) return '';
+        const anchor = `${band.anchorName()}_selfqueues`;
+        return (
+            `  "${anchor}" ${LAYOUT_NODE_ATTRS};\n` +
+            `  { rank=same; "${anchor}"; ` +
+            band.selfQueueNames.map((name) => `"${dotValue(name)}"; `).join('') +
+            '}\n' +
+            `  "${band.anchorName()}" -> "${anchor}" ${LAYOUT_EDGE_ATTRS};\n`
+        );
     }
 
     /**
@@ -105,15 +121,22 @@ export class LevelBandLayout {
      * straight through the row below.
      */
     private bandGap(upper: LevelBand, lower: LevelBand): string {
-        const crowded = upper.nodeNames.length > SPACER_MIN_BAND_SIZE
-            || lower.nodeNames.length > SPACER_MIN_BAND_SIZE;
+        const upperAnchor =
+            upper.selfQueueNames.length === 0
+                ? upper.anchorName()
+                : `${upper.anchorName()}_selfqueues`;
+        const crowded =
+            upper.nodeNames.length > SPACER_MIN_BAND_SIZE ||
+            lower.nodeNames.length > SPACER_MIN_BAND_SIZE;
         if (!crowded) {
-            return `  "${upper.anchorName()}" -> "${lower.anchorName()}" ${LAYOUT_EDGE_ATTRS};\n`;
+            return `  "${upperAnchor}" -> "${lower.anchorName()}" ${LAYOUT_EDGE_ATTRS};\n`;
         }
         const spacer = `__wp_layout_spacer_L${upper.level}_L${lower.level}`;
-        return `  "${spacer}" ${LAYOUT_NODE_ATTRS};\n`
-            + `  { rank=same; "${spacer}"; }\n`
-            + `  "${upper.anchorName()}" -> "${spacer}" ${LAYOUT_EDGE_ATTRS};\n`
-            + `  "${spacer}" -> "${lower.anchorName()}" ${LAYOUT_EDGE_ATTRS};\n`;
+        return (
+            `  "${spacer}" ${LAYOUT_NODE_ATTRS};\n` +
+            `  { rank=same; "${spacer}"; }\n` +
+            `  "${upperAnchor}" -> "${spacer}" ${LAYOUT_EDGE_ATTRS};\n` +
+            `  "${spacer}" -> "${lower.anchorName()}" ${LAYOUT_EDGE_ATTRS};\n`
+        );
     }
 }
