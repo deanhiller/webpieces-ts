@@ -162,7 +162,7 @@ describe('generateRuntimeDot — contract queues, clocks, inbound external', () 
         // Mrecord + an empty leading field = a cylinder on its side; the upright cylinder now means
         // a database, so the two never look alike.
         expect(dot).toContain('"queue__TaskApi" [shape=Mrecord');
-        expect(dot).toContain('label=" |TaskApi');
+        expect(dot).toContain('label=" |L1  TaskApi');
         // CHANGED from toContain: `TaskApi-send` is the DERIVED `${Api}-${method}` name, so the
         // `queue:` line only restated the line above it. Only a @Queue(...) OVERRIDE prints now.
         expect(dot).not.toContain('queue: TaskApi-send');
@@ -225,7 +225,7 @@ describe('generateRuntimeDot — merging queues of one contract into one box', (
     it('draws the declared contract with one enqueue and one deliver arrow', () => {
         expect(countLines(dot, '[shape=Mrecord')).toBe(1);
         expect(dot).toContain('"queue__TaskApi" [shape=Mrecord');
-        expect(dot).toContain('label=" |TaskApi');
+        expect(dot).toContain('label=" |L1  TaskApi');
         for (const method of ['blast', 'retry', 'send'])
             expect(dot).not.toContain(`TaskApi.${method}`);
         expect(dot).not.toContain('custom-blast');
@@ -334,7 +334,7 @@ describe('generateRuntimeDot — the contract-only per-API queue', () => {
 
     it('still renders an edge that carries no queue key', () => {
         expect(dot).toContain('"queue__EmailApi" [shape=Mrecord');
-        expect(dot).toContain('label=" |EmailApi queue"');
+        expect(dot).toContain('label=" |L2  EmailApi queue"');
         expect(dot).toContain('"p1" -> "queue__EmailApi" [label="enqueue", style=dashed]');
         expect(dot).toContain('"queue__EmailApi" -> "c" [style=dashed]');
     });

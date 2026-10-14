@@ -133,6 +133,11 @@ producers. Foreign queue cycles fail with the queue named in the cycle path; exi
 RPC cuts remain honored. Every trigger shares the top row, one above the highest non-trigger node.
 `maxLevel` records the highest generated level. The renderer ranks all visible node kinds using these
 stored numbers; inbound callers and outbound sinks for the same vendor have separate boxes.
+Only downward real edges constrain ranks. Upward and same-level feedback edges remain visible with
+`constraint=false`. Pure self-queues occupy a presentation-only sub-row below their service, within
+the same logical level; mixed foreign/self queues stay at their saved foreign level. Every queue box
+shows its saved `L#` badge. Filtering and color-mode rebuilds preserve these rows and constraints.
+The layout regression suite runs `dot -Tplain` and requires Graphviz, installed explicitly by CI.
 After upgrading, regenerate old RPC-only JSON with `pnpm nx run architecture:generate`.
 
 - **Runtime** — where the code can run. One runtime is a solid fill. One runtime plus a

@@ -41,6 +41,7 @@ class WpRenderBand {
     constructor(
         readonly level: number,
         readonly nodeNames: string[],
+        readonly selfQueueNames: string[],
     ) {}
 }
 
@@ -60,7 +61,9 @@ class WpFilteredDot {
         keepEmptyLevels = false,
         edgeDot: (edge: RenderEdgeJson) => string = (edge: RenderEdgeJson): string => edge.dot,
     ): string {
-        const nodes = this.model.nodes.filter((node: RenderNodeJson): boolean => retained.has(node.id));
+        const nodes = this.model.nodes.filter((node: RenderNodeJson): boolean =>
+            retained.has(node.id),
+        );
         const edges = this.model.edges.filter(
             (edge: RenderEdgeJson): boolean => retained.has(edge.from) && retained.has(edge.to),
         );
@@ -70,6 +73,7 @@ class WpFilteredDot {
                     new WpRenderBand(
                         band.level,
                         band.nodeNames.filter((id: string): boolean => retained.has(id)),
+                        band.selfQueueNames.filter((id: string): boolean => retained.has(id)),
                     ),
             )
             .filter((band: WpRenderBand): boolean => keepEmptyLevels || band.nodeNames.length > 0);
@@ -96,12 +100,22 @@ class WpFilteredDot {
                     : '[shape=plaintext, style="", width=0.01, height=0.15, margin=0, fontsize=9, fontcolor="#9a9eab", ' +
                       `label="L${band.level} · no matching projects", class="wp-layout wp-empty-level"]`;
             dot += `  "${anchor}" ${attrs};\n  { rank=same; "${anchor}"; `;
-            dot += band.nodeNames.map((id) => `${JSON.stringify(id)}; `).join('') + '}\n';
+            dot +=
+                band.nodeNames
+                    .filter((id) => !band.selfQueueNames.includes(id))
+                    .map((id) => `${JSON.stringify(id)}; `)
+                    .join('') + '}\n';
+            if (band.selfQueueNames.length > 0) {
+                const subrow = `${anchor}_selfqueues`;
+                dot += `  "${subrow}" ${nodeAttrs};\n  { rank=same; "${subrow}"; `;
+                dot += band.selfQueueNames.map((id) => `${JSON.stringify(id)}; `).join('') + '}\n';
+                dot += `  "${anchor}" -> "${subrow}" ${edgeAttrs};\n`;
+            }
         }
         for (let i = 0; i + 1 < bands.length; i++) {
             const upper = bands[i];
             const lower = bands[i + 1];
-            const from = `__wp_layout_L${upper.level}`;
+            const from = `__wp_layout_L${upper.level}${upper.selfQueueNames.length === 0 ? '' : '_selfqueues'}`;
             const to = `__wp_layout_L${lower.level}`;
             if (upper.nodeNames.length <= 10 && lower.nodeNames.length <= 10) {
                 dot += `  "${from}" -> "${to}" ${edgeAttrs};\n`;
