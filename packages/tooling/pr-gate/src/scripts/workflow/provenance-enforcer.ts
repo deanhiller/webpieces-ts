@@ -239,7 +239,7 @@ export class ProvenanceEnforcer {
     }
 
     /**
-     * Write this round's audit record: `.webpieces-logs/pr-review/<featureSlug>/provenance.json`, linking each
+     * Write this round's audit record: `.webpieces/pr-review/<featureSlug>/provenance.json`, linking each
      * verdict to the transcript of the subagent that produced it.
      *
      * `<featureSlug>`, not `<branch>`: the dir is named by `AiBranchName.getFeatureName()`, which

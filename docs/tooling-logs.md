@@ -8,8 +8,8 @@ This is not about your application's logs. For those see [`ai.logging.md`](../ai
 ## The one directory
 
 ```
-<primary-clone>/.webpieces-logs/logs/                              ← the primary clone's own tree
-<primary-clone>/.webpieces-logs/worktrees/<git-worktree-name>/logs/ ← each linked worktree
+<primary-clone>/.webpieces/logs/                              ← the primary clone's own tree
+<primary-clone>/.webpieces/worktrees/<git-worktree-name>/logs/ ← each linked worktree
 ```
 
 Inside it, **the stream is a DIRECTORY and the writer is a FILE**:
@@ -18,12 +18,12 @@ Inside it, **the stream is a DIRECTORY and the writer is a FILE**:
 logs/<stream>/<sessionId>-<agentId | "coordinator">-<hook>.log
 ```
 
-`.webpieces-logs/` is gitignored. It is anchored at the **primary clone** even for a linked worktree, so a
+`.webpieces/` is gitignored. It is anchored at the **primary clone** even for a linked worktree, so a
 worktree's history survives `git worktree remove` and the whole repo's history is one glob:
 
 ```bash
-ls  <primary>/.webpieces-logs/logs/
-ls  <primary>/.webpieces-logs/worktrees/*/logs/
+ls  <primary>/.webpieces/logs/
+ls  <primary>/.webpieces/worktrees/*/logs/
 ```
 
 Every writer resolves this directory through `dotWebpieces.logs()` / `logsFile()`

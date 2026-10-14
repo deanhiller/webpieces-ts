@@ -367,7 +367,7 @@ describe('whole-repo-build-guard honours the machine-local opt-in', () => {
                 .mockImplementation(function (this: HomeConfigService): HomeConfig {
                     return realLoad.call(this, tmpHome);
                 });
-            expect(fs.existsSync(path.join(tmpHome, '.webpieces-logs', 'config.json'))).toBe(false);
+            expect(fs.existsSync(path.join(tmpHome, '.webpieces', 'config.json'))).toBe(false);
             for (const command of ['pnpm run build-all', 'pnpm nx affected --target=ci', 'pnpm exec vitest run']) {
                 expect(guard().check(ctx(command)), command).toEqual([]);
             }

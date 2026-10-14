@@ -19,7 +19,7 @@
 
 import { MERGE_EXPLANATION_FILE } from './constants';
 
-/** The rules-config template name, and the file name it lands under in `.webpieces-logs/instruct-ai/`. */
+/** The rules-config template name, and the file name it lands under in `.webpieces/instruct-ai/`. */
 export const MERGE_PROCESS_DOC = 'webpieces.mergeprocess.md';
 
 const REFERENCE_RUN_STATE = `**Reference copy — no conflicted 3-point merge is in progress in this tree.** It is written beside
@@ -30,7 +30,7 @@ this file in place with the branch you are standing on, that run's absolute \`ME
 finish command for the flow you started, and the list of conflicted files. Until that happens, read
 what follows as the PROCESS and not as a live handback: \`<feature>Squash\` stands for the transient
 branch a conflicted merge puts you on, and \`MERGE_DIR\` for that run's
-\`.webpieces-logs/merge-info/<feature>/merge-<n>/\` directory.`;
+\`.webpieces/merge-info/<feature>/merge-<n>/\` directory.`;
 
 const REFERENCE_FILE_LIST =
     '*(none — no conflicted merge is in progress; the live copy lists this run\'s conflicted files here)*';

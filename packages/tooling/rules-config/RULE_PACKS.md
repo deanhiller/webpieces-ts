@@ -66,17 +66,23 @@ writes, undeclared config files, escaping symlinks, mixed patches and chained mu
 ## Repository directories
 
 Commit `.webpieces-config/`: selected owner settings, `rules.lock.json`, and `rules-catalog.md`.
-Keep all generated runtime files under `.webpieces-logs/`, and ignore it with exactly one entry:
+Keep all generated runtime files under `.webpieces/`, and ignore it with exactly one entry:
 
 ```gitignore
-.webpieces-logs/
+.webpieces/
 ```
 
-`pnpm wp-migrate-dirs` moves the retired `.webpieces/` layout, rewrites declared owner paths,
-refreshes lock/catalog artifacts, and removes the old ignore exceptions. Hook installation,
-`wp-upgrade-shim`, and explicit rule sync/upgrade also perform the directory migration.
+`.webpieces/` is the gitignored local state directory (logs, trash, pr-review, merge state, tasks)
+and stays where it is. `pnpm wp-migrate-dirs` moves ONLY the committed policy that releases up to
+0.4.910 kept inside it — `rules.lock.json`, `instruct-ai/rules-catalog.md` and `rules/**`, plus any
+declared owner file under `.webpieces/` or `.webpieces-logs/` — into `.webpieces-config/`, rewrites the
+declarations, and removes the old ignore exceptions. It never walks the rest of `.webpieces/`, so state
+such as pnpm symlinks under `trash/` can never fail it (#1254). A `.webpieces-logs/` left by
+0.4.911–0.4.914 is renamed back to `.webpieces/` when that name is free, and is otherwise left in place.
+Hook installation, `wp-upgrade-shim`, and explicit rule sync/upgrade also perform the migration.
 Conflicting destinations fail before files move; identical files support interrupted reruns.
-Normal loading refuses the retired layout and any owner file in a runtime directory.
+Normal loading refuses only policy still left inside `.webpieces/`, and any owner file declared in a
+runtime directory.
 
 In a Git checkout, every declared owner file, the lock, and the catalog must be tracked and
 must not match any ignore pattern, even if it was force-added previously. After reviewing a

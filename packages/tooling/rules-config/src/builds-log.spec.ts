@@ -234,7 +234,7 @@ describe('BuildsLog — concurrency', () => {
 
     it('never throws when the ledger directory cannot be written', () => {
         const home = fakeHome();
-        // A FILE where `.webpieces-logs/` belongs: every mkdir/append below it fails with ENOTDIR.
+        // A FILE where `.webpieces/` belongs: every mkdir/append below it fails with ENOTDIR.
         fs.writeFileSync(path.join(home, '.webpieces'), 'not a directory\n');
         const log = ledger();
         const ticket = log.start('build', process.cwd(), home);

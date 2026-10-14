@@ -7,8 +7,8 @@ import { toError } from '@webpieces/tooling-common/to-error';
 
 // The BRANCH-MUTATION log — an audit trail for every workflow verb that RENAMES or MOVES branches.
 // Records START / each phase boundary / END-with-outcome so the next agent (or a human) can
-// reconstruct what the tooling did to the branches. Writes to `.webpieces-logs/logs/branch-mutations.log`
-// (in a linked worktree: `.webpieces-logs/worktrees/<name>/logs/`) — see LOGS_STATE_DIR for why every
+// reconstruct what the tooling did to the branches. Writes to `.webpieces/logs/branch-mutations.log`
+// (in a linked worktree: `.webpieces/worktrees/<name>/logs/`) — see LOGS_STATE_DIR for why every
 // webpieces log lives under `logs/` and no longer beside the non-log state in `hooks/`.
 // Lives in repo-workflow-core (shared by guards and pr-gate) so the pr-gate scripts can call it directly.
 
@@ -104,7 +104,7 @@ export class BranchMutationLog {
      *
      * Nothing is lost by keeping it local: under the `worktrees/<name>/` layout the log lives in the
      * PRIMARY clone, so it survives `git worktree remove`, and the whole history is one glob —
-     * `<primary>/.webpieces-logs/worktrees/＊/logs/branch-mutations.log`.
+     * `<primary>/.webpieces/worktrees/＊/logs/branch-mutations.log`.
      */
     branchMutationLogPath(root: string): string {
         return this.dotDir.logsFile(root, LOG_FILE);
@@ -112,7 +112,7 @@ export class BranchMutationLog {
 
     /**
      * Append one tab-separated line per branch-mutation event to
-     * `.webpieces-logs/logs/branch-mutations.log`. Swallows all errors — logging must NEVER block or fail
+     * `.webpieces/logs/branch-mutations.log`. Swallows all errors — logging must NEVER block or fail
      * the workflow it is observing.
      */
     logBranchMutation(root: string, event: BranchMutationEvent): void {

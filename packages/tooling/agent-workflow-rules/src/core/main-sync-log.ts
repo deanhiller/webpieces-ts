@@ -14,7 +14,7 @@ import { logStream } from './log-stream';
 // This log captures its lifecycle — SPAWN_ATTEMPT (parent side), then START / SKIP_INPROGRESS /
 // FINISH / ERROR (child side) — so we can tell whether the detached child never launched, was killed
 // mid-run (START with no FINISH), or threw. Writes to
-// `.webpieces-logs/logs/async-refresh/<writer>.log`, where <writer> is LogStream's
+// `.webpieces/logs/async-refresh/<writer>.log`, where <writer> is LogStream's
 // `<sessionId>-<agentId|coordinator>-<hook>` key (see LOGS_STATE_DIR and ASYNC_REFRESH_STREAM).
 //
 // THE CHILD'S RAW STDIO GOES TO THIS SAME FILE. It used to have a `.stderr.log` sibling, which was
@@ -44,8 +44,8 @@ export class SyncLogEvent {
 
 /**
  * Append one tab-separated line per refresher event to
- * `.webpieces-logs/logs/async-refresh/<writer>.log` (see LogStream for the writer key). `root` is
- * the workspace root holding `.webpieces-logs`. Swallows all errors — logging must never block or fail
+ * `.webpieces/logs/async-refresh/<writer>.log` (see LogStream for the writer key). `root` is
+ * the workspace root holding `.webpieces`. Swallows all errors — logging must never block or fail
  * the refresher (or the hook that spawns it).
  */
 // webpieces-disable no-function-outside-class -- existing stateless module helper moved intact with its callers; ownership extraction preserves its functional API

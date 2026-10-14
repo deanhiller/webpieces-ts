@@ -87,15 +87,15 @@ export class BuildLogHeartbeat {
  * — one mechanism, shared with the stage console log, so there is a single answer to "where is it?".
  *
  * ─── Two naming schemes, one rule each ─────────────────────────────────────────────────────────────────
- *   • `wp-build` (BUILD_STAGE) writes ONE fixed path, `.webpieces-logs/build.log`. It is fixed because a HUMAN
- *     OR AN AGENT TYPES IT — `grep -n error .webpieces-logs/build.log` has to be writable from memory, and a
+ *   • `wp-build` (BUILD_STAGE) writes ONE fixed path, `.webpieces/build.log`. It is fixed because a HUMAN
+ *     OR AN AGENT TYPES IT — `grep -n error .webpieces/build.log` has to be writable from memory, and a
  *     name carrying a branch and a sha is not. History comes from the rotation instead.
  *   • stage ② and stage ③ write `logs/build-gate-<stage>-<branch>-<shortSha>.log`, because those two
  *     gates CAN run against one commit and a failure message from one must not be pointing at a file the
  *     other overwrote. Nobody types those names; the failure message prints them.
  *
  * ─── Concurrency ───────────────────────────────────────────────────────────────────────────────────────
- * The DIRECTORY is `dotWebpieces.local()`-scoped — `<primary>/.webpieces-logs/worktrees/<git worktree name>/`
+ * The DIRECTORY is `dotWebpieces.local()`-scoped — `<primary>/.webpieces/worktrees/<git worktree name>/`
  * in a linked worktree — so "N agents in N worktrees" is safe by construction rather than by naming. The
  * residual case is two builds in the SAME worktree at once, which is already unsupported: both would be
  * driving one git index.

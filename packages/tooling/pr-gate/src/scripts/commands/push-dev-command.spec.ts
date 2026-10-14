@@ -22,7 +22,7 @@ import { GitStatusParser } from '../workflow/git-status';
  */
 
 // A real (empty) directory, because every wp-* command opens by refreshing the AI-facing workflow doc
-// into `<repoRoot>/.webpieces-logs/instruct-ai/` — a fictional path would fail before any decision is made.
+// into `<repoRoot>/.webpieces/instruct-ai/` — a fictional path would fail before any decision is made.
 const REPO = specTempDirs.make('wp-push-dev-spec-');
 const MY_COPY = 'dev-include/dean/ONE-2275';
 

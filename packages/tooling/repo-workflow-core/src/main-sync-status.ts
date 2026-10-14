@@ -74,7 +74,7 @@ export class MainSyncStatusService {
     ) {}
 
     /**
-     * SHARED scope: `<primary>/.webpieces-logs/main-sync-status.json`, one per repo.
+     * SHARED scope: `<primary>/.webpieces/main-sync-status.json`, one per repo.
      *
      * It is the OUTPUT of the single-flight refresher below, so it has to live where the lock lives —
      * one `.git`, one `origin/main`, one fetch, one answer. A per-worktree copy under single-flight

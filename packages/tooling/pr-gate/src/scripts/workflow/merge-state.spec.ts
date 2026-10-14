@@ -177,8 +177,8 @@ describe('recordCleanMerge — absence is the signal (Part 2)', () => {
 
 describe('staged/ vs merged/ layout + legacy migration (Parts 1 & 3)', () => {
     it('the in-flight home is merge-info/staged/<feature>', () => {
-        expect(ms.stagedDirFor('/repo', 'feat')).toBe(path.join('/repo', '.webpieces-logs', 'merge-info', STAGED_DIR, 'feat'));
-        expect(ms.mergedDirFor('/repo', 'feat')).toBe(path.join('/repo', '.webpieces-logs', 'merge-info', MERGED_DIR, 'feat'));
+        expect(ms.stagedDirFor('/repo', 'feat')).toBe(path.join('/repo', '.webpieces', 'merge-info', STAGED_DIR, 'feat'));
+        expect(ms.mergedDirFor('/repo', 'feat')).toBe(path.join('/repo', '.webpieces', 'merge-info', MERGED_DIR, 'feat'));
     });
 
     /**
@@ -189,7 +189,7 @@ describe('staged/ vs merged/ layout + legacy migration (Parts 1 & 3)', () => {
      */
     it('moves a legacy merge-info/<feature>/ tree into staged/ with its contents intact', () => {
         const root = tmp();
-        const legacy = path.join(root, '.webpieces-logs', 'merge-info', 'feat', 'merge-1');
+        const legacy = path.join(root, '.webpieces', 'merge-info', 'feat', 'merge-1');
         fs.mkdirSync(legacy, { recursive: true });
         fs.writeFileSync(path.join(legacy, 'updatemain-hashes.json'), '{"hashForkPoint":"old"}');
         writeExplanationIn(legacy, 'src/foo.ts', 'legacy explanation\n');
@@ -197,7 +197,7 @@ describe('staged/ vs merged/ layout + legacy migration (Parts 1 & 3)', () => {
         const home = mergeDirFor(root, 'feat');
 
         expect(home).toBe(ms.stagedDirFor(root, 'feat'));
-        expect(fs.existsSync(path.join(root, '.webpieces-logs', 'merge-info', 'feat'))).toBe(false);
+        expect(fs.existsSync(path.join(root, '.webpieces', 'merge-info', 'feat'))).toBe(false);
         expect(JSON.parse(fs.readFileSync(path.join(home, 'merge-1', 'updatemain-hashes.json'), 'utf8')).hashForkPoint).toBe('old');
         expect(fs.readFileSync(
             path.join(perFileContextDir(path.join(home, 'merge-1'), 'src/foo.ts'), MERGE_EXPLANATION_FILE), 'utf8',
@@ -208,12 +208,12 @@ describe('staged/ vs merged/ layout + legacy migration (Parts 1 & 3)', () => {
     // strictly alone rather than merged into or deleted.
     it('leaves the legacy dir untouched when staged/<feature> already exists', () => {
         const root = tmp();
-        fs.mkdirSync(path.join(root, '.webpieces-logs', 'merge-info', 'feat'), { recursive: true });
+        fs.mkdirSync(path.join(root, '.webpieces', 'merge-info', 'feat'), { recursive: true });
         fs.mkdirSync(ms.stagedDirFor(root, 'feat'), { recursive: true });
 
         mergeDirFor(root, 'feat');
 
-        expect(fs.existsSync(path.join(root, '.webpieces-logs', 'merge-info', 'feat'))).toBe(true);
+        expect(fs.existsSync(path.join(root, '.webpieces', 'merge-info', 'feat'))).toBe(true);
     });
 
     // Every intermediate pre-merge tip, not just the last: a branch synced five times has five

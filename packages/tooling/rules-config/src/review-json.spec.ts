@@ -387,7 +387,7 @@ describe('loadSummaryJson — the removed `success` field', () => {
 const OVERRIDE = new ChecklistOverride('a', 'human, in-session', '2026-09-03T18:22:11Z', 'accepted, tracked in JIRA-1');
 // The summary.json path every refusalError assertion renders against — it is what the printed heredoc's
 // override path is derived from.
-const REVIEW_PATH = '/repo/.webpieces-logs/pr-review/feat/summary.json';
+const REVIEW_PATH = '/repo/.webpieces/pr-review/feat/summary.json';
 describe('ReviewJsonService.pendingChecklists', () => {
     const svc2 = new ReviewJsonService();
     const req = (id: string): RequiredChecklist => new RequiredChecklist(id, agentPolicy(id), '', ['x.sql'], ['**/*.sql']);
@@ -421,8 +421,8 @@ describe('ChecklistInstructionsService', () => {
     const inst = new ChecklistInstructionsService(new ReviewJsonService());
     // A CLEAN-tree context: base→head, both real shas. The command is GIVEN, never assembled here — see
     // the dirty-tree regression test below for why that distinction is the whole point.
-    const CTX = new ChecklistReviewContext('abc1234', '/repo/.webpieces-logs/pr-review/feat/pr-context.json', 'git diff abc1234 def5678 -- <file>');
-    const REVIEW = '/repo/.webpieces-logs/pr-review/feat/summary.json';
+    const CTX = new ChecklistReviewContext('abc1234', '/repo/.webpieces/pr-review/feat/pr-context.json', 'git diff abc1234 def5678 -- <file>');
+    const REVIEW = '/repo/.webpieces/pr-review/feat/summary.json';
     it('renders nothing at all when nothing is pending, so callers can concatenate blindly', () => {
         expect(inst.render([], REVIEW, CTX)).toBe('');
     });
@@ -431,7 +431,7 @@ describe('ChecklistInstructionsService', () => {
         const text = inst.render([req], REVIEW, CTX);
         expect(text).toContain('• checklist db');
         expect(text).toContain('doc to read:  .claude/review/db.md');
-        expect(text).toContain('/repo/.webpieces-logs/pr-review/feat/review-round<N>-db.json');
+        expect(text).toContain('/repo/.webpieces/pr-review/feat/review-round<N>-db.json');
     });
     it('states the ONE verdict format once, not repeated under every reviewer', () => {
         const two = [new RequiredChecklist('a', agentPolicy('a'), '', ['x'], ['**']), new RequiredChecklist('b', agentPolicy('b'), '', ['x'], ['**'])];
@@ -451,14 +451,14 @@ describe('ChecklistInstructionsService', () => {
         const req = new RequiredChecklist('a', agentPolicy('a'), '', ['x'], ['**']);
         const text = inst.render([req], REVIEW, CTX);
         expect(text).toContain('git diff abc1234 def5678 -- <file>');
-        expect(text).toContain('/repo/.webpieces-logs/pr-review/feat/pr-context.json');
+        expect(text).toContain('/repo/.webpieces/pr-review/feat/pr-context.json');
     });
 });
 // Split out to keep each describe under the method-length limit. These are the diff-command tests: the
 // renderer must print the command it was GIVEN, never re-assemble `<base> HEAD`.
 describe('ChecklistInstructionsService — the diff command', () => {
     const inst = new ChecklistInstructionsService(new ReviewJsonService());
-    const REVIEW = '/repo/.webpieces-logs/pr-review/feat/summary.json';
+    const REVIEW = '/repo/.webpieces/pr-review/feat/summary.json';
     /**
      * THE regression test for the recorded failure.
      *
@@ -471,7 +471,7 @@ describe('ChecklistInstructionsService — the diff command', () => {
      * NO head. Asserting the absence of ` HEAD ` is the point: that token reappearing IS the bug.
      */
     it('prints the dirty-tree command with NO head, and never re-assembles `<base> HEAD`', () => {
-        const dirty = new ChecklistReviewContext('abc1234', '/repo/.webpieces-logs/pr-review/feat/pr-context.json', 'git diff abc1234 -- <file>', '', true);
+        const dirty = new ChecklistReviewContext('abc1234', '/repo/.webpieces/pr-review/feat/pr-context.json', 'git diff abc1234 -- <file>', '', true);
         const text = inst.render([new RequiredChecklist('a', agentPolicy('a'), '', ['x'], ['**'])], REVIEW, dirty);
         expect(text).toContain('git diff abc1234 -- <file>');
         expect(text).not.toContain('git diff abc1234 HEAD');
@@ -480,9 +480,9 @@ describe('ChecklistInstructionsService — the diff command', () => {
     });
     // A materialized diff is one Read instead of a shell-out per file, so it leads when it exists.
     it('points at the extracted diff when one was materialized', () => {
-        const withDiff = new ChecklistReviewContext('abc1234', '/repo/ctx.json', 'git diff abc1234 def5678 -- <file>', '/repo/.webpieces-logs/pr-review/feat/diff');
+        const withDiff = new ChecklistReviewContext('abc1234', '/repo/ctx.json', 'git diff abc1234 def5678 -- <file>', '/repo/.webpieces/pr-review/feat/diff');
         const text = inst.render([new RequiredChecklist('a', agentPolicy('a'), '', ['x'], ['**'])], REVIEW, withDiff);
-        expect(text).toContain('/repo/.webpieces-logs/pr-review/feat/diff/ALL.diff');
+        expect(text).toContain('/repo/.webpieces/pr-review/feat/diff/ALL.diff');
         expect(text).toContain('manifest.json');
     });
     // An older pr-gate wrote a context with no command. Guessing `<base> HEAD` to fill the gap would
@@ -498,8 +498,8 @@ describe('ChecklistInstructionsService — the diff command', () => {
 // Split out to keep each describe inside the method-length limit.
 describe('ChecklistInstructionsService — scope wording and lossless lists', () => {
     const inst = new ChecklistInstructionsService(new ReviewJsonService());
-    const CTX = new ChecklistReviewContext('abc1234', '/repo/.webpieces-logs/pr-review/feat/pr-context.json');
-    const REVIEW = '/repo/.webpieces-logs/pr-review/feat/summary.json';
+    const CTX = new ChecklistReviewContext('abc1234', '/repo/.webpieces/pr-review/feat/pr-context.json');
+    const REVIEW = '/repo/.webpieces/pr-review/feat/summary.json';
     it('never truncates the matched list silently — it states how many were dropped', () => {
         const many = Array.from({ length: 40 }, (_v: unknown, i: number): string => `db/${i}.sql`);
         const req = new RequiredChecklist('a', agentPolicy('a'), '', many, ['**/*.sql']);

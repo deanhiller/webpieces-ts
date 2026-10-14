@@ -214,7 +214,7 @@ describe('shimStaleDenyReason — unambiguous, JSON-safe, not a deadlock', () =>
     it('stays inside the L0 message budget in its widest form, pointer included', () => {
         const widest = shimStaleDenyReason('0.4.624', '/tmp/wp-root',
             [SHIM_MARKER, REGISTRATION_SURFACE, NEIGHBOUR_SURFACE, ENV_SURFACE], true)
-            + guardMatrixPointer(`/repo/.webpieces-logs/instruct-ai/${GUARD_MATRIX_DOC}`);
+            + guardMatrixPointer(`/repo/.webpieces/instruct-ai/${GUARD_MATRIX_DOC}`);
         expect(widest.length).toBeLessThan(4100);
     });
 

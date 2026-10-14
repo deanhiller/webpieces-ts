@@ -62,7 +62,7 @@ export class ReviewerEvidence {
     readDiff: boolean;       // opened the materialized diff dir (or its own instructions file)
     readDoc: boolean;        // opened its checklist's guidance doc
     /**
-     * Named its own verdict file — `.webpieces-logs/pr-review/<featureSlug>/review-round<N>-<id>.json` — in a tool input.
+     * Named its own verdict file — `.webpieces/pr-review/<featureSlug>/review-round<N>-<id>.json` — in a tool input.
      *
      * Recorded, not just consumed, because it is the field that answers "who wrote this verdict?" for an
      * auditor reading provenance.json later. It is also a CREDIT channel: see
@@ -144,7 +144,7 @@ export class TranscriptScan {
  *
  * One class for BOTH passes — crediting (`verifyReviewers`) and evidence (`evidenceFor`) — because they
  * ask their questions of the same paths. `diffDir` is the per-branch materialization
- * (`.webpieces-logs/pr-review/<featureSlug>/diff`), which is what makes it usable as PROOF of which branch a
+ * (`.webpieces/pr-review/<featureSlug>/diff`), which is what makes it usable as PROOF of which branch a
  * reviewer looked at: the path names the branch, it is absolute, and stage ② recreates it per run.
  */
 export class ReviewerContext {
@@ -153,7 +153,7 @@ export class ReviewerContext {
     docPaths: Record<string, string>; // checklist id → its checklist doc path ('' when none)
     /**
      * checklist id → the absolute path of the verdict file THAT checklist must write on THIS branch
-     * (`.webpieces-logs/pr-review/<featureSlug>/review-round<N>-<id>.json`). '' when unknown.
+     * (`.webpieces/pr-review/<featureSlug>/review-round<N>-<id>.json`). '' when unknown.
      *
      * The strongest attribution signal available, and stronger than `diffDir`: the path is
      * worktree-absolute (naming the tree), per-branch (naming the featureSlug) AND per-checklist (naming
@@ -340,14 +340,14 @@ export class SubagentProvenanceService {
      * Did a tool input name `absPath` — absolutely, or RELATIVE to the transcript's own recorded `cwd`?
      *
      * Relative because that is how a reviewer whose cwd IS the repo root naturally spells it. Measured
-     * (issue #1211): a reviewer read the diff forty times as `D=.webpieces-logs/pr-review/<slug>/diff/files;
+     * (issue #1211): a reviewer read the diff forty times as `D=.webpieces/pr-review/<slug>/diff/files;
      * cat $D/...` and was refused as never having opened it, because only the absolute spelling matched.
      *
      * Still branch-specific: the relative form is derived from `absPath` itself, so it carries the same
      * `<featureSlug>`, and it is only tried when `absPath` lies UNDER the recorded cwd — i.e. when the
      * relative spelling, resolved where the harness says the reviewer stood, IS this file. A reviewer of
      * another branch names another slug; a reviewer standing in another tree resolves to another path.
-     * The relative needle must START a path token, so `/other/root/.webpieces-logs/...` cannot satisfy it as a
+     * The relative needle must START a path token, so `/other/root/.webpieces/...` cannot satisfy it as a
      * mere substring.
      */
     private namesPath(scan: TranscriptScan, absPath: string): boolean {
@@ -630,7 +630,7 @@ export class SubagentProvenanceService {
      * Credit a reviewer for WHAT IT TOUCHED when neither harness-stamped field can settle it.
      *
      * Both paths compared here are ABSOLUTE and BRANCH-SPECIFIC — they live under
-     * `<worktree>/.webpieces-logs/pr-review/<featureSlug>/`, so the string names the tree AND the branch. A
+     * `<worktree>/.webpieces/pr-review/<featureSlug>/`, so the string names the tree AND the branch. A
      * reviewer that worked on a different branch cannot have them in its transcript, and a reviewer of
      * this branch that ran from a mis-stamped cwd cannot avoid having them. That is the property
      * `gitBranch` lacks — this file's own sweep of 961 record-0s found the mis-stamp is the MAJORITY

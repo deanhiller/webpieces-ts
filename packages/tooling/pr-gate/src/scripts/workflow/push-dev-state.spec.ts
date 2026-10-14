@@ -22,7 +22,7 @@ const store = new PushDevStateStore(new DotWebpieces());
 let repo = '';
 
 function stateFile(): string {
-    return path.join(repo, '.webpieces-logs', PUSH_DEV_STATE_FILE);
+    return path.join(repo, '.webpieces', PUSH_DEV_STATE_FILE);
 }
 
 // The message of the CliExitError `fn` is expected to throw.
@@ -41,7 +41,7 @@ function refusal(fn: () => void): string {
 
 beforeEach((): void => {
     repo = specTempDirs.make('wp-push-dev-state-');
-    fs.mkdirSync(path.join(repo, '.webpieces-logs'), { recursive: true });
+    fs.mkdirSync(path.join(repo, '.webpieces'), { recursive: true });
 });
 
 describe('PushDevStateStore', () => {

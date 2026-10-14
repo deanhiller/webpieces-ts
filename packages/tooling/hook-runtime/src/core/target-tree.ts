@@ -121,11 +121,11 @@ export class TargetTreeResolver {
  *   `relativePath`     — relative to the GOVERNED root. What `excludePaths`' globs are written against,
  *                        and what the violation report prints.
  *   `treeRelativePath` — relative to the tree that OWNS the file. What `isWebpiecesStateDir` must be
- *                        asked about, because `.webpieces-logs/` is the tooling's state dir *of a tree*, and
+ *                        asked about, because `.webpieces/` is the tooling's state dir *of a tree*, and
  *                        a worktree has its own. Governed-root-relative, a reviewer subagent's
- *                        `<primary>/.claude/worktrees/agent-X/.webpieces-logs/pr-review/<branch>/summary.json`
+ *                        `<primary>/.claude/worktrees/agent-X/.webpieces/pr-review/<branch>/summary.json`
  *                        reads as `.claude/...` and was NOT exempt — while
- *                        `<primary>/.webpieces-logs/worktrees/agent-X/pr-review/.../review-1.json`, the same
+ *                        `<primary>/.webpieces/worktrees/agent-X/pr-review/.../review-1.json`, the same
  *                        kind of file one directory over, was. `wp-review-upsert-pr` REQUIRES that file
  *                        before `wp-finish-upsert-pr` will open a PR, so the guard could forbid a file
  *                        the gate demands.

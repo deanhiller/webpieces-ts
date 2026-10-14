@@ -276,7 +276,7 @@ function l0FaultAllows(command: string, aiType: AiType): boolean {
     return isAllowed('Bash', command.trim(), '', aiType) !== null;
 }
 
-// The L0 cure bypass's audit line. Anchored at the repo root that owns `.webpieces-logs` — RepoRootFinder
+// The L0 cure bypass's audit line. Anchored at the repo root that owns `.webpieces` — RepoRootFinder
 // (config-walk-up first, then git toplevel) is the authority for that, and it is correct in a linked
 // worktree because each worktree checks out its own webpieces.config.json. This runs BEFORE
 // loadAndValidate, which is why it resolves the root itself rather than using workspaceRoot.

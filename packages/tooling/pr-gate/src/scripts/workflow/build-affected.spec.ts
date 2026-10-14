@@ -22,7 +22,7 @@ afterEach(() => {
     written = '';
 });
 
-/** A HOME with no `.webpieces-logs` in it at all — where the throwaway build ledger is pointed. */
+/** A HOME with no `.webpieces` in it at all — where the throwaway build ledger is pointed. */
 function tempHome(): string {
     const dir = specTempDirs.makeReal('wp-nohome-');
     dirs.push(dir);

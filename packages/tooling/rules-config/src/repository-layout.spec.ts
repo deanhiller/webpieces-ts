@@ -4,6 +4,7 @@ import * as path from 'node:path';
 import { specTempDirs } from '@webpieces/tooling-testkit';
 import { RepositoryLayout } from '@webpieces/tooling-common';
 
+/** A 0.4.910-layout repo: committed policy beside gitignored state inside `.webpieces/`. */
 class LayoutFixture {
     readonly root = specTempDirs.makeReal('wp-layout-');
     readonly layout = new RepositoryLayout();
@@ -33,10 +34,21 @@ class LayoutFixture {
     read(name: string): string {
         return fs.readFileSync(path.join(this.root, name), 'utf8');
     }
+    exists(name: string): boolean {
+        return fs.lstatSync(path.join(this.root, name), { throwIfNoEntry: false }) !== undefined;
+    }
+    // The #1254 shape: pnpm links of a deleted project, swept into trash by wp-sync-main.
+    trashSymlinks(): string {
+        const bin = '.webpieces/trash/2026-10-12T11-39-35Z/libraries/gone/node_modules/.bin';
+        fs.mkdirSync(path.join(this.root, bin), { recursive: true });
+        const link = path.join(bin, 'glob');
+        fs.symlinkSync('../glob/dist/cli.js', path.join(this.root, link));
+        return link;
+    }
 }
 
 describe('repository directory migration', () => {
-    it('separates committed policy from every runtime file and reduces ignore rules to one', () => {
+    it('moves only committed policy out of .webpieces/ and leaves every state file in place', () => {
         const fixture = new LayoutFixture();
         expect(() => fixture.layout.assertCurrent(fixture.root)).toThrow('pnpm wp-migrate-dirs');
         fixture.layout.migrate(fixture.root);
@@ -44,28 +56,68 @@ describe('repository directory migration', () => {
         expect(fixture.read('.webpieces-config/rules/code.json')).toBe('{"code":1}');
         expect(fixture.read('.webpieces-config/rules.lock.json')).toBe('{"packs":[]}');
         expect(fixture.read('.webpieces-config/rules-catalog.md')).toBe('# Policy');
-        expect(fixture.read('.webpieces-logs/instruct-ai/guide.md')).toBe('# Runtime');
-        expect(fixture.read('.webpieces-logs/pr-review/topic/summary.json')).toContain(
-            'work in flight',
-        );
-        expect(fixture.read('.webpieces-logs/merge-info/topic/state.json')).toBe('{"a":1}');
+        expect(fixture.read('.webpieces/instruct-ai/guide.md')).toBe('# Runtime');
+        expect(fixture.read('.webpieces/pr-review/topic/summary.json')).toContain('work in flight');
+        expect(fixture.read('.webpieces/merge-info/topic/state.json')).toBe('{"a":1}');
+        expect(fixture.exists('.webpieces/rules')).toBe(false);
+        expect(fixture.exists('.webpieces/rules.lock.json')).toBe(false);
         expect(fixture.read('webpieces.config.json')).toContain(
             '.webpieces-config/custom/policy.json',
         );
         expect(fixture.read('webpieces.config.json')).toContain('preserve this');
-        expect(fixture.read('.gitignore')).toBe('node_modules/\n.webpieces-logs/\n');
-        expect(fs.existsSync(path.join(fixture.root, '.webpieces'))).toBe(false);
+        expect(fixture.read('.gitignore')).toBe('node_modules/\n.webpieces/\n');
         expect(fixture.layout.migrate(fixture.root)).toEqual([]);
         expect(() => fixture.layout.assertCurrent(fixture.root)).not.toThrow();
     });
-    it('repairs runtime-directory policy using the command prescribed by the rejection', () => {
+
+    it('never walks state: symlinks in .webpieces/trash neither fail the migration nor block (#1254)', () => {
+        const fixture = new LayoutFixture();
+        const link = fixture.trashSymlinks();
+        fixture.layout.migrate(fixture.root);
+        expect(fs.lstatSync(path.join(fixture.root, link)).isSymbolicLink()).toBe(true);
+        expect(fixture.read('.webpieces-config/rules.lock.json')).toBe('{"packs":[]}');
+        expect(() => fixture.layout.assertCurrent(fixture.root)).not.toThrow();
+    });
+
+    it('accepts a .webpieces/ that holds only state — it is the current layout, not a retired one', () => {
+        const fixture = new LayoutFixture();
+        fixture.layout.migrate(fixture.root);
+        fixture.trashSymlinks();
+        fixture.write('.webpieces/main-sync-status.json', '{}');
+        expect(() => fixture.layout.assertCurrent(fixture.root)).not.toThrow();
+        expect(fixture.layout.migrate(fixture.root)).toEqual([]);
+    });
+
+    it('leaves an already-correct .gitignore byte-identical', () => {
+        const fixture = new LayoutFixture();
+        fixture.write('.gitignore', 'dist/\n.webpieces/\nnode_modules/\n');
+        fixture.layout.migrate(fixture.root);
+        expect(fixture.read('.gitignore')).toBe('dist/\n.webpieces/\nnode_modules/\n');
+    });
+
+    it('renames a 0.4.911-0.4.914 .webpieces-logs/ back to .webpieces/ in one move when the name is free', () => {
+        const fixture = new LayoutFixture();
+        fixture.layout.migrate(fixture.root);
+        fs.renameSync(path.join(fixture.root, '.webpieces'), path.join(fixture.root, '.webpieces-logs'));
+        fixture.layout.migrate(fixture.root);
+        expect(fixture.exists('.webpieces-logs')).toBe(false);
+        expect(fixture.read('.webpieces/merge-info/topic/state.json')).toBe('{"a":1}');
+    });
+
+    it('leaves .webpieces-logs/ untouched when .webpieces/ already exists', () => {
+        const fixture = new LayoutFixture();
+        fixture.layout.migrate(fixture.root);
+        fixture.write('.webpieces-logs/pr-review/old/summary.json', '{"old":true}');
+        fixture.layout.migrate(fixture.root);
+        expect(fixture.read('.webpieces-logs/pr-review/old/summary.json')).toBe('{"old":true}');
+        expect(fixture.read('.webpieces/pr-review/topic/summary.json')).toContain('work in flight');
+    });
+
+    it('repairs a declaration pointing into the retired .webpieces-logs/ directory', () => {
         const fixture = new LayoutFixture();
         const misplaced = '.webpieces-logs/custom/policy.json';
-        fs.mkdirSync(path.join(fixture.root, '.webpieces-logs/custom'), { recursive: true });
-        fs.renameSync(
-            path.join(fixture.root, '.webpieces/custom/policy.json'),
-            path.join(fixture.root, misplaced),
-        );
+        fixture.write(misplaced, fixture.read('.webpieces/custom/policy.json'));
+        fs.rmSync(path.join(fixture.root, '.webpieces/custom'), { recursive: true });
         const document = JSON.parse(fixture.read('webpieces.config.json'));
         document.rulePacks[0].config = misplaced;
         fixture.write('webpieces.config.json', JSON.stringify(document));
@@ -75,7 +127,7 @@ describe('repository directory migration', () => {
         expect(migrated).toBe('.webpieces-config/custom/policy.json');
         expect(() => fixture.layout.assertPolicyPath(migrated)).not.toThrow();
         expect(fixture.read(migrated)).toBe('{"rule":{"mode":"OFF"}}');
-        expect(fs.existsSync(path.join(fixture.root, misplaced))).toBe(false);
+        expect(fixture.exists(misplaced)).toBe(false);
         expect(fixture.layout.migrate(fixture.root)).toEqual([]);
     });
 
@@ -86,9 +138,21 @@ describe('repository directory migration', () => {
         expect(() => fixture.layout.migrate(fixture.root)).toThrow('conflicts with');
         expect(fixture.read('.webpieces-config/custom/policy.json')).toBe('other policy');
         expect(fixture.read('.webpieces/custom/policy.json')).toContain('OFF');
+        expect(fixture.read('.webpieces/rules.lock.json')).toBe('{"packs":[]}');
         expect(fixture.read('webpieces.config.json')).toBe(before);
-        expect(fs.existsSync(path.join(fixture.root, '.webpieces-logs'))).toBe(false);
     });
+
+    it('replaces a stale generated lock and catalog left in .webpieces-config/ by a rollback', () => {
+        const fixture = new LayoutFixture();
+        fixture.write('.webpieces-config/rules.lock.json', '{"packs":["stale"]}');
+        fixture.write('.webpieces-config/rules-catalog.md', '# Stale');
+        fixture.layout.migrate(fixture.root);
+        expect(fixture.read('.webpieces-config/rules.lock.json')).toBe('{"packs":[]}');
+        expect(fixture.read('.webpieces-config/rules-catalog.md')).toBe('# Policy');
+        expect(fixture.exists('.webpieces/rules.lock.json')).toBe(false);
+        expect(() => fixture.layout.assertCurrent(fixture.root)).not.toThrow();
+    });
+
     it('rejects two different sources that would converge on one destination', () => {
         const fixture = new LayoutFixture();
         fixture.write(
@@ -101,8 +165,8 @@ describe('repository directory migration', () => {
         expect(() => fixture.layout.migrate(fixture.root)).toThrow('both target');
         expect(fixture.read('.webpieces/rules-catalog.md')).toBe('separate declared policy');
         expect(fixture.read('.webpieces/instruct-ai/rules-catalog.md')).toBe('# Policy');
-        expect(fs.existsSync(path.join(fixture.root, '.webpieces-logs'))).toBe(false);
     });
+
     it('accepts identical destinations after an interrupted migration', () => {
         const fixture = new LayoutFixture();
         fixture.write(
@@ -112,6 +176,7 @@ describe('repository directory migration', () => {
         fixture.layout.migrate(fixture.root);
         expect(() => fixture.layout.assertCurrent(fixture.root)).not.toThrow();
     });
+
     it('refuses a symlink destination before moving source bytes', () => {
         const fixture = new LayoutFixture();
         const outside = specTempDirs.makeReal('wp-layout-outside-');
@@ -120,7 +185,8 @@ describe('repository directory migration', () => {
         expect(fs.readdirSync(outside)).toEqual([]);
         expect(fixture.read('.webpieces/custom/policy.json')).toContain('OFF');
     });
-    it('rejects owner settings in either retired or runtime directories', () => {
+
+    it('rejects owner settings in the state directory or the retired .webpieces-logs/', () => {
         const layout = new RepositoryLayout();
         for (const filename of ['.webpieces/rules/code.json', '.webpieces-logs/rules/code.json'])
             expect(() => layout.assertPolicyPath(filename)).toThrow('pnpm wp-migrate-dirs');

@@ -94,7 +94,7 @@ describe('codex-subagent-no-write-in-shared-tree is unreachable from Claude Code
     // Issue #863: this guard blocked a Codex reviewer's verdict, and its "hand the edit back to the
     // coordinator" option is how a coordinator came to write all five verdicts itself.
     it('names wp-write-review for a verdict write, and NEVER offers the coordinator hand-back', () => {
-        const verdict = path.join(root, '.webpieces-logs', 'pr-review', 'dean-x', 'review-security.json');
+        const verdict = path.join(root, '.webpieces', 'pr-review', 'dean-x', 'review-security.json');
         const blocked = guard.check(event('codex', 'agent-1', verdict), root);
         expect(blocked).not.toBeNull();
         expect(blocked!.report).toContain('pnpm wp-write-review --checklist <id>');

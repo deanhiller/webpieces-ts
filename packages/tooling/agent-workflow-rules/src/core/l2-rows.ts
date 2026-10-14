@@ -23,7 +23,7 @@
 // reason string into the decision log; `L2_ROW_FOR_REASON` maps each of those to the row it is an
 // instance of, the guards stamp that number as `row=`, and l2-matrix.spec.ts asserts the map is
 // EXHAUSTIVE against the guard sources — a new reason with no row fails the build. So `row=8` in
-// `.webpieces-logs/logs/L2-decisions` opens guards/L2-branch-state.md at row 8 and reads the state, the cure
+// `.webpieces/logs/L2-decisions` opens guards/L2-branch-state.md at row 8 and reads the state, the cure
 // and the tools that row covers, exactly as `row=5` already does for L1.
 //
 // The rows the guards cannot yet honour are named in the doc's "Not done" section rather than quietly

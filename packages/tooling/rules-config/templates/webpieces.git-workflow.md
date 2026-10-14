@@ -76,7 +76,7 @@ Before running any `wp-*` PR/merge command, your working tree must be 100% clean
 - **Add + commit, or delete** every untracked file.
 
 Each command runs `git status --porcelain` first and **aborts** if anything is uncommitted — including
-**untracked** files (gitignored paths like `.webpieces-logs/` are excluded). The tooling deliberately does
+**untracked** files (gitignored paths, including the tooling's own state directory, are excluded). The tooling deliberately does
 **not** `git add -A` your tree: a blanket sweep once committed a stale untracked directory into a
 squash commit. If a command tells you the tree is dirty, commit or delete the listed files, then re-run.
 
@@ -173,7 +173,6 @@ git merge-base --is-ancestor origin/main HEAD         # exit 0 = your branch alr
 git rev-list --left-right --count origin/main...HEAD  # prints "<behind>  <ahead>"
 git log --oneline HEAD..origin/main                   # what main has that you do not
 git diff --stat origin/main...HEAD                    # what you changed since the fork point
-cat .webpieces-logs/main-sync-status.json                  # the tooling's own answer + predicted conflicts
 ```
 
 ## Where is this going? Ask that BEFORE asking about the PR
@@ -227,7 +226,7 @@ snapshots are never loaded as active summaries; a new PR requires its own author
 
 1. **`pnpm wp-start-update`** — squash-update your branch from main (standalone, no PR). Clean merge →
    finalizes everything (no need to call `pnpm wp-finish-update`). Conflicts → writes
-   `.webpieces-logs/instruct-ai/webpieces.mergeprocess.md` and hands resolution to you; finish with
+   `webpieces.mergeprocess.md` (its path is printed) and hands resolution to you; finish with
    `pnpm wp-finish-update`.
 2. **`pnpm wp-finish-update`** — finalize a squash-update after you've resolved its conflicts (validates +
    commits + swaps the branch). Only needed on the conflict path; a clean `wp-start-update` finalizes
@@ -238,7 +237,7 @@ snapshots are never loaded as active summaries; a new PR requires its own author
    `pnpm wp-finish-update`, and no longer `pnpm wp-finish-upsert-pr`).
 4. **`pnpm wp-review-upsert-pr`** — STAGE ②, and the one that verifies before anyone reviews. It validates
    and commits any in-progress 3-point merge, asserts a clean tree, runs the **build gate**, extracts this
-   branch's diff to `.webpieces-logs/pr-review/<featureSlug>/diff/`, writes a per-reviewer instructions file, and
+   branch's diff into the branch's pr-review directory (path printed), writes a per-reviewer instructions file, and
    prints exactly what to spawn plus the `summary.json` schema. It CAN fail — and when it does, no reviewer
    has been spawned yet, so a broken branch costs no review effort.
 5. **`pnpm wp-finish-upsert-pr`** — STAGE ③: requires stage ②'s receipt, your `summary.json` (its `title`
@@ -419,7 +418,7 @@ A branch is only ever deleted without being asked about when it is backed by a *
 squash-merge backup of one, or holds **no commits of its own** and nobody is holding it (no uncommitted
 files, no live lock, not the tree you are standing in). Anything with unique commits is reported in a
 numbered block for you to take with `--delete-branches=` / `--delete-worktrees=`, and
-`.webpieces-logs/merged-branches.json` carries the per-branch and per-worktree reason either way.
+the merged-branches file in the state directory carries the per-branch and per-worktree reason either way.
 
 With `branch-creation-guard.autoReapMergedBranches: true` you will rarely see this cap at all — the
 background refresher reaps dead branches on its own, and `pnpm wp-cleanup` is just how you make it happen
@@ -455,7 +454,7 @@ A sync does its work on a transient `<feature>Squash` branch and, when it finish
 the *same* name. There is no `wpN` generation suffix to reconcile.
 
 Each sync takes a pre-merge snapshot `<feature>PreMerge<n>` (numbered from 1) paired 1:1 with a
-conflict-context folder `.webpieces-logs/merge-info/<slug>/merge-<n>/` under the same number. A **clean**
+conflict-context folder `merge-info/<slug>/merge-<n>/` in the state directory under the same number. A **clean**
 sync auto-removes its snapshot and leaves no folder (no undo point needed). A **conflict** sync KEEPS
 the matched pair — `<feature>PreMerge<n>` to diff/bail against, and `merge-<n>/` holding that merge's
 3-point context — so merge N never reuses merge N-1's files. List the trail with
@@ -490,8 +489,8 @@ commits exactly that. The commit is a pure function of your already-committed wo
 you: pnpm wp-start-update
   tool: assertCleanTree; snapshot -> <feature>PreMerge<n>; checkout main; pull; create <feature>Squash
   tool: git merge --squash <feature>          # CONFLICTS — conflicted files left with markers
-  tool: writes .webpieces-logs/merge-info/<slug>/merge-<n>/ (A=fork / B=feature / C=main context + diffs; kept, paired with PreMerge<n>)
-  tool: writes .webpieces-logs/instruct-ai/webpieces.mergeprocess.md, then exits (code 2)
+  tool: writes merge-info/<slug>/merge-<n>/ (A=fork / B=feature / C=main context + diffs; kept, paired with PreMerge<n>)
+  tool: writes webpieces.mergeprocess.md (path printed), then exits (code 2)
   ---- hand-off to the AI (you are on the transient <feature>Squash branch) ----
   AI:  read webpieces.mergeprocess.md
   AI:  per conflicted file -> resolve markers -> git add <file> -> write merge-explanation.md
@@ -521,7 +520,7 @@ Its opening lines say which of the two you are looking at.
 
 ## Sibling docs in this directory
 
-Every doc named here is written into `.webpieces-logs/instruct-ai/` together with this one — a doc and
+Every doc named here is written into the same directory as this one — a doc and
 everything it links to always land as a set, so a link from this page never points at a file that is not
 there.
 

@@ -339,7 +339,7 @@ describe('L1 rows agree with the predicates the guards enforce', () => {
  * The doc IS the array. Locked byte-identical the same way webpieces.guard-matrix.md is locked to
  * renderGuardMatrixDoc() — a doc that merely describes the table drifts from it within one release.
  *
- * This spec, not the runtime hook, is the gate: `.webpieces-logs/instruct-ai/` carries the PUBLISHED copy
+ * This spec, not the runtime hook, is the gate: `.webpieces/instruct-ai/` carries the PUBLISHED copy
  * and is a release behind, while vitest resolves @webpieces/* to LOCAL source.
  */
 describe('guards/L1-location.md is generated from the rows the guard consults', () => {
@@ -400,8 +400,8 @@ describe('guards/L1-location.md is generated from the rows the guard consults', 
     it('points the reader at the doc only when it was actually written', () => {
         expect(locationMatrixPointer('', '6')).toBe('');
         expect(
-            locationMatrixPointer('/repo/.webpieces-logs/instruct-ai/webpieces.location-matrix.md', '6'),
-        ).toContain('/repo/.webpieces-logs/instruct-ai/webpieces.location-matrix.md');
+            locationMatrixPointer('/repo/.webpieces/instruct-ai/webpieces.location-matrix.md', '6'),
+        ).toContain('/repo/.webpieces/instruct-ai/webpieces.location-matrix.md');
     });
 
     // The row is the point: a bare "read this doc" is a page, a row number is the two lines that
@@ -417,7 +417,7 @@ describe('guards/L1-location.md is generated from the rows the guard consults', 
     // L0's and L2's are: a quote or backslash corrupts the decision payload, not merely the prose.
     it('emits a JSON-safe pointer', () => {
         const pointer = locationMatrixPointer(
-            '/repo/.webpieces-logs/instruct-ai/webpieces.location-matrix.md',
+            '/repo/.webpieces/instruct-ai/webpieces.location-matrix.md',
             '5',
         );
         expect(pointer).not.toContain('"');
@@ -428,7 +428,7 @@ describe('guards/L1-location.md is generated from the rows the guard consults', 
     // assumed, which is why L1's own messages name <root> explicitly rather than saying "cd first".
     it('keeps the path absolute, and starts on its own line so the house report shape holds', () => {
         const pointer = locationMatrixPointer(
-            '/repo/.webpieces-logs/instruct-ai/webpieces.location-matrix.md',
+            '/repo/.webpieces/instruct-ai/webpieces.location-matrix.md',
             '5',
         );
         expect(pointer.startsWith('\n')).toBe(true);
@@ -438,7 +438,7 @@ describe('guards/L1-location.md is generated from the rows the guard consults', 
     it('tells a reader how a `row=` in the L1 log joins back to the table', () => {
         const doc = renderL1Doc();
         expect(doc).toContain('## How a log line joins to a row');
-        expect(doc).toContain('.webpieces-logs/logs/L1-location/<writer>.log');
+        expect(doc).toContain('the L1-location log (one file per writer)');
     });
 
     // The prose sections are literal lines in the renderer, and this is the one that must never be

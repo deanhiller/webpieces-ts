@@ -29,13 +29,13 @@ export {
 // than through the typed config (the pr-gate active-hatch dashboard section reads every rule's hatches).
 export { RawConfigFile } from './config-file';
 export { RepoRootFinder, INSTRUCT_AI_DIR, INSTRUCT_AI_LEAF } from './repo-root';
-// The scoped `.webpieces-logs` resolver. EVERY reader/writer of `.webpieces-logs/...` goes through one of its two
+// The scoped `.webpieces` resolver. EVERY reader/writer of `.webpieces/...` goes through one of its two
 // named methods so the call site declares whether the state is repo-wide or worktree-private.
 
 // There is NO machine-global state root. `MachineStateHome`/`StateHome`/`WEBPIECES_STATE_HOME` and the
 // `PrBodyStore` that used them are DELETED: the one artifact that needed a scope above the clone was the
-// gated squash body, and GitHub holds it now (it IS the PR description). Every `.webpieces-logs` path a
-// webpieces tool writes is `{repo}/.webpieces-logs`, resolved through `DotWebpieces` above. See
+// gated squash body, and GitHub holds it now (it IS the PR description). Every `.webpieces` path a
+// webpieces tool writes is `{repo}/.webpieces`, resolved through `DotWebpieces` above. See
 // `decisions/0005-the-pr-description-is-the-merge-body.md`.
 export { AgedTreeSweeper, SweepCount, RETENTION_DAYS } from './aged-tree-sweep';
 export {
@@ -142,11 +142,11 @@ export {
     DOCUMENTATION_KEYS,
 } from './home-config';
 // The MACHINE-WIDE build ledger, `~/.webpieces/builds.log`. THE one carve-out from
-// `no-machine-global-state.spec.ts`'s rule that webpieces writes only under `{repo}/.webpieces-logs` — the
+// `no-machine-global-state.spec.ts`'s rule that webpieces writes only under `{repo}/.webpieces` — the
 // argument is in `decisions/0006-the-build-ledger-is-machine-global.md`, and the short form is that "how
 // many builds are burning this box's CPU" is a fact about the MACHINE, is not a cache of anything a
 // remote owns, and cannot be answered from a per-repo file because every linked worktree has its own
-// `.webpieces-logs/` and would be blind to the sibling it is contending with. See builds-log.ts.
+// `.webpieces/` and would be blind to the sibling it is contending with. See builds-log.ts.
 export {
     BuildsLog,
     BuildTicket,

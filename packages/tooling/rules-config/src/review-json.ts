@@ -83,7 +83,7 @@ export class ReviewJsonService {
         private readonly overrides: ChecklistOverrideService = checklistOverrideService,
     ) {}
 
-    // The per-feature PR working dir: `<worktree>/.webpieces-logs/pr-review/<feature>`. AI-WRITABLE scope,
+    // The per-feature PR working dir: `<worktree>/.webpieces/pr-review/<feature>`. AI-WRITABLE scope,
     // not local() — an agent AUTHORS summary.json here, and each reviewer subagent authors its own
     // review-round<N>-<id>.json beside it. A worktree-isolated agent's Write is refused for any path under the
     // shared checkout, which is where local() puts this, so local() made both files unwritable by the

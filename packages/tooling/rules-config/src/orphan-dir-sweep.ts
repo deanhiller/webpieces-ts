@@ -89,7 +89,7 @@ export class OrphanSweepReport {
     private renderReportOnly(): string {
         return `${this.heading()}\n`
             + `  Nothing was moved — archiving is off on this machine.\n`
-            + `  To archive them (never delete: they move to .webpieces-logs/trash/<sweepId>/ with a recover=\n`
+            + `  To archive them (never delete: they move to .webpieces/trash/<sweepId>/ with a recover=\n`
             + `  command printed for each), add this key in ~/.webpieces/config.json — every key in that\n`
             + `  file is optional, so this one line beside whatever is already there is the whole edit:\n\n`
             + `      { "${HOME_EXPERIMENTAL_SECTION}": { "${HOME_KEY_ORPHAN_DIR_SWEEP}": true } }\n`;

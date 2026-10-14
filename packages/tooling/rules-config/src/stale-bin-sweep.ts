@@ -47,7 +47,7 @@ import { toError } from '@webpieces/tooling-common/to-error';
 // the whole safety story: another package's bins are never touched.
 //
 // WHY NOT A postinstall HOOK. `setupDebugging.md` records the postinstall approach as ABANDONED in this
-// repo. The call site is the `wp-*` startup pass that regenerates `.webpieces-logs/instruct-ai/*` — see
+// repo. The call site is the `wp-*` startup pass that regenerates `.webpieces/instruct-ai/*` — see
 // TemplateWriter — and that placement is the load-bearing half of the fix. This is not a tidy-up for one
 // repo: every developer's machine has this graveyard, and a cure that only cleans the tree somebody happens
 // to run it in is worthless. Riding the pass EVERY `wp-*` command takes is what makes the RELEASED sweep

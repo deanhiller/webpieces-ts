@@ -131,7 +131,7 @@ describe('StaleBinSweeper', () => {
 
 /**
  * THE LOAD-BEARING CALL SITE. The sweep only reaches every clone on every developer's machine because it
- * rides the pass every `wp-*` command takes — regenerating `.webpieces-logs/instruct-ai/*`. A test that only
+ * rides the pass every `wp-*` command takes — regenerating `.webpieces/instruct-ai/*`. A test that only
  * covered `StaleBinSweeper` directly would pass while the self-heal reached nobody.
  */
 describe('TemplateWriter sweeps stale wp-* bins on the wp-* startup path', () => {
@@ -141,7 +141,7 @@ describe('TemplateWriter sweeps stale wp-* bins on the wp-* startup path', () =>
         // A FRESH sweeper, not the shared singleton: the singleton's once-per-root memo is process-wide and
         // another spec in this process may already have swept.
         // An explicit instructDir keeps the docs inside the fixture, so this asserts the SWEEP and needs no
-        // git repo to resolve `.webpieces-logs` against.
+        // git repo to resolve `.webpieces` against.
         new TemplateWriter(undefined, undefined, undefined, new StaleBinSweeper())
             .writeTemplate(root, 'webpieces.git-workflow.md', 'instruct-out');
         expect(fs.existsSync(path.join(bin, 'wp-authorize'))).toBe(false);

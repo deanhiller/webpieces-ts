@@ -136,7 +136,7 @@ export const ALL_DIFF_ONE_READ_LINES = 1500;
 
 /**
  * Renders the per-reviewer instructions file that `wp-review-upsert-pr` writes to
- * `.webpieces-logs/pr-review/<feature>/instructions/<checklistId>.instructions.md` — ONE PER CHECKLIST, so a
+ * `.webpieces/pr-review/<feature>/instructions/<checklistId>.instructions.md` — ONE PER CHECKLIST, so a
  * subagent covering several checklists (`commands.pr-gate.reviewerAgents`) is simply handed several files.
  *
  * WHY this file exists, measured rather than assumed: a reviewer subagent on consumer-monorepo2 spent **14 of its

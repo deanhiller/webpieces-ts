@@ -90,6 +90,6 @@ describe('ReviewStageReceiptService', () => {
     it('lives beside summary.json, in the per-feature pr-review dir', () => {
         const repo = tmpRepo();
         expect(svc().receiptPath(repo, 'feat'))
-            .toBe(path.join(repo, '.webpieces-logs', 'pr-review', 'feat', 'review-stage.json'));
+            .toBe(path.join(repo, '.webpieces', 'pr-review', 'feat', 'review-stage.json'));
     });
 });

@@ -44,20 +44,20 @@ function makeMigrationRepo(): void {
     git(primary, 'add -A');
     git(primary, 'commit -q -m init');
     git(primary, `worktree add -q -b feature ${worktree}`);
-    namespace = path.join(primary, '.webpieces-logs', WORKTREE_STATE_DIR, 'wt-inflight');
+    namespace = path.join(primary, '.webpieces', WORKTREE_STATE_DIR, 'wt-inflight');
 }
 
 function cleanupMigrationRepo(): void {
     fs.rmSync(tmp, { recursive: true, force: true });
 }
 
-describe('legacy per-worktree .webpieces-logs migration', () => {
+describe('legacy per-worktree .webpieces migration', () => {
     beforeEach(() => { makeMigrationRepo(); });
     afterEach(cleanupMigrationRepo);
 
     it('moves an IN-FLIGHT merge out of the legacy dir without losing a byte', () => {
         const marker = 'merge-info/staged/feature/merge-in-progress.json';
-        writeFile(worktree, `.webpieces-logs/${marker}`, '{"validated":false,"conflictedFiles":["a.ts"]}');
+        writeFile(worktree, `.webpieces/${marker}`, '{"validated":false,"conflictedFiles":["a.ts"]}');
 
         // Resolution itself performs the migration — the first new-code process in this worktree.
         const resolved = new DotWebpieces().local(worktree);
@@ -66,7 +66,7 @@ describe('legacy per-worktree .webpieces-logs migration', () => {
         expect(fs.readFileSync(path.join(namespace, marker), 'utf8'))
             .toBe('{"validated":false,"conflictedFiles":["a.ts"]}');
         // The drained legacy dir removes itself, so nothing is left to diverge from.
-        expect(fs.existsSync(path.join(worktree, '.webpieces-logs'))).toBe(false);
+        expect(fs.existsSync(path.join(worktree, '.webpieces'))).toBe(false);
     });
 
     /**
@@ -77,17 +77,17 @@ describe('legacy per-worktree .webpieces-logs migration', () => {
      * only writable copy back out of reach.
      */
     it('LEAVES pr-review/ in the worktree — it is aiWritable() state, not legacy', () => {
-        writeFile(worktree, '.webpieces-logs/pr-review/feature/summary.json', '{"title":"wip"}');
-        writeFile(worktree, '.webpieces-logs/merge-info/staged/feature/merge-in-progress.json', '{"a":1}');
+        writeFile(worktree, '.webpieces/pr-review/feature/summary.json', '{"title":"wip"}');
+        writeFile(worktree, '.webpieces/merge-info/staged/feature/merge-in-progress.json', '{"a":1}');
 
         const dot = new DotWebpieces();
         expect(dot.local(worktree)).toBe(namespace);
 
-        expect(fs.readFileSync(path.join(worktree, '.webpieces-logs/pr-review/feature/summary.json'), 'utf8'))
+        expect(fs.readFileSync(path.join(worktree, '.webpieces/pr-review/feature/summary.json'), 'utf8'))
             .toBe('{"title":"wip"}');
         expect(fs.existsSync(path.join(namespace, 'pr-review'))).toBe(false);
         // …and it is exactly where aiWritable() says to look for it.
-        expect(dot.aiWritable(worktree)).toBe(path.join(worktree, '.webpieces-logs'));
+        expect(dot.aiWritable(worktree)).toBe(path.join(worktree, '.webpieces'));
         // The genuinely-legacy sibling still migrated, so this is a skip and not a disabled migrator.
         expect(fs.existsSync(path.join(namespace, 'merge-info/staged/feature/merge-in-progress.json'))).toBe(true);
     });
@@ -95,29 +95,29 @@ describe('legacy per-worktree .webpieces-logs migration', () => {
     it('NEVER destroys or overwrites: an occupied destination leaves the legacy copy in place', () => {
         const relative = 'merge-info/staged/feature/merge-in-progress.json';
         writeFile(namespace, relative, '{"which":"already-in-namespace"}');
-        writeFile(worktree, `.webpieces-logs/${relative}`, '{"which":"legacy"}');
+        writeFile(worktree, `.webpieces/${relative}`, '{"which":"legacy"}');
 
         const report = new StateDirMigrator().migrate(
-            path.join(worktree, '.webpieces-logs'), namespace, []);
+            path.join(worktree, '.webpieces'), namespace, []);
 
         expect(report.kept).toContain(relative);
         expect(fs.readFileSync(path.join(namespace, relative), 'utf8')).toBe('{"which":"already-in-namespace"}');
         // The loser is still on disk, untouched, for a human to reconcile.
-        expect(fs.readFileSync(path.join(worktree, '.webpieces-logs', relative), 'utf8')).toBe('{"which":"legacy"}');
+        expect(fs.readFileSync(path.join(worktree, '.webpieces', relative), 'utf8')).toBe('{"which":"legacy"}');
     });
 
 });
 
-describe('legacy .webpieces-logs migration — partial and repeat runs', () => {
+describe('legacy .webpieces migration — partial and repeat runs', () => {
     beforeEach(() => { makeMigrationRepo(); });
     afterEach(cleanupMigrationRepo);
 
     it('merges around an occupied path — free siblings still move', () => {
         writeFile(namespace, 'merge-info/staged/feature/merge-in-progress.json', '{"which":"kept"}');
-        writeFile(worktree, '.webpieces-logs/merge-info/staged/feature/merge-in-progress.json', '{"which":"legacy"}');
-        writeFile(worktree, '.webpieces-logs/hooks/branch-mutations.log', 'one audit line\n');
+        writeFile(worktree, '.webpieces/merge-info/staged/feature/merge-in-progress.json', '{"which":"legacy"}');
+        writeFile(worktree, '.webpieces/hooks/branch-mutations.log', 'one audit line\n');
 
-        const report = new StateDirMigrator().migrate(path.join(worktree, '.webpieces-logs'), namespace, []);
+        const report = new StateDirMigrator().migrate(path.join(worktree, '.webpieces'), namespace, []);
 
         // `hooks/` had a free destination, so the WHOLE subtree moved in one rename — that is the
         // property that keeps an in-flight merge from ever being half-migrated.
@@ -133,7 +133,7 @@ describe('legacy .webpieces-logs migration — partial and repeat runs', () => {
      */
     it('sweeps state deposited by an OLD published build on the next new-code resolution', () => {
         new DotWebpieces().local(worktree);                       // new code runs first, dir is clean
-        writeFile(worktree, '.webpieces-logs/instruct-ai/webpieces.git-workflow.md', 'written by the old build\n');
+        writeFile(worktree, '.webpieces/instruct-ai/webpieces.git-workflow.md', 'written by the old build\n');
 
         const resolved = new DotWebpieces().local(worktree);      // a LATER process (fresh instance)
 
@@ -142,11 +142,11 @@ describe('legacy .webpieces-logs migration — partial and repeat runs', () => {
             .toBe('written by the old build\n');
     });
 
-    it('is a no-op in the primary clone — its .webpieces-logs is already the right place', () => {
-        writeFile(primary, '.webpieces-logs/merge-info/staged/main/merge-in-progress.json', '{"primary":true}');
-        expect(new DotWebpieces().local(primary)).toBe(path.join(primary, '.webpieces-logs'));
+    it('is a no-op in the primary clone — its .webpieces is already the right place', () => {
+        writeFile(primary, '.webpieces/merge-info/staged/main/merge-in-progress.json', '{"primary":true}');
+        expect(new DotWebpieces().local(primary)).toBe(path.join(primary, '.webpieces'));
         expect(fs.readFileSync(
-            path.join(primary, '.webpieces-logs/merge-info/staged/main/merge-in-progress.json'), 'utf8'))
+            path.join(primary, '.webpieces/merge-info/staged/main/merge-in-progress.json'), 'utf8'))
             .toBe('{"primary":true}');
     });
 });
@@ -190,7 +190,7 @@ describe('main-sync single-flight across worktrees', () => {
         expect(second).toBeNull();
         // Same physical file from both trees — a per-worktree lock would have let both through.
         expect(service.mainSyncLockPath(worktreeA)).toBe(service.mainSyncLockPath(worktreeB));
-        expect(fs.existsSync(path.join(primary, '.webpieces-logs', 'main-sync.lock.json'))).toBe(true);
+        expect(fs.existsSync(path.join(primary, '.webpieces', 'main-sync.lock.json'))).toBe(true);
     });
 
     it('a STALE lock is recoverable — a hung holder does not wedge every worktree forever', () => {
@@ -232,7 +232,7 @@ describe('declared repository policy inputs survive linked-worktree state migrat
         }));
         const policyFiles = ['custom/client.json', 'rules.lock.json', 'rules-catalog.md'];
         for (const filename of policyFiles) writeFile(worktree, `.webpieces-config/${filename}`, `original:${filename}`);
-        writeFile(worktree, '.webpieces-logs/logs/hook.log', 'runtime state');
+        writeFile(worktree, '.webpieces/logs/hook.log', 'runtime state');
 
         new DotWebpieces().local(worktree);
 

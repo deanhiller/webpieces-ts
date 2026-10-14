@@ -96,7 +96,7 @@ describe('redirect-how-to-merge-main — why the fork point matters', () => {
     it('sends the AI to a doc that states the invariant, its consumers and the rewrite in full', () => {
         const root = policyFixture.makeRepo('wp-redirect-invariant-');
         rule.check(ctx('git merge origin/main', root));
-        const written = fs.readFileSync(path.join(root, '.webpieces-logs', 'instruct-ai', 'webpieces.git-workflow.md'), 'utf8');
+        const written = fs.readFileSync(path.join(root, '.webpieces', 'instruct-ai', 'webpieces.git-workflow.md'), 'utf8');
         expect(written).toContain('THE FORK POINT INVARIANT');
         // Both halves of the symmetric invariant.
         expect(written).toContain('pure `main` commit containing none of your work');
@@ -126,7 +126,7 @@ describe('redirect-how-to-merge-main — why the fork point matters', () => {
     it('leaves the words to warn the human with in the doc it links', () => {
         const root = policyFixture.makeRepo('wp-redirect-warn-');
         rule.check(ctx('git merge origin/main', root));
-        const written = fs.readFileSync(path.join(root, '.webpieces-logs', 'instruct-ai', 'webpieces.git-workflow.md'), 'utf8');
+        const written = fs.readFileSync(path.join(root, '.webpieces', 'instruct-ai', 'webpieces.git-workflow.md'), 'utf8');
         expect(written).toContain('push back and make you use the 3-point merge instead');
         expect(rule.fixHint.mainMessage).toContain('the exact words to warn a human with');
         fs.rmSync(root, { recursive: true, force: true });
@@ -163,7 +163,7 @@ describe('redirect-how-to-merge-main — what the block tells the AI', () => {
 
     it('writes the git-workflow doc it points the AI at, and links that exact path', () => {
         const root = policyFixture.makeRepo('wp-redirect-doc-');
-        const doc = path.join(root, '.webpieces-logs', 'instruct-ai', 'webpieces.git-workflow.md');
+        const doc = path.join(root, '.webpieces', 'instruct-ai', 'webpieces.git-workflow.md');
         expect(fs.existsSync(doc)).toBe(false);
 
         const violations = rule.check(ctx('git merge origin/main', root));

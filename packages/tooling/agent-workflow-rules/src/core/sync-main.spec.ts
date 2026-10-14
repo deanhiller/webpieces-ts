@@ -31,7 +31,7 @@ let root: string;
 const service = new MainSyncStatusService();
 
 function asyncLog(): string {
-    const logPath = path.join(root, '.webpieces-logs', 'logs', streamName(ASYNC_REFRESH_STREAM));
+    const logPath = path.join(root, '.webpieces', 'logs', streamName(ASYNC_REFRESH_STREAM));
     return fs.existsSync(logPath) ? fs.readFileSync(logPath, 'utf8') : '';
 }
 

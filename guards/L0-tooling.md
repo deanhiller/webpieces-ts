@@ -174,8 +174,8 @@ It lands in the log directory of the tree the CALL was made in, centralized unde
 so that removing a worktree does not take its audit trail with it:
 
 ```
-<primary>/.webpieces-logs/worktrees/<tree>/logs/L0-shim/<session>-<agent|coordinator>-<binName>.log
-<primary>/.webpieces-logs/logs/L0-shim/<session>-<agent|coordinator>-<binName>.log   # from the primary clone itself
+<primary>/.webpieces/worktrees/<tree>/logs/L0-shim/<session>-<agent|coordinator>-<binName>.log
+<primary>/.webpieces/logs/L0-shim/<session>-<agent|coordinator>-<binName>.log   # from the primary clone itself
 ```
 
 The binary stamps the same `layer=`/`row=`/`fault=` fields onto its OWN streams —

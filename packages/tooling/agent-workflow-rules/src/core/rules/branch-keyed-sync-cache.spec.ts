@@ -14,7 +14,7 @@ type RulesConfigModule = typeof import('@webpieces/repo-workflow-core');
 /**
  * THE regression this change exists for.
  *
- * `<primary>/.webpieces-logs/main-sync-status.json` is ONE file shared by every worktree of the repo, and
+ * `<primary>/.webpieces/main-sync-status.json` is ONE file shared by every worktree of the repo, and
  * it used to describe exactly ONE branch — whichever tree won the single-flight lock. Every guard
  * bails out with `stale-cross-branch-cache (fail-open)` when the cached branch is not the branch it is
  * judging, so with N worktrees at most one worktree's guards were armed and the rest silently

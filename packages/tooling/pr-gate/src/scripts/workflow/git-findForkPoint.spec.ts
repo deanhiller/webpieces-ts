@@ -11,8 +11,8 @@ const forkPointOutputDir = (r: string, f: string, w: string): string => forkPoin
 const mergeDirFor = (r: string, f: string): string => mergeStateSvc.mergeDirFor(r, f);
 
 // Regression guard for the fork-point dir mismatch: findForkPoint USED to write
-// updatemain-hashes.json to the legacy flat `.webpieces-logs/<workflow>-<feature>/`, while every reader
-// (git-gatherInfo / merge-start) reads it from the nested mergeDirFor (`.webpieces-logs/merge-info/...`).
+// updatemain-hashes.json to the legacy flat `.webpieces/<workflow>-<feature>/`, while every reader
+// (git-gatherInfo / merge-start) reads it from the nested mergeDirFor (`.webpieces/merge-info/...`).
 // The writer and the readers MUST resolve to the same dir, so we pin that invariant here: if anyone
 // re-introduces a divergent path, this fails.
 describe('forkPointOutputDir — writer dir matches the reader dir', () => {

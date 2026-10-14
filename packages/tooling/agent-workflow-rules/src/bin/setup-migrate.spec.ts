@@ -21,7 +21,7 @@ import {
  */
 
 describe('migrate', () => {
-    // Seeded EMPTY, and specifically NOT with a `.webpieces-logs/**` glob. That exemption lives in code
+    // Seeded EMPTY, and specifically NOT with a `.webpieces/**` glob. That exemption lives in code
     // (isWebpiecesStateDir, consulted by filterByExcludedPaths ahead of this list), so a glob here would
     // be a second and weaker spelling of it — and the next two tests are why a seed could never be the
     // mechanism anyway: the migrator never rewrites a list a consumer already has.

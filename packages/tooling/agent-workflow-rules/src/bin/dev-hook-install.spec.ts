@@ -30,7 +30,7 @@ describe('development hook installation after separating source and workflow pac
         const settings = readFileSync(join(fixture.home, '.claude/settings.json'), 'utf8');
         expect(settings).toContain(`node ${source}`);
         expect(settings).toContain(`node ${guards}`);
-        expect(readFileSync(join(fixture.home, '.webpieces-logs/dev-hook-backup.json'), 'utf8')).toContain('"previousHooks": null');
+        expect(readFileSync(join(fixture.home, '.webpieces/dev-hook-backup.json'), 'utf8')).toContain('"previousHooks": null');
     });
 
     it.each(['ai-hook-rules', 'agent-workflow-rules'])('names the missing %s build and an executable cure', async (missing: string) => {
@@ -61,14 +61,14 @@ describe('development hook installation after separating source and workflow pac
         }
         if (state === 'backup') {
             mkdirSync(join(root, 'dist/packages/tooling/rules-config'), { recursive: true });
-            mkdirSync(join(fixture.home, '.webpieces-logs'), { recursive: true });
-            writeFileSync(join(fixture.home, '.webpieces-logs/dev-hook-backup.json'), 'preserve this backup');
+            mkdirSync(join(fixture.home, '.webpieces'), { recursive: true });
+            writeFileSync(join(fixture.home, '.webpieces/dev-hook-backup.json'), 'preserve this backup');
         }
         const cure = state === 'backup' ? 'node dist/packages/tooling/agent-workflow-rules/src/bin/dev-hook-uninstall.js' : 'pnpm nx run rules-config:build';
 
         await expect(runDevHookInstall()).rejects.toThrow(cure);
 
         expect(error).not.toHaveBeenCalled();
-        if (state === 'backup') expect(readFileSync(join(fixture.home, '.webpieces-logs/dev-hook-backup.json'), 'utf8')).toBe('preserve this backup');
+        if (state === 'backup') expect(readFileSync(join(fixture.home, '.webpieces/dev-hook-backup.json'), 'utf8')).toBe('preserve this backup');
     });
 });

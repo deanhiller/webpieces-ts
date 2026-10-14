@@ -37,7 +37,7 @@ const READS: readonly string[] = [
     "sed -n '1,240p' packages/tooling/agent-workflow-rules/src/bin/shim.ts",
     'sed -n 1,50p package.json',
     'cat webpieces.config.json',
-    'cat .webpieces-logs/instruct-ai/webpieces.guard-matrix.md',
+    'cat .webpieces/instruct-ai/webpieces.guard-matrix.md',
     'head -50 guards/L0-tooling.md',
     'head -n 50 guards/L0-tooling.md',
     'tail -20 pnpm-workspace.yaml',
@@ -337,7 +337,7 @@ describe('every L0 fault: a Codex READ is allowed, a Codex WRITE and a non-read 
     it('records the ALLOW-CODEX-READ verdict with the harness on the same line', () => {
         const root = kit.stageDeclaredRoot();
         kit.runShim(root, 'wp-ai-guards-hook', codexPayload('Bash', CODEX_READ_CMD, root));
-        const dir = path.join(root, '.webpieces-logs', 'logs', 'L0-shim');
+        const dir = path.join(root, '.webpieces', 'logs', 'L0-shim');
         const files = fs.existsSync(dir) ? fs.readdirSync(dir) : [];
         expect(files.length, 'the shim wrote no audit line at all').toBeGreaterThan(0);
         const body = files.map((f: string): string => fs.readFileSync(path.join(dir, f), 'utf8')).join('');

@@ -5,9 +5,9 @@ import { injectable, bindingScopeValues } from 'inversify';
 import { toError } from './to-error';
 
 /**
- * Crash-safe / concurrency-safe file writes for the SHARED `.webpieces-logs/` state dir.
+ * Crash-safe / concurrency-safe file writes for the SHARED `.webpieces/` state dir.
  *
- * WHY this exists: once `.webpieces-logs/` is shared by every linked worktree (see SharedStateDir), files
+ * WHY this exists: once `.webpieces/` is shared by every linked worktree (see SharedStateDir), files
  * that used to have exactly ONE writer per worktree now have N concurrent writers across the repo —
  * seven agents, one `merged-branches.json`. A plain `fs.writeFileSync` TRUNCATES first and then writes,
  * so a reader that opens the file in that window reads a truncated or half-written document and its
@@ -62,7 +62,7 @@ export class AtomicFile {
      * Atomic write, SKIPPED when the file already holds exactly `contents`. Returns true when it wrote.
      *
      * This is the instruct-ai regeneration case: every `wp-*` command rewrites the same generated docs,
-     * and with a shared `.webpieces-logs/` those rewrites now overlap across worktrees. Identical content is
+     * and with a shared `.webpieces/` those rewrites now overlap across worktrees. Identical content is
      * the overwhelmingly common case, so the cheapest correct answer is to not write at all; when the
      * content genuinely changed, the write is atomic so a concurrent reader never sees a half-doc.
      */

@@ -26,7 +26,7 @@ async function main(): Promise<void> {
             args.has('--mode') ? args.value('--mode') : undefined,
             args.has('--projects') ? args.value('--projects') : undefined,
         );
-        // Anchor at the repo root so `.webpieces-logs/instruct-ai` docs land there, not in whatever subdir
+        // Anchor at the repo root so `.webpieces/instruct-ai` docs land there, not in whatever subdir
         // this CLI ran from; load config from there.
         const workspaceRoot = new RepoRootFinder().resolveRepoRoot(process.cwd());
         const result = await new CodeRulesBootstrap().run(workspaceRoot, request);

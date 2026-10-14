@@ -307,7 +307,7 @@ describe('linked-worktree hook-to-writer routing (#1105)', () => {
         expect(stamps.take(target, 'other-checklist')).toBeNull();
         const stampPath = stamps.stampPath(target, 'security');
         expect(stampPath).toContain(
-            `/.webpieces-logs/worktrees/${path.basename(target)}/review-stamps/`,
+            `/.webpieces/worktrees/${path.basename(target)}/review-stamps/`,
         );
         const stamp = JSON.parse(fs.readFileSync(stampPath, 'utf8'));
         expect(stamp.cwd).toBe(target);

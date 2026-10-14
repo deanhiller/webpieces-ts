@@ -104,6 +104,6 @@ export function formatConfigErrorsBanner(errors: readonly string[]): string {
         `  • A MACHINE-LOCAL setting does not belong in this file at all. Those live in ` +
         `~/.webpieces/config.json under "experimental" — an optional file tracked by no repo, whose absence ` +
         `is the default behaviour. Delete the key here and put it there.` +
-        `\n\nBackground: .webpieces-logs/instruct-ai/${CONFIG_POLICY_DOC}`
+        `\n\nBackground: .webpieces/instruct-ai/${CONFIG_POLICY_DOC}`
     );
 }

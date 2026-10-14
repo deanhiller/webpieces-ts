@@ -25,7 +25,7 @@ let dependenciesDocCreated = false;
 
 /**
  * Ensure the dependencies documentation file exists at
- * .webpieces-logs/instruct-ai/webpieces.dependencies.md. Sourced from @webpieces/rules-config.
+ * .webpieces/instruct-ai/webpieces.dependencies.md. Sourced from @webpieces/rules-config.
  */
 function ensureDependenciesDoc(workspaceRoot: string): void {
     if (dependenciesDocCreated) return;
@@ -65,7 +65,7 @@ let cachedGraphPath: string | null = null;
 let cachedProjectMappings: ProjectMapping[] | null = null;
 
 /**
- * Repo root that owns `.webpieces-logs/` AND `architecture/dependencies.json`, resolved from the file
+ * Repo root that owns `.webpieces/` AND `architecture/dependencies.json`, resolved from the file
  * being linted. Anchored at the git/config root so a nested package resolves to the true root.
  */
 function findWorkspaceRoot(startPath: string): string {
@@ -306,7 +306,7 @@ const rule: Rule.RuleModule = {
         },
         messages: {
             illegalImport:
-                "⚠️ AI Agent: READ .webpieces-logs/instruct-ai/webpieces.dependencies.md (at the repo root) for resolution steps!\n\n" +
+                "⚠️ AI Agent: READ .webpieces/instruct-ai/webpieces.dependencies.md (at the repo root) for resolution steps!\n\n" +
                 "Import '{{imported}}' violates architecture boundaries.\n\n" +
                 "Project '{{project}}' (level {{level}}) can only import from:\n" +
                 '{{allowedList}}',

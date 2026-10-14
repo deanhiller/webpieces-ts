@@ -7,7 +7,7 @@ import { BlockedResult } from '@webpieces/hook-runtime';
 // The L1 matrix, DELIVERED — the same treatment L0 and L2 already had.
 //
 // THE GAP THIS CLOSES. L1 stamps `layer=L1 row=<n>` on every decision it makes: a fleet audit counted
-// 1,457 of them across nine repos, with rows 0, 1, 4, 5, 6 and 7 all in active use. `.webpieces-logs/instruct-ai/`
+// 1,457 of them across nine repos, with rows 0, 1, 4, 5, 6 and 7 all in active use. `.webpieces/instruct-ai/`
 // shipped a matrix for L2 (`webpieces.branch-state-matrix.md`) and one for L0 (`webpieces.guard-matrix.md`)
 // — and NOTHING for L1. An agent told "L1 row 6" had nowhere to look it up.
 //

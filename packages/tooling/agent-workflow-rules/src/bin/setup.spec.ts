@@ -15,7 +15,7 @@ import { L0_SHIM_STREAM } from '../core/log-streams';
 // rather than hard-coding a name — which also proves exactly one stream file was written.
 function shimLogPath(root: string): string {
     // The LAYER is the directory now: L0's shim writes into `logs/L0-shim/<writer>.log`.
-    const dir = path.join(root, '.webpieces-logs', 'logs', L0_SHIM_STREAM);
+    const dir = path.join(root, '.webpieces', 'logs', L0_SHIM_STREAM);
     const hits = fs.readdirSync(dir).filter((n: string): boolean => n.endsWith('.log') && !n.endsWith('.1.log'));
     if (hits.length !== 1) throw new Error(`expected 1 shim log, found ${hits.length}: ${hits.join()}`);
     return path.join(dir, hits[0]);
@@ -459,7 +459,7 @@ describe('renderShim passthrough (healthy bin — the shim must stay transparent
 // (even though the bin EXISTS) and fails closed with a "run pnpm install" message. Both hooks (rules +
 // guards) route through this one shim, so one check covers both. See renderShim's version-drift guard.
 describe('renderShim fallback — audit log', () => {
-    it('records every fail-open/closed decision to <root>/.webpieces-logs/logs/L0-shim/<writer>.log', () => {
+    it('records every fail-open/closed decision to <root>/.webpieces/logs/L0-shim/<writer>.log', () => {
         // runShim writes the shim at <root>/.claude/webpieces/ai-hook.sh, so its ROOT resolves to root.
         const root = declaredRoot();
         runShim(root, 'wp-ai-guards-hook', bashPayload('pnpm install')); // allowed
