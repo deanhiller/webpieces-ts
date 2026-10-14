@@ -15,9 +15,10 @@
  *    declared `product:` tags. A service is never put in a product because another service calls it or
  *    feeds its queue; a call from one product into another product's service shows as the runtime EDGE
  *    between them. A service whose project carries no tag is in no product.
- *  - ProductPalette — colors derived only from the product name, shared by both viewers. Adding or
- *    removing another product never reassigns an existing color. Neutral means shared by EVERY
- *    product; a dashed white box belongs to none.
+ *  - ProductPalette — the Product color mode's colors (#1244): eight fixed saturated colors, each
+ *    product hashed (SHA-256 of its name) to a preferred one, with collisions resolved in sorted-name
+ *    order. Both viewers build it over the FULL declared product set, so they agree. Neutral means
+ *    shared by EVERY product; a dashed white box belongs to none.
  *  - ProductBoundary — which dependency edges cross from one product into another (#1204), drawn
  *    dashed in the target product's color in the Product color mode.
  *
@@ -29,10 +30,11 @@ import { createHash } from 'node:crypto';
 import type { EnhancedGraph } from './graph-sorter';
 import type { RuntimeGraph } from './runtime-graph-model';
 
-// The same dark text color graph-color-modes.ts writes on light fills. Spelled here rather than
+// The same two text colors graph-color-modes.ts writes on every fill. Spelled here rather than
 // imported because graph-color-modes.ts imports THIS file (for the palette), and a file-import cycle
 // is refused by `no-file-import-cycles`.
 const DARK_TEXT = '#1a1c22';
+const LIGHT_TEXT = '#ffffff';
 
 /** One product's color, and the text color that reads on it. Data-only. */
 export class ProductColor {
@@ -42,6 +44,26 @@ export class ProductColor {
         public readonly fontColor: string,
     ) {}
 }
+
+/** One of the palette's eight colors, and the text color that reads on it. Data-only. */
+export class ProductPaletteSlot {
+    constructor(
+        public readonly color: string,
+        public readonly fontColor: string,
+    ) {}
+}
+
+/** The eight product colors, indexed by slot. Distinct from every runtime and role color. */
+export const PRODUCT_PALETTE_SLOTS: readonly ProductPaletteSlot[] = [
+    new ProductPaletteSlot('#3f6fb5', LIGHT_TEXT),
+    new ProductPaletteSlot('#f28e2b', DARK_TEXT),
+    new ProductPaletteSlot('#c0392b', LIGHT_TEXT),
+    new ProductPaletteSlot('#5cb8b2', DARK_TEXT),
+    new ProductPaletteSlot('#3d8b3d', LIGHT_TEXT),
+    new ProductPaletteSlot('#edc948', DARK_TEXT),
+    new ProductPaletteSlot('#8e5ea2', LIGHT_TEXT),
+    new ProductPaletteSlot('#ff9da7', DARK_TEXT),
+];
 
 /** A box shared by EVERY product. */
 export const PRODUCT_SHARED_FILL = '#c9ced8';
@@ -53,9 +75,38 @@ export class ProductPalette {
     /** Every declared product, sorted, each with its color. */
     readonly colors: ProductColor[];
 
+    /**
+     * @param products the FULL declared product set. Collision resolution depends on the set, so a
+     *        viewer showing a subset must still pass every declared product, or its colors would
+     *        disagree with the other viewer's.
+     */
     constructor(products: readonly string[]) {
         const sorted = [...new Set(products)].sort();
-        this.colors = sorted.map((product: string): ProductColor => this.colorOf(product));
+        const taken = new Set<number>();
+        this.colors = sorted.map((product: string): ProductColor => {
+            const slot = this.freeSlot(this.preferredSlot(product), taken);
+            taken.add(slot);
+            return this.paint(product, slot);
+        });
+    }
+
+    /** The slot a product's name hashes to: SHA-256 of the name, first byte, mod the palette size. */
+    preferredSlot(product: string): number {
+        return createHash('sha256').update(product, 'utf8').digest()[0] % PRODUCT_PALETTE_SLOTS.length;
+    }
+
+    /** The preferred slot when free, else the next free one (wrapping); with all taken, the preferred one. */
+    private freeSlot(preferred: number, taken: ReadonlySet<number>): number {
+        for (let step = 0; step < PRODUCT_PALETTE_SLOTS.length; step++) {
+            const slot = (preferred + step) % PRODUCT_PALETTE_SLOTS.length;
+            if (!taken.has(slot)) return slot;
+        }
+        return preferred;
+    }
+
+    private paint(product: string, slot: number): ProductColor {
+        const entry = PRODUCT_PALETTE_SLOTS[slot];
+        return new ProductColor(product, entry.color, entry.fontColor);
     }
 
     /** Every product carried by a project of the graph, as one palette. */
@@ -71,13 +122,15 @@ export class ProductPalette {
     }
 
     colorOf(product: string): ProductColor {
-        // SHA-256 and these channel bounds are the assignment contract. Never use the product's
-        // index, the graph's product set, or collision resolution: each would recolor other products.
-        const digest = createHash('sha256').update(product, 'utf8').digest();
-        // Keep every channel light enough for dark text, including text spanning product stripes.
-        const channels = [digest[0], digest[1], digest[2]].map((value: number): number => 136 + value % 96);
-        const color = '#' + channels.map((value: number): string => value.toString(16).padStart(2, '0')).join('');
-        return new ProductColor(product, color, DARK_TEXT);
+        // The assignment contract (#1244): the slot SHA-256 of the name prefers, with collisions
+        // resolved in sorted-name order over the whole set — the earlier name keeps a contested slot,
+        // the later takes the next free one. So adding a product recolors nobody unless it hashes onto
+        // a taken slot AND sorts before its holder. Never assign by sorted index: every addition would
+        // shift every later product. A product outside the set gets its preferred slot.
+        return (
+            this.colors.find((color: ProductColor): boolean => color.product === product) ??
+            this.paint(product, this.preferredSlot(product))
+        );
     }
 
     /** True for a box carrying every product of a workspace that declares two or more. */

@@ -24,7 +24,7 @@ import { ResponsibilitiesRenderer } from './graph-responsibilities';
 import { GraphNodeMenu } from './graph-node-menu';
 import { dotValue } from './dot-syntax';
 import { GraphRenderModel, GraphFilterAssets } from './graph-render-model';
-import { NodeFacts, NodeModeStyler, ProductCount } from './graph-color-modes';
+import { NodeFacts, NodeModeStyler } from './graph-color-modes';
 import { ProductBoundary, ProductPalette } from './graph-products';
 import { ProductDependencyMatrix } from './product-dependencies';
 import { GraphLegend } from './graph-legend';
@@ -377,7 +377,7 @@ export class GraphVisualizer {
             this.filterAssets.html(),
             this.snapshot.html(),
             responsibilitiesHtml,
-            model.legend.products.map((count: ProductCount): string => count.product),
+            model.legend.palette.colors,
         );
         return `<!DOCTYPE html>
 <html>

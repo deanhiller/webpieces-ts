@@ -34,6 +34,7 @@
     "tags": [
         "type:tooling",
         "framework:node",
-        "role:lib"
+        "role:lib",
+        "product:rules"
     ]
 }

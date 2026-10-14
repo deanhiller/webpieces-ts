@@ -41,6 +41,7 @@
     "tags": [
         "type:tooling",
         "framework:node",
-        "role:designed-lib"
+        "role:designed-lib",
+        "product:rules"
     ]
 }

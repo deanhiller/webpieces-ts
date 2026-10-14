@@ -23,7 +23,6 @@ import {
     IMPACT_UNTOUCHED,
     LegendFacts,
     NO_RUNTIME_COLOR,
-    ProductCount,
     ROLE_STYLES,
     RoleStyle,
 } from './graph-color-modes';
@@ -133,7 +132,7 @@ export class GraphLegend {
                 'no products declared',
                 'tag each project product:<name> to see each product',
             );
-        const palette = new ProductPalette(facts.products.map((count: ProductCount): string => count.product));
+        const palette = facts.palette;
         let rows = '';
         for (const count of facts.products) {
             const color = palette.colorOf(count.product);

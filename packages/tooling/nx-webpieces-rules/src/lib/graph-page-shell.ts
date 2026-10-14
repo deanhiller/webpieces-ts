@@ -12,7 +12,7 @@
  */
 
 import { FRAMEWORK_ORDER, GRAPH_MODES, GraphMode, ModeInfo, ROLE_STYLES, RoleStyle } from './graph-color-modes';
-import { ProductColor, ProductPalette } from './graph-products';
+import { ProductColor } from './graph-products';
 
 /**
  * The Filter popover's "Changes on this branch" choices. The page computes each set from the Impact
@@ -63,8 +63,11 @@ export class ShellParts {
         public readonly filterStatus: string,
         public readonly snapshot: string,
         public readonly responsibilities: string,
-        /** Every declared product, sorted (#1179); empty hides the Filter's Product group. */
-        public readonly products: string[],
+        /**
+         * One chip per product (#1179), sorted, each colored from the page's ONE palette (#1244);
+         * empty hides the Filter's Product group.
+         */
+        public readonly products: ProductColor[],
         public readonly runtime: boolean = false,
         public readonly frameworks: readonly string[] = FRAMEWORK_ORDER,
         public readonly roles: readonly string[] = ROLE_STYLES.map((style: RoleStyle): string => style.role),
@@ -177,10 +180,9 @@ export class GraphPageShell {
      * chips select the UNION of their members; the group intersects with the others. Omitted when the
      * workspace declares no product.
      */
-    private productGroup(products: string[]): string {
+    private productGroup(products: ProductColor[]): string {
         if (products.length === 0) return '';
-        const palette = new ProductPalette(products);
-        const chips = palette.colors
+        const chips = products
             .map(
                 (color: ProductColor): string =>
                     `<button type="button" class="wp-chip" data-wp-chip-group="product" data-wp-chip="${color.product}" aria-pressed="false">` +

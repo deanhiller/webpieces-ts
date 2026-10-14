@@ -63,6 +63,29 @@ describe('saved runtime presentation adapter', () => {
         expect(model.nodes.find((node) => node.id === 'producer')?.modes?.product).toContain(`fillcolor="${color}"`);
         expect(new GraphLegend().productRows(model.legend)).toContain(color);
     });
+    it('builds its palette over the FULL declared set, not the products it happens to draw (#1244)', () => {
+        // openapi hashes to core's slot and sorts after it, so over the full set it moves to the next
+        // free slot; a palette built from the drawn subset alone would give it core's color instead.
+        const full = new ProductPalette(['core', 'openapi']);
+        const subset = new ProductPalette(['openapi']);
+        expect(full.colorOf('openapi').color).not.toBe(subset.colorOf('openapi').color);
+        const graph = FilterFixture.runtime();
+        graph.services['producer'].products = ['openapi'];
+        const projects = { core: { level: 0, dependsOn: [], products: ['core'] } };
+        const model = generateRuntimeRenderModel(graph, 'Runtime', new RuntimeVizOptions(true, projects));
+        const expected = full.colorOf('openapi');
+        expect(model.nodes.find((node) => node.id === 'producer')?.modes?.product).toContain(`fillcolor="${expected.color}"`);
+        expect(model.legend.palette.colorOf('openapi')).toEqual(expected);
+        expect(new GraphLegend().productRows(model.legend)).toContain(expected.color);
+    });
+    it('counts a hidden service\'s products as declared, so hiding a box recolors nothing (#1244)', () => {
+        const graph = FilterFixture.runtime();
+        graph.services['producer'].products = ['openapi'];
+        graph.services['hidden'].products = ['core'];
+        const model = generateRuntimeRenderModel(graph);
+        const expected = new ProductPalette(['core', 'openapi']).colorOf('openapi').color;
+        expect(model.nodes.find((node) => node.id === 'producer')?.modes?.product).toContain(`fillcolor="${expected}"`);
+    });
     it('never guesses framework or role from a legacy service name; queues keep context styling', () => {
         const graph = FilterFixture.runtime();
         const model = generateRuntimeRenderModel(graph);

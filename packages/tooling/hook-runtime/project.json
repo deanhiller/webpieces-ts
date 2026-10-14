@@ -16,5 +16,5 @@
             }
         }
     },
-    "tags": ["type:tooling", "framework:node", "role:lib"]
+    "tags": ["type:tooling", "framework:node", "role:lib", "product:rules"]
 }

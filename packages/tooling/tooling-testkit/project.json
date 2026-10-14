@@ -29,6 +29,7 @@
         "type:tooling",
         "framework:node",
         "role:lib",
-        "drawOnGraph:false"
+        "drawOnGraph:false",
+        "product:rules"
     ]
 }

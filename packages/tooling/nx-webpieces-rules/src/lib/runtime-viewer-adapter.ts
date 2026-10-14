@@ -16,15 +16,12 @@ export class RuntimeViewerAdapter {
         private readonly graph: RuntimeGraph,
         private readonly projects: EnhancedGraph | null,
     ) {
-        this.palette = new ProductPalette(
-            [
-                ...new Set(
-                    Object.values(graph.services)
-                        .filter((service) => service.drawOnGraph !== false)
-                        .flatMap((service) => service.products ?? []),
-                ),
-            ].sort(),
-        );
+        // The FULL declared product set (#1244), never just the services drawn here: collision
+        // resolution depends on the set, so a subset could recolor a product away from the color the
+        // dependency viewer gives it.
+        const declared = Object.values(graph.services).flatMap((service) => service.products ?? []);
+        if (projects !== null) declared.push(...ProductPalette.fromGraph(projects).names());
+        this.palette = new ProductPalette(declared);
     }
 
     service(model: GraphRenderModel, name: string, service: RuntimeService): string {
