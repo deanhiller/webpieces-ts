@@ -1,5 +1,5 @@
 {
-  "upgradePolicyWhy": "THIS FILE IS NEVER RELEASED BACKWARDS-COMPATIBLE, AND THAT IS DELIBERATE. webpieces validates it on startup, so when a key moves or is renamed the loader REJECTS the old shape and hands you an error naming the destination ('X moved to Y'). Apply that edit and re-run — the error IS the migration. Every reader of this file is an AI agent, so upgrades are seamless without webpieces shipping a compatibility layer for every old shape. Never add a fallback that accepts both shapes: two accepted shapes means two code paths forever, and an accepted shape is NEVER migrated, so the dead one lives here indefinitely. You cannot get stuck — editing this file is always allowed even while it is invalid, and `pnpm install` is always allowed (a validator lagging this file by a release is the most common failure; install first, do NOT start by deleting keys). `pnpm wp-rules-sync --upgrade` performs explicit policy-shape migrations; `pnpm wp-rules-sync` refreshes the declared owner files and registry artifacts. `pnpm wp-upgrade-shim` regenerates the installed release's managed hook/reviewer surfaces. Any key ending in 'Why' is a rationale note like this one; unknown keys are rejected, so name notes '<key>Why'. Release ordering in this framework repo: installed validators normally come from the previous release. When source changes a declaration they inspect, update every affected rule implementation in the same change and temporarily turn the incompatible rule OFF in the declared rule-pack owner file until the matching tooling upgrade. The disable must survive merge so later builds do not run previous-release validators against new declarations. The next webpieces upgrade must install the release containing the updated validators, restore the original enforcement mode (ensure-we-are-secure: MODIFIED_PROJECTS), run pnpm wp-rules-sync and verify the affected rules are enabled. Do not leave the temporary OFF mode as permanent policy. Full policy: .webpieces-logs/instruct-ai/webpieces.config-policy.md",
+  "upgradePolicyWhy": "THIS FILE IS NEVER RELEASED BACKWARDS-COMPATIBLE, AND THAT IS DELIBERATE. webpieces validates it on startup, so when a key moves or is renamed the loader REJECTS the old shape and hands you an error naming the destination ('X moved to Y'). Apply that edit and re-run — the error IS the migration. Every reader of this file is an AI agent, so upgrades are seamless without webpieces shipping a compatibility layer for every old shape. Never add a fallback that accepts both shapes: two accepted shapes means two code paths forever, and an accepted shape is NEVER migrated, so the dead one lives here indefinitely. You cannot get stuck — editing this file is always allowed even while it is invalid, and `pnpm install` is always allowed (a validator lagging this file by a release is the most common failure; install first, do NOT start by deleting keys). `pnpm wp-rules-sync --upgrade` performs explicit policy-shape migrations; `pnpm wp-rules-sync` refreshes the declared owner files and registry artifacts. `pnpm wp-upgrade-shim` regenerates the installed release's managed hook/reviewer surfaces. Any key ending in 'Why' is a rationale note like this one; unknown keys are rejected, so name notes '<key>Why'. Release ordering in this framework repo: installed validators normally come from the previous release. When source changes a declaration they inspect, update every affected rule implementation in the same change and temporarily turn the incompatible rule OFF in the declared rule-pack owner file until the matching tooling upgrade. The disable must survive merge so later builds do not run previous-release validators against new declarations. The next webpieces upgrade must install the release containing the updated validators, restore the original enforcement mode (ensure-we-are-secure: MODIFIED_PROJECTS), run pnpm wp-rules-sync and verify the affected rules are enabled. Do not leave the temporary OFF mode as permanent policy. Full policy: .webpieces/instruct-ai/webpieces.config-policy.md",
   "commands": {
     "pr-gate": {
       "mode": "ON",
@@ -157,7 +157,7 @@
       "mergeInProgress": "pnpm wp-finish-upsert-pr"
     }
   },
-  "excludePathsWhy": "ONE glob list, honoured by every hook guard (Bash, Read and Write/Edit alike — see runner.ts filterByExcludedPaths). `repositories/**` is vendored foreign code. There is deliberately NO entry for `.webpieces-logs/**`: the tooling's own gitignored state dir is skipped in CODE (isWebpiecesStateDir, consulted by filterByExcludedPaths ahead of this list and regardless of it), so a config entry would be a second and WEAKER spelling — `.webpieces-logs/**` compiles to an anchored regex that misses the bare directory the predicate matches. The entry that used to sit here was the one-release-lag placeholder its own note scheduled for deletion; the release that ships isWebpiecesStateDir (0.4.675) is now pinned, so it is gone.",
+  "excludePathsWhy": "ONE glob list, honoured by every hook guard (Bash, Read and Write/Edit alike — see runner.ts filterByExcludedPaths). `repositories/**` is vendored foreign code. There is deliberately NO entry for `.webpieces/**`: the tooling's own gitignored state dir is skipped in CODE (isWebpiecesStateDir, consulted by filterByExcludedPaths ahead of this list and regardless of it), so a config entry would be a second and WEAKER spelling — `.webpieces/**` compiles to an anchored regex that misses the bare directory the predicate matches. The entry that used to sit here was the one-release-lag placeholder its own note scheduled for deletion; the release that ships isWebpiecesStateDir (0.4.675) is now pinned, so it is gone.",
   "excludePaths": [
     "repositories/**"
   ],
@@ -214,19 +214,19 @@
   "tagTruthUpgradeWhy": "The 0.4.835 validator requires these five newly introduced entries. They were absent and unenforced under 0.4.822. Preserve that existing enforcement while the framework project retags and measured activation remain tracked by #1065; see .claude/rules/framework-tags.md Release ordering. No existing rule mode is changed.",
   "rulePacks": [
     {
-      "config": ".webpieces-config/rules/code-rules.json",
+      "config": ".webpieces/rules/code-rules.json",
       "package": "@webpieces/code-rules"
     },
     {
-      "config": ".webpieces-config/rules/ai-hook-rules.json",
+      "config": ".webpieces/rules/ai-hook-rules.json",
       "package": "@webpieces/ai-hook-rules"
     },
     {
-      "config": ".webpieces-config/rules/agent-workflow-rules.json",
+      "config": ".webpieces/rules/agent-workflow-rules.json",
       "package": "@webpieces/agent-workflow-rules"
     },
     {
-      "config": ".webpieces-config/rules/nx-webpieces-rules.json",
+      "config": ".webpieces/rules/nx-webpieces-rules.json",
       "package": "@webpieces/nx-webpieces-rules"
     }
   ]

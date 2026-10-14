@@ -1,7 +1,7 @@
 {
   "packs": [
     {
-      "config": ".webpieces-config/rules/agent-workflow-rules.json",
+      "config": ".webpieces/rules/agent-workflow-rules.json",
       "contributions": [
         {
           "executionKind": "workflow-guard",
@@ -23,7 +23,7 @@
         }
       ],
       "manifestApiVersion": 3,
-      "manifestDigest": "d6e497f84601759f52459ab0487f362903bca76b539165e918072af632f3f51b",
+      "manifestDigest": "1c0588487e1f5e079934e4b70cbf677da55db5f62a395851becf8cc2218be77a",
       "ownedRules": [
         {
           "id": "branch-creation-guard",
@@ -40,7 +40,7 @@
       ],
       "package": "@webpieces/agent-workflow-rules",
       "packageName": "@webpieces/agent-workflow-rules",
-      "packageVersion": "0.4.911",
+      "packageVersion": "0.4.910",
       "safeguards": [
         {
           "activation": "fixed",
@@ -105,7 +105,7 @@
       ]
     },
     {
-      "config": ".webpieces-config/rules/ai-hook-rules.json",
+      "config": ".webpieces/rules/ai-hook-rules.json",
       "contributions": [
         {
           "executionKind": "source-hook",
@@ -187,7 +187,7 @@
         }
       ],
       "manifestApiVersion": 3,
-      "manifestDigest": "3e6a46f09494278104338a329ac91e8f75a4e00c83d9e6c6e7e7043201f7494a",
+      "manifestDigest": "b8f020a5bb8806b5ebc3463922c8dbf2d62b8447e950e7532a3244fe92be699d",
       "ownedRules": [
         {
           "id": "throw-cause-required",
@@ -204,11 +204,11 @@
       ],
       "package": "@webpieces/ai-hook-rules",
       "packageName": "@webpieces/ai-hook-rules",
-      "packageVersion": "0.4.911",
+      "packageVersion": "0.4.910",
       "safeguards": []
     },
     {
-      "config": ".webpieces-config/rules/code-rules.json",
+      "config": ".webpieces/rules/code-rules.json",
       "contributions": [
         {
           "executionKind": "build",
@@ -380,7 +380,7 @@
         }
       ],
       "manifestApiVersion": 3,
-      "manifestDigest": "4c021feabd5269dc041f2fe03850eb8f8fae679ab59612cc50eb05ef08bb7813",
+      "manifestDigest": "91aa36295387dce6ce933ea3fe7f9e801435991a9075eba7512ad69878078fd9",
       "ownedRules": [
         {
           "id": "max-method-lines",
@@ -497,11 +497,11 @@
       ],
       "package": "@webpieces/code-rules",
       "packageName": "@webpieces/code-rules",
-      "packageVersion": "0.4.911",
+      "packageVersion": "0.4.910",
       "safeguards": []
     },
     {
-      "config": ".webpieces-config/rules/nx-webpieces-rules.json",
+      "config": ".webpieces/rules/nx-webpieces-rules.json",
       "contributions": [
         {
           "executionKind": "build",
@@ -619,7 +619,7 @@
         }
       ],
       "manifestApiVersion": 3,
-      "manifestDigest": "354a2f2cb7bbe0bf6daf3eb8e144612dabbcb2476de6880778388539b072df7e",
+      "manifestDigest": "7c78f14507195864708b4e9db643708cbe82080413248a7faaf2a39ae471b971",
       "ownedRules": [
         {
           "id": "wiring-format",
@@ -696,7 +696,7 @@
       ],
       "package": "@webpieces/nx-webpieces-rules",
       "packageName": "@webpieces/nx-webpieces-rules",
-      "packageVersion": "0.4.911",
+      "packageVersion": "0.4.910",
       "safeguards": []
     }
   ],
