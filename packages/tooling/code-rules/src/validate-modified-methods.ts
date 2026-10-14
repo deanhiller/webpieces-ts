@@ -41,7 +41,7 @@ interface MethodViolation {
 const TMP_MD_FILE = 'webpieces.methodsize.md';
 
 /**
- * Write the instructions documentation to .webpieces/instruct-ai/.
+ * Write the instructions documentation to .webpieces-logs/instruct-ai/.
  * Sourced from @webpieces/rules-config.
  */
 function writeTmpInstructions(workspaceRoot: string): string {
@@ -363,7 +363,7 @@ function reportViolations(violations: MethodViolation[], limit: number, disableA
     console.error('   You can refactor to stay under the limit 50% of the time. If not feasible, use the escape hatch.');
     console.error('');
     console.error(
-        '\u26a0\ufe0f  *** READ .webpieces/instruct-ai/webpieces.methodsize.md for detailed guidance on how to fix this easily *** \u26a0\ufe0f'
+        '\u26a0\ufe0f  *** READ .webpieces-logs/instruct-ai/webpieces.methodsize.md for detailed guidance on how to fix this easily *** \u26a0\ufe0f'
     );
     console.error('');
 

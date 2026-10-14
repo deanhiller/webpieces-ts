@@ -147,11 +147,11 @@ export class ContentReadScan {
     }
 
     // Always-readable paths: webpieces.config.json is the mode-OFF escape hatch (never block the
-    // file that turns the guard off), and `.webpieces/` is the guards' own logs/caches — orientation
+    // file that turns the guard off), and `.webpieces-logs/` is the guards' own logs/caches — orientation
     // data this guard writes itself, not source that upstream has moved past.
     private isEscapeHatchPath(relative: string): boolean {
         const normalized = relative.replace(/^\.\//, '');
-        return normalized === 'webpieces.config.json' || normalized.startsWith('.webpieces/');
+        return normalized === 'webpieces.config.json' || normalized.startsWith('.webpieces-logs/');
     }
 
     // `/usr/bin/cat` and `./scripts/cat` both invoke a program named cat; match on the base name.

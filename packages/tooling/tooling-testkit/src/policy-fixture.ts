@@ -1,3 +1,4 @@
+import { spawnSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {
@@ -55,7 +56,7 @@ export class PolicyFixture {
             ),
         );
         const declarations = manifests.map((manifest: RulePackManifest, index: number) => {
-            const filename = `.webpieces/rules/fixture-${index}.json`;
+            const filename = `.webpieces-config/rules/fixture-${index}.json`;
             const entries = Object.fromEntries(
                 manifest.ownedRules
                     .filter((definition: OwnedRuleDefinition) => Object.hasOwn(flat, definition.id))
@@ -79,6 +80,8 @@ export class PolicyFixture {
             JSON.stringify(next, null, 2) + '\n',
         );
         this.artifactWriter.write(root);
+        if (fs.existsSync(path.join(root, '.git')))
+            spawnSync('git', ['add', '--', 'webpieces.config.json', '.webpieces-config'], { cwd: root });
     }
 
     manifests(): readonly RulePackManifest[] {

@@ -13,20 +13,21 @@ describe('exact config repair targets before validation', () => {
         fs.writeFileSync(
             path.join(root, 'webpieces.config.json'),
             JSON.stringify({
-                rulePacks: [{ package: '@client/pack', config: '.webpieces/rules/client.json' }],
+                rulePacks: [{ package: '@client/pack', config: '.webpieces-config/rules/client.json' }],
             }),
         );
         for (const filename of [
             'webpieces.config.json',
-            '.webpieces/rules/client.json',
-            '.webpieces/rules.lock.json',
-            '.webpieces/instruct-ai/rules-catalog.md',
+            '.gitignore',
+            '.webpieces-config/rules/client.json',
+            '.webpieces-config/rules.lock.json',
+            '.webpieces-config/rules-catalog.md',
         ]) {
             expect(access.isRepairFile(root, path.join(root, filename)), filename).toBe(true);
         }
         for (const filename of [
             'src/client.json',
-            '.webpieces/rules/other.json',
+            '.webpieces-config/rules/other.json',
             'nested/webpieces.config.json',
             '../outside.json',
         ]) {
@@ -43,8 +44,8 @@ describe('exact config repair targets before validation', () => {
         ]) {
             fs.writeFileSync(path.join(root, 'webpieces.config.json'), document);
             expect(access.isRepairFile(root, 'webpieces.config.json')).toBe(true);
-            expect(access.isRepairFile(root, '.webpieces/rules/client.json')).toBe(false);
-            expect(access.isRepairFile(root, '.webpieces/rules.lock.json')).toBe(false);
+            expect(access.isRepairFile(root, '.webpieces-config/rules/client.json')).toBe(false);
+            expect(access.isRepairFile(root, '.webpieces-config/rules.lock.json')).toBe(false);
         }
     });
 

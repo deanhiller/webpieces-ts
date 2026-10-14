@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { RepositoryLayout } from '@webpieces/tooling-common/repository-layout';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -48,7 +49,7 @@ import { toError } from '@webpieces/tooling-common/to-error';
 // second copy of the sweep here would be a second spelling of it, which is worse again.
 //
 // It does not need to be here. The sweep rides the `wp-*` startup pass that regenerates
-// `.webpieces/instruct-ai/*`, so ANY `wp-*` command heals the tree — including the `pnpm install` +
+// `.webpieces-logs/instruct-ai/*`, so ANY `wp-*` command heals the tree — including the `pnpm install` +
 // `pnpm exec wp-upgrade-shim` sequence this bin's own advice ends with.
 //
 // It also DELETES the retired `.claude/webpieces/guarantee-root.sh` and any settings entry still naming
@@ -82,6 +83,7 @@ export function runUpgradeShim(cwd: string): number {
     // webpieces-disable no-unmanaged-exceptions -- bin entry chokepoint: turn an fs error into an actionable line + non-zero exit rather than a raw node trace; there is no caller above a bin to handle it.
     // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
     try {
+        new RepositoryLayout().migrate(root);
         fs.writeFileSync(target, renderShim(), { mode: 0o755 });
         // writeFileSync's mode only applies on create; force it on overwrite too (matches writeShim).
         fs.chmodSync(target, 0o755);

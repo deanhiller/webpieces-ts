@@ -23,7 +23,7 @@ function repo(): string {
     git(dir, 'init', '-q', '-b', 'main');
     git(dir, 'config', 'user.email', 'spec@example.com');
     git(dir, 'config', 'user.name', 'Spec');
-    fs.writeFileSync(path.join(dir, '.gitignore'), '.webpieces/\n');
+    fs.writeFileSync(path.join(dir, '.gitignore'), '.webpieces-logs/\n');
     fs.writeFileSync(path.join(dir, 'a.ts'), 'export const a = 1;\n');
     git(dir, 'add', '.gitignore', 'a.ts');
     git(dir, 'commit', '-qm', 'base');

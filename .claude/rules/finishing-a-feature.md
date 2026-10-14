@@ -39,7 +39,7 @@ run reviewers or create verdict files. On such a branch `wp-start-upsert-pr`, `w
 `wp-finish-upsert-pr` refuse, change nothing, and name `wp-upsert-hotfix-pr`.
 
 The full workflow (worktrees, conflicts, the 3-point merge) is documented in
-`.webpieces/instruct-ai/webpieces.git-workflow.md`, refreshed on every `wp-*` command.
+`.webpieces-logs/instruct-ai/webpieces.git-workflow.md`, refreshed on every `wp-*` command.
 
 **The PR description IS the squash-commit body.** Stage ③ renders one compact string — PR link, risk,
 non-green flags, a 4-sentence summary, the build-command footer — and uses it as *both* the PR

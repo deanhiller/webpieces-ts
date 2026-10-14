@@ -183,7 +183,7 @@ describe('EffectiveTreeResolver — a worktree INSIDE the governed root (the age
  * to its primary test, which meant an agent whose cwd IS the worktree saw its own tree classified
  * `primary`. Row 8 matches on `w`, so VersionSyncGuard was dead code for exactly the agents it protects:
  * a worktree ran 0.4.624 with its own node_modules while the main clone stayed on 0.4.616, for a whole
- * session, silently. In the SAME tool call the `.webpieces/` log resolver — which asks git — stamped the
+ * session, silently. In the SAME tool call the `.webpieces-logs/` log resolver — which asks git — stamped the
  * worktree's name. Two resolvers, one process, opposite answers.
  */
 describe('EffectiveTreeResolver — the agent LIVES in the worktree (self-governed, still a worktree)', () => {

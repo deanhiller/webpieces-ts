@@ -15,10 +15,10 @@ describe('branch-mutation-log', () => {
     beforeEach(() => { root = tmpRoot(); });
     afterEach(() => { fs.rmSync(root, { recursive: true, force: true }); });
 
-    it('writes to .webpieces/logs/branch-mutations.log', () => {
+    it('writes to .webpieces-logs/logs/branch-mutations.log', () => {
         logBranchMutation(root, new BranchMutationEvent('wp-start-update', 'START'));
         const logPath = branchMutationLogPath(root);
-        expect(logPath.endsWith(path.join('.webpieces', 'logs', 'branch-mutations.log'))).toBe(true);
+        expect(logPath.endsWith(path.join('.webpieces-logs', 'logs', 'branch-mutations.log'))).toBe(true);
         expect(fs.existsSync(logPath)).toBe(true);
         const line = fs.readFileSync(logPath, 'utf8');
         expect(line).toContain('wp-start-update');
@@ -44,14 +44,14 @@ describe('branch-mutation-log', () => {
         const conflict = new BranchMutationEvent('wp-start-upsert-pr', 'CONFLICT');
         conflict.conflict = true;
         conflict.conflictFiles = ['src/a.ts', 'src/b.ts'];
-        conflict.artifacts = ['.webpieces/merge/x'];
+        conflict.artifacts = ['.webpieces-logs/merge/x'];
         logBranchMutation(root, conflict);
 
         const log = fs.readFileSync(branchMutationLogPath(root), 'utf8');
         expect(log).toContain('oldMain=aaaaaaa newMain=bbbbbbb');
         expect(log).toContain('conflict=true');
         expect(log).toContain('conflictFiles=2(src/a.ts,src/b.ts)');
-        expect(log).toContain('artifact=.webpieces/merge/x');
+        expect(log).toContain('artifact=.webpieces-logs/merge/x');
     });
 
     it('appends one line per event and collapses newlines to keep events single-line', () => {

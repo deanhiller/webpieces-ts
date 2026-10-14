@@ -2,7 +2,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { injectable, bindingScopeValues } from 'inversify';
 import { ConfigObject, OwnedRuleDefinition } from '@webpieces/rules-sdk';
-import { AtomicFile, InformAiError } from '@webpieces/tooling-common';
+import { AtomicFile, InformAiError, RepositoryLayout } from '@webpieces/tooling-common';
 import { ConfigFile, CONFIG_FILENAME } from './config-file';
 import {
     PackPolicyDeclaration,
@@ -42,6 +42,7 @@ export class RulePackSync {
     ) {}
 
     run(root: string, options: RulePackSyncOptions): readonly string[] {
+        const layoutChanges = new RepositoryLayout().migrate(root);
         const filename = path.join(root, CONFIG_FILENAME);
         // webpieces-disable no-any-unknown -- migration reads opaque JSON only at this explicit command boundary
         const document = this.configFile.readRawConfig(filename) as Record<string, unknown>;
@@ -65,7 +66,7 @@ export class RulePackSync {
         // Validate artifact data and canonical destination paths before changing any owner file.
         this.artifacts.render(prepared.resolved);
         this.artifacts.paths(root);
-        const changed: string[] = [];
+        const changed: string[] = [...layoutChanges];
         for (const plan of prepared.plans) {
             if (
                 this.atomic.writeIfChanged(
@@ -101,7 +102,7 @@ export class RulePackSync {
         const entries = metadata['rulePacks'];
         if (!Array.isArray(entries) || !entries.length) {
             throw new InformAiError(
-                'Upgrade requires explicit pack selection. Supply --pack=<package>=.webpieces/rules/<owner>.json for every selected pack. Installed dependencies are never inferred as selected packs.',
+                'Upgrade requires explicit pack selection. Supply --pack=<package>=.webpieces-config/rules/<owner>.json for every selected pack. Installed dependencies are never inferred as selected packs.',
             );
         }
         // webpieces-disable no-any-unknown -- external JSON or runtime exports are validated before policy execution
@@ -116,7 +117,7 @@ export class RulePackSync {
             const packageName = moduleName.slice(0, -'/rule-pack'.length);
             return new PackPolicyDeclaration(
                 packageName,
-                `.webpieces/rules/${packageName.split('/').at(-1)}.json`,
+                `.webpieces-config/rules/${packageName.split('/').at(-1)}.json`,
             );
         });
     }
@@ -126,7 +127,7 @@ export class RulePackSync {
         // webpieces-disable no-any-unknown -- external JSON or runtime exports are validated before policy execution
         document: Record<string, unknown>,
         registry: RulePackRegistry,
-    // webpieces-disable no-any-unknown -- external JSON or runtime exports are validated before policy execution
+        // webpieces-disable no-any-unknown -- external JSON or runtime exports are validated before policy execution
     ): Record<string, unknown> {
         if (document['extends'] !== undefined)
             throw new InformAiError(
@@ -260,12 +261,12 @@ export class RulePackSync {
         document: Record<string, unknown>,
         declarations: readonly PackPolicyDeclaration[],
         mode: 'sync' | 'upgrade',
-    // webpieces-disable no-any-unknown -- external JSON or runtime exports are validated before policy execution
+        // webpieces-disable no-any-unknown -- external JSON or runtime exports are validated before policy execution
     ): Record<string, unknown> {
         const next = { ...document, rulePacks: declarations };
         if (mode === 'upgrade')
+            // webpieces-disable no-any-unknown -- external JSON or runtime exports are validated before policy execution
             for (const key of ['rules', 'hookGuards', 'rulesDir', 'extends'])
-                // webpieces-disable no-any-unknown -- external JSON or runtime exports are validated before policy execution
                 delete (next as Record<string, unknown>)[key];
         return next;
     }

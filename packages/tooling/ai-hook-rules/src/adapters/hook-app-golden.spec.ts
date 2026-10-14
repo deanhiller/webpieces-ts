@@ -209,11 +209,11 @@ describe('HookApp golden bytes — the composed pipeline, end to end', () => {
             expected = expected
                 .replaceAll(
                     'no-js-files.allowedPaths in webpieces.config.json',
-                    'no-js-files.allowedPaths in <REPO>/.webpieces/rules/fixture-1.json',
+                    'no-js-files.allowedPaths in <REPO>/.webpieces-config/rules/fixture-1.json',
                 )
                 .replaceAll(
                     'no-destructure.allowedPaths in webpieces.config.json',
-                    'no-destructure.allowedPaths in <REPO>/.webpieces/rules/fixture-0.json',
+                    'no-destructure.allowedPaths in <REPO>/.webpieces-config/rules/fixture-0.json',
                 );
             expect(outcome.stdout).toBe(expected);
             expect(outcome.exitCode).toBe(golden.exitCode);

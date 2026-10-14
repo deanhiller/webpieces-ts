@@ -35,7 +35,7 @@ export class ConfigRepairProbe {
                 path = require('node:path') as typeof import('node:path');
             const target = this.canonical(root, path.resolve(root, filename));
             const rootFile = this.canonical(root, path.join(root, 'webpieces.config.json'));
-            if (target === rootFile) return true;
+            if (target === rootFile || target === this.canonical(root, path.join(root, '.gitignore'))) return true;
             // webpieces-disable no-any-unknown -- only validated declaration strings grant repair access
             const raw: unknown = JSON.parse(fs.readFileSync(rootFile, 'utf8'));
             if (
@@ -48,7 +48,7 @@ export class ConfigRepairProbe {
                 return false;
             const files = new Set<string>(),
                 packages = new Set<string>();
-            const lock = this.canonical(root, path.join(root, '.webpieces/rules.lock.json'));
+            const lock = this.canonical(root, path.join(root, '.webpieces-config/rules.lock.json'));
             for (const declaration of raw.rulePacks) {
                 if (
                     !declaration ||
@@ -77,7 +77,7 @@ export class ConfigRepairProbe {
             }
             files.add(lock);
             files.add(
-                this.canonical(root, path.join(root, '.webpieces/instruct-ai/rules-catalog.md')),
+                this.canonical(root, path.join(root, '.webpieces-config/rules-catalog.md')),
             );
             return files.has(target);
         // webpieces-disable no-any-unknown -- external JSON or runtime exports are validated before policy execution

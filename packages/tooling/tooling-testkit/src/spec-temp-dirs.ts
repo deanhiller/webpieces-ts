@@ -15,7 +15,7 @@ import { toError } from '@webpieces/tooling-common/to-error';
 // empty by design) — it is INODES and the fact that `$TMPDIR` stops being inspectable: `ls` takes ~30s
 // and `du` takes minutes, which is how this went unnoticed for as long as it did.
 //
-// WHY `$TMPDIR` AND NOT `.webpieces/`, WHICH IS WHERE EVERYTHING ELSE GOES. Because for a TEST fixture
+// WHY `$TMPDIR` AND NOT `.webpieces-logs/`, WHICH IS WHERE EVERYTHING ELSE GOES. Because for a TEST fixture
 // the whole point is to be outside the repo, and two separate mechanisms depend on that:
 //   - `vitest.setup.mts` mints a throwaway `$HOME` so a spec cannot read the developer's real
 //     `~/.webpieces/config.json`. A fake HOME inside the repo defeats its own isolation.

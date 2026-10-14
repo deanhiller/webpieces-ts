@@ -63,7 +63,7 @@ class RepoFixture {
         this.write('libraries/apis/moved-away-api/node_modules/dep/package.json', '{}\n');
         // WORK IN PROGRESS: a new package not committed yet. Untracked, but NOT ignored.
         this.write('libraries/brand-new-api/src/index.ts', 'export const wip = 1;\n');
-        // TOOL STATE: contents ignored, directory itself is not — the .nx / .idea / .webpieces shape.
+        // TOOL STATE: contents ignored, directory itself is not — the .nx / .idea / .webpieces-logs shape.
         this.write('.nx/cache/node_modules/x.json', '{}\n');
         // DELIBERATELY IGNORED: the opt-out a developer reaches for anyway.
         this.write('local-sandbox/scratch/dist/thing.js', 'mine\n');
@@ -156,13 +156,13 @@ describe('OrphanDirScanner — what counts as a corpse', () => {
 });
 
 describe('OrphanDirArchiver — moves, never deletes', () => {
-    it('moves the corpse into .webpieces/trash/<sweepId>/ preserving its repo-relative path', () => {
+    it('moves the corpse into .webpieces-logs/trash/<sweepId>/ preserving its repo-relative path', () => {
         const repo = new RepoFixture().seed();
         const candidates = new OrphanDirScanner().scan(repo.root);
         const result = new OrphanDirArchiver().archive(repo.root, candidates, FIXED_NOW);
         expect(result.sweepId).toBe(FIXED_SWEEP_ID);
         expect(repo.exists('libraries/apis/moved-away-api')).toBe(false);
-        expect(repo.exists(`.webpieces/trash/${FIXED_SWEEP_ID}/libraries/apis/moved-away-api/dist/index.js`))
+        expect(repo.exists(`.webpieces-logs/trash/${FIXED_SWEEP_ID}/libraries/apis/moved-away-api/dist/index.js`))
             .toBe(true);
     });
 
@@ -182,7 +182,7 @@ describe('OrphanDirArchiver — moves, never deletes', () => {
         const candidates = new OrphanDirScanner().scan(repo.root);
         new OrphanDirArchiver().archive(repo.root, candidates, FIXED_NOW);
         const raw = fs.readFileSync(
-            path.join(repo.root, '.webpieces', 'trash', FIXED_SWEEP_ID, TRASH_MANIFEST_FILE), 'utf8');
+            path.join(repo.root, '.webpieces-logs', 'trash', FIXED_SWEEP_ID, TRASH_MANIFEST_FILE), 'utf8');
         expect(raw).toContain('libraries/apis/moved-away-api');
         expect(raw).toContain('recoverCommand');
     });

@@ -15,7 +15,7 @@ export const DEFAULT_MAX_COMMITS_BEHIND = 5;
  *   Bash              | stale-main-bash-guard      | merged-branch-bash-guard
  *
  * Those four class NAMES are unchanged and still appear in every decision-log line as `rule=`, so
- * `grep rule=stale-main-bash-guard` over `.webpieces/logs/L2-decisions` keeps working. What merged is
+ * `grep rule=stale-main-bash-guard` over `.webpieces-logs/logs/L2-decisions` keeps working. What merged is
  * the SWITCH: all four read this one config entry (`AbstractRule.configKey`).
  *
  * ## Why one key and not four

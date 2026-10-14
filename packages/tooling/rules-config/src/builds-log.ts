@@ -14,12 +14,12 @@ import { toError } from '@webpieces/tooling-common/to-error';
  *
  * ─── WHY THIS ONE FILE LIVES OUTSIDE THE REPO ─────────────────────────────────────────────────────────
  * `no-machine-global-state.spec.ts` records the standing rule: webpieces writes state under
- * `{repo}/.webpieces` and nowhere else. This is the ONE carve-out, and the argument is written out in
+ * `{repo}/.webpieces-logs` and nowhere else. This is the ONE carve-out, and the argument is written out in
  * `decisions/0006-the-build-ledger-is-machine-global.md`. In short:
  *
  *   • The FACT is machine-scoped. "How many builds are burning this box's CPU right now" is not a
  *     property of any repo; it is a property of the machine. A per-repo ledger cannot answer it — every
- *     linked worktree has its OWN `.webpieces/`, so it would be blind to the sibling worktree it is
+ *     linked worktree has its OWN `.webpieces-logs/`, so it would be blind to the sibling worktree it is
  *     actually contending with, never mind the four other repos on the disk.
  *   • It is NOT A CACHE. The retired `PrBodyStore` that the no-machine-global rule was written for was a
  *     local copy of a fact GitHub owned, so it could be stale, missing, or on the wrong computer. There

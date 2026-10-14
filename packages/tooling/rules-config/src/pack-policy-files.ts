@@ -2,7 +2,7 @@ import { injectable, bindingScopeValues } from 'inversify';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { RulePackManifest, ConfigObject, RetiredConfigKey } from '@webpieces/rules-sdk';
-import { InformAiError } from '@webpieces/tooling-common';
+import { InformAiError, RepositoryLayout } from '@webpieces/tooling-common';
 import { toError } from '@webpieces/tooling-common/to-error';
 import { NodeRulePackModuleLoader, RulePackRegistry } from './rule-pack-registry';
 import { RepositoryPath } from './repository-path';
@@ -48,7 +48,7 @@ export class PackPolicyFiles {
     declarations(raw: unknown, root: string): PackPolicyDeclaration[] {
         if (!Array.isArray(raw) || raw.length === 0) {
             throw new InformAiError(
-                'webpieces.config.json.rulePacks is required. Run pnpm wp-rules-sync --upgrade to split the existing explicit config, or add exact {"package":"<pack>","config":".webpieces/rules/<pack>.json"} declarations.',
+                'webpieces.config.json.rulePacks is required. Run pnpm wp-rules-sync --upgrade to split the existing explicit config, or add exact {"package":"<pack>","config":".webpieces-config/rules/<pack>.json"} declarations.',
             );
         }
         const packages = new Set<string>(),
@@ -99,7 +99,7 @@ export class PackPolicyFiles {
                 }
                 return new SelectedPolicyPack(declaration, manifest);
             });
-        // webpieces-disable no-any-unknown -- external JSON or runtime exports are validated before policy execution
+            // webpieces-disable no-any-unknown -- external JSON or runtime exports are validated before policy execution
         } catch (err: unknown) {
             const error = toError(err);
             throw new InformAiError(
@@ -181,7 +181,7 @@ export class PackPolicyFiles {
         // eslint-disable-next-line @webpieces/no-unmanaged-exceptions -- path faults name the declaration that needs repair
         try {
             target = new RepositoryPath(root).resolve(relative);
-        // webpieces-disable no-any-unknown -- external JSON or runtime exports are validated before policy execution
+            // webpieces-disable no-any-unknown -- external JSON or runtime exports are validated before policy execution
         } catch (err: unknown) {
             const error = toError(err);
             throw new InformAiError(`Invalid pack config path ${relative}: ${error.message}`, {
@@ -194,12 +194,13 @@ export class PackPolicyFiles {
             normalized.startsWith('..') ||
             !normalized.endsWith('.json') ||
             normalized === 'webpieces.config.json' ||
-            normalized === '.webpieces/rules.lock.json'
+            normalized === '.webpieces-config/rules.lock.json'
         ) {
             throw new InformAiError(
-                `Invalid pack config path ${relative}. Use a distinct repository-relative JSON path such as .webpieces/rules/code.json.`,
+                `Invalid pack config path ${relative}. Use a distinct repository-relative JSON path such as .webpieces-config/rules/code.json.`,
             );
         }
+        new RepositoryLayout().assertPolicyPath(normalized);
         return target;
     }
 
@@ -219,7 +220,7 @@ export class PackPolicyFiles {
                 );
             }
             return entries as Record<string, ConfigObject>;
-        // webpieces-disable no-any-unknown -- external JSON or runtime exports are validated before policy execution
+            // webpieces-disable no-any-unknown -- external JSON or runtime exports are validated before policy execution
         } catch (err: unknown) {
             const error = toError(err);
             if (error instanceof InformAiError) throw error;

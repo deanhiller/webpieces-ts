@@ -77,7 +77,7 @@ function enforce(repoRoot: string, required: RequiredChecklist[]): void {
 }
 
 function provenanceIn(repoRoot: string): Record<string, unknown> {
-    const file = path.join(repoRoot, '.webpieces', 'pr-review', 'dean/feat', 'provenance.json');
+    const file = path.join(repoRoot, '.webpieces-logs', 'pr-review', 'dean/feat', 'provenance.json');
     // webpieces-disable no-any-unknown -- opaque parsed JSON in a test assertion
     return JSON.parse(fs.readFileSync(file, 'utf8')) as Record<string, unknown>;
 }
@@ -200,7 +200,7 @@ function unattributableHarness(sessionId: string, agentType: string): string {
 
 // The verdict file stage ② wrote, at the path the enforcer derives for `id`.
 function writeVerdict(repoRoot: string, id: string): void {
-    const dir = path.join(repoRoot, '.webpieces', 'pr-review', 'dean/feat');
+    const dir = path.join(repoRoot, '.webpieces-logs', 'pr-review', 'dean/feat');
     fs.mkdirSync(dir, { recursive: true });
     fs.writeFileSync(path.join(dir, `review-round1-${id}.json`), JSON.stringify({ verdict: 'green' }));
 }

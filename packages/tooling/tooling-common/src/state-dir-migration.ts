@@ -20,15 +20,15 @@ export class StateMigrationReport {
 }
 
 /**
- * Moves a LEGACY per-worktree `.webpieces/` REAL DIRECTORY into the worktree's namespace inside the
- * primary clone (`<primary>/.webpieces/worktrees/<name>/`).
+ * Moves a LEGACY per-worktree `.webpieces-logs/` REAL DIRECTORY into the worktree's namespace inside the
+ * primary clone (`<primary>/.webpieces-logs/worktrees/<name>/`).
  *
  * NO SYMLINK IS EVER CREATED in its place — an earlier draft of this design planned one and this
  * comment still said so, which is worse than silence: it told the reader to expect an indirection
  * that does not exist. `DotWebpieces` resolves the namespace path EXPLICITLY (see its "Why two
  * explicit methods and not a symlink" section, which records why the link was rejected: lazy creation
  * with three failure modes, a Windows hazard, and `rename(2)` silently REPLACING the link). After a
- * migration the legacy `<worktree>/.webpieces/` is simply gone; nothing takes its place.
+ * migration the legacy `<worktree>/.webpieces-logs/` is simply gone; nothing takes its place.
  *
  * WHY it must exist: those directories hold REAL in-flight state — above all a half-finished 3-point
  * merge under `merge-info/staged/<branch>/`. The first invocation under the new scheme must not orphan
@@ -46,11 +46,11 @@ export class StateMigrationReport {
  *
  * SAFETY RULE, absolute: this never deletes or overwrites anything that holds content. If a
  * destination path is occupied, the legacy copy is LEFT WHERE IT IS and reported loudly on stderr.
- * Empty directories are removed as they drain, which is how a fully-migrated legacy `.webpieces/`
+ * Empty directories are removed as they drain, which is how a fully-migrated legacy `.webpieces-logs/`
  * disappears on its own and lets the symlink be created.
  *
  * It is also the answer to the PUBLISHED-vs-LOCAL transition window. The `wp-*` bins and the hooks run
- * the PUBLISHED package, so for a while some invocations still create a REAL `<worktree>/.webpieces`
+ * the PUBLISHED package, so for a while some invocations still create a REAL `<worktree>/.webpieces-logs`
  * directory. Because this runs on the first state-dir resolution of EVERY new-code process, anything an
  * old-code invocation deposited is swept into the worktree namespace before any reader looks — and a
  * reader running old code finds it through the symlink either way. The two schemes converge instead of
@@ -97,7 +97,7 @@ export class StateDirMigrator {
      * its children individually.
      *
      * `keepInPlace` is consulted at the TOP LEVEL only (`relative === ''`), because that is the scope
-     * `DotWebpieces.aiWritable()` assigns: a whole leaf of `.webpieces/` either lives in the worktree or
+     * `DotWebpieces.aiWritable()` assigns: a whole leaf of `.webpieces-logs/` either lives in the worktree or
      * it does not. A nested `pr-review/` under some other home is ordinary legacy state.
      */
     private drain(
@@ -179,6 +179,6 @@ export class StateDirMigrator {
     }
 
     private warn(message: string): void {
-        process.stderr.write(`[webpieces] .webpieces state migration: ${message}\n`);
+        process.stderr.write(`[webpieces] .webpieces-logs state migration: ${message}\n`);
     }
 }

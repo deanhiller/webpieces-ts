@@ -80,7 +80,7 @@ function handleBash(event: AgentHookEvent, cwd: string, mode: HookMode): never {
     // call-level outcome onto `calls/`. So this was the THIRD line for one block, and the worst of the
     // three: it re-resolved the root from `cwd` via RepoRootFinder, which is not necessarily the tree
     // the guard actually judged, so a `cd`-relocated command scattered one block across two different
-    // `.webpieces` directories.
+    // `.webpieces-logs` directories.
     //
     // Bash deny → the event's kind is 'Bash', so denyJson adds the ANSI-red systemMessage (the only
     // field a Bash deny shows the human; permissionDecisionReason is invisible on Bash). See
@@ -168,9 +168,9 @@ function handleOneFile(event: AgentHookEvent, file: FileOperation, cwd: string, 
     // audit trail explains why a config edit on a bad branch was not blocked (see decision-log.ts).
     if (path.basename(input.filePath) === CONFIG_FILENAME) {
         if (mode !== 'rules') {
-            // `.webpieces/` (the decision log + sync cache these two calls write) lives at the repo
+            // `.webpieces-logs/` (the decision log + sync cache these two calls write) lives at the repo
             // root, not the AI's cwd — resolve it so a config edit from a subdir doesn't create a
-            // stray `<subdir>/.webpieces` tree.
+            // stray `<subdir>/.webpieces-logs` tree.
             const root = new RepoRootFinder().resolveRepoRoot(cwd);
             logGuardDecision(
                 root,

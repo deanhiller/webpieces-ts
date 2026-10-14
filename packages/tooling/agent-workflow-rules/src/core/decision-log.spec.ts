@@ -33,8 +33,8 @@ function logOne(root: string, tool: string, target: string, verdict: Verdict = '
     log.finish(verdict, rule);
 }
 
-const LOG_REL = `.webpieces/logs/${streamName(CALLS_STREAM)}`;
-const DECISION_LOG_REL = `.webpieces/logs/${streamName(L2_DECISIONS_STREAM)}`;
+const LOG_REL = `.webpieces-logs/logs/${streamName(CALLS_STREAM)}`;
+const DECISION_LOG_REL = `.webpieces-logs/logs/${streamName(L2_DECISIONS_STREAM)}`;
 
 // The temp dirs are not git repos and have no webpieces.config.json, so resolveRepoRoot falls back to
 // the passed dir (the temp root) and branchForLog returns 'unknown' — exactly the fail-open behavior
@@ -96,7 +96,7 @@ describe('InvocationLog', () => {
 
     it('rotates the writer into its .1.log sibling once the log exceeds the size cap', () => {
         const root = tmpRoot();
-        const logsDir = path.join(root, '.webpieces/logs');
+        const logsDir = path.join(root, '.webpieces-logs/logs');
         // streamName() already carries the stream segment, so only the DIRECTORY needs creating here.
         fs.mkdirSync(path.join(logsDir, CALLS_STREAM), { recursive: true });
         fs.writeFileSync(path.join(logsDir, streamName(CALLS_STREAM)), 'x'.repeat(512 * 1024 + 10));

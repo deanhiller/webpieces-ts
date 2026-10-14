@@ -9,10 +9,10 @@ import { logStream, StreamIdentity } from './log-stream';
 /**
  * The detached, fire-and-forget refresher spawned (by file path, not a bin) from
  * main-sync-refresh.ts. It does the SLOW work (merged-PR lookup + git fetch + merge-base +
- * same-file-overlap) and writes `.webpieces/main-sync-status.json` so the next hook call reads it
+ * same-file-overlap) and writes `.webpieces-logs/main-sync-status.json` so the next hook call reads it
  * instantly. Nobody reads our exit code or output — we run after the spawning hook has returned.
  *
- * Concurrency: a lock file (`.webpieces/main-sync.lock.json`) holds `inprocess`/`finished` + a start
+ * Concurrency: a lock file (`.webpieces-logs/main-sync.lock.json`) holds `inprocess`/`finished` + a start
  * epoch + the holder's pid, taken with an ATOMIC exclusive create. If another refresher already holds
  * it and is alive, we exit immediately (don't pile up `git fetch`es). If the holder is finished, dead,
  * or older than hangTimeoutMinutes, the lock is reclaimed and we proceed.

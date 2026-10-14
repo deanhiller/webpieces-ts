@@ -16,9 +16,9 @@ import { WorktreeService } from '@webpieces/repo-workflow-core';
  *     legitimate anchor here BECAUSE it is TRACKED IN GIT and therefore part of the BRANCH: a branch may
  *     change its own rules and that must keep working. So `RepoRootFinder.resolveRepoRoot` answering
  *     with the WORKTREE is correct, and stays that way.
- *   • GOVERNING ROOT — "where does `.webpieces` state live so it OUTLIVES the worktree?" Always the
- *     PRIMARY clone: `DotWebpieces.shared()` → `<primary>/.webpieces`, `DotWebpieces.local()` →
- *     `<primary>/.webpieces/worktrees/<name>`, which is still inside the primary and so survives the
+ *   • GOVERNING ROOT — "where does `.webpieces-logs` state live so it OUTLIVES the worktree?" Always the
+ *     PRIMARY clone: `DotWebpieces.shared()` → `<primary>/.webpieces-logs`, `DotWebpieces.local()` →
+ *     `<primary>/.webpieces-logs/worktrees/<name>`, which is still inside the primary and so survives the
  *     worktree being reaped.
  *
  * state-dir.ts's own header carries the full argument for both, including why `--git-dir` /
@@ -133,7 +133,7 @@ describe('isLinkedWorktree — the statSync fast path AGREES with `gitDir !== co
 
 /**
  * The two questions keep their two DIFFERENT answers. This half must not be unified either — a worktree
- * with its own checked-out config governs itself, while its `.webpieces` state stays in the primary.
+ * with its own checked-out config governs itself, while its `.webpieces-logs` state stays in the primary.
  */
 describe('git root vs governing root — deliberately different answers', () => {
 
@@ -142,10 +142,10 @@ describe('git root vs governing root — deliberately different answers', () => 
         expect(new RepoRootFinder().resolveRepoRoot(inRepoWorktree)).toBe(inRepoWorktree);
     });
 
-    it('…while its `.webpieces` state lives under the PRIMARY, so it outlives the worktree', () => {
+    it('…while its `.webpieces-logs` state lives under the PRIMARY, so it outlives the worktree', () => {
         const dot = new DotWebpieces();
-        expect(dot.shared(inRepoWorktree)).toBe(path.join(primary, '.webpieces'));
-        expect(dot.local(inRepoWorktree).startsWith(path.join(primary, '.webpieces'))).toBe(true);
+        expect(dot.shared(inRepoWorktree)).toBe(path.join(primary, '.webpieces-logs'));
+        expect(dot.local(inRepoWorktree).startsWith(path.join(primary, '.webpieces-logs'))).toBe(true);
         expect(dot.primaryRoot(inRepoWorktree)).toBe(primary);
     });
 

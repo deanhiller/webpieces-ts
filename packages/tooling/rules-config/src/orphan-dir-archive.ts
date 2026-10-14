@@ -6,7 +6,7 @@ import { OrphanCandidate } from './orphan-dir-scan';
 import { dotWebpieces } from '@webpieces/tooling-common';
 import { toError } from '@webpieces/tooling-common/to-error';
 
-/** Where every sweep's archive lands, under the repo-wide `.webpieces/` — never under a worktree's own. */
+/** Where every sweep's archive lands, under the repo-wide `.webpieces-logs/` — never under a worktree's own. */
 export const TRASH_STATE_DIR = 'trash';
 /** The per-sweep manifest, holding what moved and the command that brings each one back. */
 export const TRASH_MANIFEST_FILE = 'manifest.json';
@@ -16,7 +16,7 @@ export const TRASH_RETENTION_DAYS = 30;
 const MILLIS_PER_DAY = 24 * 60 * 60 * 1000;
 
 /**
- * Moves orphan directories into `.webpieces/trash/<sweepId>/` and records how to bring each one back.
+ * Moves orphan directories into `.webpieces-logs/trash/<sweepId>/` and records how to bring each one back.
  *
  * ─── WHY `mv` AND NEVER `rm -rf` ──────────────────────────────────────────────────────────────────────
  * This runs unattended, on other people's machines, against a predicate that is very good but is still a
@@ -77,7 +77,7 @@ export class OrphanDirArchiver {
         return reaped;
     }
 
-    /** `<repo>/.webpieces/trash` — the SHARED state dir, so a worktree's trash is not stranded with it. */
+    /** `<repo>/.webpieces-logs/trash` — the SHARED state dir, so a worktree's trash is not stranded with it. */
     trashRoot(repoRoot: string): string {
         return path.join(dotWebpieces.shared(repoRoot), TRASH_STATE_DIR);
     }
@@ -116,7 +116,7 @@ export class OrphanDirArchiver {
      * failure's message — a directory we cannot move is REPORTED and skipped, never fatal.
      *
      * `fs.renameSync` first because it is atomic and instant within a filesystem; a cross-device rename
-     * (EXDEV — a repo whose `.webpieces` sits on a different mount) falls back to a recursive copy plus
+     * (EXDEV — a repo whose `.webpieces-logs` sits on a different mount) falls back to a recursive copy plus
      * delete, which is what `mv` itself does in the same situation.
      */
     private move(from: string, to: string): string | null {

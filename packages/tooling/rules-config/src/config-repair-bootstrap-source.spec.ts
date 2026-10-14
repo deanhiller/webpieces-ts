@@ -41,16 +41,17 @@ describe('dependency-free config repair bootstrap artifact', () => {
         fs.writeFileSync(
             path.join(root, 'webpieces.config.json'),
             JSON.stringify({
-                rulePacks: [{ package: '@client/pack', config: '.webpieces/rules/client.json' }],
+                rulePacks: [{ package: '@client/pack', config: '.webpieces-config/rules/client.json' }],
             }),
         );
         fs.symlinkSync(outside, path.join(root, 'linked'));
         const probe = new ConfigRepairProbe();
         for (const filename of [
             'webpieces.config.json',
-            '.webpieces/rules/client.json',
-            '.webpieces/rules.lock.json',
-            '.webpieces/instruct-ai/rules-catalog.md',
+            '.gitignore',
+            '.webpieces-config/rules/client.json',
+            '.webpieces-config/rules.lock.json',
+            '.webpieces-config/rules-catalog.md',
             'src/client.json',
             'nested/webpieces.config.json',
             'linked/outside.json',

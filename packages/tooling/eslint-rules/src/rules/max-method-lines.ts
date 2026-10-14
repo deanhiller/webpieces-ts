@@ -163,7 +163,7 @@ const rule: Rule.RuleModule = {
         },
         messages: {
             tooLong:
-                'AI Agent: READ .webpieces/instruct-ai/webpieces.methods.md (at the repo root) for fix instructions. Method "{{name}}" has {{actual}} lines (max: {{max}})',
+                'AI Agent: READ .webpieces-logs/instruct-ai/webpieces.methods.md (at the repo root) for fix instructions. Method "{{name}}" has {{actual}} lines (max: {{max}})',
         },
         fixable: undefined,
         schema: [

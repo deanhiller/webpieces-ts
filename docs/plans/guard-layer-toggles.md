@@ -53,7 +53,7 @@ Schemas: `packages/tooling/rules-config/src/rule-configs.ts` (L3/L4) and
 defect this creates: *half a policy is representable.* `read-stale-guard: OFF` beside
 `merged-branch-bash-guard: ON` is exactly the "reading the file is allowed, `cat` of the same file is
 blocked" split that doc calls the incoherence. The four L2 keys also carry **four copies of
-`hangTimeoutMinutes`**, all tuning the ONE detached refresher behind `.webpieces/main-sync-status.json`.
+`hangTimeoutMinutes`**, all tuning the ONE detached refresher behind `.webpieces-logs/main-sync-status.json`.
 
 Goal, stated twice by the requester: **simpler, and LESS configuration.** 9 → 3.
 

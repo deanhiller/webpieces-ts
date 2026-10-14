@@ -22,8 +22,8 @@ function writeFile(root: string, relPath: string, content: string): void {
 }
 
 /**
- * `.webpieces/` MUST live at the ONE repo root, never in a CWD-dependent subdir. RepoRootFinder is the
- * single anchor every `.webpieces` writer resolves through; these pin the resolution order that keeps
+ * `.webpieces-logs/` MUST live at the ONE repo root, never in a CWD-dependent subdir. RepoRootFinder is the
+ * single anchor every `.webpieces-logs` writer resolves through; these pin the resolution order that keeps
  * a tool invoked from a subdirectory (or a nested/embedded git clone) from scattering a stray tree.
  */
 describe('RepoRootFinder.resolveRepoRoot', () => {
@@ -48,7 +48,7 @@ describe('RepoRootFinder.resolveRepoRoot', () => {
     it('anchors a NESTED git clone (no own config) at the OUTER webpieces root, not the nested root', () => {
         // The exact scatter scenario: an embedded clone under the monorepo. config-walk-up must cross
         // the nested .git boundary and land on the outer webpieces.config.json — so a tool run from
-        // inside the clone still writes `.webpieces` at the outer root.
+        // inside the clone still writes `.webpieces-logs` at the outer root.
         writeFile(root, 'webpieces.config.json', '{}\n');
         const nested = path.join(root, 'repositories', 'some-clone');
         fs.mkdirSync(nested, { recursive: true });

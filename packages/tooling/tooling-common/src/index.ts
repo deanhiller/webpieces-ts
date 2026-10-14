@@ -4,3 +4,5 @@ export * from './state-dir-migration';
 export * from './inform-ai-error';
 export * from './claude-config-dir';
 export * from './state-path-constants';
+
+export * from './repository-layout';

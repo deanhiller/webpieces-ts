@@ -5,12 +5,12 @@ const DOC = 'webpieces.git-workflow.md';
 
 /**
  * The git-workflow doc is the AI's primary account of how a PR reaches main, regenerated into
- * `.webpieces/instruct-ai/` on every `wp-*` command. It therefore has to agree with `pr-merge-guard`,
+ * `.webpieces-logs/instruct-ai/` on every `wp-*` command. It therefore has to agree with `pr-merge-guard`,
  * which BLOCKS a hand-rolled `gh pr merge` outright — a doc prescribing a command the guard rejects
  * teaches a route that cannot be taken, and the version of it that omitted `wp-land-pr` entirely is why
  * two consumer repos landed every squash commit carrying the full dashboard.
  *
- * Asserted on the TEMPLATE, which is the source of truth; the copy in a consumer's `.webpieces/` is
+ * Asserted on the TEMPLATE, which is the source of truth; the copy in a consumer's `.webpieces-logs/` is
  * rewritten from it and lags by one release (see `.claude/rules/published-vs-local-source.md`).
  */
 describe('webpieces.git-workflow.md — the landing route it teaches', () => {

@@ -178,7 +178,7 @@ const CRASHING_RULE_MODULE = "throw new Error('boom from a custom rule module');
 /**
  * Builds ONE throwaway git repo per fixture and returns it with the payload's `<REPO>` resolved.
  *
- * A FRESH repo per fixture, not one shared: the hook writes `.webpieces/` state (the decision log, the
+ * A FRESH repo per fixture, not one shared: the hook writes `.webpieces-logs/` state (the decision log, the
  * main-sync cache) as it runs, so a shared tree would let fixture N's leftovers decide fixture N+1's
  * verdict — an order-dependent suite, which is the one kind of golden test worse than none.
  *

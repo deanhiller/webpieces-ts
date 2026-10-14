@@ -5,7 +5,13 @@ import * as fs from 'fs';
 import * as path from 'path';
 
 import {
-    allRuleNames, DEFAULT_REVIEWER_AGENT_NAME, PackPolicyFiles, retiredRuleFor, sectionForRule, seedEntryForRule,
+    allRuleNames,
+    DEFAULT_REVIEWER_AGENT_NAME,
+    PackPolicyDeclaration,
+    PackPolicyFiles,
+    retiredRuleFor,
+    sectionForRule,
+    seedEntryForRule,
 } from '@webpieces/rules-config';
 
 /**
@@ -42,7 +48,16 @@ export class RepoConfigFixture {
     /** The repo's config as a mutable object, checklists dropped and local seed fields completed. */
     // webpieces-disable no-any-unknown -- the repo's own config document, opaque until a spec edits it
     load(): Record<string, unknown> {
-        const source = path.join(__dirname, '..', '..', '..', '..', '..', '..', 'webpieces.config.json');
+        const source = path.join(
+            __dirname,
+            '..',
+            '..',
+            '..',
+            '..',
+            '..',
+            '..',
+            'webpieces.config.json',
+        );
         // webpieces-disable no-any-unknown -- parsed JSON, narrowed by the accessors below
         const config = JSON.parse(fs.readFileSync(source, 'utf8')) as Record<string, unknown>;
         // webpieces-disable no-any-unknown -- narrowing one nested section
@@ -52,7 +67,10 @@ export class RepoConfigFixture {
         const prGate = commands['pr-gate'];
         // Local source requires this before the published validator permits the live repo to add it.
         prGate['maxReviewerRounds'] = 2;
-        if (prGate['overrideReviewerAgent'] !== true && prGate['reviewerAgentName'] === DEFAULT_REVIEWER_AGENT_NAME) {
+        if (
+            prGate['overrideReviewerAgent'] !== true &&
+            prGate['reviewerAgentName'] === DEFAULT_REVIEWER_AGENT_NAME
+        ) {
             delete prGate['reviewerAgentName'];
         }
         this.loadOwnedRules(config, path.dirname(source));
@@ -66,21 +84,31 @@ export class RepoConfigFixture {
         const rules: Record<string, unknown> = {};
         // webpieces-disable no-any-unknown -- parsed owner entries remain opaque until fixture validation
         const guards: Record<string, unknown> = {};
-        const declarations = new PackPolicyFiles().declarations(config['rulePacks'], root);
+        // The live repository is still governed by the installed release. Only this test transport
+        // reads its declaration paths before projecting into the local source's current fixture layout.
+        // webpieces-disable no-any-unknown -- installed tooling validates this repository input; fixture output uses strict current validation
+        const declarations = (config['rulePacks'] as PackPolicyDeclaration[]).map(
+            (entry) => new PackPolicyDeclaration(entry.package, entry.config),
+        );
         // Validate live ownership before projecting into the fixture's deliberately frozen packs.
         // Newly published policies remain enforced by the real repository; these workflow fixtures
         // carry only policies their selected manifests own. Unknown live keys still fail here.
-        const liveRegistry = new RulePackRegistry(new PackPolicyFiles().select(root, declarations).map(
-            (pack: SelectedPolicyPack) => pack.manifest,
-        ));
+        const liveRegistry = new RulePackRegistry(
+            new PackPolicyFiles()
+                .select(root, declarations)
+                .map((pack: SelectedPolicyPack) => pack.manifest),
+        );
         for (const declaration of declarations) {
             // webpieces-disable no-any-unknown -- repository owner JSON, consumed by the real fixture validator
-            const entries = JSON.parse(fs.readFileSync(path.join(root, declaration.config), 'utf8')) as Record<string, unknown>;
+            const entries = JSON.parse(
+                fs.readFileSync(path.join(root, declaration.config), 'utf8'),
+            ) as Record<string, unknown>;
             for (const name of Object.keys(entries)) {
                 liveRegistry.ownerOf(name);
                 if (!fixtureRuleRegistry.hasRule(name)) continue;
                 if (retiredRuleFor(name, fixtureRuleRegistry) !== null) continue;
-                const section = sectionForRule(name, fixtureRuleRegistry) === 'hookGuards' ? guards : rules;
+                const section =
+                    sectionForRule(name, fixtureRuleRegistry) === 'hookGuards' ? guards : rules;
                 section[name] = entries[name];
             }
         }
@@ -101,7 +129,8 @@ export class RepoConfigFixture {
         // webpieces-disable no-any-unknown -- narrowing the two rule sections
         const guards = config['hookGuards'] as Record<string, unknown>;
         for (const name of allRuleNames(fixtureRuleRegistry)) {
-            const section = sectionForRule(name, fixtureRuleRegistry) === 'hookGuards' ? guards : rules;
+            const section =
+                sectionForRule(name, fixtureRuleRegistry) === 'hookGuards' ? guards : rules;
             const seed = seedEntryForRule(name, fixtureRuleRegistry);
             // webpieces-disable no-any-unknown -- one rule's opaque config entry, merged over its typed seed
             const existing = section[name] as Record<string, unknown> | undefined;

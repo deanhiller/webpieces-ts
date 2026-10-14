@@ -17,7 +17,7 @@ function git(cwd: string, args: string): void {
 
 /**
  * A primary clone with ONE linked worktree, because that is the case the placement rule exists for: the
- * point of routing through `dotWebpieces` rather than `path.join(repoRoot, '.webpieces')` is that N
+ * point of routing through `dotWebpieces` rather than `path.join(repoRoot, '.webpieces-logs')` is that N
  * agents in N worktrees never write one another's log, and that a reaped worktree's history survives.
  */
 beforeEach(() => {
@@ -42,11 +42,11 @@ afterEach(() => {
 
 describe('GateLogFile placement', () => {
     it('puts a logs/ file under the primary clone in the primary clone', () => {
-        expect(files.logsPath(primary, 'stage.log')).toBe(path.join(primary, '.webpieces', 'logs', 'stage.log'));
+        expect(files.logsPath(primary, 'stage.log')).toBe(path.join(primary, '.webpieces-logs', 'logs', 'stage.log'));
     });
 
     it('puts a root file at the top of the state dir — the one path a person types from memory', () => {
-        expect(files.localPath(primary, 'build.log')).toBe(path.join(primary, '.webpieces', 'build.log'));
+        expect(files.localPath(primary, 'build.log')).toBe(path.join(primary, '.webpieces-logs', 'build.log'));
     });
 
     /**
@@ -56,7 +56,7 @@ describe('GateLogFile placement', () => {
      */
     it('namespaces a linked worktree under the PRIMARY clone, not inside the worktree', () => {
         const log = files.logsPath(worktree, 'stage.log');
-        expect(log).toBe(path.join(primary, '.webpieces', 'worktrees', 'wt-feature', 'logs', 'stage.log'));
+        expect(log).toBe(path.join(primary, '.webpieces-logs', 'worktrees', 'wt-feature', 'logs', 'stage.log'));
         expect(log.startsWith(worktree + path.sep)).toBe(false);
     });
 

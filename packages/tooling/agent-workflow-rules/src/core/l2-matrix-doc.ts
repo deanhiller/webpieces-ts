@@ -6,7 +6,7 @@ import { toError } from '@webpieces/tooling-common/to-error';
 // The L2 matrix, DELIVERED — dropped where a blocked agent can read it, and named in the deny.
 //
 // L0 has done this since the config-missing fault: `writeGuardMatrixDoc` drops
-// webpieces.guard-matrix.md into `.webpieces/instruct-ai/` on a BLOCK, and `guardMatrixPointer` puts
+// webpieces.guard-matrix.md into `.webpieces-logs/instruct-ai/` on a BLOCK, and `guardMatrixPointer` puts
 // its ABSOLUTE path in the deny text. L2 had the better table and none of the delivery: its rows,
 // their cures and their use cases lived in `guards/L2-branch-state.md`, a path an agent has no reason
 // to know and every reason not to find — while the deny it was actually reading named no doc at all.

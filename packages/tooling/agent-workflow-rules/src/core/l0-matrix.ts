@@ -25,7 +25,7 @@ import { toError } from '@webpieces/tooling-common/to-error';
 
 /**
  * The doc L0's deny messages point at. Lives in @webpieces/rules-config/templates alongside the others,
- * and is written to <root>/.webpieces/instruct-ai/ lazily, only on an L0 BLOCK.
+ * and is written to <root>/.webpieces-logs/instruct-ai/ lazily, only on an L0 BLOCK.
  *
  * That generated doc is the AUTHORITY for the fault table and the allowlist (same arrays, cannot
  * drift). guards/L0-tooling.md is the hand-written companion: it adds L0's evaluation

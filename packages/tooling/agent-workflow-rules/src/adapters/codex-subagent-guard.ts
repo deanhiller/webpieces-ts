@@ -26,7 +26,7 @@ export const CODEX_SUBAGENT_RULE = 'codex-subagent-no-write-in-shared-tree';
  * "hand the edit back to the coordinator" option and wrote all five verdicts itself, and the gate
  * accepted them (issue #863). So a verdict is never a patch: every reviewer SUBMITS it through
  * `pnpm wp-write-review`, a Bash call this guard does not see, and a blocked write under
- * `.webpieces/pr-review/` names that bin — and NEVER offers the coordinator hand-back, because a
+ * `.webpieces-logs/pr-review/` names that bin — and NEVER offers the coordinator hand-back, because a
  * coordinator writing a reviewer's verdict is precisely the forgery the gate refuses.
  *
  * NOT a configurable rule yet, and that is deliberate. A rule registered with the engine must have an
@@ -67,7 +67,7 @@ export class CodexSubagentSharedTreeGuard {
     }
 
     /**
-     * A write under `.webpieces/pr-review/` — a verdict, or anything beside one. There is exactly one
+     * A write under `.webpieces-logs/pr-review/` — a verdict, or anything beside one. There is exactly one
      * route for it, and it is not a patch. No "hand it to the coordinator" option: the coordinator may
      * never write a reviewer's verdict, and `wp-finish-upsert-pr` rejects one that did not come through
      * the bin.

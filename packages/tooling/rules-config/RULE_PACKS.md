@@ -6,12 +6,12 @@ Policy settings live in those files. The root keeps `commands`, `excludePaths`, 
 ```json
 {
   "rulePacks": [
-    { "package": "@webpieces/code-rules", "config": ".webpieces/rules/code.json" },
-    { "package": "@webpieces/ai-hook-rules", "config": ".webpieces/rules/source.json" },
-    { "package": "@webpieces/agent-workflow-rules", "config": ".webpieces/rules/workflow.json" },
-    { "package": "@webpieces/nx-webpieces-rules", "config": ".webpieces/rules/nx.json" },
-    { "package": "@webpieces/eslint-rules", "config": ".webpieces/rules/lint.json" },
-    { "package": "./client-policy/manifest.cjs", "config": ".webpieces/rules/client.json" }
+    { "package": "@webpieces/code-rules", "config": ".webpieces-config/rules/code.json" },
+    { "package": "@webpieces/ai-hook-rules", "config": ".webpieces-config/rules/source.json" },
+    { "package": "@webpieces/agent-workflow-rules", "config": ".webpieces-config/rules/workflow.json" },
+    { "package": "@webpieces/nx-webpieces-rules", "config": ".webpieces-config/rules/nx.json" },
+    { "package": "@webpieces/eslint-rules", "config": ".webpieces-config/rules/lint.json" },
+    { "package": "./client-policy/manifest.cjs", "config": ".webpieces-config/rules/client.json" }
   ],
   "commands": { "pr-gate": { "mode": "OFF", "buildCommand": "pnpm test", "gates": [] } },
   "excludePaths": [],
@@ -33,8 +33,8 @@ An owner file maps canonical policy IDs directly to config objects. Unknown poli
 owner's file, unknown fields, retired fields, missing required values, and incompatible manifest/schema
 APIs fail with the named repair file. Fixed and experimental safeguards remain outside configurable policies.
 
-`pnpm wp-rules-sync` also generates `.webpieces/rules.lock.json` and
-`.webpieces/instruct-ai/rules-catalog.md` from the same resolved registry. The lock records package versions,
+`pnpm wp-rules-sync` also generates `.webpieces-config/rules.lock.json` and
+`.webpieces-config/rules-catalog.md` from the same resolved registry. The lock records package versions,
 manifest digests, schema APIs, owners and implementation contributions. The catalog names actual config
 files, modes, contributors and owner-authored remediation. Loading checks exact artifact agreement and
 never rewrites files. Config limits alone do not change the manifest lock.
@@ -42,7 +42,7 @@ never rewrites files. Config limits alone do not change the manifest lock.
 To migrate a previous flat root, run the explicit upgrade command:
 
 ```sh
-pnpm wp-rules-sync --upgrade --pack=@webpieces/code-rules=.webpieces/rules/code.json --pack=@webpieces/ai-hook-rules=.webpieces/rules/source.json --pack=@webpieces/agent-workflow-rules=.webpieces/rules/workflow.json --pack=@webpieces/nx-webpieces-rules=.webpieces/rules/nx.json --pack=@webpieces/eslint-rules=.webpieces/rules/lint.json
+pnpm wp-rules-sync --upgrade --pack=@webpieces/code-rules=.webpieces-config/rules/code.json --pack=@webpieces/ai-hook-rules=.webpieces-config/rules/source.json --pack=@webpieces/agent-workflow-rules=.webpieces-config/rules/workflow.json --pack=@webpieces/nx-webpieces-rules=.webpieces-config/rules/nx.json --pack=@webpieces/eslint-rules=.webpieces-config/rules/lint.json
 ```
 
 Only this upgrade operation may read the previous package.json selection metadata and flat root settings.
@@ -62,3 +62,25 @@ imports or discovery list. Client implementations use the same contract as shipp
 When config is invalid, reads and inspection remain available. Exact root, declared owner, lock and catalog
 repair writes are allowed before validation, as are anchored install, sync and prune commands. Unrelated
 writes, undeclared config files, escaping symlinks, mixed patches and chained mutating commands stay blocked.
+
+## Repository directories
+
+Commit `.webpieces-config/`: selected owner settings, `rules.lock.json`, and `rules-catalog.md`.
+Keep all generated runtime files under `.webpieces-logs/`, and ignore it with exactly one entry:
+
+```gitignore
+.webpieces-logs/
+```
+
+`pnpm wp-migrate-dirs` moves the retired `.webpieces/` layout, rewrites declared owner paths,
+refreshes lock/catalog artifacts, and removes the old ignore exceptions. Hook installation,
+`wp-upgrade-shim`, and explicit rule sync/upgrade also perform the directory migration.
+Conflicting destinations fail before files move; identical files support interrupted reruns.
+Normal loading refuses the retired layout and any owner file in a runtime directory.
+
+In a Git checkout, every declared owner file, the lock, and the catalog must be tracked and
+must not match any ignore pattern, even if it was force-added previously. After reviewing a
+migration, `pnpm wp-migrate-dirs --stage` explicitly stages the new policy and declaration.
+Commit the deletion of the old policy paths as well. The migration command remains allowed
+while configuration is invalid, and `.gitignore` remains editable for policy-ignore repairs.
+Standalone validation outside a Git checkout still checks config and artifacts without an index.

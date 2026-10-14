@@ -20,7 +20,7 @@ function streamName(stream: string, suffix: string = '.log'): string {
 }
 
 
-const LOG_REL = `.webpieces/logs/${streamName(ASYNC_REFRESH_STREAM)}`;
+const LOG_REL = `.webpieces-logs/logs/${streamName(ASYNC_REFRESH_STREAM)}`;
 
 function spawnAttempts(root: string): number {
     const logPath = path.join(root, LOG_REL);

@@ -11,7 +11,7 @@ import type { EnhancedGraph } from '../graph-sorter';
 import type { RuntimeGraph } from '../runtime-graph-model';
 
 class RuntimeParityFixture {
-    readonly browser = new BrowserFixture(path.resolve('.webpieces/1185-browser-evidence'));
+    readonly browser = new BrowserFixture(path.resolve('.webpieces-logs/1185-browser-evidence'));
     readonly graph = FilterFixture.runtime();
     readonly projects: EnhancedGraph = {};
 

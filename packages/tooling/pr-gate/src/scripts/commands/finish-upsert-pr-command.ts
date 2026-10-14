@@ -301,7 +301,7 @@ export class FinishUpsertPrCommand {
                 'verified: the conflict resolution is unchecked, the merged tree was never built, and any\n' +
                 'reviewer that ran judged the PRE-merge code.\n\n' +
                 `Conflicted file(s): ${marker.conflictedFiles.join(', ')}\n\n` +
-                'Resolve them (see .webpieces/instruct-ai/webpieces.mergeprocess.md), then run:\n' +
+                'Resolve them (see .webpieces-logs/instruct-ai/webpieces.mergeprocess.md), then run:\n' +
                 '  pnpm wp-review-upsert-pr\n' +
                 'It validates the resolution, commits it, builds it, and re-briefs the reviewers.',
         );

@@ -56,7 +56,7 @@ asserts the reason map is exhaustive against the guard sources.
 <!-- END GENERATED — hand-written prose resumes here -->
 
 **How the generated files reach this repo's root, despite the one-release lag.** The runtime copy in
-`.webpieces/instruct-ai/` comes from the PUBLISHED package and is therefore one release behind — fine
+`.webpieces-logs/instruct-ai/` comes from the PUBLISHED package and is therefore one release behind — fine
 for consumers, wrong for the copy people read on GitHub. So the root files are **not** written by the
 runtime hook. They are byte-locked by a vitest spec that calls the local `render*Doc()` — and vitest
 resolves `@webpieces/*` to local source via `tsconfig.base.json` paths, so there is no lag at all. A

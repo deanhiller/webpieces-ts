@@ -27,7 +27,7 @@ export const VERDICT_ORANGE = 'orange';
 export const VERDICT_RED = 'red';
 export const VERDICT_STATUSES = [VERDICT_GREEN, VERDICT_YELLOW, VERDICT_ORANGE, VERDICT_RED] as const;
 
-// The verdict a reviewer SUBAGENT submits into `.webpieces/pr-review/<featureSlug>/review-round<N>-<id>.json`,
+// The verdict a reviewer SUBAGENT submits into `.webpieces-logs/pr-review/<featureSlug>/review-round<N>-<id>.json`,
 // one per briefed checklist per round. One file per checklist per ROUND, so N concurrent reviewer subagents
 // never clobber a shared file and no round's verdict is ever overwritten by a later one (issue #1053): the
 // gate reads the HIGHEST round per checklist, and the earlier rounds stay on disk as the audit trail. It
@@ -239,7 +239,7 @@ export class ChecklistVerdict {
     }
 }
 
-// The PR's diff context, written by wp-start-upsert-pr into `.webpieces/pr-review/<featureSlug>/pr-context.json`
+// The PR's diff context, written by wp-start-upsert-pr into `.webpieces-logs/pr-review/<featureSlug>/pr-context.json`
 // so a reviewer subagent knows the exact 3-point base the gate used and the full changed-file set — then
 // reads any file's actual diff with `git diff <base> HEAD -- <file>`. This is what lets a checklist match
 // coarsely by path (in the config) while the subagent makes the fine, content-level judgment. Data-only.

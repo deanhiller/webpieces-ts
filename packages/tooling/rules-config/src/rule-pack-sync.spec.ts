@@ -24,7 +24,7 @@ class SyncFixture {
         (manifest: RulePackManifest, index: number) =>
             new PackPolicyDeclaration(
                 `./fixture-policy-${index}.cjs`,
-                `.webpieces/rules/owner-${index}.json`,
+                `.webpieces-config/rules/owner-${index}.json`,
             ),
     );
     readonly entries: Record<string, ConfigObject> = Object.fromEntries(
@@ -65,13 +65,43 @@ describe('explicit owner config sync and upgrade', () => {
         fixture.entries['max-file-lines']['turnOffRuleWhileOnBranch'] = 'feature/explicit';
         fixture.write(true);
         expect(() => loadAndValidate(fixture.root)).toThrow('Retired top-level key');
-        expect(fixture.run('upgrade')).toHaveLength(7);
+        expect(fixture.run('upgrade')).toHaveLength(8);
         const loaded = loadAndValidate(fixture.root);
         expect(loaded.rulesConfig['max-file-lines']).toEqual(fixture.entries['max-file-lines']);
         const root = fs.readFileSync(path.join(fixture.root, 'webpieces.config.json'), 'utf8');
         expect(root).toContain('Preserve chosen enforcement values.');
         expect(root).not.toContain('"hookGuards"');
         expect(fixture.run('sync')).toEqual([]);
+    });
+
+    it('automatically upgrades the retired directory while preserving explicit policy', () => {
+        const fixture = new SyncFixture();
+        fixture.write(false);
+        fixture.run('sync');
+        const owner = path.join(fixture.root, fixture.declarations[0].config);
+        const entries = JSON.parse(fs.readFileSync(owner, 'utf8'));
+        entries['max-file-lines'].mode = 'OFF';
+        entries['max-file-lines'].limit = 432;
+        fs.writeFileSync(owner, JSON.stringify(entries));
+        const filename = path.join(fixture.root, 'webpieces.config.json');
+        const document = JSON.parse(fs.readFileSync(filename, 'utf8'));
+        for (const declaration of document.rulePacks)
+            declaration.config = declaration.config.replace('.webpieces-config/', '.webpieces/');
+        fs.writeFileSync(filename, JSON.stringify(document));
+        fs.renameSync(
+            path.join(fixture.root, '.webpieces-config'),
+            path.join(fixture.root, '.webpieces'),
+        );
+        fs.mkdirSync(path.join(fixture.root, '.webpieces/instruct-ai'));
+        fs.renameSync(
+            path.join(fixture.root, '.webpieces/rules-catalog.md'),
+            path.join(fixture.root, '.webpieces/instruct-ai/rules-catalog.md'),
+        );
+        expect(() => loadAndValidate(fixture.root)).toThrow('wp-migrate-dirs');
+        fixture.run('sync');
+        expect(loadAndValidate(fixture.root).rulesConfig['max-file-lines']['mode']).toBe('OFF');
+        expect(loadAndValidate(fixture.root).rulesConfig['max-file-lines']['limit']).toBe(432);
+        expect(fs.existsSync(path.join(fixture.root, '.webpieces'))).toBe(false);
     });
 
     it('writes reviewed seeds only during sync, and fills missing required fields without tuning defaults', () => {
@@ -102,8 +132,10 @@ describe('explicit owner config sync and upgrade', () => {
             before = fs.readFileSync(filename, 'utf8');
         expect(() => fixture.run('upgrade')).toThrow('Sync made no changes');
         expect(fs.readFileSync(filename, 'utf8')).toBe(before);
-        expect(fs.existsSync(path.join(fixture.root, '.webpieces/rules'))).toBe(false);
-        expect(fs.existsSync(path.join(fixture.root, '.webpieces/rules.lock.json'))).toBe(false);
+        expect(fs.existsSync(path.join(fixture.root, '.webpieces-config/rules'))).toBe(false);
+        expect(fs.existsSync(path.join(fixture.root, '.webpieces-config/rules.lock.json'))).toBe(
+            false,
+        );
     });
 
     it('rejects directory and inherited config instead of guessing owners or values', () => {

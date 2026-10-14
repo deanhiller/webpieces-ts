@@ -28,7 +28,7 @@ const REJECTION_LOG = REJECTIONS_STREAM;
 // <session>-<agent|coordinator>-<hook>-, which is how concurrent writers stay out of one file.
 function readLog(root: string, name: string): string {
     // `name` selects the STREAM DIRECTORY now; the file inside it is this writer's key.
-    const dir = path.join(root, '.webpieces', 'logs', name);
+    const dir = path.join(root, '.webpieces-logs', 'logs', name);
     return fs.readFileSync(path.join(dir, new LogStream().writerFile('.log')), 'utf8');
 }
 
@@ -128,8 +128,8 @@ describe('every L0 fault code can appear in the audit trail with its `fault=` st
 describe('a log failure never throws', () => {
     it('swallows an unwritable destination in all three writers', () => {
         const root = tmpRoot();
-        fs.mkdirSync(path.join(root, '.webpieces'), { recursive: true });
-        fs.writeFileSync(path.join(root, '.webpieces', 'logs'), 'not a directory');
+        fs.mkdirSync(path.join(root, '.webpieces-logs'), { recursive: true });
+        fs.writeFileSync(path.join(root, '.webpieces-logs', 'logs'), 'not a directory');
 
         const invocations = new InvocationLog();
         expect(() => {

@@ -43,7 +43,7 @@ interface MethodInfo {
 const TMP_MD_FILE = 'webpieces.methodsize.md';
 
 /**
- * Write the instructions documentation to .webpieces/instruct-ai/.
+ * Write the instructions documentation to .webpieces-logs/instruct-ai/.
  * Sourced from @webpieces/rules-config.
  */
 function writeTmpInstructions(workspaceRoot: string): string {
@@ -197,7 +197,7 @@ function reportViolations(violations: MethodViolation[], limit: number, disableA
     console.error('\ud83d\udcda Methods should read like a "table of contents" - each method call');
     console.error('   describes a larger piece of work.');
     console.error('');
-    console.error('\u26a0\ufe0f  *** READ .webpieces/instruct-ai/webpieces.methodsize.md for detailed guidance on how to fix this easily *** \u26a0\ufe0f');
+    console.error('\u26a0\ufe0f  *** READ .webpieces-logs/instruct-ai/webpieces.methodsize.md for detailed guidance on how to fix this easily *** \u26a0\ufe0f');
     console.error('');
 
     if (disableAllowed) {

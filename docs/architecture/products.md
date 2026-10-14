@@ -22,7 +22,7 @@ platform or from rules to OpenAPI.
 validation. The other products cannot depend on example code, and neither
 foundation may depend back on its consumers.
 
-The enforced matrix lives in `.webpieces/rules/nx-webpieces-rules.json` under
+The enforced matrix lives in `.webpieces-config/rules/nx-webpieces-rules.json` under
 `product-tags.productDependencies`. A product always permits dependencies on
 itself. An omitted entry permits no outward product dependencies.
 

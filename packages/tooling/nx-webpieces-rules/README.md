@@ -33,13 +33,13 @@ It is wired into the build: the `@nx/js:tsc` target default lists it in
 ```json
 {
   "package": "@webpieces/nx-webpieces-rules",
-  "config": ".webpieces/rules/nx.json"
+  "config": ".webpieces-config/rules/nx.json"
 }
 ```
 
 Keep the other selected owners and required root settings. Policy settings come
 from the declared owner file's direct policy-ID map. This entry belongs directly
-in `.webpieces/rules/nx.json` (an excerpt; the other owned policies also require
+in `.webpieces-config/rules/nx.json` (an excerpt; the other owned policies also require
 explicit settings):
 
 ```json

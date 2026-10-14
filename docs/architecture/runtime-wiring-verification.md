@@ -91,14 +91,14 @@ Ordinary bindings remain in `src/modules/InversifyModule.ts`; RPC bindings moved
 retaining their injection tokens and lazy factory resolution. Legacy adds `tsconfig.app.json` and
 an explicit configured build output, so its declaration proof is a build prerequisite too.
 
-`pnpm-workspace.yaml`, `pnpm-lock.yaml`, and `.webpieces/rules.lock.json` consume installed 0.4.857.
+`pnpm-workspace.yaml`, `pnpm-lock.yaml`, and `.webpieces-config/rules.lock.json` consume installed 0.4.857.
 The reviewed architecture/dependency/runtime snapshots and producer design artifacts are regenerated
 with that installed release. The initial 0.4.855 attempt exposed two integration gaps: DI diagrams
 lost the helper singleton API boundaries, and API validation checked hosts before loading service
 identities. PR #1128 fixes both before this migration. Five focused DI fixtures prove aliases,
 singleton boundaries, typed tokens and unrelated-method exclusion; analysis over the four real
 migrated apps resolves all tokens. Generated `**/design.html` artifacts join the existing generated
-architecture HTML exemption in `.webpieces/rules/code-rules.json`; Angular source styling remains
+architecture HTML exemption in `.webpieces-config/rules/code-rules.json`; Angular source styling remains
 enforced. See [runtime-wiring.md](runtime-wiring.md) for schema, supported static composition,
 explicit approval, legacy migration and release sequencing.
 

@@ -345,7 +345,7 @@ async function wireHook(hook: HookSpec, targets: InstallTarget[], projectRoot: s
  * whole point of the doc is to tell you to set one, so gating it on the thing it teaches meant the
  * instructions only appeared to repos that no longer needed them.
  *
- * Both land in gitignored `.webpieces/instruct-ai/`, never `.github/` directly — writing there would
+ * Both land in gitignored `.webpieces-logs/instruct-ai/`, never `.github/` directly — writing there would
  * dirty the tree, and copying it is the human's decision. `IfMissing` for the yml so a repo that has
  * customized its workflow never gets it clobbered; the doc itself is refreshed so it cannot go stale.
  */
@@ -356,14 +356,14 @@ function scaffoldCiGate(projectRoot: string): void {
     console.log('');
     console.log('ℹ️  Optional: server-side PR gate (stops an UNHOOKED teammate opening a PR in the web UI).');
     console.log('   It is OFF until you set a gateSalt. Three steps, one of which needs a repo admin:');
-    console.log('     .webpieces/instruct-ai/webpieces.ci-gate-setup.md');
+    console.log('     .webpieces-logs/instruct-ai/webpieces.ci-gate-setup.md');
 }
 
 // webpieces-disable no-function-outside-class -- existing CLI/shim bootstrap function moved intact; it must remain callable without constructing a DI container
 export async function main(): Promise<void> {
     const args = process.argv.slice(2);
     // Anchor the install at the repo root (git toplevel — webpieces.config.json may not exist yet on
-    // a first install), never a subdir cwd, so `.webpieces`/hooks/config all land at the root.
+    // a first install), never a subdir cwd, so `.webpieces-logs`/hooks/config all land at the root.
     const projectRoot = new RepoRootFinder().resolveRepoRoot(process.cwd());
 
     seedOrSyncConfig(projectRoot);

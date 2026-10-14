@@ -85,7 +85,7 @@ describe('sh ↔ TS twin: the worktree name and the state dir must be the SAME a
             const fromWorktree = shResolve(repo.worktree);
             expect(dot.worktreeName(repo.worktree)).toBe('wt-feature');
             expect(fromWorktree.tree).toBe(dot.worktreeName(repo.worktree));
-            expect(fromWorktree.logDir).toBe(path.join(repo.primary, '.webpieces', WORKTREE_STATE_DIR, 'wt-feature', 'logs'));
+            expect(fromWorktree.logDir).toBe(path.join(repo.primary, '.webpieces-logs', WORKTREE_STATE_DIR, 'wt-feature', 'logs'));
             expect(fromWorktree.logDir).toBe(dot.logs(repo.worktree));
 
             const fromPrimary = shResolve(repo.primary);
@@ -113,11 +113,11 @@ describe('sh ↔ TS twin: the worktree name and the state dir must be the SAME a
         }
     });
 
-    it('fails SOFT to <cwd>/.webpieces/logs when the directory is not a git repo at all', () => {
+    it('fails SOFT to <cwd>/.webpieces-logs/logs when the directory is not a git repo at all', () => {
         const plain = specTempDirs.makeReal('wp-nogit-');
         const answer = shResolve(plain);
         expect(answer.tree).toBe('primary');
-        expect(answer.logDir).toBe(path.join(plain, '.webpieces', 'logs'));
+        expect(answer.logDir).toBe(path.join(plain, '.webpieces-logs', 'logs'));
     });
 });
 
@@ -147,7 +147,7 @@ function installBin(root: string, exitCode: number): void {
 }
 
 /**
- * WHERE the line lands. The shim used to hardcode `$ROOT/.webpieces/logs`, so every worktree's L0
+ * WHERE the line lands. The shim used to hardcode `$ROOT/.webpieces-logs/logs`, so every worktree's L0
  * history piled into one flat file while the L1 binary had been per-worktree since the state-dir
  * split. These assert the two halves finally agree.
  */
@@ -159,21 +159,21 @@ describe('L0 audit log routing — per worktree, centralized under the primary',
             installBin(repo.worktree, 0);
             kit.runShim(repo.worktree, 'wp-ai-guards-hook', bashPayloadFrom(repo.worktree, 'pnpm build'));
             // Centralized in the PRIMARY on purpose: removing the worktree must not take its log with it.
-            const logDir = path.join(repo.primary, '.webpieces', WORKTREE_STATE_DIR, 'wt-feature', 'logs');
+            const logDir = path.join(repo.primary, '.webpieces-logs', WORKTREE_STATE_DIR, 'wt-feature', 'logs');
             expect(readLog(logDir)).toContain('tree=wt-feature');
-            expect(fs.existsSync(path.join(repo.worktree, '.webpieces', 'logs'))).toBe(false);
+            expect(fs.existsSync(path.join(repo.worktree, '.webpieces-logs', 'logs'))).toBe(false);
         } finally {
             repo.cleanup();
         }
     });
 
-    it('writes a call made in the PRIMARY clone under .webpieces/logs/, with no namespace', () => {
+    it('writes a call made in the PRIMARY clone under .webpieces-logs/logs/, with no namespace', () => {
         const repo = new TwoTreeRepo('wt-feature');
         // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
         try {
             installBin(repo.primary, 0);
             kit.runShim(repo.primary, 'wp-ai-guards-hook', bashPayloadFrom(repo.primary, 'pnpm build'));
-            expect(readLog(path.join(repo.primary, '.webpieces', 'logs'))).toContain('tree=primary');
+            expect(readLog(path.join(repo.primary, '.webpieces-logs', 'logs'))).toContain('tree=primary');
         } finally {
             repo.cleanup();
         }
@@ -188,9 +188,9 @@ describe('L0 audit log routing — per worktree, centralized under the primary',
             // the CALL was in — otherwise a worktree's whole L0 history lands in the primary's file.
             installBin(repo.primary, 0);
             kit.runShim(repo.primary, 'wp-ai-guards-hook', bashPayloadFrom(repo.worktree, 'pnpm build'));
-            const logDir = path.join(repo.primary, '.webpieces', WORKTREE_STATE_DIR, 'wt-feature', 'logs');
+            const logDir = path.join(repo.primary, '.webpieces-logs', WORKTREE_STATE_DIR, 'wt-feature', 'logs');
             expect(readLog(logDir)).toContain('tree=wt-feature');
-            expect(fs.existsSync(path.join(repo.primary, '.webpieces', 'logs', L0_SHIM_STREAM))).toBe(false);
+            expect(fs.existsSync(path.join(repo.primary, '.webpieces-logs', 'logs', L0_SHIM_STREAM))).toBe(false);
         } finally {
             repo.cleanup();
         }
@@ -210,7 +210,7 @@ function stageDriftRoot(declared: string, installed: string): string {
 }
 
 function logOf(root: string): string {
-    return readLog(path.join(root, '.webpieces', 'logs'));
+    return readLog(path.join(root, '.webpieces-logs', 'logs'));
 }
 
 /**
@@ -300,7 +300,7 @@ describe('L0 audit log rotation — 512 KB into a .1.log sibling', () => {
     it('rotates once the log exceeds the cap, and keeps writing to the live file', () => {
         const root = kit.mktmp();
         installBin(root, 0);
-        const logDir = path.join(root, '.webpieces', 'logs');
+        const logDir = path.join(root, '.webpieces-logs', 'logs');
         // Seed the writer the shim will actually append to, inside its LAYER directory.
         fs.mkdirSync(path.join(logDir, L0_SHIM_STREAM), { recursive: true });
         const stream = path.join(L0_SHIM_STREAM, 'unknown-coordinator-wp-ai-guards-hook.log');
@@ -319,7 +319,7 @@ describe('L0 audit log rotation — 512 KB into a .1.log sibling', () => {
     it('does NOT rotate a log still under the cap', () => {
         const root = kit.mktmp();
         installBin(root, 0);
-        const logDir = path.join(root, '.webpieces', 'logs');
+        const logDir = path.join(root, '.webpieces-logs', 'logs');
         fs.mkdirSync(logDir, { recursive: true });
         fs.mkdirSync(path.join(logDir, L0_SHIM_STREAM), { recursive: true });
         fs.writeFileSync(path.join(logDir, L0_SHIM_STREAM, 'unknown-coordinator-wp-ai-guards-hook.log'), 'x'.repeat(1024));
@@ -339,7 +339,7 @@ describe('L0 audit log is best-effort — an unwritable log dir changes nothing'
         const root = kit.mktmp();
         installBin(root, 0);
         // A FILE where the state dir must be: mkdir -p cannot succeed, at any depth beneath it.
-        fs.writeFileSync(path.join(root, '.webpieces'), 'not a directory\n');
+        fs.writeFileSync(path.join(root, '.webpieces-logs'), 'not a directory\n');
 
         const out = kit.runShim(root, 'wp-ai-guards-hook', kit.bashPayload('pnpm build'));
 
@@ -350,7 +350,7 @@ describe('L0 audit log is best-effort — an unwritable log dir changes nothing'
 
     it('still DENIES (fails closed) when the guards are down and the log cannot be written', () => {
         const root = kit.stageDeclaredRoot();  // declared but no bin → fault X
-        fs.writeFileSync(path.join(root, '.webpieces'), 'not a directory\n');
+        fs.writeFileSync(path.join(root, '.webpieces-logs'), 'not a directory\n');
         const out = kit.runShim(root, 'wp-ai-guards-hook', kit.bashPayload('pnpm build'));
         expect(out.isDenied()).toBe(true);
         expect(out.denyReason()).toContain('not installed');
@@ -487,8 +487,8 @@ describe('L0 audit log line format', () => {
 
     it('renders the log path from the shared state-dir constants, never a hardcoded hooks/', () => {
         const shim = renderShim();
-        expect(shim).toContain('/.webpieces/worktrees/$WP_TREE/logs');
-        expect(shim).not.toContain('.webpieces/hooks');
+        expect(shim).toContain('/.webpieces-logs/worktrees/$WP_TREE/logs');
+        expect(shim).not.toContain('.webpieces-logs/hooks');
     });
 });
 

@@ -64,7 +64,7 @@ function main(): void {
     wrote.push(l2);
 
     // The DELIVERED copy of the same bytes. `guards/L2-branch-state.md` is for a human reading the
-    // repo; this is the rules-config TEMPLATE an L2 block drops into `.webpieces/instruct-ai/` and
+    // repo; this is the rules-config TEMPLATE an L2 block drops into `.webpieces-logs/instruct-ai/` and
     // names by absolute path in the deny (see core/l2-matrix-doc.ts). One renderer feeds both, so the
     // doc an agent is handed mid-block cannot describe a table the guards no longer have — the same
     // arrangement L0 already has with webpieces.guard-matrix.md.

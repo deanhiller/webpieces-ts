@@ -163,7 +163,7 @@ describe('L2 reason -> row is exhaustive over the four guards', () => {
 
 /**
  * THE DELIVERED COPY. `guards/L2-branch-state.md` is for a human reading the repo; the rules-config
- * template is what an L2 block drops into `.webpieces/instruct-ai/` and names by absolute path. Both
+ * template is what an L2 block drops into `.webpieces-logs/instruct-ai/` and names by absolute path. Both
  * come from renderL2Doc(), and this is what keeps that true — a delivered doc describing a table the
  * guards no longer have is worse than no doc, for the reason the "side door" incident already taught:
  * it looks covered.
@@ -179,8 +179,8 @@ describe('the L2 matrix is DELIVERED to the AI, not just committed', () => {
 
     it('points the reader at the doc only when it was actually written', () => {
         expect(branchStateMatrixPointer('', '5')).toBe('');
-        expect(branchStateMatrixPointer('/repo/.webpieces/instruct-ai/webpieces.branch-state-matrix.md', '5'))
-            .toContain('/repo/.webpieces/instruct-ai/webpieces.branch-state-matrix.md');
+        expect(branchStateMatrixPointer('/repo/.webpieces-logs/instruct-ai/webpieces.branch-state-matrix.md', '5'))
+            .toContain('/repo/.webpieces-logs/instruct-ai/webpieces.branch-state-matrix.md');
     });
 
     // The row is the point: a bare "read this doc" is a page, a row number is the two lines that
@@ -192,7 +192,7 @@ describe('the L2 matrix is DELIVERED to the AI, not just committed', () => {
     // Interpolated into a REASON="…" shell assignment and then printf'd into a JSON string, exactly as
     // L0's pointer is: a quote or backslash corrupts the decision payload, not merely the prose.
     it('emits a JSON-safe pointer', () => {
-        const pointer = branchStateMatrixPointer('/repo/.webpieces/instruct-ai/webpieces.branch-state-matrix.md', '5');
+        const pointer = branchStateMatrixPointer('/repo/.webpieces-logs/instruct-ai/webpieces.branch-state-matrix.md', '5');
         expect(pointer).not.toContain('"');
         expect(pointer).not.toContain('\\');
     });
@@ -200,7 +200,7 @@ describe('the L2 matrix is DELIVERED to the AI, not just committed', () => {
     // An absolute path or it is not a pointer — the shell's cwd is not the governed root and cannot be
     // assumed, which is why L1's messages name <root> explicitly rather than saying "cd first".
     it('keeps the path absolute, and starts on its own line so the house report shape holds', () => {
-        const pointer = branchStateMatrixPointer('/repo/.webpieces/instruct-ai/webpieces.branch-state-matrix.md', '5');
+        const pointer = branchStateMatrixPointer('/repo/.webpieces-logs/instruct-ai/webpieces.branch-state-matrix.md', '5');
         expect(pointer.startsWith('\n')).toBe(true);
         expect(pointer).toContain(' /repo/');
     });

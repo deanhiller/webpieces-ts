@@ -112,7 +112,7 @@ describe('index.json — because branches ALTERNATE (Part 4)', () => {
         stageMerge('feat', 1, ['x.ts']);
         index.promoteToMerged(repo, 'feat', new ArchiveRecord('tag2', 's', 'b', 2, 'now'));
 
-        const mergedRoot = path.join(repo, '.webpieces', 'merge-info', 'merged');
+        const mergedRoot = path.join(repo, '.webpieces-logs', 'merge-info', 'merged');
         const kept = fs.readdirSync(mergedRoot).filter((entry: string): boolean => entry.startsWith('feat-prev-'));
         expect(kept.length).toBe(1);
         expect(readIndex().merged['feat'].pr).toBe(2);
@@ -126,7 +126,7 @@ describe('legacy migration reaches the index without data loss', () => {
      * including keeping its 3-point/clean classification.
      */
     it('a legacy {branch}/merge-N/ tree migrates, promotes and indexes intact', () => {
-        const legacyHome = path.join(repo, '.webpieces', 'merge-info', 'legacy-feat');
+        const legacyHome = path.join(repo, '.webpieces-logs', 'merge-info', 'legacy-feat');
         const legacyRun = path.join(legacyHome, 'merge-1');
         fs.mkdirSync(legacyRun, { recursive: true });
         fs.writeFileSync(path.join(legacyRun, 'updatemain-hashes.json'), '{"hashForkPoint":"old"}');

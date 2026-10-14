@@ -29,7 +29,7 @@ class ShimVerdict {
 
 /** The one L0 shim log this tree wrote — locating it also proves exactly one writer was used. */
 function readShimLog(root: string): string {
-    const dir = path.join(root, '.webpieces', 'logs', L0_SHIM_STREAM);
+    const dir = path.join(root, '.webpieces-logs', 'logs', L0_SHIM_STREAM);
     const hits = fs.readdirSync(dir).filter((n: string): boolean => n.endsWith('.log') && !n.endsWith('.1.log'));
     if (hits.length !== 1) throw new Error(`expected 1 shim log, found ${hits.length}: ${hits.join()}`);
     return fs.readFileSync(path.join(dir, hits[0]), 'utf8');

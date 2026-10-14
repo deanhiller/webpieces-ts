@@ -18,11 +18,11 @@ export const WEBPIECES_DISABLE = 'webpieces-disable';
 // to block commit/push/PR until the merge is validated). Kept here so neither package
 // depends on the other — they only share this vocabulary.
 //
-// `.webpieces/` is the single working dir for all webpieces tooling: ai-hook-rules
+// `.webpieces-logs/` is the single working dir for all webpieces tooling: ai-hook-rules
 // bootstrap/cache, the instruct-ai docs, and the workflow state. To keep the top level
 // quiet, per-feature workflow dirs are nested one level down under `merge-info/<feature>`
 // and `pr-review/<feature>` rather than scattered as top-level `merge-<feature>`/`pr-<feature>`.
-// `.webpieces/` is gitignored; only the per-feature subdirs under those two homes are subject
+// `.webpieces-logs/` is gitignored; only the per-feature subdirs under those two homes are subject
 // to 30-day cleanup (the homes themselves, like hooks/ and instruct-ai/, are permanent).
 // The DIRECTORY NAME only. Never join it onto a root yourself — go through `DotWebpieces.shared()`
 // (repo-wide state), `DotWebpieces.local()` (this worktree's own tooling-written state) or
@@ -40,7 +40,7 @@ export const MERGE_IN_PROGRESS_FILE = 'merge-in-progress.json';
 // pr-gate commands WRITE it and things outside pr-gate READ it to decide whether a resolve is
 // half-finished, and neither side may depend on the other.
 //
-// It lives directly under `.webpieces/` local state (NOT under merge-info/), because a dev-deploy
+// It lives directly under `.webpieces-logs/` local state (NOT under merge-info/), because a dev-deploy
 // resolve is not a 3-point merge: it never touches the feature branch, never produces merge-info
 // context, and must NOT be picked up by merge-in-progress-guard's marker scan — that guard's remedy
 // is `pnpm wp-finish-upsert-pr`, which is the wrong command here and would strand the tmp branch.

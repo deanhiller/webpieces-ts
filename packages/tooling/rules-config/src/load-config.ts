@@ -1,7 +1,7 @@
 import * as path from 'node:path';
 import { injectable, bindingScopeValues } from 'inversify';
 import { ConfigObject } from '@webpieces/rules-sdk';
-import { InformAiError, AtomicFile } from '@webpieces/tooling-common';
+import { InformAiError, AtomicFile, RepositoryLayout } from '@webpieces/tooling-common';
 import { buildCommandsConfig, CommandsConfig } from './commands-config';
 import { ConfigFile } from './config-file';
 import { RulePackRegistry } from './rule-pack-registry';
@@ -15,6 +15,7 @@ import { validateTopLevelKeys } from './config-key-rules';
 import { validateExcludePaths, validateMatchRulesSection } from './validate-config';
 import { MatchRuleConfig } from './match-rules-config';
 import { WebpiecesRulesConfig } from './WebpiecesRulesConfig';
+import { PolicyTracking } from './policy-tracking';
 import { formatConfigErrorsBanner } from './config-error-banner';
 
 /** One root parse and one owner-resolution pass supply all consumers with the same registry and settings. */
@@ -55,9 +56,11 @@ export class ConfigLoader {
             ...validateMatchRulesSection(raw['match-rules']),
         ];
         if (errors.length) throw new InformAiError(formatConfigErrorsBanner(errors));
+        new RepositoryLayout().assertCurrent(root);
         const declarations = this.files.declarations(raw.rulePacks, root);
         const policy = this.files.resolve(root, this.files.select(root, declarations));
         this.artifacts.check(root, policy);
+        new PolicyTracking().check(root, declarations);
         return this.loaded(
             configPath,
             raw.commands,

@@ -34,7 +34,7 @@ export function refresherArgv(refresher: string, workspaceRoot: string, hangTime
  * the NEXT call. This is the first detached spawn in the codebase — every existing hook is synchronous.
  *
  * Observability: we log SPAWN_ATTEMPT here and the child logs START/FINISH/ERROR, all to
- * `.webpieces/logs/async-refresh/<writer>.log` (LogStream names every writer). The child's
+ * `.webpieces-logs/logs/async-refresh/<writer>.log` (LogStream names every writer). The child's
  * stdout/stderr are redirected to a sibling file (not
  * /dev/null) so a crash before the child's own logging is still captured. If the async-refresh stream shows
  * SPAWN_ATTEMPT but never START, the detached child was killed before it ran.
@@ -68,7 +68,7 @@ export function triggerMainSyncRefresh(workspaceRoot: string, hangTimeoutMinutes
     // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
     try {
         const refresher = path.join(__dirname, 'sync-main.js');
-        // SPAWN_ATTEMPT first — this also creates .webpieces/logs so the stderr fd below can open.
+        // SPAWN_ATTEMPT first — this also creates .webpieces-logs/logs so the stderr fd below can open.
         logSyncEvent(workspaceRoot, new SyncLogEvent('SPAWN_ATTEMPT', process.pid, '-', `refresher=${refresher}`));
 
         // Redirect the detached child's stdout+stderr to a file (not /dev/null) so an uncaught crash

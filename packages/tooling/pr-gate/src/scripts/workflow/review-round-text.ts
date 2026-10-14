@@ -31,7 +31,7 @@ export class ReviewRoundText {
             '     green / yellow → finish.',
             '     orange         → FIX the code best effort, record it with `pnpm wp-write-review-fixes`, then finish.',
             '   You may NOT spawn a reviewer again, re-brief one, ask for an override, or move/delete/edit anything',
-            '   under .webpieces/pr-review/* to get another round. If the gate ever asks for another review after',
+            '   under .webpieces-logs/pr-review/* to get another round. If the gate ever asks for another review after',
             '   this, do not spawn a reviewer; report it as a webpieces bug.',
             '',
         ].join('\n');

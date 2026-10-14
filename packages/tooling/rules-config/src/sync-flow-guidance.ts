@@ -130,7 +130,7 @@ export class SyncFlowGuidance {
             '  git rev-list --left-right --count origin/main...HEAD  ← prints "<behind>  <ahead>"',
             '  git log --oneline HEAD..origin/main                   ← what main has that you do not',
             '  git diff --stat origin/main...HEAD                    ← what you changed since the fork point',
-            '  cat .webpieces/main-sync-status.json                  ← the tooling\'s own answer, incl.',
+            '  cat .webpieces-logs/main-sync-status.json                  ← the tooling\'s own answer, incl.',
             '                                                          the files predicted to conflict',
             '`git merge --ff-only` is NOT a look — it MUTATES on success (that is the whole point of a',
             'fast-forward), so it is blocked like every other merge. Never use it as a probe.',
