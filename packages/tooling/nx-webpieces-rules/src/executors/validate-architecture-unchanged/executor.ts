@@ -42,7 +42,7 @@ export interface ExecutorResult {
 const TMP_MD_FILE = 'webpieces.dependencies.md';
 
 /**
- * Write the instructions documentation to .webpieces/instruct-ai/.
+ * Write the instructions documentation to .webpieces-logs/instruct-ai/.
  * Sourced from @webpieces/rules-config.
  */
 function writeTmpInstructionsFile(workspaceRoot: string): string {

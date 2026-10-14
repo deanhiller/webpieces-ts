@@ -12,7 +12,7 @@ import type { Rule } from './types';
  * argument for the bash surface.
  *
  * Lifted out of runner.ts, which the file-size rule had outgrown. It is a natural seam rather than a
- * page-count fix: this is the only place `excludePaths` and the hard-coded `.webpieces/` skip are
+ * page-count fix: this is the only place `excludePaths` and the hard-coded `.webpieces-logs/` skip are
  * consulted, and runner.ts is otherwise the four tool ENTRY POINTS and their L0/L1 preamble.
  */
 
@@ -23,15 +23,15 @@ import type { Rule } from './types';
 //
 // It takes a GovernedPath and not a bare string because the two questions below are asked against
 // DIFFERENT roots, and answering both from the governed-root spelling is issue #851's secondary defect:
-// the excludePaths globs are authored against the governed root, while `.webpieces/` is the state dir OF
+// the excludePaths globs are authored against the governed root, while `.webpieces-logs/` is the state dir OF
 // A TREE and a linked worktree has its own. One argument carrying both spellings is what stops a caller
 // picking the wrong one; see GovernedPath.
 // webpieces-disable no-function-outside-class -- L1's filter, a pure predicate over one path and one glob list; it is called from four module-scope entry points in runner.ts and a class here would be a namespace with no state
 export function filterByExcludedPaths(rules: readonly Rule[], governed: GovernedPath, ex: ExcludePaths): readonly Rule[] {
     // webpieces' OWN gitignored state dir is never governed, config or no config. Ahead of the list on
     // purpose — see isWebpiecesStateDir for why it is code and not a seeded glob. Asked about the
-    // OWNING tree's spelling, so `<primary>/.claude/worktrees/agent-X/.webpieces/...` is exempt for the
-    // identical reason `<primary>/.webpieces/...` is: nothing under it is tracked, reviewable or
+    // OWNING tree's spelling, so `<primary>/.claude/worktrees/agent-X/.webpieces-logs/...` is exempt for the
+    // identical reason `<primary>/.webpieces-logs/...` is: nothing under it is tracked, reviewable or
     // revertable in the tree it belongs to.
     if (isWebpiecesStateDir(governed.treeRelativePath)) return [];
     if (ex.paths.some((p: string): boolean => globMatches(p, governed.relativePath))) return [];
@@ -43,8 +43,8 @@ export function filterByExcludedPaths(rules: readonly Rule[], governed: Governed
  * so it costs no extra git call on the hook's blocking path.
  *
  * Both spellings of the command's effective cwd: relative to the governed root for the excludePaths
- * globs, and relative to the OWNING tree for the `.webpieces/` skip — which for
- * `cd <worktree>/.webpieces && …` is the worktree's state dir, not the primary's. Both are '' for a
+ * globs, and relative to the OWNING tree for the `.webpieces-logs/` skip — which for
+ * `cd <worktree>/.webpieces-logs && …` is the worktree's state dir, not the primary's. Both are '' for a
  * command with no leading `cd`, which matches no glob and is not the state dir.
  */
 // webpieces-disable no-function-outside-class -- the bash-side constructor for the value above, beside it

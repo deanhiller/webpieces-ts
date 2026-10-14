@@ -60,7 +60,9 @@ jobs:
               # change makes nearly every project "affected", so this overlaps the independent branches
               # of the task graph; the win is bounded by the serial dependency chain (core-util builds
               # before its dependents).
-              run: TS_NODE_PROJECT=tsconfig.base.json node -r @swc-node/register -r tsconfig-paths/register packages/tooling/code-rules/src/wp-ci.ts --base=origin/main --parallel=4
+              # Keep the entrypoint and Nx executors on the same pinned published toolchain.
+              # Package tests exercise local source through the TypeScript/Vitest aliases.
+              run: pnpm wp-ci --base=origin/main --parallel=4
 
             - name: Upload coverage
               uses: codecov/codecov-action@v6

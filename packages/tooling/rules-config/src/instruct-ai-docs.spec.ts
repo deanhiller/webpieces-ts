@@ -18,7 +18,7 @@ function tempRoot(): string {
 }
 
 function deliveredDir(root: string): string {
-    return path.join(root, '.webpieces', 'instruct-ai');
+    return path.join(root, '.webpieces-logs', 'instruct-ai');
 }
 
 /**

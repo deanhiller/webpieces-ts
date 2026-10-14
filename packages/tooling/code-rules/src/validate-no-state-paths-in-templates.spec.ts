@@ -21,7 +21,7 @@ const TEMPLATES = 'packages/tooling/rules-config/templates';
 const OFFENDING_DOC = `# wp-cleanup
 
 It logs every deletion with its pre-delete SHA plus a \`recover=\` command in
-\`.webpieces/logs/branch-mutations.log\`. Use this instead of \`git branch -D\`.
+\`.webpieces-logs/logs/branch-mutations.log\`. Use this instead of \`git branch -D\`.
 `;
 
 // The same doc, fixed the way the template engine already works elsewhere.
@@ -71,7 +71,7 @@ describe('NoStatePathsInTemplatesValidator', () => {
         fs.rmSync(root, { recursive: true, force: true });
     });
 
-    it('FAILS a template that restates a .webpieces path', async () => {
+    it('FAILS a template that restates a .webpieces-logs path', async () => {
         writeFile(root, `${TEMPLATES}/webpieces.git-workflow.md`, OFFENDING_DOC);
 
         await expect(new NoStatePathsInTemplatesValidator(config(), new GateScanScope()).run(root)).rejects.toBeInstanceOf(RuleFailError);
@@ -98,7 +98,7 @@ describe('NoStatePathsInTemplatesValidator', () => {
     it('honours the escape hatch a doc whose SUBJECT is the layout needs', async () => {
         writeFile(root, `${TEMPLATES}/webpieces.buildlog.md`,
             '<!-- webpieces-disable no-state-paths-in-templates -- this table IS the layout -->\n'
-            + '| the primary clone | `.webpieces/build.log` |\n');
+            + '| the primary clone | `.webpieces-logs/build.log` |\n');
 
         expect((await new NoStatePathsInTemplatesValidator(config(), new GateScanScope()).run(root)).success).toBe(true);
     });
@@ -106,7 +106,7 @@ describe('NoStatePathsInTemplatesValidator', () => {
     it('refuses the escape hatch when disableAllowed is false', async () => {
         writeFile(root, `${TEMPLATES}/webpieces.buildlog.md`,
             '<!-- webpieces-disable no-state-paths-in-templates -- this table IS the layout -->\n'
-            + '| the primary clone | `.webpieces/build.log` |\n');
+            + '| the primary clone | `.webpieces-logs/build.log` |\n');
         const cfg = config();
         cfg.disableAllowed = false;
 
@@ -127,7 +127,7 @@ describe('NoStatePathsInTemplatesValidator', () => {
 
     it('still flags a per-tree path on a line that also names the machine-local one', async () => {
         writeFile(root, `${TEMPLATES}/webpieces.buildlog.md`,
-            'The ledger is `~/.webpieces/builds.log`; this build went to `.webpieces/build.log`.\n');
+            'The ledger is `~/.webpieces/builds.log`; this build went to `.webpieces-logs/build.log`.\n');
 
         await expect(new NoStatePathsInTemplatesValidator(config(), new GateScanScope()).run(root)).rejects.toBeInstanceOf(RuleFailError);
     });

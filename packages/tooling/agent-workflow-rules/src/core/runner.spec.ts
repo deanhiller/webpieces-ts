@@ -424,7 +424,7 @@ describe('runBash — the deny body advertises the Read/Write escape for an excl
     beforeAll(() => {
         outer = specTempDirs.makeReal('wp-esc-');
         initRepo(outer);
-        fs.mkdirSync(nodePath.join(outer, '.webpieces'), { recursive: true });
+        fs.mkdirSync(nodePath.join(outer, '.webpieces-logs'), { recursive: true });
         fs.mkdirSync(nodePath.join(outer, 'repositories', 'plain'), { recursive: true });
     });
 
@@ -433,30 +433,30 @@ describe('runBash — the deny body advertises the Read/Write escape for an excl
     });
 
     it('prepends the stanza — ABOVE the git remedies — when the command names an excluded path', () => {
-        writeGuardConfig(outer, ['.webpieces/**', 'repositories/**']);
+        writeGuardConfig(outer, ['.webpieces-logs/**', 'repositories/**']);
         const report = (
             runBash(
-                'git push origin HEAD && cat .webpieces/tasks.md',
+                'git push origin HEAD && cat .webpieces-logs/tasks.md',
                 outer,
                 'guards',
                 'claude-code',
             ) as BlockedResult
         ).report;
         expect(report.startsWith('✅ YOU CAN USE THE READ/WRITE TOOLS RIGHT NOW')).toBe(true);
-        expect(report).toContain('Your command referenced: .webpieces/tasks.md');
-        expect(report).toContain('.webpieces/**'); // the ACTUAL configured globs, not an example
+        expect(report).toContain('Your command referenced: .webpieces-logs/tasks.md');
+        expect(report).toContain('.webpieces-logs/**'); // the ACTUAL configured globs, not an example
         expect(report).toContain('gated flow'); // the verdict is unchanged — still the push block
     });
 
     it("normalises an ABSOLUTE path the same way (the live incident's shape)", () => {
-        writeGuardConfig(outer, ['.webpieces/**']);
-        const command = `git push origin HEAD && cat ${nodePath.join(outer, '.webpieces', 'tasks.md')}`;
+        writeGuardConfig(outer, ['.webpieces-logs/**']);
+        const command = `git push origin HEAD && cat ${nodePath.join(outer, '.webpieces-logs', 'tasks.md')}`;
         const report = (runBash(command, outer, 'guards', 'claude-code') as BlockedResult).report;
-        expect(report).toContain('Your command referenced: .webpieces/tasks.md');
+        expect(report).toContain('Your command referenced: .webpieces-logs/tasks.md');
     });
 
     it('does NOT prepend the stanza when the command names no excluded path', () => {
-        writeGuardConfig(outer, ['.webpieces/**', 'repositories/**']);
+        writeGuardConfig(outer, ['.webpieces-logs/**', 'repositories/**']);
         const report = (
             runBash('git push origin HEAD', outer, 'guards', 'claude-code') as BlockedResult
         ).report;
@@ -465,7 +465,7 @@ describe('runBash — the deny body advertises the Read/Write escape for an excl
     });
 
     it('offers the `cd` only when the directory itself matches — never the <dir>/** trap', () => {
-        writeGuardConfig(outer, ['.webpieces/**', 'repositories/**']);
+        writeGuardConfig(outer, ['.webpieces-logs/**', 'repositories/**']);
 
         const withCd = (
             runBash(
@@ -479,13 +479,13 @@ describe('runBash — the deny body advertises the Read/Write escape for an excl
 
         const noCd = (
             runBash(
-                'git push origin HEAD && cat .webpieces/tasks.md',
+                'git push origin HEAD && cat .webpieces-logs/tasks.md',
                 outer,
                 'guards',
                 'claude-code',
             ) as BlockedResult
         ).report;
-        expect(noCd).not.toContain('cd .webpieces &&');
+        expect(noCd).not.toContain('cd .webpieces-logs &&');
         expect(noCd).toContain('A `cd` CANNOT rescue bash here');
     });
 });

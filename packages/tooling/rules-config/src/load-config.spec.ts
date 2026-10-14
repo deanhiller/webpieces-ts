@@ -327,7 +327,7 @@ describe('loadAndValidate — escape-hatch fields', () => {
 describe('loadAndValidate — sections & commands', () => {
     it('errors when a policy is placed in another declared owner file', () => {
         const dir = writeConfig(allRulesOff());
-        const ownerFile = path.join(dir, '.webpieces/rules/fixture-0.json');
+        const ownerFile = path.join(dir, '.webpieces-config/rules/fixture-0.json');
         const entries = JSON.parse(fs.readFileSync(ownerFile, 'utf8'));
         entries['pr-lifecycle-guard'] = fixtureRuleRegistry.seedFor('pr-lifecycle-guard');
         fs.writeFileSync(ownerFile, JSON.stringify(entries));

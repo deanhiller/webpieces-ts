@@ -88,7 +88,7 @@ function repo(): string {
     git(dir, 'git init -q -b main');
     git(dir, 'git config user.email t@t.co');
     git(dir, 'git config user.name T');
-    fs.writeFileSync(path.join(dir, '.gitignore'), '.webpieces/\n');
+    fs.writeFileSync(path.join(dir, '.gitignore'), '.webpieces-logs/\n');
     commit(dir, 'README.md', '# base\n');
     git(dir, 'git checkout -q -b dean/feat');
     commit(dir, 'store.ts', 'export function load(): string { try { return read(); } catch { return ""; } }\n');

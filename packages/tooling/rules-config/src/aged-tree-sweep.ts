@@ -4,7 +4,7 @@ import { injectable, bindingScopeValues } from 'inversify';
 
 /**
  * How long a file survives an AGED-TREE SWEEP without being rewritten — the policy `cleanTmp` applies
- * to `{repo}/.webpieces`.
+ * to `{repo}/.webpieces-logs`.
  *
  * It is NOT the only root webpieces writes under, though this comment used to say so: scratch trees go
  * to `os.tmpdir()` as well, on a much shorter cutoff and through `TmpScratchSweeper`. See that file.
@@ -39,7 +39,7 @@ export class SweepCount {
 /**
  * The 30-day depth-first reap, as ONE implementation.
  *
- * It was written inside `CleanTmp` for `<primary>/.webpieces`, and extracted here when a second root
+ * It was written inside `CleanTmp` for `<primary>/.webpieces-logs`, and extracted here when a second root
  * (the machine-global PR-body store) needed the identical policy. That second root is gone — the gated
  * merge body is the PR's own description now, see `decisions/0005` — so today there is one caller. The
  * loop stays extracted anyway: it is the sweep policy, testable on its own root, and `CleanTmp` reads

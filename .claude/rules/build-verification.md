@@ -23,14 +23,14 @@ compiles projects your change cannot reach.
 **The build's output goes to a log FILE, not to your terminal.** The console gets a heartbeat (`… size
 100 lines`, plus `still` when the count has not moved) and then one summary — `Build success` or
 `Build Failed:`, the absolute `FullLog :` path, and a note that the previous run is kept beside it as
-`build.log.bak`. Both are gitignored with the rest of `.webpieces/`.
+`build.log.bak`. Both are gitignored with the rest of `.webpieces-logs/`.
 
 **Read the log at the absolute `FullLog :` path THIS run printed — never type a path from memory.**
 `grep -n error "<the FullLog path>"` always works; a remembered relative path silently greps nothing,
 which reads exactly like a clean build.
 
 Where that file actually lands — primary clone vs linked worktree, `wp-build` vs the PR gate's stages —
-is **`.webpieces/instruct-ai/webpieces.buildlog.md`**, regenerated on every `wp-*` command. Read it
+is **`.webpieces-logs/instruct-ai/webpieces.buildlog.md`**, regenerated on every `wp-*` command. Read it
 there rather than here: the namespacing is webpieces' to change, this file is hand-written, and a path
 copied into a hand-written file is exactly the thing that goes stale under us (see the corollary in
 `.claude/rules/no-backwards-compat.md`).
@@ -111,7 +111,7 @@ the one spec file you are changing.
 — `wp-build` and both PR-gate stages — writes a row to one machine-wide ledger, and `wp-build` REFUSES
 when the box is already at its limit rather than making a fourth build everybody's problem. The gate
 stages are never refused. When you meet that refusal, take its first cure: run the gate you were going
-to run anyway, which runs the same `buildCommand`. **`.webpieces/instruct-ai/webpieces.buildlog.md` has
+to run anyway, which runs the same `buildCommand`. **`.webpieces-logs/instruct-ai/webpieces.buildlog.md` has
 the ledger's location, its row format, the grep recipes, the limit's config key and the `--force`
 escape** — read it there, not here, for the reason in the corollary in
 `.claude/rules/no-backwards-compat.md`: a path copied into this hand-written file is exactly what goes

@@ -8,8 +8,8 @@ import { PackPolicyFiles } from './pack-policy-files';
 describe('repository-owned policy paths', () => {
     it('canonicalizes roots and future paths without writing directories', () => {
         const root = specTempDirs.make('wp-rooted-policy-');
-        expect(new RepositoryPath(root).resolve('.webpieces/rules/code.json')).toBe(
-            path.join(fs.realpathSync(root), '.webpieces/rules/code.json'),
+        expect(new RepositoryPath(root).resolve('.webpieces-config/rules/code.json')).toBe(
+            path.join(fs.realpathSync(root), '.webpieces-config/rules/code.json'),
         );
         expect(fs.readdirSync(root)).toEqual([]);
     });

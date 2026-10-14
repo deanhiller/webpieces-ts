@@ -199,15 +199,15 @@ describe('feature-branch-guard judges the tree that owns the FILE (issue #851)',
 });
 
 /*
- * The `.webpieces/` exemption, in the spelling that was NOT exempt.
+ * The `.webpieces-logs/` exemption, in the spelling that was NOT exempt.
  *
- * `<primary>/.webpieces/worktrees/agent-X/pr-review/…/review-1.json` was exempt; the same kind of file
- * at `<primary>/.claude/worktrees/agent-X/.webpieces/pr-review/…/summary.json` was not, because the skip
+ * `<primary>/.webpieces-logs/worktrees/agent-X/pr-review/…/review-1.json` was exempt; the same kind of file
+ * at `<primary>/.claude/worktrees/agent-X/.webpieces-logs/pr-review/…/summary.json` was not, because the skip
  * was asked about the GOVERNED-root spelling, where that path begins `.claude`. This matters out of all
  * proportion to its size: `wp-review-upsert-pr` REQUIRES that file before `wp-finish-upsert-pr` will
  * open a PR, so the guard could forbid a file the gate demands.
  */
-describe('the .webpieces/ state-dir exemption follows the tree that owns the file', () => {
+describe('the .webpieces-logs/ state-dir exemption follows the tree that owns the file', () => {
     const rules: readonly Rule[] = [{ name: 'feature-branch-guard', configKey: 'branch-state-guard' } as unknown as Rule];
 
     function governed(absolute: string): GovernedPath {
@@ -215,7 +215,7 @@ describe('the .webpieces/ state-dir exemption follows the tree that owns the fil
     }
 
     function reviewJson(): string {
-        return path.join(worktree, '.webpieces', 'pr-review', WORKTREE_BRANCH, 'summary.json');
+        return path.join(worktree, '.webpieces-logs', 'pr-review', WORKTREE_BRANCH, 'summary.json');
     }
 
     // The PRE-FIX behaviour, asserted so the change is a measured one rather than a claimed one: the
@@ -231,15 +231,15 @@ describe('the .webpieces/ state-dir exemption follows the tree that owns the fil
     });
 
     it('keeps the primary clone\'s own state dir exempt (unchanged)', () => {
-        const verdict = path.join(primary, '.webpieces', 'worktrees', AGENT_ID, 'pr-review', 'b', 'review-1.json');
+        const verdict = path.join(primary, '.webpieces-logs', 'worktrees', AGENT_ID, 'pr-review', 'b', 'review-1.json');
         expect(filterByExcludedPaths(rules, governed(verdict), new ExcludePaths([]))).toEqual([]);
     });
 
-    // FIRST SEGMENT OF THE OWNING TREE, still — not "anything containing .webpieces". A nested
-    // `.webpieces` belonging to a package inside the worktree stays governed, exactly as it does in the
+    // FIRST SEGMENT OF THE OWNING TREE, still — not "anything containing .webpieces-logs". A nested
+    // `.webpieces-logs` belonging to a package inside the worktree stays governed, exactly as it does in the
     // primary clone.
-    it('does NOT exempt a nested .webpieces owned by something else inside the worktree', () => {
-        const nested = path.join(worktree, 'packages', '.webpieces', 'x.ts');
+    it('does NOT exempt a nested .webpieces-logs owned by something else inside the worktree', () => {
+        const nested = path.join(worktree, 'packages', '.webpieces-logs', 'x.ts');
         expect(filterByExcludedPaths(rules, governed(nested), new ExcludePaths([]))).toEqual(rules);
     });
 });

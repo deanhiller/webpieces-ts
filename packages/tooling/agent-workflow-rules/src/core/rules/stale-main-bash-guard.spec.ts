@@ -358,7 +358,7 @@ describe('stale-main-bash-guard — never wedges the session', () => {
     it('allows the mode-OFF escape hatch and the guards own logs', () => {
         expect(blocked('cat webpieces.config.json')).toBe(false);
         expect(blocked('cat ./webpieces.config.json')).toBe(false);
-        expect(blocked('cat .webpieces/logs/async-refresh/x.log')).toBe(false);
+        expect(blocked('cat .webpieces-logs/logs/async-refresh/x.log')).toBe(false);
         expect(blocked('cat /repo/webpieces.config.json')).toBe(false);
     });
 });

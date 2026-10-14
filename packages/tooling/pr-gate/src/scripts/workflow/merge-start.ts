@@ -193,7 +193,7 @@ export class MergeStart {
         }
     }
 
-    // The LIVE rendering of the same template `.webpieces/instruct-ai/webpieces.mergeprocess.md` is
+    // The LIVE rendering of the same template `.webpieces-logs/instruct-ai/webpieces.mergeprocess.md` is
     // delivered from — see rules-config/src/merge-process-doc.ts. The text lives there, not here, so
     // the copy every repo receives and the copy a conflicted merge stamps are the same document.
     private mergeProcessDoc(mergeDir: string, squashBranch: string, conflictedFiles: string[], finishCommand: string): string {

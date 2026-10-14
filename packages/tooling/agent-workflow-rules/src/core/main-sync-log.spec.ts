@@ -20,7 +20,7 @@ function tmpRoot(): string {
     return specTempDirs.make('wp-synclog-');
 }
 
-const LOG_REL = `.webpieces/logs/${streamName(ASYNC_REFRESH_STREAM)}`;
+const LOG_REL = `.webpieces-logs/logs/${streamName(ASYNC_REFRESH_STREAM)}`;
 
 describe('main-sync-log', () => {
     it('appends one tab-separated line with phase, pid, branch and detail', () => {
@@ -35,7 +35,7 @@ describe('main-sync-log', () => {
 
     it('rotates the writer into its .1.log sibling once the log exceeds the size cap', () => {
         const root = tmpRoot();
-        const logsDir = path.join(root, '.webpieces/logs');
+        const logsDir = path.join(root, '.webpieces-logs/logs');
         fs.mkdirSync(path.join(logsDir, ASYNC_REFRESH_STREAM), { recursive: true });
         fs.writeFileSync(path.join(logsDir, streamName(ASYNC_REFRESH_STREAM)), 'x'.repeat(512 * 1024 + 10));
         logSyncEvent(root, new SyncLogEvent('FINISH', 1, 'main', 'ok'));
@@ -51,7 +51,7 @@ describe('main-sync-log', () => {
         expect(content).toContain('line1 line2 line3');
     });
 
-    it('refresherChildStdioPath points inside .webpieces/logs', () => {
-        expect(refresherChildStdioPath('/repo')).toBe(path.join('/repo', '.webpieces/logs', streamName(ASYNC_REFRESH_STREAM)));
+    it('refresherChildStdioPath points inside .webpieces-logs/logs', () => {
+        expect(refresherChildStdioPath('/repo')).toBe(path.join('/repo', '.webpieces-logs/logs', streamName(ASYNC_REFRESH_STREAM)));
     });
 });

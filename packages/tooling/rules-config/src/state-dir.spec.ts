@@ -51,7 +51,7 @@ function makeRepoWithWorktree(prefix: string, worktreeDirName: string): void {
     git(primary, 'config user.email test@example.com');
     git(primary, 'config user.name Test');
     writeFile(primary, 'webpieces.config.json', '{}\n');
-    writeFile(primary, '.gitignore', '.webpieces/\n');
+    writeFile(primary, '.gitignore', '.webpieces-logs/\n');
     git(primary, 'add -A');
     git(primary, 'commit -q -m init');
     git(primary, `worktree add -q -b feature ${worktree}`);
@@ -72,17 +72,17 @@ describe('DotWebpieces.local()/shared() over a real linked worktree', () => {
         expect(dot.isLinkedWorktree(worktree)).toBe(true);
         expect(dot.worktreeName(worktree)).toBe('wt-feature');
         expect(dot.local(worktree)).toBe(
-            path.join(primary, '.webpieces', WORKTREE_STATE_DIR, 'wt-feature'));
+            path.join(primary, '.webpieces-logs', WORKTREE_STATE_DIR, 'wt-feature'));
     });
 
-    it('local() in the PRIMARY clone is unchanged — still <primary>/.webpieces, no namespace', () => {
+    it('local() in the PRIMARY clone is unchanged — still <primary>/.webpieces-logs, no namespace', () => {
         expect(dot.isLinkedWorktree(primary)).toBe(false);
         expect(dot.worktreeName(primary)).toBe('');
-        expect(dot.local(primary)).toBe(path.join(primary, '.webpieces'));
+        expect(dot.local(primary)).toBe(path.join(primary, '.webpieces-logs'));
     });
 
     it('shared() is the SAME path from the worktree and from the primary clone', () => {
-        const expected = path.join(primary, '.webpieces');
+        const expected = path.join(primary, '.webpieces-logs');
         expect(dot.shared(worktree)).toBe(expected);
         expect(dot.shared(primary)).toBe(expected);
         // …and it is NOT under the worktree namespace: an atomic rename() into it must land on a real
@@ -99,9 +99,9 @@ describe('DotWebpieces resolution edge cases', () => {
     it('resolves identically from a SUBDIRECTORY of the worktree (the hook is often run from one)', () => {
         const subdir = path.join(worktree, 'packages', 'deep');
         fs.mkdirSync(subdir, { recursive: true });
-        expect(dot.shared(subdir)).toBe(path.join(primary, '.webpieces'));
+        expect(dot.shared(subdir)).toBe(path.join(primary, '.webpieces-logs'));
         expect(dot.local(subdir)).toBe(
-            path.join(primary, '.webpieces', WORKTREE_STATE_DIR, 'wt-feature'));
+            path.join(primary, '.webpieces-logs', WORKTREE_STATE_DIR, 'wt-feature'));
     });
 
     it('two worktrees get DISJOINT local() dirs and the SAME shared() dir', () => {
@@ -111,12 +111,12 @@ describe('DotWebpieces resolution edge cases', () => {
         expect(dot.shared(worktree)).toBe(dot.shared(second));
     });
 
-    it('falls back to <dir>/.webpieces when the directory is not a git repo at all', () => {
+    it('falls back to <dir>/.webpieces-logs when the directory is not a git repo at all', () => {
         const notARepo = path.join(tmp, 'loose');
         fs.mkdirSync(notARepo);
-        expect(dot.shared(notARepo)).toBe(path.join(notARepo, '.webpieces'));
-        expect(dot.local(notARepo)).toBe(path.join(notARepo, '.webpieces'));
-        expect(dot.aiWritable(notARepo)).toBe(path.join(notARepo, '.webpieces'));
+        expect(dot.shared(notARepo)).toBe(path.join(notARepo, '.webpieces-logs'));
+        expect(dot.local(notARepo)).toBe(path.join(notARepo, '.webpieces-logs'));
+        expect(dot.aiWritable(notARepo)).toBe(path.join(notARepo, '.webpieces-logs'));
     });
 
 });
@@ -132,14 +132,14 @@ describe('DotWebpieces.aiWritable() — the scope an isolated agent can actually
     afterEach(cleanupRepo);
 
     it('resolves INSIDE the linked worktree, never under the primary clone', () => {
-        expect(dot.aiWritable(worktree)).toBe(path.join(worktree, '.webpieces'));
+        expect(dot.aiWritable(worktree)).toBe(path.join(worktree, '.webpieces-logs'));
         // The whole point: not a subpath of the shared checkout's state dir.
         expect(dot.aiWritable(worktree).startsWith(dot.shared(worktree))).toBe(false);
         expect(dot.aiWritable(worktree)).not.toBe(dot.local(worktree));
     });
 
     it('is the SAME dir as local()/shared() in the primary clone — nothing changes without worktrees', () => {
-        const expected = path.join(primary, '.webpieces');
+        const expected = path.join(primary, '.webpieces-logs');
         expect(dot.aiWritable(primary)).toBe(expected);
         expect(dot.local(primary)).toBe(expected);
         expect(dot.shared(primary)).toBe(expected);
@@ -148,7 +148,7 @@ describe('DotWebpieces.aiWritable() — the scope an isolated agent can actually
     it('resolves from a SUBDIRECTORY to the worktree ROOT, not to the subdirectory', () => {
         const subdir = path.join(worktree, 'packages', 'deep');
         fs.mkdirSync(subdir, { recursive: true });
-        expect(dot.aiWritable(subdir)).toBe(path.join(worktree, '.webpieces'));
+        expect(dot.aiWritable(subdir)).toBe(path.join(worktree, '.webpieces-logs'));
     });
 
     it('two worktrees get DISJOINT aiWritable() dirs — one review per tree, never shared', () => {
@@ -159,7 +159,7 @@ describe('DotWebpieces.aiWritable() — the scope an isolated agent can actually
 
     it('aiWritableFile() joins beneath it', () => {
         expect(dot.aiWritableFile(worktree, 'pr-review', 'feature'))
-            .toBe(path.join(worktree, '.webpieces', 'pr-review', 'feature'));
+            .toBe(path.join(worktree, '.webpieces-logs', 'pr-review', 'feature'));
     });
 });
 
@@ -169,10 +169,10 @@ describe('the config boundary', () => {
 
     /**
      * THE BOUNDARY. `webpieces.config.json` is TRACKED and therefore part of the BRANCH — a branch may
-     * change its own rules. Only the gitignored `.webpieces/` STATE relocates. If this test ever fails,
+     * change its own rules. Only the gitignored `.webpieces-logs/` STATE relocates. If this test ever fails,
      * a worktree has stopped being able to carry its own config and the change is wrong.
      */
-    it('webpieces.config.json STILL resolves per-worktree — only .webpieces/ state moved', () => {
+    it('webpieces.config.json STILL resolves per-worktree — only .webpieces-logs/ state moved', () => {
         writeFile(worktree, 'webpieces.config.json', '{"branchOwn": true}\n');
         expect(findConfigFile(worktree)).toBe(path.join(worktree, 'webpieces.config.json'));
         expect(new RepoRootFinder().resolveRepoRoot(worktree)).toBe(worktree);
@@ -191,7 +191,7 @@ describe('scope assignment from inside a linked worktree', () => {
 
     it('merged-branches.json is SHARED — the same file from the worktree and the primary clone', () => {
         const service = new MergedBranchesService(undefined, new DotWebpieces());
-        const expected = path.join(primary, '.webpieces', 'merged-branches.json');
+        const expected = path.join(primary, '.webpieces-logs', 'merged-branches.json');
         expect(service.mergedBranchesPath(worktree)).toBe(expected);
         expect(service.mergedBranchesPath(primary)).toBe(expected);
     });
@@ -199,9 +199,9 @@ describe('scope assignment from inside a linked worktree', () => {
     it('main-sync status AND lock are SHARED — one refresher per repo, not per worktree', () => {
         const service = new MainSyncStatusService(new DotWebpieces());
         expect(service.mainSyncStatusPath(worktree))
-            .toBe(path.join(primary, '.webpieces', 'main-sync-status.json'));
+            .toBe(path.join(primary, '.webpieces-logs', 'main-sync-status.json'));
         expect(service.mainSyncLockPath(worktree))
-            .toBe(path.join(primary, '.webpieces', 'main-sync.lock.json'));
+            .toBe(path.join(primary, '.webpieces-logs', 'main-sync.lock.json'));
         expect(service.mainSyncLockPath(worktree)).toBe(service.mainSyncLockPath(primary));
     });
 
@@ -209,7 +209,7 @@ describe('scope assignment from inside a linked worktree', () => {
         const log = new BranchMutationLog(new DotWebpieces());
         const logPath = log.branchMutationLogPath(worktree);
         expect(logPath).toBe(path.join(
-            primary, '.webpieces', WORKTREE_STATE_DIR, 'wt-a', 'logs', 'branch-mutations.log'));
+            primary, '.webpieces-logs', WORKTREE_STATE_DIR, 'wt-a', 'logs', 'branch-mutations.log'));
         expect(logPath).not.toBe(log.branchMutationLogPath(primary));
 
         const event = new BranchMutationEvent('wp-cleanup', 'REAP');

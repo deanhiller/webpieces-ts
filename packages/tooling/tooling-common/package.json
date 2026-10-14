@@ -7,7 +7,8 @@
     "exports": {
         ".": "./src/index.js",
         "./package.json": "./package.json",
-        "./to-error": "./src/to-error.js"
+        "./to-error": "./src/to-error.js",
+        "./repository-layout": "./src/repository-layout.js"
     },
     "files": [
         "src/**/*"

@@ -7,7 +7,7 @@ import { injectable, bindingScopeValues } from 'inversify';
 import { ARCHIVE_RECORD_FILE, MERGED_DIR, MERGE_INDEX_FILE, MergeState } from './merge-state';
 
 /**
- * `.webpieces/merge-info/index.json` — the one answer to "which merges, across ALL branches, were
+ * `.webpieces-logs/merge-info/index.json` — the one answer to "which merges, across ALL branches, were
  * 3-point?", which is the actual review question.
  *
  * WHY AN INDEX IS REQUIRED and a directory name will not do: a single branch can alternate
@@ -16,7 +16,7 @@ import { ARCHIVE_RECORD_FILE, MERGED_DIR, MERGE_INDEX_FILE, MergeState } from '.
  * 3-point merge in the repo and stays correct for alternating branches:
  *
  *   jq -r '.merged | to_entries[] | .key as $b | .value.merges[] |
- *          select(.threeWay) | "\($b) merge-\(.n)"' .webpieces/merge-info/index.json
+ *          select(.threeWay) | "\($b) merge-\(.n)"' .webpieces-logs/merge-info/index.json
  *
  * WHY IT IS DERIVED, NOT INCREMENTALLY WRITTEN: every fact in it already exists on disk — `threeWay`
  * is the presence of `conflicts.md` in the run dir, `conflicts` is that file's list, and the archive

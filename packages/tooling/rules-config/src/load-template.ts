@@ -15,7 +15,7 @@ const TEMPLATES_DIR = path.join(__dirname, '..', 'templates');
 const DEFAULT_INSTRUCT_DIR = '';
 
 /**
- * Writes the AI-facing instruct-ai template docs under `<workspaceRoot>/.webpieces/instruct-ai/`.
+ * Writes the AI-facing instruct-ai template docs under `<workspaceRoot>/.webpieces-logs/instruct-ai/`.
  * `@injectable(bindingScopeValues.Singleton)` so it can be injected and appear in the rules-config DI design.
  */
 @injectable(bindingScopeValues.Singleton)
@@ -87,7 +87,7 @@ export class TemplateWriter {
         for (const line of this.staleBins.report(removed)) process.stdout.write(line + '\n');
     }
 
-    // LOCAL `.webpieces/instruct-ai/<name>` by default; an explicitly-passed relative dir is still
+    // LOCAL `.webpieces-logs/instruct-ai/<name>` by default; an explicitly-passed relative dir is still
     // joined onto workspaceRoot exactly as before.
     private destination(workspaceRoot: string, name: string, instructDir: string): string {
         if (instructDir === DEFAULT_INSTRUCT_DIR) {

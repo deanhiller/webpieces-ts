@@ -2,9 +2,9 @@
  * The WORKTREE removal report, and the one thing in it a human has to be able to act on: WHERE the
  * `recover=` line was written.
  *
- * That message used to carry the literal `.webpieces/logs/branch-mutations.log`. The log is
+ * That message used to carry the literal `.webpieces-logs/logs/branch-mutations.log`. The log is
  * deliberately per-worktree — a linked worktree's lives at
- * `<primary>/.webpieces/worktrees/<name>/logs/` — so the literal named a file that does not exist in
+ * `<primary>/.webpieces-logs/worktrees/<name>/logs/` — so the literal named a file that does not exist in
  * half the trees that read it. Removing a worktree deletes REAL FILES; a reader who cds to the printed
  * path and greps nothing concludes the removal was never logged, which is the opposite of the truth.
  *

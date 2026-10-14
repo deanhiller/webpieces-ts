@@ -11,8 +11,8 @@ import {
 import { AtomicFile, InformAiError } from '@webpieces/tooling-common';
 import { PackPolicyFilesResult, SelectedPolicyPack } from './pack-policy-files';
 
-export const RULE_LOCK_FILE = '.webpieces/rules.lock.json';
-export const RULE_CATALOG_FILE = '.webpieces/instruct-ai/rules-catalog.md';
+export const RULE_LOCK_FILE = '.webpieces-config/rules.lock.json';
+export const RULE_CATALOG_FILE = '.webpieces-config/rules-catalog.md';
 
 class LockedOwnedRule {
     constructor(

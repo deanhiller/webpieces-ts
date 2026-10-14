@@ -8,14 +8,14 @@ const svc = new ReviewerInstructionsService(new ReviewJsonService());
 function briefing(): ReviewerBriefing {
     const b = new ReviewerBriefing('db-reviewer', 'db-reviewer', '/repo');
     b.docPath = '/repo/.claude/review/db.md';
-    b.diffDir = '/repo/.webpieces/pr-review/feat/diff';
-    b.allDiffPath = '/repo/.webpieces/pr-review/feat/diff/ALL.diff';
-    b.manifestPath = '/repo/.webpieces/pr-review/feat/diff/manifest.json';
+    b.diffDir = '/repo/.webpieces-logs/pr-review/feat/diff';
+    b.allDiffPath = '/repo/.webpieces-logs/pr-review/feat/diff/ALL.diff';
+    b.manifestPath = '/repo/.webpieces-logs/pr-review/feat/diff/manifest.json';
     b.myFiles = [new BriefedFile(
-        'db/001.sql', '/repo/.webpieces/pr-review/feat/diff/files/db__001.sql.diff', '/repo/db/001.sql', 'M', 4096)];
+        'db/001.sql', '/repo/.webpieces-logs/pr-review/feat/diff/files/db__001.sql.diff', '/repo/db/001.sql', 'M', 4096)];
     b.matchedPatterns = ['db/**/*.sql'];
     b.sourceDirs = ['/repo/db'];
-    b.verdictPath = '/repo/.webpieces/pr-review/feat/review-round1-db-reviewer.json';
+    b.verdictPath = '/repo/.webpieces-logs/pr-review/feat/review-round1-db-reviewer.json';
     b.fileDiffCommand = 'git diff abc123 def456 -- <file>';
     b.changedFileCount = 1;
     b.allDiffLines = 582;
@@ -34,10 +34,10 @@ describe('ReviewerInstructionsService — the file that replaces context archaeo
         expect(md).toContain('/repo/.claude/agents/db-reviewer.md');
         expect(md).toContain('Never write a verdict for a checklist you were not handed');
         expect(md).toContain('/repo/.claude/review/db.md');
-        expect(md).toContain('/repo/.webpieces/pr-review/feat/diff/ALL.diff');
-        expect(md).toContain('/repo/.webpieces/pr-review/feat/diff/files/db__001.sql.diff');
+        expect(md).toContain('/repo/.webpieces-logs/pr-review/feat/diff/ALL.diff');
+        expect(md).toContain('/repo/.webpieces-logs/pr-review/feat/diff/files/db__001.sql.diff');
         expect(md).toContain('/repo/db');
-        expect(md).toContain('/repo/.webpieces/pr-review/feat/review-round1-db-reviewer.json');
+        expect(md).toContain('/repo/.webpieces-logs/pr-review/feat/review-round1-db-reviewer.json');
     });
 
     // Issue #1053, section 2: a reviewer on the LAST round learns it before anything else in the file.
@@ -84,7 +84,7 @@ describe('ReviewerInstructionsService — the file that replaces context archaeo
     // and a relative path that fails to resolve turns straight back into a search.
     it('emits no repo-relative paths for the things it points at', () => {
         const md = svc.render(briefing());
-        expect(md).not.toContain('](.webpieces/');
+        expect(md).not.toContain('](.webpieces-logs/');
         expect(md).not.toContain('`.claude/review/db.md`');
         expect(md).toContain('`/repo/.claude/review/db.md`');
     });
@@ -147,7 +147,7 @@ describe('ReviewerInstructionsService — pre-resolved context and scope wording
 
     it('places the instructions file beside summary.json, under instructions/', () => {
         expect(svc.pathFor('/repo', 'feat', 'db-reviewer'))
-            .toBe(path.join('/repo', '.webpieces', 'pr-review', 'feat', 'instructions', 'db-reviewer.instructions.md'));
+            .toBe(path.join('/repo', '.webpieces-logs', 'pr-review', 'feat', 'instructions', 'db-reviewer.instructions.md'));
     });
 
     // A checklist with no guidance doc still gets a coherent file, rather than a dangling "read: ".
@@ -167,8 +167,8 @@ describe('ReviewerInstructionsService — pre-resolved context and scope wording
 describe('ReviewerInstructionsService — what the reviewer is pushed to open FIRST', () => {
     it('puts the manifest ahead of ALL.diff, and calls it authoritative', () => {
         const md = svc.render(briefing());
-        const manifestAt = md.indexOf('/repo/.webpieces/pr-review/feat/diff/manifest.json');
-        const allDiffAt = md.indexOf('/repo/.webpieces/pr-review/feat/diff/ALL.diff');
+        const manifestAt = md.indexOf('/repo/.webpieces-logs/pr-review/feat/diff/manifest.json');
+        const allDiffAt = md.indexOf('/repo/.webpieces-logs/pr-review/feat/diff/ALL.diff');
         expect(manifestAt).toBeGreaterThan(-1);
         expect(manifestAt).toBeLessThan(allDiffAt);
         expect(md).toContain('AUTHORITATIVE');

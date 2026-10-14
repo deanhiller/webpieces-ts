@@ -126,18 +126,18 @@ describe('runBash / run — an unloadable config blocks work but never read-only
 
     it('allows exact owner-file and artifact repairs, sync and inspection while owner JSON is invalid', () => {
         writeGuardConfig(root, []);
-        const owner = nodePath.join(root, '.webpieces/rules/fixture-0.json');
+        const owner = nodePath.join(root, '.webpieces-config/rules/fixture-0.json');
         fs.writeFileSync(owner, '{');
         const repair = new NormalizedToolInput(owner, [new NormalizedEdit('', '{}')]);
         expect(run('Write', repair, root, 'guards')).toBeNull();
         expect(runRead(owner, root, 'guards')).toBeNull();
         expect(
-            runBash('cat .webpieces/rules/fixture-0.json', root, 'guards', 'claude-code'),
+            runBash('cat .webpieces-config/rules/fixture-0.json', root, 'guards', 'claude-code'),
         ).toBeNull();
         expect(runBash('pnpm wp-rules-sync', root, 'guards', 'claude-code')).toBeNull();
         for (const filename of [
-            '.webpieces/rules.lock.json',
-            '.webpieces/instruct-ai/rules-catalog.md',
+            '.webpieces-config/rules.lock.json',
+            '.webpieces-config/rules-catalog.md',
         ]) {
             expect(
                 run(
@@ -151,7 +151,7 @@ describe('runBash / run — an unloadable config blocks work but never read-only
             ).toBeNull();
         }
         const unrelated = new NormalizedToolInput(
-            nodePath.join(root, '.webpieces/rules/undeclared.json'),
+            nodePath.join(root, '.webpieces-config/rules/undeclared.json'),
             [new NormalizedEdit('', '{}')],
         );
         expect(() => run('Write', unrelated, root, 'guards')).toThrow(

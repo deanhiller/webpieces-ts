@@ -101,7 +101,7 @@ export class DiffManifest {
 export class DiffMaterializer {
     constructor(private readonly reviewJsonService: ReviewJsonService) {}
 
-    /** The dir this writes into: `.webpieces/pr-review/<feature>/diff`. */
+    /** The dir this writes into: `.webpieces-logs/pr-review/<feature>/diff`. */
     diffDirFor(repoRoot: string, featureName: string): string {
         return path.join(this.reviewJsonService.prDirFor(repoRoot, featureName), 'diff');
     }

@@ -9,7 +9,7 @@ const REASON_FILL_IN = 'REPLACE THIS with the human\'s own words, verbatim';
 
 /**
  * The HUMAN's ship-anyway decision for ONE checklist, recorded in its own file beside the verdict:
- * `.webpieces/pr-review/<feature>/override-<id>.json`. Data-only (per CLAUDE.md).
+ * `.webpieces-logs/pr-review/<feature>/override-<id>.json`. Data-only (per CLAUDE.md).
  *
  * WHY IT IS A SEPARATE FILE FROM THE VERDICT. `review-round<N>-<id>.json` is a REVIEWER's verdict file, and a
  * coding agent editing a reviewer's verdict is refused by the harness — correctly, and by every route

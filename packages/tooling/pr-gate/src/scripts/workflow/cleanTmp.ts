@@ -7,7 +7,7 @@ import { injectable, bindingScopeValues } from 'inversify';
 const SEP = '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n';
 
 /**
- * 30-day garbage collection of this tree's `.webpieces` scratch state.
+ * 30-day garbage collection of this tree's `.webpieces-logs` scratch state.
  *
  * Runs at the end of every merge/PR flow (see merge-end.ts). Any file older than the cutoff is deleted
  * and any directory left empty afterwards is pruned; the root itself is never removed.
@@ -32,7 +32,7 @@ const SEP = '━━━━━━━━━━━━━━━━━━━━━━�
  * `wp-*` directories in `$TMPDIR`.
  *
  * The fix is ownership at the call site — `SpecTempDirs` for fixtures, `RepoScratchDirs` (which lands
- * under the `.webpieces` scope swept below) for the two runtime paths. `TmpScratchSweeper` is the
+ * under the `.webpieces-logs` scope swept below) for the two runtime paths. `TmpScratchSweeper` is the
  * backstop for the residue an exit handler cannot cover: a SIGKILLed worker, a lost power rail.
  */
 @injectable(bindingScopeValues.Singleton)
@@ -49,12 +49,12 @@ export class CleanTmp {
         // The two per-worktree scopes, and only those. It must never sweep the repo-wide dir, whose
         // entries (merged-branches.json, the main-sync status and its lock) belong to every worktree at
         // once. In the primary clone these collapse to the same path and it is swept once.
-        //   local()      — merge-info/, instruct-ai/, logs/ in <primary>/.webpieces/worktrees/<name>
-        //   aiWritable() — pr-review/ in <worktree>/.webpieces, where the agent can actually write it
+        //   local()      — merge-info/, instruct-ai/, logs/ in <primary>/.webpieces-logs/worktrees/<name>
+        //   aiWritable() — pr-review/ in <worktree>/.webpieces-logs, where the agent can actually write it
         const bases = this.sweepBases(repoRoot);
         if (bases.length === 0) return;
 
-        process.stdout.write('\n' + SEP + '🧹 Garbage-Collecting .webpieces\n' + SEP + '\n');
+        process.stdout.write('\n' + SEP + '🧹 Garbage-Collecting .webpieces-logs\n' + SEP + '\n');
         for (const base of bases) process.stdout.write(`Location: ${base}\n`);
         process.stdout.write(`Retention: ${RETENTION_DAYS} days (older files reaped; empty dirs pruned)\n\n`);
 

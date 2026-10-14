@@ -123,7 +123,7 @@ describe('case 1 — retired key, validator knows the retirement', () => {
                 ...[0, 1, 2, 3].map((index) =>
                     JSON.parse(
                         fs.readFileSync(
-                            path.join(dir, `.webpieces/rules/fixture-${index}.json`),
+                            path.join(dir, `.webpieces-config/rules/fixture-${index}.json`),
                             'utf8',
                         ),
                     ),
@@ -144,7 +144,7 @@ describe('case 1 — retired key, validator knows the retirement', () => {
             JSON.stringify({ hookGuards: { 'whole-repo-build-guard': { mode: 'ON' } } }, null, 4),
         );
         const report = pruner().pruneFrom(dir).describeSelf();
-        expect(report).toContain('.webpieces/rules/fixture-0.json.whole-repo-build-guard');
+        expect(report).toContain('.webpieces-config/rules/fixture-0.json.whole-repo-build-guard');
         expect(report).toContain('~/.webpieces/config.json');
     });
 });
@@ -329,7 +329,7 @@ describe('case 4 — a valid-but-newer key is never dropped without warning', ()
                 ...[0, 1, 2, 3].map((index) =>
                     JSON.parse(
                         fs.readFileSync(
-                            path.join(dir, `.webpieces/rules/fixture-${index}.json`),
+                            path.join(dir, `.webpieces-config/rules/fixture-${index}.json`),
                             'utf8',
                         ),
                     ),

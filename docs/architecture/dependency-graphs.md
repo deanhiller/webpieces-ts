@@ -209,7 +209,7 @@ The optional browser regression suite uses the pages' pinned Viz UMD renderer an
 installed Playwright Chromium. Set `WP_GRAPH_VIZ_JS` to that renderer's local path
 (and `PLAYWRIGHT_BROWSERS_PATH` when necessary), then run the focused
 `graph-filter-browser.spec.ts`. It opens generated pages as local files and writes
-before/filter/restored screenshots under `.webpieces/1118-browser-evidence/`.
+before/filter/restored screenshots under `.webpieces-logs/1118-browser-evidence/`.
 
 Drawable nodes are keyboard reachable with Tab. Enter or Space opens the node menu,
 with focus on its first action. Escape returns keyboard focus to the invoking node;

@@ -19,7 +19,7 @@ import { cureForMatrix } from './matrix-cures';
 // the ASYNC log (the `async-refresh/` stream, written by the detached refresher in main-sync-log.ts). This
 // one records EVERY guard decision — allow, block, config-bypass, and the fail-open cases — and CITES
 // the async-written cache snapshot (`cache` field) that drove the decision, so a wrong allow/block is
-// traceable to a stale or missing async write. Writes to `.webpieces/logs/L2-decisions/<writer>.log` —
+// traceable to a stale or missing async write. Writes to `.webpieces-logs/logs/L2-decisions/<writer>.log` —
 // the LAYER is the directory, the WRITER is the file (see log-streams.ts and LogStream).
 const MAX_LOG_BYTES = 512 * 1024; // 512 KB — rotate when exceeded (mirrors rotation in rejection-log)
 
@@ -158,13 +158,13 @@ export class GuardDecision {
 }
 
 /**
- * Append one tab-separated line per L2 decision to `.webpieces/logs/L2-decisions/<writer>.log`, where
+ * Append one tab-separated line per L2 decision to `.webpieces-logs/logs/L2-decisions/<writer>.log`, where
  * <writer> is LogStream's `<sessionId>-<agentId|coordinator>-<hook>` key (a caller that never
  * identified renders as `unknown-coordinator-hook` — there is no un-keyed name).
  * `root` is
- * the repo/workspace root that holds `.webpieces` (callers pass workspaceRoot, or a
+ * the repo/workspace root that holds `.webpieces-logs` (callers pass workspaceRoot, or a
  * RepoRootFinder-resolved root at the pre-load config-bypass site — never a raw cwd, so a bypass
- * logged from a subdir never scatters a stray `.webpieces`). Swallows all errors — logging must never
+ * logged from a subdir never scatters a stray `.webpieces-logs`). Swallows all errors — logging must never
  * block or fail a hook.
  */
 // webpieces-disable no-function-outside-class -- the module-scope writer this log has always been, beside branchForLog/oneLine/rotateLogFile; it must stay callable from a tree too broken to build a DI container
@@ -173,7 +173,7 @@ export function logGuardDecision(root: string, decision: GuardDecision): void {
 }
 
 /**
- * The L1 stream — `.webpieces/logs/L1-location/<writer>.log`.
+ * The L1 stream — `.webpieces-logs/logs/L1-location/<writer>.log`.
  *
  * L1 had NO stream. Its three blocking paths wrote into L2's file under an implementation name
  * (`force-to-root`, `trinary-version-skew`, `cd-must-be-first`), and its NON-blocking outcomes —
@@ -269,7 +269,7 @@ export class GuardInvocation {
 }
 
 /**
- * The per-INVOCATION stream — `.webpieces/logs/calls/<writer>.log` (see LogStream for the writer
+ * The per-INVOCATION stream — `.webpieces-logs/logs/calls/<writer>.log` (see LogStream for the writer
  * key), one line for EVERY guards-hook
  * call (allow or block, bash or file), unlike `L2-decisions/` which records only the calls a
  * rule actually judged. It captures the tool, the command/file, the live git branch, the async-written
@@ -292,7 +292,7 @@ export class InvocationLog {
 
     /**
      * Capture the context of one invocation. `cwd` is the AI's working dir; the repo root that owns
-     * `.webpieces` is resolved from it. Writes NOTHING — {@link finish} does that.
+     * `.webpieces-logs` is resolved from it. Writes NOTHING — {@link finish} does that.
      */
     begin(cwd: string, tool: string, target: string): void {
         // eslint-disable-next-line @webpieces/no-unmanaged-exceptions

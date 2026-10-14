@@ -10,7 +10,7 @@ import type { Rule } from '@webpieces/hook-runtime';
 // ---------------------------------------------------------------------------
 // THE ONE `hangTimeoutMinutes`, and every caller that has to read it.
 //
-// There is ONE detached refresher writing ONE cache (.webpieces/main-sync-status.json), so there is one
+// There is ONE detached refresher writing ONE cache (.webpieces-logs/main-sync-status.json), so there is one
 // knob: `hookGuards.branch-state-guard.hangTimeoutMinutes`, which tunes the stale-lock reclaim window.
 //
 // It used to be declared FOUR times — once per branch-state guard class — and read four times, and

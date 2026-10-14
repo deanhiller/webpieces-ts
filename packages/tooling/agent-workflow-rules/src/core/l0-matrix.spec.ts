@@ -448,7 +448,7 @@ describe('L0 accepts the remedy it emits, even when the repo path contains a spa
  * One L0 event produces THREE artifacts, and until now no coordinate was common to all of them:
  *
  *   1. THE DENY   the agent reads in the moment (`L0Fault.denyText`)
- *   2. THE AUDIT LINE  `.webpieces/logs/**`, whose fields are `layer=` `row=` `fault=`
+ *   2. THE AUDIT LINE  `.webpieces-logs/logs/**`, whose fields are `layer=` `row=` `fault=`
  *   3. THE MATRIX DOC  webpieces.guard-matrix.md, rendered from these same arrays
  *
  * The deny named no guard, no fault letter and no row — so a transcript could not be debugged against
@@ -555,14 +555,14 @@ describe('webpieces.guard-matrix.md is generated from the same arrays the guard 
 
     it('points the reader at the doc only when it was actually written', () => {
         expect(guardMatrixPointer('')).toBe('');
-        expect(guardMatrixPointer('/repo/.webpieces/instruct-ai/webpieces.guard-matrix.md'))
-            .toContain('/repo/.webpieces/instruct-ai/webpieces.guard-matrix.md');
+        expect(guardMatrixPointer('/repo/.webpieces-logs/instruct-ai/webpieces.guard-matrix.md'))
+            .toContain('/repo/.webpieces-logs/instruct-ai/webpieces.guard-matrix.md');
     });
 
     // The deny text is interpolated into a REASON="…" shell assignment and then printf'd into a JSON
     // string, so a quote or backslash would corrupt the decision payload, not just the prose.
     it('emits a JSON-safe pointer', () => {
-        const pointer = guardMatrixPointer('/repo/.webpieces/instruct-ai/webpieces.guard-matrix.md');
+        const pointer = guardMatrixPointer('/repo/.webpieces-logs/instruct-ai/webpieces.guard-matrix.md');
         expect(pointer).not.toContain('"');
         expect(pointer).not.toContain('\\');
     });

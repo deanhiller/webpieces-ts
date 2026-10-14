@@ -33,7 +33,8 @@
     "publishConfig": {
         "access": "public",
         "bin": {
-            "wp-rules-sync": "./src/rules-sync-cli.js"
+            "wp-rules-sync": "./src/rules-sync-cli.js",
+            "wp-migrate-dirs": "./src/migrate-dirs-cli.js"
         }
     },
     "devDependencies": {

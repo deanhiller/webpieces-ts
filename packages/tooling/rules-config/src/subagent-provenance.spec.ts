@@ -99,7 +99,7 @@ describe('SubagentProvenanceService', () => {
     it('CREDITS a general-purpose fallback that NAMED this checklist’s verdict path (issue #964)', () => {
         const home = specTempDirs.make('wp-home-964-');
         const dir = path.join(home, '.claude', 'projects', '-Slug', 'sess-964', 'subagents');
-        const verdict = '/Users/x/repo/.webpieces/pr-review/dean-feat/review-checklist-reviewer.json';
+        const verdict = '/Users/x/repo/.webpieces-logs/pr-review/dean-feat/review-checklist-reviewer.json';
         fs.mkdirSync(dir, { recursive: true });
         fs.writeFileSync(path.join(dir, 'agent-gp.meta.json'), JSON.stringify({ agentType: 'general-purpose', spawnDepth: 1 }));
         fs.writeFileSync(path.join(dir, 'agent-gp.jsonl'),
@@ -456,7 +456,7 @@ function statusForTouch(sessionId: string, touched: string, context: ReviewerCon
     return verifyDistinct(new SubagentProvenanceService(), ['checklist-reviewer'], context).status;
 }
 
-const WT = '/Users/x/repo-one-2546/.webpieces/pr-review/feature-ONE-2546';
+const WT = '/Users/x/repo-one-2546/.webpieces-logs/pr-review/feature-ONE-2546';
 const DIFF = `${WT}/diff`;
 const VERDICT = `${WT}/review-checklist-reviewer.json`;
 
@@ -505,7 +505,7 @@ describe('SubagentProvenanceService — a reviewer spawned from the PRIMARY CLON
 
     // ─── The channel must not become a way to credit ANY old reviewer ────────────────────────────────
     it('does NOT credit a reviewer that touched a DIFFERENT branch’s materialization', () => {
-        const other = '/Users/x/repo-one-9999/.webpieces/pr-review/feature-ONE-9999/review-checklist-reviewer.json';
+        const other = '/Users/x/repo-one-9999/.webpieces-logs/pr-review/feature-ONE-9999/review-checklist-reviewer.json';
         expect(statusForTouch('sess-t5', other, worktreeContext('feature/ONE-2546'))).toBe(PROVENANCE_MISSING);
     });
 
@@ -684,7 +684,7 @@ describe('SubagentProvenanceService — $CLAUDE_CONFIG_DIR (issue #963)', () => 
  * Measured: the main session sat in the PRIMARY CLONE on branch A while another agent worked in a linked
  * worktree on branch B. The reviewer's record 0 carried `gitBranch: B` (the OTHER worktree's branch — a
  * mis-stamp) and `cwd: <primary clone>` (not pinned, so it settles nothing). It then read the diff forty
- * times as `D=.webpieces/pr-review/<slug>/diff/files; cat $D/...` — RELATIVE to its repo-root cwd — and
+ * times as `D=.webpieces-logs/pr-review/<slug>/diff/files; cat $D/...` — RELATIVE to its repo-root cwd — and
  * submitted every verdict through `pnpm -s wp-write-review --checklist <id> <<'EOF'`. Neither was a credit
  * channel: only the ABSOLUTE diff path matched, and a wp-write-review call was trusted for authorship but
  * never for the branch.
@@ -707,7 +707,7 @@ function misStampedReviewer(sessionId: string, cwd: string, commands: readonly s
 
 // The context wp-finish-upsert-pr builds in that primary clone for branch A.
 function incidentContext(repoRoot: string, submittedBy: Record<string, string> = {}): ReviewerContext {
-    const prDir = path.join(repoRoot, '.webpieces', 'pr-review', SLUG);
+    const prDir = path.join(repoRoot, '.webpieces-logs', 'pr-review', SLUG);
     return new ReviewerContext('deanhiller/1202/upgrade', path.join(prDir, 'diff'), {},
         { 'checklist-reviewer': path.join(prDir, 'review-round1-checklist-reviewer.json') }, submittedBy);
 }
@@ -723,7 +723,7 @@ describe('SubagentProvenanceService — issue #1211: a relative diff read and a 
     it('credits a reviewer that read THIS branch’s diff RELATIVE to its repo-root cwd', () => {
         const repoRoot = clone();
         const res = verify1211('sess-1211a', repoRoot,
-            [`D=.webpieces/pr-review/${SLUG}/diff/files; cat $D/packages/a.ts`], incidentContext(repoRoot));
+            [`D=.webpieces-logs/pr-review/${SLUG}/diff/files; cat $D/packages/a.ts`], incidentContext(repoRoot));
         expect(res.status).toBe(PROVENANCE_OK);
         expect(res.agentIds['checklist-reviewer']).toBe('rev');
     });
@@ -731,14 +731,14 @@ describe('SubagentProvenanceService — issue #1211: a relative diff read and a 
     it('reports readDiff on the evidence row for a relative read, not only an absolute one', () => {
         const repoRoot = clone();
         const context = incidentContext(repoRoot);
-        const res = verify1211('sess-1211b', repoRoot, [`cat ./.webpieces/pr-review/${SLUG}/diff/ALL.diff`], context);
+        const res = verify1211('sess-1211b', repoRoot, [`cat ./.webpieces-logs/pr-review/${SLUG}/diff/ALL.diff`], context);
         expect(evidenceFor(new SubagentProvenanceService(), context, res.agentIds)[0]?.readDiff).toBe(true);
     });
 
     it('credits a reviewer that named its verdict file relative to its cwd', () => {
         const repoRoot = clone();
         const res = verify1211('sess-1211c', repoRoot,
-            [`cat .webpieces/pr-review/${SLUG}/review-round1-checklist-reviewer.json`], incidentContext(repoRoot));
+            [`cat .webpieces-logs/pr-review/${SLUG}/review-round1-checklist-reviewer.json`], incidentContext(repoRoot));
         expect(res.status).toBe(PROVENANCE_OK);
     });
 
@@ -755,7 +755,7 @@ describe('SubagentProvenanceService — issue #1211: a relative diff read and a 
     it('does NOT credit a mis-stamped reviewer that read ANOTHER branch’s diff relatively', () => {
         const repoRoot = clone();
         const res = verify1211('sess-1211e', repoRoot,
-            ['D=.webpieces/pr-review/deanhiller-1204-product-dependency-matrix/diff/files; cat $D/a.ts'], incidentContext(repoRoot));
+            ['D=.webpieces-logs/pr-review/deanhiller-1204-product-dependency-matrix/diff/files; cat $D/a.ts'], incidentContext(repoRoot));
         expect(res.status).toBe(PROVENANCE_MISSING);
     });
 
@@ -763,14 +763,14 @@ describe('SubagentProvenanceService — issue #1211: a relative diff read and a 
         const repoRoot = clone();
         const otherTree = specTempDirs.make('wp-other-tree-');
         const res = verify1211('sess-1211f', otherTree,
-            [`cat .webpieces/pr-review/${SLUG}/diff/ALL.diff`], incidentContext(repoRoot));
+            [`cat .webpieces-logs/pr-review/${SLUG}/diff/ALL.diff`], incidentContext(repoRoot));
         expect(res.status).toBe(PROVENANCE_MISSING);
     });
 
     it('does NOT let another tree’s ABSOLUTE path satisfy the relative spelling as a substring', () => {
         const repoRoot = clone();
         const res = verify1211('sess-1211g', repoRoot,
-            [`cat /elsewhere/clone/.webpieces/pr-review/${SLUG}/diff/ALL.diff`], incidentContext(repoRoot));
+            [`cat /elsewhere/clone/.webpieces-logs/pr-review/${SLUG}/diff/ALL.diff`], incidentContext(repoRoot));
         expect(res.status).toBe(PROVENANCE_MISSING);
     });
 

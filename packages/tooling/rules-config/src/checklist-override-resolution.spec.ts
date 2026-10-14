@@ -90,7 +90,7 @@ describe('loadSummaryJson resolves a red verdict against override-<id>.json', ()
  */
 describe('refusalError prints the override route', () => {
     const svc = new ReviewJsonService();
-    const REVIEW_PATH = '/repo/.webpieces/pr-review/feat/summary.json';
+    const REVIEW_PATH = '/repo/.webpieces-logs/pr-review/feat/summary.json';
     const req = (id: string): RequiredChecklist => new RequiredChecklist(id, agentPolicy(`${id}-reviewer`), '', ['x.sql'], ['**/*.sql']);
     const refusalFor = (id: string): string => {
         const results = [new ChecklistResult('unknown', 'unknown', id, 'red', 'refused', null)];
@@ -99,7 +99,7 @@ describe('refusalError prints the override route', () => {
 
     it('is a ready-to-run heredoc with the real id and the real path', () => {
         const text = refusalFor('a');
-        expect(text).toContain("cat > /repo/.webpieces/pr-review/feat/override-a.json <<'JSON'");
+        expect(text).toContain("cat > /repo/.webpieces-logs/pr-review/feat/override-a.json <<'JSON'");
         expect(text).toContain('"checklistId": "a"');
         expect(text).toContain('"authorizedBy": "human, in-session"');
         expect(text).toContain("REPLACE THIS with the human's own words, verbatim");

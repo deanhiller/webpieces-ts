@@ -36,7 +36,7 @@ export function impactScan(
 /** Opt-in browser suite: WP_GRAPH_VIZ_JS supplies Viz 3; the cross-page test additionally uses
  * WP_GRAPH_VIZ2_JS and WP_GRAPH_VIZ2_RENDER_JS for design's pinned Viz 2.1.2 scripts. */
 export class BrowserFixture {
-    constructor(readonly output: string = path.resolve('.webpieces/1118-browser-evidence', randomUUID())) {}
+    constructor(readonly output: string = path.resolve('.webpieces-logs/1118-browser-evidence', randomUUID())) {}
     readonly viz = FilterFixture.visualizer();
     browser!: Browser;
 

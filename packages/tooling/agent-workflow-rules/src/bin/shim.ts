@@ -81,7 +81,7 @@ export function shimPath(projectRoot: string): string {
 // HOW EVERY DENY MUST SPELL ITS CURE (added 2026-07-23, from a live audit-log post-mortem).
 //
 // The guards were right, the message was right, and the assistant STILL handed the block back to the
-// human — because of one appended clause. From .webpieces/logs/L0-shim/<writer>.log in a consumer repo:
+// human — because of one appended clause. From .webpieces-logs/logs/L0-shim/<writer>.log in a consumer repo:
 //
 //   DENY-SHIM-STALE  cp node_modules/@webpieces/agent-workflow-rules/templates/ai-hook.sh .claude/webpieces/ai-hook.sh && git status --short
 //

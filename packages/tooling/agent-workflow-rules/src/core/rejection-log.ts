@@ -49,8 +49,8 @@ export function logRejection(
 ): void {
     // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
     try {
-        // `.webpieces/` lives at the repo root, NOT the AI's cwd — resolve it so a hook fired while
-        // the AI is in a subdirectory never scatters a stray `<subdir>/.webpieces` tree.
+        // `.webpieces-logs/` lives at the repo root, NOT the AI's cwd — resolve it so a hook fired while
+        // the AI is in a subdirectory never scatters a stray `<subdir>/.webpieces-logs` tree.
         const root = new RepoRootFinder().resolveRepoRoot(cwd);
         const now = new Date();
         const timestamp = now.toISOString();

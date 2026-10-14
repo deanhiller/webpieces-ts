@@ -1,3 +1,4 @@
+import { MIGRATE_DIRS_COMMAND } from '@webpieces/tooling-common';
 import { PACKAGE_MANIFEST } from '@webpieces/rules-config';
 import { WORKSPACE_MANIFEST } from '@webpieces/rules-config';
 import { CONFIG_FILENAME, PRUNE_UNKNOWN_COMMAND } from '@webpieces/rules-config';
@@ -559,6 +560,13 @@ export const L0_ALLOWLIST: readonly L0AllowEntry[] = [
         EVERY_HARNESS, new L0Call('Bash', PRUNE_UNKNOWN_COMMAND, ''),
         [new L0Call('Bash', 'pnpm exec wp-prune-unknown-config', '')]),
     new L0AllowEntry(
+        MIGRATE_DIRS_COMMAND, 'allow', true,
+        '(pnpm|npm|npx)([[:space:]]+(exec|run))?[[:space:]]+wp-migrate-dirs([[:space:]]+--stage)?',
+        '(pnpm|npm|npx)(\\s+(exec|run))?\\s+wp-migrate-dirs(\\s+--stage)?',
+        EVERY_HARNESS, new L0Call('Bash', MIGRATE_DIRS_COMMAND, ''),
+        [new L0Call('Bash', `${MIGRATE_DIRS_COMMAND} --stage`, '')],
+    ),
+    new L0AllowEntry(
         'pnpm wp-rules-sync — explicit owner seeds and lock/catalog repair',
         'allow',
         true,
@@ -569,7 +577,7 @@ export const L0_ALLOWLIST: readonly L0AllowEntry[] = [
         [
             new L0Call(
                 'Bash',
-                'pnpm wp-rules-sync --upgrade --pack=@client/policy=.webpieces/rules/client.json',
+                'pnpm wp-rules-sync --upgrade --pack=@client/policy=.webpieces-config/rules/client.json',
                 '',
             ),
         ],
@@ -633,7 +641,7 @@ export const L0_ALLOWLIST: readonly L0AllowEntry[] = [
         new L0Call('Bash', CODEX_READ_CMD, ''),
         [
             new L0Call('Bash', 'cat webpieces.config.json', ''),
-            new L0Call('Bash', 'head -50 .webpieces/instruct-ai/webpieces.guard-matrix.md', ''),
+            new L0Call('Bash', 'head -50 .webpieces-logs/instruct-ai/webpieces.guard-matrix.md', ''),
             new L0Call('Bash', 'tail -n 20 package.json', ''),
             new L0Call('Bash', "cat '/Users/dean hiller/repo/package.json'", ''),
         ],

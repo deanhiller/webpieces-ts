@@ -32,7 +32,7 @@ class ArtifactFixture {
                 new SelectedPolicyPack(
                     new PackPolicyDeclaration(
                         manifest.packageName,
-                        `.webpieces/rules/${manifest.packageName.split('/')[1]}.json`,
+                        `.webpieces-config/rules/${manifest.packageName.split('/')[1]}.json`,
                     ),
                     manifest,
                 ),
@@ -65,7 +65,7 @@ describe('committed artifacts from the resolved rule registry', () => {
         ) as DecodedRuleLock;
         expect(lock.packs).toHaveLength(4);
         expect(lock.packs.flatMap((pack: DecodedLockPack) => pack.ownedRules)).toHaveLength(51);
-        expect(first.catalog).toContain('.webpieces/rules/code-rules.json');
+        expect(first.catalog).toContain('.webpieces-config/rules/code-rules.json');
         expect(first.catalog).not.toContain('{configFile}');
     });
 

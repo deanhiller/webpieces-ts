@@ -93,8 +93,8 @@ describe('build-output-pipe-guard allows everything else', () => {
 
     // Reading the log is the whole point of the refusal, so it can never itself be refused.
     it('allows grepping and tailing the log file the command wrote', () => {
-        expect(check('grep -n error /repo/.webpieces/build.log')).toEqual([]);
-        expect(check('tail -50 /repo/.webpieces/logs/wp-review-upsert-pr.log')).toEqual([]);
+        expect(check('grep -n error /repo/.webpieces-logs/build.log')).toEqual([]);
+        expect(check('tail -50 /repo/.webpieces-logs/logs/wp-review-upsert-pr.log')).toEqual([]);
     });
 
     it('allows a chain that merely MENTIONS the command in prose', () => {

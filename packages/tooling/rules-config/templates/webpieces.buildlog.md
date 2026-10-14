@@ -28,10 +28,10 @@ webpieces state is worktree-namespaced **inside the primary clone**, not duplica
 
 | where you are standing | where `wp-build` writes |
 |---|---|
-| the primary clone | `<primary>/.webpieces/build.log` |
-| a linked worktree (the normal case for a subagent) | `<primary>/.webpieces/worktrees/<worktree-name>/build.log` |
+| the primary clone | `<primary>/.webpieces-logs/build.log` |
+| a linked worktree (the normal case for a subagent) | `<primary>/.webpieces-logs/worktrees/<worktree-name>/build.log` |
 
-A relative `.webpieces/build.log` inside a linked worktree **does not exist at all**. Those two rows are
+A relative `.webpieces-logs/build.log` inside a linked worktree **does not exist at all**. Those two rows are
 an illustration of why you read the printed path — they are not a lookup table to memorise, and the
 namespacing scheme is webpieces' to change.
 

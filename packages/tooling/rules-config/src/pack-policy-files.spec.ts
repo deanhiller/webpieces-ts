@@ -19,7 +19,7 @@ class SplitPolicyFixture {
                 new SelectedPolicyPack(
                     new PackPolicyDeclaration(
                         `./fixture-policy-${index}.cjs`,
-                        `.webpieces/rules/pack-${index}.json`,
+                        `.webpieces-config/rules/pack-${index}.json`,
                     ),
                     manifest,
                 ),
@@ -58,7 +58,7 @@ describe('strict owner-specific policy files', () => {
         expect(result.values['max-file-lines']['limit']).toBeUndefined();
         expect(result.registry.optionalTuningFor('max-file-lines')['limit']).toBe(900);
         expect(result.targetFiles.get('max-file-lines')).toBe(
-            path.join(fs.realpathSync(fixture.root), '.webpieces/rules/pack-0.json'),
+            path.join(fs.realpathSync(fixture.root), '.webpieces-config/rules/pack-0.json'),
         );
     });
 
@@ -126,7 +126,7 @@ describe('strict owner-specific policy files', () => {
             '../outside.json',
             '/tmp/outside.json',
             'webpieces.config.json',
-            '.webpieces/rules.lock.json',
+            '.webpieces-config/rules.lock.json',
         ]) {
             expect(() => files.declarations([{ package: 'client-policy', config }], root)).toThrow(
                 'Invalid pack config path',
@@ -135,8 +135,8 @@ describe('strict owner-specific policy files', () => {
         expect(() =>
             files.declarations(
                 [
-                    { package: 'one', config: '.webpieces/rules/code.json' },
-                    { package: 'two', config: '.webpieces/rules/../rules/code.json' },
+                    { package: 'one', config: '.webpieces-config/rules/code.json' },
+                    { package: 'two', config: '.webpieces-config/rules/../rules/code.json' },
                 ],
                 root,
             ),

@@ -41,7 +41,7 @@ const TMP_MD_FILE = 'webpieces.filesize.md';
 
 
 /**
- * Write the instructions documentation to .webpieces/instruct-ai/.
+ * Write the instructions documentation to .webpieces-logs/instruct-ai/.
  * Sourced from @webpieces/rules-config.
  */
 function writeTmpInstructions(workspaceRoot: string): string {
@@ -233,7 +233,7 @@ export function violationsError(violations: readonly FileViolation[], limit: num
     ].join('\n');
 
     const cures: Option[] = [
-        new Option(`Refactor the file under ${limit} lines — READ .webpieces/instruct-ai/${TMP_MD_FILE} for step-by-step guidance.`, true),
+        new Option(`Refactor the file under ${limit} lines — READ .webpieces-logs/instruct-ai/${TMP_MD_FILE} for step-by-step guidance.`, true),
         new Option('Is the file MACHINE-GENERATED (codegen output, a schema dump)? Its size is not yours to fix, and turning the rule off is the wrong cure — that stops it on hand-written files too. Add its tree to rules."max-file-lines".allowedPaths in webpieces.config.json, e.g. "allowedPaths": ["**/__generated__/**"]. Never list hand-written code there.'),
     ];
     if (disableAllowed) {

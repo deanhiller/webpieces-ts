@@ -41,7 +41,7 @@ export class ReviewerIdentity {
  *
  * The plain-terminal story: with NO harness env and no stamp, the caller is a HUMAN at a terminal. That is
  * a legitimate reviewer, and the verdict is recorded with harness `terminal`. CI never submits verdicts —
- * `.webpieces/` is not in the repo, so there is nothing for CI to read or write here.
+ * `.webpieces-logs/` is not in the repo, so there is nothing for CI to read or write here.
  *
  * NOT tamper-proof: an agent can scrub its env AND invoke the bin some way the hook does not recognise, or
  * forge a stamp file. That is deliberate, visible forgery in the transcript — the bar the rest of reviewer

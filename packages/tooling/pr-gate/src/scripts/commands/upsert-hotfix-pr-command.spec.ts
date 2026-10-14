@@ -120,7 +120,7 @@ class Fixture {
         this.git(['config', 'core.hooksPath', '/dev/null']);
         this.git(['config', 'user.email', 'spec@example.com']);
         this.git(['config', 'user.name', 'spec']);
-        fs.writeFileSync(path.join(this.repo, '.gitignore'), '.webpieces/\n');
+        fs.writeFileSync(path.join(this.repo, '.gitignore'), '.webpieces-logs/\n');
         this.git(['add', '.gitignore']);
         this.prodSha = this.commit('app.txt', 'v1\n', 'prod');
         this.git(['remote', 'add', 'origin', origin]);

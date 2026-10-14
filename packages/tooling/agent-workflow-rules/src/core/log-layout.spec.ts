@@ -34,7 +34,7 @@ const UNIDENTIFIED = new StreamIdentity('unknown', '', 'hook');
  * logs went to `hooks/` (which also held the dated, non-log rejection details) while the L0 sh shim
  * wrote to `logs/`. So "where are the logs?" had two answers, one of them a mixed directory. Every
  * writer now goes through `dotWebpieces.logs()`, and this file is the guard that keeps it that way:
- * it exercises each writer for real and then asserts, from the filesystem, that `.webpieces/` holds
+ * it exercises each writer for real and then asserts, from the filesystem, that `.webpieces-logs/` holds
  * `logs/` and nothing else. A newly-added writer that invents a second state directory turns this red.
  */
 function tmpRoot(): string {
@@ -74,16 +74,16 @@ describe('every webpieces log lives under logs/, and nothing else does', () => {
         const root = tmpRoot();
         exerciseEveryWriter(root);
 
-        const state = fs.readdirSync(path.join(root, '.webpieces'));
+        const state = fs.readdirSync(path.join(root, '.webpieces-logs'));
         expect(state).toEqual([LOGS_STATE_DIR]);
-        expect(fs.existsSync(path.join(root, '.webpieces', 'hooks'))).toBe(false);
+        expect(fs.existsSync(path.join(root, '.webpieces-logs', 'hooks'))).toBe(false);
     });
 
     it('files every binary-side log under its LAYER directory', () => {
         const root = tmpRoot();
         exerciseEveryWriter(root);
 
-        const logs = filesIn(path.join(root, '.webpieces', LOGS_STATE_DIR));
+        const logs = filesIn(path.join(root, '.webpieces-logs', LOGS_STATE_DIR));
         for (const expected of [streamName(CALLS_STREAM), streamName(L2_DECISIONS_STREAM), streamName(ASYNC_REFRESH_STREAM), streamName(REJECTIONS_STREAM)]) {
             expect(logs, `missing ${expected}`).toContain(expected);
         }
@@ -96,14 +96,14 @@ describe('every webpieces log lives under logs/, and nothing else does', () => {
         const root = tmpRoot();
         // 0 bytes on every measured run; it is written only when the child dies before its own
         // logging, which is exactly when you want it interleaved with the SPAWN_ATTEMPT above it.
-        expect(refresherChildStdioPath(root)).toBe(path.join(root, '.webpieces', LOGS_STATE_DIR, streamName(ASYNC_REFRESH_STREAM)));
+        expect(refresherChildStdioPath(root)).toBe(path.join(root, '.webpieces-logs', LOGS_STATE_DIR, streamName(ASYNC_REFRESH_STREAM)));
     });
 
     it('puts ONLY stream directories directly under logs/', () => {
         const root = tmpRoot();
         exerciseEveryWriter(root);
 
-        const entries = fs.readdirSync(path.join(root, '.webpieces', LOGS_STATE_DIR), { withFileTypes: true });
+        const entries = fs.readdirSync(path.join(root, '.webpieces-logs', LOGS_STATE_DIR), { withFileTypes: true });
         expect(entries.every((e: fs.Dirent): boolean => e.isDirectory()), 'a loose file under logs/').toBe(true);
         // SWEEPABLE, not ALL: a directory an OLDER release wrote (the retired `L-1-cd`) may still be on
         // disk in a real repo, and it is not a layout violation — it is something retention should reap.
@@ -127,7 +127,7 @@ describe('every webpieces log lives under logs/, and nothing else does', () => {
         const root = tmpRoot();
         exerciseEveryWriter(root);
 
-        const logsDir = path.join(root, '.webpieces', LOGS_STATE_DIR, REJECTIONS_STREAM);
+        const logsDir = path.join(root, '.webpieces-logs', LOGS_STATE_DIR, REJECTIONS_STREAM);
         // Same writer key as the index, minus the `.log` — which is the whole point: the detail
         // directory has ONE owner for the same reason the log does, so two agents blocked in the same
         // millisecond cannot write the same path. Both live inside the `rejections/` stream dir.
@@ -156,7 +156,7 @@ describe('every webpieces log lives under logs/, and nothing else does', () => {
         logRejection('Edit', input, result, root);
         logStream.identify(UNIDENTIFIED);
 
-        const logsDir = path.join(root, '.webpieces', LOGS_STATE_DIR, REJECTIONS_STREAM);
+        const logsDir = path.join(root, '.webpieces-logs', LOGS_STATE_DIR, REJECTIONS_STREAM);
         for (const agent of ['agentA', 'agentB']) {
             const dir = path.join(logsDir, `sess-${agent}-guards`);
             expect(fs.readdirSync(dir), `${agent} lost its detail`).toHaveLength(1);
@@ -165,7 +165,7 @@ describe('every webpieces log lives under logs/, and nothing else does', () => {
 
     it('prunes details by the epoch millis IN THE FILENAME and removes the emptied stream dir', () => {
         const root = tmpRoot();
-        const logsDir = path.join(root, '.webpieces', LOGS_STATE_DIR, REJECTIONS_STREAM);
+        const logsDir = path.join(root, '.webpieces-logs', LOGS_STATE_DIR, REJECTIONS_STREAM);
         const stale = path.join(logsDir, 'old-agent-guards');
         fs.mkdirSync(stale, { recursive: true });
         // 8 days old, stated only in the NAME — no `stat` call, and no dated directory to key off.
@@ -180,7 +180,7 @@ describe('every webpieces log lives under logs/, and nothing else does', () => {
 
     it('is idempotent — a second sweep over the same expired files changes nothing and throws nothing', () => {
         const root = tmpRoot();
-        const logsDir = path.join(root, '.webpieces', LOGS_STATE_DIR, REJECTIONS_STREAM);
+        const logsDir = path.join(root, '.webpieces-logs', LOGS_STATE_DIR, REJECTIONS_STREAM);
         const stale = path.join(logsDir, 'old-agent-guards');
         fs.mkdirSync(stale, { recursive: true });
         fs.writeFileSync(path.join(stale, `writeInfo-${String(Date.now() - 8 * 24 * 60 * 60 * 1000)}.md`), 'x\n');

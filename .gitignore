@@ -103,6 +103,7 @@ node_modules_*/
 
 # Webpieces tooling working dir: ai-hook-rules bootstrap/cache, instruct-ai docs,
 # and per-feature git workflow dirs (merge-/review-/pr-, 30-day retention)
+.webpieces-logs/
 .webpieces/
 !/.webpieces/
 /.webpieces/*

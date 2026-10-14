@@ -6,7 +6,7 @@
  * unexpectedly — and with exit 0 it masquerades as success. Throw a semantic error instead and let
  * the ONE top-level `main()`/`runMain` try-catch pick the exit code.
  *
- * See .webpieces/instruct-ai/webpieces.noexitinmain.md (generated on violation) for the full pattern.
+ * See .webpieces-logs/instruct-ai/webpieces.noexitinmain.md (generated on violation) for the full pattern.
  *
  * ALLOWED
  * - A `process.exit` whose nearest enclosing function is named `main` or `runMain`.

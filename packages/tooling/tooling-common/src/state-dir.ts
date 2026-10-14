@@ -1,4 +1,3 @@
-import { RepositoryConfigStatePaths } from './repository-config-state-paths';
 import { spawnSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -7,9 +6,9 @@ import { injectable, bindingScopeValues } from 'inversify';
 import { PR_REVIEW_DIR, WEBPIECES_TMP_DIR } from './state-path-constants';
 import { StateDirMigrator } from './state-dir-migration';
 
-// The per-worktree namespace inside the primary clone's `.webpieces/`. A LINKED worktree's local state
-// lives at `<primary>/.webpieces/worktrees/<worktreeName>/`; the primary clone keeps using
-// `<primary>/.webpieces/` directly, exactly as it always has.
+// The per-worktree namespace inside the primary clone's `.webpieces-logs/`. A LINKED worktree's local state
+// lives at `<primary>/.webpieces-logs/worktrees/<worktreeName>/`; the primary clone keeps using
+// `<primary>/.webpieces-logs/` directly, exactly as it always has.
 export const WORKTREE_STATE_DIR = 'worktrees';
 
 // The ONE and ONLY directory webpieces writes observability state into — `<state>/logs/`, for the
@@ -29,10 +28,10 @@ export const WORKTREE_STATE_DIR = 'worktrees';
 // hooks IN PARALLEL and subagents/windows share a tree, so writers must never share a file.
 export const LOGS_STATE_DIR = 'logs';
 
-// The leaves of `.webpieces/` that resolve through `aiWritable()` and therefore live in the WORKTREE's
+// The leaves of `.webpieces-logs/` that resolve through `aiWritable()` and therefore live in the WORKTREE's
 // own root rather than in the primary clone's namespace. Named here because TWO things must agree about
 // them: `aiWritable()`, which puts them there, and `StateDirMigrator`, which must NOT sweep them out
-// again (its whole job is draining `<worktree>/.webpieces` into the namespace, and these are the one
+// again (its whole job is draining `<worktree>/.webpieces-logs` into the namespace, and these are the one
 // part of that directory that is live rather than legacy).
 export const AI_WRITABLE_STATE_DIRS: readonly string[] = [PR_REVIEW_DIR];
 
@@ -63,18 +62,18 @@ export class GitDirs {
 }
 
 /**
- * WHERE a piece of `.webpieces/` state belongs — the ONE resolver every reader and writer must go
+ * WHERE a piece of `.webpieces-logs/` state belongs — the ONE resolver every reader and writer must go
  * through, with THREE named methods because there are exactly three answers and a call site must DECLARE
  * which one it means.
  *
- *   dotWebpieces.shared(dir)     → <primary>/.webpieces                    (repo-wide facts)
- *   dotWebpieces.local(dir)      → <primary>/.webpieces/worktrees/<name>   (this worktree only, tooling-written)
- *                                → <primary>/.webpieces                    (…in the primary clone)
- *   dotWebpieces.aiWritable(dir) → <worktree>/.webpieces                   (this worktree only, AI-WRITTEN)
- *                                → <primary>/.webpieces                    (…in the primary clone)
+ *   dotWebpieces.shared(dir)     → <primary>/.webpieces-logs                    (repo-wide facts)
+ *   dotWebpieces.local(dir)      → <primary>/.webpieces-logs/worktrees/<name>   (this worktree only, tooling-written)
+ *                                → <primary>/.webpieces-logs                    (…in the primary clone)
+ *   dotWebpieces.aiWritable(dir) → <worktree>/.webpieces-logs                   (this worktree only, AI-WRITTEN)
+ *                                → <primary>/.webpieces-logs                    (…in the primary clone)
  *
  * ─── The bug ───────────────────────────────────────────────────────────────────────────────────────
- * `.webpieces/` is gitignored, and it was anchored at the directory holding webpieces.config.json —
+ * `.webpieces-logs/` is gitignored, and it was anchored at the directory holding webpieces.config.json —
  * which in a linked worktree is the WORKTREE. So a repo with seven worktrees had SEVEN independent
  * copies of files that describe the WHOLE REPO. `merged-branches.json` holds verdicts for every branch
  * AND every worktree in the repo; N copies is N divergent truths, and the guards read them as fact.
@@ -83,7 +82,7 @@ export class GitDirs {
  * DIFFERENT worktree — and it then blocked a legitimate `git worktree add` on that fiction.
  *
  * ─── Why two explicit methods and not a symlink ────────────────────────────────────────────────────
- * A `<worktree>/.webpieces` → `<primary>/…/worktrees/<name>` symlink would have left every call site
+ * A `<worktree>/.webpieces-logs` → `<primary>/…/worktrees/<name>` symlink would have left every call site
  * untouched, which is seductive and wrong. Nothing hooks `git worktree add`, so the link needs LAZY
  * creation that also has to handle "link already exists", "link points somewhere else", and "a real
  * directory is already there" — invisible filesystem magic with a Windows failure mode. Worse, the safe
@@ -103,7 +102,7 @@ export class GitDirs {
  *     `recover=git worktree add -b <branch> <abs-path> <tag>` line with real paths exceeds that. A
  *     per-worktree log has exactly ONE writer and cannot tear, and under this layout it already
  *     survives the worktree's deletion — recovery is one glob over
- *     `<primary>/.webpieces/worktrees/＊/logs/branch-mutations.log`.
+ *     `<primary>/.webpieces-logs/worktrees/＊/logs/branch-mutations.log`.
  *   • merge-info/staged|merged/<branch>/ and its index.json, instruct-ai/, and every other per-tree
  *     scratch file that the TOOLING writes.
  * aiWritable():
@@ -117,7 +116,7 @@ export class GitDirs {
  * edit the worktree copy of this file instead". That refusal is not ours to relax.
  *
  * So `local()` — correct for everything the tooling writes — is UNREACHABLE for the two files the flow
- * asks an agent to write. Stage ② printed a `<primary>/.webpieces/worktrees/<name>/pr-review/…` path,
+ * asks an agent to write. Stage ② printed a `<primary>/.webpieces-logs/worktrees/<name>/pr-review/…` path,
  * the agent's Write was refused at exactly that path, and the only way through was `cp`/`>` from Bash
  * (which is NOT blocked, so the refusal looks arbitrary rather than structural). Three separate agents
  * hit it, each concluded the tooling was printing a path it did not use, and each invented its own
@@ -125,7 +124,7 @@ export class GitDirs {
  * `wp-finish-upsert-pr` REFUSES the PR while a required checklist has no verdict — so this was a
  * correctness bug, not an ergonomics one.
  *
- * The invariant, stated once: ANY `.webpieces/` path an AI AGENT is instructed to WRITE must resolve
+ * The invariant, stated once: ANY `.webpieces-logs/` path an AI AGENT is instructed to WRITE must resolve
  * inside that agent's own working tree. `aiWritable()` is that rule, made greppable. Do not add a
  * fourth scope; do not route a tooling-written file through this one.
  *
@@ -135,7 +134,7 @@ export class GitDirs {
  * in-flight `merge-info/staged/<branch>/` is not regenerable, which is exactly why it stays on local().
  *
  * ─── The boundary that must not be blurred ─────────────────────────────────────────────────────────
- * ONLY the gitignored `.webpieces/` STATE relocates. `webpieces.config.json` is TRACKED IN GIT and is
+ * ONLY the gitignored `.webpieces-logs/` STATE relocates. `webpieces.config.json` is TRACKED IN GIT and is
  * therefore part of the BRANCH: a branch may legitimately change its own rules and that must keep
  * working. Config resolution is untouched — still per-worktree, via findConfigFile /
  * RepoRootFinder.resolveRepoRoot. Nothing in this class reads or moves config.
@@ -156,7 +155,7 @@ export class GitDirs {
  * code-rules all need has to sit.
  *
  * Fails CLOSED to the pre-change behaviour: when git cannot answer, every path here collapses to
- * `<startDir-root>/.webpieces` exactly as before. Degrading to merely-suboptimal beats throwing on a
+ * `<startDir-root>/.webpieces-logs` exactly as before. Degrading to merely-suboptimal beats throwing on a
  * hook's blocking path.
  */
 @injectable(bindingScopeValues.Singleton)
@@ -166,13 +165,13 @@ export class DotWebpieces {
     private readonly gitDirsByRoot = new Map<string, GitDirs | null>();
     // startDir → `git rev-parse --show-toplevel`, cached on the same terms as gitDirsByRoot.
     private readonly treeRootByDir = new Map<string, string | null>();
-    // Roots whose legacy per-worktree `.webpieces/` has already been considered for migration.
+    // Roots whose legacy per-worktree `.webpieces-logs/` has already been considered for migration.
     private readonly migrated = new Set<string>();
 
     constructor(private readonly migrator: StateDirMigrator = new StateDirMigrator()) {}
 
     /**
-     * REPO-WIDE state: `<primary>/.webpieces`. Use ONLY for facts about the repo rather than about one
+     * REPO-WIDE state: `<primary>/.webpieces-logs`. Use ONLY for facts about the repo rather than about one
      * worktree — today that is merged-branches.json and the main-sync status + lock. Identical from
      * every worktree, and never behind an indirection, so an atomic `rename()` into it is safe.
      */
@@ -186,11 +185,11 @@ export class DotWebpieces {
     }
 
     /**
-     * THIS WORKTREE's private state: `<primary>/.webpieces/worktrees/<name>` for a linked worktree, and
-     * `<primary>/.webpieces` for the primary clone, which keeps its state exactly where it has always
+     * THIS WORKTREE's private state: `<primary>/.webpieces-logs/worktrees/<name>` for a linked worktree, and
+     * `<primary>/.webpieces-logs` for the primary clone, which keeps its state exactly where it has always
      * been. Fully isolated — two worktrees never write the same path, so nothing here needs a lock.
      *
-     * The first call for a linked worktree also MIGRATES a legacy real `<worktree>/.webpieces/`
+     * The first call for a linked worktree also MIGRATES a legacy real `<worktree>/.webpieces-logs/`
      * directory into the namespace, so in-flight merge / pr-review state written under the old scheme
      * (or by an older PUBLISHED build during the transition) is picked up rather than orphaned.
      */
@@ -209,7 +208,7 @@ export class DotWebpieces {
     }
 
     /**
-     * State an AI AGENT writes with its own file-write tool: `<worktree>/.webpieces` — the worktree's
+     * State an AI AGENT writes with its own file-write tool: `<worktree>/.webpieces-logs` — the worktree's
      * OWN root, which is the only place a worktree-isolated agent is permitted to write. Identical to
      * `shared()`/`local()` in the primary clone, so nothing changes for a repo without worktrees.
      *
@@ -318,7 +317,7 @@ export class DotWebpieces {
     }
 
     /**
-     * The PRE-change location, `<treeRoot>/.webpieces` — what every call site used to compute. Public
+     * The PRE-change location, `<treeRoot>/.webpieces-logs` — what every call site used to compute. Public
      * because the migrator and its specs must be able to name the thing being migrated FROM, and
      * because the transition-window fallback readers need it.
      */
@@ -326,7 +325,7 @@ export class DotWebpieces {
         return path.join(treeRoot, WEBPIECES_TMP_DIR);
     }
 
-    // Drain a legacy per-worktree `.webpieces/` into this worktree's namespace, at most once per tree
+    // Drain a legacy per-worktree `.webpieces-logs/` into this worktree's namespace, at most once per tree
     // per process. Migration is idempotent, but it touches the filesystem on the hook's blocking path.
     private migrateOnce(startDir: string, target: string): void {
         // Guard on the CHEAP key first. `local()` is called many times per invocation, and resolving the
@@ -336,7 +335,7 @@ export class DotWebpieces {
         this.migrated.add(startDir);
         const toplevel = this.treeRoot(startDir);
         if (toplevel === null) return;
-        this.migrator.migrate(this.legacyDir(toplevel), target, [...AI_WRITABLE_STATE_DIRS, ...new RepositoryConfigStatePaths().keepInPlace(toplevel)]);
+        this.migrator.migrate(this.legacyDir(toplevel), target, AI_WRITABLE_STATE_DIRS);
     }
 
     // One `git rev-parse <flag>`, resolved to an absolute path (git prints a bare `.git`, relative to

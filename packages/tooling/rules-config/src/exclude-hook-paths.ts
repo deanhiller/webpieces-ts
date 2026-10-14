@@ -21,20 +21,20 @@ export class ExcludePaths {
 /**
  * webpieces' OWN state directory is NEVER governed, whatever `excludePaths` says.
  *
- * `.webpieces/` is gitignored in every consumer, so nothing under it can reach a branch, be reviewed,
+ * `.webpieces-logs/` is gitignored in every consumer, so nothing under it can reach a branch, be reviewed,
  * be reverted, or be lost to a checkout — every justification the branch-state guard prints about
  * protecting `main` is vacuous there. Leaving that to config made the exemption OPTIONAL, and the
  * tooling writes into the directory itself: `wp-review-upsert-pr` asks a reviewer subagent to write its
- * verdict to `<primary>/.webpieces/worktrees/agent-<id>/pr-review/<branch>/`, feature-branch-guard
+ * verdict to `<primary>/.webpieces-logs/worktrees/agent-<id>/pr-review/<branch>/`, feature-branch-guard
  * resolved that write to the PRIMARY clone and judged the primary's live branch — a tree the subagent
  * is not standing in — so the reviewer was blocked with "You should not be working on main" whenever an
  * unrelated session happened to leave the primary there. Hard-coding the skip makes that whole class
  * unreachable, and fixes existing consumer repos the moment they upgrade the pin.
  *
- * THIS IS THE ONLY SPELLING. There is deliberately no companion `.webpieces/**` glob seeded into
+ * THIS IS THE ONLY SPELLING. There is deliberately no companion `.webpieces-logs/**` glob seeded into
  * `excludePaths` — a config entry that changed nothing would be a second spelling of a decision that
- * already has one, and a strictly WEAKER one at that: the repo's glob matcher compiles `.webpieces/**`
- * to an anchored regex whose `/` is literal, so it misses the bare directory `.webpieces` that this
+ * already has one, and a strictly WEAKER one at that: the repo's glob matcher compiles `.webpieces-logs/**`
+ * to an anchored regex whose `/` is literal, so it misses the bare directory `.webpieces-logs` that this
  * predicate matches. A consumer reading such a glob would also conclude the exemption is config-driven
  * and therefore removable, which is exactly the belief this predicate exists to destroy.
  *
