@@ -178,13 +178,13 @@
     "mode": "OFF",
     "entries": [
       {
+        "exempt": false,
         "paths": [
           "**/*Dto.ts"
         ],
         "suffixes": [
           "Dto"
-        ],
-        "exempt": false
+        ]
       }
     ],
     "turnOffRuleUntilEpoch": 0,
