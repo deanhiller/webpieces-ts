@@ -1,7 +1,10 @@
 {
+    "maxLevel": 3,
+    "contractQueues": {},
     "services": {
         "angular-site": {
-            "level": 2,
+            "level": 3,
+            "levelBecause": "rpc:client-server (L2)",
             "role": "client",
             "implements": [],
             "uses": [
@@ -36,7 +39,8 @@
             ]
         },
         "app-example-e2e": {
-            "level": 0,
+            "level": 1,
+            "levelBecause": "no callees (service starts at L1)",
             "role": "server",
             "implements": [],
             "uses": [],
@@ -47,7 +51,8 @@
             ]
         },
         "client-server": {
-            "level": 1,
+            "level": 2,
+            "levelBecause": "rpc:server2 (L1)",
             "role": "server",
             "serviceName": "client-server",
             "implements": [
@@ -96,7 +101,8 @@
             ]
         },
         "legacy-server": {
-            "level": 1,
+            "level": 2,
+            "levelBecause": "rpc:server2 (L1)",
             "role": "server",
             "serviceName": "legacy-server",
             "implements": [
@@ -138,7 +144,8 @@
             ]
         },
         "server2": {
-            "level": 0,
+            "level": 1,
+            "levelBecause": "no callees (service starts at L1)",
             "role": "server",
             "serviceName": "server2",
             "implements": [
@@ -241,6 +248,8 @@
     ],
     "unresolvedUses": [
         {
+            "level": 0,
+            "levelBecause": "outbound sink",
             "service": "angular-site",
             "api": "BrowserStorageApi"
         }

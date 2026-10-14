@@ -513,6 +513,7 @@
             "designFile": "packages/tooling/rules-config/design.json",
             "dependsOn": [
                 "repo-workflow-core",
+                "rules-sdk",
                 "tooling-testkit"
             ]
         },
