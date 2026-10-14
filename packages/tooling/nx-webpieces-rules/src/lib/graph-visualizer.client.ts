@@ -172,6 +172,8 @@ class GraphHighlighter {
             items.push(this.page.filterItem(name));
             const implemented = window.__WP_RUNTIME__?.implementsItem(name, node);
             if (implemented) items.push(implemented);
+            const goal = window.__WP_GOAL__?.item(name, node);
+            if (goal) items.push(goal);
             return items;
         });
     }
@@ -414,7 +416,7 @@ class GraphDrawer {
         if (ev.key === 'Escape' && this.dismissOverlay()) return;
         const target = ev.target;
         if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) return;
-        const menuOpen = document.getElementById('wp-node-menu') !== null || document.querySelector('.wp-graph-details:not([hidden])') !== null;
+        const menuOpen = document.getElementById('wp-node-menu') !== null || document.querySelector('.wp-graph-details:not([hidden]), .wp-goal-details:not([hidden])') !== null;
         if (ev.key === '/') {
             this.byId('wp-shell')?.classList.remove('wp-collapsed');
             this.byId('wp-collapse')?.setAttribute('aria-expanded', 'true');
@@ -422,7 +424,7 @@ class GraphDrawer {
             this.lockInput()?.focus();
             return;
         }
-        const index = ['1', '2', '3', '4'].indexOf(ev.key);
+        const index = ['1', '2', '3', '4', '5'].indexOf(ev.key);
         if (index >= 0 && !menuOpen) {
             this.page.setMode(WpModeState.MODES[index]);
             return;
@@ -488,6 +490,12 @@ class GraphDrawer {
             button.disabled = !modes.available(mode);
             if (mode === 'impact') button.title = reason === '' ? 'Key 3' : reason;
             if (mode === 'product') button.title = modes.productReason() === '' ? 'Key 4' : modes.productReason();
+            if (mode === 'goal') {
+                // Unavailable is said in the menu itself, never shown as "no differences" (#1239).
+                button.title = modes.goalReason() === '' ? 'Key 5' : modes.goalReason();
+                const sub = button.querySelector('.wp-mode-sub');
+                if (sub !== null) sub.textContent = modes.goalReason() === '' ? modes.subtitle(mode) : `Unavailable: ${modes.goalReason()}`;
+            }
         });
         this.text('wp-mode-current', modes.name(modes.mode));
         this.text('wp-mode-current-sub', modes.subtitle(modes.mode));
@@ -625,11 +633,14 @@ class GraphDrawer {
 class GraphPage extends WpFilterPage {
     private highlighter: GraphHighlighter | null = null;
     private selected: string | null = null;
+    /** The page's own graph; Goal vs Current swaps in its overlay and back (#1239). */
+    private readonly base: RenderModelJson = this.model;
     private readonly modes = new WpModeState(
         this.model.nodes.some((node: RenderNodeJson): boolean => node.products.length > 0),
         this.model.viewer ?? 'architecture',
+        this.goalUnavailable(),
     );
-    private readonly projects = new WpProjectFilter(this.model, this.modes);
+    private projects = new WpProjectFilter(this.model, this.modes);
     private applied = new WpFilterChoice();
     private readonly drawer = new GraphDrawer(this);
 
@@ -643,8 +654,27 @@ class GraphPage extends WpFilterPage {
     }
 
     protected override wireControls(): void {
+        this.syncModel();
         this.drawer.wire();
         this.syncControls();
+    }
+
+    /** '' when this page can show Goal vs Current, else why not. */
+    private goalUnavailable(): string {
+        if (this.model.viewer !== 'runtime') return 'Goal vs Current compares runtime architecture only.';
+        const comparison = this.model.comparison;
+        if (comparison === undefined || comparison === null)
+            return 'This page carries no Goal vs Current data. Re-open it with pnpm nx run architecture:visualize-runtime.';
+        return comparison.available ? '' : comparison.reason;
+    }
+
+    /** Goal vs Current draws its overlay topology; every other mode draws the page's own graph. */
+    private syncModel(): void {
+        const overlay = this.base.comparison?.model ?? null;
+        const next = this.modes.mode === 'goal' && overlay !== null ? overlay : this.base;
+        if (next === this.model) return;
+        this.useModel(next);
+        this.projects = new WpProjectFilter(next, this.modes);
     }
 
     protected override nodeDot(node: RenderNodeJson): string {
@@ -663,7 +693,7 @@ class GraphPage extends WpFilterPage {
     }
 
     protected override usesFullDot(): boolean {
-        return this.modes.mode === 'runtime' && this.applied.count() === 0;
+        return (this.modes.mode === 'runtime' || this.modes.mode === 'goal') && this.applied.count() === 0;
     }
 
     protected override narrow(retained: Set<string>): Set<string> {
@@ -729,6 +759,7 @@ class GraphPage extends WpFilterPage {
 
     setMode(mode: string): void {
         if (mode === this.modes.mode || !this.modes.set(mode)) return;
+        this.syncModel();
         this.syncControls();
         this.redraw();
     }
@@ -787,6 +818,7 @@ class GraphPage extends WpFilterPage {
     }
 
     private syncControls(): void {
+        document.body.dataset['wpMode'] = this.modes.mode;
         this.drawer.sync(this.modes, this.locked, this.anchor !== null, this.applied);
         const count = this.model.nodes.filter(node => this.retained.has(node.id) && this.projects.isService(node)).length;
         const empty = document.getElementById('wp-empty');

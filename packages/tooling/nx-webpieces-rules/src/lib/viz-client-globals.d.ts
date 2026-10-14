@@ -81,6 +81,20 @@ interface RenderModelJson {
     fullDot: string;
     header: string;
     footer: string;
+    /** Runtime pages (#1239): the Goal vs Current overlay, or why it is unavailable. Absent elsewhere. */
+    comparison?: RuntimeComparisonJson | null;
+}
+
+/** RuntimeComparisonView (graph-render-model.ts), as JSON. */
+interface RuntimeComparisonJson {
+    available: boolean;
+    reason: string;
+    direction: string;
+    summary: string;
+    model: RenderModelJson | null;
+    nodeDetails: Record<string, string[]>;
+    edgeDetails: Record<string, string[]>;
+    differences: string[];
 }
 
 interface RenderNodeJson {
@@ -148,6 +162,11 @@ interface ImpactJson {
 interface Window {
     __WP_IMPACT__?: ImpactDataJson;
     __WP_RUNTIME__?: RuntimeViewerBinding;
+    __WP_GOAL__?: GoalViewerBinding;
+}
+/** The Goal vs Current details panel (runtime-goal-details.ts): a node menu item while that mode is on. */
+interface GoalViewerBinding {
+    item(name: string, node: SVGGElement): WpNodeMenuItem | null;
 }
 interface RuntimeViewerBinding {
     prepare(svg: SVGSVGElement): void;

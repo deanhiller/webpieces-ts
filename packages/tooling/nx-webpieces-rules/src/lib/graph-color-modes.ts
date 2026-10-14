@@ -40,6 +40,8 @@ export enum GraphMode {
     ARCHITECTURE = 'architecture',
     IMPACT = 'impact',
     PRODUCT = 'product',
+    /** Runtime pages only (#1239): the saved goal compared with the saved current graph. */
+    GOAL = 'goal',
 }
 
 /** One selectable mode as the drawer's Color-by pulldown shows it. */
@@ -57,6 +59,15 @@ export const GRAPH_MODES: readonly ModeInfo[] = [
     new ModeInfo(GraphMode.ARCHITECTURE, 'Architecture', 'servers · clients · APIs'),
     new ModeInfo(GraphMode.IMPACT, 'Impact', 'what changed'),
     new ModeInfo(GraphMode.PRODUCT, 'Product', 'which products it belongs to'),
+];
+
+/**
+ * The runtime page's Color-by menu: the four shared modes plus Goal vs Current (#1239), key `5`. The
+ * build-dependency and DI viewers never list it.
+ */
+export const RUNTIME_GRAPH_MODES: readonly ModeInfo[] = [
+    ...GRAPH_MODES,
+    new ModeInfo(GraphMode.GOAL, 'Goal vs Current', 'Current → Goal proposal'),
 ];
 
 /** Text on a light fill. */

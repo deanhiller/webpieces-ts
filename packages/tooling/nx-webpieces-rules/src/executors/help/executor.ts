@@ -22,6 +22,7 @@ export default async function helpExecutor(
     console.log('    npm run arch:generate                  # Explicitly refresh architecture/API/runtime facts');
     console.log('    npm run arch:visualize                 # View saved snapshot (does not refresh)');
     console.log('    npm run arch:visualize-runtime         # View saved runtime snapshot (does not refresh)');
+    console.log('    npm run arch:visualize-runtime-goal    # View the runtime goal proposal + Goal vs Current (never generates)');
     console.log('');
     console.log('  Validation:');
     console.log('    npm run arch:validate                  # Quick validation (no-cycles)');
@@ -36,6 +37,7 @@ export default async function helpExecutor(
     console.log('    nx run architecture:generate                         # Explicitly refresh architecture/API/runtime facts');
     console.log('    nx run architecture:visualize                        # View saved snapshot (does not refresh)');
     console.log('    nx run architecture:visualize-runtime                # View saved runtime snapshot (does not refresh)');
+    console.log('    nx run architecture:visualize-runtime-goal           # View the runtime goal proposal (--prepare recomputes its levels)');
     console.log('    nx run architecture:validate-no-architecture-cycles  # Check for circular project dependencies');
     console.log('    nx run architecture:validate-architecture-unchanged  # Validate against blessed graph');
     console.log('');

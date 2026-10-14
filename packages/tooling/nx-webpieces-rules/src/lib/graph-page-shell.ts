@@ -11,7 +11,7 @@
  * carries a `style=` attribute — every look is a class.
  */
 
-import { FRAMEWORK_ORDER, GRAPH_MODES, GraphMode, ModeInfo, ROLE_STYLES, RoleStyle } from './graph-color-modes';
+import { FRAMEWORK_ORDER, GRAPH_MODES, GraphMode, ModeInfo, ROLE_STYLES, RoleStyle, RUNTIME_GRAPH_MODES } from './graph-color-modes';
 import { ProductColor } from './graph-products';
 
 /**
@@ -92,7 +92,7 @@ export class GraphPageShell {
         <div class="wp-brand">${this.brandIcon()}<span>${parts.title}</span></div>
         <div class="wp-group" role="group" aria-label="Color mode">
             <div class="wp-label">Color by</div>
-            ${this.modePulldown()}
+            ${this.modePulldown(parts.runtime ? RUNTIME_GRAPH_MODES : GRAPH_MODES)}
             <p class="wp-mode-reason" id="wp-impact-reason" hidden></p>
             ${this.impactKinds('drawer')}
         </div>
@@ -125,13 +125,13 @@ export class GraphPageShell {
      * menu of the four. Keys 1/2/3/4 and the #runtime / #architecture / #impact / #product links still
      * switch.
      */
-    private modePulldown(): string {
-        const first = GRAPH_MODES[0];
+    private modePulldown(modes: readonly ModeInfo[]): string {
+        const first = modes[0];
         return `<div class="wp-pulldown">
                 <button type="button" class="wp-pill-trigger" id="wp-mode-trigger" aria-haspopup="menu" aria-controls="wp-mode-menu" aria-expanded="false">
                     <span class="wp-pill-text"><span class="wp-mode-name" id="wp-mode-current">${first.name}</span><span class="wp-mode-sub" id="wp-mode-current-sub">${first.subtitle}</span></span><span class="wp-caret" aria-hidden="true">▾</span>
                 </button>
-                <div class="wp-menu" id="wp-mode-menu" role="menu" aria-label="Color by" hidden>${GRAPH_MODES.map((info: ModeInfo, index: number): string => this.modeItem(info, index)).join('')}</div>
+                <div class="wp-menu" id="wp-mode-menu" role="menu" aria-label="Color by" hidden>${modes.map((info: ModeInfo, index: number): string => this.modeItem(info, index)).join('')}</div>
             </div>`;
     }
 
@@ -239,7 +239,8 @@ export class GraphPageShell {
             <p>Lock pins separate incoming and outgoing chains; hover adds another chain temporarily. Hide unconnected removes unrelated boxes independently. Clear all clears facets, leaving Lock and chain filtering intact.</p>
             <p>Filters intersect declared runtime, role, product closure and Nx build scope. Counts describe services; attached contextual nodes are counted separately. Impact uses compile-project sets, never runtime reachability. Queues and vendors are context, never source owners or CI projects.</p>
             <p>Runtime uses declared framework colors, Architecture declared roles; contextual nodes keep their kind colors. Product colors come from each project's declared product: tags; contextual nodes inherit adjacent memberships. Unknown metadata is neutral. Missing saved metadata requires explicit architecture:generate.</p>
-            <p><kbd>/</kbd> Focus search · <kbd>1</kbd>–<kbd>4</kbd> modes · <kbd>Esc</kbd> dismiss or unlock</p>
+            <p><strong>Goal vs Current</strong> compares the saved goal (architecture/runtime-dependencies-goal.json) with the saved current graph, Current → Goal: green added, red dashed removed (still drawn), amber changed, grey unchanged. Click a box for its before/after details, or click an arrow.</p>
+            <p><kbd>/</kbd> Focus search · <kbd>1</kbd>–<kbd>5</kbd> modes · <kbd>Esc</kbd> dismiss or unlock</p>
         </div>`;
         return `<div class="wp-pop wp-help" id="wp-help" role="dialog" aria-label="How to read this graph" hidden>
             <header><span>Reading the graph</span><button type="button" class="wp-icon wp-icon-mini" id="wp-help-close" aria-label="Close help">✕</button></header>

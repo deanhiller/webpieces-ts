@@ -84,6 +84,8 @@ class QueueCylinders {
         const first = shapes[0];
         const fill = first.getAttribute('fill') ?? 'none';
         const stroke = first.getAttribute('stroke') ?? 'black';
+        // A dashed outline (Goal vs Current's removed queue, #1239) survives the redraw.
+        const dash = first.getAttribute('stroke-dasharray');
         // Measured BEFORE the shapes go: the record separator is where the label text starts.
         const separator = this.separatorX(shapes);
         shapes.forEach((shape: Element): void => {
@@ -111,8 +113,8 @@ class QueueCylinders {
 
         const anchor = node.firstChild;
         if (anchor === null || anchor.nextSibling === null) return;
-        node.insertBefore(this.pathEl(fill, stroke, body), anchor.nextSibling);
-        node.insertBefore(this.pathEl('none', stroke, cap), anchor.nextSibling.nextSibling);
+        node.insertBefore(this.pathEl(fill, stroke, body, dash), anchor.nextSibling);
+        node.insertBefore(this.pathEl('none', stroke, cap, dash), anchor.nextSibling.nextSibling);
 
         // The label is deliberately NOT nudged. QUEUE_LABEL_PREFIX already gives the node an empty
         // leading record field, so Graphviz has centred the text in the space to the RIGHT of where the
@@ -199,10 +201,11 @@ class QueueCylinders {
         return new Bounds(Math.min(...xs), Math.max(...xs), Math.min(...ys), Math.max(...ys));
     }
 
-    private pathEl(fill: string, stroke: string, d: string): SVGPathElement {
+    private pathEl(fill: string, stroke: string, d: string, dash: string | null): SVGPathElement {
         const el = document.createElementNS(QueueCylinders.SVG_NS, 'path');
         el.setAttribute('fill', fill);
         el.setAttribute('stroke', stroke);
+        if (dash !== null) el.setAttribute('stroke-dasharray', dash);
         el.setAttribute('d', d);
         return el;
     }

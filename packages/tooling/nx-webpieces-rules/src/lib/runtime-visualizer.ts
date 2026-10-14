@@ -82,8 +82,9 @@ const APIS_PER_LABEL_LINE = 3;
 /** Separator for the (service, external-library) grouping key; illegal in both project names. */
 const PAIR_SEP = '|';
 
-import { RuntimeVizOptions } from './runtime-viz-options';
-export { RuntimeVizOptions } from './runtime-viz-options';
+import { RuntimeVizOptions, RuntimePageKind } from './runtime-viz-options';
+import type { RuntimeComparisonView } from './graph-render-model';
+export { RuntimeVizOptions, RuntimePageKind } from './runtime-viz-options';
 
 /**
  * The DISPLAY name of a project/service: scope stripped. LABELS ONLY.
@@ -219,7 +220,11 @@ function queueBoxDot(
  * anything else stays separate, because merging it would assert a routing that does not exist.
  */
 // webpieces-disable no-function-outside-class -- DOT string builder, matching getShortName in this file
-function groupQueues(byQueue: Map<string, QueueEndpoints>, graph: RuntimeGraph): QueueGroup[] {
+function groupQueues(
+    byQueue: Map<string, QueueEndpoints>,
+    graph: RuntimeGraph,
+    tags: Record<string, string>,
+): QueueGroup[] {
     const groups = new Map<string, QueueGroup>();
     // Sorted keys → the first member of every group, and therefore its node id, is deterministic.
     for (const key of [...byQueue.keys()].sort()) {
@@ -232,6 +237,7 @@ function groupQueues(byQueue: Map<string, QueueEndpoints>, graph: RuntimeGraph):
             graph.queues[key].level,
             producers.join(','),
             consumers.join(','),
+            tags[key] ?? '',
         ].join(PAIR_SEP);
         const existing = groups.get(mergeKey);
         if (existing === undefined)
@@ -254,7 +260,12 @@ function groupQueues(byQueue: Map<string, QueueEndpoints>, graph: RuntimeGraph):
  * one is stuck) at a fraction of the node count.
  */
 // webpieces-disable no-function-outside-class -- DOT string builder, matching getShortName in this file
-function queuesDot(graph: RuntimeGraph, hidden: Set<string>, model: GraphRenderModel): string {
+function queuesDot(
+    graph: RuntimeGraph,
+    hidden: Set<string>,
+    model: GraphRenderModel,
+    options: RuntimeVizOptions,
+): string {
     const queued = graph.runtimeEdges.filter(
         (e: RuntimeEdge) => e.type === 'pubsub' && !hidden.has(e.from) && !hidden.has(e.to),
     );
@@ -289,7 +300,7 @@ function queuesDot(graph: RuntimeGraph, hidden: Set<string>, model: GraphRenderM
         );
     }
 
-    for (const group of groupQueues(byQueue, graph)) {
+    for (const group of groupQueues(byQueue, graph, options.queueGroupTags)) {
         const body = group.members
             .map((key: string) => queueLine(key, graph.queues[key]))
             .join('\\n');
@@ -632,7 +643,7 @@ export function generateRuntimeRenderModel(
         dot += model.edge(edge.from, edge.to, edgeDot(edge));
     }
 
-    dot += queuesDot(graph, hidden, model);
+    dot += queuesDot(graph, hidden, model, options);
     dot += remoteServicesDot(graph, hidden, model);
     dot += triggerDot(graph, hidden, model);
 
@@ -644,7 +655,7 @@ export function generateRuntimeRenderModel(
     model.bands = adapter.levelBands(model);
     const footerStart = dot.length;
     dot += '\n  labelloc="t";\n';
-    dot += `  label="${dotValue(title)}\\n(from architecture/runtime-dependencies.json)";\n`;
+    dot += `  label="${dotValue(title)}\\n(from ${dotValue(options.source())})";\n`;
     dot += '  fontsize=20;\n';
     dot += '}\n';
     // Nothing downstream parses this DOT until a human opens the page, so parse-shape is checked
@@ -664,22 +675,29 @@ export interface RuntimeVisualizationPaths {
     htmlPath: string;
 }
 
-/** Write the DOT + HTML renderings to tmp/webpieces/. */
+/**
+ * Write the DOT + HTML renderings to tmp/webpieces/: `runtime-architecture.*` for the current graph,
+ * `runtime-architecture-goal.*` for the goal (#1239), so neither page ever overwrites the other.
+ * `comparison` is the Goal vs Current overlay the page carries (or why it is unavailable).
+ */
 export function writeRuntimeVisualization(
     graph: RuntimeGraph,
     workspaceRoot: string,
-    title: string = 'WebPieces Runtime Architecture',
-    options: RuntimeVizOptions = new RuntimeVizOptions(),
+    title: string,
+    options: RuntimeVizOptions,
+    comparison: RuntimeComparisonView,
 ): RuntimeVisualizationPaths {
     const outputDir = path.join(workspaceRoot, 'tmp', 'webpieces');
     if (!fs.existsSync(outputDir)) fs.mkdirSync(outputDir, { recursive: true });
 
     const model = generateRuntimeRenderModel(graph, title, options);
+    model.comparison = comparison;
     const dot = model.fullDot;
-    const dotPath = path.join(outputDir, 'runtime-architecture.dot');
+    const base = options.page === RuntimePageKind.GOAL ? 'runtime-architecture-goal' : 'runtime-architecture';
+    const dotPath = path.join(outputDir, `${base}.dot`);
     fs.writeFileSync(dotPath, dot, 'utf-8');
 
-    const htmlPath = path.join(outputDir, 'runtime-architecture.html');
+    const htmlPath = path.join(outputDir, `${base}.html`);
     fs.writeFileSync(htmlPath, new RuntimeHtmlPage().render(model, title, graph, options), 'utf-8');
 
     return { dotPath, htmlPath };
