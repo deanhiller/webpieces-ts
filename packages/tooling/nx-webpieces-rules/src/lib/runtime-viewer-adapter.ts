@@ -78,8 +78,8 @@ export class RuntimeViewerAdapter {
             bands.get(level)!.push(node.id);
         }
         return [...bands.entries()]
-            .sort(([a], [b]) => b - a)
-            .map(([level, names]) => new LevelBand(level, names));
+            .sort((a, b) => b[0] - a[0])
+            .map((entry) => new LevelBand(entry[0], entry[1]));
     }
 
     /** Context keeps its shape/kind palette; Impact never paints a queue as a source owner. */

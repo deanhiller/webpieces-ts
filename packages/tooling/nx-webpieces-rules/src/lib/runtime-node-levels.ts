@@ -2,6 +2,8 @@ import type { RuntimeGraph, RuntimeLevel } from './runtime-graph-model';
 import { RuntimeQueueFlow } from './runtime-graph-model';
 import { assignLevels } from './runtime-graph-levels';
 
+type QueueEntry = [string, RuntimeQueueFlow];
+
 /** Generator-owned layering. Renderers consume these numbers without deriving topology. */
 export class RuntimeNodeLevels {
     apply(graph: RuntimeGraph): void {
@@ -25,7 +27,7 @@ export class RuntimeNodeLevels {
                     ? 'no callees (service starts at L1)'
                     : `${graph.services[highest] === undefined ? highest : `rpc:${highest}`} (L${levels[highest]})`;
         }
-        for (const [key, queue] of this.queues(graph)) this.queueLevel(key, queue, graph, levels);
+        for (const entry of this.queues(graph)) this.queueLevel(entry[0], entry[1], graph, levels);
         for (const system of Object.values(graph.externalSystems ?? {})) this.sink(system);
         for (const remote of Object.values(graph.remoteServices ?? {})) this.sink(remote);
         for (const use of graph.unresolvedUses) this.sink(use);
@@ -34,7 +36,7 @@ export class RuntimeNodeLevels {
             Math.max(
                 0,
                 ...Object.values(levels),
-                ...this.queues(graph).map(([, queue]) => queue.level),
+                ...this.queues(graph).map((entry) => entry[1].level),
             );
         for (const trigger of graph.triggers) {
             trigger.level = top;
@@ -51,7 +53,9 @@ export class RuntimeNodeLevels {
             if (edge.type !== 'pubsub' && edge.cutLegacyCycle !== true)
                 adj[edge.from].push(edge.to);
         }
-        for (const [key, queue] of this.queues(graph)) {
+        for (const entry of this.queues(graph)) {
+            const key = entry[0];
+            const queue = entry[1];
             const foreign = queue.producedBy.filter((producer) =>
                 queue.consumedBy.some((consumer) => consumer !== producer),
             );
@@ -93,7 +97,7 @@ export class RuntimeNodeLevels {
         }
     }
 
-    private queues(graph: RuntimeGraph): [string, RuntimeQueueFlow][] {
+    private queues(graph: RuntimeGraph): QueueEntry[] {
         return [...Object.entries(graph.queues), ...Object.entries(graph.contractQueues)];
     }
 
