@@ -32,16 +32,24 @@ legend show ownership, cross-product edges, and the allowed dependency matrix.
 
 ## Stable graph colors
 
-Product colors are derived from the exact `product:<name>` name using SHA-256.
-Adding, removing, or reordering other products does not change an existing
-product's color. Architecture and runtime use the same assignment, even when
-runtime shows only a subset. Nodes, crossing edges, legends, and filter swatches
-use that assignment. Renaming a product changes its identity and therefore its
-color. There is no eight-product limit or overflow into the shared neutral fill.
+Product colors come from one fixed palette of eight saturated colors (blue,
+orange, red, teal, green, yellow, purple, pink), each with the text color that
+reads on it. A product's preferred color is chosen by its name: the first byte of
+SHA-256(`<name>`), mod 8. When two products prefer the same color, products are
+taken in sorted-name order: the first keeps it and the later one takes the next
+free color (wrapping). So adding a product changes no existing color unless the
+new name hashes onto a color already taken AND sorts before the product holding
+it. Products are never colored by their position in the sorted list: that would
+recolor every later product whenever one is added. Past eight products, the extra
+products share their preferred color; none falls back to the neutral fill.
 
-Colors are automatic; consumers do not need to configure them. Name-based colors
-can be similar, so the product labels remain the ownership key. Neutral means a
-box belongs to every product in that graph; white/dashed means no product.
+Because collisions are resolved over the whole set, both viewers build the
+palette over every declared product, even when the runtime graph shows only a
+subset or hides a service. Nodes, crossing edges, legends, and filter swatches
+all read that one palette. Renaming a product can change its color.
+
+Colors are automatic; consumers do not need to configure them. Neutral means a
+box belongs to every declared product; white/dashed means no product.
 
 Runtime framework colors, Architecture role colors, and Impact status colors are
 fixed semantic palettes. A box changes those colors only when its framework, role,

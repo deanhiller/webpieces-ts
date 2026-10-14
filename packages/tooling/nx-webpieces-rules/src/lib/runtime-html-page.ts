@@ -16,7 +16,7 @@ import { GraphNodeMenu } from './graph-node-menu';
 import { GraphPageShell, ShellParts } from './graph-page-shell';
 import { GraphPageStyles } from './graph-page-styles';
 import { GraphLegend } from './graph-legend';
-import { ProductPalette } from './graph-products';
+import { ProductColor } from './graph-products';
 import { FRAMEWORK_STYLES, ROLE_STYLES } from './graph-color-modes';
 import { IMPACT_SIDECAR_SRC } from './graph-impact';
 import { ResponsibilitiesRenderer } from './graph-responsibilities';
@@ -51,7 +51,7 @@ export class RuntimeHtmlPage {
         const roles = [
             ...new Set(model.nodes.flatMap((node) => (node.tags === null ? [] : [node.tags.role]))),
         ].sort();
-        const products = [...new Set(model.nodes.flatMap((node) => node.products))].sort();
+        const products = this.shownProducts(model);
         const parts = new ShellParts(
             title,
             this.lockControl(model),
@@ -133,9 +133,7 @@ export class RuntimeHtmlPage {
                 ),
             )
             .join('');
-        const products = new ProductPalette(
-            model.legend.products.map((count) => count.product),
-        ).colors
+        const products = this.shownProducts(model)
             .map((color) => tag('product', color.product, color.color))
             .join('');
         return (
@@ -144,6 +142,16 @@ export class RuntimeHtmlPage {
             `<section data-wp-legend-mode="impact" class="wp-legend-list" hidden>${new GraphLegend().impactRows()}</section><section data-wp-legend-mode="product" class="wp-legend-list" hidden>${products}<p>Stripes: several products; neutral: all products; white/dashed: no product. Context inherits adjacent service memberships.</p></section>` +
             '<p>Queues, clocks, datastores and vendors remain context in Impact; no source ownership or CI status is implied.</p>'
         );
+    }
+
+    /**
+     * The products some drawn box carries, colored from the ONE palette the boxes were painted with —
+     * built over every declared product (#1244), so a product keeps the dependency viewer's color even
+     * though this page lists only the products it shows.
+     */
+    private shownProducts(model: GraphRenderModel): ProductColor[] {
+        const shown = new Set(model.nodes.flatMap((node) => node.products));
+        return model.legend.palette.colors.filter((color: ProductColor): boolean => shown.has(color.product));
     }
 
     private edgeKey(): string {

@@ -1539,6 +1539,12 @@
             "optional": false,
             "nullable": false,
             "nonEmpty": true
+          },
+          "exempt": {
+            "type": "boolean",
+            "optional": true,
+            "nullable": false,
+            "nonEmpty": false
           }
         }
       },

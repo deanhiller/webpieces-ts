@@ -26,7 +26,15 @@ export { ApiClientPackagesEntry, ApiLibDependenciesConfig, ApiLibPathConfig, Fra
 
 export { GraphRenderModel, RenderNode, RenderEdge, NodeTags } from './lib/graph-render-model';
 export { GraphMode, NodeModeDots, LegendFacts, ProductCount } from './lib/graph-color-modes';
-export { ProductMembership, RuntimeProductMembership, ProductPalette, ProductColor, ProductBoundary } from './lib/graph-products';
+export {
+    ProductMembership,
+    RuntimeProductMembership,
+    ProductPalette,
+    ProductColor,
+    ProductPaletteSlot,
+    PRODUCT_PALETTE_SLOTS,
+    ProductBoundary,
+} from './lib/graph-products';
 export { ProductDependencyMatrix } from './lib/product-dependencies';
 export { ProductResolver, ProductResolution, PRODUCT_TAG_PREFIX } from './lib/product-resolver';
 export { EntryPointLevels } from './lib/graph-entry-levels';

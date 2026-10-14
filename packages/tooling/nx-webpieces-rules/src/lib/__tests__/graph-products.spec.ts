@@ -7,6 +7,7 @@ import { describe, it, expect } from 'vitest';
 import type { EnhancedGraph } from '../graph-sorter';
 import type { RuntimeGraph, RuntimeService } from '../runtime-graph-model';
 import {
+    PRODUCT_PALETTE_SLOTS,
     PRODUCT_SHARED_FILL,
     ProductColor,
     ProductMembership,
@@ -173,24 +174,79 @@ describe('ProductPalette', () => {
         expect(a.colorOf('lang').color).toBe(b.colorOf('lang').color);
     });
 
-    it('locks a product color across additions, removals, duplicates and runtime subsets', () => {
-        const products = ['api-model', 'core', 'example', 'openapi', 'platform', 'rules'];
-        for (const product of products) {
-            const full = new ProductPalette(products).colorOf(product);
-            expect(new ProductPalette([product]).colorOf(product)).toEqual(full);
-            expect(new ProductPalette(['aaa', ...products, 'zzz', product]).colorOf(product)).toEqual(full);
-            expect(new ProductPalette([...products].reverse()).colorOf(product)).toEqual(full);
+    it('pins this repo\'s six products to their concrete colors, all distinct (#1244)', () => {
+        const palette = new ProductPalette(['api-model', 'core', 'example', 'openapi', 'platform', 'rules']);
+        const pinned = palette.colors.map((color: ProductColor): string => `${color.product} ${color.color} ${color.fontColor}`);
+        expect(pinned).toEqual([
+            'api-model #8e5ea2 #ffffff',
+            'core #edc948 #1a1c22',
+            'example #3f6fb5 #ffffff',
+            // openapi hashes to core's slot (5); core sorts first and keeps it, openapi takes 6, which
+            // api-model holds, so it wraps on to 7.
+            'openapi #ff9da7 #1a1c22',
+            'platform #c0392b #ffffff',
+            'rules #3d8b3d #ffffff',
+        ]);
+        expect(new Set(palette.colors.map((color: ProductColor): string => color.color)).size).toBe(6);
+    });
+
+    it('restores the eight saturated pre-#1226 colors, each with its text color', () => {
+        expect(PRODUCT_PALETTE_SLOTS.map((slot): string => `${slot.color} ${slot.fontColor}`)).toEqual([
+            '#3f6fb5 #ffffff',
+            '#f28e2b #1a1c22',
+            '#c0392b #ffffff',
+            '#5cb8b2 #1a1c22',
+            '#3d8b3d #ffffff',
+            '#edc948 #1a1c22',
+            '#8e5ea2 #ffffff',
+            '#ff9da7 #1a1c22',
+        ]);
+    });
+
+    it('hashes the name to a preferred slot: SHA-256, first byte, mod 8', () => {
+        const palette = new ProductPalette([]);
+        expect(palette.preferredSlot('core')).toBe(5);
+        expect(palette.preferredSlot('openapi')).toBe(5);
+        expect(palette.preferredSlot('example')).toBe(0);
+        // A lone product always gets its preferred slot.
+        expect(new ProductPalette(['openapi']).colorOf('openapi').color).toBe(PRODUCT_PALETTE_SLOTS[5].color);
+    });
+
+    it('never duplicates a color for eight or fewer products', () => {
+        for (let size = 1; size <= 8; size++) {
+            const names = Array.from({ length: size }, (_: unknown, i: number): string => `product-${i}`);
+            const colors = new ProductPalette(names).colors.map((color: ProductColor): string => color.color);
+            expect(new Set(colors).size).toBe(size);
         }
     });
 
-    it('pins name-based colors so future refactors cannot silently reassign them', () => {
-        expect(new ProductPalette(['core']).colorOf('core').color).toBe('#95cdbd');
+    it('adding an unrelated product whose slot is free changes no existing color', () => {
+        const products = ['api-model', 'core', 'example', 'openapi', 'platform', 'rules'];
+        const before = new ProductPalette(products);
+        // bugfixer hashes to slot 3, which none of the six holds.
+        const palette = new ProductPalette([]);
+        expect(palette.preferredSlot('bugfixer')).toBe(3);
+        const after = new ProductPalette([...products, 'bugfixer']);
+        for (const product of products) expect(after.colorOf(product)).toEqual(before.colorOf(product));
+        expect(after.colorOf('bugfixer').color).toBe(PRODUCT_PALETTE_SLOTS[3].color);
     });
 
-    it('colors more than eight products without treating any as shared', () => {
+    it('ignores input order and duplicates', () => {
+        const products = ['api-model', 'core', 'example', 'openapi', 'platform', 'rules'];
+        const full = new ProductPalette(products);
+        expect(new ProductPalette([...products].reverse()).colors).toEqual(full.colors);
+        expect(new ProductPalette([...products, ...products]).colors).toEqual(full.colors);
+    });
+
+    it('past eight products, a product shares its preferred slot\'s color — never the neutral fill', () => {
         const names = Array.from({ length: 20 }, (_: unknown, i: number): string => `product-${i}`);
         const palette = new ProductPalette(names);
-        expect(new Set(palette.colors.map((color: ProductColor): string => color.color)).size).toBe(20);
+        const slotColors = PRODUCT_PALETTE_SLOTS.map((slot): string => slot.color);
+        expect(new Set(palette.colors.map((color: ProductColor): string => color.color)).size).toBe(8);
+        for (const color of palette.colors.slice(8)) {
+            expect(color.color).toBe(PRODUCT_PALETTE_SLOTS[palette.preferredSlot(color.product)].color);
+        }
+        expect(palette.colors.every((color: ProductColor): boolean => slotColors.includes(color.color))).toBe(true);
         expect(palette.colors.every((color: ProductColor): boolean => color.color !== PRODUCT_SHARED_FILL)).toBe(true);
     });
 

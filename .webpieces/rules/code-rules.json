@@ -183,7 +183,8 @@
         ],
         "suffixes": [
           "Dto"
-        ]
+        ],
+        "exempt": false
       }
     ],
     "turnOffRuleUntilEpoch": 0,

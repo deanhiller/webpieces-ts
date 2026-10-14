@@ -206,6 +206,13 @@ export class LegendFacts {
     noRuntime = false;
     /** One count per declared product, in palette (sorted-name) order; empty when none is declared. */
     products: ProductCount[] = [];
+    /**
+     * The ONE palette every box was painted with (#1244), built over the full declared product set.
+     * The legend, the Filter's product chips and the crossing edges read their colors from it, never
+     * from a palette of their own: collision resolution depends on the set, so a second palette built
+     * from a subset could disagree with the boxes.
+     */
+    palette: ProductPalette = new ProductPalette([]);
     /** Boxes shared by every product (two or more declared). */
     sharedByAll = 0;
     /** Boxes in no product. */
@@ -291,6 +298,7 @@ export class NodeModeStyler {
 
     /** The Product section's counts: per product (total, and only-this-product), shared-by-all, none. */
     private recordProducts(legend: LegendFacts, facts: NodeFacts, palette: ProductPalette): void {
+        legend.palette = palette;
         if (legend.products.length === 0 && palette.colors.length > 0) {
             legend.products = palette.names().map((product: string): ProductCount => new ProductCount(product, 0, 0));
         }
