@@ -20,11 +20,11 @@ the visible PR body distinguishes automated-gate success from explicit human att
 1. **Copy the workflow into place and commit it:**
 
    ```bash
-   cp <the webpieces-pr-gate.yml path printed above> .github/workflows/webpieces-pr-gate.yml
+   cp <the webpieces-pr-gate.yml beside this doc> .github/workflows/webpieces-pr-gate.yml
    git add .github/workflows/webpieces-pr-gate.yml
    ```
 
-   It is scaffolded into the gitignored state directory rather than written straight into
+   It is scaffolded into the same gitignored directory as this doc rather than written straight into
    `.github/` so it can never dirty your tree mid-flow. Copying it is your decision, not the tool's.
 
 2. **Set a non-empty `gateSalt`** under the `pr-gate` section of `webpieces.config.json` (any string).

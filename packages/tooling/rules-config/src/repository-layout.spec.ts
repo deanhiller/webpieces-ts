@@ -142,6 +142,17 @@ describe('repository directory migration', () => {
         expect(fixture.read('webpieces.config.json')).toBe(before);
     });
 
+    it('replaces a stale generated lock and catalog left in .webpieces-config/ by a rollback', () => {
+        const fixture = new LayoutFixture();
+        fixture.write('.webpieces-config/rules.lock.json', '{"packs":["stale"]}');
+        fixture.write('.webpieces-config/rules-catalog.md', '# Stale');
+        fixture.layout.migrate(fixture.root);
+        expect(fixture.read('.webpieces-config/rules.lock.json')).toBe('{"packs":[]}');
+        expect(fixture.read('.webpieces-config/rules-catalog.md')).toBe('# Policy');
+        expect(fixture.exists('.webpieces/rules.lock.json')).toBe(false);
+        expect(() => fixture.layout.assertCurrent(fixture.root)).not.toThrow();
+    });
+
     it('rejects two different sources that would converge on one destination', () => {
         const fixture = new LayoutFixture();
         fixture.write(
