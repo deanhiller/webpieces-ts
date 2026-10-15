@@ -14,6 +14,8 @@ import { injectable, bindingScopeValues } from 'inversify';
 
 import { toError } from '@webpieces/tooling-common/to-error';
 
+import { RuleFileScope } from './rule-file-scope';
+
 /** A git diff range: the base ref to compare against and an optional head (else the working tree). */
 export class DiffRange {
     base?: string;
@@ -37,6 +39,9 @@ export class ChangedFilesOptions {
 
 @injectable(bindingScopeValues.Singleton)
 export class DiffScope {
+    // Stateless reader of the rule run in progress (an AsyncLocalStorage store), not a dependency.
+    private readonly ruleFileScope = new RuleFileScope();
+
     /** Auto-detect the diff base: merge-base of HEAD with origin/main, falling back to local main. */
     detectBase(workspaceRoot: string): string | null {
         for (const ref of ['origin/main', 'main']) {
@@ -69,9 +74,16 @@ export class DiffScope {
      * Changed files between base and head (or base→working-tree when head is omitted). Untracked files
      * are unioned in for the working-tree case. `tsOnly` (default true) restricts to *.ts/*.tsx and
      * drops test files. Deletions are excluded (`--diff-filter=d`).
+     *
+     * Inside a rule run, the files that run's path exclusions match are dropped (#1253): this listing is
+     * where the framework applies the top-level and per-rule `excludePaths`, so no rule does it itself.
      */
-    // webpieces-disable max-lines-new-methods -- git command handling with untracked files needs several code paths
     getChangedFiles(workspaceRoot: string, base: string, head?: string, opts?: ChangedFilesOptions): string[] {
+        return this.ruleFileScope.filter(this.listChangedFiles(workspaceRoot, base, head, opts));
+    }
+
+    // webpieces-disable max-lines-new-methods -- git command handling with untracked files needs several code paths
+    private listChangedFiles(workspaceRoot: string, base: string, head?: string, opts?: ChangedFilesOptions): string[] {
         const tsOnly = opts?.tsOnly ?? true;
         const glob = tsOnly ? " -- '*.ts' '*.tsx'" : '';
         const keep = (f: string): boolean => f.length > 0 && (!tsOnly || !this.isTestFile(f));
@@ -122,8 +134,14 @@ export class DiffScope {
      * Unlike getChangedFiles it does NOT swallow a git failure into an empty list: an empty whole-scope
      * listing reads as "0 sites left", a false answer to exactly the question these modes exist to
      * answer, so a failed `git ls-files` throws and fails the run.
+     *
+     * Inside a rule run, the run's path exclusions are applied exactly as in {@link getChangedFiles}.
      */
     getAllFiles(workspaceRoot: string, opts?: ChangedFilesOptions): string[] {
+        return this.ruleFileScope.filter(this.listAllFiles(workspaceRoot, opts));
+    }
+
+    private listAllFiles(workspaceRoot: string, opts?: ChangedFilesOptions): string[] {
         const tsOnly = opts?.tsOnly ?? true;
         const glob = tsOnly ? " -- '*.ts' '*.tsx'" : '';
         const output = execSync(`git ls-files --cached --others --exclude-standard${glob}`, {

@@ -40,6 +40,18 @@
         "optional": false,
         "nullable": true,
         "nonEmpty": false
+      },
+      "excludePaths": {
+        "type": "string[]",
+        "optional": true,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "reason": {
+        "type": "string",
+        "optional": true,
+        "nullable": false,
+        "nonEmpty": false
       }
     },
     "optionalTuning": {},
@@ -84,6 +96,18 @@
         "optional": false,
         "nullable": true,
         "nonEmpty": false
+      },
+      "excludePaths": {
+        "type": "string[]",
+        "optional": true,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "reason": {
+        "type": "string",
+        "optional": true,
+        "nullable": false,
+        "nonEmpty": false
       }
     },
     "optionalTuning": {},
@@ -115,6 +139,18 @@
         "type": "string",
         "optional": false,
         "nullable": true,
+        "nonEmpty": false
+      },
+      "excludePaths": {
+        "type": "string[]",
+        "optional": true,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "reason": {
+        "type": "string",
+        "optional": true,
+        "nullable": false,
         "nonEmpty": false
       }
     },
@@ -148,6 +184,18 @@
         "optional": false,
         "nullable": true,
         "nonEmpty": false
+      },
+      "excludePaths": {
+        "type": "string[]",
+        "optional": true,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "reason": {
+        "type": "string",
+        "optional": true,
+        "nullable": false,
+        "nonEmpty": false
       }
     },
     "optionalTuning": {},
@@ -179,6 +227,18 @@
         "type": "string",
         "optional": false,
         "nullable": true,
+        "nonEmpty": false
+      },
+      "excludePaths": {
+        "type": "string[]",
+        "optional": true,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "reason": {
+        "type": "string",
+        "optional": true,
+        "nullable": false,
         "nonEmpty": false
       }
     },
@@ -212,6 +272,18 @@
         "optional": false,
         "nullable": true,
         "nonEmpty": false
+      },
+      "excludePaths": {
+        "type": "string[]",
+        "optional": true,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "reason": {
+        "type": "string",
+        "optional": true,
+        "nullable": false,
+        "nonEmpty": false
       }
     },
     "optionalTuning": {},
@@ -243,6 +315,18 @@
         "type": "string",
         "optional": false,
         "nullable": true,
+        "nonEmpty": false
+      },
+      "excludePaths": {
+        "type": "string[]",
+        "optional": true,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "reason": {
+        "type": "string",
+        "optional": true,
+        "nullable": false,
         "nonEmpty": false
       }
     },
@@ -276,6 +360,18 @@
         "optional": false,
         "nullable": true,
         "nonEmpty": false
+      },
+      "excludePaths": {
+        "type": "string[]",
+        "optional": true,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "reason": {
+        "type": "string",
+        "optional": true,
+        "nullable": false,
+        "nonEmpty": false
       }
     },
     "optionalTuning": {},
@@ -308,6 +404,18 @@
         "optional": false,
         "nullable": true,
         "nonEmpty": false
+      },
+      "excludePaths": {
+        "type": "string[]",
+        "optional": true,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "reason": {
+        "type": "string",
+        "optional": true,
+        "nullable": false,
+        "nonEmpty": false
       }
     },
     "optionalTuning": {},
@@ -339,6 +447,18 @@
         "type": "string",
         "optional": false,
         "nullable": true,
+        "nonEmpty": false
+      },
+      "excludePaths": {
+        "type": "string[]",
+        "optional": true,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "reason": {
+        "type": "string",
+        "optional": true,
+        "nullable": false,
         "nonEmpty": false
       }
     },
@@ -377,6 +497,18 @@
         "type": "string",
         "optional": false,
         "nullable": true,
+        "nonEmpty": false
+      },
+      "excludePaths": {
+        "type": "string[]",
+        "optional": true,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "reason": {
+        "type": "string",
+        "optional": true,
+        "nullable": false,
         "nonEmpty": false
       }
     },
@@ -417,6 +549,18 @@
         "optional": false,
         "nullable": true,
         "nonEmpty": false
+      },
+      "excludePaths": {
+        "type": "string[]",
+        "optional": true,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "reason": {
+        "type": "string",
+        "optional": true,
+        "nullable": false,
+        "nonEmpty": false
       }
     },
     "optionalTuning": {},
@@ -455,6 +599,18 @@
         "type": "string",
         "optional": false,
         "nullable": true,
+        "nonEmpty": false
+      },
+      "excludePaths": {
+        "type": "string[]",
+        "optional": true,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "reason": {
+        "type": "string",
+        "optional": true,
+        "nullable": false,
         "nonEmpty": false
       }
     },
@@ -514,6 +670,18 @@
         "optional": false,
         "nullable": true,
         "nonEmpty": false
+      },
+      "excludePaths": {
+        "type": "string[]",
+        "optional": true,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "reason": {
+        "type": "string",
+        "optional": true,
+        "nullable": false,
+        "nonEmpty": false
       }
     },
     "optionalTuning": {},
@@ -556,6 +724,18 @@
         "type": "string",
         "optional": false,
         "nullable": true,
+        "nonEmpty": false
+      },
+      "excludePaths": {
+        "type": "string[]",
+        "optional": true,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "reason": {
+        "type": "string",
+        "optional": true,
+        "nullable": false,
         "nonEmpty": false
       }
     },
@@ -617,6 +797,18 @@
         "type": "string",
         "optional": false,
         "nullable": true,
+        "nonEmpty": false
+      },
+      "excludePaths": {
+        "type": "string[]",
+        "optional": true,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "reason": {
+        "type": "string",
+        "optional": true,
+        "nullable": false,
         "nonEmpty": false
       }
     },
@@ -771,6 +963,18 @@
         "type": "string",
         "optional": false,
         "nullable": true,
+        "nonEmpty": false
+      },
+      "excludePaths": {
+        "type": "string[]",
+        "optional": true,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "reason": {
+        "type": "string",
+        "optional": true,
+        "nullable": false,
         "nonEmpty": false
       }
     },

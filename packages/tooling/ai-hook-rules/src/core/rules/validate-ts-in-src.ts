@@ -9,7 +9,10 @@ import { Violation as V } from '@webpieces/hook-runtime';
 import { FileRuleBase } from '@webpieces/hook-runtime';
 import { FixHint } from '@webpieces/hook-runtime';
 
-const DEFAULT_EXCLUDE_PATHS = [
+// Never project source, whatever the config says: a FLOOR the rule applies itself (like GENERATED_CODE_PATHS
+// for max-file-lines). The repo's own `excludePaths` — this rule's and the top-level one — are framework
+// fields the engine applies before this rule is dispatched (#1253); they ADD to this list.
+const BUILT_IN_EXCLUDE_PATHS = [
     'node_modules',
     'dist',
     '.nx',
@@ -36,7 +39,6 @@ export class ValidateTsInSrcRule extends FileRuleBase<ValidateTsInSrcConfig> {
     readonly description = "Every .ts file must belong to a project's src/ directory.";
     override readonly files = ['**/*.ts', '**/*.tsx'];
     override readonly defaultOptions = {
-        excludePaths: DEFAULT_EXCLUDE_PATHS,
         allowedRootFiles: DEFAULT_ALLOWED_ROOT_FILES,
     };
     readonly fixHint = new FixHint(
@@ -48,7 +50,7 @@ export class ValidateTsInSrcRule extends FileRuleBase<ValidateTsInSrcConfig> {
                 true,
             ),
             new Option(
-                'Add a dir or glob (e.g. "**/codegen.ts") to validate-ts-in-src.excludePaths in {configFile}',
+                'Add a glob (e.g. "**/codegen.ts", "scripts/**") to validate-ts-in-src.excludePaths in {configFile}',
             ),
         ],
     );
@@ -56,11 +58,10 @@ export class ValidateTsInSrcRule extends FileRuleBase<ValidateTsInSrcConfig> {
     check(ctx: FileContext): readonly Violation[] {
         if (ctx.tool !== 'Write') return [];
 
-        const excludePaths = this.config.excludePaths ?? DEFAULT_EXCLUDE_PATHS;
         const allowedRootFiles = this.config.allowedRootFiles ?? DEFAULT_ALLOWED_ROOT_FILES;
 
-        // Holistic exclusion (Layer 1 + Layer 2): bare dir names + globs.
-        if (isPathExcluded(ctx.targetRelativePath, excludePaths)) return [];
+        // The built-in floor (bare dir names + globs); configured excludePaths never reach this rule.
+        if (isPathExcluded(ctx.targetRelativePath, BUILT_IN_EXCLUDE_PATHS)) return [];
 
         const relParts = ctx.targetRelativePath.split(path.sep);
         if (relParts.length === 1 && allowedRootFiles.indexOf(relParts[0] ?? '') >= 0) return [];

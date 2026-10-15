@@ -253,6 +253,12 @@ export interface Rule extends PlainRule {
      */
     readonly configKey: string;
     shouldRun(): boolean;
+    /**
+     * True when this rule's own `excludePaths` matches the workspace-relative path (#1253). The engine
+     * asks it before dispatching the rule on a path, exactly as it asks shouldRun() — no rule filters
+     * its own paths. AbstractRule supplies it.
+     */
+    excludesPath(relativePath: string): boolean;
 }
 
 export class RuleGroup {

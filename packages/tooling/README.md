@@ -55,7 +55,7 @@ Read the **suppression census** as a signal about the *rule*, not the engineer:
 grep -rho "webpieces-disable [a-z-]*" --include="*.ts" packages apps | sort | uniq -c | sort -rn
 ```
 
-A handful = the hatch working. A cluster in one layer = fix the rule's `allowedPaths`. Hundreds spread
+A handful = the hatch working. A cluster in one layer = fix the rule's `excludePaths`. Hundreds spread
 across the repo = the rule is miscalibrated; fix the rule, not the files.
 
 ## Where to go next

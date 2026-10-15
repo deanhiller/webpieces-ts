@@ -43,7 +43,6 @@ export * from './core/excluded-paths';
 export * from './core/delete-scoped-rules';
 export * from './core/apply-patch-parse';
 export * from './core/shell-read-parity';
-export * from './core/glob';
 export * from './adapters/agent-payload';
 export * from './adapters/detect-ai';
 export * from './adapters/agent-adapters';

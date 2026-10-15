@@ -1,7 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as ts from 'typescript';
-import { DiffScope, hasDisable, isPathExcluded } from '@webpieces/rules-config';
+import { DiffScope, hasDisable, RuleFileExclusions } from '@webpieces/rules-config';
 import { ModifiedCodeMode } from '@webpieces/rules-sdk';
 
 /** Suffix enforcement keeps its own rollout scope, independently of the enclosing doc rule. */
@@ -14,7 +14,9 @@ export class WireSuffixScope {
     constructor(
         private readonly root: string,
         private readonly mode: ModifiedCodeMode,
-        private readonly allowedPaths: readonly string[],
+        // required-type-suffix's framework-owned path exclusions (#1253): the repo's top-level
+        // excludePaths plus the rule's own — the same RuleFileExclusions the code-rules runtime applies.
+        private readonly exclusions: RuleFileExclusions,
         private readonly diff: DiffScope,
     ) {
         const range = mode === 'RUN_EVERY_TIME' ? undefined : diff.resolveBase(root);
@@ -37,7 +39,7 @@ export class WireSuffixScope {
         location: string,
         projectRoots: readonly string[],
     ): boolean {
-        if (this.mode === 'OFF' || isPathExcluded(relFile, this.allowedPaths)) return false;
+        if (this.mode === 'OFF' || this.exclusions.excludes(relFile)) return false;
         if (
             relFile.endsWith('.d.ts') ||
             /\.(spec|test)\.ts$/.test(relFile) ||

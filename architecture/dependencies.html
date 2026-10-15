@@ -609,7 +609,7 @@
 <p>exports from <code>role:api-lib</code>. Inside the <code>api-rules-for-openapi</code> / <code>api-rules-for-mcp</code> scan, the</p>
 <p>WIRE CLOSURE (<code>wire-closure.ts</code>) requires every type a contract reaches to be declared in a</p>
 <p><code>role:api-lib</code> project and to carry its <code>required-type-suffix</code> suffix (using that rule's own mode,</p>
-<p>allowedPaths, declaration-site disables, and first-match <code>exempt: true</code> entries); <code>generate:openapi-components</code> is</p>
+<p>framework-owned excludePaths, declaration-site disables, and first-match <code>exempt: true</code> entries); <code>generate:openapi-components</code> is</p>
 <p>refused on anything but a <code>role:api-lib</code> (<code>ComponentsWiring</code> and the executor). See</p>
 <p><code>.claude/rules/framework-tags.md</code>.</p>
 <ul>

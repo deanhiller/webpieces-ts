@@ -2,7 +2,7 @@ import { fixtureSchemas as RULE_SCHEMAS } from '@webpieces/tooling-testkit';
 import { describe, it, expect } from 'vitest';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { FieldDef, RulePackManifest } from '@webpieces/rules-sdk';
+import { BASE_RULE_SCHEMA, FieldDef, RetiredConfigKey, RulePackManifest } from '@webpieces/rules-sdk';
 import { RulePackRegistry } from '@webpieces/rules-config';
 
 class PackPackage {
@@ -49,9 +49,38 @@ describe('complete compatibility pack catalog', () => {
                 }),
             },
         };
-        for (const id of configured) expect(registry.schemaFor(id)).toEqual(expected[id]);
+        // #1253: the framework owns the universal fields — the registry merges excludePaths and reason into
+        // every rule, and the per-rule allowedPaths that meant "skip these files" became that excludePaths.
+        const renamed = new Set(
+            registry.migrations()
+                .filter((entry: RetiredConfigKey) => entry.scope === 'field' && entry.key.endsWith('.allowedPaths'))
+                .map((entry: RetiredConfigKey) => entry.key.slice(0, -'.allowedPaths'.length)),
+        );
+        for (const id of configured) {
+            const frozen: Record<string, FieldDef> = { ...expected[id as keyof typeof expected] };
+            if (renamed.has(id)) delete frozen['allowedPaths'];
+            expect(registry.schemaFor(id)).toEqual({ ...frozen, ...BASE_RULE_SCHEMA });
+        }
         expect(registry.ruleIds().filter(id => !Object.hasOwn(RULE_SCHEMAS, id)).sort()).toEqual([
             'enforce-architecture', 'no-json-property-primitive-type', 'no-mat-cell-def', 'require-typed-template', 'wiring-format',
         ]);
     });
+
+    // #1253 enforcement: EVERY registered rule — whichever pack owns it, added before or after this
+    // change — accepts the framework-owned universal fields with no per-rule schema code. (A lint rule
+    // takes the hatches and reason only: ESLint, not webpieces, decides which files it lints.)
+    it('gives every registered rule the framework-owned universal fields', async () => {
+        const registry = new RulePackRegistry(await new InstalledPackInventory().manifests());
+        for (const id of registry.ruleIds()) {
+            const universal: Record<string, string | string[]> = { reason: 'why this entry is as it is' };
+            if (registry.sectionFor(id) !== 'lint') universal['excludePaths'] = ['**/__generated__/**'];
+            expect(registry.validateRuleConfig(id, { ...registry.seedFor(id), ...universal }), id).toEqual([]);
+            for (const hatch of ['turnOffRuleUntilEpoch', 'turnOffRuleWhileOnBranch']) {
+                const missing = { ...registry.seedFor(id) };
+                delete missing[hatch];
+                expect(registry.validateRuleConfig(id, missing).join(), id).toContain(`${id}.${hatch} is required`);
+            }
+        }
+    });
 });
+

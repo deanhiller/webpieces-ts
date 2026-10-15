@@ -8,7 +8,7 @@ export class HookPolicyRuntimeRequest extends PolicyRuntimeRequest {
         request: PolicyRuntimeRequest,
         readonly commands: CommandsConfig,
     ) {
-        super(request.workspaceRoot, request.configs, request.ruleIds);
+        super(request.workspaceRoot, request.configs, request.ruleIds, request.excludePaths);
     }
 }
 

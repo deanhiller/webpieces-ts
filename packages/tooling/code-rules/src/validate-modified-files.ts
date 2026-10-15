@@ -20,7 +20,6 @@ import { MaxFileLinesConfig } from "./configs/rule-configs";
 import { FileLimitMode } from '@webpieces/rules-sdk';
 import { CodeValidator, ExecutorResult } from './code-validator';
 import { injectable, bindingScopeValues } from 'inversify';
-import { shouldSkipRule, SkipRuleResult } from './resolve-mode';
 
 /** One over-limit file. A class, not an interface — findViolations is exported for its tests. */
 export class FileViolation {
@@ -133,17 +132,6 @@ function checkDisableComment(content: string): DisableStatus {
 }
 
 /**
- * The complete exempt-path list for one run: the machine-generated trees that are exempt with no
- * configuration at all, PLUS whatever the repo listed in `max-file-lines.allowedPaths`. The config
- * ADDS to the floor rather than replacing it, so exempting one of your own trees can never silently
- * cost you the generated-code exemption (see GENERATED_CODE_PATHS for why that matters).
- */
-// webpieces-disable no-function-outside-class -- pure list join, sibling of the file-scoped helpers here
-export function exemptPathsFor(config: MaxFileLinesConfig): readonly string[] {
-    return [...GENERATED_CODE_PATHS, ...(config.allowedPaths ?? [])];
-}
-
-/**
  * Count lines in a file and check for violations
  */
 // webpieces-disable max-lines-new-methods -- File iteration with disable checking logic
@@ -154,7 +142,8 @@ export function findViolations(workspaceRoot: string, changedFiles: string[], li
     for (const file of changedFiles) {
         const fullPath = path.join(workspaceRoot, file);
 
-        // Machine-generated / explicitly allowed trees: the file's size is not the repo's to fix.
+        // Machine-generated trees: the file's size is not the repo's to fix. (A tree the repo lists in
+        // excludePaths never reaches this list at all — the framework drops it from the file listing.)
         if (isPathExcluded(file, exemptPaths)) continue;
 
         if (!fs.existsSync(fullPath)) continue;
@@ -234,7 +223,7 @@ export function violationsError(violations: readonly FileViolation[], limit: num
 
     const cures: Option[] = [
         new Option(`Refactor the file under ${limit} lines — READ .webpieces/instruct-ai/${TMP_MD_FILE} for step-by-step guidance.`, true),
-        new Option('Is the file MACHINE-GENERATED (codegen output, a schema dump)? Its size is not yours to fix, and turning the rule off is the wrong cure — that stops it on hand-written files too. Add its tree to rules."max-file-lines".allowedPaths in webpieces.config.json, e.g. "allowedPaths": ["**/__generated__/**"]. Never list hand-written code there.'),
+        new Option('Is the file MACHINE-GENERATED (codegen output, a schema dump)? Its size is not yours to fix, and turning the rule off is the wrong cure — that stops it on hand-written files too. Add its tree to "excludePaths" in the max-file-lines entry (that rule only) or to the top-level "excludePaths" of webpieces.config.json (every rule), e.g. "excludePaths": ["**/__generated__/**"]. Never list hand-written code there.'),
     ];
     if (disableAllowed) {
         cures.push(new Option(`Put this on the FIRST 5 lines of the file (it expires in 1 month): // webpieces-disable max-lines-modified-files ${getTodayDateString()} -- [your reason]`));
@@ -251,18 +240,15 @@ async function runValidatorImpl(
 ): Promise<ExecutorResult> {
     const limit = options.limit ?? 900;
     const disableAllowed = options.disableAllowed ?? true;
-    // Machine-generated trees + the repo's own allowedPaths. A line-count rule firing on a file nobody
-    // authored is never a useful signal, so the generated half needs no configuration.
-    const exemptPaths = exemptPathsFor(options);
+    // Machine-generated trees: a line-count rule firing on a file nobody authored is never a useful
+    // signal, so this floor needs no configuration. The repo's own excludePaths are applied upstream.
+    const exemptPaths = GENERATED_CODE_PATHS;
 
-    const rawMode: FileLimitMode = options.mode ?? 'NEW_AND_MODIFIED_FILES';
-    const skip = rawMode !== 'OFF' ? shouldSkipRule(options.turnOffRuleUntilEpoch, (options.turnOffRuleWhileOnBranch ?? undefined)) : new SkipRuleResult(false);
-    const mode: FileLimitMode = skip.skip ? 'OFF' : rawMode;
+    const mode: FileLimitMode = options.mode ?? 'NEW_AND_MODIFIED_FILES';
 
     // Skip validation entirely if mode is OFF
     if (mode === 'OFF') {
-        const reason = skip.skip ? skip.reason : 'mode: OFF';
-        console.log(`\n\u23ed\ufe0f  Skipping modified files validation (${reason})`);
+        console.log(`\n\u23ed\ufe0f  Skipping modified files validation (mode: OFF)`);
         console.log('');
         return { success: true };
     }

@@ -1,4 +1,4 @@
-import { FieldDef, SchemaShape, BaseRuleConfig, BASE_RULE_SCHEMA } from "@webpieces/rules-sdk";
+import { FieldDef, SchemaShape, BaseRuleConfig } from "@webpieces/rules-sdk";
 import { OnOffMode, ON_OFF_MODES } from "@webpieces/rules-sdk";
 export const DEFAULT_MAX_COMMITS_BEHIND = 5;
 
@@ -47,6 +47,5 @@ export class BranchStateGuardConfig extends BaseRuleConfig {
         branchNamingConvention: FieldDef.optional('string'),
         hangTimeoutMinutes: FieldDef.optional('number'),
         maxCommitsBehind: new FieldDef('number'),
-        ...BASE_RULE_SCHEMA,
     };
 }

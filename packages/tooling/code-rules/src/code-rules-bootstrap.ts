@@ -61,6 +61,7 @@ export class CodeRulesBootstrap {
             workspaceRoot,
             configs,
             CODE_POLICIES.map((policy: CodePolicy) => policy.ruleId),
+            loaded.excludePaths.paths,
         );
         const container = await new CodeRuleRuntime().compose(runtimeRequest, plan?.projects);
         container

@@ -52,7 +52,7 @@ export class MatchRulesChecker {
 
     /** Run one `match-rules` entry against the workspace (per-entry mode/diff-scoping/report). */
     async runForConfig(config: MatchRuleConfig, workspaceRoot: string): Promise<ExecutorResult> {
-        const mode = this.resolveMode(config);
+        const mode: ModifiedCodeMode = config.mode ?? 'OFF';
         if (mode === 'OFF') {
             console.log(`\n⏭️  Skipping ${config.name} validation (mode: OFF)\n`);
             return { success: true };
@@ -166,14 +166,4 @@ export class MatchRulesChecker {
         console.error('');
     }
 
-    private resolveMode(config: MatchRuleConfig): ModifiedCodeMode {
-        const normalMode: ModifiedCodeMode = config.mode ?? 'OFF';
-        if (normalMode === 'OFF') return normalMode;
-        const skip = shouldSkipRule(config.turnOffRuleUntilEpoch, config.turnOffRuleWhileOnBranch);
-        if (skip.skip) {
-            console.log(`\n⏭️  Skipping ${config.name} validation (${skip.reason})\n`);
-            return 'OFF';
-        }
-        return normalMode;
-    }
 }

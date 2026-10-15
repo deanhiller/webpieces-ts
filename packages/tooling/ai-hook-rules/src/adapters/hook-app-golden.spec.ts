@@ -205,15 +205,16 @@ describe('HookApp golden bytes — the composed pipeline, end to end', () => {
                       'Cannot load declared policy runtime ./crash-runtime.cjs from ./fixture-policy-4.cjs: boom from a custom rule module. Repair its public implementation module or root declaration.',
                   )
                 : golden.stdout;
-            // Keep the captured protocol and policy behavior; config remedies now name the declared owner file.
+            // Keep the captured protocol and policy behavior; config remedies now name the declared owner file,
+            // and the per-rule path exemption they name is the framework-owned excludePaths (#1253).
             expected = expected
                 .replaceAll(
                     'no-js-files.allowedPaths in webpieces.config.json',
-                    'no-js-files.allowedPaths in <REPO>/.webpieces-config/rules/fixture-1.json',
+                    'no-js-files.excludePaths in <REPO>/.webpieces-config/rules/fixture-1.json',
                 )
                 .replaceAll(
                     'no-destructure.allowedPaths in webpieces.config.json',
-                    'no-destructure.allowedPaths in <REPO>/.webpieces-config/rules/fixture-0.json',
+                    'no-destructure.excludePaths in <REPO>/.webpieces-config/rules/fixture-0.json',
                 );
             expect(outcome.stdout).toBe(expected);
             expect(outcome.exitCode).toBe(golden.exitCode);

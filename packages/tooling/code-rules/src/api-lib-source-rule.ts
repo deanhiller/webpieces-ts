@@ -19,7 +19,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as ts from 'typescript';
-import { DiffScope, Option, RuleFailError, hasDisable, isPathExcluded } from "@webpieces/rules-config";
+import { DiffScope, Option, RuleFailError, hasDisable } from "@webpieces/rules-config";
 import { NoInlineImportInApiLibConfig, OneEnumSpellingInApiLibConfig } from "./configs/api-lib-spelling-configs";
 import { NoUtilityTypesInApiLibConfig } from "./configs/no-utility-types-config";
 import { RequiredTypeSuffixConfig } from "./configs/required-type-suffix-config";
@@ -139,11 +139,10 @@ export abstract class ApiLibSourceRule<C extends ApiLibConfig> extends CodeValid
             .map((site: ApiLibSite) => new FoundSite(relFile, site));
     }
 
-    /** A non-test `.ts` file, not under `allowedPaths`, that {@link isApiLibrarySource} claims. */
+    /** A non-test `.ts` file that {@link isApiLibrarySource} claims (`excludePaths` is applied upstream). */
     private inScope(workspaceRoot: string, relFile: string): boolean {
         if (!relFile.endsWith('.ts') || relFile.endsWith('.d.ts')) return false;
         if (/\.(spec|test)\.ts$/.test(relFile) || relFile.includes('__tests__/')) return false;
-        if (isPathExcluded(relFile, this.config.allowedPaths ?? [])) return false;
         if (!fs.existsSync(path.join(workspaceRoot, relFile))) return false;
         return this.isApiLibrarySource(workspaceRoot, relFile);
     }

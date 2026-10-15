@@ -1,4 +1,4 @@
-import { FieldDef, SchemaShape, BaseRuleConfig, BASE_RULE_SCHEMA } from "@webpieces/rules-sdk";
+import { FieldDef, SchemaShape, BaseRuleConfig } from "@webpieces/rules-sdk";
 import { StructuralMode, STRUCTURAL_MODES } from "./rule-configs";
 /**
  * `no-root-union-api-type` — a request or response type that IS a union, on any `@ApiPath` contract.
@@ -13,8 +13,9 @@ import { StructuralMode, STRUCTURAL_MODES } from "./rule-configs";
  * already opted in would let a team discover six months afterwards that the type was never
  * expressible — by which time it is in partners' generated clients and cannot be changed.
  *
- * `allowedPaths` exempts whole trees, with the same glob semantics every other rule's `allowedPaths`
- * uses. The per-site escape hatch is `// webpieces-disable no-root-union-api-type -- <reason>`, and
+ * `allowedPaths` — globs over PROJECT ROOTS this rule skips (a whole project, matched against its root;
+ * not a file list). The framework-owned `excludePaths` every rule accepts (#1253) is NOT applied by this
+ * project scan yet — use `allowedPaths` to exempt a project (follow-up #1278). The per-site escape hatch is `// webpieces-disable no-root-union-api-type -- <reason>`, and
  * the REASON is mandatory: this defect's blast radius is every tool in a session, so a suppression
  * has to carry an argument somebody wrote down.
  */
@@ -25,6 +26,5 @@ export class NoRootUnionApiTypeConfig extends BaseRuleConfig {
     static readonly SCHEMA: SchemaShape<NoRootUnionApiTypeConfig> = {
         mode: new FieldDef('string', STRUCTURAL_MODES),
         allowedPaths: FieldDef.optional('string[]'),
-        ...BASE_RULE_SCHEMA,
     };
 }

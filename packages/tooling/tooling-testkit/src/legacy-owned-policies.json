@@ -24,18 +24,6 @@
         "optional": true,
         "nullable": false,
         "nonEmpty": false
-      },
-      "turnOffRuleUntilEpoch": {
-        "type": "number",
-        "optional": false,
-        "nullable": false,
-        "nonEmpty": false
-      },
-      "turnOffRuleWhileOnBranch": {
-        "type": "string",
-        "optional": false,
-        "nullable": true,
-        "nonEmpty": false
       }
     },
     "max-file-lines": {
@@ -66,18 +54,6 @@
         "optional": true,
         "nullable": false,
         "nonEmpty": false
-      },
-      "turnOffRuleUntilEpoch": {
-        "type": "number",
-        "optional": false,
-        "nullable": false,
-        "nonEmpty": false
-      },
-      "turnOffRuleWhileOnBranch": {
-        "type": "string",
-        "optional": false,
-        "nullable": true,
-        "nonEmpty": false
       }
     },
     "require-return-type": {
@@ -98,18 +74,6 @@
         "optional": true,
         "nullable": false,
         "nonEmpty": false
-      },
-      "turnOffRuleUntilEpoch": {
-        "type": "number",
-        "optional": false,
-        "nullable": false,
-        "nonEmpty": false
-      },
-      "turnOffRuleWhileOnBranch": {
-        "type": "string",
-        "optional": false,
-        "nullable": true,
-        "nonEmpty": false
       }
     },
     "no-inline-type-literals": {
@@ -129,18 +93,6 @@
         "type": "boolean",
         "optional": true,
         "nullable": false,
-        "nonEmpty": false
-      },
-      "turnOffRuleUntilEpoch": {
-        "type": "number",
-        "optional": false,
-        "nullable": false,
-        "nonEmpty": false
-      },
-      "turnOffRuleWhileOnBranch": {
-        "type": "string",
-        "optional": false,
-        "nullable": true,
         "nonEmpty": false
       }
     },
@@ -163,18 +115,6 @@
         "optional": true,
         "nullable": false,
         "nonEmpty": false
-      },
-      "turnOffRuleUntilEpoch": {
-        "type": "number",
-        "optional": false,
-        "nullable": false,
-        "nonEmpty": false
-      },
-      "turnOffRuleWhileOnBranch": {
-        "type": "string",
-        "optional": false,
-        "nullable": true,
-        "nonEmpty": false
       }
     },
     "no-implicit-any": {
@@ -195,18 +135,6 @@
         "type": "boolean",
         "optional": true,
         "nullable": false,
-        "nonEmpty": false
-      },
-      "turnOffRuleUntilEpoch": {
-        "type": "number",
-        "optional": false,
-        "nullable": false,
-        "nonEmpty": false
-      },
-      "turnOffRuleWhileOnBranch": {
-        "type": "string",
-        "optional": false,
-        "nullable": true,
         "nonEmpty": false
       }
     },
@@ -238,18 +166,6 @@
         "type": "string[]",
         "optional": true,
         "nullable": false,
-        "nonEmpty": false
-      },
-      "turnOffRuleUntilEpoch": {
-        "type": "number",
-        "optional": false,
-        "nullable": false,
-        "nonEmpty": false
-      },
-      "turnOffRuleWhileOnBranch": {
-        "type": "string",
-        "optional": false,
-        "nullable": true,
         "nonEmpty": false
       }
     },
@@ -288,18 +204,6 @@
         "optional": true,
         "nullable": false,
         "nonEmpty": false
-      },
-      "turnOffRuleUntilEpoch": {
-        "type": "number",
-        "optional": false,
-        "nullable": false,
-        "nonEmpty": false
-      },
-      "turnOffRuleWhileOnBranch": {
-        "type": "string",
-        "optional": false,
-        "nullable": true,
-        "nonEmpty": false
       }
     },
     "no-destructure": {
@@ -333,18 +237,6 @@
         "optional": true,
         "nullable": false,
         "nonEmpty": false
-      },
-      "turnOffRuleUntilEpoch": {
-        "type": "number",
-        "optional": false,
-        "nullable": false,
-        "nonEmpty": false
-      },
-      "turnOffRuleWhileOnBranch": {
-        "type": "string",
-        "optional": false,
-        "nullable": true,
-        "nonEmpty": false
       }
     },
     "no-unmanaged-exceptions": {
@@ -365,18 +257,6 @@
         "type": "boolean",
         "optional": true,
         "nullable": false,
-        "nonEmpty": false
-      },
-      "turnOffRuleUntilEpoch": {
-        "type": "number",
-        "optional": false,
-        "nullable": false,
-        "nonEmpty": false
-      },
-      "turnOffRuleWhileOnBranch": {
-        "type": "string",
-        "optional": false,
-        "nullable": true,
         "nonEmpty": false
       }
     },
@@ -399,18 +279,6 @@
         "optional": true,
         "nullable": false,
         "nonEmpty": false
-      },
-      "turnOffRuleUntilEpoch": {
-        "type": "number",
-        "optional": false,
-        "nullable": false,
-        "nonEmpty": false
-      },
-      "turnOffRuleWhileOnBranch": {
-        "type": "string",
-        "optional": false,
-        "nullable": true,
-        "nonEmpty": false
       }
     },
     "throw-cause-required": {
@@ -428,18 +296,6 @@
         "type": "boolean",
         "optional": true,
         "nullable": false,
-        "nonEmpty": false
-      },
-      "turnOffRuleUntilEpoch": {
-        "type": "number",
-        "optional": false,
-        "nullable": false,
-        "nonEmpty": false
-      },
-      "turnOffRuleWhileOnBranch": {
-        "type": "string",
-        "optional": false,
-        "nullable": true,
         "nonEmpty": false
       }
     },
@@ -467,18 +323,6 @@
         "optional": true,
         "nullable": false,
         "nonEmpty": false
-      },
-      "turnOffRuleUntilEpoch": {
-        "type": "number",
-        "optional": false,
-        "nullable": false,
-        "nonEmpty": false
-      },
-      "turnOffRuleWhileOnBranch": {
-        "type": "string",
-        "optional": false,
-        "nullable": true,
-        "nonEmpty": false
       }
     },
     "no-symbol-di-tokens": {
@@ -505,18 +349,6 @@
         "type": "string[]",
         "optional": true,
         "nullable": false,
-        "nonEmpty": false
-      },
-      "turnOffRuleUntilEpoch": {
-        "type": "number",
-        "optional": false,
-        "nullable": false,
-        "nonEmpty": false
-      },
-      "turnOffRuleWhileOnBranch": {
-        "type": "string",
-        "optional": false,
-        "nullable": true,
         "nonEmpty": false
       }
     },
@@ -561,18 +393,6 @@
         "optional": true,
         "nullable": false,
         "nonEmpty": false
-      },
-      "turnOffRuleUntilEpoch": {
-        "type": "number",
-        "optional": false,
-        "nullable": false,
-        "nonEmpty": false
-      },
-      "turnOffRuleWhileOnBranch": {
-        "type": "string",
-        "optional": false,
-        "nullable": true,
-        "nonEmpty": false
       }
     },
     "no-custom-css": {
@@ -599,18 +419,6 @@
         "type": "string[]",
         "optional": true,
         "nullable": false,
-        "nonEmpty": false
-      },
-      "turnOffRuleUntilEpoch": {
-        "type": "number",
-        "optional": false,
-        "nullable": false,
-        "nonEmpty": false
-      },
-      "turnOffRuleWhileOnBranch": {
-        "type": "string",
-        "optional": false,
-        "nullable": true,
         "nonEmpty": false
       }
     },
@@ -645,18 +453,6 @@
         "optional": true,
         "nullable": false,
         "nonEmpty": false
-      },
-      "turnOffRuleUntilEpoch": {
-        "type": "number",
-        "optional": false,
-        "nullable": false,
-        "nonEmpty": false
-      },
-      "turnOffRuleWhileOnBranch": {
-        "type": "string",
-        "optional": false,
-        "nullable": true,
-        "nonEmpty": false
       }
     },
     "no-process-exit-outside-main": {
@@ -677,18 +473,6 @@
         "type": "boolean",
         "optional": true,
         "nullable": false,
-        "nonEmpty": false
-      },
-      "turnOffRuleUntilEpoch": {
-        "type": "number",
-        "optional": false,
-        "nullable": false,
-        "nonEmpty": false
-      },
-      "turnOffRuleWhileOnBranch": {
-        "type": "string",
-        "optional": false,
-        "nullable": true,
         "nonEmpty": false
       }
     },
@@ -717,18 +501,6 @@
         "optional": true,
         "nullable": false,
         "nonEmpty": false
-      },
-      "turnOffRuleUntilEpoch": {
-        "type": "number",
-        "optional": false,
-        "nullable": false,
-        "nonEmpty": false
-      },
-      "turnOffRuleWhileOnBranch": {
-        "type": "string",
-        "optional": false,
-        "nullable": true,
-        "nonEmpty": false
       }
     },
     "inject-annotation-not-needed-for-concrete-class": {
@@ -756,18 +528,6 @@
         "optional": true,
         "nullable": false,
         "nonEmpty": false
-      },
-      "turnOffRuleUntilEpoch": {
-        "type": "number",
-        "optional": false,
-        "nullable": false,
-        "nonEmpty": false
-      },
-      "turnOffRuleWhileOnBranch": {
-        "type": "string",
-        "optional": false,
-        "nullable": true,
-        "nonEmpty": false
       }
     },
     "framework-tag": {
@@ -785,18 +545,6 @@
         "type": "string[]",
         "optional": true,
         "nullable": false,
-        "nonEmpty": false
-      },
-      "turnOffRuleUntilEpoch": {
-        "type": "number",
-        "optional": false,
-        "nullable": false,
-        "nonEmpty": false
-      },
-      "turnOffRuleWhileOnBranch": {
-        "type": "string",
-        "optional": false,
-        "nullable": true,
         "nonEmpty": false
       }
     },
@@ -816,18 +564,6 @@
         "optional": true,
         "nullable": false,
         "nonEmpty": false
-      },
-      "turnOffRuleUntilEpoch": {
-        "type": "number",
-        "optional": false,
-        "nullable": false,
-        "nonEmpty": false
-      },
-      "turnOffRuleWhileOnBranch": {
-        "type": "string",
-        "optional": false,
-        "nullable": true,
-        "nonEmpty": false
       }
     },
     "ensure-we-are-secure": {
@@ -839,18 +575,6 @@
         ],
         "optional": false,
         "nullable": false,
-        "nonEmpty": false
-      },
-      "turnOffRuleUntilEpoch": {
-        "type": "number",
-        "optional": false,
-        "nullable": false,
-        "nonEmpty": false
-      },
-      "turnOffRuleWhileOnBranch": {
-        "type": "string",
-        "optional": false,
-        "nullable": true,
         "nonEmpty": false
       }
     },
@@ -895,18 +619,6 @@
         "optional": false,
         "nullable": false,
         "nonEmpty": false
-      },
-      "turnOffRuleUntilEpoch": {
-        "type": "number",
-        "optional": false,
-        "nullable": false,
-        "nonEmpty": false
-      },
-      "turnOffRuleWhileOnBranch": {
-        "type": "string",
-        "optional": false,
-        "nullable": true,
-        "nonEmpty": false
       }
     },
     "pr-lifecycle-guard": {
@@ -918,18 +630,6 @@
         ],
         "optional": false,
         "nullable": false,
-        "nonEmpty": false
-      },
-      "turnOffRuleUntilEpoch": {
-        "type": "number",
-        "optional": false,
-        "nullable": false,
-        "nonEmpty": false
-      },
-      "turnOffRuleWhileOnBranch": {
-        "type": "string",
-        "optional": false,
-        "nullable": true,
         "nonEmpty": false
       }
     },
@@ -961,18 +661,6 @@
         "optional": false,
         "nullable": false,
         "nonEmpty": false
-      },
-      "turnOffRuleUntilEpoch": {
-        "type": "number",
-        "optional": false,
-        "nullable": false,
-        "nonEmpty": false
-      },
-      "turnOffRuleWhileOnBranch": {
-        "type": "string",
-        "optional": false,
-        "nullable": true,
-        "nonEmpty": false
       }
     },
     "no-file-import-cycles": {
@@ -1003,18 +691,6 @@
         "optional": true,
         "nullable": false,
         "nonEmpty": false
-      },
-      "turnOffRuleUntilEpoch": {
-        "type": "number",
-        "optional": false,
-        "nullable": false,
-        "nonEmpty": false
-      },
-      "turnOffRuleWhileOnBranch": {
-        "type": "string",
-        "optional": false,
-        "nullable": true,
-        "nonEmpty": false
       }
     },
     "runtime-architecture": {
@@ -1039,18 +715,6 @@
         "optional": true,
         "nullable": false,
         "nonEmpty": false
-      },
-      "turnOffRuleUntilEpoch": {
-        "type": "number",
-        "optional": false,
-        "nullable": false,
-        "nonEmpty": false
-      },
-      "turnOffRuleWhileOnBranch": {
-        "type": "string",
-        "optional": false,
-        "nullable": true,
-        "nonEmpty": false
       }
     },
     "nx-wiring": {
@@ -1062,18 +726,6 @@
         ],
         "optional": false,
         "nullable": false,
-        "nonEmpty": false
-      },
-      "turnOffRuleUntilEpoch": {
-        "type": "number",
-        "optional": false,
-        "nullable": false,
-        "nonEmpty": false
-      },
-      "turnOffRuleWhileOnBranch": {
-        "type": "string",
-        "optional": false,
-        "nullable": true,
         "nonEmpty": false
       }
     },
@@ -1087,18 +739,6 @@
         "optional": false,
         "nullable": false,
         "nonEmpty": false
-      },
-      "turnOffRuleUntilEpoch": {
-        "type": "number",
-        "optional": false,
-        "nullable": false,
-        "nonEmpty": false
-      },
-      "turnOffRuleWhileOnBranch": {
-        "type": "string",
-        "optional": false,
-        "nullable": true,
-        "nonEmpty": false
       }
     },
     "missing-design-annotation": {
@@ -1110,18 +750,6 @@
         ],
         "optional": false,
         "nullable": false,
-        "nonEmpty": false
-      },
-      "turnOffRuleUntilEpoch": {
-        "type": "number",
-        "optional": false,
-        "nullable": false,
-        "nonEmpty": false
-      },
-      "turnOffRuleWhileOnBranch": {
-        "type": "string",
-        "optional": false,
-        "nullable": true,
         "nonEmpty": false
       }
     },
@@ -1141,18 +769,6 @@
         "optional": true,
         "nullable": false,
         "nonEmpty": false
-      },
-      "turnOffRuleUntilEpoch": {
-        "type": "number",
-        "optional": false,
-        "nullable": false,
-        "nonEmpty": false
-      },
-      "turnOffRuleWhileOnBranch": {
-        "type": "string",
-        "optional": false,
-        "nullable": true,
-        "nonEmpty": false
       }
     },
     "validate-ts-in-src": {
@@ -1171,24 +787,6 @@
         "optional": true,
         "nullable": false,
         "nonEmpty": false
-      },
-      "excludePaths": {
-        "type": "string[]",
-        "optional": true,
-        "nullable": false,
-        "nonEmpty": false
-      },
-      "turnOffRuleUntilEpoch": {
-        "type": "number",
-        "optional": false,
-        "nullable": false,
-        "nonEmpty": false
-      },
-      "turnOffRuleWhileOnBranch": {
-        "type": "string",
-        "optional": false,
-        "nullable": true,
-        "nonEmpty": false
       }
     },
     "validate-architecture-unchanged": {
@@ -1200,18 +798,6 @@
         ],
         "optional": false,
         "nullable": false,
-        "nonEmpty": false
-      },
-      "turnOffRuleUntilEpoch": {
-        "type": "number",
-        "optional": false,
-        "nullable": false,
-        "nonEmpty": false
-      },
-      "turnOffRuleWhileOnBranch": {
-        "type": "string",
-        "optional": false,
-        "nullable": true,
         "nonEmpty": false
       }
     },
@@ -1225,18 +811,6 @@
         "optional": false,
         "nullable": false,
         "nonEmpty": false
-      },
-      "turnOffRuleUntilEpoch": {
-        "type": "number",
-        "optional": false,
-        "nullable": false,
-        "nonEmpty": false
-      },
-      "turnOffRuleWhileOnBranch": {
-        "type": "string",
-        "optional": false,
-        "nullable": true,
-        "nonEmpty": false
       }
     },
     "validate-packagejson": {
@@ -1248,18 +822,6 @@
         ],
         "optional": false,
         "nullable": false,
-        "nonEmpty": false
-      },
-      "turnOffRuleUntilEpoch": {
-        "type": "number",
-        "optional": false,
-        "nullable": false,
-        "nonEmpty": false
-      },
-      "turnOffRuleWhileOnBranch": {
-        "type": "string",
-        "optional": false,
-        "nullable": true,
         "nonEmpty": false
       }
     },
@@ -1273,18 +835,6 @@
         "optional": false,
         "nullable": false,
         "nonEmpty": false
-      },
-      "turnOffRuleUntilEpoch": {
-        "type": "number",
-        "optional": false,
-        "nullable": false,
-        "nonEmpty": false
-      },
-      "turnOffRuleWhileOnBranch": {
-        "type": "string",
-        "optional": false,
-        "nullable": true,
-        "nonEmpty": false
       }
     },
     "validate-eslint-sync": {
@@ -1296,18 +846,6 @@
         ],
         "optional": false,
         "nullable": false,
-        "nonEmpty": false
-      },
-      "turnOffRuleUntilEpoch": {
-        "type": "number",
-        "optional": false,
-        "nullable": false,
-        "nonEmpty": false
-      },
-      "turnOffRuleWhileOnBranch": {
-        "type": "string",
-        "optional": false,
-        "nullable": true,
         "nonEmpty": false
       }
     },
@@ -1326,18 +864,6 @@
         "type": "string[]",
         "optional": true,
         "nullable": false,
-        "nonEmpty": false
-      },
-      "turnOffRuleUntilEpoch": {
-        "type": "number",
-        "optional": false,
-        "nullable": false,
-        "nonEmpty": false
-      },
-      "turnOffRuleWhileOnBranch": {
-        "type": "string",
-        "optional": false,
-        "nullable": true,
         "nonEmpty": false
       }
     },
@@ -1358,18 +884,6 @@
         "optional": true,
         "nullable": false,
         "nonEmpty": false
-      },
-      "turnOffRuleUntilEpoch": {
-        "type": "number",
-        "optional": false,
-        "nullable": false,
-        "nonEmpty": false
-      },
-      "turnOffRuleWhileOnBranch": {
-        "type": "string",
-        "optional": false,
-        "nullable": true,
-        "nonEmpty": false
       }
     },
     "api-rules-for-mcp": {
@@ -1388,18 +902,6 @@
         "type": "string[]",
         "optional": true,
         "nullable": false,
-        "nonEmpty": false
-      },
-      "turnOffRuleUntilEpoch": {
-        "type": "number",
-        "optional": false,
-        "nullable": false,
-        "nonEmpty": false
-      },
-      "turnOffRuleWhileOnBranch": {
-        "type": "string",
-        "optional": false,
-        "nullable": true,
         "nonEmpty": false
       }
     },
@@ -1422,18 +924,6 @@
         "optional": true,
         "nullable": false,
         "nonEmpty": false
-      },
-      "turnOffRuleUntilEpoch": {
-        "type": "number",
-        "optional": false,
-        "nullable": false,
-        "nonEmpty": false
-      },
-      "turnOffRuleWhileOnBranch": {
-        "type": "string",
-        "optional": false,
-        "nullable": true,
-        "nonEmpty": false
       }
     },
     "one-enum-spelling-in-api-lib": {
@@ -1454,18 +944,6 @@
         "type": "string[]",
         "optional": true,
         "nullable": false,
-        "nonEmpty": false
-      },
-      "turnOffRuleUntilEpoch": {
-        "type": "number",
-        "optional": false,
-        "nullable": false,
-        "nonEmpty": false
-      },
-      "turnOffRuleWhileOnBranch": {
-        "type": "string",
-        "optional": false,
-        "nullable": true,
         "nonEmpty": false
       }
     },
@@ -1493,18 +971,6 @@
         "type": "string[]",
         "optional": true,
         "nullable": false,
-        "nonEmpty": false
-      },
-      "turnOffRuleUntilEpoch": {
-        "type": "number",
-        "optional": false,
-        "nullable": false,
-        "nonEmpty": false
-      },
-      "turnOffRuleWhileOnBranch": {
-        "type": "string",
-        "optional": false,
-        "nullable": true,
         "nonEmpty": false
       }
     },
@@ -1553,18 +1019,6 @@
         "optional": true,
         "nullable": false,
         "nonEmpty": false
-      },
-      "turnOffRuleUntilEpoch": {
-        "type": "number",
-        "optional": false,
-        "nullable": false,
-        "nonEmpty": false
-      },
-      "turnOffRuleWhileOnBranch": {
-        "type": "string",
-        "optional": false,
-        "nullable": true,
-        "nonEmpty": false
       }
     },
     "api-lib-dependencies": {
@@ -1603,18 +1057,6 @@
             "nonEmpty": false
           }
         }
-      },
-      "turnOffRuleUntilEpoch": {
-        "type": "number",
-        "optional": false,
-        "nullable": false,
-        "nonEmpty": false
-      },
-      "turnOffRuleWhileOnBranch": {
-        "type": "string",
-        "optional": false,
-        "nullable": true,
-        "nonEmpty": false
       }
     },
     "api-lib-path": {
@@ -1633,18 +1075,6 @@
         "optional": false,
         "nullable": false,
         "nonEmpty": true
-      },
-      "turnOffRuleUntilEpoch": {
-        "type": "number",
-        "optional": false,
-        "nullable": false,
-        "nonEmpty": false
-      },
-      "turnOffRuleWhileOnBranch": {
-        "type": "string",
-        "optional": false,
-        "nullable": true,
-        "nonEmpty": false
       }
     },
     "framework-folder": {
@@ -1683,18 +1113,6 @@
             "nonEmpty": true
           }
         }
-      },
-      "turnOffRuleUntilEpoch": {
-        "type": "number",
-        "optional": false,
-        "nullable": false,
-        "nonEmpty": false
-      },
-      "turnOffRuleWhileOnBranch": {
-        "type": "string",
-        "optional": false,
-        "nullable": true,
-        "nonEmpty": false
       }
     },
     "framework-tsconfig": {
@@ -1713,18 +1131,6 @@
         "type": "string[]",
         "optional": true,
         "nullable": false,
-        "nonEmpty": false
-      },
-      "turnOffRuleUntilEpoch": {
-        "type": "number",
-        "optional": false,
-        "nullable": false,
-        "nonEmpty": false
-      },
-      "turnOffRuleWhileOnBranch": {
-        "type": "string",
-        "optional": false,
-        "nullable": true,
         "nonEmpty": false
       }
     },
@@ -1765,18 +1171,6 @@
         "optional": true,
         "nullable": false,
         "nonEmpty": false
-      },
-      "turnOffRuleUntilEpoch": {
-        "type": "number",
-        "optional": false,
-        "nullable": false,
-        "nonEmpty": false
-      },
-      "turnOffRuleWhileOnBranch": {
-        "type": "string",
-        "optional": false,
-        "nullable": true,
-        "nonEmpty": false
       }
     },
     "product-tags": {
@@ -1815,18 +1209,6 @@
             "nonEmpty": false
           }
         }
-      },
-      "turnOffRuleUntilEpoch": {
-        "type": "number",
-        "optional": false,
-        "nullable": false,
-        "nonEmpty": false
-      },
-      "turnOffRuleWhileOnBranch": {
-        "type": "string",
-        "optional": false,
-        "nullable": true,
-        "nonEmpty": false
       }
     }
   },
@@ -1888,14 +1270,6 @@
     "validate-ts-in-src": {
       "allowedRootFiles": [
         "jest.setup.ts"
-      ],
-      "excludePaths": [
-        "node_modules",
-        "dist",
-        ".nx",
-        ".git",
-        "**/*.d.ts",
-        "**/jest.config.ts"
       ]
     },
     "no-js-files": {},

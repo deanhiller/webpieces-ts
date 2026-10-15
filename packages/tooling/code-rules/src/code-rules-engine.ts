@@ -7,6 +7,8 @@ import { RuleReporter } from './rule-reporter';
 import { WorkspaceRoot, MatchRulesHolder } from './code-rules-context';
 import { RuleSelection } from './code-rules-run-request';
 import { MatchRulesChecker } from './validate-match-rules';
+import { GlobalExcludePaths } from './rule-dispatch';
+import { RuleFileExclusions, RuleFileScope } from '@webpieces/rules-config';
 
 /** Runtime checks are composed from the owner's policy entries, rather than injected individually. */
 export class BuildPolicySet {
@@ -23,6 +25,7 @@ export class CodeRulesEngine {
         private readonly matchChecker: MatchRulesChecker,
         private readonly selection: RuleSelection,
         private readonly checks: BuildPolicySet,
+        private readonly globalExcludes: GlobalExcludePaths,
     ) {}
 
     /**
@@ -38,8 +41,13 @@ export class CodeRulesEngine {
                 runs.push(new RuleRun(v.name, () => v.run(root)));
         }
         for (const mr of this.matchRules.rules) {
-            if (this.selection.includes(mr.name) && this.matchChecker.shouldRun(mr))
-                runs.push(new RuleRun(mr.name, () => this.matchChecker.runForConfig(mr, root)));
+            if (this.selection.includes(mr.name) && this.matchChecker.shouldRun(mr)) {
+                // A client-authored match rule has no owner schema, but the repo's top-level
+                // `excludePaths` still binds it (#1253): no rule judges those paths.
+                const exclusions = new RuleFileExclusions(mr.name, this.globalExcludes.paths, []);
+                runs.push(new RuleRun(mr.name, () =>
+                    new RuleFileScope().runWithin(exclusions, () => this.matchChecker.runForConfig(mr, root))));
+            }
         }
         return runs;
     }

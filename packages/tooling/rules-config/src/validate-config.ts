@@ -375,8 +375,9 @@ function validateExcludeList(value: unknown, key: string): string[] {
 }
 
 /**
- * Validate the REQUIRED top-level `excludePaths` block: ONE glob list suppressing hook enforcement per
- * file path, for code-style rules and file-scoped guards alike. Required so every client upgrading is
+ * Validate the REQUIRED top-level `excludePaths` block: ONE glob list of paths NO rule judges — hook
+ * rules, file-scoped guards and the build's code rules alike (#1253: the code-rules runtime applies it
+ * too, through RuleFileScope). Required so every client upgrading is
  * forced to declare it (as [] to keep today's behavior, or with real paths). Returns copy-paste
  * friendly errors and never throws — same contract as validatePrGateSection.
  *

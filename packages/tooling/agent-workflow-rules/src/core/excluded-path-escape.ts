@@ -1,9 +1,8 @@
 import * as path from 'path';
 
-import { ExcludePaths } from '@webpieces/rules-config';
+import { ExcludePaths, globMatches } from '@webpieces/rules-config';
 
 import { CommandScanner } from '@webpieces/hook-runtime';
-import {  globMatches  } from '@webpieces/hook-runtime';
 
 /**
  * One path the denied command NAMED that `excludePaths` already exempts, plus how to reach it.

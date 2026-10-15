@@ -10,11 +10,6 @@
             "default": "NEW_AND_MODIFIED_FILES",
             "description": "OFF = skip validation, NEW_AND_MODIFIED_FILES = only check new/changed .ts files from git diff (legacy-friendly; pre-existing files are grandfathered). The whole-workspace 'ON' scan was removed."
         },
-        "excludePaths": {
-            "type": "array",
-            "items": { "type": "string" },
-            "description": "Holistic exclusion list applied to BOTH layers. Each entry is either a bare directory/segment name matched at any depth (e.g. node_modules, dist, scripts) or a glob matched against the workspace-relative path (e.g. '**/*.d.ts', '**/codegen.ts'). Defaults: node_modules, dist, .nx, .git, architecture, tmp, scripts, **/*.d.ts, **/jest.config.ts. node_modules_* backup directories are always skipped. Override replaces the defaults — re-list any defaults you want to keep."
-        },
         "allowedRootFiles": {
             "type": "array",
             "items": { "type": "string" },

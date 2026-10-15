@@ -33,7 +33,6 @@ import { NoImplicitAnyConfig } from "./configs/rule-configs";
 import { ModifiedCodeMode } from '@webpieces/rules-sdk';
 import { CodeValidator, ExecutorResult } from './code-validator';
 import { injectable, bindingScopeValues } from 'inversify';
-import { shouldSkipRule } from './resolve-mode';
 import { ScanScope } from './scan-scope';
 
 interface ImplicitAnyViolation {
@@ -201,25 +200,12 @@ function reportViolations(violations: ImplicitAnyViolation[], mode: ModifiedCode
     console.error('');
 }
 
-function resolveMode(normalMode: ModifiedCodeMode, epoch: number | undefined, branchPattern: string | undefined): ModifiedCodeMode {
-    if (normalMode === 'OFF') {
-        return normalMode;
-    }
-    const skip = shouldSkipRule(epoch, branchPattern);
-    if (skip.skip) {
-        console.log(`\n\u23ed\ufe0f  Skipping no-implicit-any validation (${skip.reason})`);
-        console.log('');
-        return 'OFF';
-    }
-    return normalMode;
-}
-
 async function runInternal(
     scan: ScanScope,
     options: NoImplicitAnyConfig,
     workspaceRoot: string,
 ): Promise<ExecutorResult> {
-    const mode: ModifiedCodeMode = resolveMode(options.mode ?? 'OFF', options.turnOffRuleUntilEpoch, (options.turnOffRuleWhileOnBranch ?? undefined));
+    const mode: ModifiedCodeMode = options.mode ?? 'OFF';
     const disableAllowed = options.disableAllowed ?? true;
 
     if (mode === 'OFF') {

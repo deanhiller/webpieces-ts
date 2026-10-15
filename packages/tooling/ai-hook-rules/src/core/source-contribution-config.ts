@@ -5,6 +5,5 @@ export class SourceContributionConfig extends BaseRuleConfig {
     limit?: number;
     disableAllowed?: boolean;
     allowTopLevel?: boolean;
-    allowedPaths?: string[];
     allowGlobs?: string[];
 }

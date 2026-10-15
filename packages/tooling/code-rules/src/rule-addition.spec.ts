@@ -4,7 +4,6 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {
     FieldDef,
-    BASE_RULE_SCHEMA,
     OwnedRuleDefinition,
     RuleContribution,
 } from '@webpieces/rules-sdk';
@@ -28,7 +27,7 @@ describe('owner-only rule addition', () => {
             {
                 mode: new FieldDef('string', ['ON', 'OFF']),
                 prefix: new FieldDef('string'),
-                ...BASE_RULE_SCHEMA,
+                // No hatches, no excludePaths: the registry merges the framework-owned fields (#1253).
             },
             1,
             {},
@@ -75,7 +74,8 @@ describe('owner-only rule addition', () => {
         const config = path.join(root, 'webpieces.config.json');
         policyFixture.writeOwnerConfig(root, document, manifests);
         expect(() => loadAndValidate(root)).toThrow(`missing required entry "${id}"`);
-        rules[id] = { ...seed, mode: 'OFF' };
+        // The framework-owned fields arrive with the rule, though its schema never named them.
+        rules[id] = { ...seed, mode: 'OFF', excludePaths: ['**/__generated__/**'], reason: 'codegen output' };
         policyFixture.writeOwnerConfig(root, document, manifests);
         expect(loadAndValidate(root).resolved.rules.get(id)?.isOff).toBe(true);
         delete rules[id]['prefix'];

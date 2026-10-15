@@ -39,7 +39,6 @@ import { NoUnmanagedExceptionsConfig } from "./configs/rule-configs";
 import { ModifiedCodeMode } from '@webpieces/rules-sdk';
 import { CodeValidator, ExecutorResult } from './code-validator';
 import { injectable, bindingScopeValues } from 'inversify';
-import { shouldSkipRule } from './resolve-mode';
 import { ScanScope } from './scan-scope';
 
 interface TryCatchViolation {
@@ -195,28 +194,12 @@ function reportViolations(violations: TryCatchViolation[], mode: ModifiedCodeMod
     console.error('');
 }
 
-/**
- * Resolve mode considering turnOffRuleUntilEpoch override.
- */
-function resolveMode(normalMode: ModifiedCodeMode, epoch: number | undefined, branchPattern: string | undefined): ModifiedCodeMode {
-    if (normalMode === 'OFF') {
-        return normalMode;
-    }
-    const skip = shouldSkipRule(epoch, branchPattern);
-    if (skip.skip) {
-        console.log(`\n\u23ed\ufe0f  Skipping no-unmanaged-exceptions validation (${skip.reason})`);
-        console.log('');
-        return 'OFF';
-    }
-    return normalMode;
-}
-
 async function runValidatorImpl(
     scan: ScanScope,
     options: NoUnmanagedExceptionsConfig,
     workspaceRoot: string
 ): Promise<ExecutorResult> {
-    const mode: ModifiedCodeMode = resolveMode(options.mode ?? 'OFF', options.turnOffRuleUntilEpoch, (options.turnOffRuleWhileOnBranch ?? undefined));
+    const mode: ModifiedCodeMode = options.mode ?? 'OFF';
     const disableAllowed = options.disableAllowed ?? true;
 
     if (mode === 'OFF') {

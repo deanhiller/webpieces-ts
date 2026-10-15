@@ -10,7 +10,7 @@ import {
     BlockedResult,
 } from './types';
 
-import { globMatches } from './glob';
+import { globMatches } from '@webpieces/rules-config';
 
 // Every entry was read from its declared owner file and validated before execution.
 // webpieces-disable no-function-outside-class -- existing stateless evaluator helpers extracted intact for both hook providers

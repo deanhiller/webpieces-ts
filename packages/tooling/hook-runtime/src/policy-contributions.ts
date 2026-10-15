@@ -78,6 +78,7 @@ export class HookPolicyContributions {
                 root,
                 loaded.rulesConfig as Record<string, ConfigObject>,
                 group,
+                loaded.excludePaths.paths,
             );
             const rules = runtime.create(new HookPolicyRuntimeRequest(request, loaded.commands));
             this.validate(rules, group);
@@ -134,7 +135,8 @@ export class HookPolicyContributions {
                 !rule.defaultOptions ||
                 !rule.fixHint ||
                 typeof rule.check !== 'function' ||
-                typeof rule.shouldRun !== 'function'
+                typeof rule.shouldRun !== 'function' ||
+                typeof rule.excludesPath !== 'function'
             ) {
                 throw new InformAiError(
                     `Invalid hook policy returned by ${group.implementationModule}. Supply the declared configKey and complete hook contract.`,

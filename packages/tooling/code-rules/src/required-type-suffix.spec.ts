@@ -4,7 +4,7 @@ import { execSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as ts from 'typescript';
-import { DiffScope, RuleFailError } from "@webpieces/rules-config";
+import { DiffScope, RuleFailError, RuleFileScope } from "@webpieces/rules-config";
 import { RequiredTypeSuffixConfig, RequiredTypeSuffixEntry } from "./configs/required-type-suffix-config";
 import { toError } from '@webpieces/tooling-common/to-error';
 
@@ -206,12 +206,12 @@ async function failureAt(
     root: string,
     mode: string,
     entries: RequiredTypeSuffixEntry[] = Entries.issueExample(),
-    allowedPaths?: string[],
+    excludePaths?: string[],
 ): Promise<RuleFailError | undefined> {
     const committed = new RequiredTypeSuffixConfig();
     committed.mode = mode as RequiredTypeSuffixConfig['mode'];
     committed.entries = entries;
-    committed.allowedPaths = allowedPaths;
+    committed.excludePaths = excludePaths;
     const validator = new RequiredTypeSuffixValidator(
         committed,
         new ProjectRoleResolver(),
@@ -220,7 +220,8 @@ async function failureAt(
     );
     // webpieces-disable no-unmanaged-exceptions -- the thrown rule failure is this helper's return value
     try {
-        await validator.run(root);
+        // Run inside the framework-owned exclusion scope, exactly as the runtime dispatches it (#1253).
+        await new RuleFileScope().runWithin(validator.fileExclusions([]), () => validator.run(root));
         return undefined;
     } catch (err: unknown) {
         const error = toError(err);
@@ -301,7 +302,7 @@ describe('required-type-suffix — the validator, end to end', () => {
         expect(message).toContain('(Fs)');
     });
 
-    it('exempts spec files, `allowedPaths`, a per-site disable, and mode OFF', async () => {
+    it('exempts spec files, the framework-owned `excludePaths`, a per-site disable, and mode OFF', async () => {
         repo.write('libraries/apis/internal/lessons/src/Dtos.spec.ts', 'export interface Fixture { a: string; }\n');
         repo.write('libraries/apis/internal/vendor/src/Mirror.ts', 'export interface Mirror { a: string; }\n');
         repo.write('libraries/apis/internal/lessons/src/Partner.ts',

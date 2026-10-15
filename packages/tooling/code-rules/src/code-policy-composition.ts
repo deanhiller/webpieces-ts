@@ -1,6 +1,7 @@
 import 'reflect-metadata';
 import { Container } from 'inversify';
 import {
+    BaseRuleConfig,
     BuildPolicy,
     BuildRuleRuntime,
     PolicyRuntimeRequest,
@@ -13,6 +14,7 @@ import { CODE_POLICIES, CodePolicy } from './code-policy-registry';
 import { WorkspaceRoot } from './code-rules-context';
 import { ScanRestriction } from './scan-scope';
 import { BuildPolicySet } from './code-rules-engine';
+import { ExclusionScopedPolicy, GlobalExcludePaths, RuleExclusionsFactory } from './rule-dispatch';
 
 /** Composition stays with the code owner; the public manifest never imports validators. */
 export class CodeRuleRuntime implements BuildRuleRuntime {
@@ -27,6 +29,8 @@ export class CodeRuleRuntime implements BuildRuleRuntime {
         const container = new Container({ autobind: true });
         container.bind(WorkspaceRoot).toConstantValue(new WorkspaceRoot(request.workspaceRoot));
         container.bind(ScanRestriction).toConstantValue(new ScanRestriction(projects));
+        const global = new GlobalExcludePaths(request.excludePaths);
+        container.bind(GlobalExcludePaths).toConstantValue(global);
         const policies = request.ruleIds.map((id: string) => this.entry(id));
         for (const policy of policies) {
             const config = request.configs[policy.ruleId];
@@ -36,8 +40,14 @@ export class CodeRuleRuntime implements BuildRuleRuntime {
                 );
             container.bind(policy.configClass).toConstantValue(config);
         }
+        // Every validator runs inside its framework-owned path exclusions (#1253) — see ExclusionScopedPolicy.
+        const exclusions = new RuleExclusionsFactory();
         const checks = await Promise.all(
-            policies.map(async (policy: CodePolicy) => container.get(await policy.loadValidator())),
+            policies.map(async (policy: CodePolicy) => {
+                const check = container.get(await policy.loadValidator());
+                const config = request.configs[policy.ruleId] as BaseRuleConfig;
+                return new ExclusionScopedPolicy(check, exclusions.forRule(check.name, global, config));
+            }),
         );
         container.bind(BuildPolicySet).toConstantValue(new BuildPolicySet(checks));
         return container;

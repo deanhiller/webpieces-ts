@@ -198,6 +198,7 @@ const ruleHints = (): Map<string, string> => {
                         ]),
                     ),
                     WORKFLOW_POLICIES.map((policy) => policy.definition.id),
+                    [],
                 ),
                 buildCommandsConfig(undefined),
             ),

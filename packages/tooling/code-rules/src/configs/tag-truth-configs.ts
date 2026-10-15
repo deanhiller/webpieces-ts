@@ -1,4 +1,4 @@
-import { FieldDef, SchemaShape, BaseRuleConfig, BASE_RULE_SCHEMA } from "@webpieces/rules-sdk";
+import { FieldDef, SchemaShape, BaseRuleConfig } from "@webpieces/rules-sdk";
 /**
  * The six rules that make an nx `framework:*` / `role:*` / `product:*` tag TRUE (#1064, #1179). Before
  * them a tag was a promise only the dependency graph checked; the code inside a library, the folder it
@@ -35,7 +35,8 @@ export type ProjectScanMode = typeof PROJECT_SCAN_MODES[number];
  * installed `@types/*`, so it counts as including `node`. Both must therefore be stated.
  *
  * - `mode` — OFF | MODIFIED_PROJECTS | RUN_EVERY_TIME.
- * - `allowedPaths` — optional globs over project roots this rule skips.
+ * - `allowedPaths` — optional globs over PROJECT ROOTS this rule skips (a project, not a file: the
+ *   framework-owned `excludePaths` filters files, this filters whole projects by their root).
  */
 export class FrameworkTsconfigConfig extends BaseRuleConfig {
     declare mode?: ProjectScanMode;
@@ -44,7 +45,6 @@ export class FrameworkTsconfigConfig extends BaseRuleConfig {
     static readonly SCHEMA: SchemaShape<FrameworkTsconfigConfig> = {
         mode: new FieldDef('string', PROJECT_SCAN_MODES),
         allowedPaths: FieldDef.optional('string[]'),
-        ...BASE_RULE_SCHEMA,
     };
 }
 
@@ -71,7 +71,8 @@ export class FrameworkPackagesEntry {
  *
  * - `mode` — OFF | MODIFIED_PROJECTS | RUN_EVERY_TIME.
  * - `entries` — required, non-empty. The recommended list is in `.claude/rules/framework-tags.md`.
- * - `allowedPaths` — optional globs over project roots this rule skips.
+ * - `allowedPaths` — optional globs over PROJECT ROOTS this rule skips (a project, not a file: the
+ *   framework-owned `excludePaths` filters files, this filters whole projects by their root).
  */
 export class FrameworkPackagesConfig extends BaseRuleConfig {
     declare mode?: ProjectScanMode;
@@ -82,6 +83,5 @@ export class FrameworkPackagesConfig extends BaseRuleConfig {
         mode: new FieldDef('string', PROJECT_SCAN_MODES),
         entries: FieldDef.nonEmptyObjects(FrameworkPackagesEntry.SCHEMA),
         allowedPaths: FieldDef.optional('string[]'),
-        ...BASE_RULE_SCHEMA,
     };
 }

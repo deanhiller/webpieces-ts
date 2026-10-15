@@ -10,41 +10,10 @@ const SYMBOL_DI_REGEX = /=\s*Symbol(?:\.for)?\(/;
 
 const TEST_PATHS: RegExp[] = [/\.test\.ts$/, /\.spec\.ts$/, /__tests__\//];
 
-function globToRegex(pattern: string): RegExp {
-    let re = '';
-    let i = 0;
-    while (i < pattern.length) {
-        const ch = pattern[i];
-        if (ch === '*') {
-            if (pattern[i + 1] === '*') {
-                re += '.*';
-                i += 2;
-                if (pattern[i] === '/') i += 1;
-                continue;
-            }
-            re += '[^/]*';
-            i += 1;
-            continue;
-        }
-        if (ch === '?') {
-            re += '[^/]';
-            i += 1;
-            continue;
-        }
-        if ('.+^$(){}|[]\\'.includes(ch)) {
-            re += '\\' + ch;
-            i += 1;
-            continue;
-        }
-        re += ch;
-        i += 1;
-    }
-    return new RegExp('^' + re + '$');
-}
-
-function isAllowedPath(relativePath: string, allowedPaths: readonly string[]): boolean {
-    if (TEST_PATHS.some((re: RegExp) => re.test(relativePath))) return true;
-    return allowedPaths.some((pattern: string) => globToRegex(pattern).test(relativePath));
+// webpieces-disable no-function-outside-class -- leaf predicate over one path, beside the TEST_PATHS it reads
+function isTestPath(relativePath: string): boolean {
+    // Configured trees (this rule's excludePaths, the top-level one) are dropped by the engine (#1253).
+    return TEST_PATHS.some((re: RegExp) => re.test(relativePath));
 }
 
 export class NoSymbolDiTokensRule extends EditRuleBase<SourceContributionConfig> {
@@ -52,7 +21,7 @@ export class NoSymbolDiTokensRule extends EditRuleBase<SourceContributionConfig>
 
     readonly description = 'Disallow Symbol() DI tokens outside explicitly configured paths. Use @injectable(bindingScopeValues.Singleton) + inject-by-type instead.';
     override readonly files = ['**/*.ts', '**/*.tsx'];
-    override readonly defaultOptions = { allowedPaths: [] };
+    override readonly defaultOptions = {};
     get fixHint(): FixHint {
         return new FixHint(
             'Symbol() used as a DI token — we avoid Symbol DI tokens where we can.',
@@ -67,8 +36,7 @@ export class NoSymbolDiTokensRule extends EditRuleBase<SourceContributionConfig>
     }
 
     check(ctx: EditContext): readonly Violation[] {
-        const allowedPaths = this.config.allowedPaths ?? [];
-        if (isAllowedPath(ctx.relativePath, allowedPaths)) return [];
+        if (isTestPath(ctx.relativePath)) return [];
 
         const disableAllowed = this.config.disableAllowed ?? true;
         const violations: V[] = [];

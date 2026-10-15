@@ -124,7 +124,7 @@ describe('findFunctionsOutsideClassInSource — disable comment', () => {
     });
 });
 
-describe('findFunctionsOutsideClassInFile — allowedPaths', () => {
+describe('findFunctionsOutsideClassInFile — judges every file it is handed', () => {
     let tmpDir: string;
 
     beforeEach(() => {
@@ -142,27 +142,15 @@ describe('findFunctionsOutsideClassInFile — allowedPaths', () => {
         return relativePath;
     }
 
-    it('flags a module-scope function when the file is NOT in allowedPaths', () => {
+    it('flags a module-scope function', () => {
         const file = writeFile('src/util.ts', 'export function foo(): number { return 1; }\n');
-        const found = findFunctionsOutsideClassInFile(file, tmpDir, true, []);
-        expect(found).toHaveLength(1);
+        expect(findFunctionsOutsideClassInFile(file, tmpDir, true)).toHaveLength(1);
     });
 
-    it('ignores a file matched by an allowedPaths glob (React components)', () => {
+    // A React tree is skipped by the framework-owned excludePaths, applied to the file listing before
+    // the rule runs (#1253, proven in rule-exclusions.spec.ts) — never by the rule itself.
+    it('applies no path exemption of its own', () => {
         const file = writeFile('src/react/Button.tsx', 'export function Button() { return null; }\n');
-        const found = findFunctionsOutsideClassInFile(file, tmpDir, true, ['src/react/**']);
-        expect(found).toHaveLength(0);
-    });
-
-    it('ignores a file under an allowedPaths directory prefix', () => {
-        const file = writeFile('apps/web/hooks/useThing.ts', 'export const useThing = () => 1;\n');
-        const found = findFunctionsOutsideClassInFile(file, tmpDir, true, ['apps/web']);
-        expect(found).toHaveLength(0);
-    });
-
-    it('still flags a file outside the allowedPaths glob', () => {
-        const file = writeFile('src/services/thing.ts', 'export const compute = () => 1;\n');
-        const found = findFunctionsOutsideClassInFile(file, tmpDir, true, ['src/react/**']);
-        expect(found).toHaveLength(1);
+        expect(findFunctionsOutsideClassInFile(file, tmpDir, true)).toHaveLength(1);
     });
 });

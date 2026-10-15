@@ -4,6 +4,7 @@ import { describe, it, expect } from 'vitest';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {
+    BASE_RULE_SCHEMA,
     FieldDef,
     OwnedRuleDefinition,
     RuleContribution,
@@ -30,7 +31,7 @@ class Packs {
                     { mode: new FieldDef('string', ['ON', 'OFF']), limit: new FieldDef('number') },
                     1,
                     {},
-                    { mode: 'ON', limit: 0 },
+                    { mode: 'ON', limit: 0, turnOffRuleUntilEpoch: 0, turnOffRuleWhileOnBranch: null },
                     'rules',
                     new RuleHelp(
                         'Client-owned policy',
@@ -53,7 +54,7 @@ describe('explicit rule pack registry', () => {
             path.join(root, 'client-pack.cjs'),
             `module.exports.rulePackManifest = {
             packageName: 'client-policy', packageVersion: '1.2.3', apiVersion: 3, migrations: [], safeguards: [],
-            ownedRules: [{ id: 'client-rule', schemaApiVersion: 1, optionalTuning: {}, recommendedSeed: { mode: 'ON', paths: ['src/**'], entries: [{ suffix: 'Dto' }] }, section: 'rules', help: { description: 'Client policy', remediation: 'Configure in {configFile}.' }, schema: {
+            ownedRules: [{ id: 'client-rule', schemaApiVersion: 1, optionalTuning: {}, recommendedSeed: { mode: 'ON', paths: ['src/**'], entries: [{ suffix: 'Dto' }], turnOffRuleUntilEpoch: 0, turnOffRuleWhileOnBranch: null }, section: 'rules', help: { description: 'Client policy', remediation: 'Configure in {configFile}.' }, schema: {
                 mode: { type: 'string', enumValues: ['ON', 'OFF'] },
                 paths: { type: 'string[]', nonEmpty: true },
                 entries: { type: 'object[]', elementSchema: { suffix: { type: 'string' } } }
@@ -69,6 +70,8 @@ describe('explicit rule pack registry', () => {
                 mode: 'ON',
                 paths: ['src/**'],
                 entries: [{ suffix: 'Dto' }],
+                turnOffRuleUntilEpoch: 0,
+                turnOffRuleWhileOnBranch: null,
             }),
         ).toEqual([]);
         expect(
@@ -77,6 +80,8 @@ describe('explicit rule pack registry', () => {
                 paths: [],
                 entries: [{}],
                 typo: true,
+                turnOffRuleUntilEpoch: 0,
+                turnOffRuleWhileOnBranch: null,
             }),
         ).toEqual([
             'client-rule.typo is unknown. Use a field declared by its owner.',
@@ -87,10 +92,13 @@ describe('explicit rule pack registry', () => {
 
     it('requires each required field even when a rule is explicitly OFF', () => {
         const registry = new RulePackRegistry([Packs.owner()]);
+        // The framework-owned hatches are demanded of a client rule whose schema never named them (#1253).
         expect(registry.validateRuleConfig('client-rule', { mode: 'OFF' })).toEqual([
             'client-rule.limit is required. Add an explicit number value.',
+            'client-rule.turnOffRuleUntilEpoch is required. Add an explicit number value.',
+            'client-rule.turnOffRuleWhileOnBranch is required. Add an explicit string value.',
         ]);
-        expect(registry.validateRuleConfig('client-rule', { mode: 'MAYBE', limit: '10' })).toEqual([
+        expect(registry.validateRuleConfig('client-rule', { mode: 'MAYBE', limit: '10', turnOffRuleUntilEpoch: 0, turnOffRuleWhileOnBranch: null })).toEqual([
             'client-rule.mode must be one of ON, OFF.',
             'client-rule.limit must be number.',
         ]);
@@ -186,7 +194,7 @@ describe('explicit rule pack registry', () => {
                                 {},
                                 2,
                                 {},
-                                { mode: 'ON', limit: 0 },
+                                { mode: 'ON', limit: 0, turnOffRuleUntilEpoch: 0, turnOffRuleWhileOnBranch: null },
                                 'rules',
                                 new RuleHelp(
                                     'Client-owned policy',
@@ -213,7 +221,7 @@ describe('explicit rule pack registry', () => {
                                 {},
                                 2,
                                 {},
-                                { mode: 'ON', limit: 0 },
+                                { mode: 'ON', limit: 0, turnOffRuleUntilEpoch: 0, turnOffRuleWhileOnBranch: null },
                                 'rules',
                                 new RuleHelp(
                                     'Client-owned policy',
@@ -268,5 +276,71 @@ describe('explicit rule pack registry', () => {
                 new RulePackDeclaration('./missing.cjs'),
             ]),
         ).toThrow(InformAiError);
+    });
+
+    // #1253: the framework owns the universal fields. A pack schema never declares them; the registry
+    // merges them into EVERY owned rule, so a rule added later has them with no code of its own.
+    describe('framework-owned universal fields', () => {
+        const hatches = { turnOffRuleUntilEpoch: 0, turnOffRuleWhileOnBranch: null };
+
+        it('accepts excludePaths and a reason on a rule whose schema never named them', () => {
+            const registry = new RulePackRegistry([Packs.owner()]);
+            expect(Object.keys(registry.schemaFor('client-rule')).sort()).toEqual(
+                ['excludePaths', 'limit', 'mode', 'reason', 'turnOffRuleUntilEpoch', 'turnOffRuleWhileOnBranch'],
+            );
+            expect(
+                registry.validateRuleConfig('client-rule', {
+                    mode: 'ON', limit: 1, ...hatches,
+                    excludePaths: ['**/__generated__/**'], reason: 'codegen output is not ours to fix',
+                }),
+            ).toEqual([]);
+            expect(registry.validateRuleConfig('client-rule', { mode: 'ON', limit: 1, ...hatches, excludePaths: 'x' }))
+                .toEqual(['client-rule.excludePaths must be string[].']);
+        });
+
+        it('refuses a pack that declares a universal field even with the framework definition', () => {
+            const pack = Packs.owner();
+            const spread = new OwnedRuleDefinition(
+                'client-rule',
+                { mode: new FieldDef('string', ['ON', 'OFF']), limit: new FieldDef('number'), ...BASE_RULE_SCHEMA },
+                1, {}, { mode: 'ON', limit: 0, ...hatches }, 'rules', new RuleHelp('d', 'r {configFile}'),
+            );
+            expect(() => new RulePackRegistry([{ ...pack, ownedRules: [spread] }]))
+                .toThrow('declares the framework-owned field "turnOffRuleUntilEpoch"');
+        });
+
+        it('refuses a pack that redeclares a universal field with a different meaning', () => {
+            const pack = Packs.owner();
+            const redeclared = new OwnedRuleDefinition(
+                'client-rule',
+                { mode: new FieldDef('string', ['ON', 'OFF']), limit: new FieldDef('number'), excludePaths: new FieldDef('string') },
+                1, {}, { mode: 'ON', limit: 0, ...hatches }, 'rules', new RuleHelp('d', 'r {configFile}'),
+            );
+            expect(() => new RulePackRegistry([{ ...pack, ownedRules: [redeclared] }]))
+                .toThrow('declares the framework-owned field "excludePaths"');
+        });
+
+        it('refuses a default (optional tuning) for a universal field', () => {
+            const pack = Packs.owner();
+            const tuned = new OwnedRuleDefinition(
+                'client-rule',
+                { mode: new FieldDef('string', ['ON', 'OFF']), limit: new FieldDef('number') },
+                1, { excludePaths: ['dist/**'] }, { mode: 'ON', limit: 0, ...hatches }, 'rules', new RuleHelp('d', 'r {configFile}'),
+            );
+            expect(() => new RulePackRegistry([{ ...pack, ownedRules: [tuned] }])).toThrow('cannot have a default');
+        });
+
+        it('gives a lint rule the hatches and reason but not excludePaths, which ESLint could not honour', () => {
+            const pack = Packs.owner();
+            const lint = new OwnedRuleDefinition(
+                'client-rule', { mode: new FieldDef('string', ['ON', 'OFF']) }, 1, {}, { mode: 'ON', ...hatches },
+                'lint', new RuleHelp('d', 'r {configFile}'),
+            );
+            const registry = new RulePackRegistry([{ ...pack, ownedRules: [lint], contributions: [] }]);
+            expect(Object.keys(registry.schemaFor('client-rule')).sort())
+                .toEqual(['mode', 'reason', 'turnOffRuleUntilEpoch', 'turnOffRuleWhileOnBranch']);
+            expect(registry.validateRuleConfig('client-rule', { mode: 'ON', ...hatches, excludePaths: [] }).join())
+                .toContain('client-rule.excludePaths is unknown');
+        });
     });
 });

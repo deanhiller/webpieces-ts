@@ -7,8 +7,8 @@
 // `turnOffRuleUntilEpoch`, a GLOBAL off-switch that also stopped the rule on hand-written files —
 // i.e. the protection was removed exactly when a real 1,500-line service class could slip in.
 //
-// So these globs are exempt UNCONDITIONALLY, and a rule's own `allowedPaths` ADDS to them rather
-// than replacing them. A consumer who configures `allowedPaths` for one of their own trees cannot
+// So these globs are exempt UNCONDITIONALLY, and a rule's own `excludePaths` ADDS to them rather
+// than replacing them. A consumer who configures `excludePaths` for one of their own trees cannot
 // silently lose the generated-code exemption and re-acquire the incident.
 //
 // Matched with the shared `isPathExcluded` glob/prefix/segment semantics, so a bare `dist` matches a

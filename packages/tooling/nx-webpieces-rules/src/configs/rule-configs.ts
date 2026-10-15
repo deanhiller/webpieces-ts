@@ -1,4 +1,4 @@
-import { BaseRuleConfig, BASE_RULE_SCHEMA } from "@webpieces/rules-sdk";
+import { BaseRuleConfig } from "@webpieces/rules-sdk";
 import { FieldDef, SchemaShape } from "@webpieces/rules-sdk";
 // Structural / whole-graph rules (import-cycle, runtime-architecture, nx-wiring). They can't be
 // scoped to changed lines/files — a cycle or wiring break can route through a project that wasn't
@@ -33,7 +33,6 @@ export class NoFileImportCyclesConfig extends BaseRuleConfig {
         ignoreTypeOnly: FieldDef.optional('boolean'),
         excludePackages: FieldDef.optional('string[]'),
         excludeRegExp: FieldDef.optional('string[]'),
-        ...BASE_RULE_SCHEMA,
     };
 }
 
@@ -75,7 +74,6 @@ export class RuntimeArchitectureConfig extends BaseRuleConfig {
         mode: new FieldDef('string', STRUCTURAL_MODES),
         showExternalNodes: FieldDef.optional('boolean'),
         externalApiPaths: FieldDef.optional('string[]'),
-        ...BASE_RULE_SCHEMA,
     };
 }
 
@@ -84,7 +82,6 @@ export class NxWiringConfig extends BaseRuleConfig {
 
     static readonly SCHEMA: SchemaShape<NxWiringConfig> = {
         mode: new FieldDef('string', STRUCTURAL_MODES),
-        ...BASE_RULE_SCHEMA,
     };
 }
 
@@ -95,7 +92,6 @@ export class DiGraphConfig extends BaseRuleConfig {
 
     static readonly SCHEMA: SchemaShape<DiGraphConfig> = {
         mode: new FieldDef('string', STRUCTURAL_MODES),
-        ...BASE_RULE_SCHEMA,
     };
 }
 
@@ -106,7 +102,6 @@ export class MissingDesignAnnotationConfig extends BaseRuleConfig {
 
     static readonly SCHEMA: SchemaShape<MissingDesignAnnotationConfig> = {
         mode: new FieldDef('string', STRUCTURAL_MODES),
-        ...BASE_RULE_SCHEMA,
     };
 }
 
@@ -130,7 +125,6 @@ export class ValidateArchitectureUnchangedConfig extends BaseRuleConfig {
 
     static readonly SCHEMA: SchemaShape<ValidateArchitectureUnchangedConfig> = {
         mode: new FieldDef('string', STRUCTURAL_MODES),
-        ...BASE_RULE_SCHEMA,
     };
 }
 
@@ -139,7 +133,6 @@ export class ValidateNoArchitectureCyclesConfig extends BaseRuleConfig {
 
     static readonly SCHEMA: SchemaShape<ValidateNoArchitectureCyclesConfig> = {
         mode: new FieldDef('string', STRUCTURAL_MODES),
-        ...BASE_RULE_SCHEMA,
     };
 }
 
@@ -148,7 +141,6 @@ export class ValidatePackageJsonConfig extends BaseRuleConfig {
 
     static readonly SCHEMA: SchemaShape<ValidatePackageJsonConfig> = {
         mode: new FieldDef('string', STRUCTURAL_MODES),
-        ...BASE_RULE_SCHEMA,
     };
 }
 
@@ -157,7 +149,6 @@ export class ValidateVersionsLockedConfig extends BaseRuleConfig {
 
     static readonly SCHEMA: SchemaShape<ValidateVersionsLockedConfig> = {
         mode: new FieldDef('string', STRUCTURAL_MODES),
-        ...BASE_RULE_SCHEMA,
     };
 }
 
@@ -166,6 +157,5 @@ export class ValidateEslintSyncConfig extends BaseRuleConfig {
 
     static readonly SCHEMA: SchemaShape<ValidateEslintSyncConfig> = {
         mode: new FieldDef('string', STRUCTURAL_MODES),
-        ...BASE_RULE_SCHEMA,
     };
 }

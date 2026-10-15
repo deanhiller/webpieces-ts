@@ -208,7 +208,7 @@ describe('feature-branch-guard judges the tree that owns the FILE (issue #851)',
  * open a PR, so the guard could forbid a file the gate demands.
  */
 describe('the .webpieces/ state-dir exemption follows the tree that owns the file', () => {
-    const rules: readonly Rule[] = [{ name: 'feature-branch-guard', configKey: 'branch-state-guard' } as unknown as Rule];
+    const rules: readonly Rule[] = [{ name: 'feature-branch-guard', configKey: 'branch-state-guard', excludesPath: (): boolean => false } as unknown as Rule];
 
     function governed(absolute: string): GovernedPath {
         return new TargetTreeResolver().governedPath(absolute, primary);

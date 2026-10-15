@@ -8,6 +8,7 @@ import {
     RULE_SCHEMA_API_VERSION,
 } from '@webpieces/rules-sdk';
 import { CODE_POLICIES, CodePolicy } from './code-policy-registry';
+import { ruleMigrations } from './rule-migrations';
 import { version } from '../package.json';
 
 /** The code owner publishes the same definitions its composition root binds. */
@@ -36,6 +37,6 @@ export const rulePackManifest = new RulePackManifest(
                 '@webpieces/code-rules/rule-runtime',
             ),
     ),
-    [],
+    ruleMigrations,
     [],
 );

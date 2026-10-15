@@ -1,4 +1,4 @@
-import { BaseRuleConfig, BASE_RULE_SCHEMA, FieldDef, SchemaShape } from '@webpieces/rules-sdk';
+import { BaseRuleConfig, FieldDef, SchemaShape } from '@webpieces/rules-sdk';
 import { STRUCTURAL_MODES, StructuralMode } from './rule-configs';
 
 export class WiringFormatConfig extends BaseRuleConfig {
@@ -8,6 +8,5 @@ export class WiringFormatConfig extends BaseRuleConfig {
     static readonly SCHEMA: SchemaShape<WiringFormatConfig> = {
         mode: new FieldDef('string', STRUCTURAL_MODES),
         maxLines: new FieldDef('number'),
-        ...BASE_RULE_SCHEMA,
     };
 }

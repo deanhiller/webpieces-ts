@@ -95,7 +95,7 @@
             "mode": "NEW_AND_MODIFIED_CODE",
             "disableAllowed": true,
             "turnOffRuleUntilEpoch": 0,
-            "allowedPaths": ["libraries/apis/**", "packages/core/core-util/src/http/**"],
+            "excludePaths": ["libraries/apis/**", "packages/core/core-util/src/http/**"],
             "turnOffRuleWhileOnBranch": null
         },
         "missing-design-annotation": {
@@ -132,7 +132,7 @@
         },
         "no-js-files": {
             "mode": "NEW_AND_MODIFIED_FILES",
-            "allowedPaths": [],
+            "excludePaths": [],
             "turnOffRuleUntilEpoch": 0,
             "turnOffRuleWhileOnBranch": null
         },

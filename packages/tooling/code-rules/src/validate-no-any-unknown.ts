@@ -38,7 +38,6 @@ import { NoAnyUnknownConfig } from "./configs/rule-configs";
 import { ModifiedCodeMode } from '@webpieces/rules-sdk';
 import { CodeValidator, ExecutorResult } from './code-validator';
 import { injectable, bindingScopeValues } from 'inversify';
-import { shouldSkipRule } from './resolve-mode';
 import { ScanScope } from './scan-scope';
 
 interface AnyUnknownViolation {
@@ -325,29 +324,12 @@ function reportViolations(violations: AnyUnknownViolation[], mode: ModifiedCodeM
     console.error('');
 }
 
-/**
- * Resolve mode considering turnOffRuleUntilEpoch override.
- * When active, downgrades to OFF. When expired, logs a warning.
- */
-function resolveMode(normalMode: ModifiedCodeMode, epoch: number | undefined, branchPattern: string | undefined): ModifiedCodeMode {
-    if (normalMode === 'OFF') {
-        return normalMode;
-    }
-    const skip = shouldSkipRule(epoch, branchPattern);
-    if (skip.skip) {
-        console.log(`\n⏭️  Skipping no-any-unknown validation (${skip.reason})`);
-        console.log('');
-        return 'OFF';
-    }
-    return normalMode;
-}
-
 async function runValidatorImpl(
     scan: ScanScope,
     options: NoAnyUnknownConfig,
     workspaceRoot: string
 ): Promise<ExecutorResult> {
-    const mode: ModifiedCodeMode = resolveMode(options.mode ?? 'OFF', options.turnOffRuleUntilEpoch, (options.turnOffRuleWhileOnBranch ?? undefined));
+    const mode: ModifiedCodeMode = options.mode ?? 'OFF';
     const disableAllowed = options.disableAllowed ?? true;
 
     if (mode === 'OFF') {

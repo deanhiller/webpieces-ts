@@ -22,7 +22,7 @@ export class MaxFileLinesRule extends FileRuleBase<SourceContributionConfig> {
 
     readonly description = 'Cap file length at a configured line limit.';
     override readonly files = ['**/*.ts', '**/*.tsx'];
-    override readonly defaultOptions = { limit: DEFAULT_LIMIT, allowedPaths: [] };
+    override readonly defaultOptions = { limit: DEFAULT_LIMIT };
     get fixHint(): FixHint {
         return new FixHint(
             'File exceeds the max-file-lines limit.',
@@ -33,7 +33,7 @@ export class MaxFileLinesRule extends FileRuleBase<SourceContributionConfig> {
                     true,
                 ),
                 new Option(
-                    'If this file is MACHINE-GENERATED and its size is not yours to control, add its tree to max-file-lines.allowedPaths in {configFile} (the generated trees in GENERATED_CODE_PATHS are already exempt with no config at all). Never do this for hand-written code.',
+                    'If this file is MACHINE-GENERATED and its size is not yours to control, add its tree to max-file-lines.excludePaths in {configFile} (the generated trees in GENERATED_CODE_PATHS are already exempt with no config at all). Never do this for hand-written code.',
                 ),
             ],
             new DisableEscape(
@@ -45,14 +45,9 @@ export class MaxFileLinesRule extends FileRuleBase<SourceContributionConfig> {
 
     check(ctx: FileContext): readonly Violation[] {
         const limit = this.config.limit ?? DEFAULT_LIMIT;
-        // Machine-generated trees are exempt unconditionally; allowedPaths ADDS to that floor.
-        if (
-            isPathExcluded(ctx.relativePath, [
-                ...GENERATED_CODE_PATHS,
-                ...(this.config.allowedPaths ?? []),
-            ])
-        )
-            return [];
+        // Machine-generated trees are exempt unconditionally. The repo's own excludePaths (this rule's
+        // and the top-level one) are applied by the engine before the rule is dispatched (#1253).
+        if (isPathExcluded(ctx.relativePath, GENERATED_CODE_PATHS)) return [];
         if (ctx.projectedFileLines <= limit) return [];
         writeTemplateIfMissing(ctx.workspaceRoot, INSTRUCT_FILE);
         const docPath = new RepoRootFinder().instructAiDocPath(ctx.workspaceRoot, INSTRUCT_FILE);

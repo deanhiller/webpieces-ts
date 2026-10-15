@@ -7,14 +7,6 @@ export const optionalTuning: Readonly<Record<string, ConfigObject>> = {
     "validate-ts-in-src": {
         "allowedRootFiles": [
             "jest.setup.ts"
-        ],
-        "excludePaths": [
-            "node_modules",
-            "dist",
-            ".nx",
-            ".git",
-            "**/*.d.ts",
-            "**/jest.config.ts"
         ]
     }
 };

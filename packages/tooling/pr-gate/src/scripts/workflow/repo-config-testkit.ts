@@ -3,6 +3,7 @@ import { RulePackRegistry, SelectedPolicyPack } from '@webpieces/rules-config';
 const fixtureRuleRegistry = new RulePackRegistry(policyFixture.manifests());
 import * as fs from 'fs';
 import * as path from 'path';
+import { InformAiError } from '@webpieces/tooling-common';
 
 import {
     allRuleNames,
@@ -90,13 +91,15 @@ export class RepoConfigFixture {
         const declarations = (config['rulePacks'] as PackPolicyDeclaration[]).map(
             (entry) => new PackPolicyDeclaration(entry.package, entry.config),
         );
-        // Validate live ownership before projecting into the fixture's deliberately frozen packs.
+        // Check live ownership before projecting into the fixture's deliberately frozen packs.
         // Newly published policies remain enforced by the real repository; these workflow fixtures
         // carry only policies their selected manifests own. Unknown live keys still fail here.
-        const liveRegistry = new RulePackRegistry(
+        // Ownership only — the INSTALLED manifests are one release behind this source, so validating
+        // them against the local registry would judge a published pack by unreleased rules (#1253).
+        const liveOwned = new Set(
             new PackPolicyFiles()
                 .select(root, declarations)
-                .map((pack: SelectedPolicyPack) => pack.manifest),
+                .flatMap((pack: SelectedPolicyPack) => pack.manifest.ownedRules.map((rule) => rule.id)),
         );
         for (const declaration of declarations) {
             // webpieces-disable no-any-unknown -- repository owner JSON, consumed by the real fixture validator
@@ -104,7 +107,8 @@ export class RepoConfigFixture {
                 fs.readFileSync(path.join(root, declaration.config), 'utf8'),
             ) as Record<string, unknown>;
             for (const name of Object.keys(entries)) {
-                liveRegistry.ownerOf(name);
+                if (!liveOwned.has(name))
+                    throw new InformAiError(`Unknown rule ${name}. Declare its owning pack.`);
                 if (!fixtureRuleRegistry.hasRule(name)) continue;
                 if (retiredRuleFor(name, fixtureRuleRegistry) !== null) continue;
                 const section =

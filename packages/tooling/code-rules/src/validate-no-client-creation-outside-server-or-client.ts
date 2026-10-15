@@ -29,7 +29,8 @@
  * - A project with NO `role:` tag (the role-tag rule owns "every project must declare a role").
  * - Merely IMPORTING the api type or its DI token, or injecting the api — only constructing the
  *   transport (a `.createRpcClient(` / `.createPubSubClient(` CALL) is a violation.
- * - Files under allowedPaths, test files, and lines carrying the webpieces-disable escape.
+ * - Test files and lines carrying the webpieces-disable escape. (Files under the rule's or the top-level
+ *   `excludePaths` never reach the rule — the framework drops them.)
  *
  * ============================================================================
  * SEVERITY (WARN first, then error)
@@ -40,12 +41,11 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
-import { hasDisable, isPathExcluded, detectBase, getFileDiff, getChangedLineNumbers } from "@webpieces/rules-config";
+import { hasDisable, detectBase, getFileDiff, getChangedLineNumbers } from "@webpieces/rules-config";
 import { NoClientCreationOutsideServerOrClientConfig, ClientCreationSeverity } from "./configs/no-client-creation-config";
 import { ModifiedCodeMode } from '@webpieces/rules-sdk';
 import { CodeValidator, ExecutorResult } from './code-validator';
 import { injectable, bindingScopeValues } from 'inversify';
-import { shouldSkipRule } from './resolve-mode';
 import { ProjectRoleResolver } from './project-role-resolver';
 import { ScanScope } from './scan-scope';
 
@@ -86,7 +86,7 @@ export class NoClientCreationOutsideServerOrClientValidator extends CodeValidato
     }
 
     async run(workspaceRoot: string): Promise<ExecutorResult> {
-        const mode = this.resolveMode(this.config.mode ?? 'OFF');
+        const mode = this.config.mode ?? 'OFF';
         if (mode === 'OFF') {
             console.log(`\n⏭️  Skipping ${RULE_NAME} validation (mode: OFF)`);
             console.log('');
@@ -132,21 +132,6 @@ export class NoClientCreationOutsideServerOrClientValidator extends CodeValidato
 
     private disableAllowed(): boolean {
         return this.config.disableAllowed ?? true;
-    }
-
-    private allowedPaths(): string[] {
-        return this.config.allowedPaths ?? [];
-    }
-
-    private resolveMode(normalMode: ModifiedCodeMode): ModifiedCodeMode {
-        if (normalMode === 'OFF') return normalMode;
-        const skip = shouldSkipRule(this.config.turnOffRuleUntilEpoch, this.config.turnOffRuleWhileOnBranch);
-        if (skip.skip) {
-            console.log(`\n⏭️  Skipping ${RULE_NAME} validation (${skip.reason})`);
-            console.log('');
-            return 'OFF';
-        }
-        return normalMode;
     }
 
     private resolveBase(workspaceRoot: string): string | null {
@@ -195,7 +180,7 @@ export class NoClientCreationOutsideServerOrClientValidator extends CodeValidato
     }
 
     private isExempt(file: string): boolean {
-        return this.isTestFile(file) || isPathExcluded(file, this.allowedPaths());
+        return this.isTestFile(file);
     }
 
     private isTestFile(filePath: string): boolean {

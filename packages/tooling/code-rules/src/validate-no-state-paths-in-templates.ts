@@ -49,7 +49,6 @@ import { ModifiedCodeMode } from '@webpieces/rules-sdk';
 import { injectable, bindingScopeValues } from 'inversify';
 
 import { CodeValidator, ExecutorResult } from './code-validator';
-import { shouldSkipRule } from './resolve-mode';
 import { ScanScope } from './scan-scope';
 
 /** One restated state path, located in a template. */
@@ -80,8 +79,7 @@ export class NoStatePathsInTemplatesValidator extends CodeValidator<NoStatePaths
 
     async run(workspaceRoot: string): Promise<ExecutorResult> {
         const opts = this.config;
-        const mode = this.resolveMode(
-            opts.mode ?? 'NEW_AND_MODIFIED_CODE', opts.turnOffRuleUntilEpoch, opts.turnOffRuleWhileOnBranch ?? undefined);
+        const mode = opts.mode ?? 'NEW_AND_MODIFIED_CODE';
         const disableAllowed = opts.disableAllowed ?? true;
         if (mode === 'OFF') {
             console.log('\n⏭️  Skipping no-state-paths-in-templates validation (mode: OFF)\n');
@@ -263,19 +261,5 @@ export class NoStatePathsInTemplatesValidator extends CodeValidator<NoStatePaths
             if (hasDisable(lines[i] ?? '', "no-state-paths-in-templates")) return true;
         }
         return false;
-    }
-
-    private resolveMode(
-        normalMode: ModifiedCodeMode,
-        epoch: number | undefined,
-        branchPattern: string | undefined,
-    ): ModifiedCodeMode {
-        if (normalMode === 'OFF') return normalMode;
-        const skip = shouldSkipRule(epoch, branchPattern);
-        if (skip.skip) {
-            console.log(`\n⏭️  Skipping no-state-paths-in-templates validation (${skip.reason})\n`);
-            return 'OFF';
-        }
-        return normalMode;
     }
 }

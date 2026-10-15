@@ -122,6 +122,8 @@ export class RuleRuntimeModules {
         root: string,
         configs: Readonly<Record<string, ConfigObject>>,
         group: RuntimeContributionGroup,
+        // The repo's top-level `excludePaths` — handed to the runtime so it applies them (#1253).
+        excludePaths: readonly string[],
     ): PolicyRuntimeRequest {
         const selected: Record<string, ConfigObject> = {};
         for (const id of group.ruleIds) {
@@ -131,7 +133,7 @@ export class RuleRuntimeModules {
                 );
             selected[id] = configs[id];
         }
-        return new PolicyRuntimeRequest(root, selected, group.ruleIds);
+        return new PolicyRuntimeRequest(root, selected, group.ruleIds, excludePaths);
     }
 
     // webpieces-disable no-any-unknown -- public exports are validated before use; no concrete execution package is imported

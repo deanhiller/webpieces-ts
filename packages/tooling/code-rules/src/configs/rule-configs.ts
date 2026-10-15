@@ -1,5 +1,5 @@
 import { FileLimitMode, FILE_LIMIT_MODES, ModifiedCodeMode, MODIFIED_CODE_MODES } from "@webpieces/rules-sdk";
-import { BaseRuleConfig, BASE_RULE_SCHEMA } from "@webpieces/rules-sdk";
+import { BaseRuleConfig } from "@webpieces/rules-sdk";
 import { FieldDef, SchemaShape } from "@webpieces/rules-sdk";
 // Mode const arrays — TypeScript union types derived from them, and FieldDef enum
 // values reference the same array. Impossible for the type and runtime check to diverge.
@@ -72,32 +72,27 @@ export class MaxMethodLinesConfig extends BaseRuleConfig {
         mode: new FieldDef('string', METHOD_LIMIT_MODES),
         limit: FieldDef.optional('number'),
         disableAllowed: FieldDef.optional('boolean'),
-        ...BASE_RULE_SCHEMA,
     };
 }
 
 // max-file-lines — caps a file's line count.
 //
-// `allowedPaths` exempts whole file trees, matched with the shared `isPathExcluded` glob/prefix/segment
-// semantics (the same field, same matcher and same meaning as no-function-outside-class / no-js-files /
-// no-destructure). It is for files the repo did NOT author and cannot shrink — never a standing amnesty
-// for hand-written code, which is what the inline disable and a refactor are for.
+// The framework-owned `excludePaths` (every rule accepts it, the dispatcher applies it — #1253) exempts
+// whole file trees. For this rule it is for files the repo did NOT author and cannot shrink — never a
+// standing amnesty for hand-written code, which is what the inline disable and a refactor are for.
 //
 // The machine-generated trees in GENERATED_CODE_PATHS are exempt WITHOUT configuration, and
-// `allowedPaths` ADDS to that floor rather than replacing it — see generated-code-paths.ts for why a
+// `excludePaths` ADDS to that floor rather than replacing it — see generated-code-paths.ts for why a
 // 42,000-line graphql-codegen output must not be able to cost a repo the whole rule.
 export class MaxFileLinesConfig extends BaseRuleConfig {
     declare mode?: FileLimitMode;
     limit?: number;
     disableAllowed?: boolean;
-    allowedPaths?: string[];
 
     static readonly SCHEMA: SchemaShape<MaxFileLinesConfig> = {
         mode: new FieldDef('string', FILE_LIMIT_MODES),
         limit: FieldDef.optional('number'),
         disableAllowed: FieldDef.optional('boolean'),
-        allowedPaths: FieldDef.optional('string[]'),
-        ...BASE_RULE_SCHEMA,
     };
 }
 
@@ -108,7 +103,6 @@ export class RequireReturnTypeConfig extends BaseRuleConfig {
     static readonly SCHEMA: SchemaShape<RequireReturnTypeConfig> = {
         mode: new FieldDef('string', RETURN_TYPE_MODES),
         disableAllowed: FieldDef.optional('boolean'),
-        ...BASE_RULE_SCHEMA,
     };
 }
 
@@ -119,7 +113,6 @@ export class NoInlineTypeLiteralsConfig extends BaseRuleConfig {
     static readonly SCHEMA: SchemaShape<NoInlineTypeLiteralsConfig> = {
         mode: new FieldDef('string', INLINE_TYPE_MODES),
         disableAllowed: FieldDef.optional('boolean'),
-        ...BASE_RULE_SCHEMA,
     };
 }
 
@@ -130,7 +123,6 @@ export class NoAnyUnknownConfig extends BaseRuleConfig {
     static readonly SCHEMA: SchemaShape<NoAnyUnknownConfig> = {
         mode: new FieldDef('string', MODIFIED_CODE_MODES),
         disableAllowed: FieldDef.optional('boolean'),
-        ...BASE_RULE_SCHEMA,
     };
 }
 
@@ -141,7 +133,6 @@ export class NoImplicitAnyConfig extends BaseRuleConfig {
     static readonly SCHEMA: SchemaShape<NoImplicitAnyConfig> = {
         mode: new FieldDef('string', MODIFIED_CODE_MODES),
         disableAllowed: FieldDef.optional('boolean'),
-        ...BASE_RULE_SCHEMA,
     };
 }
 
@@ -156,7 +147,6 @@ export class PrismaValidateDtosConfig extends BaseRuleConfig {
         disableAllowed: FieldDef.optional('boolean'),
         prismaSchemaPath: FieldDef.optional('string'),
         dtoSourcePaths: FieldDef.optional('string[]'),
-        ...BASE_RULE_SCHEMA,
     };
 }
 
@@ -173,26 +163,22 @@ export class PrismaConverterConfig extends BaseRuleConfig {
         schemaPath: FieldDef.optional('string'),
         convertersPaths: FieldDef.optional('string[]'),
         enforcePaths: FieldDef.optional('string[]'),
-        ...BASE_RULE_SCHEMA,
     };
 }
 
-// `allowedPaths` exempts whole file trees whose idioms are destructuring by construction (React /
-// React Native components and hooks — `const [x, setX] = useState()`, destructured props — framework
-// glue), matched with the shared glob/prefix/segment semantics of `isPathExcluded`. It is the ONLY
-// escape when `disableAllowed: false`, since that setting deliberately ignores inline disables.
+// The framework-owned `excludePaths` exempts whole file trees whose idioms are destructuring by
+// construction (React / React Native components and hooks — `const [x, setX] = useState()`, destructured
+// props — framework glue). It is the ONLY escape when `disableAllowed: false`, since that setting
+// deliberately ignores inline disables.
 export class NoDestructureConfig extends BaseRuleConfig {
     declare mode?: ModifiedCodeMode;
     allowTopLevel?: boolean;
     disableAllowed?: boolean;
-    allowedPaths?: string[];
 
     static readonly SCHEMA: SchemaShape<NoDestructureConfig> = {
         mode: new FieldDef('string', MODIFIED_CODE_MODES),
         allowTopLevel: FieldDef.optional('boolean'),
         disableAllowed: FieldDef.optional('boolean'),
-        allowedPaths: FieldDef.optional('string[]'),
-        ...BASE_RULE_SCHEMA,
     };
 }
 
@@ -203,7 +189,6 @@ export class NoUnmanagedExceptionsConfig extends BaseRuleConfig {
     static readonly SCHEMA: SchemaShape<NoUnmanagedExceptionsConfig> = {
         mode: new FieldDef('string', MODIFIED_CODE_MODES),
         disableAllowed: FieldDef.optional('boolean'),
-        ...BASE_RULE_SCHEMA,
     };
 }
 
@@ -214,7 +199,6 @@ export class CatchErrorPatternConfig extends BaseRuleConfig {
     static readonly SCHEMA: SchemaShape<CatchErrorPatternConfig> = {
         mode: new FieldDef('string', MODIFIED_CODE_MODES),
         disableAllowed: FieldDef.optional('boolean'),
-        ...BASE_RULE_SCHEMA,
     };
 }
 
@@ -227,7 +211,6 @@ export class AngularNoDirectApiInResolverConfig extends BaseRuleConfig {
         mode: new FieldDef('string', DIRECT_API_RESOLVER_MODES),
         disableAllowed: FieldDef.optional('boolean'),
         enforcePaths: FieldDef.optional('string[]'),
-        ...BASE_RULE_SCHEMA,
     };
 }
 
@@ -243,20 +226,16 @@ export class NoCustomCssConfig extends BaseRuleConfig {
         mode: new FieldDef('string', MODIFIED_CODE_MODES),
         disableAllowed: FieldDef.optional('boolean'),
         allowGlobs: FieldDef.optional('string[]'),
-        ...BASE_RULE_SCHEMA,
     };
 }
 
 export class NoSymbolDiTokensConfig extends BaseRuleConfig {
     declare mode?: ModifiedCodeMode;
     disableAllowed?: boolean;
-    allowedPaths?: string[];
 
     static readonly SCHEMA: SchemaShape<NoSymbolDiTokensConfig> = {
         mode: new FieldDef('string', MODIFIED_CODE_MODES),
         disableAllowed: FieldDef.optional('boolean'),
-        allowedPaths: FieldDef.optional('string[]'),
-        ...BASE_RULE_SCHEMA,
     };
 }
 
@@ -271,7 +250,6 @@ export class NoProcessExitOutsideMainConfig extends BaseRuleConfig {
     static readonly SCHEMA: SchemaShape<NoProcessExitOutsideMainConfig> = {
         mode: new FieldDef('string', MODIFIED_CODE_MODES),
         disableAllowed: FieldDef.optional('boolean'),
-        ...BASE_RULE_SCHEMA,
     };
 }
 
@@ -281,19 +259,16 @@ export class NoProcessExitOutsideMainConfig extends BaseRuleConfig {
 // dead-end the DI graph can't reach. Inline callbacks, nested functions inside methods, and non-function
 // top-level consts (objects, zod schemas, primitives) are NOT flagged. Standard rollout knobs via the
 // base: mode (OFF | NEW_AND_MODIFIED_CODE | NEW_AND_MODIFIED_FILES), turnOffRuleUntilEpoch, branch,
-// and disableAllowed for the inline `// webpieces-disable` escape. `allowedPaths` exempts whole file
-// trees that legitimately live outside the class-per-behavior model (e.g. React component/hook files,
-// framework glue), matched with the shared glob/prefix/segment semantics of `isPathExcluded`.
+// and disableAllowed for the inline `// webpieces-disable` escape. The framework-owned `excludePaths`
+// exempts whole file trees that legitimately live outside the class-per-behavior model (e.g. React
+// component/hook files, framework glue).
 export class NoFunctionOutsideClassConfig extends BaseRuleConfig {
     declare mode?: ModifiedCodeMode;
     disableAllowed?: boolean;
-    allowedPaths?: string[];
 
     static readonly SCHEMA: SchemaShape<NoFunctionOutsideClassConfig> = {
         mode: new FieldDef('string', MODIFIED_CODE_MODES),
         disableAllowed: FieldDef.optional('boolean'),
-        allowedPaths: FieldDef.optional('string[]'),
-        ...BASE_RULE_SCHEMA,
     };
 }
 
@@ -305,18 +280,15 @@ export class NoFunctionOutsideClassConfig extends BaseRuleConfig {
 // tokens are NOT flagged because they never equal the type (`@inject(FOO_TOKEN) x: Provider<Foo>`).
 // AI keeps carpet-bombing `@inject`; this fails the build on the redundant form. Standard rollout knobs
 // via the base: mode (OFF | NEW_AND_MODIFIED_CODE | NEW_AND_MODIFIED_FILES), turnOffRuleUntilEpoch,
-// branch, and disableAllowed for the inline `// webpieces-disable` escape. `allowedPaths` exempts whole
-// file trees, matched with the shared glob/prefix/segment semantics.
+// branch, and disableAllowed for the inline `// webpieces-disable` escape. The framework-owned
+// `excludePaths` exempts whole file trees.
 export class InjectAnnotationNotNeededForConcreteClassConfig extends BaseRuleConfig {
     declare mode?: ModifiedCodeMode;
     disableAllowed?: boolean;
-    allowedPaths?: string[];
 
     static readonly SCHEMA: SchemaShape<InjectAnnotationNotNeededForConcreteClassConfig> = {
         mode: new FieldDef('string', MODIFIED_CODE_MODES),
         disableAllowed: FieldDef.optional('boolean'),
-        allowedPaths: FieldDef.optional('string[]'),
-        ...BASE_RULE_SCHEMA,
     };
 }
 
@@ -334,7 +306,6 @@ export class FrameworkTagConfig extends BaseRuleConfig {
     static readonly SCHEMA: SchemaShape<FrameworkTagConfig> = {
         mode: new FieldDef('string', PROJECT_MODES),
         knownTypes: FieldDef.optional('string[]'),
-        ...BASE_RULE_SCHEMA,
     };
 }
 
@@ -351,7 +322,6 @@ export class RoleTagConfig extends BaseRuleConfig {
     static readonly SCHEMA: SchemaShape<RoleTagConfig> = {
         mode: new FieldDef('string', PROJECT_MODES),
         knownTypes: FieldDef.optional('string[]'),
-        ...BASE_RULE_SCHEMA,
     };
 }
 
@@ -360,6 +330,5 @@ export class EnsureWeAreSecureConfig extends BaseRuleConfig {
     declare mode?: ProjectMode;
     static readonly SCHEMA: SchemaShape<EnsureWeAreSecureConfig> = {
         mode: new FieldDef('string', PROJECT_MODES),
-        ...BASE_RULE_SCHEMA,
     };
 }

@@ -55,7 +55,18 @@ export class FieldDef {
     }
 }
 
-// Enforces that a static SCHEMA has exactly the same keys as the config class.
+/**
+ * The framework-owned fields every rule carries (#1253) — see BaseRuleConfig. RulePackRegistry merges
+ * their schema (BASE_RULE_SCHEMA) into every owned rule, so a pack's SchemaShape never lists them.
+ */
+export type UniversalRuleField =
+    | 'turnOffRuleUntilEpoch'
+    | 'turnOffRuleWhileOnBranch'
+    | 'excludePaths'
+    | 'reason';
+
+// Enforces that a static SCHEMA has exactly the same keys as the config class, minus the
+// framework-owned UniversalRuleField keys, which the registry merges in itself.
 // Add a field to the class → TS errors until SCHEMA is updated.
 // Add to SCHEMA without adding to class → TS errors (extra property).
-export type SchemaShape<T> = { [K in keyof Required<T>]: FieldDef };
+export type SchemaShape<T> = { [K in Exclude<keyof Required<T>, UniversalRuleField>]: FieldDef };

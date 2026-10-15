@@ -238,7 +238,8 @@ export class GoldenRepoBuilder {
                 pack.packageName === rulePackManifest.packageName ? rulePackManifest : pack,
             );
         if (fixture.crashingRuntime) {
-            const seed = Object.assign(new ConfigObject(), { mode: 'ON' });
+            // Every rule carries the framework-owned hatches (#1253), so the client seed states them.
+            const seed = Object.assign(new ConfigObject(), { mode: 'ON', turnOffRuleUntilEpoch: 0, turnOffRuleWhileOnBranch: null });
             const definition = new OwnedRuleDefinition(
                 'client-crash',
                 { mode: new FieldDef('string', ['ON', 'OFF']) },
@@ -289,7 +290,7 @@ export class GoldenRepoBuilder {
         const parsed = JSON.parse(this.configJson) as Record<string, unknown>;
         (parsed['rules'] as Record<string, ConfigObject>)['client-crash'] = Object.assign(
             new ConfigObject(),
-            { mode: 'ON' },
+            { mode: 'ON', turnOffRuleUntilEpoch: 0, turnOffRuleWhileOnBranch: null },
         );
         return JSON.stringify(parsed, null, 4);
     }

@@ -1,4 +1,4 @@
-import { FieldDef, SchemaShape, BaseRuleConfig, BASE_RULE_SCHEMA } from "@webpieces/rules-sdk";
+import { FieldDef, SchemaShape, BaseRuleConfig } from "@webpieces/rules-sdk";
 import { ModifiedCodeMode, MODIFIED_CODE_MODES } from "@webpieces/rules-sdk";
 /**
  * `no-utility-types-in-api-lib` (#1026) — in every `.ts` file under `paths`, refuse the TypeScript
@@ -19,18 +19,15 @@ import { ModifiedCodeMode, MODIFIED_CODE_MODES } from "@webpieces/rules-sdk";
  * - `paths` — the globs of the API contract libraries this rule judges, e.g. `["libraries/apis/**"]`.
  *   An empty list judges nothing.
  *
- * `allowedPaths` exempts whole trees inside `paths`. The per-site escape hatch is
+ * The framework-owned `excludePaths` exempts whole trees inside `paths`. The per-site escape hatch is
  * `// webpieces-disable no-utility-types-in-api-lib -- <reason>` on the line or the line above.
  */
 export class NoUtilityTypesInApiLibConfig extends BaseRuleConfig {
     declare mode?: ModifiedCodeMode;
     paths!: string[];
-    allowedPaths?: string[];
 
     static readonly SCHEMA: SchemaShape<NoUtilityTypesInApiLibConfig> = {
         mode: new FieldDef('string', MODIFIED_CODE_MODES),
         paths: new FieldDef('string[]'),
-        allowedPaths: FieldDef.optional('string[]'),
-        ...BASE_RULE_SCHEMA,
     };
 }

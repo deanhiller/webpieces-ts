@@ -13,11 +13,14 @@ import { filterByExcludedPaths } from '@webpieces/hook-runtime';
 import { GovernedPath } from '@webpieces/hook-runtime';
 import { Rule, Violation, BashContext, BlockedResult, NormalizedToolInput, NormalizedEdit } from '@webpieces/hook-runtime';
 
-// filterByExcludedPaths reads only `rule.name` (for the assertions below), so a minimal stand-in is
-// enough. `configKey` is carried too because the SIBLING helper filterByMode classifies on that field
-// rather than on the name — a stand-in with only a name would classify the guard as a code rule.
-function ruleNamed(name: string, configKey: string): Rule {
-    return { name, configKey } as unknown as Rule;
+// filterByExcludedPaths reads `rule.name` (for the assertions below) and asks `rule.excludesPath` (the
+// rule's OWN framework-owned excludePaths, #1253), so a minimal stand-in is enough. `configKey` is
+// carried too because the SIBLING helper filterByMode classifies on that field rather than on the name —
+// a stand-in with only a name would classify the guard as a code rule.
+function ruleNamed(name: string, configKey: string, ownExcludes: readonly string[] = []): Rule {
+    const excludesPath = (relativePath: string): boolean =>
+        ownExcludes.some((prefix: string): boolean => relativePath.startsWith(prefix));
+    return { name, configKey, excludesPath } as unknown as Rule;
 }
 
 const codeRule = ruleNamed('max-file-lines', 'max-file-lines');
@@ -43,6 +46,24 @@ describe('filterByExcludedPaths', () => {
     it('drops EVERY rule — code rules and guards — on an excluded path', () => {
         const ex = new ExcludePaths(['repositories/**']);
         expect(filterByExcludedPaths([codeRule, guard], samePath('repositories/foo/bar.ts'), ex)).toEqual([]);
+    });
+
+    // The per-rule half (#1253): a rule whose own excludePaths names the path is dropped HERE, by the
+    // engine, and only that rule — the others still judge the file.
+    it('drops ONLY the rule whose own excludePaths matches the path', () => {
+        const generatedAware = ruleNamed('no-any-unknown', 'no-any-unknown', ['src/__generated__/']);
+        const kept = filterByExcludedPaths(
+            [codeRule, generatedAware, guard],
+            samePath('src/__generated__/graphql.ts'),
+            new ExcludePaths([]),
+        );
+        expect(names(kept)).toEqual(['max-file-lines', 'feature-branch-guard']);
+        const handWritten = filterByExcludedPaths(
+            [codeRule, generatedAware, guard],
+            samePath('src/app/service.ts'),
+            new ExcludePaths([]),
+        );
+        expect(names(handWritten)).toEqual(['max-file-lines', 'no-any-unknown', 'feature-branch-guard']);
     });
 
     it('keeps every rule for a path that matches no exclusion', () => {

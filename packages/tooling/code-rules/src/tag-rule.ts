@@ -13,7 +13,6 @@ import { detectBase, getChangedFiles } from "@webpieces/rules-config";
 import { ProjectMode } from "./configs/rule-configs";
 import { toError } from '@webpieces/tooling-common/to-error';
 import { ExecutorResult } from './code-validator';
-import { shouldSkipRule } from './resolve-mode';
 
 /** A project (identified by its project.json) missing the required tag. */
 export class MissingTagProject {
@@ -191,36 +190,13 @@ export function findProjectsWithInvalidTagValues(
     return invalid;
 }
 
-function resolveMode(
-    normalMode: ProjectMode,
-    epoch: number | undefined,
-    branchPattern: string | undefined,
-    ruleName: string
-): ProjectMode {
-    if (normalMode === 'OFF') {
-        return normalMode;
-    }
-    const skip = shouldSkipRule(epoch, branchPattern);
-    if (skip.skip) {
-        console.log(`\n⏭️  Skipping ${ruleName} validation (${skip.reason})`);
-        console.log('');
-        return 'OFF';
-    }
-    return normalMode;
-}
-
 /** Run a concrete tag rule (framework-tag / role-tag) against the git diff. */
 export async function runTagValidator(
     options: TagRuleConfig,
     workspaceRoot: string,
     spec: TagRuleSpec
 ): Promise<ExecutorResult> {
-    const mode: ProjectMode = resolveMode(
-        options.mode ?? 'OFF',
-        options.turnOffRuleUntilEpoch,
-        (options.turnOffRuleWhileOnBranch ?? undefined),
-        spec.ruleName
-    );
+    const mode: ProjectMode = options.mode ?? 'OFF';
     const knownTypes = options.knownTypes && options.knownTypes.length > 0 ? options.knownTypes : spec.defaultKnownTypes;
 
     if (mode === 'OFF') {

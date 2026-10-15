@@ -7,8 +7,10 @@
  *            Nx project. Orphan files (at workspace root or in a non-project
  *            directory) fail the rule unless explicitly allowlisted.
  *
- * `excludePaths` is holistic — its bare dir names and globs exempt files
- * from BOTH layers. Defaults exempt **\/*.d.ts and **\/jest.config.ts.
+ * A built-in floor (bare dir names + globs, e.g. **\/*.d.ts and **\/jest.config.ts) exempts files from
+ * BOTH layers. The configured `excludePaths` — this rule's and the repo's top-level one — are the
+ * framework-owned exclusions (#1253): the rule runs inside a RuleFileScope carrying them, so the changed-file
+ * listing never contains a file they match. They ADD to the floor.
  *
  * Only the files changed vs the base branch are validated (NEW_AND_MODIFIED_FILES),
  * so the rule applies cleanly to legacy projects — pre-existing orphan files
@@ -17,7 +19,7 @@
  * Configurable via webpieces.config.json:
  *   "validate-ts-in-src": {
  *       "mode": "NEW_AND_MODIFIED_FILES", // "OFF" disables the rule
- *       "excludePaths": [...],   // dir names + globs, e.g. "**\/codegen.ts"
+ *       "excludePaths": [...],   // globs, e.g. "**\/codegen.ts", "scripts/**"
  *       "allowedRootFiles": [...],
  *       "turnOffRuleUntilEpoch": 0,       // epoch SECONDS; skip the rule until it passes
  *       "turnOffRuleWhileOnBranch": null  // branch name; skip the rule while it is checked out
@@ -28,7 +30,15 @@
 
 import type { ExecutorContext } from '@nx/devkit';
 import { createProjectGraphAsync, readProjectsConfigurationFromProjectGraph } from '@nx/devkit';
-import { loadAndValidate, isPathExcluded, shouldSkipRule, detectBase, getChangedFiles } from '@webpieces/rules-config';
+import {
+    loadAndValidate,
+    isPathExcluded,
+    shouldSkipRule,
+    detectBase,
+    getChangedFiles,
+    RuleFileExclusions,
+    RuleFileScope,
+} from '@webpieces/rules-config';
 import * as path from 'path';
 import * as fs from 'fs';
 
@@ -36,7 +46,6 @@ export type ValidateTsInSrcMode = 'OFF' | 'NEW_AND_MODIFIED_FILES';
 
 export interface ValidateTsInSrcOptions {
     mode?: ValidateTsInSrcMode;
-    excludePaths?: string[];
     allowedRootFiles?: string[];
     turnOffRuleUntilEpoch?: number;
     turnOffRuleWhileOnBranch?: string | null;
@@ -46,7 +55,7 @@ export interface ExecutorResult {
     success: boolean;
 }
 
-const DEFAULT_EXCLUDE_PATHS: string[] = [
+const BUILT_IN_EXCLUDE_PATHS: string[] = [
     'node_modules', 'dist', '.nx', '.git',
     'architecture', 'tmp', 'scripts',
     '**/*.d.ts', '**/jest.config.ts',
@@ -154,7 +163,7 @@ function reportLayerOneFailure(violations: LayerOneViolation[]): void {
 
     console.error('\nTo fix, pick one:');
     console.error('  (a) Move the .ts file(s) into the src/ directory');
-    console.error('  (b) Add a glob/dir to validate-ts-in-src.excludePaths in');
+    console.error('  (b) Add a glob to validate-ts-in-src.excludePaths in');
     console.error('      webpieces.config.json (e.g. "**/codegen.ts"). Defaults already');
     console.error('      exempt **/*.d.ts and **/jest.config.ts.\n');
 }
@@ -172,8 +181,9 @@ function reportLayerTwoFailure(violations: LayerTwoViolation[]): void {
     console.error('\nTo fix, pick one:');
     console.error('  (a) Move the file into an existing project\'s src/ directory');
     console.error('  (b) Create a new project (add project.json) that owns the directory');
-    console.error('  (c) Add the containing top-level directory to validate-ts-in-src.excludePaths');
-    console.error('      in nx.json targetDefaults, or add the filename to allowedRootFiles');
+    console.error('  (c) Add a glob for the containing directory (e.g. "tools/**") to validate-ts-in-src.excludePaths');
+    console.error('      in the validate-ts-in-src entry of webpieces.config.json (or its owner rule file), or to');
+    console.error('      the top-level excludePaths for every rule; or add the filename to allowedRootFiles');
     console.error('      if it is a legitimate workspace-root file (e.g., jest.setup.ts)\n');
 }
 
@@ -244,7 +254,8 @@ export default async function runExecutor(
 ): Promise<ExecutorResult> {
     // Config comes from webpieces.config.json — same source as ai-hooks
     // and validate-code — via @webpieces/rules-config.
-    const shared = loadAndValidate(context.root).resolved;
+    const loaded = loadAndValidate(context.root);
+    const shared = loaded.resolved;
     const rule = shared.rules.get('validate-ts-in-src');
 
     const rawMode = (rule?.options['mode'] as ValidateTsInSrcMode | undefined) ?? 'NEW_AND_MODIFIED_FILES';
@@ -261,12 +272,18 @@ export default async function runExecutor(
     }
 
     const workspaceRoot = context.root;
-    const excludePaths =
-        (rule?.options['excludePaths'] as string[] | undefined) ?? DEFAULT_EXCLUDE_PATHS;
+    // The framework-owned exclusions (#1253): the repo's top-level list plus this rule's own.
+    const exclusions = new RuleFileExclusions(
+        'validate-ts-in-src',
+        loaded.excludePaths.paths,
+        (rule?.options['excludePaths'] as string[] | undefined) ?? [],
+    );
     const allowedRootFiles =
         (rule?.options['allowedRootFiles'] as string[] | undefined) ?? DEFAULT_ALLOWED_ROOT_FILES;
 
     // Only NEW_AND_MODIFIED_FILES remains once OFF is handled above — validate just the
     // files changed vs the base branch (legacy-friendly; no whole-workspace scan).
-    return runModifiedFilesMode(workspaceRoot, excludePaths, allowedRootFiles);
+    return new RuleFileScope().runWithin(exclusions, () =>
+        runModifiedFilesMode(workspaceRoot, BUILT_IN_EXCLUDE_PATHS, allowedRootFiles),
+    );
 }

@@ -28,6 +28,18 @@
         "optional": false,
         "nullable": true,
         "nonEmpty": false
+      },
+      "excludePaths": {
+        "type": "string[]",
+        "optional": true,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "reason": {
+        "type": "string",
+        "optional": true,
+        "nullable": false,
+        "nonEmpty": false
       }
     },
     "optionalTuning": {},
@@ -49,12 +61,6 @@
         "nullable": false,
         "nonEmpty": false
       },
-      "allowedPaths": {
-        "type": "string[]",
-        "optional": true,
-        "nullable": false,
-        "nonEmpty": false
-      },
       "turnOffRuleUntilEpoch": {
         "type": "number",
         "optional": false,
@@ -65,6 +71,18 @@
         "type": "string",
         "optional": false,
         "nullable": true,
+        "nonEmpty": false
+      },
+      "excludePaths": {
+        "type": "string[]",
+        "optional": true,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "reason": {
+        "type": "string",
+        "optional": true,
+        "nullable": false,
         "nonEmpty": false
       }
     },
@@ -110,19 +128,17 @@
         "optional": false,
         "nullable": true,
         "nonEmpty": false
+      },
+      "reason": {
+        "type": "string",
+        "optional": true,
+        "nullable": false,
+        "nonEmpty": false
       }
     },
     "optionalTuning": {
       "allowedRootFiles": [
         "jest.setup.ts"
-      ],
-      "excludePaths": [
-        "node_modules",
-        "dist",
-        ".nx",
-        ".git",
-        "**/*.d.ts",
-        "**/jest.config.ts"
       ]
     },
     "recommendedSeed": {

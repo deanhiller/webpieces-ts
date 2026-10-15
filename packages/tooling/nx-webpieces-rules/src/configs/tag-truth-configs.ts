@@ -1,4 +1,4 @@
-import { FieldDef, SchemaShape, BaseRuleConfig, BASE_RULE_SCHEMA } from "@webpieces/rules-sdk";
+import { FieldDef, SchemaShape, BaseRuleConfig } from "@webpieces/rules-sdk";
 import { StructuralMode, STRUCTURAL_MODES } from "./rule-configs";
 /** One `role:api-client` project and the outside packages it may import (its SDK, inversify, …). Data-only. */
 export class ApiClientPackagesEntry {
@@ -34,7 +34,6 @@ export class ApiLibDependenciesConfig extends BaseRuleConfig {
         mode: new FieldDef('string', STRUCTURAL_MODES),
         apiLibPackages: new FieldDef('string[]'),
         apiClients: FieldDef.objects(ApiClientPackagesEntry.SCHEMA),
-        ...BASE_RULE_SCHEMA,
     };
 }
 
@@ -52,7 +51,6 @@ export class ApiLibPathConfig extends BaseRuleConfig {
     static readonly SCHEMA: SchemaShape<ApiLibPathConfig> = {
         mode: new FieldDef('string', STRUCTURAL_MODES),
         paths: FieldDef.nonEmptyStrings(),
-        ...BASE_RULE_SCHEMA,
     };
 }
 
@@ -96,7 +94,6 @@ export class FrameworkFolderConfig extends BaseRuleConfig {
     static readonly SCHEMA: SchemaShape<FrameworkFolderConfig> = {
         mode: new FieldDef('string', STRUCTURAL_MODES),
         entries: FieldDef.nonEmptyObjects(FrameworkFolderEntry.SCHEMA),
-        ...BASE_RULE_SCHEMA,
     };
 }
 
@@ -149,6 +146,5 @@ export class ProductTagsConfig extends BaseRuleConfig {
         mode: new FieldDef('string', STRUCTURAL_MODES),
         roles: FieldDef.nonEmptyStrings(),
         productDependencies: FieldDef.objects(ProductDependencyEntry.SCHEMA),
-        ...BASE_RULE_SCHEMA,
     };
 }
