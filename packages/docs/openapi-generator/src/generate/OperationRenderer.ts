@@ -11,7 +11,7 @@ import {
     WRITE_IDEMPOTENT,
 } from '@webpieces/core-util';
 import { JsonObject, JsonValue } from '../json/JsonObject';
-import { ErrorResponseEntry } from '../manifest/OpenApiManifest';
+import { ErrorResponseEntry, OperationIdStyle } from '../manifest/OpenApiManifest';
 import { SchemaRenderer } from './SchemaRenderer';
 
 /** What a webhook's `void` return means on the wire, said once. */
@@ -26,7 +26,11 @@ export class ResponseContract {
         readonly errors: readonly ErrorResponseEntry[],
         /** `$ref` at the error body schema, when the manifest declared one. */
         readonly errorSchemaRef: JsonObject | undefined,
-        /** Header name -> its `components.headers` `$ref`, on every success response. */
+        /**
+         * Header name -> its `components.headers` `$ref`, on the success response AND on every
+         * failure listed for the operation (#1270). The server stamps the header on every response,
+         * and the failing one is the response a partner most needs to quote back.
+         */
         readonly headers: JsonObject | undefined,
     ) {}
 }
@@ -60,7 +64,21 @@ export class OperationRenderer {
         private readonly includeMcp: boolean,
         /** True only for the private document — see {@link triggerSentence}. */
         private readonly includeTrigger: boolean,
+        /** The manifest's `operationIds` — see {@link operationIdOf}. */
+        private readonly operationIds: OperationIdStyle,
     ) {}
+
+    /**
+     * The published `operationId`, in the manifest's chosen style (#1270).
+     *
+     * Public because the generator checks uniqueness with the SAME function before rendering: a
+     * second spelling of the id there could pass a collision this one then publishes.
+     */
+    operationIdOf(endpoint: DocumentedEndpoint, contractName: string): string {
+        return this.operationIds === OperationIdStyle.METHOD
+            ? endpoint.methodName
+            : `${contractName}_${endpoint.methodName}`;
+    }
 
     /** An ordinary served route. */
     operation(
@@ -104,7 +122,7 @@ export class OperationRenderer {
         contract: ResponseContract,
     ): JsonObject {
         return new JsonObject()
-            .set('operationId', `${contractName}_${endpoint.methodName}`)
+            .set('operationId', this.operationIdOf(endpoint, contractName))
             .set('x-webpieces-authentication', endpoint.auth?.methods.map((method: DocumentedAuthMethod) => new JsonObject().set('kind', method.kind).set('arguments', method.argumentTexts)))
             .set('summary', endpoint.methodName)
             .set('description', this.describe(endpoint))
@@ -304,7 +322,9 @@ export class OperationRenderer {
     }
 
     private failure(description: string, contract: ResponseContract): JsonObject {
-        const response = new JsonObject().set('description', description);
+        const response = new JsonObject()
+            .set('description', description)
+            .set('headers', contract.headers);
         if (contract.errorSchemaRef === undefined) {
             return response;
         }

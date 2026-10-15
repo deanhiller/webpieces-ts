@@ -20,6 +20,7 @@ export {
     ErrorResponseEntry,
     ErrorsEntry,
     OpenApiManifest,
+    OperationIdStyle,
     ResponseHeaderEntry,
     ServerEntry,
 } from './manifest/OpenApiManifest';

@@ -1,5 +1,6 @@
 {
     "title": "Stories API",
+    "operationIds": "contract_method",
     "version": "1.0.0",
     "apisWhy": "One contract carrying string enums in every position and multi-value discriminators (#1023).",
     "apis": [

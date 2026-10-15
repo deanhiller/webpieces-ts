@@ -1,5 +1,6 @@
 {
     "title": "Widgets API",
+    "operationIds": "contract_method",
     "version": "2.1.0",
     "servers": [
         {

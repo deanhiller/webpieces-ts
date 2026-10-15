@@ -412,6 +412,63 @@ describe('errors.responses[].requiresAuth', () => {
     });
 });
 
+describe('responseHeaders on failure responses (#1270)', () => {
+    it('hangs the header off every failure the operation lists, respecting requiresAuth', () => {
+        const published = harness.document(
+            harness.run('mixed.manifest.json'),
+            'full-private-openapi.json',
+        );
+        const ref = '#/components/headers/x-trace-id';
+        // The correlation id matters MOST on the response that failed; the server stamps it there too.
+        expect(harness.at(published, 'paths./mixed/ping.post.responses.200.headers.x-trace-id.$ref')).toBe(ref);
+        expect(harness.at(published, 'paths./mixed/ping.post.responses.400.headers.x-trace-id.$ref')).toBe(ref);
+        expect(harness.at(published, 'paths./mixed/secret.post.responses.400.headers.x-trace-id.$ref')).toBe(ref);
+        expect(harness.at(published, 'paths./mixed/secret.post.responses.401.headers.x-trace-id.$ref')).toBe(ref);
+        // The auth-only 401 is still left off the public operation: the header rides only the
+        // responses the operation actually declares.
+        expect(harness.at(published, 'paths./mixed/ping.post.responses.401')).toBeUndefined();
+    });
+});
+
+describe('operationIds (#1270)', () => {
+    it('"contract_method" prefixes every id with its contract name', () => {
+        const published = harness.document(
+            harness.run('single.manifest.json'),
+            'full-private-openapi.json',
+        );
+        expect(harness.at(published, 'paths./widgets/list.post.operationId')).toBe('WidgetsApi_list');
+        expect(harness.webhook(published, 'widget.made')['operationId']).toBe('EventsApi_widgetMade');
+    });
+
+    it('"method" publishes the bare method name, on routes and webhooks alike', () => {
+        const published = harness.document(
+            harness.run('method-ids.manifest.json'),
+            'full-private-openapi.json',
+        );
+        expect(harness.at(published, 'paths./widgets/list.post.operationId')).toBe('list');
+        expect(harness.at(published, 'paths./widgets/purge.post.operationId')).toBe('purge');
+        expect(harness.webhook(published, 'widget.made')['operationId']).toBe('widgetMade');
+    });
+
+    it('"method" HARD-FAILS when two operations of one document would share an id, naming both', () => {
+        const failure = harness.failureOf('duplicate-ids.manifest.json');
+        expect(failure, 'a duplicated operationId was published').toBeDefined();
+        expect(failure!.message).toContain('operationId(s) would be published twice');
+        expect(failure!.cure).toContain('"operationIds": "contract_method"');
+        expect(failure!.pointers).toHaveLength(1);
+        expect(failure!.pointers[0]).toContain("operationId 'list'");
+        expect(failure!.pointers[0]).toContain('WidgetsApi.list');
+        expect(failure!.pointers[0]).toContain('GadgetsApi.list');
+    });
+
+    it('REFUSES a manifest that does not state a style, naming the key and both choices', () => {
+        const failure = harness.failureOf('missing-operation-ids.manifest.json');
+        expect(failure, 'a manifest with no operationIds was accepted').toBeDefined();
+        expect(failure!.message).toContain("'operationIds' is missing");
+        expect(failure!.cure).toContain('"contract_method" or "method"');
+    });
+});
+
 describe('prose', () => {
     it('makes `summary` the operation NAME and the JSDoc body the `description`', () => {
         const published = harness.document(

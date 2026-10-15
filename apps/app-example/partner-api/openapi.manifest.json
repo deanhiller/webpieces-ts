@@ -1,5 +1,6 @@
 {
     "title": "Example Orders API",
+    "operationIds": "contract_method",
     "version": "1.0.0",
     "descriptionFile": "description.md",
     "servers": [

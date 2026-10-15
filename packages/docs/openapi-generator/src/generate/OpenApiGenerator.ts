@@ -228,7 +228,9 @@ export class OpenApiGenerator {
             schemas,
             selection.includeMcpExtensions,
             selection.internalNotice,
+            inputs.manifest.operationIds,
         );
+        this.refuseDuplicateOperationIds(contracts, selection, operations, inputs.manifestPath);
         const apiKey = this.singleApiKey(inputs, contracts, selection);
         const schemeNames = inputs.manifest.securitySchemeNames;
         const hoisted =
@@ -333,6 +335,52 @@ export class OpenApiGenerator {
                 (each: TypeNameCollision) =>
                     `${each.name} (${each.packageName ?? 'no package'}): ${each.firstLocation} and ${each.secondLocation}`,
             ),
+        );
+    }
+
+    /**
+     * OpenAPI requires every operationId to be unique among ALL operations of a document, webhooks
+     * included. `"operationIds": "method"` publishes the bare method name, so two contracts with a
+     * same-named method would publish one id twice — and a generated client would silently get one
+     * method for two operations. Refused here, naming both, before anything renders (#1270). The ids
+     * come from the renderer's own {@link OperationRenderer.operationIdOf}, so the check and the
+     * published value cannot disagree.
+     */
+    private refuseDuplicateOperationIds(
+        contracts: readonly ContractModel[],
+        selection: DocumentSelection,
+        operations: OperationRenderer,
+        where: string,
+    ): void {
+        const firstOwner = new Map<string, string>();
+        const duplicates: string[] = [];
+        for (const contractModel of contracts) {
+            const model = contractModel.model;
+            for (const endpoint of model.endpoints) {
+                if (!selection.acceptsEndpoint(endpoint)) {
+                    continue;
+                }
+                const id = operations.operationIdOf(endpoint, model.contractName);
+                const owner = `${model.contractName}.${endpoint.methodName} (${contractModel.file})`;
+                const first = firstOwner.get(id);
+                if (first === undefined) {
+                    firstOwner.set(id, owner);
+                } else {
+                    duplicates.push(`operationId '${id}': ${first} and ${owner}`);
+                }
+            }
+        }
+        if (duplicates.length === 0) {
+            return;
+        }
+        throw new OpenApiGenerationError(
+            `${duplicates.length} operationId(s) would be published twice in ${selection.fileName}; ` +
+                'an operationId must be unique across every operation of one document',
+            where,
+            'Rename one of each pair of methods, or set "operationIds": "contract_method" in the ' +
+                'manifest, which prefixes every id with its contract name (this renames every method ' +
+                "in partners' generated clients).",
+            duplicates,
         );
     }
 

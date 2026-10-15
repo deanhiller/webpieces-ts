@@ -1,5 +1,6 @@
 {
     "title": "Widgets API",
+    "operationIds": "contract_method",
     "version": "2.1.0",
     "apisWhy": "The same contract as single.manifest.json, with ONE published scheme name for a regime that declares TWO credentials.",
     "apis": [

@@ -14,7 +14,10 @@ export class AuthorizedApiDocument {
         for (const route of routes) {
             if (!route.authorization || !route.apiClass) throw new ApiImplementationError('Document routes require canonical receiving endpoint metadata.');
             policy.validate(route.authorization);
-            const id = `${route.apiClass.name}_${route.methodName}`;
+            // Keyed by the HTTP method and path template, never by operationId: a manifest chooses how
+            // operationIds are spelled (`contract_method` or bare `method`, #1270), and the method+path
+            // pair is the one identity every spelling shares with the receiving route.
+            const id = this.operationKey(route.httpMethod.toLowerCase(), this.template(route.path));
             if (this.routes.has(id)) throw new ApiImplementationError(`Duplicate document operation ${id}.`);
             this.routes.set(id, route);
         }
@@ -30,9 +33,9 @@ export class AuthorizedApiDocument {
             for (const method of Object.keys(item)) {
                 if (!this.methods.includes(method)) continue;
                 const operation = this.object(item[method]);
-                const id = operation['operationId'];
-                const route = typeof id === 'string' ? this.routes.get(id) : undefined;
-                if (!route?.authorization || route.path.replace(/:([A-Za-z_]\w*)/g, '{$1}') !== path || route.httpMethod.toLowerCase() !== method) throw new ApiImplementationError(`Document operation ${String(id)} has no matching receiving endpoint policy.`);
+                const id = this.operationKey(method, path);
+                const route = this.routes.get(id);
+                if (!route?.authorization) throw new ApiImplementationError(`Document operation ${id} (operationId ${String(operation['operationId'])}) has no matching receiving endpoint policy.`);
                 if (!(await this.permits(route))) { delete item[method]; continue; }
                 const names = operation['tags'];
                 if (Array.isArray(names)) for (const name of names) if (typeof name === 'string') tags.add(name);
@@ -46,6 +49,15 @@ export class AuthorizedApiDocument {
         });
         this.pruneComponents(document);
         return document;
+    }
+
+    /** A route path as the document spells it: `:id` becomes `{id}`. */
+    private template(routePath: string): string {
+        return routePath.replace(/:([A-Za-z_]\w*)/g, '{$1}');
+    }
+
+    private operationKey(method: string, documentPath: string): string {
+        return `${method.toUpperCase()} ${documentPath}`;
     }
 
     private async permits(route: RouteMetadata): Promise<boolean> {
