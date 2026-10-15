@@ -214,19 +214,19 @@
   "tagTruthUpgradeWhy": "The 0.4.835 validator requires these five newly introduced entries. They were absent and unenforced under 0.4.822. Preserve that existing enforcement while the framework project retags and measured activation remain tracked by #1065; see .claude/rules/framework-tags.md Release ordering. No existing rule mode is changed.",
   "rulePacks": [
     {
-      "config": ".webpieces/rules/code-rules.json",
+      "config": ".webpieces-config/rules/code-rules.json",
       "package": "@webpieces/code-rules"
     },
     {
-      "config": ".webpieces/rules/ai-hook-rules.json",
+      "config": ".webpieces-config/rules/ai-hook-rules.json",
       "package": "@webpieces/ai-hook-rules"
     },
     {
-      "config": ".webpieces/rules/agent-workflow-rules.json",
+      "config": ".webpieces-config/rules/agent-workflow-rules.json",
       "package": "@webpieces/agent-workflow-rules"
     },
     {
-      "config": ".webpieces/rules/nx-webpieces-rules.json",
+      "config": ".webpieces-config/rules/nx-webpieces-rules.json",
       "package": "@webpieces/nx-webpieces-rules"
     }
   ]

@@ -103,16 +103,10 @@ node_modules_*/
 
 # Webpieces tooling working dir: ai-hook-rules bootstrap/cache, instruct-ai docs,
 # and per-feature git workflow dirs (merge-/review-/pr-, 30-day retention)
-.webpieces-logs/
 .webpieces/
-!/.webpieces/
-/.webpieces/*
-# Explicit policy settings and their registry/catalog are committed, reproducible inputs.
-!/.webpieces/rules/
-!/.webpieces/rules.lock.json
-!/.webpieces/instruct-ai/
-/.webpieces/instruct-ai/*
-!/.webpieces/instruct-ai/rules-catalog.md
+# Retired state dir from 0.4.914-0.4.916 (#1242, reversed by #1260); stale copies stay ignored.
+.webpieces-logs/
+# Committed policy (rule-pack configs, rules.lock.json, rules-catalog.md) lives in .webpieces-config/.
 
 # Claude Code subagent worktrees — linked git worktrees, never committed.
 #
