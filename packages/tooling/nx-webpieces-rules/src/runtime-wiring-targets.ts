@@ -31,16 +31,21 @@ export class RuntimeWiringTargets {
             'runtime-wiring-check': {
                 executor: '@webpieces/nx-webpieces-rules:runtime-wiring-check',
                 cache: true,
+                // PER-PROJECT inputs only (#1263). nx turns every `{workspaceRoot}/...` input of a
+                // target into an implicit dependency of the project that carries it
+                // (getImplicitlyTouchedProjects), so a workspace-wide glob here made ONE service's
+                // wiring.ts change mark EVERY webpieces-tagged project affected. The check reads only
+                // this project's src/wiring.ts, its runtime-deps.json, its project.json and the files
+                // its own TS program imports (its graph dependencies -> ^default). The cross-service
+                // half (assembling every runtime-deps.json, callers vs callees) already runs ONCE,
+                // uncached, in architecture:validate-architecture-unchanged (ApprovedWiringGraph).
+                // tsconfig.base.json is hashed into every task by nx itself (path mappings selectively)
+                // and handled by its own affected locator, so naming it here only widened `affected`.
                 inputs: [
                     'default',
+                    '{projectRoot}/src/wiring.ts',
                     '{projectRoot}/runtime-deps.json',
-                    '{workspaceRoot}/packages/tooling/nx-webpieces-rules/src/**/*.ts',
                     '^default',
-                    '{workspaceRoot}/**/src/wiring.ts',
-                    '{workspaceRoot}/**/runtime-deps.json',
-                    '{workspaceRoot}/webpieces.config.json',
-                    '{workspaceRoot}/tsconfig.base.json',
-                    '{workspaceRoot}/nx.json',
                     { externalDependencies: ['@webpieces/nx-webpieces-rules'] },
                 ],
                 outputs: [`{workspaceRoot}/${outputPath}/runtime-deps.candidate.json`],
