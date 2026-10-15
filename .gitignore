@@ -106,7 +106,7 @@ node_modules_*/
 .webpieces/
 # Retired state dir from 0.4.914-0.4.916 (#1242, reversed by #1260); stale copies stay ignored.
 .webpieces-logs/
-# Committed policy (rule-pack configs, rules.lock.json, rules-catalog.md) lives in .webpieces-config/.
+# Committed policy (rule-pack configs) lives in .webpieces-config/.
 
 # Claude Code subagent worktrees — linked git worktrees, never committed.
 #
