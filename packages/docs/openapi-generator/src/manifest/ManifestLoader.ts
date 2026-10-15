@@ -22,6 +22,9 @@ const WEBHOOK = 'webhook';
  */
 const COMPONENTS = 'components';
 
+/** The deleted string-constant spelling of a response header's name (#1249). */
+const RETIRED_NAME_CONSTANT = 'nameConstant';
+
 /** Keys a components manifest must not carry, each with why — a contract-manifest key is a mix-up. */
 const NOT_IN_COMPONENTS: ReadonlyMap<string, string> = new Map<string, string>([
     ['apis', 'a components document has no paths; list the library\'s entry files in "entries"'],
@@ -200,22 +203,33 @@ export class ManifestLoader {
                         new ErrorResponseEntry(
                             response.string('status'),
                             response.string('description'),
+                            response.optionalBoolean('requiresAuth') ?? false,
                         ),
                 ),
         );
     }
 
     private responseHeaders(raw: JsonReader): readonly ResponseHeaderEntry[] {
-        return raw
-            .objects('responseHeaders')
-            .map(
-                (header: JsonReader) =>
-                    new ResponseHeaderEntry(
-                        header.string('entry'),
-                        header.string('nameConstant'),
-                        header.optionalString('description'),
-                    ),
+        return raw.objects('responseHeaders').map((header: JsonReader) => {
+            // RETIRED (#1249): a header NAME is never a string constant any more — it is read off the
+            // ContextKey that is the one definition of the header. Refused, never accepted beside the
+            // new key: two spellings means the old one is never migrated.
+            if (header.has(RETIRED_NAME_CONSTANT)) {
+                throw new OpenApiGenerationError(
+                    `'${RETIRED_NAME_CONSTANT}' was removed from responseHeaders[]; it moved to 'contextKey'`,
+                    raw.where,
+                    `Replace "${RETIRED_NAME_CONSTANT}" with "contextKey" naming an exported ContextKey in ` +
+                        '"entry" (e.g. `export const REQUEST_ID_KEY = WebpiecesCoreHeaders.REQUEST_ID;`, ' +
+                        'or a dotted path like "OneTabletKey.TX_ID"); the header name is read off its responseHeader.',
+                );
+            }
+            return new ResponseHeaderEntry(
+                header.string('entry'),
+                header.string('contextKey'),
+                header.optionalString('description'),
+                header.optionalBoolean('required'),
             );
+        });
     }
 
     /** A manifest-relative path, resolved against the manifest's own directory. */

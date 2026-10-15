@@ -1,3 +1,4 @@
+import { ContextKey } from '../ContextKey';
 import { apiKey, ApiKeyCredential, AuthMode } from './auth-mode';
 import { WpAuth } from './decorators';
 
@@ -20,12 +21,15 @@ import { WpAuth } from './decorators';
  *    with no security block, which is precisely the silent failure the argument exists to remove, so
  *    `[]` is a compile error rather than a runtime throw (shim shape #4).
  * 3. {@link ApiKeyCredential} makes the two OpenAPI schemes MUTUALLY exclusive: a header credential
- *    must carry its header name, and a bearer credential must NOT — its location IS `Authorization`,
- *    so a `name` beside it would be a lie a generator has to guess about.
+ *    must carry the ContextKey whose `httpHeader` it rides under, and a bearer credential must NOT —
+ *    its location IS `Authorization`, so a key beside it would be a lie a generator has to guess about.
  * 4. The ONE-ARGUMENT `@apiKey('regime')` form is GONE. It could declare a key regime while
  *    saying nothing about where the credential rides, which is the whole defect; per the
  *    no-backwards-compatibility rule there is no overload and no optional second parameter left
  *    behind, and this directive is what proves it.
+ * 5. The header-name STRING spelling `{ in: 'header', name: 'x-api-key' }` is GONE (#1249). A header
+ *    is defined ONCE, as a ContextKey, and named by that key everywhere; a string here was a second
+ *    copy a rename leaves silently stale.
  *
  * The EXHAUSTIVENESS half needs no directive: `apiKeyIsCoveredExhaustively` below returns on every
  * branch with no `default`, so dropping the `apikey` case makes tsc fail with TS7030 (not all code
@@ -33,6 +37,9 @@ import { WpAuth } from './decorators';
  * `DestinationTrust.forAuthMode` rely on, asserted here where it cannot be edited away by accident.
  */
 export class AuthApiKeyCompileAssertions {
+    private static readonly API_KEY = ContextKey.untrusted<string>('apiKey', 'x-api-key', true);
+    private static readonly ORG_ID = ContextKey.untrusted<string>('organizationId', 'x-organization-id');
+
     /** The one legitimate spelling must keep compiling; asserted by the ABSENCE of an error. */
     legitimate(): AuthMode {
         const mode: AuthMode = {
@@ -41,10 +48,10 @@ export class AuthApiKeyCompileAssertions {
             credentials: [
                 {
                     in: 'header',
-                    name: 'x-api-key',
+                    key: AuthApiKeyCompileAssertions.API_KEY,
                     description: 'The key issued to your integration.',
                 },
-                { in: 'header', name: 'x-organization-id' },
+                { in: 'header', key: AuthApiKeyCompileAssertions.ORG_ID },
             ],
         };
         return mode;
@@ -61,7 +68,7 @@ export class AuthApiKeyCompileAssertions {
 
     /** apiKey takes regime and credentials; WpAuth wraps the descriptor in a nonempty list. */
     legitimateDecorator(): MethodDecorator {
-        return WpAuth([apiKey('onetablet-partner', [{ in: 'header', name: 'x-api-key' }])]);
+        return WpAuth([apiKey('onetablet-partner', [{ in: 'header', key: AuthApiKeyCompileAssertions.API_KEY }])]);
     }
 
     /** Every one of these must be UNWRITABLE. A directive going unused here fails the build. */
@@ -69,7 +76,7 @@ export class AuthApiKeyCompileAssertions {
         // @ts-expect-error `regime` is REQUIRED — it selects which key regime, so it cannot be omitted
         const noRegime: AuthMode = {
             kind: 'apikey',
-            credentials: [{ in: 'header', name: 'x-api-key' }],
+            credentials: [{ in: 'header', key: AuthApiKeyCompileAssertions.API_KEY }],
         };
         void noRegime;
         // @ts-expect-error `credentials` is REQUIRED — a regime that declares no location is the defect
@@ -82,17 +89,23 @@ export class AuthApiKeyCompileAssertions {
             // @ts-expect-error the discriminant is 'apikey'; 'api-key' is not a member of the union
             kind: 'api-key',
             regime: 'onetablet-partner',
-            credentials: [{ in: 'header', name: 'x-api-key' }],
+            credentials: [{ in: 'header', key: AuthApiKeyCompileAssertions.API_KEY }],
         };
         void misspelled;
-        // @ts-expect-error bearer's location IS `Authorization`; a header name beside it is a lie
-        const bearerWithName: ApiKeyCredential = { in: 'bearer', name: 'x-api-key' };
-        void bearerWithName;
-        // @ts-expect-error a header credential with no header name cannot become a securityScheme
-        const headerWithNoName: ApiKeyCredential = { in: 'header' };
-        void headerWithNoName;
+        // @ts-expect-error bearer's location IS `Authorization`; a ContextKey beside it is a lie
+        const bearerWithKey: ApiKeyCredential = { in: 'bearer', key: AuthApiKeyCompileAssertions.API_KEY };
+        void bearerWithKey;
+        // @ts-expect-error a header credential with no ContextKey cannot become a securityScheme
+        const headerWithNoKey: ApiKeyCredential = { in: 'header' };
+        void headerWithNoKey;
+        // @ts-expect-error the header-name STRING spelling is deleted — name the ContextKey: `key: MyKeys.API_KEY`
+        const headerNameString: ApiKeyCredential = { in: 'header', name: 'x-api-key' };
+        void headerNameString;
+        // @ts-expect-error `key` is a ContextKey, never the header name itself
+        const keyAsString: ApiKeyCredential = { in: 'header', key: 'x-api-key' };
+        void keyAsString;
         // @ts-expect-error 'query' is not reachable — the framework declares only these two locations
-        const unknownLocation: ApiKeyCredential = { in: 'query', name: 'api_key' };
+        const unknownLocation: ApiKeyCredential = { in: 'query', key: AuthApiKeyCompileAssertions.API_KEY };
         void unknownLocation;
     }
 

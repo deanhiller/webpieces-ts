@@ -14,15 +14,17 @@ export class ContractModel {
 }
 
 /**
- * One response header, with its name already FOLDED out of the constant the manifest named.
+ * One response header, with its name already READ off the ContextKey the manifest named (#1249).
  *
- * The folding happens before generation, not during it, so the generator is a pure function of
+ * The resolution happens before generation, not during it, so the generator is a pure function of
  * already-established facts: everything that can fail by reading the world has failed by then.
  */
 export class ResolvedResponseHeader {
     constructor(
         readonly headerName: string,
         readonly description: string | undefined,
+        /** The header object's `required`, verbatim; undefined leaves it unstated. */
+        readonly required: boolean | undefined,
     ) {}
 }
 

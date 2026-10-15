@@ -7,6 +7,7 @@ import { WpAuthorization, AuthorizationType, WpAuth, apiKey as apiKeyAuth } from
  * stamping it per operation: hoisting here would tell a customer that the public endpoint needs a key.
  */
 import { ApiPath, ApiType, Endpoint, EXTERNAL_CUSTOMER, POST, READ, RPC, SVC_TO_SVC, WpAuthPublic } from '@webpieces/core-util';
+import { WidgetKeys } from './Headers';
 
 export interface PingRequest {
     echo: string;
@@ -38,7 +39,7 @@ export class MixedApi {
 
     /** Only a partner may call this. */
     @Endpoint(POST, '/secret', READ, RPC)
-    @WpAuth([apiKeyAuth('partner', [{ in: 'header', name: 'x-api-key', description: 'Your key.' }])])
+    @WpAuth([apiKeyAuth('partner', [{ in: 'header', key: WidgetKeys.API_KEY, description: 'Your key.' }])])
     @WpAuthorization({ authType: AuthorizationType.USERS_OR_SERVICES })
     secret(request: SecretRequest): Promise<SecretResponse> {
         throw new Error('contract');

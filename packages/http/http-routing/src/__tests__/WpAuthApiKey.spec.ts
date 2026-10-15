@@ -38,6 +38,10 @@ const ORG_ID = ContextKey.trusted<string>(
     'x-org-id',
 );
 
+/** The headers the partner's regime declares, each named by its ContextKey (#1249). */
+const API_KEY = ContextKey.untrusted<string>('apiKey', 'x-api-key', true);
+const ORG_HEADER = ContextKey.untrusted<string>('organizationHeader', 'x-organization-id');
+
 const API_KEY_ROUTE = new RouteMetadata(
     'POST',
     '/management/v1/orders',
@@ -48,8 +52,8 @@ const API_KEY_ROUTE = new RouteMetadata(
         kind: 'apikey',
         regime: 'onetablet-partner',
         credentials: [
-            { in: 'header', name: 'x-api-key' },
-            { in: 'header', name: 'x-organization-id' },
+            { in: 'header', key: API_KEY },
+            { in: 'header', key: ORG_HEADER },
         ],
     }], undefined),
     'ManagementApi',
@@ -285,7 +289,7 @@ describe('@WpAuthApiKey does NOT verify its caller, so forwarded trusted context
         const trust = DestinationTrust.forAuthMode({
             kind: 'apikey',
             regime: 'onetablet-partner',
-            credentials: [{ in: 'header', name: 'x-api-key' }],
+            credentials: [{ in: 'header', key: API_KEY }],
         });
 
         expect(trust.allows(ORG_ID)).toBe(false);

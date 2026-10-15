@@ -10,7 +10,7 @@ import {
 } from '@webpieces/api-doc-model';
 import { JsonObject, JsonValue } from '../json/JsonObject';
 import { OpenApiGenerationError } from '../OpenApiGenerationError';
-import { ServerEntry } from '../manifest/OpenApiManifest';
+import { ErrorResponseEntry, ServerEntry } from '../manifest/OpenApiManifest';
 import {
     ComponentsInputs,
     ContractModel,
@@ -398,7 +398,7 @@ export class OpenApiGenerator {
      * our own responses is true of it. Publishing either would document their server, not ours.
      */
     private webhookContract(): ResponseContract {
-        return new ResponseContract(new Map<string, string>(), undefined, undefined);
+        return new ResponseContract([], undefined, undefined);
     }
 
     /** One contract's ACCEPTED endpoints, into `paths` or into `webhooks`. */
@@ -631,12 +631,8 @@ export class OpenApiGenerator {
         return model.description.trim() === '' ? undefined : model.description;
     }
 
-    private errorResponses(inputs: GenerationInputs): ReadonlyMap<string, string> {
-        const responses = new Map<string, string>();
-        for (const response of inputs.manifest.errors?.responses ?? []) {
-            responses.set(response.status, response.description);
-        }
-        return responses;
+    private errorResponses(inputs: GenerationInputs): readonly ErrorResponseEntry[] {
+        return inputs.manifest.errors?.responses ?? [];
     }
 
     private errorSchemaRef(
@@ -661,6 +657,7 @@ export class OpenApiGenerator {
                 header.headerName,
                 new JsonObject()
                     .set('description', header.description)
+                    .set('required', header.required)
                     .set('schema', new JsonObject().set('type', 'string')),
             );
         }

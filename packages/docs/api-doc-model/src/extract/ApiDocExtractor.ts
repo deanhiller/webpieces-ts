@@ -37,6 +37,7 @@ import {
 import { TypeRef } from '../model/TypeRef';
 import { ApiDocExtractionError } from './ApiDocExtractionError';
 import { ConstantFolder } from './ConstantFolder';
+import { ContextKeyHeaderFolder, ContextKeyHeaderSlot } from './ContextKeyHeaderFolder';
 import { JsDoc } from './JsDoc';
 import { SourceLocation } from './SourceLocation';
 import { assertApiTypeMatchesMcpTools } from './McpMembership';
@@ -294,6 +295,73 @@ export class ApiDocExtractor {
         );
     }
 
+    /**
+     * The header name an EXPORTED ContextKey rides under — what a manifest's response header names
+     * instead of a string (#1249). `exportPath` is the export's name, or a dotted path into one
+     * (`OneTabletKey.TX_ID`, a class's `static readonly` or an object's property).
+     *
+     * @throws ApiDocExtractionError naming the export when it is missing or cannot be followed to a
+     *   `ContextKey.trusted(...)` / `ContextKey.untrusted(...)` call declaring that header.
+     */
+    extractContextKeyHeader(
+        entryFile: string,
+        exportPath: string,
+        slot: ContextKeyHeaderSlot,
+        compilerOptions: ts.CompilerOptions = {},
+    ): string {
+        const program = ts.createProgram([entryFile], compilerOptions);
+        const source = program.getSourceFile(entryFile);
+        if (source === undefined) {
+            throw new ApiDocExtractionError(
+                'entry file is not part of the program',
+                entryFile,
+                'Pass an absolute path to a .ts file that exists.',
+            );
+        }
+        const checker = program.getTypeChecker();
+        const symbol = this.exportedMember(checker, source, exportPath);
+        if (symbol === undefined) {
+            throw new ApiDocExtractionError(
+                `'${exportPath}' is not exported by this file`,
+                entryFile,
+                `Export the ContextKey there — e.g. \`export const ${exportPath.split('.')[0]} = MyKeys.SOME_KEY;\` — ` +
+                    'or name the file that does.',
+            );
+        }
+        return new ContextKeyHeaderFolder(new ConstantFolder(checker)).foldSymbol(
+            symbol,
+            exportPath,
+            entryFile,
+            slot,
+            'the manifest response header',
+        );
+    }
+
+    /** `A` or `A.B.C`: the export `A`, then each property of its value in turn. */
+    private exportedMember(
+        checker: ts.TypeChecker,
+        source: ts.SourceFile,
+        exportPath: string,
+    ): ts.Symbol | undefined {
+        const moduleSymbol = checker.getSymbolAtLocation(source);
+        if (moduleSymbol === undefined) {
+            return undefined;
+        }
+        const segments = exportPath.split('.');
+        let symbol: ts.Symbol | undefined = checker
+            .getExportsOfModule(moduleSymbol)
+            .find((exported: ts.Symbol) => exported.name === segments[0]);
+        for (const segment of segments.slice(1)) {
+            if (symbol === undefined) {
+                return undefined;
+            }
+            const unaliased =
+                (symbol.flags & ts.SymbolFlags.Alias) !== 0 ? checker.getAliasedSymbol(symbol) : symbol;
+            symbol = checker.getTypeOfSymbolAtLocation(unaliased, source).getProperty(segment);
+        }
+        return symbol;
+    }
+
     /** A DTO library's exported types, for its components document (#1058). */
     extractComponents(
         entryFiles: readonly string[],
@@ -524,7 +592,7 @@ export class ApiDocExtractor {
     }
 
     /**
-     * `apiKey(regime, [{in: 'header', name: 'x-api-key', description: '…'}, …])`, parsed.
+     * `apiKey(regime, [{in: 'header', key: MyKeys.API_KEY, description: '…'}, …])`, parsed.
      *
      * A malformed declaration FAILS rather than yielding a half-parsed regime: the credentials are
      * what a published document's security block is made of, and a document that silently omitted
@@ -538,7 +606,7 @@ export class ApiDocExtractor {
             throw new ApiDocExtractionError(
                 'apiKey(...) needs a regime AND its credentials',
                 SourceLocation.of(call),
-                "Write both: apiKey('partner', [{ in: 'header', name: 'x-api-key' }]).",
+                "Write both: apiKey('partner', [{ in: 'header', key: MyKeys.API_KEY }]).",
             );
         }
         const regime = folder.foldString(regimeArgument, 'apiKey(...) regime');
@@ -571,7 +639,7 @@ export class ApiDocExtractor {
             throw new ApiDocExtractionError(
                 'an apiKey(...) credential is not an object literal',
                 SourceLocation.of(element),
-                "Write it inline: { in: 'header', name: 'x-api-key' }.",
+                "Write it inline: { in: 'header', key: MyKeys.API_KEY }.",
             );
         }
         const location = ApiDocExtractor.stringProperty(element, 'in', folder);
@@ -579,13 +647,42 @@ export class ApiDocExtractor {
             throw new ApiDocExtractionError(
                 'an apiKey(...) credential declares no `in`',
                 SourceLocation.of(element),
-                "Say where it rides: `in: 'header'` with a name, or `in: 'bearer'`.",
+                "Say where it rides: `in: 'header'` with its ContextKey, or `in: 'bearer'`.",
             );
         }
         return new DocumentedApiKeyCredential(
             location,
-            ApiDocExtractor.stringProperty(element, 'name', folder),
+            ApiDocExtractor.headerOf(element, location, folder),
             ApiDocExtractor.stringProperty(element, 'description', folder),
+        );
+    }
+
+    /**
+     * A header credential's wire name, read off the ContextKey its `key` names (#1249) — never a
+     * string. Undefined for any other location, which {@link SecurityDeriver}-style renderers judge.
+     */
+    // webpieces-disable no-function-outside-class -- private static reader of this class
+    private static headerOf(
+        element: ts.ObjectLiteralExpression,
+        location: string,
+        folder: ConstantFolder,
+    ): string | undefined {
+        if (location !== 'header') {
+            return undefined;
+        }
+        const key = ApiDocExtractor.findProperty(element, 'key');
+        if (key === undefined) {
+            throw new ApiDocExtractionError(
+                "a header apiKey(...) credential names no ContextKey in 'key'",
+                SourceLocation.of(element),
+                "Name the ContextKey carrying it: { in: 'header', key: MyKeys.API_KEY }. The header-name " +
+                    'string spelling (`name:`) is deleted; the key is the one definition of the header.',
+            );
+        }
+        return new ContextKeyHeaderFolder(folder).fold(
+            key,
+            ContextKeyHeaderSlot.REQUEST,
+            "the apiKey(...) header credential's key",
         );
     }
 

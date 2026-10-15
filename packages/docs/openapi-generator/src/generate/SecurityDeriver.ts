@@ -108,15 +108,17 @@ export class SecurityDeriver {
             throw new OpenApiGenerationError(
                 `unknown api-key credential location '${credential.location}'`,
                 manifestPath,
-                "A credential rides `in: 'header'` with a name, or `in: 'bearer'`.",
+                "A credential rides `in: 'header'` with its ContextKey, or `in: 'bearer'`.",
             );
         }
+        // The extractor reads the name off the credential's ContextKey and refuses, quoting the key,
+        // when it cannot — so a model reaching here without one was built by hand, not extracted.
         if (credential.name === undefined) {
             throw new OpenApiGenerationError(
-                'a header api-key credential declares no header name',
+                'a header api-key credential reached the generator with no resolved header name',
                 manifestPath,
-                "Write `{ in: 'header', name: 'x-api-key' }`; a header credential with no name " +
-                    'is unusable and cannot be published.',
+                "Declare it as `{ in: 'header', key: MyKeys.API_KEY }` and let the extractor read the " +
+                    "header name off that ContextKey's httpHeader.",
             );
         }
         return new JsonObject()

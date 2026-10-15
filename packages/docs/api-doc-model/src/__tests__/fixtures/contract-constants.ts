@@ -1,4 +1,5 @@
 /* eslint-disable */
+import { ContextKey } from '@webpieces/core-util';
 /**
  * FIXTURE SUPPORT. Excluded from `tsconfig.lib.json`, so it ships in no build.
  *
@@ -16,3 +17,27 @@
  * so the suite exercises constant FOLDING across an import.
  */
 export const SAVE_PATH = '/save';
+
+/**
+ * A typed context-key REGISTRY, the shape real consumers keep (#1249): every header is defined ONCE
+ * as a ContextKey and every surface names the key. The extractor follows `PartnerKeys.API_KEY`,
+ * across this import, into the factory call and reads its `httpHeader` — here itself a folded
+ * constant.
+ */
+const API_KEY_HEADER = 'x-api-key';
+
+export class PartnerKeys {
+    static readonly API_KEY = ContextKey.untrusted<string>('apiKey', API_KEY_HEADER, true);
+    static readonly ORG_ID = ContextKey.trusted<string>(
+        'organizationId',
+        'the api-key hook proves the key acts for this organization',
+        'x-organization-id',
+    );
+    /** Context-only: no httpHeader, so it can never name a header credential. */
+    static readonly IN_PROCESS = ContextKey.untrusted<string>('inProcess');
+}
+
+/** The same keys reached through an object-literal registry instead of a class. */
+export const PartnerKeyTable = {
+    ORG_ID: PartnerKeys.ORG_ID,
+} as const;

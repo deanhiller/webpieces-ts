@@ -7,7 +7,7 @@ import { WpAuthorization, AuthorizationType, WpAuth, jwt as jwtAuth, apiKey as a
  * from the signatures it exists to exercise.
  */
 import { ApiPath, ApiType, CLOUDTASKS, CRON, Endpoint, EXTERNAL, EXTERNAL_CUSTOMER, GET, Integer, MaskLog, MCP, POST, READ, RPC, SVC_TO_SVC, WRITE, WpAuthPublic, WpInt, WpMax, WpMcpTool, WpMin } from '@webpieces/core-util';
-import { SAVE_PATH } from './contract-constants';
+import { PartnerKeys, PartnerKeyTable, SAVE_PATH } from './contract-constants';
 
 /** A string-literal union with a NAME — becomes one enum entry a renderer can `$ref`. */
 export type Color = 'red' | 'green' | 'blue';
@@ -240,8 +240,9 @@ export class ExampleApi {
      */
     @Endpoint(POST, '/lookup', READ, RPC)
     @WpAuth([apiKeyAuth('partner', [
-        { in: 'header', name: 'x-api-key', description: 'Your partner key.' },
-        { in: 'bearer', description: 'The organization the key acts for.' },
+        { in: 'header', key: PartnerKeys.API_KEY, description: 'Your partner key.' },
+        { in: 'header', key: PartnerKeyTable.ORG_ID!, description: 'The organization the key acts for.' },
+        { in: 'bearer', description: 'A session token for the same partner.' },
     ])])
     @WpAuthorization({ authType: AuthorizationType.USERS_OR_SERVICES })
     lookup(request: LookupRequest): Promise<void> {

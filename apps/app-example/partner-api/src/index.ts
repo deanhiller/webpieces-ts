@@ -6,7 +6,8 @@
  * fixtures: `src/__tests__/openapi-golden.spec.ts` regenerates and diffs against them, so a
  * generator change that moves what it emits is a red test rather than a silent republish.
  */
-export { REQUEST_ID_HEADER } from './ResponseHeaders';
+export { REQUEST_ID_KEY } from './ResponseHeaders';
+export { PartnerHeaderKeys } from './PartnerHeaderKeys';
 export type { ApiErrorResponse } from './ApiErrors';
 export { PartnerOrdersApi } from './PartnerOrdersApi';
 export type {

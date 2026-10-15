@@ -196,20 +196,23 @@ export class DocumentedMcpTool {
 }
 
 /**
- * ONE credential of an api-key regime, PARSED — `{ in: 'header', name: 'x-api-key' }` or
+ * ONE credential of an api-key regime, PARSED — `{ in: 'header', key: MyKeys.API_KEY }` or
  * `{ in: 'bearer' }`.
  *
  * Parsed rather than left as source text because it is the one auth argument a renderer must turn
  * into a STRUCTURE: an OpenAPI `securityScheme` is `{type: apiKey, in, name}` or
  * `{type: http, scheme: bearer}`, and those are different documents. A renderer handed the string
- * `"{ in: 'header', name: 'x-api-key' }"` would have to parse TypeScript to emit either one, which
+ * `"{ in: 'header', key: MyKeys.API_KEY }"` would have to parse TypeScript to emit either one, which
  * is this package's job and not a renderer's.
  */
 export class DocumentedApiKeyCredential {
     constructor(
         /** `header` or `bearer`, verbatim from the declaration. */
         readonly location: string,
-        /** The header name. Undefined for `bearer`, whose location IS `Authorization`. */
+        /**
+         * The header name, read off the `httpHeader` of the ContextKey the credential's `key` names
+         * (#1249). Undefined for `bearer`, whose location IS `Authorization`.
+         */
         readonly name: string | undefined,
         /** The prose a docs site renders on its authorization card. */
         readonly description: string | undefined,
