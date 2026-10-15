@@ -1,5 +1,6 @@
 import * as ts from 'typescript';
 import { ApiDocExtractionError } from './ApiDocExtractionError';
+import { CompiledKeyDefinitions } from './CompiledKeyDefinitions';
 import { ConstantFolder } from './ConstantFolder';
 import { SourceLocation } from './SourceLocation';
 
@@ -57,6 +58,8 @@ const ARGUMENT_INDEX: ReadonlyMap<string, ReadonlyMap<ContextKeyHeaderSlot, numb
  * the running hook demands.
  */
 export class ContextKeyHeaderFolder {
+    private readonly compiled = new CompiledKeyDefinitions();
+
     constructor(private readonly folder: ConstantFolder) {}
 
     /**
@@ -67,6 +70,13 @@ export class ContextKeyHeaderFolder {
      */
     fold(expression: ts.Expression, slot: ContextKeyHeaderSlot, what: string): string {
         const definition = this.folder.follow(expression);
+        if (!ts.isCallExpression(definition)) {
+            // Followed as far as source goes: a key from a PUBLISHED package stops at its `.d.ts`.
+            const published = this.publishedDefinition(this.folder.symbolOf(definition));
+            if (published !== undefined) {
+                return this.foldPublished(published, expression.getText(), slot, what);
+            }
+        }
         return this.foldDefinition(definition, expression.getText(), expression, slot, what);
     }
 
@@ -83,9 +93,87 @@ export class ContextKeyHeaderFolder {
     ): string {
         const initializer = this.folder.initializerOf(symbol);
         if (initializer === undefined) {
+            const published = this.publishedDefinition(symbol);
+            if (published !== undefined) {
+                return this.foldPublished(published, written, slot, what);
+            }
             throw this.unresolvable(written, where, what);
         }
-        return this.foldDefinition(this.folder.follow(initializer), written, initializer, slot, what);
+        const definition = this.folder.follow(initializer);
+        if (!ts.isCallExpression(definition)) {
+            const published = this.publishedDefinition(this.folder.symbolOf(definition));
+            if (published !== undefined) {
+                return this.foldPublished(published, written, slot, what);
+            }
+        }
+        return this.foldDefinition(definition, written, initializer, slot, what);
+    }
+
+    /**
+     * The definition a `.d.ts` declaration lost, read from its compiled `.js` sibling — see
+     * {@link CompiledKeyDefinitions}. Undefined when the symbol is not declared in a `.d.ts`.
+     */
+    private publishedDefinition(symbol: ts.Symbol | undefined): ts.Expression | undefined {
+        for (const declaration of symbol?.declarations ?? []) {
+            const initializer = this.compiled.initializerOf(declaration);
+            if (initializer !== undefined) {
+                return initializer;
+            }
+        }
+        return undefined;
+    }
+
+    /**
+     * Fold a definition read from COMPILED JavaScript. Those nodes are outside the checker's
+     * program, so nothing here asks the checker: the factory is recognised by its spelling
+     * (`<anything>.ContextKey.untrusted(...)`, the shape tsc emits for an import) and the header must
+     * be a string literal in the compiled call; anything else is refused quoting the compiled text.
+     */
+    private foldPublished(definition: ts.Expression, written: string, slot: ContextKeyHeaderSlot, what: string): string {
+        const factory = ts.isCallExpression(definition) ? this.publishedFactoryOf(definition) : undefined;
+        if (factory === undefined || !ts.isCallExpression(definition)) {
+            throw this.unresolvable(written, definition.getSourceFile().fileName, what);
+        }
+        const argument = definition.arguments[ARGUMENT_INDEX.get(factory)!.get(slot)!];
+        if (argument === undefined || this.isUndefined(argument)) {
+            throw this.noHeader(written, definition, factory, slot, what);
+        }
+        if (!ts.isStringLiteralLike(argument) || argument.text.trim() === '') {
+            throw new ApiDocExtractionError(
+                `${what} '${written}': the ${slot} of its published ContextKey is not a string literal: '${argument.getText()}'`,
+                SourceLocation.of(argument),
+                "Write the header name as a string literal in the key's ContextKey.trusted(...) / " +
+                    'ContextKey.untrusted(...) call in the package that defines it.',
+            );
+        }
+        return argument.text;
+    }
+
+    private publishedFactoryOf(call: ts.CallExpression): string | undefined {
+        const callee = call.expression;
+        if (!ts.isPropertyAccessExpression(callee) || !ARGUMENT_INDEX.has(callee.name.text)) {
+            return undefined;
+        }
+        const owner = callee.expression;
+        const named =
+            (ts.isIdentifier(owner) && owner.text === CONTEXT_KEY) ||
+            (ts.isPropertyAccessExpression(owner) && owner.name.text === CONTEXT_KEY);
+        return named ? callee.name.text : undefined;
+    }
+
+    private noHeader(
+        written: string,
+        definition: ts.Node,
+        factory: string,
+        slot: ContextKeyHeaderSlot,
+        what: string,
+    ): ApiDocExtractionError {
+        return new ApiDocExtractionError(
+            `${what} '${written}' is a ContextKey that declares no ${slot}`,
+            SourceLocation.of(definition),
+            `Give the key its ${slot} in its ContextKey.${factory}(...) definition — a key with no ` +
+                'header name never crosses the wire, so it cannot be documented as one.',
+        );
     }
 
     private foldDefinition(
@@ -102,12 +190,7 @@ export class ContextKeyHeaderFolder {
         const index = ARGUMENT_INDEX.get(factory)!.get(slot)!;
         const argument = definition.arguments[index];
         if (argument === undefined || this.isUndefined(argument)) {
-            throw new ApiDocExtractionError(
-                `${what} '${written}' is a ContextKey that declares no ${slot}`,
-                SourceLocation.of(definition),
-                `Give the key its ${slot} in its ContextKey.${factory}(...) definition — a key with no ` +
-                    'header name never crosses the wire, so it cannot be documented as one.',
-            );
+            throw this.noHeader(written, definition, factory, slot, what);
         }
         const header = this.folder.tryFoldString(argument);
         if (header === undefined || header.trim() === '') {
@@ -125,9 +208,10 @@ export class ContextKeyHeaderFolder {
         return new ApiDocExtractionError(
             `cannot statically resolve ${what} '${written}' to a ContextKey.trusted(...) / ContextKey.untrusted(...) definition`,
             where,
-            'Reference a ContextKey declared in source — a `const`, an object property, or a class ' +
-                "`static readonly` — initialised directly by ContextKey.trusted(...) or ContextKey.untrusted(...). " +
-                'A key only known at runtime (or only as a .d.ts declaration) has no header name a document can read.',
+            'Reference a ContextKey declared as a `const`, an object property, or a class `static readonly` ' +
+                'initialised directly by ContextKey.trusted(...) or ContextKey.untrusted(...) — in source, or in ' +
+                'a published package whose compiled .js ships beside its .d.ts. A key only known at runtime ' +
+                'has no header name a document can read.',
         );
     }
 

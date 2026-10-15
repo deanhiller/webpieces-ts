@@ -133,7 +133,8 @@ never reads, and nothing could contradict it.
 `ContextKey.trusted(...)` / `ContextKey.untrusted(...)`, and every surface names that key:
 
 - an api-key credential is `{ in: 'header', key: MyKeys.API_KEY }` — the generator follows the key
-  (through imports, `!`, `as`, a class's `static readonly` or an object's property) to its factory
+  (through imports, `!`, `as`, a class's `static readonly` or an object's property — and, for a key
+  from a published package, into the compiled `.js` beside its `.d.ts`) to its factory
   call and reads its `httpHeader`;
 - `responseHeaders[].contextKey` names an exported ContextKey in `entry` — the export, or a dotted
   path into one (`"OneTabletKey.TX_ID"`) — and the generator reads its `responseHeader`. The old
