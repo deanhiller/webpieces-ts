@@ -51,11 +51,13 @@ abstract class SharedSecretApi {
     }
 }
 
+const PARTNER_API_KEY = ContextKey.untrusted<string>('partnerApiKey', 'x-api-key', true);
+
 @Rpc()
 @ApiPath('/management/v1')
 abstract class ApiKeyApi {
     @Endpoint(POST, '/orders', READ, RPC)
-    @WpAuth([apiKeyAuth('onetablet-partner', [{ in: 'header', name: 'x-api-key' }])])
+    @WpAuth([apiKeyAuth('onetablet-partner', [{ in: 'header', key: PARTNER_API_KEY }])])
     @WpAuthorization({ authType: AuthorizationType.USERS_OR_SERVICES })
     // webpieces-disable no-unmanaged-exceptions -- abstract contract stub, never executed
     listOrders(_request: SaveRequest): Promise<void> {

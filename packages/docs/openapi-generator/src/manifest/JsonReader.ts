@@ -83,6 +83,23 @@ export class JsonReader {
         return typeof value === 'string' && value !== '' ? value : undefined;
     }
 
+    /** A boolean, or undefined when the field is absent. Anything else present is refused. */
+    optionalBoolean(field: string): boolean | undefined {
+        // webpieces-disable no-any-unknown -- the raw entry, narrowed below
+        const value: unknown = this.entries.get(field);
+        if (value === undefined) {
+            return undefined;
+        }
+        if (typeof value !== 'boolean') {
+            throw new OpenApiGenerationError(
+                `'${field}' is not a boolean`,
+                this.where,
+                `Write "${field}" as true or false, or leave it out.`,
+            );
+        }
+        return value;
+    }
+
     /** An array of strings, empty when the field is absent. */
     strings(field: string): readonly string[] {
         // webpieces-disable no-any-unknown -- the raw entry, narrowed below

@@ -4,6 +4,7 @@ import * as ts from 'typescript';
 import {
     ApiComponentsModel,
     ApiDocExtractor,
+    ContextKeyHeaderSlot,
     DocumentedType,
     PackageOfFile,
     SchemaNames,
@@ -24,7 +25,6 @@ import {
     UpstreamComponentsIndex,
 } from '../generate/UpstreamComponents';
 import { ComponentsLocator } from './ComponentsLocator';
-import { ExportedConstantFolder } from './ExportedConstantFolder';
 import { ForeignFailure } from './ForeignFailure';
 
 /** A `path/to/File.ts:12:5` location's FILE. */
@@ -59,7 +59,6 @@ const FALLBACK_OPTIONS: ts.CompilerOptions = {
  */
 export class InputsLoader {
     private readonly manifests = new ManifestLoader();
-    private readonly constants = new ExportedConstantFolder();
     private extractor = new ApiDocExtractor();
     private readonly packages = new PackageOfFile();
     private readonly locator = new ComponentsLocator();
@@ -269,10 +268,23 @@ export class InputsLoader {
     ): readonly ResolvedResponseHeader[] {
         return manifest.responseHeaders.map((header: ResponseHeaderEntry) => {
             const file = this.manifests.resolve(manifestPath, header.entry);
-            return new ResolvedResponseHeader(
-                this.constants.fold(file, header.nameConstant),
-                header.description,
-            );
+            this.mustExist(file, header.entry, manifestPath);
+            // eslint-disable-next-line @webpieces/no-unmanaged-exceptions -- re-thrown as the ONE error type of this package
+            try {
+                return new ResolvedResponseHeader(
+                    this.extractor.extractContextKeyHeader(
+                        file,
+                        header.contextKey,
+                        ContextKeyHeaderSlot.RESPONSE,
+                        this.options,
+                    ),
+                    header.description,
+                    header.required,
+                );
+            } catch (err: unknown) {
+                //const error = toError(err);
+                throw this.rethrow(err, file);
+            }
         });
     }
 

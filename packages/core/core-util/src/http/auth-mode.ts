@@ -1,6 +1,19 @@
+import type { AnyContextKey } from '../ContextKey';
+
+/**
+ * WHERE one api-key credential rides.
+ *
+ * A header credential names the {@link AnyContextKey ContextKey} that carries it — NEVER a header-name
+ * string. The key's `httpHeader` is the wire name, so the ONE definition of each header (the
+ * ContextKey) is reused on every surface: `RequestContext` put/get, the client/server header
+ * transfer, this declaration, and the published OpenAPI document. A string here was a second copy a
+ * rename left stale (#1249). The key MUST declare an `httpHeader` — {@link AuthDeclaration} refuses
+ * one that does not, and the OpenAPI generator reads the header name off the key's
+ * `ContextKey.trusted(...)` / `ContextKey.untrusted(...)` definition.
+ */
 export type ApiKeyCredential =
-    | { in: 'header'; name: string; description?: string }
-    | { in: 'bearer'; name?: never; description?: string };
+    | { in: 'header'; key: AnyContextKey; description?: string }
+    | { in: 'bearer'; key?: never; description?: string };
 
 export type ApiKeyCredentials = readonly [ApiKeyCredential, ...ApiKeyCredential[]];
 
@@ -77,14 +90,31 @@ export class AuthDeclaration {
                 this.requireText(method.regime, 'apiKey');
                 if (!Array.isArray(method.credentials) || !method.credentials.length) throw new Error('apiKey(...) requires a nonempty credentials tuple.');
                 for (const credential of method.credentials) {
-                    if (credential.in === 'header') this.requireText(credential.name, 'apiKey header');
-                    else if (credential.in !== 'bearer' || Object.hasOwn(credential, 'name')) throw new Error('Invalid API-key credential location.');
+                    if (credential.in === 'header') this.requireHeaderKey(credential.key);
+                    else if (credential.in !== 'bearer' || Object.hasOwn(credential, 'key')) throw new Error('Invalid API-key credential location.');
                 }
                 break;
             default: throw new Error('Unknown @WpAuth method; use jwt/oidc/sharedSecret/webhook/apiKey descriptors.');
         }
         for (const key of Object.keys(method)) {
             if (!keys.includes(key)) throw new Error(`Auth method rejects '${key}'; operation policy belongs in @WpAuthorization.`);
+        }
+    }
+
+    /**
+     * A header credential's key must be a ContextKey that rides the wire. `httpHeader` is optional on
+     * ContextKey itself (most keys never leave the process), and the factories' explicit value-type
+     * argument (`ContextKey.untrusted<string>(...)`) stops TypeScript inferring whether one was
+     * passed, so the type cannot say "a key WITH a header". It is checked once, when the contract is
+     * decorated, and the OpenAPI generator refuses the same key statically.
+     */
+    // webpieces-disable no-function-outside-class -- stateless contract validation or scope metadata reader used before DI registration
+    private static requireHeaderKey(key: AnyContextKey | undefined): void {
+        if (!key || typeof key !== 'object' || typeof key.name !== 'string') {
+            throw new Error("apiKey header credential requires `key`: the ContextKey carrying it, e.g. { in: 'header', key: MyKeys.API_KEY }.");
+        }
+        if (typeof key.httpHeader !== 'string' || !key.httpHeader.trim()) {
+            throw new Error(`apiKey header credential key '${key.name}' declares no httpHeader; define it with ContextKey.trusted(name, provenance, '<header>') or ContextKey.untrusted(name, '<header>').`);
         }
     }
 

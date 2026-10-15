@@ -7,6 +7,7 @@ import {
     ApiUnauthorizedError,
     AuthMeta,
     AuthMode,
+    ContextKey,
     ContextTuple,
     RouteMetadata,
     Service,
@@ -131,7 +132,7 @@ describe('AuthFilter stamps SURFACE from the auth mode that matched', () => {
         await runFilter(next, {
             kind: 'apikey',
             regime: 'partner',
-            credentials: [{ in: 'header', name: 'x-api-key' }],
+            credentials: [{ in: 'header', key: ContextKey.untrusted<string>('apiKey', 'x-api-key', true) }],
         });
 
         expect(next.invoked).toBe(true);

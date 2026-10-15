@@ -11,6 +11,7 @@
 export { ApiDocExtractor } from './extract/ApiDocExtractor';
 export { SchemaNames, SchemaNameEntry } from './model/SchemaNames';
 export { ApiDocExtractionError } from './extract/ApiDocExtractionError';
+export { ContextKeyHeaderSlot } from './extract/ContextKeyHeaderFolder';
 export { DeclaringPackage, PackageOfFile } from './extract/PackageOfFile';
 export {
     ApiComponentsModel,

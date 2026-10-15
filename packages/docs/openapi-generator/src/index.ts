@@ -56,7 +56,6 @@ export {
 } from './generate/UpstreamComponents';
 export { ComponentsLocator, LocatedComponents } from './load/ComponentsLocator';
 export { SecurityDeriver } from './generate/SecurityDeriver';
-export { ExportedConstantFolder } from './load/ExportedConstantFolder';
 export { ForeignFailure } from './load/ForeignFailure';
 export { InputsLoader } from './load/InputsLoader';
 export { ArtifactWriter, GeneratedArtifact } from './emit/ArtifactWriter';

@@ -7,5 +7,21 @@
             "tag": "Mixed"
         }
     ],
-    "securitySchemeNames": ["MixedKey"]
+    "securitySchemeNames": ["MixedKey"],
+    "errorsWhy": "401 requiresAuth: a public endpoint cannot fail authentication, so it is left off the public ping and kept on the api-key secret. 400 states nothing, so it is on every operation.",
+    "errors": {
+        "entry": "Errors.ts",
+        "type": "ApiError",
+        "responses": [
+            {
+                "status": "400",
+                "description": "The request failed validation."
+            },
+            {
+                "status": "401",
+                "description": "The api key is missing or not valid.",
+                "requiresAuth": true
+            }
+        ]
+    }
 }

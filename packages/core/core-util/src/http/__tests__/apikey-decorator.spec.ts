@@ -1,8 +1,8 @@
 import { WpAuthorization, AuthorizationType, WpAuth, apiKey as apiKeyAuth } from '@webpieces/core-util';
 import 'reflect-metadata';
 import { describe, it, expect } from 'vitest';
-import { ApiPath, DestinationTrust, Endpoint, ContextKey, MISSING_AUTH_DECORATOR_FIX, WpAuthPublic, assertEveryEndpointHasAuthMode, getAuthMeta, POST, READ, RPC, WRITE } from '../../index';
-import type { ApiKeyCredential, AuthMode } from '../../index';
+import { ApiPath, AuthMeta, DestinationTrust, Endpoint, ContextKey, MISSING_AUTH_DECORATOR_FIX, WpAuthPublic, assertEveryEndpointHasAuthMode, getAuthMeta, POST, READ, RPC, WRITE } from '../../index';
+import type { ApiKeyCredential, ApiKeyCredentials, AuthMode } from '../../index';
 
 /**
  * The CONTRACT half of `@WpAuthApiKey` (the enforcement half is pinned in http-routing's
@@ -18,11 +18,17 @@ import type { ApiKeyCredential, AuthMode } from '../../index';
  * The credential list is what a spec generator reads. This one is the REAL Management API shape: a key
  * AND the organization id it acts for, validated together by the hook, ANDed in the published document.
  */
+class PartnerKeys {
+    static readonly API_KEY = ContextKey.untrusted<string>('apiKey', 'x-api-key', true);
+    static readonly ORG_ID = ContextKey.untrusted<string>('organizationId', 'x-organization-id');
+    static readonly NO_HEADER = ContextKey.untrusted<string>('inProcessOnly');
+}
+
 const MANAGEMENT_CREDENTIALS = [
-    { in: 'header', name: 'x-api-key', description: 'The key issued to your integration.' },
+    { in: 'header', key: PartnerKeys.API_KEY, description: 'The key issued to your integration.' },
     {
         in: 'header',
-        name: 'x-organization-id',
+        key: PartnerKeys.ORG_ID,
         description: 'Which of your organizations to act on.',
     },
 ] as const;
@@ -115,6 +121,23 @@ describe('@WpAuthApiKey declares a customer-key posture on the contract', () => 
             return TwoModesApi;
         }).toThrow(/@WpAuth\(\[\.\.\.\]\)/);
     });
+
+    /**
+     * A header credential names a ContextKey (#1249), and that key must actually ride the wire: a
+     * context-only key has no header name for the hook to read or a document to publish.
+     */
+    it('refuses a header credential whose ContextKey declares no httpHeader, naming the key', () => {
+        const method = apiKeyAuth('onetablet-partner', [{ in: 'header', key: PartnerKeys.NO_HEADER }]);
+        expect(() => new AuthMeta([method], undefined)).toThrow(/key 'inProcessOnly' declares no httpHeader.*ContextKey\.untrusted\(name, '<header>'\)/);
+    });
+
+    it('refuses a header credential still written with the deleted `name:` string spelling', () => {
+        // webpieces-disable no-any-unknown -- deliberately forges the deleted shape the type no longer admits, to pin the runtime refusal a JS caller would hit
+        const legacy = [{ in: 'header', name: 'x-api-key' }] as unknown as ApiKeyCredentials;
+        expect(() => new AuthMeta([apiKeyAuth('onetablet-partner', legacy)], undefined)).toThrow(
+            /requires `key`: the ContextKey carrying it/,
+        );
+    });
 });
 
 /**
@@ -130,7 +153,7 @@ describe('DestinationTrust classifies apikey as NOT caller-verifying (trusted ke
     const APIKEY_MODE: AuthMode = {
         kind: 'apikey',
         regime: 'onetablet-partner',
-        credentials: [{ in: 'header', name: 'x-api-key' }],
+        credentials: [{ in: 'header', key: PartnerKeys.API_KEY }],
     };
     const USER_ID = ContextKey.trusted<string>('userId', 'jwt claim `sub`', 'x-user-id');
     const TENANT = ContextKey.untrusted<string>('tenantId', 'x-tenant-id');
@@ -170,10 +193,10 @@ describe('the auth metadata a spec generator reads off a contract', () => {
         expect(mode.regime).toBe('onetablet-partner');
         // ORDER is significant: it is the order the credentials appear in the published document.
         expect(mode.credentials).toEqual([
-            { in: 'header', name: 'x-api-key', description: 'The key issued to your integration.' },
+            { in: 'header', key: PartnerKeys.API_KEY, description: 'The key issued to your integration.' },
             {
                 in: 'header',
-                name: 'x-organization-id',
+                key: PartnerKeys.ORG_ID,
                 description: 'Which of your organizations to act on.',
             },
         ]);
@@ -189,7 +212,7 @@ describe('the auth metadata a spec generator reads off a contract', () => {
         if (mode?.kind !== 'apikey') throw new Error(`expected an apikey mode, got ${mode?.kind}`);
 
         expect(mode.credentials).toHaveLength(2);
-        const headerNames = mode.credentials.map((c: ApiKeyCredential) => c.name);
+        const headerNames = mode.credentials.map((c: ApiKeyCredential) => c.key?.httpHeader);
         expect(headerNames).toEqual(['x-api-key', 'x-organization-id']);
     });
 
@@ -205,7 +228,7 @@ describe('the auth metadata a spec generator reads off a contract', () => {
         expect(mode.credentials).toEqual([
             { in: 'bearer', description: 'Send the tooling key as a bearer token.' },
         ]);
-        expect(mode.credentials[0].name).toBeUndefined();
+        expect(mode.credentials[0].key).toBeUndefined();
     });
 
     /**
@@ -215,7 +238,8 @@ describe('the auth metadata a spec generator reads off a contract', () => {
      */
     it('the missing-auth prescription teaches the credential list, not the deleted one-arg form', () => {
         expect(MISSING_AUTH_DECORATOR_FIX).toContain(
-            "apiKey('regime', [{in: 'header', name: 'x-api-key'}])",
+            "apiKey('regime', [{in: 'header', key: MyKeys.API_KEY}])",
         );
+        expect(MISSING_AUTH_DECORATOR_FIX).not.toContain("name: 'x-api-key'");
     });
 });

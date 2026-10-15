@@ -135,12 +135,17 @@ describe('the contract itself', () => {
         // ORDER is the order a published document lists them in, so it is asserted.
         expect(apiKey?.credentials.map((c: DocumentedApiKeyCredential) => c.location)).toEqual([
             'header',
+            'header',
             'bearer',
         ]);
+        // The header name is READ OFF THE CONTEXTKEY the credential names (#1249): followed across
+        // an import into `PartnerKeys`' static factory call, whose httpHeader is itself a constant.
         expect(apiKey?.credentials[0]?.name).toBe('x-api-key');
         expect(apiKey?.credentials[0]?.description).toBe('Your partner key.');
+        // ...and through an object-literal registry plus a non-null assertion, `PartnerKeyTable.ORG_ID!`.
+        expect(apiKey?.credentials[1]?.name).toBe('x-organization-id');
         // `bearer` has no header name — its location IS `Authorization`, and a name there is a lie.
-        expect(apiKey?.credentials[1]?.name).toBeUndefined();
+        expect(apiKey?.credentials[2]?.name).toBeUndefined();
     });
 
     it('leaves `apiKey` unset for every other credential kind', () => {
@@ -358,6 +363,25 @@ describe('Integer and @WpInt are both accepted, and produce IDENTICAL model outp
 });
 
 describe('what FAILS the build rather than being guessed at', () => {
+    it('a header credential whose ContextKey declares no httpHeader, naming the key', () => {
+        const failure = harness.failureOf('HeaderlessKeyApi.ts');
+        expect(failure, 'a context-only key was published as a header').toBeDefined();
+        expect(failure!.message).toContain("'PartnerKeys.IN_PROCESS' is a ContextKey that declares no httpHeader");
+        expect(failure!.location).toMatch(/contract-constants\.ts:\d+:\d+$/);
+        expect(failure!.cure).toContain('ContextKey.untrusted(...)');
+    });
+
+    it('a header credential whose ContextKey cannot be resolved statically, QUOTING the expression', () => {
+        const failure = harness.failureOf('RuntimeKeyApi.ts');
+        expect(failure, 'a runtime key was accepted').toBeDefined();
+        expect(failure!.message).toContain(
+            "cannot statically resolve the apiKey(...) header credential's key 'keyAtRuntime()'",
+        );
+        // The old diagnosis pointed the author the wrong way: the credential DOES name a key.
+        expect(failure!.message).not.toContain('declares no header name');
+        expect(failure!.location).toMatch(/RuntimeKeyApi\.ts:\d+:\d+$/);
+    });
+
     it('a path that cannot be constant-folded', () => {
         const failure = harness.failureOf('UnfoldablePathApi.ts');
         expect(failure, 'a runtime path was accepted').toBeDefined();

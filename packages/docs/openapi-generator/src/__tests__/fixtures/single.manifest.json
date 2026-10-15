@@ -32,7 +32,8 @@
     "responseHeaders": [
         {
             "entry": "Headers.ts",
-            "nameConstant": "TRACE_HEADER",
+            "contextKey": "WidgetKeys.TRACE",
+            "required": false,
             "description": "Correlates this response with our logs."
         }
     ]

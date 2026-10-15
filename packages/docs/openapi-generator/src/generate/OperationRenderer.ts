@@ -11,6 +11,7 @@ import {
     WRITE_IDEMPOTENT,
 } from '@webpieces/core-util';
 import { JsonObject, JsonValue } from '../json/JsonObject';
+import { ErrorResponseEntry } from '../manifest/OpenApiManifest';
 import { SchemaRenderer } from './SchemaRenderer';
 
 /** What a webhook's `void` return means on the wire, said once. */
@@ -21,8 +22,8 @@ const ACKNOWLEDGE = 'Return any 2xx to acknowledge delivery. The body is ignored
 /** The response document, and the responses a document-wide failure contract adds to it. */
 export class ResponseContract {
     constructor(
-        /** Status -> description, from the manifest's `errors.responses`, in declared order. */
-        readonly errors: ReadonlyMap<string, string>,
+        /** The manifest's `errors.responses`, in declared order. */
+        readonly errors: readonly ErrorResponseEntry[],
         /** `$ref` at the error body schema, when the manifest declared one. */
         readonly errorSchemaRef: JsonObject | undefined,
         /** Header name -> its `components.headers` `$ref`, on every success response. */
@@ -270,8 +271,13 @@ export class OperationRenderer {
     ): JsonObject {
         const responses = new JsonObject();
         responses.set('200', this.success(endpoint, contractName, contract));
-        for (const status of Array.from(contract.errors.keys())) {
-            responses.set(status, this.failure(contract.errors.get(status)!, contract));
+        for (const error of contract.errors) {
+            // A failure only an AUTHENTICATED operation can have (a 401) is not one a public
+            // endpoint can return, so it is not documented there.
+            if (error.requiresAuth && this.isPublic(endpoint)) {
+                continue;
+            }
+            responses.set(error.status, this.failure(error.description, contract));
         }
         return responses;
     }

@@ -66,12 +66,16 @@ It carries exactly what is **not a property of the code**:
     "errors": {
         "entry": "src/ApiErrors.ts",
         "type": "ApiErrorResponse",
-        "responses": [{ "status": "400", "description": "The request failed validation." }]
+        "responses": [
+            { "status": "400", "description": "The request failed validation." },
+            { "status": "401", "description": "The api key is not valid.", "requiresAuth": true }
+        ]
     },
     "responseHeaders": [
         {
             "entry": "src/ResponseHeaders.ts",
-            "nameConstant": "REQUEST_ID_HEADER",
+            "contextKey": "REQUEST_ID_KEY",
+            "required": true,
             "description": "Correlates this response with our logs."
         }
     ]
@@ -125,9 +129,26 @@ For example: `{ "paths": ["published/**"], "suffixes": ["Dto", "Api"], "exempt":
 `securitySchemes` block in the manifest would be a second copy of header names the running server
 never reads, and nothing could contradict it.
 
-**`responseHeaders` names a CONSTANT, never a header string.** JSON cannot import, so a literal there
-is a copy that a rename leaves silently stale. The generator folds the const and hard-fails if it
-cannot.
+**Header names come from a `ContextKey`, never a string (#1249).** Each header is defined ONCE, as a
+`ContextKey.trusted(...)` / `ContextKey.untrusted(...)`, and every surface names that key:
+
+- an api-key credential is `{ in: 'header', key: MyKeys.API_KEY }` — the generator follows the key
+  (through imports, `!`, `as`, a class's `static readonly` or an object's property) to its factory
+  call and reads its `httpHeader`;
+- `responseHeaders[].contextKey` names an exported ContextKey in `entry` — the export, or a dotted
+  path into one (`"OneTabletKey.TX_ID"`) — and the generator reads its `responseHeader`. The old
+  `nameConstant` is refused with an error naming `contextKey`.
+
+JSON cannot import, so a literal there would be a copy that a rename leaves silently stale. When a
+key cannot be followed to its definition, or declares no such header, generation hard-fails QUOTING
+the expression.
+
+**`responseHeaders[].required`** is rendered verbatim on the header object; omitted, the document
+does not state it (OpenAPI reads that as `false`).
+
+**`errors.responses[].requiresAuth: true`** marks a failure only an authenticated operation can have
+(a 401): it is left off every operation whose auth is `@WpAuthPublic`. Omitted means `false` — the
+response is listed on every operation.
 
 ## DTO libraries: chained documents, one owner per schema (#1058)
 

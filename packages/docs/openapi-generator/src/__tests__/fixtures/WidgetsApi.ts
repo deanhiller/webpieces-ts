@@ -9,9 +9,10 @@ import { WpAuthorization, AuthorizationType, WpAuth, apiKey as apiKeyAuth } from
  * nothing about the thing it is a fixture FOR.
  */
 import { ApiPath, ApiType, Endpoint, EXTERNAL_CUSTOMER, MCP, POST, READ, RPC, SVC_TO_SVC, WRITE, WpMcpTool } from '@webpieces/core-util';
+import { WidgetKeys } from './Headers';
 
 const PARTNER_CREDENTIALS = [
-    { in: 'header', name: 'x-api-key', description: 'Your key.' },
+    { in: 'header', key: WidgetKeys.API_KEY!, description: 'Your key.' },
     { in: 'bearer', description: 'The organization token.' },
 ] as const;
 

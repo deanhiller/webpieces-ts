@@ -62,26 +62,64 @@ export class ConstantFolder {
             return expression;
         }
         seen.add(expression);
-        if (ts.isParenthesizedExpression(expression) || ts.isAsExpression(expression)) {
+        if (this.isTransparentWrapper(expression)) {
             return this.followThrough(expression.expression, seen);
         }
         if (!ts.isIdentifier(expression) && !ts.isPropertyAccessExpression(expression)) {
             return expression;
         }
-        const symbol = this.checker.getSymbolAtLocation(expression);
-        const resolved =
-            symbol !== undefined && (symbol.flags & ts.SymbolFlags.Alias) !== 0
-                ? this.checker.getAliasedSymbol(symbol)
-                : symbol;
-        for (const declaration of resolved?.declarations ?? []) {
+        const initializer = this.initializerOf(this.checker.getSymbolAtLocation(expression));
+        return initializer === undefined ? expression : this.followThrough(initializer, seen);
+    }
+
+    /**
+     * The initializer a symbol was DECLARED with — a `const`, an object-literal property, or a
+     * class's `static readonly` property — following an import alias first. Undefined when the
+     * declaration has none (a parameter, a `.d.ts` declaration, a `let` with no initializer).
+     */
+    initializerOf(symbol: ts.Symbol | undefined): ts.Expression | undefined {
+        for (const declaration of this.unaliased(symbol)?.declarations ?? []) {
             if (ts.isVariableDeclaration(declaration) && declaration.initializer) {
-                return this.followThrough(declaration.initializer, seen);
+                return declaration.initializer;
             }
             if (ts.isPropertyAssignment(declaration) && ts.isExpression(declaration.initializer)) {
-                return this.followThrough(declaration.initializer, seen);
+                return declaration.initializer;
+            }
+            if (ts.isPropertyDeclaration(declaration) && declaration.initializer) {
+                return declaration.initializer;
             }
         }
-        return expression;
+        return undefined;
+    }
+
+    /** The symbol a name denotes, with an import alias followed to what it imports. */
+    symbolOf(expression: ts.Expression): ts.Symbol | undefined {
+        return this.unaliased(this.checker.getSymbolAtLocation(expression));
+    }
+
+    private unaliased(symbol: ts.Symbol | undefined): ts.Symbol | undefined {
+        return symbol !== undefined && (symbol.flags & ts.SymbolFlags.Alias) !== 0
+            ? this.checker.getAliasedSymbol(symbol)
+            : symbol;
+    }
+
+    /**
+     * `(x)`, `x as T`, `x satisfies T` and `x!` all DENOTE `x` — none of them changes the value, so a
+     * reader looks straight through them. `Keys.ORG_ID.httpHeader!` is the everyday shape (#1249).
+     */
+    private isTransparentWrapper(
+        expression: ts.Expression,
+    ): expression is
+        | ts.ParenthesizedExpression
+        | ts.AsExpression
+        | ts.SatisfiesExpression
+        | ts.NonNullExpression {
+        return (
+            ts.isParenthesizedExpression(expression) ||
+            ts.isAsExpression(expression) ||
+            ts.isSatisfiesExpression(expression) ||
+            ts.isNonNullExpression(expression)
+        );
     }
 
     private tryFold(expression: ts.Expression, seen: Set<ts.Node>): string | undefined {
@@ -125,7 +163,7 @@ export class ConstantFolder {
             return this.foldThroughSymbol(expression, seen);
         }
 
-        if (ts.isParenthesizedExpression(expression) || ts.isAsExpression(expression)) {
+        if (this.isTransparentWrapper(expression)) {
             return this.tryFold(expression.expression, seen);
         }
 
@@ -134,22 +172,7 @@ export class ConstantFolder {
 
     /** Follow an identifier / `Obj.MEMBER` to its declaration's initializer and fold that. */
     private foldThroughSymbol(expression: ts.Expression, seen: Set<ts.Node>): string | undefined {
-        const symbol = this.checker.getSymbolAtLocation(expression);
-        const resolved =
-            symbol !== undefined && (symbol.flags & ts.SymbolFlags.Alias) !== 0
-                ? this.checker.getAliasedSymbol(symbol)
-                : symbol;
-        for (const declaration of resolved?.declarations ?? []) {
-            if (ts.isVariableDeclaration(declaration) && declaration.initializer) {
-                return this.tryFold(declaration.initializer, seen);
-            }
-            if (ts.isPropertyAssignment(declaration) && ts.isExpression(declaration.initializer)) {
-                return this.tryFold(declaration.initializer, seen);
-            }
-            if (ts.isPropertyDeclaration(declaration) && declaration.initializer) {
-                return this.tryFold(declaration.initializer, seen);
-            }
-        }
-        return undefined;
+        const initializer = this.initializerOf(this.checker.getSymbolAtLocation(expression));
+        return initializer === undefined ? undefined : this.tryFold(initializer, seen);
     }
 }

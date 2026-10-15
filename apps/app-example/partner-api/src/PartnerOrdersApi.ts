@@ -1,6 +1,7 @@
 import { WpAuthorization, AuthorizationType, WpAuth, apiKey as apiKeyAuth } from '@webpieces/core-util';
 import { ApiPath, ApiType, Endpoint, EXTERNAL_CUSTOMER, MCP, POST, READ, RPC, SVC_TO_SVC, WRITE, WpMcpTool } from '@webpieces/core-util';
 import { WindowedStoreRequest } from './OrderRequestBases';
+import { PartnerHeaderKeys } from './PartnerHeaderKeys';
 
 export class PartnerAccessPolicy {
     llmRoles!: readonly string[];
@@ -14,10 +15,10 @@ export class PartnerAccessPolicy {
  * this literal, which is why declaring it once costs the published document nothing.
  */
 const PARTNER_CREDENTIALS = [
-    { in: 'header', name: 'x-api-key', description: 'Your partner key.' },
+    { in: 'header', key: PartnerHeaderKeys.API_KEY, description: 'Your partner key.' },
     {
         in: 'header',
-        name: 'x-organization-id',
+        key: PartnerHeaderKeys.ORGANIZATION_ID,
         description: 'The organization the key acts for.',
     },
 ] as const;

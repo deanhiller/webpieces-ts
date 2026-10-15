@@ -355,18 +355,60 @@ describe('the document-wide error contract', () => {
     });
 });
 
-describe('the folded response header', () => {
-    it('folds `nameConstant` to the real header name and hangs it off every success response', () => {
+describe('the response header, read off its ContextKey', () => {
+    it("reads the header name off the named ContextKey's responseHeader and hangs it off every success response", () => {
         const published = harness.document(
             harness.run('single.manifest.json'),
             'public-openapi.json',
         );
-        // The manifest named TRACE_HEADER, never the string. A literal there would be a copy a
-        // rename leaves silently stale, in a file no compiler reads.
+        // The manifest named the KEY (`WidgetKeys.TRACE`, a dotted path into a class), never the
+        // string. A literal there would be a copy a rename leaves silently stale, in a file no
+        // compiler reads (#1249).
         expect(harness.at(published, 'components.headers.x-trace-id.schema.type')).toBe('string');
         expect(
             harness.at(published, 'paths./widgets/list.post.responses.200.headers.x-trace-id.$ref'),
         ).toBe('#/components/headers/x-trace-id');
+    });
+
+    it('renders the manifest `required` verbatim on the header object', () => {
+        const published = harness.document(
+            harness.run('single.manifest.json'),
+            'public-openapi.json',
+        );
+        expect(harness.at(published, 'components.headers.x-trace-id.required')).toBe(false);
+    });
+
+    it('REFUSES the retired `nameConstant`, naming its replacement', () => {
+        const failure = harness.failureOf('retired-name-constant.manifest.json');
+        expect(failure, 'the retired spelling was accepted').toBeDefined();
+        expect(failure!.message).toContain(
+            "'nameConstant' was removed from responseHeaders[]; it moved to 'contextKey'",
+        );
+    });
+
+    it('REFUSES a ContextKey that never rides a response, naming the key', () => {
+        const failure = harness.failureOf('request-only-header.manifest.json');
+        expect(failure, 'a request-only key was published as a response header').toBeDefined();
+        expect(failure!.message).toContain(
+            "'WidgetKeys.REQUEST_ONLY' is a ContextKey that declares no responseHeader",
+        );
+    });
+});
+
+describe('errors.responses[].requiresAuth', () => {
+    it('leaves an auth-only failure OFF a public operation and keeps it on an authenticated one', () => {
+        const published = harness.document(
+            harness.run('mixed.manifest.json'),
+            'full-private-openapi.json',
+        );
+        // A public endpoint cannot fail authentication, so its 401 would be a lie.
+        expect(harness.at(published, 'paths./mixed/ping.post.responses.401')).toBeUndefined();
+        expect(harness.at(published, 'paths./mixed/secret.post.responses.401.description')).toBe(
+            'The api key is missing or not valid.',
+        );
+        // A response that states nothing about auth is documented on EVERY operation.
+        expect(harness.at(published, 'paths./mixed/ping.post.responses.400')).toBeDefined();
+        expect(harness.at(published, 'paths./mixed/secret.post.responses.400')).toBeDefined();
     });
 });
 

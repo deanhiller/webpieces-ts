@@ -32,7 +32,8 @@
             },
             {
                 "status": "401",
-                "description": "The api key or the organization header is missing or not valid."
+                "description": "The api key or the organization header is missing or not valid.",
+                "requiresAuth": true
             },
             {
                 "status": "404",
@@ -43,7 +44,7 @@
     "responseHeaders": [
         {
             "entry": "src/ResponseHeaders.ts",
-            "nameConstant": "REQUEST_ID_HEADER",
+            "contextKey": "REQUEST_ID_KEY",
             "description": "Correlates this response with our logs. Quote it in a support request."
         }
     ]

@@ -85,7 +85,7 @@ describe('ensure-we-are-secure HTTP contracts', () => {
                 @Endpoint() @WpAuth([oidc()]) @WpAuthorization({authType: AuthorizationType.SERVICE_ONLY}) service(v: object): Promise<object> {throw 0;}
                 @Endpoint() @WpAuth([webhook('x')]) @WpAuthorization({authType: AuthorizationType.USERS_OR_SERVICES}) hook(v: object): Promise<object> {throw 0;}
                 @Endpoint() @WpAuth([sharedSecret('x'), jwt()]) @WpAuthorization({authType: AuthorizationType.USERS_OR_SERVICES}) either(v: object): Promise<object> {throw 0;}
-                @Endpoint() @WpAuth([apiKey('partner', [{in:'header',name:'x-api-key'}])]) @WpAuthorization({authType: AuthorizationType.ROLES, roles:['agent']}) key(v: object): Promise<object> {throw 0;}
+                @Endpoint() @WpAuth([apiKey('partner', [{in:'header',key:PartnerKeys.API_KEY}])]) @WpAuthorization({authType: AuthorizationType.ROLES, roles:['agent']}) key(v: object): Promise<object> {throw 0;}
                 @Endpoint() @WpLocalOnly() @WpAuthPublic('diagnostics') @WpAuthorization({authType: AuthorizationType.ANONYMOUS, reason:'diagnostics'}) local(v: object): Promise<object> {throw 0;}
                 @Endpoint() @WpAuth([jwt()]) @WpAuthorization({authType: AuthorizationType.CUSTOM, appPolicy:{inOrg:true}}) custom(v: object): Promise<object> {throw 0;}
             }

@@ -16,7 +16,7 @@
  *   server never reads, and nothing could contradict it.
  * - `errors` — the document-wide failure contract, with the BODY read from a real TS type so the
  *   published shape cannot drift from the one on the wire.
- * - `responseHeaders[]` — declared by `nameConstant` naming an exported const, never by a literal.
+ * - `responseHeaders[]` — declared by `contextKey` naming an exported ContextKey, never by a literal.
  *
  * Anything a renderer could read off the source instead belongs in the source.
  *
@@ -62,6 +62,13 @@ export class ErrorResponseEntry {
     constructor(
         readonly status: string,
         readonly description: string,
+        /**
+         * `true`: this failure can only happen to an AUTHENTICATED operation (a 401 for a bad
+         * credential), so it is left OFF every operation whose resolved auth is public
+         * (`@WpAuthPublic`) — a public endpoint cannot fail authentication. Omitted means `false`:
+         * the response is listed on every operation.
+         */
+        readonly requiresAuth: boolean,
     ) {}
 }
 
@@ -85,16 +92,24 @@ export class ErrorsEntry {
 /**
  * One response header every operation carries.
  *
- * `nameConstant` names an exported `const` in `entry`, and the generator FOLDS it. A literal here
- * would be a copy of the header name that a rename leaves silently stale — and JSON cannot import,
- * so naming the constant is the only way for this file to point at the one the server actually
- * writes. Failing to fold it is a HARD FAILURE for the same reason.
+ * `contextKey` names an exported `ContextKey` in `entry` — the export's name, or a dotted path into
+ * one (`OneTabletKey.TX_ID`) — and the generator reads the header name off that key's own
+ * `ContextKey.trusted(...)` / `ContextKey.untrusted(...)` definition: its `responseHeader`, which is
+ * what the server's response choke point actually writes (#1249). A literal here would be a copy of
+ * the header name that a rename leaves silently stale — and JSON cannot import, so naming the key is
+ * the only way for this file to point at the one definition. Failing to resolve it is a HARD
+ * FAILURE for the same reason.
  */
 export class ResponseHeaderEntry {
     constructor(
         readonly entry: string,
-        readonly nameConstant: string,
+        readonly contextKey: string,
         readonly description: string | undefined,
+        /**
+         * Rendered verbatim as the OpenAPI header object's `required`. Omitted means the document
+         * does not state it, which OpenAPI reads as `false`.
+         */
+        readonly required: boolean | undefined,
     ) {}
 }
 
