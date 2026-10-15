@@ -1,4 +1,5 @@
 import { HttpRequest, RawHttpRequest } from '@webpieces/core-context';
+import { OidcAuthMethods } from '@webpieces/core-util';
 import { AuthenticatedCaller, AuthenticatedMachineIdentity } from './AuthConfig';
 
 /** Framework-normalized result from an application-owned JWT mint operation. */
@@ -34,12 +35,14 @@ export const JWT_HOOK = Symbol.for('JwtHook');
  * autobind; rebindable in tests). Bind one ONLY to customize the caller policy — e.g. an app that reads an
  * `ALLOWED_OIDC_CALLERS` env var at its composition root and enforces that allow-list. When NO
  * OidcHook is bound, the framework {@link AuthFilter} runs the built-in {@link DefaultOidcVerifier}
- * directly, so a server that wires nothing still verifies Google OIDC against its `oidc(...callers)`
- * (else trusts the edge — any Google-signed caller). `verifyOidc` verifies the token against `callers`;
- * throw on failure.
+ * directly, so a server that wires nothing still verifies Google OIDC against the endpoint's caller
+ * scopes. `verifyOidc` receives EVERY OIDC method the endpoint declares ({@link OidcAuthMethods}: one,
+ * or one `oidcSameProject()` (`callerScope: 'same-project'`) plus one `oidcSvcs([...])`
+ * (`callerScope: 'services'` with its `callers`)), because they are one bearer credential: verify
+ * the token once, admit the call when ANY of them admits the caller, and throw otherwise.
  */
 export abstract class OidcHook {
-    abstract verifyOidc(token: string, callers: string[]): Promise<AuthenticatedMachineIdentity>;
+    abstract verifyOidc(token: string, methods: OidcAuthMethods): Promise<AuthenticatedMachineIdentity>;
 }
 
 /**

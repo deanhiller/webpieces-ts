@@ -15,7 +15,7 @@ exactly one artifact, read by everyone.
 
 A contract is an abstract class decorated with the shared api decorators
 (`packages/core/core-util/src/http/decorators.ts`): `@ApiPath`, `@Endpoint`, one
-`@WpAuth([jwt(), oidc(), ...])` or `@WpAuthPublic(reason)`, and mandatory
+`@WpAuth([jwt(), oidcSameProject(), ...])` or `@WpAuthPublic(reason)`, and mandatory
 `@WpAuthorization(...)`. `@WpLocalOnly()` independently limits route availability.
 Task contracts additionally declare their queue. Every transport reads this same runtime metadata.
 
@@ -34,9 +34,10 @@ endpoint that authenticates its caller, see
 so they never leak. The server side is `packages/http/http-server/src/ExpressWrapper.ts` +
 `WebpiecesMiddleware.ts`, which run the request through the full filter chain.
 
-For an `@WpAuth([oidc()])` contract, the Node client mints a Google ID token for the final
-destination audience. A private Cloud Run edge validates the invocation and enforces
-invoker IAM before the server chain runs. The application's OIDC check is supplementary;
+For an `@WpAuth([oidcSameProject()])` or `@WpAuth([oidcSvcs([...])])` contract, the Node client
+mints a Google ID token for the final destination audience. A private Cloud Run edge validates the
+invocation and enforces invoker IAM before the server chain runs. The application then checks the
+caller itself: a service account of the callee's own GCP project, or one of the listed accounts;
 see [Cloud Run OIDC](./cloud-run-oidc.md) for the trust boundary and local-token behavior.
 
 ## Transport 2 — In-process (tests, zero HTTP, real filter chain)

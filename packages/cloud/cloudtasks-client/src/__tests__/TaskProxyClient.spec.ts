@@ -1,4 +1,4 @@
-import { WpAuthorization, AuthorizationType, WpAuth, oidc as oidcAuth } from '@webpieces/core-util';
+import { WpAuthorization, AuthorizationType, WpAuth, oidcSameProject } from '@webpieces/core-util';
 import 'reflect-metadata';
 
 // Force gcp-metadata to report "not on GCP" instantly so these tests are hermetic
@@ -31,7 +31,7 @@ class SendEmailRequest {
 @PubSub()
 @ApiPath('/email')
 abstract class EmailApi {
-    @WpAuth([oidcAuth()])
+    @WpAuth([oidcSameProject()])
     @WpAuthorization({ authType: AuthorizationType.SERVICE_ONLY })
     @Endpoint(POST, '/send', WRITE, CLOUDTASKS)
     @Queue('email-send-queue')

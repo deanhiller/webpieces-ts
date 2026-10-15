@@ -5,7 +5,7 @@ export {
     PathParam,
     QueryParam,
     WpAuthPublic,
-    WpAuth, WpLocalOnly, isLocalOnly, jwt, oidc, sharedSecret, webhook, apiKey,
+    WpAuth, WpLocalOnly, isLocalOnly, jwt, oidcSameProject, oidcSvcs, sharedSecret, webhook, apiKey,
     WpAuthorization, AuthorizationType, getAuthorization,
     Rpc,
     PubSub,

@@ -141,7 +141,7 @@ describe('DestinationTrust for a @WpAuthLocalOnly destination', () => {
     });
 
     it('is NOT in the caller-verifying bucket that @WpAuthOidc/@WpAuthSharedSecret are', () => {
-        expect(DestinationTrust.forAuthMode({ kind: 'oidc', callers: [] }).allows(USER_ID)).toBe(
+        expect(DestinationTrust.forAuthMode({ kind: 'oidc', callerScope: 'same-project' }).allows(USER_ID)).toBe(
             true,
         );
         expect(DestinationTrust.forAuthMode({ kind: 'public' }).allows(USER_ID)).toBe(false);

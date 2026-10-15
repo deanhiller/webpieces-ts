@@ -4,8 +4,9 @@ import { HttpRequest, RawHttpRequest, RawRequest } from '@webpieces/core-context
 import type { HeaderReader } from './AuthHooks';
 // @ts-expect-error AuthValues is RENAMED to AuthenticatedCaller — there is no alias, by policy.
 import type { AuthValues } from './AuthConfig';
-import { ApiKeyHook, WebhookAuthCallback } from './AuthHooks';
-import { AuthenticatedCaller } from './AuthConfig';
+import { OidcAuthMethod, OidcAuthMethods } from '@webpieces/core-util';
+import { ApiKeyHook, OidcHook, WebhookAuthCallback } from './AuthHooks';
+import { AuthenticatedCaller, AuthenticatedMachineIdentity } from './AuthConfig';
 
 /**
  * COMPILE-TIME assertions that the four auth hooks share ONE shape, and that every spelling this
@@ -69,6 +70,35 @@ export class AuthHooksCompileAssertions {
             // @ts-expect-error verifyWebhook returns the caller it proved: a void override must not compile
             override async verifyWebhook(_name: string, _request: RawHttpRequest): Promise<void> {
                 // a hook that verifies and then has no way to say what it proved
+            }
+        };
+    }
+
+    /**
+     * {@link OidcHook.verifyOidc} receives EVERY OIDC method the endpoint declares ({@link OidcAuthMethods}),
+     * so a hook verifies the token once and can tell `oidcSameProject()` from `oidcSvcs([...])`. The
+     * caller-list override this change deletes (`callers: string[]`, where an EMPTY list meant "any
+     * Google-signed caller") and a one-method override, which could not see the other scope of a pair,
+     * must not compile.
+     */
+    oidcHookTakesTheMethods(): void {
+        void class extends OidcHook {
+            override async verifyOidc(_token: string, methods: OidcAuthMethods): Promise<AuthenticatedMachineIdentity> {
+                const first = methods[0];
+                const named = first.callerScope === 'services' ? first.callers[0] : 'same-project';
+                return new AuthenticatedMachineIdentity('oidc', named);
+            }
+        };
+        void class extends OidcHook {
+            // @ts-expect-error verifyOidc takes the endpoint's OidcAuthMethods; the deleted caller-list override must not compile
+            override async verifyOidc(_token: string, _callers: string[]): Promise<AuthenticatedMachineIdentity> {
+                return new AuthenticatedMachineIdentity('oidc', 'caller@example.test');
+            }
+        };
+        void class extends OidcHook {
+            // @ts-expect-error verifyOidc takes every OIDC method of the endpoint, not one, so a pair is verified once
+            override async verifyOidc(_token: string, _method: OidcAuthMethod): Promise<AuthenticatedMachineIdentity> {
+                return new AuthenticatedMachineIdentity('oidc', 'caller@example.test');
             }
         };
     }

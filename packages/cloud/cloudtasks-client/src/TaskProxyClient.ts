@@ -280,7 +280,7 @@ export class TaskProxyClient {
      *
      * No credential can appear here: `authorization` is read off the inbound HttpRequest and is not
      * a ContextKey, so it never enters the RequestContext to be transferred. The invoker mints the
-     * task's own delivery auth per the endpoint's oidc(...) / sharedSecret(...) mode.
+     * task's own delivery auth per the endpoint's oidcSameProject() / oidcSvcs(...) / sharedSecret(...) mode.
      *
      * TRUSTED keys DO flow on this path, and that is the point of deriving {@link DestinationTrust}
      * from `plan.authMode` rather than hardcoding it: a task is delivered under the OIDC token the

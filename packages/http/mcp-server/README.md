@@ -187,7 +187,7 @@ Local bindings require explicit tool exposure and valid common authorization. Th
 `InvocationAuthentication` through `ApiFactory.createInvocationApiClient`, preserving the ordinary
 logging, authentication and authorization filters. The proof identifies the actual endpoint and
 original verified ingress scope. No endpoint JWT is minted or parsed and no GUI `JWT_HOOK` is required.
-Remote bindings declare `oidc(...)` or `sharedSecret(...)` network credentials. The generated Node
+Remote bindings declare `oidcSameProject()`, `oidcSvcs(...)` or `sharedSecret(...)` network credentials. The generated Node
 client chooses its service mechanism before forwarding verified delegated facts; the MCP bearer never
 becomes a downstream credential.
 

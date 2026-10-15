@@ -49,7 +49,7 @@ const TRUSTED_TIER = ContextKey.trusted<string>(
     /*responseMerge*/ 'last',
 );
 
-const OIDC: AuthMode = { kind: 'oidc' };
+const OIDC: AuthMode = { kind: 'oidc', callerScope: 'same-project' };
 const PUBLIC: AuthMode = { kind: 'public' };
 /** An internal peer we authenticate to — its response assertions are believable. */
 const FROM_PEER = DestinationTrust.forAuthMode(OIDC);

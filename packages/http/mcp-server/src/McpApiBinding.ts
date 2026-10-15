@@ -60,7 +60,7 @@ export class McpApiBinding<TApi extends object = object> {
         assertEveryEndpointHasAuthMode(this.api);
         const methods = getAuthMeta(this.api, methodName)?.methods;
         if (this.topology === 'remote' && !methods?.some((method: AuthMode) => method.kind === 'oidc' || method.kind === 'shared-secret')) {
-            throw new Error(`MCP remote binding ${this.api.name}.${methodName} requires oidc(...) or sharedSecret(...) network ingress.`);
+            throw new Error(`MCP remote binding ${this.api.name}.${methodName} requires oidcSameProject(), oidcSvcs(...) or sharedSecret(...) network ingress.`);
         }
     }
 }

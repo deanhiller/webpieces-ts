@@ -5,8 +5,10 @@ export class DeletedAuthCompileAssertions {
     removedExports(): void {
         // @ts-expect-error use WpAuth([jwt()]) and WpAuthorization
         void CoreUtil.WpAuthJwt;
-        // @ts-expect-error use WpAuth([oidc(...)]) and WpAuthorization
+        // @ts-expect-error use WpAuth([oidcSameProject()]) or WpAuth([oidcSvcs([...])]) and WpAuthorization
         void CoreUtil.WpAuthOidc;
+        // @ts-expect-error oidc(...) is removed: oidcSameProject() for this GCP project, oidcSvcs([...]) for named service accounts
+        void CoreUtil.oidc;
         // @ts-expect-error use WpAuth([sharedSecret(...)]) and WpAuthorization
         void CoreUtil.WpAuthSharedSecret;
         // @ts-expect-error use WpAuth([webhook(...)]) and WpAuthorization

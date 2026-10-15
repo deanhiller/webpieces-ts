@@ -1,20 +1,36 @@
 import { GoogleAuth, OAuth2Client } from 'google-auth-library';
 import { provideFrameworkSingleton } from '@webpieces/core-context';
-import { LogManager } from '@webpieces/core-util';
+import { LogManager, OidcAuthMethod, OidcAuthMethods, OidcCallers } from '@webpieces/core-util';
 import { toError } from '@webpieces/core-util';
-import { isOnGcp } from './metadata';
-import { getProjectId, getRegion, getRuntimeServiceAccountEmail } from './urls';
+import { isOnGcp, readNumericProjectId, readProjectId } from './metadata';
+import { getProjectId, getRuntimeServiceAccountEmail } from './urls';
 
 const log = LogManager.getLogger('gcp-identity-oidc');
 
 /**
  * Prefix marking a deterministic local (off-GCP) OIDC token. Real Google-signed
  * tokens never start with this, so verify can tell them apart. This is what keeps
- * the oidc(...) code path fully exercised in tests without any GCP round-trip.
+ * the OIDC (`oidcSameProject()` / `oidcSvcs(...)`) code path fully exercised in tests
+ * without any GCP round-trip.
+ * The token is UNSIGNED, so verify accepts it only where mint creates it: off GCP.
  */
 const DEV_TOKEN_PREFIX = 'dev-oidc.';
 
-/** Outcome of verifying an inbound OIDC token against an allow-list of callers. */
+/** Why a token proved no caller email, in every case but the one below. */
+const NO_VERIFIED_EMAIL = 'token invalid or missing email claim';
+
+/**
+ * Why a dev token is refused on GCP. The caller does not see it: DefaultOidcVerifier throws it inside an
+ * ApiUnauthorizedError, and ApiErrorBoundary / ApiErrorCodec.publicMessage disclose only an
+ * ApiEndUserError's own message, so the caller gets the generic 401 text. The operator sees it twice:
+ * in the thrown error's message, which LogApiCall records on the server's resp-FAIL line, and in the
+ * warn line below. It names the rule and the cure, never the token or the email it claims.
+ */
+const DEV_TOKEN_ON_GCP =
+    'dev-oidc token refused on GCP: dev tokens are unsigned and accepted only off GCP, where ' +
+    'mintIdToken creates them; send a Google-signed ID token';
+
+/** Outcome of verifying an inbound OIDC token against an endpoint's caller scope. */
 export class OidcVerifyResult {
     /** True when the token is valid AND its caller SA is allowed. */
     ok: boolean;
@@ -32,23 +48,27 @@ export class OidcVerifyResult {
 
 /**
  * GcpOidc - Google OIDC service-to-service tokens: MINT an outbound token as this service's runtime
- * SA, and VERIFY an inbound token against a caller allow-list. Injected by type (@provideSingleton /
- * inject-by-type) into the RPC + Cloud Tasks clients (mint) and the framework auth verifier (verify),
- * so no DI-managed code calls gcp-identity as a free function.
+ * SA, and VERIFY an inbound token against the OIDC methods its endpoint declares
+ * (`oidcSameProject()` and/or `oidcSvcs([...])`, see {@link verify}). Injected by type
+ * (@provideSingleton / inject-by-type) into the RPC + Cloud Tasks clients (mint) and the framework
+ * auth verifier (verify), so no DI-managed code calls gcp-identity as a free function.
+ *
+ * Verify has one rule for the unsigned `dev-oidc.*` token: it is accepted only OFF GCP, where
+ * {@link mintIdToken} creates it. On GCP it is refused before any caller check.
  *
  * Holds the reusable google-auth-library clients as instance state (one per process, since this is a
- * framework singleton) plus the "warned about public posture once" flag.
+ * framework singleton).
  */
 @provideFrameworkSingleton()
 export class GcpOidc {
     private readonly auth = new GoogleAuth();
     private readonly verifier = new OAuth2Client();
-    private publicPostureChecked = false;
 
     /**
      * Mint a Google-signed OIDC ID token for `audience` (the callee's base URL), as this service's
-     * runtime SA. Off-GCP returns a self-describing `dev-oidc.*` token that {@link verifyFromCallers}
-     * accepts locally.
+     * runtime SA. Off-GCP returns a self-describing, unsigned `dev-oidc.*` token instead, and
+     * {@link verify} accepts one under the same condition: off GCP only. On GCP it refuses a dev
+     * token, so mint and verify agree on where a dev token is legitimate.
      */
     async mintIdToken(audience: string): Promise<string> {
         if (!(await isOnGcp())) {
@@ -60,88 +80,92 @@ export class GcpOidc {
     }
 
     /**
-     * Verify an inbound OIDC token and require its caller SA to be in the allow-list. Audience is
-     * deliberately NOT gated (mirrors the platform's cross-service model — the callee's own `aud`
-     * passes). Never throws — an invalid token or a disallowed caller comes back as `ok:false` so
-     * callers map it to a 401 without a try/catch.
+     * Verify an inbound OIDC token against the endpoint's OIDC methods: the signature is checked ONCE,
+     * and the call is admitted when ANY method admits the caller's email. Never throws for a bad token
+     * or a disallowed caller, so callers map `ok:false` to a 401 without a try/catch. Audience is
+     * deliberately NOT gated (mirrors the platform's cross-service model: the callee's own `aud` passes).
      *
-     * `callers` entries resolve as: 'self' → this service's runtime SA; a bare id →
-     * `<id>@<project>.iam.gserviceaccount.com`; anything containing '@' → verbatim.
+     * - `oidcSameProject()`: the caller must be a service account of THIS GCP project, either
+     *   user-managed (`<name>@<projectId>.iam.gserviceaccount.com`) or the project's Compute Engine
+     *   default (`<projectNumber>-compute@developer.gserviceaccount.com`). Google service agents
+     *   (`service-<number>@gcp-sa-*.iam.gserviceaccount.com` and the other Google-owned domains) are
+     *   NOT this project's accounts and are refused, as is a user account. Off GCP there is no project
+     *   to compare against, so this check is OPEN.
+     * - `oidcSvcs([...])`: the caller must be one of `callers`, which may belong to other projects.
+     *   Entries resolve as: 'self' → this service's runtime SA; a bare id →
+     *   `<id>@<project>.iam.gserviceaccount.com`; anything containing '@' → verbatim.
      */
-    async verifyFromCallers(idToken: string, callers: string[]): Promise<OidcVerifyResult> {
-        const email = await this.extractVerifiedEmail(idToken);
+    async verify(idToken: string, methods: OidcAuthMethods): Promise<OidcVerifyResult> {
+        const verified = await this.extractVerifiedEmail(idToken);
+        const email = verified.email;
         if (!email) {
-            return new OidcVerifyResult(false, undefined, 'token invalid or missing email claim');
+            return new OidcVerifyResult(false, undefined, verified.reasonIfNone);
         }
-        // EMPTY allow-list = TRUST THE EDGE: accept any genuine Google-signed OIDC caller, because a
-        // PRIVATE Cloud Run service's edge already gated WHO via run.invoker IAM (managed in terraform,
-        // one source of truth). Warn loudly (once) if the service is actually PUBLIC — then the edge is
-        // NOT filtering callers and this is insecure. Non-empty list = explicit app-level allow-list.
-        if (callers.length === 0) {
-            await this.warnIfPublicOnce();
-            return new OidcVerifyResult(true, email);
+        const refusals: string[] = [];
+        for (const method of methods) {
+            const refusal = await this.refusalOf(email, method);
+            if (refusal === undefined) {
+                return new OidcVerifyResult(true, email);
+            }
+            refusals.push(refusal);
         }
-        const allowed = await this.resolveCallers(callers);
-        if (!allowed.includes(email)) {
-            return new OidcVerifyResult(
-                false,
-                email,
-                `caller '${email}' is not in the allow-list [${allowed.join(', ')}]`,
-            );
-        }
-        return new OidcVerifyResult(true, email);
+        return new OidcVerifyResult(false, email, refusals.join('; '));
     }
 
     /**
-     * @WpAuth([oidc()]) (trust-the-edge) is only secure when the Cloud Run service is PRIVATE — the edge
-     * enforces run.invoker. If it is actually PUBLIC, warn LOUDLY (once): we still admit only
-     * Google-signed callers, but the edge is not filtering WHO. Never fails — this is advisory.
+     * Why `method` does not admit `email`, or undefined when it does. One branch per scope, then a
+     * `never` tail: a scope added to OidcAuthMethod without a branch here stops compiling, and a scope
+     * that reaches this method around the type (a cast, plain JS) is refused instead of falling through
+     * to admitted. That refusal names the scope only, never the token or the email.
      */
-    private async warnIfPublicOnce(): Promise<void> {
-        if (this.publicPostureChecked) {
-            return;
+    private async refusalOf(email: string, method: OidcAuthMethod): Promise<string | undefined> {
+        switch (method.callerScope) {
+            case 'same-project':
+                return (await this.admitsSameProject(email))
+                    ? undefined
+                    : `caller '${email}' is not a service account of this GCP project`;
+            case 'services':
+                return this.listedRefusal(email, method.callers);
+            default: {
+                const unhandled: never = method;
+                return `unknown OIDC callerScope '${String((unhandled as OidcAuthMethod).callerScope)}'`;
+            }
         }
-        this.publicPostureChecked = true; // attempt at most once, even if the check itself errors
+    }
+
+    /** Off GCP there is no project to compare against, so the same-project check is open there. */
+    private async admitsSameProject(email: string): Promise<boolean> {
         if (!(await isOnGcp())) {
-            return; // off-GCP: there is no Cloud Run edge; public/private does not apply.
+            return true;
         }
-        if (await this.isServicePublic()) {
-            log.error(
-                'This endpoint is currently public but marked oidc(...) which requires the service to be ' +
-                    'private. You are currently running in a very insecure mode; however, we are only allowing ' +
-                    'google-signed callers in. The edge will validate callers are allowed in (make the Cloud Run ' +
-                    'service private — remove the allUsers run.invoker binding) to reduce your attack surface.',
-            );
-        }
+        return this.isThisProjectsServiceAccount(email);
+    }
+
+    private async listedRefusal(email: string, callers: OidcCallers): Promise<string | undefined> {
+        const allowed = await this.resolveCallers(callers);
+        return allowed.includes(email)
+            ? undefined
+            : `caller '${email}' is not in the allow-list [${allowed.join(', ')}]`;
     }
 
     /**
-     * True when THIS Cloud Run service grants run.invoker to allUsers/allAuthenticatedUsers (public).
-     * Reads the service's OWN IAM policy via the Run Admin API (needs run.services.getIamPolicy on the
-     * runtime SA). On any failure we cannot tell → false (no false alarm).
+     * True when `email` is a service account OF this project. Only two shapes qualify: a user-managed
+     * account under `<projectId>.iam.gserviceaccount.com`, and this project number's Compute Engine
+     * default account. Matching the WHOLE domain (not a prefix or suffix of it) is what keeps service
+     * agents out: they live under Google-owned domains such as `gcp-sa-pubsub.iam.gserviceaccount.com`
+     * even when their name carries this project's number. Only called on GCP.
      */
-    private async isServicePublic(): Promise<boolean> {
-        // eslint-disable-next-line @webpieces/no-unmanaged-exceptions -- a failed self-IAM read just means "posture unknown" → no warning
-        try {
-            const [project, region] = await Promise.all([getProjectId(), getRegion()]);
-            const service = process.env['K_SERVICE'] ?? '';
-            const url = `https://run.googleapis.com/v2/projects/${project}/locations/${region}/services/${service}:getIamPolicy`;
-            const client = await this.auth.getClient();
-            const res = await client.request<IamPolicy>({ url: url });
-            return (res.data.bindings ?? []).some(
-                (binding: IamBinding) =>
-                    binding.role === 'roles/run.invoker' &&
-                    (binding.members ?? []).some(
-                        (m: string) => m === 'allUsers' || m === 'allAuthenticatedUsers',
-                    ),
-            );
-        } catch (err: unknown) {
-            const error = toError(err);
-            log.debug(
-                `Could not read own Cloud Run IAM policy (need run.services.getIamPolicy): ${error.message}`,
-            );
+    private async isThisProjectsServiceAccount(email: string): Promise<boolean> {
+        const projectId = await readProjectId();
+        const projectNumber = await readNumericProjectId();
+        const at = email.lastIndexOf('@');
+        if (at <= 0) {
             return false;
         }
+        return (
+            email.substring(at + 1) === `${projectId}.iam.gserviceaccount.com` ||
+            email === `${projectNumber}-compute@developer.gserviceaccount.com`
+        );
     }
 
     private makeDevToken(email: string, audience: string): string {
@@ -149,15 +173,25 @@ export class GcpOidc {
         return DEV_TOKEN_PREFIX + Buffer.from(payload, 'utf8').toString('base64url');
     }
 
-    private async extractVerifiedEmail(idToken: string): Promise<string | undefined> {
+    private async extractVerifiedEmail(idToken: string): Promise<VerifiedEmail> {
         if (idToken.startsWith(DEV_TOKEN_PREFIX)) {
-            return this.decodeDevTokenEmail(idToken);
+            if (await isOnGcp()) {
+                // Mint creates a dev token only OFF GCP, so verify accepts one only there. On GCP it is
+                // just unsigned text, so refuse it BEFORE decoding, whatever email it claims.
+                log.warn(
+                    'Refusing a dev-oidc token, because isOnGcp() is true (K_SERVICE is set, or ' +
+                        'METADATA_SERVER_DETECTION=assume-present): ' +
+                        DEV_TOKEN_ON_GCP,
+                );
+                return new VerifiedEmail(undefined, DEV_TOKEN_ON_GCP);
+            }
+            return new VerifiedEmail(this.decodeDevTokenEmail(idToken), NO_VERIFIED_EMAIL);
         }
         // eslint-disable-next-line @webpieces/no-unmanaged-exceptions -- a genuinely unverifiable token is unauthenticated (→ undefined → 401); infra failures are re-thrown below
         try {
             const ticket = await this.verifier.verifyIdToken({ idToken: idToken });
             const payload = ticket.getPayload();
-            return payload?.email ?? undefined;
+            return new VerifiedEmail(payload?.email ?? undefined, NO_VERIFIED_EMAIL);
         } catch (err: unknown) {
             const error = toError(err);
             if (this.isInfrastructureError(error)) {
@@ -168,7 +202,7 @@ export class GcpOidc {
             }
             // Bad signature / expired / malformed token → genuinely unauthenticated → 401 upstream.
             log.debug(`OIDC token rejected (unauthenticated): ${error.message}`);
-            return undefined;
+            return new VerifiedEmail(undefined, NO_VERIFIED_EMAIL);
         }
     }
 
@@ -201,7 +235,7 @@ export class GcpOidc {
         }
     }
 
-    private async resolveCallers(callers: string[]): Promise<string[]> {
+    private async resolveCallers(callers: readonly string[]): Promise<string[]> {
         return Promise.all(callers.map((caller: string) => this.resolveCaller(caller)));
     }
 
@@ -217,13 +251,12 @@ export class GcpOidc {
     }
 }
 
-/** Minimal shape of a Cloud Run getIamPolicy response. */
-interface IamBinding {
-    role: string;
-    members?: string[];
-}
-interface IamPolicy {
-    bindings?: IamBinding[];
+/** The caller email a token proved, or `undefined` and the reason it proved none. */
+class VerifiedEmail {
+    constructor(
+        readonly email: string | undefined,
+        readonly reasonIfNone: string,
+    ) {}
 }
 
 /** Shape of the decoded dev-oidc token payload. */

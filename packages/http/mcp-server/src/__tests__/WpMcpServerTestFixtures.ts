@@ -1,5 +1,5 @@
 import { Mcp } from '@webpieces/core-util';
-import { WpAuthorization, AuthorizationType, WpAuth, jwt as jwtAuth, oidc as oidcAuth } from '@webpieces/core-util';
+import { WpAuthorization, AuthorizationType, WpAuth, jwt as jwtAuth, oidcSameProject } from '@webpieces/core-util';
 import 'reflect-metadata';
 import { injectable } from 'inversify';
 import { ApiBadRequestError, ApiBadGatewayError, ApiConnectionError, ApiDependencyBackoffError, ApiDependencyError, ApiDependencyTimeoutError, ApiEndUserError, ApiRetriesExhaustedError, ApiPath, ApiType, ApiUnauthorizedError, ApiUnavailableError, Logger, LoggerFactory, LogLevel, ContextKey, ContextTuple, Endpoint, ApiJsonSchema, McpToolCatalogFile, McpToolDefinition, ObjectSchemaBuilder, WpMcpTool, WpMcpToolHints, MCP, POST, READ, RPC, SVC_TO_SVC, WRITE } from '@webpieces/core-util';
@@ -144,7 +144,7 @@ export abstract class SearchApi {
 export abstract class RemoteSearchApi {
     /** Search a remote binding. */
 
-    @WpAuth([oidcAuth()])
+    @WpAuth([oidcSameProject()])
     @WpAuthorization({ authType: AuthorizationType.USERS_OR_SERVICES })
     @Endpoint(POST, '/search', WRITE, RPC)
     @WpMcpTool('remote_search', 'Remote search')

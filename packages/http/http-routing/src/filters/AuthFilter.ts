@@ -8,6 +8,8 @@ import {
 } from '@webpieces/core-context';
 import {
     AuthMode,
+    OidcAuthMethod,
+    OidcAuthMethods,
     ApiEndpointNotFoundError,
     ApiUnauthorizedError,
     ApiImplementationError,
@@ -71,7 +73,8 @@ const SHARED_SECRET_SCHEME = 'Webpieces';
  *                    strategy may reach a JWKS or a datastore). No JwtHook bound → "not enabled"
  *                    (401): JWT needs an app secret + payload shape.
  *  - oidc          → the bound {@link OidcHook} if any, else the framework {@link DefaultOidcVerifier}
- *                    run DIRECTLY — so a server that wires NOTHING still verifies Google OIDC.
+ *                    run DIRECTLY — so a server that wires NOTHING still verifies Google OIDC against
+ *                    the endpoint's caller scope (`oidcSameProject()` or `oidcSvcs([...])`).
  *  - webhook       → the bound {@link WebhookAuthCallback} verifies the VENDOR's signature over the retained
  *                    raw request. No WebhookAuthCallback bound → 401, like jwt: an unverified webhook is
  *                    never waved through because wiring was forgotten.
@@ -141,24 +144,39 @@ export class AuthFilter extends Filter<MethodMeta, WpResponse<unknown>> {
         return nextFilter.invoke(meta);
     }
 
+    /**
+     * Try each declared credential in order. The endpoint's OIDC methods (one `oidcSameProject()` and
+     * one `oidcSvcs([...])` may pair) are ONE bearer credential, so they are ONE alternative, tried at
+     * the position of the first: the token is verified once against all of them.
+     */
     private async authenticateAlternatives(methods: readonly AuthMode[], header: string | undefined, meta: MethodMeta): Promise<AuthMode> {
-        for (const method of methods) {
+        const oidc = AuthFilter.oidcMethodsOf(methods);
+        const alternatives = methods.filter((method: AuthMode) => method.kind !== 'oidc' || method === oidc?.[0]);
+        for (const method of alternatives) {
             // eslint-disable-next-line @webpieces/no-unmanaged-exceptions -- failed credentials may try another declared authenticator; invariants propagate
             try {
-                await this.authenticateMethod(method, header, meta);
+                await this.authenticateMethod(method, header, meta, oidc);
                 return method;
             } catch (err: unknown) { // webpieces-disable no-any-unknown -- structured credential rejection at the boundary
                 const error = toError(err);
-                if (!(error instanceof ApiUnauthorizedError) || methods.length === 1) throw error;
+                if (!(error instanceof ApiUnauthorizedError) || alternatives.length === 1) throw error;
             }
         }
         throw new ApiUnauthorizedError('No declared credential mechanism authenticated this request.');
     }
 
-    private async authenticateMethod(mode: AuthMode, header: string | undefined, meta: MethodMeta): Promise<void> {
+    /** The endpoint's OIDC methods in declaration order, or undefined when it declares none. */
+    // webpieces-disable no-function-outside-class -- static pure reader of the AuthMode list, kept beside its only caller
+    private static oidcMethodsOf(methods: readonly AuthMode[]): OidcAuthMethods | undefined {
+        const oidc = methods.filter((method: AuthMode): method is OidcAuthMethod => method.kind === 'oidc');
+        const first = oidc[0];
+        return first === undefined ? undefined : [first, ...oidc.slice(1)];
+    }
+
+    private async authenticateMethod(mode: AuthMode, header: string | undefined, meta: MethodMeta, oidc: OidcAuthMethods | undefined): Promise<void> {
         switch (mode.kind) {
             case 'jwt': await this.enforceJwt(header); return;
-            case 'oidc': await this.enforceOidc(header, mode.callers); return;
+            case 'oidc': await this.enforceOidc(header, oidc ?? [mode]); return;
             case 'shared-secret':
                 this.enforceSharedSecret(this.credential(header, SHARED_SECRET_SCHEME), mode.secretKey);
                 RequestContext.putTrusted(VERIFIED_MACHINE_CALLER, new VerifiedMachineCaller('shared-secret', mode.secretKey));
@@ -180,7 +198,7 @@ export class AuthFilter extends Filter<MethodMeta, WpResponse<unknown>> {
      * - the MCP bridge, which stamps `llm` before invoking a `@WpAuthorization` tool through `ApiFactory`
      *   — that in-process hop still runs this filter, and its HTTP auth mode says nothing about the
      *   model on the other end;
-     * - a `oidc(...)` service-to-service hop, whose caller's surface arrived on the wire. OIDC is an
+     * - an OIDC (`oidcSameProject()` / `oidcSvcs(...)`) service-to-service hop, whose caller's surface arrived on the wire. OIDC is an
      *   internal hop, NOT a surface of its own, so it deliberately maps to `undefined` below and the
      *   propagated value survives.
      *
@@ -402,12 +420,12 @@ export class AuthFilter extends Filter<MethodMeta, WpResponse<unknown>> {
         this.callerContext.publish(await this.jwtHook.parseJwt(token));
     }
 
-    private async enforceOidc(header: string | undefined, callers: readonly string[]): Promise<void> {
+    private async enforceOidc(header: string | undefined, methods: OidcAuthMethods): Promise<void> {
         const token = this.credential(header, BEARER_SCHEME);
         if (!token) throw new ApiUnauthorizedError('Missing OIDC bearer token');
         const identity = this.oidcHook
-            ? await this.oidcHook.verifyOidc(token, [...callers])
-            : await this.oidcVerifier.verify(token, [...callers]);
+            ? await this.oidcHook.verifyOidc(token, methods)
+            : await this.oidcVerifier.verify(token, methods);
         if (!identity) throw new ApiImplementationError('OIDC verifier must return its verified machine identity.');
         RequestContext.putTrusted(VERIFIED_MACHINE_CALLER, new VerifiedMachineCaller(identity.mechanism, identity.identity));
     }

@@ -370,7 +370,7 @@ describe('McpApiBinding.remote generated Node client integration', () => {
         );
         expect(minter.audiences).toEqual([baseUrl]);
         expect(verifier.tokens).toEqual([OIDC_TOKEN]);
-        expect(verifier.callerLists).toEqual([['mcp-gateway']]);
+        expect(verifier.methods).toEqual([{ kind: 'oidc', callerScope: 'services', callers: ['mcp-gateway'] }]);
         expect(controller.authorization).toBe(`Bearer ${OIDC_TOKEN}`);
         expect(controller.authorization).not.toContain(EXTERNAL_MCP_BEARER);
         expect(controller.authorization).not.toContain(LOCAL_ENDPOINT_JWT);

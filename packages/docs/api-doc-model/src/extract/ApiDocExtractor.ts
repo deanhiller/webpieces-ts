@@ -563,13 +563,13 @@ export class ApiDocExtractor {
         const protectedCall = this.decoratorCall(member, WpAuth.name);
         if (!protectedCall) return undefined;
         const array = protectedCall.arguments[0];
-        if (!array || !ts.isArrayLiteralExpression(array) || !array.elements.length) throw new ApiDocExtractionError('WpAuth requires a nonempty descriptor array', SourceLocation.of(protectedCall), 'Use @WpAuth([jwt(), oidc(...)]).');
+        if (!array || !ts.isArrayLiteralExpression(array) || !array.elements.length) throw new ApiDocExtractionError('WpAuth requires a nonempty descriptor array', SourceLocation.of(protectedCall), 'Use @WpAuth([jwt(), oidcSameProject()]).');
         const methods: DocumentedAuthMethod[] = [];
         for (const element of array.elements) {
             if (!ts.isCallExpression(element)) throw new ApiDocExtractionError('Auth method is not a descriptor call', SourceLocation.of(element), 'Use canonical credential descriptors.');
             const name = this.canonicalCallName(element.expression);
-            const kind = new Map([['jwt', 'jwt'], ['oidc', 'oidc'], ['sharedSecret', 'shared-secret'], ['webhook', 'webhook'], ['apiKey', 'apikey']]).get(name ?? '');
-            if (!kind) throw new ApiDocExtractionError('Unknown authentication descriptor', SourceLocation.of(element), 'Import jwt/oidc/sharedSecret/webhook/apiKey from core-util.');
+            const kind = new Map([['jwt', 'jwt'], ['oidcSameProject', 'oidc'], ['oidcSvcs', 'oidc'], ['sharedSecret', 'shared-secret'], ['webhook', 'webhook'], ['apiKey', 'apikey']]).get(name ?? '');
+            if (!kind) throw new ApiDocExtractionError('Unknown authentication descriptor', SourceLocation.of(element), 'Import jwt/oidcSameProject/oidcSvcs/sharedSecret/webhook/apiKey from core-util.');
             methods.push(new DocumentedAuthMethod(kind, element.arguments.map((argument: ts.Expression) => argument.getText()), name === API_KEY_AUTH ? this.apiKeyOf(element, folder) : undefined));
         }
         return new DocumentedAuth(undefined, methods);

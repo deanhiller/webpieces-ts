@@ -1,6 +1,6 @@
 import { Mcp } from '@webpieces/core-util';
 import { AuthenticatedMachineIdentity } from '@webpieces/http-routing';
-import { ClientRole, WpAuthorization, AuthorizationType, WpAuth, oidc as oidcAuth, jwt as jwtAuth } from '@webpieces/core-util';
+import { ClientRole, WpAuthorization, AuthorizationType, WpAuth, oidcSvcs, OidcAuthMethod, OidcAuthMethods, jwt as jwtAuth } from '@webpieces/core-util';
 import 'reflect-metadata';
 import { injectable } from 'inversify';
 import { ApiBadRequestError, ApiCodedError, ApiConflictError, ApiConnectionError, ApiDependencyBackoffError, ApiDependencyError, ApiDependencyTimeoutError, ApiEndpointNotFoundError, ApiEndUserError, ApiErrorCodec, ApiErrorHttpStatus, ApiForbiddenError, ApiImplementationError, ApiNotFoundError, ApiNotImplementedError, ApiPath, ApiType, ApiPreconditionFailedError, ApiRateLimitedError, ApiRequestTimeoutError, ApiRetriesExhaustedError, ApiUnauthorizedError, ApiUnavailableError, ApiUnprocessableError, ApiUnsupportedMediaTypeError, ContextKey, Endpoint, ErrorTranslator, Filter, WebpiecesDefaultErrorTranslator, HttpResponseDto, LogLevel, Service, WebpiecesCoreHeaders, ApiJsonSchema, McpToolCatalogFile, McpToolDefinition, ObjectSchemaBuilder, WpMcpTool, WpMcpToolHints, MCP, POST, READ, RPC, SVC_TO_SVC } from '@webpieces/core-util';
@@ -117,7 +117,7 @@ export const GATEWAY_CATALOGS: readonly McpToolCatalog[] = [
 export abstract class RemoteMcpApi {
     /** Calls a remote Webpieces API. */
 
-    @WpAuth([oidcAuth('mcp-gateway')])
+    @WpAuth([oidcSvcs(['mcp-gateway'])])
     @WpAuthorization({ authType: AuthorizationType.USERS_OR_SERVICES })
     @Endpoint(POST, '/search', READ, RPC)
     @WpMcpTool('remote_integration_search', 'Remote integration search')
@@ -131,7 +131,7 @@ export abstract class RemoteMcpApi {
 export abstract class MissingRemoteMcpApi {
     /** Intentionally absent route. */
 
-    @WpAuth([oidcAuth('mcp-gateway')])
+    @WpAuth([oidcSvcs(['mcp-gateway'])])
     @WpAuthorization({ authType: AuthorizationType.USERS_OR_SERVICES })
     @Endpoint(POST, '/search', READ, RPC)
     @WpMcpTool('missing_remote_integration_search', 'Missing remote integration search')
@@ -145,7 +145,7 @@ export abstract class MissingRemoteMcpApi {
 export abstract class RefusedRemoteApi {
     /** Nothing listens on this port. */
 
-    @WpAuth([oidcAuth('mcp-gateway')])
+    @WpAuth([oidcSvcs(['mcp-gateway'])])
     @WpAuthorization({ authType: AuthorizationType.USERS_OR_SERVICES })
     @Endpoint(POST, '/search', READ, RPC)
     @WpMcpTool('refused_remote', 'Refused remote call')
@@ -159,7 +159,7 @@ export abstract class RefusedRemoteApi {
 export abstract class GarbageRemoteApi {
     /** Answers an undecodable body. */
 
-    @WpAuth([oidcAuth('mcp-gateway')])
+    @WpAuth([oidcSvcs(['mcp-gateway'])])
     @WpAuthorization({ authType: AuthorizationType.USERS_OR_SERVICES })
     @Endpoint(POST, '/search', READ, RPC)
     @WpMcpTool('garbage_remote', 'Garbage remote response')
@@ -173,7 +173,7 @@ export abstract class GarbageRemoteApi {
 export abstract class OidcFailRemoteApi {
     /** Its OIDC token cannot be minted. */
 
-    @WpAuth([oidcAuth('mcp-gateway')])
+    @WpAuth([oidcSvcs(['mcp-gateway'])])
     @WpAuthorization({ authType: AuthorizationType.USERS_OR_SERVICES })
     @Endpoint(POST, '/search', READ, RPC)
     @WpMcpTool('oidc_fail_remote', 'OIDC failure on remote')
@@ -201,7 +201,7 @@ export abstract class LocalThrowApi {
 export abstract class RemoteThrowApi {
     /** Throws the requested failure remotely. */
 
-    @WpAuth([oidcAuth('mcp-gateway')])
+    @WpAuth([oidcSvcs(['mcp-gateway'])])
     @WpAuthorization({ authType: AuthorizationType.USERS_OR_SERVICES })
     @Endpoint(POST, '/throw', READ, RPC)
     @WpMcpTool('remote_throw', 'Remote throw')
@@ -358,11 +358,11 @@ export class RecordingOidcMinter {
 
 export class RecordingOidcVerifier extends OidcHook {
     readonly tokens: string[] = [];
-    readonly callerLists: string[][] = [];
+    readonly methods: OidcAuthMethod[] = [];
 
-    override verifyOidc(token: string, callers: string[]): Promise<AuthenticatedMachineIdentity> {
+    override verifyOidc(token: string, methods: OidcAuthMethods): Promise<AuthenticatedMachineIdentity> {
         this.tokens.push(token);
-        this.callerLists.push(callers);
+        this.methods.push(...methods);
         if (token !== OIDC_TOKEN) throw new Error(`unexpected OIDC token '${token}'`);
         return Promise.resolve(new AuthenticatedMachineIdentity('oidc','test-service@example.test'));
     }

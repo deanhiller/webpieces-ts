@@ -97,7 +97,7 @@ export class BrowserProxyClient extends ProxyClient {
 
     /**
      * `destination` is always the un-verifying kind here — {@link assertEndpointSupported} below
-     * refuses to bind an oidc(...) / sharedSecret(...) contract, so every browser destination is
+     * refuses to bind an oidcSameProject() / oidcSvcs(...) / sharedSecret(...) contract, so every browser destination is
      * jwt() or @WpAuthPublic — which means a browser never puts a trusted context key on the wire. It is
      * still threaded rather than short-circuited: the rule lives in ContextMgr, one place, for both
      * environments.
@@ -135,7 +135,7 @@ export class BrowserProxyClient extends ProxyClient {
 
     /**
      * Reject a contract this browser cannot satisfy, at bind time rather than on the first call.
-     * Both service-to-service modes need credentials only a server has: oidc(...) needs a runtime
+     * Both service-to-service modes need credentials only a server has: OIDC (oidcSameProject() / oidcSvcs(...)) needs a runtime
      * service account to mint a token, sharedSecret(...) needs a secret no browser may ship.
      *
      * @WpLocalOnly is deliberately NOT rejected: a browser calling a dev-only endpoint on the

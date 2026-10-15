@@ -1,4 +1,4 @@
-import { WpAuthorization, AuthorizationType, WpAuth, oidc as oidcAuth } from '@webpieces/core-util';
+import { WpAuthorization, AuthorizationType, WpAuth, oidcSameProject } from '@webpieces/core-util';
 import 'reflect-metadata';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { CloudTasksClient } from '@google-cloud/tasks';
@@ -51,7 +51,7 @@ class EmailRequest {
 @PubSub()
 @ApiPath('/email')
 abstract class EmailApi {
-    @WpAuth([oidcAuth()])
+    @WpAuth([oidcSameProject()])
     @WpAuthorization({ authType: AuthorizationType.SERVICE_ONLY })
     @Endpoint(POST, '/send', WRITE, CLOUDTASKS)
     // webpieces-disable no-unmanaged-exceptions -- abstract contract stub, never executed

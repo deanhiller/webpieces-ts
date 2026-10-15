@@ -180,9 +180,11 @@ export class MyRoutes implements Routes {
 ## Auditing OIDC on private Cloud Run
 
 Read [`docs/architecture/cloud-run-oidc.md`](../../docs/architecture/cloud-run-oidc.md) before
-assessing `@WpAuthOidc`. The intended private Cloud Run edge checks the invocation token
-and enforces invoker IAM before the application runs; the decorator primarily drives client
-credential generation, while server validation remains supplementary. A synthetic token accepted
-by a direct application-verifier call does not demonstrate a protected Cloud Run ingress bypass.
+assessing `oidcSameProject()` / `oidcSvcs([...])`. The intended private Cloud Run edge checks the
+invocation token and enforces invoker IAM before the application runs; the descriptor drives client
+credential generation, and the application then admits only service accounts of its own GCP project
+(`oidcSameProject()`, open off GCP) or the listed ones (`oidcSvcs([...])`). A synthetic token is
+accepted only off GCP, so one accepted by a direct application-verifier call there does not
+demonstrate a protected Cloud Run ingress bypass.
 State the deployment and credential/header path when assessing security; do not assume the edge
 exists on public/direct ingress or that two separately supplied credentials identify one caller.

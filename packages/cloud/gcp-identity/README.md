@@ -10,26 +10,38 @@ tests) every call falls back to a deterministic localhost value so no GCP is nee
 - `gcpCloudRunDeriver()` — the GCP half of URL resolution: `svcName` → `https://<svc>-<projectNumber>.<region>.run.app`. Install it once at startup with `ClientRegistry.setDeriver(gcpCloudRunDeriver())` and every same-project/same-region peer resolves with no URL table. Off GCP (a CLI, CI) pass the values instead: `gcpCloudRunDeriver(new GcpCloudRunTarget(projectNumber, region))`
 - `getRuntimeServiceAccountEmail()` — the SA this process runs as
 - `GcpOidc.mintIdToken(audience)` — Google-signed OIDC ID token (a `dev-oidc.*` token off-GCP)
-- `GcpOidc.verifyFromCallers(idToken, callers)` — verify + allow-list the caller SA
+- `GcpOidc.verify(idToken, methods)` — verify the token ONCE against the endpoint's OIDC methods (`oidcSameProject()` and/or `oidcSvcs([...])`); the call passes when any of them admits the caller
 
-Underpins the `oidc(...)` service-to-service credential contract used by
-`@webpieces/http-client-node` (RPC) and `@webpieces/cloudtasks-client`, with supplementary
-server checks dispatched by `AuthFilter`.
+Underpins the `oidcSameProject()` / `oidcSvcs([...])` service-to-service credential contract used by
+`@webpieces/http-client-node` (RPC) and `@webpieces/cloudtasks-client`, with the server checks
+dispatched by `AuthFilter`.
 
-## Private Cloud Run: Google enforces invocation access
+## Private Cloud Run: Google enforces invocation access, the application checks the caller
 
 The protected Cloud Run edge verifies the invocation ID token and enforces `roles/run.invoker`
-before the container receives it. The annotation primarily tells clients to generate the
-correct destination-audience token. A bare `@WpAuth([oidc()])` delegates caller authorization to
-that edge; explicit callers add an application allow-list. Real tokens are also checked by the
-application verifier, without its own audience constraint.
+before the container receives it. The descriptor tells clients to generate the correct
+destination-audience token and names the callers the application accepts:
 
-Synthetic `dev-oidc.*` tokens support local/in-process tests and are unsigned. The current
-application decoder accepts that prefix without checking the runtime; the protected Cloud Run
-edge rejects it as an invocation credential. A direct verifier call does not test ingress IAM,
-and this verifier must not be treated as standalone protection for public/direct ingress.
+- `oidcSameProject()` admits a Google-signed token from a user-managed service account of this
+  project (`<name>@<projectId>.iam.gserviceaccount.com`) or from the project's Compute Engine
+  default (`<projectNumber>-compute@developer.gserviceaccount.com`). Google service agents, other
+  projects and user accounts are refused. Off GCP there is no project, so the check is open.
+- `oidcSvcs([...])` admits exactly the listed accounts: `'self'` is this service's runtime
+  account, a bare id is an account of this project, and a full email is taken verbatim, so an
+  account of another project can be listed.
+
+Real tokens are checked for signature and expiry, without an audience constraint of the verifier's own.
+
+Synthetic `dev-oidc.*` tokens support local/in-process tests and are unsigned. `verify` accepts
+that prefix only off GCP, where `mintIdToken` creates it: when `isOnGcp()` is true it refuses
+one (`ok:false`, logged as a warning) before any project or caller check. The protected Cloud Run
+edge also rejects it as an invocation credential. `isOnGcp()` reads `K_SERVICE` /
+`METADATA_SERVER_DETECTION`, so a deployed host that sets neither is treated as off GCP: it still
+accepts a synthetic token, and the `oidcSameProject()` check is open there. Set
+`METADATA_SERVER_DETECTION=assume-present` on such hosts. A direct verifier call does not test
+ingress IAM, and this verifier must not be treated as standalone protection for public/direct ingress.
 See [the Cloud Run OIDC guide](../../../docs/architecture/cloud-run-oidc.md) for deployment
-assumptions, the advisory public-posture check, and separate-header handling.
+assumptions and separate-header handling.
 
 **There is exactly ONE service name.** The Cloud Run service name is what you report, what peers
 call you by, and what goes in every URL — yours and theirs. Nothing strips or adds a prefix: deploy

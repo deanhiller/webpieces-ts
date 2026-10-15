@@ -123,11 +123,12 @@ for a click is first minted.
 ## Cloud Run OIDC → service trust
 
 For private Cloud Run, invocation-token verification and `roles/run.invoker` enforcement
-happen at Google's edge before Webpieces handles the request. `@WpAuth([oidc()])` tells RPC
-and task clients which credential to generate; the server retains supplementary validation
-and optional explicit caller checks. The default empty caller list delegates caller authorization
-to deployed IAM. This assumption applies to the protected ingress path, not to arbitrary direct
-calls into the application verifier. See [Cloud Run OIDC](./cloud-run-oidc.md), including the
+happen at Google's edge before Webpieces handles the request. `@WpAuth([oidcSameProject()])` and
+`@WpAuth([oidcSvcs([...])])` tell RPC and task clients which credential to generate, and the server
+checks the caller again: `oidcSameProject()` admits only service accounts of the service's own GCP
+project (open off GCP, where there is no project), and `oidcSvcs([...])` only the listed ones. The
+edge assumption applies to the protected ingress path, not to arbitrary direct calls into the
+application verifier. See [Cloud Run OIDC](./cloud-run-oidc.md), including the
 separate `X-Serverless-Authorization` case, before interpreting OIDC admission as proof about
 application identity or promoting pending wire context to trusted values.
 
@@ -181,7 +182,7 @@ SERVER. Both directions live here," and it fails fast outside a `run(...)` scope
 
   `destination` is a `DestinationTrust`, and it is the OUTBOUND half of the trust rule below. A
   **trusted** key is emitted only when the destination endpoint authenticates its CALLER
-  (`oidc(...)` / `sharedSecret(...)`); to a `jwt()` / `@WpAuthPublic` / `@WpLocalOnly` / undeclared endpoint it is
+  (`oidcSameProject()` / `oidcSvcs(...)` / `sharedSecret(...)`); to a `jwt()` / `@WpAuthPublic` / `@WpLocalOnly` / undeclared endpoint it is
   omitted, because that endpoint's `AuthFilter` is obliged to reject it — sending it would 401 our
   own request. Untrusted keys always travel. `DestinationTrust.forAuthMode(selectedMethod)` is
   the only way to build one, so the caller cannot assert a posture the route does not have, and
@@ -191,7 +192,7 @@ SERVER. Both directions live here," and it fails fast outside a `run(...)` scope
   straight in, a **trusted** one is stashed in `PendingWireTrust` and NOT written. This fill runs at
   transport level, BEFORE any filter, so nothing has verified the caller yet — writing a trusted value
   here would mean `getTrusted` could return a header a stranger typed. `AuthFilter` then admits the
-  pending values on a route that authenticated its CALLER (`oidc(...)`/`sharedSecret(...)`), and on
+  pending values on a route that authenticated its CALLER (`oidcSameProject()`/`oidcSvcs(...)`/`sharedSecret(...)`), and on
   `jwt()`/`@WpAuthPublic`/`@WpLocalOnly` requires an exact match from the authenticator or rejects the
   request. If there
   is no incoming `REQUEST_ID`, mint one and stamp `REQUEST_ID_SOURCE` from `ServiceInfo.getName()`.
@@ -201,7 +202,7 @@ The Node client (`NodeProxyClient.outboundContextHeaders(destination)`) uses the
 server entry point (`ExpressWrapper` / `WebpiecesMiddleware`) wraps each request in
 `RequestContext.run(...)` then calls `fillFromRequest`. The BROWSER twin
 (`ContextMgr.buildOutboundHeaders(destination)`) applies the same rule, and never reaches the
-permissive branch: `BrowserProxyClient` refuses to bind an `oidc(...)`/`sharedSecret(...)` contract
+permissive branch: `BrowserProxyClient` refuses to bind an `oidcSameProject()`/`oidcSvcs(...)`/`sharedSecret(...)` contract
 at all, so every browser destination is `jwt()`, `@WpAuthPublic` or `@WpLocalOnly` (a browser calling
 a dev-only endpoint on the developer's own server is that mode's motivating case).
 

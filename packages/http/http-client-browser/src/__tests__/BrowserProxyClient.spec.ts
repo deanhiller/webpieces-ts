@@ -1,4 +1,4 @@
-import { ClientRole, WpAuthorization, AuthorizationType, WpAuth, oidc as oidcAuth, sharedSecret as sharedSecretAuth, apiKey as apiKeyAuth } from '@webpieces/core-util';
+import { ClientRole, WpAuthorization, AuthorizationType, WpAuth, oidcSameProject, sharedSecret as sharedSecretAuth, apiKey as apiKeyAuth } from '@webpieces/core-util';
 import 'reflect-metadata';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { ApiPath, ClientRegistry, ContextKey, Endpoint, HeaderRegistry, ApiDependencyError, ApiEndUserError, ApiImplementationError, ApiUnauthorizedError, LogManager, ApiConnectionError, WpAuthPublic, Rpc, WebpiecesCoreHeaders, POST, READ, RPC, WRITE } from '@webpieces/core-util';
@@ -31,7 +31,7 @@ abstract class PublicApi {
 @ApiPath('/secure')
 abstract class OidcApi {
     @Endpoint(POST, '/internalOp', WRITE, RPC)
-    @WpAuth([oidcAuth()])
+    @WpAuth([oidcSameProject()])
     @WpAuthorization({ authType: AuthorizationType.SERVICE_ONLY })
     // webpieces-disable no-unmanaged-exceptions -- abstract contract stub, never executed
     internalOp(_request: SaveRequest): Promise<void> {

@@ -4,6 +4,20 @@ export class SecurityPolicyShapeProblem {
     constructor(readonly code: string, readonly message: string) {}
 }
 
+/**
+ * Every canonical credential descriptor and the uniqueness key it occupies in one @WpAuth: its credential
+ * kind, except OIDC, which is keyed on kind plus `callerScope` exactly as the runtime `AuthDeclaration`
+ * keys it. So `oidcSameProject()` and `oidcSvcs([...])` may pair on one endpoint, and two of either may not.
+ */
+const DESCRIPTOR_KEYS: ReadonlyMap<string, string> = new Map([
+    ['jwt', 'jwt'],
+    ['oidcSameProject', 'oidc:same-project'],
+    ['oidcSvcs', 'oidc:services'],
+    ['sharedSecret', 'shared-secret'],
+    ['webhook', 'webhook'],
+    ['apiKey', 'apikey'],
+]);
+
 /** Literal declarations must be inspectable; runtime registration additionally checks erased values. */
 export class SecurityPolicyShapes {
     // webpieces-disable no-function-outside-class -- stateless contract validation or scope metadata reader used before DI registration
@@ -12,14 +26,15 @@ export class SecurityPolicyShapes {
         if (!array || !ts.isArrayLiteralExpression(array) || !array.elements.length) {
             return [new SecurityPolicyShapeProblem('HTTP_AUTH_METHODS', '@WpAuth requires a nonempty inline array of canonical credential descriptors.')];
         }
-        const seen = new Set<string>();
+        const seenKeys = new Set<string>();
         const problems: SecurityPolicyShapeProblem[] = [];
         for (const element of array.elements) {
             const name = ts.isCallExpression(element) ? this.canonicalName(element.expression, named, namespaces) : undefined;
-            if (!name || !['jwt', 'oidc', 'sharedSecret', 'webhook', 'apiKey'].includes(name) || seen.has(name)) {
-                problems.push(new SecurityPolicyShapeProblem('HTTP_AUTH_METHODS', '@WpAuth accepts unique jwt/oidc/sharedSecret/webhook/apiKey descriptors; public/locality are separate declarations.'));
+            const key = name === undefined ? undefined : DESCRIPTOR_KEYS.get(name);
+            if (!name || !key || seenKeys.has(key)) {
+                problems.push(new SecurityPolicyShapeProblem('HTTP_AUTH_METHODS', '@WpAuth accepts unique jwt/oidcSameProject/oidcSvcs/sharedSecret/webhook/apiKey descriptors; public/locality are separate declarations.'));
             } else {
-                seen.add(name);
+                seenKeys.add(key);
                 if (ts.isCallExpression(element)) problems.push(...this.descriptor(name, element));
             }
         }
@@ -29,9 +44,25 @@ export class SecurityPolicyShapes {
     // webpieces-disable no-function-outside-class -- stateless contract validation or scope metadata reader used before DI registration
     private static descriptor(name: string, call: ts.CallExpression): readonly SecurityPolicyShapeProblem[] {
         if (name === 'jwt' && call.arguments.length) return [new SecurityPolicyShapeProblem('HTTP_AUTH_METHODS', 'jwt() takes no policy; put roles/application policy in @WpAuthorization.')];
+        if (name === 'oidcSameProject' && call.arguments.length) return [new SecurityPolicyShapeProblem('HTTP_AUTH_METHODS', 'oidcSameProject() takes no arguments; name service accounts with oidcSvcs([...]) instead.')];
+        if (name === 'oidcSvcs') return this.oidcServices(call);
         if (['sharedSecret', 'webhook', 'apiKey'].includes(name) && !call.arguments.length) return [new SecurityPolicyShapeProblem('HTTP_AUTH_METHODS', `${name}(...) requires its named credential configuration.`)];
         if (name === 'apiKey' && !call.arguments[1]) return [new SecurityPolicyShapeProblem('HTTP_AUTH_METHODS', 'apiKey(regime, credentials) requires a nonempty credentials tuple.')];
         if (name === 'apiKey' && ts.isArrayLiteralExpression(call.arguments[1]) && !call.arguments[1].elements.length) return [new SecurityPolicyShapeProblem('HTTP_AUTH_METHODS', 'apiKey credentials cannot be empty.')];
+        return [];
+    }
+
+    /**
+     * `oidcSvcs([...])` takes ONE list naming at least one service account. An inline list is checked here;
+     * any other expression is left to the `OidcCallers` type and the runtime `AuthDeclaration` backstop.
+     */
+    // webpieces-disable no-function-outside-class -- stateless contract validation or scope metadata reader used before DI registration
+    private static oidcServices(call: ts.CallExpression): readonly SecurityPolicyShapeProblem[] {
+        const list = call.arguments[0];
+        const blank = (element: ts.Expression): boolean => ts.isStringLiteral(element) && element.text.trim().length === 0;
+        if (call.arguments.length !== 1 || !list || (ts.isArrayLiteralExpression(list) && (!list.elements.length || list.elements.some(blank)))) {
+            return [new SecurityPolicyShapeProblem('HTTP_AUTH_METHODS', "oidcSvcs([...]) requires one nonempty list of service accounts; use oidcSameProject() for this GCP project's service accounts.")];
+        }
         return [];
     }
 

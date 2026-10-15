@@ -93,11 +93,13 @@ packages/
 ## Cloud Run service-to-service authentication
 
 For private Cloud Run services, Google verifies the invocation ID token and enforces
-invoker IAM before the container receives the request. `@WpAuthOidc()` primarily makes RPC
-and Cloud Tasks clients generate the appropriate destination-audience credential; Webpieces
-retains supplementary server validation. The empty caller list delegates caller authorization
-to the edge. Read the [Cloud Run OIDC security boundary](./docs/architecture/cloud-run-oidc.md)
-for deployment assumptions, local tokens, and the distinction between edge and application checks.
+invoker IAM before the container receives the request. `@WpAuth([oidcSameProject()])` and
+`@WpAuth([oidcSvcs([...])])` make RPC and Cloud Tasks clients generate the appropriate
+destination-audience credential, and Webpieces checks the caller again in the application:
+`oidcSameProject()` admits any service account of the service's own GCP project, and
+`oidcSvcs([...])` exactly the listed service accounts, including ones of other projects. Read the
+[Cloud Run OIDC security boundary](./docs/architecture/cloud-run-oidc.md) for deployment
+assumptions, local tokens, and the distinction between edge and application checks.
 
 ## Core Concepts
 
