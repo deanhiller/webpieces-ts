@@ -113,14 +113,6 @@
                     "level": 1
                 },
                 {
-                    "id": "RulePackArtifacts",
-                    "className": "RulePackArtifacts",
-                    "kind": "class",
-                    "scope": "singleton",
-                    "file": "packages/tooling/rules-config/src/rule-pack-artifacts.ts",
-                    "level": 2
-                },
-                {
                     "id": "RulesConfigDesign",
                     "className": "RulesConfigDesign",
                     "kind": "apiImplementation",
@@ -188,15 +180,6 @@
                     "tokenKey": "class:packages/tooling/rules-config/src/pack-policy-files.ts#PackPolicyFiles",
                     "paramName": "files",
                     "paramType": "PackPolicyFiles"
-                },
-                {
-                    "from": "ConfigLoader",
-                    "to": "RulePackArtifacts",
-                    "injection": "type",
-                    "token": "RulePackArtifacts",
-                    "tokenKey": "class:packages/tooling/rules-config/src/rule-pack-artifacts.ts#RulePackArtifacts",
-                    "paramName": "artifacts",
-                    "paramType": "RulePackArtifacts"
                 },
                 {
                     "from": "DotWebpieces",
@@ -287,15 +270,6 @@
                     "tokenKey": "class:packages/tooling/tooling-common/src/state-dir.ts#DotWebpieces",
                     "paramName": "dotDir",
                     "paramType": "DotWebpieces"
-                },
-                {
-                    "from": "RulePackArtifacts",
-                    "to": "AtomicFile",
-                    "injection": "type",
-                    "token": "AtomicFile",
-                    "tokenKey": "class:packages/tooling/tooling-common/src/atomic-file.ts#AtomicFile",
-                    "paramName": "atomic",
-                    "paramType": "AtomicFile"
                 },
                 {
                     "from": "RulesConfigDesign",

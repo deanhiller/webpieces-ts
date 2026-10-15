@@ -286,12 +286,6 @@ const PRUNE_CONFIG_BODY_ERE = '(pnpm|npm|npx)([[:space:]]+(exec|run))?[[:space:]
 // JS-regex twin of PRUNE_CONFIG_BODY_ERE (POSIX `[[:space:]]` → `\s`).
 const PRUNE_CONFIG_BODY_JS = '(pnpm|npm|npx)(\\s+(exec|run))?\\s+wp-prune-unknown-config';
 
-// Literal sync arguments only: no shell operators, substitutions, arbitrary switches or sibling commands.
-const RULES_SYNC_BODY_ERE =
-    '(pnpm|npm|npx)([[:space:]]+(exec|run))?[[:space:]]+wp-rules-sync([[:space:]]+(--upgrade|--pack(=|[[:space:]]+)[[:alnum:]_@./-]+=[[:alnum:]_./-]+))*';
-const RULES_SYNC_BODY_JS =
-    '(pnpm|npm|npx)(\\s+(exec|run))?\\s+wp-rules-sync(\\s+(--upgrade|--pack(=|\\s+)[a-zA-Z0-9_@./-]+=[a-zA-Z0-9_./-]+))*';
-
 // The entry below spells the command as PRUNE_UNKNOWN_COMMAND, IMPORTED rather than re-typed: that
 // constant is the single spelling, and a second literal here is exactly the drift that would let a
 // message prescribe a command this allowlist does not match.
@@ -565,22 +559,6 @@ export const L0_ALLOWLIST: readonly L0AllowEntry[] = [
         '(pnpm|npm|npx)(\\s+(exec|run))?\\s+wp-migrate-dirs(\\s+--stage)?',
         EVERY_HARNESS, new L0Call('Bash', MIGRATE_DIRS_COMMAND, ''),
         [new L0Call('Bash', `${MIGRATE_DIRS_COMMAND} --stage`, '')],
-    ),
-    new L0AllowEntry(
-        'pnpm wp-rules-sync — explicit owner seeds and lock/catalog repair',
-        'allow',
-        true,
-        RULES_SYNC_BODY_ERE,
-        RULES_SYNC_BODY_JS,
-        EVERY_HARNESS,
-        new L0Call('Bash', 'pnpm wp-rules-sync', ''),
-        [
-            new L0Call(
-                'Bash',
-                'pnpm wp-rules-sync --upgrade --pack=@client/policy=.webpieces-config/rules/client.json',
-                '',
-            ),
-        ],
     ),
     new L0AllowEntry(
         `${INSTALL_HOOKS_CMD} (flags allowed, e.g. --target=project)`,

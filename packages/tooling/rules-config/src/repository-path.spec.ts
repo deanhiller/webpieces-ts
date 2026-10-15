@@ -26,7 +26,7 @@ describe('repository-owned policy paths', () => {
         expect(fs.readdirSync(outside)).toEqual([]);
     });
 
-    it('rejects alias declarations for one file and aliases of reserved artifacts', () => {
+    it('rejects alias declarations for one file and aliases of the root config', () => {
         const root = specTempDirs.make('wp-rooted-policy-');
         fs.writeFileSync(path.join(root, 'owner.json'), '{}');
         fs.symlinkSync('owner.json', path.join(root, 'alias.json'));
@@ -38,11 +38,11 @@ describe('repository-owned policy paths', () => {
                 ],
                 root,
             ),
-        ).toThrow('Duplicate rule-pack declaration or config path');
+        ).toThrow('duplicate rule-pack declaration or config path');
         fs.writeFileSync(path.join(root, 'webpieces.config.json'), '{}');
         fs.symlinkSync('webpieces.config.json', path.join(root, 'reserved.json'));
         expect(() => new PackPolicyFiles().configPath(root, 'reserved.json')).toThrow(
-            'Invalid pack config path',
+            'invalid pack config path',
         );
     });
 });

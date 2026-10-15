@@ -20,19 +20,8 @@ class OwnershipBaseline {
 }
 const baseline = snapshot as OwnershipBaseline;
 
-/** A test host supplies the real artifact renderer without creating a production dependency edge. */
-export interface FixtureArtifactWriter {
-    write(root: string): void;
-}
-
 /** Frozen pre-migration policy data for real config-loader fixtures; never used by product code. */
 export class PolicyFixture {
-    private artifactWriter: FixtureArtifactWriter | null = null;
-
-    registerArtifactWriter(writer: FixtureArtifactWriter): void {
-        this.artifactWriter = writer;
-    }
-
     /** Explicit fixture migration preserves missing entries/fields so fail-closed assertions remain real. */
     // webpieces-disable no-any-unknown -- test-only JSON conversion; runtime loading never accepts this old input shape
     writeOwnerConfig(
@@ -41,10 +30,6 @@ export class PolicyFixture {
         document: Record<string, unknown>,
         manifests: readonly RulePackManifest[] = this.manifests(),
     ): void {
-        if (!this.artifactWriter)
-            throw new Error(
-                'Register a real FixtureArtifactWriter before writing a migrated policy fixture.',
-            );
         this.declareIn(root, manifests);
         const flat = Object.assign({}, document['rules'], document['hookGuards']) as Record<
             string,
@@ -79,7 +64,6 @@ export class PolicyFixture {
             path.join(root, 'webpieces.config.json'),
             JSON.stringify(next, null, 2) + '\n',
         );
-        this.artifactWriter.write(root);
         if (fs.existsSync(path.join(root, '.git')))
             spawnSync('git', ['add', '--', 'webpieces.config.json', '.webpieces-config'], { cwd: root });
     }

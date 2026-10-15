@@ -1,6 +1,12 @@
 import { CONFIG_REPAIR_BOOTSTRAP_SOURCE } from './config-repair-bootstrap-source';
 
-/** Self-contained Node probe: serialized into the POSIX shim so repairs work with missing packages. */
+/**
+ * Self-contained Node probe: serialized into the POSIX shim so repairs work with missing packages.
+ *
+ * A REPAIR FILE is one a config-repair deny can tell the agent to edit, so it is permitted while the
+ * config is invalid: the root `webpieces.config.json`, `.gitignore`, everything under `.webpieces-config/`,
+ * and any owner file `rulePacks` declares elsewhere. Nothing that resolves outside the repository counts.
+ */
 export class ConfigRepairProbe {
     rootFor(cwd: string): string {
         const fs = require('node:fs') as typeof import('node:fs'),
@@ -36,50 +42,24 @@ export class ConfigRepairProbe {
             const target = this.canonical(root, path.resolve(root, filename));
             const rootFile = this.canonical(root, path.join(root, 'webpieces.config.json'));
             if (target === rootFile || target === this.canonical(root, path.join(root, '.gitignore'))) return true;
+            const policy = path.relative(this.canonical(root, path.join(root, '.webpieces-config')), target);
+            if (policy !== '' && !policy.startsWith('..') && !path.isAbsolute(policy)) return true;
             // webpieces-disable no-any-unknown -- only validated declaration strings grant repair access
             const raw: unknown = JSON.parse(fs.readFileSync(rootFile, 'utf8'));
-            if (
-                !raw ||
-                typeof raw !== 'object' ||
-                !('rulePacks' in raw) ||
-                !Array.isArray(raw.rulePacks) ||
-                !raw.rulePacks.length
-            )
+            if (!raw || typeof raw !== 'object' || !('rulePacks' in raw) || !Array.isArray(raw.rulePacks))
                 return false;
-            const files = new Set<string>(),
-                packages = new Set<string>();
-            const lock = this.canonical(root, path.join(root, '.webpieces-config/rules.lock.json'));
             for (const declaration of raw.rulePacks) {
                 if (
-                    !declaration ||
-                    typeof declaration !== 'object' ||
-                    Array.isArray(declaration) ||
-                    typeof declaration.package !== 'string' ||
-                    !declaration.package ||
-                    typeof declaration.config !== 'string' ||
-                    !declaration.config.endsWith('.json') ||
-                    path.isAbsolute(declaration.config) ||
-                    Object.keys(declaration).some(
-                        (key: string) => !['package', 'config'].includes(key),
-                    )
+                    declaration &&
+                    typeof declaration === 'object' &&
+                    typeof declaration.config === 'string' &&
+                    declaration.config.endsWith('.json') &&
+                    !path.isAbsolute(declaration.config) &&
+                    this.canonical(root, path.join(root, declaration.config)) === target
                 )
-                    return false;
-                const file = this.canonical(root, path.join(root, declaration.config));
-                if (
-                    file === rootFile ||
-                    file === lock ||
-                    files.has(file) ||
-                    packages.has(declaration.package)
-                )
-                    return false;
-                files.add(file);
-                packages.add(declaration.package);
+                    return true;
             }
-            files.add(lock);
-            files.add(
-                this.canonical(root, path.join(root, '.webpieces-config/rules-catalog.md')),
-            );
-            return files.has(target);
+            return false;
         // webpieces-disable no-any-unknown -- external JSON or runtime exports are validated before policy execution
         } catch (err: unknown) {
             const error = toError(err);

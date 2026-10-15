@@ -1,12 +1,11 @@
 import * as path from 'node:path';
 import { injectable, bindingScopeValues } from 'inversify';
 import { ConfigObject } from '@webpieces/rules-sdk';
-import { InformAiError, AtomicFile, RepositoryLayout } from '@webpieces/tooling-common';
+import { RepositoryLayout } from '@webpieces/tooling-common';
 import { buildCommandsConfig, CommandsConfig } from './commands-config';
 import { ConfigFile } from './config-file';
 import { RulePackRegistry } from './rule-pack-registry';
 import { PackPolicyFiles, PackPolicyFilesResult } from './pack-policy-files';
-import { RulePackArtifacts } from './rule-pack-artifacts';
 import { ExcludePaths } from './exclude-hook-paths';
 import { PrGateConfig } from './pr-gate-config';
 import { ResolvedConfig, ResolvedRuleConfig } from './types';
@@ -17,6 +16,8 @@ import { MatchRuleConfig } from './match-rules-config';
 import { WebpiecesRulesConfig } from './WebpiecesRulesConfig';
 import { PolicyTracking } from './policy-tracking';
 import { formatConfigErrorsBanner } from './config-error-banner';
+import { ConfigRepairError, EditFileCure, RepositoryLayoutRepair, RunCommandCure } from './config-repair-error';
+import { PRUNE_UNKNOWN_COMMAND } from './constants';
 
 /** One root parse and one owner-resolution pass supply all consumers with the same registry and settings. */
 export class LoadedConfig {
@@ -39,7 +40,6 @@ export class ConfigLoader {
     constructor(
         private readonly configFile: ConfigFile,
         private readonly files: PackPolicyFiles,
-        private readonly artifacts: RulePackArtifacts,
     ) {}
 
     loadAndValidate(cwd: string): LoadedConfig {
@@ -55,11 +55,17 @@ export class ConfigLoader {
             ...validateExcludePaths(raw.excludePaths),
             ...validateMatchRulesSection(raw['match-rules']),
         ];
-        if (errors.length) throw new InformAiError(formatConfigErrorsBanner(errors));
-        new RepositoryLayout().assertCurrent(root);
+        if (errors.length)
+            throw new ConfigRepairError(formatConfigErrorsBanner(errors), [
+                new EditFileCure(configPath, `Edit ${configPath} and apply every bullet above.`),
+                new RunCommandCure(
+                    PRUNE_UNKNOWN_COMMAND,
+                    `${PRUNE_UNKNOWN_COMMAND} — deletes every key no validator has a schema for.`,
+                ),
+            ]);
+        new RepositoryLayoutRepair().run(() => new RepositoryLayout().assertCurrent(root));
         const declarations = this.files.declarations(raw.rulePacks, root);
         const policy = this.files.resolve(root, this.files.select(root, declarations));
-        this.artifacts.check(root, policy);
         new PolicyTracking().check(root, declarations);
         return this.loaded(
             configPath,
@@ -120,11 +126,7 @@ export class ConfigLoader {
     }
 }
 
-const configLoaderSvc = new ConfigLoader(
-    new ConfigFile(),
-    new PackPolicyFiles(),
-    new RulePackArtifacts(new AtomicFile()),
-);
+const configLoaderSvc = new ConfigLoader(new ConfigFile(), new PackPolicyFiles());
 
 /** Public function entry point and injected service use the same implementation. */
 // webpieces-disable no-function-outside-class -- canonical public loader function for CLI and executor entry points

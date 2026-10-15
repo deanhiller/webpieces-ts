@@ -4,7 +4,9 @@ import * as path from 'node:path';
 import { policyFixture, specTempDirs } from '@webpieces/tooling-testkit';
 import { ConfigObject, OwnedRuleDefinition, RulePackManifest } from '@webpieces/rules-sdk';
 import { InformAiError } from '@webpieces/tooling-common';
+import { toError } from '@webpieces/tooling-common/to-error';
 import { PackPolicyDeclaration, PackPolicyFiles, SelectedPolicyPack } from './pack-policy-files';
+import { ConfigRepairError } from './config-repair-error';
 
 class SplitPolicyFixture {
     readonly root = specTempDirs.make('wp-split-policy-');
@@ -46,6 +48,19 @@ class SplitPolicyFixture {
     }
 }
 
+// The structured repair a config problem carries — what the hook later renders as its deny (#1273).
+function thrown(action: () => void): ConfigRepairError {
+    // eslint-disable-next-line @webpieces/no-unmanaged-exceptions -- the spec inspects the thrown structure
+    try {
+        action();
+    } catch (err: unknown) {
+        const error = toError(err);
+        expect(error).toBeInstanceOf(ConfigRepairError);
+        return error as ConfigRepairError;
+    }
+    throw new Error('expected a ConfigRepairError');
+}
+
 describe('strict owner-specific policy files', () => {
     it('loads explicit owners and keeps raw options distinct from optional tuning', () => {
         const fixture = new SplitPolicyFixture();
@@ -62,7 +77,7 @@ describe('strict owner-specific policy files', () => {
         );
     });
 
-    it('names the exact file for a missing required entry and never fills it', () => {
+    it('names the exact file and the exact entry to paste for a missing required entry, and never fills it', () => {
         const fixture = new SplitPolicyFixture(),
             pack = fixture.selected[0];
         const entries = fixture.entries(pack);
@@ -70,10 +85,23 @@ describe('strict owner-specific policy files', () => {
         fixture.write(pack, entries);
         const filename = fixture.files.configPath(fixture.root, pack.declaration.config);
         const before = fs.readFileSync(filename, 'utf8');
-        expect(() => fixture.files.resolve(fixture.root, fixture.selected)).toThrow(
-            'pack-0.json: missing required entry max-file-lines',
-        );
+        const error = thrown(() => fixture.files.resolve(fixture.root, fixture.selected));
+        expect(error.message).toContain('pack-0.json: missing required entry "max-file-lines"');
+        const seed = pack.manifest.ownedRules.find((rule) => rule.id === 'max-file-lines')!.recommendedSeed;
+        expect(error.message).toContain(`"max-file-lines": ${JSON.stringify(seed)}`);
+        expect(error.cures.map((cure) => cure.editFile)).toEqual([filename]);
         expect(fs.readFileSync(filename, 'utf8')).toBe(before);
+    });
+
+    it('prints the whole owner file to create when a declared file is missing', () => {
+        const fixture = new SplitPolicyFixture(),
+            pack = fixture.selected[0];
+        const filename = fixture.files.configPath(fixture.root, pack.declaration.config);
+        fs.rmSync(filename);
+        const error = thrown(() => fixture.files.resolve(fixture.root, fixture.selected));
+        expect(error.message).toContain(`${filename}: missing rule-pack config for ${pack.manifest.packageName}`);
+        expect(error.message).toContain('"max-file-lines": {');
+        expect(error.cures.map((cure) => cure.editFile)).toEqual([filename]);
     });
 
     it('requires complete OFF settings and rejects cross-owner policy placement', () => {
@@ -93,8 +121,13 @@ describe('strict owner-specific policy files', () => {
         const otherEntries = fixture.entries(other);
         otherEntries['max-file-lines'] = entries['max-file-lines'];
         fixture.write(other, otherEntries);
-        expect(() => fixture.files.resolve(fixture.root, fixture.selected)).toThrow('Move it to');
-        expect(() => fixture.files.resolve(fixture.root, fixture.selected)).toThrow('pack-0.json');
+        const error = thrown(() => fixture.files.resolve(fixture.root, fixture.selected));
+        expect(error.message).toContain('Delete the "max-file-lines" entry here and paste it into');
+        expect(error.message).toContain('pack-0.json');
+        expect(error.cures.map((cure) => cure.editFile)).toEqual([
+            fixture.files.configPath(fixture.root, other.declaration.config),
+            fixture.files.configPath(fixture.root, owner.declaration.config),
+        ]);
     });
 
     it('rejects unknown fields, malformed files, and fixed-safeguard opt-out entries', () => {
@@ -110,7 +143,7 @@ describe('strict owner-specific policy files', () => {
         entries['version-drift'] = { mode: 'OFF' };
         fixture.write(pack, entries);
         expect(() => fixture.files.resolve(fixture.root, fixture.selected)).toThrow(
-            'version-drift has no declared configurable owner',
+            '"version-drift" has no declared configurable owner. Delete the "version-drift" entry',
         );
         fs.writeFileSync(fixture.files.configPath(fixture.root, pack.declaration.config), '{');
         expect(() => fixture.files.resolve(fixture.root, fixture.selected)).toThrow(
@@ -119,18 +152,13 @@ describe('strict owner-specific policy files', () => {
         expect(() => fixture.files.resolve(fixture.root, fixture.selected)).toThrow(InformAiError);
     });
 
-    it('rejects path escapes, root/lock collisions, and duplicate normalized paths', () => {
+    it('rejects path escapes, root collisions, and duplicate normalized paths', () => {
         const files = new PackPolicyFiles(),
             root = specTempDirs.make('wp-split-declarations-');
-        for (const config of [
-            '../outside.json',
-            '/tmp/outside.json',
-            'webpieces.config.json',
-            '.webpieces-config/rules.lock.json',
-        ]) {
-            expect(() => files.declarations([{ package: 'client-policy', config }], root)).toThrow(
-                'Invalid pack config path',
-            );
+        for (const config of ['../outside.json', '/tmp/outside.json', 'webpieces.config.json']) {
+            const error = thrown(() => files.declarations([{ package: 'client-policy', config }], root));
+            expect(error.message).toContain('invalid pack config path');
+            expect(error.cures.map((cure) => cure.editFile)).toEqual([path.join(root, 'webpieces.config.json')]);
         }
         expect(() =>
             files.declarations(
@@ -140,7 +168,7 @@ describe('strict owner-specific policy files', () => {
                 ],
                 root,
             ),
-        ).toThrow('Duplicate');
+        ).toThrow('duplicate rule-pack declaration');
         expect(() => files.declarations([], root)).toThrow('rulePacks is required');
     });
 });

@@ -332,9 +332,9 @@ describe('loadAndValidate — sections & commands', () => {
         entries['pr-lifecycle-guard'] = fixtureRuleRegistry.seedFor('pr-lifecycle-guard');
         fs.writeFileSync(ownerFile, JSON.stringify(entries));
         expect(() => loadAndValidate(dir)).toThrow(
-            'pr-lifecycle-guard belongs to @webpieces/agent-workflow-rules',
+            '"pr-lifecycle-guard" belongs to @webpieces/agent-workflow-rules',
         );
-        expect(() => loadAndValidate(dir)).toThrow('Move it to');
+        expect(() => loadAndValidate(dir)).toThrow('Delete the "pr-lifecycle-guard" entry here and paste it into');
     });
 
     it('errors on a retired top-level pr-gate block', () => {
@@ -459,7 +459,7 @@ describe('loadAndValidate — config-error banner (unblock instructions)', () =>
 
     it('names editing the config as THE fix, and rules `pnpm install` out instead of prescribing it', () => {
         const msg = bannerFor('totally-made-up-rule');
-        expect(msg).toContain('THE FIX: edit declared owner config files');
+        expect(msg).toContain('THE FIX: edit the declared owner config files named above');
         expect(msg).toContain('Do NOT run `pnpm install`');
         expect(msg).not.toContain('FIX ORDER');
     });

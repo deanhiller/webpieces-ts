@@ -33,7 +33,7 @@ export function validateTopLevelKeys(raw: Record<string, unknown>): string[] {
                 ? 'Declare a client-owned rule pack with a schema and implementation module; directory scanning is retired.'
                 : key === 'extends'
                   ? 'Declare exact rulePacks and explicit owner files; inherited central config is retired.'
-                  : 'Run pnpm wp-rules-sync --upgrade to move the existing explicit entries into declared owner files.'),
+                  : 'Move each entry it holds into the owner file its pack declares in rulePacks (.webpieces-config/rules/<pack>.json), then delete this key.'),
     );
     return [
         ...errors,

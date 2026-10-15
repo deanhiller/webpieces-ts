@@ -2,8 +2,7 @@
 import { RepositoryLayout, AtomicFile, InformAiError } from '@webpieces/tooling-common';
 import { ConfigFile } from './config-file';
 import { PackPolicyFiles } from './pack-policy-files';
-import { RulePackArtifacts } from './rule-pack-artifacts';
-import { RulePackSync, RulePackSyncOptions } from './rule-pack-sync';
+import { RulePackSync } from './rule-pack-sync';
 import { PolicyTracking } from './policy-tracking';
 import { RepoRootFinder } from './repo-root';
 import { runMain } from './run-main';
@@ -17,13 +16,7 @@ export class MigrateDirsCli {
             );
         const root = new RepoRootFinder().resolveRepoRoot(process.cwd());
         const changed = new RepositoryLayout().migrate(root);
-        const atomic = new AtomicFile();
-        new RulePackSync(
-            new ConfigFile(),
-            new PackPolicyFiles(),
-            new RulePackArtifacts(atomic),
-            atomic,
-        ).run(root, new RulePackSyncOptions('sync', null));
+        new RulePackSync(new ConfigFile(), new PackPolicyFiles(), new AtomicFile()).run(root);
         if (args.includes('--stage')) {
             const raw = new ConfigFile().readRawConfig(`${root}/webpieces.config.json`);
             new PolicyTracking().stage(

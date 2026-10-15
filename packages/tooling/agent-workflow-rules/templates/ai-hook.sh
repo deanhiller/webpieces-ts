@@ -364,7 +364,13 @@ case "$TOOL" in
     exit 0 ;;
 esac
 # The same compiled Node probe is used by the live runner; it requires no installed package.
-if printf '%s' "$PAYLOAD" | node -e '/** Self-contained Node probe: serialized into the POSIX shim so repairs work with missing packages. */
+if printf '%s' "$PAYLOAD" | node -e '/**
+ * Self-contained Node probe: serialized into the POSIX shim so repairs work with missing packages.
+ *
+ * A REPAIR FILE is one a config-repair deny can tell the agent to edit, so it is permitted while the
+ * config is invalid: the root `webpieces.config.json`, `.gitignore`, everything under `.webpieces-config/`,
+ * and any owner file `rulePacks` declares elsewhere. Nothing that resolves outside the repository counts.
+ */
 class ConfigRepairProbe {
     rootFor(cwd) {
         const fs = require('\''node:fs'\''), path = require('\''node:path'\'');
@@ -401,39 +407,23 @@ class ConfigRepairProbe {
             const rootFile = this.canonical(root, path.join(root, '\''webpieces.config.json'\''));
             if (target === rootFile || target === this.canonical(root, path.join(root, '\''.gitignore'\'')))
                 return true;
+            const policy = path.relative(this.canonical(root, path.join(root, '\''.webpieces-config'\'')), target);
+            if (policy !== '\'''\'' && !policy.startsWith('\''..'\'') && !path.isAbsolute(policy))
+                return true;
             // webpieces-disable no-any-unknown -- only validated declaration strings grant repair access
             const raw = JSON.parse(fs.readFileSync(rootFile, '\''utf8'\''));
-            if (!raw ||
-                typeof raw !== '\''object'\'' ||
-                !('\''rulePacks'\'' in raw) ||
-                !Array.isArray(raw.rulePacks) ||
-                !raw.rulePacks.length)
+            if (!raw || typeof raw !== '\''object'\'' || !('\''rulePacks'\'' in raw) || !Array.isArray(raw.rulePacks))
                 return false;
-            const files = new Set(), packages = new Set();
-            const lock = this.canonical(root, path.join(root, '\''.webpieces-config/rules.lock.json'\''));
             for (const declaration of raw.rulePacks) {
-                if (!declaration ||
-                    typeof declaration !== '\''object'\'' ||
-                    Array.isArray(declaration) ||
-                    typeof declaration.package !== '\''string'\'' ||
-                    !declaration.package ||
-                    typeof declaration.config !== '\''string'\'' ||
-                    !declaration.config.endsWith('\''.json'\'') ||
-                    path.isAbsolute(declaration.config) ||
-                    Object.keys(declaration).some((key) => !['\''package'\'', '\''config'\''].includes(key)))
-                    return false;
-                const file = this.canonical(root, path.join(root, declaration.config));
-                if (file === rootFile ||
-                    file === lock ||
-                    files.has(file) ||
-                    packages.has(declaration.package))
-                    return false;
-                files.add(file);
-                packages.add(declaration.package);
+                if (declaration &&
+                    typeof declaration === '\''object'\'' &&
+                    typeof declaration.config === '\''string'\'' &&
+                    declaration.config.endsWith('\''.json'\'') &&
+                    !path.isAbsolute(declaration.config) &&
+                    this.canonical(root, path.join(root, declaration.config)) === target)
+                    return true;
             }
-            files.add(lock);
-            files.add(this.canonical(root, path.join(root, '\''.webpieces-config/rules-catalog.md'\'')));
-            return files.has(target);
+            return false;
             // webpieces-disable no-any-unknown -- external JSON or runtime exports are validated before policy execution
         }
         catch (err) {
@@ -479,7 +469,7 @@ case "$FILE" in
       exit 0
     fi ;;
 esac
-if printf '%s' "$CMD" | grep -Eq '^(cd[[:space:]]+([A-Za-z0-9._/@~+-]+|'\''[^'\'']+'\'')[[:space:]]*&&[[:space:]]*)?((pnpm|npm)[[:space:]]+(install|i)([[:space:]]+--[A-Za-z][A-Za-z0-9=._/@:-]*)*|rm[[:space:]]+-rf[[:space:]]+(\./)?node_modules/?([[:space:]]*&&[[:space:]]*(pnpm|npm)[[:space:]]+(install|i)([[:space:]]+--[A-Za-z][A-Za-z0-9=._/@:-]*)*)?|git[[:space:]]+fetch([[:space:]]+(--)?[A-Za-z0-9][A-Za-z0-9=._/@:-]*)*|git[[:space:]]+checkout[[:space:]]+main[[:space:]]*&&[[:space:]]*git[[:space:]]+pull[[:space:]]+origin[[:space:]]+main|(pnpm|npm|npx)([[:space:]]+(exec|run))?[[:space:]]+wp-upgrade-shim|cp[[:space:]]+(\./)?node_modules/@webpieces/agent-workflow-rules/templates/ai-hook\.sh[[:space:]]+(\./)?\.claude/webpieces/ai-hook\.sh|(pnpm|npm|npx)([[:space:]]+(exec|run))?[[:space:]]+wp-prune-unknown-config|(pnpm|npm|npx)([[:space:]]+(exec|run))?[[:space:]]+wp-migrate-dirs([[:space:]]+--stage)?|(pnpm|npm|npx)([[:space:]]+(exec|run))?[[:space:]]+wp-rules-sync([[:space:]]+(--upgrade|--pack(=|[[:space:]]+)[[:alnum:]_@./-]+=[[:alnum:]_./-]+))*|(pnpm|npm|npx)([[:space:]]+(exec|run))?[[:space:]]+wp-install-ai-hooks([[:space:]]+--[A-Za-z][A-Za-z0-9=._/@:-]*)*|(pnpm|npm)[[:space:]]+add([[:space:]]+(-[A-Za-z]|--[A-Za-z][A-Za-z0-9=._/@:-]*))*[[:space:]]+@webpieces/agent-workflow-rules(@[A-Za-z0-9._+-]+)?([[:space:]]+(-[A-Za-z]|--[A-Za-z][A-Za-z0-9=._/@:-]*))*|(pwd|git[[:space:]]+(status|log|diff|show|branch|rev-parse)|git[[:space:]]+worktree[[:space:]]+list)([[:space:]]+(--)?[A-Za-z0-9][A-Za-z0-9=._/@:-]*)*)([[:space:]]+2>(&1|/dev/null))?([[:space:]]*\|[[:space:]]*(tail|head)([[:space:]]+-(n[[:space:]]+)?[0-9]+)?)?[[:space:]]*$'; then
+if printf '%s' "$CMD" | grep -Eq '^(cd[[:space:]]+([A-Za-z0-9._/@~+-]+|'\''[^'\'']+'\'')[[:space:]]*&&[[:space:]]*)?((pnpm|npm)[[:space:]]+(install|i)([[:space:]]+--[A-Za-z][A-Za-z0-9=._/@:-]*)*|rm[[:space:]]+-rf[[:space:]]+(\./)?node_modules/?([[:space:]]*&&[[:space:]]*(pnpm|npm)[[:space:]]+(install|i)([[:space:]]+--[A-Za-z][A-Za-z0-9=._/@:-]*)*)?|git[[:space:]]+fetch([[:space:]]+(--)?[A-Za-z0-9][A-Za-z0-9=._/@:-]*)*|git[[:space:]]+checkout[[:space:]]+main[[:space:]]*&&[[:space:]]*git[[:space:]]+pull[[:space:]]+origin[[:space:]]+main|(pnpm|npm|npx)([[:space:]]+(exec|run))?[[:space:]]+wp-upgrade-shim|cp[[:space:]]+(\./)?node_modules/@webpieces/agent-workflow-rules/templates/ai-hook\.sh[[:space:]]+(\./)?\.claude/webpieces/ai-hook\.sh|(pnpm|npm|npx)([[:space:]]+(exec|run))?[[:space:]]+wp-prune-unknown-config|(pnpm|npm|npx)([[:space:]]+(exec|run))?[[:space:]]+wp-migrate-dirs([[:space:]]+--stage)?|(pnpm|npm|npx)([[:space:]]+(exec|run))?[[:space:]]+wp-install-ai-hooks([[:space:]]+--[A-Za-z][A-Za-z0-9=._/@:-]*)*|(pnpm|npm)[[:space:]]+add([[:space:]]+(-[A-Za-z]|--[A-Za-z][A-Za-z0-9=._/@:-]*))*[[:space:]]+@webpieces/agent-workflow-rules(@[A-Za-z0-9._+-]+)?([[:space:]]+(-[A-Za-z]|--[A-Za-z][A-Za-z0-9=._/@:-]*))*|(pwd|git[[:space:]]+(status|log|diff|show|branch|rev-parse)|git[[:space:]]+worktree[[:space:]]+list)([[:space:]]+(--)?[A-Za-z0-9][A-Za-z0-9=._/@:-]*)*)([[:space:]]+2>(&1|/dev/null))?([[:space:]]*\|[[:space:]]*(tail|head)([[:space:]]+-(n[[:space:]]+)?[0-9]+)?)?[[:space:]]*$'; then
   wp_log "$WP_FAULT" ALLOW-CURE   # record the self-heal we let through (re-enables the guards)
   exit 0                     # allow the cure so the assistant can break the deadlock
 fi

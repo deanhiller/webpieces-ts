@@ -1,9 +1,9 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { InformAiError } from '@webpieces/tooling-common';
+import { InformAiError, MIGRATE_DIRS_COMMAND } from '@webpieces/tooling-common';
 import type { PackPolicyDeclaration } from './pack-policy-files';
-import { RULE_LOCK_FILE, RULE_CATALOG_FILE } from './rule-pack-artifacts';
+import { ConfigRepairError, EditFileCure, RunCommandCure } from './config-repair-error';
 
 /** Git repositories must share policy through their index, including rules switched OFF. */
 export class PolicyTracking {
@@ -20,8 +20,14 @@ export class PolicyTracking {
                 `Cannot verify policy ignore status: ${ignored.stderr}. Repair git access, then retry.`,
             );
         if (ignored.stdout.trim())
-            throw new InformAiError(
-                `Committed Webpieces policy is gitignored:\n${ignored.stdout}Remove the matching ignore patterns. Only .webpieces/ belongs in .gitignore; .webpieces-config/ must be tracked.`,
+            throw new ConfigRepairError(
+                `Committed Webpieces policy is gitignored:\n${ignored.stdout}Only .webpieces/ belongs in .gitignore; .webpieces-config/ must be tracked.`,
+                [
+                    new EditFileCure(
+                        path.join(root, '.gitignore'),
+                        `Delete the .gitignore patterns that match the files listed above.`,
+                    ),
+                ],
             );
         const tracked = spawnSync(
             'git',
@@ -32,8 +38,14 @@ export class PolicyTracking {
             },
         );
         if (tracked.status !== 0)
-            throw new InformAiError(
-                `Webpieces policy must be tracked by git: ${tracked.stderr}\nReview the policy files, then run pnpm wp-migrate-dirs --stage to stage the declaration, owner files, lock and catalog. Commit them with your change.`,
+            throw new ConfigRepairError(
+                `Webpieces policy must be tracked by git: ${tracked.stderr}\nReview the policy files, stage them, and commit them with your change.`,
+                [
+                    new RunCommandCure(
+                        `${MIGRATE_DIRS_COMMAND} --stage`,
+                        `${MIGRATE_DIRS_COMMAND} --stage — stages the declaration and the owner files.`,
+                    ),
+                ],
             );
     }
 
@@ -69,11 +81,7 @@ export class PolicyTracking {
     }
 
     private files(root: string, declarations: readonly PackPolicyDeclaration[]): string[] {
-        const declared = [
-            ...declarations.map((declaration) => declaration.config),
-            RULE_LOCK_FILE,
-            RULE_CATALOG_FILE,
-        ];
+        const declared = declarations.map((declaration) => declaration.config);
         return [
             ...new Set(
                 declared.flatMap((filename) => [

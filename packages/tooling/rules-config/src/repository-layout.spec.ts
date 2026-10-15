@@ -20,8 +20,8 @@ class LayoutFixture {
         this.write('.gitignore', '.webpieces/\n!/.webpieces/rules/\nnode_modules/\n');
         this.write('.webpieces/custom/policy.json', '{"rule":{"mode":"OFF"}}');
         this.write('.webpieces/rules/code.json', '{"code":1}');
-        this.write('.webpieces/rules.lock.json', '{"packs":[]}');
-        this.write('.webpieces/instruct-ai/rules-catalog.md', '# Policy');
+        // A file an older release GENERATED here is gitignored state like any other: it never moves.
+        this.write('.webpieces/instruct-ai/rules-catalog.md', '# Generated');
         this.write('.webpieces/instruct-ai/guide.md', '# Runtime');
         this.write('.webpieces/pr-review/topic/summary.json', '{"title":"work in flight"}');
         this.write('.webpieces/merge-info/topic/state.json', '{"a":1}');
@@ -54,13 +54,12 @@ describe('repository directory migration', () => {
         fixture.layout.migrate(fixture.root);
         expect(fixture.read('.webpieces-config/custom/policy.json')).toContain('OFF');
         expect(fixture.read('.webpieces-config/rules/code.json')).toBe('{"code":1}');
-        expect(fixture.read('.webpieces-config/rules.lock.json')).toBe('{"packs":[]}');
-        expect(fixture.read('.webpieces-config/rules-catalog.md')).toBe('# Policy');
+        expect(fixture.exists('.webpieces-config/rules-catalog.md')).toBe(false);
+        expect(fixture.read('.webpieces/instruct-ai/rules-catalog.md')).toBe('# Generated');
         expect(fixture.read('.webpieces/instruct-ai/guide.md')).toBe('# Runtime');
         expect(fixture.read('.webpieces/pr-review/topic/summary.json')).toContain('work in flight');
         expect(fixture.read('.webpieces/merge-info/topic/state.json')).toBe('{"a":1}');
         expect(fixture.exists('.webpieces/rules')).toBe(false);
-        expect(fixture.exists('.webpieces/rules.lock.json')).toBe(false);
         expect(fixture.read('webpieces.config.json')).toContain(
             '.webpieces-config/custom/policy.json',
         );
@@ -75,7 +74,7 @@ describe('repository directory migration', () => {
         const link = fixture.trashSymlinks();
         fixture.layout.migrate(fixture.root);
         expect(fs.lstatSync(path.join(fixture.root, link)).isSymbolicLink()).toBe(true);
-        expect(fixture.read('.webpieces-config/rules.lock.json')).toBe('{"packs":[]}');
+        expect(fixture.read('.webpieces-config/rules/code.json')).toBe('{"code":1}');
         expect(() => fixture.layout.assertCurrent(fixture.root)).not.toThrow();
     });
 
@@ -138,19 +137,8 @@ describe('repository directory migration', () => {
         expect(() => fixture.layout.migrate(fixture.root)).toThrow('conflicts with');
         expect(fixture.read('.webpieces-config/custom/policy.json')).toBe('other policy');
         expect(fixture.read('.webpieces/custom/policy.json')).toContain('OFF');
-        expect(fixture.read('.webpieces/rules.lock.json')).toBe('{"packs":[]}');
+        expect(fixture.read('.webpieces/rules/code.json')).toBe('{"code":1}');
         expect(fixture.read('webpieces.config.json')).toBe(before);
-    });
-
-    it('replaces a stale generated lock and catalog left in .webpieces-config/ by a rollback', () => {
-        const fixture = new LayoutFixture();
-        fixture.write('.webpieces-config/rules.lock.json', '{"packs":["stale"]}');
-        fixture.write('.webpieces-config/rules-catalog.md', '# Stale');
-        fixture.layout.migrate(fixture.root);
-        expect(fixture.read('.webpieces-config/rules.lock.json')).toBe('{"packs":[]}');
-        expect(fixture.read('.webpieces-config/rules-catalog.md')).toBe('# Policy');
-        expect(fixture.exists('.webpieces/rules.lock.json')).toBe(false);
-        expect(() => fixture.layout.assertCurrent(fixture.root)).not.toThrow();
     });
 
     it('rejects two different sources that would converge on one destination', () => {
@@ -158,13 +146,13 @@ describe('repository directory migration', () => {
         fixture.write(
             'webpieces.config.json',
             JSON.stringify({
-                rulePacks: [{ package: '@client/pack', config: '.webpieces/rules-catalog.md' }],
+                rulePacks: [{ package: '@client/pack', config: '.webpieces-logs/rules/code.json' }],
             }),
         );
-        fixture.write('.webpieces/rules-catalog.md', 'separate declared policy');
+        fixture.write('.webpieces-logs/rules/code.json', 'separate declared policy');
         expect(() => fixture.layout.migrate(fixture.root)).toThrow('both target');
-        expect(fixture.read('.webpieces/rules-catalog.md')).toBe('separate declared policy');
-        expect(fixture.read('.webpieces/instruct-ai/rules-catalog.md')).toBe('# Policy');
+        expect(fixture.read('.webpieces-logs/rules/code.json')).toBe('separate declared policy');
+        expect(fixture.read('.webpieces/rules/code.json')).toBe('{"code":1}');
     });
 
     it('accepts identical destinations after an interrupted migration', () => {
