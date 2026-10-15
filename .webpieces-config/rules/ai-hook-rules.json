@@ -7,7 +7,6 @@
   },
   "no-js-files": {
     "mode": "NEW_AND_MODIFIED_FILES",
-    "allowedPaths": [],
     "turnOffRuleUntilEpoch": 0,
     "turnOffRuleWhileOnBranch": null
   },
@@ -18,13 +17,7 @@
       "jest.setup.ts"
     ],
     "excludePaths": [
-      "node_modules",
-      "dist",
-      ".nx",
-      ".git",
       "scripts/**",
-      "**/*.d.ts",
-      "**/jest.config.ts",
       "**/codegen.ts"
     ],
     "turnOffRuleWhileOnBranch": null

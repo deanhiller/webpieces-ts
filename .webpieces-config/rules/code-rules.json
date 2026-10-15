@@ -77,7 +77,7 @@
     "mode": "NEW_AND_MODIFIED_CODE",
     "disableAllowed": true,
     "turnOffRuleUntilEpoch": 1771931925,
-    "allowedPaths": [
+    "excludePaths": [
       "libraries/apis/**",
       "packages/core/core-util/src/http/**"
     ],
