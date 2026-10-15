@@ -121,13 +121,28 @@ class WpModeState {
         return true;
     }
 
-    /** Which impact shade a box gets, from the ACTIVE scan. */
-    status(id: string): 'touched' | 'affected' | 'buildInput' | 'untouched' {
+    /** Which impact shade a box gets, from the ACTIVE scan: WHY nx included it (#1264). */
+    status(id: string): 'touched' | 'dependent' | 'implicit' | 'rootFile' | 'unexplained' | 'buildInput' | 'untouched' {
         const impact = this.impact;
         if (impact?.touched.includes(id)) return 'touched';
-        if (impact?.affected.includes(id)) return 'affected';
+        if (impact?.dependents.includes(id)) return 'dependent';
+        if (impact?.implicit.includes(id)) return 'implicit';
+        if (impact?.rootFile.includes(id)) return 'rootFile';
+        if (impact?.unexplained.includes(id)) return 'unexplained';
         if (impact?.buildInputs.includes(id)) return 'buildInput';
         return 'untouched';
+    }
+
+    /** Every affected node id of the active scan, whatever its reason. */
+    affected(): string[] {
+        const impact = this.impact;
+        if (impact === null) return [];
+        return [...impact.touched, ...impact.dependents, ...impact.implicit, ...impact.rootFile, ...impact.unexplained];
+    }
+
+    /** Why `id` is in the active scan's build; null when it is not affected. */
+    reason(id: string): AffectedReasonJson | null {
+        return this.impact?.reasons.find((reason: AffectedReasonJson): boolean => reason.project === id) ?? null;
     }
 
     private initial(): string {
@@ -148,5 +163,126 @@ class WpModeState {
             void err;
             return null;
         }
+    }
+}
+
+/**
+ * What the "why" panel says about one affected project (#1264): never a reason the graph cannot show.
+ * Pure text, so a spec reads it without a browser; GraphPage puts it in a panel.
+ */
+class WpImpactWhy {
+    static readonly TITLES: Record<string, string> = {
+        touched: 'Changed',
+        dependent: 'Dependent',
+        implicit: 'Implicitly touched',
+        rootFile: 'Root-file touched',
+        unexplained: 'Unexplained',
+    };
+
+    /**
+     * `8 changed · 3 dependents · 22 implicitly touched (runtime-wiring-check inputs) · 47 dependencies`
+     * — the same split ImpactCounts (graph-impact.ts) prints on the console.
+     */
+    counts(impact: ImpactJson): string {
+        const parts = [`${impact.touched.length} changed`, `${impact.dependents.length} dependents`];
+        if (impact.implicit.length > 0) {
+            const targets = [
+                ...new Set(
+                    impact.reasons
+                        .filter((reason: AffectedReasonJson): boolean => reason.kind === 'implicit' && reason.target !== '')
+                        .map((reason: AffectedReasonJson): string => reason.target),
+                ),
+            ].sort();
+            parts.push(`${impact.implicit.length} implicitly touched${targets.length === 0 ? '' : ` (${targets.join(', ')} inputs)`}`);
+        }
+        if (impact.rootFile.length > 0) parts.push(`${impact.rootFile.length} root-file touched`);
+        if (impact.unexplained.length > 0) parts.push(`${impact.unexplained.length} unexplained`);
+        parts.push(`${impact.buildInputs.length} dependencies`);
+        return parts.join(' · ');
+    }
+
+    title(reason: AffectedReasonJson): string {
+        return `${WpImpactWhy.TITLES[reason.kind] ?? reason.kind}: ${reason.project}`;
+    }
+
+    lines(reason: AffectedReasonJson): string[] {
+        if (reason.kind === 'touched') {
+            const owns = reason.files.length === 1 ? 'this changed file' : `these ${reason.files.length} changed files`;
+            return [`It owns ${owns}:`, ...reason.files];
+        }
+        if (reason.kind === 'dependent')
+            return [
+                'It uses a changed or touched project through these dependency edges, so its tests and build re-run:',
+                reason.path.join(' -> '),
+            ];
+        if (reason.kind === 'implicit')
+            return [
+                reason.target === '' ? reason.detail : `${reason.target} input ${reason.input} matched ${reason.files.join(', ')}`,
+                'nx marks every project whose target input glob matches a changed file. It uses no changed project.',
+            ];
+        if (reason.kind === 'rootFile')
+            return [
+                reason.detail,
+                ...(reason.path.length > 0 ? [reason.path.join(' -> ')] : []),
+                'nx marked it for a workspace root file; it uses no changed project.',
+            ];
+        return [reason.detail];
+    }
+}
+
+/**
+ * The "why is this in the build?" panel (#1264): opened from an affected box's menu in Impact mode.
+ * Text nodes only, so no project name is parsed as HTML.
+ */
+class ImpactWhyPanel {
+    private readonly panel = document.createElement('div');
+    private readonly text = new WpImpactWhy();
+    private anchor: SVGGElement | null = null;
+
+    constructor() {
+        this.panel.className = 'wp-graph-details wp-impact-why';
+        this.panel.hidden = true;
+        this.panel.setAttribute('role', 'dialog');
+        this.panel.setAttribute('aria-label', 'Why this project is in the build');
+        document.body.append(this.panel);
+        document.addEventListener('keydown', (ev: KeyboardEvent) => {
+            if (ev.key !== 'Escape' || this.panel.hidden) return;
+            ev.stopPropagation();
+            this.close();
+        }, true);
+        document.addEventListener('click', (ev: MouseEvent) => {
+            const target = ev.target;
+            if (target instanceof Node && !this.panel.contains(target) && !this.anchor?.contains(target)) this.close();
+        });
+    }
+
+    open(node: SVGGElement, reason: AffectedReasonJson): void {
+        this.anchor = node;
+        const heading = document.createElement('strong');
+        heading.textContent = this.text.title(reason);
+        const list = document.createElement('ul');
+        for (const line of this.text.lines(reason)) {
+            const item = document.createElement('li');
+            item.textContent = line;
+            list.append(item);
+        }
+        const close = document.createElement('button');
+        close.type = 'button';
+        close.textContent = 'Close';
+        close.addEventListener('click', () => this.close());
+        this.panel.replaceChildren(heading, list, close);
+        this.panel.hidden = false;
+        const box = node.getBoundingClientRect();
+        this.panel.style.left = `${Math.max(12, Math.min(box.left, innerWidth - this.panel.offsetWidth - 12))}px`;
+        this.panel.style.top = `${Math.max(12, Math.min(box.bottom + 6, innerHeight - this.panel.offsetHeight - 12))}px`;
+        close.focus({ preventScroll: true });
+    }
+
+    close(): void {
+        if (this.panel.hidden) return;
+        this.panel.hidden = true;
+        const anchor = this.anchor;
+        this.anchor = null;
+        if (anchor?.isConnected) anchor.focus({ preventScroll: true });
     }
 }

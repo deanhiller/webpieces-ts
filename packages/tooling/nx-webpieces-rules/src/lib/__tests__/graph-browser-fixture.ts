@@ -13,25 +13,43 @@ import { ResponsibilitiesRenderer } from '../graph-responsibilities';
 import type { EnhancedGraph } from '../graph-sorter';
 import type { GraphRenderModel, RenderEdge } from '../graph-render-model';
 import { ImpactKind, ImpactReport, ImpactSidecar, ImpactSidecarData } from '../graph-impact';
+import { AffectedClass, AffectedReason } from '../graph-impact-reasons';
 
 export const BRANCH_LABEL = 'Changed on this branch (since abc1234)';
 export const COMMIT_LABEL = 'Changed since def5678 — Upgrade the thing (#1162)';
 
-/** One available scan, as the scanner builds it. */
+/**
+ * One available scan, as the scanner builds it: `touched` own a changed file, `dependents` use one
+ * (each one edge from the first touched project), `implicit` matched a {workspaceRoot} input glob.
+ */
 export function impactScan(
     kind: ImpactKind,
     label: string,
     touched: string[],
-    affected: string[],
+    dependents: string[],
     buildInputs: string[],
     changedFiles: number,
     dependencies: string[],
     globalFiles: string[] = [],
     reason = '',
+    implicit: string[] = [],
 ): ImpactReport {
     const dirty = label.endsWith('+ uncommitted changes');
-    return new ImpactReport(kind, label, dirty, true, reason, 'abc1234', touched, affected, buildInputs, changedFiles, dependencies, globalFiles);
+    const reasons = [
+        ...touched.map((id: string): AffectedReason => new AffectedReason(id, AffectedClass.CHANGED, [`${id}/src/index.ts`], [], '', '', 'owns 1 changed file')),
+        ...dependents.map(
+            (id: string): AffectedReason =>
+                new AffectedReason(id, AffectedClass.DEPENDENT, [], [id, touched[0]], '', '', `uses a changed project: ${id} -> ${touched[0]}`),
+        ),
+        ...implicit.map(
+            (id: string): AffectedReason =>
+                new AffectedReason(id, AffectedClass.IMPLICIT, ['services/a/src/wiring.ts'], [], 'wiring-check', WIRING_INPUT, `wiring-check input ${WIRING_INPUT} matched services/a/src/wiring.ts`),
+        ),
+    ];
+    return new ImpactReport(kind, label, dirty, true, reason, 'abc1234', touched, dependents, implicit, [], [], buildInputs, changedFiles, dependencies, globalFiles, reasons);
 }
+
+export const WIRING_INPUT = '{workspaceRoot}/**/src/wiring.ts';
 
 /** Opt-in browser suite: WP_GRAPH_VIZ_JS supplies Viz 3; the cross-page test additionally uses
  * WP_GRAPH_VIZ2_JS and WP_GRAPH_VIZ2_RENDER_JS for design's pinned Viz 2.1.2 scripts. */

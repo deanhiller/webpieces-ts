@@ -16,9 +16,9 @@ import { ProductColor } from './graph-products';
 
 /**
  * The Filter popover's "Changes on this branch" choices. The page computes each set from the Impact
- * sidecar (graph-impact.ts): CHANGED = touched; DEPENDENTS = touched + affected (nx affected: their
+ * sidecar (graph-impact.ts): CHANGED = touched; DEPENDENTS = every project nx affected, whatever its reason (their
  * tests re-run); DEPENDENCIES = touched + every transitive dependency of it; BUILD = touched +
- * affected + every build input — the dependencies of the DEPENDENTS too, which is why it is more than
+ * every affected project + every build input — the dependencies of the DEPENDENTS too, which is why it is more than
  * the union of the two rows above it.
  *
  * "Dependents" are what USE a project and "dependencies" what it uses (#1179). "Dependee" would mean
@@ -48,7 +48,7 @@ export class ScopeOption {
 export const SCOPE_OPTIONS: readonly ScopeOption[] = [
     new ScopeOption(ChangeScope.EVERYTHING, 'All', 'every project'),
     new ScopeOption(ChangeScope.CHANGED, 'Changed', 'owns a changed file'),
-    new ScopeOption(ChangeScope.DEPENDENTS, 'Changed + dependents', '+ everything that uses them (their tests re-run)'),
+    new ScopeOption(ChangeScope.DEPENDENTS, 'Changed + dependents', '+ everything else nx affected: dependents, implicitly and root-file touched (their tests re-run)'),
     new ScopeOption(ChangeScope.DEPENDENCIES, 'Changed + dependencies', '+ everything they use'),
     new ScopeOption(ChangeScope.BUILD, 'Changed + dependents + dependencies', 'everything CI builds for this branch'),
 ];
@@ -248,7 +248,7 @@ export class GraphPageShell {
             <p>💡 <strong>Click any box</strong> for its menu: <strong>View Design</strong> (only where the project has a generated <strong>design.html</strong>, i.e. what the AI sees inside it), <strong>Lock/Unlock</strong> (the same lock as the Focus field), <strong>Filter Unconnected</strong> (removes unrelated boxes, keeping each L-number row).</p>
             <p><strong>Filter</strong> narrows the graph by what changed on this branch or in the last commit, by runtime, by role and by product; the groups combine. A product keeps its servers, clients and apps plus everything they depend on, so <strong>Product</strong> + <strong>Changed + dependents + dependencies</strong> is exactly what this branch builds that can affect that product. Every box keeps its own L-row, and a level left empty shows as a thin labeled band.</p>
             <p>🔦 <strong>Hover any box</strong> to trace its <em>entire</em> dependency chain — every ancestor above it and every dependency below it, with the lines between — while the rest of the graph dims.</p>
-            <p><strong>Runtime</strong>: a box may depend on a box carrying every color it has. <strong>Architecture</strong>: what each box is in the system. <strong>Impact</strong>: what changed on this branch or in the last commit (amber) and its dependents (amber outline); with both available, a toggle picks which. <strong>Product</strong>: which products each box belongs to — one color per product, stripes for several, grey for every product, a dashed white box for none.</p>
+            <p><strong>Runtime</strong>: a box may depend on a box carrying every color it has. <strong>Architecture</strong>: what each box is in the system. <strong>Impact</strong>: what changed on this branch or in the last commit (amber), its dependents (amber outline), and what nx marked for another reason: an input glob (violet hatch) or a root file (teal). Click an affected box for why; with both available, a toggle picks which. <strong>Product</strong>: which products each box belongs to — one color per product, stripes for several, grey for every product, a dashed white box for none.</p>
             <p><kbd>/</kbd> focus the lock search · <kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd> <kbd>4</kbd> switch mode · <kbd>Esc</kbd> unlock</p>
         </div>`;
     }

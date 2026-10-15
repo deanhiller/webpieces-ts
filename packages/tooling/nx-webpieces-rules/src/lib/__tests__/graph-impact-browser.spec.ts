@@ -99,7 +99,7 @@ describe.skipIf(!process.env.WP_GRAPH_VIZ_JS)('Impact comparisons in a real brow
     });
 
     it('labels an unavailable scan in the reason and keeps the toggle option disabled', async () => {
-        const rootCommit = new ImpactReport(ImpactKind.COMMIT, 'Last commit', false, false, ROOT_COMMIT_REASON, '', [], [], [], 0, [], []);
+        const rootCommit = new ImpactReport(ImpactKind.COMMIT, 'Last commit', false, false, ROOT_COMMIT_REASON, '', [], [], [], [], [], [], 0, [], [], []);
         const page = await fixture.openWithImpact(
             '1163-unavailable',
             fixture.architecture(FilterFixture.wide()),

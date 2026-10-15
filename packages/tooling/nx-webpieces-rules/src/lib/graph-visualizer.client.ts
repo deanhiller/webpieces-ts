@@ -46,7 +46,7 @@ class WpProjectFilter {
         const impact = this.modes.impact;
         if (scope === 'everything' || impact === null || this.modes.impactReason() !== '') return null;
         const ids: string[] = [...impact.touched];
-        if (scope === 'dependents' || scope === 'build') ids.push(...impact.affected);
+        if (scope === 'dependents' || scope === 'build') ids.push(...this.modes.affected());
         if (scope === 'dependencies') ids.push(...impact.dependencies);
         if (scope === 'build') ids.push(...impact.buildInputs);
         return new Set(ids);
@@ -170,6 +170,8 @@ class GraphHighlighter {
                 ),
             );
             items.push(this.page.filterItem(name));
+            const why = this.page.whyItem(name, node);
+            if (why !== null) items.unshift(why);
             const implemented = window.__WP_RUNTIME__?.implementsItem(name, node);
             if (implemented) items.push(implemented);
             const goal = window.__WP_GOAL__?.item(name, node);
@@ -510,6 +512,10 @@ class GraphDrawer {
         document.querySelectorAll<HTMLElement>('[data-wp-impact-note]').forEach((note: HTMLElement) => {
             note.textContent = this.impactNote(modes);
         });
+        // "unexplained" is a row only when the active scan has one.
+        document.querySelectorAll<HTMLElement>('[data-wp-legend="unexplained"]').forEach((row: HTMLElement) => {
+            row.hidden = (modes.impact?.unexplained.length ?? 0) === 0;
+        });
         this.syncImpactKinds(modes);
         const title = this.byId('wp-legend-pop-title');
         if (title !== null) title.textContent = `Legend · ${modes.name(modes.mode)}`;
@@ -579,10 +585,8 @@ class GraphDrawer {
         if (impact === null || !impact.available) return '';
         // An available scan with a note is an EMPTY one, e.g. "Nothing changed on this branch yet".
         if (impact.reason !== '') return `${impact.label}: ${impact.reason}.`;
-        const stats =
-            `${impact.label}: ${impact.touched.length} changed · ${impact.affected.length} dependents · ` +
-            `${impact.buildInputs.length} dependencies — nx affected, ${impact.changedFiles} changed files.`;
-        const cause = this.globalCause(impact);
+        const stats = `${impact.label}: ${new WpImpactWhy().counts(impact)} — nx affected, ${impact.changedFiles} changed files.`;
+        const cause = this.globalCause(impact, modes.affected().length);
         return cause === '' ? stats : `${cause}. ${stats}`;
     }
 
@@ -591,9 +595,8 @@ class GraphDrawer {
      * workspace-global input (a lockfile, the workspace manifest). That is correct for CI, and
      * baffling on a graph, so the note names the cause.
      */
-    private globalCause(impact: ImpactJson): string {
+    private globalCause(impact: ImpactJson, affected: number): string {
         if (impact.touched.length > 0 || impact.changedFiles === 0) return '';
-        const affected = impact.affected.length;
         const who = affected >= this.page.projectCount() ? 'Every project affected' : `${affected} projects affected`;
         const files = impact.globalFiles;
         if (files.length === 0)
@@ -643,6 +646,15 @@ class GraphPage extends WpFilterPage {
     private projects = new WpProjectFilter(this.model, this.modes);
     private applied = new WpFilterChoice();
     private readonly drawer = new GraphDrawer(this);
+    private readonly why = new ImpactWhyPanel();
+
+    /** In Impact mode, an affected box's menu leads with WHY it is in the build (#1264). */
+    whyItem(name: string, node: SVGGElement): WpNodeMenuItem | null {
+        const reason = this.modes.mode === 'impact' ? this.modes.reason(name) : null;
+        if (reason === null) return null;
+        const title = (WpImpactWhy.TITLES[reason.kind] ?? reason.kind).toLowerCase();
+        return new WpNodeMenuItem(`Why in this build? (${title})`, () => this.why.open(node, reason));
+    }
 
     protected override captureBinding(_svg: SVGSVGElement | null): () => void {
         const previous = this.highlighter;

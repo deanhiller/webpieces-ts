@@ -1,16 +1,22 @@
 /**
  * Impact mode's data. nx and git are injected, so these pin the decisions — which comparisons exist
- * where HEAD is (#1163), what is "touched" vs "affected", when no sidecar is written, that the sidecar
- * ignores itself — without spawning either.
+ * where HEAD is (#1163), WHY each affected project is in the build (#1264), when no sidecar is
+ * written, that the sidecar ignores itself — without spawning either. nx's affected locators are its
+ * own, run over a synthetic project graph.
  */
 
 import { describe, it, expect } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
+import type { FileChange } from 'nx/src/project-graph/file-utils';
 import { DiffScope } from '@webpieces/rules-config';
 import { specTempDirs } from '@webpieces/tooling-testkit';
 import type { EnhancedGraph } from '../graph-sorter';
+import { AffectedClass, AffectedClassifier, AffectedReason } from '../graph-impact-reasons';
+import { ImpactGraphFixture } from './graph-impact-fixture';
 import {
+    AffectedContext,
+    AffectedContextLoader,
     GENERATE_IMPACT_KINDS,
     IMPACT_SIDECAR_DIR,
     IMPACT_SIDECAR_FILE,
@@ -27,7 +33,6 @@ import {
     NOTHING_CHANGED_ON_BRANCH,
     NxCli,
     NxImpactScanner,
-    ProjectFileOwners,
     ROOT_COMMIT_REASON,
     VISUALIZE_IMPACT_KINDS,
 } from '../graph-impact';
@@ -71,14 +76,39 @@ class FakeNx extends NxCli {
     }
 }
 
-class FakeOwners extends ProjectFileOwners {
+/** The same projects as nx sees them: roots for file ownership, and the dependency edges. */
+const NX_GRAPH = ImpactGraphFixture.graph(
+    [
+        ImpactGraphFixture.project('app', 'apps/app'),
+        ImpactGraphFixture.project('lib-a', 'libs/lib-a'),
+        ImpactGraphFixture.project('core', 'libs/core'),
+        ImpactGraphFixture.project('other', 'libs/other'),
+    ],
+    [
+        ['app', 'lib-a'],
+        ['lib-a', 'core'],
+    ],
+);
+
+/** nx's own locators over NX_GRAPH; every changed file is a whole-file change. */
+class FakeContext extends AffectedContext {
+    constructor() {
+        super(NX_GRAPH, { namedInputs: { default: ['{projectRoot}/**/*'] } }, ImpactGraphFixture.PACKAGE_JSON, new AffectedClassifier(ImpactGraphFixture.locators()), null);
+    }
+    override fileChanges(files: string[]): FileChange[] {
+        return files.map((file: string): FileChange => ImpactGraphFixture.wholeFile(file));
+    }
+}
+
+class FakeLoader extends AffectedContextLoader {
     calls = 0;
-    constructor(private readonly map: Map<string, string>) {
+    constructor(private readonly fail = false) {
         super();
     }
-    override async owners(): Promise<Map<string, string>> {
+    override async load(): Promise<AffectedContext> {
         this.calls++;
-        return this.map;
+        if (this.fail) throw new Error('nx is not installed here');
+        return new FakeContext();
     }
 }
 
@@ -106,10 +136,6 @@ class FakeGit extends ImpactGit {
     }
 }
 
-const owners = new Map<string, string>([
-    ['libs/core/src/a.ts', 'core'],
-    ['apps/app/main.ts', 'app'],
-]);
 
 const branchAt = (base: string | null): ImpactComparison =>
     new ImpactComparison(ImpactKind.BRANCH, base, 'Changed on this branch (since abcdef1)', false, '');
@@ -193,7 +219,7 @@ describe('NxImpactScanner', () => {
     it("asks nx for the affected set from the comparison's base with no --head, so uncommitted work counts", async () => {
         const nx = new FakeNx('["app","lib-a","core","not-drawn"]');
         const diff = new FakeDiff(null, ['libs/core/src/a.ts']);
-        const scanner = new NxImpactScanner(diff, nx, new FakeOwners(owners));
+        const scanner = new NxImpactScanner(diff, nx, new FakeLoader());
         const report = (await scanner.scan('/ws', GRAPH, branchAt('abcdef1234'))) as ImpactReport;
         expect(nx.calls).toEqual([['show', 'projects', '--affected', '--base=abcdef1234', '--json']]);
         expect(diff.bases).toEqual(['abcdef1234..WORKTREE']);
@@ -201,83 +227,97 @@ describe('NxImpactScanner', () => {
         expect(report.kind).toBe(ImpactKind.BRANCH);
         expect(report.label).toBe('Changed on this branch (since abcdef1)');
         expect(report.base).toBe('abcdef1');
-        // touched = affected AND owning a changed file (by nx's own ownership); the rest are affected.
+        // touched = affected AND owning a changed file (nx's own locator); the rest reach it over edges.
         expect(report.touched).toEqual(['core']);
-        expect(report.affected).toEqual(['app', 'lib-a']);
+        expect(report.dependents).toEqual(['app', 'lib-a']);
+        expect([report.implicit, report.rootFile, report.unexplained]).toEqual([[], [], []]);
         expect(report.buildInputs).toEqual([]);
+        // Every affected project carries WHY; a project the page does not draw carries nothing.
+        const why = report.reasons.map((reason: AffectedReason): string => `${reason.project}: ${reason.detail}`);
+        expect(why).toEqual([
+            'app: uses a changed project: app -> lib-a -> core',
+            'core: owns 1 changed file',
+            'lib-a: uses a changed project: lib-a -> core',
+        ]);
     });
 
-    it('scans each comparison with its OWN --base and computes nx ownership once for both', async () => {
+    it('scans each comparison with its OWN --base and loads nx once for both', async () => {
         const nx = new FakeNx('["core"]');
         const diff = new FakeDiff(null, ['libs/core/src/a.ts']);
-        const ownership = new FakeOwners(owners);
+        const loader = new FakeLoader();
         const comparisons = plan(new FakeGit('dean/x', PARENT, false), FORK).comparisons;
-        const results = await new NxImpactScanner(diff, nx, ownership).scanAll('/ws', GRAPH, comparisons);
+        const results = await new NxImpactScanner(diff, nx, loader).scanAll('/ws', GRAPH, comparisons);
         expect(nx.calls).toEqual([
             ['show', 'projects', '--affected', `--base=${FORK}`, '--json'],
             ['show', 'projects', '--affected', `--base=${PARENT}`, '--json'],
         ]);
         expect(nx.calls.flat().some((arg: string): boolean => arg.startsWith('--head'))).toBe(false);
         expect(diff.bases).toEqual([`${FORK}..WORKTREE`, `${PARENT}..WORKTREE`]);
-        expect(ownership.calls).toBe(1);
+        expect(loader.calls).toBe(1);
         expect(reportKinds(results)).toEqual([ImpactKind.BRANCH, ImpactKind.COMMIT]);
     });
 
     it('marks every transitive dependency of the affected set that is not affected as a build input', async () => {
         // nx says only the app is affected (e.g. its own file changed): lib-a and core must still be built.
-        const scanner = new NxImpactScanner(new FakeDiff(null, ['apps/app/main.ts']), new FakeNx('["app"]'), new FakeOwners(owners));
+        const scanner = new NxImpactScanner(new FakeDiff(null, ['apps/app/main.ts']), new FakeNx('["app"]'), new FakeLoader());
         const report = (await scanner.scan('/ws', GRAPH, branchAt('b'))) as ImpactReport;
         expect(report.touched).toEqual(['app']);
-        expect(report.affected).toEqual([]);
+        expect(report.dependents).toEqual([]);
         expect(report.buildInputs).toEqual(['core', 'lib-a']);
     });
 
     it('exposes what the changed projects use, for the Filter popover', async () => {
         // lib-a changed: it uses core (a dependency of the touched set, not itself touched).
-        const lib = new Map<string, string>([['libs/lib-a/x.ts', 'lib-a']]);
-        const scanner = new NxImpactScanner(new FakeDiff(null, ['libs/lib-a/x.ts']), new FakeNx('["app","lib-a"]'), new FakeOwners(lib));
+        const scanner = new NxImpactScanner(new FakeDiff(null, ['libs/lib-a/x.ts']), new FakeNx('["app","lib-a"]'), new FakeLoader());
         const report = (await scanner.scan('/ws', GRAPH, branchAt('b'))) as ImpactReport;
         expect(report.touched).toEqual(['lib-a']);
-        expect(report.affected).toEqual(['app']);
+        expect(report.dependents).toEqual(['app']);
         expect(report.dependencies).toEqual(['core']);
         expect(report.globalFiles).toEqual([]);
     });
 
-    it('names the workspace-global files when changes touch no project but nx affects everything', async () => {
+    it('labels a lockfile change ROOT-FILE touched — never dependent — and names the unowned files', async () => {
         const files = ['pnpm-workspace.yaml', 'pnpm-lock.yaml'];
-        const scanner = new NxImpactScanner(new FakeDiff(null, files), new FakeNx('["app","lib-a","core","other"]'), new FakeOwners(owners));
+        const scanner = new NxImpactScanner(new FakeDiff(null, files), new FakeNx('["app","lib-a","core","other"]'), new FakeLoader());
         const report = (await scanner.scan('/ws', GRAPH, branchAt('b'))) as ImpactReport;
         expect(report.touched).toEqual([]);
-        expect(report.affected).toHaveLength(4);
+        expect(report.dependents).toEqual([]);
+        expect(report.rootFile).toEqual(['app', 'core', 'lib-a', 'other']);
         expect(report.globalFiles).toEqual(['pnpm-lock.yaml', 'pnpm-workspace.yaml']);
         expect(report.dependencies).toEqual([]);
     });
 
-    it('claims no global files when nx file ownership was unavailable', async () => {
-        const scanner = new NxImpactScanner(new FakeDiff(null, ['pnpm-lock.yaml']), new FakeNx('["core"]'), new FakeOwners(new Map()));
-        expect(((await scanner.scan('/ws', GRAPH, branchAt('b'))) as ImpactReport).globalFiles).toEqual([]);
+    it('labels everything UNEXPLAINED, with the reason, when nx\'s locators cannot load', async () => {
+        const scanner = new NxImpactScanner(new FakeDiff(null, ['pnpm-lock.yaml']), new FakeNx('["core","app"]'), new FakeLoader(true));
+        const report = (await scanner.scan('/ws', GRAPH, branchAt('b'))) as ImpactReport;
+        expect(report.globalFiles).toEqual([]);
+        expect(report.unexplained).toEqual(['app', 'core']);
+        expect([report.touched, report.dependents]).toEqual([[], []]);
+        expect(report.reasons[0].kind).toBe(AffectedClass.UNEXPLAINED);
+        expect(report.reasons[0].detail).toContain('nx is not installed here');
     });
 
-    it('never counts a file owner nx did not call affected', async () => {
-        const scanner = new NxImpactScanner(new FakeDiff(null, ['apps/app/main.ts']), new FakeNx('["core"]'), new FakeOwners(owners));
+    it('never counts a file owner nx did not call affected, and never guesses why nx marked another', async () => {
+        const scanner = new NxImpactScanner(new FakeDiff(null, ['apps/app/main.ts']), new FakeNx('["core"]'), new FakeLoader());
         const report = (await scanner.scan('/ws', GRAPH, branchAt('b'))) as ImpactReport;
         expect(report.touched).toEqual([]);
-        expect(report.affected).toEqual(['core']);
+        expect(report.dependents).toEqual([]);
+        expect(report.unexplained).toEqual(['core']);
     });
 
     it('reports a fresh branch with a clean tree as AVAILABLE with zero sets and "Nothing changed on this branch yet"', async () => {
-        const scanner = new NxImpactScanner(new FakeDiff(null, []), new FakeNx('[]'), new FakeOwners(owners));
+        const scanner = new NxImpactScanner(new FakeDiff(null, []), new FakeNx('[]'), new FakeLoader());
         const report = (await scanner.scan('/ws', GRAPH, branchAt(HEAD))) as ImpactReport;
         expect(report.available).toBe(true);
         expect(report.reason).toBe(NOTHING_CHANGED_ON_BRANCH);
-        expect([report.touched, report.affected, report.buildInputs, report.dependencies]).toEqual([[], [], [], []]);
+        expect([report.touched, report.dependents, report.buildInputs, report.dependencies]).toEqual([[], [], [], []]);
         expect(report.changedFiles).toBe(0);
     });
 
     it("reports the root commit's last-commit comparison as unavailable with its reason, asking nx nothing", async () => {
         const nx = new FakeNx('[]');
         const comparison = plan(new FakeGit('main', null, false)).comparisons[0];
-        const scanner = new NxImpactScanner(new FakeDiff(null, []), nx, new FakeOwners(owners));
+        const scanner = new NxImpactScanner(new FakeDiff(null, []), nx, new FakeLoader());
         const report = (await scanner.scan('/ws', GRAPH, comparison)) as ImpactReport;
         expect(report.available).toBe(false);
         expect(report.reason).toBe(ROOT_COMMIT_REASON);
@@ -286,9 +326,9 @@ describe('NxImpactScanner', () => {
 
     it('is unavailable with a failed nx, or output that is not a JSON list', async () => {
         for (const scanner of [
-            new NxImpactScanner(new FakeDiff(null, []), new FakeNx(null), new FakeOwners(owners)),
-            new NxImpactScanner(new FakeDiff(null, []), new FakeNx('{"a":1}'), new FakeOwners(owners)),
-            new NxImpactScanner(new FakeDiff(null, []), new FakeNx('not json'), new FakeOwners(owners)),
+            new NxImpactScanner(new FakeDiff(null, []), new FakeNx(null), new FakeLoader()),
+            new NxImpactScanner(new FakeDiff(null, []), new FakeNx('{"a":1}'), new FakeLoader()),
+            new NxImpactScanner(new FakeDiff(null, []), new FakeNx('not json'), new FakeLoader()),
         ]) {
             expect(await scanner.scan('/ws', GRAPH, branchAt('b'))).toBeInstanceOf(ImpactUnavailable);
         }
@@ -318,7 +358,7 @@ const scanKinds = (data: ImpactSidecarData): string[] => data.scans.map((scan: I
 describe('ImpactRefresh + ImpactSidecar', () => {
     it('writes a self-ignoring sidecar that sets one window global of { scans, defaultKind }', async () => {
         const dir = specTempDirs.make('wp-impact-');
-        const scanner = new NxImpactScanner(new FakeDiff(null, ['libs/core/src/a.ts']), new FakeNx('["core","app"]'), new FakeOwners(owners));
+        const scanner = new NxImpactScanner(new FakeDiff(null, ['libs/core/src/a.ts']), new FakeNx('["core","app"]'), new FakeLoader());
         const resolver = new FixedResolver(plan(new FakeGit('dean/x', PARENT, false), FORK));
         const line = await new ImpactRefresh(scanner, new ImpactSidecar(), resolver).run(dir, dir, GRAPH, VISUALIZE_IMPACT_KINDS);
         // One result line per comparison.
@@ -341,7 +381,7 @@ describe('ImpactRefresh + ImpactSidecar', () => {
         expect(GENERATE_IMPACT_KINDS).toEqual([ImpactKind.BRANCH]);
         const dir = specTempDirs.make('wp-impact-generate-');
         const nx = new FakeNx('["core"]');
-        const scanner = new NxImpactScanner(new FakeDiff(null, ['libs/core/src/a.ts']), nx, new FakeOwners(owners));
+        const scanner = new NxImpactScanner(new FakeDiff(null, ['libs/core/src/a.ts']), nx, new FakeLoader());
         const resolver = new FixedResolver(plan(new FakeGit('dean/x', PARENT, false), FORK));
         await new ImpactRefresh(scanner, new ImpactSidecar(), resolver).run(dir, dir, GRAPH, GENERATE_IMPACT_KINDS);
         expect(nx.calls).toEqual([['show', 'projects', '--affected', `--base=${FORK}`, '--json']]);
@@ -353,7 +393,7 @@ describe('ImpactRefresh + ImpactSidecar', () => {
         const sidecar = new ImpactSidecar();
         sidecar.write(dir, new ImpactSidecarData([], ImpactKind.BRANCH));
         const nx = new FakeNx('["core"]');
-        const scanner = new NxImpactScanner(new FakeDiff(null, []), nx, new FakeOwners(owners));
+        const scanner = new NxImpactScanner(new FakeDiff(null, []), nx, new FakeLoader());
         const resolver = new FixedResolver(plan(new FakeGit('main', PARENT, false)));
         const line = await new ImpactRefresh(scanner, sidecar, resolver).run(dir, dir, GRAPH, GENERATE_IMPACT_KINDS);
         expect(line).toContain('no sidecar written');
@@ -366,7 +406,7 @@ describe('ImpactRefresh + ImpactSidecar', () => {
         const dir = specTempDirs.make('wp-impact-stale-');
         const sidecar = new ImpactSidecar();
         sidecar.write(dir, new ImpactSidecarData([], ImpactKind.BRANCH));
-        const scanner = new NxImpactScanner(new FakeDiff(null, []), new FakeNx(null), new FakeOwners(owners));
+        const scanner = new NxImpactScanner(new FakeDiff(null, []), new FakeNx(null), new FakeLoader());
         const resolver = new FixedResolver(plan(new FakeGit('main', PARENT, false)));
         const line = await new ImpactRefresh(scanner, sidecar, resolver).run(dir, dir, GRAPH, VISUALIZE_IMPACT_KINDS);
         expect(line).toContain('no sidecar written');
@@ -375,7 +415,7 @@ describe('ImpactRefresh + ImpactSidecar', () => {
 
     it('writes the root commit as an unavailable scan with its reason', async () => {
         const dir = specTempDirs.make('wp-impact-root-');
-        const scanner = new NxImpactScanner(new FakeDiff(null, []), new FakeNx('[]'), new FakeOwners(owners));
+        const scanner = new NxImpactScanner(new FakeDiff(null, []), new FakeNx('[]'), new FakeLoader());
         const resolver = new FixedResolver(plan(new FakeGit('main', null, false)));
         const line = await new ImpactRefresh(scanner, new ImpactSidecar(), resolver).run(dir, dir, GRAPH, VISUALIZE_IMPACT_KINDS);
         expect(line).toContain(ROOT_COMMIT_REASON);
@@ -388,14 +428,14 @@ describe('ImpactRefresh + ImpactSidecar', () => {
         const dir = specTempDirs.make('wp-impact-default-');
         const failing = new ImpactComparison(ImpactKind.BRANCH, null, 'Changed on this branch', false, 'no fork point');
         const commit = new ImpactComparison(ImpactKind.COMMIT, PARENT, 'Changed since eeee000', false, '');
-        const scanner = new NxImpactScanner(new FakeDiff(null, ['libs/core/src/a.ts']), new FakeNx('["core"]'), new FakeOwners(owners));
+        const scanner = new NxImpactScanner(new FakeDiff(null, ['libs/core/src/a.ts']), new FakeNx('["core"]'), new FakeLoader());
         const resolver = new FixedResolver(new ImpactPlan([failing, commit], ImpactKind.BRANCH));
         await new ImpactRefresh(scanner, new ImpactSidecar(), resolver).run(dir, dir, GRAPH, VISUALIZE_IMPACT_KINDS);
         expect(sidecarData(dir).defaultKind).toBe('commit');
     });
 
     it('escapes "<" so a project name cannot close the script', () => {
-        const report = new ImpactReport(ImpactKind.BRANCH, 'l', false, true, '', 'b', ['</script>'], [], [], 1, [], []);
+        const report = new ImpactReport(ImpactKind.BRANCH, 'l', false, true, '', 'b', ['</script>'], [], [], [], [], [], 1, [], [], []);
         const script = new ImpactSidecar().script(new ImpactSidecarData([report], ImpactKind.BRANCH));
         expect(script).not.toContain('</script>');
     });
