@@ -16,10 +16,16 @@ import {
     FRAMEWORK_STYLES,
     FrameworkStyle,
     GraphMode,
-    IMPACT_AFFECTED,
     IMPACT_BUILD_INPUT,
     IMPACT_BUILD_INPUT_BORDER,
+    IMPACT_DEPENDENT,
+    IMPACT_IMPLICIT,
+    IMPACT_IMPLICIT_BORDER,
+    IMPACT_IMPLICIT_GAP,
+    IMPACT_ROOT_FILE,
+    IMPACT_ROOT_FILE_BORDER,
     IMPACT_TOUCHED,
+    IMPACT_UNEXPLAINED_BORDER,
     IMPACT_UNTOUCHED,
     LegendFacts,
     NO_RUNTIME_COLOR,
@@ -97,17 +103,36 @@ export class GraphLegend {
     }
 
     /**
-     * Which box is which is only known from the branch's sidecar, so all four rows always show. The
-     * words are the Filter's (#1179): changed · dependent · dependency · not in this build.
+     * Which box is which is only known from the branch's sidecar, so every row shows except
+     * "unexplained", which the page shows only when the active scan has one. Each affected class says
+     * WHY nx included it (#1264) — only the dependent row claims "uses a changed project".
      */
     impactRows(): string {
         return (
             this.row('touched', this.solid(IMPACT_TOUCHED, '', ''), 'changed', 'owns a changed file') +
             this.row(
-                'affected',
-                this.solid(IMPACT_AFFECTED, IMPACT_TOUCHED, ''),
                 'dependent',
-                'uses a changed project: its tests and build re-run',
+                this.solid(IMPACT_DEPENDENT, IMPACT_TOUCHED, ''),
+                'dependent',
+                'uses a changed project: its tests and build re-run (click it for the path)',
+            ) +
+            this.row(
+                'implicit',
+                this.hatchSwatch(),
+                'implicitly touched',
+                'a target input glob ({workspaceRoot}/…) matched a changed file; it uses no changed project',
+            ) +
+            this.row(
+                'rootFile',
+                this.solid(IMPACT_ROOT_FILE, IMPACT_ROOT_FILE_BORDER, ''),
+                'root-file touched',
+                'a lockfile, package.json, tsconfig.base.json or nx.json change marked it',
+            ) +
+            this.row(
+                'unexplained',
+                this.solid(IMPACT_DEPENDENT, IMPACT_UNEXPLAINED_BORDER, '3 2'),
+                'unexplained',
+                'nx marked it affected; nothing here could say why',
             ) +
             this.row(
                 'build-input',
@@ -215,6 +240,17 @@ export class GraphLegend {
         if (style.isBase()) return this.open() + base + this.frame();
         const inset = `<rect x="4" y="4" width="${SWATCH_W - 8}" height="${SWATCH_H - 8}" rx="2" fill="${style.color}"/>`;
         return this.open() + base + inset + this.frame();
+    }
+
+    /** The implicitly-touched hatch: thin alternating violet stripes inside a violet ring. */
+    private hatchSwatch(): string {
+        const count = 8;
+        const width = SWATCH_W / count;
+        let stripes = '';
+        for (let index = 0; index < count; index++)
+            stripes += `<rect x="${(index * width).toFixed(2)}" width="${width.toFixed(2)}" height="${SWATCH_H}" fill="${index % 2 === 0 ? IMPACT_IMPLICIT : IMPACT_IMPLICIT_GAP}"/>`;
+        const ring = `<rect x="2" y="2" width="${SWATCH_W - 4}" height="${SWATCH_H - 4}" fill="none" stroke="${IMPACT_IMPLICIT_BORDER}" stroke-width="2"/>`;
+        return this.open() + stripes + ring + this.frame();
     }
 
     private stripesSwatch(): string {

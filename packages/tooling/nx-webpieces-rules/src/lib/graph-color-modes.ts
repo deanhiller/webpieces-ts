@@ -14,14 +14,18 @@
  *                 dependency rule becomes visual: a box may depend on a box carrying every color it has.
  *  - ARCHITECTURE "servers · clients · APIs". A solid fill by ROLE; framework color is not shown.
  *  - IMPACT       "what changed" — on this branch, or in the last commit (graph-impact.ts).
- *                 Projects owning a changed file are solid amber ("touched"); the rest of nx's affected set is light amber ("affected": their ci
- *                 re-runs); every transitive dependency of the affected set that is not itself
- *                 affected is light slate with a dashed border ("build input": compiled or restored
- *                 from cache, unchanged); everything else is grey. Which box is which is only known
- *                 per checkout, so every box carries all four variants and the page picks one from the
- *                 sidecar (graph-impact.ts). The state is never written on the box: color + legend.
- *                 The words are the Filter's: changed · dependent · dependency (built, unchanged) ·
- *                 not in this build.
+ *                 The affected set is split by WHY nx included it (#1264, graph-impact-reasons.ts):
+ *                 owning a changed file is solid amber ("changed"); reached over dependency edges
+ *                 from one is light amber with an amber border ("dependent"); a `{workspaceRoot}`
+ *                 input glob match is violet hatching ("implicitly touched"); a lockfile /
+ *                 package.json / tsconfig.base.json / nx.json change is teal ("root-file touched");
+ *                 anything nothing could explain is light amber with a dashed grey border
+ *                 ("unexplained" — never drawn as a dependent). Every transitive dependency of the
+ *                 affected set that is not itself affected is light slate with a dashed border
+ *                 ("build input": compiled or restored from cache, unchanged); everything else is
+ *                 grey. Which box is which is only known per checkout, so every box carries every
+ *                 variant and the page picks one from the sidecar (graph-impact.ts). The state is
+ *                 never written on the box: color + legend + the "why" panel a click opens.
  *  - PRODUCT      "which products it belongs to" (#1179, graph-products.ts). One product is a solid
  *                 fill in that product's palette color; two or more (but not all) are the same
  *                 vertical stripes the multi-runtime box uses, one per product; a box shared by EVERY
@@ -167,7 +171,18 @@ export const ROLE_STYLES: readonly RoleStyle[] = [
 
 /** The four impact shades (graph-impact.ts decides which box gets which). */
 export const IMPACT_TOUCHED = '#f5a524';
-export const IMPACT_AFFECTED = '#fde3b0';
+export const IMPACT_DEPENDENT = '#fde3b0';
+/** Implicitly touched (#1264): violet HATCHING — thin alternating stripes — with a violet border. */
+export const IMPACT_IMPLICIT = '#cdb8f4';
+export const IMPACT_IMPLICIT_GAP = '#f5f0fd';
+export const IMPACT_IMPLICIT_BORDER = '#7e57c2';
+/** Root-file touched (#1264): teal, with a teal border. */
+export const IMPACT_ROOT_FILE = '#bfe6e0';
+export const IMPACT_ROOT_FILE_BORDER = '#1a8f86';
+/** Unexplained (#1264): the dependent fill with a dashed grey border, so it never reads as a dependent. */
+export const IMPACT_UNEXPLAINED_BORDER = '#8a8f9c';
+/** How many hatch stripes an implicitly-touched box gets. */
+const HATCH_STRIPES = 12;
 export const IMPACT_BUILD_INPUT = '#e3e9f2';
 export const IMPACT_BUILD_INPUT_BORDER = '#7c8aa3';
 export const IMPACT_UNTOUCHED = '#eef0f4';
@@ -193,7 +208,10 @@ export class NodeModeDots {
         public readonly runtime: string,
         public readonly architecture: string,
         public readonly touched: string,
-        public readonly affected: string,
+        public readonly dependent: string,
+        public readonly implicit: string,
+        public readonly rootFile: string,
+        public readonly unexplained: string,
         public readonly buildInput: string,
         public readonly untouched: string,
         public readonly product: string,
@@ -280,7 +298,10 @@ export class NodeModeStyler {
             this.runtime(facts),
             this.plain(facts, this.roleStyle(facts.role).fill, this.roleStyle(facts.role).fontColor, ''),
             this.plain(facts, IMPACT_TOUCHED, DARK_TEXT, ''),
-            this.plain(facts, IMPACT_AFFECTED, DARK_TEXT, `, color="${IMPACT_TOUCHED}", penwidth=2`),
+            this.plain(facts, IMPACT_DEPENDENT, DARK_TEXT, `, color="${IMPACT_TOUCHED}", penwidth=2`),
+            this.hatched(facts),
+            this.plain(facts, IMPACT_ROOT_FILE, DARK_TEXT, `, color="${IMPACT_ROOT_FILE_BORDER}", penwidth=2`),
+            this.plain(facts, IMPACT_DEPENDENT, DARK_TEXT, `, color="${IMPACT_UNEXPLAINED_BORDER}", penwidth=1.5`, 'filled,dashed'),
             this.plain(
                 facts,
                 IMPACT_BUILD_INPUT,
@@ -290,6 +311,18 @@ export class NodeModeStyler {
             ),
             this.plain(facts, IMPACT_UNTOUCHED, IMPACT_UNTOUCHED_TEXT, ', color="#b4b9c4"'),
             this.product(facts, palette),
+        );
+    }
+
+    /** Implicitly touched: thin alternating violet stripes (a hatch), so it never reads as amber. */
+    private hatched(facts: NodeFacts): string {
+        const colors = Array.from({ length: HATCH_STRIPES }, (_: undefined, index: number): string =>
+            index % 2 === 0 ? IMPACT_IMPLICIT : IMPACT_IMPLICIT_GAP,
+        );
+        return this.statement(
+            facts,
+            `${this.stripes(colors)}, fontcolor="${DARK_TEXT}", color="${IMPACT_IMPLICIT_BORDER}", penwidth=2`,
+            this.labelText(facts, DARK_TEXT),
         );
     }
 

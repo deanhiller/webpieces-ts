@@ -3,7 +3,7 @@ import { ProductPalette } from '../graph-products';
 import { GraphLegend } from '../graph-legend';
 import { FilterFixture } from './graph-filter-fixture';
 import { generateRuntimeRenderModel, RuntimeVizOptions } from '../runtime-visualizer';
-import { NO_RUNTIME_COLOR, IMPACT_AFFECTED, IMPACT_TOUCHED } from '../graph-color-modes';
+import { NO_RUNTIME_COLOR, IMPACT_DEPENDENT, IMPACT_TOUCHED } from '../graph-color-modes';
 
 describe('saved runtime presentation adapter', () => {
     it('uses declared framework/role facts while preserving saved call-depth and canonical identities', () => {
@@ -50,7 +50,7 @@ describe('saved runtime presentation adapter', () => {
         expect(node.modes?.runtime).toContain('Implements (1)');
         expect(node.modes?.runtime).not.toContain('Uses');
         expect(node.modes?.touched).toContain(IMPACT_TOUCHED);
-        expect(node.modes?.affected).toContain(IMPACT_AFFECTED);
+        expect(node.modes?.dependent).toContain(IMPACT_DEPENDENT);
         expect(model.nodes.filter((node) => node.id.endsWith('/worker'))).toHaveLength(2);
         expect(model.bands.find((band) => band.level === 7)?.nodeNames).toContain('@a/worker');
     });
@@ -96,7 +96,7 @@ describe('saved runtime presentation adapter', () => {
         const queue = model.nodes.find((node) => node.id === 'queue__TaskApi_send')!;
         expect(queue.tags).toBeNull();
         expect(queue.modes?.touched).toBe(queue.dot);
-        expect(queue.modes?.affected).toBe(queue.dot);
+        expect(queue.modes?.dependent).toBe(queue.dot);
         expect(queue.modes?.product).toContain('shape=Mrecord');
         expect(model.nodes.some((node) => node.id === 'hidden')).toBe(false);
     });

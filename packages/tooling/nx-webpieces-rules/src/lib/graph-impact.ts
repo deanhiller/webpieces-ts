@@ -1,5 +1,5 @@
 /**
- * Impact mode's data: what one COMPARISON's build looks like, in three shades (plus untouched grey).
+ * Impact mode's data: what one COMPARISON's build looks like, and WHY each project is in it.
  *
  * There are two comparisons, and only two (#1163). Both end at the WORKING TREE, so uncommitted and
  * untracked work counts in either:
@@ -25,15 +25,13 @@
  *  - AFFECTED is `nx show projects --affected --base=<the comparison's base> --json`, with NO
  *    `--head`, so uncommitted and untracked work counts. nx already gets right everything a
  *    hand-rolled diff gets wrong: lockfile and package.json changes resolved per project, root/global
- *    inputs, namedInputs, implicitDependencies, nested roots and deleted files. This uses its public
- *    CLI surface only, never nx internals, and never NX_BASE/NX_HEAD, whose value depends on whoever
- *    launched the process.
- *  - TOUCHED is the subset of that set which OWNS a changed file, by nx's own file-to-project
- *    ownership (the project file map from `createProjectFileMapUsingProjectGraph`, public devkit API)
- *    — never a path-prefix guess. The ownership map is computed ONCE and shared by every comparison.
- *    A project whose only change is a DELETED file is not in that map (the file is gone), so it shows
- *    as affected rather than touched. The changed-file list is `DiffScope.getChangedFiles`, the same
- *    base→working-tree diff (with untracked files) every code rule uses.
+ *    inputs, namedInputs, implicitDependencies, nested roots and deleted files. It never reads
+ *    NX_BASE/NX_HEAD, whose value depends on whoever launched the process.
+ *  - WHY each affected project is in it (#1264) — changed, dependent (with the edge path), implicitly
+ *    touched (with the target, glob and file) or root-file touched — comes from nx's OWN affected
+ *    locators, run in-process against the workspace's own nx (graph-impact-reasons.ts). They are
+ *    loaded ONCE and shared by every comparison. The changed-file list is `DiffScope.getChangedFiles`,
+ *    the same base→working-tree diff (with untracked files) every code rule uses.
  *
  * The answer changes per checkout, so it never goes into the committed dependencies.html or
  * dependencies.json (both stay byte-stable). It goes into a SIDECAR,
@@ -56,8 +54,19 @@
 import { spawnSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
-import { createProjectFileMapUsingProjectGraph, createProjectGraphAsync } from '@nx/devkit';
+import { createProjectGraphAsync } from '@nx/devkit';
+import type { NxJsonConfiguration, ProjectGraph } from '@nx/devkit';
+import type { FileChange } from 'nx/src/project-graph/file-utils';
+import type { PackageJson } from 'nx/src/utils/package-json';
 import { DiffScope, ChangedFilesOptions } from '@webpieces/rules-config';
+import {
+    AffectedClass,
+    AffectedClassification,
+    AffectedClassifier,
+    AffectedInputs,
+    AffectedReason,
+    WorkspaceNx,
+} from './graph-impact-reasons';
 import type { EnhancedGraph } from './graph-sorter';
 import { GraphNames } from './graph-names';
 import { toError } from '../toError';
@@ -102,10 +111,16 @@ export class ImpactReport {
         public readonly reason: string,
         /** The base's short sha ('' when there is none). */
         public readonly base: string,
-        /** Affected AND owning a changed file (node ids). */
+        /** Affected AND owning a changed file (node ids): "changed". */
         public readonly touched: string[],
-        /** Affected but owning no changed file (node ids): their ci re-runs. */
-        public readonly affected: string[],
+        /** Affected through dependency edges from a changed or touched project (node ids). */
+        public readonly dependents: string[],
+        /** Affected because a `{workspaceRoot}` target input matched a changed file (node ids). */
+        public readonly implicit: string[],
+        /** Affected by a lockfile, package.json, tsconfig.base.json, nx.json or deleted-config change (node ids). */
+        public readonly rootFile: string[],
+        /** Affected, and nothing here could say why (node ids). Never shown as a dependent. */
+        public readonly unexplained: string[],
         /**
          * Transitive dependencies of the affected set that are NOT affected (node ids). `ci` dependsOn
          * `^build`, so they must exist as build output although their inputs did not change: nx
@@ -116,17 +131,37 @@ export class ImpactReport {
         public readonly changedFiles: number,
         /**
          * Transitive dependencies of the TOUCHED set that are not touched themselves (node ids): the
-         * Filter popover's "Changed + dependencies". ("Changed + dependents" is touched + affected,
-         * which nx already computed as the dependents whose tests re-run.)
+         * Filter popover's "Changed + dependencies". ("Changed + dependents" is every affected project.)
          */
         public readonly dependencies: string[],
         /**
          * Changed files no project owns (repo-relative, sorted): workspace-global inputs such as
-         * pnpm-lock.yaml. When nothing is touched they are WHY everything is affected, and the
-         * legend names them. Empty when nx's file ownership was unavailable — then nothing is known.
+         * pnpm-lock.yaml. Empty when nx's locators were unavailable — then nothing is known.
          */
         public readonly globalFiles: string[],
+        /** WHY each affected project is in the build (graph-impact-reasons.ts): one per affected node. */
+        public readonly reasons: AffectedReason[],
     ) {}
+}
+
+/** The one-line count split, shared by the executor's console line (the page builds the same line). */
+export class ImpactCounts {
+    /** `8 changed · 3 dependents · 22 implicitly touched (runtime-wiring-check inputs) · 47 dependencies`. */
+    line(report: ImpactReport): string {
+        const parts = [`${report.touched.length} changed`, `${report.dependents.length} dependents`];
+        if (report.implicit.length > 0) parts.push(`${report.implicit.length} implicitly touched${this.targets(report)}`);
+        if (report.rootFile.length > 0) parts.push(`${report.rootFile.length} root-file touched`);
+        if (report.unexplained.length > 0) parts.push(`${report.unexplained.length} unexplained`);
+        parts.push(`${report.buildInputs.length} dependencies`);
+        return parts.join(' · ');
+    }
+
+    private targets(report: ImpactReport): string {
+        const targets = new Set<string>();
+        for (const reason of report.reasons)
+            if (reason.kind === AffectedClass.IMPLICIT && reason.target !== '') targets.add(reason.target);
+        return targets.size === 0 ? '' : ` (${[...targets].sort().join(', ')} inputs)`;
+    }
 }
 
 /** The sidecar's one global: every scan, and the one the page shows first. */
@@ -291,53 +326,67 @@ export class NxCli {
     }
 }
 
-/** nx's own file → project ownership, from the public devkit file map. Injected for specs. */
-export class ProjectFileOwners {
-    async owners(): Promise<Map<string, string>> {
-        const fileMap = await createProjectFileMapUsingProjectGraph(await createProjectGraphAsync());
-        const owners = new Map<string, string>();
-        for (const project of Object.keys(fileMap)) {
-            for (const data of fileMap[project]) owners.set(data.file, project);
-        }
-        return owners;
+/**
+ * The workspace's nx facts every comparison classifies against: its project graph (with npm nodes
+ * and every edge), nx.json, package.json, and nx's own affected locators. Subclassed by specs.
+ */
+export class AffectedContext {
+    constructor(
+        public readonly graph: ProjectGraph,
+        public readonly nxJson: NxJsonConfiguration,
+        public readonly packageJson: PackageJson,
+        public readonly classifier: AffectedClassifier,
+        private readonly nx: WorkspaceNx | null,
+    ) {}
+
+    /** nx's FileChange list for `files`, base → working tree. */
+    fileChanges(files: string[], base: string): FileChange[] {
+        if (this.nx === null) throw new Error('no workspace nx to read file changes with');
+        return this.nx.fileChanges(files, base);
+    }
+}
+
+/** Loads the workspace's nx facts. Injected so specs never load the real project graph. */
+export class AffectedContextLoader {
+    async load(workspaceRoot: string): Promise<AffectedContext> {
+        const nx = new WorkspaceNx(workspaceRoot);
+        return new AffectedContext(
+            await createProjectGraphAsync(),
+            nx.nxJson(),
+            nx.packageJson(),
+            new AffectedClassifier(nx.locators()),
+            nx,
+        );
     }
 }
 
 /**
- * nx's ownership map, computed at most ONCE however many comparisons ask for it. Failing is not
- * fatal: the set then shows in one shade, all "affected".
+ * The context, loaded at most ONCE however many comparisons ask for it. Failing is not fatal: every
+ * affected project is then "unexplained", with this error as its reason — never a dependent.
  */
-export class SharedOwners {
-    private pending: Promise<Map<string, string>> | null = null;
+export class SharedContext {
+    private pending: Promise<AffectedContext | Error> | null = null;
 
-    constructor(private readonly ownership: ProjectFileOwners) {}
+    constructor(
+        private readonly loader: AffectedContextLoader,
+        private readonly workspaceRoot: string,
+    ) {}
 
-    get(): Promise<Map<string, string>> {
+    get(): Promise<AffectedContext | Error> {
         if (this.pending === null) this.pending = this.load();
         return this.pending;
     }
 
-    private async load(): Promise<Map<string, string>> {
-        // eslint-disable-next-line @webpieces/no-unmanaged-exceptions -- the second shade is optional
+    private async load(): Promise<AffectedContext | Error> {
+        // eslint-disable-next-line @webpieces/no-unmanaged-exceptions -- the reasons are optional; the affected set still shows
         try {
-            return await this.ownership.owners();
+            return await this.loader.load(this.workspaceRoot);
         } catch (err: unknown) {
             const error = toError(err);
-            console.warn(`⚠️  Impact: nx file ownership unavailable (${error.message}); showing one shade`);
-            return new Map<string, string>();
+            console.warn(`⚠️  Impact: nx's affected locators unavailable (${error.message}); reasons unknown`);
+            return error;
         }
     }
-}
-
-/** The sets one scan found; an empty one is still an answer. */
-class ImpactSets {
-    constructor(
-        public readonly touched: string[] = [],
-        public readonly affected: string[] = [],
-        public readonly buildInputs: string[] = [],
-        public readonly dependencies: string[] = [],
-        public readonly globalFiles: string[] = [],
-    ) {}
 }
 
 export class NxImpactScanner {
@@ -346,18 +395,18 @@ export class NxImpactScanner {
     constructor(
         private readonly diffScope: DiffScope = new DiffScope(),
         private readonly nx: NxCli = new NxCli(),
-        private readonly ownership: ProjectFileOwners = new ProjectFileOwners(),
+        private readonly loader: AffectedContextLoader = new AffectedContextLoader(),
     ) {}
 
-    /** Every comparison, in order, sharing one ownership map. */
+    /** Every comparison, in order, sharing one nx context. */
     async scanAll(
         workspaceRoot: string,
         graph: EnhancedGraph,
         comparisons: ImpactComparison[],
     ): Promise<(ImpactReport | ImpactUnavailable)[]> {
-        const owners = new SharedOwners(this.ownership);
+        const context = new SharedContext(this.loader, workspaceRoot);
         const results: (ImpactReport | ImpactUnavailable)[] = [];
-        for (const comparison of comparisons) results.push(await this.scan(workspaceRoot, graph, comparison, owners));
+        for (const comparison of comparisons) results.push(await this.scan(workspaceRoot, graph, comparison, context));
         return results;
     }
 
@@ -366,14 +415,14 @@ export class NxImpactScanner {
         workspaceRoot: string,
         graph: EnhancedGraph,
         comparison: ImpactComparison,
-        owners: SharedOwners = new SharedOwners(this.ownership),
+        context: SharedContext = new SharedContext(this.loader, workspaceRoot),
     ): Promise<ImpactReport | ImpactUnavailable> {
         const base = comparison.base;
-        if (base === null) return this.report(comparison, false, comparison.reason, '', 0, new ImpactSets());
+        if (base === null) return this.empty(comparison, false, comparison.reason, '', 0);
         const json = this.nx.run(workspaceRoot, ['show', 'projects', '--affected', `--base=${base}`, '--json'], NX_TIMEOUT_MS);
         if (json === null)
             return new ImpactUnavailable(`nx show projects --affected failed or took over ${NX_TIMEOUT_MS / 1000}s`, comparison.label);
-        const affectedSet = this.parse(json, graph);
+        const affectedSet = this.parse(json);
         if (affectedSet === null)
             return new ImpactUnavailable('nx show projects --affected printed something other than a JSON list', comparison.label);
         const options = new ChangedFilesOptions();
@@ -381,19 +430,38 @@ export class NxImpactScanner {
         options.includeDeletions = true;
         const files = this.diffScope.getChangedFiles(workspaceRoot, base, undefined, options);
         const short = base.slice(0, 7);
-        if (affectedSet.length === 0)
-            return this.report(comparison, true, this.emptyNote(comparison, files.length, short), short, files.length, new ImpactSets());
-        const map = await owners.get();
-        const touched = this.touched(affectedSet, files, map);
-        const rest = affectedSet.filter((project: string): boolean => !touched.includes(project));
-        const sets = new ImpactSets(
-            this.ids(touched),
-            this.ids(rest),
-            this.ids(this.buildInputs(affectedSet, graph)),
-            this.ids(this.buildInputs(touched, graph)),
-            this.globalFiles(files, map),
-        );
-        return this.report(comparison, true, '', short, files.length, sets);
+        const drawn = affectedSet.filter((project: string): boolean => graph[project] !== undefined);
+        if (drawn.length === 0)
+            return this.empty(comparison, true, this.emptyNote(comparison, files.length, short), short, files.length);
+        const classification = await this.classify(await context.get(), files, base, affectedSet);
+        return this.report(comparison, short, files.length, graph, classification);
+    }
+
+    /** nx's locators' answer; any failure makes every affected project "unexplained", with the reason. */
+    async classify(
+        context: AffectedContext | Error,
+        files: string[],
+        base: string,
+        affected: string[],
+    ): Promise<AffectedClassification> {
+        // eslint-disable-next-line @webpieces/no-unmanaged-exceptions -- the reasons are optional; a locator failure leaves them unknown
+        try {
+            if (context instanceof Error) throw context;
+            const changes = context.fileChanges(files, base);
+            return await context.classifier.classify(
+                new AffectedInputs(context.graph, context.nxJson, context.packageJson, changes, affected),
+            );
+        } catch (err: unknown) {
+            const error = toError(err);
+            const why = `nx's affected locators could not run here (${error.message}), so why nx marked it is unknown`;
+            return new AffectedClassification(
+                [...affected].sort().map(
+                    (project: string): AffectedReason =>
+                        new AffectedReason(project, AffectedClass.UNEXPLAINED, [], [], '', '', why),
+                ),
+                [],
+            );
+        }
     }
 
     /**
@@ -404,12 +472,6 @@ export class NxImpactScanner {
         if (changedFiles === 0 && comparison.kind === ImpactKind.BRANCH) return NOTHING_CHANGED_ON_BRANCH;
         if (changedFiles === 0) return `Nothing changed since ${short}`;
         return `Nothing affected since ${short}`;
-    }
-
-    /** Changed files no project owns; none are claimed when ownership itself was unavailable. */
-    globalFiles(files: string[], owners: Map<string, string>): string[] {
-        if (owners.size === 0) return [];
-        return files.filter((file: string): boolean => !owners.has(file)).sort();
     }
 
     /**
@@ -434,26 +496,14 @@ export class NxImpactScanner {
         return inputs.sort();
     }
 
-    /** Affected projects that own one of the changed files, by nx's own ownership. */
-    touched(affected: string[], files: string[], owners: Map<string, string>): string[] {
-        const owning = new Set<string>();
-        for (const file of files) {
-            const owner = owners.get(file);
-            if (owner !== undefined) owning.add(owner);
-        }
-        return affected.filter((project: string): boolean => owning.has(project));
-    }
-
-    /** The JSON list, narrowed to projects the graph draws; null when it is not a list of names. */
-    parse(json: string, graph: EnhancedGraph): string[] | null {
+    /** The JSON list of project names, sorted; null when it is not a list of names. */
+    parse(json: string): string[] | null {
         // eslint-disable-next-line @webpieces/no-unmanaged-exceptions -- untrusted CLI output; anything unparseable is reported as a reason
         try {
             // webpieces-disable no-any-unknown -- CLI JSON is untrusted until narrowed below
             const parsed: unknown = JSON.parse(json);
             if (!Array.isArray(parsed)) return null;
-            return parsed
-                .filter((name: unknown): name is string => typeof name === 'string' && graph[name] !== undefined)
-                .sort();
+            return parsed.filter((name: unknown): name is string => typeof name === 'string').sort();
         } catch (err: unknown) {
             const error = toError(err);
             void error; // not JSON — the caller reports it
@@ -461,28 +511,40 @@ export class NxImpactScanner {
         }
     }
 
+    /** The drawn projects only: a reason for a project the page does not draw has nowhere to show. */
     private report(
         comparison: ImpactComparison,
-        available: boolean,
-        reason: string,
-        base: string,
+        short: string,
         changedFiles: number,
-        sets: ImpactSets,
+        graph: EnhancedGraph,
+        classification: AffectedClassification,
     ): ImpactReport {
+        const drawn = (projects: string[]): string[] =>
+            projects.filter((project: string): boolean => graph[project] !== undefined);
+        const touched = drawn(classification.of(AffectedClass.CHANGED));
+        const affected = drawn(classification.reasons.map((reason: AffectedReason): string => reason.project));
         return new ImpactReport(
             comparison.kind,
             comparison.label,
             comparison.dirty,
-            available,
-            reason,
-            base,
-            sets.touched,
-            sets.affected,
-            sets.buildInputs,
+            true,
+            '',
+            short,
+            this.ids(touched),
+            this.ids(drawn(classification.of(AffectedClass.DEPENDENT))),
+            this.ids(drawn(classification.of(AffectedClass.IMPLICIT))),
+            this.ids(drawn(classification.of(AffectedClass.ROOT_FILE))),
+            this.ids(drawn(classification.of(AffectedClass.UNEXPLAINED))),
+            this.ids(this.buildInputs(affected, graph)),
             changedFiles,
-            sets.dependencies,
-            sets.globalFiles,
+            this.ids(this.buildInputs(touched, graph)),
+            classification.globalFiles,
+            classification.reasons.filter((reason: AffectedReason): boolean => graph[reason.project] !== undefined),
         );
+    }
+
+    private empty(comparison: ImpactComparison, available: boolean, reason: string, base: string, changedFiles: number): ImpactReport {
+        return new ImpactReport(comparison.kind, comparison.label, comparison.dirty, available, reason, base, [], [], [], [], [], [], changedFiles, [], [], []);
     }
 
     private ids(projects: string[]): string[] {
@@ -591,9 +653,6 @@ export class ImpactRefresh {
         if (result instanceof ImpactUnavailable || !result.available)
             return `ℹ️  Impact · ${result.label}: unavailable — ${result.reason}`;
         if (result.reason !== '') return `✅ Impact · ${result.label}: ${result.reason}`;
-        return (
-            `✅ Impact · ${result.label}: ${result.touched.length} changed · ${result.affected.length} dependents · ` +
-            `${result.buildInputs.length} dependencies, from ${result.changedFiles} changed file(s)`
-        );
+        return `✅ Impact · ${result.label}: ${new ImpactCounts().line(result)}, from ${result.changedFiles} changed file(s)`;
     }
 }

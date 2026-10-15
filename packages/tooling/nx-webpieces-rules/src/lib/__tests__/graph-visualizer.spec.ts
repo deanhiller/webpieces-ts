@@ -55,7 +55,7 @@ describe('generateDot', () => {
     it('writes the same three lines on every box in every mode: L# + bold name, role, every framework tag', () => {
         const server = nodeOf(GRAPH, 'server2').modes!;
         const lines = '<B>server2</B><BR/>server<BR/>node · express';
-        for (const dot of [server.runtime, server.architecture, server.touched, server.affected, server.buildInput, server.untouched])
+        for (const dot of [server.runtime, server.architecture, server.touched, server.dependent, server.implicit, server.rootFile, server.unexplained, server.buildInput, server.untouched])
             expect(dot).toContain(lines);
         expect(server.runtime).toContain('<FONT COLOR="#ffffff99">L4</FONT>&#160;&#160;<B>server2</B>');
         expect(viz.generateDot(GRAPH)).toContain('<B>angular-site</B><BR/>client<BR/>browser · angular');
@@ -89,14 +89,31 @@ describe('generateDot', () => {
         expect(nodeOf(GRAPH, 'http-client').modes!.architecture).toContain('fillcolor="#d7dae2", fontcolor="#1a1c22"');
     });
 
-    it('carries all four Impact statements per box, since only the sidecar knows which applies', () => {
+    it('carries every Impact statement per box, since only the sidecar knows which applies', () => {
         const modes = nodeOf(GRAPH, 'server2').modes!;
         expect(modes.touched).toContain('style="filled", fillcolor="#f5a524", fontcolor="#1a1c22", label=<');
-        expect(modes.affected).toContain('fillcolor="#fde3b0", fontcolor="#1a1c22", color="#f5a524", penwidth=2, label=<');
+        expect(modes.dependent).toContain('fillcolor="#fde3b0", fontcolor="#1a1c22", color="#f5a524", penwidth=2, label=<');
         expect(modes.buildInput).toContain(
             'style="filled,dashed", fillcolor="#e3e9f2", fontcolor="#1a1c22", color="#7c8aa3", penwidth=1.5, label=<',
         );
         expect(modes.untouched).toContain('fillcolor="#eef0f4", fontcolor="#6b7180", color="#b4b9c4", label=<');
+        // #1264: implicitly touched is a violet HATCH, root-file touched teal, unexplained dashed grey —
+        // none of them the dependent's amber outline.
+        expect(modes.implicit).toContain('style="striped", fillcolor="#cdb8f4;0.083:#f5f0fd;0.083:');
+        expect(modes.implicit).toContain('color="#7e57c2", penwidth=2');
+        expect(modes.rootFile).toContain('fillcolor="#bfe6e0", fontcolor="#1a1c22", color="#1a8f86", penwidth=2, label=<');
+        expect(modes.unexplained).toContain('style="filled,dashed", fillcolor="#fde3b0", fontcolor="#1a1c22", color="#8a8f9c"');
+        for (const dot of [modes.implicit, modes.rootFile, modes.unexplained]) expect(dot).not.toContain('color="#f5a524"');
+    });
+
+    it('says "uses a changed project" on the dependent legend row only (#1264)', () => {
+        const html = viz.generateHTML(viz.generateRenderModel(GRAPH), viz.designLinks(GRAPH));
+        // The legend is drawn in the drawer AND the pop-out: every row that says it is the dependent row.
+        const rows = html.split('<div class="wp-legend-row"').slice(1).map((row: string): string => row.split('</div>')[0]);
+        const claiming = rows.filter((row: string): boolean => row.includes('uses a changed project'));
+        expect(claiming.length).toBeGreaterThan(0);
+        for (const row of claiming) expect(row).toContain('data-wp-legend="dependent"');
+        expect(html).toContain('implicitly touched<small>a target input glob ({workspaceRoot}/…) matched a changed file; it uses no changed project');
     });
 
     it("records each box's role and framework tags for the page's Filter", () => {
@@ -414,7 +431,7 @@ describe('generateHTML', () => {
         // Nothing in GRAPH is react / react-native / an app — so no row for them.
         for (const key of ['react', 'react-native', 'app', 'bundle'])
             expect(html).not.toContain(`data-wp-legend="${key}"`);
-        for (const key of ['server', 'client', 'lib', 'touched', 'affected', 'build-input', 'untouched'])
+        for (const key of ['server', 'client', 'lib', 'touched', 'dependent', 'implicit', 'rootFile', 'unexplained', 'build-input', 'untouched'])
             expect(html).toContain(`data-wp-legend="${key}"`);
     });
 

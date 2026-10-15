@@ -110,6 +110,9 @@ export class RuntimeViewerAdapter {
                 node.dot,
                 node.dot,
                 node.dot,
+                node.dot,
+                node.dot,
+                node.dot,
                 product,
             );
             model.nodes[index] = new RenderNode(

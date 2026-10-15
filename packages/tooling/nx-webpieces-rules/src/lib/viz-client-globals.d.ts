@@ -116,7 +116,10 @@ interface NodeModeDotsJson {
     runtime: string;
     architecture: string;
     touched: string;
-    affected: string;
+    dependent: string;
+    implicit: string;
+    rootFile: string;
+    unexplained: string;
     buildInput: string;
     untouched: string;
     /** Product color mode (#1179). */
@@ -149,8 +152,16 @@ interface ImpactJson {
     base: string;
     /** In nx affected AND owning a changed file. */
     touched: string[];
-    /** The rest of nx affected: their ci re-runs. */
-    affected: string[];
+    /** Affected over dependency edges from a changed or touched project. */
+    dependents: string[];
+    /** Affected because a {workspaceRoot} target input matched a changed file. */
+    implicit: string[];
+    /** Affected by a lockfile / package.json / tsconfig.base.json / nx.json change. */
+    rootFile: string[];
+    /** Affected, and nothing could say why. */
+    unexplained: string[];
+    /** Why each affected project is in the build (graph-impact-reasons.ts). */
+    reasons: AffectedReasonJson[];
     /** Transitive dependencies of the affected set that are not affected themselves. */
     buildInputs: string[];
     changedFiles: number;
@@ -158,6 +169,20 @@ interface ImpactJson {
     dependencies: string[];
     /** Changed files no project owns (workspace-global inputs such as pnpm-lock.yaml). */
     globalFiles: string[];
+}
+/** Why one affected project is in the build (#1264). */
+interface AffectedReasonJson {
+    project: string;
+    /** 'touched' | 'dependent' | 'implicit' | 'rootFile' | 'unexplained' — the box's impact status. */
+    kind: string;
+    /** Changed: the files it owns. Implicit / root-file: the changed file that matched. */
+    files: string[];
+    /** Dependent: [project, …, nearest changed or touched project]. */
+    path: string[];
+    /** Implicit: the target and its input glob. */
+    target: string;
+    input: string;
+    detail: string;
 }
 interface Window {
     __WP_IMPACT__?: ImpactDataJson;
