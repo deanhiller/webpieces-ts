@@ -14,6 +14,7 @@ import { specTempDirs } from '@webpieces/tooling-testkit';
 import type { EnhancedGraph } from '../graph-sorter';
 import { AffectedClass, AffectedClassifier, AffectedReason } from '../graph-impact-reasons';
 import { ImpactGraphFixture } from './graph-impact-fixture';
+import { EdgeDiffReport, FixedLiveGraphs, LiveGraphs } from '../graph-edge-diff';
 import {
     AffectedContext,
     AffectedContextLoader,
@@ -43,6 +44,11 @@ const GRAPH: EnhancedGraph = {
     core: { level: 0, dependsOn: [] },
     other: { level: 0, dependsOn: [] },
 };
+
+/** The live graphs, as architecture:generate hands them over. */
+const LIVE = new FixedLiveGraphs(new LiveGraphs(GRAPH, null, 'no runtime graph in this spec'));
+/** A sidecar whose edge diff was computed and found nothing. */
+const NO_EDGES = new EdgeDiffReport('abc1234', '', [], '', []);
 
 const HEAD = 'ffff000011112222333344445555666677778888';
 const PARENT = 'eeee000011112222333344445555666677778888';
@@ -360,7 +366,7 @@ describe('ImpactRefresh + ImpactSidecar', () => {
         const dir = specTempDirs.make('wp-impact-');
         const scanner = new NxImpactScanner(new FakeDiff(null, ['libs/core/src/a.ts']), new FakeNx('["core","app"]'), new FakeLoader());
         const resolver = new FixedResolver(plan(new FakeGit('dean/x', PARENT, false), FORK));
-        const line = await new ImpactRefresh(scanner, new ImpactSidecar(), resolver).run(dir, dir, GRAPH, VISUALIZE_IMPACT_KINDS);
+        const line = await new ImpactRefresh(scanner, new ImpactSidecar(), resolver).run(dir, dir, GRAPH, VISUALIZE_IMPACT_KINDS, LIVE);
         // One result line per comparison.
         expect(line).toContain('Changed on this branch (since aaaa000): 1 changed · 1 dependents · 1 dependencies');
         expect(line).toContain('Changed since eeee000 — Upgrade the thing (#1162): 1 changed');
@@ -383,7 +389,7 @@ describe('ImpactRefresh + ImpactSidecar', () => {
         const nx = new FakeNx('["core"]');
         const scanner = new NxImpactScanner(new FakeDiff(null, ['libs/core/src/a.ts']), nx, new FakeLoader());
         const resolver = new FixedResolver(plan(new FakeGit('dean/x', PARENT, false), FORK));
-        await new ImpactRefresh(scanner, new ImpactSidecar(), resolver).run(dir, dir, GRAPH, GENERATE_IMPACT_KINDS);
+        await new ImpactRefresh(scanner, new ImpactSidecar(), resolver).run(dir, dir, GRAPH, GENERATE_IMPACT_KINDS, LIVE);
         expect(nx.calls).toEqual([['show', 'projects', '--affected', `--base=${FORK}`, '--json']]);
         expect(scanKinds(sidecarData(dir))).toEqual(['branch']);
     });
@@ -391,11 +397,11 @@ describe('ImpactRefresh + ImpactSidecar', () => {
     it('generate on main writes no Impact data, removing a stale sidecar', async () => {
         const dir = specTempDirs.make('wp-impact-generate-main-');
         const sidecar = new ImpactSidecar();
-        sidecar.write(dir, new ImpactSidecarData([], ImpactKind.BRANCH));
+        sidecar.write(dir, new ImpactSidecarData([], ImpactKind.BRANCH, NO_EDGES));
         const nx = new FakeNx('["core"]');
         const scanner = new NxImpactScanner(new FakeDiff(null, []), nx, new FakeLoader());
         const resolver = new FixedResolver(plan(new FakeGit('main', PARENT, false)));
-        const line = await new ImpactRefresh(scanner, sidecar, resolver).run(dir, dir, GRAPH, GENERATE_IMPACT_KINDS);
+        const line = await new ImpactRefresh(scanner, sidecar, resolver).run(dir, dir, GRAPH, GENERATE_IMPACT_KINDS, LIVE);
         expect(line).toContain('no sidecar written');
         expect(line).toContain('pnpm arch:visualize');
         expect(nx.calls).toEqual([]);
@@ -405,10 +411,10 @@ describe('ImpactRefresh + ImpactSidecar', () => {
     it('removes a stale sidecar and writes none when nx cannot answer', async () => {
         const dir = specTempDirs.make('wp-impact-stale-');
         const sidecar = new ImpactSidecar();
-        sidecar.write(dir, new ImpactSidecarData([], ImpactKind.BRANCH));
+        sidecar.write(dir, new ImpactSidecarData([], ImpactKind.BRANCH, NO_EDGES));
         const scanner = new NxImpactScanner(new FakeDiff(null, []), new FakeNx(null), new FakeLoader());
         const resolver = new FixedResolver(plan(new FakeGit('main', PARENT, false)));
-        const line = await new ImpactRefresh(scanner, sidecar, resolver).run(dir, dir, GRAPH, VISUALIZE_IMPACT_KINDS);
+        const line = await new ImpactRefresh(scanner, sidecar, resolver).run(dir, dir, GRAPH, VISUALIZE_IMPACT_KINDS, LIVE);
         expect(line).toContain('no sidecar written');
         expect(fs.existsSync(path.join(dir, IMPACT_SIDECAR_DIR, IMPACT_SIDECAR_FILE))).toBe(false);
     });
@@ -417,7 +423,7 @@ describe('ImpactRefresh + ImpactSidecar', () => {
         const dir = specTempDirs.make('wp-impact-root-');
         const scanner = new NxImpactScanner(new FakeDiff(null, []), new FakeNx('[]'), new FakeLoader());
         const resolver = new FixedResolver(plan(new FakeGit('main', null, false)));
-        const line = await new ImpactRefresh(scanner, new ImpactSidecar(), resolver).run(dir, dir, GRAPH, VISUALIZE_IMPACT_KINDS);
+        const line = await new ImpactRefresh(scanner, new ImpactSidecar(), resolver).run(dir, dir, GRAPH, VISUALIZE_IMPACT_KINDS, LIVE);
         expect(line).toContain(ROOT_COMMIT_REASON);
         const data = sidecarData(dir);
         expect(data.scans[0].available).toBe(false);
@@ -430,13 +436,13 @@ describe('ImpactRefresh + ImpactSidecar', () => {
         const commit = new ImpactComparison(ImpactKind.COMMIT, PARENT, 'Changed since eeee000', false, '');
         const scanner = new NxImpactScanner(new FakeDiff(null, ['libs/core/src/a.ts']), new FakeNx('["core"]'), new FakeLoader());
         const resolver = new FixedResolver(new ImpactPlan([failing, commit], ImpactKind.BRANCH));
-        await new ImpactRefresh(scanner, new ImpactSidecar(), resolver).run(dir, dir, GRAPH, VISUALIZE_IMPACT_KINDS);
+        await new ImpactRefresh(scanner, new ImpactSidecar(), resolver).run(dir, dir, GRAPH, VISUALIZE_IMPACT_KINDS, LIVE);
         expect(sidecarData(dir).defaultKind).toBe('commit');
     });
 
     it('escapes "<" so a project name cannot close the script', () => {
         const report = new ImpactReport(ImpactKind.BRANCH, 'l', false, true, '', 'b', ['</script>'], [], [], [], [], [], 1, [], [], []);
-        const script = new ImpactSidecar().script(new ImpactSidecarData([report], ImpactKind.BRANCH));
+        const script = new ImpactSidecar().script(new ImpactSidecarData([report], ImpactKind.BRANCH, NO_EDGES));
         expect(script).not.toContain('</script>');
     });
 });

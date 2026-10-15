@@ -30,6 +30,8 @@ import type { EnhancedGraph, GraphEntry } from '../../lib/graph-sorter';
 import type { RemoteServices } from '../../lib/remote-services';
 import { GraphVisualizer } from '../../lib/graph-visualizer';
 import { GENERATE_IMPACT_KINDS, ImpactRefresh } from '../../lib/graph-impact';
+import { FixedLiveGraphs, LiveGraphs } from '../../lib/graph-edge-diff';
+import type { RuntimeGraph } from '../../lib/runtime-graph-model';
 import * as path from 'path';
 import { deriveRuntimeGraphReport, saveRuntimeGraph } from '../../lib/runtime-graph';
 import { printAutoHiddenServers } from '../../lib/runtime-participant-resolver';
@@ -57,7 +59,7 @@ function generateRuntimeGraph(
     apiContracts: ApiContracts,
     externalSystems: ExternalSystemDecls,
     remoteServices: RemoteServices,
-): void {
+): RuntimeGraph {
     console.log('📡 Deriving runtime graph from dependencies.json (implements × uses per API)...');
     const report = deriveRuntimeGraphReport(
         graph,
@@ -86,6 +88,7 @@ function generateRuntimeGraph(
         for (const problem of report.problems) console.error(`     • ${problem}`);
         console.error('   This FAILS architecture:validate-runtime-architecture.');
     }
+    return report.graph;
 }
 
 /** Print the derivation's guessed-edge warnings (nothing at all when the graph is fully targeted). */
@@ -219,17 +222,10 @@ export class ArchitectureGenerator {
         const vizPaths = this.visualizer.writeVisualization(enhancedGraph, workspaceRoot, productDependencies);
         console.log(`✅ Wrote ${vizPaths.htmlPath}`);
 
-        // Step 4c: The page's Impact mode — nx affected for "Changed on this branch" ONLY, into a
-        // gitignored sidecar beside the html (never into the committed files). Generate never scans
-        // the last commit; that comparison is arch:visualize's. Optional: it reports, it never throws.
-        console.log(
-            await this.impact.run(path.dirname(vizPaths.htmlPath), workspaceRoot, enhancedGraph, GENERATE_IMPACT_KINDS),
-        );
-
         // Step 5: Generate the runtime microservice graph from the same scan.
         // Projects tagged drawOnGraph:false are threaded through so the runtime
         // graph hides them too (they stay flagged in runtime-dependencies.json).
-        generateRuntimeGraph(
+        const runtimeGraph = generateRuntimeGraph(
             workspaceRoot,
             enhancedGraph,
             hiddenProjectsIn(enhancedGraph),
@@ -238,7 +234,21 @@ export class ArchitectureGenerator {
             scanned.remoteServices,
         );
 
+        await this.refreshImpact(path.dirname(vizPaths.htmlPath), workspaceRoot, new LiveGraphs(enhancedGraph, runtimeGraph));
+
         printGraphSummary(enhancedGraph);
+    }
+
+    /**
+     * The page's Impact mode — nx affected for "Changed on this branch" ONLY, into a gitignored
+     * sidecar beside the html (never into the committed files), plus the edges gained and lost since
+     * the fork point, against the two graphs just built. Generate never scans the last commit; that
+     * comparison is arch:visualize's. Optional: it reports, it never throws.
+     */
+    private async refreshImpact(architectureDir: string, workspaceRoot: string, live: LiveGraphs): Promise<void> {
+        console.log(
+            await this.impact.run(architectureDir, workspaceRoot, live.projects, GENERATE_IMPACT_KINDS, new FixedLiveGraphs(live)),
+        );
     }
 }
 

@@ -14,6 +14,7 @@ import type { EnhancedGraph } from '../graph-sorter';
 import type { GraphRenderModel, RenderEdge } from '../graph-render-model';
 import { ImpactKind, ImpactReport, ImpactSidecar, ImpactSidecarData } from '../graph-impact';
 import { AffectedClass, AffectedReason } from '../graph-impact-reasons';
+import { EdgeDiffReport } from '../graph-edge-diff';
 
 export const BRANCH_LABEL = 'Changed on this branch (since abc1234)';
 export const COMMIT_LABEL = 'Changed since def5678 — Upgrade the thing (#1162)';
@@ -50,6 +51,9 @@ export function impactScan(
 }
 
 export const WIRING_INPUT = '{workspaceRoot}/**/src/wiring.ts';
+
+/** A sidecar whose edge diff was computed and found nothing. */
+export const NO_EDGES = new EdgeDiffReport('abc1234', '', [], '', []);
 
 /** Opt-in browser suite: WP_GRAPH_VIZ_JS supplies Viz 3; the cross-page test additionally uses
  * WP_GRAPH_VIZ2_JS and WP_GRAPH_VIZ2_RENDER_JS for design's pinned Viz 2.1.2 scripts. */

@@ -67,6 +67,7 @@ import {
     AffectedReason,
     WorkspaceNx,
 } from './graph-impact-reasons';
+import { EdgeChange, EdgeChangeKind, EdgeChangeScanner, EdgeDiffReport, LiveGraphSource } from './graph-edge-diff';
 import type { EnhancedGraph } from './graph-sorter';
 import { GraphNames } from './graph-names';
 import { toError } from '../toError';
@@ -169,6 +170,12 @@ export class ImpactSidecarData {
     constructor(
         public readonly scans: ImpactReport[],
         public readonly defaultKind: ImpactKind,
+        /**
+         * The edges this branch gained or lost since its FORK POINT, the live graph against the fork
+         * point's committed one (graph-edge-diff.ts, #1264). One per sidecar: it does not depend on
+         * which scan is shown.
+         */
+        public readonly edges: EdgeDiffReport,
     ) {}
 }
 
@@ -592,17 +599,20 @@ export class ImpactRefresh {
         private readonly scanner: NxImpactScanner = new NxImpactScanner(),
         private readonly sidecar: ImpactSidecar = new ImpactSidecar(),
         private readonly resolver: ImpactScopeResolver = new ImpactScopeResolver(),
+        private readonly edges: EdgeChangeScanner = new EdgeChangeScanner(),
     ) {}
 
     /**
      * Scans the comparisons in `kinds` that exist here (`VISUALIZE_IMPACT_KINDS` /
-     * `GENERATE_IMPACT_KINDS`). Never throws — Impact is optional, generation is not.
+     * `GENERATE_IMPACT_KINDS`), and the edge changes since the fork point against the LIVE graphs
+     * `live` computes. Never throws — Impact is optional, generation is not.
      */
     async run(
         architectureDir: string,
         workspaceRoot: string,
         graph: EnhancedGraph,
         kinds: readonly ImpactKind[],
+        live: LiveGraphSource,
     ): Promise<string> {
         const started = Date.now();
         // eslint-disable-next-line @webpieces/no-unmanaged-exceptions -- impact is optional; any failure becomes a reason, never a failed generation
@@ -628,13 +638,28 @@ export class ImpactRefresh {
                 this.sidecar.remove(architectureDir);
                 return [...lines, `ℹ️  Impact disabled, no sidecar written (${cost})`].join('\n');
             }
-            const file = this.sidecar.write(architectureDir, new ImpactSidecarData(scans, this.defaultKind(scans, plan.defaultKind)));
-            return [...lines, file === null ? `⚠️  Impact sidecar not written (${cost})` : `→ ${file} (${cost})`].join('\n');
+            const fork = plan.comparisons.find((comparison: ImpactComparison): boolean => comparison.kind === ImpactKind.BRANCH);
+            const edges = await this.edges.scan(workspaceRoot, fork?.base ?? null, live);
+            lines.push(this.edgeLine(edges));
+            const data = new ImpactSidecarData(scans, this.defaultKind(scans, plan.defaultKind), edges);
+            const file = this.sidecar.write(architectureDir, data);
+            return [...lines, file === null ? `⚠️  Impact sidecar not written (${Date.now() - started} ms)` : `→ ${file} (${Date.now() - started} ms)`].join('\n');
         } catch (err: unknown) {
             const error = toError(err);
             this.sidecar.remove(architectureDir);
             return `⚠️  Impact skipped: ${error.message}`;
         }
+    }
+
+    /** `✅ Edges since abc1234: dependencies 1 gained · 1 lost; runtime 0 gained · 0 lost`, or why not. */
+    private edgeLine(edges: EdgeDiffReport): string {
+        const half = (name: string, reason: string, changes: EdgeChange[]): string => {
+            if (reason !== '') return `${name}: ${reason}`;
+            const gained = changes.filter((change: EdgeChange): boolean => change.change === EdgeChangeKind.GAINED).length;
+            return `${name} ${gained} gained · ${changes.length - gained} lost`;
+        };
+        const head = edges.base === '' ? 'ℹ️  Edges' : `✅ Edges since ${edges.base}`;
+        return `${head}: ${half('dependencies', edges.dependencyReason, edges.dependency)}; ${half('runtime', edges.runtimeReason, edges.runtime)}`;
     }
 
     /** The plan's default when that scan is available, else the first available one. */

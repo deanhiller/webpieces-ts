@@ -135,6 +135,31 @@ interface ImpactDataJson {
     scans: ImpactJson[];
     /** The scan the page shows until the viewer picks another. */
     defaultKind: string;
+    /** Edges gained and lost since the fork point, live graph vs the fork point's (#1264). */
+    edges: EdgeDiffJson;
+}
+
+/** EdgeDiffReport (graph-edge-diff.ts), as JSON. */
+interface EdgeDiffJson {
+    base: string;
+    /** '' when `dependency` was computed, else why the page shows none. */
+    dependencyReason: string;
+    dependency: EdgeChangeJson[];
+    /** '' when `runtime` was computed, else why the page shows none. */
+    runtimeReason: string;
+    runtime: EdgeChangeJson[];
+}
+
+/** One gained or lost edge (#1264). */
+interface EdgeChangeJson {
+    from: string;
+    to: string;
+    /** 'gained' | 'lost' */
+    change: string;
+    /** 'depends' | 'calls' */
+    relation: string;
+    apis: string[];
+    text: string;
 }
 
 /** One comparison's scan. */

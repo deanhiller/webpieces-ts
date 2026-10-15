@@ -80,8 +80,8 @@ export class RuntimeHtmlPage {
 <script src="https://cdn.jsdelivr.net/npm/@viz-js/viz@3.28.0/dist/viz-global.js"></script>
 <script src="${IMPACT_SIDECAR_SRC}"></script>
 <style>${this.menu.styles()}${this.menu.dimStyles('#graph')}${this.assets.styles()}${this.navigation.styles()}${new GraphPageStyles().css()}
-.wp-graph-details, .wp-goal-details { position:fixed; z-index:60; max-width:min(520px,calc(100vw - 24px)); max-height:70vh; overflow:auto; background:var(--wp-surface); border:1px solid var(--wp-line); border-radius:10px; padding:14px; box-shadow:0 8px 24px #0002; }
-.wp-graph-details button, .wp-goal-details button { cursor:pointer; } .wp-api-detail { cursor:pointer; text-decoration:underline; }
+.wp-graph-details, .wp-goal-details, .wp-impact-why { position:fixed; z-index:60; max-width:min(520px,calc(100vw - 24px)); max-height:70vh; overflow:auto; background:var(--wp-surface); border:1px solid var(--wp-line); border-radius:10px; padding:14px; box-shadow:0 8px 24px #0002; }
+.wp-graph-details button, .wp-goal-details button, .wp-impact-why button { cursor:pointer; } .wp-api-detail { cursor:pointer; text-decoration:underline; }
 .wp-api-detail:focus-visible { outline:3px solid var(--wp-accent); } #wp-context-count { font-size:11px; color:var(--wp-muted); }
 .wp-goal-edge { cursor:pointer; } .wp-goal-diff ul { margin:4px 0 0; padding-left:16px; max-height:220px; overflow:auto; }
 .wp-empty { position:absolute; top:70px; left:16px; padding:16px; background:var(--wp-surface); border-radius:10px; }

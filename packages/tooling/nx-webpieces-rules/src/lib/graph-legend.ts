@@ -41,6 +41,8 @@ import {
 } from './graph-products';
 import type { ProductDependencyEntry } from '../configs/tag-truth-configs';
 
+/** The page's WpEdgeOverlay.RED: a gained or lost edge, and the edge-only badge (#1264). */
+export const EDGE_CHANGE_RED = '#d32f2f';
 const SWATCH_W = 26;
 const SWATCH_H = 16;
 const FRAME = '#3a3c46';
@@ -141,6 +143,9 @@ export class GraphLegend {
                 'compiled or restored from cache for this build',
             ) +
             this.row('untouched', this.solid(IMPACT_UNTOUCHED, '', ''), 'not in this build', 'nothing here changed or depends on a change') +
+            this.row('edge-gained', this.line(EDGE_CHANGE_RED, ''), 'gained edge', 'new on this branch: depends on / calls (click it)') +
+            this.row('edge-lost', this.line(EDGE_CHANGE_RED, '4 3'), 'lost edge', 'no longer depends on / calls since the fork point (click it)') +
+            this.row('edge-only', this.edgeBadge(), 'only its edges changed', 'gained or lost an edge, owns no changed file') +
             '<p class="wp-impact-note" data-wp-impact-note></p>'
         );
     }
@@ -240,6 +245,17 @@ export class GraphLegend {
         if (style.isBase()) return this.open() + base + this.frame();
         const inset = `<rect x="4" y="4" width="${SWATCH_W - 8}" height="${SWATCH_H - 8}" rx="2" fill="${style.color}"/>`;
         return this.open() + base + inset + this.frame();
+    }
+
+    /** The red ± badge a box whose only change is an edge carries (#1264). */
+    private edgeBadge(): string {
+        return (
+            this.open() +
+            `<rect width="${SWATCH_W}" height="${SWATCH_H}" fill="${IMPACT_UNTOUCHED}"/>` +
+            `<circle cx="${SWATCH_W - 7}" cy="7" r="6" fill="${EDGE_CHANGE_RED}"/>` +
+            `<text x="${SWATCH_W - 7}" y="10" text-anchor="middle" font-size="9" fill="#ffffff">±</text>` +
+            this.frame()
+        );
     }
 
     /** The implicitly-touched hatch: thin alternating violet stripes inside a violet ring. */

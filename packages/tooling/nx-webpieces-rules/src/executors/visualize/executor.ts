@@ -10,6 +10,11 @@
  * working tree). On main or a detached HEAD only the last commit exists, so checking out a commit
  * and running `pnpm arch:visualize` shows what that commit changed.
  *
+ * The Impact sidecar also carries the edges this branch gained and lost (#1264): the graph computed
+ * LIVE here (generate's pipeline, writing nothing — never HEAD's committed architecture/*.json, which
+ * would show nothing once the branch regenerated it) against the fork point's committed graph. The
+ * drawn boxes stay the saved snapshot; the changed edges are drawn over them in Impact mode.
+ *
  * Usage:
  * nx run architecture:visualize   (pnpm arch:visualize)
  */
@@ -21,6 +26,7 @@ import { DEFAULT_GRAPH_PATH } from '../../lib/graph-loader';
 import { GraphVisualizer } from '../../lib/graph-visualizer';
 import { TagTruthRules } from '../../lib/tag-truth';
 import { ImpactRefresh, VISUALIZE_IMPACT_KINDS } from '../../lib/graph-impact';
+import { LiveGraphSource } from '../../lib/graph-edge-diff';
 import { RuleFailError, renderRuleFailForHuman } from '@webpieces/rules-config';
 import { toError } from '../../toError';
 
@@ -38,6 +44,7 @@ export class SavedGraphViewer {
         private readonly visualizer: GraphVisualizer = new GraphVisualizer(),
         private readonly impact: ImpactRefresh = new ImpactRefresh(),
         private readonly snapshot: SavedSnapshot = new SavedSnapshot(),
+        private readonly live: LiveGraphSource = new LiveGraphSource(),
     ) {}
 
     async view(options: VisualizeExecutorOptions, context: ExecutorContext): Promise<ExecutorResult> {
@@ -58,8 +65,8 @@ export class SavedGraphViewer {
             console.log(`✅ Generated: ${vizPaths.htmlPath}`);
 
             // Impact is optional: it reports, it never throws, and it never touches committed files.
-            console.log('🟠 Refreshing impact (nx affected: changed on this branch, and since the last commit)...');
-            console.log(await this.impact.run(path.dirname(vizPaths.htmlPath), workspaceRoot, graph, VISUALIZE_IMPACT_KINDS));
+            console.log('🟠 Refreshing impact (nx affected: changed on this branch, and since the last commit; edges gained and lost since the fork point, against the graph computed live now)...');
+            console.log(await this.impact.run(path.dirname(vizPaths.htmlPath), workspaceRoot, graph, VISUALIZE_IMPACT_KINDS, this.live));
 
             console.log('\n🌐 Opening visualization in browser...');
             if (this.visualizer.openVisualization(vizPaths.htmlPath)) {

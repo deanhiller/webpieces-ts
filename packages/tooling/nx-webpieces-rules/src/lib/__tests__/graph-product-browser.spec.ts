@@ -5,7 +5,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { Locator } from '@playwright/test';
 import { FilterFixture } from './graph-filter-fixture';
-import { BRANCH_LABEL, BrowserFixture, impactScan } from './graph-browser-fixture';
+import { BRANCH_LABEL, BrowserFixture, NO_EDGES, impactScan } from './graph-browser-fixture';
 import { RuntimeHtmlPage } from '../runtime-html-page';
 import { generateRuntimeRenderModel } from '../runtime-visualizer';
 import type { EnhancedGraph } from '../graph-sorter';
@@ -46,6 +46,7 @@ describe.skipIf(!process.env.WP_GRAPH_VIZ_JS)('products in a real browser (#1179
                     ),
                 ],
                 ImpactKind.BRANCH,
+                NO_EDGES,
             ),
         );
         const apply = page.locator('#wp-filter-apply');

@@ -431,7 +431,7 @@ describe('generateHTML', () => {
         // Nothing in GRAPH is react / react-native / an app — so no row for them.
         for (const key of ['react', 'react-native', 'app', 'bundle'])
             expect(html).not.toContain(`data-wp-legend="${key}"`);
-        for (const key of ['server', 'client', 'lib', 'touched', 'dependent', 'implicit', 'rootFile', 'unexplained', 'build-input', 'untouched'])
+        for (const key of ['server', 'client', 'lib', 'touched', 'dependent', 'implicit', 'rootFile', 'unexplained', 'build-input', 'untouched', 'edge-gained', 'edge-lost', 'edge-only'])
             expect(html).toContain(`data-wp-legend="${key}"`);
     });
 

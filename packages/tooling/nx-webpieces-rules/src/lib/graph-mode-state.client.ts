@@ -140,6 +140,39 @@ class WpModeState {
         return [...impact.touched, ...impact.dependents, ...impact.implicit, ...impact.rootFile, ...impact.unexplained];
     }
 
+    /** The edges gained and lost since the fork point that THIS page draws: build deps or runtime calls. */
+    edgeChanges(): EdgeChangeJson[] {
+        const edges = window.__WP_IMPACT__?.edges;
+        if (edges === undefined) return [];
+        return this.viewer === 'runtime' ? edges.runtime : edges.dependency;
+    }
+
+    /** '' when this page's edge changes were computed (even if none), else why the page shows none. */
+    edgeReason(): string {
+        const edges = window.__WP_IMPACT__?.edges;
+        if (edges === undefined) return 'No edge changes here. Run pnpm arch:visualize to compute them.';
+        return this.viewer === 'runtime' ? edges.runtimeReason : edges.dependencyReason;
+    }
+
+    /** Every box at either end of a changed edge: the Filter's "Edge changes only". */
+    edgeEnds(): Set<string> {
+        const ends = new Set<string>();
+        for (const change of this.edgeChanges()) {
+            ends.add(change.from);
+            ends.add(change.to);
+        }
+        return ends;
+    }
+
+    /** "Edges since abc1234: 1 gained · 1 lost." — or why there are none to show. */
+    edgeNote(): string {
+        const reason = this.edgeReason();
+        if (reason !== '') return `${reason}.`;
+        const changes = this.edgeChanges();
+        const gained = changes.filter((change: EdgeChangeJson): boolean => change.change === 'gained').length;
+        return `Edges since ${window.__WP_IMPACT__?.edges.base ?? ''}: ${gained} gained · ${changes.length - gained} lost.`;
+    }
+
     /** Why `id` is in the active scan's build; null when it is not affected. */
     reason(id: string): AffectedReasonJson | null {
         return this.impact?.reasons.find((reason: AffectedReasonJson): boolean => reason.project === id) ?? null;
@@ -237,10 +270,10 @@ class WpImpactWhy {
 class ImpactWhyPanel {
     private readonly panel = document.createElement('div');
     private readonly text = new WpImpactWhy();
-    private anchor: SVGGElement | null = null;
+    private anchor: SVGElement | null = null;
 
     constructor() {
-        this.panel.className = 'wp-graph-details wp-impact-why';
+        this.panel.className = 'wp-impact-why';
         this.panel.hidden = true;
         this.panel.setAttribute('role', 'dialog');
         this.panel.setAttribute('aria-label', 'Why this project is in the build');
@@ -257,11 +290,16 @@ class ImpactWhyPanel {
     }
 
     open(node: SVGGElement, reason: AffectedReasonJson): void {
+        this.show(node, this.text.title(reason), this.text.lines(reason));
+    }
+
+    /** Any heading and lines, anchored under `node` (a box, or a changed edge). */
+    show(node: SVGElement, title: string, lines: string[]): void {
         this.anchor = node;
         const heading = document.createElement('strong');
-        heading.textContent = this.text.title(reason);
+        heading.textContent = title;
         const list = document.createElement('ul');
-        for (const line of this.text.lines(reason)) {
+        for (const line of lines) {
             const item = document.createElement('li');
             item.textContent = line;
             list.append(item);
@@ -284,5 +322,177 @@ class ImpactWhyPanel {
         const anchor = this.anchor;
         this.anchor = null;
         if (anchor?.isConnected) anchor.focus({ preventScroll: true });
+    }
+}
+
+/** A changed edge the saved page does not draw: added to the Impact overlay. */
+class WpOverlayEdge implements RenderEdgeJson {
+    readonly productDot: string | null = null;
+
+    constructor(
+        readonly id: string,
+        readonly from: string,
+        readonly to: string,
+        readonly dot: string,
+    ) {}
+}
+
+/** The page's own model with the overlay's edges: same boxes, levels and frame. */
+class WpOverlayModel implements RenderModelJson {
+    readonly viewer: 'architecture' | 'runtime';
+    readonly nodes: RenderNodeJson[];
+    readonly bands: RenderBandJson[];
+    readonly fullDot: string;
+    readonly header: string;
+    readonly footer: string;
+    readonly comparison: RuntimeComparisonJson | null;
+
+    constructor(
+        base: RenderModelJson,
+        readonly edges: RenderEdgeJson[],
+    ) {
+        this.viewer = base.viewer;
+        this.nodes = base.nodes;
+        this.bands = base.bands;
+        this.fullDot = base.fullDot;
+        this.header = base.header;
+        this.footer = base.footer;
+        this.comparison = base.comparison ?? null;
+    }
+}
+
+/**
+ * The edges this branch gained or lost since its fork point, drawn over the page in Impact mode
+ * (#1264). A changed edge the page already draws is restyled; one it does not (the page is the saved
+ * snapshot, the diff is against the LIVE graph) is added: a gained edge solid red and bold, a lost one
+ * a red dashed ghost. Every changed edge is clickable, and a box whose only change is an edge gets a
+ * red badge.
+ */
+class WpEdgeOverlay {
+    static readonly RED = '#d32f2f';
+    static readonly PREFIX = 'wp-edge-change-';
+    /** pair key → that pair's changes; null until first asked. */
+    private pairs: Map<string, EdgeChangeJson[]> | null = null;
+    /** Rendered edge id → the changes it stands for. */
+    private readonly byEdgeId = new Map<string, EdgeChangeJson[]>();
+    private overlay: RenderModelJson | null = null;
+
+    constructor(private readonly modes: WpModeState) {}
+
+    private key(from: string, to: string): string {
+        return `${from}\u0000${to}`;
+    }
+
+    private grouped(): Map<string, EdgeChangeJson[]> {
+        if (this.pairs !== null) return this.pairs;
+        this.pairs = new Map<string, EdgeChangeJson[]>();
+        for (const change of this.modes.edgeChanges()) {
+            const key = this.key(change.from, change.to);
+            this.pairs.set(key, [...(this.pairs.get(key) ?? []), change]);
+        }
+        return this.pairs;
+    }
+
+    any(): boolean {
+        return this.modes.edgeChanges().length > 0;
+    }
+
+    /** `base` plus a ghost statement for every changed edge it does not draw (both ends must be boxes). */
+    model(base: RenderModelJson): RenderModelJson {
+        if (this.overlay !== null) return this.overlay;
+        const ids = new Set(base.nodes.map((node: RenderNodeJson): string => node.id));
+        const drawn = new Set(base.edges.map((edge: RenderEdgeJson): string => this.key(edge.from, edge.to)));
+        const extra: RenderEdgeJson[] = [];
+        for (const key of this.grouped().keys()) {
+            const changes = this.grouped().get(key) as EdgeChangeJson[];
+            const from = changes[0].from;
+            const to = changes[0].to;
+            if (drawn.has(key) || !ids.has(from) || !ids.has(to)) continue;
+            const id = `${WpEdgeOverlay.PREFIX}${extra.length}`;
+            const dot = `  "${this.esc(from)}" -> "${this.esc(to)}" [id="${id}", constraint=false${this.attrs(changes)}];\n`;
+            this.byEdgeId.set(id, changes);
+            extra.push(new WpOverlayEdge(id, from, to, dot));
+        }
+        this.overlay = new WpOverlayModel(base, [...base.edges, ...extra]);
+        return this.overlay;
+    }
+
+    /** A drawn edge's statement restyled when it changed; null when it did not. */
+    edgeDot(edge: RenderEdgeJson): string | null {
+        if (edge.id.startsWith(WpEdgeOverlay.PREFIX)) return edge.dot;
+        const changes = this.grouped().get(this.key(edge.from, edge.to));
+        if (changes === undefined) return null;
+        this.byEdgeId.set(edge.id, changes);
+        return `${edge.dot.slice(0, -2)} [${this.attrs(changes).slice(2)}];\n`;
+    }
+
+    /** Gained (any API new) is solid, bold red; otherwise a lost edge is a red dashed ghost. */
+    private attrs(changes: EdgeChangeJson[]): string {
+        const gained = changes.some((change: EdgeChangeJson): boolean => change.change === 'gained');
+        const tooltip = this.esc(changes.map((change: EdgeChangeJson): string => change.text).join('; '));
+        return `, color="${WpEdgeOverlay.RED}", fontcolor="${WpEdgeOverlay.RED}", penwidth=${gained ? '3' : '2'}, style="${gained ? 'bold' : 'dashed'}", tooltip="${tooltip}"`;
+    }
+
+    private esc(text: string): string {
+        return text.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+    }
+
+    /** The lines for one box's edge changes ("new on this branch: …", "… no longer calls …"). */
+    nodeLines(id: string): string[] {
+        return this.modes
+            .edgeChanges()
+            .filter((change: EdgeChangeJson): boolean => change.from === id || change.to === id)
+            .map((change: EdgeChangeJson): string => change.text);
+    }
+
+    /** Every changed edge clickable; a red badge on each box whose ONLY change is an edge. */
+    decorate(svg: SVGSVGElement, panel: ImpactWhyPanel): void {
+        for (const id of this.byEdgeId.keys()) {
+            const edge = svg.querySelector<SVGGElement>(`g.edge[id="${id}"]`);
+            const changes = this.byEdgeId.get(id) as EdgeChangeJson[];
+            if (edge === null) continue;
+            edge.classList.add('wp-edge-change');
+            edge.setAttribute('tabindex', '0');
+            edge.setAttribute('role', 'button');
+            const title = changes.some((change: EdgeChangeJson): boolean => change.change === 'gained') ? 'Gained edge' : 'Lost edge';
+            const show = (ev: Event): void => {
+                ev.stopPropagation();
+                panel.show(edge, title, changes.map((change: EdgeChangeJson): string => change.text));
+            };
+            edge.addEventListener('click', show);
+            edge.addEventListener('keydown', (ev: KeyboardEvent) => {
+                if (ev.key === 'Enter' || ev.key === ' ') show(ev);
+            });
+        }
+        const affected = new Set(this.modes.affected());
+        const ends = this.modes.edgeEnds();
+        svg.querySelectorAll<SVGGElement>('g.node').forEach((node: SVGGElement) => {
+            const id = node.querySelector('title')?.textContent ?? '';
+            if (!ends.has(id) || affected.has(id)) return;
+            node.append(this.badge(node));
+        });
+    }
+
+    private badge(node: SVGGElement): SVGGElement {
+        const ns = 'http://www.w3.org/2000/svg';
+        const box = node.getBBox();
+        const group = document.createElementNS(ns, 'g');
+        group.setAttribute('class', 'wp-edge-badge');
+        const circle = document.createElementNS(ns, 'circle');
+        circle.setAttribute('cx', String(box.x + box.width - 2));
+        circle.setAttribute('cy', String(box.y + 2));
+        circle.setAttribute('r', '8');
+        circle.setAttribute('fill', WpEdgeOverlay.RED);
+        const text = document.createElementNS(ns, 'text');
+        text.setAttribute('x', String(box.x + box.width - 2));
+        text.setAttribute('y', String(box.y + 6));
+        text.setAttribute('text-anchor', 'middle');
+        text.setAttribute('font-size', '12');
+        text.setAttribute('fill', '#ffffff');
+        text.textContent = '±';
+        const hint = document.createElementNS(ns, 'title');
+        hint.textContent = 'Only its edges changed on this branch';
+        group.append(circle, text, hint);
+        return group;
     }
 }

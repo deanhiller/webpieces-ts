@@ -13,6 +13,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { DEFAULT_GRAPH_PATH } from '../../lib/graph-loader';
 import { ImpactRefresh, ImpactSidecar, VISUALIZE_IMPACT_KINDS } from '../../lib/graph-impact';
+import { LiveGraphSource } from '../../lib/graph-edge-diff';
 import type { ExecutorContext } from '@nx/devkit';
 import { SavedSnapshot } from '../../lib/saved-snapshot';
 import { RuleFailError, renderRuleFailForHuman } from '@webpieces/rules-config';
@@ -52,7 +53,7 @@ export default async function runExecutor(
         const vizPaths = writeRuntimeVisualization(graph, workspaceRoot, 'WebPieces Runtime Architecture', options, comparison);
         console.log(`✅ Generated: ${vizPaths.dotPath}`);
         console.log(`✅ Generated: ${vizPaths.htmlPath}`);
-        if (projects !== null) console.log(await new ImpactRefresh().run(path.dirname(vizPaths.htmlPath), workspaceRoot, projects, VISUALIZE_IMPACT_KINDS));
+        if (projects !== null) console.log(await new ImpactRefresh().run(path.dirname(vizPaths.htmlPath), workspaceRoot, projects, VISUALIZE_IMPACT_KINDS, new LiveGraphSource()));
         else { new ImpactSidecar().remove(path.dirname(vizPaths.htmlPath)); console.log('Impact and framework metadata unavailable: no saved project graph. Refresh explicitly with architecture:generate.'); }
 
         console.log('\n🌐 Opening visualization in browser...');
