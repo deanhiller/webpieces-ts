@@ -130,7 +130,8 @@ export class AffectedClassifier {
         const affected = new Set<string>(inputs.affected);
         const seeds = new Map<string, AffectedReason>();
         const owned = await this.owned(inputs);
-        for (const [project, files] of owned) {
+        for (const project of owned.keys()) {
+            const files = owned.get(project) as string[];
             const detail = `owns ${files.length} changed file${files.length === 1 ? '' : 's'}`;
             this.seed(seeds, affected, this.reason(project, AffectedClass.CHANGED, files, [], '', '', detail));
         }
@@ -303,7 +304,8 @@ export class AffectedClassifier {
         external: Map<string, AffectedReason>,
     ): AffectedReason[] {
         const next = this.nearest(graph, [...seeds.keys(), ...external.keys()]);
-        for (const [project, hop] of next) {
+        for (const project of next.keys()) {
+            const hop = next.get(project) as string;
             const viaPackage = external.get(hop);
             if (viaPackage === undefined) continue;
             this.seed(seeds, affected, this.reason(project, AffectedClass.ROOT_FILE, viaPackage.files, [project, hop], '', '', `uses ${hop}: ${viaPackage.detail}`));

@@ -48,7 +48,7 @@ export class ImpactGraphFixture {
         }
         for (const name of external)
             (graph.externalNodes ?? {})[name] = { name: name as `npm:${string}`, type: 'npm', data: { version: '1.0.0', packageName: name.slice(4) } };
-        for (const [source, target] of edges) graph.dependencies[source].push({ source, target, type: 'static' });
+        for (const edge of edges) graph.dependencies[edge[0]].push({ source: edge[0], target: edge[1], type: 'static' });
         return graph;
     }
 }
