@@ -9,6 +9,7 @@ import {
     ErrorResponseEntry,
     ErrorsEntry,
     OpenApiManifest,
+    OperationIdStyle,
     ResponseHeaderEntry,
     ServerEntry,
 } from './OpenApiManifest';
@@ -36,7 +37,14 @@ const NOT_IN_COMPONENTS: ReadonlyMap<string, string> = new Map<string, string>([
     ['errors', 'the error contract belongs to a contract document'],
     ['responseHeaders', 'response headers belong to a contract document'],
     ['securitySchemeNames', 'security belongs to a contract document'],
+    ['operationIds', 'a components document has no operations to name'],
 ]);
+
+/** Every spelling `operationIds` accepts, in the order the refusal lists them. */
+const OPERATION_ID_STYLES: readonly OperationIdStyle[] = [
+    OperationIdStyle.CONTRACT_METHOD,
+    OperationIdStyle.METHOD,
+];
 
 /**
  * Read `openapi.manifest.json` into {@link OpenApiManifest}.
@@ -123,6 +131,30 @@ export class ManifestLoader {
             this.errors(raw),
             this.responseHeaders(raw),
             this.schemaNames(raw),
+            this.operationIds(raw),
+        );
+    }
+
+    /**
+     * REQUIRED, with no default (#1270): the operationId is the method name in every client a
+     * partner generates, so its spelling is the consumer's decision, stated in the manifest.
+     */
+    private operationIds(raw: JsonReader): OperationIdStyle {
+        const value = raw.optionalString('operationIds');
+        const style = OPERATION_ID_STYLES.find((each: OperationIdStyle) => each === value);
+        if (style !== undefined) {
+            return style;
+        }
+        const choices = OPERATION_ID_STYLES.map((each: OperationIdStyle) => `"${each}"`).join(' or ');
+        throw new OpenApiGenerationError(
+            value === undefined
+                ? "'operationIds' is missing or is not a string"
+                : `unknown operationIds style '${value}'`,
+            raw.where,
+            `Add "operationIds": ${choices}. "${OperationIdStyle.CONTRACT_METHOD}" publishes ` +
+                `OrdersApi_fetchOrders; "${OperationIdStyle.METHOD}" publishes fetchOrders and fails ` +
+                'generation when two operations of one document would share it. Generated partner ' +
+                'clients name their methods from it, so changing it renames every method in their SDKs.',
         );
     }
 

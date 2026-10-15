@@ -1,5 +1,6 @@
 {
     "title": "Mixed API",
+    "operationIds": "contract_method",
     "version": "1.0.0",
     "apis": [
         {
@@ -23,5 +24,13 @@
                 "requiresAuth": true
             }
         ]
-    }
+    },
+    "responseHeadersWhy": "The header rides EVERY response the operation lists, failures included (#1270): ping's 400, and secret's 400 and 401.",
+    "responseHeaders": [
+        {
+            "entry": "Headers.ts",
+            "contextKey": "WidgetKeys.TRACE",
+            "description": "Correlates this response with our logs."
+        }
+    ]
 }

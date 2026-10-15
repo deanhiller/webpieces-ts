@@ -55,6 +55,7 @@ It carries exactly what is **not a property of the code**:
 ```json
 {
     "title": "Example Orders API",
+    "operationIds": "method",
     "version": "1.0.0",
     "descriptionFile": "description.md",
     "servers": [{ "url": "https://api.example.com", "description": "Production." }],
@@ -143,6 +144,24 @@ never reads, and nothing could contradict it.
 JSON cannot import, so a literal there would be a copy that a rename leaves silently stale. When a
 key cannot be followed to its definition, or declares no such header, generation hard-fails QUOTING
 the expression.
+
+**Every response header rides every response the operation declares** — the success response
+AND each `errors.responses[]` entry listed on it (so an auth-only 401 left off a public operation
+carries nothing there, because it is not there). The server stamps the header on every response, and
+for a correlation id the failing response is the one a partner most needs to quote back. A webhook
+takes none of them: it is served by the partner, not by us.
+
+**`operationIds` is REQUIRED — there is no default (#1270).** `operationId` is what openapi-generator,
+Kiota, NSwag and the rest name the METHOD in every client a partner generates, so changing its spelling
+renames every method in every partner's SDK. The manifest states it:
+
+| value | publishes | uniqueness |
+|---|---|---|
+| `"contract_method"` | `OrdersApi_fetchOrders` | by construction |
+| `"method"` | `fetchOrders` | checked: two operations of one document (routes and webhooks alike) sharing an id is a HARD FAILURE naming both |
+
+A manifest without it, or with any other value, is refused with an error naming the key and both
+choices. Pick `"contract_method"` to keep the ids every earlier release published.
 
 **`responseHeaders[].required`** is rendered verbatim on the header object; omitted, the document
 does not state it (OpenAPI reads that as `false`).

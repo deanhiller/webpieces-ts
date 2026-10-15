@@ -69,6 +69,11 @@
                     },
                     "400": {
                         "description": "The request body failed validation. `details` names the fields.",
+                        "headers": {
+                            "x-request-id": {
+                                "$ref": "#/components/headers/x-request-id"
+                            }
+                        },
                         "content": {
                             "application/json": {
                                 "schema": {
@@ -79,6 +84,11 @@
                     },
                     "401": {
                         "description": "The api key or the organization header is missing or not valid.",
+                        "headers": {
+                            "x-request-id": {
+                                "$ref": "#/components/headers/x-request-id"
+                            }
+                        },
                         "content": {
                             "application/json": {
                                 "schema": {
@@ -89,6 +99,11 @@
                     },
                     "404": {
                         "description": "The addressed resource does not exist for this organization.",
+                        "headers": {
+                            "x-request-id": {
+                                "$ref": "#/components/headers/x-request-id"
+                            }
+                        },
                         "content": {
                             "application/json": {
                                 "schema": {
@@ -154,6 +169,11 @@
                     },
                     "400": {
                         "description": "The request body failed validation. `details` names the fields.",
+                        "headers": {
+                            "x-request-id": {
+                                "$ref": "#/components/headers/x-request-id"
+                            }
+                        },
                         "content": {
                             "application/json": {
                                 "schema": {
@@ -164,6 +184,11 @@
                     },
                     "401": {
                         "description": "The api key or the organization header is missing or not valid.",
+                        "headers": {
+                            "x-request-id": {
+                                "$ref": "#/components/headers/x-request-id"
+                            }
+                        },
                         "content": {
                             "application/json": {
                                 "schema": {
@@ -174,6 +199,11 @@
                     },
                     "404": {
                         "description": "The addressed resource does not exist for this organization.",
+                        "headers": {
+                            "x-request-id": {
+                                "$ref": "#/components/headers/x-request-id"
+                            }
+                        },
                         "content": {
                             "application/json": {
                                 "schema": {
@@ -230,6 +260,11 @@
                     },
                     "400": {
                         "description": "The request body failed validation. `details` names the fields.",
+                        "headers": {
+                            "x-request-id": {
+                                "$ref": "#/components/headers/x-request-id"
+                            }
+                        },
                         "content": {
                             "application/json": {
                                 "schema": {
@@ -240,6 +275,11 @@
                     },
                     "401": {
                         "description": "The api key or the organization header is missing or not valid.",
+                        "headers": {
+                            "x-request-id": {
+                                "$ref": "#/components/headers/x-request-id"
+                            }
+                        },
                         "content": {
                             "application/json": {
                                 "schema": {
@@ -250,6 +290,11 @@
                     },
                     "404": {
                         "description": "The addressed resource does not exist for this organization.",
+                        "headers": {
+                            "x-request-id": {
+                                "$ref": "#/components/headers/x-request-id"
+                            }
+                        },
                         "content": {
                             "application/json": {
                                 "schema": {

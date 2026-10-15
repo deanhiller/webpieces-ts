@@ -32,8 +32,10 @@ abstract class DocumentsApi {
 const catalog: ApiDocumentObject = {
     openapi:'3.1.0',
     tags:[{name:'browse'},{name:'private'}],
+    // One operation per operationId spelling a manifest may choose (#1270): the bare `method` and
+    // `contract_method`. The projection matches each to its route by HTTP method and path, so both work.
     paths:{
-        '/inventory/browse':{post:{operationId:'InventoryApi_browse',tags:['browse'],responses:{'200':{schema:{$ref:'#/components/schemas/Shared'}}}}},
+        '/inventory/browse':{post:{operationId:'browse',tags:['browse'],responses:{'200':{schema:{$ref:'#/components/schemas/Shared'}}}}},
         '/inventory/private':{post:{operationId:'InventoryApi_privateData',tags:['private'],responses:{'200':{schema:{$ref:'#/components/schemas/Private'}}}}},
     },
     components:{schemas:{

@@ -17,6 +17,7 @@
  * - `errors` — the document-wide failure contract, with the BODY read from a real TS type so the
  *   published shape cannot drift from the one on the wire.
  * - `responseHeaders[]` — declared by `contextKey` naming an exported ContextKey, never by a literal.
+ * - `operationIds` — the published operationId spelling, a partner-visible decision (#1270).
  *
  * Anything a renderer could read off the source instead belongs in the source.
  *
@@ -26,6 +27,22 @@
  * Alphabetising this array is not a cleanup; it reorders partner-facing navigation.
  */
 import { SchemaNameEntry } from '@webpieces/api-doc-model';
+
+/**
+ * How every operation's `operationId` is spelled (#1270). REQUIRED in a contract manifest, with no
+ * default: `operationId` is what openapi-generator, Kiota, NSwag and friends name the METHOD in every
+ * client a partner generates, so changing the spelling renames every method in every partner's SDK.
+ * That is the consumer's decision to state, never one a generator default makes silently.
+ */
+export enum OperationIdStyle {
+    /** `OrdersApi_fetchOrders` — unique by construction across contracts. */
+    CONTRACT_METHOD = 'contract_method',
+    /**
+     * `fetchOrders` — the bare method name. Two operations of one document sharing it is a HARD
+     * FAILURE naming both, so the id is still unique.
+     */
+    METHOD = 'method',
+}
 
 export class ServerEntry {
     constructor(
@@ -90,7 +107,9 @@ export class ErrorsEntry {
 }
 
 /**
- * One response header every operation carries.
+ * One response header every operation carries — on its success response AND on every failure the
+ * document declares for it (#1270): a correlation id matters most on the response that FAILED, and
+ * the server stamps it on every response, so declaring it on the 200 alone under-documents the wire.
  *
  * `contextKey` names an exported `ContextKey` in `entry` — the export's name, or a dotted path into
  * one (`OneTabletKey.TX_ID`) — and the generator reads the header name off that key's own
@@ -125,6 +144,7 @@ export class OpenApiManifest {
         readonly errors: ErrorsEntry | undefined,
         readonly responseHeaders: readonly ResponseHeaderEntry[],
         readonly schemaNames: readonly SchemaNameEntry[],
+        readonly operationIds: OperationIdStyle,
     ) {}
 }
 
