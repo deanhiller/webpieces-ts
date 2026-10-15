@@ -64,10 +64,11 @@ export class EdgeDiffReport {
         public readonly runtimeReason: string,
         public readonly runtime: EdgeChange[],
     ) {}
+}
 
-    static unavailable(reason: string, base = ''): EdgeDiffReport {
-        return new EdgeDiffReport(base, reason, [], reason, []);
-    }
+/** The one field of a committed dependencies.json the base side reads. */
+interface SavedProjectsFile {
+    projects?: EnhancedGraph;
 }
 
 /** The two graphs the branch has NOW, computed live. `runtime` null when it could not be derived. */
@@ -198,14 +199,14 @@ export class EdgeChangeScanner {
 
     async scan(workspaceRoot: string, forkPoint: string | null, source: LiveGraphSource): Promise<EdgeDiffReport> {
         if (forkPoint === null)
-            return EdgeDiffReport.unavailable('Edge changes compare a branch with its fork point; there is no branch comparison here (main or a detached HEAD)');
+            return this.none('Edge changes compare a branch with its fork point; there is no branch comparison here (main or a detached HEAD)');
         const short = forkPoint.slice(0, 7);
         // eslint-disable-next-line @webpieces/no-unmanaged-exceptions -- edge changes are optional; a failure becomes the reason the page shows
         try {
             const baseProjects = this.projectsAt(workspaceRoot, forkPoint);
             const baseRuntime = this.runtimeAt(workspaceRoot, forkPoint);
             if (baseProjects === null && baseRuntime === null)
-                return EdgeDiffReport.unavailable(`No architecture graph at the fork point ${short} (first adoption), so there is nothing to compare edges against`, short);
+                return this.none(`No architecture graph at the fork point ${short} (first adoption), so there is nothing to compare edges against`, short);
             const live = await source.graphs(workspaceRoot);
             const dependencyReason = baseProjects === null ? `No ${DEFAULT_GRAPH_PATH} at the fork point ${short}` : '';
             const runtimeReason = baseRuntime === null ? `No ${DEFAULT_RUNTIME_GRAPH_PATH} at the fork point ${short}` : live.runtimeReason;
@@ -218,14 +219,19 @@ export class EdgeChangeScanner {
             );
         } catch (err: unknown) {
             const error = toError(err);
-            return EdgeDiffReport.unavailable(`Edge changes unavailable: ${error.message}`, short);
+            return this.none(`Edge changes unavailable: ${error.message}`, short);
         }
+    }
+
+    /** No edge changes to show, with the one reason the page says instead. */
+    private none(reason: string, base = ''): EdgeDiffReport {
+        return new EdgeDiffReport(base, reason, [], reason, []);
     }
 
     /** dependencies.json's `projects` at the fork point; null when absent or not that shape. */
     private projectsAt(workspaceRoot: string, sha: string): EnhancedGraph | null {
         const parsed = this.parse(this.git.read(workspaceRoot, sha, DEFAULT_GRAPH_PATH));
-        const projects = parsed === null ? undefined : (parsed as { projects?: EnhancedGraph }).projects;
+        const projects = parsed === null ? undefined : (parsed as SavedProjectsFile).projects;
         return projects !== undefined && typeof projects === 'object' && projects !== null ? projects : null;
     }
 

@@ -21,7 +21,8 @@ const GRAPH: EnhancedGraph = {
     'lib-c': { level: 0, dependsOn: [], role: 'lib' },
 };
 
-const LOST = new EdgeChange('svc-a', 'lib-b', EdgeChangeKind.LOST, EdgeRelation.DEPENDS, [], 'svc-a no longer depends on lib-b');
+const FIRST_ADOPTION = 'No architecture graph at the fork point abc1234 (first adoption), so there is nothing to compare edges against';
+const LOST =new EdgeChange('svc-a', 'lib-b', EdgeChangeKind.LOST, EdgeRelation.DEPENDS, [], 'svc-a no longer depends on lib-b');
 const GAINED = new EdgeChange('svc-a', 'lib-c', EdgeChangeKind.GAINED, EdgeRelation.DEPENDS, [], 'new on this branch: svc-a now depends on lib-c');
 
 function edge(page: Page, title: string): ReturnType<Page['locator']> {
@@ -73,7 +74,7 @@ describe.skipIf(!process.env['WP_GRAPH_VIZ_JS'])('Impact reasons and edge change
     });
 
     it('says so when the fork point has no graph, and draws no edge change', async () => {
-        const edges = EdgeDiffReport.unavailable('No architecture graph at the fork point abc1234 (first adoption), so there is nothing to compare edges against', 'abc1234');
+        const edges = new EdgeDiffReport('abc1234', FIRST_ADOPTION, [], FIRST_ADOPTION, []);
         const scan = impactScan(ImpactKind.BRANCH, BRANCH_LABEL, ['svc-a'], [], [], 1, []);
         const page = await fixture.openWithImpact('1264-no-base', fixture.architecture(GRAPH), new ImpactSidecarData([scan], ImpactKind.BRANCH, edges));
         await fixture.mode(page, 'impact');
