@@ -169,7 +169,7 @@ export abstract class ProxyClient {
 
     /**
      * Reject, at bind time, an endpoint this environment cannot satisfy — e.g. a browser cannot
-     * mint the OIDC token an oidc(...) endpoint demands. Surfacing it here beats failing on the
+     * mint the OIDC token an oidcSameProject() / oidcSvcs(...) endpoint demands. Surfacing it here beats failing on the
      * first call in production. The default accepts everything.
      */
     protected assertEndpointSupported(_route: RouteMetadata): void {}

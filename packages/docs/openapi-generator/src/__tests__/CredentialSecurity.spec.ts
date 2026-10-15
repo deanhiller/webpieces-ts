@@ -21,6 +21,14 @@ describe('declared credential OR in generated OpenAPI', () => {
         expect((requirements?.[1] as JsonObject).keys()).toEqual(['WebpiecesSharedSecret']);
     });
 
+    it('lists the OIDC scheme once when an endpoint pairs oidcSameProject() with oidcSvcs([...])', () => {
+        const auth = new DocumentedAuth(undefined, [new DocumentedAuthMethod('oidc', [], undefined), new DocumentedAuthMethod('oidc', ["['partner@other-project.iam.gserviceaccount.com']"], undefined), new DocumentedAuthMethod('jwt', [], undefined)]);
+        const requirements = new SecurityDeriver().operation(auth, undefined);
+        expect(requirements).toHaveLength(2);
+        expect((requirements?.[0] as JsonObject).keys()).toEqual(['WebpiecesOidc']);
+        expect((requirements?.[1] as JsonObject).keys()).toEqual(['WebpiecesJwt']);
+    });
+
     it('does not invent wire headers for an application-owned vendor signature', () => {
         const auth = new DocumentedAuth(undefined, [new DocumentedAuthMethod('jwt', [], undefined),new DocumentedAuthMethod('webhook', ["'vendor'"], undefined)]);
         expect(new SecurityDeriver().operation(auth, undefined)).toBeUndefined();

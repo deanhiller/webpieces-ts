@@ -123,7 +123,7 @@ export class WebpiecesCoreHeaders {
      * service is the point. What makes that safe is not the header being absent, it is WHO is
      * allowed to have set it: an inbound value is held PENDING by
      * `RequestContextHeaders.fillFromRequest` and admitted by `AuthFilter` only on a route that
-     * verified its CALLER (`oidc(...)` / `sharedSecret(...)`). On a browser-reachable route
+     * verified its CALLER (`oidcSameProject()` / `oidcSvcs(...)` / `sharedSecret(...)`). On a browser-reachable route
      * (`jwt()` / public) the value must match what the authenticator itself derived, or the
      * request is rejected.
      *
@@ -163,7 +163,7 @@ export class WebpiecesCoreHeaders {
      * every other unvouched trusted header.
      *
      * It keeps its `httpHeader` because PROPAGATION is the point: the surface belongs to the ORIGINAL
-     * caller, so `GUI -> api1 -> api2` must leave api2 seeing `gui`. An internal `oidc(...)` hop
+     * caller, so `GUI -> api1 -> api2` must leave api2 seeing `gui`. An internal OIDC hop (`oidcSameProject()` / `oidcSvcs(...)`)
      * verifies its caller, so the propagated value is admitted verbatim — and the auth filter only
      * ever SETS a surface when none arrived, so an inherited one is never overwritten.
      */

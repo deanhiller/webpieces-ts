@@ -79,10 +79,12 @@ describe('ensure-we-are-secure HTTP contracts', () => {
     it('accepts canonical credentials, OR alternatives, and separate locality', () => {
         write('packages/api/src/Api.ts', `
             import { ApiPath, Endpoint, WpAuth, WpAuthPublic, WpAuthorization,
-                AuthorizationType, WpLocalOnly, jwt, oidc, webhook, sharedSecret, apiKey } from '@webpieces/core-util';
+                AuthorizationType, WpLocalOnly, jwt, oidcSameProject, oidcSvcs, webhook, sharedSecret, apiKey } from '@webpieces/core-util';
             @ApiPath('/x') class Api {
                 @Endpoint() @WpAuth([jwt()]) @WpAuthorization({authType: AuthorizationType.ALL_USERS}) user(v: object): Promise<object> {throw 0;}
-                @Endpoint() @WpAuth([oidc()]) @WpAuthorization({authType: AuthorizationType.SERVICE_ONLY}) service(v: object): Promise<object> {throw 0;}
+                @Endpoint() @WpAuth([oidcSameProject()]) @WpAuthorization({authType: AuthorizationType.SERVICE_ONLY}) service(v: object): Promise<object> {throw 0;}
+                @Endpoint() @WpAuth([oidcSvcs(['svc-a', 'partner@other-project.iam.gserviceaccount.com'])]) @WpAuthorization({authType: AuthorizationType.SERVICE_ONLY}) listed(v: object): Promise<object> {throw 0;}
+                @Endpoint() @WpAuth([oidcSameProject(), oidcSvcs(['partner@other-project.iam.gserviceaccount.com']), jwt()]) @WpAuthorization({authType: AuthorizationType.USERS_OR_SERVICES}) paired(v: object): Promise<object> {throw 0;}
                 @Endpoint() @WpAuth([webhook('x')]) @WpAuthorization({authType: AuthorizationType.USERS_OR_SERVICES}) hook(v: object): Promise<object> {throw 0;}
                 @Endpoint() @WpAuth([sharedSecret('x'), jwt()]) @WpAuthorization({authType: AuthorizationType.USERS_OR_SERVICES}) either(v: object): Promise<object> {throw 0;}
                 @Endpoint() @WpAuth([apiKey('partner', [{in:'header',key:PartnerKeys.API_KEY}])]) @WpAuthorization({authType: AuthorizationType.ROLES, roles:['agent']}) key(v: object): Promise<object> {throw 0;}
@@ -99,7 +101,7 @@ describe('ensure-we-are-secure HTTP contracts', () => {
                 WpAuthorization as Policy, AuthorizationType as Type} from '@webpieces/core-util';
             import * as wp from '@webpieces/core-util';
             @Path('/a') class A {@Route() @Auth([credential()]) @Policy({authType:Type.ALL_USERS}) x(v: object): Promise<object> {throw 0;}}
-            @wp.ApiPath('/b') class B {@wp.Endpoint() @wp.WpAuth([wp.oidc()]) @wp.WpAuthorization({authType:wp.AuthorizationType.SERVICE_ONLY}) x(v: object): Promise<object> {throw 0;}}
+            @wp.ApiPath('/b') class B {@wp.Endpoint() @wp.WpAuth([wp.oidcSvcs(['svc-a'])]) @wp.WpAuthorization({authType:wp.AuthorizationType.SERVICE_ONLY}) x(v: object): Promise<object> {throw 0;}}
         `);
         expect(codes()).toEqual([]);
     });
@@ -133,13 +135,31 @@ describe('ensure-we-are-secure HTTP contracts', () => {
         ['@WpAuth([jwt()])', '{authType:AuthorizationType.ALL_USERS,appPolicy:{permission:"x"}}', 'HTTP_AUTHORIZATION_POLICY'],
         ['@WpAuth([jwt()])', '{authType:AuthorizationType.ANONYMOUS,reason:"x"}', 'HTTP_AUTHORIZATION_PAIRING'],
         ["@WpAuthPublic('probe')", '{authType:AuthorizationType.ALL_USERS}', 'HTTP_AUTHORIZATION_PAIRING'],
+        ['@WpAuth([oidcSvcs([])])', '{authType:AuthorizationType.SERVICE_ONLY}', 'HTTP_AUTH_METHODS'],
+        ["@WpAuth([oidcSvcs(['  '])])", '{authType:AuthorizationType.SERVICE_ONLY}', 'HTTP_AUTH_METHODS'],
+        ["@WpAuth([oidcSvcs('svc-a','svc-b')])", '{authType:AuthorizationType.SERVICE_ONLY}', 'HTTP_AUTH_METHODS'],
+        ["@WpAuth([oidcSameProject('svc-a')])", '{authType:AuthorizationType.SERVICE_ONLY}', 'HTTP_AUTH_METHODS'],
+        ["@WpAuth([oidcSvcs(['svc-a']),oidcSvcs(['svc-b'])])", '{authType:AuthorizationType.SERVICE_ONLY}', 'HTTP_AUTH_METHODS'],
+        ['@WpAuth([oidcSameProject(),oidcSameProject()])', '{authType:AuthorizationType.SERVICE_ONLY}', 'HTTP_AUTH_METHODS'],
     ])('fails closed on %s with %s', (authentication: string, policy: string, code: string) => {
         write('packages/api/src/BadPolicy.ts', `
-            import {ApiPath,Endpoint,WpAuth,WpAuthPublic,WpAuthorization,AuthorizationType,jwt} from '@webpieces/core-util';
+            import {ApiPath,Endpoint,WpAuth,WpAuthPublic,WpAuthorization,AuthorizationType,jwt,oidcSameProject,oidcSvcs} from '@webpieces/core-util';
             function fake() {return {kind:'jwt'};}
             @ApiPath('/x') class Api {@Endpoint() ${authentication} @WpAuthorization(${policy}) x(v: object): Promise<object> {throw 0;}}
         `);
         expect(codes()).toContain(code);
+    });
+
+    it('rejects the removed oidc() descriptor with a message naming only its replacements', () => {
+        write('packages/api/src/RemovedOidc.ts', `
+            import {ApiPath,Endpoint,WpAuth,WpAuthorization,AuthorizationType,oidc} from '@webpieces/core-util';
+            @ApiPath('/x') class Api {@Endpoint() @WpAuth([oidc()]) @WpAuthorization({authType:AuthorizationType.SERVICE_ONLY}) x(v: object): Promise<object> {throw 0;}}
+        `);
+        const methods = auditSecurityContracts(root, ['packages/api']).filter((v: SecurityContractViolation) => v.code === 'HTTP_AUTH_METHODS');
+        expect(methods).toHaveLength(1);
+        expect(methods[0].message).toContain('oidcSameProject');
+        expect(methods[0].message).toContain('oidcSvcs');
+        expect(methods[0].message).not.toMatch(/\boidc[(/]/);
     });
 
     it('does not treat negative test fixtures as production API contracts', () => {
@@ -155,12 +175,12 @@ describe('ensure-we-are-secure HTTP contracts', () => {
 
     it('reports class-level, duplicate, missing and orphan declarations', () => {
         write('packages/api/src/Bad.ts', `
-            import {ApiPath,Endpoint,WpAuth,WpAuthPublic,WpAuthorization,AuthorizationType,jwt,oidc} from '@webpieces/core-util';
+            import {ApiPath,Endpoint,WpAuth,WpAuthPublic,WpAuthorization,AuthorizationType,jwt,oidcSameProject} from '@webpieces/core-util';
             @WpAuth([jwt()]) @ApiPath('/x') class Api {
                 @Endpoint() missing(v: object): Promise<object> {throw 0;}
-                @Endpoint() @WpAuth([jwt()]) @WpAuth([oidc()]) @WpAuthorization({authType:AuthorizationType.ALL_USERS}) many(v: object): Promise<object> {throw 0;}
+                @Endpoint() @WpAuth([jwt()]) @WpAuth([oidcSameProject()]) @WpAuthorization({authType:AuthorizationType.ALL_USERS}) many(v: object): Promise<object> {throw 0;}
                 @Endpoint() @WpAuthPublic('   ') @WpAuthorization({authType:AuthorizationType.ANONYMOUS,reason:'probe'}) public(v: object): Promise<object> {throw 0;}
-                @WpAuth([oidc()]) @WpAuthorization({authType:AuthorizationType.SERVICE_ONLY}) orphan(v: object): Promise<object> {throw 0;}
+                @WpAuth([oidcSameProject()]) @WpAuthorization({authType:AuthorizationType.SERVICE_ONLY}) orphan(v: object): Promise<object> {throw 0;}
             }
         `);
         expect(codes()).toEqual([

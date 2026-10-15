@@ -1,4 +1,4 @@
-import { WpAuthorization, AuthorizationType, WpAuth, jwt as jwtAuth, sharedSecret as sharedSecretAuth, oidc as oidcAuth } from '@webpieces/core-util';
+import { WpAuthorization, AuthorizationType, WpAuth, jwt as jwtAuth, sharedSecret as sharedSecretAuth, oidcSameProject } from '@webpieces/core-util';
 import { ApiPath, Endpoint, POST, READ, RPC } from '@webpieces/core-util';
 
 export class OrganizationAccessPolicy {
@@ -54,9 +54,9 @@ export abstract class SecureApi {
         throw new Error('Method internalOp() must be implemented by subclass');
     }
 
-    /** Requires a genuine Google OIDC token; @WpAuth([oidc()]) (no callers) trusts the edge for WHO (run.invoker IAM). */
+    /** Requires a Google OIDC token from a service account of THIS GCP project (oidcSameProject()); open off GCP. */
     @Endpoint(POST, '/service', READ, RPC)
-    @WpAuth([oidcAuth()])
+    @WpAuth([oidcSameProject()])
     @WpAuthorization({ authType: AuthorizationType.SERVICE_ONLY })
     serviceOp(request: SecureRequest): Promise<SecureResponse> {
         throw new Error('Method serviceOp() must be implemented by subclass');

@@ -1,6 +1,6 @@
 # Responsibilities — http-server
 
-Server runtime that assembles the HTTP layer: bootstraps the Inversify DI container, builds routes/filter chains from `WebAppMeta`, serves them over Express, ships built-in filters (Context, LogApi, Recording, ServiceAuth), the in-process test client, and the test-case recorder.
+Server runtime that assembles the HTTP layer: bootstraps the Inversify DI container, builds routes/filter chains from `WebAppMeta`, serves them over Express, ships built-in filters (Context, LogApi, Recording), the in-process test client, and the test-case recorder.
 
 ## In Scope
 
@@ -8,7 +8,7 @@ Server runtime that assembles the HTTP layer: bootstraps the Inversify DI contai
 - Express integration and request dispatch (`WebpiecesMiddleware`, `WebpiecesRouteCreator`, CORS), including symmetric path/query/body binding for GET, JSON POST, and form POST plus complete `HttpResponseDto` status/header/body emission
 - Obtaining request body bytes (`RequestBodyReader`: `StreamBodyReader` default, opt-in `PreConsumedBodyReader` for hosts such as Cloud Functions gen2 that consume the stream first and keep `req.rawBody`), chosen via `WebpiecesExpressRouter.setBodyReader`
 - DI container/module wiring (`WebpiecesModule`) binding framework singletons
-- Built-in concrete filters: `ContextFilter`, `LogApiFilter`, `RecordingFilter`, `ServiceAuthFilter` (service-to-service `oidc(...)`/`sharedSecret(...)` enforcement on Cloud Tasks / cross-service delivery)
+- Built-in concrete filters: `ContextFilter`, `LogApiFilter`, `RecordingFilter` (service-to-service `oidcSameProject()`/`oidcSvcs(...)`/`sharedSecret(...)` enforcement on Cloud Tasks / cross-service delivery is http-routing's `AuthFilter`)
 - In-process (HTTP-less) client factory for tests (`InProcessApiClientFactory`)
 - Writing the error response: `ExpressWrapper.handleError` narrows the thrown value once and makes ONE unconditional call to `ClientRegistry.getErrorTranslator().toWire(error)`. The classification itself belongs to core-util's `WebpiecesDefaultErrorTranslator` (always installed; an app translator REPLACES it and declines by delegating to it). Only `ApiEndUserError.message` is directly caller-facing; `ApiBadRequestError.callerMessage` is the explicit safe validation field. Every other message is generic and the operator diagnostic stays in logs.
 - Republishing an end-user answer at the status THIS CALLER expects, from `WebpiecesCoreHeaders.SURFACE` (`SurfaceEndUserStatus`): 266 for `gui`, `llm` and an unidentified caller; `edgeHttpStatus` (400 when absent) for `public-api`. Per REQUEST, not per router — `setEndUserStatus` is gone.

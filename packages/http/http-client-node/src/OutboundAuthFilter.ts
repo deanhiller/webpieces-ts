@@ -24,7 +24,7 @@ import { SignableRequest, WebhookSignerCallback } from './WebhookSignerCallback'
  *
  * ## The three modes, and why none of them is restricted to a fixed host
  *
- * - `oidc(...)` → a bearer token minted as this caller's runtime SA, audience = the final base URL.
+ * - `oidcSameProject()` / `oidcSvcs(...)` → a bearer token minted as this caller's runtime SA, audience = the final base URL.
  * - `sharedSecret(...)` → the value this client holds for that key, as `Authorization: Webpieces …`.
  *   Legitimate against a re-pointed URL: N services implementing ONE contract behind ONE agreed
  *   secret is a real and common topology, and often stands in for OIDC where OIDC is not available.

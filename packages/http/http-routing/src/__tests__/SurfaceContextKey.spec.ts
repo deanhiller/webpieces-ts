@@ -9,6 +9,7 @@ import {
     AuthMode,
     ContextKey,
     ContextTuple,
+    OidcAuthMethods,
     RouteMetadata,
     Service,
     Surface,
@@ -51,7 +52,7 @@ class RecordingNext implements Service<MethodMeta, WpResponse<unknown>> {
 
 /** Accepts any caller: these specs are about the SURFACE key, not about OIDC verification. */
 class PassingOidcHook extends OidcHook {
-    override async verifyOidc(_token: string, _callers: string[]): Promise<AuthenticatedMachineIdentity> {
+    override async verifyOidc(_token: string, _methods: OidcAuthMethods): Promise<AuthenticatedMachineIdentity> {
         return new AuthenticatedMachineIdentity('oidc','caller@example.test');
     }
 }
@@ -164,7 +165,7 @@ describe('SURFACE propagates: the second hop INHERITS the edge hop, it does not 
         // api2's route verifies its CALLER (oidc), so the propagated trusted header is admitted.
         await runFilter(
             next,
-            { kind: 'oidc', callers: ['api1@example.iam.gserviceaccount.com'] },
+            { kind: 'oidc', callerScope: 'services', callers: ['api1@example.iam.gserviceaccount.com'] },
             { authorization: 'Bearer an-oidc-id-token' },
             [new ContextTuple(WebpiecesCoreHeaders.SURFACE, 'gui')],
         );

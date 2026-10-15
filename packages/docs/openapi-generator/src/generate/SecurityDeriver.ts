@@ -34,6 +34,7 @@ export class SecurityDeriver {
         if (!methods?.length) return undefined;
         if (methods.length === 1 && methods[0].kind === 'apikey') return apiKeyRequirement;
         const alternatives: JsonValue[] = [];
+        const builtins = new Set<string>();
         for (const method of methods) {
             if (method.kind === 'apikey') {
                 if (!apiKeyRequirement) throw new Error('Mixed credentials require an explicit API-key security requirement.');
@@ -43,6 +44,10 @@ export class SecurityDeriver {
                 // Vendor signatures do not declare their wire headers. Keep the complete canonical
                 // authentication extension rather than inventing a header or publishing a subset.
                 if (!name) return undefined;
+                // `oidcSameProject()` + `oidcSvcs([...])` are two caller scopes of ONE wire credential (the
+                // same bearer token), so the scheme is one alternative, listed once.
+                if (builtins.has(name)) continue;
+                builtins.add(name);
                 alternatives.push(new JsonObject().set(name, []));
             }
         }

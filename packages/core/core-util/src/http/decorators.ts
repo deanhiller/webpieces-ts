@@ -512,7 +512,7 @@ export function getAuthMeta(apiClass: Function, methodName: string): AuthMeta | 
  * the first thing offered should not be the widest grant.
  */
 export const MISSING_AUTH_DECORATOR_FIX =
-    "Declare @WpAuth([jwt(), oidc(...callers), sharedSecret(key), webhook(name), apiKey('regime', [{in: 'header', key: MyKeys.API_KEY}])]) " +
+    "Declare @WpAuth([jwt(), oidcSameProject() or oidcSvcs(['svc-a']), sharedSecret(key), webhook(name), apiKey('regime', [{in: 'header', key: MyKeys.API_KEY}])]) " +
     "or @WpAuthPublic('reason'), and exactly one @WpAuthorization on every endpoint. Add @WpLocalOnly() separately when locality is required.";
 
 /**

@@ -43,7 +43,7 @@ export class PendingTrustedValue {
  * Inbound trusted values never enter the context. They are stashed HERE, and `AuthFilter` decides
  * what to do with them once it knows who the caller is:
  *
- * - `oidc(...)` / `sharedSecret(...)` — the CALLER's own identity was verified, so this is an
+ * - `oidcSameProject()` / `oidcSvcs(...)` / `sharedSecret(...)` — the CALLER's own identity was verified, so this is an
  *   internal service passing along context it already holds. Admit the pending values as trusted.
  *   This is what makes service-to-service propagation of a verified userId work, and it is the whole
  *   reason trusted keys are allowed to have an `httpHeader` at all.

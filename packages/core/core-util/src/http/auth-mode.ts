@@ -17,10 +17,36 @@ export type ApiKeyCredential =
 
 export type ApiKeyCredentials = readonly [ApiKeyCredential, ...ApiKeyCredential[]];
 
+/**
+ * The service accounts an `oidcSvcs([...])` endpoint names, at least one: an empty list is not a
+ * policy anybody could mean, so it does not compile. Each entry resolves as `'self'` (this service's
+ * runtime SA), a bare id (`<id>@<project>.iam.gserviceaccount.com`) or a full email (verbatim).
+ */
+export type OidcCallers = readonly [string, ...string[]];
+
+/**
+ * WHICH Google-signed callers an OIDC endpoint accepts, named by `callerScope`:
+ * - `'same-project'` (`oidcSameProject()`): any service account of THIS GCP project. Off GCP there is
+ *   no project, so the check is open.
+ * - `'services'` (`oidcSvcs([...])`): exactly the listed service accounts, which may belong to other
+ *   projects.
+ * One endpoint may declare one of each; see {@link OidcAuthMethods}.
+ */
+export type OidcAuthMethod =
+    | { kind: 'oidc'; callerScope: 'same-project' }
+    | { kind: 'oidc'; callerScope: 'services'; callers: OidcCallers };
+
+/**
+ * The OIDC methods ONE endpoint declares, in declaration order: one, or one per caller scope. They are
+ * ONE bearer credential, so a verifier receives them together, checks the token's signature once, and
+ * admits the call when ANY of them admits the caller.
+ */
+export type OidcAuthMethods = readonly [OidcAuthMethod, ...OidcAuthMethod[]];
+
 /** One concrete mechanism; user policy belongs exclusively to WpAuthorization. */
 export type AuthMethod =
     | { kind: 'jwt' }
-    | { kind: 'oidc'; callers: readonly string[] }
+    | OidcAuthMethod
     | { kind: 'shared-secret'; secretKey: string }
     | { kind: 'webhook'; name: string }
     | { kind: 'apikey'; regime: string; credentials: ApiKeyCredentials };
@@ -45,7 +71,9 @@ export class AuthMeta {
     // webpieces-disable no-function-outside-class -- stateless contract validation or scope metadata reader used before DI registration
     private static snapshot(method: AuthMode): AuthMode {
         switch (method.kind) {
-            case 'oidc': return Object.freeze({ ...method, callers: Object.freeze([...method.callers]) });
+            case 'oidc': return method.callerScope === 'services'
+                ? Object.freeze({ ...method, callers: Object.freeze([...method.callers]) as OidcCallers })
+                : Object.freeze({ ...method });
             case 'apikey': return Object.freeze({ ...method, credentials: Object.freeze(method.credentials.map((credential: ApiKeyCredential) => Object.freeze({ ...credential }))) as ApiKeyCredentials });
             default: return Object.freeze({ ...method });
         }
@@ -58,8 +86,8 @@ export class AuthDeclaration {
         if (!Array.isArray(meta.methods) || meta.methods.length === 0) throw new Error('@WpAuth requires a nonempty methods tuple.');
         const kinds = new Set<string>();
         for (const method of meta.methods) {
-            if (!method || typeof method !== 'object' || kinds.has(method.kind)) throw new Error('@WpAuth rejects duplicate or invalid credential methods.');
-            kinds.add(method.kind);
+            if (!method || typeof method !== 'object' || kinds.has(this.uniquenessKey(method))) throw new Error('@WpAuth rejects duplicate or invalid credential methods.');
+            kinds.add(this.uniquenessKey(method));
             this.validateMethod(method);
         }
         if (kinds.has('public')) {
@@ -69,16 +97,23 @@ export class AuthDeclaration {
         } else if (meta.publicReason !== undefined) throw new Error('Protected @WpAuth rejects public reasons.');
     }
 
+    /**
+     * One method per credential kind, except OIDC: one per `callerScope`, so `oidcSameProject()` and
+     * `oidcSvcs([...])` may pair on one endpoint (this project's accounts OR the listed ones). They are
+     * still ONE bearer credential, which AuthFilter verifies once for both.
+     */
+    // webpieces-disable no-function-outside-class -- stateless contract validation or scope metadata reader used before DI registration
+    private static uniquenessKey(method: AuthMode): string {
+        return method.kind === 'oidc' ? `oidc:${method.callerScope}` : method.kind;
+    }
+
     // webpieces-disable no-function-outside-class -- stateless contract validation or scope metadata reader used before DI registration
     private static validateMethod(method: AuthMode): void {
         let keys: readonly string[];
         switch (method.kind) {
             case 'jwt':
             case 'public': keys = ['kind']; break;
-            case 'oidc':
-                keys = ['kind', 'callers'];
-                if (!Array.isArray(method.callers) || !method.callers.every((caller: string) => typeof caller === 'string' && caller.trim().length > 0)) throw new Error('oidc(...) requires valid caller names.');
-                break;
+            case 'oidc': keys = this.oidcKeys(method); break;
             case 'shared-secret':
                 keys = ['kind', 'secretKey'];
                 this.requireText(method.secretKey, 'sharedSecret'); break;
@@ -94,11 +129,27 @@ export class AuthDeclaration {
                     else if (credential.in !== 'bearer' || Object.hasOwn(credential, 'key')) throw new Error('Invalid API-key credential location.');
                 }
                 break;
-            default: throw new Error('Unknown @WpAuth method; use jwt/oidc/sharedSecret/webhook/apiKey descriptors.');
+            default: throw new Error('Unknown @WpAuth method; use jwt/oidcSameProject/oidcSvcs/sharedSecret/webhook/apiKey descriptors.');
         }
         for (const key of Object.keys(method)) {
             if (!keys.includes(key)) throw new Error(`Auth method rejects '${key}'; operation policy belongs in @WpAuthorization.`);
         }
+    }
+
+    /**
+     * The keys an OIDC descriptor may carry, after checking its scope. `OidcCallers` already makes an
+     * empty `oidcSvcs([])` a compile error; this is the backstop for a list that reached the decorator
+     * around the type (a cast, a spread of a runtime array, plain JS), so it fails when the decorator
+     * is evaluated instead of reaching a verifier.
+     */
+    // webpieces-disable no-function-outside-class -- stateless contract validation or scope metadata reader used before DI registration
+    private static oidcKeys(method: OidcAuthMethod): readonly string[] {
+        if (method.callerScope === 'same-project') return ['kind', 'callerScope'];
+        if (method.callerScope !== 'services') throw new Error("Unknown OIDC callerScope; use oidcSameProject() or oidcSvcs(['svc-a']).");
+        if (!Array.isArray(method.callers) || method.callers.length === 0 || !method.callers.every((caller: string) => typeof caller === 'string' && caller.trim().length > 0)) {
+            throw new Error("oidcSvcs([...]) requires at least one nonblank service account; use oidcSameProject() to accept this GCP project's service accounts.");
+        }
+        return ['kind', 'callerScope', 'callers'];
     }
 
     /**
@@ -127,7 +178,9 @@ export class AuthDeclaration {
 // webpieces-disable no-function-outside-class -- canonical credential descriptor factory
 export function jwt(): AuthMethod { return { kind: 'jwt' }; }
 // webpieces-disable no-function-outside-class -- canonical credential descriptor factory
-export function oidc(...callers: string[]): AuthMethod { return { kind: 'oidc', callers }; }
+export function oidcSameProject(): OidcAuthMethod { return { kind: 'oidc', callerScope: 'same-project' }; }
+// webpieces-disable no-function-outside-class -- canonical credential descriptor factory
+export function oidcSvcs(callers: OidcCallers): OidcAuthMethod { return { kind: 'oidc', callerScope: 'services', callers }; }
 // webpieces-disable no-function-outside-class -- canonical credential descriptor factory
 export function sharedSecret(secretKey: string): AuthMethod { return { kind: 'shared-secret', secretKey }; }
 // webpieces-disable no-function-outside-class -- canonical credential descriptor factory

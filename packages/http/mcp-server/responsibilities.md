@@ -38,7 +38,7 @@ normal endpoint filter chain, DTO validation, and safe error boundary.
 - Operator logging of a failure the filter chain already logged: `LogApiFilter` / `LogApiCall` owns
   that line, and a second bare one at the protocol edge is the defect `ErrorLogFilter` was deleted for.
 
-- Application endpoint authorization: `jwt()` / `oidc(...)` and `AuthFilter` own the HTTP boundary.
+- Application endpoint authorization: `jwt()` / `oidcSameProject()` / `oidcSvcs(...)` and `AuthFilter` own the HTTP boundary.
 - Issuing OAuth tokens: applications may use any authorization server, while this package describes
   the protected resource and verifies tokens at the resource boundary.
 - Forwarding external MCP bearer tokens or browser JWTs to application endpoints.

@@ -117,7 +117,7 @@ for (const webhook of webhooks) {
   refused rather than obeyed. The one relaxation — testing the partner path against a local fake —
   has to be said out loud, with a reason:
   `new ContextFullUrlFilter(new SsrfTestingPolicy('local fake in the delivery e2e'))`.
-- **Every auth mode still works.** `oidc(...)` mints for the FINAL base URL, `sharedSecret(...)`
+- **Every auth mode still works.** `oidcSameProject()` / `oidcSvcs(...)` mint for the FINAL base URL, `sharedSecret(...)`
   sends the value this client holds (N services implementing one contract behind one agreed secret is
   a real topology), and `@WpAuth([webhook(name)])` calls your bound `WebhookSignerCallback`. The minter runs
   BELOW the SSRF guard, so a destination that is going to be refused never causes a credential to be
@@ -126,13 +126,14 @@ for (const webhook of webhooks) {
   as its own node on the runtime architecture graph, and two services delivering over the same
   contract converge on one box.
 
-## `oidc(...)`: generate the credential the Cloud Run edge expects
+## `oidcSameProject()` / `oidcSvcs([...])`: generate the credential the Cloud Run edge expects
 
 The shared contract tells `OutboundAuthFilter` to mint a Google ID token for the final
 base URL and send it in `Authorization: Bearer`. A private Cloud Run service verifies
-that invocation token and enforces invoker IAM before the container runs. Webpieces retains
-supplementary server checks; its empty caller list relies on edge authorization. Off-GCP
-clients mint unsigned synthetic tokens for local tests. See [Cloud Run OIDC](../../../docs/architecture/cloud-run-oidc.md)
+that invocation token and enforces invoker IAM before the container runs. The server then
+checks the caller itself: `oidcSameProject()` admits service accounts of its own GCP project,
+`oidcSvcs([...])` only the listed ones. Off-GCP clients mint unsigned synthetic tokens for local
+tests, which a server on GCP refuses. See [Cloud Run OIDC](../../../docs/architecture/cloud-run-oidc.md)
 for deployment assumptions and why a direct application-verifier test does not test the edge.
 
 ## Signing an OUTBOUND webhook — `webhook(...)`, the other way round

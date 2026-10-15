@@ -1,4 +1,4 @@
-import { ClientRole, WpAuthorization, AuthorizationType, WpAuth, oidc as oidcAuth } from '@webpieces/core-util';
+import { ClientRole, WpAuthorization, AuthorizationType, WpAuth, oidcSameProject } from '@webpieces/core-util';
 import 'reflect-metadata';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { ApiPath, ClientRegistry, DestinationTrust, Endpoint, QueryParam, Rpc, Secrets, TestCaseRecorder, WebpiecesCoreHeaders, WpAuthPublic, POST, RPC, WRITE } from '@webpieces/core-util';
@@ -58,7 +58,7 @@ abstract class EmptyPathWebhookApi {
 @ApiPath('/internal')
 abstract class OidcWebhookApi {
     @Endpoint(POST, '/work', WRITE, RPC)
-    @WpAuth([oidcAuth()])
+    @WpAuth([oidcSameProject()])
     @WpAuthorization({ authType: AuthorizationType.SERVICE_ONLY })
     // webpieces-disable no-unmanaged-exceptions -- abstract contract stub, never executed
     work(_request: DeliverRequest): Promise<void> {

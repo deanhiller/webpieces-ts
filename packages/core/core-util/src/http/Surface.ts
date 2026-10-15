@@ -15,8 +15,8 @@
  * | `apiKey(...)`               | `public-api` |
  *
  * It is set at the EDGE ONLY and then PROPAGATES: the surface is the ORIGINAL caller's, so a hop that
- * already received one INHERITS it unchanged. `oidc(...)` is an internal service-to-service hop, not
- * a surface of its own, and must never overwrite a propagated value — `GUI -> api1 -> api2` leaves
+ * already received one INHERITS it unchanged. An OIDC call (`oidcSameProject()` / `oidcSvcs(...)`) is an
+ * internal service-to-service hop, not a surface of its own, and must never overwrite a propagated value — `GUI -> api1 -> api2` leaves
  * api2 seeing `gui`, which is the whole point of carrying it.
  */
 export type Surface = 'gui' | 'llm' | 'public-api';

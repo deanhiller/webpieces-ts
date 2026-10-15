@@ -17,7 +17,8 @@ import { ClientServerWiring } from '../wiring';
  *    wrong key 401s.
  *  - jwt: a REAL token signed with a test secret is parsed by CompanyAuthConfig; role-gating is
  *    enforced (admin ok; no token 401; wrong role 403).
- *  - oidc: a REAL dev OIDC token (gcp-identity off-GCP) verifies against the 'self' caller.
+ *  - oidc: a REAL dev OIDC token (gcp-identity off-GCP) verifies under oidcSameProject(), which is
+ *    open off GCP.
  *
  * The credential is delivered exactly as a transport would: RequestContext.setRequest(HttpRequest
  * carrying the auth header), then the api is called in-process — the SAME chain HTTP uses.
@@ -151,7 +152,7 @@ describe('Authentication: jwt (real signed token, role-gated)', () => {
     });
 });
 
-describe('Authentication: oidc (real dev token, trust-the-edge)', () => {
+describe('Authentication: oidc (real dev token, oidcSameProject())', () => {
     const overrides = new ContainerModule(() => Promise.resolve()); // real CompanyAuthConfig → gcp-identity
 
     let api: SecureApi;
@@ -159,10 +160,10 @@ describe('Authentication: oidc (real dev token, trust-the-edge)', () => {
         api = await secureClient(overrides);
     });
 
-    it('accepts a genuine Google-signed OIDC token (@WpAuthOidc() trusts the edge)', async () => {
-        // Off-GCP, mintIdToken produces a real dev token. @WpAuthOidc() has no callers → TRUST THE EDGE:
-        // verifyOidcFromCallers verifies the signature and accepts any Google-signed caller (the edge's
-        // run.invoker IAM gates WHO). Real mint↔verify, no mocking.
+    it('accepts a real dev OIDC token off GCP (oidcSameProject() has no project to compare against)', async () => {
+        // Off-GCP, mintIdToken produces a real dev token and GcpOidc.verify accepts it: with no GCP
+        // project the same-project check is open. On GCP the same token is refused and only this
+        // project's service accounts pass. Real mint↔verify, no mocking.
         const token = await new GcpOidc().mintIdToken('http://localhost');
         const res = await withAuthHeader(`Bearer ${token}`, () => api.serviceOp({}));
         expect(res.ok).toBe(true);

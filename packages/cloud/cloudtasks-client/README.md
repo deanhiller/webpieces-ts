@@ -10,7 +10,7 @@ where it runs through the full server filter chain.
 @PubSub() @ApiPath('/email')
 abstract class EmailApi {
     @Endpoint(POST, '/send', WRITE, CLOUDTASKS)
-    @WpAuth([oidc()])
+    @WpAuth([oidcSameProject()])
     @WpAuthorization({ authType: AuthorizationType.SERVICE_ONLY })
     abstract sendEmail(r: SendEmailRequest): Promise<void>;
 }

@@ -9,7 +9,8 @@ import * as gcpMetadata from 'gcp-metadata';
  * `isOnGcp()` is decided from the `K_SERVICE` env var (which Cloud Run always sets),
  * NOT a metadata network probe — so local dev never blocks on the ~3s
  * `gcpMetadata.isAvailable()` timeout. Every caller (project id, region, Cloud Run URL
- * resolution, OIDC minting, Cloud Tasks) short-circuits through this one gate.
+ * resolution, OIDC minting, dev-token and same-project verification, Cloud Tasks) short-circuits
+ * through this one gate.
  */
 
 let cachedOnGcp: Promise<boolean> | undefined;
@@ -22,6 +23,10 @@ let cachedSaEmail: Promise<string> | undefined;
  * True when running on GCP Cloud Run. Gated on `K_SERVICE` (set by Cloud Run) so local dev does NO
  * metadata network probe. For non-Cloud-Run GCP (GCE / Cloud Functions, which don't set `K_SERVICE`),
  * set `METADATA_SERVER_DETECTION=assume-present` to force on-GCP behavior.
+ *
+ * This is also a security gate. While it is false, GcpOidc accepts an unsigned `dev-oidc.*` token
+ * and the `oidcSameProject()` check is open (there is no project to compare against). A deployed host that
+ * sets neither variable therefore gets both, so it must set `METADATA_SERVER_DETECTION=assume-present`.
  */
 export function isOnGcp(): Promise<boolean> {
     if (!cachedOnGcp) {

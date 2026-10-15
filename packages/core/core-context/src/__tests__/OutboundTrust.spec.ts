@@ -38,7 +38,7 @@ const headers = new RequestContextHeaders();
 // `defineAuthMode({ kind: 'public' })` uses in decorators.ts.
 const PUBLIC: AuthMode = { kind: 'public' };
 const JWT: AuthMode = { kind: 'jwt' };
-const OIDC: AuthMode = { kind: 'oidc', callers: ['self'] };
+const OIDC: AuthMode = { kind: 'oidc', callerScope: 'services', callers: ['self'] };
 const SHARED_SECRET: AuthMode = { kind: 'shared-secret', secretKey: 'peer-key' };
 
 beforeEach(() => {

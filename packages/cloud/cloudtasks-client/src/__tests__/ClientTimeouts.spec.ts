@@ -1,4 +1,4 @@
-import { WpAuthorization, AuthorizationType, WpAuth, oidc as oidcAuth } from '@webpieces/core-util';
+import { WpAuthorization, AuthorizationType, WpAuth, oidcSameProject } from '@webpieces/core-util';
 import 'reflect-metadata';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
@@ -37,14 +37,14 @@ class Payload {
 @PubSub()
 @ApiPath('/timeout-task')
 abstract class TaskApi {
-    @WpAuth([oidcAuth()])
+    @WpAuth([oidcSameProject()])
     @WpAuthorization({ authType: AuthorizationType.SERVICE_ONLY })
     @Endpoint(POST, '/work', WRITE, CLOUDTASKS)
     work(_request: Payload): Promise<void> {
         throw new Error('contract only');
     }
 
-    @WpAuth([oidcAuth()])
+    @WpAuth([oidcSameProject()])
     @WpAuthorization({ authType: AuthorizationType.SERVICE_ONLY })
     @Endpoint(POST, '/other', WRITE, CLOUDTASKS)
     other(_request: Payload): Promise<void> {

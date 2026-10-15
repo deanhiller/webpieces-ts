@@ -155,6 +155,19 @@ describe('the contract itself', () => {
         expect(jwt?.methods[0].argumentTexts).toEqual([]);
     });
 
+    it('documents oidcSameProject() and oidcSvcs([...]) as the one oidc kind, keeping the listed accounts', () => {
+        const oidcModel = harness.extract('OidcScopesApi.ts');
+        const project = harness.endpoint(oidcModel, 'project').auth;
+        expect(project?.methods.map((method) => method.kind)).toEqual(['oidc']);
+        expect(project?.methods[0].argumentTexts).toEqual([]);
+        const listed = harness.endpoint(oidcModel, 'listed').auth;
+        expect(listed?.methods.map((method) => method.kind)).toEqual(['oidc']);
+        expect(listed?.methods[0].argumentTexts).toEqual(["['svc-a', 'partner@other-project.iam.gserviceaccount.com']"]);
+        const paired = harness.endpoint(oidcModel, 'paired').auth;
+        expect(paired?.methods.map((method) => method.kind)).toEqual(['oidc', 'oidc']);
+        expect(paired?.methods.map((method) => method.argumentTexts)).toEqual([[], ["['partner@other-project.iam.gserviceaccount.com']"]]);
+    });
+
     it('extracts ONE named type from a file, for a type no contract field points at', () => {
         // The document-wide error body a manifest names is reachable from nothing in the contract,
         // and reading it with the SAME resolver is what stops two answers about one type's shape.

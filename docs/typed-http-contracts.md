@@ -135,8 +135,10 @@ Authentication and authorization apply identically to every verb and encoding:
 
 - `@WpAuthPublic(reason)` pairs with `@WpAuthorization({authType: AuthorizationType.ANONYMOUS, reason})`.
   Protocol credentials and payload validation remain the controller's responsibility.
-- `@WpAuth([jwt(), oidc(...), sharedSecret(...), webhook(...), apiKey(...)])` accepts any
-  declared credential mechanism. A separate `@WpAuthorization(...)` controls access.
+- `@WpAuth([jwt(), oidcSameProject(), sharedSecret(...), webhook(...), apiKey(...)])` accepts any
+  declared credential mechanism, one per kind, except that `oidcSameProject()` and `oidcSvcs([...])` may
+  pair to admit this project's service accounts or the listed ones. A separate `@WpAuthorization(...)`
+  controls access.
 - `@WpLocalOnly()` limits registration to local runtime without replacing either declaration.
 
 No special OAuth auth decorator is needed. OAuth client credentials, authorization codes, PKCE
@@ -157,7 +159,7 @@ Keep one contract and replace hand-written Express URL/body parsing with explici
 | dynamic registration | JSON `POST`, `@WpAuthPublic`, often `responseType: 'full'` for `201` and headers |
 | authorization | `GET` plus named `@QueryParam`s, `@WpAuthPublic`, full response for redirects/errors |
 | token exchange | `POST` plus `formPost: true`, `@WpAuthPublic`, full response for OAuth error payloads |
-| authenticated resource | `GET` or `POST` plus the existing applicable `jwt()`/`oidc(...)` mode |
+| authenticated resource | `GET` or `POST` plus the existing applicable `jwt()`/`oidcSameProject()`/`oidcSvcs(...)` mode |
 
 This framework capability does not migrate an application's OAuth endpoints automatically. Move
 each application route deliberately, preserving its protocol validation and security policy.

@@ -186,13 +186,16 @@ export type {
     LayoutTargets,
 } from './mcp/GeneratedApiDocsLayout';
 // The TYPE layer of the auth surface — likewise split out of decorators.ts for file size only.
-export { AuthMeta, AuthDeclaration, jwt, oidc, sharedSecret, webhook, apiKey } from './http/auth-mode';
+export { AuthMeta, AuthDeclaration, jwt, oidcSameProject, oidcSvcs, sharedSecret, webhook, apiKey } from './http/auth-mode';
 export type {
     AuthMode,
     ApiKeyCredential,
     ApiKeyCredentials,
     AuthMethod,
     AuthMethods,
+    OidcAuthMethod,
+    OidcAuthMethods,
+    OidcCallers,
 } from './http/auth-mode';
 // API kind (RPC vs PubSub/Cloud Tasks) + queue naming. Split out of decorators.ts for file size only;
 // one-way dependency api-kind -> decorators, and the barrel keeps the surface identical.

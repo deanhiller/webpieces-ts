@@ -12,11 +12,14 @@ npm install @webpieces/http-routing
 
 ## OIDC on private Cloud Run
 
-`@WpAuth([oidc()])` primarily selects client-side Google ID-token generation. With invocation
-authentication and invoker IAM enabled, Cloud Run checks the invocation before it reaches
-`AuthFilter`; the framework retains supplementary server validation. No callers means delegate
-caller authorization to the edge; explicit callers add an application allow-list. Local tokens
-exercise the filter chain without proving deployed IAM or Google signature validation.
+`@WpAuth([oidcSameProject()])` and `@WpAuth([oidcSvcs([...])])` select client-side Google
+ID-token generation. With invocation authentication and invoker IAM enabled, Cloud Run checks the
+invocation before it reaches `AuthFilter`; the framework then checks the caller itself.
+`oidcSameProject()` admits any service account of this service's GCP project (open off GCP, where
+there is no project), and `oidcSvcs([...])` only the listed accounts, which may belong to other
+projects; an endpoint may pair the two, and the token is then verified once against both. A bound
+`OidcHook` receives all of the endpoint's OIDC methods (`OidcAuthMethods`). Local tokens exercise
+the filter chain without proving deployed IAM or Google signature validation.
 See [the Cloud Run OIDC security boundary](../../../docs/architecture/cloud-run-oidc.md) for the
 current verifier behavior and the assumptions required for that deployment model.
 

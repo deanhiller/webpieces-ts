@@ -244,8 +244,8 @@ export class NodeProxyClient extends ProxyClient {
      * Straight from the RequestContext. Throws when there is no active request scope.
      *
      * `destination` rides through unchanged: this is the ONE client that can legitimately propagate a
-     * verified identity, and it does so exactly when the callee will authenticate us (oidc(...) /
-     * sharedSecret(...)). Calling a peer's @WpAuthPublic or jwt() endpoint now omits `x-user-id` and
+     * verified identity, and it does so exactly when the callee will authenticate us (oidcSameProject() /
+     * oidcSvcs(...) / sharedSecret(...)). Calling a peer's @WpAuthPublic or jwt() endpoint now omits `x-user-id` and
      * friends instead of shipping headers that endpoint's AuthFilter is obliged to reject.
      */
     protected override outboundContextHeaders(destination: DestinationTrust): Map<string, string> {

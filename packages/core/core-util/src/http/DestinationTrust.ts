@@ -8,7 +8,7 @@ import { AuthMode } from './auth-mode';
  * ## Why the client has to answer this at all
  *
  * The server already decided (see `PendingWireTrust`): an inbound `x-user-id` is admitted only on a
- * route that verified WHO called it — `oidc(...)` / `sharedSecret(...)`. On a `jwt()` or `@WpAuthPublic`
+ * route that verified WHO called it — `oidcSameProject()` / `oidcSvcs(...)` / `sharedSecret(...)`. On a `jwt()` or `@WpAuthPublic`
  * route the same header must match what the authenticator independently derived, or the request is
  * REJECTED with a 401.
  *
@@ -33,7 +33,7 @@ import { AuthMode } from './auth-mode';
  */
 export class DestinationTrust {
     /**
-     * The destination authenticates its CALLER (oidc(...) / sharedSecret(...)), so it is entitled to
+     * The destination authenticates its CALLER (oidcSameProject() / oidcSvcs(...) / sharedSecret(...)), so it is entitled to
      * believe context WE vouch for — this is the service-to-service identity propagation that trusted
      * keys keep an `httpHeader` for.
      */
@@ -94,7 +94,7 @@ export class DestinationTrust {
      * - OUTBOUND (`buildOutboundHeaders`): may we SEND a trusted key there? Only when the destination
      *   will authenticate US, because that is the only case its `AuthFilter` will admit it.
      * - RESPONSE (`acceptResponseHeaders`): may we BELIEVE a trusted key that came BACK? Only from a
-     *   destination this client authenticated to — an `oidc(...)` / `sharedSecret(...)` peer is a
+     *   destination this client authenticated to — an `oidcSameProject()` / `oidcSvcs(...)` / `sharedSecret(...)` peer is a
      *   service in our own trust domain, while a `@WpAuthPublic` / `jwt()` / partner endpoint is
      *   somebody else's process whose response headers are an assertion, not a proof.
      *
