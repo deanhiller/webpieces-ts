@@ -45,6 +45,7 @@ class WpProjectFilter {
     scopeSet(scope: string): Set<string> | null {
         const impact = this.modes.impact;
         if (scope === 'everything' || impact === null || this.modes.impactReason() !== '') return null;
+        if (scope === 'edges') return this.modes.edgeEnds();
         const ids: string[] = [...impact.touched];
         if (scope === 'dependents' || scope === 'build') ids.push(...this.modes.affected());
         if (scope === 'dependencies') ids.push(...impact.dependencies);
@@ -170,8 +171,7 @@ class GraphHighlighter {
                 ),
             );
             items.push(this.page.filterItem(name));
-            const why = this.page.whyItem(name, node);
-            if (why !== null) items.unshift(why);
+            items.unshift(...this.page.impactItems(name, node));
             const implemented = window.__WP_RUNTIME__?.implementsItem(name, node);
             if (implemented) items.push(implemented);
             const goal = window.__WP_GOAL__?.item(name, node);
@@ -418,7 +418,7 @@ class GraphDrawer {
         if (ev.key === 'Escape' && this.dismissOverlay()) return;
         const target = ev.target;
         if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) return;
-        const menuOpen = document.getElementById('wp-node-menu') !== null || document.querySelector('.wp-graph-details:not([hidden]), .wp-goal-details:not([hidden])') !== null;
+        const menuOpen = document.getElementById('wp-node-menu') !== null || document.querySelector('.wp-graph-details:not([hidden]), .wp-goal-details:not([hidden]), .wp-impact-why:not([hidden])') !== null;
         if (ev.key === '/') {
             this.byId('wp-shell')?.classList.remove('wp-collapsed');
             this.byId('wp-collapse')?.setAttribute('aria-expanded', 'true');
@@ -587,7 +587,7 @@ class GraphDrawer {
         if (impact.reason !== '') return `${impact.label}: ${impact.reason}.`;
         const stats = `${impact.label}: ${new WpImpactWhy().counts(impact)} — nx affected, ${impact.changedFiles} changed files.`;
         const cause = this.globalCause(impact, modes.affected().length);
-        return cause === '' ? stats : `${cause}. ${stats}`;
+        return [cause === '' ? '' : `${cause}.`, stats, modes.edgeNote()].filter((part: string): boolean => part !== '').join(' ');
     }
 
     /**
@@ -648,12 +648,18 @@ class GraphPage extends WpFilterPage {
     private readonly drawer = new GraphDrawer(this);
     private readonly why = new ImpactWhyPanel();
 
-    /** In Impact mode, an affected box's menu leads with WHY it is in the build (#1264). */
-    whyItem(name: string, node: SVGGElement): WpNodeMenuItem | null {
-        const reason = this.modes.mode === 'impact' ? this.modes.reason(name) : null;
-        if (reason === null) return null;
-        const title = (WpImpactWhy.TITLES[reason.kind] ?? reason.kind).toLowerCase();
-        return new WpNodeMenuItem(`Why in this build? (${title})`, () => this.why.open(node, reason));
+    private readonly edges = new WpEdgeOverlay(this.modes);
+
+    /** In Impact mode a box's menu leads with WHY it is in the build, and its edge changes (#1264). */
+    impactItems(name: string, node: SVGGElement): WpNodeMenuItem[] {
+        if (this.modes.mode !== 'impact') return [];
+        const items: WpNodeMenuItem[] = [];
+        const reason = this.modes.reason(name);
+        const title = reason === null ? '' : (WpImpactWhy.TITLES[reason.kind] ?? reason.kind).toLowerCase();
+        if (reason !== null) items.push(new WpNodeMenuItem(`Why in this build? (${title})`, () => this.why.open(node, reason)));
+        const lines = this.edges.nodeLines(name);
+        if (lines.length > 0) items.push(new WpNodeMenuItem(`Edge changes (${lines.length})`, () => this.why.show(node, `Edge changes: ${name}`, lines)));
+        return items;
     }
 
     protected override captureBinding(_svg: SVGSVGElement | null): () => void {
@@ -683,7 +689,8 @@ class GraphPage extends WpFilterPage {
     /** Goal vs Current draws its overlay topology; every other mode draws the page's own graph. */
     private syncModel(): void {
         const overlay = this.base.comparison?.model ?? null;
-        const next = this.modes.mode === 'goal' && overlay !== null ? overlay : this.base;
+        let next = this.modes.mode === 'goal' && overlay !== null ? overlay : this.base;
+        if (this.modes.mode === 'impact' && this.edges.any()) next = this.edges.model(this.base);
         if (next === this.model) return;
         this.useModel(next);
         this.projects = new WpProjectFilter(next, this.modes);
@@ -701,6 +708,7 @@ class GraphPage extends WpFilterPage {
     /** Product mode dashes a dependency that crosses into another product (#1204); every other mode draws it plain. */
     protected override edgeDot(edge: RenderEdgeJson): string {
         if (this.modes.mode === 'product' && edge.productDot !== null) return edge.productDot;
+        if (this.modes.mode === 'impact') return this.edges.edgeDot(edge) ?? edge.dot;
         return edge.dot;
     }
 
@@ -722,6 +730,7 @@ class GraphPage extends WpFilterPage {
     protected wireSvg(svg: SVGSVGElement): void {
         this.highlighter = new GraphHighlighter(svg, this.chain, this.model, this);
         this.highlighter.wire();
+        if (this.modes.mode === 'impact') this.edges.decorate(svg, this.why);
         this.filterCards();
         this.syncControls();
         svg.querySelectorAll<SVGGElement>('g.node').forEach((node: SVGGElement) => {

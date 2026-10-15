@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
-import { BrowserFixture, BRANCH_LABEL, impactScan } from './graph-browser-fixture';
+import { BrowserFixture, BRANCH_LABEL, NO_EDGES, impactScan } from './graph-browser-fixture';
 import { RuntimeTriggerFixture } from './runtime-trigger-fixture';
 import { FilterFixture } from './graph-filter-fixture';
 import { RuntimeHtmlPage } from '../runtime-html-page';
@@ -334,7 +334,7 @@ describe.skipIf(!process.env.WP_GRAPH_VIZ_JS)('runtime viewer parity in file:// 
         const page = await fixture.browser.openWithImpact(
             '1185-runtime-impact',
             fixture.html(),
-            new ImpactSidecarData([scan], ImpactKind.BRANCH),
+            new ImpactSidecarData([scan], ImpactKind.BRANCH, NO_EDGES),
         );
         await fixture.browser.mode(page, 'impact');
         expect(

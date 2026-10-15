@@ -3,7 +3,7 @@ import type { Locator } from '@playwright/test';
 import * as path from 'path';
 import { FilterFixture } from './graph-filter-fixture';
 import { GraphFocusBrowser } from './graph-focus-browser';
-import { BRANCH_LABEL, BrowserFixture, impactScan } from './graph-browser-fixture';
+import { BRANCH_LABEL, BrowserFixture, NO_EDGES, impactScan } from './graph-browser-fixture';
 import { RuntimeHtmlPage } from '../runtime-html-page';
 import { DiDesign, DiGraph, DiNode } from '../di-graph/model';
 import { generateDesignHTML } from '../di-graph/design-visualizer';
@@ -534,6 +534,7 @@ describe.skipIf(!process.env.WP_GRAPH_VIZ_JS)('real Viz local-file filtering', (
                     ),
                 ],
                 ImpactKind.BRANCH,
+                NO_EDGES,
             ),
         );
         await fixture.mode(page, 'impact');
@@ -569,6 +570,7 @@ describe.skipIf(!process.env.WP_GRAPH_VIZ_JS)('real Viz local-file filtering', (
             new ImpactSidecarData(
                 [impactScan(ImpactKind.BRANCH, BRANCH_LABEL, ['ui-kit'], ['portal-web'], ['model'], 1, ['model'])],
                 ImpactKind.BRANCH,
+                NO_EDGES,
             ),
         );
         const top = await fixture.row(page, 'portal-web');
@@ -650,6 +652,7 @@ describe.skipIf(!process.env.WP_GRAPH_VIZ_JS)('real Viz local-file filtering', (
             new ImpactSidecarData(
                 [impactScan(ImpactKind.BRANCH, BRANCH_LABEL, [], ids, [], 2, [], ['pnpm-lock.yaml', 'pnpm-workspace.yaml'])],
                 ImpactKind.BRANCH,
+                NO_EDGES,
             ),
         );
         await fixture.mode(page, 'impact');

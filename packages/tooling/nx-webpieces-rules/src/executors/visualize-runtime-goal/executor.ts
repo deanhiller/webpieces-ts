@@ -23,6 +23,7 @@ import type { ExecutorContext } from '@nx/devkit';
 import { RuleFailError, renderRuleFailForHuman } from '@webpieces/rules-config';
 import { DEFAULT_GRAPH_PATH } from '../../lib/graph-loader';
 import { ImpactRefresh, ImpactSidecar, VISUALIZE_IMPACT_KINDS } from '../../lib/graph-impact';
+import { LiveGraphSource } from '../../lib/graph-edge-diff';
 import { SavedSnapshot } from '../../lib/saved-snapshot';
 import { writeRuntimeVisualization, RuntimeVizOptions, RuntimePageKind } from '../../lib/runtime-visualizer';
 import { loadRuntimeConfig } from '../../lib/runtime-config';
@@ -66,7 +67,7 @@ export default async function runExecutor(
         const vizPaths = writeRuntimeVisualization(goal, workspaceRoot, 'Goal / Proposed Runtime Architecture', vizOptions, comparison);
         console.log(`✅ Generated: ${vizPaths.dotPath}`);
         console.log(`✅ Generated: ${vizPaths.htmlPath}`);
-        if (projects !== null) console.log(await new ImpactRefresh().run(path.dirname(vizPaths.htmlPath), workspaceRoot, projects, VISUALIZE_IMPACT_KINDS));
+        if (projects !== null) console.log(await new ImpactRefresh().run(path.dirname(vizPaths.htmlPath), workspaceRoot, projects, VISUALIZE_IMPACT_KINDS, new LiveGraphSource()));
         else { new ImpactSidecar().remove(path.dirname(vizPaths.htmlPath)); console.log('Impact and framework metadata unavailable: no saved project graph. Proposed services carry their goal facts only.'); }
 
         console.log('\n🌐 Opening visualization in browser...');

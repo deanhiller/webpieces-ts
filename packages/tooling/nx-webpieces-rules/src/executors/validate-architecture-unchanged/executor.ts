@@ -15,20 +15,15 @@ import {
     RuleFailError,
     renderRuleFailForHuman,
 } from '@webpieces/rules-config';
-import { generateReducedGraph } from '../../lib/graph-generator';
-import { sortGraphTopologically } from '../../lib/graph-sorter';
 import { compareGraphs } from '../../lib/graph-comparator';
 import { loadBlessedGraph, graphFileExists } from '../../lib/graph-loader';
 import type { DependenciesFile } from '../../lib/graph-loader';
-import { collectProjectInfo, enrichGraph, MetadataValidationError } from '../../lib/graph-metadata';
-import { TagTruthCheck } from '../../lib/tag-truth';
-import { ApprovedWiringGraph } from '../../lib/runtime-wiring/approved-graph';
+import { MetadataValidationError } from '../../lib/graph-metadata';
 import type { ExternalSystemDecls } from '../../lib/api-usage/api-relations';
-import { ApiContractFiles } from '../../lib/api-contract-files';
 import type { ApiContractFileRefs } from '../../lib/api-contract-files';
 import type { RemoteServices } from '../../lib/remote-services';
 import { RuleGate } from '../../lib/rule-gate';
-import type { EnhancedGraph } from '../../lib/graph-sorter';
+import { CurrentArchitecture, CurrentGraphBuilder } from '../../lib/current-architecture';
 import { toError } from '../../toError';
 
 export interface ValidateArchitectureUnchangedOptions {
@@ -156,55 +151,6 @@ function describeExternalSystemDrift(
     }
     if (changes.length === 0) return null;
     return `externalSystems drift (${changes.length} system(s)):\n${changes.join('\n')}`;
-}
-
-/**
- * Build the current dependency graph exactly as the generator does: reduce the nx
- * graph, sort into levels, enrich with metadata, and attach the derived
- * apiRelations — so this validator compares like-for-like against the committed file.
- */
-export class CurrentGraphBuilder {
-    async build(workspaceRoot: string, graphPath?: string): Promise<CurrentArchitecture> {
-        console.log('📊 Generating current dependency graph...');
-        const reducedGraph = await generateReducedGraph();
-        console.log('🔄 Computing topological layers...');
-        const currentGraph = sortGraphTopologically(reducedGraph);
-        console.log('🏷️  Enriching graph with framework + responsibilities metadata...');
-        const projectInfos = await collectProjectInfo();
-        enrichGraph(currentGraph, projectInfos, workspaceRoot);
-        new TagTruthCheck().assertTrue(currentGraph, projectInfos, workspaceRoot);
-        new ApprovedWiringGraph().attach(workspaceRoot, currentGraph, projectInfos, graphPath);
-        const saved = loadBlessedGraph(workspaceRoot, graphPath);
-        if (saved === null)
-            throw new RuleFailError(
-                'validate-runtime-architecture',
-                'Missing approved graph.',
-                undefined,
-                undefined,
-                [
-                    new Option(
-                        'Migrate src/wiring.ts and review runtime-deps.json and API contract approvals.',
-                        true,
-                    ),
-                ],
-            );
-        return new CurrentArchitecture(
-            currentGraph,
-            saved.apiContractFiles,
-            saved.externalSystems,
-            saved.remoteServices,
-        );
-    }
-}
-
-/** The regenerated graph plus the tables beside it — everything dependencies.json holds. */
-export class CurrentArchitecture {
-    constructor(
-        public readonly graph: EnhancedGraph,
-        public readonly apiContractFiles: ApiContractFileRefs,
-        public readonly externalSystems: ExternalSystemDecls,
-        public readonly remoteServices: RemoteServices,
-    ) {}
 }
 
 /** The bootstrap path: there is nothing to diff against yet, so say how to create it. */

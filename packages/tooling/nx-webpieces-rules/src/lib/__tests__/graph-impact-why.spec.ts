@@ -9,7 +9,7 @@ import * as path from 'path';
 import * as vm from 'vm';
 import * as ts from 'typescript';
 import { ImpactKind, ImpactSidecarData } from '../graph-impact';
-import { BRANCH_LABEL, WIRING_INPUT, impactScan } from './graph-browser-fixture';
+import { BRANCH_LABEL, NO_EDGES, WIRING_INPUT, impactScan } from './graph-browser-fixture';
 
 interface ReasonShape {
     kind: string;
@@ -54,7 +54,7 @@ const SCAN = impactScan(ImpactKind.BRANCH, BRANCH_LABEL, ['svc-a'], ['gateway'],
 
 describe('Impact "why" on the page (#1264)', () => {
     it('shades an implicitly touched box as implicit, a dependent as dependent, and counts them apart', () => {
-        const api = client(new ImpactSidecarData([SCAN], ImpactKind.BRANCH));
+        const api = client(new ImpactSidecarData([SCAN], ImpactKind.BRANCH, NO_EDGES));
         expect(api.modes.status('svc-a')).toBe('touched');
         expect(api.modes.status('gateway')).toBe('dependent');
         expect(api.modes.status('public-api')).toBe('implicit');
@@ -65,7 +65,7 @@ describe('Impact "why" on the page (#1264)', () => {
     });
 
     it('explains an implicit touch by its target, glob and file — and says it uses no changed project', () => {
-        const api = client(new ImpactSidecarData([SCAN], ImpactKind.BRANCH));
+        const api = client(new ImpactSidecarData([SCAN], ImpactKind.BRANCH, NO_EDGES));
         const reason = api.modes.reason('public-api') as ReasonShape;
         expect(api.why.title(reason)).toBe('Implicitly touched: public-api');
         const lines = api.why.lines(reason);
@@ -75,7 +75,7 @@ describe('Impact "why" on the page (#1264)', () => {
     });
 
     it('explains a dependent by its edge path, and a changed project by the files it owns', () => {
-        const api = client(new ImpactSidecarData([SCAN], ImpactKind.BRANCH));
+        const api = client(new ImpactSidecarData([SCAN], ImpactKind.BRANCH, NO_EDGES));
         expect(api.why.lines(api.modes.reason('gateway') as ReasonShape)).toContain('gateway -> svc-a');
         expect(api.why.lines(api.modes.reason('svc-a') as ReasonShape)).toEqual(['It owns this changed file:', 'svc-a/src/index.ts']);
         expect(api.modes.reason('core')).toBeNull();

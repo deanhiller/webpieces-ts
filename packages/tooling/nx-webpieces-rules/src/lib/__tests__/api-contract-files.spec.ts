@@ -18,10 +18,8 @@ import { saveGraph, loadBlessedGraph, DEFAULT_GRAPH_PATH, AI_INSTRUCTIONS } from
 import { ApiContractFiles } from '../api-contract-files';
 import { deriveRuntimeGraph } from '../runtime-graph';
 import { toError } from '../../toError';
-import {
-    CurrentArchitecture,
-    describeTableDrift,
-} from '../../executors/validate-architecture-unchanged/executor';
+import { describeTableDrift } from '../../executors/validate-architecture-unchanged/executor';
+import { CurrentArchitecture } from '../current-architecture';
 
 let root: string;
 

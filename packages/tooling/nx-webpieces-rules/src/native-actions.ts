@@ -76,7 +76,7 @@ export class NativeActions {
         'graph-policies',
         'workspace',
         async (context: ExecutorContext) => {
-            const graph = await import('./executors/validate-architecture-unchanged/executor');
+            const graph = await import('./lib/current-architecture');
             await new graph.CurrentGraphBuilder().build(context.root);
             return new BuildPolicyResult(true);
         },

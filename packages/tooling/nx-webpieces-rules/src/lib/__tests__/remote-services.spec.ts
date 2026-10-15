@@ -17,10 +17,8 @@ import { ServiceTargetValidator } from '../runtime-wiring/service-targets';
 import { deriveRuntimeGraphReport } from '../runtime-graph';
 import { generateRuntimeDot } from '../runtime-visualizer';
 import { loadBlessedGraph, saveGraph } from '../graph-loader';
-import {
-    CurrentArchitecture,
-    describeTableDrift,
-} from '../../executors/validate-architecture-unchanged/executor';
+import { describeTableDrift } from '../../executors/validate-architecture-unchanged/executor';
+import { CurrentArchitecture } from '../current-architecture';
 import type { EnhancedGraph } from '../graph-sorter';
 import type { ApiContracts } from '../api-usage/api-relations';
 import { toError } from '../../toError';

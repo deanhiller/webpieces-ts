@@ -30,6 +30,8 @@ export enum ChangeScope {
     DEPENDENTS = 'dependents',
     DEPENDENCIES = 'dependencies',
     BUILD = 'build',
+    /** #1264: the boxes at either end of an edge gained or lost since the fork point. */
+    EDGES = 'edges',
 }
 
 /**
@@ -51,6 +53,7 @@ export const SCOPE_OPTIONS: readonly ScopeOption[] = [
     new ScopeOption(ChangeScope.DEPENDENTS, 'Changed + dependents', '+ everything else nx affected: dependents, implicitly and root-file touched (their tests re-run)'),
     new ScopeOption(ChangeScope.DEPENDENCIES, 'Changed + dependencies', '+ everything they use'),
     new ScopeOption(ChangeScope.BUILD, 'Changed + dependents + dependencies', 'everything CI builds for this branch'),
+    new ScopeOption(ChangeScope.EDGES, 'Edge changes only', 'projects that gained or lost a dependency or call since the fork point'),
 ];
 
 /** Everything the shell frames, already rendered by its owner. */

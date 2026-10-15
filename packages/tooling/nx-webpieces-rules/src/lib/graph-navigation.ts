@@ -21,9 +21,11 @@ export class GraphNavigation {
         .wp-navigation.wp-zoom button { min-width: 34px; height: 34px; padding: 0 8px; border-radius: 8px; border: 1px solid #d9dce5; background: #fff; color: #1b1e27; font-size: 15px; }
         .wp-navigation.wp-zoom button:hover { border-color: #3559d6; }
         .wp-navigation.wp-zoom output { min-width: 42px; padding: 2px 6px; border-radius: 6px; background: #ffffffd9; color: #5d6475; font-size: 12px; text-align: center; }
-        .wp-graph-details { position: fixed; z-index: 1100; box-sizing: border-box; max-width: min(520px, calc(100vw - 24px)); max-height: min(480px, calc(100vh - 24px)); overflow: auto; background: white; padding: 12px; border: 1px solid #aaa; border-radius: 6px; box-shadow: 0 4px 16px #0003; font: 14px/1.5 Arial, sans-serif; overflow-wrap: anywhere; }
-        .wp-graph-details li { margin-bottom: 8px; }
+        .wp-graph-details, .wp-impact-why { position: fixed; z-index: 1100; box-sizing: border-box; max-width: min(520px, calc(100vw - 24px)); max-height: min(480px, calc(100vh - 24px)); overflow: auto; background: white; padding: 12px; border: 1px solid #aaa; border-radius: 6px; box-shadow: 0 4px 16px #0003; font: 14px/1.5 Arial, sans-serif; overflow-wrap: anywhere; }
+        .wp-graph-details li, .wp-impact-why li { margin-bottom: 8px; }
         .wp-api-detail { cursor: pointer; text-decoration: underline; }
+        #graph g.edge.wp-edge-change { cursor: pointer; }
+        #graph g.edge.wp-edge-change:focus { outline: 2px dashed #d32f2f; }
         .wp-api-detail:focus { outline: 2px solid #1565c0; }
         `;
     }

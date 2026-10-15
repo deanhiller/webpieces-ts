@@ -5,7 +5,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import * as path from 'path';
 import { FilterFixture } from './graph-filter-fixture';
-import { BRANCH_LABEL, BrowserFixture, COMMIT_LABEL, impactScan } from './graph-browser-fixture';
+import { BRANCH_LABEL, BrowserFixture, COMMIT_LABEL, NO_EDGES, impactScan } from './graph-browser-fixture';
 import type { EnhancedGraph } from '../graph-sorter';
 import { ImpactKind, ImpactReport, ImpactSidecarData, NOTHING_CHANGED_ON_BRANCH, ROOT_COMMIT_REASON } from '../graph-impact';
 
@@ -33,6 +33,7 @@ describe.skipIf(!process.env.WP_GRAPH_VIZ_JS)('Impact comparisons in a real brow
                     impactScan(ImpactKind.COMMIT, dirtyCommit, ['server-auth'], ['jobs-svr'], ['model'], 3, ['model']),
                 ],
                 ImpactKind.BRANCH,
+                NO_EDGES,
             ),
         );
         const drawerToggle = page.locator('#wp-side [data-wp-impact-kinds="drawer"]');
@@ -85,6 +86,7 @@ describe.skipIf(!process.env.WP_GRAPH_VIZ_JS)('Impact comparisons in a real brow
             new ImpactSidecarData(
                 [impactScan(ImpactKind.BRANCH, BRANCH_LABEL, [], [], [], 0, [], [], NOTHING_CHANGED_ON_BRANCH)],
                 ImpactKind.BRANCH,
+                NO_EDGES,
             ),
         );
         await fixture.mode(page, 'impact');
@@ -106,6 +108,7 @@ describe.skipIf(!process.env.WP_GRAPH_VIZ_JS)('Impact comparisons in a real brow
             new ImpactSidecarData(
                 [impactScan(ImpactKind.BRANCH, BRANCH_LABEL, ['rules-config'], [], [], 1, []), rootCommit],
                 ImpactKind.BRANCH,
+                NO_EDGES,
             ),
         );
         await fixture.mode(page, 'impact');
