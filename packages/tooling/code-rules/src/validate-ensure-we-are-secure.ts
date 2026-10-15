@@ -3,7 +3,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as ts from 'typescript';
 import { SecurityPolicyShapes } from './security-policy-shapes';
-import { getChangedFiles, detectBase, Option, RuleFailError } from "@webpieces/rules-config";
+import { getChangedFiles, detectBase, Option, RuleFailError, RuleFileScope } from "@webpieces/rules-config";
 import { EnsureWeAreSecureConfig } from "./configs/rule-configs";
 import { InformAiError } from '@webpieces/tooling-common';
 import { injectable, bindingScopeValues } from 'inversify';
@@ -525,6 +525,8 @@ function projectFiles(workspaceRoot: string, projectRoot: string): string[] {
                 !entry.name.endsWith('.test.tsx')
             ) {
                 const rel = path.relative(workspaceRoot, full);
+                // A directory walk bypasses DiffScope, so the framework's path exclusions (#1253) are asked here.
+                if (new RuleFileScope().isExcluded(rel)) continue;
                 const owner = owningProjectJson(workspaceRoot, rel);
                 if (owner !== null && path.dirname(owner) === projectRoot) files.push(rel);
             }

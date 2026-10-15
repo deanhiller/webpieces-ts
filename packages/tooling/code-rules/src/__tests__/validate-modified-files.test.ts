@@ -3,10 +3,9 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
 
-import { GENERATED_CODE_PATHS, isPathExcluded } from "@webpieces/rules-config";
-import { MaxFileLinesConfig, NoFunctionOutsideClassConfig } from "../configs/rule-configs";
+import { GENERATED_CODE_PATHS, isPathExcluded, RuleFileExclusions } from "@webpieces/rules-config";
 
-import { findViolations, exemptPathsFor, violationsError } from '../validate-modified-files';
+import { findViolations, violationsError } from '../validate-modified-files';
 
 // The build-time half of the max-file-lines path exemption. The incident: a graphql-codegen
 // client-preset output is ~42k lines because it embeds the whole upstream Hasura schema, so
@@ -29,17 +28,12 @@ function write(relPath: string, lineCount: number): void {
     fs.writeFileSync(full, 'const x = 1;\n'.repeat(lineCount - 1), 'utf-8');
 }
 
-function config(allowedPaths?: string[]): MaxFileLinesConfig {
-    const cfg = new MaxFileLinesConfig();
-    cfg.mode = 'NEW_AND_MODIFIED_FILES';
-    cfg.limit = LIMIT;
-    cfg.disableAllowed = false;
-    if (allowedPaths !== undefined) cfg.allowedPaths = allowedPaths;
-    return cfg;
-}
-
-function offenders(files: string[], cfg: MaxFileLinesConfig): string[] {
-    return findViolations(root, files, LIMIT, false, exemptPathsFor(cfg)).map((v: { file: string }): string => v.file);
+// The rule's own floor. A repo's configured trees never reach findViolations: the framework drops them
+// from the rule's file listing (#1253), which offenders() models with the same RuleFileExclusions.
+function offenders(files: string[], excludePaths: string[] = []): string[] {
+    const exclusions = new RuleFileExclusions('max-file-lines', [], excludePaths);
+    const listed = files.filter((f: string): boolean => !exclusions.excludes(f));
+    return findViolations(root, listed, LIMIT, false, GENERATED_CODE_PATHS).map((v: { file: string }): string => v.file);
 }
 
 beforeAll((): void => {
@@ -60,82 +54,66 @@ afterAll((): void => {
 
 describe('findViolations — generated code is exempt with NO configuration', () => {
     it('passes a 43,000-line file under **/__generated__/**', () => {
-        expect(offenders([GENERATED], config())).toEqual([]);
+        expect(offenders([GENERATED])).toEqual([]);
     });
 
     it('passes *.generated.ts, a generated/ directory, and dist output', () => {
-        expect(offenders([DOT_GENERATED, GENERATED_DIR], config())).toEqual([]);
+        expect(offenders([DOT_GENERATED, GENERATED_DIR])).toEqual([]);
         expect(isPathExcluded('apps/web/dist/main.ts', GENERATED_CODE_PATHS)).toBe(true);
     });
 });
 
-describe('findViolations — allowedPaths', () => {
-    it('passes the same huge file via an explicit allowedPaths glob', () => {
-        expect(offenders([VENDOR], config(['vendor/**']))).toEqual([]);
+describe('findViolations — the framework-owned excludePaths (#1253)', () => {
+    it('passes the same huge file via an excludePaths glob', () => {
+        expect(offenders([VENDOR], ['vendor/**'])).toEqual([]);
     });
 
-    it('flags that file when allowedPaths does not cover it', () => {
-        expect(offenders([VENDOR], config())).toEqual([VENDOR]);
+    it('flags that file when excludePaths does not cover it', () => {
+        expect(offenders([VENDOR])).toEqual([VENDOR]);
     });
 
-    // allowedPaths ADDS to the built-in floor, so configuring one of your own trees can never cost
+    // excludePaths ADDS to the built-in floor, so configuring one of your own trees can never cost
     // you the generated-code exemption.
-    it('keeps the generated exemption when allowedPaths names something else', () => {
-        expect(offenders([GENERATED, VENDOR], config(['vendor/**']))).toEqual([]);
+    it('keeps the generated exemption when excludePaths names something else', () => {
+        expect(offenders([GENERATED, VENDOR], ['vendor/**'])).toEqual([]);
     });
 });
 
 describe('findViolations — hand-written files are STILL protected', () => {
     it('flags a 1,500-line hand-written file outside every exempt glob', () => {
-        const violations = findViolations(root, [HAND_WRITTEN], LIMIT, false, exemptPathsFor(config()));
+        const violations = findViolations(root, [HAND_WRITTEN], LIMIT, false, GENERATED_CODE_PATHS);
         expect(violations).toHaveLength(1);
         expect(violations[0].lines).toBe(1_500);
     });
 
     it('flags it even while a generated sibling in the same diff is exempt', () => {
-        expect(offenders([GENERATED, HAND_WRITTEN], config(['vendor/**']))).toEqual([HAND_WRITTEN]);
+        expect(offenders([GENERATED, HAND_WRITTEN], ['vendor/**'])).toEqual([HAND_WRITTEN]);
     });
 
     it('passes a small hand-written file', () => {
-        expect(offenders(['services/orders/src/SmallService.ts'], config())).toEqual([]);
-    });
-});
-
-describe('allowedPaths glob matching agrees with no-function-outside-class', () => {
-    // Both rules feed the SAME matcher (isPathExcluded) — that is what "same semantics" has to mean.
-    const cases: ReadonlyArray<readonly [string, readonly string[]]> = [
-        [VENDOR, ['vendor/**']],
-        [VENDOR, ['vendor/sdk']],
-        [HAND_WRITTEN, ['vendor/**']],
-        [GENERATED, ['**/__generated__/**']],
-    ];
-
-    it.each(cases)('%s vs %s', (relPath: string, patterns: readonly string[]) => {
-        const nfoc = new NoFunctionOutsideClassConfig();
-        nfoc.allowedPaths = [...patterns];
-        const expected = isPathExcluded(relPath, nfoc.allowedPaths) || isPathExcluded(relPath, GENERATED_CODE_PATHS);
-        expect(offenders([relPath], config([...patterns])).length === 0).toBe(expected);
+        expect(offenders(['services/orders/src/SmallService.ts'])).toEqual([]);
     });
 });
 
 describe('violationsError — one thrown failure value, cures as Option[]', () => {
-    it('names allowedPaths as the cure for a machine-generated file', () => {
-        const err = violationsError(findViolations(root, [HAND_WRITTEN], LIMIT, false, exemptPathsFor(config())), LIMIT, false);
+    it('names excludePaths — never the retired allowedPaths — as the cure for a machine-generated file', () => {
+        const err = violationsError(findViolations(root, [HAND_WRITTEN], LIMIT, false, GENERATED_CODE_PATHS), LIMIT, false);
         const cures = err.fixOptions.map((o: { text: string }): string => o.text).join('\n');
-        expect(cures).toContain('allowedPaths');
+        expect(cures).toContain('excludePaths');
+        expect(cures).not.toContain('allowedPaths');
         expect(err.ruleName).toBe('max-file-lines');
         expect(err.humanMessage).toContain(HAND_WRITTEN);
     });
 
     it('offers the human-only epoch hatch only as a cure, never hand-numbered in the message', () => {
-        const err = violationsError(findViolations(root, [HAND_WRITTEN], LIMIT, false, exemptPathsFor(config())), LIMIT, false);
+        const err = violationsError(findViolations(root, [HAND_WRITTEN], LIMIT, false, GENERATED_CODE_PATHS), LIMIT, false);
         expect(err.humanMessage).not.toContain('turnOffRuleUntilEpoch');
         expect(err.fixOptions.some((o: { text: string }): boolean => o.text.includes('turnOffRuleUntilEpoch'))).toBe(true);
         expect(err.humanMessage).not.toContain('Fix Option');
     });
 
     it('offers the dated inline disable instead when disableAllowed is true', () => {
-        const err = violationsError(findViolations(root, [HAND_WRITTEN], LIMIT, true, exemptPathsFor(config())), LIMIT, true);
+        const err = violationsError(findViolations(root, [HAND_WRITTEN], LIMIT, true, GENERATED_CODE_PATHS), LIMIT, true);
         expect(err.fixOptions.some((o: { text: string }): boolean => o.text.includes('webpieces-disable max-lines-modified-files'))).toBe(true);
     });
 });

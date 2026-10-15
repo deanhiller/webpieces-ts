@@ -8,7 +8,7 @@ import { specTempDirs } from '@webpieces/tooling-testkit';
  * dependency rule cannot see, because no nx edge is involved.
  */
 import * as fs from 'fs';
-import { DiffScope } from '@webpieces/rules-config';
+import { DiffScope, RuleFileExclusions } from '@webpieces/rules-config';
 import { WireSuffixScope } from '../api-usage/wire-suffix-scope';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { WireSuffixEntry } from '../api-usage/wire-suffix-entry';
@@ -87,7 +87,7 @@ function suffixes(...list: string[]): WireClosureRule {
     entry.exempt = false;
     return new WireClosureRule(
         [entry],
-        new WireSuffixScope(root, 'RUN_EVERY_TIME', [], new DiffScope()),
+        new WireSuffixScope(root, 'RUN_EVERY_TIME', new RuleFileExclusions('required-type-suffix', [], []), new DiffScope()),
     );
 }
 
@@ -148,7 +148,7 @@ describe('wire closure (D4)', () => {
         exempt.paths = ['libraries/company-core/**'];
         exempt.suffixes = ['Dto'];
         exempt.exempt = true;
-        const scope = new WireSuffixScope(root, 'RUN_EVERY_TIME', [], new DiffScope());
+        const scope = new WireSuffixScope(root, 'RUN_EVERY_TIME', new RuleFileExclusions('required-type-suffix', [], []), new DiffScope());
         expect(
             wireDefects('api-lib', new WireClosureRule([exempt, ...broad.suffixEntries], scope)),
         ).toEqual([]);

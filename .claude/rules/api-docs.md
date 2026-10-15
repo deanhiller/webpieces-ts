@@ -291,7 +291,7 @@ UNION of them — every value maps to its branch. It keeps supporting string-lit
 Two `@webpieces/code-rules` rules keep an api library (`role:api-lib`) on that one spelling. Both have
 NO default (`.claude/rules/no-rule-defaults.md`) — a consumer states `mode` (`OFF` |
 `NEW_AND_MODIFIED_CODE` | `NEW_AND_MODIFIED_FILES` | `MODIFIED_PROJECTS` | `RUN_EVERY_TIME`),
-optionally `allowedPaths`, and the universal hatches. The two whole-scope modes (#1027) exist for the
+optionally the framework-owned `excludePaths` (every rule accepts it, #1253), and the universal hatches. The two whole-scope modes (#1027) exist for the
 migration a large api library needs: count what is left with
 `pnpm exec wp-validate-code --rule=one-enum-spelling-in-api-lib --mode=RUN_EVERY_TIME --projects=<api libs>`
 (no config edit; see `docs/ENGINEERING-PRACTICE.md`, Part 3):

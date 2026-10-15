@@ -16,7 +16,65 @@ import {
     SafeguardDefinition,
     RuleConfigSection,
     ConfigValue,
+    BASE_RULE_SCHEMA,
 } from '@webpieces/rules-sdk';
+
+/**
+ * The framework-owned fields every owned rule's schema carries (#1253), merged in HERE so no pack
+ * declares them and no rule can lose them by forgetting a spread.
+ *
+ * A `lint` rule gets the hatches and `reason` but not `excludePaths`: ESLint decides which files it
+ * lints (its own `ignores`), and webpieces' activation of a lint rule is on/off only — an accepted
+ * `excludePaths` there would change nothing, so the field is refused rather than silently ignored.
+ */
+export class UniversalRuleSchema {
+    fieldsFor(section: RuleConfigSection): Readonly<Record<string, FieldDef>> {
+        if (section !== 'lint') return BASE_RULE_SCHEMA;
+        const lint: Record<string, FieldDef> = { ...BASE_RULE_SCHEMA };
+        delete lint['excludePaths'];
+        return lint;
+    }
+
+    isUniversal(key: string): boolean {
+        return Object.hasOwn(BASE_RULE_SCHEMA, key);
+    }
+
+    /**
+     * The owner schema plus the framework's fields. A pack schema that names a universal field is
+     * REFUSED — one spelling: the registry supplies them, a pack never declares them.
+     *
+     * The ONE exception is a `lint` rule carrying the framework's own definition: eslint-rules'
+     * LintRuleConfig still spreads BASE_RULE_SCHEMA, and decision 6 of #1253 keeps eslint-rules
+     * untouched in that change. Its follow-up (#1278) deletes that spread and this exception with it.
+     * Any other section, and any differing definition, fails here.
+     */
+    merge(ruleId: string, section: RuleConfigSection, schema: Readonly<Record<string, FieldDef>>): Readonly<Record<string, FieldDef>> {
+        const merged: Record<string, FieldDef> = {};
+        for (const [key, field] of Object.entries(schema)) {
+            if (!this.isUniversal(key)) {
+                merged[key] = field;
+                continue;
+            }
+            const owned = BASE_RULE_SCHEMA[key as keyof typeof BASE_RULE_SCHEMA];
+            if (section === 'lint' && this.sameField(field, owned)) continue;
+            throw new InformAiError(
+                `Policy ${ruleId} declares the framework-owned field "${key}". Delete it from the owner schema (and any ...BASE_RULE_SCHEMA spread); the registry supplies ${Object.keys(BASE_RULE_SCHEMA).join(', ')} to every rule.`,
+            );
+        }
+        return { ...merged, ...this.fieldsFor(section) };
+    }
+
+    private sameField(a: FieldDef, b: FieldDef): boolean {
+        return (
+            a.type === b.type &&
+            Boolean(a.optional) === Boolean(b.optional) &&
+            Boolean(a.nullable) === Boolean(b.nullable) &&
+            Boolean(a.nonEmpty) === Boolean(b.nonEmpty) &&
+            a.enumValues === undefined &&
+            b.enumValues === undefined
+        );
+    }
+}
 
 /** Loading is the only impure boundary; callers may supply an alternative module transport. */
 export abstract class RulePackModuleLoader {
@@ -51,6 +109,9 @@ export class RulePackRegistry {
     private readonly owners = new Map<string, string>();
     private readonly definitions = new Map<string, OwnedRuleDefinition>();
     private readonly safeguards = new Map<string, SafeguardDefinition>();
+    // Owner schema + the framework-owned universal fields (UniversalRuleSchema) — what config is validated against.
+    private readonly schemas = new Map<string, Readonly<Record<string, FieldDef>>>();
+    private readonly universal = new UniversalRuleSchema();
 
     constructor(readonly manifests: readonly RulePackManifest[]) {
         for (const manifest of manifests) this.validateManifestHeader(manifest);
@@ -146,7 +207,7 @@ export class RulePackRegistry {
 
     schemaFor(ruleId: string): Readonly<Record<string, FieldDef>> {
         this.ownerOf(ruleId);
-        return this.definitions.get(ruleId)!.schema;
+        return this.schemas.get(ruleId)!;
     }
 
     /** The transport records the exact client declaration, including local manifest modules. */
@@ -282,6 +343,10 @@ export class RulePackRegistry {
                     `Missing catalog help for ${definition.id}. Its owner must supply description and remediation.`,
                 );
             }
+            this.schemas.set(
+                definition.id,
+                this.universal.merge(definition.id, definition.section, definition.schema),
+            );
             this.validateOwnerSettings(definition);
             const mode = definition.schema['mode'];
             if (
@@ -311,11 +376,12 @@ export class RulePackRegistry {
             );
         }
         for (const key of Object.keys(tuning)) {
-            const field = definition.schema[key];
+            const field = this.schemas.get(definition.id)![key];
             if (
                 !field ||
                 !field.optional ||
-                ['mode', 'turnOffRuleUntilEpoch', 'turnOffRuleWhileOnBranch'].includes(key)
+                key === 'mode' ||
+                this.universal.isUniversal(key)
             ) {
                 throw new InformAiError(
                     `${definition.id}.${key} cannot have a default. Keep required behaviour in explicit repository config.`,
@@ -330,7 +396,7 @@ export class RulePackRegistry {
         }
         const errors = this.validateObject(
             definition.id,
-            definition.schema,
+            this.schemas.get(definition.id)!,
             definition.recommendedSeed,
         );
         if (errors.length)

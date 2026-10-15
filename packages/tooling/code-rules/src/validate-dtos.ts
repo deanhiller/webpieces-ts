@@ -35,7 +35,6 @@ import { detectBase, getChangedFiles, getFileDiff, getChangedLineNumbers } from 
 import { PrismaValidateDtosConfig, PrismaValidateDtosMode } from "./configs/rule-configs";
 import { CodeValidator, ExecutorResult } from './code-validator';
 import { injectable, bindingScopeValues } from 'inversify';
-import { shouldSkipRule } from './resolve-mode';
 
 interface DtoFieldInfo {
     name: string;
@@ -481,28 +480,11 @@ function validateDtoFiles(
     return { success: false };
 }
 
-/**
- * Resolve mode considering turnOffRuleUntilEpoch override.
- * When active, downgrades to OFF. When expired, logs a warning.
- */
-function resolveMode(normalMode: PrismaValidateDtosMode, epoch: number | undefined, branchPattern: string | undefined): PrismaValidateDtosMode {
-    if (normalMode === 'OFF') {
-        return normalMode;
-    }
-    const skip = shouldSkipRule(epoch, branchPattern);
-    if (skip.skip) {
-        console.log(`\n⏭️  Skipping validate-dtos (${skip.reason})`);
-        console.log('');
-        return 'OFF';
-    }
-    return normalMode;
-}
-
 async function runValidatorImpl(
     options: PrismaValidateDtosConfig,
     workspaceRoot: string
 ): Promise<ExecutorResult> {
-    const mode = resolveMode(options.mode ?? 'OFF', options.turnOffRuleUntilEpoch, (options.turnOffRuleWhileOnBranch ?? undefined));
+    const mode = options.mode ?? 'OFF';
 
     if (mode === 'OFF') {
         console.log('\n⏭️  Skipping validate-dtos (mode: OFF)');

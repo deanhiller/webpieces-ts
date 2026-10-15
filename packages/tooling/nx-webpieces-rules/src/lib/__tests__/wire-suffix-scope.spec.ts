@@ -3,7 +3,7 @@ import * as path from 'path';
 import { execFileSync } from 'child_process';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { specTempDirs } from '@webpieces/tooling-testkit';
-import { DiffScope } from '@webpieces/rules-config';
+import { DiffScope, RuleFileExclusions } from '@webpieces/rules-config';
 import { ModifiedCodeMode } from '@webpieces/rules-sdk';
 import { WireSuffixScope } from '../api-usage/wire-suffix-scope';
 
@@ -29,8 +29,9 @@ beforeEach(() => {
 
 afterEach(() => fs.rmSync(root, { recursive: true, force: true }));
 
-function scope(mode: ModifiedCodeMode, allowedPaths: string[] = []): WireSuffixScope {
-    return new WireSuffixScope(root, mode, allowedPaths, new DiffScope());
+function scope(mode: ModifiedCodeMode, excludePaths: string[] = [], globalExcludes: string[] = []): WireSuffixScope {
+    const exclusions = new RuleFileExclusions('required-type-suffix', globalExcludes, excludePaths);
+    return new WireSuffixScope(root, mode, exclusions, new DiffScope());
 }
 
 function includes(policy: WireSuffixScope, name = 'Legacy', line = 1): boolean {
@@ -62,9 +63,10 @@ describe('wire suffix rollout uses the declaring type, independently of the doc 
         expect(includes(scope('RUN_EVERY_TIME'))).toBe(true);
     });
 
-    it('honors OFF and allowedPaths even in whole-repo mode', () => {
+    it('honors OFF and the framework-owned excludePaths (per-rule and top-level) even in whole-repo mode', () => {
         expect(includes(scope('OFF'))).toBe(false);
         expect(includes(scope('RUN_EVERY_TIME', ['libraries/api/**']))).toBe(false);
+        expect(includes(scope('RUN_EVERY_TIME', [], ['libraries/api/**']))).toBe(false);
     });
 
     it('does not mark a parent project touched by edits owned by a nested project', () => {

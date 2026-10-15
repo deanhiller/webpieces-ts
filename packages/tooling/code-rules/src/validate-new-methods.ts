@@ -22,7 +22,6 @@ import * as ts from 'typescript';
 import { writeTemplate, WEBPIECES_DISABLE, detectBase, getChangedFiles, getFileDiff, findNewMethodSignaturesInDiff } from "@webpieces/rules-config";
 import { MaxMethodLinesConfig, MethodLimitMode } from "./configs/rule-configs";
 import { ExecutorResult } from './code-validator';
-import { shouldSkipRule, SkipRuleResult } from './resolve-mode';
 
 interface MethodViolation {
     file: string;
@@ -226,14 +225,11 @@ export async function runNewMethods(
     const limit = options.limit ?? 80;
     const disableAllowed = options.disableAllowed ?? true;
 
-    const rawMode: MethodLimitMode = options.mode ?? 'NEW_AND_MODIFIED_METHODS';
-    const skip = rawMode !== 'OFF' ? shouldSkipRule(options.turnOffRuleUntilEpoch, (options.turnOffRuleWhileOnBranch ?? undefined)) : new SkipRuleResult(false);
-    const mode: MethodLimitMode = skip.skip ? 'OFF' : rawMode;
+    const mode: MethodLimitMode = options.mode ?? 'NEW_AND_MODIFIED_METHODS';
 
     // Skip validation entirely if mode is OFF
     if (mode === 'OFF') {
-        const reason = skip.skip ? skip.reason : 'mode: OFF';
-        console.log(`\n\u23ed\ufe0f  Skipping new method validation (${reason})`);
+        console.log(`\n\u23ed\ufe0f  Skipping new method validation (mode: OFF)`);
         console.log('');
         return { success: true };
     }

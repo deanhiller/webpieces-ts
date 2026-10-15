@@ -30,7 +30,7 @@
  *   provider tokens, interface tokens).
  * - Property/field injection, and any parameter without an `@inject` decorator.
  * - Test files (*.test.ts, *.spec.ts, __tests__/**).
- * - Files under a configured `allowedPaths` glob (shared isPathExcluded glob/prefix/segment semantics).
+ * - Files under the rule's `excludePaths` or the top-level one (dropped by the framework).
  * - Lines with `// webpieces-disable inject-annotation-not-needed-for-concrete-class -- <reason>`
  *   (only when disableAllowed).
  *
@@ -43,12 +43,11 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as ts from 'typescript';
-import { hasDisable, detectBase, getFileDiff, getChangedLineNumbers, isPathExcluded } from "@webpieces/rules-config";
+import { hasDisable, detectBase, getFileDiff, getChangedLineNumbers } from "@webpieces/rules-config";
 import { InjectAnnotationNotNeededForConcreteClassConfig } from "./configs/rule-configs";
 import { ModifiedCodeMode } from '@webpieces/rules-sdk';
 import { CodeValidator, ExecutorResult } from './code-validator';
 import { injectable, bindingScopeValues } from 'inversify';
-import { shouldSkipRule } from './resolve-mode';
 import { ScanScope } from './scan-scope';
 
 const RULE_NAME = "inject-annotation-not-needed-for-concrete-class";
@@ -171,9 +170,8 @@ function recordViolation(
 }
 
 // webpieces-disable no-function-outside-class -- the rule engine is inherently functional; validators can't be class members
-function findRedundantInjectInFile(filePath: string, workspaceRoot: string, disableAllowed: boolean, allowedPaths: string[]): InjectViolationInfo[] {
+function findRedundantInjectInFile(filePath: string, workspaceRoot: string, disableAllowed: boolean): InjectViolationInfo[] {
     if (isTestFile(filePath)) return [];
-    if (isPathExcluded(filePath, allowedPaths)) return [];
     const fullPath = path.join(workspaceRoot, filePath);
     if (!fs.existsSync(fullPath)) return [];
     const content = fs.readFileSync(fullPath, 'utf-8');
@@ -181,12 +179,12 @@ function findRedundantInjectInFile(filePath: string, workspaceRoot: string, disa
 }
 
 // webpieces-disable no-function-outside-class -- the rule engine is inherently functional; validators can't be class members
-function findViolationsForModifiedCode(workspaceRoot: string, changedFiles: string[], base: string, head: string | undefined, disableAllowed: boolean, allowedPaths: string[]): InjectViolation[] {
+function findViolationsForModifiedCode(workspaceRoot: string, changedFiles: string[], base: string, head: string | undefined, disableAllowed: boolean): InjectViolation[] {
     const violations: InjectViolation[] = [];
     for (const file of changedFiles) {
         const changedLines = getChangedLineNumbers(getFileDiff(workspaceRoot, file, base, head));
         if (changedLines.size === 0) continue;
-        for (const v of findRedundantInjectInFile(file, workspaceRoot, disableAllowed, allowedPaths)) {
+        for (const v of findRedundantInjectInFile(file, workspaceRoot, disableAllowed)) {
             if (disableAllowed && v.hasDisableComment) continue;
             if (!changedLines.has(v.line)) continue;
             violations.push({ file, line: v.line, column: v.column, context: v.context });
@@ -196,10 +194,10 @@ function findViolationsForModifiedCode(workspaceRoot: string, changedFiles: stri
 }
 
 // webpieces-disable no-function-outside-class -- the rule engine is inherently functional; validators can't be class members
-function findViolationsForModifiedFiles(workspaceRoot: string, changedFiles: string[], disableAllowed: boolean, allowedPaths: string[]): InjectViolation[] {
+function findViolationsForModifiedFiles(workspaceRoot: string, changedFiles: string[], disableAllowed: boolean): InjectViolation[] {
     const violations: InjectViolation[] = [];
     for (const file of changedFiles) {
-        for (const v of findRedundantInjectInFile(file, workspaceRoot, disableAllowed, allowedPaths)) {
+        for (const v of findRedundantInjectInFile(file, workspaceRoot, disableAllowed)) {
             if (disableAllowed && v.hasDisableComment) continue;
             violations.push({ file, line: v.line, column: v.column, context: v.context });
         }
@@ -222,19 +220,8 @@ function reportViolations(violations: InjectViolation[], mode: ModifiedCodeMode,
     console.error(disableAllowed
         ? `   Escape hatch (use sparingly): // webpieces-disable ${RULE_NAME} -- <reason>`
         : '   Escape hatch: DISABLED (disableAllowed: false)');
-    console.error(`   Whole-tree exemption: add a glob to ${RULE_NAME}.allowedPaths in webpieces.config.json`);
+    console.error(`   Whole-tree exemption: add a glob to ${RULE_NAME}.excludePaths in webpieces.config.json`);
     console.error(`\n   Current mode: ${mode}\n`);
-}
-
-// webpieces-disable no-function-outside-class -- the rule engine is inherently functional; validators can't be class members
-function resolveMode(normalMode: ModifiedCodeMode, epoch: number | undefined, branchPattern: string | undefined): ModifiedCodeMode {
-    if (normalMode === 'OFF') return normalMode;
-    const skip = shouldSkipRule(epoch, branchPattern);
-    if (skip.skip) {
-        console.log(`\n⏭️  Skipping ${RULE_NAME} validation (${skip.reason})\n`);
-        return 'OFF';
-    }
-    return normalMode;
 }
 
 // webpieces-disable no-function-outside-class -- the rule engine is inherently functional; validators can't be class members
@@ -243,9 +230,8 @@ async function runValidatorImpl(
     options: InjectAnnotationNotNeededForConcreteClassConfig,
     workspaceRoot: string,
 ): Promise<ExecutorResult> {
-    const mode: ModifiedCodeMode = resolveMode(options.mode ?? 'OFF', options.turnOffRuleUntilEpoch, (options.turnOffRuleWhileOnBranch ?? undefined));
+    const mode: ModifiedCodeMode = options.mode ?? 'OFF';
     const disableAllowed = options.disableAllowed ?? true;
-    const allowedPaths = options.allowedPaths ?? [];
 
     if (mode === 'OFF') {
         console.log(`\n⏭️  Skipping ${RULE_NAME} validation (mode: OFF)\n`);
@@ -278,10 +264,10 @@ async function runValidatorImpl(
 
     let violations: InjectViolation[] = [];
     if (mode === 'NEW_AND_MODIFIED_CODE') {
-        violations = findViolationsForModifiedCode(workspaceRoot, changedFiles, base, head, disableAllowed, allowedPaths);
+        violations = findViolationsForModifiedCode(workspaceRoot, changedFiles, base, head, disableAllowed);
     } else {
         // NEW_AND_MODIFIED_FILES and the whole-scope modes (#1027) all judge every site of every file.
-        violations = findViolationsForModifiedFiles(workspaceRoot, changedFiles, disableAllowed, allowedPaths);
+        violations = findViolationsForModifiedFiles(workspaceRoot, changedFiles, disableAllowed);
     }
 
     if (violations.length === 0) {

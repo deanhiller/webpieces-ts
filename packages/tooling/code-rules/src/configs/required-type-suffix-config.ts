@@ -1,4 +1,4 @@
-import { FieldDef, SchemaShape, BaseRuleConfig, BASE_RULE_SCHEMA } from '@webpieces/rules-sdk';
+import { FieldDef, SchemaShape, BaseRuleConfig } from '@webpieces/rules-sdk';
 import { ModifiedCodeMode, MODIFIED_CODE_MODES } from '@webpieces/rules-sdk';
 /**
  * One `required-type-suffix` entry: the path globs it covers and the suffixes a type exported from a
@@ -49,18 +49,15 @@ export class RequiredTypeSuffixEntry {
  * narrower one never applies there. A failure names the governing entry's glob, so a reader can see
  * which entry won.
  *
- * `allowedPaths` exempts whole trees inside `paths`. The per-site escape hatch is
+ * The framework-owned `excludePaths` exempts whole trees inside `paths`. The per-site escape hatch is
  * `// webpieces-disable required-type-suffix -- <reason>` on the declaration's line or the line above.
  */
 export class RequiredTypeSuffixConfig extends BaseRuleConfig {
     declare mode?: ModifiedCodeMode;
     entries!: RequiredTypeSuffixEntry[];
-    allowedPaths?: string[];
 
     static readonly SCHEMA: SchemaShape<RequiredTypeSuffixConfig> = {
         mode: new FieldDef('string', MODIFIED_CODE_MODES),
         entries: FieldDef.nonEmptyObjects(RequiredTypeSuffixEntry.SCHEMA),
-        allowedPaths: FieldDef.optional('string[]'),
-        ...BASE_RULE_SCHEMA,
     };
 }

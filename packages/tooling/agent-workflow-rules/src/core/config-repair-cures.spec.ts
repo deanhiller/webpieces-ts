@@ -5,7 +5,6 @@ import * as nodePath from 'path';
 
 import { policyFixture, specTempDirs } from '@webpieces/tooling-testkit';
 import {
-    BASE_RULE_SCHEMA,
     ConfigObject,
     FieldDef,
     OwnedRuleDefinition,
@@ -250,7 +249,7 @@ class NextRelease {
                           ...pack.ownedRules,
                           new OwnedRuleDefinition(
                               id,
-                              { mode: new FieldDef('string', ['ON', 'OFF']), ...BASE_RULE_SCHEMA },
+                              { mode: new FieldDef('string', ['ON', 'OFF']) }, // the registry merges the universal fields (#1253)
                               1,
                               {},
                               seed,

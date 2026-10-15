@@ -86,7 +86,6 @@ import { hasDisable, detectBase, getChangedFiles, getFileDiff, getChangedLineNum
 import { NoInlineTypeLiteralsConfig, InlineTypeMode } from "./configs/rule-configs";
 import { CodeValidator, ExecutorResult } from './code-validator';
 import { injectable, bindingScopeValues } from 'inversify';
-import { shouldSkipRule } from './resolve-mode';
 
 interface InlineTypeViolation {
     file: string;
@@ -524,28 +523,11 @@ function reportViolations(violations: InlineTypeViolation[], mode: InlineTypeMod
     console.error('');
 }
 
-/**
- * Resolve mode considering turnOffRuleUntilEpoch override.
- * When active, downgrades to OFF. When expired, logs a warning.
- */
-function resolveMode(normalMode: InlineTypeMode, epoch: number | undefined, branchPattern: string | undefined): InlineTypeMode {
-    if (normalMode === 'OFF') {
-        return normalMode;
-    }
-    const skip = shouldSkipRule(epoch, branchPattern);
-    if (skip.skip) {
-        console.log(`\n⏭️  Skipping no-inline-types validation (${skip.reason})`);
-        console.log('');
-        return 'OFF';
-    }
-    return normalMode;
-}
-
 async function runValidatorImpl(
     options: NoInlineTypeLiteralsConfig,
     workspaceRoot: string
 ): Promise<ExecutorResult> {
-    const mode: InlineTypeMode = resolveMode(options.mode ?? 'OFF', options.turnOffRuleUntilEpoch, (options.turnOffRuleWhileOnBranch ?? undefined));
+    const mode: InlineTypeMode = options.mode ?? 'OFF';
     const disableAllowed = options.disableAllowed ?? true;
 
     if (mode === 'OFF') {

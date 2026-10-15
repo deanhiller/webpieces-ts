@@ -4,7 +4,7 @@ import { execSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as ts from 'typescript';
-import { DiffScope, RuleFailError } from "@webpieces/rules-config";
+import { DiffScope, RuleFailError, RuleFileScope } from "@webpieces/rules-config";
 import { NoUtilityTypesInApiLibConfig } from "./configs/no-utility-types-config";
 
 import { ApiLibFile, ApiLibSite } from './api-lib-source-rule';
@@ -155,12 +155,12 @@ async function failureOf(run: () => Promise<unknown>): Promise<RuleFailError | u
 function rule(
     mode: 'NEW_AND_MODIFIED_CODE' | 'NEW_AND_MODIFIED_FILES' | 'OFF',
     paths: string[] = ['libraries/apis/**'],
-    allowedPaths?: string[],
+    excludePaths?: string[],
 ): NoUtilityTypesInApiLibValidator {
     const config = new NoUtilityTypesInApiLibConfig();
     config.mode = mode;
     config.paths = paths;
-    config.allowedPaths = allowedPaths;
+    config.excludePaths = excludePaths;
     return new NoUtilityTypesInApiLibValidator(config, new ProjectRoleResolver(), new DiffScope(), new GateScanScope());
 }
 
@@ -201,12 +201,15 @@ describe('no-utility-types-in-api-lib — the validator, end to end', () => {
             .toBeInstanceOf(RuleFailError);
     });
 
-    it('exempts `allowedPaths` and spec files', async () => {
+    // excludePaths is framework-owned (#1253): it is applied by the RuleFileScope the dispatcher runs the
+    // rule inside, so the rule run here goes through that scope exactly as the runtime does.
+    it('exempts the framework-owned `excludePaths` and spec files', async () => {
         repo.write('libraries/apis/lessons/src/Dtos.spec.ts', "export type Slim = Omit<Full, 'secret'>;\n");
         repo.write('libraries/apis/legacy/src/Dtos.ts', "export type Slim = Omit<Full, 'secret'>;\n");
 
-        expect(await failureOf(() => rule('NEW_AND_MODIFIED_FILES', ['libraries/apis/**'], ['libraries/apis/legacy/**'])
-            .run(repo.root))).toBeUndefined();
+        const scoped = rule('NEW_AND_MODIFIED_FILES', ['libraries/apis/**'], ['libraries/apis/legacy/**']);
+        expect(await failureOf(() => new RuleFileScope().runWithin(scoped.fileExclusions([]), () => scoped.run(repo.root))))
+            .toBeUndefined();
     });
 
     it('NEW_AND_MODIFIED_CODE grandfathers unchanged lines; NEW_AND_MODIFIED_FILES judges the whole changed file', async () => {

@@ -1,4 +1,4 @@
-import { FieldDef, SchemaShape, BaseRuleConfig, BASE_RULE_SCHEMA } from "@webpieces/rules-sdk";
+import { FieldDef, SchemaShape, BaseRuleConfig } from "@webpieces/rules-sdk";
 /**
  * The modes the two CONTRACT rules accept (#1017).
  *
@@ -29,8 +29,9 @@ export type ApiDocMode = typeof API_DOC_MODES[number];
  * construction: a contract that passes is one where adding `@ApiType(...)` then generates. A second
  * implementation would drift from the generator's on the first release that improved either.
  *
- * `allowedPaths` exempts whole project trees, with the same glob semantics every other rule's
- * `allowedPaths` uses. The per-site escape hatch is
+ * `allowedPaths` — globs over PROJECT ROOTS this rule skips (a whole project, matched against its root;
+ * not a file list). The framework-owned `excludePaths` every rule accepts (#1253) is NOT applied by this
+ * project scan yet — use `allowedPaths` to exempt a project (follow-up #1278). The per-site escape hatch is
  * `// webpieces-disable api-rules-for-openapi -- <reason>`, and the REASON is mandatory.
  *
  * An EXISTING `no-any-unknown` disable deliberately does not silence this rule. That rule asks
@@ -44,7 +45,6 @@ export class ApiRulesForOpenApiConfig extends BaseRuleConfig {
     static readonly SCHEMA: SchemaShape<ApiRulesForOpenApiConfig> = {
         mode: new FieldDef('string', API_DOC_MODES),
         allowedPaths: FieldDef.optional('string[]'),
-        ...BASE_RULE_SCHEMA,
     };
 }
 
@@ -67,6 +67,5 @@ export class ApiRulesForMcpConfig extends BaseRuleConfig {
     static readonly SCHEMA: SchemaShape<ApiRulesForMcpConfig> = {
         mode: new FieldDef('string', API_DOC_MODES),
         allowedPaths: FieldDef.optional('string[]'),
-        ...BASE_RULE_SCHEMA,
     };
 }

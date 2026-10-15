@@ -24,7 +24,6 @@ import { hasDisable, detectBase, getChangedFiles, getFileDiff, getChangedLineNum
 import { RequireReturnTypeConfig, ReturnTypeMode } from "./configs/rule-configs";
 import { CodeValidator, ExecutorResult } from './code-validator';
 import { injectable, bindingScopeValues } from 'inversify';
-import { shouldSkipRule } from './resolve-mode';
 
 interface MethodViolation {
     file: string;
@@ -269,28 +268,11 @@ function reportViolations(violations: MethodViolation[], mode: ReturnTypeMode): 
     console.error('');
 }
 
-/**
- * Resolve mode considering turnOffRuleUntilEpoch override.
- * When active, downgrades to OFF. When expired, logs a warning.
- */
-function resolveMode(normalMode: ReturnTypeMode, epoch: number | undefined, branchPattern: string | undefined): ReturnTypeMode {
-    if (normalMode === 'OFF') {
-        return normalMode;
-    }
-    const skip = shouldSkipRule(epoch, branchPattern);
-    if (skip.skip) {
-        console.log(`\n⏭️  Skipping require-return-type validation (${skip.reason})`);
-        console.log('');
-        return 'OFF';
-    }
-    return normalMode;
-}
-
 async function runValidatorImpl(
     options: RequireReturnTypeConfig,
     workspaceRoot: string
 ): Promise<ExecutorResult> {
-    const mode: ReturnTypeMode = resolveMode(options.mode ?? 'NEW_METHODS', options.turnOffRuleUntilEpoch, (options.turnOffRuleWhileOnBranch ?? undefined));
+    const mode: ReturnTypeMode = options.mode ?? 'NEW_METHODS';
     const disableAllowed = options.disableAllowed ?? true;
 
     if (mode === 'OFF') {

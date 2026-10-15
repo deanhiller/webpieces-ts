@@ -22,4 +22,11 @@ describe('rules SDK remains a pure leaf', () => {
         expect(BASE_RULE_SCHEMA.turnOffRuleWhileOnBranch.nullable).toBe(true);
         expect(FieldDef.optional('number').optional).toBe(true);
     });
+
+    it('owns the path exclusion and the rationale as OPTIONAL universal fields (#1253)', () => {
+        expect(BASE_RULE_SCHEMA.excludePaths.type).toBe('string[]');
+        expect(BASE_RULE_SCHEMA.excludePaths.optional).toBe(true);
+        expect(BASE_RULE_SCHEMA.reason.type).toBe('string');
+        expect(BASE_RULE_SCHEMA.reason.optional).toBe(true);
+    });
 });

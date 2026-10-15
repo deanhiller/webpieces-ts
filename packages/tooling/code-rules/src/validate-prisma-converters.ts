@@ -52,7 +52,6 @@ import { hasDisable, detectBase, getChangedFiles, getFileDiff, getChangedLineNum
 import { PrismaConverterConfig, PrismaConverterMode } from "./configs/rule-configs";
 import { CodeValidator, ExecutorResult } from './code-validator';
 import { injectable, bindingScopeValues } from 'inversify';
-import { shouldSkipRule } from './resolve-mode';
 
 interface PrismaConverterViolation {
     file: string;
@@ -674,32 +673,11 @@ function validateChangedFiles(
     return { success: false };
 }
 
-/**
- * Resolve mode considering turnOffRuleUntilEpoch override.
- * When active, downgrades to OFF. When expired, logs a warning.
- */
-function resolvePrismaConverterMode(
-    normalMode: PrismaConverterMode,
-    epoch: number | undefined,
-    branchPattern: string | undefined
-): PrismaConverterMode {
-    if (normalMode === 'OFF') {
-        return normalMode;
-    }
-    const skip = shouldSkipRule(epoch, branchPattern);
-    if (skip.skip) {
-        console.log(`\n⏭️  Skipping prisma-converter validation (${skip.reason})`);
-        console.log('');
-        return 'OFF';
-    }
-    return normalMode;
-}
-
 async function runValidatorImpl(
     options: PrismaConverterConfig,
     workspaceRoot: string
 ): Promise<ExecutorResult> {
-    const mode = resolvePrismaConverterMode(options.mode ?? 'OFF', options.turnOffRuleUntilEpoch, (options.turnOffRuleWhileOnBranch ?? undefined));
+    const mode = options.mode ?? 'OFF';
 
     if (mode === 'OFF') {
         console.log('\n⏭️  Skipping prisma-converter validation (mode: OFF)');

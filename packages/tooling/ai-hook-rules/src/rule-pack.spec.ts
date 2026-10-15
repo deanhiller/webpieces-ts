@@ -28,9 +28,15 @@ describe('ai-hook-rules compatibility manifest', () => {
 });
 
 it('preserves every existing owned schema, optional knob, and reviewed seed', () => {
+    // The baseline records the schema config is VALIDATED against: the owner's fields plus the
+    // framework-owned universal fields the registry merges in (#1253).
+    const own = rulePackManifest.contributions.filter(
+        (contribution) => contribution.ownerPack === rulePackManifest.packageName,
+    );
+    const registry = new RulePackRegistry([{ ...rulePackManifest, contributions: own }]);
     for (const [id, previous] of Object.entries(baseline)) {
         const rule = rulePackManifest.ownedRules.find((rule) => rule.id === id)!;
-        expect(rule.schema).toEqual(previous.schema);
+        expect(registry.schemaFor(id)).toEqual(previous.schema);
         expect(rule.optionalTuning).toEqual(previous.optionalTuning);
         expect(rule.recommendedSeed).toEqual(previous.recommendedSeed);
     }
@@ -51,13 +57,13 @@ it('requires explicit settings for every owned policy, including future addition
         );
         expect(
             Object.keys(rule.optionalTuning).every(
-                (key) => key !== 'mode' && rule.schema[key].optional,
+                (key) => key !== 'mode' && registry.schemaFor(rule.id)[key].optional,
             ),
         ).toBe(true);
         expect(
             registry.validateRuleConfig(rule.id, { ...rule.recommendedSeed, mode: 'OFF' }),
         ).toEqual([]);
-        for (const [field, definition] of Object.entries(rule.schema)) {
+        for (const [field, definition] of Object.entries(registry.schemaFor(rule.id))) {
             if (definition.optional) continue;
             const incomplete = { ...rule.recommendedSeed, mode: 'OFF' };
             delete incomplete[field];

@@ -17,7 +17,7 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
-import { hasDisable, matchesAnyGlob, Option, RuleFailError } from "@webpieces/rules-config";
+import { hasDisable, matchesAnyGlob, Option, RuleFailError, RuleFileScope } from "@webpieces/rules-config";
 import { FrameworkPackagesConfig, FrameworkPackagesEntry } from "./configs/tag-truth-configs";
 import { injectable, bindingScopeValues } from 'inversify';
 import { CodeValidator, ExecutorResult } from './code-validator';
@@ -69,6 +69,8 @@ export class FrameworkPackagesAudit {
     /** Every bare-package import in a project's production source, nested projects excluded. */
     private importsOf(workspaceRoot: string, dir: string, projectDirs: ReadonlySet<string>): ImportSite[] {
         const sites: ImportSite[] = [];
+        // A directory walk bypasses DiffScope, so the framework's path exclusions (#1253) are asked here.
+        const scope = new RuleFileScope();
         const walk = (absDir: string): void => {
             for (const entry of fs.readdirSync(absDir, { withFileTypes: true })) {
                 const abs = path.join(absDir, entry.name);
@@ -77,7 +79,7 @@ export class FrameworkPackagesAudit {
                     if (SKIP_DIRS.has(entry.name) || entry.name === '__tests__' || projectDirs.has(rel)) continue;
                     if (fs.existsSync(path.join(abs, 'project.json'))) continue; // a nested project is judged on its own
                     walk(abs);
-                } else if (/\.(ts|tsx|mts|cts)$/.test(entry.name) && !/\.d\.ts$/.test(entry.name) && !this.isTestFile(entry.name)) {
+                } else if (/\.(ts|tsx|mts|cts)$/.test(entry.name) && !/\.d\.ts$/.test(entry.name) && !this.isTestFile(entry.name) && !scope.isExcluded(rel)) {
                     sites.push(...this.sitesIn(abs, rel));
                 }
             }

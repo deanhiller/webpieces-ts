@@ -1,6 +1,7 @@
 import { RuleContribution, RulePackManifest, RULE_PACK_API_VERSION } from '@webpieces/rules-sdk';
 import { ownedRules, SOURCE_POLICIES, SourcePolicy } from './source-policy-registry';
 import { version } from '../package.json';
+import { ruleMigrations } from './rule-migrations';
 
 export const rulePackManifest = new RulePackManifest(
     '@webpieces/ai-hook-rules',
@@ -16,6 +17,6 @@ export const rulePackManifest = new RulePackManifest(
                 '@webpieces/ai-hook-rules/rule-runtime',
             ),
     ),
-    [],
+    ruleMigrations,
     [],
 );

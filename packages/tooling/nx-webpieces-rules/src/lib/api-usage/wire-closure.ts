@@ -26,7 +26,7 @@ import { WireSuffixEntry } from './wire-suffix-entry';
 import { ProjectInfo } from '../project-info';
 import { resolveRole } from '../role-resolver';
 import { RuleGate } from '../rule-gate';
-import { DiffScope } from '@webpieces/rules-config';
+import { DiffScope, RuleFileExclusions } from '@webpieces/rules-config';
 import { ModifiedCodeMode } from '@webpieces/rules-sdk';
 import { WireSuffixScope } from './wire-suffix-scope';
 
@@ -51,13 +51,18 @@ export class WireClosureRule {
         if (new RuleGate().skipReason(workspaceRoot, 'required-type-suffix', true) !== null) {
             return WireClosureRule.withoutSuffixes();
         }
-        const rule = loadAndValidate(workspaceRoot).resolved.rules.get('required-type-suffix')!;
+        const loaded = loadAndValidate(workspaceRoot);
+        const rule = loaded.resolved.rules.get('required-type-suffix')!;
         return new WireClosureRule(
             rule.options['entries'] as WireSuffixEntry[],
             new WireSuffixScope(
                 workspaceRoot,
                 rule.options['mode'] as ModifiedCodeMode,
-                (rule.options['allowedPaths'] as string[] | undefined) ?? [],
+                new RuleFileExclusions(
+                    'required-type-suffix',
+                    loaded.excludePaths.paths,
+                    (rule.options['excludePaths'] as string[] | undefined) ?? [],
+                ),
                 new DiffScope(),
             ),
         );

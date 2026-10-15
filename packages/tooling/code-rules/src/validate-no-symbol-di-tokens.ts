@@ -16,7 +16,7 @@
  * ALLOWED
  * ============================================================================
  *
- * - Files under allowedPaths (configured in webpieces.config.json, defaults to [])
+ * - Files under the rule's `excludePaths` or the top-level one (dropped by the framework)
  * - Test files (*.test.ts, *.spec.ts, __tests__/**)
  * - Lines with // webpieces-disable no-symbol-di-tokens -- <reason> (when disableAllowed: true)
  *
@@ -42,7 +42,6 @@ import { NoSymbolDiTokensConfig } from "./configs/rule-configs";
 import { ModifiedCodeMode } from '@webpieces/rules-sdk';
 import { CodeValidator, ExecutorResult } from './code-validator';
 import { injectable, bindingScopeValues } from 'inversify';
-import { shouldSkipRule } from './resolve-mode';
 import { ScanScope } from './scan-scope';
 
 const SYMBOL_DI_REGEX = /=\s*Symbol(?:\.for)?\(/;
@@ -77,47 +76,6 @@ function isTestFile(filePath: string): boolean {
         filePath.includes('__tests__/');
 }
 
-function globToRegex(pattern: string): RegExp {
-    let re = '';
-    let i = 0;
-    while (i < pattern.length) {
-        const ch = pattern[i];
-        if (ch === '*') {
-            if (pattern[i + 1] === '*') {
-                re += '.*';
-                i += 2;
-                if (pattern[i] === '/') i += 1;
-                continue;
-            }
-            re += '[^/]*';
-            i += 1;
-            continue;
-        }
-        if (ch === '?') {
-            re += '[^/]';
-            i += 1;
-            continue;
-        }
-        if ('.+^$(){}|[]\\'.includes(ch)) {
-            re += '\\' + ch;
-            i += 1;
-            continue;
-        }
-        re += ch;
-        i += 1;
-    }
-    return new RegExp('^' + re + '$');
-}
-
-function isAllowedPath(filePath: string, allowedPaths: string[]): boolean {
-    for (const pattern of allowedPaths) {
-        if (globToRegex(pattern).test(filePath)) {
-            return true;
-        }
-    }
-    return false;
-}
-
 function stripLineComments(line: string): string {
     const idx = line.indexOf('//');
     if (idx === -1) return line;
@@ -139,10 +97,8 @@ export function findSymbolViolationsInFile(
     filePath: string,
     workspaceRoot: string,
     disableAllowed: boolean,
-    allowedPaths: string[],
 ): SymbolViolationInfo[] {
     if (isTestFile(filePath)) return [];
-    if (isAllowedPath(filePath, allowedPaths)) return [];
 
     const fullPath = path.join(workspaceRoot, filePath);
     if (!fs.existsSync(fullPath)) return [];
@@ -177,7 +133,6 @@ function findViolationsForModifiedCode(
     base: string,
     head: string | undefined,
     disableAllowed: boolean,
-    allowedPaths: string[],
 ): SymbolViolation[] {
     const violations: SymbolViolation[] = [];
 
@@ -187,7 +142,7 @@ function findViolationsForModifiedCode(
 
         if (changedLines.size === 0) continue;
 
-        const allViolations = findSymbolViolationsInFile(file, workspaceRoot, disableAllowed, allowedPaths);
+        const allViolations = findSymbolViolationsInFile(file, workspaceRoot, disableAllowed);
 
         for (const v of allViolations) {
             if (disableAllowed && v.hasDisableComment) continue;
@@ -204,12 +159,11 @@ function findViolationsForModifiedFiles(
     workspaceRoot: string,
     changedFiles: string[],
     disableAllowed: boolean,
-    allowedPaths: string[],
 ): SymbolViolation[] {
     const violations: SymbolViolation[] = [];
 
     for (const file of changedFiles) {
-        const allViolations = findSymbolViolationsInFile(file, workspaceRoot, disableAllowed, allowedPaths);
+        const allViolations = findSymbolViolationsInFile(file, workspaceRoot, disableAllowed);
 
         for (const v of allViolations) {
             if (disableAllowed && v.hasDisableComment) continue;
@@ -245,27 +199,13 @@ function reportViolations(violations: SymbolViolation[], mode: ModifiedCodeMode,
     console.error('');
 }
 
-function resolveMode(normalMode: ModifiedCodeMode, epoch: number | undefined, branchPattern: string | undefined): ModifiedCodeMode {
-    if (normalMode === 'OFF') {
-        return normalMode;
-    }
-    const skip = shouldSkipRule(epoch, branchPattern);
-    if (skip.skip) {
-        console.log(`\n⏭️  Skipping no-symbol-di-tokens validation (${skip.reason})`);
-        console.log('');
-        return 'OFF';
-    }
-    return normalMode;
-}
-
 async function runValidatorImpl(
     scan: ScanScope,
     options: NoSymbolDiTokensConfig,
     workspaceRoot: string,
 ): Promise<ExecutorResult> {
-    const mode: ModifiedCodeMode = resolveMode(options.mode ?? 'OFF', options.turnOffRuleUntilEpoch, (options.turnOffRuleWhileOnBranch ?? undefined));
+    const mode: ModifiedCodeMode = options.mode ?? 'OFF';
     const disableAllowed = options.disableAllowed ?? true;
-    const allowedPaths = options.allowedPaths ?? [];
 
     if (mode === 'OFF') {
         console.log('\n⏭️  Skipping no-symbol-di-tokens validation (mode: OFF)');
@@ -305,10 +245,10 @@ async function runValidatorImpl(
     let violations: SymbolViolation[] = [];
 
     if (mode === 'NEW_AND_MODIFIED_CODE') {
-        violations = findViolationsForModifiedCode(workspaceRoot, changedFiles, base, head, disableAllowed, allowedPaths);
+        violations = findViolationsForModifiedCode(workspaceRoot, changedFiles, base, head, disableAllowed);
     } else {
         // NEW_AND_MODIFIED_FILES and the whole-scope modes (#1027) all judge every site of every file.
-        violations = findViolationsForModifiedFiles(workspaceRoot, changedFiles, disableAllowed, allowedPaths);
+        violations = findViolationsForModifiedFiles(workspaceRoot, changedFiles, disableAllowed);
     }
 
     if (violations.length === 0) {

@@ -1,8 +1,9 @@
 import { WEBPIECES_TMP_DIR } from '@webpieces/tooling-common';
 
-// Top-level `excludePaths` block from webpieces.config.json: ONE glob list that suppresses hook
-// enforcement for matching files (matched against the workspace-relative path). A path listed here is
-// hands-off for everything — code-style rules AND file-scoped guards alike.
+// Top-level `excludePaths` block from webpieces.config.json: ONE glob list of paths no rule judges
+// (matched against the workspace-relative path by globMatches). A path listed here is hands-off for
+// everything — hook rules, file-scoped guards, AND the build's code rules, which the code-rules runtime
+// filters through RuleFileScope (#1253). One meaning, both engines.
 //
 // It used to be TWO independently-varying lists, `rules` and `guards`. The split never earned its
 // keep: every consumer set both to the same value, and the one case that would need them to differ

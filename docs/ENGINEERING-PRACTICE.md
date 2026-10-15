@@ -268,7 +268,8 @@ Interpretation, and this is the part orgs get backwards:
 
 - **A handful of suppressions** — the escape hatch working as designed. Ignore.
 - **A rule suppressed in a specific *cluster*** (one package, one layer) — the rule is right but its
-  scope is wrong. Add an `allowedPaths` entry, as `no-symbol-di-tokens` does for `libraries/apis/**`.
+  scope is wrong. Add an `excludePaths` entry to that rule, as `no-symbol-di-tokens` does for
+  `libraries/apis/**` — every rule accepts one, and the framework applies it (#1253).
 - **A rule suppressed in the *hundreds*, spread across the repo** — the rule is miscalibrated, and the
   org is paying a per-file annotation tax to keep a rule that is not describing the codebase it
   guards. **Fix the rule, not the files.** In this repository `no-any-unknown` and
@@ -323,7 +324,7 @@ A sequence that does not produce a revolt:
    with the largest payoff and the largest cultural cost, because it forbids the reflex the whole
    industry has trained. Introduce it with
    [`architecture/testing-philosophy.md`](./architecture/testing-philosophy.md), not with a lint error.
-6. **Review the census quarterly.** Delete rules nobody obeys. Widen `allowedPaths` where the
+6. **Review the census quarterly.** Delete rules nobody obeys. Widen a rule's `excludePaths` where the
    suppressions cluster. The rule set is a living artifact; a static one rots into ceremony.
 
 ---

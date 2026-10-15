@@ -8,6 +8,7 @@ import { NoClientCreationOutsideServerOrClientConfig } from "./configs/no-client
 import { NoClientCreationOutsideServerOrClientValidator } from './validate-no-client-creation-outside-server-or-client';
 import { ProjectRoleResolver } from './project-role-resolver';
 import { GateScanScope } from './scan-scope';
+import { RuleFileScope } from '@webpieces/rules-config';
 
 function git(root: string, cmd: string): string {
     // core.hooksPath=/dev/null keeps machine-global git hooks out of the throwaway test repo.
@@ -123,9 +124,11 @@ describe('NoClientCreationOutsideServerOrClientValidator', () => {
         expect(result.success).toBe(true);
     });
 
-    it('exempts files under allowedPaths', async () => {
+    // excludePaths is framework-owned (#1253): the dispatcher runs the rule inside a RuleFileScope.
+    it('exempts files under the framework-owned excludePaths', async () => {
         addProject('libs/core-angular', 'lib', 'src/wiring.ts', RPC_CALL);
-        const result = await validator(config({ severity: 'error', allowedPaths: ['libs/core-angular/**'] })).run(root);
+        const v = validator(config({ severity: 'error', excludePaths: ['libs/core-angular/**'] }));
+        const result = await new RuleFileScope().runWithin(v.fileExclusions([]), () => v.run(root));
         expect(result.success).toBe(true);
     });
 

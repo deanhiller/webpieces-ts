@@ -1,11 +1,18 @@
 import { ConfigObject } from './rule-pack';
 
-/** Validated owner settings, restricted to the policies supplied by this runtime module. */
+/**
+ * Validated owner settings, restricted to the policies supplied by this runtime module.
+ *
+ * `excludePaths` is the repo's top-level `excludePaths` (webpieces.config.json): globs no rule — build or
+ * hook — judges. A runtime applies it, together with each rule's own `excludePaths`, to every file its
+ * rules list (#1253); it is passed explicitly so a runtime never re-reads the config to find it.
+ */
 export class PolicyRuntimeRequest {
     constructor(
         readonly workspaceRoot: string,
         readonly configs: Readonly<Record<string, ConfigObject>>,
         readonly ruleIds: readonly string[],
+        readonly excludePaths: readonly string[],
     ) {}
 }
 

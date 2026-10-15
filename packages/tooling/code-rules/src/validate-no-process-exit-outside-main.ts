@@ -26,7 +26,6 @@ import { NoProcessExitOutsideMainConfig } from "./configs/rule-configs";
 import { ModifiedCodeMode } from '@webpieces/rules-sdk';
 import { CodeValidator, ExecutorResult } from './code-validator';
 import { injectable, bindingScopeValues } from 'inversify';
-import { shouldSkipRule } from './resolve-mode';
 import { ScanScope } from './scan-scope';
 
 const INSTRUCT_FILE = 'webpieces.noexitinmain.md';
@@ -153,23 +152,13 @@ function reportViolations(workspaceRoot: string, violations: ExitViolation[], mo
     console.error(`\n   Current mode: ${mode}\n`);
 }
 
-function resolveMode(normalMode: ModifiedCodeMode, epoch: number | undefined, branchPattern: string | undefined): ModifiedCodeMode {
-    if (normalMode === 'OFF') return normalMode;
-    const skip = shouldSkipRule(epoch, branchPattern);
-    if (skip.skip) {
-        console.log(`\n⏭️  Skipping no-process-exit-outside-main validation (${skip.reason})\n`);
-        return 'OFF';
-    }
-    return normalMode;
-}
-
 // webpieces-disable no-function-outside-class -- the rule engine is inherently functional; validators can't be class members
 async function runValidatorImpl(
     scan: ScanScope,
     options: NoProcessExitOutsideMainConfig,
     workspaceRoot: string,
 ): Promise<ExecutorResult> {
-    const mode: ModifiedCodeMode = resolveMode(options.mode ?? 'OFF', options.turnOffRuleUntilEpoch, (options.turnOffRuleWhileOnBranch ?? undefined));
+    const mode: ModifiedCodeMode = options.mode ?? 'OFF';
     const disableAllowed = options.disableAllowed ?? true;
 
     if (mode === 'OFF') {

@@ -32,11 +32,17 @@ vi.mock('@webpieces/rules-config', async (importOriginal: () => Promise<RulesCon
     return {
         ...actual,
         // Only the FILE READ is faked. shouldSkipRule, the thing under test, stays the real one.
-        loadAndValidate: (): { resolved: InstanceType<typeof actual.ResolvedConfig> } => {
+        loadAndValidate: (): {
+            resolved: InstanceType<typeof actual.ResolvedConfig>;
+            excludePaths: InstanceType<typeof actual.ExcludePaths>;
+        } => {
             const rules = new Map(
                 Array.from(configState.rules, ([name, options]) => [name, new actual.ResolvedRuleConfig(options)]),
             );
-            return { resolved: new actual.ResolvedConfig(rules, new Set<string>(), [], null) };
+            return {
+                resolved: new actual.ResolvedConfig(rules, new Set<string>(), [], null),
+                excludePaths: new actual.ExcludePaths([]),
+            };
         },
     };
 });

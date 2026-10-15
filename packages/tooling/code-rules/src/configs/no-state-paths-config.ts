@@ -1,4 +1,4 @@
-import { FieldDef, SchemaShape, BaseRuleConfig, BASE_RULE_SCHEMA } from "@webpieces/rules-sdk";
+import { FieldDef, SchemaShape, BaseRuleConfig } from "@webpieces/rules-sdk";
 import { ModifiedCodeMode, MODIFIED_CODE_MODES } from "@webpieces/rules-sdk";
 /**
  * The template dirs `no-state-paths-in-templates` looks at when a repo has not said otherwise:
@@ -45,6 +45,5 @@ export class NoStatePathsInTemplatesConfig extends BaseRuleConfig {
         disableAllowed: FieldDef.optional('boolean'),
         templateDirs: FieldDef.optional('string[]'),
         bannedPathPrefixes: FieldDef.optional('string[]'),
-        ...BASE_RULE_SCHEMA,
     };
 }

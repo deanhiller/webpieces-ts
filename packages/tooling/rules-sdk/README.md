@@ -14,6 +14,11 @@ rule/execution kind. Different execution kinds may implement the same owned poli
 from `@webpieces/rules-sdk`. Configuration values remain explicit: required fields have no fallback,
 including required mode and universal escape-hatch fields. Concrete mode enums belong to their owners.
 
+`BASE_RULE_SCHEMA` holds the FRAMEWORK-OWNED universal fields (`turnOffRuleUntilEpoch`,
+`turnOffRuleWhileOnBranch`, optional `excludePaths`, optional `reason`, #1253). A pack schema never
+declares or spreads them: the registry merges them into every owned rule and refuses a pack that names
+one, and the dispatchers apply them, so a new rule gets the hatches and path exclusions with no code.
+
 Shared `FILE_LIMIT_MODES`, `MODIFIED_CODE_MODES`, and `ON_OFF_MODES` scope vocabulary is exported with its union types. These are supported values; they do not choose a rule mode or supply configuration defaults.
 
 A recommended seed is written into a client config for review; it never answers omitted required settings

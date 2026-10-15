@@ -1,5 +1,5 @@
 import { OnOffMode, ON_OFF_MODES } from "@webpieces/rules-sdk";
-import { BaseRuleConfig, BASE_RULE_SCHEMA } from "@webpieces/rules-sdk";
+import { BaseRuleConfig } from "@webpieces/rules-sdk";
 import { FieldDef, SchemaShape } from "@webpieces/rules-sdk";
 // branch-creation-guard modes. ON_NO_SUBBRANCHES is the strict variant: it hard-blocks
 // creating a branch off any non-main branch (no sub-branch affordance), pointing the agent
@@ -55,7 +55,6 @@ export class BranchCreationGuardConfig extends BaseRuleConfig {
         maxLocalBranches: FieldDef.optional('number'),
         maxWorktrees: FieldDef.optional('number'),
         autoReapMergedBranches: new FieldDef('boolean'),
-        ...BASE_RULE_SCHEMA,
     };
 }
 
@@ -93,6 +92,5 @@ export class PrLifecycleGuardConfig extends BaseRuleConfig {
 
     static readonly SCHEMA: SchemaShape<PrLifecycleGuardConfig> = {
         mode: new FieldDef('string', ON_OFF_MODES),
-        ...BASE_RULE_SCHEMA,
     };
 }

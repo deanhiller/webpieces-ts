@@ -41,7 +41,6 @@ import { hasDisable, detectBase, getChangedFiles, getFileDiff, getChangedLineNum
 import { AngularNoDirectApiInResolverConfig, DirectApiResolverMode } from "./configs/rule-configs";
 import { CodeValidator, ExecutorResult } from './code-validator';
 import { injectable, bindingScopeValues } from 'inversify';
-import { shouldSkipRule } from './resolve-mode';
 
 interface Violation {
     file: string;
@@ -484,23 +483,6 @@ function reportViolations(violations: Violation[], mode: DirectApiResolverMode, 
 }
 
 /**
- * Resolve mode considering turnOffRuleUntilEpoch override.
- * When active, downgrades to OFF. When expired, logs a warning.
- */
-function resolveMode(normalMode: DirectApiResolverMode, epoch: number | undefined, branchPattern: string | undefined): DirectApiResolverMode {
-    if (normalMode === 'OFF') {
-        return normalMode;
-    }
-    const skip = shouldSkipRule(epoch, branchPattern);
-    if (skip.skip) {
-        console.log(`\n\u23ed\ufe0f  Skipping no-direct-api-resolver validation (${skip.reason})`);
-        console.log('');
-        return 'OFF';
-    }
-    return normalMode;
-}
-
-/**
  * Filter changed files to only those under enforcePaths (if configured).
  */
 function filterByEnforcePaths(changedFiles: string[], enforcePaths: string[] | undefined): string[] {
@@ -525,7 +507,7 @@ async function runValidatorImpl(
     options: AngularNoDirectApiInResolverConfig,
     workspaceRoot: string
 ): Promise<ExecutorResult> {
-    const mode: DirectApiResolverMode = resolveMode(options.mode ?? 'OFF', options.turnOffRuleUntilEpoch, (options.turnOffRuleWhileOnBranch ?? undefined));
+    const mode: DirectApiResolverMode = options.mode ?? 'OFF';
     const disableAllowed = options.disableAllowed ?? true;
 
     if (mode === 'OFF') {

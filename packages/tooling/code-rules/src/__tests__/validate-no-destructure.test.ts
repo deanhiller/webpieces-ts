@@ -6,9 +6,10 @@ import * as path from 'path';
 import { findDestructuringInFile } from '../validate-no-destructure';
 
 
-// allowedPaths is the ONLY escape when disableAllowed is false — that setting deliberately converts a
-// disabled violation back into a reported one — so every case below runs with disableAllowed: false.
-// Testing with disableAllowed: true would pass even with the exemption missing.
+// Every case runs with disableAllowed: false, the setting under which a path exclusion is the ONLY
+// escape. That exclusion is no longer the rule's: the framework-owned excludePaths drops the file from
+// the rule's listing before it runs (#1253, proven in rule-exclusions.spec.ts), so the rule judges
+// every file it is handed.
 
 const RN_COMPONENT = [
     'export function Transport(props: Props) {',
@@ -18,7 +19,7 @@ const RN_COMPONENT = [
     'export function Bar(props2: { onPlay: () => void }) { return props2; }',
 ].join('\n');
 
-describe('findDestructuringInFile — allowedPaths', () => {
+describe('findDestructuringInFile — judges every file it is handed', () => {
     let tmpDir: string;
 
     beforeEach(() => {
@@ -36,36 +37,18 @@ describe('findDestructuringInFile — allowedPaths', () => {
         return relativePath;
     }
 
-    it('flags React idiom when the file is NOT in allowedPaths', () => {
+    it('flags the React idiom', () => {
         const file = writeFile('src/service.ts', RN_COMPONENT);
-        expect(findDestructuringInFile(file, tmpDir, false, [])).toHaveLength(1);
+        expect(findDestructuringInFile(file, tmpDir, false)).toHaveLength(1);
     });
 
-    it('ignores a file matched by an allowedPaths glob (React Native tree)', () => {
-        const file = writeFile('mobile/lang-android/Transport.tsx', RN_COMPONENT);
-        expect(findDestructuringInFile(file, tmpDir, false, ['mobile/**'])).toHaveLength(0);
-    });
-
-    it('ignores a file under an allowedPaths directory prefix', () => {
-        const file = writeFile('mobile/lang-android/hooks/useThing.ts', RN_COMPONENT);
-        expect(findDestructuringInFile(file, tmpDir, false, ['mobile/lang-android'])).toHaveLength(0);
-    });
-
-    it('exempts a destructured function parameter under allowedPaths', () => {
+    it('flags a destructured function parameter', () => {
         const src = 'export function Transport({ onPlay }: Props) { return onPlay; }\n';
-        expect(findDestructuringInFile(writeFile('src/svc.ts', src), tmpDir, false, [])).toHaveLength(1);
-        expect(findDestructuringInFile(writeFile('mobile/ui/Comp.tsx', src), tmpDir, false, ['mobile/**'])).toHaveLength(0);
+        expect(findDestructuringInFile(writeFile('src/svc.ts', src), tmpDir, false)).toHaveLength(1);
     });
 
-    it('still flags a file outside the allowedPaths glob', () => {
-        const file = writeFile('apps/server/thing.ts', RN_COMPONENT);
-        expect(findDestructuringInFile(file, tmpDir, false, ['mobile/**'])).toHaveLength(1);
-    });
-
-    it('matches on the repo-relative path, not the absolute one', () => {
-        // A guard applied after path.join(workspaceRoot, file) would never match `mobile/**`.
-        const file = writeFile('mobile/deep/nested/Comp.tsx', RN_COMPONENT);
-        expect(path.isAbsolute(file)).toBe(false);
-        expect(findDestructuringInFile(file, tmpDir, false, ['mobile/**'])).toHaveLength(0);
+    it('applies no path exemption of its own — a React Native tree is excluded by excludePaths upstream', () => {
+        const file = writeFile('mobile/lang-android/Transport.tsx', RN_COMPONENT);
+        expect(findDestructuringInFile(file, tmpDir, false)).toHaveLength(1);
     });
 });

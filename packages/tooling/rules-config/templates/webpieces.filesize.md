@@ -164,19 +164,20 @@ These trees are exempt with **no configuration at all**:
 **/__generated__/**   **/generated/**   **/*.generated.ts   **/*.generated.tsx   dist
 ```
 
-For any other tree the repo does not author, add it to `allowedPaths` — which ADDS to the list above
-rather than replacing it:
+For any other tree the repo does not author, add it to the rule's `excludePaths` — a framework field
+every rule accepts (#1253) — which ADDS to the list above rather than replacing it. A tree no rule at all
+should judge (codegen output, vendored code) belongs in the TOP-LEVEL `excludePaths` instead:
 
 ```jsonc
 "max-file-lines": {
   "limit": 900,
   "mode": "NEW_AND_MODIFIED_FILES",
   "disableAllowed": false,
-  "allowedPaths": ["**/__generated__/**", "libraries/vendor-sdk/**"]
+  "excludePaths": ["**/__generated__/**", "libraries/vendor-sdk/**"]
 }
 ```
 
-**Never list hand-written code in `allowedPaths`.** It is for files whose size is not yours to
+**Never list hand-written code in `excludePaths`.** It is for files whose size is not yours to
 control; a long file you wrote gets refactored, per the rest of this doc.
 
 ## Escape Hatch

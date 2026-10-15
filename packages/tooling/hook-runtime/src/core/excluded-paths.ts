@@ -3,7 +3,7 @@ import * as path from 'path';
 import { ExcludePaths, isWebpiecesStateDir } from '@webpieces/rules-config';
 
 import { EffectiveTree } from './effective-tree';
-import { globMatches } from './glob';
+import { globMatches } from '@webpieces/rules-config';
 import { GovernedPath } from './target-tree';
 import type { Rule } from './types';
 
@@ -35,7 +35,10 @@ export function filterByExcludedPaths(rules: readonly Rule[], governed: Governed
     // revertable in the tree it belongs to.
     if (isWebpiecesStateDir(governed.treeRelativePath)) return [];
     if (ex.paths.some((p: string): boolean => globMatches(p, governed.relativePath))) return [];
-    return rules;
+    // Then each rule's OWN `excludePaths` (#1253) — the same globs, the same matcher, applied here once
+    // so no rule filters its own paths. `.webpieces/` and the top-level list above drop every rule; this
+    // drops only the rule whose entry names the path.
+    return rules.filter((rule: Rule): boolean => !rule.excludesPath(governed.relativePath));
 }
 
 /**

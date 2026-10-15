@@ -1,10 +1,9 @@
 import * as nodePath from 'path';
 
-import { ExcludePaths } from '@webpieces/rules-config';
+import { ExcludePaths, globMatches } from '@webpieces/rules-config';
 
 import { CommandScanner } from '@webpieces/hook-runtime';
 import { ExcludedPathEscapeHint, ExcludedPathEscapeScan, ExcludedPathReference } from './excluded-path-escape';
-import {  globMatches  } from '@webpieces/hook-runtime';
 
 const ROOT = '/repo';
 

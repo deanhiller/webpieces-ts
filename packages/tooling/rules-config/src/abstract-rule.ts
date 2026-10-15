@@ -1,6 +1,7 @@
 import { BaseRuleConfig } from '@webpieces/rules-sdk';
 
 import { shouldSkipRule } from './skip-rule';
+import { RuleFileExclusions } from './rule-file-scope';
 
 /**
  * Shared base for every rule in BOTH packages (ai-hook-rules and code-rules). A rule is
@@ -33,10 +34,27 @@ import { shouldSkipRule } from './skip-rule';
 export abstract class AbstractRule<C extends BaseRuleConfig> {
     constructor(protected readonly config: C, readonly name: string, readonly configKey: string) {}
 
-    /** True unless the rule is `mode: "OFF"` or skipped by a branch/epoch escape hatch. */
+    /**
+     * True unless the rule is `mode: "OFF"` or skipped by a branch/epoch escape hatch. Every dispatcher
+     * (the code-rules runtime, the build runner, the hook engine) asks this before a rule runs, so no
+     * rule checks its own hatches.
+     */
     shouldRun(): boolean {
         if (this.config.mode === 'OFF') return false;
         const skip = shouldSkipRule(this.config.turnOffRuleUntilEpoch, this.config.turnOffRuleWhileOnBranch);
         return !skip.skip;
+    }
+
+    /**
+     * True when this rule's own `excludePaths` matches `relativePath` (workspace-relative). The hook
+     * engine asks it before dispatching the rule on a file — the path-filter twin of shouldRun().
+     */
+    excludesPath(relativePath: string): boolean {
+        return this.fileExclusions([]).excludes(relativePath);
+    }
+
+    /** This rule's exclusions combined with the repo's top-level `excludePaths`, for one rule run. */
+    fileExclusions(globalPaths: readonly string[]): RuleFileExclusions {
+        return new RuleFileExclusions(this.name, globalPaths, this.config.excludePaths ?? []);
     }
 }

@@ -31,7 +31,6 @@ import { NoCustomCssConfig } from "./configs/rule-configs";
 import { ModifiedCodeMode } from '@webpieces/rules-sdk';
 import { CodeValidator, ExecutorResult } from './code-validator';
 import { injectable, bindingScopeValues } from 'inversify';
-import { shouldSkipRule } from './resolve-mode';
 import { ScanScope } from './scan-scope';
 
 // @Component decorator properties that inject hand-written CSS.
@@ -74,7 +73,7 @@ export class NoCustomCssValidator extends CodeValidator<NoCustomCssConfig> {
 
     async run(workspaceRoot: string): Promise<ExecutorResult> {
         const opts = this.config;
-        const mode = this.resolveMode(opts.mode ?? 'OFF', opts.turnOffRuleUntilEpoch, opts.turnOffRuleWhileOnBranch ?? undefined);
+        const mode = opts.mode ?? 'OFF';
         const disableAllowed = opts.disableAllowed ?? true;
         if (mode === 'OFF') {
             console.log('\n⏭️  Skipping no-custom-css validation (mode: OFF)\n');
@@ -235,16 +234,6 @@ export class NoCustomCssValidator extends CodeValidator<NoCustomCssConfig> {
             if (hasDisable(lines[i] ?? '', "no-custom-css")) return true;
         }
         return false;
-    }
-
-    private resolveMode(normalMode: ModifiedCodeMode, epoch: number | undefined, branchPattern: string | undefined): ModifiedCodeMode {
-        if (normalMode === 'OFF') return normalMode;
-        const skip = shouldSkipRule(epoch, branchPattern);
-        if (skip.skip) {
-            console.log(`\n⏭️  Skipping no-custom-css validation (${skip.reason})\n`);
-            return 'OFF';
-        }
-        return normalMode;
     }
 
     private reportViolations(violations: CssViolation[], mode: ModifiedCodeMode): void {

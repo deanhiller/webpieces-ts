@@ -1,7 +1,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { injectable, bindingScopeValues } from 'inversify';
-import { ConfigObject, OwnedRuleDefinition } from '@webpieces/rules-sdk';
+import { ConfigObject, FieldDef, OwnedRuleDefinition } from '@webpieces/rules-sdk';
 import { AtomicFile, InformAiError, RepositoryLayout } from '@webpieces/tooling-common';
 import { ConfigFile, CONFIG_FILENAME } from './config-file';
 import { PackPolicyFiles, SelectedPolicyPack } from './pack-policy-files';
@@ -74,7 +74,7 @@ export class RulePackSync {
                 }
             }
             for (const definition of pack.manifest.ownedRules) {
-                const value = this.seedMissing(entries[definition.id], definition);
+                const value = this.seedMissing(entries[definition.id], definition, registry.schemaFor(definition.id));
                 errors.push(
                     ...registry
                         .validateRuleConfig(definition.id, value)
@@ -91,13 +91,15 @@ export class RulePackSync {
     private seedMissing(
         previous: ConfigObject | undefined,
         definition: OwnedRuleDefinition,
+        // The registry's MERGED schema (owner fields + framework-owned universal fields).
+        schema: Readonly<Record<string, FieldDef>>,
     ): ConfigObject {
         const value =
             previous === undefined
                 ? structuredClone(definition.recommendedSeed)
                 : Object.assign(new ConfigObject(), this.object(previous, definition.id));
-        for (const field of Object.keys(definition.schema)) {
-            if (!definition.schema[field].optional && !Object.hasOwn(value, field)) {
+        for (const field of Object.keys(schema)) {
+            if (!schema[field].optional && !Object.hasOwn(value, field)) {
                 value[field] = structuredClone(definition.recommendedSeed[field]);
             }
         }

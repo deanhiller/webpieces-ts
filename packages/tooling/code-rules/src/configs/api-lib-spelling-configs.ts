@@ -1,4 +1,4 @@
-import { FieldDef, SchemaShape, BaseRuleConfig, BASE_RULE_SCHEMA } from "@webpieces/rules-sdk";
+import { FieldDef, SchemaShape, BaseRuleConfig } from "@webpieces/rules-sdk";
 import { ModifiedCodeMode, MODIFIED_CODE_MODES } from "@webpieces/rules-sdk";
 /**
  * `no-inline-import-in-api-lib` (#1023) — in every `role:api-lib` project, refuse an `import('…')`
@@ -9,17 +9,14 @@ import { ModifiedCodeMode, MODIFIED_CODE_MODES } from "@webpieces/rules-sdk";
  * `mode` is REQUIRED and has no default (`.claude/rules/no-rule-defaults.md`): OFF |
  * NEW_AND_MODIFIED_CODE (only changed lines — grandfathers the rest) | NEW_AND_MODIFIED_FILES (every
  * occurrence in a changed file) | MODIFIED_PROJECTS / RUN_EVERY_TIME (every occurrence in a touched
- * project / in the repo — #1027; count what is left with `wp-validate-code --rule=… --mode=RUN_EVERY_TIME`). `allowedPaths` exempts whole trees. The per-site escape hatch is
+ * project / in the repo — #1027; count what is left with `wp-validate-code --rule=… --mode=RUN_EVERY_TIME`). The framework-owned `excludePaths` exempts whole trees. The per-site escape hatch is
  * `// webpieces-disable no-inline-import-in-api-lib -- <reason>` on the line or the line above.
  */
 export class NoInlineImportInApiLibConfig extends BaseRuleConfig {
     declare mode?: ModifiedCodeMode;
-    allowedPaths?: string[];
 
     static readonly SCHEMA: SchemaShape<NoInlineImportInApiLibConfig> = {
         mode: new FieldDef('string', MODIFIED_CODE_MODES),
-        allowedPaths: FieldDef.optional('string[]'),
-        ...BASE_RULE_SCHEMA,
     };
 }
 
@@ -37,15 +34,12 @@ export class NoInlineImportInApiLibConfig extends BaseRuleConfig {
  * mode grandfathers. This rule is what forbids NEW ones in an api library.
  *
  * `mode` is REQUIRED and has no default (`.claude/rules/no-rule-defaults.md`), with the same three
- * values as above; `allowedPaths` and the per-site disable work the same way.
+ * values as above; `excludePaths` and the per-site disable work the same way.
  */
 export class OneEnumSpellingInApiLibConfig extends BaseRuleConfig {
     declare mode?: ModifiedCodeMode;
-    allowedPaths?: string[];
 
     static readonly SCHEMA: SchemaShape<OneEnumSpellingInApiLibConfig> = {
         mode: new FieldDef('string', MODIFIED_CODE_MODES),
-        allowedPaths: FieldDef.optional('string[]'),
-        ...BASE_RULE_SCHEMA,
     };
 }

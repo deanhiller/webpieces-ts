@@ -1,5 +1,5 @@
 import { SourceContributionConfig } from '../source-contribution-config';
-import { isPathExcluded, Option } from '@webpieces/rules-config';
+import { Option } from '@webpieces/rules-config';
 
 import type { EditContext, Violation } from '@webpieces/hook-runtime';
 import { Violation as V } from '@webpieces/hook-runtime';
@@ -16,7 +16,7 @@ export class NoDestructureRule extends EditRuleBase<SourceContributionConfig> {
     readonly description =
         'Disallow destructuring patterns. Assign the whole result and pass it around or access properties explicitly.';
     override readonly files = ['**/*.ts', '**/*.tsx'];
-    override readonly defaultOptions = { allowTopLevel: true, allowedPaths: [] };
+    override readonly defaultOptions = { allowTopLevel: true };
     get fixHint(): FixHint {
         return new FixHint(
             'Destructuring pattern on a call result.',
@@ -27,7 +27,7 @@ export class NoDestructureRule extends EditRuleBase<SourceContributionConfig> {
                     true,
                 ),
                 new Option(
-                    'If this whole tree is destructuring by construction (a React/React Native component or hook tree), add a glob to no-destructure.allowedPaths in {configFile}',
+                    'If this whole tree is destructuring by construction (a React/React Native component or hook tree), add a glob to no-destructure.excludePaths in {configFile}',
                 ),
             ],
             new DisableEscape(
@@ -38,9 +38,6 @@ export class NoDestructureRule extends EditRuleBase<SourceContributionConfig> {
     }
 
     check(ctx: EditContext): readonly Violation[] {
-        const allowedPaths = this.config.allowedPaths ?? [];
-        if (isPathExcluded(ctx.relativePath, allowedPaths)) return [];
-
         const disableAllowed = this.config.disableAllowed ?? true;
         const violations: V[] = [];
         for (let i = 0; i < ctx.strippedLines.length; i += 1) {

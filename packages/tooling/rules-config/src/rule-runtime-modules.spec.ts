@@ -14,6 +14,10 @@ import { PackPolicyFiles } from './pack-policy-files';
 import { NodeRuleRuntimeModuleLoader, RuleRuntimeModules } from './rule-runtime-modules';
 
 class ClientPolicyConfig extends ConfigObject {
+    // The framework-owned hatches every rule carries (#1253), though the client schema never names them.
+    readonly turnOffRuleUntilEpoch = 0;
+    readonly turnOffRuleWhileOnBranch = null;
+
     constructor(
         readonly mode: string,
         readonly requiredMarker: string,
@@ -104,7 +108,7 @@ describe('client-owned policy runtime through real Node module transport', () =>
             providerModules,
             new NodeRuleRuntimeModuleLoader(client.root),
         );
-        const request = modules.request(client.root, resolved.values, group);
+        const request = modules.request(client.root, resolved.values, group, []);
         const checks = await modules.createBuildPolicies(exports, request);
         fs.writeFileSync(path.join(client.root, 'client-input.txt'), client.config.requiredMarker);
         expect(checks[0].shouldRun()).toBe(true);
@@ -119,7 +123,7 @@ describe('client-owned policy runtime through real Node module transport', () =>
 
     it('requires complete settings even OFF and runs no check when explicitly opted out', async () => {
         const client = new ClientRuntimeFixture();
-        fs.writeFileSync(path.join(client.root, 'owner.json'), '{"client-marker":{"mode":"OFF"}}');
+        fs.writeFileSync(path.join(client.root, 'owner.json'), '{"client-marker":{"mode":"OFF","turnOffRuleUntilEpoch":0,"turnOffRuleWhileOnBranch":null}}');
         expect(() => client.resolve()).toThrow(/owner.json.*requiredMarker is required/);
         fs.writeFileSync(
             path.join(client.root, 'owner.json'),
@@ -135,7 +139,7 @@ describe('client-owned policy runtime through real Node module transport', () =>
         );
         const checks = await modules.createBuildPolicies(
             exports,
-            modules.request(client.root, resolved.values, group),
+            modules.request(client.root, resolved.values, group, []),
         );
         expect(checks[0].shouldRun()).toBe(false);
         expect(fs.existsSync(path.join(client.root, 'execution.txt'))).toBe(false);
@@ -149,6 +153,7 @@ describe('client-owned policy runtime through real Node module transport', () =>
             client.root,
             resolved.values,
             modules.groups(resolved.registry, 'build')[0],
+            [],
         );
         await expect(modules.createBuildPolicies({}, request)).rejects.toThrow(
             'must export buildRuleRuntime',

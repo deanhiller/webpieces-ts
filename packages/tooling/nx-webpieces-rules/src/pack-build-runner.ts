@@ -30,6 +30,7 @@ export class PackBuildRunner {
                 root,
                 loaded.rulesConfig as Record<string, ConfigObject>,
                 group,
+                loaded.excludePaths.paths,
             );
             const exports = modules.load(group, loaded.ruleRegistry.manifestModules, loader);
             const checks = await modules.createBuildPolicies(exports, request);

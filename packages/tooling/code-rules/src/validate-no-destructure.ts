@@ -24,8 +24,8 @@
  * - for (const [key, value] of Object.entries(obj)) — Object.entries in for-of
  * - const { extracted, ...rest } = obj — rest operator separation
  * - Lines with // webpieces-disable no-destructure -- [reason] (only when disableAllowed: true)
- * - Files under a configured `allowedPaths` glob (shared isPathExcluded glob/prefix/segment
- *   semantics) — e.g. a React/React Native tree, where useState and destructured props are the
+ * - Files under the rule's `excludePaths` (or the top-level one), dropped by the framework before the
+ *   rule runs — e.g. a React/React Native tree, where useState and destructured props are the
  *   framework's own idiom. This is the ONLY escape when disableAllowed: false.
  *
  * ============================================================================
@@ -46,12 +46,11 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as ts from 'typescript';
-import { hasDisable, detectBase, getFileDiff, getChangedLineNumbers, isPathExcluded } from "@webpieces/rules-config";
+import { hasDisable, detectBase, getFileDiff, getChangedLineNumbers } from "@webpieces/rules-config";
 import { NoDestructureConfig } from "./configs/rule-configs";
 import { ModifiedCodeMode } from '@webpieces/rules-sdk';
 import { CodeValidator, ExecutorResult } from './code-validator';
 import { injectable, bindingScopeValues } from 'inversify';
-import { shouldSkipRule } from './resolve-mode';
 import { ScanScope } from './scan-scope';
 
 interface DestructureViolation {
@@ -155,10 +154,9 @@ export interface DestructureInfo {
  */
 // webpieces-disable max-lines-new-methods -- AST traversal with multiple destructuring pattern checks and exception detection
 // webpieces-disable no-function-outside-class -- the rule engine is inherently functional; validators can't be class members
-export function findDestructuringInFile(filePath: string, workspaceRoot: string, disableAllowed: boolean, allowedPaths: string[]): DestructureInfo[] {
+export function findDestructuringInFile(filePath: string, workspaceRoot: string, disableAllowed: boolean): DestructureInfo[] {
     // Guard on the REPO-RELATIVE path, before the join below — globs like `mobile/**` never match an
     // absolute path. This is the only escape when disableAllowed is false.
-    if (isPathExcluded(filePath, allowedPaths)) return [];
     const fullPath = path.join(workspaceRoot, filePath);
     if (!fs.existsSync(fullPath)) return [];
 
@@ -274,7 +272,6 @@ function findViolationsForModifiedCode(
     base: string,
     head: string | undefined,
     disableAllowed: boolean,
-    allowedPaths: string[]
 ): DestructureViolation[] {
     const violations: DestructureViolation[] = [];
 
@@ -284,7 +281,7 @@ function findViolationsForModifiedCode(
 
         if (changedLines.size === 0) continue;
 
-        const allViolations = findDestructuringInFile(file, workspaceRoot, disableAllowed, allowedPaths);
+        const allViolations = findDestructuringInFile(file, workspaceRoot, disableAllowed);
 
         for (const v of allViolations) {
             if (disableAllowed && v.hasDisableComment) continue;
@@ -307,11 +304,11 @@ function findViolationsForModifiedCode(
  * NEW_AND_MODIFIED_FILES mode: Flag ALL violations in files that were modified.
  */
 // webpieces-disable no-function-outside-class -- the rule engine is inherently functional; validators can't be class members
-function findViolationsForModifiedFiles(workspaceRoot: string, changedFiles: string[], disableAllowed: boolean, allowedPaths: string[]): DestructureViolation[] {
+function findViolationsForModifiedFiles(workspaceRoot: string, changedFiles: string[], disableAllowed: boolean): DestructureViolation[] {
     const violations: DestructureViolation[] = [];
 
     for (const file of changedFiles) {
-        const allViolations = findDestructuringInFile(file, workspaceRoot, disableAllowed, allowedPaths);
+        const allViolations = findDestructuringInFile(file, workspaceRoot, disableAllowed);
 
         for (const v of allViolations) {
             if (disableAllowed && v.hasDisableComment) continue;
@@ -365,27 +362,10 @@ function reportViolations(violations: DestructureViolation[], mode: ModifiedCode
         console.error('   Escape hatch: DISABLED (disableAllowed: false)');
         console.error('   Disable comments are ignored. Fix the destructuring directly.');
     }
-    console.error('   Whole-tree exemption (e.g. React/React Native): add a glob to no-destructure.allowedPaths in webpieces.config.json');
+    console.error('   Whole-tree exemption (e.g. React/React Native): add a glob to no-destructure.excludePaths in webpieces.config.json');
     console.error('');
     console.error(`   Current mode: ${mode}`);
     console.error('');
-}
-
-/**
- * Resolve mode considering turnOffRuleUntilEpoch override.
- * When active, downgrades to OFF. When expired, logs a warning.
- */
-function resolveNoDestructureMode(normalMode: ModifiedCodeMode, epoch: number | undefined, branchPattern: string | undefined): ModifiedCodeMode {
-    if (normalMode === 'OFF') {
-        return normalMode;
-    }
-    const skip = shouldSkipRule(epoch, branchPattern);
-    if (skip.skip) {
-        console.log(`\n\u23ed\ufe0f  Skipping no-destructure validation (${skip.reason})`);
-        console.log('');
-        return 'OFF';
-    }
-    return normalMode;
 }
 
 async function runValidatorImpl(
@@ -393,9 +373,8 @@ async function runValidatorImpl(
     options: NoDestructureConfig,
     workspaceRoot: string
 ): Promise<ExecutorResult> {
-    const mode: ModifiedCodeMode = resolveNoDestructureMode(options.mode ?? 'OFF', options.turnOffRuleUntilEpoch, (options.turnOffRuleWhileOnBranch ?? undefined));
+    const mode: ModifiedCodeMode = options.mode ?? 'OFF';
     const disableAllowed = options.disableAllowed ?? true;
-    const allowedPaths = options.allowedPaths ?? [];
 
     if (mode === 'OFF') {
         console.log('\n\u23ed\ufe0f  Skipping no-destructure validation (mode: OFF)');
@@ -435,10 +414,10 @@ async function runValidatorImpl(
     let violations: DestructureViolation[] = [];
 
     if (mode === 'NEW_AND_MODIFIED_CODE') {
-        violations = findViolationsForModifiedCode(workspaceRoot, changedFiles, base, head, disableAllowed, allowedPaths);
+        violations = findViolationsForModifiedCode(workspaceRoot, changedFiles, base, head, disableAllowed);
     } else {
         // NEW_AND_MODIFIED_FILES and the whole-scope modes (#1027) all judge every site of every file.
-        violations = findViolationsForModifiedFiles(workspaceRoot, changedFiles, disableAllowed, allowedPaths);
+        violations = findViolationsForModifiedFiles(workspaceRoot, changedFiles, disableAllowed);
     }
 
     if (violations.length === 0) {

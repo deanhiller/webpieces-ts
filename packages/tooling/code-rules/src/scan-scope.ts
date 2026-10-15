@@ -19,7 +19,7 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
-import { ChangedFilesOptions, DiffScope } from "@webpieces/rules-config";
+import { ChangedFilesOptions, DiffScope, RuleFileScope } from "@webpieces/rules-config";
 import { ModifiedCodeMode } from '@webpieces/rules-sdk';
 import { InformAiError } from '@webpieces/tooling-common';
 import { toError } from '@webpieces/tooling-common/to-error';
@@ -68,7 +68,10 @@ export class ProjectCatalog {
     }
 
     private load(workspaceRoot: string): ProjectEntry[] {
-        const jsons = this.diffScope.getAllFiles(workspaceRoot, { tsOnly: false })
+        // OUTSIDE any rule run's path exclusions (#1253): the catalog is cached across rules, so one rule's
+        // excludePaths must never hide a project from the next. Excluded FILES are dropped by their listing.
+        const listed = new RuleFileScope().outside(() => this.diffScope.getAllFiles(workspaceRoot, { tsOnly: false }));
+        const jsons = listed
             .filter((f: string) => f === 'project.json' || f.endsWith('/project.json'));
         return jsons.map((rel: string) => {
             const dir = path.posix.dirname(rel) === '.' ? '' : path.posix.dirname(rel);
