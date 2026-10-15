@@ -16,8 +16,7 @@ class TrackingFixture {
     constructor() {
         execFileSync('git', ['init', '-q'], { cwd: this.root });
         fs.mkdirSync(path.join(this.root, '.webpieces-config/rules'), { recursive: true });
-        for (const name of ['rules/client.json', 'rules.lock.json', 'rules-catalog.md'])
-            fs.writeFileSync(path.join(this.root, '.webpieces-config', name), '{}');
+        fs.writeFileSync(path.join(this.root, '.webpieces-config/rules/client.json'), '{}');
         fs.writeFileSync(path.join(this.root, 'webpieces.config.json'), '{}');
         fs.writeFileSync(path.join(this.root, '.gitignore'), '.webpieces/\n');
     }
@@ -77,13 +76,12 @@ describe('policy must be committed inputs', () => {
         fixture.tracking.stage(fixture.root, fixture.declarations);
         expect(() => fixture.tracking.check(fixture.root, fixture.declarations)).not.toThrow();
     });
-    it('requires the lock and catalog as well as every declared owner file', () => {
+    it('requires every declared owner file and nothing generated (#1273: there is no lock or catalog)', () => {
         const fixture = new TrackingFixture();
+        expect(() => fixture.tracking.check(fixture.root, fixture.declarations)).toThrow('client.json');
         execFileSync('git', ['add', '--', '.webpieces-config/rules/client.json'], {
             cwd: fixture.root,
         });
-        expect(() => fixture.tracking.check(fixture.root, fixture.declarations)).toThrow(
-            'rules.lock.json',
-        );
+        expect(() => fixture.tracking.check(fixture.root, fixture.declarations)).not.toThrow();
     });
 });

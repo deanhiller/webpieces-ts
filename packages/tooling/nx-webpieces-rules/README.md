@@ -56,9 +56,8 @@ explicit settings):
 Use complete `OFF` settings for an intentional opt-out. `ignoreTypeOnly: true`
 ignores type-only import/re-export cycles. A future `turnOffRuleUntilEpoch` value
 uses epoch seconds; `0` and a `null` branch hatch keep enforcement active.
-After reviewing the declarations, `pnpm wp-rules-sync` explicitly seeds missing
-owner settings and refreshes the lock/catalog artifacts. Review and commit its
-changes; normal loading never supplies missing required settings.
+A missing required entry is refused with the owner file to edit and the exact
+entry to paste; normal loading never supplies missing required settings.
 
 Semantics, mirroring the method/file-size dated-disable model:
 

@@ -226,11 +226,11 @@ describe('declared repository policy inputs survive linked-worktree state migrat
     beforeEach(makeMigrationRepo);
     afterEach(cleanupMigrationRepo);
 
-    it('keeps owner configs, lock and catalog in the worktree while moving runtime state', () => {
+    it('keeps every committed policy file in the worktree while moving runtime state', () => {
         writeFile(worktree, 'webpieces.config.json', JSON.stringify({
             rulePacks: [{ package: '@client/policy', config: '.webpieces-config/custom/client.json' }],
         }));
-        const policyFiles = ['custom/client.json', 'rules.lock.json', 'rules-catalog.md'];
+        const policyFiles = ['custom/client.json', 'rules/workflow.json', 'notes.md'];
         for (const filename of policyFiles) writeFile(worktree, `.webpieces-config/${filename}`, `original:${filename}`);
         writeFile(worktree, '.webpieces/logs/hook.log', 'runtime state');
 

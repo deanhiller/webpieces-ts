@@ -1,4 +1,4 @@
-/** Previous-root conversion is reachable only through an explicit upgrade command; normal loading never calls it. */
+/** Builds a complete flat config from a registry — a test-fixture builder. No production command runs it, and normal loading never calls it (#1273). */
 import { RulePackRegistry } from './rule-pack-registry';
 import { allRuleNames, seedEntryForRule } from './validate-config';
 import { schemaFieldNames } from './rule-schemas';
@@ -73,7 +73,7 @@ function seedRule(ruleName: string, registry: RulePackRegistry): RuleEntry {
 
 // Bring an existing `excludePaths` forward to the single-list shape. Already a list → untouched.
 // Legacy `{ rules, guards }` → unioned (order preserved, duplicates dropped) and recorded as a change
-// so `pnpm wp-rules-sync --upgrade` is the migration path rather than a hand-edit. Anything else → seeded [].
+// so the conversion reports it rather than rewriting it silently. Anything else → seeded [].
 // webpieces-disable no-any-unknown -- opaque legacy JSON is narrowed before use
 // webpieces-disable no-function-outside-class -- pure legacy config conversion helper
 function migrateExcludePaths(raw: unknown, changes: string[]): string[] {
@@ -181,8 +181,8 @@ function migrateRetiredRuleNames(
  * the first key it met and then, finding the destination already present, DELETED each of the other
  * three outright — so which guard's settings survived depended on RETIRED_CONFIG_KEYS declaration
  * order rather than on the consumer's file, and the survivor carried only that one guard's fields, so
- * it was missing required fields of the merged schema. `pnpm wp-rules-sync --upgrade` is the command advertised
- * as the migration path; half-migrating every consumer into an invalid config is not an option.
+ * it was missing required fields of the merged schema. A conversion that half-merges
+ * would hand every fixture an invalid config, which is not an option.
  *
  * UNION, first writer wins per field. Earlier-declared keys are the more specific ones (only
  * feature-branch-guard carries `branchNamingConvention`), and a field already present on the
@@ -254,12 +254,12 @@ function fillRequiredFields(section: Section, changes: string[], registry: RuleP
 
 // Deep-copy the framework's default match-rules (the no-fetch guard) into plain JSON for the config
 // file. Round-tripping through JSON turns the MatchRuleConfig instances into plain objects.
-// webpieces-disable no-function-outside-class -- this module is deliberately DI-FREE: `pnpm wp-rules-sync --upgrade` must run on a half-written node_modules (see install-entry.ts), so it cannot build a container to hold a method
+// webpieces-disable no-function-outside-class -- this module is deliberately DI-FREE: plain functions keep the fixture builder free of any container
 function seedMatchRules(): Json[] {
     return JSON.parse(JSON.stringify(DEFAULT_MATCH_RULES)) as Json[];
 }
 
-// webpieces-disable no-function-outside-class -- this module is deliberately DI-FREE: `pnpm wp-rules-sync --upgrade` must run on a half-written node_modules (see install-entry.ts), so it cannot build a container to hold a method
+// webpieces-disable no-function-outside-class -- this module is deliberately DI-FREE: plain functions keep the fixture builder free of any container
 function asSection(value: Json[string]): Section {
     return typeof value === 'object' && value !== null && !Array.isArray(value)
         ? (value as Section)
@@ -268,7 +268,7 @@ function asSection(value: Json[string]): Section {
 
 // Migrate an existing config to the rules / hookGuards / commands layout and add any missing rules.
 // Returns a human-readable list of what changed (empty = already up to date).
-// webpieces-disable no-function-outside-class -- this module is deliberately DI-FREE: `pnpm wp-rules-sync --upgrade` must run on a half-written node_modules (see install-entry.ts), so it cannot build a container to hold a method
+// webpieces-disable no-function-outside-class -- this module is deliberately DI-FREE: plain functions keep the fixture builder free of any container
 export function prepareLegacyUpgrade(
     existing: Json,
     registry: RulePackRegistry,

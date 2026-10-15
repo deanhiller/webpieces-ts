@@ -2,8 +2,8 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { injectable, bindingScopeValues } from 'inversify';
 
-import { InformAiError } from '@webpieces/tooling-common';
 import { toError } from '@webpieces/tooling-common/to-error';
+import { ConfigRepairError, EditFileCure } from './config-repair-error';
 
 export const CONFIG_FILENAME = 'webpieces.config.json';
 
@@ -79,7 +79,9 @@ export class ConfigFile {
             if (outcome.config !== null) return outcome.config;
             lastError = outcome.error;
         }
-        throw new InformAiError(this.formatParseFailure(configPath, lastError));
+        throw new ConfigRepairError(this.formatParseFailure(configPath, lastError), [
+            new EditFileCure(configPath, `Edit ${configPath} to restore valid JSON.`),
+        ]);
     }
 
     // ONE read+parse attempt. The read is inside the try too: a file being replaced can momentarily

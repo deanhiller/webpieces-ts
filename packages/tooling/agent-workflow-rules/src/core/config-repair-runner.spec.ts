@@ -124,7 +124,7 @@ describe('runBash / run — an unloadable config blocks work but never read-only
         expect(run('Write', input, root, 'guards')).toBeNull();
     });
 
-    it('allows exact owner-file and artifact repairs, sync and inspection while owner JSON is invalid', () => {
+    it('allows owner-file and .webpieces-config/ repairs, prune and inspection while owner JSON is invalid', () => {
         writeGuardConfig(root, []);
         const owner = nodePath.join(root, '.webpieces-config/rules/fixture-0.json');
         fs.writeFileSync(owner, '{');
@@ -134,10 +134,10 @@ describe('runBash / run — an unloadable config blocks work but never read-only
         expect(
             runBash('cat .webpieces-config/rules/fixture-0.json', root, 'guards', 'claude-code'),
         ).toBeNull();
-        expect(runBash('pnpm wp-rules-sync', root, 'guards', 'claude-code')).toBeNull();
+        expect(runBash('pnpm wp-prune-unknown-config', root, 'guards', 'claude-code')).toBeNull();
         for (const filename of [
-            '.webpieces-config/rules.lock.json',
-            '.webpieces-config/rules-catalog.md',
+            '.webpieces-config/rules/undeclared.json',
+            '.webpieces-config/notes.md',
         ]) {
             expect(
                 run(
@@ -151,14 +151,14 @@ describe('runBash / run — an unloadable config blocks work but never read-only
             ).toBeNull();
         }
         const unrelated = new NormalizedToolInput(
-            nodePath.join(root, '.webpieces-config/rules/undeclared.json'),
+            nodePath.join(root, 'src/undeclared.json'),
             [new NormalizedEdit('', '{}')],
         );
         expect(() => run('Write', unrelated, root, 'guards')).toThrow(
             'Cannot parse rule-pack config',
         );
         expect(() =>
-            runBash('pnpm wp-rules-sync && touch src/other.ts', root, 'guards', 'claude-code'),
+            runBash('pnpm wp-prune-unknown-config && touch src/other.ts', root, 'guards', 'claude-code'),
         ).toThrow('Cannot parse rule-pack config');
         expect(() => runBash('git push origin HEAD', root, 'guards', 'claude-code')).toThrow(
             'Cannot parse rule-pack config',

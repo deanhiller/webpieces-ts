@@ -74,7 +74,7 @@ describe('owner-only rule addition', () => {
         };
         const config = path.join(root, 'webpieces.config.json');
         policyFixture.writeOwnerConfig(root, document, manifests);
-        expect(() => loadAndValidate(root)).toThrow(`missing required entry ${id}`);
+        expect(() => loadAndValidate(root)).toThrow(`missing required entry "${id}"`);
         rules[id] = { ...seed, mode: 'OFF' };
         policyFixture.writeOwnerConfig(root, document, manifests);
         expect(loadAndValidate(root).resolved.rules.get(id)?.isOff).toBe(true);

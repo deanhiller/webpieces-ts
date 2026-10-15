@@ -25,7 +25,7 @@ describe('explicit client pack selection', () => {
         const selection = new PackPolicyFiles();
         fs.writeFileSync(file, '{"private":true}');
         expect(() => selection.declarations([{ package: 12, config: 'owner.json' }], root)).toThrow(
-            'Invalid rulePacks entry',
+            'invalid rulePacks entry',
         );
         const declarations = selection.declarations(
             [{ package: './absent.cjs', config: 'owner.json' }],

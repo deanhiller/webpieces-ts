@@ -3,23 +3,17 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { policyFixture, specTempDirs } from '@webpieces/tooling-testkit';
 import { AtomicFile } from '@webpieces/tooling-common';
-import { RulePackManifest, OwnedRuleDefinition, ConfigObject } from '@webpieces/rules-sdk';
+import { RulePackManifest, ConfigObject } from '@webpieces/rules-sdk';
 import { ConfigFile } from './config-file';
 import { PackPolicyDeclaration, PackPolicyFiles } from './pack-policy-files';
-import { RulePackArtifacts } from './rule-pack-artifacts';
-import { RulePackSync, RulePackSyncOptions } from './rule-pack-sync';
+import { RulePackSync } from './rule-pack-sync';
 import { loadAndValidate } from './load-config';
 
 class SyncFixture {
     readonly root = specTempDirs.make('wp-owner-sync-');
     readonly manifests = policyFixture.manifests();
     readonly atomic = new AtomicFile();
-    readonly sync = new RulePackSync(
-        new ConfigFile(),
-        new PackPolicyFiles(),
-        new RulePackArtifacts(this.atomic),
-        this.atomic,
-    );
+    readonly sync = new RulePackSync(new ConfigFile(), new PackPolicyFiles(), this.atomic);
     readonly declarations = this.manifests.map(
         (manifest: RulePackManifest, index: number) =>
             new PackPolicyDeclaration(
@@ -27,57 +21,33 @@ class SyncFixture {
                 `.webpieces-config/rules/owner-${index}.json`,
             ),
     );
-    readonly entries: Record<string, ConfigObject> = Object.fromEntries(
-        this.manifests.flatMap((manifest: RulePackManifest) =>
-            manifest.ownedRules.map((definition: OwnedRuleDefinition) => [
-                definition.id,
-                structuredClone(definition.recommendedSeed),
-            ]),
-        ),
-    );
 
     constructor() {
         policyFixture.declareIn(this.root, this.manifests);
     }
 
-    write(upgrade: boolean): void {
+    // webpieces-disable no-any-unknown -- fixture root JSON is opaque config written for the loader
+    write(extra: Record<string, unknown> = {}): void {
         this.atomic.writeJsonAtomic(path.join(this.root, 'webpieces.config.json'), {
-            ...(upgrade
-                ? { rules: this.entries, hookGuards: {}, rulesDir: [] }
-                : { rulePacks: this.declarations }),
+            rulePacks: this.declarations,
             commands: { 'pr-gate': { mode: 'OFF', buildCommand: 'pnpm test', gates: [] } },
             excludePaths: [],
             'match-rules': [],
             migrationWhy: 'Preserve chosen enforcement values.',
+            ...extra,
         });
     }
 
-    run(mode: 'sync' | 'upgrade'): readonly string[] {
-        return this.sync.run(this.root, new RulePackSyncOptions(mode, this.declarations));
+    run(): readonly string[] {
+        return this.sync.run(this.root);
     }
 }
 
-describe('explicit owner config sync and upgrade', () => {
-    it('preserves existing modes, hatches and options through upgrade and is idempotent', () => {
+describe('explicit owner config sync (installer and wp-migrate-dirs)', () => {
+    it('migrates the retired directory while preserving explicit policy', () => {
         const fixture = new SyncFixture();
-        fixture.entries['max-file-lines']['mode'] = 'OFF';
-        fixture.entries['max-file-lines']['limit'] = 432;
-        fixture.entries['max-file-lines']['turnOffRuleWhileOnBranch'] = 'feature/explicit';
-        fixture.write(true);
-        expect(() => loadAndValidate(fixture.root)).toThrow('Retired top-level key');
-        expect(fixture.run('upgrade')).toHaveLength(8);
-        const loaded = loadAndValidate(fixture.root);
-        expect(loaded.rulesConfig['max-file-lines']).toEqual(fixture.entries['max-file-lines']);
-        const root = fs.readFileSync(path.join(fixture.root, 'webpieces.config.json'), 'utf8');
-        expect(root).toContain('Preserve chosen enforcement values.');
-        expect(root).not.toContain('"hookGuards"');
-        expect(fixture.run('sync')).toEqual([]);
-    });
-
-    it('automatically upgrades the retired directory while preserving explicit policy', () => {
-        const fixture = new SyncFixture();
-        fixture.write(false);
-        fixture.run('sync');
+        fixture.write();
+        fixture.run();
         const owner = path.join(fixture.root, fixture.declarations[0].config);
         const entries = JSON.parse(fs.readFileSync(owner, 'utf8'));
         entries['max-file-lines'].mode = 'OFF';
@@ -92,23 +62,18 @@ describe('explicit owner config sync and upgrade', () => {
             path.join(fixture.root, '.webpieces-config'),
             path.join(fixture.root, '.webpieces'),
         );
-        fs.mkdirSync(path.join(fixture.root, '.webpieces/instruct-ai'));
-        fs.renameSync(
-            path.join(fixture.root, '.webpieces/rules-catalog.md'),
-            path.join(fixture.root, '.webpieces/instruct-ai/rules-catalog.md'),
-        );
         expect(() => loadAndValidate(fixture.root)).toThrow('wp-migrate-dirs');
-        fixture.run('sync');
+        fixture.run();
         expect(loadAndValidate(fixture.root).rulesConfig['max-file-lines']['mode']).toBe('OFF');
         expect(loadAndValidate(fixture.root).rulesConfig['max-file-lines']['limit']).toBe(432);
-        expect(fs.existsSync(path.join(fixture.root, '.webpieces/rules.lock.json'))).toBe(false);
+        expect(fixture.run()).toEqual([]);
     });
 
     it('writes reviewed seeds only during sync, and fills missing required fields without tuning defaults', () => {
         const fixture = new SyncFixture();
-        fixture.write(false);
-        expect(() => loadAndValidate(fixture.root)).toThrow('Missing rule-pack config');
-        fixture.run('sync');
+        fixture.write();
+        expect(() => loadAndValidate(fixture.root)).toThrow('missing rule-pack config');
+        fixture.run();
         const filename = path.join(fixture.root, fixture.declarations[0].config);
         const entries = JSON.parse(fs.readFileSync(filename, 'utf8')) as Record<
             string,
@@ -117,38 +82,32 @@ describe('explicit owner config sync and upgrade', () => {
         entries['max-file-lines'] = { mode: 'OFF' };
         fixture.atomic.writeJsonAtomic(filename, entries);
         expect(() => loadAndValidate(fixture.root)).toThrow('turnOffRuleUntilEpoch is required');
-        fixture.run('sync');
+        fixture.run();
         const config = loadAndValidate(fixture.root).rulesConfig['max-file-lines'];
         expect(config['mode']).toBe('OFF');
         expect(config['turnOffRuleUntilEpoch']).toBe(0);
         expect(config['limit']).toBeUndefined();
     });
 
-    it('rejects invalid settings before writing any root, owner file or artifact', () => {
+    it('rejects invalid settings before writing any owner file', () => {
         const fixture = new SyncFixture();
-        fixture.entries['max-file-lines']['typo'] = true;
-        fixture.write(true);
-        const filename = path.join(fixture.root, 'webpieces.config.json'),
-            before = fs.readFileSync(filename, 'utf8');
-        expect(() => fixture.run('upgrade')).toThrow('Sync made no changes');
+        fixture.write();
+        fixture.run();
+        const filename = path.join(fixture.root, fixture.declarations[0].config);
+        const entries = JSON.parse(fs.readFileSync(filename, 'utf8'));
+        entries['max-file-lines']['typo'] = true;
+        fs.writeFileSync(filename, JSON.stringify(entries));
+        fs.rmSync(path.join(fixture.root, fixture.declarations[1].config));
+        const before = fs.readFileSync(filename, 'utf8');
+        expect(() => fixture.run()).toThrow('Sync made no changes');
         expect(fs.readFileSync(filename, 'utf8')).toBe(before);
-        expect(fs.existsSync(path.join(fixture.root, '.webpieces-config/rules'))).toBe(false);
-        expect(fs.existsSync(path.join(fixture.root, '.webpieces-config/rules.lock.json'))).toBe(
-            false,
-        );
+        expect(fs.existsSync(path.join(fixture.root, fixture.declarations[1].config))).toBe(false);
     });
 
-    it('rejects directory and inherited config instead of guessing owners or values', () => {
+    it('rejects a retired root section instead of guessing owners or values', () => {
         const fixture = new SyncFixture();
-        fixture.write(true);
-        const filename = path.join(fixture.root, 'webpieces.config.json');
-        const config = JSON.parse(fs.readFileSync(filename, 'utf8'));
-        config.rulesDir = ['custom'];
-        fixture.atomic.writeJsonAtomic(filename, config);
-        expect(() => fixture.run('upgrade')).toThrow('declared client rule pack');
-        config.rulesDir = [];
-        config.extends = './inherited.json';
-        fixture.atomic.writeJsonAtomic(filename, config);
-        expect(() => fixture.run('upgrade')).toThrow('inherited values explicit');
+        fixture.write({ rulesDir: ['custom'] });
+        expect(() => fixture.run()).toThrow('Sync made no changes');
+        expect(fs.existsSync(path.join(fixture.root, '.webpieces-config/rules'))).toBe(false);
     });
 });

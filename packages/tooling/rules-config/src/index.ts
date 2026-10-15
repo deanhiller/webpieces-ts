@@ -361,15 +361,16 @@ export {
     PackPolicyFilesResult,
     PackPolicyFiles,
 } from './pack-policy-files';
-export { RulePackSync, RulePackSyncOptions } from './rule-pack-sync';
+export { RulePackSync } from './rule-pack-sync';
 export { ConfigRepairAccess } from './config-repair-access';
 export { ConfigRepairBootstrap } from './config-repair-probe';
 export {
-    RulePackArtifacts,
-    RuleArtifactContents,
-    RULE_LOCK_FILE,
-    RULE_CATALOG_FILE,
-} from './rule-pack-artifacts';
+    ConfigRepairCure,
+    ConfigRepairError,
+    EditFileCure,
+    RunCommandCure,
+    RepositoryLayoutRepair,
+} from './config-repair-error';
 export {
     RuleRuntimeModules,
     RuleRuntimeModuleLoader,
