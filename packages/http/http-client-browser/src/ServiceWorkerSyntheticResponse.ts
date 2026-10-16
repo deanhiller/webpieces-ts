@@ -52,10 +52,12 @@ export class ServiceWorkerSyntheticResponse {
         return response;
     }
 
+    /** `forEach`, not `keys()`: a consumer compiling without the `dom.iterable` lib has no `keys()`. */
     private hasAnyHeader(headers: Headers): boolean {
-        for (const _entry of headers.keys()) {
-            return true;
-        }
-        return false;
+        let any = false;
+        headers.forEach((): void => {
+            any = true;
+        });
+        return any;
     }
 }
