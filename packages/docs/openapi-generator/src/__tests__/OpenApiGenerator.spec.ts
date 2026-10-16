@@ -461,10 +461,21 @@ describe('operationIds (#1270)', () => {
         expect(failure!.pointers[0]).toContain('GadgetsApi.list');
     });
 
-    it('REFUSES a manifest that does not state a style, naming the key and both choices', () => {
-        const failure = harness.failureOf('missing-operation-ids.manifest.json');
-        expect(failure, 'a manifest with no operationIds was accepted').toBeDefined();
-        expect(failure!.message).toContain("'operationIds' is missing");
+    it('defaults to "contract_method" when the manifest omits the key (#1283)', () => {
+        const published = harness.document(
+            harness.run('omitted-operation-ids.manifest.json'),
+            'full-private-openapi.json',
+        );
+        expect(harness.at(published, 'paths./widgets/list.post.operationId')).toBe('WidgetsApi_list');
+        expect(harness.at(published, 'paths./widgets/purge.post.operationId')).toBe('WidgetsApi_purge');
+        expect(harness.webhook(published, 'widget.made')['operationId']).toBe('EventsApi_widgetMade');
+    });
+
+    it('REFUSES an unknown style, naming the key and both choices', () => {
+        const failure = harness.failureOf('unknown-operation-ids.manifest.json');
+        expect(failure, 'an unknown operationIds style was accepted').toBeDefined();
+        expect(failure!.message).toContain("unknown operationIds style 'Contract_Method'");
+        expect(failure!.cure).toContain('"operationIds"');
         expect(failure!.cure).toContain('"contract_method" or "method"');
     });
 });

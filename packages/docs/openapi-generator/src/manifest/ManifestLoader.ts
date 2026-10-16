@@ -136,10 +136,15 @@ export class ManifestLoader {
     }
 
     /**
-     * REQUIRED, with no default (#1270): the operationId is the method name in every client a
-     * partner generates, so its spelling is the consumer's decision, stated in the manifest.
+     * OPTIONAL, defaulting to `"contract_method"` (#1283) — the spelling every release before #1270
+     * published, and the one that is unique by construction, so a new contract gets the safe scheme
+     * without writing anything. `"method"` is the opt-in for a document that already published bare
+     * names. A value that is present but is neither choice is still refused.
      */
     private operationIds(raw: JsonReader): OperationIdStyle {
+        if (!raw.has('operationIds')) {
+            return OperationIdStyle.CONTRACT_METHOD;
+        }
         const value = raw.optionalString('operationIds');
         const style = OPERATION_ID_STYLES.find((each: OperationIdStyle) => each === value);
         if (style !== undefined) {
@@ -148,13 +153,14 @@ export class ManifestLoader {
         const choices = OPERATION_ID_STYLES.map((each: OperationIdStyle) => `"${each}"`).join(' or ');
         throw new OpenApiGenerationError(
             value === undefined
-                ? "'operationIds' is missing or is not a string"
+                ? "'operationIds' is present but is not a non-empty string"
                 : `unknown operationIds style '${value}'`,
             raw.where,
-            `Add "operationIds": ${choices}. "${OperationIdStyle.CONTRACT_METHOD}" publishes ` +
-                `OrdersApi_fetchOrders; "${OperationIdStyle.METHOD}" publishes fetchOrders and fails ` +
-                'generation when two operations of one document would share it. Generated partner ' +
-                'clients name their methods from it, so changing it renames every method in their SDKs.',
+            `Set "operationIds" to ${choices}, or omit it for "${OperationIdStyle.CONTRACT_METHOD}". ` +
+                `"${OperationIdStyle.CONTRACT_METHOD}" publishes OrdersApi_fetchOrders; ` +
+                `"${OperationIdStyle.METHOD}" publishes fetchOrders and fails generation when two ` +
+                'operations of one document would share it. Generated partner clients name their ' +
+                'methods from it, so changing it renames every method in their SDKs.',
         );
     }
 
