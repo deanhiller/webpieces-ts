@@ -9,7 +9,23 @@ import { SourceLocation } from './SourceLocation';
 type JsDocCarrier = ts.Node & { jsDoc?: ts.JSDoc[] };
 
 /**
- * The PROSE half of the model: the JSDoc body, the `@format` tag and the `@mcp` override.
+ * TSDoc's spelling of the success-response tag. JSDoc's older `@return` is deliberately NOT read: one
+ * spelling per fact, and a refusal naming `@returns` is how an author finds out.
+ */
+const RETURNS_TAG = 'returns';
+
+/**
+ * The PROSE half of the model: the JSDoc body, the `@returns` tag, the `@format` tag and the `@mcp`
+ * override.
+ *
+ * ## Every `/** *\/` is published — except `@privateRemarks` (#1292)
+ *
+ * The body and the four tags named here are the ONLY text read out of a block. Every other block tag
+ * is dropped together with its text, and `@privateRemarks` — TSDoc's standard "inside the doc block,
+ * never published" tag — is the one an author writes ON PURPOSE to keep a note out of every document:
+ * OpenAPI, MCP tool catalogs, tag and schema descriptions. It is dropped HERE, at extraction, so no
+ * renderer can ever reach it — the same reason `{@link}` is flattened here (below). `//` and `/* *\/`
+ * comments are private by construction: the compiler attaches no JSDoc for them.
  *
  * `{@link Foo.bar}` is flattened to `Foo.bar` HERE, at this boundary, and that placement is the
  * point: a link is a TypeScript editor affordance, and every downstream renderer — OpenAPI
@@ -20,6 +36,12 @@ export class JsDoc {
     private constructor(
         /** The body text, links flattened, trimmed. Empty string when undocumented. */
         readonly description: string,
+        /**
+         * The `@returns` block tag's text — what a method's success response carries, published as
+         * that response's `description` (#1292). Undefined when the author wrote none (or wrote the
+         * tag with no text), which an OpenAPI renderer refuses for an operation with a body.
+         */
+        readonly returns: string | undefined,
         /** The `@format` block tag's text, e.g. `email` / `date-time`. */
         readonly format: string | undefined,
         /**
@@ -47,6 +69,7 @@ export class JsDoc {
         const symbolLike = node as JsDocCarrier;
         const blocks = symbolLike.jsDoc ?? [];
         const bodies: string[] = [];
+        let returns: string | undefined;
         let format: string | undefined;
         let mcp: string | undefined;
         let mcpHeader: string | undefined;
@@ -56,7 +79,11 @@ export class JsDoc {
             for (const tag of block.tags ?? []) {
                 const name = tag.tagName.text;
                 const text = JsDoc.flatten(tag.comment);
-                if (name === 'format' && text !== '') {
+                // `@privateRemarks` (and every tag not named below) is skipped with its text — see
+                // the class doc: it is never published anywhere.
+                if (name === RETURNS_TAG && text !== '') {
+                    returns = text;
+                } else if (name === 'format' && text !== '') {
                     format = text;
                 } else if (name === 'mcp' && text !== '') {
                     mcp = text;
@@ -66,7 +93,7 @@ export class JsDoc {
             }
         }
 
-        return new JsDoc(bodies.join('\n').trim(), format, mcp, mcpHeader);
+        return new JsDoc(bodies.join('\n').trim(), returns, format, mcp, mcpHeader);
     }
 
     /**

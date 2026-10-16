@@ -57,7 +57,7 @@
                 },
                 "responses": {
                     "200": {
-                        "description": "Success.",
+                        "description": "The page of matching orders, newest first, with `nextFrom` set while more remain.",
                         "headers": {
                             "x-request-id": {
                                 "$ref": "#/components/headers/x-request-id"
@@ -148,7 +148,7 @@
                 },
                 "responses": {
                     "200": {
-                        "description": "Success.",
+                        "description": "The order's state after the attempt — `cancelled`, or the state that prevented it.",
                         "headers": {
                             "x-request-id": {
                                 "$ref": "#/components/headers/x-request-id"
@@ -239,7 +239,7 @@
                 },
                 "responses": {
                     "200": {
-                        "description": "Success.",
+                        "description": "How many menu items the rebuild re-read.",
                         "headers": {
                             "x-request-id": {
                                 "$ref": "#/components/headers/x-request-id"
@@ -381,6 +381,7 @@
             },
             "CancelOrderRequest": {
                 "type": "object",
+                "description": "The order to cancel, and why.",
                 "properties": {
                     "orderId": {
                         "type": "string",
@@ -398,6 +399,7 @@
             },
             "CancelOrderResponse": {
                 "type": "object",
+                "description": "Where an order stands after a cancellation attempt.",
                 "properties": {
                     "state": {
                         "$ref": "#/components/schemas/OrderState",
@@ -428,6 +430,7 @@
             },
             "FetchOrdersRequest": {
                 "type": "object",
+                "description": "Which orders to fetch: one store's orders inside a time window, optionally narrowed by state.",
                 "properties": {
                     "storeId": {
                         "type": "string",
@@ -452,6 +455,7 @@
             },
             "FetchOrdersResponse": {
                 "type": "object",
+                "description": "One page of a store's orders, and where the next page starts.",
                 "properties": {
                     "orders": {
                         "type": "array",
@@ -526,6 +530,7 @@
             },
             "OrderStateChangedEvent": {
                 "type": "object",
+                "description": "The payload of `order.state-changed`: which order moved, to what state, and when.",
                 "properties": {
                     "orderId": {
                         "type": "string",
@@ -549,6 +554,7 @@
             },
             "ReindexRequest": {
                 "type": "object",
+                "description": "The store whose menu cache to rebuild.",
                 "properties": {
                     "storeId": {
                         "type": "string",
@@ -561,6 +567,7 @@
             },
             "ReindexResponse": {
                 "type": "object",
+                "description": "What a menu-cache rebuild re-read.",
                 "properties": {
                     "itemsRead": {
                         "type": "number",

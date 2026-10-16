@@ -38,7 +38,11 @@ export interface StoredPassageResponse {
 @ApiPath('/fsdb')
 @ApiType(SVC_TO_SVC, MCP)
 export class FsdbApi {
-    /** Reads one stored passage. */
+    /**
+     * Reads one stored passage.
+     *
+     * @returns The passage and where its descriptions are stored.
+     */
     @Endpoint(POST, '/passage', READ, RPC)
     @WpAuthPublic('Fixture only.')
     @WpAuthorization({ authType: AuthorizationType.ANONYMOUS, reason: 'Fixture only.' })

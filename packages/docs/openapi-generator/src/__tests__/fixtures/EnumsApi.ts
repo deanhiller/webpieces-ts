@@ -20,19 +20,23 @@ export enum VoiceMode {
     FIXED = 'fixed',
 }
 
+/** One voice in a story. */
 export interface Speaker {
     /** The speaker's gender. */
     gender: SpeakerGender;
 }
 
+/** A voice picked at random. */
 export interface RandomStoryVoice {
     mode: VoiceMode.RANDOM;
 }
 
+/** A voice picked at random from the Chirp voices. */
 export interface ChirpRandomVoice {
     mode: VoiceMode.RANDOM_WITH_CHIRP | VoiceMode.RANDOM_CHIRP_MALE;
 }
 
+/** One named voice, every time. */
 export interface FixedStoryVoice {
     mode: VoiceMode.FIXED;
     name: string;
@@ -41,10 +45,12 @@ export interface FixedStoryVoice {
 /** Narrowed on `mode`. */
 export type StoryVoiceChoice = RandomStoryVoice | ChirpRandomVoice | FixedStoryVoice;
 
+/** A random voice of one gender, chosen by a literal. */
 export interface LiteralRandomVoice {
     kind: 'randomFemale' | 'randomMale';
 }
 
+/** One named voice, chosen by a literal. */
 export interface LiteralFixedVoice {
     kind: 'fixed';
     name: string;
@@ -53,6 +59,7 @@ export interface LiteralFixedVoice {
 /** Narrowed on `kind`, one branch holding two literals. */
 export type LiteralVoiceChoice = LiteralRandomVoice | LiteralFixedVoice;
 
+/** The story to write and who narrates it. */
 export interface StoryRequest {
     gender: SpeakerGender;
     rotation: SpeakerGender[];
@@ -63,6 +70,7 @@ export interface StoryRequest {
     literalVoice?: LiteralVoiceChoice;
 }
 
+/** The story as written. */
 export interface StoryResponse {
     gender: SpeakerGender;
     /** Not chosen yet: a NULLABLE named enum (#1197). */
@@ -74,7 +82,11 @@ export interface StoryResponse {
 /** Stories. */
 @ApiPath('/stories')
 export class EnumsApi {
-    /** Writes one story. */
+    /**
+     * Writes one story.
+     *
+     * @returns The written story's voice choices.
+     */
     @Endpoint(POST, '/write', READ, RPC)
     @WpAuthPublic('Fixture only.')
     @WpAuthorization({ authType: AuthorizationType.ANONYMOUS, reason: 'Fixture only.' })

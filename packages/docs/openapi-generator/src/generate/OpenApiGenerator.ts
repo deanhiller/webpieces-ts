@@ -30,7 +30,10 @@ import {
 } from './SchemaPlacement';
 import { SchemaRenderer, UnmappedField } from './SchemaRenderer';
 import { SecurityDeriver } from './SecurityDeriver';
+import { MissingReturnsGuard } from './MissingReturnsGuard';
 import { StackedJsDocGuard } from './StackedJsDocGuard';
+import { TagOwnership } from './TagOwnership';
+import { UndocumentedSchemaGuard } from './UndocumentedSchemaGuard';
 import { UpstreamComponentsIndex } from './UpstreamComponents';
 
 /** One rendered document, and the renderer that built its schemas — what it defined and referenced. */
@@ -96,11 +99,16 @@ const OPENAPI_VERSION = '3.1.0';
  * contract, by naming the type.
  *
  * It refuses a declaration with stacked JSDoc the same way, and for the same reason — see
- * {@link StackedJsDocGuard} (#1286).
+ * {@link StackedJsDocGuard} (#1286). And, in every document including the MCP projection and its tool
+ * catalogs, an operation with a body but no `@returns` ({@link MissingReturnsGuard}) and a published
+ * schema with no JSDoc description ({@link UndocumentedSchemaGuard}) — each naming every offender in
+ * one run (#1292).
  */
 export class OpenApiGenerator {
     private readonly security = new SecurityDeriver();
     private readonly stackedJsDoc = new StackedJsDocGuard();
+    private readonly missingReturns = new MissingReturnsGuard();
+    private readonly tagOwnership = new TagOwnership();
 
     /**
      * ONE document per `@ApiType` some contract declares, and no others.
@@ -121,6 +129,11 @@ export class OpenApiGenerator {
             models.flatMap((model: ApiDocModel) => model.stackedJsDoc),
             inputs.manifestPath,
         );
+        this.missingReturns.refuse(inputs.contracts, inputs.manifestPath);
+        this.tagOwnership.refuseSharedOwners(inputs.contracts, inputs.manifestPath);
+        // Collected across EVERY OpenAPI document of the run and refused once, after them all, so an
+        // author is handed every undocumented schema at once rather than one document at a time.
+        const undocumented = new UndocumentedSchemaGuard();
         const documents: GeneratedDocument[] = [];
         for (const selection of DocumentSelection.all()) {
             const contracts = inputs.contracts.filter((each: ContractModel) =>
@@ -133,7 +146,7 @@ export class OpenApiGenerator {
                 documents.push(
                     new GeneratedDocument(
                         selection.fileName,
-                        this.bundled(inputs, contracts, selection),
+                        this.bundled(inputs, contracts, selection, undocumented),
                     ),
                 );
                 continue;
@@ -152,6 +165,7 @@ export class OpenApiGenerator {
                 selection.fileName,
                 inputs.manifestPath,
             );
+            undocumented.collect(split.schemas.reachedTypes(), this.mergedTypes(inputs));
             documents.push(new GeneratedDocument(selection.fileName, split.document));
             documents.push(
                 new GeneratedDocument(
@@ -160,6 +174,7 @@ export class OpenApiGenerator {
                 ),
             );
         }
+        undocumented.refuse(inputs.manifestPath);
         return new GeneratedDocuments(documents);
     }
 
@@ -186,6 +201,9 @@ export class OpenApiGenerator {
         const rendered = schemas.components();
         this.refuseUnmapped(schemas.unmapped(), COMPONENTS_DOCUMENT, where);
         this.refuseUnpublished(schemas, model.types, inputs.upstream, COMPONENTS_DOCUMENT, where);
+        const undocumented = new UndocumentedSchemaGuard();
+        undocumented.collect(schemas.reachedTypes(), model.types);
+        undocumented.refuse(where);
         if (rendered.isEmpty()) {
             throw new OpenApiGenerationError(
                 `${model.packageName}'s entries export no type with a schema`,
@@ -221,8 +239,13 @@ export class OpenApiGenerator {
         inputs: GenerationInputs,
         contracts: readonly ContractModel[],
         selection: DocumentSelection,
+        undocumented?: UndocumentedSchemaGuard,
     ): JsonObject {
         const discovery = this.render(inputs, contracts, selection, new DiscoveryPlacement());
+        // The MCP projection inlines every type it reaches, from any package, so it is judged here
+        // over that whole set (#1292). A split document's bundled sibling is not: each type in it is
+        // judged by the document — or the components document — that defines it.
+        undocumented?.collect(discovery.schemas.reachedTypes(), this.mergedTypes(inputs));
         const names = BundledNames.assign(
             discovery.schemas.reachedTypes(),
             this.mergedTypes(inputs),
@@ -262,7 +285,7 @@ export class OpenApiGenerator {
 
         const paths = new JsonObject();
         const webhooks = new JsonObject();
-        const tags = new JsonObject();
+        const tags = new Set<string>();
         for (const contractModel of contracts) {
             this.renderContract(
                 contractModel,
@@ -295,7 +318,7 @@ export class OpenApiGenerator {
             .set('openapi', OPENAPI_VERSION)
             .set('info', this.info(inputs, selection))
             .set('servers', this.servers(inputs))
-            .set('tags', this.tagList(tags))
+            .set('tags', this.tagList(tags, contracts))
             .set('security', hoisted === undefined ? undefined : hoisted.slice())
             .set('paths', paths)
             .set('webhooks', webhooks.orUndefined())
@@ -475,7 +498,7 @@ export class OpenApiGenerator {
         perOperationSecurity: readonly JsonValue[] | undefined,
         paths: JsonObject,
         webhooks: JsonObject,
-        tags: JsonObject,
+        tags: Set<string>,
     ): void {
         const model = contractModel.model;
         const tag = contractModel.entry.tag;
@@ -485,7 +508,7 @@ export class OpenApiGenerator {
             }
             // A tag is added only by an operation that survived, so a document never advertises a
             // section of its sidebar that turns out to be empty.
-            tags.set(tag, this.tagProse(model) ?? '');
+            tags.add(tag);
             if (contractModel.entry.isWebhook()) {
                 webhooks.set(
                     this.eventName(endpoint),
@@ -676,23 +699,22 @@ export class OpenApiGenerator {
 
     /**
      * `tags[]` in MANIFEST ORDER, because that order IS the published sidebar — one of the two
-     * orders in this document that carries meaning and is therefore NOT sorted.
+     * orders in this document that carries meaning and is therefore NOT sorted. Each description is
+     * the owning contract's JSDoc — see {@link TagOwnership} (#1292).
      */
-    private tagList(tags: JsonObject): readonly JsonValue[] | undefined {
+    private tagList(
+        tags: ReadonlySet<string>,
+        contracts: readonly ContractModel[],
+    ): readonly JsonValue[] | undefined {
         const list: JsonValue[] = [];
-        for (const name of tags.keys()) {
-            const prose = tags.get(name);
+        for (const name of Array.from(tags)) {
             list.push(
                 new JsonObject()
                     .set('name', name)
-                    .set('description', prose === '' ? undefined : prose),
+                    .set('description', this.tagOwnership.descriptionOf(name, contracts)),
             );
         }
         return list.length === 0 ? undefined : list;
-    }
-
-    private tagProse(model: ApiDocModel): string | undefined {
-        return model.description.trim() === '' ? undefined : model.description;
     }
 
     private errorResponses(inputs: GenerationInputs): readonly ErrorResponseEntry[] {

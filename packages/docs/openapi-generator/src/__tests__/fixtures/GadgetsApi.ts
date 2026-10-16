@@ -7,10 +7,12 @@
  */
 import { ApiPath, ApiType, AuthorizationType, Endpoint, POST, READ, RPC, SVC_TO_SVC, WpAuthPublic, WpAuthorization } from '@webpieces/core-util';
 
+/** Which gadgets to list. */
 export interface ListGadgetsRequest {
     prefix: string;
 }
 
+/** The gadgets that matched. */
 export interface ListGadgetsResponse {
     names: string[];
 }
@@ -19,7 +21,11 @@ export interface ListGadgetsResponse {
 @ApiPath('/gadgets')
 @ApiType(SVC_TO_SVC)
 export class GadgetsApi {
-    /** Lists gadgets. */
+    /**
+     * Lists gadgets.
+     *
+     * @returns The names of the matching gadgets.
+     */
     @Endpoint(POST, '/list', READ, RPC)
     @WpAuthPublic('A fixture; nothing here to protect.')
     @WpAuthorization({ authType: AuthorizationType.ANONYMOUS, reason: 'A fixture; nothing here to protect.' })

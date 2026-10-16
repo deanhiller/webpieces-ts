@@ -12,6 +12,7 @@
     },
     "inputSchema": {
       "type": "object",
+      "description": "Everything the cancel tool accepts.",
       "properties": {
         "orderId": {
           "type": "string",
@@ -30,6 +31,7 @@
     },
     "outputSchema": {
       "type": "object",
+      "description": "The order's phase after the cancellation attempt.",
       "properties": {
         "phase": {
           "type": "string",
@@ -62,6 +64,7 @@
     },
     "inputSchema": {
       "type": "object",
+      "description": "Everything the lookup tool accepts. See PageRequest for why this is a class.",
       "properties": {
         "storeId": {
           "type": "string",
@@ -154,6 +157,7 @@
     },
     "outputSchema": {
       "type": "object",
+      "description": "One page of matching orders and the cursor for the next page.",
       "properties": {
         "orders": {
           "type": "array",
@@ -221,6 +225,7 @@
     },
     "inputSchema": {
       "type": "object",
+      "description": "Everything the reindex tool accepts.",
       "properties": {
         "storeId": {
           "type": "string",
@@ -234,6 +239,7 @@
     },
     "outputSchema": {
       "type": "object",
+      "description": "How many menu items the rebuild re-read.",
       "properties": {
         "itemsRead": {
           "type": "integer",

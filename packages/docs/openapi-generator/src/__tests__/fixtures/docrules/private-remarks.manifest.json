@@ -1,0 +1,11 @@
+{
+    "title": "Doc rules",
+    "operationIds": "contract_method",
+    "version": "1.0.0",
+    "apis": [
+        {
+            "entry": "PrivateRemarksApi.ts",
+            "tag": "Lamps"
+        }
+    ]
+}

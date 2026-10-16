@@ -12,6 +12,7 @@
     },
     "inputSchema": {
       "type": "object",
+      "description": "Which orders to fetch: one store's orders inside a time window, optionally narrowed by state.",
       "properties": {
         "storeId": {
           "type": "string",
@@ -42,6 +43,7 @@
     },
     "outputSchema": {
       "type": "object",
+      "description": "The page of matching orders, newest first, with `nextFrom` set while more remain.",
       "properties": {
         "orders": {
           "type": "array",

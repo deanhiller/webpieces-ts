@@ -9,6 +9,7 @@ import { WpAuthorization, AuthorizationType } from '@webpieces/core-util';
  */
 import { ApiPath, Endpoint, POST, READ, RPC, WpAuthPublic } from '@webpieces/core-util';
 
+/** A liveness beat from one service. */
 export interface HeartbeatRequest {
     at: string;
 }

@@ -16,6 +16,7 @@ import {
     WRITE,
 } from '@webpieces/core-util';
 
+/** The event a partner receives when a widget is made. */
 export interface WidgetMadeEvent {
     /** The widget that was made. */
     widgetId: string;

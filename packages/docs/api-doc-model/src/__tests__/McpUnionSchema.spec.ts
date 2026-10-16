@@ -243,6 +243,7 @@ function endpoint(title: string): DocumentedEndpoint {
         new Map<string, string>(),
         'Asks.',
         undefined,
+        'The answer.',
         TypeRef.ref('Ask'),
         TypeRef.ref('Answer'),
     );

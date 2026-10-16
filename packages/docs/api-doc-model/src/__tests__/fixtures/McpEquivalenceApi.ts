@@ -149,7 +149,12 @@ export abstract class McpEquivalenceApi {
     // `idempotentHint` true, all three computed from `READ` rather than declared. It is a `//`
     // comment and not part of the JSDoc because the JSDoc BODY is the published tool description,
     // and this paragraph is for whoever maintains the fixture.
-    /** Looks up orders at one store, newest first. */
+    /**
+     * Looks up orders at one store, newest first.
+     *
+     * @returns One page of matching orders and the cursor for the next page.
+     * @privateRemarks Served from the read replica; this note must reach no tool catalog (#1292).
+     */
     @Endpoint(POST, '/lookup', READ, RPC)
     @WpAuth([jwtAuth()])
     @WpAuthorization({ authType: AuthorizationType.ALL_USERS })
@@ -161,7 +166,11 @@ export abstract class McpEquivalenceApi {
 
     // The WRITE row: not read-only, destructive, NOT idempotent. `openWorld` is declared on
     // `@Endpoint`'s options, which is where the fourth hint lives after #982.
-    /** Cancels one order. */
+    /**
+     * Cancels one order.
+     *
+     * @returns The order's phase after the cancellation attempt.
+     */
     @Endpoint(POST, '/cancel', WRITE, RPC, { openWorld: true })
     @WpAuth([jwtAuth()])
     @WpAuthorization({ authType: AuthorizationType.ALL_USERS })
@@ -173,7 +182,11 @@ export abstract class McpEquivalenceApi {
 
     // The WRITE_IDEMPOTENT row: destructive AND idempotent. `hidden` keeps it out of the customer
     // document and leaves it in the MCP one, which is the combination most likely to be got wrong.
-    /** Rebuilds a store's menu cache. */
+    /**
+     * Rebuilds a store's menu cache.
+     *
+     * @returns How many menu items the rebuild re-read.
+     */
     @Endpoint(POST, '/reindex', WRITE_IDEMPOTENT, RPC, { hidden: true })
     @WpAuth([jwtAuth()])
     @WpAuthorization({ authType: AuthorizationType.ALL_USERS })

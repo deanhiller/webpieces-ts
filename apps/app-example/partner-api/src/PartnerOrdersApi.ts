@@ -81,8 +81,14 @@ export interface Order {
 }
 
 // `storeId` is inherited from StoreScopedRequest two levels up, and `from` REDECLARES
-// WindowedStoreRequest's field — the golden's inheritance case (#1055). A line comment, not JSDoc,
-// because JSDoc here would publish as this schema's description.
+// WindowedStoreRequest's field — the golden's inheritance case (#1055). A line comment, so this note
+// stays private: only the JSDoc below publishes, as the schema's description.
+/**
+ * Which orders to fetch: one store's orders inside a time window, optionally narrowed by state.
+ *
+ * @privateRemarks The golden's inheritance case (#1055): `storeId` comes from StoreScopedRequest two
+ * levels up. This sentence must appear in NO generated document — the #1292 stripping proof.
+ */
 export interface FetchOrdersRequest extends WindowedStoreRequest {
     /**
      * Window start, inclusive. Omit for the last 24 hours — OPTIONAL, so it may be absent entirely.
@@ -94,6 +100,7 @@ export interface FetchOrdersRequest extends WindowedStoreRequest {
     states?: OrderState[];
 }
 
+/** One page of a store's orders, and where the next page starts. */
 export interface FetchOrdersResponse {
     /** The matching orders, newest first. */
     orders: Order[];
@@ -102,6 +109,7 @@ export interface FetchOrdersResponse {
     nextFrom?: string;
 }
 
+/** The order to cancel, and why. */
 export interface CancelOrderRequest {
     /** The order to cancel. */
     orderId: string;
@@ -110,16 +118,19 @@ export interface CancelOrderRequest {
     reason: string;
 }
 
+/** Where an order stands after a cancellation attempt. */
 export interface CancelOrderResponse {
     /** The order's state after the attempt. */
     state: OrderState;
 }
 
+/** The store whose menu cache to rebuild. */
 export interface ReindexRequest {
     /** The store whose cache to rebuild. */
     storeId: string;
 }
 
+/** What a menu-cache rebuild re-read. */
 export interface ReindexResponse {
     /** How many menu items were re-read. */
     itemsRead: number;
@@ -141,6 +152,9 @@ export abstract class PartnerOrdersApi {
      *
      * Paginate by passing the previous response's `nextFrom` until it is absent.
      *
+     * @returns The page of matching orders, newest first, with `nextFrom` set while more remain.
+     * @privateRemarks Backed by the orders read replica, which lags the primary by up to a second.
+     * Internal only: this note must appear in NO generated document (#1292).
      * @mcp Read-only. Call this before answering any question about recent orders; do not reuse an
      *      earlier answer, order state changes minute to minute.
      */
@@ -158,6 +172,8 @@ export abstract class PartnerOrdersApi {
      *
      * Cancelling an order that is already `delivered` returns its current state rather than failing:
      * the call is about reaching a state, not about performing an action exactly once.
+     *
+     * @returns The order's state after the attempt — `cancelled`, or the state that prevented it.
      */
     @Endpoint(POST, '/cancel', WRITE, RPC)
     @WpAuth([apiKeyAuth('partner', PARTNER_CREDENTIALS)])
@@ -172,6 +188,8 @@ export abstract class PartnerOrdersApi {
      * Not published: this is an operator tool, and the partner contract has no concept of our cache.
      * It is still served and still demands the `partner` credential — `hidden` is a documentation
      * decision and authorizes nobody.
+     *
+     * @returns How many menu items the rebuild re-read.
      */
     @Endpoint(POST, '/reindex', WRITE, RPC, { hidden: true })
     @WpAuth([apiKeyAuth('partner', PARTNER_CREDENTIALS)])

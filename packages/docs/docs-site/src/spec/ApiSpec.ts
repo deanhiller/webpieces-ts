@@ -32,12 +32,33 @@ export class SecuritySchemeInfo {
     ) {}
 }
 
+/**
+ * One HTTP header a page documents: a response's `headers` entry, or a request parameter declared
+ * `in: "header"` (#1292). A `$ref` — into `components.headers` or `components.parameters` — is resolved
+ * when the document is read, so a renderer never follows a pointer.
+ *
+ * `schema` is kept as the node rather than a label, because the type label is the same
+ * `SchemaLens` reading every body field gets — a header typed by a named schema reads exactly like a
+ * field typed by one.
+ */
+export class HeaderInfo {
+    constructor(
+        readonly name: string,
+        readonly required: boolean,
+        readonly description: string,
+        /** The header's `schema`; a node over `undefined` when the document states none. */
+        readonly schema: JsonNode,
+    ) {}
+}
+
 /** One response of one operation. */
 export class ResponseInfo {
     constructor(
         readonly status: string,
         readonly description: string,
         readonly schema: JsonNode | undefined,
+        /** Its `headers`, in document order — rendered on the card beside the body (#1292). */
+        readonly headers: readonly HeaderInfo[],
     ) {}
 }
 
@@ -57,6 +78,11 @@ export class OperationInfo {
         readonly description: string,
         readonly tag: string,
         readonly requestSchema: JsonNode | undefined,
+        /**
+         * Every `in: "header"` parameter, the path item's and the operation's (#1292). A credential
+         * header from a security scheme is not here: the authorization card documents those.
+         */
+        readonly requestHeaders: readonly HeaderInfo[],
         readonly responses: readonly ResponseInfo[],
         readonly isWebhook: boolean,
         readonly securityKeys: readonly string[],

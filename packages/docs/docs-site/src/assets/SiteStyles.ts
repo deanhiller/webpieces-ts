@@ -84,6 +84,9 @@ button:hover { color: var(--fg); }
 .field-name { font-weight: 600; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
 .field-type { color: var(--fg-soft); font-size: 12px; }
 .field-required { color: #c0392b; font-size: 11px; font-weight: 700; letter-spacing: .04em; }
+.field-optional { color: var(--fg-soft); font-size: 11px; font-weight: 700; letter-spacing: .04em; }
+.headers { margin: 8px 0 12px; }
+.headers-head { font-size: 12px; font-weight: 700; letter-spacing: .04em; color: var(--fg-soft); text-transform: uppercase; }
 .field-doc { margin: 4px 0 0; color: var(--fg-soft); }
 .field-children { margin-left: 16px; border-left: 1px solid var(--line); padding-left: 12px; }
 .chips { margin-top: 6px; font-size: 12px; color: var(--fg-soft); }

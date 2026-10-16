@@ -210,8 +210,8 @@ export class McpSchemaRenderer {
                 McpSchemaRenderer.operationOf(endpoint, where),
                 endpoint.openWorld,
             ),
-            this.rootSchema(endpoint.request, where, 'request'),
-            this.rootSchema(endpoint.response, where, 'response'),
+            this.rootSchema(endpoint.request, where, 'request', undefined),
+            this.rootSchema(endpoint.response, where, 'response', endpoint.returnsDescription),
             endpoint.mcpTool!.profiles,
         );
     }
@@ -252,7 +252,12 @@ export class McpSchemaRenderer {
      * contract in the workspace, `@ApiType` or not. This is the renderer's own backstop, so a catalog
      * can never carry one even if it is reached some other way.
      */
-    private rootSchema(ref: TypeRef, where: string, side: string): ApiJsonSchema {
+    private rootSchema(
+        ref: TypeRef,
+        where: string,
+        side: string,
+        returns: string | undefined,
+    ): ApiJsonSchema {
         if (ref.kind === 'union') {
             throw new McpRenderError(
                 `an MCP tool's ${side} is itself a union`,
@@ -280,7 +285,25 @@ export class McpSchemaRenderer {
                     'request in the session.',
             );
         }
-        return this.objectSchema(type, new Set<string>());
+        const schema = this.objectSchema(type, new Set<string>());
+        McpSchemaRenderer.describeRoot(schema, returns ?? type.description);
+        return schema;
+    }
+
+    /**
+     * The ROOT schema's `description` (#1292): the request DTO's JSDoc on `inputSchema`, and the
+     * method's `@returns` sentence on `outputSchema` — the one slot a tool catalog has for "what this
+     * tool returns", so an agent reads the same sentence a partner reads as the OpenAPI success
+     * response's description. Falls back to the response DTO's own JSDoc when the method has no
+     * `@returns`, which only a caller outside `wp-openapi` can reach: the generator refuses a tool
+     * without one before any catalog is written. Nested DTOs keep the FIELD's prose (see
+     * {@link fieldSchema}); only the root has no field to take it from.
+     */
+    // webpieces-disable no-function-outside-class -- private static helper of this class
+    private static describeRoot(schema: ApiJsonSchema, prose: string): void {
+        if (prose.trim() !== '') {
+            schema.description = prose;
+        }
     }
 
     private namedType(name: string, where: string): DocumentedType {

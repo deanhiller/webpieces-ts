@@ -1,4 +1,4 @@
-import { DocumentedAuthMethod, DocumentedEndpoint, TypeRef } from '@webpieces/api-doc-model';
+import { DocumentedAuthMethod, DocumentedEndpoint } from '@webpieces/api-doc-model';
 import {
     CLOUDTASKS,
     CRON,
@@ -13,11 +13,11 @@ import {
 import { JsonObject, JsonValue } from '../json/JsonObject';
 import { ErrorResponseEntry, OperationIdStyle } from '../manifest/OpenApiManifest';
 import { SchemaRenderer } from './SchemaRenderer';
+import { SuccessBody } from './SuccessBody';
+import { OpenApiGenerationError } from '../OpenApiGenerationError';
 
 /** What a webhook's `void` return means on the wire, said once. */
 const ACKNOWLEDGE = 'Return any 2xx to acknowledge delivery. The body is ignored.';
-
-/** `Promise<void>` on the wire, said once. */
 
 /** The response document, and the responses a document-wide failure contract adds to it. */
 export class ResponseContract {
@@ -58,6 +58,8 @@ export class ResponseContract {
  * render of one operation, so two documents holding it cannot disagree about anything else in it.
  */
 export class OperationRenderer {
+    private readonly body = new SuccessBody();
+
     constructor(
         private readonly schemas: SchemaRenderer,
         /** True only for the MCP document — see {@link withMcp}. */
@@ -305,10 +307,11 @@ export class OperationRenderer {
         contractName: string,
         contract: ResponseContract,
     ): JsonObject {
+        const isVoid = this.body.isVoid(endpoint.response);
         const response = new JsonObject()
-            .set('description', this.isVoid(endpoint.response) ? ACKNOWLEDGE : 'Success.')
+            .set('description', this.successDescription(endpoint, contractName, isVoid))
             .set('headers', contract.headers);
-        if (this.isVoid(endpoint.response)) {
+        if (isVoid) {
             return response;
         }
         const pointer = `#/paths/${contractName}_${endpoint.methodName}/responses/200`;
@@ -337,12 +340,30 @@ export class OperationRenderer {
         );
     }
 
-    /** `Promise<void>` reaches the model as the `unknown` primitive — there is no body to document. */
-    private isVoid(response: TypeRef | undefined): boolean {
-        return (
-            response === undefined ||
-            (response.kind === 'primitive' && response.primitive === 'unknown')
-        );
+    /**
+     * The method's `@returns` text (#1292). With none, a `void` operation keeps the derived
+     * acknowledgement sentence — there is no body for `@returns` to describe. A body-carrying
+     * operation with none never gets here: {@link MissingReturnsGuard} refuses it before any document
+     * renders, so there is no filler fallback to publish.
+     */
+    private successDescription(
+        endpoint: DocumentedEndpoint,
+        contractName: string,
+        isVoid: boolean,
+    ): string {
+        const returns = this.prose(endpoint.returnsDescription);
+        if (returns !== undefined) {
+            return returns;
+        }
+        if (!isVoid) {
+            throw new OpenApiGenerationError(
+                `${endpoint.methodName} has a response body but no @returns`,
+                `${contractName}.${endpoint.methodName} (the contract method's JSDoc)`,
+                'Add a `@returns` line to its JSDoc. MissingReturnsGuard should have refused this ' +
+                    'before rendering; reaching here is a generator defect.',
+            );
+        }
+        return ACKNOWLEDGE;
     }
 
     private prose(text: string | undefined): string | undefined {

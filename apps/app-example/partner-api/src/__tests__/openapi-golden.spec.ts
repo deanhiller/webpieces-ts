@@ -130,6 +130,27 @@ describe('the OpenAPI documents generated from the example contract', () => {
         }
     });
 
+    /**
+     * #1292: `fetchOrders` and `FetchOrdersRequest` carry a `@privateRemarks`. Its text reaches NO
+     * file — not the OpenAPI documents, not their YAML, not the MCP document or the tool catalog —
+     * while the method's `@returns` is every document's success description.
+     */
+    it('publishes no @privateRemarks text anywhere, and @returns as the success description', () => {
+        expect(golden.fresh.size).toBeGreaterThan(0);
+        for (const [fileName, text] of Array.from(golden.fresh.entries())) {
+            expect(text, fileName).not.toContain('read replica');
+            expect(text, fileName).not.toContain('must appear in NO generated document');
+        }
+        const returns =
+            'The page of matching orders, newest first, with `nextFrom` set while more remain.';
+        for (const name of DOCUMENTS) {
+            const doc = JSON.parse(golden.fresh.get(`${name}.json`)!) as {
+                paths: Record<string, Record<string, { responses: Record<string, { description: string }> }>>;
+            };
+            expect(doc.paths['/orders/fetch']['post'].responses['200'].description, name).toBe(returns);
+        }
+    });
+
     it('the YAML parses back to the SAME document as its JSON counterpart', () => {
         const reader = new YamlReader();
         for (const name of DOCUMENTS) {

@@ -81,6 +81,36 @@ describe('a conforming document this package did not generate', () => {
         expect(site.page('reference', 'plant-tree')).toContain('x-mixed-key');
     });
 
+    it('renders a Headers list on the response card, resolving a $ref into components.headers (#1292)', () => {
+        const page = site.page('reference', 'plant-tree');
+        const card = page.slice(page.indexOf('<h2>Responses</h2>'));
+        expect(card).toContain('<div class="headers-head">Headers</div>');
+        expect(card).toContain('<span class="field-name">x-request-id</span>');
+        expect(card).toContain('Quote it in a support request.');
+        expect(card).toContain('<span class="field-name">X-Rate-Remaining</span>');
+        expect(card).toContain('<span class="field-type">integer</span>');
+        expect(card).toContain('<span class="field-optional">OPTIONAL</span>');
+        // BESIDE the body schema, on the same card.
+        expect(card.indexOf('x-request-id')).toBeLessThan(card.indexOf('</details>'));
+    });
+
+    it('lists in:"header" parameters in the request section — path item and operation, $ref resolved (#1292)', () => {
+        const page = site.page('reference', 'plant-tree');
+        const request = page.slice(page.indexOf('<h2>Request headers</h2>'), page.indexOf('<h2>Request body</h2>'));
+        expect(request).toContain('<span class="field-name">X-Trace</span>');
+        expect(request).toContain('string&lt;uuid&gt;');
+        expect(request).toContain('<span class="field-required">REQUIRED</span>');
+        expect(request).toContain('Correlates the call across services.');
+        expect(request).toContain('<span class="field-name">X-Tree-Owner</span>');
+        expect(page).not.toContain('<span class="field-name">dryRun</span>');
+    });
+
+    it('renders no Headers heading for an operation that declares none', () => {
+        const page = site.page('reference', 'count-trees');
+        expect(page).not.toContain('headers-head');
+        expect(page).not.toContain('Request headers');
+    });
+
     it('renders the info description as markdown, escaping anything that is not a known mark', () => {
         const home = site.page('.');
         expect(home).toContain('<strong>not</strong>');

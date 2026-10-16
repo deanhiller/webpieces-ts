@@ -9,18 +9,22 @@ import { WpAuthorization, AuthorizationType, WpAuth, apiKey as apiKeyAuth } from
 import { ApiPath, ApiType, Endpoint, EXTERNAL_CUSTOMER, POST, READ, RPC, SVC_TO_SVC, WpAuthPublic } from '@webpieces/core-util';
 import { WidgetKeys } from './Headers';
 
+/** What to echo back. */
 export interface PingRequest {
     echo: string;
 }
 
+/** The echo. */
 export interface PingResponse {
     echo: string;
 }
 
+/** Which secret to read. */
 export interface SecretRequest {
     id: string;
 }
 
+/** The secret's value. */
 export interface SecretResponse {
     value: string;
 }
@@ -29,7 +33,11 @@ export interface SecretResponse {
 @ApiPath('/mixed')
 @ApiType(SVC_TO_SVC, EXTERNAL_CUSTOMER)
 export class MixedApi {
-    /** Anyone may call this. */
+    /**
+     * Anyone may call this.
+     *
+     * @returns The request's echo, unchanged.
+     */
     @Endpoint(POST, '/ping', READ, RPC)
     @WpAuthPublic('A liveness probe; there is nothing here to protect.')
     @WpAuthorization({ authType: AuthorizationType.ANONYMOUS, reason: 'A liveness probe; there is nothing here to protect.' })
@@ -37,7 +45,11 @@ export class MixedApi {
         throw new Error('contract');
     }
 
-    /** Only a partner may call this. */
+    /**
+     * Only a partner may call this.
+     *
+     * @returns The secret's value.
+     */
     @Endpoint(POST, '/secret', READ, RPC)
     @WpAuth([apiKeyAuth('partner', [{ in: 'header', key: WidgetKeys.API_KEY, description: 'Your key.' }])])
     @WpAuthorization({ authType: AuthorizationType.USERS_OR_SERVICES })

@@ -12,6 +12,7 @@
     },
     "inputSchema": {
       "type": "object",
+      "description": "A request for one lesson's passages. Its base lives in ANOTHER package, and is flattened.",
       "properties": {
         "lessonNumber": {
           "type": "number",
@@ -42,6 +43,7 @@
     },
     "outputSchema": {
       "type": "object",
+      "description": "Every passage of the lesson, in reading order, with its descriptions.",
       "properties": {
         "passages": {
           "type": "array",

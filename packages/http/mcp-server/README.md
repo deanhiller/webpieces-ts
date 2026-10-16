@@ -50,10 +50,16 @@ contract by `@webpieces/api-doc-model` at BUILD time:
 |---|---|
 | `title` / `annotations.title` | `@WpMcpTool`'s second argument |
 | `description` | the method's JSDoc body, or its `@mcp` tag — the same words the partner reads in OpenAPI |
-| `inputSchema` / `outputSchema` | the declared request and response types, with each field's JSDoc as its description |
+| `inputSchema` / `outputSchema` | the declared request and response types, with each field's JSDoc as its description; `inputSchema.description` is the request DTO's JSDoc and `outputSchema.description` is the method's `@returns` — the sentence OpenAPI publishes as the success response's description (#1292) |
 | `readOnlyHint` / `destructiveHint` / `idempotentHint` | `@Endpoint`'s `operation` — `READ`, `WRITE_IDEMPOTENT` or `WRITE` |
 | `openWorldHint` | `@Endpoint`'s `openWorld` option |
 | `x-mcp-header` | the field's `@mcpHeader <token>` JSDoc tag |
+
+No `@privateRemarks` text reaches any of it: the generator drops the tag at extraction, and it refuses
+a tool whose method has no `@returns` or that reaches a schema with no JSDoc description, exactly as it
+refuses them for OpenAPI (#1292). The server serves the catalog's descriptions verbatim —
+`McpServedDescriptions.integration.spec.ts` boots it on the partner-api golden catalog and reads them
+back through `tools/list`.
 
 Every `@Endpoint` declares one enum-backed operation, independent of its required `GET` or `POST`
 argument: a GET may deliberately write and a POST may be a read. A tool therefore cannot claim to be

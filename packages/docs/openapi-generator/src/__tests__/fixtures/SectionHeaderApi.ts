@@ -41,7 +41,11 @@ export class ListCouponsResponse {
 @ApiPath('/coupons')
 @ApiType(SVC_TO_SVC, EXTERNAL_CUSTOMER)
 export class SectionHeaderApi {
-    /** Lists coupons. */
+    /**
+     * Lists coupons.
+     *
+     * @returns How many coupons matched.
+     */
     @Endpoint(POST, '/list', READ, RPC)
     @WpAuthPublic('Fixture only.')
     @WpAuthorization({ authType: AuthorizationType.ANONYMOUS, reason: 'Fixture only.' })
