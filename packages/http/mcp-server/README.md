@@ -128,6 +128,9 @@ change. Expect to supply the type arguments explicitly:
 ```ts
 const config = new WpMcpServerConfig<MyGrant>()
     .setName('my-server')
+    .setTitle('My Product')
+    .setDescription('Search and manage My Product accounts from any MCP client.')
+    .setWebsiteUrl('https://www.example.com/my-product')
     .setVersion('1.0.0')
     .setResource('https://api.example.com/mcp')
     .setAccessTokenAuthority(authority)
@@ -142,9 +145,26 @@ McpRegistry.setErrorTranslator(new MyMcpErrorTranslator());
 
 Each setter validates its own value immediately and names itself in the failure: `setResource(...)`
 and every entry of `setAuthorizationServers(...)` must be an absolute URL, because they are compared
-against a token's audience and issuer. `setMaxAccountValidationAgeSeconds` and
-`setMaxEndpointJwtLifetimeSeconds` default to one hour and are capped there.
-`setErrorTranslator(...)` is the only optional non-ceiling setting; everything else is required and
+against a token's audience and issuer. `setMaxAccountValidationAgeSeconds` defaults to one hour and is capped there.
+
+`setTitle`, `setDescription` and `setWebsiteUrl` are REQUIRED and are sent on `initialize`'s
+`serverInfo` (and on every modern-era result's `io.modelcontextprotocol/serverInfo` meta) as
+`title`, `description` and `websiteUrl`:
+
+| setter | `serverInfo` field | validation |
+|---|---|---|
+| `setTitle(title)` | `title` (MCP 2025-06-18) | one line, at most 100 characters |
+| `setDescription(description)` | `description` (MCP 2025-11-25) | non-empty, at most 2000 characters |
+| `setWebsiteUrl(url)` | `websiteUrl` (MCP 2025-11-25) | absolute `https://` URL |
+
+The limits are the Claude Connectors Directory's listing Name and Description limits. The app sets all
+three because the server cannot derive them: it does not read the OpenAPI manifest at runtime, and one
+server may bind contracts from several api libraries. `websiteUrl` is a page a human reads (the product
+homepage or docs site), so it is never derived from `setResource` — that is the MCP endpoint, not a
+website. There are no defaults; a missing one fails `bind(...)` naming the setter, like `setName`.
+
+`setIcons(...)` and `setToolProfiles(...)` are the only optional non-ceiling settings (the error
+translator is process-global, on `McpRegistry`); everything else is required and
 `WpMcpServer.bind(...)` fails at startup listing **every** missing setter
 (`WpMcpServerConfig is missing setResource(...)`). That is deliberate: a misconfigured audience or
 issuer otherwise surfaces as a first-request `401 + WWW-Authenticate`, which is the OAuth discovery
@@ -472,6 +492,9 @@ import { McpIcon, WpMcpServerConfig } from '@webpieces/mcp-server';
 
 const config = new WpMcpServerConfig<MyGrant>()
     .setName('my-product')
+    .setTitle('My Product')
+    .setDescription('Search and manage My Product accounts from any MCP client.')
+    .setWebsiteUrl('https://www.example.com/my-product')
     .setVersion('1.0.0')
     .setResource('https://api.example.com/mcp')
     .setIcons([

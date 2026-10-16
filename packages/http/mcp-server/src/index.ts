@@ -1,6 +1,8 @@
 export {
     MAX_MCP_ACCESS_TOKEN_LIFETIME_SECONDS,
     MAX_MCP_ACCOUNT_VALIDATION_AGE_SECONDS,
+    MAX_MCP_SERVER_DESCRIPTION_LENGTH,
+    MAX_MCP_SERVER_TITLE_LENGTH,
     MintedMcpAccessToken,
     McpProtectedResourceMetadata,
     VerifiedMcpCredential,

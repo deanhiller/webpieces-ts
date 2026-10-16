@@ -22,6 +22,9 @@ import {
 
 const RESOURCE = 'https://api.example.test/app-owned/mcp';
 const ISSUER = 'https://login.example.test';
+const TITLE = 'Config Spec';
+const DESCRIPTION = 'Pins the WpMcpServerConfig fluent setters.';
+const WEBSITE = 'https://docs.example.test/config-spec';
 
 /**
  * The positional constructor these setters replaced had eight required positions, five of which were
@@ -48,6 +51,9 @@ describe('WpMcpServerConfig fluent setters', () => {
     function complete(): WpMcpServerConfig<string> {
         return new WpMcpServerConfig<string>()
             .setName('config-spec')
+            .setTitle(TITLE)
+            .setDescription(DESCRIPTION)
+            .setWebsiteUrl(WEBSITE)
             .setVersion('1.0.0')
             .setResource(RESOURCE)
             .setAccessTokenAuthority(new TestTokenAuthority())
@@ -72,6 +78,9 @@ describe('WpMcpServerConfig fluent setters', () => {
     it('chains every setter and exposes the values it was given', () => {
         const config = complete().setMaxAccountValidationAgeSeconds(900);
         expect(config.name).toBe('config-spec');
+        expect(config.title).toBe(TITLE);
+        expect(config.description).toBe(DESCRIPTION);
+        expect(config.websiteUrl).toBe(WEBSITE);
         expect(config.version).toBe('1.0.0');
         expect(config.resource).toBe(RESOURCE);
         expect(config.authorizationServers).toEqual([ISSUER]);
@@ -84,7 +93,8 @@ describe('WpMcpServerConfig fluent setters', () => {
     it('bind() lists EVERY missing required setter in one startup failure', () => {
         const config = new WpMcpServerConfig<string>().setName('half-built').setVersion('1.0.0');
         expect(() => bind(config)).toThrow(
-            'WpMcpServerConfig is missing setResource(...), setAccessTokenAuthority(...), ' +
+            'WpMcpServerConfig is missing setTitle(...), setDescription(...), setWebsiteUrl(...), ' +
+                'setResource(...), setAccessTokenAuthority(...), ' +
                 'setAuthorizationService(...), ' +
                 'setAuthorizationServers(...), setRequiredScopes(...)',
         );
@@ -93,12 +103,76 @@ describe('WpMcpServerConfig fluent setters', () => {
     it('bind() names the one forgotten setter', () => {
         const config = new WpMcpServerConfig<string>()
             .setName('no-resource')
+            .setTitle(TITLE)
+            .setDescription(DESCRIPTION)
+            .setWebsiteUrl(WEBSITE)
             .setVersion('1.0.0')
             .setAccessTokenAuthority(new TestTokenAuthority())
             .setAuthorizationService(router.authorizationService())
             .setAuthorizationServers([ISSUER])
             .setRequiredScopes(['tools']);
         expect(() => bind(config)).toThrow('WpMcpServerConfig is missing setResource(...)');
+    });
+
+    it.each(['setTitle', 'setDescription', 'setWebsiteUrl'])(
+        'bind() names a forgotten %s(...) on its own',
+        (setter: string) => {
+            const config = complete();
+            // Rebuild without the one setter under test: every other required value is present.
+            const partial = new WpMcpServerConfig<string>()
+                .setName(config.name)
+                .setVersion(config.version)
+                .setResource(config.resource)
+                .setAccessTokenAuthority(config.accessTokenAuthority)
+                .setAuthorizationService(config.authorizationService)
+                .setAuthorizationServers(config.authorizationServers)
+                .setRequiredScopes(config.requiredScopes);
+            if (setter !== 'setTitle') partial.setTitle(TITLE);
+            if (setter !== 'setDescription') partial.setDescription(DESCRIPTION);
+            if (setter !== 'setWebsiteUrl') partial.setWebsiteUrl(WEBSITE);
+            expect(() => bind(partial)).toThrow(`WpMcpServerConfig is missing ${setter}(...)`);
+        },
+    );
+
+    it('setTitle requires one non-empty line of at most 100 characters', () => {
+        const config = new WpMcpServerConfig<string>();
+        expect(() => config.setTitle(' ')).toThrow(
+            'WpMcpServerConfig.setTitle(...) requires a non-empty string.',
+        );
+        expect(() => config.setTitle('Line one\nLine two')).toThrow(
+            'WpMcpServerConfig.setTitle(...) requires a single line of text.',
+        );
+        expect(() => config.setTitle('x'.repeat(101))).toThrow(
+            'WpMcpServerConfig.setTitle(...) allows at most 100 characters, got 101.',
+        );
+        expect(config.setTitle('x'.repeat(100)).title).toHaveLength(100);
+    });
+
+    it('setDescription requires non-empty text of at most 2000 characters', () => {
+        const config = new WpMcpServerConfig<string>();
+        expect(() => config.setDescription('')).toThrow(
+            'WpMcpServerConfig.setDescription(...) requires a non-empty string.',
+        );
+        expect(() => config.setDescription('d'.repeat(2001))).toThrow(
+            'WpMcpServerConfig.setDescription(...) allows at most 2000 characters, got 2001.',
+        );
+        const multiLine = 'First paragraph.\n\nSecond paragraph.';
+        expect(config.setDescription(multiLine).description).toBe(multiLine);
+        expect(config.setDescription('d'.repeat(2000)).description).toHaveLength(2000);
+    });
+
+    it('setWebsiteUrl requires an absolute https URL', () => {
+        const config = new WpMcpServerConfig<string>();
+        expect(() => config.setWebsiteUrl('')).toThrow(
+            'WpMcpServerConfig.setWebsiteUrl(...) requires a non-empty string.',
+        );
+        expect(() => config.setWebsiteUrl('docs.example.test')).toThrow(
+            "WpMcpServerConfig.setWebsiteUrl(...) requires an absolute URL, got 'docs.example.test'.",
+        );
+        expect(() => config.setWebsiteUrl('http://docs.example.test')).toThrow(
+            "WpMcpServerConfig.setWebsiteUrl(...) requires an https:// URL, got 'http://docs.example.test'.",
+        );
+        expect(config.setWebsiteUrl(WEBSITE).websiteUrl).toBe(WEBSITE);
     });
 
     it('a complete config binds', () => {

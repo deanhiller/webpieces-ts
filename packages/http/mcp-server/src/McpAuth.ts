@@ -5,6 +5,10 @@ import { McpIcon } from './McpIcon';
 
 export const MAX_MCP_ACCESS_TOKEN_LIFETIME_SECONDS = 30 * 24 * 60 * 60;
 export const MAX_MCP_ACCOUNT_VALIDATION_AGE_SECONDS = 60 * 60;
+/** `setTitle` ceiling: the Claude Connectors Directory's listing Name limit. */
+export const MAX_MCP_SERVER_TITLE_LENGTH = 100;
+/** `setDescription` ceiling: the Claude Connectors Directory's listing Description limit. */
+export const MAX_MCP_SERVER_DESCRIPTION_LENGTH = 2000;
 
 /** Framework-normalized access-token result. The token representation remains application-owned. */
 export class MintedMcpAccessToken {
@@ -107,6 +111,9 @@ export class McpProtectedResourceMetadata {
  * ```ts
  * const config = new WpMcpServerConfig<MyGrant>()
  *     .setName('my-server')
+ *     .setTitle('My Product')
+ *     .setDescription('Search and manage My Product accounts from any MCP client.')
+ *     .setWebsiteUrl('https://www.example.com/my-product')
  *     .setVersion('1.0.0')
  *     .setResource('https://api.example.com/mcp')
  *     .setAccessTokenAuthority(authority)
@@ -121,6 +128,9 @@ export class McpProtectedResourceMetadata {
 export class WpMcpServerConfig<TGrant> {
     private toolProfilesValue: readonly string[] = Object.freeze([Mcp.DEFAULT]);
     private nameValue?: string;
+    private titleValue?: string;
+    private descriptionValue?: string;
+    private websiteUrlValue?: string;
     private versionValue?: string;
     private iconsValue?: readonly McpIcon[];
     private resourceValue?: string;
@@ -143,6 +153,56 @@ export class WpMcpServerConfig<TGrant> {
     /** REQUIRED. The MCP server name reported by `initialize`. */
     setName(name: string): this {
         this.nameValue = this.requireText(name, 'setName');
+        return this;
+    }
+
+    /**
+     * REQUIRED. The human-readable display name sent as `serverInfo.title` (MCP 2025-06-18), e.g.
+     * `'Lang Learning'` where {@link setName} is the programmatic `'lang-learning'`. One line, at most
+     * 100 characters — the Claude Connectors Directory's listing Name limit.
+     *
+     * The app sets it because the server cannot derive it: it does not read the OpenAPI manifest at
+     * runtime, and one MCP server may bind contracts from several api libraries.
+     */
+    setTitle(title: string): this {
+        const value = this.requireText(title, 'setTitle');
+        if (/[\r\n]/.test(value)) {
+            throw new Error('WpMcpServerConfig.setTitle(...) requires a single line of text.');
+        }
+        this.titleValue = this.requireMaxLength(value, MAX_MCP_SERVER_TITLE_LENGTH, 'setTitle');
+        return this;
+    }
+
+    /**
+     * REQUIRED. What this server does, sent as `serverInfo.description` (MCP 2025-11-25). At most
+     * 2000 characters — the Claude Connectors Directory's listing Description limit.
+     */
+    setDescription(description: string): this {
+        const value = this.requireText(description, 'setDescription');
+        this.descriptionValue = this.requireMaxLength(
+            value,
+            MAX_MCP_SERVER_DESCRIPTION_LENGTH,
+            'setDescription',
+        );
+        return this;
+    }
+
+    /**
+     * REQUIRED. An absolute `https://` URL of a page a HUMAN reads about this server — the product
+     * homepage or its docs site — sent as `serverInfo.websiteUrl` (MCP 2025-11-25).
+     *
+     * Deliberately NOT derived from {@link setResource}: that is the MCP endpoint, an API host, not a
+     * website, and the resource is never derived from request input either. No default, because the
+     * page a user is sent to is the app's decision.
+     */
+    setWebsiteUrl(websiteUrl: string): this {
+        const value = this.requireUrl(websiteUrl, 'setWebsiteUrl');
+        if (new URL(value).protocol !== 'https:') {
+            throw new Error(
+                `WpMcpServerConfig.setWebsiteUrl(...) requires an https:// URL, got '${value}'.`,
+            );
+        }
+        this.websiteUrlValue = value;
         return this;
     }
 
@@ -238,6 +298,9 @@ export class WpMcpServerConfig<TGrant> {
     validate(): void {
         const missing: string[] = [];
         if (this.nameValue === undefined) missing.push('setName(...)');
+        if (this.titleValue === undefined) missing.push('setTitle(...)');
+        if (this.descriptionValue === undefined) missing.push('setDescription(...)');
+        if (this.websiteUrlValue === undefined) missing.push('setWebsiteUrl(...)');
         if (this.versionValue === undefined) missing.push('setVersion(...)');
         if (this.resourceValue === undefined) missing.push('setResource(...)');
         if (this.accessTokenAuthorityValue === undefined) {
@@ -265,6 +328,18 @@ export class WpMcpServerConfig<TGrant> {
 
     get name(): string {
         return this.read(this.nameValue, 'setName');
+    }
+
+    get title(): string {
+        return this.read(this.titleValue, 'setTitle');
+    }
+
+    get description(): string {
+        return this.read(this.descriptionValue, 'setDescription');
+    }
+
+    get websiteUrl(): string {
+        return this.read(this.websiteUrlValue, 'setWebsiteUrl');
     }
 
     get version(): string {
@@ -347,6 +422,15 @@ export class WpMcpServerConfig<TGrant> {
         if (!URL.canParse(value)) {
             throw new Error(
                 `WpMcpServerConfig.${setter}(...) requires an absolute URL, got '${value}'.`,
+            );
+        }
+        return value;
+    }
+
+    private requireMaxLength(value: string, max: number, setter: string): string {
+        if (value.length > max) {
+            throw new Error(
+                `WpMcpServerConfig.${setter}(...) allows at most ${max} characters, got ${value.length}.`,
             );
         }
         return value;

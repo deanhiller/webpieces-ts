@@ -118,6 +118,9 @@ describe('WpMcpServer HTTP bridge', () => {
     function serverConfig(): WpMcpServerConfig<string> {
         return new WpMcpServerConfig<string>()
             .setName('test-server')
+            .setTitle('Webpieces Test Server')
+            .setDescription('Exercises the webpieces MCP bridge in the mcp-server test suite.')
+            .setWebsiteUrl('https://docs.example.test/mcp')
             .setVersion('1.0.0')
             .setResource('https://api.example.test/app-owned/mcp')
             .setAccessTokenAuthority(authority)

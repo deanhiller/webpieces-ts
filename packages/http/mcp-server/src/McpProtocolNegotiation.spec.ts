@@ -48,6 +48,11 @@ const ICONS = [
     new McpIcon('data:image/png;base64,aWNvbg==', 'image/png', ['64x64'], 'dark'),
 ];
 
+// Issue #1298: the app-owned identity sent on serverInfo, in both eras.
+const TITLE = 'Negotiation Test Server';
+const DESCRIPTION = 'Serves both MCP wire eras from one endpoint.\nSecond line kept verbatim.';
+const WEBSITE_URL = 'https://docs.example.test/negotiation';
+
 describe.each([false, true])(
     'WpMcpServer protocol negotiation (icons: %s)',
     (withIcons: boolean) => {
@@ -69,6 +74,9 @@ describe.each([false, true])(
             router.addRoutes(SearchApi, SearchController);
             const config = new WpMcpServerConfig<string>()
                 .setName('test-server')
+                .setTitle(TITLE)
+                .setDescription(DESCRIPTION)
+                .setWebsiteUrl(WEBSITE_URL)
                 .setVersion('1.0.0')
                 .setResource('https://api.example.test/app-owned/mcp')
                 .setAccessTokenAuthority(new TestTokenAuthority())
@@ -117,6 +125,9 @@ describe.each([false, true])(
                 expect(result['protocolVersion']).toBe(requested);
                 expect(result['serverInfo']).toMatchObject({
                     name: 'test-server',
+                    title: TITLE,
+                    description: DESCRIPTION,
+                    websiteUrl: WEBSITE_URL,
                     version: `1.0.0+${bridge.registryRevision}`,
                 });
                 expect(result['serverInfo']).toHaveProperty('name', 'test-server');
@@ -134,6 +145,9 @@ describe.each([false, true])(
             const info = meta['io.modelcontextprotocol/serverInfo'] as Record<string, unknown>;
             expect(info).toMatchObject({
                 name: 'test-server',
+                title: TITLE,
+                description: DESCRIPTION,
+                websiteUrl: WEBSITE_URL,
                 version: `1.0.0+${bridge.registryRevision}`,
             });
             if (withIcons) expect(info['icons']).toEqual(ICONS);

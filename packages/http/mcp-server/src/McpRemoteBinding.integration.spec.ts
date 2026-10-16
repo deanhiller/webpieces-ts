@@ -210,6 +210,9 @@ describe('McpApiBinding.remote generated Node client integration', () => {
         gateway = new WpMcpServer(
             new WpMcpServerConfig<string>()
                 .setName('gateway')
+                .setTitle('Webpieces Test Server')
+                .setDescription('Exercises the webpieces MCP bridge in the mcp-server test suite.')
+                .setWebsiteUrl('https://docs.example.test/mcp')
                 .setVersion('1.0.0')
                 .setResource('https://gateway.example.test/gateway/mcp')
                 .setAccessTokenAuthority(new TestTokenAuthority())
