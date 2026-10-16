@@ -51,12 +51,16 @@ class LockResponse {
 @ApiPath('/lock-spec')
 @ApiType(SVC_TO_SVC, MCP)
 abstract class LockApi {
-    /** Open a passage for editing. */
+    /**
+     * Open a passage for editing.
+     *
+     * @summary Open a passage
+     */
 
     @WpAuth([jwtAuth()])
     @WpAuthorization({ authType: AuthorizationType.ALL_USERS })
     @Endpoint(POST, '/open', WRITE_IDEMPOTENT, RPC)
-    @WpMcpTool('passage_open', 'Open a passage')
+    @WpMcpTool('passage_open')
     open(_request: LockRequest): Promise<LockResponse> {
         throw new Error('contract only');
     }

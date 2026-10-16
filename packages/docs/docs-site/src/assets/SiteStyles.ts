@@ -68,6 +68,8 @@ blockquote { margin: 12px 0; padding: 4px 14px; border-left: 3px solid var(--lin
 .badge { font-size: 10px; font-weight: 700; letter-spacing: .04em; padding: 1px 5px; border-radius: 3px; background: var(--accent); color: var(--badge-fg); }
 .op-head { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 4px; }
 .op-path { background: var(--code-bg); padding: 3px 8px; border-radius: 4px; }
+.op-id { color: var(--fg-soft); font-size: 12px; }
+.api-summary { font-size: 1.1em; color: var(--fg-soft); margin-top: -4px; }
 
 .card { border: 1px solid var(--line); border-radius: 8px; background: var(--bg); margin-bottom: 16px; }
 .card-head { display: flex; justify-content: space-between; align-items: center; padding: 8px 12px; border-bottom: 1px solid var(--line); font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--fg-soft); }

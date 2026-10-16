@@ -42,7 +42,11 @@ export class ListPromotionsResponse {
 @ApiPath('/promotions')
 @ApiType(SVC_TO_SVC, EXTERNAL_CUSTOMER)
 export class StackedHeaderApi {
-    /** Lists promotions. */
+    /**
+     * Lists promotions.
+     *
+     * @summary List promotions
+     */
     @Endpoint(POST, '/list', READ, RPC)
     @WpAuthPublic('Fixture only.')
     @WpAuthorization({ authType: AuthorizationType.ANONYMOUS, reason: 'Fixture only.' })

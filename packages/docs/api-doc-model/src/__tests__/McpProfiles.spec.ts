@@ -44,4 +44,10 @@ describe('profile authoring extraction', () => {
     ])('refuses malformed membership %s', (text: string) => {
         expect(() => ProfileExpression.read(text)).toThrow(ApiDocExtractionError);
     });
+    it('names where the title went when the retired title argument sits in the options slot (#1296)', () => {
+        const read = (): readonly string[] => ProfileExpression.read("'Get your passages'");
+        expect(read).toThrow(ApiDocExtractionError);
+        expect(read).toThrow(/@WpMcpTool takes no title argument/);
+        expect(read).toThrow(expect.objectContaining({ cure: expect.stringContaining('`@summary` line') }));
+    });
 });

@@ -64,13 +64,14 @@ export class WidgetsApi {
     /**
      * Lists widgets.
      *
+     * @summary List widgets
      * @returns The matching widgets, newest first.
      * @mcp Read-only. Prefer this over guessing from an earlier answer.
      */
     @Endpoint(POST, '/list', READ, RPC)
     @WpAuth([apiKeyAuth('partner', PARTNER_CREDENTIALS)])
     @WpAuthorization<{llmRoles: readonly string[]}>({ authType: AuthorizationType.CUSTOM, appPolicy: {llmRoles: ['agent']} })
-    @WpMcpTool('list_widgets', 'List widgets')
+    @WpMcpTool('list_widgets')
 
     list(request: ListWidgetsRequest): Promise<ListWidgetsResponse> {
         throw new Error('contract');
@@ -81,6 +82,7 @@ export class WidgetsApi {
      *
      * Not published: an operator tool, and the customer contract has no concept of our retention.
      *
+     * @summary Purge old widgets
      * @returns How many widgets were deleted.
      */
     @Endpoint(POST, '/purge', WRITE, RPC, { hidden: true })

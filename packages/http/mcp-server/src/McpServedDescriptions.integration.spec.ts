@@ -36,10 +36,14 @@ import { TestJwtHook, TestTokenAuthority, USER_ID } from './__tests__/WpMcpServe
  * What an MCP CLIENT is told, end to end (#1292): the tool catalog `wp-openapi` GENERATED from the
  * example partner contract, booted by the real `WpMcpServer` and read back through `tools/list`.
  *
+ * It also proves the tool's TITLE has one source end to end (#1296): the method's `@summary` JSDoc
+ * tag, which the generator writes into the catalog and the server serves as BOTH `Tool.title` and
+ * `annotations.title` — the decorator carries no title any more.
+ *
  * The catalog is the partner-api golden — the exact bytes `openapi-golden.spec.ts` proves the generator
  * writes from `apps/app-example/partner-api/src/PartnerOrdersApi.ts` — read as a FILE rather than
  * hand-built, so this spec checks the generated descriptions and not a copy of them. The runtime does
- * not depend on the compiler API, so the contract is re-declared here with the same tool name, title
+ * not depend on the compiler API, so the contract is re-declared here with the same tool name, summary
  * and method: the registry pairs a binding with its catalog by contract CLASS NAME.
  *
  * The source carries a `@privateRemarks` on both the method and the request DTO; the generator drops
@@ -47,20 +51,27 @@ import { TestJwtHook, TestTokenAuthority, USER_ID } from './__tests__/WpMcpServe
  * serves the root `inputSchema` / `outputSchema` descriptions the generator now writes — the request
  * DTO's JSDoc and the method's `@returns` (rule 2) — and every field's own JSDoc (rule 3).
  */
-const GOLDEN = path.resolve(
-    __dirname,
-    '..',
-    '..',
-    '..',
-    '..',
-    'apps',
-    'app-example',
-    'partner-api',
-    'src',
+const PARTNER_SRC = path.resolve(__dirname, '..', '..', '..', '..', 'apps', 'app-example', 'partner-api', 'src');
+
+const GOLDEN = path.join(
+    PARTNER_SRC,
     '__tests__',
     'goldens',
     McpToolCatalogFile.fileNameFor('PartnerOrdersApi'),
 );
+
+/**
+ * The `@summary` line of `fetchOrders` in the REAL contract source, read as text — so the assertion
+ * below compares what an MCP client is served with what the author wrote, not with a copy of it.
+ */
+function summaryInContractSource(): string {
+    const source = fs.readFileSync(path.join(PARTNER_SRC, 'PartnerOrdersApi.ts'), 'utf8');
+    const method = source.indexOf('fetchOrders(request');
+    const block = source.slice(source.lastIndexOf('/**', method), method);
+    const line = /^\s*\*\s*@summary\s+(.+?)\s*$/m.exec(block);
+    if (line === null) throw new Error('PartnerOrdersApi.fetchOrders has no summary JSDoc tag');
+    return line[1];
+}
 
 class FetchOrdersRequest {
     /** The store to read. */
@@ -76,11 +87,15 @@ class FetchOrdersResponse {
 @ApiPath('/orders')
 @ApiType(SVC_TO_SVC, MCP)
 abstract class PartnerOrdersApi {
-    /** Returns every order placed at one store inside a time window, newest first. */
+    /**
+     * Returns every order placed at one store inside a time window, newest first.
+     *
+     * @summary Fetch your orders
+     */
     @WpAuth([jwt()])
     @WpAuthorization({ authType: AuthorizationType.ALL_USERS })
     @Endpoint(POST, '/fetch', READ, RPC)
-    @WpMcpTool('fetch_orders', 'Fetch your orders')
+    @WpMcpTool('fetch_orders')
     fetchOrders(_request: FetchOrdersRequest): Promise<FetchOrdersResponse> {
         throw new Error('contract');
     }
@@ -172,6 +187,15 @@ describe('the descriptions an MCP client is served from a GENERATED catalog (#12
         for (const [name, property] of Object.entries(properties)) {
             expect(String(property['description'] ?? '').trim(), name).not.toBe('');
         }
+    });
+
+    it("serves the method's summary JSDoc tag as BOTH Tool.title and annotations.title (#1296)", async () => {
+        const summary = summaryInContractSource();
+        expect(summary).toBe('Fetch your orders');
+        const tool = await listedTool();
+        expect(tool['title']).toBe(summary);
+        expect((tool['annotations'] as Record<string, unknown>)['title']).toBe(summary);
+        expect(String(tool['description'])).not.toContain(summary);
     });
 
     it('serves the agent-facing @mcp text as the tool description, without the private note', async () => {

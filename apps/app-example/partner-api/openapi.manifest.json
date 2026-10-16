@@ -1,5 +1,6 @@
 {
     "title": "Example Orders API",
+    "summary": "Read and cancel the orders placed at your stores, and receive a webhook whenever an order's state changes.",
     "version": "1.0.0",
     "descriptionFile": "description.md",
     "servers": [

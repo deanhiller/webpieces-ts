@@ -1,5 +1,6 @@
 {
     "title": "Section Header API",
+    "summary": "List the coupons a store offers.",
     "operationIds": "contract_method",
     "version": "1.0.0",
     "apis": [

@@ -41,6 +41,7 @@ export class UndocumentedApi {
     /**
      * Paints a wall.
      *
+     * @summary Paint a wall
      * @returns How many walls were painted.
      */
     @Endpoint(POST, '/wall', READ, RPC)

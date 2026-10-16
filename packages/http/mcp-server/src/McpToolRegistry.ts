@@ -27,7 +27,11 @@ export class RegisteredMcpTool {
         public readonly apiClass: ClassType,
         public readonly methodName: string,
         public readonly name: string,
-        /** The human-readable display name; published as BOTH `Tool.title` and `annotations.title` (#1180). */
+        /**
+         * The human-readable display name, read from the CATALOG — which the generator wrote from the
+         * method's `@summary` JSDoc tag (#1296). Published as BOTH `Tool.title` and `annotations.title`.
+         * The contract carries no title at runtime, so there is nothing to compare it with: one source.
+         */
         public readonly title: string,
         public readonly description: string,
         public readonly annotations: WpMcpToolHints,
@@ -44,7 +48,9 @@ export class RegisteredMcpTool {
 
 /**
  * Fail-fast registry: the CONTRACT says which methods are tools and how they are authorized, and the
- * build's generated catalog OF THAT CONTRACT says what each tool's documentation and schemas are.
+ * build's generated catalog OF THAT CONTRACT says what each tool's title, documentation and schemas
+ * are. The title and the description are JSDoc (`@summary` and the body), which only the compiler can
+ * read, so the catalog is their one runtime source (#1296).
  *
  * ## Why the schemas come from the catalog and not from here
  *
@@ -191,14 +197,6 @@ export class McpToolRegistry {
         ) {
             pairing.problem(
                 `MCP tool '${metadata.name}' has stale method/profile metadata in ${catalog.file.fileName}; rebuild the api library.`,
-            );
-            return undefined;
-        }
-        if (published.title !== metadata.title) {
-            pairing.problem(
-                `@WpMcpTool ${apiClass.name}.${metadata.methodName} is titled '${metadata.title}', but ` +
-                    `${catalog.file.fileName} (${catalog.directory}) publishes '${metadata.name}' as ` +
-                    `'${published.title}'. The catalog is older than the contract — rebuild the api library.`,
             );
             return undefined;
         }

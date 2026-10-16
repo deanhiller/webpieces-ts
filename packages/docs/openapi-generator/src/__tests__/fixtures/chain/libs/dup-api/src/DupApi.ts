@@ -18,6 +18,7 @@ export class DupApi {
     /**
      * Reads both.
      *
+     * @summary Read both passages
      * @returns Both same-named DTOs, side by side.
      */
     @Endpoint(POST, '/both', READ, RPC)

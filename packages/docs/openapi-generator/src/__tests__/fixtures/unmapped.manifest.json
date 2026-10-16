@@ -1,5 +1,6 @@
 {
     "title": "Unmapped API",
+    "summary": "Send a payload for processing.",
     "operationIds": "contract_method",
     "version": "1.0.0",
     "apis": [

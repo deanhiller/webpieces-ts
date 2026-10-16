@@ -19,12 +19,13 @@ export class McpOnlyUndocumentedApi {
     /**
      * Checks a guess.
      *
+     * @summary Check a guess
      * @returns Whether the guess was right.
      */
     @Endpoint(POST, '/check', READ, RPC)
     @WpAuthPublic('Fixture only.')
     @WpAuthorization({ authType: AuthorizationType.ANONYMOUS, reason: 'Fixture only.' })
-    @WpMcpTool('check_guess', 'Check a guess')
+    @WpMcpTool('check_guess')
     check(request: GuessRequest): Promise<GuessResponse> {
         throw new Error('contract');
     }

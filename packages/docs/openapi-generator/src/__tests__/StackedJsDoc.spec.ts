@@ -91,7 +91,7 @@ describe('stacked JSDoc (#1286)', () => {
             [
                 `${file}:18:1 MenuPublicationStatusDto — 2 JSDoc blocks, starting on lines 16, 17`,
                 `${file}:26:5 MenuPublicationDto.id — 2 JSDoc blocks, starting on lines 24, 25`,
-                `${file}:44:5 StrandedDocApi.get — 2 JSDoc blocks, starting on lines 42, 43`,
+                `${file}:48:5 StrandedDocApi.get — 2 JSDoc blocks, starting on lines 42, 43`,
             ].sort(),
         );
     });

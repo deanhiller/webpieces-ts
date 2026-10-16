@@ -86,6 +86,9 @@ export class SiteRenderer {
 
     private overview(spec: ApiSpec, layout: Layout): SitePage {
         const parts = [`<h1>${this.html.escape(spec.title)}</h1>`];
+        if (spec.summary !== '') {
+            parts.push(`<p class="api-summary">${this.html.escape(spec.summary)}</p>`);
+        }
         if (spec.description !== '') {
             parts.push(this.markdown.render(spec.description));
         }

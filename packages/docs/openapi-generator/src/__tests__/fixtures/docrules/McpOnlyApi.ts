@@ -17,11 +17,15 @@ export class AskResponse {
 @ApiPath('/ask')
 @ApiType(MCP)
 export class McpOnlyApi {
-    /** Asks a question; it has no returns tag, refused although this contract feeds only MCP output. */
+    /**
+     * Asks a question; it has no returns tag, refused although this contract feeds only MCP output.
+     *
+     * @summary Ask a question
+     */
     @Endpoint(POST, '/ask', READ, RPC)
     @WpAuthPublic('Fixture only.')
     @WpAuthorization({ authType: AuthorizationType.ANONYMOUS, reason: 'Fixture only.' })
-    @WpMcpTool('ask_question', 'Ask a question')
+    @WpMcpTool('ask_question')
     ask(request: AskRequest): Promise<AskResponse> {
         throw new Error('contract');
     }

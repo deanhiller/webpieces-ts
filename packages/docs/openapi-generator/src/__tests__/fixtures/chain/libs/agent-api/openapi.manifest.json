@@ -1,5 +1,6 @@
 {
     "title": "Agent API",
+    "summary": "Ask a language-model provider a question.",
     "operationIds": "contract_method",
     "version": "1.0.0",
     "apis": [

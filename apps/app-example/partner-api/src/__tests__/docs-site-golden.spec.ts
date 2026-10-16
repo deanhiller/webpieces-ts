@@ -58,9 +58,9 @@ describe('the docs site rendered from the example contract', () => {
     });
 
     it('writes one pre-rendered page per operation, including the webhook', () => {
-        expect(site.exists('reference', 'fetch-orders', 'index.html')).toBe(true);
-        expect(site.exists('reference', 'cancel-order', 'index.html')).toBe(true);
-        expect(site.exists('reference', 'order-state-changed', 'index.html')).toBe(true);
+        expect(site.exists('reference', 'partner-orders-api-fetch-orders', 'index.html')).toBe(true);
+        expect(site.exists('reference', 'partner-orders-api-cancel-order', 'index.html')).toBe(true);
+        expect(site.exists('reference', 'partner-delivery-webhook-api-order-state-changed', 'index.html')).toBe(true);
     });
 
     it('writes one page per named OBJECT dto, and none for a named enum', () => {
@@ -77,7 +77,7 @@ describe('the docs site rendered from the example contract', () => {
     });
 
     it('resolves the same reference FULLY in the generated example body', () => {
-        const page = site.page('reference', 'fetch-orders');
+        const page = site.page('reference', 'partner-orders-api-fetch-orders');
         expect(page).toContain('&quot;storeId&quot;: &quot;storeId&quot;');
     });
 
@@ -90,7 +90,7 @@ describe('the docs site rendered from the example contract', () => {
     });
 
     it('gives an enum the COMPLETE Possible values chip line', () => {
-        const page = site.page('reference', 'cancel-order');
+        const page = site.page('reference', 'partner-orders-api-cancel-order');
         expect(page).toContain('Possible values:');
         for (const value of ['placed', 'accepted', 'delivered', 'cancelled']) {
             expect(page).toContain(`<span class="chip">${value}</span>`);
@@ -98,7 +98,7 @@ describe('the docs site rendered from the example contract', () => {
     });
 
     it('gives a webhook no method, no path and no code samples', () => {
-        const page = site.page('reference', 'order-state-changed');
+        const page = site.page('reference', 'partner-delivery-webhook-api-order-state-changed');
         expect(page).toContain('WEBHOOK');
         expect(page).toContain('order.state-changed');
         expect(page).not.toContain('class="tab"');
@@ -106,7 +106,7 @@ describe('the docs site rendered from the example contract', () => {
     });
 
     it('builds the code samples FROM THE SPEC — server url, path and security header names', () => {
-        const page = site.page('reference', 'fetch-orders');
+        const page = site.page('reference', 'partner-orders-api-fetch-orders');
         expect(page).toContain('https://api.example.com/orders/fetch');
         expect(page).toContain('x-api-key');
         expect(page).toContain('x-organization-id');
@@ -116,7 +116,7 @@ describe('the docs site rendered from the example contract', () => {
     });
 
     it('shows the x-request-id response header and the @returns description on every response card (#1292)', () => {
-        const page = site.page('reference', 'fetch-orders');
+        const page = site.page('reference', 'partner-orders-api-fetch-orders');
         const responses = page.slice(page.indexOf('<h2>Responses</h2>'));
         expect(responses).toContain(
             '200 — The page of matching orders, newest first, with `nextFrom` set while more remain.',
@@ -135,10 +135,30 @@ describe('the docs site rendered from the example contract', () => {
         expect(home.indexOf('>Orders<')).toBeLessThan(home.indexOf('>Webhooks<'));
     });
 
+    it('heads each operation page and labels its sidebar link with the @summary, keeping the operationId visible (#1296)', () => {
+        const page = site.page('reference', 'partner-orders-api-fetch-orders');
+        expect(page).toContain('<h1>Fetch your orders</h1>');
+        expect(page).toContain('<code class="op-id" title="operationId">PartnerOrdersApi_fetchOrders</code>');
+        expect(page).toContain('<span>Fetch your orders</span>');
+        expect(page).toContain('<span>Cancel an order</span>');
+        expect(page).toContain('<span>Order state changed</span>');
+        expect(page).not.toContain('<span>fetchOrders</span>');
+        const webhook = site.page('reference', 'partner-delivery-webhook-api-order-state-changed');
+        expect(webhook).toContain('<h1>Order state changed</h1>');
+        expect(webhook).toContain('PartnerDeliveryWebhookApi_orderStateChanged');
+    });
+
+    it("shows the manifest's summary (info.summary) under the API title on the overview (#1296)", () => {
+        const home = site.home();
+        const title = home.indexOf('<h1>Example Orders API</h1>');
+        expect(title).toBeGreaterThan(-1);
+        expect(home.indexOf('<p class="api-summary">Read and cancel the orders placed at your stores')).toBeGreaterThan(title);
+    });
+
     it('files the webhook into the same nav section as the tag it shares', () => {
-        const page = site.page('reference', 'order-state-changed');
+        const page = site.page('reference', 'partner-delivery-webhook-api-order-state-changed');
         const section = page.indexOf('<summary>Webhooks</summary>');
         expect(section).toBeGreaterThan(-1);
-        expect(page.indexOf('reference/order-state-changed/index.html')).toBeGreaterThan(section);
+        expect(page.indexOf('reference/partner-delivery-webhook-api-order-state-changed/index.html')).toBeGreaterThan(section);
     });
 });

@@ -186,15 +186,16 @@ export class DocumentedEndpointOptions {
 }
 
 /**
- * The `@WpMcpTool('search_stores', 'Search stores')` declaration, when the method carries one — the
- * TWO facts the source cannot otherwise state, and nothing else.
+ * The `@WpMcpTool('search_stores')` declaration, when the method carries one — the ONE fact the source
+ * cannot otherwise state, plus the profile groups it is listed in.
  *
  * `description` used to sit on the decorator too. The method's JSDoc is the description, for the
  * agent and for the partner alike, byte-identical: two authored copies of one paragraph is the
  * two-spellings shim, and its failure mode is concrete — the partner reads the JSDoc in the OpenAPI
  * document while the agent reads the decorator string in `tools/list`, and they drift the first time
- * somebody edits one. #984 deleted it. #1180 added the REQUIRED `title`, the short display name
- * clients and the Claude Connectors Directory show — a name, not a second copy of the description.
+ * somebody edits one. #984 deleted it. The `title` argument #1180 added went the same way in #1296:
+ * the tool's title is the method's `@summary` ({@link DocumentedEndpoint.summary}), the same line the
+ * OpenAPI operation publishes as its `summary`.
  *
  * The three side-effect hints are COMPUTED from the endpoint's `operation` by `mcpHintsForOperation`
  * in `@webpieces/core-util`, which is the one place that mapping lives — `READ | WRITE_IDEMPOTENT |
@@ -208,11 +209,6 @@ export class DocumentedMcpTool {
          * method must not break a saved agent workflow.
          */
         readonly name: string,
-        /**
-         * The human-readable display name, published as `Tool.title` and `annotations.title`. The
-         * EMPTY STRING when the argument does not fold to a string; the MCP renderer refuses that.
-         */
-        readonly title: string,
         readonly profiles: readonly string[],
     ) {}
 }
@@ -315,6 +311,13 @@ export class DocumentedEndpoint {
         /** `@MaskLog({...})` — field name -> mask mode. */
         readonly maskLog: ReadonlyMap<string, string>,
         readonly description: string,
+        /**
+         * The method's `@summary` text — its one-line short title (#1296): the OpenAPI operation's
+         * `summary` and, for a tool, MCP `Tool.title` AND `annotations.title`. Undefined when the method
+         * has none; the OpenAPI generator refuses that for every published operation, and the MCP
+         * renderer refuses a tool without one.
+         */
+        readonly summary: string | undefined,
         /** The `@mcp` override. See {@link DocumentedField.mcpDescription}. */
         readonly mcpDescription: string | undefined,
         /**

@@ -103,23 +103,34 @@ describe('a union in an MCP tool schema', () => {
         expect(either.oneOf![0].properties!['left'].type).toBe('string');
     });
 
-    it('carries the @WpMcpTool title into the catalog entry (#1180)', () => {
+    it("carries the method's summary JSDoc tag into the catalog entry as its title (#1296)", () => {
         expect(new McpSchemaRenderer(unnarrowableModel('Ask either way')).render()[0].title).toBe(
             'Ask either way',
         );
     });
 
-    it('REFUSES a tool with no title — one that did not fold to a string — naming the decorator to write (#1180)', () => {
+    it.each([
+        [undefined, /has no @summary/],
+        [' ', /has no @summary/],
+        ['Ask\neither way', /spans more than one line/],
+        ['x'.repeat(101), /101 characters, over the 100-character limit/],
+    ])('REFUSES a tool whose summary is %j, naming the JSDoc tag to write (#1296)', (summary: string | undefined, why: RegExp) => {
         const render = (): void => {
-            new McpSchemaRenderer(unnarrowableModel(' ')).render();
+            new McpSchemaRenderer(unnarrowableModel(summary)).render();
         };
         expect(render).toThrow(McpRenderError);
-        expect(render).toThrow(/an MCP tool has no human-readable title/);
+        expect(render).toThrow(why);
         expect(render).toThrow(
-            expect.objectContaining({
-                cure: expect.stringContaining("@WpMcpTool('ask_either', '<Human-readable title>')"),
-            }),
+            expect.objectContaining({ cure: expect.stringContaining('`@summary <short title>`') }),
         );
+    });
+
+    it('REFUSES a tool name the Claude Connectors Directory would refuse (#1296)', () => {
+        const render = (): void => {
+            new McpSchemaRenderer(unnarrowableModel('Ask either way', 'x'.repeat(65))).render();
+        };
+        expect(render).toThrow(McpRenderError);
+        expect(render).toThrow(/65 characters, over the 64-character limit/);
     });
 });
 
@@ -144,7 +155,7 @@ function rootUnionCure(): string {
 
 /** A model whose union carries NO discriminator, which the extractor will never build by itself. */
 // webpieces-disable no-function-outside-class -- spec fixture builder, beside the one test that uses it
-function unnarrowableModel(title: string): ApiDocModel {
+function unnarrowableModel(summary: string | undefined, name = 'ask_either'): ApiDocModel {
     const types = new Map<string, DocumentedType>();
     types.set('Left', objectType('Left', 'left'));
     types.set('Right', objectType('Right', 'right'));
@@ -184,7 +195,7 @@ function unnarrowableModel(title: string): ApiDocModel {
         ['mcp'],
         '/either',
         'Either.',
-        [endpoint(title)],
+        [endpoint(summary, name)],
         types,
         [],
         [],
@@ -226,7 +237,7 @@ function field(name: string, type: TypeRef): DocumentedField {
 }
 
 // webpieces-disable no-function-outside-class -- spec fixture builder
-function endpoint(title: string): DocumentedEndpoint {
+function endpoint(summary: string | undefined, name: string): DocumentedEndpoint {
     return new DocumentedEndpoint(
         'ask',
         'POST',
@@ -237,11 +248,12 @@ function endpoint(title: string): DocumentedEndpoint {
         false,
         new DocumentedEndpointOptions(false, undefined, undefined),
         undefined,
-        new DocumentedMcpTool('ask_either', title, [Mcp.DEFAULT]),
+        new DocumentedMcpTool(name, [Mcp.DEFAULT]),
         undefined,
         undefined,
         new Map<string, string>(),
         'Asks.',
+        summary,
         undefined,
         'The answer.',
         TypeRef.ref('Ask'),

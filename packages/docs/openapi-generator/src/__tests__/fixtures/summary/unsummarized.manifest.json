@@ -1,0 +1,16 @@
+{
+    "title": "Crates API",
+    "summary": "Open, seal, weigh and count crates, and hear when one ships.",
+    "version": "1.0.0",
+    "apis": [
+        {
+            "entry": "UnsummarizedApi.ts",
+            "tag": "Crates"
+        },
+        {
+            "entry": "UnsummarizedWebhookApi.ts",
+            "tag": "Crates",
+            "kind": "webhook"
+        }
+    ]
+}

@@ -221,7 +221,7 @@ describe('WpMcpServer HTTP bridge', () => {
         );
     });
 
-    it('publishes the @WpMcpTool title as BOTH Tool.title and annotations.title on every tool (#1180)', async () => {
+    it("publishes the catalog's title (the summary JSDoc tag) as BOTH Tool.title and annotations.title on every tool (#1180, #1296)", async () => {
         const tools = resultOf((await post(request('tools/list'))).payload)['tools'] as Array<
             Record<string, unknown>
         >;
@@ -555,10 +555,14 @@ describe('WpMcpServer HTTP bridge', () => {
         @ApiPath('/invalid')
         @ApiType(SVC_TO_SVC, MCP)
         class MissingMcpAuthApi {
-            /** Invalid: missing common authorization. */
+            /**
+             * Invalid: missing common authorization.
+             *
+             * @summary Missing MCP auth
+             */
             @WpAuth([jwtAuth()])
             @Endpoint(POST, '/tool', WRITE, RPC)
-            @WpMcpTool('missing_mcp_auth', 'Missing MCP auth')
+            @WpMcpTool('missing_mcp_auth')
             tool(_request: SearchRequest): Promise<SearchResponse> {
                 throw new Error('contract only');
             }

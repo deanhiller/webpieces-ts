@@ -152,6 +152,7 @@ export abstract class McpEquivalenceApi {
     /**
      * Looks up orders at one store, newest first.
      *
+     * @summary Look up orders
      * @returns One page of matching orders and the cursor for the next page.
      * @privateRemarks Served from the read replica; this note must reach no tool catalog (#1292).
      */
@@ -159,7 +160,7 @@ export abstract class McpEquivalenceApi {
     @WpAuth([jwtAuth()])
     @WpAuthorization({ authType: AuthorizationType.ALL_USERS })
 
-    @WpMcpTool('lookup_orders', 'Look up orders')
+    @WpMcpTool('lookup_orders')
     lookup(_request: LookupRequest): Promise<LookupResponse> {
         throw new Error('contract only');
     }
@@ -169,13 +170,14 @@ export abstract class McpEquivalenceApi {
     /**
      * Cancels one order.
      *
+     * @summary Cancel an order
      * @returns The order's phase after the cancellation attempt.
      */
     @Endpoint(POST, '/cancel', WRITE, RPC, { openWorld: true })
     @WpAuth([jwtAuth()])
     @WpAuthorization({ authType: AuthorizationType.ALL_USERS })
 
-    @WpMcpTool('cancel_order', 'Cancel an order', { profiles: ['admin'] })
+    @WpMcpTool('cancel_order', { profiles: ['admin'] })
     cancel(_request: CancelRequest): Promise<CancelResponse> {
         throw new Error('contract only');
     }
@@ -185,13 +187,14 @@ export abstract class McpEquivalenceApi {
     /**
      * Rebuilds a store's menu cache.
      *
+     * @summary Reindex a store
      * @returns How many menu items the rebuild re-read.
      */
     @Endpoint(POST, '/reindex', WRITE_IDEMPOTENT, RPC, { hidden: true })
     @WpAuth([jwtAuth()])
     @WpAuthorization({ authType: AuthorizationType.ALL_USERS })
 
-    @WpMcpTool('reindex_store', 'Reindex a store', { profiles: [Mcp.DEFAULT, 'admin'] })
+    @WpMcpTool('reindex_store', { profiles: [Mcp.DEFAULT, 'admin'] })
     reindex(_request: ReindexRequest): Promise<ReindexResponse> {
         throw new Error('contract only');
     }

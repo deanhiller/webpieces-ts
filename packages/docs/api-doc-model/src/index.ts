@@ -32,6 +32,7 @@ export {
 } from './model/ApiDocModel';
 export { McpRenderError } from './render/McpRenderError';
 export { McpCatalogRender, McpSchemaRenderer, SkippedMcpTool } from './render/McpSchemaRenderer';
+export { EndpointSummary } from './model/EndpointSummary';
 export { TypeRef } from './model/TypeRef';
 export type { PrimitiveKind, TypeRefKind } from './model/TypeRef';
 export { StreamingSchemaRenderer } from './render/StreamingSchemaRenderer';

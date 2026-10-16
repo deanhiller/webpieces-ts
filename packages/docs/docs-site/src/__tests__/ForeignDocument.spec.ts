@@ -66,23 +66,23 @@ describe('a conforming document this package did not generate', () => {
     });
 
     it('survives a self-referential DTO, because the root is marked seen before its own properties', () => {
-        const page = site.page('reference', 'plant-tree');
+        const page = site.page('reference', 'tree-api-plant-tree');
         expect(page).toContain('&quot;parent&quot;: {}');
     });
 
     it('gives an untagged operation a section of its own rather than dropping it from the nav', () => {
-        expect(site.exists('reference', 'count-trees')).toBe(true);
-        expect(site.page('reference', 'count-trees')).toContain('<summary>Operations</summary>');
+        expect(site.exists('reference', 'tree-api-count-trees')).toBe(true);
+        expect(site.page('reference', 'tree-api-count-trees')).toContain('<summary>Operations</summary>');
     });
 
     it('honours an operation stating security: [] instead of inheriting the document requirement', () => {
-        const page = site.page('reference', 'count-trees');
+        const page = site.page('reference', 'tree-api-count-trees');
         expect(page).not.toContain('x-mixed-key');
-        expect(site.page('reference', 'plant-tree')).toContain('x-mixed-key');
+        expect(site.page('reference', 'tree-api-plant-tree')).toContain('x-mixed-key');
     });
 
     it('renders a Headers list on the response card, resolving a $ref into components.headers (#1292)', () => {
-        const page = site.page('reference', 'plant-tree');
+        const page = site.page('reference', 'tree-api-plant-tree');
         const card = page.slice(page.indexOf('<h2>Responses</h2>'));
         expect(card).toContain('<div class="headers-head">Headers</div>');
         expect(card).toContain('<span class="field-name">x-request-id</span>');
@@ -95,7 +95,7 @@ describe('a conforming document this package did not generate', () => {
     });
 
     it('lists in:"header" parameters in the request section — path item and operation, $ref resolved (#1292)', () => {
-        const page = site.page('reference', 'plant-tree');
+        const page = site.page('reference', 'tree-api-plant-tree');
         const request = page.slice(page.indexOf('<h2>Request headers</h2>'), page.indexOf('<h2>Request body</h2>'));
         expect(request).toContain('<span class="field-name">X-Trace</span>');
         expect(request).toContain('string&lt;uuid&gt;');
@@ -106,7 +106,7 @@ describe('a conforming document this package did not generate', () => {
     });
 
     it('renders no Headers heading for an operation that declares none', () => {
-        const page = site.page('reference', 'count-trees');
+        const page = site.page('reference', 'tree-api-count-trees');
         expect(page).not.toContain('headers-head');
         expect(page).not.toContain('Request headers');
     });

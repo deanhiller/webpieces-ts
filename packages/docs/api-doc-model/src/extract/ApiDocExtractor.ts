@@ -456,6 +456,7 @@ export class ApiDocExtractor {
             ApiDocExtractor.decoratorCall(member, AUTHORIZATION)?.arguments[0]?.getText(),
             ApiDocExtractor.maskLogOf(member),
             doc.description,
+            doc.summary,
             doc.mcp,
             doc.returns,
             this.requestOf(member, methodName, resolver),
@@ -689,11 +690,11 @@ export class ApiDocExtractor {
     }
 
     /**
-     * `@WpMcpTool('search_stores', 'Search stores')` — the stable protocol name and the REQUIRED
-     * human-readable title (#1180), the two facts the source cannot otherwise state. A title that
-     * does not fold to a string is read as the empty string, which the MCP renderer refuses.
+     * `@WpMcpTool('search_stores')` — the stable protocol name, the one fact the source cannot
+     * otherwise state. The tool's title is the method's `@summary` JSDoc tag (#1296), read with the rest
+     * of its prose; the decorator carries none.
      *
-     * Profile membership is read from the optional third argument (#1187). Otherwise, the method's JSDoc
+     * Profile membership is read from the optional second argument (#1187). Otherwise, the method's JSDoc
      * is the description for the agent and the partner alike, the three side-effect hints are computed
      * from the endpoint's `operation`, and `openWorldHint` is `@Endpoint`'s `openWorld`. See
      * {@link DocumentedMcpTool}.
@@ -708,9 +709,10 @@ export class ApiDocExtractor {
         if (argument === undefined) {
             return undefined;
         }
-        const titleArgument = call?.arguments[1];
-        const title = titleArgument === undefined ? '' : (folder.tryFoldString(titleArgument) ?? '');
-        return new DocumentedMcpTool(folder.tryFoldString(argument) ?? '', title, new McpProfiles().read(call?.arguments[2], folder));
+        return new DocumentedMcpTool(
+            folder.tryFoldString(argument) ?? '',
+            new McpProfiles().read(call?.arguments[1], folder),
+        );
     }
 
     /**

@@ -2,6 +2,7 @@
     "openapi": "3.1.0",
     "info": {
         "title": "Fsdb API",
+        "summary": "Read stored passages and where their descriptions live.",
         "version": "1.0.0",
         "description": "INTERNAL — service-to-service use only. This document lists every endpoint these services serve, including ones no customer is meant to see. It is not the customer contract and must never be handed to one.\n\nEvery operation states whether it is safe to retry, derived from the endpoint's declared\nside-effect contract:\n\n| declared operation | read-only | destructive | idempotent |\n|---|---|---|---|\n| read | yes | no | yes |\n| write-idempotent | no | yes | yes |\n| write | no | yes | no |"
     },
@@ -16,7 +17,7 @@
             "post": {
                 "operationId": "FsdbApi_readPassage",
                 "x-webpieces-authentication": [],
-                "summary": "readPassage",
+                "summary": "Read a passage",
                 "description": "Reads one stored passage.\n\nSafe to retry: this operation is read-only and idempotent.\n\nTriggered by a direct call.",
                 "tags": [
                     "Storage"

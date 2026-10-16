@@ -56,7 +56,7 @@ const MCP_CATALOG = 'mcp-PartnerOrdersApi-tools.json';
 
 const REGENERATE = [
     'If the new output is intended, regenerate the goldens:',
-    '  node -r @swc-node/register -r tsconfig-paths/register \\',
+    '  TS_NODE_PROJECT=tsconfig.base.json node -r @swc-node/register -r tsconfig-paths/register \\',
     '    packages/docs/openapi-generator/src/cli/wp-openapi.ts \\',
     '    --manifest apps/app-example/partner-api/openapi.manifest.json \\',
     '    --out apps/app-example/partner-api/src/__tests__/goldens --format json',

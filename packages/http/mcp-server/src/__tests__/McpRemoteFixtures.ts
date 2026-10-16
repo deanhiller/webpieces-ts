@@ -115,12 +115,16 @@ export const GATEWAY_CATALOGS: readonly McpToolCatalog[] = [
 @ApiPath('/remote-mcp')
 @ApiType(SVC_TO_SVC, MCP)
 export abstract class RemoteMcpApi {
-    /** Calls a remote Webpieces API. */
+    /**
+     * Calls a remote Webpieces API.
+     *
+     * @summary Remote integration search
+     */
 
     @WpAuth([oidcSvcs(['mcp-gateway'])])
     @WpAuthorization({ authType: AuthorizationType.USERS_OR_SERVICES })
     @Endpoint(POST, '/search', READ, RPC)
-    @WpMcpTool('remote_integration_search', 'Remote integration search')
+    @WpMcpTool('remote_integration_search')
     search(_request: RemoteRequest): Promise<RemoteResponse> {
         throw new Error('contract only');
     }
@@ -129,12 +133,16 @@ export abstract class RemoteMcpApi {
 @ApiPath('/missing-remote-mcp')
 @ApiType(SVC_TO_SVC, MCP)
 export abstract class MissingRemoteMcpApi {
-    /** Intentionally absent route. */
+    /**
+     * Intentionally absent route.
+     *
+     * @summary Missing remote integration search
+     */
 
     @WpAuth([oidcSvcs(['mcp-gateway'])])
     @WpAuthorization({ authType: AuthorizationType.USERS_OR_SERVICES })
     @Endpoint(POST, '/search', READ, RPC)
-    @WpMcpTool('missing_remote_integration_search', 'Missing remote integration search')
+    @WpMcpTool('missing_remote_integration_search')
     search(_request: RemoteRequest): Promise<RemoteResponse> {
         throw new Error('contract only');
     }
@@ -143,12 +151,16 @@ export abstract class MissingRemoteMcpApi {
 @ApiPath('/refused-remote-mcp')
 @ApiType(SVC_TO_SVC, MCP)
 export abstract class RefusedRemoteApi {
-    /** Nothing listens on this port. */
+    /**
+     * Nothing listens on this port.
+     *
+     * @summary Refused remote call
+     */
 
     @WpAuth([oidcSvcs(['mcp-gateway'])])
     @WpAuthorization({ authType: AuthorizationType.USERS_OR_SERVICES })
     @Endpoint(POST, '/search', READ, RPC)
-    @WpMcpTool('refused_remote', 'Refused remote call')
+    @WpMcpTool('refused_remote')
     search(_request: RemoteRequest): Promise<RemoteResponse> {
         throw new Error('contract only');
     }
@@ -157,12 +169,16 @@ export abstract class RefusedRemoteApi {
 @ApiPath('/garbage-remote-mcp')
 @ApiType(SVC_TO_SVC, MCP)
 export abstract class GarbageRemoteApi {
-    /** Answers an undecodable body. */
+    /**
+     * Answers an undecodable body.
+     *
+     * @summary Garbage remote response
+     */
 
     @WpAuth([oidcSvcs(['mcp-gateway'])])
     @WpAuthorization({ authType: AuthorizationType.USERS_OR_SERVICES })
     @Endpoint(POST, '/search', READ, RPC)
-    @WpMcpTool('garbage_remote', 'Garbage remote response')
+    @WpMcpTool('garbage_remote')
     search(_request: RemoteRequest): Promise<RemoteResponse> {
         throw new Error('contract only');
     }
@@ -171,12 +187,16 @@ export abstract class GarbageRemoteApi {
 @ApiPath('/oidc-fail-remote-mcp')
 @ApiType(SVC_TO_SVC, MCP)
 export abstract class OidcFailRemoteApi {
-    /** Its OIDC token cannot be minted. */
+    /**
+     * Its OIDC token cannot be minted.
+     *
+     * @summary OIDC failure on remote
+     */
 
     @WpAuth([oidcSvcs(['mcp-gateway'])])
     @WpAuthorization({ authType: AuthorizationType.USERS_OR_SERVICES })
     @Endpoint(POST, '/search', READ, RPC)
-    @WpMcpTool('oidc_fail_remote', 'OIDC failure on remote')
+    @WpMcpTool('oidc_fail_remote')
     search(_request: RemoteRequest): Promise<RemoteResponse> {
         throw new Error('contract only');
     }
@@ -185,12 +205,16 @@ export abstract class OidcFailRemoteApi {
 @ApiPath('/local-throw')
 @ApiType(SVC_TO_SVC, MCP)
 export abstract class LocalThrowApi {
-    /** Throws the requested failure in-process. */
+    /**
+     * Throws the requested failure in-process.
+     *
+     * @summary Local throw
+     */
 
     @WpAuth([jwtAuth()])
     @WpAuthorization({ authType: AuthorizationType.ALL_USERS })
     @Endpoint(POST, '/throw', READ, RPC)
-    @WpMcpTool('local_throw', 'Local throw')
+    @WpMcpTool('local_throw')
     fail(_request: RemoteRequest): Promise<RemoteResponse> {
         throw new Error('contract only');
     }
@@ -199,12 +223,16 @@ export abstract class LocalThrowApi {
 @ApiPath('/remote-throw')
 @ApiType(SVC_TO_SVC, MCP)
 export abstract class RemoteThrowApi {
-    /** Throws the requested failure remotely. */
+    /**
+     * Throws the requested failure remotely.
+     *
+     * @summary Remote throw
+     */
 
     @WpAuth([oidcSvcs(['mcp-gateway'])])
     @WpAuthorization({ authType: AuthorizationType.USERS_OR_SERVICES })
     @Endpoint(POST, '/throw', READ, RPC)
-    @WpMcpTool('remote_throw', 'Remote throw')
+    @WpMcpTool('remote_throw')
     fail(_request: RemoteRequest): Promise<RemoteResponse> {
         throw new Error('contract only');
     }

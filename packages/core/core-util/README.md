@@ -156,8 +156,10 @@ Apache-2.0
 
 ### MCP profile membership
 
-`Mcp.DEFAULT` is the reserved base tool group. `@WpMcpTool(name, title)` and an omitted
-`profiles` option select only that group. `{ profiles: ['admin'] }` selects only admin;
+`Mcp.DEFAULT` is the reserved base tool group. `@WpMcpTool(name)` and an omitted
+`profiles` option select only that group. The decorator takes the stable tool name only: the tool's
+title is the method's `@summary` JSDoc tag (#1296), and a name must be 1-64 characters of
+`[A-Za-z0-9_-]` (`McpToolName`) or the decorator throws. `{ profiles: ['admin'] }` selects only admin;
 `{ profiles: [Mcp.DEFAULT, 'admin'] }` explicitly shares a tool between both groups. Membership is
 independent of `@WpAuthorization` roles and never grants account permissions. Identifiers match
 `[a-z][a-z0-9-]{0,63}`; empty lists, duplicates and malformed options are rejected.

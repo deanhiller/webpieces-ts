@@ -1,5 +1,6 @@
 {
     "title": "Internal API",
+    "summary": "Check that the internal service is up.",
     "operationIds": "contract_method",
     "version": "1.0.0",
     "apisWhy": "One contract declaring no @ApiType, so ONLY the internal document is written.",

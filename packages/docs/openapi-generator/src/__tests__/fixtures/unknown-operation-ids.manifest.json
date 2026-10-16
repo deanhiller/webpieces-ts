@@ -1,5 +1,6 @@
 {
     "title": "Widgets API",
+    "summary": "List and purge the widgets in your account.",
     "version": "2.1.0",
     "operationIds": "Contract_Method",
     "servers": [

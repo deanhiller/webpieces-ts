@@ -52,6 +52,7 @@ export class SpecReader {
         const sections = this.readSections(root);
         return new ApiSpec(
             root.at('info').text('title') ?? 'API reference',
+            root.at('info').text('summary') ?? '',
             root.at('info').text('version') ?? '',
             root.at('info').text('description') ?? '',
             this.readServers(root),
@@ -207,10 +208,12 @@ export class SpecReader {
         isWebhook: boolean,
         pathItem: JsonNode,
     ): OperationInfo {
-        const name = node.text('summary') ?? node.text('operationId') ?? pathOrEvent;
+        const operationId = node.text('operationId');
+        const name = node.text('summary') ?? operationId ?? pathOrEvent;
         return new OperationInfo(
             name,
-            slugs.unique(name),
+            operationId ?? '',
+            slugs.unique(operationId ?? name),
             httpMethod,
             isWebhook ? '' : pathOrEvent,
             node.text('description') ?? '',

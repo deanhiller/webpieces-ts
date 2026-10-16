@@ -19,6 +19,7 @@ export {
     ComponentsManifest,
     ErrorResponseEntry,
     ErrorsEntry,
+    MANIFEST_SUMMARY_MAX_LENGTH,
     OpenApiManifest,
     OperationIdStyle,
     ResponseHeaderEntry,

@@ -1,5 +1,6 @@
 {
     "title": "Lang API",
+    "summary": "List a lesson's passages in reading order.",
     "operationIds": "contract_method",
     "version": "1.0.0",
     "apis": [

@@ -160,6 +160,7 @@ export {
     mcpHintsForOperation,
 } from './mcp/McpMetadata';
 export type { WpMcpMethodDecorator } from './mcp/McpMetadata';
+export { McpToolName } from './mcp/McpToolName';
 export {
     ApiJsonSchema,
     ApiJsonSchemaDiscriminator,

@@ -1,5 +1,6 @@
 {
     "title": "Stranded Doc API",
+    "summary": "Read one publication by its id.",
     "operationIds": "contract_method",
     "version": "1.0.0",
     "apis": [

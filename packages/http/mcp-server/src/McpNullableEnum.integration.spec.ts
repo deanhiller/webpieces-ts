@@ -68,11 +68,15 @@ class FormatResponse {
 @ApiPath('/nullable-enum-spec')
 @ApiType(SVC_TO_SVC, MCP)
 abstract class NullableEnumApi {
-    /** Reads the chosen résumé format. */
+    /**
+     * Reads the chosen résumé format.
+     *
+     * @summary Get format
+     */
     @WpAuth([jwt()])
     @WpAuthorization({ authType: AuthorizationType.ALL_USERS })
     @Endpoint(POST, '/format', READ, RPC)
-    @WpMcpTool('get_format', 'Get format')
+    @WpMcpTool('get_format')
     format(_request: FormatRequest): Promise<FormatResponse> {
         throw new Error('contract');
     }

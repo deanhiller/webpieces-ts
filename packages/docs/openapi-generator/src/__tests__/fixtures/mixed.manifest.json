@@ -1,5 +1,6 @@
 {
     "title": "Mixed API",
+    "summary": "Ping the service and read the partner secret.",
     "operationIds": "contract_method",
     "version": "1.0.0",
     "apis": [

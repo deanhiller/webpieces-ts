@@ -481,14 +481,17 @@ describe('operationIds (#1270)', () => {
 });
 
 describe('prose', () => {
-    it('makes `summary` the operation NAME and the JSDoc body the `description`', () => {
+    it('makes `summary` the @summary short title and the JSDoc body the `description` (#1296)', () => {
         const published = harness.document(
             harness.run('single.manifest.json'),
             'public-openapi.json',
         );
-        // A docs theme TITLES the page from `summary`; a sentence there produces a sidebar of
-        // sentences and a page whose heading repeats its own first line.
-        expect(harness.at(published, 'paths./widgets/list.post.summary')).toBe('list');
+        // A docs theme TITLES the page from `summary` and labels the sidebar with it, so it is the
+        // author's one-line title — never a code identifier, never the first sentence of the prose.
+        expect(harness.at(published, 'paths./widgets/list.post.summary')).toBe('List widgets');
+        expect(harness.at(published, 'paths./widgets/list.post.description')).not.toContain(
+            'List widgets',
+        );
         expect(harness.at(published, 'paths./widgets/list.post.description')).toContain(
             'Lists widgets.',
         );
@@ -527,9 +530,12 @@ describe('prose', () => {
         const mcp = harness.document(written, 'mcp-openapi.json');
         const published = harness.document(written, 'public-openapi.json');
         expect(harness.at(mcp, 'paths./widgets/list.post.x-mcp-tool')).toBe('list_widgets');
+        // The title is the @summary line, as Tool.title and as annotations.title (#1296).
+        expect(harness.at(mcp, 'paths./widgets/list.post.x-mcp-title')).toBe('List widgets');
         // The three side-effect hints are COMPUTED from `operation` by core-util's own mapping; only
         // `openWorldHint` is declared, and it defaults false.
         expect(harness.at(mcp, 'paths./widgets/list.post.x-mcp-hints')).toEqual({
+            title: 'List widgets',
             readOnlyHint: true,
             destructiveHint: false,
             idempotentHint: true,
@@ -545,8 +551,8 @@ describe('prose', () => {
         const written = harness.run('single.manifest.json');
         const mcp = harness.document(written, 'mcp-openapi.json');
         const published = harness.document(written, 'public-openapi.json');
-        // `@WpMcpTool`'s `description` field is never read: two authored copies of one paragraph
-        // drift the first time somebody edits one.
+        // There is no decorator description or title to read: two authored copies of one paragraph
+        // drift the first time somebody edits one. The @summary title is not part of the body.
         expect(harness.at(mcp, 'paths./widgets/list.post.description')).toBe(
             harness.at(published, 'paths./widgets/list.post.description'),
         );

@@ -40,7 +40,11 @@ export class GetPublicationRequest {
 @ApiType(SVC_TO_SVC, EXTERNAL_CUSTOMER)
 export class StrandedDocApi {
     /** A doc for a method that no longer exists. */
-    /** Reads one publication. */
+    /**
+     * Reads one publication.
+     *
+     * @summary Read a publication
+     */
     @Endpoint(POST, '/get', READ, RPC)
     @WpAuthPublic('Fixture only.')
     @WpAuthorization({ authType: AuthorizationType.ANONYMOUS, reason: 'Fixture only.' })

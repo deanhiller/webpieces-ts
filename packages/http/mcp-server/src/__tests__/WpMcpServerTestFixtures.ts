@@ -118,22 +118,30 @@ export const REMOTE_SEARCH_API_CATALOG = new McpToolCatalog(
 @ApiPath('/mcp-spec')
 @ApiType(SVC_TO_SVC, MCP)
 export abstract class SearchApi {
-    /** Search records owned by the authenticated user. */
+    /**
+     * Search records owned by the authenticated user.
+     *
+     * @summary Search accounts
+     */
 
     @WpAuth([jwtAuth()])
     @WpAuthorization({ authType: AuthorizationType.ALL_USERS })
     @Endpoint(POST, '/search', READ, RPC)
-    @WpMcpTool('account_search', 'Search accounts')
+    @WpMcpTool('account_search')
     search(_request: SearchRequest): Promise<SearchResponse> {
         throw new Error('contract only');
     }
 
-    /** Administrative search. */
+    /**
+     * Administrative search.
+     *
+     * @summary Admin search
+     */
 
     @WpAuth([jwtAuth()])
     @WpAuthorization({ authType: AuthorizationType.ROLES, roles: ['admin'] })
     @Endpoint(POST, '/admin', WRITE, RPC)
-    @WpMcpTool('admin_search', 'Admin search')
+    @WpMcpTool('admin_search')
     admin(_request: SearchRequest): Promise<SearchResponse> {
         throw new Error('contract only');
     }
@@ -142,12 +150,16 @@ export abstract class SearchApi {
 @ApiPath('/remote-spec')
 @ApiType(SVC_TO_SVC, MCP)
 export abstract class RemoteSearchApi {
-    /** Search a remote binding. */
+    /**
+     * Search a remote binding.
+     *
+     * @summary Remote search
+     */
 
     @WpAuth([oidcSameProject()])
     @WpAuthorization({ authType: AuthorizationType.USERS_OR_SERVICES })
     @Endpoint(POST, '/search', WRITE, RPC)
-    @WpMcpTool('remote_search', 'Remote search')
+    @WpMcpTool('remote_search')
     search(_request: SearchRequest): Promise<SearchResponse> {
         throw new Error('contract only');
     }
