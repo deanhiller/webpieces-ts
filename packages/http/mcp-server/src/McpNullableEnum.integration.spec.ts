@@ -165,6 +165,9 @@ describe('a NULLABLE string enum in an MCP tool output (#1197)', () => {
             mount.bridge = new WpMcpServer(
                 new WpMcpServerConfig<string>()
                     .setName('nullable-enum')
+                    .setTitle('Webpieces Test Server')
+                    .setDescription('Exercises the webpieces MCP bridge in the mcp-server test suite.')
+                    .setWebsiteUrl('https://docs.example.test/mcp')
                     .setVersion('1')
                     .setResource(`https://api.example.test${mount.path}`)
                     .setAccessTokenAuthority(new TestTokenAuthority())

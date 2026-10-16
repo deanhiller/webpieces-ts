@@ -71,6 +71,9 @@ describe('bound MCP profile and resource isolation', () => {
             const profiles: [string, ...string[]] = [mount.profiles[0], ...mount.profiles.slice(1)];
             const config = new WpMcpServerConfig<string>()
                 .setName('profiles')
+                .setTitle('Webpieces Test Server')
+                .setDescription('Exercises the webpieces MCP bridge in the mcp-server test suite.')
+                .setWebsiteUrl('https://docs.example.test/mcp')
                 .setVersion('1')
                 .setResource(`https://api.example.test${mount.path}`)
                 .setAccessTokenAuthority(new ResourceAuthority())
@@ -216,6 +219,9 @@ describe('bound MCP profile and resource isolation', () => {
         for (const catalog of [missing, stale]) {
             const config = new WpMcpServerConfig<string>()
                 .setName('invalid')
+                .setTitle('Webpieces Test Server')
+                .setDescription('Exercises the webpieces MCP bridge in the mcp-server test suite.')
+                .setWebsiteUrl('https://docs.example.test/mcp')
                 .setVersion('1')
                 .setResource('https://api.example.test/mcp')
                 .setAccessTokenAuthority(new ResourceAuthority())

@@ -155,6 +155,9 @@ describe('WpMcpServer error boundary (WpMcpErrorTranslator)', () => {
         bridge = new WpMcpServer(
             new WpMcpServerConfig<string>()
                 .setName('boundary-server')
+                .setTitle('Webpieces Test Server')
+                .setDescription('Exercises the webpieces MCP bridge in the mcp-server test suite.')
+                .setWebsiteUrl('https://docs.example.test/mcp')
                 .setVersion('1.0.0')
                 .setResource('https://api.example.test/app-owned/mcp')
                 .setAccessTokenAuthority(authority)

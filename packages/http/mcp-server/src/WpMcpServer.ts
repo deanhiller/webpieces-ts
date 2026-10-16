@@ -409,6 +409,9 @@ export class WpMcpServer<TGrant> {
         const server = new WpSdkMcpServer(
             {
                 name: this.config.name,
+                title: this.config.title,
+                description: this.config.description,
+                websiteUrl: this.config.websiteUrl,
                 version: `${this.config.version}+${this.revision}`,
                 ...(this.icons === undefined ? {} : { icons: [...this.icons] }),
             },

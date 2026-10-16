@@ -132,6 +132,9 @@ describe('the descriptions an MCP client is served from a GENERATED catalog (#12
         bridge = new WpMcpServer(
             new WpMcpServerConfig<string>()
                 .setName('described')
+                .setTitle('Webpieces Test Server')
+                .setDescription('Exercises the webpieces MCP bridge in the mcp-server test suite.')
+                .setWebsiteUrl('https://docs.example.test/mcp')
                 .setVersion('1')
                 .setResource(`https://api.example.test${mountPath}`)
                 .setAccessTokenAuthority(new TestTokenAuthority())
