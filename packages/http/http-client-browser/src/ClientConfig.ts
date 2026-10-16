@@ -1,4 +1,5 @@
-import { ClientRole } from '@webpieces/core-util';
+import { CallMode, ClientRole } from '@webpieces/core-util';
+import { ServiceWorkerRouting } from './ServiceWorkerRouting';
 
 /**
  * Per-client STATE for a browser HTTP client — nothing else. A plain class; it extends nothing and
@@ -26,5 +27,19 @@ export class ClientConfig {
          * right answer is opposite for the two, so no default could be right for both.
          */
         public readonly role: ClientRole,
+        /**
+         * Whether the user waits on this client's calls (#1293). The same contract may be built twice:
+         * once FOREGROUND for the Refresh button, once {@link CallMode.BACKGROUND} for the timer that
+         * polls it. A BACKGROUND client's routes carry `hideProgress` and `callMode`, and every
+         * failure it rejects with carries `err.callMode === CallMode.BACKGROUND` — the error's class is
+         * unchanged. FOREGROUND, the ordinary call, when omitted.
+         */
+        public readonly callMode: CallMode = CallMode.FOREGROUND,
+        /**
+         * Whether the page's service worker may intercept these calls. {@link ServiceWorkerRouting.BYPASS}
+         * (append `ngsw-bypass=true`) when omitted, so a dropped connection is an `ApiConnectionError`
+         * and never Angular's synthetic 504 — see {@link ServiceWorkerRouting}.
+         */
+        public readonly serviceWorker: ServiceWorkerRouting = ServiceWorkerRouting.BYPASS,
     ) {}
 }

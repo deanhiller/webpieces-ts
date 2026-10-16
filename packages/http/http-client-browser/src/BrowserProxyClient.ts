@@ -6,6 +6,7 @@ import {
     RouteMetadata,
     StreamDirection,
     ClientRole,
+    CallMode,
 } from '@webpieces/core-util';
 import { BrowserApiCallContext } from './BrowserApiCallContext';
 import {
@@ -18,6 +19,8 @@ import {
 } from '@webpieces/http-client-core';
 import { ClientConfig } from './ClientConfig';
 import { RequestLifecycleListener } from './RequestLifecycleListener';
+import { ServiceWorkerRouting } from './ServiceWorkerRouting';
+import { ServiceWorkerSyntheticResponse } from './ServiceWorkerSyntheticResponse';
 
 /**
  * The browser {@link ProxyClient}. Reads context from the app-held store (via {@link ContextMgr}),
@@ -39,6 +42,12 @@ export class BrowserProxyClient extends ProxyClient {
         return selected;
     }
     private config!: ClientConfig;
+
+    /** The query parameter Angular's service worker (`Driver.onFetch`) honours to skip a request. */
+    static readonly NGSW_BYPASS_PARAM = 'ngsw-bypass';
+
+    // Stateless, so constructed here rather than injected — the browser bundle keeps no DI on the fetch path.
+    private readonly syntheticResponse = new ServiceWorkerSyntheticResponse();
 
     constructor(
         private readonly contextMgr: ContextMgr,
@@ -71,6 +80,35 @@ export class BrowserProxyClient extends ProxyClient {
      */
     protected override clientRole(): ClientRole {
         return this.config.role;
+    }
+
+    /** From {@link ClientConfig.callMode}: a BACKGROUND client stamps every route and failure with it. */
+    protected override callMode(): CallMode {
+        return this.config.callMode;
+    }
+
+    /**
+     * Append `ngsw-bypass=true` unless {@link ClientConfig.serviceWorker} is ALLOW (#1293), so ngsw
+     * never intercepts the RPC and a network reject arrives as a native reject — which
+     * `NetworkRejectClassifier` types as `ApiConnectionError` — instead of ngsw's synthetic 504.
+     */
+    protected override transportUrl(request: ClientRequest): string {
+        const url = request.url;
+        if (this.config.serviceWorker === ServiceWorkerRouting.ALLOW) {
+            return url;
+        }
+        const separator = url.includes('?') ? '&' : '?';
+        return `${url}${separator}${BrowserProxyClient.NGSW_BYPASS_PARAM}=true`;
+    }
+
+    /**
+     * One transmission, then the fallback for a service worker that intercepted anyway (ALLOW, or a
+     * worker other than ngsw honouring nothing): its synthetic 504 becomes `ApiConnectionError` with
+     * the response as cause. A real gateway 504 has headers, so it stays `ApiDependencyTimeoutError`.
+     */
+    protected override async sendOnce(request: ClientRequest, signal: AbortSignal): Promise<Response> {
+        const response = await super.sendOnce(request, signal);
+        return this.syntheticResponse.rejectIfSynthetic(response, request.url);
     }
 
     protected override async resolveBaseUrl(): Promise<string> {

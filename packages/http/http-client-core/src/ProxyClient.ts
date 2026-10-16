@@ -17,6 +17,8 @@ import {
     DtoValue,
     StreamDirection,
     ClientRole,
+    CallMode,
+    CallModeMarker,
 } from '@webpieces/core-util';
 import { ApiPrototype } from './ApiPrototype';
 import { ClientFilterDefinition } from './ClientFilter';
@@ -190,6 +192,16 @@ export abstract class ProxyClient {
         return [];
     }
 
+    /**
+     * Whether the user is waiting on this client's calls (#1293). Every call's route is stamped with
+     * it ({@link RouteMetadata.withCallMode} — a BACKGROUND call also gets `hideProgress`), and every
+     * failure carries it as `err.callMode` ({@link CallModeMarker}). The default is FOREGROUND; the
+     * browser client answers from its `ClientConfig`.
+     */
+    protected callMode(): CallMode {
+        return CallMode.FOREGROUND;
+    }
+
     /** Whether fetch can read the response while its streaming request body remains open. */
     protected abstract supportsConcurrentDuplexFetch(): boolean;
 
@@ -349,8 +361,29 @@ export abstract class ProxyClient {
         // mirror of the inbound WebhookAuthCallback that verifies one.
     }
 
+    /**
+     * One generated-client call. The route is cloned per call with the selected credential and this
+     * client's {@link callMode}; a failure is rethrown as the SAME instance, carrying that mode as
+     * `err.callMode`, so the error's class is never changed.
+     */
     // webpieces-disable no-any-unknown -- request and response DTOs are erased at the proxy boundary
     async makeRequest(route: RouteMetadata, args: unknown[]): Promise<unknown> {
+        const mode = this.callMode();
+        // webpieces-disable no-unmanaged-exceptions -- park the call mode on the failure, rethrow it unchanged
+        // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
+        try {
+            return await this.makeModeRequest(route.withCallMode(mode), args);
+        } catch (err: unknown) {
+            //const error = toError(err);
+            // The ORIGINAL thrown value is marked and rethrown by identity, so its class never changes.
+            CallModeMarker.attachTo(err, mode);
+            // eslint-disable-next-line @webpieces/no-unmanaged-exceptions -- rethrows the call's own failure unchanged
+            throw err;
+        }
+    }
+
+    // webpieces-disable no-any-unknown -- request and response DTOs are erased at the proxy boundary
+    private async makeModeRequest(route: RouteMetadata, args: unknown[]): Promise<unknown> {
         route = route.withSelectedAuth(this.selectAuthMethod(route));
         this.refuseEndpointNoClientCanCall(route);
         if (route.streaming) return this.makeStreamingRequest(route, args);
@@ -590,11 +623,22 @@ export abstract class ProxyClient {
         // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
         try {
             // webpieces-disable no-fetch -- this IS the generated-client implementation the rule points everyone to
-            return await fetch(request.url, options);
+            return await fetch(this.transportUrl(request), options);
         } catch (err: unknown) {
             const error = toError(err);
             throw this.networkRejectClassifier.toNetworkError(error, request.url);
         }
+    }
+
+    /**
+     * The url {@link sendOnce} hands to `fetch` — `request.url` unless the environment must add a
+     * TRANSPORT-only marker no filter should see or judge. The browser client appends
+     * `ngsw-bypass=true` here so Angular's service worker never intercepts an RPC (#1293). It is a
+     * hook rather than a filter on purpose: re-pointing the {@link ClientRequest} would flip
+     * `destinationCameFromData` and claim the destination came from data, which it did not.
+     */
+    protected transportUrl(request: ClientRequest): string {
+        return request.url;
     }
 
     /** Node fetch's streaming upload option. Browser callers are refused before reaching here. */

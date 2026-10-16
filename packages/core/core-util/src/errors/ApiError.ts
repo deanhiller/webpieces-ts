@@ -1,4 +1,5 @@
 import { ApiCallSite } from './ApiCallSite';
+import { CallMode } from './CallMode';
 
 export type ApiErrorKind =
     | 'end-user'
@@ -37,6 +38,14 @@ export abstract class ApiError extends Error {
      * no `callSite` key at all. See {@link ApiCallSite} for why it is not `cause`.
      */
     declare readonly callSite?: ApiCallSite;
+
+    /**
+     * Whether the user was waiting on the generated client call that rejected with this error
+     * (#1293) — `CallMode.BACKGROUND` for a client built with a background `ClientConfig`. Set by
+     * {@link CallModeMarker.attachTo} as a NON-ENUMERABLE own property, exactly like
+     * {@link callSite}; an error that never failed a client call carries no `callMode` key.
+     */
+    declare readonly callMode?: CallMode;
 
     constructor(message: string, cause?: Error) {
         super(message, { cause });

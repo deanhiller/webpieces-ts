@@ -5,7 +5,8 @@ The browser-side HTTP client: generates type-safe clients from the SAME API cont
 ## In Scope
 
 - `ClientHttpBrowserFactory` — a plain class the app provides through whatever DI it already has (Angular `useFactory`, a React context, a module-level `const`)
-- `ClientConfig` — per-client state: the base URL, plus an optional logging name
+- `ClientConfig` — per-client state: the svcName, the `ClientRole`, the per-call `CallMode` (a BACKGROUND client hides progress and stamps `err.callMode` on every failure, #1293), and the `ServiceWorkerRouting` (#1293)
+- Bypassing Angular's service worker on every RPC (`ngsw-bypass=true` query parameter) and re-typing ngsw's synthetic 504 (`ServiceWorkerSyntheticResponse`) as `ApiConnectionError`, so a dropped connection is never shown as a gateway timeout
 - Applying the SAME received-status rule as `http-client-node` — one `WebpiecesDefaultErrorTranslator`, no browser-specific branch. A browser that received a 404 called a path that does not exist, which is the CLIENT's bug (`ApiImplementationError`), not an answer to show a user; a 5xx is the server's (`ApiDependencyError`). The one genuinely user-facing outcome has its own channel and always did: 266 / `ApiEndUserError`
 - `MutableContextStore` — the browser `ContextReader`. Browsers have no ambient request scope, so the app sets context values (login token, tenant) as they become known and every outbound call transfers them as headers
 - Exposing the core client's typed GET/POST, explicit path/query, JSON/form, and full-response behavior without a Node-only dependency; manual redirects remain subject to native browser CORS/opaque-response rules

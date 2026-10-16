@@ -393,6 +393,8 @@ export {
     ApiErrorPayload,
     ApiErrorBoundary,
     ApiCallSite,
+    CallMode,
+    CallModeMarker,
     ReportableApiFailure,
     RpcCallFailed,
 } from './errors';
