@@ -179,12 +179,13 @@ export class ExampleApi {
     /**
      * Save a customer.
      *
+     * @summary Save a customer
      * @mcp Create or update one customer record. Safe to retry.
      */
     @Endpoint(POST, SAVE_PATH, WRITE, RPC)
     @WpAuth([jwtAuth()])
     @WpAuthorization<{llmRoles: readonly [string, ...string[]]}>({ authType: AuthorizationType.CUSTOM, appPolicy: {llmRoles: ['admin']} })
-    @WpMcpTool('save_customer', 'Save a customer')
+    @WpMcpTool('save_customer')
 
     @MaskLog({ secretToken: 'full' })
     save(request: SaveRequest): Promise<SaveResponse> {

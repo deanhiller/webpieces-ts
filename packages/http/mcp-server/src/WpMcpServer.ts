@@ -74,7 +74,8 @@ class McpEdgeRequest {
 /**
  * `Tool.annotations` exactly as tools/list publishes it: the four hints PLUS the human-readable
  * `title` (#1180). The Claude Connectors Directory checks `annotations.title`; clients on the
- * 2025-06-18+ spec render the top-level `Tool.title`, so both carry the one `@WpMcpTool` title.
+ * 2025-06-18+ spec render the top-level `Tool.title`, so both carry the one title — the method's
+ * `@summary` JSDoc tag, read from the generated catalog (#1296).
  */
 class McpPublishedToolAnnotations {
     readonly title: string;

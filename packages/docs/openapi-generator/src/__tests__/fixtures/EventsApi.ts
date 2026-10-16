@@ -26,7 +26,11 @@ export interface WidgetMadeEvent {
 @ApiPath('/hooks')
 @ApiType(SVC_TO_SVC, EXTERNAL_CUSTOMER)
 export class EventsApi {
-    /** Sent whenever a widget is made. */
+    /**
+     * Sent whenever a widget is made.
+     *
+     * @summary Widget made
+     */
     @Endpoint(POST, '/widget.made', WRITE, RPC)
     @WpAuthPublic('Never served here; this declares a payload we SEND to a partner endpoint.')
     @WpAuthorization({ authType: AuthorizationType.ANONYMOUS, reason: 'Never served here; this declares a payload we SEND to a partner endpoint.' })

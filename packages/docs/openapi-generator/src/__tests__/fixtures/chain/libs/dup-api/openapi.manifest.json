@@ -1,5 +1,6 @@
 {
     "title": "Dup API",
+    "summary": "Read two passages that share a name across packages.",
     "operationIds": "contract_method",
     "version": "1.0.0",
     "apis": [

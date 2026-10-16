@@ -54,12 +54,16 @@ class PassageResponse {
 @ApiPath('/mcp-spec-passages')
 @ApiType(SVC_TO_SVC, MCP)
 abstract class PassageApi {
-    /** Find passages with their translations keyed by locale. */
+    /**
+     * Find passages with their translations keyed by locale.
+     *
+     * @summary Find passages
+     */
 
     @WpAuth([jwtAuth()])
     @WpAuthorization({ authType: AuthorizationType.ALL_USERS })
     @Endpoint(POST, '/passages', READ, RPC)
-    @WpMcpTool('passages_find', 'Find passages')
+    @WpMcpTool('passages_find')
     passages(_request: PassageRequest): Promise<PassageResponse> {
         throw new Error('contract only');
     }

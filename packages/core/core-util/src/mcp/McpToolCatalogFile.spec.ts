@@ -115,6 +115,18 @@ describe('McpToolCatalogFile', () => {
         );
     });
 
+    it('REFUSES every illegal tool name at once — over 64 characters or outside [A-Za-z0-9_-] (#1296)', () => {
+        const long = 'x'.repeat(65);
+        const build = (): McpToolCatalogFile =>
+            new McpToolCatalogFile('OrdersApi', [tool(long), tool('orders.lookup'), tool('fine_name')]);
+
+        expect(build).toThrow(McpToolCatalogError);
+        expect(build).toThrow(/2 illegal tool name\(s\)/);
+        expect(build).toThrow(/65 characters, over the 64-character limit/);
+        expect(build).toThrow(/'orders\.lookup'.*outside A-Z a-z 0-9 _ -/);
+        expect(() => new McpToolCatalogFile('OrdersApi', [tool('x'.repeat(64))])).not.toThrow();
+    });
+
     it('names its file after the CONTRACT, and reads the contract back from the file name', () => {
         const file = new McpToolCatalogFile('LangCourseAuthorApi', [tool('a')]);
 

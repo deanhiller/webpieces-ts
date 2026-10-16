@@ -53,8 +53,12 @@ export interface LearnerLookupRequest extends LearnerNamedDto, AgedDto {
 @ApiType(MCP)
 @ApiPath('/lessons')
 export abstract class InheritanceApi {
-    /** Renders one lesson. */
-    @WpMcpTool('render_lesson', 'Render a lesson')
+    /**
+     * Renders one lesson.
+     *
+     * @summary Render a lesson
+     */
+    @WpMcpTool('render_lesson')
     @WpAuth([jwtAuth()])
     @WpAuthorization({ authType: AuthorizationType.ALL_USERS })
 
@@ -63,8 +67,12 @@ export abstract class InheritanceApi {
         throw new Error('contract only');
     }
 
-    /** Looks one learner up. */
-    @WpMcpTool('lookup_learner', 'Look up a learner')
+    /**
+     * Looks one learner up.
+     *
+     * @summary Look up a learner
+     */
+    @WpMcpTool('lookup_learner')
     @WpAuth([jwtAuth()])
     @WpAuthorization({ authType: AuthorizationType.ALL_USERS })
 

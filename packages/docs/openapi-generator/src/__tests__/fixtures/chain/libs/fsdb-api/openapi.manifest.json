@@ -1,5 +1,6 @@
 {
     "title": "Fsdb API",
+    "summary": "Read stored passages and where their descriptions live.",
     "operationIds": "contract_method",
     "version": "1.0.0",
     "apis": [

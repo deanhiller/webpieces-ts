@@ -6,12 +6,13 @@ Render a static, three-pane API reference site from **any** conforming OpenAPI 3
 
 ## In Scope
 
-- **One PRE-RENDERED HTML file per URL** — `index.html`, `prose/<slug>/index.html`, `reference/<kebab-operation>/index.html`, `schemas/<kebab-name>/index.html`. Deep links resolve server-side, the output is a folder any static host serves, JS off still reads, and a JSDoc edit shows up as a diff on the one page it affects
+- **One PRE-RENDERED HTML file per URL** — `index.html`, `prose/<slug>/index.html`, `reference/<kebab-operationId>/index.html`, `schemas/<kebab-name>/index.html`. Deep links resolve server-side, the output is a folder any static host serves, JS off still reads, and a JSDoc edit shows up as a diff on the one page it affects
 - The three panes: the collapsible nav tree, the operation body, and the sticky card column (authorization, code samples, `REQUEST` / `COLLAPSE ALL`)
 - The parameter tree: field name, type label, prose, and for an enum the COMPLETE `Possible values:` chip line — all read from the spec
 - `docs.manifest.json` names the markdown prose pages and their order
 - Code samples built FROM THE SPEC — server url, path, security-scheme header names, a generated example body — in Go, raw HTTP, Java and JavaScript
 - **Every OpenAPI tag is its own nav section**, in the document's own `tags[]` order
+- **Titles (#1296)** — an operation page's heading and its sidebar label are the operation's `summary`; its `operationId` stays visible beside the method and path (`.op-id`) as the code identifier, and its URL is kebabed from the `operationId` so a reworded title never moves a link. The overview shows `info.summary` under the API title. A document stating no `summary` falls back to the `operationId`, then the path or event
 - **Webhooks** file into the SAME section as the operations sharing their tag, appended after them, badged, with no method, no path and no code samples
 - **Headers (#1292)** — a **Headers** list on each response card, beside the body schema: name, type, `REQUIRED` / `OPTIONAL`, prose, with a `$ref` into `components.headers` resolved. A request's `in: "header"` parameters (the path item's and the operation's, a `$ref` into `components.parameters` resolved) are listed the same way under **Request headers**
 - A `oneOf` request body renders as one labelled variant per branch, keyed by the discriminator value, **all expanded** rather than tabbed

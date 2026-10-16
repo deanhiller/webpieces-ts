@@ -85,6 +85,7 @@ export class EnumsApi {
     /**
      * Writes one story.
      *
+     * @summary Write a story
      * @returns The written story's voice choices.
      */
     @Endpoint(POST, '/write', READ, RPC)

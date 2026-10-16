@@ -19,6 +19,7 @@ export class OrdersTagApi {
     /**
      * Reads one order.
      *
+     * @summary Read an order
      * @returns The order.
      */
     @Endpoint(POST, '/read', READ, RPC)

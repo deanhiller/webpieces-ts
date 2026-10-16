@@ -2,6 +2,7 @@
     "openapi": "3.1.0",
     "info": {
         "title": "Lang API",
+        "summary": "List a lesson's passages in reading order.",
         "version": "1.0.0",
         "description": "Every operation states whether it is safe to retry, derived from the endpoint's declared\nside-effect contract:\n\n| declared operation | read-only | destructive | idempotent |\n|---|---|---|---|\n| read | yes | no | yes |\n| write-idempotent | no | yes | yes |\n| write | no | yes | no |"
     },
@@ -16,7 +17,7 @@
             "post": {
                 "operationId": "LangLessonApi_listPassages",
                 "x-webpieces-authentication": [],
-                "summary": "listPassages",
+                "summary": "List passages",
                 "description": "Lists a lesson's passages.\n\nSafe to retry: this operation is read-only and idempotent.",
                 "tags": [
                     "Lessons"
@@ -45,7 +46,9 @@
                 },
                 "security": [],
                 "x-mcp-tool": "list_passages",
+                "x-mcp-title": "List passages",
                 "x-mcp-hints": {
+                    "title": "List passages",
                     "readOnlyHint": true,
                     "destructiveHint": false,
                     "idempotentHint": true,

@@ -24,31 +24,42 @@ interface FindOrderResponse {
 @ApiPath('/orders')
 @ApiType(SVC_TO_SVC, MCP)
 abstract class OrdersApi {
-    /** Find one order owned by the signed-in user. */
+    /**
+     * Find one order owned by the signed-in user.
+     *
+     * @summary Find orders
+     * @returns The order, with its current state.
+     */
     @WpAuth([jwt()])
     @WpAuthorization({ authType: AuthorizationType.ALL_USERS })
     @Endpoint(POST, '/find', READ, RPC)
-    @WpMcpTool('orders_find', 'Find orders')
+    @WpMcpTool('orders_find')
     find(request: FindOrderRequest): Promise<FindOrderResponse> {
         throw new Error('contract only');
     }
 }
 ```
 
-## Everything but the tool NAME and TITLE comes from the source
+## Everything but the tool NAME comes from the source
 
-`@WpMcpTool(name, title)` takes two REQUIRED arguments, because they are the only facts the source
-cannot state: the stable protocol name, and the human-readable title clients and the Claude Connectors
-Directory display. `tools/list` publishes the title as BOTH the top-level `Tool.title` and
-`annotations.title` (#1180). An empty or whitespace title throws at decoration time, the one-argument
-spelling does not compile, and a catalog entry with no title is refused when it is loaded — so a catalog
-generated before titles existed fails the boot instead of publishing untitled tools. Write the title a
-person would read ("Find orders"); never derive it from the name. Everything else is read off the
-contract by `@webpieces/api-doc-model` at BUILD time:
+`@WpMcpTool(name)` takes ONE argument (plus the optional profiles object), because the stable protocol
+name is the only fact the source cannot state. It must be 1-64 characters of `[A-Za-z0-9_-]` — the
+Claude Connectors Directory refuses a server with a longer name — and `McpToolName` enforces that rule
+at decoration time, in `wp-openapi` (every offender named in one run), in `api-rules-for-mcp`, and when a
+catalog is loaded.
+
+The TITLE is the method's `@summary` JSDoc tag (#1296): one line, at most 100 characters, REQUIRED on
+every published operation. It is the same line the OpenAPI documents publish as the operation's
+`summary`, so a partner's docs page and an agent's tool list name the endpoint identically, and
+`tools/list` publishes it as BOTH the top-level `Tool.title` and `annotations.title` (#1180). The title
+argument the decorator used to take is gone — passing one is a compile error — and a catalog entry
+with no title is refused when it is loaded, so a stale catalog fails the boot instead of publishing
+untitled tools. Write the title a person would read ("Find orders"); never derive it from the name.
+Everything else is read off the contract by `@webpieces/api-doc-model` at BUILD time:
 
 | fact | source |
 |---|---|
-| `title` / `annotations.title` | `@WpMcpTool`'s second argument |
+| `title` / `annotations.title` | the method's `@summary` JSDoc tag — the OpenAPI operation's `summary` |
 | `description` | the method's JSDoc body, or its `@mcp` tag — the same words the partner reads in OpenAPI |
 | `inputSchema` / `outputSchema` | the declared request and response types, with each field's JSDoc as its description; `inputSchema.description` is the request DTO's JSDoc and `outputSchema.description` is the method's `@returns` — the sentence OpenAPI publishes as the success response's description (#1292) |
 | `readOnlyHint` / `destructiveHint` / `idempotentHint` | `@Endpoint`'s `operation` — `READ`, `WRITE_IDEMPOTENT` or `WRITE` |
@@ -413,13 +424,14 @@ Profile membership partitions tool exposure; account roles still belong exclusiv
 `WpMcpTool` from the browser-safe `@webpieces/core-util` package:
 
 ```ts
-@WpMcpTool('learner_get_passages', 'Get your passages') // only Mcp.DEFAULT
-@WpMcpTool('admin_list_users', 'List users', { profiles: ['admin'] }) // only admin
-@WpMcpTool('shared_tool', 'Shared tool', { profiles: [Mcp.DEFAULT, 'admin'] })
+@WpMcpTool('learner_get_passages') // only Mcp.DEFAULT
+@WpMcpTool('admin_list_users', { profiles: ['admin'] }) // only admin
+@WpMcpTool('shared_tool', { profiles: [Mcp.DEFAULT, 'admin'] })
 ```
 
-Each declaration also needs the usual endpoint, DTO, authentication, and authorization declarations.
-Two arguments, an omitted `profiles` property, and explicit `[Mcp.DEFAULT]` all select only the base
+Each declaration also needs the usual endpoint, DTO, authentication, and authorization declarations,
+and a `@summary` line in the method's JSDoc for its title.
+One argument, an omitted `profiles` property, and explicit `[Mcp.DEFAULT]` all select only the base
 group. An explicit list replaces that membership; it never implicitly adds the base group.
 Identifiers match `[a-z][a-z0-9-]{0,63}` (1–64 lowercase ASCII letters, digits or hyphens, starting
 with a letter). `Mcp.DEFAULT` reserves `default` for the base group. Empty lists, duplicates, unknown

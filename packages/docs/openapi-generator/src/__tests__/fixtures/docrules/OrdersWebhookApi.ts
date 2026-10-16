@@ -10,7 +10,11 @@ export class OrderShippedEvent {
 /** FIRST WEBHOOK PROSE: the events we send about orders. */
 @ApiPath('/order-hooks')
 export class OrdersWebhookApi {
-    /** Sent when an order ships. */
+    /**
+     * Sent when an order ships.
+     *
+     * @summary Order shipped
+     */
     @Endpoint(POST, '/order.shipped', WRITE, RPC)
     @WpAuthPublic('Never served here.')
     @WpAuthorization({ authType: AuthorizationType.ANONYMOUS, reason: 'Never served here.' })

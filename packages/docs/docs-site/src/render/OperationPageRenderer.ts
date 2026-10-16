@@ -66,11 +66,20 @@ export class OperationPageRenderer {
         return parts.join('\n');
     }
 
+    /**
+     * The badge, the path (or event) and the `operationId`. The page HEADING is the operation's
+     * summary (#1296); the operationId stays visible here because it is what a generated client names
+     * the method, which is what a developer searches their code for.
+     */
     private head(operation: OperationInfo): string {
+        const id =
+            operation.operationId === ''
+                ? ''
+                : `<code class="op-id" title="operationId">${this.html.escape(operation.operationId)}</code>`;
         if (operation.isWebhook) {
-            return `<div class="op-head"><span class="badge">${WEBHOOK_BADGE}</span><code class="op-path">${this.html.escape(operation.eventName)}</code></div>`;
+            return `<div class="op-head"><span class="badge">${WEBHOOK_BADGE}</span><code class="op-path">${this.html.escape(operation.eventName)}</code>${id}</div>`;
         }
-        return `<div class="op-head"><span class="badge">${this.html.escape(operation.httpMethod)}</span><code class="op-path">${this.html.escape(operation.path)}</code></div>`;
+        return `<div class="op-head"><span class="badge">${this.html.escape(operation.httpMethod)}</span><code class="op-path">${this.html.escape(operation.path)}</code>${id}</div>`;
     }
 
     /** The request's `in: "header"` parameters, then its body — each only when there is one. */

@@ -134,8 +134,12 @@ export interface OverlapRequest {
 @ApiType(MCP)
 @ApiPath('/stories')
 export abstract class McpEnumApi {
-    /** Writes one story. */
-    @WpMcpTool('write_story', 'Write a story')
+    /**
+     * Writes one story.
+     *
+     * @summary Write a story
+     */
+    @WpMcpTool('write_story')
     @WpAuth([jwtAuth()])
     @WpAuthorization({ authType: AuthorizationType.ALL_USERS })
 
@@ -144,8 +148,12 @@ export abstract class McpEnumApi {
         throw new Error('contract only');
     }
 
-    /** Refused: its request holds a union TypeScript cannot narrow. */
-    @WpMcpTool('overlap_story', 'Overlap a story')
+    /**
+     * Refused: its request holds a union TypeScript cannot narrow.
+     *
+     * @summary Overlap a story
+     */
+    @WpMcpTool('overlap_story')
     @WpAuth([jwtAuth()])
     @WpAuthorization({ authType: AuthorizationType.ALL_USERS })
 

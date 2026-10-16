@@ -297,7 +297,7 @@ describe('api-rules-for-openapi', () => {
 });
 
 describe('api-rules-for-mcp', () => {
-    it('REFUSES a tool on a non-RPC endpoint, a tool with no auth, and an undocumented tool', () => {
+    it('REFUSES a tool on a non-RPC endpoint, with no auth, undocumented, untitled, or misnamed', () => {
         const findings = scan('bad-mcp-api');
 
         expect(lines(findings.mcp.violations)).toEqual([
@@ -306,6 +306,10 @@ describe('api-rules-for-mcp', () => {
             'SearchApi.open: an MCP tool does not declare @WpAuthorization(...)',
             'SearchApi.quiet: an MCP tool has no documentation (SearchApi.quiet) — no MCP schema ' +
                 'could be built',
+            'SearchApi.untitled: an MCP tool has no @summary, so it has no title (SearchApi.untitled) ' +
+                '— no MCP schema could be built',
+            "SearchApi.everything: the MCP tool name 'search_every_store_every_order_and_every_delivery_in_the_whole_account' " +
+                'is 70 characters, over the 64-character limit (SearchApi.everything) — no MCP schema could be built',
         ]);
     });
 

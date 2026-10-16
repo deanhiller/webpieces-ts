@@ -1,5 +1,6 @@
 import 'reflect-metadata';
 import { Mcp, McpToolProfilesOptions } from './Mcp';
+import { McpToolName } from './McpToolName';
 import { METADATA_KEYS } from '../http/decorators';
 import { EndpointOperation, READ, WRITE_IDEMPOTENT, WRITE } from '../http/HttpEndpointOptions';
 
@@ -32,51 +33,49 @@ export class WpMcpToolMetadata {
     constructor(
         public readonly methodName: string,
         public readonly name: string,
-        /** The human-readable display name; `tools/list` publishes it as `title` AND `annotations.title`. */
-        public readonly title: string,
         public readonly profiles: readonly string[],
     ) {}
 }
 
 /**
  * Explicitly publishes an existing `@Endpoint(POST, path, WRITE, RPC)` method as an MCP tool, under
- * the STABLE protocol name and the human-readable TITLE given here.
+ * the STABLE protocol name given here.
  *
  * ```typescript
- * @WpMcpTool('learner_get_passages', 'Get your passages')
+ * /**
+ *  * Every passage the learner can open, newest first.
+ *  *
+ *  * @summary Get your passages
+ *  * @returns The learner's passages, newest first.
+ *  *\/
+ * @WpMcpTool('learner_get_passages')
  * ```
  *
- * The optional third argument selects profiles; omission selects only Mcp.DEFAULT.
- * The name and title are facts the source cannot otherwise
- * state:
+ * The optional second argument selects profiles; omission selects only Mcp.DEFAULT. The name is the
+ * one fact the source cannot otherwise state:
  *
  * | fact | where it comes from |
  * |---|---|
- * | `name` | this decorator — the stable protocol identity, independent of the method name because renaming a method must not break a saved agent workflow |
- * | `title` | this decorator — the display name clients and the Claude Connectors Directory show; published as BOTH `Tool.title` and `annotations.title` |
+ * | `name` | this decorator — the stable protocol identity, independent of the method name because renaming a method must not break a saved agent workflow. 1-64 characters of `[A-Za-z0-9_-]` ({@link McpToolName}) |
+ * | `title` | the method's REQUIRED `@summary` JSDoc tag — the same line OpenAPI publishes as the operation's `summary`; published as BOTH `Tool.title` and `annotations.title` |
  * | `description` | the method's JSDoc body, or its `@mcp` tag — the same words the partner reads |
  * | `readOnlyHint` / `destructiveHint` / `idempotentHint` | `@Endpoint`'s `operation`, via {@link mcpHintsForOperation} |
  * | `openWorldHint` | `@Endpoint`'s `openWorld` option |
  * | `inputSchema` / `outputSchema` | the declared request and response types |
  *
- * ## Why the title is REQUIRED and never derived (#1180)
+ * ## Why the title is NOT an argument here (#1296)
  *
- * The Connectors Directory flags every tool without `annotations.title`. An optional title gets
- * skipped and the miss surfaces only at directory-submission time, so it is a compile-time
- * requirement and an empty or whitespace one throws at decoration time. It is never computed from
- * the name: `learner_get_passages` → "Learner get passages" is exactly the mechanical listing text
- * reviewers push back on, and the area prefix means nothing to an end user.
+ * It used to be the second argument (#1180). That was a second place to write an endpoint's short
+ * title: it never reached OpenAPI, whose operation `summary` was the bare method name, and the two
+ * drifted. The title now has ONE source, the `@summary` JSDoc tag, which `wp-openapi` REQUIRES on every
+ * published operation and publishes as OpenAPI `summary`, MCP `title` and MCP `annotations.title`.
+ * Passing a title here is a compile error; the second parameter is the profiles object.
  *
- * Until #984 the decorator also took a `description`, duplicating the JSDoc. Two authored copies of
- * one paragraph drift the first time somebody edits one, so it is gone; the title is a short NAME,
- * not a second copy of the description.
+ * Until #984 the decorator also took a `description`, duplicating the JSDoc, and was cut for the same
+ * reason: two authored copies of one fact drift the first time somebody edits one.
  */
 // webpieces-disable no-function-outside-class -- decorator factories are inherently module-scope
-export function WpMcpTool(
-    name: string,
-    title: string,
-    options?: McpToolProfilesOptions,
-): WpMcpMethodDecorator {
+export function WpMcpTool(name: string, options?: McpToolProfilesOptions): WpMcpMethodDecorator {
     if (
         options !== undefined &&
         (typeof options !== 'object' ||
@@ -84,19 +83,18 @@ export function WpMcpTool(
             Array.isArray(options) ||
             Object.keys(options).some((key: string) => key !== 'profiles'))
     ) {
-        throw new Error('@WpMcpTool options must be an object containing only profiles.');
+        throw new Error(
+            '@WpMcpTool options must be an object containing only profiles. The tool title is the ' +
+                "method's @summary JSDoc tag, never a decorator argument.",
+        );
     }
     const profiles = Mcp.profiles(
         options !== undefined && 'profiles' in options ? options.profiles! : [Mcp.DEFAULT],
         '@WpMcpTool',
     );
-    if (name.trim() === '') throw new Error('@WpMcpTool requires a non-empty stable name.');
-    if (title.trim() === '') {
-        throw new Error(
-            `@WpMcpTool('${name}', ...) requires a non-empty human-readable title, e.g. ` +
-                "@WpMcpTool('learner_get_passages', 'Get your passages'). tools/list publishes it as " +
-                'title and annotations.title, and the Claude Connectors Directory flags a tool without one.',
-        );
+    const problem = McpToolName.problemWith(name);
+    if (problem !== undefined) {
+        throw new Error(`@WpMcpTool('${name}'): the tool name ${problem}. ${McpToolName.cure()}`);
     }
     return <TMethod extends AsyncObjectMethod>(
         target: object,
@@ -107,7 +105,7 @@ export function WpMcpTool(
         const tools: Record<string, WpMcpToolMetadata> =
             Reflect.getMetadata(METADATA_KEYS.MCP_TOOLS, apiClass) ?? {};
         const methodName = String(propertyKey);
-        tools[methodName] = new WpMcpToolMetadata(methodName, name, title, profiles);
+        tools[methodName] = new WpMcpToolMetadata(methodName, name, profiles);
         Reflect.defineMetadata(METADATA_KEYS.MCP_TOOLS, tools, apiClass);
     };
 }

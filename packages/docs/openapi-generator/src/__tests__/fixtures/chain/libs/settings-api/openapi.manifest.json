@@ -1,5 +1,6 @@
 {
     "title": "Settings API",
+    "summary": "Read the account's settings.",
     "operationIds": "contract_method",
     "version": "1.0.0",
     "apis": [

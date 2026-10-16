@@ -8,6 +8,7 @@ import {
     ComponentsManifest,
     ErrorResponseEntry,
     ErrorsEntry,
+    MANIFEST_SUMMARY_MAX_LENGTH,
     OpenApiManifest,
     OperationIdStyle,
     ResponseHeaderEntry,
@@ -123,6 +124,7 @@ export class ManifestLoader {
         const raw = this.read(manifestPath);
         return new OpenApiManifest(
             raw.string('title'),
+            this.summary(raw),
             raw.string('version'),
             this.servers(raw),
             raw.optionalString('descriptionFile'),
@@ -133,6 +135,36 @@ export class ManifestLoader {
             this.schemaNames(raw),
             this.operationIds(raw),
         );
+    }
+
+    /**
+     * REQUIRED (#1296): the API's one-line summary, published as `info.summary`. A heading's subtitle
+     * and a directory listing's one-liner, so a second line or a paragraph is refused rather than
+     * published.
+     */
+    private summary(raw: JsonReader): string {
+        const cure =
+            `Give "summary" one line of at most ${MANIFEST_SUMMARY_MAX_LENGTH} characters saying what the API ` +
+            'lets a caller do, e.g. "summary": "Read and cancel the orders placed at your stores." It is ' +
+            "published as info.summary under the API's title; the long form stays in descriptionFile.";
+        if (!raw.has('summary')) {
+            throw new OpenApiGenerationError("'summary' is missing", raw.where, cure);
+        }
+        const value = raw.optionalString('summary');
+        if (value === undefined || value.trim() === '') {
+            throw new OpenApiGenerationError("'summary' is not a non-empty string", raw.where, cure);
+        }
+        if (/[\r\n]/.test(value)) {
+            throw new OpenApiGenerationError("'summary' spans more than one line", raw.where, cure);
+        }
+        if (value.length > MANIFEST_SUMMARY_MAX_LENGTH) {
+            throw new OpenApiGenerationError(
+                `'summary' is ${value.length} characters, over the ${MANIFEST_SUMMARY_MAX_LENGTH}-character limit`,
+                raw.where,
+                cure,
+            );
+        }
+        return value;
     }
 
     /**

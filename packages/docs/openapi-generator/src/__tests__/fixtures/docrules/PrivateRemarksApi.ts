@@ -95,6 +95,7 @@ export class PrivateRemarksApi {
     /**
      * Switches one lamp.
      *
+     * @summary Switch a lamp
      * @returns The lamp after the switch.
      * @privateRemarks SECRET-NOTE on a method, between the returns and mcp tags.
      * @mcp Switch exactly the lamp the user named.
@@ -102,7 +103,7 @@ export class PrivateRemarksApi {
     @Endpoint(POST, '/switch', READ, RPC)
     @WpAuthPublic('Fixture only.')
     @WpAuthorization({ authType: AuthorizationType.ANONYMOUS, reason: 'Fixture only.' })
-    @WpMcpTool('switch_lamp', 'Switch a lamp')
+    @WpMcpTool('switch_lamp')
     switchLamp(request: SwitchLampRequest): Promise<SwitchLampResponse> {
         throw new Error('contract');
     }

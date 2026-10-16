@@ -208,6 +208,9 @@ describe('every @WpMcpTool in this repo, read by the compiler', () => {
             'packages/docs/openapi-generator/src/__tests__/fixtures/docrules/McpOnlyApi.ts',
             'packages/docs/openapi-generator/src/__tests__/fixtures/docrules/McpOnlyUndocumentedApi.ts',
             'packages/docs/openapi-generator/src/__tests__/fixtures/docrules/PrivateRemarksApi.ts',
+            'packages/docs/openapi-generator/src/__tests__/fixtures/summary/LongToolNameApi.ts',
+            'packages/docs/openapi-generator/src/__tests__/fixtures/summary/ShelvesApi.ts',
+            'packages/docs/openapi-generator/src/__tests__/fixtures/summary/UnsummarizedApi.ts',
             'packages/http/mcp-server/src/__tests__/McpProfileFixtures.ts',
             'packages/http/mcp-server/src/__tests__/McpRemoteFixtures.ts',
             'packages/http/mcp-server/src/__tests__/WpMcpServerTestFixtures.ts',
@@ -254,6 +257,13 @@ describe('every @WpMcpTool in this repo, read by the compiler', () => {
             'McpOnlyApi/ask_question',
             'McpOnlyUndocumentedApi/check_guess',
             'PrivateRemarksApi/switch_lamp',
+            // The summary-rule fixtures (#1296). A tool name the Claude Connectors Directory would
+            // refuse, and a tool with no `@summary` — so no title — are each refused by this renderer
+            // too, so `api-rules-for-mcp` reports them; wp-openapi's guards refuse them over the run.
+            "LongToolNameApi/measure_one_barrel_in_the_cellar_and_report_its_level_in_litres_now: the MCP tool name 'measure_one_barrel_in_the_cellar_and_report_its_level_in_litres_now' is 67 characters, over the 64-character limit (LongToolNameApi.measure)",
+            "LongToolNameApi/barrels.tap: the MCP tool name 'barrels.tap' uses a character outside A-Z a-z 0-9 _ - (LongToolNameApi.tap)",
+            'ShelvesApi/read_shelf',
+            'UnsummarizedApi/open_crate: an MCP tool has no @summary, so it has no title (UnsummarizedApi.open)',
             'ProfileApi/learner',
             'ProfileApi/admin',
             'ProfileApi/shared',

@@ -52,6 +52,8 @@ export abstract class PartnerDeliveryWebhookApi {
      *
      * Deliveries are at-least-once and may arrive out of order; treat `state` as the state at `at`
      * and ignore an event older than one you have already applied.
+     *
+     * @summary Order state changed
      */
     @Endpoint(POST, '/order.state-changed', WRITE, RPC)
     @WpAuthPublic(

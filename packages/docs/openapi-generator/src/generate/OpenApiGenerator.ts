@@ -30,7 +30,9 @@ import {
 } from './SchemaPlacement';
 import { SchemaRenderer, UnmappedField } from './SchemaRenderer';
 import { SecurityDeriver } from './SecurityDeriver';
+import { McpToolNameGuard } from './McpToolNameGuard';
 import { MissingReturnsGuard } from './MissingReturnsGuard';
+import { SummaryGuard } from './SummaryGuard';
 import { StackedJsDocGuard } from './StackedJsDocGuard';
 import { TagOwnership } from './TagOwnership';
 import { UndocumentedSchemaGuard } from './UndocumentedSchemaGuard';
@@ -102,12 +104,15 @@ const OPENAPI_VERSION = '3.1.0';
  * {@link StackedJsDocGuard} (#1286). And, in every document including the MCP projection and its tool
  * catalogs, an operation with a body but no `@returns` ({@link MissingReturnsGuard}) and a published
  * schema with no JSDoc description ({@link UndocumentedSchemaGuard}) — each naming every offender in
- * one run (#1292).
+ * one run (#1292). Likewise an operation with no valid `@summary` ({@link SummaryGuard}) and an MCP
+ * tool whose name the Claude Connectors Directory would refuse ({@link McpToolNameGuard}) (#1296).
  */
 export class OpenApiGenerator {
     private readonly security = new SecurityDeriver();
     private readonly stackedJsDoc = new StackedJsDocGuard();
     private readonly missingReturns = new MissingReturnsGuard();
+    private readonly summaries = new SummaryGuard();
+    private readonly toolNames = new McpToolNameGuard();
     private readonly tagOwnership = new TagOwnership();
 
     /**
@@ -129,6 +134,8 @@ export class OpenApiGenerator {
             models.flatMap((model: ApiDocModel) => model.stackedJsDoc),
             inputs.manifestPath,
         );
+        this.summaries.refuse(inputs.contracts, inputs.manifestPath);
+        this.toolNames.refuse(inputs.contracts, inputs.manifestPath);
         this.missingReturns.refuse(inputs.contracts, inputs.manifestPath);
         this.tagOwnership.refuseSharedOwners(inputs.contracts, inputs.manifestPath);
         // Collected across EVERY OpenAPI document of the run and refused once, after them all, so an
@@ -684,6 +691,7 @@ export class OpenApiGenerator {
     private info(inputs: GenerationInputs, selection: DocumentSelection): JsonObject {
         return new JsonObject()
             .set('title', inputs.manifest.title)
+            .set('summary', inputs.manifest.summary)
             .set('version', inputs.manifest.version)
             .set('description', selection.description(inputs.description));
     }

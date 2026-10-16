@@ -6,7 +6,9 @@
  * The manifest carries exactly what is **not a property of the code**, and nothing else. Every field
  * below is a product decision, a deployment fact, or a NAME pointing at something the code owns:
  *
- * - `title`, `version` — product decisions.
+ * - `title`, `summary`, `version` — product decisions. `summary` is the API's one-line pitch (#1296),
+ *   published as `info.summary`; REQUIRED, one line, at most 200 characters — the Claude Connectors
+ *   Directory's one-liner limit, so the same text can be pasted there.
  * - `servers[]` — a deployment fact.
  * - `descriptionFile` — a teaching decision.
  * - `apis[]` — which contracts, in the order the published sidebar shows them.
@@ -27,6 +29,12 @@
  * Alphabetising this array is not a cleanup; it reorders partner-facing navigation.
  */
 import { SchemaNameEntry } from '@webpieces/api-doc-model';
+
+/**
+ * The longest manifest `summary` (#1296): the Claude Connectors Directory's limit for a server's
+ * one-line description, so the line published as `info.summary` can be pasted there unchanged.
+ */
+export const MANIFEST_SUMMARY_MAX_LENGTH = 200;
 
 /**
  * How every operation's `operationId` is spelled (#1270). OPTIONAL in a contract manifest, defaulting
@@ -136,6 +144,11 @@ export class ResponseHeaderEntry {
 export class OpenApiManifest {
     constructor(
         readonly title: string,
+        /**
+         * The API's one-line summary (#1296) — OpenAPI 3.1 `info.summary`. REQUIRED: one line, at most
+         * {@link MANIFEST_SUMMARY_MAX_LENGTH} characters.
+         */
+        readonly summary: string,
         readonly version: string,
         readonly servers: readonly ServerEntry[],
         /** A markdown preamble, relative to the manifest. Rendered into `info.description`. */

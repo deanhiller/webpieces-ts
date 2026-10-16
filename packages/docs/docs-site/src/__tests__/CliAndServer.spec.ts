@@ -152,7 +152,7 @@ describe('the localhost preview server', () => {
         const port = await server.start(0);
         expect(port).toBeGreaterThan(0);
         expect(server.url()).toContain(LOOPBACK);
-        const body = await io.get(`http://${LOOPBACK}:${port}/reference/plant-tree/`);
+        const body = await io.get(`http://${LOOPBACK}:${port}/reference/tree-api-plant-tree/`);
         expect(body).toContain('plantTree');
     });
 

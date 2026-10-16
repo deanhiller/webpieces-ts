@@ -1,6 +1,7 @@
 import { ApiJsonSchema, ApiJsonSchemaDiscriminator, ApiJsonSchemaType } from './DtoSchema';
 import { Mcp } from './Mcp';
 import { WpMcpToolHints } from './McpMetadata';
+import { McpToolName } from './McpToolName';
 
 /**
  * ONE generated MCP tool definition, including server-only profile membership.
@@ -15,12 +16,16 @@ import { WpMcpToolHints } from './McpMetadata';
  */
 export class McpToolDefinition {
     constructor(
-        /** The stable protocol name from `@WpMcpTool('<name>', '<title>')`. */
+        /**
+         * The stable protocol name from `@WpMcpTool('<name>')` — 1-64 characters of `[A-Za-z0-9_-]`
+         * ({@link McpToolName}), refused on load otherwise.
+         */
         readonly name: string,
         /**
-         * The human-readable display name from `@WpMcpTool('<name>', '<title>')`. REQUIRED (#1180):
-         * `tools/list` publishes it as both `Tool.title` and `annotations.title`, and a catalog entry
-         * without one is refused on load rather than silently publishing an untitled tool.
+         * The human-readable display name: the method's `@summary` JSDoc tag (#1296), the same line
+         * the OpenAPI operation publishes as its `summary`. REQUIRED (#1180): `tools/list` publishes it
+         * as both `Tool.title` and `annotations.title`, and a catalog entry without one is refused on
+         * load rather than silently publishing an untitled tool.
          */
         readonly title: string,
         /** The contract method it was rendered from, so a mismatch report can name the source. */
@@ -101,12 +106,24 @@ export class McpToolCatalogFile {
             );
         }
         const byName = new Map<string, McpToolDefinition>();
+        const badNames: string[] = [];
+        for (const tool of tools) {
+            const problem = McpToolName.problemWith(tool.name);
+            if (problem !== undefined) badNames.push(`'${tool.name}' (${tool.methodName}) ${problem}`);
+        }
+        if (badNames.length > 0) {
+            throw new McpToolCatalogError(
+                `The MCP tool catalog of ${contractName} carries ${badNames.length} illegal tool ` +
+                    `name(s): ${badNames.join('; ')}.`,
+                McpToolName.cure(),
+            );
+        }
         for (const tool of tools) {
             if (byName.has(tool.name)) {
                 throw new McpToolCatalogError(
                     `Duplicate MCP tool name '${tool.name}' in the generated catalog of ${contractName}.`,
                     'Tool names are the protocol identity and must be globally unique — rename one ' +
-                        "of the two @WpMcpTool('<name>', '<title>') declarations.",
+                        "of the two @WpMcpTool('<name>') declarations.",
                 );
             }
             byName.set(tool.name, tool);
@@ -301,8 +318,8 @@ class McpCatalogJson {
         if (typeof value !== 'string' || value.trim() === '') {
             throw new McpToolCatalogError(
                 `The MCP tool catalog has no 'title' on tool '${String(name)}'; every tool needs a ` +
-                    "human-readable title from @WpMcpTool('<name>', '<title>'). The catalog predates " +
-                    'required titles (#1180).',
+                    "human-readable title, which the generator writes from the method's @summary JSDoc " +
+                    'tag (#1296). The catalog predates required titles (#1180).',
                 REGENERATE,
             );
         }

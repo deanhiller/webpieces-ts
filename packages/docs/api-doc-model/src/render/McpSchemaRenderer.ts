@@ -6,6 +6,7 @@ import {
     McpToolCatalogError,
     McpToolCatalogFile,
     McpToolDefinition,
+    McpToolName,
     mcpHintsForOperation,
     READ,
     WRITE,
@@ -17,6 +18,7 @@ import {
     DocumentedField,
     DocumentedType,
 } from '../model/ApiDocModel';
+import { EndpointSummary } from '../model/EndpointSummary';
 import { TypeRef } from '../model/TypeRef';
 import { McpRenderError } from './McpRenderError';
 
@@ -165,7 +167,7 @@ export class McpSchemaRenderer {
                 throw new McpToolCatalogError(
                     `Duplicate MCP tool name '${tool.name}': declared by both ${owner} and ${contractName}.`,
                     'Tool names are the protocol identity and must be globally unique — rename one ' +
-                        "of the two @WpMcpTool('<name>', '<title>') declarations.",
+                        "of the two @WpMcpTool('<name>') declarations.",
                 );
             }
             owners.set(tool.name, contractName);
@@ -191,19 +193,26 @@ export class McpSchemaRenderer {
                 'Declare both: one request parameter and a Promise<Response> return type.',
             );
         }
-        const title = endpoint.mcpTool!.title;
-        if (title.trim() === '') {
+        const summaryProblem = EndpointSummary.problemWith(endpoint.summary);
+        if (summaryProblem !== undefined) {
             throw new McpRenderError(
-                'an MCP tool has no human-readable title',
+                `an MCP tool ${summaryProblem}, so it has no title`,
                 where,
-                `Write it as the second argument, a string literal: @WpMcpTool('${endpoint.mcpTool!.name}', ` +
-                    "'<Human-readable title>'). tools/list publishes it as title and annotations.title " +
-                    '(#1180); never derive it from the name.',
+                `${EndpointSummary.cure()} tools/list publishes it as title and annotations.title ` +
+                    '(#1296); it is never derived from the tool name.',
+            );
+        }
+        const nameProblem = McpToolName.problemWith(endpoint.mcpTool!.name);
+        if (nameProblem !== undefined) {
+            throw new McpRenderError(
+                `the MCP tool name '${endpoint.mcpTool!.name}' ${nameProblem}`,
+                where,
+                McpToolName.cure(),
             );
         }
         return new McpToolDefinition(
             endpoint.mcpTool!.name,
-            title,
+            endpoint.summary!,
             endpoint.methodName,
             description,
             mcpHintsForOperation(

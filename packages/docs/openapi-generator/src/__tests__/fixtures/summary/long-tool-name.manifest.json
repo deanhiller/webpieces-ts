@@ -1,0 +1,11 @@
+{
+    "title": "Barrels API",
+    "summary": "Measure and tap the barrels in the cellar.",
+    "version": "1.0.0",
+    "apis": [
+        {
+            "entry": "LongToolNameApi.ts",
+            "tag": "Barrels"
+        }
+    ]
+}

@@ -51,6 +51,7 @@ export class UnmappedApi {
     /**
      * Sends a payload.
      *
+     * @summary Send a payload
      * @returns Whether the payload was accepted.
      */
     @Endpoint(POST, '/send', READ, RPC)

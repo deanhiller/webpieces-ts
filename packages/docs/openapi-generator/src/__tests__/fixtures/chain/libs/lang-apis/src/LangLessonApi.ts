@@ -39,12 +39,13 @@ export class LangLessonApi {
     /**
      * Lists a lesson's passages.
      *
+     * @summary List passages
      * @returns Every passage of the lesson, in reading order, with its descriptions.
      */
     @Endpoint(POST, '/passages', READ, RPC)
     @WpAuthPublic('Fixture only.')
     @WpAuthorization({ authType: AuthorizationType.ANONYMOUS, reason: 'Fixture only.' })
-    @WpMcpTool('list_passages', 'List passages')
+    @WpMcpTool('list_passages')
     listPassages(request: PassageListRequest): Promise<PassageListResponse> {
         throw new Error('contract');
     }

@@ -264,14 +264,14 @@ describe('McpToolRegistry pairs each binding with ITS contract’s catalog', () 
         );
     });
 
-    it('refuses a catalog whose title is older than the contract’s @WpMcpTool title (#1180)', () => {
+    it("serves the CATALOG's title: the contract carries none at runtime, so there is one source (#1296)", () => {
         const account = SEARCH_API_CATALOG.find('account_search')!;
         const admin = SEARCH_API_CATALOG.find('admin_search')!;
-        const stale = new McpToolCatalog(
+        const retitled = new McpToolCatalog(
             new McpToolCatalogFile('SearchApi', [
                 new McpToolDefinition(
                     account.name,
-                    'Account search (old title)',
+                    'Find accounts by query',
                     account.methodName,
                     account.description,
                     account.hints,
@@ -283,9 +283,8 @@ describe('McpToolRegistry pairs each binding with ITS contract’s catalog', () 
             IN_MEMORY,
         );
 
-        expect(() => new McpToolRegistry([search()], [stale], factory.authorizationService())).toThrow(
-            /SearchApi\.search is titled 'Search accounts', but mcp-SearchApi-tools\.json[\s\S]*'Account search \(old title\)'[\s\S]*rebuild the api library/,
-        );
+        const registry = new McpToolRegistry([search()], [retitled], factory.authorizationService());
+        expect(registry.find('account_search')?.title).toBe('Find accounts by query');
     });
 
     it('refuses to LOAD a stale on-disk catalog whose tools carry no title (#1180)', () => {

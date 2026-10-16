@@ -44,6 +44,7 @@ export class SectionHeaderApi {
     /**
      * Lists coupons.
      *
+     * @summary List coupons
      * @returns How many coupons matched.
      */
     @Endpoint(POST, '/list', READ, RPC)

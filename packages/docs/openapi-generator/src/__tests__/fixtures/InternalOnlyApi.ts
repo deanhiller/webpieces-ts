@@ -17,7 +17,11 @@ export interface HeartbeatRequest {
 /** Plumbing. */
 @ApiPath('/internal')
 export class InternalOnlyApi {
-    /** Says nothing about who may read it, so the default decides. */
+    /**
+     * Says nothing about who may read it, so the default decides.
+     *
+     * @summary Send a heartbeat
+     */
     @Endpoint(POST, '/heartbeat', READ, RPC)
     @WpAuthPublic('Fixture only.')
     @WpAuthorization({ authType: AuthorizationType.ANONYMOUS, reason: 'Fixture only.' })

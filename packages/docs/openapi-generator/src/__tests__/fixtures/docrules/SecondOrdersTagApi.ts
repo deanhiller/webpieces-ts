@@ -8,6 +8,7 @@ export class SecondOrdersTagApi {
     /**
      * Reads one order again.
      *
+     * @summary Read an order again
      * @returns The order.
      */
     @Endpoint(POST, '/read', READ, RPC)

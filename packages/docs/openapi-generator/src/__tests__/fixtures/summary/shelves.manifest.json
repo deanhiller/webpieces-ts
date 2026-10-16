@@ -1,0 +1,11 @@
+{
+    "title": "Shelves API",
+    "summary": "Read the books on a shelf, left to right.",
+    "version": "1.0.0",
+    "apis": [
+        {
+            "entry": "ShelvesApi.ts",
+            "tag": "Shelves"
+        }
+    ]
+}

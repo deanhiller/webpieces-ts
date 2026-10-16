@@ -38,12 +38,15 @@ export class ResponseContract {
 /**
  * ONE {@link DocumentedEndpoint} -> one OpenAPI Operation Object.
  *
- * ## `summary` is the operation NAME, never a sentence
+ * ## `summary` is the method's `@summary` JSDoc tag — a short title, never a sentence (#1296)
  *
- * A docs theme titles the endpoint's page from `summary` and puts `description` in the body. Writing
- * the first sentence of the prose into `summary` therefore produces a sidebar of sentences and a page
- * whose heading repeats its own first line. The method name is what a reader is looking for, and it
- * is also what the generated client calls the method, so the two agree by construction.
+ * A docs theme titles the endpoint's page from `summary` and labels its sidebar with it, and puts
+ * `description` in the body. It used to be the bare method name, which put code identifiers in every
+ * heading. It is now the `@summary` line the author wrote — one line, at most 100 characters,
+ * REQUIRED on every published operation by {@link SummaryGuard} — and the tag is not part of
+ * `description`, so the page does not repeat its own heading. The code identifier stays published as
+ * `operationId`, which is what a generated client names the method. The same line is the MCP tool's
+ * `title`, so a partner's docs page and an agent's tool list name the endpoint identically.
  *
  * ## The MCP extensions ride HERE, on the operation
  *
@@ -126,7 +129,7 @@ export class OperationRenderer {
         return new JsonObject()
             .set('operationId', this.operationIdOf(endpoint, contractName))
             .set('x-webpieces-authentication', endpoint.auth?.methods.map((method: DocumentedAuthMethod) => new JsonObject().set('kind', method.kind).set('arguments', method.argumentTexts)))
-            .set('summary', endpoint.methodName)
+            .set('summary', endpoint.summary)
             .set('description', this.describe(endpoint))
             .set('tags', [tag])
             .set('requestBody', this.requestBody(endpoint, contractName))
@@ -217,7 +220,14 @@ export class OperationRenderer {
      * a human declares, because it is a judgement about the world rather than a consequence of the
      * operation.
      *
-     * ## There is no separate MCP description
+     * ## The title is the operation's `summary`, published as the Tool's `title` AND `annotations.title`
+ *
+ * `x-mcp-title` and `x-mcp-hints.title` carry the `@summary` line exactly as `tools/list` serves it:
+ * `Tool.title` for clients on the 2025-06-18+ spec and `annotations.title` (the block `x-mcp-hints`
+ * mirrors) for older clients and the Claude Connectors Directory (#1296). One source, so they cannot
+ * differ from the operation's own `summary`.
+ *
+ * ## There is no separate MCP description
      *
      * The agent reads the operation's `description` — the method's JSDoc — byte-identical to what the
      * partner reads. `x-mcp-description` appears ONLY when the author wrote an explicit `@mcp` JSDoc
@@ -230,9 +240,11 @@ export class OperationRenderer {
         const hints = mcpHintsForOperation(this.operationOf(endpoint), endpoint.openWorld);
         return operation
             .set('x-mcp-tool', endpoint.mcpTool.name)
+            .set('x-mcp-title', endpoint.summary)
             .set(
                 'x-mcp-hints',
                 new JsonObject()
+                    .set('title', endpoint.summary)
                     .set('readOnlyHint', hints.readOnlyHint)
                     .set('destructiveHint', hints.destructiveHint)
                     .set('idempotentHint', hints.idempotentHint)

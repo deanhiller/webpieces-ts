@@ -36,6 +36,7 @@ export class MixedApi {
     /**
      * Anyone may call this.
      *
+     * @summary Ping the service
      * @returns The request's echo, unchanged.
      */
     @Endpoint(POST, '/ping', READ, RPC)
@@ -48,6 +49,7 @@ export class MixedApi {
     /**
      * Only a partner may call this.
      *
+     * @summary Read the partner secret
      * @returns The secret's value.
      */
     @Endpoint(POST, '/secret', READ, RPC)

@@ -190,6 +190,37 @@ types and `$ref`s every other package's into that package's components document:
 `ChainedComponents.spec.ts` (openapi-generator) proves it on a three-level chain, every document
 checked by `@seriousme/openapi-schema-validator`.
 
+## One short title per endpoint, from ONE source: `@summary` (#1296)
+
+Each level has three forms, and each form has exactly one source:
+
+| level | id | short line | long text |
+|---|---|---|---|
+| an endpoint (OpenAPI Operation) | `operationId` | `summary` ← the method's `@summary` JSDoc tag | `description` ← the rest of the JSDoc body |
+| an MCP tool | `name` ← `@WpMcpTool('<name>')` | `title` AND `annotations.title` ← the same `@summary` | `description` ← the same body (or `@mcp`) |
+| the whole API (`info`) | `info.title` ← manifest `title` | `info.summary` ← manifest `summary` | `info.description` ← `descriptionFile` |
+
+- **`@summary` is REQUIRED** on every published operation, route and webhook: one line, at most 100
+  characters (a heading and sidebar label — a house rule, not a spec limit). A missing, multi-line or
+  over-long one refuses generation, naming every method and file in one run (`SummaryGuard`, the same
+  shape as `MissingReturnsGuard`). The tag and its text are never part of `description`.
+- **`@WpMcpTool` takes the name only.** Its former title argument is DELETED, not deprecated: passing a
+  title is a compile error (`McpCompileAssertions.ts`), and the title reaches `tools/list` only through
+  the generated catalog, which `McpToolRegistry` serves verbatim — the contract carries no runtime title
+  to compare it with.
+- **An MCP tool `name` is 1-64 characters of `[A-Za-z0-9_-]`** — the Claude Connectors Directory's limit
+  (MCP itself allows 128 and a dot). `McpToolName` in `@webpieces/core-util` is the one rule, applied at
+  decoration time, by `wp-openapi` (`McpToolNameGuard`, every offender in one run), by
+  `api-rules-for-mcp`, and when a catalog is loaded.
+- **The contract manifest's `summary` is REQUIRED**: one line, at most 200 characters — the Connectors
+  Directory's one-liner limit, so the same text can be pasted there. A components manifest takes none.
+- **`@webpieces/docs-site`** heads each operation page and labels its sidebar link with `summary`, keeps
+  the `operationId` visible as the code identifier (and kebabs the page URL from it), and shows
+  `info.summary` under the API title.
+
+TypeScript starts a JSDoc tag at any `@word` after whitespace, even mid-sentence — write "the summary
+tag" in prose, never a bare `@summary`, or the rest of the sentence becomes the summary.
+
 ## The docs site is for HOSTING, not for the package
 
 `docs-generate` (tag `generate:docs-site`) renders the static site into `<projectRoot>/<siteDir>`, e.g.

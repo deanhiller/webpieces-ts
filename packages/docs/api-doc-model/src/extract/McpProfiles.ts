@@ -8,6 +8,17 @@ import { SourceLocation } from './SourceLocation';
 export class McpProfiles {
     read(argument: ts.Expression | undefined, folder: ConstantFolder): readonly string[] {
         if (argument === undefined) return [Mcp.DEFAULT];
+        if (ts.isStringLiteralLike(argument)) {
+            // The pre-#1296 spelling `@WpMcpTool(name, title)`. It no longer compiles; say where the
+            // title went rather than calling a title "malformed profile options".
+            throw new ApiDocExtractionError(
+                '@WpMcpTool takes no title argument (#1296)',
+                SourceLocation.of(argument),
+                "Delete the second argument and write the title as the method's JSDoc `@summary` line " +
+                    '— one line, at most 100 characters. It is published as OpenAPI summary and MCP ' +
+                    'title / annotations.title.',
+            );
+        }
         const options = folder.follow(argument);
         if (!ts.isObjectLiteralExpression(options)) return this.invalid(argument);
         let profiles: ts.Expression | undefined;

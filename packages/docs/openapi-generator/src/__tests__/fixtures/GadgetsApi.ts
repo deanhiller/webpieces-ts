@@ -24,6 +24,7 @@ export class GadgetsApi {
     /**
      * Lists gadgets.
      *
+     * @summary List gadgets
      * @returns The names of the matching gadgets.
      */
     @Endpoint(POST, '/list', READ, RPC)

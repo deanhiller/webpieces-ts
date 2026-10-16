@@ -152,6 +152,7 @@ export abstract class PartnerOrdersApi {
      *
      * Paginate by passing the previous response's `nextFrom` until it is absent.
      *
+     * @summary Fetch your orders
      * @returns The page of matching orders, newest first, with `nextFrom` set while more remain.
      * @privateRemarks Backed by the orders read replica, which lags the primary by up to a second.
      * Internal only: this note must appear in NO generated document (#1292).
@@ -161,7 +162,7 @@ export abstract class PartnerOrdersApi {
     @Endpoint(POST, '/fetch', READ, RPC)
     @WpAuth([apiKeyAuth('partner', PARTNER_CREDENTIALS)])
     @WpAuthorization<PartnerAccessPolicy>({ authType: AuthorizationType.CUSTOM, appPolicy: {llmRoles: ['partner-agent']} })
-    @WpMcpTool('fetch_orders', 'Fetch your orders')
+    @WpMcpTool('fetch_orders')
 
     fetchOrders(request: FetchOrdersRequest): Promise<FetchOrdersResponse> {
         throw new Error('Method fetchOrders() must be implemented by subclass');
@@ -173,6 +174,7 @@ export abstract class PartnerOrdersApi {
      * Cancelling an order that is already `delivered` returns its current state rather than failing:
      * the call is about reaching a state, not about performing an action exactly once.
      *
+     * @summary Cancel an order
      * @returns The order's state after the attempt — `cancelled`, or the state that prevented it.
      */
     @Endpoint(POST, '/cancel', WRITE, RPC)
@@ -189,6 +191,7 @@ export abstract class PartnerOrdersApi {
      * It is still served and still demands the `partner` credential — `hidden` is a documentation
      * decision and authorizes nobody.
      *
+     * @summary Rebuild a store's menu cache
      * @returns How many menu items the rebuild re-read.
      */
     @Endpoint(POST, '/reindex', WRITE, RPC, { hidden: true })

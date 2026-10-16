@@ -71,7 +71,21 @@ export class ResponseInfo {
  */
 export class OperationInfo {
     constructor(
+        /**
+         * The operation's short TITLE — its `summary`, which is the page heading and the sidebar label
+         * (#1296). A document that states none falls back to the `operationId`, then the path or event.
+         */
         readonly name: string,
+        /**
+         * The `operationId` — the CODE identifier a generated client names the method by — shown on the
+         * page beside the method and path. Empty when the document states none.
+         */
+        readonly operationId: string,
+        /**
+         * The page's URL segment. Kebabed from the `operationId` when there is one, because a title
+         * is prose an author rewords and a bookmarked URL should not move when they do; otherwise from
+         * the title.
+         */
         readonly slug: string,
         readonly httpMethod: string,
         readonly path: string,
@@ -129,6 +143,8 @@ export class NamedSchema {
 export class ApiSpec {
     constructor(
         readonly title: string,
+        /** `info.summary` (OpenAPI 3.1) — the one-line pitch shown under the title. Empty when absent. */
+        readonly summary: string,
         readonly version: string,
         readonly description: string,
         readonly servers: readonly ServerInfo[],

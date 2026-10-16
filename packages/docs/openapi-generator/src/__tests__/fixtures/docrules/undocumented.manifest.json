@@ -1,5 +1,6 @@
 {
     "title": "Doc rules",
+    "summary": "Fixtures for the documentation rules the generator enforces.",
     "operationIds": "contract_method",
     "version": "1.0.0",
     "apis": [

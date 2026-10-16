@@ -16,7 +16,11 @@ export class ReadItemResponse {
 /** Items, two of whose methods forgot their returns tag. */
 @ApiPath('/items')
 export class NoReturnsApi {
-    /** Reads one item; it has no returns tag, so it is refused. */
+    /**
+     * Reads one item; it has no returns tag, so it is refused.
+     *
+     * @summary Read an item
+     */
     @Endpoint(POST, '/read', READ, RPC)
     @WpAuthPublic('Fixture only.')
     @WpAuthorization({ authType: AuthorizationType.ANONYMOUS, reason: 'Fixture only.' })
@@ -24,7 +28,11 @@ export class NoReturnsApi {
         throw new Error('contract');
     }
 
-    /** Reads it again; also refused, in the SAME run. */
+    /**
+     * Reads it again; also refused, in the SAME run.
+     *
+     * @summary Read an item again
+     */
     @Endpoint(POST, '/reread', READ, RPC)
     @WpAuthPublic('Fixture only.')
     @WpAuthorization({ authType: AuthorizationType.ANONYMOUS, reason: 'Fixture only.' })
@@ -32,7 +40,11 @@ export class NoReturnsApi {
         throw new Error('contract');
     }
 
-    /** Touches one item. `void`: there is no body for a returns tag to describe, so none is required. */
+    /**
+     * Touches one item. `void`: there is no body for a returns tag to describe, so none is required.
+     *
+     * @summary Touch an item
+     */
     @Endpoint(POST, '/touch', READ, RPC)
     @WpAuthPublic('Fixture only.')
     @WpAuthorization({ authType: AuthorizationType.ANONYMOUS, reason: 'Fixture only.' })

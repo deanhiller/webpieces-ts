@@ -18,7 +18,7 @@ describe('canonical contract discovery', () => {
             ${imports}
             @${path}('/alias')
             export abstract class AliasedApi {
-                @${tool}('orphan', 'missing endpoint')
+                @${tool}('orphan')
                 abstract orphan(): Promise<void>;
             }
         `);

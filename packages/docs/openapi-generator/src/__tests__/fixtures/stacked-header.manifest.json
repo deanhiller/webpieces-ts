@@ -1,5 +1,6 @@
 {
     "title": "Stacked Header API",
+    "summary": "List the promotions a store runs.",
     "operationIds": "contract_method",
     "version": "1.0.0",
     "apis": [

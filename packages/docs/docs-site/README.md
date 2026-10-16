@@ -14,12 +14,18 @@ your project does not grow your dependency surface, and this package's own build
 
 ```
 site/
-  index.html                          the overview: info.description, plus every tag and its operations
+  index.html                          the overview: info.title, info.summary under it, info.description, plus every tag and its operations
   styles.css  site.js                 one stylesheet, one script
   prose/<kebab-title>/index.html      one per page docs.manifest.json names, in ITS order
-  reference/<kebab-operation>/index.html
+  reference/<kebab-operationId>/index.html
   schemas/<kebab-name>/index.html     one per named OBJECT dto
 ```
+
+Each operation page is HEADED, and its sidebar link LABELLED, with the operation's `summary` — its short
+human title (#1296) — and shows the `operationId` beside the method and path as the code identifier a
+generated client names the method by. The page's URL is kebabed from the `operationId`, so rewording a
+title never moves a bookmarked link. A document that states no `summary` falls back to the
+`operationId`, then the path or event name.
 
 One PRE-RENDERED file per URL. A deep link resolves without JavaScript, the folder works on any
 static host (and under a path prefix, and over `file://`), and a JSDoc edit shows up as a diff on the

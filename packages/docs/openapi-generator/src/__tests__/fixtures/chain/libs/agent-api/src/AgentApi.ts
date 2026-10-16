@@ -22,12 +22,13 @@ export class AgentApi {
     /**
      * Asks a provider.
      *
+     * @summary Ask a provider
      * @returns What the provider answered.
      */
     @Endpoint(POST, '/ask', READ, RPC)
     @WpAuthPublic('Fixture only.')
     @WpAuthorization({ authType: AuthorizationType.ANONYMOUS, reason: 'Fixture only.' })
-    @WpMcpTool('ask_provider', 'Ask a provider')
+    @WpMcpTool('ask_provider')
     ask(request: ProviderRequest): Promise<ProviderResponse> {
         throw new Error('contract');
     }

@@ -21,6 +21,7 @@ export class SettingsApi {
     /**
      * Reads the settings.
      *
+     * @summary Read the settings
      * @returns The user's settings.
      */
     @Endpoint(POST, '/read', READ, RPC)

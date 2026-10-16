@@ -55,6 +55,7 @@ It carries exactly what is **not a property of the code**:
 ```json
 {
     "title": "Example Orders API",
+    "summary": "Read and cancel the orders placed at your stores.",
     "version": "1.0.0",
     "descriptionFile": "description.md",
     "servers": [{ "url": "https://api.example.com", "description": "Production." }],
@@ -83,6 +84,13 @@ It carries exactly what is **not a property of the code**:
 ```
 
 Every path is relative to the manifest's own directory.
+
+The API itself has the same three forms an operation has (#1296): `title` is `info.title`, the
+REQUIRED `summary` — one line, at most 200 characters, the Claude Connectors Directory's one-liner
+limit, so the same text can be pasted there — is OpenAPI 3.1's `info.summary`, and `descriptionFile`
+is `info.description`. A manifest with no `summary`, an empty one, a second line or more than 200
+characters is refused, naming the key. A `"kind": "components"` manifest takes no `summary`: a DTO
+library's document is not an API anybody lists.
 
 ### Source suffixes and published schema names
 
@@ -222,9 +230,13 @@ does not declare `MCP` is an error. Membership has one spelling.
 
 The agent reads the SAME `description` a human does — the method's JSDoc, byte for byte. Two authored
 copies of one paragraph drift the first time somebody edits one, so
-`@WpMcpTool('search_stores', 'Search stores')` carries only what JSDoc cannot say: the stable protocol
-name and the REQUIRED human-readable title, which each catalog entry carries as `title` and `tools/list`
-publishes as `title` and `annotations.title` (#1180). `readOnlyHint`, `destructiveHint` and
+`@WpMcpTool('search_stores')` carries only what JSDoc cannot say: the stable protocol name — 1-64
+characters of `[A-Za-z0-9_-]`, refused at generation otherwise, every offender named in one run, because
+the Claude Connectors Directory refuses a longer one (#1296). The title is the method's `@summary`
+(below): each catalog entry carries it as `title`, `tools/list` publishes it as `title` AND
+`annotations.title` (#1180), and `mcp-openapi.json` stamps it as `x-mcp-title` and `x-mcp-hints.title`
+beside the operation's own `summary`. The decorator's former title argument is gone; passing one is a
+compile error. `readOnlyHint`, `destructiveHint` and
 `idempotentHint` are computed from the endpoint's declared `operation`; `openWorldHint` comes from
 `{ openWorld: true }` on the endpoint.
 
@@ -246,6 +258,7 @@ file. `--format` does not apply to them.
 | JSDoc on | Published as |
 |---|---|
 | a method | `operation.description` (and the MCP tool's `description`, unless an `@mcp` tag overrides it) |
+| its `@summary` tag | `operation.summary` — the docs page heading and sidebar label — and the MCP tool's `title` and `annotations.title` (#1296) |
 | its `@returns` tag | the success response's `description`, and the MCP catalog's `outputSchema.description` |
 | a DTO class / interface / enum / union alias | `components.schemas.<Name>.description` (and the MCP catalog's `inputSchema.description` for the request DTO) |
 | a field | the property's `description` |
@@ -256,6 +269,12 @@ and the `mcp-<Contract>-tools.json` catalogs — and each refusal names every of
 writes nothing. None has an off switch.
 
 - **`@privateRemarks` is dropped** with its text, everywhere. Write internal notes there.
+- **`@summary` is REQUIRED** on every published operation, route and webhook alike (#1296): one line,
+  at most 100 characters. It is the endpoint's short title — the OpenAPI `summary` (which used to be
+  the bare method name) and the MCP tool's `title` / `annotations.title` — and the tag and its text are
+  NOT part of `description`, which is the rest of the JSDoc body. A missing, multi-line or over-long
+  summary is refused, naming every method and file in one run. The code identifier stays published
+  as `operationId`.
 - **`@returns` is REQUIRED** on every published method whose response has a body. It replaces the
   hard-coded `"Success."` the success response used to carry. A `Promise<void>` method needs none and
   keeps the derived acknowledgement sentence. Error responses keep the manifest's descriptions.
