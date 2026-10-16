@@ -188,6 +188,7 @@ function unnarrowableModel(title: string): ApiDocModel {
         types,
         [],
         [],
+        [],
     );
 }
 

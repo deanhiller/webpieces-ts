@@ -38,7 +38,6 @@ import { TypeRef } from '../model/TypeRef';
 import { ApiDocExtractionError } from './ApiDocExtractionError';
 import { ConstantFolder } from './ConstantFolder';
 import { ContextKeyHeaderFolder, ContextKeyHeaderSlot } from './ContextKeyHeaderFolder';
-import { JsDoc } from './JsDoc';
 import { SourceLocation } from './SourceLocation';
 import { assertApiTypeMatchesMcpTools } from './McpMembership';
 import { ComponentsExtractor } from './ComponentsExtractor';
@@ -241,11 +240,12 @@ export class ApiDocExtractor {
             contract.name?.text ?? '<anonymous>',
             apiTypes,
             basePath,
-            JsDoc.read(contract).description,
+            resolver.readDoc(contract).description,
             endpoints,
             resolver.collectedTypes(),
             resolver.collectedUnmapped(),
             resolver.collectedCollisions(),
+            resolver.collectedStackedJsDoc(),
         );
     }
 
@@ -292,6 +292,7 @@ export class ApiDocExtractor {
             resolver.collectedTypes(),
             resolver.collectedUnmapped(),
             resolver.collectedCollisions(),
+            resolver.collectedStackedJsDoc(),
         );
     }
 
@@ -433,7 +434,7 @@ export class ApiDocExtractor {
         const literal =
             options !== undefined && ts.isObjectLiteralExpression(options) ? options : undefined;
 
-        const doc = JsDoc.read(member);
+        const doc = resolver.readDoc(member);
         const mcpTool = ApiDocExtractor.mcpToolOf(member, folder);
         const streaming = new StreamingSignature().read(member, folder, resolver);
         return new DocumentedEndpoint(

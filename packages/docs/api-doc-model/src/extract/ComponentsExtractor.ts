@@ -78,6 +78,7 @@ export class ComponentsExtractor {
             resolver.collectedTypes(),
             resolver.collectedUnmapped(),
             resolver.collectedCollisions(),
+            resolver.collectedStackedJsDoc(),
         );
     }
 

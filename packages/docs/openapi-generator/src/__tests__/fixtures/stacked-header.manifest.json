@@ -1,0 +1,12 @@
+{
+    "title": "Stacked Header API",
+    "operationIds": "contract_method",
+    "version": "1.0.0",
+    "apis": [
+        {
+            "entry": "StackedHeaderApi.ts",
+            "tag": "Promotions"
+        }
+    ],
+    "securitySchemeNames": []
+}

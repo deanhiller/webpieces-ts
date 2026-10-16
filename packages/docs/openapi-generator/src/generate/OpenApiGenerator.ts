@@ -30,6 +30,7 @@ import {
 } from './SchemaPlacement';
 import { SchemaRenderer, UnmappedField } from './SchemaRenderer';
 import { SecurityDeriver } from './SecurityDeriver';
+import { StackedJsDocGuard } from './StackedJsDocGuard';
 import { UpstreamComponentsIndex } from './UpstreamComponents';
 
 /** One rendered document, and the renderer that built its schemas — what it defined and referenced. */
@@ -93,9 +94,13 @@ const OPENAPI_VERSION = '3.1.0';
  * is a green build handing a partner a field with no shape, so the guard names the JSON pointer of
  * every one and exits non-zero. There is deliberately NO flag to switch it off: the cure is at the
  * contract, by naming the type.
+ *
+ * It refuses a declaration with stacked JSDoc the same way, and for the same reason — see
+ * {@link StackedJsDocGuard} (#1286).
  */
 export class OpenApiGenerator {
     private readonly security = new SecurityDeriver();
+    private readonly stackedJsDoc = new StackedJsDocGuard();
 
     /**
      * ONE document per `@ApiType` some contract declares, and no others.
@@ -106,6 +111,16 @@ export class OpenApiGenerator {
      * with the first.
      */
     generate(inputs: GenerationInputs): GeneratedDocuments {
+        // Before ANY selection: a declaration's prose reaches every document it appears in, so the
+        // refusal is about the contracts, not about one document (#1286).
+        const models = inputs.contracts.map((each: ContractModel) => each.model);
+        if (inputs.errorType !== undefined) {
+            models.push(inputs.errorType);
+        }
+        this.stackedJsDoc.refuse(
+            models.flatMap((model: ApiDocModel) => model.stackedJsDoc),
+            inputs.manifestPath,
+        );
         const documents: GeneratedDocument[] = [];
         for (const selection of DocumentSelection.all()) {
             const contracts = inputs.contracts.filter((each: ContractModel) =>
@@ -162,6 +177,7 @@ export class OpenApiGenerator {
     components(inputs: ComponentsInputs): GeneratedDocument {
         const model = inputs.model;
         const where = inputs.manifestPath;
+        this.stackedJsDoc.refuse(model.stackedJsDoc, where);
         this.refuseCollisions(model.collisions, where);
         const schemas = new SchemaRenderer(model.types, new SplitPlacement(model.packageName));
         for (const key of model.exported) {

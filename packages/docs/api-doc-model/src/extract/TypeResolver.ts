@@ -4,6 +4,7 @@ import { WpInt, WpMax, WpMin } from '@webpieces/core-util';
 import {
     DocumentedField,
     DocumentedType,
+    StackedJsDoc,
     TypeNameCollision,
     UnionDiscriminator,
     UnmappedType,
@@ -70,6 +71,11 @@ const INTEGER_ALIAS = 'Integer';
  */
 export class TypeResolver {
     private readonly unmapped: UnmappedType[] = [];
+    /**
+     * Declarations carrying stacked JSDoc, by location — keyed so a base field flattened into two
+     * subclasses is ONE record, not two (#1286).
+     */
+    private readonly stacked = new Map<string, StackedJsDoc>();
     /** Every named type, its key and the declaration that claimed it — see {@link TypeRegistry}. */
     private readonly registry: TypeRegistry;
     /** Anonymous type literals currently being expanded — the cycle stop for the ANONYMOUS case. */
@@ -97,6 +103,24 @@ export class TypeResolver {
     /** Everything that could not be represented — recorded, never dropped. */
     collectedUnmapped(): readonly UnmappedType[] {
         return this.unmapped;
+    }
+
+    /** Every reached declaration with two or more JSDoc blocks, in the order they were met. */
+    collectedStackedJsDoc(): readonly StackedJsDoc[] {
+        return Array.from(this.stacked.values());
+    }
+
+    /**
+     * Read `node`'s JSDoc AND record it when blocks are stacked on it (#1286). Every JSDoc read of a
+     * declaration an extraction reaches goes through here — the contract and its methods too — so the
+     * record cannot miss a declaration whose prose a document publishes.
+     */
+    readDoc(node: ts.Node): JsDoc {
+        const stacked = JsDoc.stackedAt(node);
+        if (stacked !== undefined && !this.stacked.has(stacked.location)) {
+            this.stacked.set(stacked.location, stacked);
+        }
+        return JsDoc.read(node);
     }
 
     /** Same-named, different declarations in one package — see {@link TypeNameCollision}. */
@@ -287,7 +311,7 @@ export class TypeResolver {
             this.registry.documented(
                 name,
                 alias,
-                JsDoc.read(alias).description,
+                this.readDoc(alias).description,
                 [],
                 [],
                 branchNames,
@@ -392,7 +416,7 @@ export class TypeResolver {
                     this.registry.documented(
                         name,
                         alias,
-                        JsDoc.read(alias).description,
+                        this.readDoc(alias).description,
                         [],
                         resolved.enumValues,
                         [],
@@ -451,7 +475,7 @@ export class TypeResolver {
             this.registry.documented(
                 name,
                 declaration,
-                JsDoc.read(declaration).description,
+                this.readDoc(declaration).description,
                 [],
                 values,
                 [],
@@ -492,7 +516,7 @@ export class TypeResolver {
             this.registry.documented(
                 name,
                 declaration,
-                JsDoc.read(declaration).description,
+                this.readDoc(declaration).description,
                 Array.from(fields.values()),
                 [],
                 [],
@@ -610,7 +634,7 @@ export class TypeResolver {
             type = FieldDecorators.markInteger(type);
         }
 
-        const doc = JsDoc.read(member);
+        const doc = this.readDoc(member);
         const min = FieldDecorators.numericArgument(member, MIN_DECORATOR);
         const max = FieldDecorators.numericArgument(member, MAX_DECORATOR);
         FieldDecorators.assertNumericConstraintsFit(member, name, type, min, max);

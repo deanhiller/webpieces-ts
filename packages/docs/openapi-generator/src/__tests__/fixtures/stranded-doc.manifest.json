@@ -1,0 +1,12 @@
+{
+    "title": "Stranded Doc API",
+    "operationIds": "contract_method",
+    "version": "1.0.0",
+    "apis": [
+        {
+            "entry": "StrandedDocApi.ts",
+            "tag": "Publications"
+        }
+    ],
+    "securitySchemeNames": []
+}
