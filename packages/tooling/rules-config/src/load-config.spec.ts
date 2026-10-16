@@ -107,7 +107,7 @@ const EXTRA_REQUIRED: Record<string, Record<string, unknown>> = {
     'required-type-suffix': { entries: [{ paths: ['libraries/apis/**'], suffixes: ['Dto'] }] },
     // Schema-required (#1064): what an api library may import, where each runtime lives, and which
     // framework packages belong to which runtime are the consumer's layout.
-    'api-lib-dependencies': { apiLibPackages: ['tslib'], apiClients: [] },
+    'api-lib-dependencies': { apiLibPackages: ['tslib'], apiClients: [], allowedWorkspaceProjects: [] },
     'api-lib-path': { paths: ['libraries/apis/**'] },
     'framework-folder': {
         entries: [{ paths: ['libraries/node/**'], frameworkSets: ['node'], roles: ['lib'] }],

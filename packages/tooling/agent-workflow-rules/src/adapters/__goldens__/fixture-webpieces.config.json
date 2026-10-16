@@ -249,6 +249,7 @@
             "mode": "OFF",
             "apiLibPackages": ["@webpieces/core-util", "tslib"],
             "apiClients": [],
+            "allowedWorkspaceProjects": [],
             "turnOffRuleUntilEpoch": 0,
             "turnOffRuleWhileOnBranch": null
         },

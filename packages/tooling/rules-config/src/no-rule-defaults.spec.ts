@@ -122,7 +122,7 @@ describe('a rule has no default', () => {
 
     it('the six tag-truth rules (#1064, #1179) demand every field that decides behaviour, and default none of them', () => {
         const required: Record<string, string[]> = {
-            'api-lib-dependencies': ['mode', 'apiLibPackages', 'apiClients'],
+            'api-lib-dependencies': ['mode', 'apiLibPackages', 'apiClients', 'allowedWorkspaceProjects'],
             'api-lib-path': ['mode', 'paths'],
             'framework-folder': ['mode', 'entries'],
             'framework-tsconfig': ['mode'],

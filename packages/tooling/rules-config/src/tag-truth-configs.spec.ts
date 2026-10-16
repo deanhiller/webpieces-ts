@@ -23,34 +23,44 @@ describe('api-lib-dependencies — config validation', () => {
             mode: 'RUN_EVERY_TIME',
             apiLibPackages: ['@webpieces/core-util', 'tslib'],
             apiClients: [{ project: 'gmail', packages: ['googleapis', 'inversify', '@webpieces/core-context'] }],
+            allowedWorkspaceProjects: ['@my/openapi-*', 'core-util'],
             ...HATCHES,
         })).toEqual([]);
     });
 
-    it('accepts an EMPTY apiClients and apiLibPackages — a repo with no api-client, and api libs importing nothing outside', () => {
-        expect(errorsFor('api-lib-dependencies', { mode: 'OFF', apiLibPackages: [], apiClients: [], ...HATCHES })).toEqual([]);
+    it('accepts an EMPTY apiClients, apiLibPackages and allowedWorkspaceProjects — a repo with no api-client, and api libs depending on nothing outside the api set', () => {
+        expect(errorsFor('api-lib-dependencies', {
+            mode: 'OFF', apiLibPackages: [], apiClients: [], allowedWorkspaceProjects: [], ...HATCHES,
+        })).toEqual([]);
     });
 
-    it('demands apiLibPackages and apiClients', () => {
+    it('demands apiLibPackages, apiClients and allowedWorkspaceProjects', () => {
         const errors = errorsFor('api-lib-dependencies', { mode: 'OFF', ...HATCHES });
         expect(errors).toEqual([
             expect.stringContaining('Missing required field "apiLibPackages"'),
             expect.stringContaining('Missing required field "apiClients"'),
+            expect.stringContaining('Missing required field "allowedWorkspaceProjects". Add allowedWorkspaceProjects:'),
         ]);
+    });
+
+    it('checks allowedWorkspaceProjects is a string list', () => {
+        expect(errorsFor('api-lib-dependencies', {
+            mode: 'OFF', apiLibPackages: [], apiClients: [], allowedWorkspaceProjects: [7], ...HATCHES,
+        })).toEqual([expect.stringContaining('allowedWorkspaceProjects')]);
     });
 
     it('checks every apiClients element against its schema', () => {
         expect(errorsFor('api-lib-dependencies', {
-            mode: 'OFF', apiLibPackages: [], apiClients: [{ project: 'gmail' }], ...HATCHES,
+            mode: 'OFF', apiLibPackages: [], apiClients: [{ project: 'gmail' }], allowedWorkspaceProjects: [], ...HATCHES,
         })).toEqual([expect.stringContaining('"apiClients"[0] Missing required field "packages"')]);
         expect(errorsFor('api-lib-dependencies', {
-            mode: 'OFF', apiLibPackages: [], apiClients: [{ project: 7, packages: [] }], ...HATCHES,
+            mode: 'OFF', apiLibPackages: [], apiClients: [{ project: 7, packages: [] }], allowedWorkspaceProjects: [], ...HATCHES,
         })).toEqual([expect.stringContaining('"apiClients"[0].project must be string')]);
     });
 
     it('refuses a mode a graph rule cannot honour', () => {
         expect(errorsFor('api-lib-dependencies', {
-            mode: 'MODIFIED_PROJECTS', apiLibPackages: [], apiClients: [], ...HATCHES,
+            mode: 'MODIFIED_PROJECTS', apiLibPackages: [], apiClients: [], allowedWorkspaceProjects: [], ...HATCHES,
         })).toEqual([expect.stringContaining('"mode"')]);
     });
 });

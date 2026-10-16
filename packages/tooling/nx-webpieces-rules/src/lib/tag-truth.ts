@@ -2,7 +2,8 @@
  * Tag truth — the four GRAPH rules that make an nx `role:*` / `framework:*` / `product:*` tag true
  * (#1064, #1179):
  *
- *   api-lib-dependencies (D2) — a `role:api-lib` depends only on other `role:api-lib` projects plus a
+ *   api-lib-dependencies (D2) — a `role:api-lib` depends only on other `role:api-lib` projects, the
+ *                               stated workspace projects (`allowedWorkspaceProjects`, #1287) and a
  *                               stated list of outside packages; a `role:api-client` may also import
  *                               the packages its own config entry names (its SDK, inversify, …).
  *   api-lib-path         (D10) — every api-lib / api-client lives under the configured api globs, and
@@ -48,10 +49,16 @@ const API_ROLES: readonly string[] = [API_LIB_ROLE, API_CLIENT_ROLE];
 /** `api-lib-dependencies`, resolved: what an api library may import from outside the api-lib set. */
 export class ApiLibDependenciesRule {
     constructor(
-        /** Package / project names (globs allowed) every api-lib and api-client may depend on. */
+        /** OUTSIDE package names (globs allowed) every api-lib and api-client may import. */
         public readonly apiLibPackages: readonly string[],
-        /** `role:api-client` project → the extra packages it may depend on. */
+        /** `role:api-client` project → the extra outside packages it may import. */
         public readonly apiClientPackages: ReadonlyMap<string, readonly string[]>,
+        /**
+         * WORKSPACE projects (nx name or package.json name, globs allowed) every api-lib and api-client may
+         * depend on — a generator, or a deliberately shared util library (#1287). Each entry must match
+         * some workspace project.
+         */
+        public readonly allowedWorkspaceProjects: readonly string[],
     ) {}
 }
 
@@ -161,7 +168,11 @@ export class TagTruthRules {
     private static dependenciesRule(options: RuleOptions): ApiLibDependenciesRule {
         const clients = new Map<string, readonly string[]>();
         for (const entry of options['apiClients'] as ApiClientPackagesEntry[]) clients.set(entry.project, entry.packages);
-        return new ApiLibDependenciesRule(options['apiLibPackages'] as string[], clients);
+        return new ApiLibDependenciesRule(
+            options['apiLibPackages'] as string[],
+            clients,
+            options['allowedWorkspaceProjects'] as string[],
+        );
     }
 }
 
@@ -203,10 +214,35 @@ export class TagTruthValidator {
                 problems.push(...this.productTagProblems(info, root, entry, this.rules.productTags));
             }
         }
+        if (this.rules.apiLibDependencies !== null) {
+            problems.push(...this.deadWorkspaceEntries(graph, imports, this.rules.apiLibDependencies));
+        }
         if (this.rules.productTags !== null) {
             problems.push(...this.rules.productTags.dependencies.problems(graph, this.declaredProducts(infos)));
         }
         return problems;
+    }
+
+    /**
+     * #1287 — an `allowedWorkspaceProjects` entry that matches no workspace project (by nx name or
+     * package.json name) is refused, so the list cannot rot into allowances for projects long gone.
+     */
+    private deadWorkspaceEntries(
+        graph: EnhancedGraph,
+        imports: ReadonlyMap<string, ProjectImports>,
+        rule: ApiLibDependenciesRule,
+    ): string[] {
+        const names: string[] = [...Object.keys(graph), ...imports.keys()];
+        for (const each of imports.values()) if (each.packageName) names.push(each.packageName);
+        return rule.allowedWorkspaceProjects
+            .filter((entry: string) => !names.some((name: string) => matchesAnyGlob(name, [entry])))
+            .map(
+                (entry: string) =>
+                    `${"api-lib-dependencies"}: allowedWorkspaceProjects entry '${entry}' matches no workspace ` +
+                    `project (by nx project name or package.json name) — an allowance for a project that is not ` +
+                    `there controls nothing. Delete '${entry}' from ${"api-lib-dependencies"}.allowedWorkspaceProjects ` +
+                    `in webpieces.config.json.`,
+            );
     }
 
     /** Every product some project's `product:` tag names — what a matrix entry may refer to. */
@@ -260,6 +296,7 @@ export class TagTruthValidator {
         const allowed = [...rule.apiLibPackages, ...(clientPackages ?? [])];
         const listName =
             role === API_CLIENT_ROLE ? `apiLibPackages or its apiClients entry` : 'apiLibPackages';
+        const workspaceList = `${"api-lib-dependencies"}.allowedWorkspaceProjects`;
         const problems: string[] = [];
         const workspaceNames = new Set<string>();
         for (const dep of entry.dependsOn) {
@@ -267,12 +304,14 @@ export class TagTruthValidator {
             if (depImports?.packageName) workspaceNames.add(depImports.packageName);
             const depRole = graph[dep]?.role;
             if (depRole === API_LIB_ROLE) continue;
-            if (matchesAnyGlob(dep, allowed)) continue;
-            if (depImports?.packageName && matchesAnyGlob(depImports.packageName, allowed)) continue;
+            if (matchesAnyGlob(dep, rule.allowedWorkspaceProjects)) continue;
+            if (depImports?.packageName && matchesAnyGlob(depImports.packageName, rule.allowedWorkspaceProjects)) continue;
             problems.push(
                 `${rulePrefix} must not depend on '${dep}' (role:${depRole ?? 'none'}) — an api library depends ` +
-                    `only on role:api-lib projects and the packages ${listName} lists. Move what it needs into a ` +
-                    `role:api-lib project, or add '${depImports?.packageName ?? dep}' to ${listName}.`,
+                    `only on role:api-lib projects and the workspace projects ${workspaceList} lists. Move what ` +
+                    `it needs into a role:api-lib project, or — when '${dep}' is a generator or a workspace ` +
+                    `library every api library may deliberately share — add '${depImports?.packageName ?? dep}' ` +
+                    `to ${workspaceList} in webpieces.config.json.`,
             );
         }
         const own = imports.get(name);

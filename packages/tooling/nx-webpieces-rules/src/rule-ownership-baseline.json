@@ -659,6 +659,12 @@
           }
         }
       },
+      "allowedWorkspaceProjects": {
+        "type": "string[]",
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      },
       "turnOffRuleUntilEpoch": {
         "type": "number",
         "optional": false,
@@ -693,7 +699,8 @@
         "@webpieces/core-util",
         "tslib"
       ],
-      "apiClients": []
+      "apiClients": [],
+      "allowedWorkspaceProjects": []
     }
   },
   "api-lib-path": {
