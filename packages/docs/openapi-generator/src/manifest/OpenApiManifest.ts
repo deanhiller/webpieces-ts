@@ -17,7 +17,7 @@
  * - `errors` — the document-wide failure contract, with the BODY read from a real TS type so the
  *   published shape cannot drift from the one on the wire.
  * - `responseHeaders[]` — declared by `contextKey` naming an exported ContextKey, never by a literal.
- * - `operationIds` — the published operationId spelling, a partner-visible decision (#1270).
+ * - `operationIds` — the published operationId spelling (#1270); optional, `contract_method` when omitted (#1283).
  *
  * Anything a renderer could read off the source instead belongs in the source.
  *
@@ -29,10 +29,11 @@
 import { SchemaNameEntry } from '@webpieces/api-doc-model';
 
 /**
- * How every operation's `operationId` is spelled (#1270). REQUIRED in a contract manifest, with no
- * default: `operationId` is what openapi-generator, Kiota, NSwag and friends name the METHOD in every
- * client a partner generates, so changing the spelling renames every method in every partner's SDK.
- * That is the consumer's decision to state, never one a generator default makes silently.
+ * How every operation's `operationId` is spelled (#1270). OPTIONAL in a contract manifest, defaulting
+ * to {@link CONTRACT_METHOD} (#1283) — the spelling every earlier release published, and the only one
+ * unique by construction. `operationId` is what openapi-generator, Kiota, NSwag and friends name the
+ * METHOD in every client a partner generates, so changing the spelling renames every method in every
+ * partner's SDK; {@link METHOD} is the opt-in for a document that already published bare names.
  */
 export enum OperationIdStyle {
     /** `OrdersApi_fetchOrders` — unique by construction across contracts. */

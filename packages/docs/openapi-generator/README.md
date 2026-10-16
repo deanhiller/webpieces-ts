@@ -55,7 +55,6 @@ It carries exactly what is **not a property of the code**:
 ```json
 {
     "title": "Example Orders API",
-    "operationIds": "method",
     "version": "1.0.0",
     "descriptionFile": "description.md",
     "servers": [{ "url": "https://api.example.com", "description": "Production." }],
@@ -151,17 +150,19 @@ carries nothing there, because it is not there). The server stamps the header on
 for a correlation id the failing response is the one a partner most needs to quote back. A webhook
 takes none of them: it is served by the partner, not by us.
 
-**`operationIds` is REQUIRED — there is no default (#1270).** `operationId` is what openapi-generator,
-Kiota, NSwag and the rest name the METHOD in every client a partner generates, so changing its spelling
-renames every method in every partner's SDK. The manifest states it:
+**`operationIds` is optional and defaults to `"contract_method"` (#1270, #1283).** `operationId` is
+what openapi-generator, Kiota, NSwag and the rest name the METHOD in every client a partner generates,
+so changing its spelling renames every method in every partner's SDK:
 
 | value | publishes | uniqueness |
 |---|---|---|
-| `"contract_method"` | `OrdersApi_fetchOrders` | by construction |
+| `"contract_method"` (the default) | `OrdersApi_fetchOrders` | by construction |
 | `"method"` | `fetchOrders` | checked: two operations of one document (routes and webhooks alike) sharing an id is a HARD FAILURE naming both |
 
-A manifest without it, or with any other value, is refused with an error naming the key and both
-choices. Pick `"contract_method"` to keep the ids every earlier release published.
+Omit the key for a new API: `"contract_method"` is the spelling every release before #1270 published,
+and it keeps working as contracts grow (two contracts that each have a `fetch` never collide).
+`"method"` is the opt-in for a document that has already published bare names and must keep them.
+Any other value is refused with an error naming the key and both choices.
 
 **`responseHeaders[].required`** is rendered verbatim on the header object; omitted, the document
 does not state it (OpenAPI reads that as `false`).
