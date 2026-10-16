@@ -78,7 +78,7 @@ class ChromiumStreamingFixture {
         if (request.url === '/client.js') {
             response.setHeader('Content-Type', 'application/javascript');
             response.end(this.bundle);
-        } else if (request.url === '/stream/watch') {
+        } else if (request.url === '/stream/watch?ngsw-bypass=true') {
             response.once('close', (): void => {
                 if (!response.writableEnded) this.peerCancelled = true;
             });

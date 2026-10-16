@@ -93,7 +93,7 @@ describe('browser generated typed HTTP contracts', () => {
         await client.resource('a/b ✓', ['read all', 'write&more']);
 
         expect(fetchMock.mock.calls[0][0]).toBe(
-            'https://api.example.test/oauth/resource/a%2Fb%20%E2%9C%93?scope=read%20all&scope=write%26more',
+            'https://api.example.test/oauth/resource/a%2Fb%20%E2%9C%93?scope=read%20all&scope=write%26more&ngsw-bypass=true',
         );
         expect(fetchMock.mock.calls[0][1]?.method).toBe('GET');
         expect(fetchMock.mock.calls[0][1]?.body).toBeUndefined();

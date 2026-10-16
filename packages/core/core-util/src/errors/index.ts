@@ -34,6 +34,7 @@ export { EndUserErrorRegistry } from './EndUserErrorRegistry';
 export type { EndUserErrorFactory } from './EndUserErrorRegistry';
 export { ClientRole } from './ClientRole';
 export { ApiCallSite } from './ApiCallSite';
+export { CallMode, CallModeMarker } from './CallMode';
 export type { CallSiteBoundary } from './ApiCallSite';
 export { ReportableApiFailure, RpcCallFailed } from './ReportableApiFailure';
 export type { ApiErrorKind, ApiStatusCode, EdgeHttpStatus } from './ApiError';

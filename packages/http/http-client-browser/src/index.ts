@@ -31,6 +31,12 @@ export { BrowserProxyClient } from './BrowserProxyClient';
 // and fold it into log lines.
 export { BrowserApiCallContext } from './BrowserApiCallContext';
 export { ClientConfig } from './ClientConfig';
+// #1293: service-worker routing for every RPC, and ngsw's synthetic-504 fallback.
+export { ServiceWorkerRouting } from './ServiceWorkerRouting';
+export {
+    ServiceWorkerSyntheticResponse,
+    ServiceWorkerSyntheticResponseError,
+} from './ServiceWorkerSyntheticResponse';
 export { MutableContextStore } from './MutableContextStore';
 export type { RequestLifecycleListener } from './RequestLifecycleListener';
 
@@ -52,6 +58,8 @@ export {
     HeaderRegistry,
     ClientRegistry,
     ClientRole,
+    CallMode,
+    CallModeMarker,
     templateDeriver,
     WebpiecesCoreHeaders,
 } from '@webpieces/core-util';

@@ -41,6 +41,17 @@ It asks two questions with two owners:
 
 When it actually retried and ran out it throws `ApiRetriesExhaustedError` (`cause` = the last attempt's error, `attempts` = how many ran). That error is classified `FAILURE` and published as **HTTP 502**, never 503, so no layer above retries again: retries happen at ONE layer. A call that made a single attempt rethrows its own error unchanged.
 
+### The stock strategy for browser, node and React Native clients (#1293)
+
+There is no second "retry-safe operations" strategy: `RetryStrategy` IS it. It lives in `@webpieces/core-util` (tagged browser + node + react-native), so one registration serves every client:
+
+```ts
+// once, at app startup — a browser bundle, an Expo shell, or a node server
+CallRegistry.setStrategy(new RetryStrategy(10_000, 2, 250, 2, 1_000).run, 'ALL');
+```
+
+Registered at ALL it retries `ApiConnectionError` and `ApiCallTimeoutError` (and the other transient kinds above) only on `READ` / `WRITE_IDEMPOTENT` endpoints, never a `WRITE` — a dropped connection does not prove the request never left. In a browser, a connection failure arrives as `ApiConnectionError` because the browser client bypasses Angular's service worker by default (see the [browser client README](../packages/http/http-client-browser/README.md)); without that, ngsw's synthetic 504 would hide it.
+
 ## Logging each attempt
 
 `CallRegistry.execute` wraps the attempt BEFORE handing it to any strategy — `RetryStrategy` or one you wrote — so every RETRIED transient attempt logs one line:

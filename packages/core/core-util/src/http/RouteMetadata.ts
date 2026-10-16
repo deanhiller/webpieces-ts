@@ -3,6 +3,7 @@ import { AuthMeta } from './auth-mode';
 import { EndpointResponseType, HttpParameterBinding } from './HttpContract';
 import { StreamingEndpointMetadata } from './StreamingContract';
 import { EndpointOperation } from './HttpEndpointOptions';
+import { CallMode } from '../errors/CallMode';
 
 /**
  * Route metadata stored per-method at runtime.
@@ -24,6 +25,45 @@ export class RouteMetadata {
         if (!this.authMeta?.methods.includes(method)) throw new Error('Selected credential is not declared by this endpoint.');
         const route = Object.assign(new RouteMetadata(this.httpMethod, this.path, this.methodName, this.operation), this);
         route.authMeta = new AuthMeta([method], method.kind === 'public' ? this.authMeta.publicReason : undefined);
+        return route;
+    }
+    /**
+     * Whether the user is waiting on THIS call (#1293). Not an endpoint declaration: a client stamps
+     * it per call with {@link withCallMode}, from the `ClientConfig` it was built with. FOREGROUND on
+     * every route a contract's decorators build.
+     */
+    callMode: CallMode = CallMode.FOREGROUND;
+
+    /**
+     * A per-call copy carrying `mode`. A BACKGROUND call also gets {@link hideProgress} — nobody is
+     * waiting on it — so an app's `RequestLifecycleListener` keeps it out of the progress bar with
+     * no endpoint declaration. FOREGROUND returns this route unchanged.
+     */
+    withCallMode(mode: CallMode): RouteMetadata {
+        if (mode === CallMode.FOREGROUND) return this;
+        const route = new RouteMetadata(
+            this.httpMethod,
+            this.path,
+            this.methodName,
+            this.operation,
+            this.controllerClassName,
+            this.authMeta,
+            this.apiName,
+            this.formPost,
+            this.mask,
+            this.rawBody,
+            this.parameterBindings,
+            this.bodyParameterIndex,
+            this.responseType,
+            this.streaming,
+            true,
+            this.noLogging,
+            this.allowUpgradeInFlight,
+        );
+        route.apiClass = this.apiClass;
+        route.authorization = this.authorization;
+        route.localOnly = this.localOnly;
+        route.callMode = mode;
         return route;
     }
     httpMethod: string;

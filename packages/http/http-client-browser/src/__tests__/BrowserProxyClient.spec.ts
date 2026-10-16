@@ -204,7 +204,7 @@ describe('BrowserProxyClient resolves a base URL without ever throwing', () => {
 
         await client.save(new SaveRequest('q'));
 
-        expect(fetched.url()).toBe('/public/save');
+        expect(fetched.url()).toBe('/public/save?ngsw-bypass=true');
     });
 
     it('a registered mapping still WINS — the Angular dev server on :4201 reaching :8201', async () => {
@@ -214,7 +214,7 @@ describe('BrowserProxyClient resolves a base URL without ever throwing', () => {
 
         await client.save(new SaveRequest('q'));
 
-        expect(fetched.url()).toBe('http://localhost:8201/public/save');
+        expect(fetched.url()).toBe('http://localhost:8201/public/save?ngsw-bypass=true');
     });
 
     it('an installed deriver is honored in the browser too', async () => {
@@ -224,7 +224,7 @@ describe('BrowserProxyClient resolves a base URL without ever throwing', () => {
 
         await client.save(new SaveRequest('q'));
 
-        expect(fetched.url()).toBe('https://save-svc.example.com/public/save');
+        expect(fetched.url()).toBe('https://save-svc.example.com/public/save?ngsw-bypass=true');
     });
 });
 
@@ -286,7 +286,7 @@ describe('BrowserProxyClient reports the request lifecycle to a registered liste
 
         await client.save(new SaveRequest('q'));
 
-        expect(fetched.url()).toBe('/public/save');
+        expect(fetched.url()).toBe('/public/save?ngsw-bypass=true');
     });
 
     it('a 2xx fires start THEN end, exactly once each, ok with the route + headers', async () => {
