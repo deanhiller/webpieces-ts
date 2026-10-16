@@ -103,7 +103,8 @@ export const recommendedSeeds: Readonly<Record<string, ConfigObject>> = {
             "@webpieces/core-util",
             "tslib"
         ],
-        "apiClients": []
+        "apiClients": [],
+        "allowedWorkspaceProjects": []
     },
     "api-lib-path": {
         "mode": "RUN_EVERY_TIME",

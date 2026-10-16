@@ -62,9 +62,13 @@ class Fixture {
 
 const UNIVERSAL = ['browser', 'node', 'react-native'];
 
-function depsRule(apiLibPackages: string[], clients: Record<string, string[]> = {}): TagTruthRules {
+function depsRule(
+    apiLibPackages: string[],
+    clients: Record<string, string[]> = {},
+    allowedWorkspaceProjects: string[] = [],
+): TagTruthRules {
     return new TagTruthRules(
-        new ApiLibDependenciesRule(apiLibPackages, new Map(Object.entries(clients))),
+        new ApiLibDependenciesRule(apiLibPackages, new Map(Object.entries(clients)), allowedWorkspaceProjects),
         null,
         null,
         null,
@@ -142,28 +146,86 @@ describe('api-lib-dependencies (D2)', () => {
                 '@my/company-core',
             ),
         ]);
-        expect(fx.problems(depsRule(['tslib']))).toEqual([
+        const problems = fx.problems(depsRule(['tslib']));
+        expect(problems).toEqual([
             expect.stringContaining(
                 "api-lib-dependencies: 'lang-apis' (role:api-lib) must not depend on 'company-core' (role:lib)",
             ),
         ]);
+        expect(problems[0]).toContain("add '@my/company-core' to api-lib-dependencies.allowedWorkspaceProjects");
+    });
+});
+
+describe('api-lib-dependencies allowedWorkspaceProjects (#1287)', () => {
+    /** An api-lib depending on two generators and a shared util library — the monorepo-nx shape. */
+    function fixture(): Fixture {
+        return new Fixture([
+            new Proj(
+                'management-api',
+                'libraries/apis/partner/management-api',
+                'api-lib',
+                UNIVERSAL,
+                ['openapi-docs-site', 'openapi-from-webpieces', 'core-util'],
+                '@my/management-api',
+                ['@my/core-util'],
+            ),
+            new Proj('openapi-docs-site', 'libraries/node/openapi-docs-site', 'lib', ['node'], [], '@my/openapi-docs-site'),
+            new Proj('openapi-from-webpieces', 'libraries/node/openapi-from-webpieces', 'lib', ['node'], [], '@my/openapi-from-webpieces'),
+            new Proj('core-util', 'libraries/universal/core-util', 'lib', UNIVERSAL, [], '@my/core-util'),
+        ]);
+    }
+
+    it('GREEN: allowed by nx project name', () => {
+        const rules = depsRule([], {}, ['openapi-docs-site', 'openapi-from-webpieces', 'core-util']);
+        expect(fixture().problems(rules)).toEqual([]);
     });
 
-    it('a workspace project listed by package name in apiLibPackages is allowed (a repo whose core-util is local)', () => {
+    it('GREEN: allowed by package.json name', () => {
+        const rules = depsRule([], {}, ['@my/openapi-docs-site', '@my/openapi-from-webpieces', '@my/core-util']);
+        expect(fixture().problems(rules)).toEqual([]);
+    });
+
+    it('GREEN: allowed by glob', () => {
+        expect(fixture().problems(depsRule([], {}, ['@my/openapi-*', 'core-util']))).toEqual([]);
+    });
+
+    it('GREEN: an api-client may depend on a listed workspace project too', () => {
         const fx = new Fixture([
-            new Proj('a-api', 'libraries/apis/a', 'api-lib', UNIVERSAL, ['core-util'], '@x/a-api', [
-                '@webpieces/core-util',
+            new Proj('gmail', 'libraries/apis/external-node/gmail', 'api-client', ['node'], ['core-util'], '@x/gmail', [
+                '@x/core-util',
             ]),
-            new Proj(
-                'core-util',
-                'packages/core/core-util',
-                'lib',
-                UNIVERSAL,
-                [],
-                '@webpieces/core-util',
-            ),
+            new Proj('core-util', 'libraries/universal/core-util', 'lib', UNIVERSAL, [], '@x/core-util'),
         ]);
-        expect(fx.problems(depsRule(['@webpieces/core-util']))).toEqual([]);
+        expect(fx.problems(depsRule([], { gmail: [] }, ['@x/core-util']))).toEqual([]);
+    });
+
+    it('RED: still refused when not listed, naming allowedWorkspaceProjects as the cure', () => {
+        const problems = fixture().problems(depsRule([], {}, ['@my/openapi-*']));
+        expect(problems).toEqual([
+            expect.stringContaining("'management-api' (role:api-lib) must not depend on 'core-util' (role:lib)"),
+        ]);
+        expect(problems[0]).toContain("add '@my/core-util' to api-lib-dependencies.allowedWorkspaceProjects");
+    });
+
+    it('RED: apiLibPackages does not admit a workspace project — that list is for OUTSIDE packages only', () => {
+        const problems = fixture().problems(
+            depsRule(['@my/openapi-docs-site', '@my/openapi-from-webpieces', '@my/core-util'], {}, []),
+        );
+        expect(problems).toHaveLength(3);
+        for (const problem of problems) expect(problem).toContain('allowedWorkspaceProjects');
+    });
+
+    it('RED: an entry matching no workspace project is itself refused, naming the dead entry and the cure', () => {
+        const problems = fixture().problems(
+            depsRule([], {}, ['@my/openapi-*', 'core-util', '@my/long-gone-generator', 'nothing-*']),
+        );
+        expect(problems).toEqual([
+            expect.stringContaining("allowedWorkspaceProjects entry '@my/long-gone-generator' matches no workspace project"),
+            expect.stringContaining("allowedWorkspaceProjects entry 'nothing-*' matches no workspace project"),
+        ]);
+        expect(problems[0]).toContain(
+            "Delete '@my/long-gone-generator' from api-lib-dependencies.allowedWorkspaceProjects",
+        );
     });
 
     it('RED: an api-lib importing an outside package apiLibPackages does not list (node builtins included)', () => {

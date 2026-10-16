@@ -1057,6 +1057,12 @@
             "nonEmpty": false
           }
         }
+      },
+      "allowedWorkspaceProjects": {
+        "type": "string[]",
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
       }
     },
     "api-lib-path": {
@@ -1549,7 +1555,8 @@
         "@webpieces/core-util",
         "tslib"
       ],
-      "apiClients": []
+      "apiClients": [],
+      "allowedWorkspaceProjects": []
     },
     "api-lib-path": {
       "mode": "RUN_EVERY_TIME",

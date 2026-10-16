@@ -20,20 +20,27 @@ export class ApiClientPackagesEntry {
  *
  * - `mode` — OFF | RUN_EVERY_TIME (a graph rule: it reads every project, every run).
  * - `apiLibPackages` — required; may be empty (an api library then imports nothing from outside), e.g.
- *   `["@webpieces/core-util", "tslib"]`. A workspace project whose name or package name is listed here
- *   is allowed too, so a repo whose `core-util` is a workspace project states it the same way.
+ *   `["@webpieces/core-util", "tslib"]`. OUTSIDE packages only: a package an api library's wire contract
+ *   may pull into every consumer. A WORKSPACE project is never allowed through this list.
  * - `apiClients` — required; one entry per `role:api-client` project. A `role:api-client` with no
  *   entry is itself a violation: what it may talk to is stated, never inferred.
+ * - `allowedWorkspaceProjects` — required; may be empty (#1287). The WORKSPACE projects (not role:api-lib)
+ *   any api-lib / api-client may depend on: a generator that builds its OpenAPI documents, or a shared
+ *   util library the repo deliberately lets every contract use. Matched by nx project name or
+ *   package.json name, globs allowed, e.g. `["@my/openapi-docs-site", "core-util"]`. An entry that
+ *   matches no workspace project is itself a violation, so the list cannot rot.
  */
 export class ApiLibDependenciesConfig extends BaseRuleConfig {
     declare mode?: StructuralMode;
     apiLibPackages!: string[];
     apiClients!: ApiClientPackagesEntry[];
+    allowedWorkspaceProjects!: string[];
 
     static readonly SCHEMA: SchemaShape<ApiLibDependenciesConfig> = {
         mode: new FieldDef('string', STRUCTURAL_MODES),
         apiLibPackages: new FieldDef('string[]'),
         apiClients: FieldDef.objects(ApiClientPackagesEntry.SCHEMA),
+        allowedWorkspaceProjects: new FieldDef('string[]'),
     };
 }
 

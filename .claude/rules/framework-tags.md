@@ -54,11 +54,25 @@ consumer's layout.
 
 ### `api-lib-dependencies` (D2) — graph rule, `OFF | RUN_EVERY_TIME`
 
-A `role:api-lib` depends only on other `role:api-lib` projects plus `apiLibPackages`; a
+A `role:api-lib` depends only on other `role:api-lib` projects, the workspace projects
+`allowedWorkspaceProjects` lists, and the outside packages `apiLibPackages` lists; a
 `role:api-client` may also import what its own `apiClients` entry lists. A `role:api-client` with no
 entry is itself refused. Production imports are parsed from source syntax (specs do not count and prose
 cannot become an import), so a node builtin is an outside package like any other; `node:fs` canonicalizes
 to the allow-list spelling `fs`.
+
+The two lists are two different decisions, so each has exactly one home (#1287):
+
+- `apiLibPackages` — OUTSIDE packages only: what an api library's wire contract may pull into every
+  consumer. A workspace project is never admitted through it.
+- `allowedWorkspaceProjects` — WORKSPACE projects that are not `role:api-lib` but that any api-lib /
+  api-client may depend on: a generator that builds its OpenAPI documents or docs site, or a shared
+  util library the repo deliberately lets every contract use. Matched by nx project name or
+  package.json name, globs allowed. REQUIRED, seeded `[]`. An entry that matches no workspace project
+  is itself refused, naming the dead entry — the cure is to delete it — so the list cannot rot.
+
+A refused workspace edge names `allowedWorkspaceProjects` as one cure; the other is moving what it needs
+into a `role:api-lib` project.
 
 ```json
 "api-lib-dependencies": {
@@ -67,6 +81,7 @@ to the allow-list spelling `fs`.
   "apiClients": [
     { "project": "gmail", "packages": ["googleapis", "inversify", "@webpieces/core-context"] }
   ],
+  "allowedWorkspaceProjects": ["@myorg/openapi-docs-site", "@myorg/openapi-from-webpieces", "core-util"],
   "turnOffRuleUntilEpoch": 0, "turnOffRuleWhileOnBranch": null
 }
 ```
@@ -194,4 +209,6 @@ validator is one release behind and would reject the unknown keys. That follow-u
 [#1065](https://github.com/deanhiller/webpieces-ts/issues/1065); for `product-tags` (#1179) it is
 [#1182](https://github.com/deanhiller/webpieces-ts/issues/1182). `product-tags.productDependencies`
 (#1204) follows the same order: this repo's config gains it with the pin bump to the release that ships
-it, since the running validator would reject the field until then.
+it, since the running validator would reject the field until then. `api-lib-dependencies.allowedWorkspaceProjects` (#1287) is
+the same again: [#1288](https://github.com/deanhiller/webpieces-ts/issues/1288) adds it to this repo's
+config with that pin bump.
