@@ -18,7 +18,11 @@ export interface SettingsResponse {
 /** Settings. */
 @ApiPath('/settings')
 export class SettingsApi {
-    /** Reads the settings. */
+    /**
+     * Reads the settings.
+     *
+     * @returns The user's settings.
+     */
     @Endpoint(POST, '/read', READ, RPC)
     @WpAuthPublic('Fixture only.')
     @WpAuthorization({ authType: AuthorizationType.ANONYMOUS, reason: 'Fixture only.' })

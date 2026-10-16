@@ -19,7 +19,11 @@ export interface ProviderResponse {
 @ApiPath('/agent')
 @ApiType(MCP)
 export class AgentApi {
-    /** Asks a provider. */
+    /**
+     * Asks a provider.
+     *
+     * @returns What the provider answered.
+     */
     @Endpoint(POST, '/ask', READ, RPC)
     @WpAuthPublic('Fixture only.')
     @WpAuthorization({ authType: AuthorizationType.ANONYMOUS, reason: 'Fixture only.' })

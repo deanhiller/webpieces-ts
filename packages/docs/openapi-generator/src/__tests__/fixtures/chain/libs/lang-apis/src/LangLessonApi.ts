@@ -36,7 +36,11 @@ export interface PassageListResponse {
 @ApiPath('/lang')
 @ApiType(SVC_TO_SVC, MCP)
 export class LangLessonApi {
-    /** Lists a lesson's passages. */
+    /**
+     * Lists a lesson's passages.
+     *
+     * @returns Every passage of the lesson, in reading order, with its descriptions.
+     */
     @Endpoint(POST, '/passages', READ, RPC)
     @WpAuthPublic('Fixture only.')
     @WpAuthorization({ authType: AuthorizationType.ANONYMOUS, reason: 'Fixture only.' })

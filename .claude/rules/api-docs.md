@@ -179,7 +179,8 @@ types and `$ref`s every other package's into that package's components document:
   refused as stale.
 - **MCP never requires a components document.** `mcp-openapi.json` and every `mcp-*-tools.json` inline
   every schema from any package, exactly as before, so an MCP-only consumer tags nothing — and a shared
-  DTO renders byte-identically in every catalog.
+  DTO renders byte-identically in every catalog. (The DESCRIPTION rules below are not this: they hold
+  for MCP output exactly as for OpenAPI.)
 - **Inheritance is FLATTENED in all three forms** (split, bundled, MCP), consistent with #1056; no
   `allOf`. A base declared in another package contributes its fields to the subclass's own schema.
 - Two packages' same-named types are two schemas in two documents; two DIFFERENT types of one name in
@@ -270,6 +271,29 @@ import into another library, or a DTO library reaching outside itself. The refus
 declaring package and project, and the fix — move it into an api library, as a `…Dto` string enum when it
 is a literal union. A type declared in a published package under `node_modules` is that package's to own
 and is not judged here.
+
+## Descriptions: one JSDoc, one published place — for OpenAPI AND MCP (#1292)
+
+`//` and `/* */` comments are private; every `/** */` is published. `@privateRemarks` (the tag and
+its text) is dropped at extraction, so it reaches no output — not an OpenAPI document, not
+`mcp-openapi.json`, not an `mcp-<Contract>-tools.json` catalog, not what `WpMcpServer` serves on
+`tools/list`.
+
+| JSDoc on | Published as |
+|---|---|
+| a method | `operation.description`; the MCP tool's `description` (unless `@mcp` overrides it) |
+| its `@returns` | the success response's `description`; the MCP catalog's `outputSchema.description` |
+| a DTO class / interface / enum / union alias | `components.schemas.<Name>.description`; the request DTO's is the catalog's `inputSchema.description` |
+| a field | the property's `description`, in every output |
+| the ONE non-webhook contract carrying a tag | `tags[<tag>].description` |
+
+Generation REFUSES — every offender named in one run, nothing written, no off switch — a
+body-carrying operation with no `@returns` (a `Promise<void>` one needs none), a published schema
+with no JSDoc description (one declared under `node_modules` is not judged), and two non-webhook
+contracts on one tag. These hold for the MCP output exactly as for OpenAPI, so an MCP-only contract
+must document its tools and their DTOs the same way. A webhook-only tag takes the first webhook
+contract's JSDoc. `@webpieces/docs-site` renders response headers and `in: "header"` request
+parameters as a **Headers** list.
 
 ## One spelling in an api library: string enums, top-of-file imports
 

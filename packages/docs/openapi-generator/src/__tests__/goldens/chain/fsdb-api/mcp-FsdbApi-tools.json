@@ -12,6 +12,7 @@
     },
     "inputSchema": {
       "type": "object",
+      "description": "A stored passage lookup.",
       "properties": {
         "passageId": {
           "type": "string",
@@ -25,6 +26,7 @@
     },
     "outputSchema": {
       "type": "object",
+      "description": "The passage and where its descriptions are stored.",
       "properties": {
         "passage": {
           "type": "object",

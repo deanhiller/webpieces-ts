@@ -457,6 +457,7 @@ export class ApiDocExtractor {
             ApiDocExtractor.maskLogOf(member),
             doc.description,
             doc.mcp,
+            doc.returns,
             this.requestOf(member, methodName, resolver),
             streaming?.initialResponse ?? this.responseOf(member, methodName, resolver),
             streaming,

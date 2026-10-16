@@ -15,7 +15,11 @@ export interface BothDupsResponse {
 /** Dup. */
 @ApiPath('/dup')
 export class DupApi {
-    /** Reads both. */
+    /**
+     * Reads both.
+     *
+     * @returns Both same-named DTOs, side by side.
+     */
     @Endpoint(POST, '/both', READ, RPC)
     @WpAuthPublic('Fixture only.')
     @WpAuthorization({ authType: AuthorizationType.ANONYMOUS, reason: 'Fixture only.' })

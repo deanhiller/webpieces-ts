@@ -8,6 +8,7 @@ import { Html } from './Html';
 import { Layout } from './Layout';
 import { Markdown } from '../markdown/Markdown';
 import { NavBuilder } from './NavModel';
+import { HeaderListRenderer } from './HeaderListRenderer';
 import { OperationPageRenderer } from './OperationPageRenderer';
 import { ProsePage } from '../manifest/DocsManifest';
 import { RenderedSite, SiteAsset, SitePage } from './SitePage';
@@ -58,6 +59,7 @@ export class SiteRenderer {
             examples,
             layout,
             this.urls,
+            new HeaderListRenderer(lens, this.markdown),
         );
         const pages: SitePage[] = [this.overview(spec, layout)];
         for (const page of prose) {

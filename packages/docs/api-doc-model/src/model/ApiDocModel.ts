@@ -317,6 +317,12 @@ export class DocumentedEndpoint {
         readonly description: string,
         /** The `@mcp` override. See {@link DocumentedField.mcpDescription}. */
         readonly mcpDescription: string | undefined,
+        /**
+         * The method's `@returns` text — the SUCCESS response's `description` in a published document
+         * (#1292). Undefined when the method has none; the OpenAPI generator refuses that for any
+         * operation whose response has a body, rather than publishing a filler sentence.
+         */
+        readonly returnsDescription: string | undefined,
         readonly request: TypeRef | undefined,
         readonly response: TypeRef | undefined,
         readonly streaming?: DocumentedStreaming,

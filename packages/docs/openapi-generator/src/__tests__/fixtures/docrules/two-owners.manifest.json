@@ -1,0 +1,20 @@
+{
+    "title": "Doc rules",
+    "operationIds": "contract_method",
+    "version": "1.0.0",
+    "apis": [
+        {
+            "entry": "OrdersTagApi.ts",
+            "tag": "Orders"
+        },
+        {
+            "entry": "SecondOrdersTagApi.ts",
+            "tag": "Orders"
+        },
+        {
+            "entry": "OrdersWebhookApi.ts",
+            "tag": "Orders",
+            "kind": "webhook"
+        }
+    ]
+}

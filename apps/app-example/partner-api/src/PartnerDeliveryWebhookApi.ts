@@ -12,6 +12,7 @@ import {
 } from '@webpieces/core-util';
 import { OrderState } from './PartnerOrdersApi';
 
+/** The payload of `order.state-changed`: which order moved, to what state, and when. */
 export interface OrderStateChangedEvent {
     /** The order whose state moved. */
     orderId: string;

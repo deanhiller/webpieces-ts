@@ -228,12 +228,47 @@ publishes as `title` and `annotations.title` (#1180). `readOnlyHint`, `destructi
 `idempotentHint` are computed from the endpoint's declared `operation`; `openWorldHint` comes from
 `{ openWorld: true }` on the endpoint.
 
+The catalog carries the same descriptions the OpenAPI documents do (#1292): the method's `@returns`
+is `outputSchema.description`, the request DTO's JSDoc is `inputSchema.description`, every field's
+JSDoc is its property's `description`, and no `@privateRemarks` text reaches any of it.
+
 Alongside `mcp-openapi.json`, a run writes ONE **`mcp-<ContractClass>-tools.json`** per contract that
 declares `MCP` and has at least one `@WpMcpTool` (e.g. `mcp-PartnerOrdersApi-tools.json`). Those are
 not documents: they are the RUNTIME catalogs `WpMcpServer` boots from, so the schema an agent is shown
 in `tools/list` and the schema the server validates a call against are the same bytes. One file per
 contract because a server binds contracts, and checks each binding against exactly its own contract's
 file. `--format` does not apply to them.
+
+## Descriptions: every `/** */` is published, `@privateRemarks` never is (#1292)
+
+`//` and `/* */` comments are private; every `/** */` block is published, one JSDoc to one place:
+
+| JSDoc on | Published as |
+|---|---|
+| a method | `operation.description` (and the MCP tool's `description`, unless an `@mcp` tag overrides it) |
+| its `@returns` tag | the success response's `description`, and the MCP catalog's `outputSchema.description` |
+| a DTO class / interface / enum / union alias | `components.schemas.<Name>.description` (and the MCP catalog's `inputSchema.description` for the request DTO) |
+| a field | the property's `description` |
+| the contract class that OWNS a tag | `tags[<tag>].description` |
+
+The rules hold for EVERY output — the OpenAPI documents, their bundled siblings, `mcp-openapi.json`
+and the `mcp-<Contract>-tools.json` catalogs — and each refusal names every offender in one run and
+writes nothing. None has an off switch.
+
+- **`@privateRemarks` is dropped** with its text, everywhere. Write internal notes there.
+- **`@returns` is REQUIRED** on every published method whose response has a body. It replaces the
+  hard-coded `"Success."` the success response used to carry. A `Promise<void>` method needs none and
+  keeps the derived acknowledgement sentence. Error responses keep the manifest's descriptions.
+  Only `@returns` is read — JSDoc's older `@return` spelling is not.
+- **Every published schema needs a description** — a class, interface, enum or union alias with no
+  JSDoc is refused, naming the type and its `file:line`. A type declared under `node_modules` is that
+  package's to own and is not judged.
+- **A tag's description comes from the ONE non-webhook contract carrying it**, never from a webhook
+  contract filed under the same tag. Two non-webhook contracts on one tag is refused, naming both; a
+  tag carried only by webhook contracts takes the first one's JSDoc, in manifest order.
+
+TypeScript starts a block tag at any `@word` preceded by whitespace, even mid-sentence, so write
+"the returns tag" in prose rather than `@returns` — the latter ends the sentence and starts a tag.
 
 ## It refuses to publish a field it has no schema for
 

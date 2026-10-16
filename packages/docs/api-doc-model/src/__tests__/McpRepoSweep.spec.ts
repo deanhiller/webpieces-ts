@@ -205,6 +205,9 @@ describe('every @WpMcpTool in this repo, read by the compiler', () => {
             'packages/docs/openapi-generator/src/__tests__/fixtures/chain/libs/agent-api/src/AgentApi.ts',
             'packages/docs/openapi-generator/src/__tests__/fixtures/chain/libs/fsdb-api/src/FsdbApi.ts',
             'packages/docs/openapi-generator/src/__tests__/fixtures/chain/libs/lang-apis/src/LangLessonApi.ts',
+            'packages/docs/openapi-generator/src/__tests__/fixtures/docrules/McpOnlyApi.ts',
+            'packages/docs/openapi-generator/src/__tests__/fixtures/docrules/McpOnlyUndocumentedApi.ts',
+            'packages/docs/openapi-generator/src/__tests__/fixtures/docrules/PrivateRemarksApi.ts',
             'packages/http/mcp-server/src/__tests__/McpProfileFixtures.ts',
             'packages/http/mcp-server/src/__tests__/McpRemoteFixtures.ts',
             'packages/http/mcp-server/src/__tests__/WpMcpServerTestFixtures.ts',
@@ -246,6 +249,11 @@ describe('every @WpMcpTool in this repo, read by the compiler', () => {
             'AgentApi/ask_provider',
             'FsdbApi/read_passage',
             'LangLessonApi/list_passages',
+            // The description-rule fixtures (#1292). Each RENDERS: a missing `@returns` or schema
+            // description is refused by wp-openapi's guards over the whole run, not by this renderer.
+            'McpOnlyApi/ask_question',
+            'McpOnlyUndocumentedApi/check_guess',
+            'PrivateRemarksApi/switch_lamp',
             'ProfileApi/learner',
             'ProfileApi/admin',
             'ProfileApi/shared',

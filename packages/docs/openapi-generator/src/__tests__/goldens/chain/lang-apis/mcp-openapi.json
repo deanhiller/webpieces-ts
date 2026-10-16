@@ -33,7 +33,7 @@
                 },
                 "responses": {
                     "200": {
-                        "description": "Success.",
+                        "description": "Every passage of the lesson, in reading order, with its descriptions.",
                         "content": {
                             "application/json": {
                                 "schema": {

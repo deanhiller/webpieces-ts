@@ -5,21 +5,39 @@
         "version": "9.9.9",
         "description": "A document webpieces did **not** generate.\n\nIt is deliberately written in 3.0's dialect, with the reference shapes a 3.0 generator emits, so the renderer is exercised against a document whose only claim on it is conformance."
     },
-    "servers": [{ "url": "https://mixed.example.com/", "description": "Production." }],
-    "tags": [{ "name": "Trees", "description": "Self-referential shapes." }],
-    "security": [{ "MixedKey": [] }],
+    "servers": [
+        {
+            "url": "https://mixed.example.com/",
+            "description": "Production."
+        }
+    ],
+    "tags": [
+        {
+            "name": "Trees",
+            "description": "Self-referential shapes."
+        }
+    ],
+    "security": [
+        {
+            "MixedKey": []
+        }
+    ],
     "paths": {
         "/trees/plant": {
             "post": {
                 "operationId": "TreeApi_plantTree",
                 "summary": "plantTree",
                 "description": "Plants one tree.",
-                "tags": ["Trees"],
+                "tags": [
+                    "Trees"
+                ],
                 "requestBody": {
                     "required": true,
                     "content": {
                         "application/json": {
-                            "schema": { "$ref": "#/components/schemas/Category" }
+                            "schema": {
+                                "$ref": "#/components/schemas/Category"
+                            }
                         }
                     }
                 },
@@ -28,12 +46,49 @@
                         "description": "Success.",
                         "content": {
                             "application/json": {
-                                "schema": { "$ref": "#/components/schemas/Category" }
+                                "schema": {
+                                    "$ref": "#/components/schemas/Category"
+                                }
+                            }
+                        },
+                        "headers": {
+                            "x-request-id": {
+                                "$ref": "#/components/headers/RequestId"
+                            },
+                            "X-Rate-Remaining": {
+                                "description": "Calls left in this window.",
+                                "schema": {
+                                    "type": "integer"
+                                }
                             }
                         }
                     }
+                },
+                "parameters": [
+                    {
+                        "name": "X-Tree-Owner",
+                        "in": "header",
+                        "required": false,
+                        "description": "Who will own the tree.",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "dryRun",
+                        "in": "query",
+                        "description": "A QUERY parameter, which the Headers list must not show.",
+                        "schema": {
+                            "type": "boolean"
+                        }
+                    }
+                ]
+            },
+            "parameters": [
+                {
+                    "$ref": "#/components/parameters/TraceParam"
                 }
-            }
+            ]
         },
         "/trees/count": {
             "get": {
@@ -41,7 +96,11 @@
                 "summary": "countTrees",
                 "description": "Counts them. It carries no tag on purpose.",
                 "security": [],
-                "responses": { "204": { "description": "Counted." } }
+                "responses": {
+                    "204": {
+                        "description": "Counted."
+                    }
+                }
             }
         }
     },
@@ -59,13 +118,27 @@
                 "type": "object",
                 "description": "A category that contains itself, which is what makes it a cycle test.",
                 "properties": {
-                    "name": { "type": "string", "description": "What it is called." },
+                    "name": {
+                        "type": "string",
+                        "description": "What it is called."
+                    },
                     "parent": {
-                        "allOf": [{ "$ref": "#/components/schemas/Category" }],
+                        "allOf": [
+                            {
+                                "$ref": "#/components/schemas/Category"
+                            }
+                        ],
                         "description": "The 3.0 wrapper shape: a description beside an allOf-of-one-ref."
                     },
                     "season": {
-                        "anyOf": [{ "$ref": "#/components/schemas/Season" }, { "type": "null" }],
+                        "anyOf": [
+                            {
+                                "$ref": "#/components/schemas/Season"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
                         "description": "The 3.1 nullable-reference shape."
                     },
                     "planted": {
@@ -74,7 +147,10 @@
                         "description": "A format, which renders inside angle brackets."
                     },
                     "retiredAt": {
-                        "type": ["string", "null"],
+                        "type": [
+                            "string",
+                            "null"
+                        ],
                         "format": "date-time",
                         "description": "Nullable: the type column shows the NON-null type."
                     },
@@ -83,12 +159,40 @@
                         "description": "A reference the document never defines."
                     }
                 },
-                "required": ["name"]
+                "required": [
+                    "name"
+                ]
             },
             "Season": {
                 "type": "string",
                 "description": "A named enum. It stays inline rather than getting a page of its own.",
-                "enum": ["spring", "summer", "autumn", "winter"]
+                "enum": [
+                    "spring",
+                    "summer",
+                    "autumn",
+                    "winter"
+                ]
+            }
+        },
+        "parameters": {
+            "TraceParam": {
+                "name": "X-Trace",
+                "in": "header",
+                "required": true,
+                "description": "Correlates the call across services.",
+                "schema": {
+                    "type": "string",
+                    "format": "uuid"
+                }
+            }
+        },
+        "headers": {
+            "RequestId": {
+                "description": "Quote it in a support request.",
+                "required": true,
+                "schema": {
+                    "type": "string"
+                }
             }
         }
     }

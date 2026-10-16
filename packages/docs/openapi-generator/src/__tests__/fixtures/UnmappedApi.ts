@@ -20,21 +20,26 @@ import {
     WpAuthPublic,
 } from '@webpieces/core-util';
 
+/** A payload naming its target. */
 export interface ByName {
     name: string;
 }
 
+/** A payload counting its targets. */
 export interface ByNumber {
     count: number;
 }
 
+/** Either payload, with nothing to tell them apart. */
 export type Payload = ByName | ByNumber;
 
+/** The payload to send. */
 export interface SendRequest {
     /** Either shape. Nothing tells them apart. */
     payload: Payload;
 }
 
+/** Whether the payload was accepted. */
 export interface SendResponse {
     accepted: boolean;
 }
@@ -43,7 +48,11 @@ export interface SendResponse {
 @ApiPath('/unmapped')
 @ApiType(SVC_TO_SVC, EXTERNAL_CUSTOMER)
 export class UnmappedApi {
-    /** Sends a payload. */
+    /**
+     * Sends a payload.
+     *
+     * @returns Whether the payload was accepted.
+     */
     @Endpoint(POST, '/send', READ, RPC)
     @WpAuthPublic('Fixture only.')
     @WpAuthorization({ authType: AuthorizationType.ANONYMOUS, reason: 'Fixture only.' })

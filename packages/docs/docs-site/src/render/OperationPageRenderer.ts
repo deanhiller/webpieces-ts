@@ -4,6 +4,7 @@ import { CodeSampleBuilder } from '../samples/CodeSamples';
 import { ExampleBuilder } from '../spec/ExampleBuilder';
 import { FieldTreeBuilder } from '../spec/FieldTree';
 import { FieldTreeRenderer } from './FieldTreeRenderer';
+import { HeaderListRenderer } from './HeaderListRenderer';
 import { Html } from './Html';
 import { JsonNode } from '../spec/JsonNode';
 import { Layout } from './Layout';
@@ -37,6 +38,7 @@ export class OperationPageRenderer {
         private readonly examples: ExampleBuilder,
         private readonly layout: Layout,
         private readonly urls: SiteUrls,
+        private readonly headers: HeaderListRenderer,
     ) {}
 
     page(operation: OperationInfo): SitePage {
@@ -71,11 +73,16 @@ export class OperationPageRenderer {
         return `<div class="op-head"><span class="badge">${this.html.escape(operation.httpMethod)}</span><code class="op-path">${this.html.escape(operation.path)}</code></div>`;
     }
 
+    /** The request's `in: "header"` parameters, then its body — each only when there is one. */
     private requestSection(operation: OperationInfo, prefix: string): string {
-        if (operation.requestSchema === undefined) {
-            return '';
+        const parts: string[] = [];
+        if (operation.requestHeaders.length > 0) {
+            parts.push(`<h2>Request headers</h2>${this.headers.render(operation.requestHeaders)}`);
         }
-        return `<h2>Request body</h2>${this.tree(operation.requestSchema, prefix)}`;
+        if (operation.requestSchema !== undefined) {
+            parts.push(`<h2>Request body</h2>${this.tree(operation.requestSchema, prefix)}`);
+        }
+        return parts.join('');
     }
 
     private responseSection(operation: OperationInfo, prefix: string): string {
@@ -94,7 +101,9 @@ export class OperationPageRenderer {
             response.schema === undefined
                 ? '<p class="field-doc">No body.</p>'
                 : this.tree(response.schema, prefix);
-        return `<details class="disclosure" open><summary>${summary}</summary>${body}</details>`;
+        // The headers ride the card beside the body (#1292) — the response a partner holds carries both.
+        const headers = this.headers.render(response.headers);
+        return `<details class="disclosure" open><summary>${summary}</summary>${headers}${body}</details>`;
     }
 
     /** A `oneOf` renders as expanded variants; anything else renders as one flat field tree. */

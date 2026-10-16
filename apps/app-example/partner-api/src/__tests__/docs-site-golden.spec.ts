@@ -115,6 +115,19 @@ describe('the docs site rendered from the example contract', () => {
         }
     });
 
+    it('shows the x-request-id response header and the @returns description on every response card (#1292)', () => {
+        const page = site.page('reference', 'fetch-orders');
+        const responses = page.slice(page.indexOf('<h2>Responses</h2>'));
+        expect(responses).toContain(
+            '200 — The page of matching orders, newest first, with `nextFrom` set while more remain.',
+        );
+        const cards = responses.split('<details').length - 1;
+        const headed = responses.split('<span class="field-name">x-request-id</span>').length - 1;
+        expect(cards).toBeGreaterThan(1);
+        expect(headed).toBe(cards);
+        expect(responses).toContain('Correlates this response with our logs.');
+    });
+
     it('takes the reference order from tags[] and the prose order from docs.manifest.json', () => {
         const home = site.home();
         expect(home.indexOf('Getting started')).toBeLessThan(home.indexOf('Authentication'));

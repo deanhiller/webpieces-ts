@@ -1,5 +1,6 @@
 import {
     ApiSpec,
+    HeaderInfo,
     NamedSchema,
     OperationInfo,
     ResponseInfo,
@@ -166,6 +167,7 @@ export class SpecReader {
                         methodEntry.key.toUpperCase(),
                         pathEntry.key,
                         false,
+                        pathEntry.value,
                     ),
                 );
             }
@@ -181,7 +183,15 @@ export class SpecReader {
                     continue;
                 }
                 found.push(
-                    this.readOperation(root, methodEntry.value, slugs, '', eventEntry.key, true),
+                    this.readOperation(
+                        root,
+                        methodEntry.value,
+                        slugs,
+                        '',
+                        eventEntry.key,
+                        true,
+                        eventEntry.value,
+                    ),
                 );
             }
         }
@@ -195,6 +205,7 @@ export class SpecReader {
         httpMethod: string,
         pathOrEvent: string,
         isWebhook: boolean,
+        pathItem: JsonNode,
     ): OperationInfo {
         const name = node.text('summary') ?? node.text('operationId') ?? pathOrEvent;
         return new OperationInfo(
@@ -205,7 +216,8 @@ export class SpecReader {
             node.text('description') ?? '',
             this.tagOf(node),
             this.requestSchemaOf(node),
-            this.responsesOf(node),
+            this.requestHeadersOf(root, pathItem, node),
+            this.responsesOf(root, node),
             isWebhook,
             isWebhook ? [] : this.operationSecurityKeys(root, node),
             isWebhook ? pathOrEvent : '',
@@ -227,18 +239,85 @@ export class SpecReader {
         return schema.isObject() ? schema : undefined;
     }
 
-    private responsesOf(node: JsonNode): readonly ResponseInfo[] {
+    private responsesOf(root: JsonNode, node: JsonNode): readonly ResponseInfo[] {
         return node
             .at('responses')
             .entries()
             .map((entry: JsonEntry): ResponseInfo => {
-                const schema = entry.value.at('content').at('application/json').at('schema');
+                const response = this.dereference(root, entry.value);
+                const schema = response.at('content').at('application/json').at('schema');
                 return new ResponseInfo(
                     entry.key,
-                    entry.value.text('description') ?? '',
+                    response.text('description') ?? '',
                     schema.isObject() ? schema : undefined,
+                    this.responseHeadersOf(root, response),
                 );
             });
+    }
+
+    /** A response's `headers` map, each entry resolved through a `$ref` into `components.headers`. */
+    private responseHeadersOf(root: JsonNode, response: JsonNode): readonly HeaderInfo[] {
+        return response
+            .at('headers')
+            .entries()
+            .map((entry: JsonEntry): HeaderInfo => {
+                const header = this.dereference(root, entry.value);
+                return new HeaderInfo(
+                    entry.key,
+                    header.flag('required') === true,
+                    header.text('description') ?? '',
+                    header.at('schema'),
+                );
+            });
+    }
+
+    /**
+     * Every `in: "header"` parameter: the PATH ITEM's first, then the operation's — an operation
+     * parameter of the same name overrides the path item's, which is OpenAPI's own rule.
+     */
+    private requestHeadersOf(
+        root: JsonNode,
+        pathItem: JsonNode,
+        node: JsonNode,
+    ): readonly HeaderInfo[] {
+        const byName = new Map<string, HeaderInfo>();
+        for (const holder of [pathItem, node]) {
+            for (const listed of holder.list('parameters')) {
+                const parameter = this.dereference(root, listed);
+                const name = parameter.text('name');
+                if (parameter.text('in') !== 'header' || name === undefined) {
+                    continue;
+                }
+                byName.set(
+                    name.toLowerCase(),
+                    new HeaderInfo(
+                        name,
+                        parameter.flag('required') === true,
+                        parameter.text('description') ?? '',
+                        parameter.at('schema'),
+                    ),
+                );
+            }
+        }
+        return Array.from(byName.values());
+    }
+
+    /**
+     * The object a LOCAL `$ref` (`#/components/headers/x-request-id`) points at, or the node itself
+     * when it is no reference. A dangling or foreign reference also reads as the node itself, so the
+     * header still renders under its own name rather than vanishing — the same total-reading choice
+     * `JsonNode` makes everywhere.
+     */
+    private dereference(root: JsonNode, node: JsonNode): JsonNode {
+        const pointer = node.text('$ref');
+        if (pointer === undefined || !pointer.startsWith('#/')) {
+            return node;
+        }
+        let current = root;
+        for (const step of pointer.slice(2).split('/')) {
+            current = current.at(step.replace(/~1/g, '/').replace(/~0/g, '~'));
+        }
+        return current.isObject() ? current : node;
     }
 
     /**

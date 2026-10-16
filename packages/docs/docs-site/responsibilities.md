@@ -13,6 +13,7 @@ Render a static, three-pane API reference site from **any** conforming OpenAPI 3
 - Code samples built FROM THE SPEC — server url, path, security-scheme header names, a generated example body — in Go, raw HTTP, Java and JavaScript
 - **Every OpenAPI tag is its own nav section**, in the document's own `tags[]` order
 - **Webhooks** file into the SAME section as the operations sharing their tag, appended after them, badged, with no method, no path and no code samples
+- **Headers (#1292)** — a **Headers** list on each response card, beside the body schema: name, type, `REQUIRED` / `OPTIONAL`, prose, with a `$ref` into `components.headers` resolved. A request's `in: "header"` parameters (the path item's and the operation's, a `$ref` into `components.parameters` resolved) are listed the same way under **Request headers**
 - A `oneOf` request body renders as one labelled variant per branch, keyed by the discriminator value, **all expanded** rather than tabbed
 - **One page per named object DTO**, with every reference to it rendered as a LINK, while the generated EXAMPLE body stays fully resolved
 - `$ref` expansion that is cycle-safe INCLUDING the root

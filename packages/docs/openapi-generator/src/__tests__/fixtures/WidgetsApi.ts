@@ -19,6 +19,7 @@ const PARTNER_CREDENTIALS = [
 /** What a widget is for. */
 export type WidgetKind = 'round' | 'square';
 
+/** One widget, as a partner sees it. */
 export interface Widget {
     /** Its identifier. */
     id: string;
@@ -33,21 +34,25 @@ export interface Widget {
     madeAt: string;
 }
 
+/** Which widgets to list. */
 export interface ListWidgetsRequest {
     /** Only widgets of these kinds. Omit for every kind. */
     kinds?: WidgetKind[];
 }
 
+/** The widgets that matched a list request. */
 export interface ListWidgetsResponse {
     /** Every widget matching the request, newest first. */
     widgets: Widget[];
 }
 
+/** Which widgets a purge deletes. */
 export interface PurgeRequest {
     /** How old, in days. */
     olderThanDays: number;
 }
 
+/** What a purge deleted. */
 export interface PurgeResponse {
     purged: number;
 }
@@ -59,6 +64,7 @@ export class WidgetsApi {
     /**
      * Lists widgets.
      *
+     * @returns The matching widgets, newest first.
      * @mcp Read-only. Prefer this over guessing from an earlier answer.
      */
     @Endpoint(POST, '/list', READ, RPC)
@@ -74,6 +80,8 @@ export class WidgetsApi {
      * Deletes old widgets.
      *
      * Not published: an operator tool, and the customer contract has no concept of our retention.
+     *
+     * @returns How many widgets were deleted.
      */
     @Endpoint(POST, '/purge', WRITE, RPC, { hidden: true })
     @WpAuth([apiKeyAuth('partner', PARTNER_CREDENTIALS)])

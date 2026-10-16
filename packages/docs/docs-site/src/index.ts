@@ -16,6 +16,7 @@ export {
     ApiSpec,
     NamedSchema,
     OperationInfo,
+    HeaderInfo,
     ResponseInfo,
     SecuritySchemeInfo,
     ServerInfo,
@@ -45,6 +46,7 @@ export { SiteUrls } from './render/SiteUrls';
 export { Layout } from './render/Layout';
 export { COLLAPSE_ALL_LABEL, CardRenderer, REQUEST_LABEL } from './render/CardRenderer';
 export { FieldTreeRenderer, POSSIBLE_VALUES } from './render/FieldTreeRenderer';
+export { HEADERS_HEADING, HeaderListRenderer } from './render/HeaderListRenderer';
 export { OperationPageRenderer, WEBHOOK_BADGE } from './render/OperationPageRenderer';
 export { RenderedSite, SiteAsset, SitePage } from './render/SitePage';
 export { OVERVIEW_TITLE, SiteRenderer } from './render/SiteRenderer';
