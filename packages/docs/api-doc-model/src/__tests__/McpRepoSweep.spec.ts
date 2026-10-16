@@ -108,6 +108,7 @@ class Sweep {
             model.types,
             model.unmapped,
             model.collisions,
+            model.stackedJsDoc,
         );
         // eslint-disable-next-line @webpieces/no-unmanaged-exceptions -- the throw IS the measurement
         try {

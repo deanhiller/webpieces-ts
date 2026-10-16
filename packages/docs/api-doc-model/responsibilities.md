@@ -25,6 +25,7 @@ It exists because **a DTO field's type is erased at runtime**. Reflection can se
 - **The DECLARING PACKAGE of every named type** (#1058) — the nearest `package.json` above its declaration, carried as `DocumentedType.packageName`. A type the home package declares is keyed by its bare name; any other package's by `<package>:<name>`, so two packages' same-named types are two entries. A type is always named by its DECLARATION, never an import alias. Two different declarations of one name in ONE package are recorded as a `TypeNameCollision` (the OpenAPI generator refuses them; the MCP projection renders as before)
 - ONE DTO library's exported types (`extractComponents`) — every interface, class, type alias and enum its entry files export and its own package declares, for the components-only document it publishes
 - Anything unrepresentable is recorded as an explicit `UnmappedType` with the TS type text and a pointer-style location — recorded, not dropped, because #982's guard needs something to name
+- Every reached declaration carrying more than one JSDoc block is recorded as a `StackedJsDoc` (`model.stackedJsDoc`) with its location and the line of each block — recorded, not resolved, because no choice of block is right and the OpenAPI generator's guard refuses it (#1286). A declaration under `node_modules` is not recorded
 
 ## The ONE renderer that lives here: `McpSchemaRenderer`
 

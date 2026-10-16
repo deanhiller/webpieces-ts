@@ -23,6 +23,28 @@ export class UnmappedType {
     ) {}
 }
 
+/**
+ * A declaration with MORE THAN ONE JSDoc block stacked above it (#1286). RECORDED, never resolved:
+ * no choice of block is right, so a renderer's guard refuses and names it.
+ *
+ * TypeScript attaches every `/** *\/` comment in a declaration's leading trivia, so two shapes land
+ * here and both publish the wrong description — a FILE or SECTION header written as `/** *\/` above
+ * the first declaration, and a doc STRANDED on top of another declaration's own by a refactor that
+ * inserted something between a declaration and its JSDoc. "Nearest wins" would hide the second shape:
+ * the declaration the stranded doc belonged to silently loses it. Only the author knows which shape
+ * this is, so the fix is theirs.
+ */
+export class StackedJsDoc {
+    constructor(
+        /** What carries the blocks — `MenuPublicationStatusDto`, `Widget.name`, `save`. */
+        readonly declaration: string,
+        /** Pointer-style location of the DECLARATION: `path/to/File.ts:12:5`. */
+        readonly location: string,
+        /** The 1-based line each stacked JSDoc block starts on, in source order. */
+        readonly blockLines: readonly number[],
+    ) {}
+}
+
 /** The DERIVED discriminator of a union — never invented, only observed. See {@link DocumentedType}. */
 export class UnionDiscriminator {
     constructor(
@@ -326,6 +348,8 @@ export class ApiDocModel {
         readonly unmapped: readonly UnmappedType[],
         /** Same-named, different declarations in one package — see {@link TypeNameCollision}. */
         readonly collisions: readonly TypeNameCollision[],
+        /** Every reached declaration carrying two or more JSDoc blocks — see {@link StackedJsDoc}. */
+        readonly stackedJsDoc: readonly StackedJsDoc[],
     ) {}
 }
 
@@ -349,5 +373,7 @@ export class ApiComponentsModel {
         readonly types: ReadonlyMap<string, DocumentedType>,
         readonly unmapped: readonly UnmappedType[],
         readonly collisions: readonly TypeNameCollision[],
+        /** Every reached declaration carrying two or more JSDoc blocks — see {@link StackedJsDoc}. */
+        readonly stackedJsDoc: readonly StackedJsDoc[],
     ) {}
 }

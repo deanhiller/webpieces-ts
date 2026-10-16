@@ -25,6 +25,7 @@ export {
     DocumentedField,
     DocumentedMcpTool,
     DocumentedType,
+    StackedJsDoc,
     TypeNameCollision,
     UnionDiscriminator,
     UnmappedType,

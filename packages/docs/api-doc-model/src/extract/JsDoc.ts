@@ -1,4 +1,6 @@
 import * as ts from 'typescript';
+import { StackedJsDoc } from '../model/ApiDocModel';
+import { SourceLocation } from './SourceLocation';
 
 /**
  * A node the compiler has attached JSDoc blocks to. `jsDoc` is internal to the TypeScript API and is
@@ -65,6 +67,40 @@ export class JsDoc {
         }
 
         return new JsDoc(bodies.join('\n').trim(), format, mcp, mcpHeader);
+    }
+
+    /**
+     * The {@link StackedJsDoc} record for `node` when it carries TWO OR MORE JSDoc blocks, else
+     * undefined (#1286).
+     *
+     * A declaration under `node_modules` is never recorded: it is a published package's to own, its
+     * author cannot be handed the cure from here, and that package's own generation is what refuses it
+     * — the same line the wire closure draws.
+     */
+    // webpieces-disable no-function-outside-class -- static reader beside read(); both interpret the same jsDoc array
+    static stackedAt(node: ts.Node): StackedJsDoc | undefined {
+        const blocks = (node as JsDocCarrier).jsDoc ?? [];
+        if (blocks.length < 2) {
+            return undefined;
+        }
+        const file = node.getSourceFile();
+        if (file.fileName.includes('/node_modules/')) {
+            return undefined;
+        }
+        const blockLines = blocks.map(
+            (block: ts.JSDoc) => file.getLineAndCharacterOfPosition(block.getStart(file)).line + 1,
+        );
+        return new StackedJsDoc(JsDoc.nameOf(node), SourceLocation.of(node), blockLines);
+    }
+
+    /** `Widget`, `Widget.name`, `save` — what an author searches the file for. */
+    // webpieces-disable no-function-outside-class -- private static helper of this class
+    private static nameOf(node: ts.Node): string {
+        const name = (node as ts.NamedDeclaration).name;
+        const own = name !== undefined ? name.getText() : ts.SyntaxKind[node.kind];
+        const parent = node.parent as ts.NamedDeclaration | undefined;
+        const isMember = parent !== undefined && (ts.isClassLike(parent) || ts.isInterfaceDeclaration(parent));
+        return isMember && parent.name !== undefined ? `${parent.name.getText()}.${own}` : own;
     }
 
     /**
