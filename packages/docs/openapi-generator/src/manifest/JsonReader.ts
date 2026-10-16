@@ -77,11 +77,6 @@ export class JsonReader {
         return value;
     }
 
-    /** Whether the field is present at all, whatever its value — absence and a bad value differ. */
-    has(field: string): boolean {
-        return this.entries.has(field);
-    }
-
     optionalString(field: string): string | undefined {
         // webpieces-disable no-any-unknown -- the raw entry, narrowed on the next line
         const value: unknown = this.entries.get(field);
