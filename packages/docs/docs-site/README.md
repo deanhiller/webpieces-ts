@@ -21,6 +21,10 @@ site/
   schemas/<kebab-name>/index.html     one per named OBJECT dto
 ```
 
+An operation's request or response body written INLINE — as `@webpieces/openapi-generator` writes a
+single-use `…Request` / `…Response` wrapper (#1303) — has no schema page: the operation page heads the
+body with its `title` (the name a generated client gives the model) and `description`, then its fields.
+
 Each operation page is HEADED, and its sidebar link LABELLED, with the operation's `summary` — its short
 human title (#1296) — and shows the `operationId` beside the method and path as the code identifier a
 generated client names the method by. The page's URL is kebabed from the `operationId`, so rewording a

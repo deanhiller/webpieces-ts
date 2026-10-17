@@ -36,6 +36,22 @@ export class SchemaVariant {
 }
 
 /**
+ * What an INLINE request or response body says about itself: its `title` and `description`.
+ *
+ * A generator may define a single-use body inline at its operation rather than as a named component
+ * (webpieces does, #1303), keeping the type's name as `title`. Such a body has no schema page, so the
+ * operation page is the only place its name and prose can appear.
+ */
+export class InlineBodyHead {
+    constructor(
+        /** The schema's `title` — the name a generated client gives the model. Empty when absent. */
+        readonly title: string,
+        /** The schema's `description`. Empty when absent. */
+        readonly description: string,
+    ) {}
+}
+
+/**
  * Builds the parameter tree.
  *
  * ## Two trees on purpose: links here, full resolution in the example
@@ -69,6 +85,22 @@ export class FieldTreeBuilder {
             fields.push(this.fieldOf(property, required.includes(property.key)));
         }
         return fields;
+    }
+
+    /**
+     * The title and description of a body schema written INLINE — `undefined` for a reference (whose
+     * prose lives on the referenced schema's own page) and for an inline schema stating neither.
+     */
+    inlineHeadOf(schema: JsonNode): InlineBodyHead | undefined {
+        if (this.lens.refTargetOf(schema) !== undefined) {
+            return undefined;
+        }
+        const title = schema.text('title') ?? '';
+        const description = schema.text('description') ?? '';
+        if (title === '' && description === '') {
+            return undefined;
+        }
+        return new InlineBodyHead(title, description);
     }
 
     /**

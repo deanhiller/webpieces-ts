@@ -208,9 +208,16 @@ describe('the OpenAPI documents generated from the example contract', () => {
         const ownProse =
             'Window start, inclusive. Omit for the last 24 hours — OPTIONAL, so it may be absent entirely.';
         const full = JSON.parse(golden.golden('full-private-openapi.json')) as {
+            paths: Record<string, Record<string, Record<string, unknown>>>;
             components: { schemas: Record<string, Record<string, unknown>> };
         };
-        const request = full.components.schemas['FetchOrdersRequest'];
+        // A single-use request is INLINE at its operation, titled with its name (#1303).
+        const body = full.paths['/orders/fetch']['post']['requestBody'] as {
+            content: Record<string, { schema: Record<string, unknown> }>;
+        };
+        const request = body.content['application/json'].schema;
+        expect(request['title']).toBe('FetchOrdersRequest');
+        expect(full.components.schemas['FetchOrdersRequest']).toBeUndefined();
         const properties = request['properties'] as Record<string, Record<string, unknown>>;
         expect(Object.keys(properties)).toEqual(['storeId', 'from', 'states']);
         expect(request['required']).toEqual(['storeId']);
@@ -254,5 +261,11 @@ describe('the OpenAPI documents generated from the example contract', () => {
             expect(published).not.toContain(typeName);
         }
         expect(published).not.toContain('operator tool');
+    });
+
+    it('publishes no x-webpieces-* key — no @WpAuth source identifier — in the customer document (#1303)', () => {
+        expect(golden.golden('public-openapi.json')).not.toContain('"x-webpieces');
+        expect(golden.golden('public-openapi.json')).not.toContain('PARTNER_CREDENTIALS');
+        expect(golden.golden('full-private-openapi.json')).toContain('x-webpieces-authentication');
     });
 });

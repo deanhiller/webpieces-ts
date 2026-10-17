@@ -97,18 +97,50 @@ export class DocumentSelection {
          * `$ref` every other package's schema, and fail closed when that package publishes none.
          */
         readonly inlinesEveryPackage: boolean,
+        /**
+         * Define a single-use request/response wrapper INLINE at its operation, with its published
+         * name as `title`, rather than in `components.schemas` (#1303) — see `InlinedWrappers`. The
+         * split documents and their bundled siblings do; the MCP projection keeps every wrapper a
+         * component, unchanged.
+         */
+        readonly inlinesWrappers: boolean,
+        /**
+         * Stamp the `x-webpieces-*` operation extensions (`x-webpieces-authentication`,
+         * `x-webpieces-webhook`). False for the PUBLIC document alone (#1303): they carry source
+         * identifiers and internal tooling's facts, and everything a partner needs is already in the
+         * standard `security` / `securitySchemes` and `webhooks:` keys.
+         */
+        readonly includeWebpiecesExtensions: boolean,
     ) {}
 
     /** Every contract declaring `SVC_TO_SVC` — which, by the fail-closed default, is every contract. */
     // webpieces-disable no-function-outside-class -- static factory; the private constructor is what stops a fourth, unnamed selection being invented at a call site
     static internal(): DocumentSelection {
-        return new DocumentSelection('full-private-openapi', SVC_TO_SVC, false, false, true, false);
+        return new DocumentSelection(
+            'full-private-openapi',
+            SVC_TO_SVC,
+            false,
+            false,
+            true,
+            false,
+            true,
+            true,
+        );
     }
 
     /** Every contract declaring `EXTERNAL_CUSTOMER`, minus its hidden methods. */
     // webpieces-disable no-function-outside-class -- static factory of this class
     static customer(): DocumentSelection {
-        return new DocumentSelection('public-openapi', EXTERNAL_CUSTOMER, true, false, false, false);
+        return new DocumentSelection(
+            'public-openapi',
+            EXTERNAL_CUSTOMER,
+            true,
+            false,
+            false,
+            false,
+            true,
+            false,
+        );
     }
 
     /**
@@ -118,7 +150,7 @@ export class DocumentSelection {
      */
     // webpieces-disable no-function-outside-class -- static factory of this class
     static mcp(): DocumentSelection {
-        return new DocumentSelection('mcp-openapi', MCP, false, true, false, true);
+        return new DocumentSelection('mcp-openapi', MCP, false, true, false, true, false, true);
     }
 
     /** Every document this generator knows how to write, in the order it writes them. */

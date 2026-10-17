@@ -190,6 +190,30 @@ types and `$ref`s every other package's into that package's components document:
 `ChainedComponents.spec.ts` (openapi-generator) proves it on a three-level chain, every document
 checked by `@seriousme/openapi-schema-validator`.
 
+## Single-use wrappers inline; the public document carries no `x-webpieces-*` (#1303)
+
+- **A single-use request/response wrapper is defined INLINE at its operation**, not in
+  `components.schemas`: `type: object`, `title: "<PublishedName>"` (client generators name the model
+  from it), its description, and `properties` even when the class is empty. "Single use" means the
+  top-level body of exactly ONE operation, counted over every route and webhook of every contract in the
+  MANIFEST (not per document), and referenced by no other schema and not the error body. A wrapper two
+  operations share, or one nested anywhere, stays a component; so does every shared noun.
+- **Only a wrapper the document's OWN package declares is inlined.** One declared in another package
+  stays a `$ref` into that package's `components.openapi.json` — inlining it would define one schema in
+  two documents, which the one-owner rule above forbids.
+- The split documents and their `*.bundled.json` siblings inline identically. `mcp-openapi.json` keeps
+  every wrapper a component, and the MCP catalogs inline everything as before. `UndocumentedSchemaGuard`
+  still judges an inlined wrapper — inlining is never a way around its description.
+- **`public-openapi.json` (and its bundled sibling) carries no `x-webpieces-*` key.**
+  `x-webpieces-authentication`'s `arguments` are the TypeScript identifiers passed to `@WpAuth`, and a
+  partner's authentication is already the standard `securitySchemes` + `security`; a webhook is already an
+  entry of `webhooks:`. `full-private-openapi.json` and `mcp-openapi.json` keep both extensions.
+- The docs site gives an inline body no schema page; the operation page heads it with its `title` and
+  `description`.
+
+`InlinedWrappers.spec.ts` (openapi-generator) proves each rule; the cross-package case is in
+`ChainedComponents.spec.ts`.
+
 ## One short title per endpoint, from ONE source: `@summary` (#1296)
 
 Each level has three forms, and each form has exactly one source:
@@ -314,7 +338,7 @@ its text) is dropped at extraction, so it reaches no output — not an OpenAPI d
 |---|---|
 | a method | `operation.description`; the MCP tool's `description` (unless `@mcp` overrides it) |
 | its `@returns` | the success response's `description`; the MCP catalog's `outputSchema.description` |
-| a DTO class / interface / enum / union alias | `components.schemas.<Name>.description`; the request DTO's is the catalog's `inputSchema.description` |
+| a DTO class / interface / enum / union alias | `components.schemas.<Name>.description` (an inlined single-use wrapper's inline body schema, #1303); the request DTO's is the catalog's `inputSchema.description` |
 | a field | the property's `description`, in every output |
 | the ONE non-webhook contract carrying a tag | `tags[<tag>].description` |
 

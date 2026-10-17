@@ -69,6 +69,14 @@ export class OperationRenderer {
         private readonly includeMcp: boolean,
         /** True only for the private document — see {@link triggerSentence}. */
         private readonly includeTrigger: boolean,
+        /**
+         * False only for the PUBLIC document (#1303): `x-webpieces-authentication` (whose `arguments`
+         * are the TypeScript identifiers passed to `@WpAuth` — private names a partner cannot use) and
+         * `x-webpieces-webhook` are internal tooling's. A partner's authentication is already in the
+         * standard `components.securitySchemes` + `security`, and a webhook already sits in the
+         * standard `webhooks:` block.
+         */
+        private readonly includeWebpieces: boolean,
         /** The manifest's `operationIds` — see {@link operationIdOf}. */
         private readonly operationIds: OperationIdStyle,
     ) {}
@@ -105,8 +113,8 @@ export class OperationRenderer {
     /**
      * A call WE make to a PARTNER's server.
      *
-     * It carries `x-webpieces-webhook: true`, which is the one fact about it a document cannot state
-     * any other way. It gets no trigger sentence and no security at all, because neither is true of
+     * It carries `x-webpieces-webhook: true` in every document but the public one (#1303), where the
+     * standard `webhooks:` block it sits in already says so. It gets no trigger sentence and no security at all, because neither is true of
      * it: nothing of ours triggers it and nothing of ours authenticates it — our api key must never
      * be published as a guard on somebody else's endpoint.
      *
@@ -123,7 +131,10 @@ export class OperationRenderer {
         contract: ResponseContract,
     ): JsonObject {
         const operation = this.common(endpoint, contractName, tag, contract, false);
-        return this.withMcp(operation.set('x-webpieces-webhook', true), endpoint);
+        return this.withMcp(
+            operation.set('x-webpieces-webhook', this.includeWebpieces ? true : undefined),
+            endpoint,
+        );
     }
 
     private common(
@@ -135,12 +146,22 @@ export class OperationRenderer {
     ): JsonObject {
         return new JsonObject()
             .set('operationId', this.operationIdOf(endpoint, contractName))
-            .set('x-webpieces-authentication', endpoint.auth?.methods.map((method: DocumentedAuthMethod) => new JsonObject().set('kind', method.kind).set('arguments', method.argumentTexts)))
+            .set('x-webpieces-authentication', this.authentication(endpoint))
             .set('summary', endpoint.summary)
             .set('description', this.describe(endpoint, isRoute))
             .set('tags', [tag])
             .set('requestBody', this.requestBody(endpoint, contractName))
             .set('responses', this.responses(endpoint, contractName, contract));
+    }
+
+    /** The declared `@WpAuth` methods, verbatim — never in the public document (#1303). */
+    private authentication(endpoint: DocumentedEndpoint): readonly JsonValue[] | undefined {
+        if (!this.includeWebpieces) {
+            return undefined;
+        }
+        return endpoint.auth?.methods.map((method: DocumentedAuthMethod) =>
+            new JsonObject().set('kind', method.kind).set('arguments', method.argumentTexts),
+        );
     }
 
     /**
@@ -303,7 +324,7 @@ export class OperationRenderer {
                 'content',
                 new JsonObject().set(
                     media,
-                    new JsonObject().set('schema', this.schemas.type(endpoint.request, pointer)),
+                    new JsonObject().set('schema', this.schemas.body(endpoint.request, pointer)),
                 ),
             );
     }
@@ -343,7 +364,7 @@ export class OperationRenderer {
             'content',
             new JsonObject().set(
                 'application/json',
-                new JsonObject().set('schema', this.schemas.type(endpoint.response!, pointer)),
+                new JsonObject().set('schema', this.schemas.body(endpoint.response!, pointer)),
             ),
         );
     }

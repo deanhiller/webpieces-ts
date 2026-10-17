@@ -17,6 +17,7 @@ Render a static, three-pane API reference site from **any** conforming OpenAPI 3
 - **Headers (#1292)** — a **Headers** list on each response card, beside the body schema: name, type, `REQUIRED` / `OPTIONAL`, prose, with a `$ref` into `components.headers` resolved. A request's `in: "header"` parameters (the path item's and the operation's, a `$ref` into `components.parameters` resolved) are listed the same way under **Request headers**
 - A `oneOf` request body renders as one labelled variant per branch, keyed by the discriminator value, **all expanded** rather than tabbed
 - **One page per named object DTO**, with every reference to it rendered as a LINK, while the generated EXAMPLE body stays fully resolved
+- **An INLINE request/response body (#1303)** — one a generator defined at its operation rather than as a component (`@webpieces/openapi-generator` does, for a single-use wrapper) — is headed on the operation page by its `title` and `description`, then its fields. It has no schema page, so that page is the only place its name and prose appear
 - `$ref` expansion that is cycle-safe INCLUDING the root
 - `DevServer` — a localhost-only static preview of the generated directory, via `wp-docs-site --serve`
 

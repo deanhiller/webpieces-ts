@@ -1,0 +1,14 @@
+{
+    "title": "Things API",
+    "summary": "Make things, ping, and file notes.",
+    "operationIds": "method",
+    "version": "1.0.0",
+    "apisWhy": "Single-use request/response wrappers are inlined at their operation; shared and nested ones stay components (#1303).",
+    "apis": [
+        {
+            "entry": "WrappersApi.ts",
+            "tag": "Things"
+        }
+    ],
+    "securitySchemeNames": []
+}

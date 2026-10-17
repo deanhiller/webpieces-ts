@@ -38,8 +38,7 @@ export interface OrderStateChangedEvent {
  *
  * - The event is keyed by its NAME with the `@ApiPath` base NOT prepended. The partner hosts the
  *   endpoint at whatever path they choose; there is no url of ours to publish.
- * - It carries `x-webpieces-webhook: true` and neither the trigger nor the auth extension, because
- *   neither is true of it.
+ * - It carries no trigger sentence and no security requirement, because neither is true of it.
  * - It contributes NOTHING to the derived security requirement. Publishing our api key as a guard on
  *   somebody else's server would be nonsense at best and an instruction to leak it at worst.
  * - The `void` return is documented as "return any 2xx to acknowledge".

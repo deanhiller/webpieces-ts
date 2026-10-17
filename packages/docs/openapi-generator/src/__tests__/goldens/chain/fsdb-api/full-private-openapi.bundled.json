@@ -27,7 +27,18 @@
                     "content": {
                         "application/json": {
                             "schema": {
-                                "$ref": "#/components/schemas/StoredPassageRequest"
+                                "type": "object",
+                                "title": "StoredPassageRequest",
+                                "description": "A stored passage lookup.",
+                                "properties": {
+                                    "passageId": {
+                                        "type": "string",
+                                        "description": "The passage's identifier."
+                                    }
+                                },
+                                "required": [
+                                    "passageId"
+                                ]
                             }
                         }
                     }
@@ -38,7 +49,23 @@
                         "content": {
                             "application/json": {
                                 "schema": {
-                                    "$ref": "#/components/schemas/StoredPassageResponse"
+                                    "type": "object",
+                                    "title": "StoredPassageResponse",
+                                    "description": "A stored passage.",
+                                    "properties": {
+                                        "passage": {
+                                            "$ref": "#/components/schemas/PassageItemDto",
+                                            "description": "The passage, exactly as lang-apis publishes it."
+                                        },
+                                        "descriptions": {
+                                            "$ref": "#/components/schemas/LocalizedDescriptionsDto",
+                                            "description": "Where its descriptions are stored."
+                                        }
+                                    },
+                                    "required": [
+                                        "passage",
+                                        "descriptions"
+                                    ]
                                 }
                             }
                         }
@@ -92,37 +119,6 @@
                 "enum": [
                     "female",
                     "male"
-                ]
-            },
-            "StoredPassageRequest": {
-                "type": "object",
-                "description": "A stored passage lookup.",
-                "properties": {
-                    "passageId": {
-                        "type": "string",
-                        "description": "The passage's identifier."
-                    }
-                },
-                "required": [
-                    "passageId"
-                ]
-            },
-            "StoredPassageResponse": {
-                "type": "object",
-                "description": "A stored passage.",
-                "properties": {
-                    "passage": {
-                        "$ref": "#/components/schemas/PassageItemDto",
-                        "description": "The passage, exactly as lang-apis publishes it."
-                    },
-                    "descriptions": {
-                        "$ref": "#/components/schemas/LocalizedDescriptionsDto",
-                        "description": "Where its descriptions are stored."
-                    }
-                },
-                "required": [
-                    "passage",
-                    "descriptions"
                 ]
             },
             "VoiceChoiceDto": {

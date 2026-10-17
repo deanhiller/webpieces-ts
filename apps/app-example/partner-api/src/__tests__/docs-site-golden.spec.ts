@@ -65,13 +65,34 @@ describe('the docs site rendered from the example contract', () => {
 
     it('writes one page per named OBJECT dto, and none for a named enum', () => {
         expect(site.exists('schemas', 'order', 'index.html')).toBe(true);
-        expect(site.exists('schemas', 'fetch-orders-request', 'index.html')).toBe(true);
         expect(site.exists('schemas', 'delivery-window', 'index.html')).toBe(true);
         expect(site.exists('schemas', 'order-state', 'index.html')).toBe(false);
     });
 
+    it('writes NO page for a single-use request/response wrapper, which is inline at its operation (#1303)', () => {
+        for (const wrapper of ['fetch-orders-request', 'fetch-orders-response', 'cancel-order-request']) {
+            expect(site.exists('schemas', wrapper, 'index.html'), wrapper).toBe(false);
+        }
+        // ...and nothing links to one.
+        for (const page of [site.home(), site.page('reference', 'partner-orders-api-fetch-orders')]) {
+            expect(page).not.toContain('schemas/fetch-orders-request/');
+            expect(page).not.toContain('schemas/fetch-orders-response/');
+        }
+    });
+
+    it('heads an INLINE body with its title and description, then its fields (#1303)', () => {
+        const page = site.page('reference', 'partner-orders-api-fetch-orders');
+        const request = page.slice(page.indexOf('<h2>Request body</h2>'), page.indexOf('<h2>Responses</h2>'));
+        expect(request).toContain('<code title="schema title">FetchOrdersRequest</code>');
+        expect(request).toContain('Which orders to fetch: one store');
+        expect(request).toContain('<span class="field-name">storeId</span>');
+        const responses = page.slice(page.indexOf('<h2>Responses</h2>'));
+        expect(responses).toContain('<code title="schema title">FetchOrdersResponse</code>');
+        expect(responses).toContain('One page of a store');
+    });
+
     it('LINKS a reference to a named object rather than inlining its fields', () => {
-        const page = site.page('schemas', 'fetch-orders-response');
+        const page = site.page('reference', 'partner-orders-api-fetch-orders');
         expect(page).toContain('../../schemas/order/index.html');
         expect(page).not.toContain('Stable for the life of the order');
     });

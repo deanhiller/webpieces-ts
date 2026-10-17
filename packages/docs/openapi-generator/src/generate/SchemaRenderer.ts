@@ -1,5 +1,6 @@
 import { DocumentedField, DocumentedType, TypeRef } from '@webpieces/api-doc-model';
 import { JsonObject, JsonValue } from '../json/JsonObject';
+import { InlinedWrappers } from './InlinedWrappers';
 import { SchemaPlacement } from './SchemaPlacement';
 
 /** ONE field the renderer could not give a shape to, and WHERE in the document it would have sat. */
@@ -39,9 +40,18 @@ export class UnmappedField {
  * `components.schemas` (and under which name) or referenced in another package's components
  * document. Every `$ref` — a field, an array item, a union branch, a discriminator `mapping` entry —
  * is written through it, so the split, the bundled and the MCP document are one renderer.
+ *
+ * ## A single-use request/response wrapper is written INLINE at its operation (#1303)
+ *
+ * {@link body} is how an operation asks for its request or success-response schema. A wrapper
+ * {@link InlinedWrappers} names is rendered right there — `title` set to its published name, its
+ * description, and `properties` even when empty — instead of as a `$ref`; it is never added to
+ * `components.schemas`. It is recorded in {@link inlinedTypes} so the description guard still judges
+ * it: inlining is never a way around a missing JSDoc.
  */
 export class SchemaRenderer {
     private readonly reached = new Set<string>();
+    private readonly inlined = new Set<string>();
     private readonly external = new Set<string>();
     private readonly unmappedFields: UnmappedField[] = [];
 
@@ -49,11 +59,18 @@ export class SchemaRenderer {
         /** The model's named types, by key (`DocumentedType.keyOf`). */
         private readonly types: ReadonlyMap<string, DocumentedType>,
         private readonly placement: SchemaPlacement,
+        /** The wrappers an operation defines inline rather than by `$ref` (#1303). */
+        private readonly wrappers: InlinedWrappers,
     ) {}
 
     /** Keys of the named types this document DEFINES, reached directly or through another schema. */
     reachedTypes(): ReadonlySet<string> {
         return this.reached;
+    }
+
+    /** Keys of the wrappers this document defined INLINE at their one operation (#1303). */
+    inlinedTypes(): ReadonlySet<string> {
+        return this.inlined;
     }
 
     /** Keys of the named types this document REFERENCES in another package's components document. */
@@ -86,7 +103,15 @@ export class SchemaRenderer {
                     continue;
                 }
                 // Rendering it can add MORE names to `reached`, which is what the outer loop is for.
-                rendered.set(name, type === undefined ? undefined : this.namedType(key, type));
+                rendered.set(
+                    name,
+                    type === undefined
+                        ? undefined
+                        : this.namedType(
+                              type,
+                              `#/components/schemas/${this.placement.localName(key, type)}`,
+                          ),
+                );
                 grew = true;
             }
         }
@@ -110,9 +135,26 @@ export class SchemaRenderer {
         }
     }
 
+    /**
+     * An operation's request body or success-response schema: the wrapper itself, INLINE, when
+     * {@link InlinedWrappers} names it — else exactly what {@link type} writes.
+     *
+     * The inline form is an object schema carrying `title` (the PUBLISHED name, which client
+     * generators name the model from) and `properties` even when the class is empty, which a client
+     * generator needs in order to emit an empty class rather than an untyped map.
+     */
+    body(ref: TypeRef, pointer: string): JsonObject {
+        const key = ref.kind === 'ref' ? ref.refName! : undefined;
+        const type = key === undefined ? undefined : this.types.get(key);
+        if (key === undefined || type === undefined || !this.wrappers.has(key)) {
+            return this.type(ref, pointer);
+        }
+        this.inlined.add(key);
+        return this.objectType(type, pointer, type.schemaName);
+    }
+
     /** One named type: an object DTO, a string enum, or a union with its DERIVED discriminator. */
-    private namedType(key: string, type: DocumentedType): JsonObject {
-        const pointer = `#/components/schemas/${this.placement.localName(key, type)}`;
+    private namedType(type: DocumentedType, pointer: string): JsonObject {
         if (type.enumValues.length > 0) {
             return new JsonObject()
                 .set('type', 'string')
@@ -122,6 +164,14 @@ export class SchemaRenderer {
         if (type.unionRefNames.length > 0) {
             return this.union(type);
         }
+        return this.objectType(type, pointer, undefined);
+    }
+
+    /**
+     * An object DTO. `title` is set only on an INLINED wrapper, and then `properties` is written even
+     * when empty (#1303); a component keeps its name as its key and omits an empty `properties`.
+     */
+    private objectType(type: DocumentedType, pointer: string, title: string | undefined): JsonObject {
         const properties = new JsonObject();
         const required: string[] = [];
         for (const field of type.fields) {
@@ -132,8 +182,9 @@ export class SchemaRenderer {
         }
         return new JsonObject()
             .set('type', 'object')
+            .set('title', title)
             .set('description', this.prose(type.description))
-            .set('properties', properties.isEmpty() ? undefined : properties)
+            .set('properties', properties.isEmpty() && title === undefined ? undefined : properties)
             .set('required', required.length === 0 ? undefined : required)
             .set(
                 'additionalProperties',

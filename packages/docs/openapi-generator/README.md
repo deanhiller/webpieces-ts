@@ -223,6 +223,39 @@ one name meet, when the other package's is qualified (`myorg.lang-api-dtos.Local
 **`mcp-openapi.json` and the MCP tool catalogs never reference anything** — they inline every schema
 from any package, exactly as before, and require no components document anywhere.
 
+## Single-use request/response wrappers are inline (#1303)
+
+A class used ONLY as one operation's request body or one operation's success response is written
+inline at that operation instead of as `components.schemas.<Name>` + `$ref`:
+
+```json
+"schema": {
+    "type": "object",
+    "title": "FetchReportCoverageRequest",
+    "description": "Which report's coverage to fetch.",
+    "properties": {}
+}
+```
+
+`title` is the published name, which client generators (openapi-generator, NSwag, Kiota) name the
+inline model from, so a partner's SDK keeps `FetchOrdersRequest` rather than `FetchOrders200Response`.
+An empty class keeps `"properties": {}`, which a client generator needs to emit an empty class.
+
+"Only" is counted over every route and webhook of every contract in the manifest — not per document —
+so a wrapper a public method shares with a hidden one stays a component in both. A wrapper used by two
+or more operations, nested in any other schema, used as the error body, or declared in ANOTHER package
+(which owns its schema in its own `components.openapi.json`) stays a component, as do enums, unions and
+every shared noun. The split documents and their `*.bundled.json` siblings inline; `mcp-openapi.json`
+keeps every wrapper a component. An inlined wrapper still needs its JSDoc description.
+
+## The public document carries no `x-webpieces-*` key (#1303)
+
+`public-openapi.json` and `public-openapi.bundled.json` are the partner's contract, so they carry only
+standard OpenAPI: a partner's authentication is `components.securitySchemes` + `security`, and a
+webhook is an entry of `webhooks:`. `x-webpieces-authentication` — whose `arguments` are the TypeScript
+identifiers passed to `@WpAuth`, private names a partner cannot use — and `x-webpieces-webhook` appear
+in `full-private-openapi.json` and `mcp-openapi.json` only.
+
 ## MCP
 
 `MCP` in `@ApiType` requires `@WpMcpTool` on at least one method, and `@WpMcpTool` on a contract that
@@ -260,7 +293,7 @@ file. `--format` does not apply to them.
 | a method | `operation.description` (and the MCP tool's `description`, unless an `@mcp` tag overrides it) |
 | its `@summary` tag | `operation.summary` — the docs page heading and sidebar label — and the MCP tool's `title` and `annotations.title` (#1296) |
 | its `@returns` tag | the success response's `description`, and the MCP catalog's `outputSchema.description` |
-| a DTO class / interface / enum / union alias | `components.schemas.<Name>.description` (and the MCP catalog's `inputSchema.description` for the request DTO) |
+| a DTO class / interface / enum / union alias | `components.schemas.<Name>.description` — or, for a single-use request/response wrapper, the inline body schema's `description` beside its `title` (#1303) — (and the MCP catalog's `inputSchema.description` for the request DTO) |
 | a field | the property's `description` |
 | the contract class that OWNS a tag | `tags[<tag>].description` |
 

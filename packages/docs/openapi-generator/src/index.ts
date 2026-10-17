@@ -43,6 +43,7 @@ export {
 export { OpenApiGenerator } from './generate/OpenApiGenerator';
 export { OperationRenderer, ResponseContract } from './generate/OperationRenderer';
 export { SchemaRenderer, UnmappedField } from './generate/SchemaRenderer';
+export { InlinedWrappers } from './generate/InlinedWrappers';
 export {
     BundledNames,
     BundledPlacement,
