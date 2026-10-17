@@ -90,6 +90,7 @@ button:hover { color: var(--fg); }
 .headers { margin: 8px 0 12px; }
 .headers-head { font-size: 12px; font-weight: 700; letter-spacing: .04em; color: var(--fg-soft); text-transform: uppercase; }
 .field-doc { margin: 4px 0 0; color: var(--fg-soft); }
+.body-type { margin: 4px 0; }
 .field-children { margin-left: 16px; border-left: 1px solid var(--line); padding-left: 12px; }
 .chips { margin-top: 6px; font-size: 12px; color: var(--fg-soft); }
 .chip { display: inline-block; background: var(--code-bg); border: 1px solid var(--line); border-radius: 10px; padding: 0 8px; margin: 2px 4px 2px 0; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }

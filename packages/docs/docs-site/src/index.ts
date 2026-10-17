@@ -27,7 +27,7 @@ export { SchemaShape } from './spec/SchemaShape';
 export { Slug } from './spec/Slug';
 export { SpecLoader } from './spec/SpecLoader';
 export { SpecReader, UNTAGGED_SECTION } from './spec/SpecReader';
-export { FieldNode, FieldTreeBuilder, SchemaVariant } from './spec/FieldTree';
+export { FieldNode, FieldTreeBuilder, InlineBodyHead, SchemaVariant } from './spec/FieldTree';
 export { ExampleBuilder } from './spec/ExampleBuilder';
 export { DocsManifest, ProsePage, ProsePageEntry } from './manifest/DocsManifest';
 export { MANIFEST_FILE, ProseLoader } from './manifest/ProseLoader';

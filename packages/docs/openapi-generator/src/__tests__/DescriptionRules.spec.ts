@@ -105,7 +105,10 @@ describe('rule 1: @privateRemarks is never published (#1292)', () => {
         expect(harness.at(schemas, 'LampSwitchDto', 'description')).toBe(
             'Either way of switching a lamp.',
         );
-        expect(harness.at(schemas, 'SwitchLampRequest', 'properties', 'lampId', 'description')).toBe(
+        // A single-use request wrapper is inline at its operation (#1303), its prose intact.
+        const body = harness.at(operation, 'requestBody', 'content', 'application/json', 'schema');
+        expect(harness.at(body, 'title')).toBe('SwitchLampRequest');
+        expect(harness.at(body, 'properties', 'lampId', 'description')).toBe(
             "The lamp's identifier.",
         );
         const mcp = harness.json(written, 'mcp-openapi.json');
@@ -163,6 +166,8 @@ describe('rule 3: a published schema with no description fails (#1292)', () => {
         expect(failure!.message).toContain('have no JSDoc description');
         const names = failure!.pointers.map((pointer: string) => pointer.split(' ')[0]).sort();
         // GuessRequest is reached ONLY by an MCP-only contract's tool: the MCP output is judged too.
+        // PaintRequest is a single-use wrapper, so it is INLINED at its operation (#1303) — and still
+        // refused: inlining is never a way around a missing description.
         expect(names).toEqual(['GuessRequest', 'PaintDto', 'PaintRequest', 'ShadeDto']);
         for (const pointer of failure!.pointers) {
             expect(pointer).toMatch(/\.ts:\d+:\d+\)$/);

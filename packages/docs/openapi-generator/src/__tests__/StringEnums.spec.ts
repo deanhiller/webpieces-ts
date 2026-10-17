@@ -31,11 +31,34 @@ class EnumsDocument {
         this.document = JSON.parse(fs.readFileSync(file!, 'utf8')) as Json;
     }
 
+    /**
+     * A named schema: its `components.schemas` entry, or — for a single-use request/response wrapper,
+     * which is defined INLINE at its operation (#1303) — the inline body schema titled with its name.
+     */
     schema(name: string): Json {
         const components = this.document['components'] as Json;
-        const found = (components['schemas'] as Json)[name] as Json | undefined;
-        expect(found, `no components.schemas.${name}`).toBeDefined();
+        const found =
+            ((components['schemas'] as Json)[name] as Json | undefined) ??
+            this.inlineTitled(this.document['paths'], name);
+        expect(found, `no components.schemas.${name} and no inline schema titled ${name}`).toBeDefined();
         return found!;
+    }
+
+    private inlineTitled(node: unknown, title: string): Json | undefined {
+        if (typeof node !== 'object' || node === null) {
+            return undefined;
+        }
+        const object = node as Json;
+        if (object['title'] === title) {
+            return object;
+        }
+        for (const value of Object.values(object)) {
+            const found = this.inlineTitled(value, title);
+            if (found !== undefined) {
+                return found;
+            }
+        }
+        return undefined;
     }
 
     property(schemaName: string, propertyName: string): Json {

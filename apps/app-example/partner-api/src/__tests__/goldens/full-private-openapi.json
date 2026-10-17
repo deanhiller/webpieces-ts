@@ -19,7 +19,7 @@
         },
         {
             "name": "Webhooks",
-            "description": "The events this service SENDS to a partner's own endpoint.\n\n## Why a webhook is declared in the manifest and never sniffed from a filename\n\n`openapi.manifest.json` marks this entry `\"kind\": \"webhook\"`, which is what moves it into the\ndocument's top-level `webhooks:` block. A `*WebhookApi` NAME convention would have done the same\njob with no file to review — and would then hide a partner-visible decision inside a rename, which\nis the one edit nobody reviews for contract impact.\n\n## What the generator does differently for these, and why\n\n- The event is keyed by its NAME with the `@ApiPath` base NOT prepended. The partner hosts the\n  endpoint at whatever path they choose; there is no url of ours to publish.\n- It carries `x-webpieces-webhook: true` and neither the trigger nor the auth extension, because\n  neither is true of it.\n- It contributes NOTHING to the derived security requirement. Publishing our api key as a guard on\n  somebody else's server would be nonsense at best and an instruction to leak it at worst.\n- The `void` return is documented as \"return any 2xx to acknowledge\"."
+            "description": "The events this service SENDS to a partner's own endpoint.\n\n## Why a webhook is declared in the manifest and never sniffed from a filename\n\n`openapi.manifest.json` marks this entry `\"kind\": \"webhook\"`, which is what moves it into the\ndocument's top-level `webhooks:` block. A `*WebhookApi` NAME convention would have done the same\njob with no file to review — and would then hide a partner-visible decision inside a rename, which\nis the one edit nobody reviews for contract impact.\n\n## What the generator does differently for these, and why\n\n- The event is keyed by its NAME with the `@ApiPath` base NOT prepended. The partner hosts the\n  endpoint at whatever path they choose; there is no url of ours to publish.\n- It carries no trigger sentence and no security requirement, because neither is true of it.\n- It contributes NOTHING to the derived security requirement. Publishing our api key as a guard on\n  somebody else's server would be nonsense at best and an instruction to leak it at worst.\n- The `void` return is documented as \"return any 2xx to acknowledge\"."
         }
     ],
     "security": [
@@ -51,7 +51,30 @@
                     "content": {
                         "application/json": {
                             "schema": {
-                                "$ref": "#/components/schemas/FetchOrdersRequest"
+                                "type": "object",
+                                "title": "FetchOrdersRequest",
+                                "description": "Which orders to fetch: one store's orders inside a time window, optionally narrowed by state.",
+                                "properties": {
+                                    "storeId": {
+                                        "type": "string",
+                                        "description": "The store to read."
+                                    },
+                                    "from": {
+                                        "type": "string",
+                                        "format": "date-time",
+                                        "description": "Window start, inclusive. Omit for the last 24 hours — OPTIONAL, so it may be absent entirely."
+                                    },
+                                    "states": {
+                                        "type": "array",
+                                        "items": {
+                                            "$ref": "#/components/schemas/OrderState"
+                                        },
+                                        "description": "Only these states. Omit for every state."
+                                    }
+                                },
+                                "required": [
+                                    "storeId"
+                                ]
                             }
                         }
                     }
@@ -67,7 +90,25 @@
                         "content": {
                             "application/json": {
                                 "schema": {
-                                    "$ref": "#/components/schemas/FetchOrdersResponse"
+                                    "type": "object",
+                                    "title": "FetchOrdersResponse",
+                                    "description": "One page of a store's orders, and where the next page starts.",
+                                    "properties": {
+                                        "orders": {
+                                            "type": "array",
+                                            "items": {
+                                                "$ref": "#/components/schemas/Order"
+                                            },
+                                            "description": "The matching orders, newest first."
+                                        },
+                                        "nextFrom": {
+                                            "type": "string",
+                                            "description": "Pass as `from` on the next call; absent when the window is exhausted."
+                                        }
+                                    },
+                                    "required": [
+                                        "orders"
+                                    ]
                                 }
                             }
                         }
@@ -142,7 +183,23 @@
                     "content": {
                         "application/json": {
                             "schema": {
-                                "$ref": "#/components/schemas/CancelOrderRequest"
+                                "type": "object",
+                                "title": "CancelOrderRequest",
+                                "description": "The order to cancel, and why.",
+                                "properties": {
+                                    "orderId": {
+                                        "type": "string",
+                                        "description": "The order to cancel."
+                                    },
+                                    "reason": {
+                                        "type": "string",
+                                        "description": "Why, for the store's records."
+                                    }
+                                },
+                                "required": [
+                                    "orderId",
+                                    "reason"
+                                ]
                             }
                         }
                     }
@@ -158,7 +215,18 @@
                         "content": {
                             "application/json": {
                                 "schema": {
-                                    "$ref": "#/components/schemas/CancelOrderResponse"
+                                    "type": "object",
+                                    "title": "CancelOrderResponse",
+                                    "description": "Where an order stands after a cancellation attempt.",
+                                    "properties": {
+                                        "state": {
+                                            "$ref": "#/components/schemas/OrderState",
+                                            "description": "The order's state after the attempt."
+                                        }
+                                    },
+                                    "required": [
+                                        "state"
+                                    ]
                                 }
                             }
                         }
@@ -233,7 +301,18 @@
                     "content": {
                         "application/json": {
                             "schema": {
-                                "$ref": "#/components/schemas/ReindexRequest"
+                                "type": "object",
+                                "title": "ReindexRequest",
+                                "description": "The store whose menu cache to rebuild.",
+                                "properties": {
+                                    "storeId": {
+                                        "type": "string",
+                                        "description": "The store whose cache to rebuild."
+                                    }
+                                },
+                                "required": [
+                                    "storeId"
+                                ]
                             }
                         }
                     }
@@ -249,7 +328,18 @@
                         "content": {
                             "application/json": {
                                 "schema": {
-                                    "$ref": "#/components/schemas/ReindexResponse"
+                                    "type": "object",
+                                    "title": "ReindexResponse",
+                                    "description": "What a menu-cache rebuild re-read.",
+                                    "properties": {
+                                        "itemsRead": {
+                                            "type": "number",
+                                            "description": "How many menu items were re-read."
+                                        }
+                                    },
+                                    "required": [
+                                        "itemsRead"
+                                    ]
                                 }
                             }
                         }
@@ -318,7 +408,29 @@
                     "content": {
                         "application/json": {
                             "schema": {
-                                "$ref": "#/components/schemas/OrderStateChangedEvent"
+                                "type": "object",
+                                "title": "OrderStateChangedEvent",
+                                "description": "The payload of `order.state-changed`: which order moved, to what state, and when.",
+                                "properties": {
+                                    "orderId": {
+                                        "type": "string",
+                                        "description": "The order whose state moved."
+                                    },
+                                    "state": {
+                                        "$ref": "#/components/schemas/OrderState",
+                                        "description": "What it moved to."
+                                    },
+                                    "at": {
+                                        "type": "string",
+                                        "format": "date-time",
+                                        "description": "When the move happened, on our clock."
+                                    }
+                                },
+                                "required": [
+                                    "orderId",
+                                    "state",
+                                    "at"
+                                ]
                             }
                         }
                     }
@@ -380,37 +492,6 @@
                     "estimateMinutes"
                 ]
             },
-            "CancelOrderRequest": {
-                "type": "object",
-                "description": "The order to cancel, and why.",
-                "properties": {
-                    "orderId": {
-                        "type": "string",
-                        "description": "The order to cancel."
-                    },
-                    "reason": {
-                        "type": "string",
-                        "description": "Why, for the store's records."
-                    }
-                },
-                "required": [
-                    "orderId",
-                    "reason"
-                ]
-            },
-            "CancelOrderResponse": {
-                "type": "object",
-                "description": "Where an order stands after a cancellation attempt.",
-                "properties": {
-                    "state": {
-                        "$ref": "#/components/schemas/OrderState",
-                        "description": "The order's state after the attempt."
-                    }
-                },
-                "required": [
-                    "state"
-                ]
-            },
             "DeliveryWindow": {
                 "description": "When the order is meant to arrive.\n\nA DISCRIMINATED union: every branch carries `kind` as one string literal, so the published\ndocument can narrow it exactly as TypeScript does. A union TypeScript itself could not narrow\nwould be published without a discriminator rather than with an invented one.",
                 "oneOf": [
@@ -428,51 +509,6 @@
                         "asap": "#/components/schemas/AsapWindow"
                     }
                 }
-            },
-            "FetchOrdersRequest": {
-                "type": "object",
-                "description": "Which orders to fetch: one store's orders inside a time window, optionally narrowed by state.",
-                "properties": {
-                    "storeId": {
-                        "type": "string",
-                        "description": "The store to read."
-                    },
-                    "from": {
-                        "type": "string",
-                        "format": "date-time",
-                        "description": "Window start, inclusive. Omit for the last 24 hours — OPTIONAL, so it may be absent entirely."
-                    },
-                    "states": {
-                        "type": "array",
-                        "items": {
-                            "$ref": "#/components/schemas/OrderState"
-                        },
-                        "description": "Only these states. Omit for every state."
-                    }
-                },
-                "required": [
-                    "storeId"
-                ]
-            },
-            "FetchOrdersResponse": {
-                "type": "object",
-                "description": "One page of a store's orders, and where the next page starts.",
-                "properties": {
-                    "orders": {
-                        "type": "array",
-                        "items": {
-                            "$ref": "#/components/schemas/Order"
-                        },
-                        "description": "The matching orders, newest first."
-                    },
-                    "nextFrom": {
-                        "type": "string",
-                        "description": "Pass as `from` on the next call; absent when the window is exhausted."
-                    }
-                },
-                "required": [
-                    "orders"
-                ]
             },
             "Order": {
                 "type": "object",
@@ -527,56 +563,6 @@
                     "accepted",
                     "delivered",
                     "cancelled"
-                ]
-            },
-            "OrderStateChangedEvent": {
-                "type": "object",
-                "description": "The payload of `order.state-changed`: which order moved, to what state, and when.",
-                "properties": {
-                    "orderId": {
-                        "type": "string",
-                        "description": "The order whose state moved."
-                    },
-                    "state": {
-                        "$ref": "#/components/schemas/OrderState",
-                        "description": "What it moved to."
-                    },
-                    "at": {
-                        "type": "string",
-                        "format": "date-time",
-                        "description": "When the move happened, on our clock."
-                    }
-                },
-                "required": [
-                    "orderId",
-                    "state",
-                    "at"
-                ]
-            },
-            "ReindexRequest": {
-                "type": "object",
-                "description": "The store whose menu cache to rebuild.",
-                "properties": {
-                    "storeId": {
-                        "type": "string",
-                        "description": "The store whose cache to rebuild."
-                    }
-                },
-                "required": [
-                    "storeId"
-                ]
-            },
-            "ReindexResponse": {
-                "type": "object",
-                "description": "What a menu-cache rebuild re-read.",
-                "properties": {
-                    "itemsRead": {
-                        "type": "number",
-                        "description": "How many menu items were re-read."
-                    }
-                },
-                "required": [
-                    "itemsRead"
                 ]
             },
             "ScheduledWindow": {

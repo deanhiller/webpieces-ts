@@ -115,8 +115,32 @@ export class OperationPageRenderer {
         return `<details class="disclosure" open><summary>${summary}</summary>${headers}${body}</details>`;
     }
 
-    /** A `oneOf` renders as expanded variants; anything else renders as one flat field tree. */
+    /**
+     * A `oneOf` renders as expanded variants; anything else renders as one flat field tree. An INLINE
+     * body (#1303) is headed by its `title` and `description` first: it has no schema page, so this
+     * page is the only place a reader can see the name a generated client gives it, or its prose.
+     */
     private tree(schema: JsonNode, prefix: string): string {
+        return this.inlineHead(schema) + this.fieldTree(schema, prefix);
+    }
+
+    private inlineHead(schema: JsonNode): string {
+        const head = this.fields.inlineHeadOf(schema);
+        if (head === undefined) {
+            return '';
+        }
+        const title =
+            head.title === ''
+                ? ''
+                : `<p class="body-type"><code title="schema title">${this.html.escape(head.title)}</code></p>`;
+        const description =
+            head.description === ''
+                ? ''
+                : `<div class="field-doc">${this.markdown.render(head.description)}</div>`;
+        return title + description;
+    }
+
+    private fieldTree(schema: JsonNode, prefix: string): string {
         const variants = this.fields.variantsOf(schema);
         if (variants.length > 0) {
             return this.trees.renderVariants(

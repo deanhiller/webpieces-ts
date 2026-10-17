@@ -37,6 +37,7 @@ import { StackedJsDocGuard } from './StackedJsDocGuard';
 import { TagOwnership } from './TagOwnership';
 import { UndocumentedSchemaGuard } from './UndocumentedSchemaGuard';
 import { UpstreamComponentsIndex } from './UpstreamComponents';
+import { InlinedWrappers } from './InlinedWrappers';
 
 /** One rendered document, and the renderer that built its schemas — what it defined and referenced. */
 class RenderedDocument {
@@ -173,6 +174,8 @@ export class OpenApiGenerator {
                 inputs.manifestPath,
             );
             undocumented.collect(split.schemas.reachedTypes(), this.mergedTypes(inputs));
+            // An inlined wrapper is still a published schema, so it still needs its description.
+            undocumented.collect(split.schemas.inlinedTypes(), this.mergedTypes(inputs));
             documents.push(new GeneratedDocument(selection.fileName, split.document));
             documents.push(
                 new GeneratedDocument(
@@ -201,7 +204,11 @@ export class OpenApiGenerator {
         const where = inputs.manifestPath;
         this.stackedJsDoc.refuse(model.stackedJsDoc, where);
         this.refuseCollisions(model.collisions, where);
-        const schemas = new SchemaRenderer(model.types, new SplitPlacement(model.packageName));
+        const schemas = new SchemaRenderer(
+            model.types,
+            new SplitPlacement(model.packageName),
+            InlinedWrappers.none(),
+        );
         for (const key of model.exported) {
             schemas.define(key);
         }
@@ -269,13 +276,8 @@ export class OpenApiGenerator {
         placement: SchemaPlacement,
     ): RenderedDocument {
         const types = this.mergedTypes(inputs);
-        const schemas = new SchemaRenderer(types, placement);
-        const operations = new OperationRenderer(
-            schemas,
-            selection.includeMcpExtensions,
-            selection.internalNotice,
-            inputs.manifest.operationIds,
-        );
+        const schemas = new SchemaRenderer(types, placement, this.wrappers(inputs, selection, types));
+        const operations = this.operationRenderer(inputs, selection, schemas);
         this.refuseDuplicateOperationIds(contracts, selection, operations, inputs.manifestPath);
         const apiKey = this.singleApiKey(inputs, contracts, selection);
         const schemeNames = inputs.manifest.securitySchemeNames;
@@ -331,6 +333,37 @@ export class OpenApiGenerator {
             .set('webhooks', webhooks.orUndefined())
             .set('components', components.orUndefined());
         return new RenderedDocument(document, schemas);
+    }
+
+    /** The operation renderer, carrying what this selection stamps on each operation. */
+    private operationRenderer(
+        inputs: GenerationInputs,
+        selection: DocumentSelection,
+        schemas: SchemaRenderer,
+    ): OperationRenderer {
+        return new OperationRenderer(
+            schemas,
+            selection.includeMcpExtensions,
+            selection.internalNotice,
+            selection.includeWebpiecesExtensions,
+            inputs.manifest.operationIds,
+        );
+    }
+
+    /**
+     * The single-use request/response wrappers this document defines inline (#1303), counted over
+     * EVERY contract of the manifest so a wrapper is inline or a component in every document alike.
+     */
+    private wrappers(
+        inputs: GenerationInputs,
+        selection: DocumentSelection,
+        types: ReadonlyMap<string, DocumentedType>,
+    ): InlinedWrappers {
+        if (!selection.inlinesWrappers) {
+            return InlinedWrappers.none();
+        }
+        const errorKey = inputs.errorType === undefined ? undefined : inputs.manifest.errors?.type;
+        return InlinedWrappers.of(inputs.contracts, types, inputs.homePackage, errorKey);
     }
 
     private renderSecuritySchemes(

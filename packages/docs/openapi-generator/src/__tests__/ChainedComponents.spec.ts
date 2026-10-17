@@ -215,6 +215,19 @@ function schemasOf(document: Json): Record<string, Json> {
     return (document['components'] as { schemas: Record<string, Json> }).schemas;
 }
 
+/**
+ * `/lang/passages`' request or success-response body schema. Its single-use wrappers are defined
+ * INLINE there (#1303), titled with their published names, rather than in `components.schemas`.
+ */
+function passagesBody(document: Json, which: 'request' | 'response'): Json {
+    const operation = ((document['paths'] as Json)['/lang/passages'] as Json)['post'] as Json;
+    const body =
+        which === 'request'
+            ? (operation['requestBody'] as Json)
+            : ((operation['responses'] as Json)['200'] as Json);
+    return ((body['content'] as Json)['application/json'] as Json)['schema'] as Json;
+}
+
 /** Every `$ref` value anywhere in a document. */
 function refsIn(value: unknown): string[] {
     if (Array.isArray(value)) return value.flatMap(refsIn);
@@ -354,15 +367,11 @@ describe('a contract document references the libraries and does not copy them', 
 
     it("defines only its OWN package's schemas, with two same-named types from two packages apart", () => {
         const split = parse(out.get('lang-apis')!.get('full-private-openapi.json'));
-        expect(Object.keys(schemasOf(split))).toEqual([
-            'LocalizedDescriptionsDto',
-            'PassageListRequest',
-            'PassageListResponse',
-        ]);
-        const response = schemasOf(split)['PassageListResponse']['properties'] as Record<
-            string,
-            Json
-        >;
+        // The single-use wrappers are inline at their operation (#1303), so only the shared noun is
+        // a component.
+        expect(Object.keys(schemasOf(split))).toEqual(['LocalizedDescriptionsDto']);
+        expect(passagesBody(split, 'response')['title']).toBe('PassageListResponse');
+        const response = passagesBody(split, 'response')['properties'] as Record<string, Json>;
         expect(response['descriptions']['$ref']).toBe(
             '#/components/schemas/LocalizedDescriptionsDto',
         );
@@ -376,7 +385,8 @@ describe('a contract document references the libraries and does not copy them', 
 
     it('FLATTENS a base declared in another package, with no allOf in any form', () => {
         const split = parse(out.get('lang-apis')!.get('full-private-openapi.json'));
-        const request = schemasOf(split)['PassageListRequest'];
+        const request = passagesBody(split, 'request');
+        expect(request['title']).toBe('PassageListRequest');
         expect(Object.keys(request['properties'] as Json)).toEqual([
             'lessonNumber',
             'lessonType',
@@ -421,8 +431,6 @@ describe('a contract document references the libraries and does not copy them', 
             'LessonTypeDto',
             'LocalizedDescriptionsDto',
             'PassageItemDto',
-            'PassageListRequest',
-            'PassageListResponse',
             'SpeakerGenderDto',
             'VoiceChoiceDto',
             'fixture.dtos-b.LocalizedDescriptionsDto',
@@ -442,6 +450,55 @@ describe('a contract document references the libraries and does not copy them', 
             JSON.stringify(b['LocalizedDescriptionsDto']),
         );
     });
+});
+
+describe('a single-use wrapper declared in ANOTHER package stays a $ref (#1303)', () => {
+    it("references it in its package's components document in the split form, and defines it in the bundled form", () => {
+        const scenario = new ChainWorkspace();
+        const api = path.join(scenario.root, 'libs/fsdb-api/src/FsdbApi.ts');
+        fs.writeFileSync(
+            api,
+            fs
+                .readFileSync(api, 'utf8')
+                .replace(
+                    "import { PassageItemDto } from '@fixture/dtos-a';",
+                    "import { LessonScopedDto, PassageItemDto } from '@fixture/dtos-a';",
+                )
+                .replace(
+                    'readPassage(request: StoredPassageRequest)',
+                    'readPassage(request: LessonScopedDto)',
+                ),
+        );
+        for (const library of ['dtos-b', 'dtos-a']) {
+            scenario.generate(library);
+        }
+        const written = scenario.generate('fsdb-api');
+        const pointer = [
+            'paths',
+            '/fsdb/passage',
+            'post',
+            'requestBody',
+            'content',
+            'application/json',
+            'schema',
+        ];
+        const bodyOf = (fileName: string): Json =>
+            pointer.reduce(
+                (node: Json, step: string) => node[step] as Json,
+                parse(written.get(fileName)),
+            );
+        // One owner per schema (#1058): inlining it here would define dtos-a's schema in two documents.
+        expect(bodyOf('full-private-openapi.json')).toEqual({
+            $ref: `${A_URI}#/components/schemas/LessonScopedDto`,
+        });
+        expect(bodyOf('full-private-openapi.bundled.json')).toEqual({
+            $ref: '#/components/schemas/LessonScopedDto',
+        });
+        // The home package's single-use response wrapper IS inlined, beside it.
+        expect(written.get('full-private-openapi.json')).toContain(
+            '"title": "StoredPassageResponse"',
+        );
+    }, 120_000);
 });
 
 describe('MCP catalogs stay fully inlined, and a shared DTO renders identically everywhere', () => {

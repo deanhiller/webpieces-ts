@@ -295,15 +295,20 @@ describe('the webhook block', () => {
         expect(harness.at(published, 'paths./hooks/widget.made')).toBeUndefined();
     });
 
-    it('carries x-webpieces-webhook and no trigger or auth extension of any kind', () => {
-        const published = harness.document(
-            harness.run('single.manifest.json'),
-            'public-openapi.json',
+    it('carries x-webpieces-webhook in the private document only, and no trigger or auth extension', () => {
+        const written = harness.run('single.manifest.json');
+        const internal = harness.webhook(
+            harness.document(written, 'full-private-openapi.json'),
+            'widget.made',
         );
-        const operation = harness.webhook(published, 'widget.made');
-        expect(operation['x-webpieces-webhook']).toBe(true);
-        expect(operation['x-webpieces-trigger']).toBeUndefined();
-        expect(operation['x-webpieces-auth']).toBeUndefined();
+        expect(internal['x-webpieces-webhook']).toBe(true);
+        // The public document's standard `webhooks:` block already says so (#1303).
+        const published = harness.webhook(harness.document(written, 'public-openapi.json'), 'widget.made');
+        expect(published['x-webpieces-webhook']).toBeUndefined();
+        for (const operation of [internal, published]) {
+            expect(operation['x-webpieces-trigger']).toBeUndefined();
+            expect(operation['x-webpieces-auth']).toBeUndefined();
+        }
     });
 
     it('documents a `void` method as "return any 2xx to acknowledge"', () => {
@@ -632,7 +637,7 @@ describe('the unmapped-type guard', () => {
         expect(failure, 'an unmapped field was published').toBeDefined();
         expect(failure!.message).toMatch(/have no schema it can state/);
         expect(failure!.pointers.join('\n')).toContain(
-            '#/components/schemas/SendRequest/properties/payload',
+            '#/paths/UnmappedApi_send/requestBody/properties/payload',
         );
         expect(failure!.cure).toMatch(/named DTO/);
     });
@@ -646,7 +651,7 @@ describe('the unmapped-type guard', () => {
             sink.asStream(),
         );
         expect(code).toBe(1);
-        expect(sink.text()).toContain('#/components/schemas/SendRequest/properties/payload');
+        expect(sink.text()).toContain('#/paths/UnmappedApi_send/requestBody/properties/payload');
         // A refused document is not half-written.
         expect(fs.readdirSync(out)).toEqual([]);
     });

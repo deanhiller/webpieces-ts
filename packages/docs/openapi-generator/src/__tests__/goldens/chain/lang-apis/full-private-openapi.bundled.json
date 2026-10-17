@@ -27,7 +27,27 @@
                     "content": {
                         "application/json": {
                             "schema": {
-                                "$ref": "#/components/schemas/PassageListRequest"
+                                "type": "object",
+                                "title": "PassageListRequest",
+                                "description": "A request for one lesson's passages. Its base lives in ANOTHER package, and is flattened.",
+                                "properties": {
+                                    "lessonNumber": {
+                                        "type": "number",
+                                        "description": "The lesson, 1-100."
+                                    },
+                                    "lessonType": {
+                                        "$ref": "#/components/schemas/LessonTypeDto",
+                                        "description": "How the lesson is built."
+                                    },
+                                    "narrator": {
+                                        "$ref": "#/components/schemas/SpeakerGenderDto",
+                                        "description": "Only passages narrated as this gender."
+                                    }
+                                },
+                                "required": [
+                                    "lessonNumber",
+                                    "lessonType"
+                                ]
                             }
                         }
                     }
@@ -38,7 +58,31 @@
                         "content": {
                             "application/json": {
                                 "schema": {
-                                    "$ref": "#/components/schemas/PassageListResponse"
+                                    "type": "object",
+                                    "title": "PassageListResponse",
+                                    "description": "One lesson's passages.",
+                                    "properties": {
+                                        "passages": {
+                                            "type": "array",
+                                            "items": {
+                                                "$ref": "#/components/schemas/PassageItemDto"
+                                            },
+                                            "description": "Every passage, in reading order."
+                                        },
+                                        "descriptions": {
+                                            "$ref": "#/components/schemas/LocalizedDescriptionsDto",
+                                            "description": "This library's own descriptions of the lesson."
+                                        },
+                                        "translations": {
+                                            "$ref": "#/components/schemas/fixture.dtos-b.LocalizedDescriptionsDto",
+                                            "description": "The shared, per-language descriptions — a DIFFERENT type with the same name."
+                                        }
+                                    },
+                                    "required": [
+                                        "passages",
+                                        "descriptions",
+                                        "translations"
+                                    ]
                                 }
                             }
                         }
@@ -97,54 +141,6 @@
                     "passageId",
                     "voice",
                     "narrator"
-                ]
-            },
-            "PassageListRequest": {
-                "type": "object",
-                "description": "A request for one lesson's passages. Its base lives in ANOTHER package, and is flattened.",
-                "properties": {
-                    "lessonNumber": {
-                        "type": "number",
-                        "description": "The lesson, 1-100."
-                    },
-                    "lessonType": {
-                        "$ref": "#/components/schemas/LessonTypeDto",
-                        "description": "How the lesson is built."
-                    },
-                    "narrator": {
-                        "$ref": "#/components/schemas/SpeakerGenderDto",
-                        "description": "Only passages narrated as this gender."
-                    }
-                },
-                "required": [
-                    "lessonNumber",
-                    "lessonType"
-                ]
-            },
-            "PassageListResponse": {
-                "type": "object",
-                "description": "One lesson's passages.",
-                "properties": {
-                    "passages": {
-                        "type": "array",
-                        "items": {
-                            "$ref": "#/components/schemas/PassageItemDto"
-                        },
-                        "description": "Every passage, in reading order."
-                    },
-                    "descriptions": {
-                        "$ref": "#/components/schemas/LocalizedDescriptionsDto",
-                        "description": "This library's own descriptions of the lesson."
-                    },
-                    "translations": {
-                        "$ref": "#/components/schemas/fixture.dtos-b.LocalizedDescriptionsDto",
-                        "description": "The shared, per-language descriptions — a DIFFERENT type with the same name."
-                    }
-                },
-                "required": [
-                    "passages",
-                    "descriptions",
-                    "translations"
                 ]
             },
             "SpeakerGenderDto": {
