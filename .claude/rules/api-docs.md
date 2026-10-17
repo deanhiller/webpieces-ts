@@ -358,7 +358,7 @@ document whose schema is `Menu`, `OrdersApi.fetchOrders` leaking the contract cl
 
 | JSDoc link | Published as (a markdown code span) |
 |---|---|
-| `{@link MenuDto}` | `` `Menu` `` — the type's published schema name, after `schemaNames` stripping (a bundled document's qualified name where it has one) |
+| `{@link MenuDto}` | `` `Menu` `` — the type's published schema name, after `schemaNames` stripping (a bundled document's qualified name where it has one; an inlined single-use wrapper's `title`, #1303) |
 | `{@link MenuDto.items}`, `{@link Gender.F}` | `` `Menu.items` ``, `` `Gender.F` `` — the `.member` tail kept as written |
 | `{@link OrdersApi.fetchOrders}` | `` `fetchOrders` `` — its operationId in the manifest's `operationIds` style, never `OrdersApi.`; in an `mcp-<Contract>-tools.json` catalog, a method that IS a tool publishes its tool `name` |
 | `{@link OrdersApi.fetchOrders \| the order list}` / `{@link X label}` | `the order list (`` `fetchOrders` ``)` — the label, then the identity |

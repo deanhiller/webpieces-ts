@@ -33,6 +33,12 @@ export class DocumentLinkNaming implements DocLinkNaming {
         if (link.kind !== DocLinkKind.TYPE || type === undefined) {
             return undefined;
         }
+        // A single-use request/response wrapper is defined INLINE at its operation (#1303), with its
+        // published name as the schema's `title` — so the link names that title. No schema page
+        // exists for it, which a docs site sees because `components.schemas` has no entry.
+        if (this.schemas.inlinedTypes().has(link.owner)) {
+            return type.schemaName;
+        }
         if (this.schemas.reachedTypes().has(link.owner)) {
             return this.placement.localName(link.owner, type);
         }

@@ -172,8 +172,8 @@ export abstract class PartnerOrdersApi {
     }
 
     /**
-     * Cancels one order — an {@link OrderDto.id} that {@link PartnerOrdersApi.fetchOrders} returned —
-     * if the store has not already started it.
+     * Cancels one order — an {@link OrderDto.id} that {@link PartnerOrdersApi.fetchOrders} returned
+     * for a {@link FetchOrdersRequest} — if the store has not already started it.
      *
      * Cancelling an order that is already `delivered` returns its current state rather than failing:
      * the call is about reaching a state, not about performing an action exactly once.

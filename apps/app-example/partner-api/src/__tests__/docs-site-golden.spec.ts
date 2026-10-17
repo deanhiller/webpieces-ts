@@ -164,6 +164,10 @@ describe('the docs site rendered from the example contract', () => {
         expect(page).toContain(
             '<a href="../../reference/partner-orders-api-fetch-orders/index.html"><code>PartnerOrdersApi_fetchOrders</code></a>',
         );
+        // A single-use wrapper is INLINED at its operation (#1303) and has no page, so a link to it
+        // publishes its title as code and the site does NOT link it to a page that does not exist.
+        expect(page).toContain('for a <code>FetchOrdersRequest</code> —');
+        expect(site.exists('schemas', 'fetch-orders-request')).toBe(false);
     });
 
     it('takes the reference order from tags[] and the prose order from docs.manifest.json', () => {

@@ -61,7 +61,8 @@ trusted, PR-reviewed input. Everything is HTML-escaped before any mark is applie
 A code span that exactly names an `operationId`, or a schema that has its own page (or a member of
 one, `` `Menu.items` ``), renders as a LINK to that page (#1284) — which is how a JSDoc `{@link}`, published
 by `wp-openapi` as a code span of its target's published name, becomes a hyperlink. A name that is both
-an operationId and a schema, and every other code span, stays plain code.
+an operationId and a schema, an inlined request/response wrapper (it has no page), and every other
+code span stays plain code.
 
 ## Reading the reference
 
