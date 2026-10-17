@@ -108,7 +108,12 @@ export type { IpcApiType, IpcEndpointKind, IpcEndpointOptions } from './ipc/IpcD
 // The runtime representation of ONE route (split out of decorators.ts for file size only).
 export { RouteMetadata } from './http/RouteMetadata';
 export { RouteMetadataFactory } from './http/RouteMetadataFactory';
-export { AuthorizationType, AuthorizationDeclaration, WpAuthorization, getAuthorization } from './http/authorization';
+export {
+    AuthorizationType,
+    AuthorizationDeclaration,
+    WpAuthorization,
+    getAuthorization,
+} from './http/authorization';
 export type { AuthorizationRequirement } from './http/authorization';
 export { StreamingSchemaCatalog, registerStreamingCatalog } from './http/StreamingSchemaCatalog';
 export {
@@ -187,7 +192,16 @@ export type {
     LayoutTargets,
 } from './mcp/GeneratedApiDocsLayout';
 // The TYPE layer of the auth surface — likewise split out of decorators.ts for file size only.
-export { AuthMeta, AuthDeclaration, jwt, oidcSameProject, oidcSvcs, sharedSecret, webhook, apiKey } from './http/auth-mode';
+export {
+    AuthMeta,
+    AuthDeclaration,
+    jwt,
+    oidcSameProject,
+    oidcSvcs,
+    sharedSecret,
+    webhook,
+    apiKey,
+} from './http/auth-mode';
 export type {
     AuthMode,
     ApiKeyCredential,
@@ -319,6 +333,9 @@ export { ContextMgr } from './http/ContextMgr';
 // with that environment's ApiCallContext — `new LogApiCallImpl(new RequestContextApiCallContext())`
 // on node, `new LogApiCallImpl(new BrowserApiCallContext())` in a browser.
 export { LogApiCallImpl } from './http/LogApiCall';
+// The logged-body cap (#1300): a per-runtime default (browser 2,000 / node 50,000 chars), overridable
+// once at startup with `LogApiCall.configure(new LogApiCallConfig(n))`.
+export { LogApiCall, LogApiCallConfig } from './http/LogApiCall';
 
 // Opt-in field masking for the LogApiCall log path — declare per-api sensitive fields so secrets
 // (OAuth refresh tokens, id-token JWTs) are masked in the logs while the real value stays on the wire.

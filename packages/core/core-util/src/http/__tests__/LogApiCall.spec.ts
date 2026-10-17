@@ -1,5 +1,5 @@
-import { describe, expect, it, afterEach, afterAll, beforeAll } from 'vitest';
-import { LogApiCallImpl } from '../LogApiCall';
+import { describe, expect, it, afterEach, afterAll, beforeAll, vi } from 'vitest';
+import { LogApiCall, LogApiCallConfig, LogApiCallImpl } from '../LogApiCall';
 import { ApiCallInfo } from '../ApiCallInfo';
 import { ApiMethodInfo, ApiSide } from '../ApiMethodInfo';
 import { ApiCallContext } from '../ApiCallContext';
@@ -190,7 +190,9 @@ describe('LogApiCall.execute — pluggable per-client failure classification', (
 
     it('a per-apiClass classifier flips a client-side error from failure → success (OTHER)', async () => {
         // Firestore-style: a not-found miss on this client is EXPECTED, not a failure.
-        ClientRegistry.addErrorClassifier(new KeyedErrorClassifier('SaveApi', new NotFoundIsExpected()));
+        ClientRegistry.addErrorClassifier(
+            new KeyedErrorClassifier('SaveApi', new NotFoundIsExpected()),
+        );
 
         const ctx = new RecordingApiCallContext();
 
@@ -209,7 +211,9 @@ describe('LogApiCall.execute — pluggable per-client failure classification', (
     });
 
     it('an error the classifier DEFERS on still uses the built-in (client → failure)', async () => {
-        ClientRegistry.addErrorClassifier(new KeyedErrorClassifier('SaveApi', new NotFoundIsExpected()));
+        ClientRegistry.addErrorClassifier(
+            new KeyedErrorClassifier('SaveApi', new NotFoundIsExpected()),
+        );
 
         const ctx = new RecordingApiCallContext();
 
@@ -687,7 +691,14 @@ describe('LogApiCall.execute — noLogging routes are not api-logged', () => {
         const ctx = new RecordingApiCallContext();
         // A background download: hidden from the bar, upgrade-safe, but its [API-*] lines are wanted.
         const hiddenButLogged = new ApiMethodInfo(
-            'client', 'OfflineApi', 'fetchManifest', undefined, undefined, false, true, true,
+            'client',
+            'OfflineApi',
+            'fetchManifest',
+            undefined,
+            undefined,
+            false,
+            true,
+            true,
         );
         expect(hiddenButLogged.hideProgress).toBe(true);
         expect(hiddenButLogged.allowUpgradeInFlight).toBe(true);
@@ -697,5 +708,149 @@ describe('LogApiCall.execute — noLogging routes are not api-logged', () => {
         await ctx.logApiCall.execute(hiddenButLogged, { q: 'x' }, async () => ({ ok: true }));
         expect(logged('[API-client-req]')).toBe(true);
         expect(logged('[API-client-resp-SUCCESS]')).toBe(true);
+    });
+});
+
+describe('LogApiCall — logged body cap (#1300)', () => {
+    const capturing = new CapturingLoggerFactory();
+    const previousFactory = LogManager.getFactory();
+
+    beforeAll(() => {
+        if (!HeaderRegistry.isConfigured()) {
+            HeaderRegistry.configure([API], /*platformHeaders*/ false);
+        }
+        LogManager.setFactory(capturing);
+    });
+
+    afterEach(() => {
+        capturing.lines.length = 0;
+        LogApiCall.configure(new LogApiCallConfig(undefined));
+    });
+
+    afterAll(() => {
+        LogManager.setFactory(previousFactory);
+    });
+
+    const bodyOf = (line: string | undefined, marker: string): string => {
+        expect(line).toBeDefined();
+        return line!.slice(line!.indexOf(marker) + marker.length);
+    };
+
+    it('a 30,000-char response logs exactly 2000 body chars plus the marker; responseSize stays the full size', async () => {
+        LogApiCall.configure(new LogApiCallConfig(LogApiCall.BROWSER_DEFAULT_MAX_BODY_CHARS));
+        const ctx = new RecordingApiCallContext();
+        const response = { items: 'x'.repeat(30000) };
+        const full = JSON.stringify(response);
+
+        await ctx.logApiCall.execute(info('client'), { q: 'x' }, async () => response);
+
+        const body = bodyOf(
+            capturing.lines.find((l) => l.includes('[API-client-resp-SUCCESS]')),
+            'response=',
+        );
+        expect(body).toBe(
+            `${full.slice(0, 2000)}…[truncated: logged 2000 of ${full.length} chars]`,
+        );
+        expect(ctx.values().at(-1)?.responseSize).toBe(full.length); // ASCII: bytes === chars
+    });
+
+    it('a body under the cap is logged byte-for-byte unchanged, with no marker', async () => {
+        LogApiCall.configure(new LogApiCallConfig(2000));
+        const ctx = new RecordingApiCallContext();
+        const response = { ok: true, name: 'small' };
+
+        await ctx.logApiCall.execute(info('client'), { q: 'x' }, async () => response);
+
+        const line = capturing.lines.find((l) => l.includes('[API-client-resp-SUCCESS]'));
+        expect(bodyOf(line, 'response=')).toBe(JSON.stringify(response));
+        expect(line).not.toContain('truncated');
+    });
+
+    it('the request line gets the same treatment, and requestSize stays the full size', async () => {
+        LogApiCall.configure(new LogApiCallConfig(100));
+        const ctx = new RecordingApiCallContext();
+        const request = { q: 'y'.repeat(500) };
+        const full = JSON.stringify(request);
+
+        await ctx.logApiCall.execute(info('server'), request, async () => ({ ok: true }));
+
+        const body = bodyOf(
+            capturing.lines.find((l) => l.includes('[API-server-req]')),
+            'request=',
+        );
+        expect(body).toBe(`${full.slice(0, 100)}…[truncated: logged 100 of ${full.length} chars]`);
+        expect(ctx.values()[0].requestSize).toBe(full.length);
+    });
+
+    it('a masked field near the cut never appears unmasked (the cut runs on the masked text)', async () => {
+        const secret = 'SECRET-REFRESH-TOKEN-0123456789';
+        const masked = new ApiMethodInfo(
+            'client',
+            'HelperFsdbApi',
+            'getEmailAccount',
+            undefined,
+            new MaskSpec({ refreshToken: 'full' }),
+        );
+        const response = { pad: 'p'.repeat(20), refreshToken: secret, tail: 't'.repeat(200) };
+        // Cut INSIDE where the cleartext secret would have been, had masking run after truncation.
+        const cutAt = JSON.stringify(response).indexOf(secret) + 10;
+        LogApiCall.configure(new LogApiCallConfig(cutAt));
+        const ctx = new RecordingApiCallContext();
+
+        await ctx.logApiCall.execute(masked, { refreshToken: secret }, async () => response);
+
+        for (const line of capturing.lines) {
+            expect(line).not.toContain(secret.slice(0, 10));
+        }
+        const respLine = capturing.lines.find((l) => l.includes('[API-client-resp-SUCCESS]'));
+        expect(respLine).toContain('"refreshToken":"*****"');
+        expect(respLine).toContain('…[truncated: logged');
+    });
+
+    it.each([0, Infinity])('a cap of %s logs the full body', async (cap) => {
+        LogApiCall.configure(new LogApiCallConfig(cap));
+        const ctx = new RecordingApiCallContext();
+        const response = { items: 'z'.repeat(60000) };
+
+        await ctx.logApiCall.execute(info('client'), { q: 'x' }, async () => response);
+
+        const line = capturing.lines.find((l) => l.includes('[API-client-resp-SUCCESS]'));
+        expect(bodyOf(line, 'response=')).toBe(JSON.stringify(response));
+    });
+
+    it('never splits a surrogate pair: an emoji straddling the cut is dropped whole', () => {
+        const body = 'ab😀cd'; // the emoji occupies UTF-16 indices 2 and 3
+        expect(LogApiCall.truncateForLog(body, 3)).toBe('ab…[truncated: logged 2 of 6 chars]');
+        expect(LogApiCall.truncateForLog(body, 4)).toBe('ab😀…[truncated: logged 4 of 6 chars]');
+        expect(LogApiCall.truncateForLog(undefined, 3)).toBeUndefined();
+    });
+
+    it('defaults: 2,000 under a simulated browser runtime, 50,000 under node', () => {
+        expect(LogApiCall.BROWSER_DEFAULT_MAX_BODY_CHARS).toBe(2000);
+        expect(LogApiCall.NODE_DEFAULT_MAX_BODY_CHARS).toBe(50000);
+        expect(LogApiCall.defaultMaxBodyChars(false)).toBe(2000);
+        expect(LogApiCall.defaultMaxBodyChars(true)).toBe(50000);
+
+        // vitest runs on node, so the module-load detection picked the node default.
+        expect(LogApiCall.isNodeRuntime()).toBe(true);
+        expect(LogApiCall.RUNTIME_DEFAULT_MAX_BODY_CHARS).toBe(50000);
+        expect(LogApiCall.maxLoggedBodyChars()).toBe(50000);
+
+        // A browser / React Native runtime has no node `process` — even with a global `window`.
+        vi.stubGlobal('window', {});
+        vi.stubGlobal('process', undefined);
+        const isNodeInBrowser = LogApiCall.isNodeRuntime();
+        vi.unstubAllGlobals();
+        expect(isNodeInBrowser).toBe(false);
+        expect(LogApiCall.defaultMaxBodyChars(isNodeInBrowser)).toBe(2000);
+    });
+
+    it('configure overrides the runtime default; undefined restores it; a negative cap is refused', () => {
+        LogApiCall.configure(new LogApiCallConfig(1234));
+        expect(LogApiCall.maxLoggedBodyChars()).toBe(1234);
+        LogApiCall.configure(new LogApiCallConfig(undefined));
+        expect(LogApiCall.maxLoggedBodyChars()).toBe(LogApiCall.RUNTIME_DEFAULT_MAX_BODY_CHARS);
+        expect(() => LogApiCall.configure(new LogApiCallConfig(-1))).toThrow(/non-negative/);
+        expect(() => LogApiCall.configure(new LogApiCallConfig(NaN))).toThrow(/non-negative/);
     });
 });

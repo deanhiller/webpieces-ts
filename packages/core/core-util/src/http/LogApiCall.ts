@@ -12,6 +12,139 @@ import { CallOutcome } from './ErrorClassifier';
 // bracket (see ApiCallLogName) — so the name here and the name they match are the one constant.
 const log = LogManager.getLogger(LOG_API_CALL_LOGGER_NAME);
 
+/** The slice of node's `process.versions` that runtime detection reads (core-util has no node types). */
+class NodeVersionsProbe {
+    node?: string;
+}
+
+/** The slice of node's `process` that runtime detection reads. */
+class NodeProcessProbe {
+    versions?: NodeVersionsProbe;
+}
+
+/** `globalThis`, as seen by runtime detection: a node `process` may or may not exist. */
+class NodeGlobalProbe {
+    process?: NodeProcessProbe;
+}
+
+/**
+ * The startup configuration for {@link LogApiCall.configure}.
+ *
+ * A class rather than an object literal (CLAUDE.md: data-only structures are classes), so the one call
+ * site reads `LogApiCall.configure(new LogApiCallConfig(2000))`.
+ */
+export class LogApiCallConfig {
+    /**
+     * @param maxLoggedBodyChars - the most characters of a serialized request/response body that one
+     *   `[API-*]` line may carry. `undefined` keeps the runtime default
+     *   ({@link LogApiCall.BROWSER_DEFAULT_MAX_BODY_CHARS} / {@link LogApiCall.NODE_DEFAULT_MAX_BODY_CHARS});
+     *   `0` or `Infinity` mean NO cap, for local debugging.
+     */
+    constructor(readonly maxLoggedBodyChars?: number) {}
+}
+
+/**
+ * Process-wide settings for the `[API-*]` lines {@link LogApiCallImpl} writes — today, how much of a
+ * body one line may carry (#1300).
+ *
+ * WHY a cap: the size of a body is already on the same line as a structured tag
+ * (`api.requestSize` / `api.responseSize` / `api.responseCount`, computed on the FULL body), so the body
+ * text adds no measurement, only bytes. Unbounded, it blew a consumer's 4,000-char browser message
+ * trimmer (a Sentry report per line) and on a server it risks Cloud Logging's 256 KB per-entry limit,
+ * where an oversize entry is LOST, not shortened.
+ *
+ * WHY the default depends on the RUNTIME, not on `methodInfo.side`: a node server is also a CLIENT when
+ * it calls another service, and those lines go to Cloud Logging too. The runtime is detected ONCE, at
+ * module load, by `process.versions.node` only — never `typeof window`, which React Native defines and
+ * some SSR setups fake.
+ *
+ * A static, process-wide setting in the style of {@link ClientRegistry} / `HeaderRegistry`: set once at
+ * startup (an app's `main.ts`, a server's bootstrap), never DI-injected, because the browser-side
+ * {@link LogApiCallImpl} is constructed by a transport with no DI container.
+ */
+export class LogApiCall {
+    /**
+     * Browser and React Native default: well under a 4,000-char shipped-log message cap, leaving room
+     * for the `[API-…] Class.method response=` prefix and the truncation marker.
+     */
+    static readonly BROWSER_DEFAULT_MAX_BODY_CHARS = 2000;
+
+    /**
+     * Node default: even at a worst-case 4 UTF-8 bytes per char this is ~200 KB, under Cloud Logging's
+     * 256 KB per-entry limit with room for the entry's other fields.
+     */
+    static readonly NODE_DEFAULT_MAX_BODY_CHARS = 50000;
+
+    /** The default for the runtime this module was loaded in, decided once. */
+    static readonly RUNTIME_DEFAULT_MAX_BODY_CHARS = LogApiCall.defaultMaxBodyChars(
+        LogApiCall.isNodeRuntime(),
+    );
+
+    private static configuredMaxBodyChars: number | undefined;
+
+    /**
+     * Override the runtime default, once at startup. A config whose `maxLoggedBodyChars` is
+     * `undefined` restores the runtime default; `0` or `Infinity` turn the cap off.
+     */
+    // webpieces-disable no-function-outside-class -- static global singleton (like HeaderRegistry/ClientRegistry); set once at startup, never DI-injected
+    static configure(config: LogApiCallConfig): void {
+        const max = config.maxLoggedBodyChars;
+        if (max !== undefined && (Number.isNaN(max) || max < 0)) {
+            throw new Error(
+                `LogApiCall.configure: maxLoggedBodyChars must be a non-negative number, 0 or Infinity (no cap), or undefined (runtime default); got ${max}`,
+            );
+        }
+        LogApiCall.configuredMaxBodyChars = max;
+    }
+
+    /** The cap in force: the configured value, else the runtime default. 0 or Infinity mean no cap. */
+    // webpieces-disable no-function-outside-class -- static global singleton (like HeaderRegistry/ClientRegistry); set once at startup, never DI-injected
+    static maxLoggedBodyChars(): number {
+        return LogApiCall.configuredMaxBodyChars ?? LogApiCall.RUNTIME_DEFAULT_MAX_BODY_CHARS;
+    }
+
+    /**
+     * The default for a runtime: {@link NODE_DEFAULT_MAX_BODY_CHARS} on node, else
+     * {@link BROWSER_DEFAULT_MAX_BODY_CHARS} (browser and React Native alike).
+     */
+    // webpieces-disable no-function-outside-class -- pure static helper of the static LogApiCall settings
+    static defaultMaxBodyChars(isNode: boolean): number {
+        return isNode
+            ? LogApiCall.NODE_DEFAULT_MAX_BODY_CHARS
+            : LogApiCall.BROWSER_DEFAULT_MAX_BODY_CHARS;
+    }
+
+    /**
+     * True only when a node `process` with `versions.node` exists. Read through `globalThis` because
+     * this browser-safe package compiles with no node types.
+     */
+    // webpieces-disable no-function-outside-class -- pure static helper of the static LogApiCall settings
+    static isNodeRuntime(): boolean {
+        const g = globalThis as NodeGlobalProbe;
+        return typeof g.process !== 'undefined' && !!g.process.versions?.node;
+    }
+
+    /**
+     * Cut a serialized body to its first `max` chars and append
+     * `…[truncated: logged <kept> of <total> chars]`. Run on the ALREADY-MASKED string, so a cut can
+     * never reveal a masked field. Never splits a surrogate pair: when the cut would land between the
+     * two halves of one code point, that code point is dropped whole. A body within the cap, an
+     * undefined body, and a cap of 0 / Infinity are returned unchanged.
+     */
+    // webpieces-disable no-function-outside-class -- pure static helper of the static LogApiCall settings
+    static truncateForLog(body: string | undefined, max: number): string | undefined {
+        if (body === undefined || max === 0 || !Number.isFinite(max) || body.length <= max) {
+            return body;
+        }
+        let end = Math.floor(max);
+        const last = body.charCodeAt(end - 1);
+        if (last >= 0xd800 && last <= 0xdbff) {
+            end -= 1; // a high surrogate whose low half would be cut off — drop the pair
+        }
+        return `${body.slice(0, end)}…[truncated: logged ${end} of ${body.length} chars]`;
+    }
+}
+
 /**
  * LogApiCallImpl - Generic API call logging utility, used by BOTH server-side (LogApiFilter) and
  * client-side (ProxyClient) for one consistent logging shape across the framework.
@@ -39,6 +172,7 @@ const log = LogManager.getLogger(LOG_API_CALL_LOGGER_NAME);
  *
  * Logging format patterns:
  * - [API-{side}-req] ClassName.methodName request={...}
+ *   (request and response bodies are capped at {@link LogApiCall.maxLoggedBodyChars} chars, #1300)
  * - [API-{side}-resp-SUCCESS] ClassName.methodName response={...}
  * - [API-{side}-resp-OTHER] ClassName.methodName errorType={...} error={...}  (CallOutcome.EXPECTED)
  * - [API-{side}-resp-FAIL] ClassName.methodName error={...}  (TRANSIENT_FAILURE or FAILURE — final by position; each retried attempt is logged by CallRegistry as [API-client-attempt-TRANSIENT])
@@ -85,6 +219,9 @@ export class LogApiCallImpl {
         // JSON.stringify fast path, unchanged for every existing caller.
         const requestBody = this.serialize(requestDto, methodInfo);
         const requestSize = this.byteSize(requestBody);
+        // The size above is on the FULL body; only the log TEXT is capped (#1300), and only after
+        // serialize() has masked it.
+        const maxBodyChars = LogApiCall.maxLoggedBodyChars();
         // Declared out here so the catch below can read it too. Reassigned just before the call, so
         // the number times ONLY the call and not our own request-logging.
         let startMs = Date.now();
@@ -92,7 +229,9 @@ export class LogApiCallImpl {
         // eslint-disable-next-line @webpieces/no-unmanaged-exceptions -- LogApiCall logs errors before re-throwing to caller
         try {
             stamp(new ApiCallInfo(methodInfo, 'request', undefined, undefined, requestSize), () =>
-                log.info(`[API-${side}-req] ${id} request=${requestBody}`),
+                log.info(
+                    `[API-${side}-req] ${id} request=${LogApiCall.truncateForLog(requestBody, maxBodyChars)}`,
+                ),
             );
 
             if (!requestDto) throw new Error(`Request cannot be null and was from ${id}`);
@@ -113,7 +252,10 @@ export class LogApiCallImpl {
                     this.byteSize(responseBody),
                     count,
                 ),
-                () => log.info(`[API-${side}-resp-SUCCESS] ${id} response=${responseBody}`),
+                () =>
+                    log.info(
+                        `[API-${side}-resp-SUCCESS] ${id} response=${LogApiCall.truncateForLog(responseBody, maxBodyChars)}`,
+                    ),
             );
 
             return response;
