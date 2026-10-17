@@ -93,7 +93,7 @@ export class OperationRenderer {
         contract: ResponseContract,
         security: readonly JsonValue[] | undefined,
     ): JsonObject {
-        const operation = this.common(endpoint, contractName, tag, contract);
+        const operation = this.common(endpoint, contractName, tag, contract, true);
         // An endpoint that authenticates NOBODY says so explicitly: `security: []` is OpenAPI's
         // spelling of "no credential required", and leaving the key off instead means "inherit the
         // document's", which is a different statement that happens to coincide today.
@@ -109,6 +109,12 @@ export class OperationRenderer {
      * any other way. It gets no trigger sentence and no security at all, because neither is true of
      * it: nothing of ours triggers it and nothing of ours authenticates it — our api key must never
      * be published as a guard on somebody else's endpoint.
+     *
+     * It gets no retry sentence either (#1302). That sentence tells a CALLER whether it may repeat
+     * the call, and the partner never calls a webhook — WE do, and we retry delivery ourselves. The
+     * `@Endpoint` operation on a webhook method is an inert value the decorator requires (the
+     * contract is never mounted as a route), so on a webhook "NOT safe to retry" would be backwards:
+     * the receiver's concern is that one event can arrive more than once.
      */
     webhook(
         endpoint: DocumentedEndpoint,
@@ -116,7 +122,7 @@ export class OperationRenderer {
         tag: string,
         contract: ResponseContract,
     ): JsonObject {
-        const operation = this.common(endpoint, contractName, tag, contract);
+        const operation = this.common(endpoint, contractName, tag, contract, false);
         return this.withMcp(operation.set('x-webpieces-webhook', true), endpoint);
     }
 
@@ -125,12 +131,13 @@ export class OperationRenderer {
         contractName: string,
         tag: string,
         contract: ResponseContract,
+        isRoute: boolean,
     ): JsonObject {
         return new JsonObject()
             .set('operationId', this.operationIdOf(endpoint, contractName))
             .set('x-webpieces-authentication', endpoint.auth?.methods.map((method: DocumentedAuthMethod) => new JsonObject().set('kind', method.kind).set('arguments', method.argumentTexts)))
             .set('summary', endpoint.summary)
-            .set('description', this.describe(endpoint))
+            .set('description', this.describe(endpoint, isRoute))
             .set('tags', [tag])
             .set('requestBody', this.requestBody(endpoint, contractName))
             .set('responses', this.responses(endpoint, contractName, contract));
@@ -144,17 +151,22 @@ export class OperationRenderer {
      * Swagger UI and most themes do not render `x-` extensions and no standard generator reads
      * `x-webpieces-*`: an extension would be invisible to the human and unread by the machine. The
      * mapping it is derived from is published once, in `info.description`, so the rule is stated and
-     * not only its consequences.
+     * not only its consequences. It is stated on ROUTES only — a webhook is a call we make, so the
+     * caller-facing retry sentence does not apply to it (see {@link webhook}).
      */
-    private describe(endpoint: DocumentedEndpoint): string | undefined {
+    private describe(endpoint: DocumentedEndpoint, isRoute: boolean): string | undefined {
         const parts: string[] = [];
         const body = this.prose(endpoint.description);
         if (body !== undefined) {
             parts.push(body);
         }
-        parts.push(this.retrySentence(endpoint));
-        if (this.includeTrigger) {
-            parts.push(this.triggerSentence(endpoint));
+        // Both derived sentences are about a call the READER makes to us (may I repeat it? what
+        // fires it?). A webhook is a call WE make to the reader, so neither applies (#1302).
+        if (isRoute) {
+            parts.push(this.retrySentence(endpoint));
+            if (this.includeTrigger) {
+                parts.push(this.triggerSentence(endpoint));
+            }
         }
         if (endpoint.openWorld) {
             parts.push(
@@ -162,7 +174,7 @@ export class OperationRenderer {
                     'are not all visible here.',
             );
         }
-        return parts.join('\n\n');
+        return parts.length === 0 ? undefined : parts.join('\n\n');
     }
 
     /**

@@ -13,15 +13,18 @@ export const INTERNAL_ONLY_LINE =
 /**
  * The retry contract, published ONCE per document rather than as booleans stamped on every operation.
  *
- * Each operation's own `description` ends with one derived sentence saying whether it is safe to
- * retry; this table says where that sentence comes from. Three vendor-extension booleans per
+ * Each route's own `description` ends with one derived sentence saying whether it is safe to
+ * retry; this table says where that sentence comes from. Webhooks are excluded (#1302): the sentence
+ * tells a CALLER whether to repeat a call, and a webhook's caller is us — so a document holding only
+ * webhooks states no table at all (see {@link DocumentSelection.description}). Three vendor-extension booleans per
  * operation would have been invisible to a human — Swagger UI and most themes do not render `x-`
  * extensions, and no standard generator reads `x-webpieces-*` — and would have tripled golden churn
  * the day the mapping changed.
  */
 export const OPERATION_SEMANTICS = [
-    "Every operation states whether it is safe to retry, derived from the endpoint's declared",
-    'side-effect contract:',
+    "Every route under `paths` states whether it is safe to retry, derived from the endpoint's",
+    'declared side-effect contract. It covers routes only: a webhook is a call we send, and we',
+    'retry its delivery ourselves, so a webhook carries no retry sentence.',
     '',
     '| declared operation | read-only | destructive | idempotent |',
     '|---|---|---|---|',
@@ -148,8 +151,13 @@ export class DocumentSelection {
         return !this.dropHidden || !endpoint.hidden;
     }
 
-    /** `info.description`: the manifest's prose, plus whatever this document adds to it. */
-    description(manifestDescription: string | undefined): string | undefined {
+    /**
+     * `info.description`: the manifest's prose, plus whatever this document adds to it.
+     *
+     * `hasRoutes` is false when every operation in the document is a webhook. The retry table then
+     * describes a sentence no operation carries, so it is left out (#1302).
+     */
+    description(manifestDescription: string | undefined, hasRoutes: boolean): string | undefined {
         const parts: string[] = [];
         if (this.internalNotice) {
             parts.push(INTERNAL_ONLY_LINE);
@@ -157,7 +165,9 @@ export class DocumentSelection {
         if (manifestDescription !== undefined) {
             parts.push(manifestDescription);
         }
-        parts.push(OPERATION_SEMANTICS);
-        return parts.join('\n\n');
+        if (hasRoutes) {
+            parts.push(OPERATION_SEMANTICS);
+        }
+        return parts.length === 0 ? undefined : parts.join('\n\n');
     }
 }

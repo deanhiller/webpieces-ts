@@ -4,7 +4,7 @@
         "title": "Lang API",
         "summary": "List a lesson's passages in reading order.",
         "version": "1.0.0",
-        "description": "INTERNAL — service-to-service use only. This document lists every endpoint these services serve, including ones no customer is meant to see. It is not the customer contract and must never be handed to one.\n\nEvery operation states whether it is safe to retry, derived from the endpoint's declared\nside-effect contract:\n\n| declared operation | read-only | destructive | idempotent |\n|---|---|---|---|\n| read | yes | no | yes |\n| write-idempotent | no | yes | yes |\n| write | no | yes | no |"
+        "description": "INTERNAL — service-to-service use only. This document lists every endpoint these services serve, including ones no customer is meant to see. It is not the customer contract and must never be handed to one.\n\nEvery route under `paths` states whether it is safe to retry, derived from the endpoint's\ndeclared side-effect contract. It covers routes only: a webhook is a call we send, and we\nretry its delivery ourselves, so a webhook carries no retry sentence.\n\n| declared operation | read-only | destructive | idempotent |\n|---|---|---|---|\n| read | yes | no | yes |\n| write-idempotent | no | yes | yes |\n| write | no | yes | no |"
     },
     "tags": [
         {

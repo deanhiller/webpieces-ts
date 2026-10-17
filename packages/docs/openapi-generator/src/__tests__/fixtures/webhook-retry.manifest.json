@@ -1,0 +1,13 @@
+{
+    "title": "Crate events",
+    "summary": "The crate events we send to your server.",
+    "operationIds": "contract_method",
+    "version": "1.0.0",
+    "apis": [
+        {
+            "entry": "RetryEventsApi.ts",
+            "tag": "Crates",
+            "kind": "webhook"
+        }
+    ]
+}
