@@ -49,7 +49,9 @@ import { TestJwtHook, TestTokenAuthority, USER_ID } from './__tests__/WpMcpServe
  * The source carries a `@privateRemarks` on both the method and the request DTO; the generator drops
  * them (rule 1), and this proves nothing downstream re-introduces them. It also proves the server
  * serves the root `inputSchema` / `outputSchema` descriptions the generator now writes — the request
- * DTO's JSDoc and the method's `@returns` (rule 2) — and every field's own JSDoc (rule 3).
+ * DTO's JSDoc and the method's `@returns` (rule 2) — and every field's own JSDoc (rule 3). And that
+ * every JSDoc link reaches the client as the target's PUBLISHED name — never a `Dto` source name and
+ * never a `Contract.` prefix (#1284).
  */
 const PARTNER_SRC = path.resolve(__dirname, '..', '..', '..', '..', 'apps', 'app-example', 'partner-api', 'src');
 
@@ -199,6 +201,21 @@ describe('the descriptions an MCP client is served from a GENERATED catalog (#12
         expect(tool['title']).toBe(summary);
         expect((tool['annotations'] as Record<string, unknown>)['title']).toBe(summary);
         expect(String(tool['description'])).not.toContain(summary);
+    });
+
+    it('serves every JSDoc {@link} as the PUBLISHED name, in a code span (#1284)', async () => {
+        const tool = await listedTool();
+        // `{@link OrderDto}` -> the schemaNames-stripped schema name; `{@link PartnerOrdersApi.cancelOrder}`
+        // -> its operationId, since cancelOrder is not a tool an agent could call by name.
+        expect(tool['description']).toContain(
+            'Each `Order` it returns can\nbe cancelled with `PartnerOrdersApi_cancelOrder`.',
+        );
+        const served = JSON.stringify(tool);
+        expect(served).toContain('Discriminates this branch of `DeliveryWindow`.');
+        expect(served).not.toContain('OrderDto');
+        expect(served).not.toContain('PartnerOrdersApi.');
+        expect(served).not.toContain('@link');
+        expect(served).not.toMatch(/[\uE000\uE001]/);
     });
 
     it('serves the agent-facing @mcp text as the tool description, without the private note', async () => {

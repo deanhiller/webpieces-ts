@@ -28,30 +28,13 @@
  * It is rendered into `tags[]` in that order, and a docs theme builds its sidebar from `tags[]`.
  * Alphabetising this array is not a cleanup; it reorders partner-facing navigation.
  */
-import { SchemaNameEntry } from '@webpieces/api-doc-model';
+import { OperationIdStyle, SchemaNameEntry } from '@webpieces/api-doc-model';
 
 /**
  * The longest manifest `summary` (#1296): the Claude Connectors Directory's limit for a server's
  * one-line description, so the line published as `info.summary` can be pasted there unchanged.
  */
 export const MANIFEST_SUMMARY_MAX_LENGTH = 200;
-
-/**
- * How every operation's `operationId` is spelled (#1270). OPTIONAL in a contract manifest, defaulting
- * to {@link CONTRACT_METHOD} (#1283) — the spelling every earlier release published, and the only one
- * unique by construction. `operationId` is what openapi-generator, Kiota, NSwag and friends name the
- * METHOD in every client a partner generates, so changing the spelling renames every method in every
- * partner's SDK; {@link METHOD} is the opt-in for a document that already published bare names.
- */
-export enum OperationIdStyle {
-    /** `OrdersApi_fetchOrders` — unique by construction across contracts. */
-    CONTRACT_METHOD = 'contract_method',
-    /**
-     * `fetchOrders` — the bare method name. Two operations of one document sharing it is a HARD
-     * FAILURE naming both, so the id is still unique.
-     */
-    METHOD = 'method',
-}
 
 export class ServerEntry {
     constructor(

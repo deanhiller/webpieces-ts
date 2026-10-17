@@ -1,0 +1,11 @@
+{
+    "title": "Dangling API",
+    "summary": "Links to what a customer document does not publish.",
+    "version": "1.0.0",
+    "apis": [
+        {
+            "entry": "DanglingLinksApi.ts",
+            "tag": "Shelves"
+        }
+    ]
+}

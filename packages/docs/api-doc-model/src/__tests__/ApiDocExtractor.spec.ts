@@ -12,6 +12,7 @@ import {
     UnmappedType,
 } from '../model/ApiDocModel';
 import { TypeRef } from '../model/TypeRef';
+import { DocLink, DocLinkKind, DocLinkText } from '../model/DocLink';
 
 /**
  * The vitest matrix issue #981 enumerates, one `it` per row.
@@ -93,12 +94,17 @@ beforeAll(() => {
 });
 
 describe('the contract itself', () => {
-    it('reads the class, its @ApiPath and its prose, with {@link} flattened', () => {
+    it('reads the class, its @ApiPath and its prose, with {@link} RESOLVED by the compiler (#1284)', () => {
         expect(model.contractName).toBe('ExampleApi');
         expect(model.basePath).toBe('/api/example');
-        // `{@link Customer.email}` became plain text at THIS boundary, so no renderer needs the grammar.
-        expect(model.description).toContain('Customer.email');
+        // `{@link Customer.email}` is resolved at THIS boundary to the TYPE it names plus the tail as
+        // written, so a renderer publishes the type's published name and never parses the grammar.
         expect(model.description).not.toContain('@link');
+        const links = DocLinkText.linksIn(model.description);
+        expect(links.map((link: DocLink) => [link.kind, link.owner, link.member])).toEqual([
+            [DocLinkKind.TYPE, 'Customer', '.email'],
+        ]);
+        expect(DocLinkText.asWritten(model.description)).toContain('`Customer.email`');
     });
 
     it('FOLDS a path held in a constant, across an import', () => {

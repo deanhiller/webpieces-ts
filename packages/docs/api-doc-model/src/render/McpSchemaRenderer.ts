@@ -18,7 +18,9 @@ import {
     DocumentedField,
     DocumentedType,
 } from '../model/ApiDocModel';
+import { DocLink, DocLinkKind, DocLinkNaming, DocLinkProblem, DocLinkText } from '../model/DocLink';
 import { EndpointSummary } from '../model/EndpointSummary';
+import { OperationIds } from '../model/OperationIds';
 import { TypeRef } from '../model/TypeRef';
 import { McpRenderError } from './McpRenderError';
 
@@ -37,6 +39,28 @@ export class SkippedMcpTool {
 
     toString(): string {
         return `${this.contractName}/${this.name}: ${this.reason}`;
+    }
+}
+
+/** The output name every MCP link refusal names. */
+const MCP_OUTPUT = 'the MCP tool catalog';
+
+/**
+ * How an MCP tool catalog names a `{@link}` target (#1284). A tool schema is fully inline, so a type
+ * is named by its published schema name; a contract method that IS a tool by its tool `name` — the
+ * one thing an MCP client can call — and any other method by its operationId.
+ */
+class McpLinkNaming implements DocLinkNaming {
+    constructor(private readonly operationIds: OperationIds) {}
+
+    publishedName(link: DocLink): string | undefined {
+        if (link.kind === DocLinkKind.TYPE) {
+            return link.ownerName;
+        }
+        if (link.kind === DocLinkKind.OPERATION) {
+            return link.mcpToolName ?? this.operationIds.of(link.owner, link.ownerName);
+        }
+        return undefined;
     }
 }
 
@@ -78,10 +102,28 @@ export class McpCatalogRender {
  *   schemas are inline and have no `$ref`.
  */
 export class McpSchemaRenderer {
+    private readonly naming: McpLinkNaming;
+    private readonly problems: DocLinkProblem[] = [];
+
     constructor(
         private readonly model: ApiDocModel,
+        /**
+         * The manifest's operationId spelling — what a `{@link}` to a contract method that is NOT a
+         * tool publishes as (#1284).
+         */
+        operationIds: OperationIds,
         private readonly requireDescriptions = true,
-    ) {}
+    ) {
+        this.naming = new McpLinkNaming(operationIds);
+    }
+
+    /**
+     * Every `{@link}` this renderer could not name, so far. A caller that PUBLISHES what it rendered
+     * refuses when this is non-empty — {@link catalogOf} does.
+     */
+    linkProblems(): readonly DocLinkProblem[] {
+        return this.problems;
+    }
 
     /** The shared inline runtime schema projection, also used by streaming catalog generation. */
     schemaFor(ref: TypeRef, where: string): ApiJsonSchema {
@@ -124,12 +166,13 @@ export class McpSchemaRenderer {
      * serve it.
      */
     // webpieces-disable no-function-outside-class -- static factory over this class
-    static catalogOf(models: readonly ApiDocModel[]): McpCatalogRender {
+    static catalogOf(models: readonly ApiDocModel[], operationIds: OperationIds): McpCatalogRender {
         const catalogs: McpToolCatalogFile[] = [];
         const skipped: SkippedMcpTool[] = [];
         const owners = new Map<string, string>();
+        const problems: DocLinkProblem[] = [];
         for (const model of models) {
-            const renderer = new McpSchemaRenderer(model);
+            const renderer = new McpSchemaRenderer(model, operationIds);
             const tools: McpToolDefinition[] = [];
             for (const endpoint of model.endpoints) {
                 if (endpoint.mcpTool === undefined) {
@@ -147,11 +190,37 @@ export class McpSchemaRenderer {
                 }
             }
             McpSchemaRenderer.claimNames(owners, model.contractName, tools);
+            problems.push(...renderer.linkProblems());
             if (tools.length > 0) {
                 catalogs.push(new McpToolCatalogFile(model.contractName, tools));
             }
         }
+        McpSchemaRenderer.refuseLinks(problems);
         return new McpCatalogRender(catalogs, skipped);
+    }
+
+    /**
+     * A `{@link}` no catalog can name is REFUSED, not skipped (#1284): it is a defect in prose, not a
+     * protocol limit, and a tool published with a dangling reference tells an agent about something it
+     * cannot find. Every offender is named in one run. `wp-openapi` refuses the same links in
+     * `mcp-openapi.json` first; this is the catalog's own backstop.
+     */
+    // webpieces-disable no-function-outside-class -- private static helper of this class
+    private static refuseLinks(problems: readonly DocLinkProblem[]): void {
+        if (problems.length === 0) {
+            return;
+        }
+        throw new McpToolCatalogError(
+            `${problems.length} {@link} reference(s) in MCP tool prose name nothing the catalog ` +
+                `publishes: ${problems.map((each: DocLinkProblem) => each.toString()).join('; ')}.`,
+            'Point each {@link} at a published type or an @Endpoint method of an @ApiPath contract, ' +
+                'imported into the file the JSDoc is in, or write the name as plain text.',
+        );
+    }
+
+    /** `text` as published: every `{@link}` named, every miss recorded — see {@link linkProblems}. */
+    private prose(text: string): string {
+        return DocLinkText.resolve(text, this.naming, MCP_OUTPUT, this.problems);
     }
 
     /** Refuse a tool name some OTHER contract of this run already declared: the namespace is flat. */
@@ -212,9 +281,9 @@ export class McpSchemaRenderer {
         }
         return new McpToolDefinition(
             endpoint.mcpTool!.name,
-            endpoint.summary!,
+            this.prose(endpoint.summary!),
             endpoint.methodName,
-            description,
+            this.prose(description),
             mcpHintsForOperation(
                 McpSchemaRenderer.operationOf(endpoint, where),
                 endpoint.openWorld,
@@ -295,7 +364,7 @@ export class McpSchemaRenderer {
             );
         }
         const schema = this.objectSchema(type, new Set<string>());
-        McpSchemaRenderer.describeRoot(schema, returns ?? type.description);
+        McpSchemaRenderer.describeRoot(schema, this.prose(returns ?? type.description));
         return schema;
     }
 
@@ -396,7 +465,7 @@ export class McpSchemaRenderer {
             this.objectSchema(this.namedType(name, type.name), nested),
         );
         if (type.description.trim() !== '') {
-            schema.description = type.description;
+            schema.description = this.prose(type.description);
         }
         if (type.discriminator !== undefined) {
             const mapping: Record<string, string> = {};
@@ -470,7 +539,7 @@ export class McpSchemaRenderer {
                     'that parameter.',
             );
         }
-        schema.description = description;
+        schema.description = this.prose(description);
 
         const leaf = field.type.kind === 'array' ? schema.items! : schema;
         if (field.min !== undefined) {

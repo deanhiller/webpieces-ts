@@ -64,6 +64,8 @@ import {
     DocumentedEndpoint,
     McpRenderError,
     McpSchemaRenderer,
+    OperationIds,
+    OperationIdStyle,
     TypeRef,
     UnmappedType,
 } from '@webpieces/api-doc-model';
@@ -444,7 +446,12 @@ export class ApiDocRulesScan {
         sink: DefectSink,
         toolNames: Map<string, string>,
     ): void {
-        const renderer = new McpSchemaRenderer(model);
+        // The scan asks only whether each tool RENDERS; it publishes no prose, so the operationId
+        // spelling a `{@link}` would take (#1284) changes no verdict. The generator's own default.
+        const renderer = new McpSchemaRenderer(
+            model,
+            new OperationIds(OperationIdStyle.CONTRACT_METHOD),
+        );
         for (const endpoint of model.endpoints) {
             if (endpoint.invalidForMcp !== undefined) {
                 if (!sink.mcpRuns()) continue;

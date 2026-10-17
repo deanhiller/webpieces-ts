@@ -1,3 +1,5 @@
+import { DocLinkText } from './DocLink';
+
 /**
  * THE rule for an endpoint's `@summary` JSDoc tag (#1296): present, one line, at most 100 characters.
  *
@@ -23,8 +25,10 @@ export class EndpointSummary {
         if (/[\r\n]/.test(summary)) {
             return '@summary spans more than one line';
         }
-        if (summary.length > EndpointSummary.MAX_LENGTH) {
-            return `@summary is ${summary.length} characters, over the ${EndpointSummary.MAX_LENGTH}-character limit`;
+        // A `{@link}` is measured as it reads, never as its encoding in the model (#1284).
+        const length = DocLinkText.asWritten(summary).length;
+        if (length > EndpointSummary.MAX_LENGTH) {
+            return `@summary is ${length} characters, over the ${EndpointSummary.MAX_LENGTH}-character limit`;
         }
         return undefined;
     }

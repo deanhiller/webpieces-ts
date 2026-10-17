@@ -6,6 +6,7 @@ import { FieldTreeBuilder } from '../spec/FieldTree';
 import { FieldTreeRenderer } from './FieldTreeRenderer';
 import { Html } from './Html';
 import { Layout } from './Layout';
+import { CodeLinks } from '../markdown/CodeLinks';
 import { Markdown } from '../markdown/Markdown';
 import { NavBuilder } from './NavModel';
 import { HeaderListRenderer } from './HeaderListRenderer';
@@ -35,7 +36,6 @@ export const OVERVIEW_TITLE = 'Overview';
  * link, which is strictly worse than the unresolved type name it replaced.
  */
 export class SiteRenderer {
-    private readonly markdown = new Markdown();
     private readonly cards = new CardRenderer();
     private readonly html = new Html();
     private readonly urls = new SiteUrls();
@@ -43,8 +43,11 @@ export class SiteRenderer {
     /** @param spec the document. @param prose the manifest's pages, in the manifest's order. */
     render(spec: ApiSpec, prose: readonly ProsePage[], titleOverride: string): RenderedSite {
         const lens = new SchemaLens(spec);
+        // A code span naming an operation or a schema links to its page (#1284); bound at the site
+        // root, and re-bound per page with `forPage`.
+        const markdown = new Markdown(CodeLinks.of(spec, this.urls), '');
         const fields = new FieldTreeBuilder(lens);
-        const trees = new FieldTreeRenderer(this.markdown, this.urls);
+        const trees = new FieldTreeRenderer(markdown, this.urls);
         const examples = new ExampleBuilder(lens);
         const title = titleOverride === '' ? spec.title : titleOverride;
         const nav = new NavBuilder(this.urls).build(spec, prose, OVERVIEW_TITLE);
@@ -53,24 +56,24 @@ export class SiteRenderer {
             spec,
             fields,
             trees,
-            this.markdown,
+            markdown,
             this.cards,
             new CodeSampleBuilder(spec, examples),
             examples,
             layout,
             this.urls,
-            new HeaderListRenderer(lens, this.markdown),
+            new HeaderListRenderer(lens, markdown),
         );
-        const pages: SitePage[] = [this.overview(spec, layout)];
+        const pages: SitePage[] = [this.overview(spec, layout, markdown)];
         for (const page of prose) {
-            pages.push(this.prosePage(page, layout));
+            pages.push(this.prosePage(page, layout, markdown));
         }
         for (const operation of spec.operations()) {
             pages.push(operations.page(operation));
         }
         for (const schema of spec.schemas) {
             if (schema.hasOwnPage) {
-                pages.push(this.schemaPage(schema, fields, trees, examples, layout));
+                pages.push(this.schemaPage(schema, fields, trees, examples, layout, markdown));
             }
         }
         return new RenderedSite(pages, this.assets());
@@ -84,15 +87,15 @@ export class SiteRenderer {
         ];
     }
 
-    private overview(spec: ApiSpec, layout: Layout): SitePage {
+    private overview(spec: ApiSpec, layout: Layout, markdown: Markdown): SitePage {
         const parts = [`<h1>${this.html.escape(spec.title)}</h1>`];
         if (spec.summary !== '') {
             parts.push(`<p class="api-summary">${this.html.escape(spec.summary)}</p>`);
         }
         if (spec.description !== '') {
-            parts.push(this.markdown.render(spec.description));
+            parts.push(markdown.render(spec.description));
         }
-        parts.push(this.sectionIndex(spec));
+        parts.push(this.sectionIndex(spec, markdown));
         const url = this.urls.home();
         return new SitePage(
             url,
@@ -101,7 +104,7 @@ export class SiteRenderer {
         );
     }
 
-    private sectionIndex(spec: ApiSpec): string {
+    private sectionIndex(spec: ApiSpec, markdown: Markdown): string {
         return spec.sections
             .map((section: TagSection): string => {
                 const items = section.operations
@@ -110,7 +113,7 @@ export class SiteRenderer {
                             `<li>${this.html.link(this.urls.operation(operation), operation.name)}</li>`,
                     )
                     .join('');
-                return `<h2>${this.html.escape(section.name)}</h2>${this.markdown.render(section.description)}<ul>${items}</ul>`;
+                return `<h2>${this.html.escape(section.name)}</h2>${markdown.render(section.description)}<ul>${items}</ul>`;
             })
             .join('\n');
     }
@@ -128,9 +131,9 @@ export class SiteRenderer {
         return this.cards.panel('SERVERS', rows);
     }
 
-    private prosePage(page: ProsePage, layout: Layout): SitePage {
+    private prosePage(page: ProsePage, layout: Layout, markdown: Markdown): SitePage {
         const url = this.urls.prose(page);
-        const body = `<h1>${this.html.escape(page.title)}</h1>${this.markdown.render(page.markdown)}`;
+        const body = `<h1>${this.html.escape(page.title)}</h1>${markdown.forPage(this.urls.prefixFor(url)).render(page.markdown)}`;
         return new SitePage(url, page.title, layout.render(url, page.title, body, ''));
     }
 
@@ -140,13 +143,14 @@ export class SiteRenderer {
         trees: FieldTreeRenderer,
         examples: ExampleBuilder,
         layout: Layout,
+        markdown: Markdown,
     ): SitePage {
         const url = this.urls.schema(schema);
         const prefix = this.urls.prefixFor(url);
         const parts = [`<h1>${this.html.escape(schema.name)}</h1>`];
         const description = schema.node.text('description');
         if (description !== undefined) {
-            parts.push(this.markdown.render(description));
+            parts.push(markdown.forPage(prefix).render(description));
         }
         const variants = fields.variantsOf(schema.node);
         parts.push(

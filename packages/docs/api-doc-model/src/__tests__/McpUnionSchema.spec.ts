@@ -15,6 +15,10 @@ import {
 import { TypeRef } from '../model/TypeRef';
 import { McpRenderError } from '../render/McpRenderError';
 import { McpSchemaRenderer, McpCatalogRender, SkippedMcpTool } from '../render/McpSchemaRenderer';
+import { OperationIds, OperationIdStyle } from '../model/OperationIds';
+
+/** The generator's default operationId spelling, for a `{@link}` to a contract method (#1284). */
+const OPERATION_IDS = new OperationIds(OperationIdStyle.CONTRACT_METHOD);
 
 /**
  * UNIONS in an MCP tool schema (#1009), in both directions.
@@ -52,7 +56,7 @@ describe('a union in an MCP tool schema', () => {
         const fixture = path.join(__dirname, 'fixtures', 'McpUnionApi.ts');
         rendered = McpSchemaRenderer.catalogOf([
             new ApiDocExtractor().extractFile(fixture, COMPILER_OPTIONS),
-        ]);
+        ], OPERATION_IDS);
     }, 60_000);
 
     it('renders a NESTED discriminated union as oneOf plus its derived discriminator', () => {
@@ -94,7 +98,7 @@ describe('a union in an MCP tool schema', () => {
      * so the renderer is measured directly against a model that carries the union without one.
      */
     it('publishes an un-narrowable union WITHOUT a discriminator rather than inventing one', () => {
-        const schema = new McpSchemaRenderer(unnarrowableModel('Ask either way')).render()[0]
+        const schema = new McpSchemaRenderer(unnarrowableModel('Ask either way'), OPERATION_IDS).render()[0]
             .outputSchema;
         const either = schema.properties!['either'];
 
@@ -104,7 +108,7 @@ describe('a union in an MCP tool schema', () => {
     });
 
     it("carries the method's summary JSDoc tag into the catalog entry as its title (#1296)", () => {
-        expect(new McpSchemaRenderer(unnarrowableModel('Ask either way')).render()[0].title).toBe(
+        expect(new McpSchemaRenderer(unnarrowableModel('Ask either way'), OPERATION_IDS).render()[0].title).toBe(
             'Ask either way',
         );
     });
@@ -116,7 +120,7 @@ describe('a union in an MCP tool schema', () => {
         ['x'.repeat(101), /101 characters, over the 100-character limit/],
     ])('REFUSES a tool whose summary is %j, naming the JSDoc tag to write (#1296)', (summary: string | undefined, why: RegExp) => {
         const render = (): void => {
-            new McpSchemaRenderer(unnarrowableModel(summary)).render();
+            new McpSchemaRenderer(unnarrowableModel(summary), OPERATION_IDS).render();
         };
         expect(render).toThrow(McpRenderError);
         expect(render).toThrow(why);
@@ -127,7 +131,7 @@ describe('a union in an MCP tool schema', () => {
 
     it('REFUSES a tool name the Claude Connectors Directory would refuse (#1296)', () => {
         const render = (): void => {
-            new McpSchemaRenderer(unnarrowableModel('Ask either way', 'x'.repeat(65))).render();
+            new McpSchemaRenderer(unnarrowableModel('Ask either way', 'x'.repeat(65)), OPERATION_IDS).render();
         };
         expect(render).toThrow(McpRenderError);
         expect(render).toThrow(/65 characters, over the 64-character limit/);
@@ -144,7 +148,7 @@ function rootUnionCure(): string {
     )!;
     // webpieces-disable no-unmanaged-exceptions -- the throw IS the measurement, and its `cure` field is the sentence an author reads
     try {
-        new McpSchemaRenderer(model).tool(moving);
+        new McpSchemaRenderer(model, OPERATION_IDS).tool(moving);
     } catch (err: unknown) {
         const error = toError(err);
         if (error instanceof McpRenderError) return error.cure;

@@ -17,7 +17,7 @@ export type {
     DeliveryWindow,
     FetchOrdersRequest,
     FetchOrdersResponse,
-    Order,
+    OrderDto,
     OrderState,
     ReindexRequest,
     ReindexResponse,

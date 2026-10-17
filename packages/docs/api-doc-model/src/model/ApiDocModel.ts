@@ -74,7 +74,7 @@ export class DocumentedField {
         readonly optional: boolean,
         /** NULLABLE (`name: string | null`) — the property is present and may hold `null`. */
         readonly nullable: boolean,
-        /** The JSDoc body, links flattened. Empty string when undocumented. */
+        /** The JSDoc body, each `{@link}` encoded (`DocLinkText`). Empty string when undocumented. */
         readonly description: string,
         /**
          * The `@mcp` block tag — an OPTIONAL agent-facing override. Undefined means "no override",
@@ -348,7 +348,7 @@ export class ApiDocModel {
         readonly apiTypes: readonly string[],
         /** `@ApiPath(...)`, constant-folded. */
         readonly basePath: string,
-        /** The JSDoc on the contract class, links flattened. */
+        /** The JSDoc on the contract class, each `{@link}` encoded (`DocLinkText`). */
         readonly description: string,
         readonly endpoints: readonly DocumentedEndpoint[],
         /** Every named type reachable from the endpoints, by name. A `$ref` target for a renderer. */

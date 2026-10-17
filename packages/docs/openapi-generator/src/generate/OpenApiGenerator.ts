@@ -5,6 +5,7 @@ import {
     DocumentedEndpoint,
     DocumentedField,
     DocumentedType,
+    OperationIds,
     TypeNameCollision,
     TypeRef,
 } from '@webpieces/api-doc-model';
@@ -18,6 +19,7 @@ import {
     GeneratedDocuments,
     GenerationInputs,
 } from './GenerationInputs';
+import { DocLinkGuard, DocumentLinkNaming } from './DocLinkGuard';
 import { DocumentSelection } from './DocumentSelection';
 import { OperationRenderer, ResponseContract } from './OperationRenderer';
 import {
@@ -107,6 +109,8 @@ const OPENAPI_VERSION = '3.1.0';
  * schema with no JSDoc description ({@link UndocumentedSchemaGuard}) — each naming every offender in
  * one run (#1292). Likewise an operation with no valid `@summary` ({@link SummaryGuard}) and an MCP
  * tool whose name the Claude Connectors Directory would refuse ({@link McpToolNameGuard}) (#1296).
+ * And a JSDoc `{@link}` the document cannot publish under its target's published name
+ * ({@link DocLinkGuard}) (#1284).
  */
 export class OpenApiGenerator {
     private readonly security = new SecurityDeriver();
@@ -142,6 +146,7 @@ export class OpenApiGenerator {
         // Collected across EVERY OpenAPI document of the run and refused once, after them all, so an
         // author is handed every undocumented schema at once rather than one document at a time.
         const undocumented = new UndocumentedSchemaGuard();
+        const links = new DocLinkGuard();
         const documents: GeneratedDocument[] = [];
         for (const selection of DocumentSelection.all()) {
             const contracts = inputs.contracts.filter((each: ContractModel) =>
@@ -154,18 +159,15 @@ export class OpenApiGenerator {
                 documents.push(
                     new GeneratedDocument(
                         selection.fileName,
-                        this.bundled(inputs, contracts, selection, undocumented),
+                        this.bundled(inputs, contracts, selection, links, undocumented),
                     ),
                 );
                 continue;
             }
             this.refuseCollisions(this.collisionsOf(inputs, contracts), inputs.manifestPath);
-            const split = this.render(
-                inputs,
-                contracts,
-                selection,
-                new SplitPlacement(inputs.homePackage),
-            );
+            const placement = new SplitPlacement(inputs.homePackage);
+            const split = this.render(inputs, contracts, selection, placement);
+            this.resolveLinks(links, split, inputs, contracts, selection, placement);
             this.refuseUnpublished(
                 split.schemas,
                 this.mergedTypes(inputs),
@@ -180,11 +182,12 @@ export class OpenApiGenerator {
             documents.push(
                 new GeneratedDocument(
                     `${selection.fileName}${BUNDLED_SUFFIX}`,
-                    this.bundled(inputs, contracts, selection),
+                    this.bundled(inputs, contracts, selection, links),
                 ),
             );
         }
         undocumented.refuse(inputs.manifestPath);
+        links.refuse(inputs.manifestPath);
         return new GeneratedDocuments(documents);
     }
 
@@ -218,6 +221,18 @@ export class OpenApiGenerator {
         const undocumented = new UndocumentedSchemaGuard();
         undocumented.collect(schemas.reachedTypes(), model.types);
         undocumented.refuse(where);
+        const links = new DocLinkGuard();
+        links.resolve(
+            rendered,
+            new DocumentLinkNaming(
+                model.types,
+                schemas,
+                new SplitPlacement(model.packageName),
+                new Map(),
+            ),
+            COMPONENTS_DOCUMENT,
+        );
+        links.refuse(where);
         if (rendered.isEmpty()) {
             throw new OpenApiGenerationError(
                 `${model.packageName}'s entries export no type with a schema`,
@@ -253,8 +268,11 @@ export class OpenApiGenerator {
         inputs: GenerationInputs,
         contracts: readonly ContractModel[],
         selection: DocumentSelection,
+        links: DocLinkGuard,
         undocumented?: UndocumentedSchemaGuard,
     ): JsonObject {
+        // The discovery pass publishes nothing, so its links are not judged: the named pass below
+        // reaches exactly the same prose.
         const discovery = this.render(inputs, contracts, selection, new DiscoveryPlacement());
         // The MCP projection inlines every type it reaches, from any package, so it is judged here
         // over that whole set (#1292). A split document's bundled sibling is not: each type in it is
@@ -265,7 +283,31 @@ export class OpenApiGenerator {
             this.mergedTypes(inputs),
             inputs.homePackage,
         );
-        return this.render(inputs, contracts, selection, new BundledPlacement(names)).document;
+        const placement = new BundledPlacement(names);
+        const rendered = this.render(inputs, contracts, selection, placement);
+        this.resolveLinks(links, rendered, inputs, contracts, selection, placement);
+        return rendered.document;
+    }
+
+    /**
+     * Publish every `{@link}` in a rendered document under its target's name in THAT document (#1284),
+     * recording the ones it cannot name — see {@link DocLinkGuard}.
+     */
+    private resolveLinks(
+        links: DocLinkGuard,
+        rendered: RenderedDocument,
+        inputs: GenerationInputs,
+        contracts: readonly ContractModel[],
+        selection: DocumentSelection,
+        placement: SchemaPlacement,
+    ): void {
+        const naming = new DocumentLinkNaming(
+            this.mergedTypes(inputs),
+            rendered.schemas,
+            placement,
+            this.publishedOperationIds(contracts, selection, inputs),
+        );
+        links.resolve(rendered.document, naming, selection.fileName);
     }
 
     /** ONE document, from the operations this selection accepts and nothing else. */
@@ -461,6 +503,28 @@ export class OpenApiGenerator {
                 "in partners' generated clients).",
             duplicates,
         );
+    }
+
+    /** `Contract.method` -> operationId, for every operation this document publishes. */
+    private publishedOperationIds(
+        contracts: readonly ContractModel[],
+        selection: DocumentSelection,
+        inputs: GenerationInputs,
+    ): ReadonlyMap<string, string> {
+        const operationIds = new OperationIds(inputs.manifest.operationIds);
+        const ids = new Map<string, string>();
+        for (const contractModel of contracts) {
+            const model = contractModel.model;
+            for (const endpoint of model.endpoints) {
+                if (selection.acceptsEndpoint(endpoint)) {
+                    ids.set(
+                        `${model.contractName}.${endpoint.methodName}`,
+                        operationIds.of(model.contractName, endpoint.methodName),
+                    );
+                }
+            }
+        }
+        return ids;
     }
 
     /**

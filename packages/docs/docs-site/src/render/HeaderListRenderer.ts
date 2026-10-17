@@ -26,16 +26,19 @@ export class HeaderListRenderer {
         private readonly markdown: Markdown,
     ) {}
 
-    /** The list, or the empty string when there are no headers — no empty heading. */
-    render(headers: readonly HeaderInfo[]): string {
+    /**
+     * The list, or the empty string when there are no headers — no empty heading. `prefix` is the
+     * page's `../` prefix, for a code span in a header's prose that links to a page.
+     */
+    render(headers: readonly HeaderInfo[], prefix: string): string {
         if (headers.length === 0) {
             return '';
         }
-        const rows = headers.map((header: HeaderInfo): string => this.row(header)).join('');
+        const rows = headers.map((header: HeaderInfo): string => this.row(header, prefix)).join('');
         return `<div class="headers"><div class="headers-head">${HEADERS_HEADING}</div>${rows}</div>`;
     }
 
-    private row(header: HeaderInfo): string {
+    private row(header: HeaderInfo, prefix: string): string {
         const parts = ['<div class="field">', '<div class="field-head">'];
         parts.push(`<span class="field-name">${this.html.escape(header.name)}</span>`);
         parts.push(`<span class="field-type">${this.html.escape(this.typeOf(header))}</span>`);
@@ -47,7 +50,7 @@ export class HeaderListRenderer {
         parts.push('</div>');
         const description = header.description !== '' ? header.description : this.lens.describe(header.schema);
         if (description !== '') {
-            parts.push(`<div class="field-doc">${this.markdown.render(description)}</div>`);
+            parts.push(`<div class="field-doc">${this.markdown.forPage(prefix).render(description)}</div>`);
         }
         parts.push('</div>');
         return parts.join('');

@@ -35,6 +35,8 @@ import {
     ApiDocModel,
     DocumentedEndpoint,
     McpSchemaRenderer,
+    OperationIds,
+    OperationIdStyle,
 } from '@webpieces/api-doc-model';
 import * as path from 'path';
 import * as ts from 'typescript';
@@ -67,6 +69,9 @@ import {
     VOID_RPC_API,
     fixtureProjects,
 } from './api-doc-rules-fixtures';
+
+/** The generator's default operationId spelling, for a `{@link}` to a contract method (#1284). */
+const OPERATION_IDS = new OperationIds(OperationIdStyle.CONTRACT_METHOD);
 
 let root = '';
 
@@ -184,7 +189,7 @@ describe('the acceptance contract — rules pass, THEN @ApiType generates', () =
         // What OpenApiGenerator.refuseUnmappedFields refuses on. Empty means it does not fire.
         expect(model.unmapped.map((one: { typeText: string }) => one.typeText)).toEqual([]);
 
-        const render = McpSchemaRenderer.catalogOf([model]);
+        const render = McpSchemaRenderer.catalogOf([model], OPERATION_IDS);
         expect(render.skipped.map(String)).toEqual([]);
         expect(render.catalogs[0]!.names()).toEqual(['fetch_order']);
         const tool = render.catalogs[0]!.find('fetch_order')!;
@@ -195,7 +200,7 @@ describe('the acceptance contract — rules pass, THEN @ApiType generates', () =
 
     it('still renders that tool when the rules are asked about it one endpoint at a time', () => {
         const model = extract('published-api');
-        const renderer = new McpSchemaRenderer(model);
+        const renderer = new McpSchemaRenderer(model, OPERATION_IDS);
 
         for (const endpoint of model.endpoints as readonly DocumentedEndpoint[]) {
             if (endpoint.mcpTool === undefined) continue;

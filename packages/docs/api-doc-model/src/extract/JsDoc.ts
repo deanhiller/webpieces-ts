@@ -1,5 +1,6 @@
 import * as ts from 'typescript';
 import { StackedJsDoc } from '../model/ApiDocModel';
+import { DocLinkReader } from './DocLinkReader';
 import { SourceLocation } from './SourceLocation';
 
 /**
@@ -30,20 +31,22 @@ const SUMMARY_TAG = 'summary';
  * is dropped together with its text, and `@privateRemarks` — TSDoc's standard "inside the doc block,
  * never published" tag — is the one an author writes ON PURPOSE to keep a note out of every document:
  * OpenAPI, MCP tool catalogs, tag and schema descriptions. It is dropped HERE, at extraction, so no
- * renderer can ever reach it — the same reason `{@link}` is flattened here (below). `//` and `/* *\/`
+ * renderer can ever reach it — the same reason `{@link}` is read here (below). `//` and `/* *\/`
  * comments are private by construction: the compiler attaches no JSDoc for them.
  *
- * `{@link Foo.bar}` is flattened to `Foo.bar` HERE, at this boundary, and that placement is the
- * point: a link is a TypeScript editor affordance, and every downstream renderer — OpenAPI
- * `description`, an MCP tool description, an HTML page — would otherwise each have to know the inline
- * tag grammar and each get it slightly differently wrong. One flattening, at extraction.
+ * `{@link Foo.bar}` is RESOLVED here, by the compiler, into a `DocLink` encoded in the prose (#1284):
+ * what it points at — a type and its model key, a contract operation, or nothing publishable. It is
+ * not flattened to its source text, because the source name is exactly what must not be published:
+ * a renderer names it as it publishes — the stripped schema name, the operationId, an MCP tool's
+ * name — as a markdown code span, through the one grammar `DocLinkText` owns. Nothing downstream
+ * parses the inline tag grammar.
  */
 export class JsDoc {
     private constructor(
         /**
-         * The body text, links flattened, trimmed. Empty string when undocumented. A block TAG is never
-         * part of it — `@summary`, `@returns` and the rest are read into their own fields (or dropped),
-         * so the short title never repeats inside the description it heads.
+         * The body text, links encoded (see the class doc), trimmed. Empty string when undocumented.
+         * A block TAG is never part of it — `@summary`, `@returns` and the rest are read into their
+         * own fields (or dropped), so the short title never repeats inside the description it heads.
          */
         readonly description: string,
         /**
@@ -81,9 +84,9 @@ export class JsDoc {
         readonly mcpHeader: string | undefined,
     ) {}
 
-    /** Read the JSDoc attached to one declaration. */
+    /** Read the JSDoc attached to one declaration, resolving every `{@link}` with `links`. */
     // webpieces-disable no-function-outside-class -- static factory; JsDoc has a private constructor so a caller cannot invent prose
-    static read(node: ts.Node): JsDoc {
+    static read(node: ts.Node, links: DocLinkReader): JsDoc {
         const symbolLike = node as JsDocCarrier;
         const blocks = symbolLike.jsDoc ?? [];
         const bodies: string[] = [];
@@ -94,10 +97,10 @@ export class JsDoc {
         let mcpHeader: string | undefined;
 
         for (const block of blocks) {
-            bodies.push(JsDoc.flatten(block.comment));
+            bodies.push(JsDoc.flatten(block.comment, links));
             for (const tag of block.tags ?? []) {
                 const name = tag.tagName.text;
-                const text = JsDoc.flatten(tag.comment);
+                const text = JsDoc.flatten(tag.comment, links);
                 // `@privateRemarks` (and every tag not named below) is skipped with its text — see
                 // the class doc: it is never published anywhere.
                 if (name === SUMMARY_TAG && text !== '') {
@@ -147,19 +150,22 @@ export class JsDoc {
         const name = (node as ts.NamedDeclaration).name;
         const own = name !== undefined ? name.getText() : ts.SyntaxKind[node.kind];
         const parent = node.parent as ts.NamedDeclaration | undefined;
-        const isMember = parent !== undefined && (ts.isClassLike(parent) || ts.isInterfaceDeclaration(parent));
+        const isMember =
+            parent !== undefined && (ts.isClassLike(parent) || ts.isInterfaceDeclaration(parent));
         return isMember && parent.name !== undefined ? `${parent.name.getText()}.${own}` : own;
     }
 
     /**
-     * A comment's text with every inline tag replaced by its own text: `{@link Foo.bar}` -> `Foo.bar`,
-     * `{@link Foo.bar|the widget}` -> `the widget`.
+     * A comment's text with every inline link replaced by what {@link DocLinkReader} makes of it.
      *
      * TypeScript hands a commented node either a plain string or an array of parts, and the link
      * parts are the ones with structure. Both shapes are handled here so no caller has to.
      */
     // webpieces-disable no-function-outside-class -- private static helper of this class
-    private static flatten(comment: string | ts.NodeArray<ts.JSDocComment> | undefined): string {
+    private static flatten(
+        comment: string | ts.NodeArray<ts.JSDocComment> | undefined,
+        links: DocLinkReader,
+    ): string {
         if (comment === undefined) {
             return '';
         }
@@ -169,10 +175,7 @@ export class JsDoc {
         const parts: string[] = [];
         for (const part of comment) {
             if (ts.isJSDocLink(part) || ts.isJSDocLinkCode(part) || ts.isJSDocLinkPlain(part)) {
-                // `text` is whatever followed the target ('|the widget'); the NAME is the target.
-                const label = part.text.replace(/^[|\s]+/, '').trim();
-                const target = part.name ? part.name.getText() : '';
-                parts.push(label !== '' ? label : target);
+                parts.push(links.textOf(part));
             } else {
                 parts.push(part.text);
             }

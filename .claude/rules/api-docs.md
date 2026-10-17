@@ -350,6 +350,33 @@ must document its tools and their DTOs the same way. A webhook-only tag takes th
 contract's JSDoc. `@webpieces/docs-site` renders response headers and `in: "header"` request
 parameters as a **Headers** list.
 
+## `{@link}` publishes the target's PUBLISHED identity, as a code span (#1284)
+
+A JSDoc `{@link X}` is resolved by the COMPILER at extraction and published under the name X has in
+the output being written — never its source name, which is exactly what leaked before (`MenuDto` in a
+document whose schema is `Menu`, `OrdersApi.fetchOrders` leaking the contract class to partners):
+
+| JSDoc link | Published as (a markdown code span) |
+|---|---|
+| `{@link MenuDto}` | `` `Menu` `` — the type's published schema name, after `schemaNames` stripping (a bundled document's qualified name where it has one; an inlined single-use wrapper's `title`, #1303) |
+| `{@link MenuDto.items}`, `{@link Gender.F}` | `` `Menu.items` ``, `` `Gender.F` `` — the `.member` tail kept as written |
+| `{@link OrdersApi.fetchOrders}` | `` `fetchOrders` `` — its operationId in the manifest's `operationIds` style, never `OrdersApi.`; in an `mcp-<Contract>-tools.json` catalog, a method that IS a tool publishes its tool `name` |
+| `{@link OrdersApi.fetchOrders \| the order list}` / `{@link X label}` | `the order list (`` `fetchOrders` ``)` — the label, then the identity |
+| `{@link https://…}` / `{@link https://… \| label}` | `<https://…>` / `[label](https://…)` — an ordinary markdown link |
+
+The same resolution runs in every output — the OpenAPI documents, their bundled siblings,
+`mcp-openapi.json` (where a method link is its operationId, like any OpenAPI document), the
+`mcp-<Contract>-tools.json` catalogs and therefore what `WpMcpServer` serves on `tools/list`.
+`@webpieces/docs-site` turns a code span that exactly names an operationId or a schema with its own
+page (or `<schema>.<member>`) into a link to that page; anything else stays plain code.
+
+Generation REFUSES — every offender with its `file:line`, in one run — a link the compiler cannot
+resolve (import the target into the file), one to something that is neither a type nor an `@Endpoint`
+method of an `@ApiPath` contract (a function, a constant, the contract class itself), and one to a type
+or operation the document being written does not publish (a type only a `{ hidden: true }` method
+reaches, linked from prose the customer document carries). A URL link is never refused. Beware that
+TypeScript parses `{@link X}` even inside backticks, so a sentence ABOUT the syntax is a link too.
+
 ## One spelling in an api library: string enums, top-of-file imports
 
 A fixed set of string values in an API is a string `enum`, every member explicitly initialised with a
