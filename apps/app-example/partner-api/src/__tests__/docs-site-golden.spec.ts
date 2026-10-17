@@ -105,6 +105,13 @@ describe('the docs site rendered from the example contract', () => {
         expect(page).not.toContain('https://api.example.com');
     });
 
+    it('shows the retry sentence on a route and never on a webhook (#1302)', () => {
+        // We send a webhook and retry its delivery ourselves; "NOT safe to retry" there is backwards.
+        const webhook = site.page('reference', 'partner-delivery-webhook-api-order-state-changed');
+        expect(webhook).not.toMatch(/safe to retry/i);
+        expect(site.page('reference', 'partner-orders-api-fetch-orders')).toContain('Safe to retry');
+    });
+
     it('builds the code samples FROM THE SPEC — server url, path and security header names', () => {
         const page = site.page('reference', 'partner-orders-api-fetch-orders');
         expect(page).toContain('https://api.example.com/orders/fetch');

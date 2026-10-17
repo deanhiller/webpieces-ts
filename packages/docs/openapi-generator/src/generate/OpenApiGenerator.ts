@@ -323,7 +323,7 @@ export class OpenApiGenerator {
 
         const document = new JsonObject()
             .set('openapi', OPENAPI_VERSION)
-            .set('info', this.info(inputs, selection))
+            .set('info', this.info(inputs, selection, !paths.isEmpty()))
             .set('servers', this.servers(inputs))
             .set('tags', this.tagList(tags, contracts))
             .set('security', hoisted === undefined ? undefined : hoisted.slice())
@@ -688,12 +688,16 @@ export class OpenApiGenerator {
     }
 
     /** `info`, whose `description` is the ONE piece of prose that differs between the documents. */
-    private info(inputs: GenerationInputs, selection: DocumentSelection): JsonObject {
+    private info(
+        inputs: GenerationInputs,
+        selection: DocumentSelection,
+        hasRoutes: boolean,
+    ): JsonObject {
         return new JsonObject()
             .set('title', inputs.manifest.title)
             .set('summary', inputs.manifest.summary)
             .set('version', inputs.manifest.version)
-            .set('description', selection.description(inputs.description));
+            .set('description', selection.description(inputs.description, hasRoutes));
     }
 
     private servers(inputs: GenerationInputs): readonly JsonValue[] | undefined {

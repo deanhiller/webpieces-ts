@@ -333,6 +333,70 @@ describe('the webhook block', () => {
     });
 });
 
+/**
+ * #1302: the retry sentence tells a CALLER whether it may repeat a call. The partner never calls a
+ * webhook — we do, and we retry delivery ourselves — so on a webhook it would be backwards.
+ */
+describe('the retry sentence is for routes, never webhooks (#1302)', () => {
+    const RETRY = /safe to retry/i;
+
+    /** Every `webhooks.<event>.<method>.description` in one document. */
+    function webhookDescriptions(document: Record<string, unknown>): string[] {
+        const descriptions: string[] = [];
+        const webhooks = (document['webhooks'] ?? {}) as Record<string, Record<string, unknown>>;
+        for (const item of Object.values(webhooks)) {
+            for (const operation of Object.values(item)) {
+                descriptions.push(String((operation as Record<string, unknown>)['description'] ?? ''));
+            }
+        }
+        return descriptions;
+    }
+
+    it('puts NO retry sentence on any webhook, in any document — READ, WRITE_IDEMPOTENT or WRITE', () => {
+        const written = harness.run('webhook-retry.manifest.json');
+        for (const file of ['full-private-openapi.json', 'public-openapi.json', 'mcp-openapi.json']) {
+            const descriptions = webhookDescriptions(harness.document(written, file));
+            expect(descriptions, file).toHaveLength(3);
+            for (const description of descriptions) {
+                expect(description, file).not.toMatch(RETRY);
+                expect(description, file).toMatch(/^Sent when a crate is/);
+            }
+        }
+    });
+
+    it('puts no trigger sentence on a webhook either — nothing of ours fires a call we make', () => {
+        const written = harness.run('webhook-retry.manifest.json');
+        for (const description of webhookDescriptions(harness.document(written, 'full-private-openapi.json'))) {
+            expect(description).not.toContain('Triggered');
+        }
+    });
+
+    it('omits the retry table from info.description when the document holds only webhooks', () => {
+        const written = harness.run('webhook-retry.manifest.json');
+        for (const file of ['full-private-openapi.json', 'public-openapi.json', 'mcp-openapi.json']) {
+            const description = String(harness.at(harness.document(written, file), 'info.description') ?? '');
+            expect(description, file).not.toMatch(RETRY);
+            expect(description, file).not.toContain('| declared operation |');
+        }
+    });
+
+    it('keeps the sentence on every route beside a webhook, and the table says it covers routes only', () => {
+        const written = harness.run('single.manifest.json');
+        for (const file of ['full-private-openapi.json', 'public-openapi.json']) {
+            const document = harness.document(written, file);
+            for (const description of webhookDescriptions(document)) {
+                expect(description, file).not.toMatch(RETRY);
+            }
+            expect(harness.at(document, 'paths./widgets/list.post.description'), file).toContain(
+                'Safe to retry: this operation is read-only and idempotent.',
+            );
+            const info = String(harness.at(document, 'info.description'));
+            expect(info, file).toContain('| declared operation |');
+            expect(info, file).toContain('It covers routes only');
+        }
+    });
+});
+
 describe('the document-wide error contract', () => {
     it('adds the declared statuses to every served operation, with the body read from a TS type', () => {
         const published = harness.document(

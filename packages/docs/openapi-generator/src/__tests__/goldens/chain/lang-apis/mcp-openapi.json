@@ -4,7 +4,7 @@
         "title": "Lang API",
         "summary": "List a lesson's passages in reading order.",
         "version": "1.0.0",
-        "description": "Every operation states whether it is safe to retry, derived from the endpoint's declared\nside-effect contract:\n\n| declared operation | read-only | destructive | idempotent |\n|---|---|---|---|\n| read | yes | no | yes |\n| write-idempotent | no | yes | yes |\n| write | no | yes | no |"
+        "description": "Every route under `paths` states whether it is safe to retry, derived from the endpoint's\ndeclared side-effect contract. It covers routes only: a webhook is a call we send, and we\nretry its delivery ourselves, so a webhook carries no retry sentence.\n\n| declared operation | read-only | destructive | idempotent |\n|---|---|---|---|\n| read | yes | no | yes |\n| write-idempotent | no | yes | yes |\n| write | no | yes | no |"
     },
     "tags": [
         {

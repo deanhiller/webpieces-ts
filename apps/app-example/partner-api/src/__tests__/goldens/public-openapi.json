@@ -4,7 +4,7 @@
         "title": "Example Orders API",
         "summary": "Read and cancel the orders placed at your stores, and receive a webhook whenever an order's state changes.",
         "version": "1.0.0",
-        "description": "# Orders API\n\nThis is the example contract that ships with webpieces. It exists so `wp-openapi` has something real\nto read: every feature of the generator — derived api-key security, a hidden endpoint, an outbound\nwebhook, a document-wide error contract and a folded response-header constant — is demonstrated by a\ncontract somebody could plausibly have written, not by a fixture.\n\nAuthenticate every call with both the `x-api-key` header and the `x-organization-id` header. They are\npresented together; neither alone is sufficient.\n\nEvery operation states whether it is safe to retry, derived from the endpoint's declared\nside-effect contract:\n\n| declared operation | read-only | destructive | idempotent |\n|---|---|---|---|\n| read | yes | no | yes |\n| write-idempotent | no | yes | yes |\n| write | no | yes | no |"
+        "description": "# Orders API\n\nThis is the example contract that ships with webpieces. It exists so `wp-openapi` has something real\nto read: every feature of the generator — derived api-key security, a hidden endpoint, an outbound\nwebhook, a document-wide error contract and a folded response-header constant — is demonstrated by a\ncontract somebody could plausibly have written, not by a fixture.\n\nAuthenticate every call with both the `x-api-key` header and the `x-organization-id` header. They are\npresented together; neither alone is sufficient.\n\nEvery route under `paths` states whether it is safe to retry, derived from the endpoint's\ndeclared side-effect contract. It covers routes only: a webhook is a call we send, and we\nretry its delivery ourselves, so a webhook carries no retry sentence.\n\n| declared operation | read-only | destructive | idempotent |\n|---|---|---|---|\n| read | yes | no | yes |\n| write-idempotent | no | yes | yes |\n| write | no | yes | no |"
     },
     "servers": [
         {
@@ -218,7 +218,7 @@
                 "operationId": "PartnerDeliveryWebhookApi_orderStateChanged",
                 "x-webpieces-authentication": [],
                 "summary": "Order state changed",
-                "description": "Sent whenever an order's state changes.\n\nDeliveries are at-least-once and may arrive out of order; treat `state` as the state at `at`\nand ignore an event older than one you have already applied.\n\nNOT safe to retry: this operation changes state and is not idempotent.",
+                "description": "Sent whenever an order's state changes.\n\nDeliveries are at-least-once and may arrive out of order; treat `state` as the state at `at`\nand ignore an event older than one you have already applied.",
                 "tags": [
                     "Webhooks"
                 ],
