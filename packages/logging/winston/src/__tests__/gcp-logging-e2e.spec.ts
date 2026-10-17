@@ -1,8 +1,10 @@
-import { describe, it, expect, beforeAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterEach } from 'vitest';
 import {
     ApiMethodInfo,
     ContextKey,
     HeaderRegistry,
+    LogApiCall,
+    LogApiCallConfig,
     LogApiCallImpl,
     LogManager,
     MAX_GCP_LOG_BYTES,
@@ -98,7 +100,27 @@ describe('E2E: a normal-sized API call', () => {
 });
 
 describe('E2E: an API call whose response would be DROPPED by GCP', () => {
-    it('splits the 400KB body into parseable records that reassemble, keeping the api tag', async () => {
+    afterEach(() => {
+        LogApiCall.configure(new LogApiCallConfig(undefined));
+    });
+
+    it('by default the node body cap keeps a 400KB response to ONE line, with the full size on the tag (#1300)', async () => {
+        const big = { blob: 'w'.repeat(400_000) };
+        const recs = await logApiCall(big, 20);
+        const responses = responsesIn(recs);
+
+        expect(responses.length).toBe(1);
+        expect(responses[0]['logChunk']).toBeUndefined();
+        const message = responses[0]['message'] as string;
+        expect(message).toContain(
+            `…[truncated: logged ${LogApiCall.NODE_DEFAULT_MAX_BODY_CHARS} of ${JSON.stringify(big).length} chars]`,
+        );
+        expect(apiTagOf(responses[0])['responseSize']).toBeGreaterThan(400_000);
+    });
+
+    it('with the cap OFF, splits the 400KB body into parseable records that reassemble, keeping the api tag', async () => {
+        // 0 = no cap, so the transport's chunking is still exercised end to end.
+        LogApiCall.configure(new LogApiCallConfig(0));
         const big = { blob: 'w'.repeat(400_000) };
         const recs = await logApiCall(big, 20);
         const responses = responsesIn(recs);
