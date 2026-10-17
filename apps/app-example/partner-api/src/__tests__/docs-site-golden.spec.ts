@@ -147,13 +147,23 @@ describe('the docs site rendered from the example contract', () => {
         const page = site.page('reference', 'partner-orders-api-fetch-orders');
         const responses = page.slice(page.indexOf('<h2>Responses</h2>'));
         expect(responses).toContain(
-            '200 — The page of matching orders, newest first, with `nextFrom` set while more remain.',
+            '200 — The page of matching orders, newest first, with <code>nextFrom</code> set while more remain.',
         );
         const cards = responses.split('<details').length - 1;
         const headed = responses.split('<span class="field-name">x-request-id</span>').length - 1;
         expect(cards).toBeGreaterThan(1);
         expect(headed).toBe(cards);
         expect(responses).toContain('Correlates this response with our logs.');
+    });
+
+    it('LINKS a {@link} — published as a code span of the published name — to its page (#1284)', () => {
+        const page = site.page('reference', 'partner-orders-api-cancel-order');
+        expect(page).toContain(
+            '<a href="../../schemas/order/index.html"><code>Order.id</code></a>',
+        );
+        expect(page).toContain(
+            '<a href="../../reference/partner-orders-api-fetch-orders/index.html"><code>PartnerOrdersApi_fetchOrders</code></a>',
+        );
     });
 
     it('takes the reference order from tags[] and the prose order from docs.manifest.json', () => {

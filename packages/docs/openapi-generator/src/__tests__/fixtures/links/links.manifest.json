@@ -1,0 +1,13 @@
+{
+    "title": "Menus API",
+    "summary": "Read and publish menus.",
+    "version": "1.0.0",
+    "operationIds": "method",
+    "schemaNames": [{ "paths": ["**"], "stripSuffixes": ["Dto"] }],
+    "apis": [
+        {
+            "entry": "MenusApi.ts",
+            "tag": "Menus"
+        }
+    ]
+}

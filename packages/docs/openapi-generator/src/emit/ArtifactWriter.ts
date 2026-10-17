@@ -1,6 +1,8 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import { DocLinkText } from '@webpieces/api-doc-model';
 import { GeneratedDocument, GeneratedDocuments } from '../generate/GenerationInputs';
+import { OpenApiGenerationError } from '../OpenApiGenerationError';
 import { JsonWriter } from '../json/JsonWriter';
 import { YamlWriter } from '../json/YamlWriter';
 
@@ -70,6 +72,19 @@ export class ArtifactWriter {
 
     /** Write them all, creating `outDir` if it does not exist. Returns the absolute paths written. */
     write(outDir: string, artifacts: readonly GeneratedArtifact[]): readonly string[] {
+        // The backstop for #1284: a renderer that forgot to resolve a `{@link}` would publish its
+        // model encoding. Checked over the exact bytes, before ANY file is written.
+        const leaked = artifacts.filter((artifact: GeneratedArtifact) =>
+            DocLinkText.hasLinks(artifact.text),
+        );
+        if (leaked.length > 0) {
+            throw new OpenApiGenerationError(
+                `${leaked.length} generated file(s) still carry an unresolved {@link}`,
+                leaked.map((artifact: GeneratedArtifact) => artifact.fileName).join(', '),
+                'This is a wp-openapi defect, not a contract one: the renderer that wrote this ' +
+                    'file must resolve its prose with DocLinkText. Report it with the file named here.',
+            );
+        }
         fs.mkdirSync(outDir, { recursive: true });
         return artifacts.map((artifact: GeneratedArtifact) => {
             const file = path.join(outDir, artifact.fileName);

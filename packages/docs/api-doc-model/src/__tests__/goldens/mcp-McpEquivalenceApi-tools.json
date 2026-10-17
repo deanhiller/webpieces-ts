@@ -64,7 +64,7 @@
     },
     "inputSchema": {
       "type": "object",
-      "description": "Everything the lookup tool accepts. See PageRequest for why this is a class.",
+      "description": "Everything the lookup tool accepts. See `PageRequest` for why this is a class.",
       "properties": {
         "storeId": {
           "type": "string",

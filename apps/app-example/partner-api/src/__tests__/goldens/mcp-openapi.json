@@ -123,7 +123,7 @@
                     "idempotentHint": true,
                     "openWorldHint": false
                 },
-                "x-mcp-description": "Read-only. Call this before answering any question about recent orders; do not reuse an\nearlier answer, order state changes minute to minute.",
+                "x-mcp-description": "Read-only. Call this before answering any question about recent orders; do not reuse an\nearlier answer, order state changes minute to minute. Each `Order` it returns can\nbe cancelled with `PartnerOrdersApi_cancelOrder`.",
                 "x-webpieces-authorization": "{ authType: AuthorizationType.CUSTOM, appPolicy: {llmRoles: ['partner-agent']} }"
             }
         },
@@ -140,7 +140,7 @@
                     }
                 ],
                 "summary": "Cancel an order",
-                "description": "Cancels one order, if the store has not already started it.\n\nCancelling an order that is already `delivered` returns its current state rather than failing:\nthe call is about reaching a state, not about performing an action exactly once.\n\nNOT safe to retry: this operation changes state and is not idempotent.",
+                "description": "Cancels one order — an `Order.id` that `PartnerOrdersApi_fetchOrders` returned —\nif the store has not already started it.\n\nCancelling an order that is already `delivered` returns its current state rather than failing:\nthe call is about reaching a state, not about performing an action exactly once.\n\nNOT safe to retry: this operation changes state and is not idempotent.",
                 "tags": [
                     "Orders"
                 ],
@@ -346,7 +346,7 @@
                         "enum": [
                             "asap"
                         ],
-                        "description": "Discriminates this branch of DeliveryWindow."
+                        "description": "Discriminates this branch of `DeliveryWindow`."
                     },
                     "estimateMinutes": {
                         "type": "number",
@@ -542,7 +542,7 @@
                         "enum": [
                             "scheduled"
                         ],
-                        "description": "Discriminates this branch of DeliveryWindow."
+                        "description": "Discriminates this branch of `DeliveryWindow`."
                     },
                     "from": {
                         "type": "string",

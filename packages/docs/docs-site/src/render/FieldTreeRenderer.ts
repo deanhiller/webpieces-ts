@@ -70,7 +70,7 @@ export class FieldTreeRenderer {
         }
         parts.push('</div>');
         if (field.description !== '') {
-            parts.push(`<div class="field-doc">${this.markdown.render(field.description)}</div>`);
+            parts.push(`<div class="field-doc">${this.markdown.forPage(prefix).render(field.description)}</div>`);
         }
         parts.push(this.chips(field));
         if (field.children.length > 0) {

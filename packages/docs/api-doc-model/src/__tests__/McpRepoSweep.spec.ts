@@ -7,6 +7,10 @@ import { ApiDocModel, DocumentedEndpoint } from '../model/ApiDocModel';
 import { McpRenderError } from '../render/McpRenderError';
 import { McpSchemaRenderer } from '../render/McpSchemaRenderer';
 import { InheritanceFixturePaths } from './fixtures/inheritance/InheritanceFixturePaths';
+import { OperationIds, OperationIdStyle } from '../model/OperationIds';
+
+/** The generator's default operationId spelling, for a `{@link}` to a contract method (#1284). */
+const OPERATION_IDS = new OperationIds(OperationIdStyle.CONTRACT_METHOD);
 
 /**
  * THE REPO SWEEP: every `@WpMcpTool` under `packages/**` and `apps/**`, rendered.
@@ -112,7 +116,7 @@ class Sweep {
         );
         // eslint-disable-next-line @webpieces/no-unmanaged-exceptions -- the throw IS the measurement
         try {
-            new McpSchemaRenderer(single).render();
+            new McpSchemaRenderer(single, OPERATION_IDS).render();
             return undefined;
         } catch (err: unknown) {
             //const error = toError(err);
@@ -186,6 +190,83 @@ class Sweep {
     }
 }
 
+/**
+ * Every tool the sweep finds, in file order, and — for each the compiler cannot render — why. Compared
+ * EXACTLY, in both directions; see the class doc.
+ */
+const SWEPT_TOOLS: readonly string[] = [
+    // RENDERS since #1009. `Order.window` is a discriminated union, which this list used to
+    // record as unpublishable — "MCP's input schema is one flat object with no oneOf". That
+    // was never a protocol limit: MCP tool schemas are JSON Schema 2020-12, the same dialect
+    // OpenAPI 3.1 uses, and the obstacle was our own `ApiJsonSchema` subset. The union is
+    // NESTED, inside a property, which is the half that is legal — a union at the ROOT of a
+    // tool schema is refused, here and by the `no-root-union-api-type` build rule.
+    'PartnerOrdersApi/fetch_orders',
+    // A `{@link}` naming nothing publishable (#1284) does not stop a tool RENDERING: it is
+    // refused by the catalog over the whole run, and by wp-openapi before that.
+    'BrokenLinksApi/break_link',
+    // A RECURSIVE DTO: `TreeNode` holds `TreeNode[]`. A tool schema is inline and has no
+    // `$ref` to close a loop with, so there is no shape to publish. The same fixture also
+    // carries `Mixed`, an un-narrowable union, for the reason above.
+    "ExampleApi/save_customer: recursive DTO 'TreeNode' cannot use an inline MCP schema (TreeNode)",
+    // `{@link}` resolved to published names (#1284).
+    'LinksApi/fetch_menu',
+    'LinksApi/publish_menu',
+    // String enums in every position, and discriminators spelled with enum members and with a
+    // union of values on one branch (#1023).
+    'McpEnumApi/write_story',
+    // Two branches claiming one discriminator value: TypeScript cannot narrow it, so there is
+    // no discriminator to derive and no schema to publish.
+    "McpEnumApi/overlap_story: no MCP schema for the declared type 'OverlapA | OverlapB' (OverlapRequest.choice)",
+    'McpEquivalenceApi/lookup_orders',
+    'McpEquivalenceApi/cancel_order',
+    'McpEquivalenceApi/reindex_store',
+    'McpUnionApi/fetch_delivery',
+    // A ROOT-level union request. Legal TypeScript, legal HTTP, and unservable as a tool:
+    // the OpenAI and Anthropic function-calling APIs reject a top-level oneOf, and a server
+    // sends its whole tool list on every request, so one of these 400s the whole session.
+    "McpUnionApi/move_window: an MCP tool's request is itself a union (McpUnionApi.moveWindow)",
+    // Inherited fields through `extends`, across files and packages, and readonly arrays (#1055).
+    'InheritanceApi/render_lesson',
+    'InheritanceApi/lookup_learner',
+    // The webhook retry fixture (#1302): a webhook answers with no body, which a tool cannot.
+    "RetryEventsApi/crate_packed: an MCP tool's response is not a named DTO (RetryEventsApi.cratePacked)",
+    'WidgetsApi/list_widgets',
+    // Chained OpenAPI generation (#1058): DTOs from other packages, inlined here as always.
+    'AgentApi/ask_provider',
+    'FsdbApi/read_passage',
+    'LangLessonApi/list_passages',
+    // The description-rule fixtures (#1292). Each RENDERS: a missing `@returns` or schema
+    // description is refused by wp-openapi's guards over the whole run, not by this renderer.
+    'McpOnlyApi/ask_question',
+    'McpOnlyUndocumentedApi/check_guess',
+    'PrivateRemarksApi/switch_lamp',
+    // `{@link}` resolved to published names in every generated output (#1284).
+    'MenusApi/fetch_menu',
+    'MenusApi/publish_menu',
+    // The summary-rule fixtures (#1296). A tool name the Claude Connectors Directory would
+    // refuse, and a tool with no `@summary` — so no title — are each refused by this renderer
+    // too, so `api-rules-for-mcp` reports them; wp-openapi's guards refuse them over the run.
+    "LongToolNameApi/measure_one_barrel_in_the_cellar_and_report_its_level_in_litres_now: the MCP tool name 'measure_one_barrel_in_the_cellar_and_report_its_level_in_litres_now' is 67 characters, over the 64-character limit (LongToolNameApi.measure)",
+    "LongToolNameApi/barrels.tap: the MCP tool name 'barrels.tap' uses a character outside A-Z a-z 0-9 _ - (LongToolNameApi.tap)",
+    'ShelvesApi/read_shelf',
+    'UnsummarizedApi/open_crate: an MCP tool has no @summary, so it has no title (UnsummarizedApi.open)',
+    'ProfileApi/learner',
+    'ProfileApi/admin',
+    'ProfileApi/shared',
+    'ProfileApi/course',
+    'RemoteMcpApi/remote_integration_search',
+    'MissingRemoteMcpApi/missing_remote_integration_search',
+    'RefusedRemoteApi/refused_remote',
+    'GarbageRemoteApi/garbage_remote',
+    'OidcFailRemoteApi/oidc_fail_remote',
+    'LocalThrowApi/local_throw',
+    'RemoteThrowApi/remote_throw',
+    'SearchApi/account_search',
+    'SearchApi/admin_search',
+    'RemoteSearchApi/remote_search',
+];
+
 describe('every @WpMcpTool in this repo, read by the compiler', () => {
     const sweep = new Sweep();
 
@@ -196,11 +277,14 @@ describe('every @WpMcpTool in this repo, read by the compiler', () => {
     it('finds every contract file that declares MCP tools', () => {
         expect(sweep.files).toEqual([
             'apps/app-example/partner-api/src/PartnerOrdersApi.ts',
+            'packages/docs/api-doc-model/src/__tests__/fixtures/BrokenLinksApi.ts',
             'packages/docs/api-doc-model/src/__tests__/fixtures/ExampleApi.ts',
+            'packages/docs/api-doc-model/src/__tests__/fixtures/LinksApi.ts',
             'packages/docs/api-doc-model/src/__tests__/fixtures/McpEnumApi.ts',
             'packages/docs/api-doc-model/src/__tests__/fixtures/McpEquivalenceApi.ts',
             'packages/docs/api-doc-model/src/__tests__/fixtures/McpUnionApi.ts',
             'packages/docs/api-doc-model/src/__tests__/fixtures/inheritance/InheritanceApi.ts',
+            'packages/docs/openapi-generator/src/__tests__/fixtures/RetryEventsApi.ts',
             'packages/docs/openapi-generator/src/__tests__/fixtures/WidgetsApi.ts',
             'packages/docs/openapi-generator/src/__tests__/fixtures/chain/libs/agent-api/src/AgentApi.ts',
             'packages/docs/openapi-generator/src/__tests__/fixtures/chain/libs/fsdb-api/src/FsdbApi.ts',
@@ -208,6 +292,7 @@ describe('every @WpMcpTool in this repo, read by the compiler', () => {
             'packages/docs/openapi-generator/src/__tests__/fixtures/docrules/McpOnlyApi.ts',
             'packages/docs/openapi-generator/src/__tests__/fixtures/docrules/McpOnlyUndocumentedApi.ts',
             'packages/docs/openapi-generator/src/__tests__/fixtures/docrules/PrivateRemarksApi.ts',
+            'packages/docs/openapi-generator/src/__tests__/fixtures/links/MenusApi.ts',
             'packages/docs/openapi-generator/src/__tests__/fixtures/summary/LongToolNameApi.ts',
             'packages/docs/openapi-generator/src/__tests__/fixtures/summary/ShelvesApi.ts',
             'packages/docs/openapi-generator/src/__tests__/fixtures/summary/UnsummarizedApi.ts',
@@ -218,67 +303,7 @@ describe('every @WpMcpTool in this repo, read by the compiler', () => {
     });
 
     it('records which tools the compiler can render, and why the rest cannot', () => {
-        expect(sweep.tools.map(String)).toEqual([
-            // RENDERS since #1009. `Order.window` is a discriminated union, which this list used to
-            // record as unpublishable — "MCP's input schema is one flat object with no oneOf". That
-            // was never a protocol limit: MCP tool schemas are JSON Schema 2020-12, the same dialect
-            // OpenAPI 3.1 uses, and the obstacle was our own `ApiJsonSchema` subset. The union is
-            // NESTED, inside a property, which is the half that is legal — a union at the ROOT of a
-            // tool schema is refused, here and by the `no-root-union-api-type` build rule.
-            'PartnerOrdersApi/fetch_orders',
-            // A RECURSIVE DTO: `TreeNode` holds `TreeNode[]`. A tool schema is inline and has no
-            // `$ref` to close a loop with, so there is no shape to publish. The same fixture also
-            // carries `Mixed`, an un-narrowable union, for the reason above.
-            "ExampleApi/save_customer: recursive DTO 'TreeNode' cannot use an inline MCP schema (TreeNode)",
-            // String enums in every position, and discriminators spelled with enum members and with a
-            // union of values on one branch (#1023).
-            'McpEnumApi/write_story',
-            // Two branches claiming one discriminator value: TypeScript cannot narrow it, so there is
-            // no discriminator to derive and no schema to publish.
-            "McpEnumApi/overlap_story: no MCP schema for the declared type 'OverlapA | OverlapB' (OverlapRequest.choice)",
-            'McpEquivalenceApi/lookup_orders',
-            'McpEquivalenceApi/cancel_order',
-            'McpEquivalenceApi/reindex_store',
-            'McpUnionApi/fetch_delivery',
-            // A ROOT-level union request. Legal TypeScript, legal HTTP, and unservable as a tool:
-            // the OpenAI and Anthropic function-calling APIs reject a top-level oneOf, and a server
-            // sends its whole tool list on every request, so one of these 400s the whole session.
-            "McpUnionApi/move_window: an MCP tool's request is itself a union (McpUnionApi.moveWindow)",
-            // Inherited fields through `extends`, across files and packages, and readonly arrays (#1055).
-            'InheritanceApi/render_lesson',
-            'InheritanceApi/lookup_learner',
-            'WidgetsApi/list_widgets',
-            // Chained OpenAPI generation (#1058): DTOs from other packages, inlined here as always.
-            'AgentApi/ask_provider',
-            'FsdbApi/read_passage',
-            'LangLessonApi/list_passages',
-            // The description-rule fixtures (#1292). Each RENDERS: a missing `@returns` or schema
-            // description is refused by wp-openapi's guards over the whole run, not by this renderer.
-            'McpOnlyApi/ask_question',
-            'McpOnlyUndocumentedApi/check_guess',
-            'PrivateRemarksApi/switch_lamp',
-            // The summary-rule fixtures (#1296). A tool name the Claude Connectors Directory would
-            // refuse, and a tool with no `@summary` — so no title — are each refused by this renderer
-            // too, so `api-rules-for-mcp` reports them; wp-openapi's guards refuse them over the run.
-            "LongToolNameApi/measure_one_barrel_in_the_cellar_and_report_its_level_in_litres_now: the MCP tool name 'measure_one_barrel_in_the_cellar_and_report_its_level_in_litres_now' is 67 characters, over the 64-character limit (LongToolNameApi.measure)",
-            "LongToolNameApi/barrels.tap: the MCP tool name 'barrels.tap' uses a character outside A-Z a-z 0-9 _ - (LongToolNameApi.tap)",
-            'ShelvesApi/read_shelf',
-            'UnsummarizedApi/open_crate: an MCP tool has no @summary, so it has no title (UnsummarizedApi.open)',
-            'ProfileApi/learner',
-            'ProfileApi/admin',
-            'ProfileApi/shared',
-            'ProfileApi/course',
-            'RemoteMcpApi/remote_integration_search',
-            'MissingRemoteMcpApi/missing_remote_integration_search',
-            'RefusedRemoteApi/refused_remote',
-            'GarbageRemoteApi/garbage_remote',
-            'OidcFailRemoteApi/oidc_fail_remote',
-            'LocalThrowApi/local_throw',
-            'RemoteThrowApi/remote_throw',
-            'SearchApi/account_search',
-            'SearchApi/admin_search',
-            'RemoteSearchApi/remote_search',
-        ]);
+        expect(sweep.tools.map(String)).toEqual(SWEPT_TOOLS);
     });
 
     it('names every tool under the stable protocol name @WpMcpTool declares', () => {

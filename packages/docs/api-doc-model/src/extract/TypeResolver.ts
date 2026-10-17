@@ -11,6 +11,7 @@ import {
 } from '../model/ApiDocModel';
 import { PrimitiveKind, TypeRef } from '../model/TypeRef';
 import { ApiDocExtractionError } from './ApiDocExtractionError';
+import { DocLinkReader } from './DocLinkReader';
 import { JsDoc } from './JsDoc';
 import { ObjectShape, ObjectShapeBases } from './ObjectShapeBases';
 import { FieldDecorators } from './FieldDecorators';
@@ -82,6 +83,8 @@ export class TypeResolver {
     private readonly expandingAnonymous = new Set<ts.TypeNode>();
 
     private readonly bases: ObjectShapeBases;
+    /** Resolves every `{@link}` in the prose this resolver reads (#1284). */
+    private readonly links: DocLinkReader;
 
     constructor(
         checker: ts.TypeChecker,
@@ -92,6 +95,7 @@ export class TypeResolver {
     ) {
         this.bases = new ObjectShapeBases(checker);
         this.registry = new TypeRegistry(packages, homePackage, schemaNames);
+        this.links = new DocLinkReader(checker, this.registry, schemaNames);
     }
 
     /** Every named type reached so far, by key — see {@link DocumentedType.keyOf}. */
@@ -120,7 +124,7 @@ export class TypeResolver {
         if (stacked !== undefined && !this.stacked.has(stacked.location)) {
             this.stacked.set(stacked.location, stacked);
         }
-        return JsDoc.read(node);
+        return JsDoc.read(node, this.links);
     }
 
     /** Same-named, different declarations in one package — see {@link TypeNameCollision}. */

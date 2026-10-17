@@ -56,8 +56,10 @@ export interface AsapWindow {
  */
 export type DeliveryWindow = ScheduledWindow | AsapWindow;
 
+// Declared OrderDto, published as Order: the manifest's schemaNames strips the suffix, and every
+// JSDoc link to it publishes the stripped name too (#1284).
 /** One order. */
-export interface Order {
+export interface OrderDto {
     /** Our identifier for it. Stable for the life of the order. */
     id: string;
 
@@ -103,7 +105,7 @@ export interface FetchOrdersRequest extends WindowedStoreRequest {
 /** One page of a store's orders, and where the next page starts. */
 export interface FetchOrdersResponse {
     /** The matching orders, newest first. */
-    orders: Order[];
+    orders: OrderDto[];
 
     /** Pass as `from` on the next call; absent when the window is exhausted. */
     nextFrom?: string;
@@ -157,7 +159,8 @@ export abstract class PartnerOrdersApi {
      * @privateRemarks Backed by the orders read replica, which lags the primary by up to a second.
      * Internal only: this note must appear in NO generated document (#1292).
      * @mcp Read-only. Call this before answering any question about recent orders; do not reuse an
-     *      earlier answer, order state changes minute to minute.
+     *      earlier answer, order state changes minute to minute. Each {@link OrderDto} it returns can
+     *      be cancelled with {@link PartnerOrdersApi.cancelOrder}.
      */
     @Endpoint(POST, '/fetch', READ, RPC)
     @WpAuth([apiKeyAuth('partner', PARTNER_CREDENTIALS)])
@@ -169,7 +172,8 @@ export abstract class PartnerOrdersApi {
     }
 
     /**
-     * Cancels one order, if the store has not already started it.
+     * Cancels one order — an {@link OrderDto.id} that {@link PartnerOrdersApi.fetchOrders} returned —
+     * if the store has not already started it.
      *
      * Cancelling an order that is already `delivered` returns its current state rather than failing:
      * the call is about reaching a state, not about performing an action exactly once.

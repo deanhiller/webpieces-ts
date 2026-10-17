@@ -1,4 +1,5 @@
 import { Html } from '../render/Html';
+import { CodeLinks } from './CodeLinks';
 
 /**
  * A DOCUMENTED SUBSET of CommonMark, over trusted, PR-reviewed input — the JSDoc a developer wrote
@@ -20,6 +21,10 @@ import { Html } from '../render/Html';
  *
  * and inline: `` `code` ``, `**bold**`, `*italic*`, `[text](url)`.
  *
+ * A code span that names a known operation or schema is rendered as a LINK to its page (#1284) — see
+ * {@link CodeLinks}. That is how a JSDoc `{@link}`, which the generator publishes as a code span of
+ * the target's published name, becomes a hyperlink here and plain code everywhere else.
+ *
  * **Everything is HTML-escaped first**, before any inline pattern runs, so a `<` in a JSDoc body is
  * text rather than the start of a tag. That ordering is the whole safety argument: escape-then-mark
  * cannot produce a tag the source did not ask for, while mark-then-escape would escape the tags this
@@ -27,6 +32,17 @@ import { Html } from '../render/Html';
  */
 export class Markdown {
     private readonly html = new Html();
+
+    constructor(
+        private readonly links: CodeLinks,
+        /** The rendering page's `../` prefix, so a code-span link resolves at any hosting path. */
+        private readonly prefix: string,
+    ) {}
+
+    /** The same renderer for a page at another depth — `prefix` is that page's `../` prefix. */
+    forPage(prefix: string): Markdown {
+        return new Markdown(this.links, prefix);
+    }
 
     /** The rendered HTML for a markdown document. */
     render(source: string): string {
@@ -44,10 +60,18 @@ export class Markdown {
     inline(source: string): string {
         const escaped = this.html.escape(source);
         return escaped
-            .replace(/`([^`]+)`/g, '<code>$1</code>')
+            .replace(/`([^`]+)`/g, (_all: string, code: string): string => this.code(code))
             .replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, '<a href="$2">$1</a>')
             .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
             .replace(/(^|[^*])\*([^*]+)\*/g, '$1<em>$2</em>');
+    }
+
+    /** One code span: a link to its page when it names one, plain code otherwise. */
+    private code(code: string): string {
+        const href = this.links.hrefFor(code);
+        return href === undefined
+            ? `<code>${code}</code>`
+            : `<a href="${this.prefix}${href}"><code>${code}</code></a>`;
     }
 
     /** @returns the index of the first line AFTER the block this consumed. */

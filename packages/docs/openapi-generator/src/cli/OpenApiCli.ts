@@ -3,6 +3,7 @@ import { MCP, McpToolCatalogFile } from '@webpieces/core-util';
 import {
     McpCatalogRender,
     McpSchemaRenderer,
+    OperationIds,
     SkippedMcpTool,
     StreamingSchemaRenderer,
 } from '@webpieces/api-doc-model';
@@ -114,7 +115,9 @@ export class OpenApiCli {
     private streamingCatalogs(inputs: GenerationInputs): readonly GeneratedArtifact[] {
         const artifacts: GeneratedArtifact[] = [];
         for (const contract of inputs.contracts) {
-            const catalog = new StreamingSchemaRenderer().render(contract.model);
+            const catalog = new StreamingSchemaRenderer(
+                new OperationIds(inputs.manifest.operationIds),
+            ).render(contract.model);
             if (Object.keys(catalog.methods).length === 0) continue;
             artifacts.push(
                 new GeneratedArtifact(
@@ -170,7 +173,10 @@ export class OpenApiCli {
         if (models.length === 0) {
             return new McpArtifacts([], []);
         }
-        const rendered: McpCatalogRender = McpSchemaRenderer.catalogOf(models);
+        const rendered: McpCatalogRender = McpSchemaRenderer.catalogOf(
+            models,
+            new OperationIds(inputs.manifest.operationIds),
+        );
         const artifacts = rendered.catalogs.map(
             (catalog: McpToolCatalogFile) =>
                 new GeneratedArtifact(catalog.fileName, catalog.toJsonText()),

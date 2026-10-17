@@ -2,7 +2,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { OpenApiGenerationError } from '../OpenApiGenerationError';
 import { JsonReader } from './JsonReader';
-import { SchemaNameEntry } from '@webpieces/api-doc-model';
+import { OperationIdStyle, SchemaNameEntry } from '@webpieces/api-doc-model';
 import {
     ApiEntry,
     ComponentsManifest,
@@ -10,7 +10,6 @@ import {
     ErrorsEntry,
     MANIFEST_SUMMARY_MAX_LENGTH,
     OpenApiManifest,
-    OperationIdStyle,
     ResponseHeaderEntry,
     ServerEntry,
 } from './OpenApiManifest';

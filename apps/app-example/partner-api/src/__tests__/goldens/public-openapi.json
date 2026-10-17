@@ -156,7 +156,7 @@
             "post": {
                 "operationId": "PartnerOrdersApi_cancelOrder",
                 "summary": "Cancel an order",
-                "description": "Cancels one order, if the store has not already started it.\n\nCancelling an order that is already `delivered` returns its current state rather than failing:\nthe call is about reaching a state, not about performing an action exactly once.\n\nNOT safe to retry: this operation changes state and is not idempotent.",
+                "description": "Cancels one order — an `Order.id` that `PartnerOrdersApi_fetchOrders` returned —\nif the store has not already started it.\n\nCancelling an order that is already `delivered` returns its current state rather than failing:\nthe call is about reaching a state, not about performing an action exactly once.\n\nNOT safe to retry: this operation changes state and is not idempotent.",
                 "tags": [
                     "Orders"
                 ],
@@ -347,7 +347,7 @@
                         "enum": [
                             "asap"
                         ],
-                        "description": "Discriminates this branch of DeliveryWindow."
+                        "description": "Discriminates this branch of `DeliveryWindow`."
                     },
                     "estimateMinutes": {
                         "type": "number",
@@ -441,7 +441,7 @@
                         "enum": [
                             "scheduled"
                         ],
-                        "description": "Discriminates this branch of DeliveryWindow."
+                        "description": "Discriminates this branch of `DeliveryWindow`."
                     },
                     "from": {
                         "type": "string",

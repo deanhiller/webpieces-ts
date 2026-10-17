@@ -170,7 +170,7 @@ export class BoundedRequest {
 /**
  * The example contract.
  *
- * It links {@link Customer.email} on purpose: inline links are flattened at extraction, so no
+ * It links {@link Customer.email} on purpose: inline links are resolved at extraction, so no
  * renderer ever has to know the JSDoc inline-tag grammar.
  */
 @ApiPath('/api/example')

@@ -32,6 +32,7 @@ export { ExampleBuilder } from './spec/ExampleBuilder';
 export { DocsManifest, ProsePage, ProsePageEntry } from './manifest/DocsManifest';
 export { MANIFEST_FILE, ProseLoader } from './manifest/ProseLoader';
 export { Markdown } from './markdown/Markdown';
+export { CodeLinks } from './markdown/CodeLinks';
 export { CodeSample, CodeSampleBuilder, SampleHeader } from './samples/CodeSamples';
 export { Html } from './render/Html';
 export {

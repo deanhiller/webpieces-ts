@@ -5,6 +5,10 @@ import { describe, expect, it } from 'vitest';
 import { ApiDocExtractor } from '../extract/ApiDocExtractor';
 import { ApiDocModel } from '../model/ApiDocModel';
 import { StreamingSchemaRenderer } from '../render/StreamingSchemaRenderer';
+import { OperationIds, OperationIdStyle } from '../model/OperationIds';
+
+/** The generator's default operationId spelling, for a `{@link}` to a contract method (#1284). */
+const OPERATION_IDS = new OperationIds(OperationIdStyle.CONTRACT_METHOD);
 
 const FILE = path.resolve(__dirname, 'fixtures/StreamingApi.ts');
 
@@ -34,7 +38,9 @@ class StreamingModelFixture {
 
 describe('build-derived streaming schemas', () => {
     it('derives four independent FULL slots and the asymmetric REQUEST/RESPONSE slots', () => {
-        const catalog = new StreamingSchemaRenderer().render(new StreamingModelFixture().extract());
+        const catalog = new StreamingSchemaRenderer(OPERATION_IDS).render(
+            new StreamingModelFixture().extract(),
+        );
         expect(catalog.methods['full'].initialRequestSchema?.required).toEqual(['room']);
         expect(catalog.methods['full'].initialResponseSchema?.required).toEqual(['session']);
         expect(catalog.methods['full'].requestSchema?.required).toEqual(['text']);

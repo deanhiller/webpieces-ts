@@ -21,7 +21,6 @@ export {
     ErrorsEntry,
     MANIFEST_SUMMARY_MAX_LENGTH,
     OpenApiManifest,
-    OperationIdStyle,
     ResponseHeaderEntry,
     ServerEntry,
 } from './manifest/OpenApiManifest';

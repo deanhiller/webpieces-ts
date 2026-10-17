@@ -5,6 +5,10 @@ import * as ts from 'typescript';
 import { ApiJsonSchema, McpToolCatalogFile, McpToolDefinition } from '@webpieces/core-util';
 import { ApiDocExtractor } from '../extract/ApiDocExtractor';
 import { McpSchemaRenderer } from '../render/McpSchemaRenderer';
+import { OperationIds, OperationIdStyle } from '../model/OperationIds';
+
+/** The generator's default operationId spelling, for a `{@link}` to a contract method (#1284). */
+const OPERATION_IDS = new OperationIds(OperationIdStyle.CONTRACT_METHOD);
 
 /**
  * THE MCP SCHEMA REGRESSION GATE.
@@ -42,9 +46,10 @@ const GOLDEN = path.join(__dirname, 'goldens', 'mcp-McpEquivalenceApi-tools.json
 
 function renderCatalog(): McpToolCatalogFile {
     const fixture = path.join(__dirname, 'fixtures', 'McpEquivalenceApi.ts');
-    const rendered = McpSchemaRenderer.catalogOf([
-        new ApiDocExtractor().extractFile(fixture, COMPILER_OPTIONS),
-    ]);
+    const rendered = McpSchemaRenderer.catalogOf(
+        [new ApiDocExtractor().extractFile(fixture, COMPILER_OPTIONS)],
+        OPERATION_IDS,
+    );
     expect(rendered.skipped).toEqual([]);
     // ONE file per contract (#1021), named after it — the name the server looks the binding up by.
     expect(rendered.catalogs.map((catalog: McpToolCatalogFile) => catalog.fileName)).toEqual([

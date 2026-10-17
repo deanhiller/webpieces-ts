@@ -302,6 +302,19 @@ and the `mcp-<Contract>-tools.json` catalogs — and each refusal names every of
 writes nothing. None has an off switch.
 
 - **`@privateRemarks` is dropped** with its text, everywhere. Write internal notes there.
+- **`{@link X}` publishes X's PUBLISHED identity** as a markdown code span (#1284), in every output:
+
+  | JSDoc link | Published as (a markdown code span) |
+  |---|---|
+  | `{@link MenuDto}` | `` `Menu` `` — the type's published schema name, after `schemaNames` stripping (a bundled document's qualified name where it has one) |
+  | `{@link MenuDto.items}`, `{@link Gender.F}` | `` `Menu.items` ``, `` `Gender.F` `` — the `.member` tail kept as written |
+  | `{@link OrdersApi.fetchOrders}` | `` `fetchOrders` `` — its operationId in the manifest's `operationIds` style, never `OrdersApi.`; in an `mcp-<Contract>-tools.json` catalog, a method that IS a tool publishes its tool `name` |
+  | `{@link OrdersApi.fetchOrders \| the order list}` / `{@link X label}` | `the order list (`` `fetchOrders` ``)` — the label, then the identity |
+  | `{@link https://…}` / `{@link https://… \| label}` | `<https://…>` / `[label](https://…)` — an ordinary markdown link |
+
+  A link the compiler cannot resolve, one to something that is not a type or an `@Endpoint` method of
+  an `@ApiPath` contract, and one to a type or operation the document does not publish are refused,
+  naming every `file:line` in one run. `@webpieces/docs-site` links each such code span to its page.
 - **`@summary` is REQUIRED** on every published operation, route and webhook alike (#1296): one line,
   at most 100 characters. It is the endpoint's short title — the OpenAPI `summary` (which used to be
   the bare method name) and the MCP tool's `title` / `annotations.title` — and the tag and its text are

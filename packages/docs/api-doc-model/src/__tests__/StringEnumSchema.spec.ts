@@ -6,6 +6,10 @@ import { ApiDocExtractor } from '../extract/ApiDocExtractor';
 import { ApiDocModel, DocumentedField, DocumentedType, UnmappedType } from '../model/ApiDocModel';
 import { TypeRef } from '../model/TypeRef';
 import { McpCatalogRender, McpSchemaRenderer, SkippedMcpTool } from '../render/McpSchemaRenderer';
+import { OperationIds, OperationIdStyle } from '../model/OperationIds';
+
+/** The generator's default operationId spelling, for a `{@link}` to a contract method (#1284). */
+const OPERATION_IDS = new OperationIds(OperationIdStyle.CONTRACT_METHOD);
 
 /**
  * STRING ENUMS and multi-value union DISCRIMINATORS (#1023), read from a real fixture contract
@@ -39,7 +43,7 @@ class Fixture {
     load(): void {
         const file = path.join(__dirname, 'fixtures', 'McpEnumApi.ts');
         this.model = new ApiDocExtractor().extractFile(file, COMPILER_OPTIONS);
-        this.rendered = McpSchemaRenderer.catalogOf([this.model]);
+        this.rendered = McpSchemaRenderer.catalogOf([this.model], OPERATION_IDS);
     }
 
     type(name: string): DocumentedType {

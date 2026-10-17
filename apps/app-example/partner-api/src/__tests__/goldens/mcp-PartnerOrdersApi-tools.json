@@ -3,7 +3,7 @@
     "name": "fetch_orders",
     "title": "Fetch your orders",
     "methodName": "fetchOrders",
-    "description": "Read-only. Call this before answering any question about recent orders; do not reuse an\nearlier answer, order state changes minute to minute.",
+    "description": "Read-only. Call this before answering any question about recent orders; do not reuse an\nearlier answer, order state changes minute to minute. Each `Order` it returns can\nbe cancelled with `PartnerOrdersApi_cancelOrder`.",
     "hints": {
       "readOnlyHint": true,
       "destructiveHint": false,
@@ -84,7 +84,7 @@
                     "properties": {
                       "kind": {
                         "type": "string",
-                        "description": "Discriminates this branch of DeliveryWindow.",
+                        "description": "Discriminates this branch of `DeliveryWindow`.",
                         "enum": [
                           "scheduled"
                         ]
@@ -105,7 +105,7 @@
                     "properties": {
                       "kind": {
                         "type": "string",
-                        "description": "Discriminates this branch of DeliveryWindow.",
+                        "description": "Discriminates this branch of `DeliveryWindow`.",
                         "enum": [
                           "asap"
                         ]

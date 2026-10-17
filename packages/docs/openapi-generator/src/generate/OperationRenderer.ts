@@ -1,4 +1,9 @@
-import { DocumentedAuthMethod, DocumentedEndpoint } from '@webpieces/api-doc-model';
+import {
+    DocumentedAuthMethod,
+    DocumentedEndpoint,
+    OperationIds,
+    OperationIdStyle,
+} from '@webpieces/api-doc-model';
 import {
     CLOUDTASKS,
     CRON,
@@ -11,7 +16,7 @@ import {
     WRITE_IDEMPOTENT,
 } from '@webpieces/core-util';
 import { JsonObject, JsonValue } from '../json/JsonObject';
-import { ErrorResponseEntry, OperationIdStyle } from '../manifest/OpenApiManifest';
+import { ErrorResponseEntry } from '../manifest/OpenApiManifest';
 import { SchemaRenderer } from './SchemaRenderer';
 import { SuccessBody } from './SuccessBody';
 import { OpenApiGenerationError } from '../OpenApiGenerationError';
@@ -62,6 +67,7 @@ export class ResponseContract {
  */
 export class OperationRenderer {
     private readonly body = new SuccessBody();
+    private readonly ids: OperationIds;
 
     constructor(
         private readonly schemas: SchemaRenderer,
@@ -78,8 +84,10 @@ export class OperationRenderer {
          */
         private readonly includeWebpieces: boolean,
         /** The manifest's `operationIds` — see {@link operationIdOf}. */
-        private readonly operationIds: OperationIdStyle,
-    ) {}
+        operationIds: OperationIdStyle,
+    ) {
+        this.ids = new OperationIds(operationIds);
+    }
 
     /**
      * The published `operationId`, in the manifest's chosen style (#1270).
@@ -88,9 +96,7 @@ export class OperationRenderer {
      * second spelling of the id there could pass a collision this one then publishes.
      */
     operationIdOf(endpoint: DocumentedEndpoint, contractName: string): string {
-        return this.operationIds === OperationIdStyle.METHOD
-            ? endpoint.methodName
-            : `${contractName}_${endpoint.methodName}`;
+        return this.ids.of(contractName, endpoint.methodName);
     }
 
     /** An ordinary served route. */

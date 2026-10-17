@@ -7,6 +7,10 @@ import { ApiDocModel, DocumentedField, DocumentedType } from '../model/ApiDocMod
 import { TypeRef } from '../model/TypeRef';
 import { McpSchemaRenderer } from '../render/McpSchemaRenderer';
 import { InheritanceFixturePaths } from './fixtures/inheritance/InheritanceFixturePaths';
+import { OperationIds, OperationIdStyle } from '../model/OperationIds';
+
+/** The generator's default operationId spelling, for a `{@link}` to a contract method (#1284). */
+const OPERATION_IDS = new OperationIds(OperationIdStyle.CONTRACT_METHOD);
 
 /**
  * INHERITED FIELDS and READONLY ARRAYS (#1055), read from `fixtures/inheritance/` through the real
@@ -46,7 +50,7 @@ class Fixture {
             path.join(FIXTURES, 'InheritanceApi.ts'),
             COMPILER_OPTIONS,
         );
-        const rendered = McpSchemaRenderer.catalogOf([this.model]);
+        const rendered = McpSchemaRenderer.catalogOf([this.model], OPERATION_IDS);
         expect(rendered.skipped).toEqual([]);
         this.catalog = rendered.catalogs[0]!;
     }

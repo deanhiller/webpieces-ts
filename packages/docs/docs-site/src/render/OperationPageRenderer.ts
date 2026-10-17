@@ -59,7 +59,7 @@ export class OperationPageRenderer {
     private body(operation: OperationInfo, prefix: string): string {
         const parts = [this.head(operation), `<h1>${this.html.escape(operation.name)}</h1>`];
         if (operation.description !== '') {
-            parts.push(this.markdown.render(operation.description));
+            parts.push(this.markdown.forPage(prefix).render(operation.description));
         }
         parts.push(this.requestSection(operation, prefix));
         parts.push(this.responseSection(operation, prefix));
@@ -86,7 +86,7 @@ export class OperationPageRenderer {
     private requestSection(operation: OperationInfo, prefix: string): string {
         const parts: string[] = [];
         if (operation.requestHeaders.length > 0) {
-            parts.push(`<h2>Request headers</h2>${this.headers.render(operation.requestHeaders)}`);
+            parts.push(`<h2>Request headers</h2>${this.headers.render(operation.requestHeaders, prefix)}`);
         }
         if (operation.requestSchema !== undefined) {
             parts.push(`<h2>Request body</h2>${this.tree(operation.requestSchema, prefix)}`);
@@ -105,13 +105,14 @@ export class OperationPageRenderer {
     }
 
     private response(response: ResponseInfo, prefix: string): string {
-        const summary = `${this.html.escape(response.status)} — ${this.html.escape(response.description)}`;
+        // Inline markdown: a `{@link}` in `@returns` arrives as a code span, and may link (#1284).
+        const summary = `${this.html.escape(response.status)} — ${this.markdown.forPage(prefix).inline(response.description)}`;
         const body =
             response.schema === undefined
                 ? '<p class="field-doc">No body.</p>'
                 : this.tree(response.schema, prefix);
         // The headers ride the card beside the body (#1292) — the response a partner holds carries both.
-        const headers = this.headers.render(response.headers);
+        const headers = this.headers.render(response.headers, prefix);
         return `<details class="disclosure" open><summary>${summary}</summary>${headers}${body}</details>`;
     }
 

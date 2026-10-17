@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { CodeLinks } from '../markdown/CodeLinks';
 import { Markdown } from '../markdown/Markdown';
 
 /**
@@ -6,7 +7,7 @@ import { Markdown } from '../markdown/Markdown';
  * mixes markup with markdown is asserting that ordering — mark-then-escape would escape the tags the
  * renderer had just written, and any other ordering can produce a tag the source did not ask for.
  */
-const markdown = new Markdown();
+const markdown = new Markdown(new CodeLinks(new Map(), new Map()), '');
 
 describe('the markdown subset', () => {
     it('escapes HTML before any inline pattern runs', () => {
@@ -52,5 +53,44 @@ describe('the markdown subset', () => {
         const html = markdown.render('words\n# Heading');
         expect(html).toContain('<p>words</p>');
         expect(html).toContain('<h1>Heading</h1>');
+    });
+});
+
+describe('a code span naming an operation or a schema (#1284)', () => {
+    const links = new CodeLinks(
+        new Map([
+            ['fetchOrders', 'reference/fetch-orders/index.html'],
+            ['Both', 'reference/both/index.html'],
+        ]),
+        new Map([
+            ['Order', 'schemas/order/index.html'],
+            ['Both', 'schemas/both/index.html'],
+        ]),
+    );
+    const page = new Markdown(links, '').forPage('../../');
+
+    it("links an operationId to the operation's page, relative to the page it is on", () => {
+        expect(page.inline('Call `fetchOrders` first.')).toBe(
+            'Call <a href="../../reference/fetch-orders/index.html"><code>fetchOrders</code></a> first.',
+        );
+    });
+
+    it("links a schema, and a member of one, to the schema's page", () => {
+        expect(page.inline('`Order`')).toBe(
+            '<a href="../../schemas/order/index.html"><code>Order</code></a>',
+        );
+        expect(page.inline('`Order.id`')).toBe(
+            '<a href="../../schemas/order/index.html"><code>Order.id</code></a>',
+        );
+    });
+
+    it('leaves an unknown, or an ambiguous, code span plain code', () => {
+        expect(page.inline('`somethingElse`')).toBe('<code>somethingElse</code>');
+        expect(page.inline('`Both`')).toBe('<code>Both</code>');
+        expect(page.inline('`fetchOrders.x`')).toBe('<code>fetchOrders.x</code>');
+    });
+
+    it('never links inside a fenced code block', () => {
+        expect(page.render('```\nfetchOrders\n```')).not.toContain('<a ');
     });
 });
