@@ -16,7 +16,7 @@ function files(): string {
     const dir = specTempDirs.make('review-identity-');
     dirs.push(dir);
     fs.writeFileSync(path.join(dir, 'summary.json'), JSON.stringify({
-        title: 'Record review identity', agent: 'codex', model: 'unknown', riskScore: 10, riskLevel: 'green',
+        title: 'Record review identity', agent: 'codex', model: 'unknown', riskScore: 10, riskLevel: 'green', addressesIssues: [],
     }));
     fs.writeFileSync(path.join(dir, 'review-round1-api.json'), JSON.stringify({
         id: 'api', status: 'green', output: 'Checked API', agent: 'claude', model: 'opus',

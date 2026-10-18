@@ -304,6 +304,7 @@ export {
 } from './review-provenance';
 export {
     PrSummary,
+    AddressedIssue,
     PrContext,
     ChecklistResult,
     ChecklistVerdict,

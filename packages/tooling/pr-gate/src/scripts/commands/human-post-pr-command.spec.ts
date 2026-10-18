@@ -27,7 +27,8 @@ function summaryJson(): string {
         model: 'test',
         riskScore: 8,
         riskLevel: 'green',
-        summary: 'Fixes #1046\n\nPosts the inspected change.',
+        summary: 'Posts the inspected change.',
+        addressesIssues: [{ url: 'https://github.com/deanhiller/webpieces-ts/issues/1046', closesIssue: true }],
         violations: [],
         risks: [],
         filesToReview: [],
@@ -255,6 +256,16 @@ describe('successful human post', () => {
         expect(body).toContain('HUMAN ESCAPE HATCH');
         expect(body).toContain('cloud CI will run');
         expect(body).toContain('webpieces-pr-gate v1 token=');
+        // The same addressesIssues block wp-finish-upsert-pr renders (issue #1310).
+        expect(body).toContain('\nFixes https://github.com/deanhiller/webpieces-ts/issues/1046\n');
+    });
+
+    it('refuses a hand-written closing keyword in summary that no closesIssue:true entry backs', async () => {
+        const f = fixture();
+        f.writeSummary(summaryJson().replace('"Posts the inspected change."', '"Fixes #999. Posts the inspected change."'));
+        const command = new TestCommand(['human', 'N'], f.deps());
+        await expect(command.run()).rejects.toThrow(/"Fixes #999"[\s\S]*addressesIssues/);
+        expect(f.publishCalls).toBe(0);
     });
 
     it('runs wp-build and follows its log when the human answers Y', async () => {

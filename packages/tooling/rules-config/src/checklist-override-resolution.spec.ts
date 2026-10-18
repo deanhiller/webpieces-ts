@@ -22,7 +22,7 @@ const REQ = (id: string): RequiredChecklist =>
     new RequiredChecklist(id, agentPolicy(`${id}-reviewer`), `.claude/review/${id}.md`, ['x.sql']);
 
 const VALID_REVIEW = JSON.stringify({
-    title: 'Fix the thing', agent: 'codex', model: 'unknown', riskScore: 10, riskLevel: 'green', summary: 'ok',
+    title: 'Fix the thing', agent: 'codex', model: 'unknown', riskScore: 10, riskLevel: 'green', summary: 'ok', addressesIssues: [],
     violations: [], risks: [], filesToReview: [],
 });
 

@@ -103,6 +103,7 @@ describe('archiveSummaryJson', () => {
             model: 'unknown',
             riskScore: 10,
             riskLevel: 'green',
+            addressesIssues: [],
             summary: 's',
             violations: [],
             risks: [],
@@ -192,6 +193,7 @@ describe('loadSummaryJson', () => {
                 model: 'unknown',
                 riskScore: 42,
                 riskLevel: 'yellow',
+                addressesIssues: [],
                 summary: 'ok',
                 violations: ['a'],
                 risks: [],
@@ -213,6 +215,7 @@ describe('loadSummaryJson', () => {
                 model: 'unknown',
                 riskScore: 10,
                 riskLevel: 'green',
+                addressesIssues: [],
             }),
         );
         expect(new ReviewJsonService().loadSummaryJson(withTitle).title).toBe('Fix the thing');
@@ -225,6 +228,7 @@ describe('loadSummaryJson', () => {
                 model: 'unknown',
                 riskScore: 10,
                 riskLevel: 'green',
+                addressesIssues: [],
             }),
         );
         expect(() => new ReviewJsonService().loadSummaryJson(blank)).toThrowError(/"title" must be a non-empty/);
@@ -256,6 +260,7 @@ function validReview(overrides: Record<string, unknown> = {}): string {
         model: 'unknown',
         riskScore: 10,
         riskLevel: 'green',
+        addressesIssues: [],
         summary: 'ok',
         violations: [],
         risks: [],
@@ -645,6 +650,7 @@ describe('loadSummaryJson — optional checklists', () => {
         model: 'unknown',
         riskScore: 1,
         riskLevel: 'green',
+        addressesIssues: [],
         summary: 's',
         violations: [],
         risks: [],

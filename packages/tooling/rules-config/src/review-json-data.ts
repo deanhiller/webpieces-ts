@@ -168,6 +168,28 @@ export class ChecklistReviewContext {
     }
 }
 
+/**
+ * One entry of summary.json's REQUIRED `addressesIssues` array (issue #1310): a ticket this PR addresses,
+ * and whether merging it should CLOSE that ticket. Data-only.
+ *
+ * Both fields are required, with no default, because either default is wrong for somebody: `true` closes a
+ * multi-PR ticket on its FIRST PR (ctoteachings/monorepo#955 needed four), and `false` silently leaves every
+ * single-PR ticket open forever. `url` is tracker-agnostic — a GitHub, Linear or Jira issue — and is only
+ * checked to be an absolute `https://` URL; webpieces renders the line and never needs to understand it.
+ *
+ *   closesIssue: true  → `Fixes <url>`   (a closing keyword: GitHub and Linear close it on merge)
+ *   closesIssue: false → `Part of <url>` (no closing keyword: links the ticket, leaves it open)
+ */
+export class AddressedIssue {
+    url: string;
+    closesIssue: boolean;
+
+    constructor(url: string, closesIssue: boolean) {
+        this.url = url;
+        this.closesIssue = closesIssue;
+    }
+}
+
 // The AI-authored PR summary (title, risk, summary). Normally the AI writes summary.json between
 // `wp-start-upsert-pr` (which prints the schema) and `wp-finish-upsert-pr` (which reads it), while reviewer
 // subagents write review-round<N>-<id>.json. The human-only `wp-human-post-pr` escape hatch also requires and reads
@@ -183,6 +205,9 @@ export class PrSummary {
     violations: string[]; // pattern/architecture violations; length = the Pattern Violations count
     risks: string[];
     filesToReview: string[];
+    // The tickets this PR addresses, rendered by the gate as `Fixes <url>` / `Part of <url>` lines in the PR
+    // body (= the squash commit). REQUIRED in summary.json; [] states "no tracked issue". See AddressedIssue.
+    addressesIssues: AddressedIssue[];
     results: ChecklistResult[]; // resolved per-checklist verdicts (from review-round<N>-<id>.json); [] when none
     mainAgentInstructions: string; // non-empty only for the opt-in single-round experiment
 
@@ -198,6 +223,7 @@ export class PrSummary {
         violations: string[],
         risks: string[],
         filesToReview: string[],
+        addressesIssues: AddressedIssue[],
         results: ChecklistResult[] = [],
         mainAgentInstructions = '',
     ) {
@@ -211,6 +237,7 @@ export class PrSummary {
         this.violations = violations;
         this.risks = risks;
         this.filesToReview = filesToReview;
+        this.addressesIssues = addressesIssues;
         this.results = results;
         this.mainAgentInstructions = mainAgentInstructions;
     }

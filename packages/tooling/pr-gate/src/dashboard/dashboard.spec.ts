@@ -14,7 +14,7 @@ const renderDetailComment = (i: DashboardInput): string => dash.renderDetailComm
 const renderPrBody = (i: DashboardInput, url: string): string => dash.renderPrBody(i, url);
 
 function review(overrides: Partial<PrSummary> = {}): PrSummary {
-    const base = new PrSummary('unknown', 'unknown', 'A short title', 20, 'green', '🟢', 'A short summary.', [], [], []);
+    const base = new PrSummary('unknown', 'unknown', 'A short title', 20, 'green', '🟢', 'A short summary.', [], [], [], []);
     return Object.assign(base, overrides);
 }
 

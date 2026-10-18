@@ -293,11 +293,29 @@ review must not read as a fully-reviewed one.
   "riskScore": 0,
   "riskLevel": "green | yellow | red",
   "summary": "5–10 sentence PR summary — what changed and why",
+  "addressesIssues": [
+    { "url": "https://github.com/<owner>/<repo>/issues/<n>", "closesIssue": true }
+  ],
   "violations": ["pattern/architecture violations (empty array if none)"],
   "risks": ["notable risks (empty array if none)"],
   "filesToReview": ["paths a human should look at (empty array if none)"]
 }
 ```
+
+`addressesIssues` is REQUIRED — `[]` when the PR addresses no tracked issue. Each entry needs both
+fields, with no default: `url` is the issue's absolute `https://` URL in any tracker (GitHub, Linear,
+Jira), and `closesIssue` says whether merging should close it. The gate renders each entry into the PR
+body, which is also the squash-commit body:
+
+| `closesIssue` | rendered line | on merge |
+|---|---|---|
+| `true` | `Fixes <url>` | the issue is CLOSED; finish prints `⚠ Merging this PR will CLOSE <url> (closesIssue: true)` |
+| `false` | `Part of <url>` | linked, left open — for a ticket more PRs are still owed on |
+
+Keep closing keywords out of `summary`. Any `close/closes/closed`, `fix/fixes/fixed` or
+`resolve/resolves/resolved` followed by `#N`, `owner/repo#N` or a URL that no `closesIssue: true` entry
+backs REFUSES finish — "Partially fixes #N" still closes #N on GitHub, which is how a four-PR ticket got
+closed by its first PR. Re-running finish re-renders the one block; it never appends a second.
 
 Then run `pnpm wp-finish-upsert-pr`. It re-computes the matched checklists, requires a well-formed,
 passing (or overridden, or author-fixed orange) verdict for each briefed checklist — its highest

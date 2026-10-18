@@ -2,6 +2,7 @@ import { ReviewIdentityRenderer } from './review-identity-renderer';
 import { GateDefinition, WEBPIECES_DISABLE, PrSummary, CK_PASS, CK_WARN, CK_OVERRIDDEN, CK_ORANGE_FIXED, CK_FAIL, CK_MISSING, HOME_CONFIG_DIR, HOME_CONFIG_FILE, HOME_KEY_TURN_OFF_ALL_REVIEWERS, HOTFIX_AUDIT_BANNER } from '@webpieces/rules-config';
 import { injectable, bindingScopeValues } from 'inversify';
 import { AuthorIdentity } from './author-identity';
+import { IssueReferences } from './issue-references';
 
 /**
  * Hidden marker on the FULL-DASHBOARD comment — the "1st comment" the PR description points at — so
@@ -287,7 +288,8 @@ export class Dashboard {
      * Then the risk score (always). Then ONLY the non-green flags, under a heading that SAYS the full list
      * is in the 1st comment — a `git log` reader has no page to glance at, so the heading has to carry
      * that itself rather than leaving "why is this list short?" to the pointer bullet alone. Then the
-     * summary capped at 4 sentences, then the footer naming the build command that vouched for it.
+     * summary capped at 4 sentences, then the summary.json `addressesIssues` lines (`Fixes <url>` /
+     * `Part of <url>`, issue #1310), then the footer naming the build command that vouched for it.
      *
      * The hidden gate-token marker is appended AFTER this by the caller, so it is the very last line of
      * the description and therefore of the commit. It stays an HTML comment — invisible on the PR page,
@@ -313,14 +315,23 @@ export class Dashboard {
         // record, and the reader never learns that every green row, the full summary and each reviewer's
         // output are one click away.
         lines.push(`- ${DETAIL_POINTER}`);
-        const summary = this.firstSentences(input.review.summary.trim(), 4);
+        const issues = new IssueReferences();
+        const summary = this.firstSentences(issues.withoutBlockLines(input.review.summary.trim(), input.review.addressesIssues), 4);
         if (summary !== '') {
             lines.push('');
             lines.push(summary);
         }
+        // The ticket lines (issue #1310) — `Fixes <url>` / `Part of <url>`, rendered ONLY from summary.json's
+        // addressesIssues, so a re-run re-renders the one block rather than appending a second.
+        const ticketLines = issues.blockLines(input.review.addressesIssues);
+        if (ticketLines.length > 0) lines.push('', ...ticketLines);
         lines.push('');
         lines.push(this.prBodyFooter(input.buildCommand, input.hotfix));
-        return this.gitLogSafe(lines.join('\n'));
+        const body = this.gitLogSafe(lines.join('\n'));
+        // Judged on the FINAL bytes, which are the squash-commit body: a closing reference no
+        // closesIssue:true entry backs refuses here, before anything is published.
+        issues.assertNoStrayClosingReferences(body, input.review.addressesIssues, input.hotfix ? 'pnpm wp-upsert-hotfix-pr' : 'pnpm wp-finish-upsert-pr');
+        return body;
     }
 
     /**
