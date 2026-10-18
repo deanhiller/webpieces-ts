@@ -308,6 +308,7 @@ writes nothing. None has an off switch.
   |---|---|
   | `{@link MenuDto}` | `` `Menu` `` — the type's published schema name, after `schemaNames` stripping (a bundled document's qualified name where it has one; an inlined single-use wrapper's `title`, #1303) |
   | `{@link MenuDto.items}`, `{@link Gender.F}` | `` `Menu.items` ``, `` `Gender.F` `` — the `.member` tail kept as written |
+  | `{@link storeId}` — a field written BARE, in a field's JSDoc | `` `storeId` `` — the field's own name, no class prefix: the reader is already on that schema (#1308). A sibling and an inherited field both resolve; a bare name of ANOTHER class's field resolves to nothing in the compiler and is refused |
   | `{@link OrdersApi.fetchOrders}` | `` `fetchOrders` `` — its operationId in the manifest's `operationIds` style, never `OrdersApi.`; in an `mcp-<Contract>-tools.json` catalog, a method that IS a tool publishes its tool `name` |
   | `{@link OrdersApi.fetchOrders \| the order list}` / `{@link X label}` | `the order list (`` `fetchOrders` ``)` — the label, then the identity |
   | `{@link https://…}` / `{@link https://… \| label}` | `<https://…>` / `[label](https://…)` — an ordinary markdown link |

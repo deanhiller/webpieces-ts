@@ -30,10 +30,25 @@ export class MenuDto {
     kind!: MenuKindDto;
 }
 
+/** Where a menu is served. A base the request flattens in — never published on its own. */
+export class MenuScopeDto {
+    /** The region the menu is served in. */
+    region!: string;
+}
+
 /** Asks for one menu. */
-export class FetchMenuRequestDto {
+export class FetchMenuRequestDto extends MenuScopeDto {
     /** Which menu; the same id as {@link MenuDto.items | the first dish}'s menu. */
     menuId!: string;
+
+    /** The location's code. Mutually exclusive with {@link storeId} — see that field. */
+    locationCode?: string;
+
+    /**
+     * The store's id. MUTUALLY EXCLUSIVE WITH {@link locationCode}: sending both is a `400`. Must lie
+     * in {@link region}; compare {@link FetchMenuRequestDto.menuId}.
+     */
+    storeId?: string;
 }
 
 /** The menu asked for. */

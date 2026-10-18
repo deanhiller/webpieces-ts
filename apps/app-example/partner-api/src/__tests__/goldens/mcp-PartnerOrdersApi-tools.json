@@ -24,7 +24,7 @@
         },
         "states": {
           "type": "array",
-          "description": "Only these states. Omit for every state.",
+          "description": "Only these states, inside the window `from` starts, at the store in `storeId`.\nOmit for every state.",
           "items": {
             "type": "string",
             "enum": [

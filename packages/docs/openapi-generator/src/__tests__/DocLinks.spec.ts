@@ -67,6 +67,16 @@ const DOCUMENTS = [
     'mcp-openapi.json',
 ];
 
+/** Each field of `FetchMenuRequest` whose JSDoc links a field BARE, and what it must publish (#1308). */
+const SIBLING_FIELDS: readonly (readonly [string, string])[] = [
+    ['locationCode', "The location's code. Mutually exclusive with `storeId` — see that field."],
+    [
+        'storeId',
+        "The store's id. MUTUALLY EXCLUSIVE WITH `locationCode`: sending both is a `400`. Must lie\n" +
+            'in `region`; compare `FetchMenuRequest.menuId`.',
+    ],
+];
+
 describe('{@link} publishes the published identity, as a code span (#1284)', () => {
     const written = harness.run('links.manifest.json');
 
@@ -97,6 +107,32 @@ describe('{@link} publishes the published identity, as a code span (#1284)', () 
         }
     });
 
+    it('names a field linked BARE by the field itself — sibling or inherited — and keeps a written Class.member prefix (#1308)', () => {
+        for (const fileName of DOCUMENTS) {
+            const document = harness.json(written, fileName);
+            const request = harness.at(document, 'components', 'schemas', 'FetchMenuRequest');
+            for (const [field, description] of SIBLING_FIELDS) {
+                expect(harness.at(request, 'properties', field, 'description'), fileName).toBe(
+                    description,
+                );
+            }
+            // The base declaring `region` is flattened away, and the link needs no schema of it.
+            expect(harness.at(document, 'components', 'schemas', 'MenuScope'), fileName).toBeUndefined();
+        }
+    });
+
+    it('names a field linked BARE by the field itself in the MCP tool catalog too (#1308)', () => {
+        const tools = JSON.parse(written.get('mcp-MenusApi-tools.json')!) as {
+            name: string;
+            inputSchema: { properties: Record<string, { description: string }> };
+        }[];
+        for (const tool of tools) {
+            for (const [field, description] of SIBLING_FIELDS) {
+                expect(tool.inputSchema.properties[field]!.description, tool.name).toBe(description);
+            }
+        }
+    });
+
     it('names a method that IS a tool by its tool name in the MCP tool catalog', () => {
         const catalog = written.get('mcp-MenusApi-tools.json')!;
         const tools = JSON.parse(catalog) as { name: string; description: string }[];
@@ -118,11 +154,16 @@ describe('a {@link} the document cannot publish is REFUSED (#1284)', () => {
 
     it('names every offender, with file:line, in one run', () => {
         expect(failure).toBeDefined();
-        expect(failure!.message).toContain('3 {@link} reference(s) name nothing');
-        expect(failure!.pointers).toHaveLength(3);
+        expect(failure!.message).toContain('4 {@link} reference(s) name nothing');
+        expect(failure!.pointers).toHaveLength(4);
         const pointers = failure!.pointers.join('\n');
         expect(pointers).toMatch(
             /DanglingLinksApi\.ts:\d+:\d+ \{@link NoSuchShelf\} — the compiler cannot resolve it/,
+        );
+        // A BARE name of ANOTHER class's field: the compiler looks a bare name up only on the class
+        // the JSDoc is in, so it resolves nothing — refused, never guessed at (#1308).
+        expect(pointers).toMatch(
+            /DanglingLinksApi\.ts:\d+:\d+ \{@link titles\} — the compiler cannot resolve it/,
         );
         // A real type, reached only by a HIDDEN operation: the customer document does not publish it.
         expect(pointers).toMatch(
