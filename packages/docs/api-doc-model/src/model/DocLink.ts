@@ -13,6 +13,13 @@
 export enum DocLinkKind {
     /** A named type — class, interface, enum or alias — optionally with a `.member` tail. */
     TYPE = 'type',
+    /**
+     * A member — property or enum member — written BARE (`{@link storeId}`), as TypeScript resolves
+     * it inside a member's own JSDoc: a sibling, or one its type inherits (#1308). Published as the
+     * member's own name, with no type prefix, because the reader is already on that schema — the one
+     * the member is a field of, its inherited fields flattened in. Every output publishes it.
+     */
+    MEMBER = 'member',
     /** A method of an `@ApiPath` contract: a published operation. */
     OPERATION = 'operation',
     /** A target that names nothing any document publishes. Always refused by a renderer. */
@@ -36,7 +43,11 @@ export class DocLink {
          */
         readonly owner: string,
         readonly ownerName: string,
-        /** {@link DocLinkKind.TYPE}: the `.member` tail exactly as written (`.items`), else empty. */
+        /**
+         * {@link DocLinkKind.TYPE}: the `.member` tail exactly as written (`.items`), else empty.
+         * {@link DocLinkKind.MEMBER}: the member's published name (`storeId`), the type it is
+         * declared on in `owner` / `ownerName`.
+         */
         readonly member: string,
         /** {@link DocLinkKind.OPERATION}: the method's `@WpMcpTool` name, when it is a tool. */
         readonly mcpToolName: string | undefined,
@@ -87,6 +98,7 @@ const ENCODED = /([^]*)/g;
  * |---|---|
  * | `{@link MenuDto}` | `` `Menu` `` (the published schema name) |
  * | `{@link MenuDto.items}` | `` `Menu.items` `` (the tail kept as written) |
+ * | `{@link storeId}`, from a sibling field's JSDoc | `` `storeId` `` (the field's own name — no type prefix) |
  * | `{@link OrdersApi.fetchOrders}` | `` `fetchOrders` `` (the operationId; an MCP tool's name in a tool catalog) |
  * | `{@link OrdersApi.fetchOrders \| the order list}` | `the order list (`fetchOrders`)` |
  *
@@ -153,6 +165,9 @@ export class DocLinkText {
     ): string {
         return text.replace(ENCODED, (_all: string, body: string) => {
             const link = DocLinkText.decode(body);
+            if (link.kind === DocLinkKind.MEMBER) {
+                return DocLinkText.spell(link, link.member);
+            }
             const name =
                 link.kind === DocLinkKind.UNRESOLVED ? undefined : naming.publishedName(link);
             if (name === undefined) {

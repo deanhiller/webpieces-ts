@@ -170,6 +170,16 @@ describe('the docs site rendered from the example contract', () => {
         expect(site.exists('schemas', 'fetch-orders-request')).toBe(false);
     });
 
+    it('keeps a field linked BARE as plain code — neither its class nor a link to a page (#1308)', () => {
+        const page = site.page('reference', 'partner-orders-api-fetch-orders');
+        // `storeId` is inherited from StoreScopedRequest two levels up; `from` is a sibling.
+        expect(page).toContain(
+            'Only these states, inside the window <code>from</code> starts, at the store in <code>storeId</code>.',
+        );
+        expect(page).not.toContain('<code>storeId</code></a>');
+        expect(page).not.toContain('<code>from</code></a>');
+    });
+
     it('takes the reference order from tags[] and the prose order from docs.manifest.json', () => {
         const home = site.home();
         expect(home.indexOf('Getting started')).toBeLessThan(home.indexOf('Authentication'));

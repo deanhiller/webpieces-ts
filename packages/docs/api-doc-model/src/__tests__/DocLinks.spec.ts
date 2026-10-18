@@ -3,7 +3,7 @@ import * as path from 'node:path';
 import * as ts from 'typescript';
 import { McpToolCatalogError, McpToolDefinition, toError } from '@webpieces/core-util';
 import { ApiDocExtractor } from '../extract/ApiDocExtractor';
-import { ApiDocModel, DocumentedEndpoint } from '../model/ApiDocModel';
+import { ApiDocModel, DocumentedEndpoint, DocumentedField } from '../model/ApiDocModel';
 import { DocLink, DocLinkKind, DocLinkText } from '../model/DocLink';
 import { OperationIds, OperationIdStyle } from '../model/OperationIds';
 import { SchemaNameEntry, SchemaNames } from '../model/SchemaNames';
@@ -91,6 +91,28 @@ describe('a {@link} at extraction', () => {
         expect(links[0]!.location).toMatch(/LinksApi\.ts:\d+:\d+$/);
     });
 
+    it('records a field linked BARE as a MEMBER: the field\'s own name, its declaring type as owner (#1308)', () => {
+        const request = model.types.get('FetchMenuRequestDto')!;
+        const field = (name: string): string =>
+            request.fields.find((each: DocumentedField) => each.name === name)!.description;
+        expect(
+            [field('locationCode'), field('storeId')].map((text: string) =>
+                DocLinkText.linksIn(text).map((link: DocLink) => [
+                    link.kind,
+                    link.owner,
+                    link.member,
+                    link.label,
+                ]),
+            ),
+        ).toEqual([
+            [[DocLinkKind.MEMBER, 'FetchMenuRequestDto', 'storeId', undefined]],
+            [[DocLinkKind.MEMBER, 'FetchMenuRequestDto', 'locationCode', 'the location']],
+        ]);
+        expect(DocLinkText.asWritten(field('locationCode'))).toBe(
+            "The location's code. Mutually exclusive with `storeId` — see that field.",
+        );
+    });
+
     it('writes a URL out as a markdown link, since it names no declaration', () => {
         const description = fixture.endpoint(model, 'fetchMenu').description;
         expect(description).toContain('[the guide](https://example.com/menus)');
@@ -126,6 +148,13 @@ describe('a {@link} in an MCP tool catalog', () => {
         expect(fetch.outputSchema.description).toBe('The `Menu` asked for.');
         expect(fetch.inputSchema.properties!['menuId']!.description).toBe(
             "Which menu; the same id as the first dish (`Menu.items`)'s menu.",
+        );
+        // A field linked BARE publishes the field, never its class (#1308).
+        expect(fetch.inputSchema.properties!['locationCode']!.description).toBe(
+            "The location's code. Mutually exclusive with `storeId` — see that field.",
+        );
+        expect(fetch.inputSchema.properties!['storeId']!.description).toBe(
+            "The store's id. MUTUALLY EXCLUSIVE WITH the location (`locationCode`).",
         );
         const menu = fetch.outputSchema.properties!['menu']!;
         expect(menu.properties!['items']!.description).toBe(

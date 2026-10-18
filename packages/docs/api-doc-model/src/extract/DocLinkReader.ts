@@ -29,6 +29,7 @@ type LinkPart = ts.JSDocLink | ts.JSDocLinkCode | ts.JSDocLinkPlain;
  * |---|---|
  * | a class, interface, enum or type alias | {@link DocLinkKind.TYPE}: its model key and published schema name |
  * | a member of one (`MenuDto.items`, `Gender.F`) | {@link DocLinkKind.TYPE} of the owner, the `.member` tail kept as written |
+ * | a member written BARE (`{@link storeId}` in a sibling's JSDoc) | {@link DocLinkKind.MEMBER}: the member's published name, no owner prefix |
  * | an `@Endpoint` method of an `@ApiPath` contract | {@link DocLinkKind.OPERATION}: contract, method, `@WpMcpTool` name |
  * | a URL (`{@link https://…}`) | a markdown link, written out here — it names no declaration |
  * | anything else, or nothing | {@link DocLinkKind.UNRESOLVED}, with the reason |
@@ -78,6 +79,10 @@ export class DocLinkReader {
             if (ts.isClassDeclaration(owner) && FieldDecorators.hasDecorator(owner, API_PATH)) {
                 return this.operationLink(owner, declaration, written, label, location);
             }
+            const bare = DocLinkReader.bareMemberName(part.name!, declaration);
+            if (bare !== undefined) {
+                return this.memberLink(owner, bare, written, label, location);
+            }
             return this.typeLink(owner, written, label, location, DocLinkReader.tailOf(part.name!));
         }
         return DocLinkReader.unresolved(
@@ -114,6 +119,33 @@ export class DocLinkReader {
             location,
             this.registry.keyFor(name, declaration),
             this.schemaNames.nameOf(name, declaration.getSourceFile().fileName),
+            member,
+            undefined,
+            '',
+        );
+    }
+
+    /**
+     * A member written bare (#1308). TypeScript resolves `{@link storeId}` in a member's JSDoc to the
+     * property of the enclosing class or interface — its own, or one it inherits — so the owner here is
+     * the type that DECLARES it, which may be a base the document flattens away. Nothing about that
+     * owner is checked: the published name is the member's own, read the way the field is.
+     */
+    private memberLink(
+        owner: NamedTypeDeclaration,
+        member: string,
+        written: string,
+        label: string | undefined,
+        location: string,
+    ): DocLink {
+        const name = owner.name.text;
+        return new DocLink(
+            DocLinkKind.MEMBER,
+            written,
+            label,
+            location,
+            this.registry.keyFor(name, owner),
+            this.schemaNames.nameOf(name, owner.getSourceFile().fileName),
             member,
             undefined,
             '',
@@ -179,6 +211,30 @@ export class DocLinkReader {
         return ts.isTypeLiteralNode(parent) && ts.isTypeAliasDeclaration(parent.parent)
             ? parent.parent
             : parent;
+    }
+
+    /**
+     * The published name of a member the link names BARE — an identifier, not `Type.member` /
+     * `Type#member` — read exactly as `TypeResolver` names a field (an identifier's or a quoted
+     * name's text; nothing renames a property on the wire). Undefined when the link is qualified or
+     * the member has no such name.
+     */
+    // webpieces-disable no-function-outside-class -- private static helper of this class
+    private static bareMemberName(
+        name: ts.EntityName | ts.JSDocMemberName,
+        member: ts.Declaration,
+    ): string | undefined {
+        if (!ts.isIdentifier(name)) {
+            return undefined;
+        }
+        const memberName = (member as ts.NamedDeclaration).name;
+        if (
+            memberName === undefined ||
+            (!ts.isIdentifier(memberName) && !ts.isStringLiteral(memberName))
+        ) {
+            return undefined;
+        }
+        return memberName.text;
     }
 
     /** `.items` of `MenuDto.items`, `#items` of `MenuDto#items` — the tail exactly as written. */

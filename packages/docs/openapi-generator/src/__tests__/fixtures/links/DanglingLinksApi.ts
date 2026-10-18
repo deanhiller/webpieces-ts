@@ -21,7 +21,10 @@ export class AuditNoteDto {
 
 /** Which shelf. Names {@link NoSuchShelf}, which does not exist. */
 export class ShelfRequestDto {
-    /** The shelf's identifier. */
+    /**
+     * The shelf's identifier. Names {@link titles} BARE, which is a field of ShelfResponseDto, not of
+     * this class — the compiler resolves a bare name only against the class the JSDoc is in (#1308).
+     */
     shelfId!: string;
 }
 

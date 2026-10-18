@@ -25,6 +25,12 @@ export interface MenuDto {
 export interface FetchMenuRequestDto {
     /** Which menu; the same id as {@link MenuDto.items | the first dish}'s menu. */
     menuId: string;
+
+    /** The location's code. Mutually exclusive with {@link storeId} — see that field. */
+    locationCode?: string;
+
+    /** The store's id. MUTUALLY EXCLUSIVE WITH {@link locationCode | the location}. */
+    storeId?: string;
 }
 
 /** The menu asked for. */

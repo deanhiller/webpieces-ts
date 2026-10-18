@@ -98,7 +98,10 @@ export interface FetchOrdersRequest extends WindowedStoreRequest {
      */
     from?: string;
 
-    /** Only these states. Omit for every state. */
+    /**
+     * Only these states, inside the window {@link from} starts, at the store in {@link storeId}.
+     * Omit for every state.
+     */
     states?: OrderState[];
 }
 
