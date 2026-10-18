@@ -1,8 +1,9 @@
 # Checklist: every change has a GitHub issue, and the closing reference reaches the squash body
 
 **The policy, in one sentence:** every change is traceable to a GitHub issue in
-`deanhiller/webpieces-ts`, the `Fixes #NNN` line has to end up in the PR body — and if this branch
-names no issue, **this reviewer creates it, states the exact line, and passes.**
+`deanhiller/webpieces-ts`, a `Fixes` (or, for a ticket more PRs still owe, `Part of`) reference has to
+end up in the PR body — and if this branch names no issue, **this reviewer creates it, states the exact
+summary.json lines, and passes.**
 
 This is the checklist for `ticket-required-reviewer`.
 
@@ -17,13 +18,13 @@ creates the PR and renders its body. At the moment you run:
 - there is usually **no PR at all** (`gh pr list --head <branch>` returns `[]` on a first-time PR);
 - `pr-body.md` in the review directory **does not exist yet** — stage ③ writes it, minutes after the
   last verdict lands;
-- `review.json` may or may not be there. Stage ② tells the main agent to write it at STEP 1, *before*
+- `summary.json` may or may not be there. Stage ② tells the main agent to write it at STEP 1, *before*
   it spawns you at STEP 2, so it is usually present — but it is a DRAFT written by the same agent that
   authored the diff, it is simply absent if that agent has not written it yet, and on a re-run of
-  stage ② it can be the previous round's file. Stage ③ MOVES it to `old-review.json` when it
+  stage ② it can be the previous round's file. Stage ③ MOVES it to `old-summary.json` when it
   publishes, so the live path is empty again on the next cycle.
 
-**`review.json` is not the PR body, and it is not evidence.** It is the draft your verdict is supposed
+**`summary.json` is not the PR body, and it is not evidence.** It is the draft your verdict is supposed
 to CORRECT — stage ③ has not rendered anything from it yet. Handle both states honestly: read it if it
 is there, treat "not found" as ordinary, and in either case do step 3.
 
@@ -60,8 +61,8 @@ git log <forkPointSha>..<featureHeadSha> --format='%s%n%b'   # both shas are pri
 
 | what the local evidence yields | verdict | what to say |
 |---|---|---|
-| a branch name or commit body naming issue #NNN, and `gh issue view NNN` resolves to an OPEN issue in this repo | 🟢 | name the number, and state the `Fixes #NNN` line (step 3) |
-| a number that resolves to a CLOSED issue | 🟢 | say so plainly; do not reopen it, do not file a new one. A follow-up PR against a closed issue is ordinary. Still state the `Fixes #NNN` line. |
+| a branch name or commit body naming issue #NNN, and `gh issue view NNN` resolves to an OPEN issue in this repo | 🟢 | name the number, and state the `addressesIssues` entry and `Fixes #NNN` line (step 3) |
+| a number that resolves to a CLOSED issue | 🟢 | say so plainly; do not reopen it, do not file a new one. A follow-up PR against a closed issue is ordinary. Still state the `addressesIssues` entry and `Fixes #NNN` line. |
 | a number that does not resolve, or resolves to a **pull request** rather than an issue | 🟢 after you create one | treat it as "nothing at all", and say in your verdict that the branch named a number that does not resolve |
 | nothing at all | 🟢 after you create one | the creation path in step 2 |
 
@@ -80,11 +81,11 @@ exists. Do not treat "the branch has the number in it" as the requirement being 
   `gh pr list --head "$(git rev-parse --abbrev-ref HEAD)" --json number,body`. If that comes back
   `[]`, that is the *normal* case and it says nothing about the change. Never report `[]` as a
   finding.
-- **`review.json`**, in the directory holding your verdict file (the parent of the `verdictPath` your
+- **`summary.json`**, in the directory holding your verdict file (the parent of the `verdictPath` your
   briefing names). Usually present, because stage ② has the main agent write it before spawning you —
   but it is that agent's DRAFT, or a previous round's file, and stage ③ has rendered nothing from it
-  yet. If its `summary` already LEADS with a correct `Fixes #NNN`, say so in your verdict and repeat
-  the line anyway. If it does not, or the file is absent, that is the ordinary case — say the number
+  yet. If its `addressesIssues` and leading `summary` line already name the right issue, say so in
+  your verdict and repeat both anyway. If it does not, or the file is absent, that is the ordinary case — say the number
   you settled on and give the line. Either way you do step 3; nothing here is a reason to skip it, and
   a missing file is never a finding.
 
@@ -106,7 +107,7 @@ Search on the distinctive nouns of the change, not on generic words like "fix", 
 
 - **do not file a second one**, and
 - **do not edit it, comment on it, or close it** — see the prohibitions below,
-- report its number in your verdict, 🟢, and give the `Fixes #NNN` line for it in step 3.
+- report its number in your verdict, 🟢, and give the `addressesIssues` entry and `Fixes #NNN` line for it in step 3.
 
 That is a better outcome than creating a new issue, so spend the search.
 
@@ -159,22 +160,37 @@ diff you are reviewing.
 
 You cannot put the line in the PR body yourself, and you must never try. What you CAN do is tell the
 agent that writes the body, mechanically, in the one channel that reaches it: your verdict `output`
-is read by the main agent assembling `review.json`, and `review.json.summary` is what stage ③ renders
-into **both** the PR description and the squash-merge commit body.
+is read by the main agent assembling `summary.json`, and `summary.json` is what stage ③ renders into
+**both** the PR description and the squash-merge commit body.
 
-So your `output` must contain, on its own line and character for character:
+So your `output` must contain, character for character, the `addressesIssues` entry:
+
+```
+"addressesIssues": [{ "url": "https://github.com/deanhiller/webpieces-ts/issues/NNN", "closesIssue": true }]
+```
+
+and the leading `summary` line, on its own line:
 
 ```
 Fixes #NNN
 ```
 
-and the sentence that says where it goes:
+and the sentence that says where they go:
 
-> `Fixes #NNN` must be the LEADING line of `review.json.summary`, so `wp-finish-upsert-pr` renders it
-> into the PR body and into the squash-merge commit.
+> Put that entry in `summary.json`'s `addressesIssues` AND make `Fixes #NNN` the LEADING line of its
+> `summary`, so `wp-finish-upsert-pr` renders the reference into the PR body and the squash-merge commit.
+
+Both, because this repo runs the gate one release behind its source
+(`.claude/rules/published-vs-local-source.md`): the running release renders only `summary`, and the
+release that ships issue #1310 renders `addressesIssues` as `Fixes <url>` and accepts a `Fixes #NNN` in
+`summary` only when a `closesIssue: true` entry backs it. Both lines are correct on either release.
+
+Use `"closesIssue": false` and `Part of #NNN` instead ONLY when the diff or the issue plainly says
+more PRs are still owed on that ticket — `false` leaves the issue open on merge, and `Part of` is not a
+closing keyword. Never "Partially fixes #NNN": GitHub reads `fixes #NNN` inside it and closes the issue.
 
 Write the real number, never the literal `NNN`. Do this whether you FOUND the issue or CREATED it —
-finding one changes nothing about whether the line reaches the body.
+finding one changes nothing about whether the reference reaches the body.
 
 **Two mechanical reasons to give, in one line, for why it is a closing keyword and not a bare
 `#NNN`:** a closing keyword auto-closes the issue when the PR merges, so the backlog does not fill up
@@ -207,7 +223,7 @@ Short list, absolute:
   if the follow-up genuinely needs tracking, and link the closed one from it.
 - **Never edit a PR body, and never create or push anything.** `gh pr edit` and `gh pr create` are
   blocked by `pr-creation-or-push-guard` anyway. Your verdict is the report, and step 3 is the fix.
-- **Never write `review.json` yourself.** That file belongs to the main agent; you write exactly one
+- **Never write `summary.json` yourself.** That file belongs to the main agent; you write exactly one
   file, your own verdict.
 - **Never comment on an unrelated issue or PR** to announce what you did. Your verdict is where you
   report.
@@ -254,9 +270,9 @@ Your `output` should be three or four sentences and must contain, literally:
 - the issue number — found or created — and, if you created it, its URL;
 - which local artifact you got it from (branch name, commit message, an already-open PR, or "none — I
   filed it");
-- **the `Fixes #NNN` line itself**, with the real number, plus the sentence saying it must lead
-  `review.json.summary`;
+- **the `addressesIssues` entry and the `Fixes #NNN` line themselves**, with the real number, plus the
+  sentence saying where each goes in `summary.json`;
 - the one-line reason a closing keyword beats a bare mention.
 
 Nobody should have to open GitHub to learn what this reviewer did, and the agent writing
-`review.json` should not have to remember anything you could have told it.
+`summary.json` should not have to remember anything you could have told it.

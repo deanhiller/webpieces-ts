@@ -259,7 +259,8 @@ snapshots are never loaded as active summaries; a new PR requires its own author
    still happens and the archive/reap half is skipped out loud rather than tagging the wrong objects.
 
    **The commit body is the PR DESCRIPTION**, which stage ③ writes as one compact string (PR link, risk,
-   non-green flags, short summary, build-command footer) and reuses verbatim as its `--body-file`. The
+   non-green flags, short summary, the `Fixes <url>` / `Part of <url>` lines from summary.json's
+   `addressesIssues`, build-command footer) and reuses verbatim as its `--body-file`. The
    full dashboard and the reviewer output live in the PR's 1st and 2nd comments so they stay out of
    `git log`. This command, a bare `gh pr merge`, and the GitHub Merge button therefore all produce
    identical history — prefer this one for the archiving and worktree cleanup, not because the others are

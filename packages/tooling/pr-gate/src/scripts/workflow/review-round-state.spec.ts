@@ -88,7 +88,8 @@ describe('ReviewRoundStateService', () => {
                 agent: 'codex',
                 model: 'spec',
                 title: 'Fix generated graphs',
-                summary: 'Fixes #1114\n\nKeep PR intent across updates.',
+                summary: 'Keep PR intent across updates.',
+                addressesIssues: [{ url: 'https://github.com/deanhiller/webpieces-ts/issues/1114', closesIssue: true }],
                 riskScore: 10,
                 riskLevel: 'green',
             });

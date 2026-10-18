@@ -28,6 +28,7 @@ import { Dashboard, DashboardInput, ChecklistRow, DETAIL_COMMENT_MARKER } from '
 import { ChecklistCommentRenderer, CHECKLIST_COMMENT_MARKER } from '../../dashboard/checklist-comment-renderer';
 import { ChecklistCommentRow } from '../../dashboard/checklist-comment-row';
 import { AuthorIdentityResolver } from '../../dashboard/author-identity';
+import { IssueReferences } from '../../dashboard/issue-references';
 import { HotfixRedirect } from '../workflow/hotfix-redirect';
 
 const SEP = '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n';
@@ -196,6 +197,9 @@ export class FinishUpsertPrCommand {
         this.verdictGate.assertEveryReviewerRan(scan);
         const review = this.reviewJsonService.loadSummaryJson(summaryJsonPath(repoRoot, featureName), required, '', scan.orangeFixes);
         this.applyRoundAudits(review, scan, config.maxReviewerRounds);
+        // FAIL FAST on a hand-written closing reference in the summary (issue #1310), before the build gate.
+        // renderPrBody re-judges the final bytes; this only moves the common case ahead of a slow build.
+        new IssueReferences().assertNoStrayClosingReferences(review.summary, review.addressesIssues, 'pnpm wp-finish-upsert-pr');
 
         // 2c. For every verdicted checklist, VERIFY (from the harness's own artifacts) that a real reviewer
         //     SUBAGENT actually ran on this branch — the coding agent may not self-certify. Its NAME is not
@@ -590,6 +594,9 @@ export class FinishUpsertPrCommand {
         // `existingPrUrl` is '' only for a brand-new PR — there is no URL to self-link to until
         // `gh pr create` returns one, and upsertPr back-fills it the moment it does.
         upsert.body = this.dashboard.renderPrBody(input, this.existingPrUrl(base)) + upsert.tokenSuffix;
+        // Rendering above already refused a stray closing reference; say out loud what merging WILL close.
+        // `say`: a wrong closesIssue must be noticed BEFORE landing, so this may not end up only in the log.
+        for (const warning of new IssueReferences().closeWarnings(input.review.addressesIssues)) this.stageConsole.say(`${warning}\n`);
         const result = this.upsertPr(upsert);
 
         // In the order the PR body's pointer promises: full dashboard 1st, reviewer output 2nd. Both are

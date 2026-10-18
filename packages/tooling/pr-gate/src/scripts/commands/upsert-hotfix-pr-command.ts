@@ -20,6 +20,7 @@ import { Dashboard, DashboardInput, DETAIL_COMMENT_MARKER } from '../../dashboar
 import { ChecklistCommentRenderer, CHECKLIST_COMMENT_MARKER } from '../../dashboard/checklist-comment-renderer';
 import { ChecklistCommentRow } from '../../dashboard/checklist-comment-row';
 import { AuthorIdentityResolver } from '../../dashboard/author-identity';
+import { IssueReferences } from '../../dashboard/issue-references';
 
 const SEP = '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n';
 
@@ -87,6 +88,8 @@ export class UpsertHotfixPrCommand {
         const summaryPath = this.reviewJsonService.summaryJsonPath(repoRoot, featureName);
         // Throws InformAiError carrying the path and the schema when summary.json is missing or invalid.
         const summary = this.reviewJsonService.loadSummaryJson(summaryPath, [], '', {}, UPSERT_HOTFIX_PR_COMMAND);
+        // FAIL FAST on a hand-written closing reference (issue #1310); renderPrBody re-judges the final body.
+        new IssueReferences().assertNoStrayClosingReferences(summary.summary, summary.addressesIssues, UPSERT_HOTFIX_PR_COMMAND);
 
         // origin/main is READ (the build's merge-base and the dashboard's fork point) — never merged.
         this.fetchMain(repoRoot);
@@ -140,6 +143,7 @@ export class UpsertHotfixPrCommand {
         const tokenSuffix = this.tokenSuffix(config.gateSalt, headSha);
         const initial = this.prRef(branch);
         const body = this.dashboard.renderPrBody(input, initial.url) + tokenSuffix;
+        for (const warning of new IssueReferences().closeWarnings(summary.addressesIssues)) process.stdout.write(`${warning}\n`);
         const bodyFile = path.join(this.reviewJsonService.prDirFor(repoRoot, this.aiBranchName.getFeatureName()), 'pr-body.md');
         fs.mkdirSync(path.dirname(bodyFile), { recursive: true });
         fs.writeFileSync(bodyFile, body + '\n');

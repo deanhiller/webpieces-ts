@@ -7,6 +7,7 @@ import { DotWebpieces, dotWebpieces } from '@webpieces/tooling-common';
 import { InformAiError } from '@webpieces/tooling-common';
 import { toError } from '@webpieces/tooling-common/to-error';
 import { SummaryJsonSchemaRenderer } from './summary-json-schema-renderer';
+import { AddressedIssuesParser } from './addressed-issues-parser';
 import { VerdictSchemaRenderer } from './verdict-schema-renderer';
 import { ChecklistOverride, ChecklistOverrideService, checklistOverrideService } from './checklist-override';
 import {
@@ -19,6 +20,7 @@ import {
     RequiredChecklist,
     ChecklistReviewContext,
     PrSummary,
+    AddressedIssue,
     CK_PASS,
     CK_WARN,
     CK_OVERRIDDEN,
@@ -43,6 +45,7 @@ export {
     RequiredChecklist,
     ChecklistReviewContext,
     PrSummary,
+    AddressedIssue,
     CK_PASS,
     CK_WARN,
     CK_OVERRIDDEN,
@@ -330,6 +333,7 @@ export class ReviewJsonService {
             errors.push('"title" must be a non-empty, imperative PR title describing the change (no branch names).');
         }
         const mainAgentInstructions = this.validateMainAgentInstructions(raw, expectedMainAgentInstructions, errors);
+        const addressesIssues = new AddressedIssuesParser().parse(raw['addressesIssues'], errors);
 
         const results = this.loadChecklistResults(filePath, required);
         for (const result of results) result.remediation = orangeFixes[result.id] ?? '';
@@ -341,7 +345,7 @@ export class ReviewJsonService {
         const emoji = typeof raw['riskEmoji'] === 'string' && raw['riskEmoji'] !== '' ? (raw['riskEmoji'] as string) : (EMOJI_FOR_LEVEL[level] ?? '🟡');
         const summary = typeof raw['summary'] === 'string' ? (raw['summary'] as string) : '';
 
-        return new PrSummary((raw['agent'] as string).trim(), (raw['model'] as string).trim(), title, riskScore as number, level, emoji, summary, this.asStringArray(raw['violations']), this.asStringArray(raw['risks']), this.asStringArray(raw['filesToReview']), results, mainAgentInstructions);
+        return new PrSummary((raw['agent'] as string).trim(), (raw['model'] as string).trim(), title, riskScore as number, level, emoji, summary, this.asStringArray(raw['violations']), this.asStringArray(raw['risks']), this.asStringArray(raw['filesToReview']), addressesIssues, results, mainAgentInstructions);
     }
 
     private assertValidSummary(errors: string[], filePath: string, expectedMainAgentInstructions: string, retryCommand: string): void {

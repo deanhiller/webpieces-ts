@@ -37,6 +37,7 @@ function rendered(model: string): { body: string; dashboard: string } {
         [],
         [],
         [],
+        [],
     );
     const input = new DashboardInput(
         'Title',
