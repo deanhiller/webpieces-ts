@@ -34,7 +34,7 @@
  */
 
 import type { ExecutorContext } from '@nx/devkit';
-import { loadAndValidate, shouldSkipRule, TurnOffRuleCure } from '@webpieces/rules-config';
+import { loadAndValidate, shouldSkipRule, TurnOffRuleCure, formatFixOptions } from '@webpieces/rules-config';
 import * as fs from 'fs';
 import * as path from 'path';
 import { toError } from '../../toError';
@@ -343,8 +343,8 @@ function reportCycles(projectName: string, cycles: string[][]): void {
     // #1318: the BRANCH hatch leads; a future epoch is REPO-WIDE, so it is only a +1 hour last resort.
     const entry = `the "${RULE_NAME}" entry in its owner rule file (the @webpieces/nx-webpieces-rules entry of "rulePacks" in webpieces.config.json, conventionally .webpieces-config/rules/nx-webpieces-rules.json)`;
     const turnOff = new TurnOffRuleCure();
-    console.error(`To shelter a known cycle during one refactor, a human can: ${turnOff.byBranchText(entry)}`);
-    console.error(turnOff.byEpochText(entry));
+    console.error('To shelter a known cycle during one refactor, a human can turn the rule off:');
+    for (const line of formatFixOptions(turnOff.options(entry))) console.error(line);
     console.error(`To turn the gate off entirely, set "${RULE_NAME}".mode to "OFF".\n`);
 }
 

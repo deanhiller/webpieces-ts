@@ -29,10 +29,12 @@ and breaks the diff range used by PR review and AI code analysis. These are bloc
 
 **You MUST branch off fresh `main`.** Name it `{whoami}/<short-feature-description>` — lowercase, no
 version numbers, no `sub/` prefix (e.g. `dean/upgrade-webpieces`). The `branch-creation-guard` blocks
-anything else. Sub-branches (branching off another feature branch) are disabled; to allow one
-temporarily, set `branch-creation-guard.turnOffRuleUntilEpoch` to a future epoch in
-`webpieces.config.json`. (It was `ignoreModifiedUntilEpoch` two renames ago; the validator has rejected
-that spelling for several releases, so this line prescribed an edit that could only fail the load.)
+anything else. Sub-branches (branching off another feature branch) are disabled; to allow one (with a
+human's approval), set `"turnOffRuleWhileOnBranch": "<the branch you are on>"` (keeping
+`"turnOffRuleUntilEpoch": 0`) on the `branch-creation-guard` entry of its owner rule file
+(conventionally `.webpieces-config/rules/agent-workflow-rules.json`). A future `turnOffRuleUntilEpoch`
+turns the rule off REPO-WIDE, so it is only a last resort for a CI that cannot see the branch, set to
+now + 1 hour in epoch seconds (#1318).
 
 **Primary clone:**
 ```bash

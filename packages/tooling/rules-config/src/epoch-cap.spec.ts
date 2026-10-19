@@ -71,11 +71,11 @@ describe('turnOffRuleUntilEpoch is capped at one week out', () => {
         // #1318: the BRANCH hatch leads; the epoch is a +1 hour, explicitly repo-wide last resort.
         expect(msg).toContain('"turnOffRuleWhileOnBranch": "<exact branch name>"');
         expect(msg.indexOf('turnOffRuleWhileOnBranch')).toBeLessThan(msg.indexOf('now + 1 hour'));
-        expect(msg).toMatch(/now \+ 1 hour in epoch SECONDS \(right now that is \d{10}\)/);
-        expect(msg).toContain('REPO-WIDE for that hour');
+        expect(msg).toMatch(/now \+ 1 hour, in epoch SECONDS \(right now that is \d{10}/);
+        expect(msg).toContain('REPO-WIDE, on every branch, for that hour');
         expect(msg).not.toMatch(/WEEKLY|epoch ms|nx\.json/);
         // The largest acceptable epoch AND its human date, so the bound is a copy-paste.
-        expect(msg).toMatch(/never past \d{10} \(\d{4}-\d{2}-\d{2}\)/);
+        expect(msg).toMatch(/Never past \d{10} \(\d{4}-\d{2}-\d{2}\)/);
     });
 
     it('REJECTS the 43-day window this cap exists to catch', () => {

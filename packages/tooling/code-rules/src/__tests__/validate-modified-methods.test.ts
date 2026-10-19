@@ -14,7 +14,9 @@ describe('max-method-lines: guidance when disableAllowed is false', () => {
     it('leads with turnOffRuleWhileOnBranch and keeps the epoch at 0', () => {
         expect(text).toContain('"turnOffRuleWhileOnBranch": "<exact branch name>"');
         expect(text).toContain('"turnOffRuleUntilEpoch": 0');
-        expect(text.indexOf('turnOffRuleWhileOnBranch')).toBeLessThan(text.indexOf('LAST RESORT'));
+        expect(text).toContain('Fix Option 1: (preferred) Turn the rule off for THIS BRANCH ONLY');
+        expect(text).toContain('Fix Option 2: LAST RESORT');
+        expect(text).not.toContain('Preferred:');
     });
 
     it('gives the epoch only as a +1 hour, REPO-WIDE last resort in epoch SECONDS', () => {

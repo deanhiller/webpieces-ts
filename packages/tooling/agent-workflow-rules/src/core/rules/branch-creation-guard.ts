@@ -212,7 +212,8 @@ export class BranchCreationGuardRule extends BashRuleBase<BranchCreationGuardCon
         if (this.config.mode === 'ON_NO_SUBBRANCHES') {
             // #1318: the BRANCH hatch leads; a future epoch is REPO-WIDE, so it is a +1 hour last resort.
             const turnOff = new TurnOffRuleCure();
-            options.push(new Option(`Sub-branches (branching off another feature branch) are disabled. To allow one stacked on the branch you are on (requires human approval): ${turnOff.byBranchText(BRANCH_CREATION_GUARD_ENTRY)}\n${turnOff.byEpochText(BRANCH_CREATION_GUARD_ENTRY)}`));
+            options.push(new Option(`Sub-branches (branching off another feature branch) are disabled. To allow one stacked on the branch you are on (requires human approval): ${turnOff.byBranchText(BRANCH_CREATION_GUARD_ENTRY)}`));
+            options.push(new Option(`(requires human approval) ${turnOff.byEpochText(BRANCH_CREATION_GUARD_ENTRY)}`));
         } else {
             options.push(new Option(`If you truly need a stacked sub-branch (requires human approval), name it per branch-creation-guard.subBranchNaming: ${this.subBranchNaming}`));
         }

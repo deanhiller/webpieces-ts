@@ -22,7 +22,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as ts from 'typescript';
-import { writeTemplate, WEBPIECES_DISABLE, detectBase, getChangedFiles, getFileDiff, getChangedLineNumbers, findNewMethodSignaturesInDiff, TurnOffRuleCure } from "@webpieces/rules-config";
+import { writeTemplate, WEBPIECES_DISABLE, detectBase, getChangedFiles, getFileDiff, getChangedLineNumbers, findNewMethodSignaturesInDiff, TurnOffRuleCure, formatFixOptions } from "@webpieces/rules-config";
 import { MaxMethodLinesConfig, MethodLimitMode } from "./configs/rule-configs";
 import { CodeValidator, ExecutorResult } from './code-validator';
 import { injectable, bindingScopeValues } from 'inversify';
@@ -364,8 +364,7 @@ export function disableNotAllowedLines(turnOff: TurnOffRuleCure = new TurnOffRul
         '',
         '   For a major refactor, a HUMAN may let methods expand while each PR shrinks them as it touches them.',
         '   AI agents should NOT turn this rule off - ask a human to do it.',
-        `   Preferred: ${turnOff.byBranchText(entry)}`,
-        `   ${turnOff.byEpochText(entry)}`,
+        ...formatFixOptions(turnOff.options(entry), '   '),
         '',
     ];
 }
