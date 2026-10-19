@@ -241,6 +241,9 @@ const SWEPT_TOOLS: readonly string[] = [
     'McpOnlyApi/ask_question',
     'McpOnlyUndocumentedApi/check_guess',
     'PrivateRemarksApi/switch_lamp',
+    // Field-level `@hidden` (#1246): MCP keeps a hidden field, as it keeps a hidden method.
+    'OrdersApi/fetch_orders',
+    'OrdersApi/get_order',
     // `{@link}` resolved to published names in every generated output (#1284).
     'MenusApi/fetch_menu',
     'MenusApi/publish_menu',
@@ -292,6 +295,7 @@ describe('every @WpMcpTool in this repo, read by the compiler', () => {
             'packages/docs/openapi-generator/src/__tests__/fixtures/docrules/McpOnlyApi.ts',
             'packages/docs/openapi-generator/src/__tests__/fixtures/docrules/McpOnlyUndocumentedApi.ts',
             'packages/docs/openapi-generator/src/__tests__/fixtures/docrules/PrivateRemarksApi.ts',
+            'packages/docs/openapi-generator/src/__tests__/fixtures/hidden/OrdersApi.ts',
             'packages/docs/openapi-generator/src/__tests__/fixtures/links/MenusApi.ts',
             'packages/docs/openapi-generator/src/__tests__/fixtures/summary/LongToolNameApi.ts',
             'packages/docs/openapi-generator/src/__tests__/fixtures/summary/ShelvesApi.ts',

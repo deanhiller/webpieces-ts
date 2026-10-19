@@ -300,6 +300,45 @@ describe('suffix stripping through chained documents and MCP catalogs (#1200)', 
     }, 60_000);
 });
 
+describe('a @hidden field on another package\'s type (#1246)', () => {
+    it('is kept in that package\'s components document, and refused by a split customer document', () => {
+        const scenario = new ChainWorkspace();
+        const dtos = path.join(scenario.root, 'libs/dtos-b/src/VoiceDtos.ts');
+        fs.writeFileSync(
+            dtos,
+            fs
+                .readFileSync(dtos, 'utf8')
+                .replace(
+                    '    /** The Spanish description. */\n    es?: string;',
+                    '    /**\n     * The Spanish description.\n     * @hidden not announced yet\n     */\n    es?: string;',
+                ),
+        );
+        const api = path.join(scenario.root, 'libs/lang-apis/src/LangLessonApi.ts');
+        fs.writeFileSync(
+            api,
+            fs
+                .readFileSync(api, 'utf8')
+                .replace('    MCP,', '    MCP,\n    EXTERNAL_CUSTOMER,')
+                .replace('@ApiType(SVC_TO_SVC, MCP)', '@ApiType(SVC_TO_SVC, MCP, EXTERNAL_CUSTOMER)'),
+        );
+        const components = parse(scenario.generate('dtos-b').get('components.openapi.json'));
+        const shared = ((components['components'] as Json)['schemas'] as Json)[
+            'LocalizedDescriptionsDto'
+        ] as Json;
+        expect(Object.keys(shared['properties'] as Json)).toEqual(['en', 'es']);
+        scenario.generate('dtos-a');
+        const failure = scenario.failureOf('lang-apis');
+        expect(failure.message).toContain(
+            "1 @hidden field(s) are on types public-openapi references in another package's components document",
+        );
+        expect(failure.pointers).toEqual([
+            expect.stringMatching(
+                /^LocalizedDescriptionsDto\.es — declared in @fixture\/dtos-b \(.*VoiceDtos\.ts:\d+:\d+\)$/,
+            ),
+        ]);
+    }, 120_000);
+});
+
 beforeAll(() => {
     // In dependency order, exactly as nx orders it through ^openapi-components-generate.
     for (const library of ['dtos-b', 'dtos-a', 'lang-apis', 'fsdb-api']) {

@@ -32,13 +32,14 @@ import {
 } from './SchemaPlacement';
 import { SchemaRenderer, UnmappedField } from './SchemaRenderer';
 import { SecurityDeriver } from './SecurityDeriver';
+import { HiddenFieldGuard } from './HiddenFieldGuard';
+import { UnpublishedComponentsGuard } from './UnpublishedComponentsGuard';
 import { McpToolNameGuard } from './McpToolNameGuard';
 import { MissingReturnsGuard } from './MissingReturnsGuard';
 import { SummaryGuard } from './SummaryGuard';
 import { StackedJsDocGuard } from './StackedJsDocGuard';
 import { TagOwnership } from './TagOwnership';
 import { UndocumentedSchemaGuard } from './UndocumentedSchemaGuard';
-import { UpstreamComponentsIndex } from './UpstreamComponents';
 import { InlinedWrappers } from './InlinedWrappers';
 
 /** One rendered document, and the renderer that built its schemas — what it defined and referenced. */
@@ -54,21 +55,6 @@ const BUNDLED_SUFFIX = '.bundled';
 
 /** The document a DTO library publishes, without its extension (#1058). */
 const COMPONENTS_DOCUMENT = 'components.openapi';
-
-/**
- * Every cure for a type reached in a package that publishes no components document.
- *
- * Tagging is offered ONLY for a package that is already a role:api-lib DTO library (#1064, D5): a
- * general library such as `company-core` is refused the tag by validate-nx-wiring and by the
- * openapi-components-generate executor, so "tag the package" is never a way out of moving the type.
- */
-const PUBLISH_COMPONENTS_CURE =
-    'Move each type into a role:api-lib DTO library that publishes a components document — as a ' +
-    '`…Dto` string enum when it is a string-literal union. Only when the declaring package is ITSELF a ' +
-    'role:api-lib DTO library, tag it "generate:openapi-components" so it publishes one (with a ' +
-    '"kind": "components" openapi.manifest.json naming its entry files; outside nx, render that manifest ' +
-    'with wp-openapi into the directory the package is packed from); a general library is refused the ' +
-    "tag. A document references another package's schema; it never copies one in.";
 
 /** The OpenAPI version this generator writes. See the class doc for why 3.1 and not 3.0. */
 const OPENAPI_VERSION = '3.1.0';
@@ -110,7 +96,9 @@ const OPENAPI_VERSION = '3.1.0';
  * one run (#1292). Likewise an operation with no valid `@summary` ({@link SummaryGuard}) and an MCP
  * tool whose name the Claude Connectors Directory would refuse ({@link McpToolNameGuard}) (#1296).
  * And a JSDoc `{@link}` the document cannot publish under its target's published name
- * ({@link DocLinkGuard}) (#1284).
+ * ({@link DocLinkGuard}) (#1284) — a `@hidden` field's included, in the customer document. And a
+ * `@hidden` field that is required, or a type whose every field is `@hidden` ({@link HiddenFieldGuard})
+ * (#1246).
  */
 export class OpenApiGenerator {
     private readonly security = new SecurityDeriver();
@@ -119,6 +107,8 @@ export class OpenApiGenerator {
     private readonly summaries = new SummaryGuard();
     private readonly toolNames = new McpToolNameGuard();
     private readonly tagOwnership = new TagOwnership();
+    private readonly hiddenFields = new HiddenFieldGuard();
+    private readonly unpublished = new UnpublishedComponentsGuard();
 
     /**
      * ONE document per `@ApiType` some contract declares, and no others.
@@ -143,6 +133,7 @@ export class OpenApiGenerator {
         this.toolNames.refuse(inputs.contracts, inputs.manifestPath);
         this.missingReturns.refuse(inputs.contracts, inputs.manifestPath);
         this.tagOwnership.refuseSharedOwners(inputs.contracts, inputs.manifestPath);
+        this.hiddenFields.refuse(this.mergedTypes(inputs), inputs.manifestPath);
         // Collected across EVERY OpenAPI document of the run and refused once, after them all, so an
         // author is handed every undocumented schema at once rather than one document at a time.
         const undocumented = new UndocumentedSchemaGuard();
@@ -168,13 +159,7 @@ export class OpenApiGenerator {
             const placement = new SplitPlacement(inputs.homePackage);
             const split = this.render(inputs, contracts, selection, placement);
             this.resolveLinks(links, split, inputs, contracts, selection, placement);
-            this.refuseUnpublished(
-                split.schemas,
-                this.mergedTypes(inputs),
-                inputs.upstream,
-                selection.fileName,
-                inputs.manifestPath,
-            );
+            this.refuseExternalReferences(split.schemas, inputs, selection);
             undocumented.collect(split.schemas.reachedTypes(), this.mergedTypes(inputs));
             // An inlined wrapper is still a published schema, so it still needs its description.
             undocumented.collect(split.schemas.inlinedTypes(), this.mergedTypes(inputs));
@@ -207,17 +192,27 @@ export class OpenApiGenerator {
         const where = inputs.manifestPath;
         this.stackedJsDoc.refuse(model.stackedJsDoc, where);
         this.refuseCollisions(model.collisions, where);
+        this.hiddenFields.refuse(model.types, where);
+        // Every field, `@hidden` ones included: one components document serves every audience, and a
+        // customer document that would have to withhold one of its fields refuses instead (#1246).
         const schemas = new SchemaRenderer(
             model.types,
             new SplitPlacement(model.packageName),
             InlinedWrappers.none(),
+            false,
         );
         for (const key of model.exported) {
             schemas.define(key);
         }
         const rendered = schemas.components();
         this.refuseUnmapped(schemas.unmapped(), COMPONENTS_DOCUMENT, where);
-        this.refuseUnpublished(schemas, model.types, inputs.upstream, COMPONENTS_DOCUMENT, where);
+        this.unpublished.refuse(
+            schemas.externalTypes(),
+            model.types,
+            inputs.upstream,
+            COMPONENTS_DOCUMENT,
+            where,
+        );
         const undocumented = new UndocumentedSchemaGuard();
         undocumented.collect(schemas.reachedTypes(), model.types);
         undocumented.refuse(where);
@@ -229,6 +224,7 @@ export class OpenApiGenerator {
                 schemas,
                 new SplitPlacement(model.packageName),
                 new Map(),
+                false,
             ),
             COMPONENTS_DOCUMENT,
         );
@@ -306,6 +302,7 @@ export class OpenApiGenerator {
             rendered.schemas,
             placement,
             this.publishedOperationIds(contracts, selection, inputs),
+            selection.dropHidden,
         );
         links.resolve(rendered.document, naming, selection.fileName);
     }
@@ -318,7 +315,12 @@ export class OpenApiGenerator {
         placement: SchemaPlacement,
     ): RenderedDocument {
         const types = this.mergedTypes(inputs);
-        const schemas = new SchemaRenderer(types, placement, this.wrappers(inputs, selection, types));
+        const schemas = new SchemaRenderer(
+            types,
+            placement,
+            this.wrappers(inputs, selection, types),
+            selection.dropHidden,
+        );
         const operations = this.operationRenderer(inputs, selection, schemas);
         this.refuseDuplicateOperationIds(contracts, selection, operations, inputs.manifestPath);
         const apiKey = this.singleApiKey(inputs, contracts, selection);
@@ -528,59 +530,21 @@ export class OpenApiGenerator {
     }
 
     /**
-     * FAIL CLOSED (#1058): every type this document references in another package must be a schema
-     * of that package's published components document. A package that publishes none is refused —
-     * naming the type, its package and the fix — rather than copied in, because silent copying is
-     * exactly the duplication this replaces. A document that exists but lacks the schema is stale.
+     * A split document's references into other packages' components documents: each must be
+     * published there (#1058), and — in the customer document — none may carry a `@hidden` field,
+     * which a shared components document cannot withhold (#1246).
      */
-    private refuseUnpublished(
+    private refuseExternalReferences(
         schemas: SchemaRenderer,
-        types: ReadonlyMap<string, DocumentedType>,
-        upstream: UpstreamComponentsIndex,
-        fileName: string,
-        where: string,
+        inputs: GenerationInputs,
+        selection: DocumentSelection,
     ): void {
-        const unpublished: string[] = [];
-        const stale: string[] = [];
-        for (const key of Array.from(schemas.externalTypes()).sort()) {
-            const type = types.get(key)!;
-            const owner = type.packageName;
-            const declared = `${type.name} — declared in ${owner ?? 'no package'} (${type.location})`;
-            if (owner === undefined) {
-                unpublished.push(
-                    `${declared}: its file belongs to no package, so no document can own its schema`,
-                );
-                continue;
-            }
-            const published = upstream.publishedBy(owner);
-            if (published === undefined) {
-                const reason = upstream.missingFor(owner)?.reason ?? 'it was never located';
-                unpublished.push(
-                    `${declared}: ${owner} publishes no components document — ${reason}`,
-                );
-            } else if (!published.schemaNames.has(type.schemaName)) {
-                stale.push(
-                    `${declared}: ${published.documentPath} has no schema '${type.schemaName}'`,
-                );
-            }
-        }
-        if (unpublished.length > 0) {
-            throw new OpenApiGenerationError(
-                `${unpublished.length} type(s) ${fileName} reaches are declared in a package that ` +
-                    'publishes no components document',
-                where,
-                PUBLISH_COMPONENTS_CURE,
-                unpublished,
-            );
-        }
-        if (stale.length > 0) {
-            throw new OpenApiGenerationError(
-                `${stale.length} type(s) ${fileName} references are missing from their package's components document`,
-                where,
-                'Regenerate the upstream components document before this one — it is older than its ' +
-                    'source (in nx, "^openapi-components-generate" in this target\'s dependsOn orders it).',
-                stale,
-            );
+        const external = schemas.externalTypes();
+        const types = this.mergedTypes(inputs);
+        const where = inputs.manifestPath;
+        this.unpublished.refuse(external, types, inputs.upstream, selection.fileName, where);
+        if (selection.dropHidden) {
+            this.hiddenFields.refuseExternal(external, types, selection.fileName, where);
         }
     }
 

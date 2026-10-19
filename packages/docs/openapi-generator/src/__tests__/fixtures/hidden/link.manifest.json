@@ -1,0 +1,8 @@
+{
+    "title": "Links to hidden fields",
+    "summary": "A fixture generation refuses (#1246).",
+    "operationIds": "method",
+    "version": "1.0.0",
+    "apis": [{ "entry": "HiddenLinkApi.ts", "tag": "Quotes" }],
+    "securitySchemeNames": []
+}

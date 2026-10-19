@@ -60,7 +60,9 @@ class McpLinkNaming implements DocLinkNaming {
         if (link.kind === DocLinkKind.OPERATION) {
             return link.mcpToolName ?? this.operationIds.of(link.owner, link.ownerName);
         }
-        return undefined;
+        // A bare member is its own name. A `@hidden` field is published to MCP (#1246), as a
+        // hidden method is, so a link to one is never refused here.
+        return link.kind === DocLinkKind.MEMBER ? link.member : undefined;
     }
 }
 

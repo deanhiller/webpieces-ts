@@ -11,11 +11,12 @@ Nothing here re-reads the source and no generated file is ever an input, so the 
   | `@ApiType` value | document | contents |
   |---|---|---|
   | `SVC_TO_SVC` | `full-private-openapi` | every method, hidden ones included, plus the internal-use-only line |
-  | `EXTERNAL_CUSTOMER` | `public-openapi` | the customer contract, minus every `{ hidden: true }` method |
+  | `EXTERNAL_CUSTOMER` | `public-openapi` | the customer contract, minus every `{ hidden: true }` method and every `@hidden` field |
   | `MCP` | `mcp-openapi` | the same contracts, carrying the `x-mcp-*` extensions |
   A document no contract declares is **not written** — there is no separate emptiness rule
 - `--format json|yaml|both` (default `both`) — the SERIALIZATION, orthogonal to which documents exist. Both come from the same in-memory document
 - **`hidden` means ABSENT.** A hidden method has no path, no operation, no schema and no prose in the customer document. Nothing marks that something was withheld
+- **A `@hidden` field is ABSENT too** (#1246) — no property, no prose, no `required` entry in the customer document and its bundled sibling, wherever the schema is written; kept in the private and MCP outputs, the audience of a hidden method. Refused: a required hidden field, an all-hidden type, a `{@link}` to a hidden field from customer prose, and a hidden field on a type the split customer document `$refs` into another package's components document
 - **Derived security** — `apiKey(regime, credentials)` → `components.securitySchemes` plus ONE AND-ed requirement, keyed by the manifest's published scheme names. Hoisted to the document when every operation in it is covered, stamped per operation otherwise
 - **The webhook block** — a manifest entry marked `"kind": "webhook"` lands under top-level `webhooks:`, keyed by the event NAME with the `@ApiPath` base deliberately not prepended, carrying `x-webpieces-webhook: true` in every document but the public one (#1303), documenting a `void` method as "return any 2xx to acknowledge", and contributing NOTHING to the derived security requirement
 - **The document-wide error contract**, with the body read from a real TS type by the compiler

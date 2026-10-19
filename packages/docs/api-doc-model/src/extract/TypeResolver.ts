@@ -655,6 +655,8 @@ export class TypeResolver {
             max,
             doc.mcpHeader,
             SourceLocation.of(member),
+            doc.hidden,
+            doc.hiddenReason,
         );
     }
 

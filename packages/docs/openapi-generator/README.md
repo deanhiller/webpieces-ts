@@ -17,7 +17,7 @@ export abstract class StoreApi { ... }
 | `@ApiType` value | file | contents |
 |---|---|---|
 | `SVC_TO_SVC` | `full-private-openapi.json` | every method, hidden ones included, plus an internal-use-only line in `info.description`. Nothing renders it for humans |
-| `EXTERNAL_CUSTOMER` | `public-openapi.json` | the customer contract, minus every `{ hidden: true }` method |
+| `EXTERNAL_CUSTOMER` | `public-openapi.json` | the customer contract, minus every `{ hidden: true }` method and every `@hidden` field |
 | `MCP` | `mcp-openapi.json` | the same contracts with the `x-mcp-*` extensions an MCP generator reads |
 
 **A document no contract declares is not written.** No `@ApiType` at all means `SVC_TO_SVC` only —
@@ -47,6 +47,42 @@ announcing that anything was withheld.
 
 **Hiding is a documentation decision and never an access-control one.** The route is still served and
 still demands whatever credential it declares.
+
+## Hiding ONE field
+
+```typescript
+export class OrderDto {
+    orderId!: string;
+    /**
+     * Estimated delivery time, ISO-8601.
+     * @hidden not announced yet; ships with the delivery-ETA launch
+     * @format date-time
+     */
+    deliveryEta?: string;
+}
+```
+
+The `@hidden` JSDoc tag withholds one field from `public-openapi.json` and its bundled sibling — its
+property, its prose and its `required` entry — everywhere the schema is written: request and response
+bodies, nested `$ref` targets, inherited fields, webhook payloads, inlined single-use wrappers. A type
+reached ONLY through a hidden field is not in the customer document at all. The field stays in
+`full-private-openapi.json`, and in the MCP output (`mcp-openapi.json` and the tool catalogs), exactly
+like a `{ hidden: true }` method. The tag's text is the author's reason and is published nowhere.
+`grep -rn "@hidden"` lists every withheld field.
+
+Generation refuses:
+
+- a hidden field that is REQUIRED — the customer document would omit a property the server insists on;
+  make it optional (`name?:`);
+- a type whose EVERY field is hidden — hide the method or the field holding the type instead;
+- a `{@link}` to a hidden field from prose the customer document carries;
+- a hidden field on a type the split customer document `$ref`s into ANOTHER package's
+  `components.openapi.json` — that document serves every audience and cannot withhold it; declare the
+  type in the contract's own package.
+
+**`@hidden` is for a field that was NEVER published.** Hiding a field a partner already reads is a
+removal from their side, and the generator has no baseline to notice it. It is also documentation only:
+the server still accepts and returns the field.
 
 ## The manifest
 

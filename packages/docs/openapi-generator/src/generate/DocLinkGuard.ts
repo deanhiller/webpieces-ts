@@ -4,6 +4,7 @@ import {
     DocLinkNaming,
     DocLinkProblem,
     DocLinkText,
+    DocumentedField,
     DocumentedType,
 } from '@webpieces/api-doc-model';
 import { JsonObject, JsonValue } from '../json/JsonObject';
@@ -23,14 +24,25 @@ export class DocumentLinkNaming implements DocLinkNaming {
         private readonly placement: SchemaPlacement,
         /** `Contract.method` -> operationId, for every operation the document publishes. */
         private readonly operationIds: ReadonlyMap<string, string>,
+        /**
+         * The document omits `@hidden` fields (#1246) — so a link to one names nothing it publishes,
+         * and is refused like a link to a hidden method.
+         */
+        private readonly dropsHiddenFields: boolean,
     ) {}
 
     publishedName(link: DocLink): string | undefined {
         if (link.kind === DocLinkKind.OPERATION) {
             return this.operationIds.get(`${link.owner}.${link.ownerName}`);
         }
+        if (link.kind === DocLinkKind.MEMBER) {
+            return this.isHiddenField(link.owner, link.member) ? undefined : link.member;
+        }
         const type = this.types.get(link.owner);
         if (link.kind !== DocLinkKind.TYPE || type === undefined) {
+            return undefined;
+        }
+        if (link.member !== '' && this.isHiddenField(link.owner, link.member.slice(1))) {
             return undefined;
         }
         // A single-use request/response wrapper is defined INLINE at its operation (#1303), with its
@@ -45,6 +57,15 @@ export class DocumentLinkNaming implements DocLinkNaming {
         // A schema `$ref`d into another package's components document is published THERE, under
         // its own schema name, so the reference is still a real one.
         return this.schemas.externalTypes().has(link.owner) ? type.schemaName : undefined;
+    }
+
+    /** True when this document omits `owner`'s field `name` because it is `@hidden` (#1246). */
+    private isHiddenField(owner: string, name: string): boolean {
+        if (!this.dropsHiddenFields) {
+            return false;
+        }
+        const field = this.types.get(owner)?.fields.find((each: DocumentedField) => each.name === name);
+        return field !== undefined && field.hidden;
     }
 }
 
