@@ -64,6 +64,7 @@
             "@webpieces/webpieces-tooling/openclaw-plugin": [
                 "packages/tooling/webpieces-tooling/src/adapters/openclaw-plugin.ts"
             ],
+            "@webpieces/webpieces-tooling/local-rules": ["packages/tooling/webpieces-tooling/src/local-rules/index.ts"],
             "@webpieces/webpieces-tooling": ["packages/tooling/webpieces-tooling/src/index.ts"],
             "@webpieces/rules-sdk": ["packages/tooling/rules-sdk/src/index.ts"],
             "@webpieces/tooling-testkit": ["packages/tooling/tooling-testkit/src/index.ts"],

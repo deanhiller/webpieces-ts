@@ -10,7 +10,7 @@ import {
     ExecutionKind,
     PolicyRuntimeRequest,
 } from '@webpieces/rules-sdk';
-import { InformAiError } from '@webpieces/tooling-common';
+import { InformAiError, TypeScriptRequire } from '@webpieces/tooling-common';
 import { RulePackRegistry } from './rule-pack-registry';
 import { ClientModuleResolution } from './client-module-resolution';
 import { toError } from '@webpieces/tooling-common/to-error';
@@ -51,7 +51,7 @@ export class NodeRuleRuntimeModuleLoader extends RuleRuntimeModuleLoader {
                           moduleName,
                       )
                     : this.resolution.resolve(moduleName);
-            return this.requireModule(resolved);
+            return new TypeScriptRequire().load(this.requireModule, resolved);
         // webpieces-disable no-any-unknown -- external JSON or runtime exports are validated before policy execution
         } catch (err: unknown) {
             const error = toError(err);

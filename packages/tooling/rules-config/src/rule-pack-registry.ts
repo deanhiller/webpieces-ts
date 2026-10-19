@@ -1,7 +1,7 @@
 import { PolicyFieldConstraints } from './policy-field-constraints';
 import { injectable, bindingScopeValues } from 'inversify';
 import { createRequire } from 'node:module';
-import { InformAiError } from '@webpieces/tooling-common';
+import { InformAiError, TypeScriptRequire } from '@webpieces/tooling-common';
 import * as path from 'node:path';
 import { ClientModuleResolution } from './client-module-resolution';
 import {
@@ -93,7 +93,7 @@ export class NodeRulePackModuleLoader extends RulePackModuleLoader {
 
     override load(moduleName: string): RulePackManifest {
         // webpieces-disable no-any-unknown -- external module boundary; registry validates its exported data before use
-        const exports: unknown = this.requireModule(this.resolution.resolve(moduleName));
+        const exports: unknown = new TypeScriptRequire().load(this.requireModule, this.resolution.resolve(moduleName));
         if (typeof exports !== 'object' || exports === null || !('rulePackManifest' in exports)) {
             throw new InformAiError(
                 `Rule pack ${moduleName} must export rulePackManifest. Add the public manifest export.`,
