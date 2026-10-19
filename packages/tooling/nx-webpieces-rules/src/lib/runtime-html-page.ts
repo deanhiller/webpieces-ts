@@ -139,13 +139,20 @@ export class RuntimeHtmlPage {
                 ),
             )
             .join('');
+        const legend = new GraphLegend();
         const products = this.shownProducts(model)
-            .map((color) => tag('product', color.product, color.color))
+            .map((color) =>
+                legend.productToggle(
+                    `data-wp-legend-group="product" data-wp-legend-value="${htmlLabelText(color.product)}"`,
+                    htmlLabelText(color.product),
+                    `<svg width="20" height="14"><rect width="20" height="14" rx="2" fill="${color.color}"/></svg>${htmlLabelText(color.product)}`,
+                ),
+            )
             .join('');
         return (
             `<section data-wp-legend-mode="runtime" class="wp-legend-list">${frameworks}${tag('runtime', 'unknown', '#e4e6ec')}<p>Neutral: unknown runtime. Nested: specialization; stripes: multiple runtimes. Context retains kind colors.</p></section>
 <section data-wp-legend-mode="architecture" class="wp-legend-list" hidden>${roles}<p>Auxiliary nodes use kind colors, never project roles.</p></section>` +
-            `<section data-wp-legend-mode="impact" class="wp-legend-list" hidden>${new GraphLegend().impactRows()}</section><section data-wp-legend-mode="product" class="wp-legend-list" hidden>${products}<p>Stripes: several products; neutral: all products; white/dashed: no product. Context inherits adjacent service memberships.</p></section>` +
+            `<section data-wp-legend-mode="impact" class="wp-legend-list" hidden>${legend.impactRows()}</section><section data-wp-legend-mode="product" class="wp-legend-list" hidden>${products}${legend.productNote()}<p>Queues, clocks, datastores and vendors inherit adjacent service memberships; several ON products are a gradient on them.</p></section>` +
             this.goalLegend(model) +
             '<p>Queues, clocks, datastores and vendors remain context in Impact; no source ownership or CI status is implied.</p>'
         );

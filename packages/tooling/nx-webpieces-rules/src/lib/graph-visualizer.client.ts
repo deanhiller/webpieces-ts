@@ -297,6 +297,7 @@ class GraphDrawer {
         this.popover.wire();
         this.wireImpactKinds();
         this.wireLock();
+        this.wireProductToggles();
         this.byId('wp-lock-toggle')?.addEventListener('click', () => this.page.toggleLock());
         this.byId('wp-filter-toggle')?.addEventListener('click', () => this.page.toggleFilter());
         this.toggles('wp-collapse', 'wp-shell', true);
@@ -337,6 +338,20 @@ class GraphDrawer {
                 this.closeModeMenu(true);
                 this.page.setMode(button.dataset['wpMode'] ?? 'runtime');
             });
+        });
+    }
+
+    /** Product legend rows (#1319): each checkbox switches its product ON or OFF; both legend copies agree. */
+    private wireProductToggles(): void {
+        document.querySelectorAll<HTMLInputElement>('[data-wp-product-toggle]').forEach((input: HTMLInputElement) => {
+            input.addEventListener('change', () => this.page.setProductOn(input.dataset['wpProductToggle'] ?? '', input.checked));
+        });
+    }
+
+    /** Every product checkbox, in the drawer and in the popped-out legend, shows the page's ON set. */
+    syncProductToggles(isOn: (product: string) => boolean): void {
+        document.querySelectorAll<HTMLInputElement>('[data-wp-product-toggle]').forEach((input: HTMLInputElement) => {
+            input.checked = isOn(input.dataset['wpProductToggle'] ?? '');
         });
     }
 
@@ -649,6 +664,12 @@ class GraphPage extends WpFilterPage {
     private readonly why = new ImpactWhyPanel();
 
     private readonly edges = new WpEdgeOverlay(this.modes);
+    /**
+     * The products switched ON in the Product legend (#1319): the first two in legend order at EVERY
+     * load. Never persisted — no storage, no hash — so the page stays stateless.
+     */
+    private readonly productsOn: Set<string> = WpProductPainter.initialOn(this.legendProducts());
+    private painter: WpProductPainter = this.newPainter();
 
     /** In Impact mode a box's menu leads with WHY it is in the build, and its edge changes (#1264). */
     impactItems(name: string, node: SVGGElement): WpNodeMenuItem[] {
@@ -701,13 +722,16 @@ class GraphPage extends WpFilterPage {
         if (modes === null) return node.dot;
         if (this.modes.mode === 'architecture') return modes.architecture;
         if (this.modes.mode === 'impact') return modes[this.modes.status(node.id)];
-        if (this.modes.mode === 'product') return modes.product;
+        if (this.modes.mode === 'product') return this.painter.nodeDot(modes.product, node.products);
         return modes.runtime;
     }
 
-    /** Product mode dashes a dependency that crosses into another product (#1204); every other mode draws it plain. */
+    /**
+     * Product mode dashes a dependency that crosses into another product (#1204) while that product is
+     * ON (#1319); every other mode draws it plain.
+     */
     protected override edgeDot(edge: RenderEdgeJson): string {
-        if (this.modes.mode === 'product' && edge.productDot !== null) return edge.productDot;
+        if (this.modes.mode === 'product') return this.painter.edgeDot(edge);
         if (this.modes.mode === 'impact') return this.edges.edgeDot(edge) ?? edge.dot;
         return edge.dot;
     }
@@ -785,6 +809,34 @@ class GraphPage extends WpFilterPage {
         this.redraw();
     }
 
+    /** A product legend toggle (#1319): repaint at once from the new ON set. */
+    setProductOn(product: string, on: boolean): void {
+        if (on) this.productsOn.add(product);
+        else this.productsOn.delete(product);
+        this.painter = this.newPainter();
+        this.syncControls();
+        if (this.modes.mode === 'product') this.redraw();
+    }
+
+    /** The products the legend lists, in its order, once each (it is in the drawer and the pop-out). */
+    private legendProducts(): string[] {
+        const order: string[] = [];
+        document.querySelectorAll<HTMLInputElement>('[data-wp-product-toggle]').forEach((input: HTMLInputElement) => {
+            const product = input.dataset['wpProductToggle'] ?? '';
+            if (product !== '' && !order.includes(product)) order.push(product);
+        });
+        return order;
+    }
+
+    /** The legend's products with their FIXED palette colors, painting from the current ON set. */
+    private newPainter(): WpProductPainter {
+        const palette = this.base.legend.palette.colors;
+        const legend = this.legendProducts()
+            .map((product: string): ProductColorJson | undefined => palette.find((color: ProductColorJson): boolean => color.product === product))
+            .filter((color: ProductColorJson | undefined): color is ProductColorJson => color !== undefined);
+        return new WpProductPainter(legend, new Set(this.productsOn));
+    }
+
     /** Switch the active Impact scan: Impact recolours and an active change-scope filter re-applies. */
     setImpactKind(kind: string): void {
         if (kind === this.modes.kind || !this.modes.setKind(kind)) return;
@@ -841,6 +893,7 @@ class GraphPage extends WpFilterPage {
     private syncControls(): void {
         document.body.dataset['wpMode'] = this.modes.mode;
         this.drawer.sync(this.modes, this.locked, this.anchor !== null, this.applied);
+        this.drawer.syncProductToggles((product: string): boolean => this.productsOn.has(product));
         const count = this.model.nodes.filter(node => this.retained.has(node.id) && this.projects.isService(node)).length;
         const empty = document.getElementById('wp-empty');
         if (empty !== null) empty.hidden = count !== 0;

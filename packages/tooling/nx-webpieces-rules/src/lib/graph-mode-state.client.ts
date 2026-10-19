@@ -327,7 +327,7 @@ class ImpactWhyPanel {
 
 /** A changed edge the saved page does not draw: added to the Impact overlay. */
 class WpOverlayEdge implements RenderEdgeJson {
-    readonly productDot: string | null = null;
+    readonly crossesInto: string[] = [];
 
     constructor(
         readonly id: string,
@@ -346,11 +346,13 @@ class WpOverlayModel implements RenderModelJson {
     readonly header: string;
     readonly footer: string;
     readonly comparison: RuntimeComparisonJson | null;
+    readonly legend: LegendJson;
 
     constructor(
         base: RenderModelJson,
         readonly edges: RenderEdgeJson[],
     ) {
+        this.legend = base.legend;
         this.viewer = base.viewer;
         this.nodes = base.nodes;
         this.bands = base.bands;

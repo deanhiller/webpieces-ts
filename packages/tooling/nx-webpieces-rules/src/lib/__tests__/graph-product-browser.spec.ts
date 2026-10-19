@@ -11,7 +11,7 @@ import { generateRuntimeRenderModel } from '../runtime-visualizer';
 import type { EnhancedGraph } from '../graph-sorter';
 import type { RuntimeGraph } from '../runtime-graph-model';
 import { ImpactKind, ImpactSidecarData } from '../graph-impact';
-import { PRODUCT_NONE_FILL, PRODUCT_SHARED_FILL, ProductPalette } from '../graph-products';
+import { PRODUCT_NONE_FILL, PRODUCT_OFF_FILL, PRODUCT_SHARED_FILL, ProductPalette } from '../graph-products';
 
 /** Two products meeting in `model`; `orphan` is in neither. */
 const GRAPH: EnhancedGraph = {
@@ -92,7 +92,7 @@ describe.skipIf(!process.env.WP_GRAPH_VIZ_JS)('products in a real browser (#1179
         await page.close();
     });
 
-    it('colors by product on key 4: one product solid, every product neutral, none dashed white', async () => {
+    it('colors by product on key 4: one product solid, every product neutral (all ON), none dashed white; a toggle repaints', async () => {
         const palette = new ProductPalette(['helper', 'lang']);
         const page = await fixture.open('1179-product-mode', fixture.architecture(GRAPH));
         const shape = (id: string): Locator => fixture.node(page, id).locator('polygon').first();
@@ -111,7 +111,45 @@ describe.skipIf(!process.env.WP_GRAPH_VIZ_JS)('products in a real browser (#1179
         expect(await legend.textContent()).toContain('3 only lang');
         expect(await legend.textContent()).toContain('shared by every product · 1');
         expect(await legend.textContent()).toContain('no product · 1');
+        // #1319: both products start ON (the first two); switching helper OFF repaints at once.
+        const toggle = (product: string): Locator =>
+            page.locator(`#wp-side [data-wp-product-toggle="${product}"]`);
+        expect(await toggle('helper').isChecked()).toBe(true);
+        expect(await toggle('lang').isChecked()).toBe(true);
+        await toggle('helper').uncheck();
+        await expect.poll(() => shape('help-svr').getAttribute('fill')).toBe(PRODUCT_OFF_FILL);
+        expect(await shape('model').getAttribute('fill')).toBe(palette.colorOf('lang').color);
+        expect(await shape('lang-svr').getAttribute('fill')).toBe(palette.colorOf('lang').color);
+        expect(await shape('orphan').getAttribute('fill')).toBe(PRODUCT_NONE_FILL);
+        // The popped-out legend's copy follows the drawer's.
+        expect(await page.locator('#wp-legend-popout [data-wp-product-toggle="helper"]').isChecked()).toBe(false);
         await page.close();
+    });
+
+    it('#1319: starts every load with the first two products ON, whatever was toggled before', async () => {
+        const graph: EnhancedGraph = {
+            a: { level: 0, dependsOn: [], framework: ['node'], role: 'server', products: ['alpha'] },
+            b: { level: 0, dependsOn: [], framework: ['node'], role: 'server', products: ['beta'] },
+            c: { level: 0, dependsOn: [], framework: ['node'], role: 'server', products: ['gamma'] },
+        };
+        const palette = new ProductPalette(['alpha', 'beta', 'gamma']);
+        const html = fixture.architecture(graph);
+        const first = await fixture.open('1319-product-toggles', html);
+        const shape = (page: typeof first, id: string): Locator => fixture.node(page, id).locator('polygon').first();
+        await first.evaluate((): void => (document.activeElement as HTMLElement | null)?.blur());
+        await first.keyboard.press('4');
+        await expect.poll(() => shape(first, 'a').getAttribute('fill')).toBe(palette.colorOf('alpha').color);
+        expect(await shape(first, 'b').getAttribute('fill')).toBe(palette.colorOf('beta').color);
+        expect(await shape(first, 'c').getAttribute('fill')).toBe(PRODUCT_OFF_FILL);
+        await first.locator('#wp-side [data-wp-product-toggle="gamma"]').check();
+        await expect.poll(() => shape(first, 'c').getAttribute('fill')).toBe(palette.colorOf('gamma').color);
+        await first.close();
+        const again = await fixture.open('1319-product-toggles', html);
+        await again.evaluate((): void => (document.activeElement as HTMLElement | null)?.blur());
+        await again.keyboard.press('4');
+        await expect.poll(() => shape(again, 'c').getAttribute('fill')).toBe(PRODUCT_OFF_FILL);
+        expect(await again.locator('#wp-side [data-wp-product-toggle="gamma"]').isChecked()).toBe(false);
+        await again.close();
     });
 
     it('#1204: Product mode dashes a cross-product edge in the target product color; other modes draw it plain', async () => {
@@ -134,6 +172,9 @@ describe.skipIf(!process.env.WP_GRAPH_VIZ_JS)('products in a real browser (#1179
         expect(await page.locator('#wp-side [data-wp-legend-mode="product"]').textContent()).toContain(
             'crosses into another product · 1',
         );
+        // #1319: with its target product OFF, the crossing draws plain.
+        await page.locator('#wp-side [data-wp-product-toggle="platform"]').uncheck();
+        await expect.poll(() => path(cross).getAttribute('stroke-dasharray')).toBeNull();
         await page.close();
     });
 

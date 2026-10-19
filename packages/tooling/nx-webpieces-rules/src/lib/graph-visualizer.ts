@@ -92,7 +92,8 @@ export function readCompiledClient(name: string): string {
         );
     }
     const source = fs.readFileSync(file, 'utf-8');
-    return name === 'graph-visualizer.client.js' ? readCompiledClient('graph-mode-state.client.js') + source : source;
+    if (name !== 'graph-visualizer.client.js') return source;
+    return readCompiledClient('graph-mode-state.client.js') + readCompiledClient('graph-product-paint.client.js') + source;
 }
 
 export class GraphVisualizer {
@@ -234,7 +235,7 @@ export class GraphVisualizer {
         dot += '\n';
         dot += this.bandLayout.dot(bands);
         dot += '\n';
-        dot += this.dotEdges(graph, model, palette);
+        dot += this.dotEdges(graph, model);
 
         const footerStart = dot.length;
         dot += '\n  labelloc="t";\n';
@@ -309,7 +310,7 @@ export class GraphVisualizer {
                 info.products ?? [],
             );
             this.styler.record(model.legend, facts, palette);
-            dot += model.styledNode(facts, this.styler.dots(facts, palette));
+            dot += model.styledNode(facts, this.styler.dots(facts));
         }
         return dot;
     }
@@ -318,7 +319,7 @@ export class GraphVisualizer {
     // (implements/uses/uses-implements, from apiRelations); every other dependency
     // keeps the default plain arrow. In the Product color mode an edge crossing into another
     // product is ALSO dashed in that product's color (#1204), so product boundaries read at a glance.
-    private dotEdges(graph: EnhancedGraph, model: GraphRenderModel, palette: ProductPalette): string {
+    private dotEdges(graph: EnhancedGraph, model: GraphRenderModel): string {
         let dot = '';
         for (const project of Object.keys(graph)) {
             const info = graph[project];
@@ -332,7 +333,7 @@ export class GraphVisualizer {
                     nodeId,
                     this.names.getNodeId(dep),
                     this.edgeDot(nodeId, this.names.getNodeId(dep), info.apiRelations?.[dep]),
-                    this.crossProductAttrs(info.products ?? [], graph[dep]?.products ?? [], model, palette),
+                    this.crossesInto(info.products ?? [], graph[dep]?.products ?? [], model),
                 );
             }
         }
@@ -340,19 +341,13 @@ export class GraphVisualizer {
     }
 
     /**
-     * The Product color mode's extra attributes for one dependency: dashed, thicker and in the color
-     * of the product it crosses into, or '' for an edge that stays inside its source's products.
+     * The products one dependency crosses into, counted for the legend; empty for an edge that stays
+     * inside its source's products. The page dashes it in the first ON one's color (#1319).
      */
-    private crossProductAttrs(
-        from: readonly string[],
-        to: readonly string[],
-        model: GraphRenderModel,
-        palette: ProductPalette,
-    ): string {
+    private crossesInto(from: readonly string[], to: readonly string[], model: GraphRenderModel): string[] {
         const into = this.boundary.crossedInto(from, to);
-        if (into === null) return '';
-        model.legend.crossProductEdges++;
-        return `style=dashed, color="${palette.colorOf(into).color}", penwidth=2`;
+        if (into.length > 0) model.legend.crossProductEdges++;
+        return into;
     }
 
     /**

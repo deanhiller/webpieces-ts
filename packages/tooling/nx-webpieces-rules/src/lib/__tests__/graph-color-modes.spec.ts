@@ -13,6 +13,8 @@ import {
     LegendFacts,
     NodeFacts,
     NodeModeStyler,
+    DARK_TEXT,
+    LIGHT_TEXT,
     ROLE_STYLES,
     RoleStyle,
 } from '../graph-color-modes';
@@ -22,13 +24,14 @@ import { htmlLabelText } from '../dot-syntax';
 import { GraphPageStyles } from '../graph-page-styles';
 import { LevelBand, LevelBandLayout } from '../graph-level-bands';
 import {
-    PRODUCT_NONE_BORDER,
-    PRODUCT_NONE_FILL,
-    PRODUCT_SHARED_FILL,
+    PRODUCT_OFF_FILL,
+    PRODUCTS_ON_AT_LOAD,
     ProductBoundary,
     ProductColor,
     ProductPalette,
+    ProductTemplateKind,
 } from '../graph-products';
+import { FilterFixture } from './graph-filter-fixture';
 import { GraphVisualizer } from '../graph-visualizer';
 import { RenderEdge } from '../graph-render-model';
 import type { EnhancedGraph } from '../graph-sorter';
@@ -122,14 +125,14 @@ describe('the brand palette (#1158)', () => {
 
 describe('Runtime boxes: solid, nested or striped — never bands or a plate', () => {
     it('stripes a universal library full height, equally, in the fixed order browser | node | react-native', () => {
-        const dot = styler.dots(new NodeFacts('u', 'u', 0, 'lib', ['react-native', 'node', 'browser'], []), NO_PRODUCTS).runtime;
+        const dot = styler.dots(new NodeFacts('u', 'u', 0, 'lib', ['react-native', 'node', 'browser'], [])).runtime;
         expect(dot).toContain('style="striped", fillcolor="#7d8cf2;0.333:#6fcf8a;0.333:#34b8a6", class="wp-striped"');
         expect(dot).not.toContain('<TABLE');
         expect(dot).toContain('<BR/>browser · node · react-native>');
     });
 
     it('draws a react-native-only box teal, as a plain fill with the three lines', () => {
-        const dot = styler.dots(new NodeFacts('rn', 'rn', 0, 'client', ['react-native'], []), NO_PRODUCTS).runtime;
+        const dot = styler.dots(new NodeFacts('rn', 'rn', 0, 'client', ['react-native'], [])).runtime;
         expect(dot).toBe(
             '  "rn" [style="filled", fillcolor="#34b8a6", fontcolor="#1a1c22", label=<<FONT COLOR="#1a1c2299">L0</FONT>' +
                 '&#160;&#160;<B>rn</B><BR/>client<BR/>react-native>];\n',
@@ -137,19 +140,19 @@ describe('Runtime boxes: solid, nested or striped — never bands or a plate', (
     });
 
     it('NESTS one runtime plus a specialization: base frame, rounded inner box, text color of the inner', () => {
-        const dot = styler.dots(new NodeFacts('site', 'site', 3, 'client', ['browser', 'angular'], []), NO_PRODUCTS).runtime;
+        const dot = styler.dots(new NodeFacts('site', 'site', 3, 'client', ['browser', 'angular'], [])).runtime;
         expect(dot).toContain('fillcolor="#7d8cf2", fontcolor="#ffffff", margin=0');
         expect(dot).toContain(
             '<TD BGCOLOR="#7d8cf2" CELLPADDING="5"><TABLE BORDER="0" CELLBORDER="0" CELLSPACING="0" CELLPADDING="6" BGCOLOR="#c8243f" STYLE="rounded"><TR><TD><FONT COLOR="#ffffff99">L3</FONT>',
         );
         // react is light, so its text stays dark.
-        const react = styler.dots(new NodeFacts('r', 'r', 1, 'lib', ['react'], []), NO_PRODUCTS).runtime;
+        const react = styler.dots(new NodeFacts('r', 'r', 1, 'lib', ['react'], [])).runtime;
         expect(react).toContain('fontcolor="#1a1c22", margin=0');
         expect(react).toContain('BGCOLOR="#7fd8ff" STYLE="rounded"');
     });
 
     it('shows a specialization on a multi-runtime box in line 3 only', () => {
-        const dot = styler.dots(new NodeFacts('hooks', 'hooks', 4, 'lib', ['react', 'react-native'], []), NO_PRODUCTS).runtime;
+        const dot = styler.dots(new NodeFacts('hooks', 'hooks', 4, 'lib', ['react', 'react-native'], [])).runtime;
         expect(dot).toContain('style="striped", fillcolor="#7d8cf2;0.500:#34b8a6"');
         expect(dot).not.toContain('#7fd8ff');
         expect(dot).toContain('<BR/>react-native · react>');
@@ -157,7 +160,7 @@ describe('Runtime boxes: solid, nested or striped — never bands or a plate', (
 
     it('entity-escapes names inside HTML-like labels', () => {
         expect(htmlLabelText('a<b>&"c"')).toBe('a&lt;b&gt;&amp;&quot;c&quot;');
-        const dot = styler.dots(new NodeFacts('x', 'a<b>', 0, 'lib', ['angular'], []), NO_PRODUCTS).runtime;
+        const dot = styler.dots(new NodeFacts('x', 'a<b>', 0, 'lib', ['angular'], [])).runtime;
         expect(dot).toContain('<B>a&lt;b&gt;</B>');
         expect(dot).not.toContain('a<b>');
     });
@@ -193,43 +196,27 @@ describe('an emptied level is a thin labeled band, never dropped', () => {
 });
 
 
-describe('Product mode (#1179): one product solid, several striped, all neutral, none dashed', () => {
+describe('Product mode (#1179): the legend counts, and the template the page paints from (#1319)', () => {
     const palette = new ProductPalette(['lang', 'helper', 'bugfixer']);
-    const lang = palette.colorOf('lang');
-    const helper = palette.colorOf('helper');
-    const product = (products: string[]): string =>
-        styler.dots(new NodeFacts('p', 'p', 2, 'lib', ['node'], products), palette).product;
+    const paint = FilterFixture.productPaint();
 
     it('assigns the palette in sorted product-name order', () => {
         expect(palette.names()).toEqual(['bugfixer', 'helper', 'lang']);
         expect(new Set(palette.colors.map((color: ProductColor): string => color.color)).size).toBe(3);
     });
 
-    it('fills a one-product box solid in that product\'s color', () => {
-        expect(product(['lang'])).toContain(`style="filled", fillcolor="${lang.color}", fontcolor="${lang.fontColor}"`);
-    });
-
-    it('stripes a box of two products (not all), one stripe each, reusing the multi-runtime renderer', () => {
-        expect(product(['helper', 'lang'])).toContain(
-            `style="striped", fillcolor="${helper.color};0.500:${lang.color}", class="wp-striped"`,
+    it('hands the page a BOX template: the statement head and the label in both text colors', () => {
+        const facts = new NodeFacts('p', 'p', 2, 'lib', ['node'], ['lang']);
+        const template = styler.dots(facts).product;
+        expect(template.kind).toBe(ProductTemplateKind.BOX);
+        expect(template.head).toBe('  "p" [');
+        expect(template.darkLabel).toBe(styler.labelText(facts, DARK_TEXT));
+        expect(template.lightLabel).toBe(styler.labelText(facts, LIGHT_TEXT));
+        const dot = paint.painter(palette.colors, ['lang']).nodeDot(template, facts.products);
+        const lang = palette.colorOf('lang');
+        expect(dot).toBe(
+            `  "p" [style="filled", fillcolor="${lang.color}", fontcolor="${lang.fontColor}", label=<${styler.labelText(facts, lang.fontColor)}>];\n`,
         );
-    });
-
-    it('paints a box shared by EVERY product with the one neutral fill', () => {
-        expect(product(['bugfixer', 'helper', 'lang'])).toContain(`fillcolor="${PRODUCT_SHARED_FILL}"`);
-        expect(product(['bugfixer', 'helper', 'lang'])).not.toContain('striped');
-    });
-
-    it('draws a box in no product white with a dashed border', () => {
-        const dot = product([]);
-        expect(dot).toContain(`style="filled,dashed", fillcolor="${PRODUCT_NONE_FILL}"`);
-        expect(dot).toContain(`color="${PRODUCT_NONE_BORDER}"`);
-    });
-
-    it('a lone declared product is never "shared by every product": it is its own color', () => {
-        const one = new ProductPalette(['lang']);
-        const dot = styler.dots(new NodeFacts('p', 'p', 0, 'lib', [], ['lang']), one).product;
-        expect(dot).toContain(`fillcolor="${one.colorOf('lang').color}"`);
     });
 
     it('uses the same product fill in nodes and legend even beyond eight products', () => {
@@ -239,12 +226,14 @@ describe('Product mode (#1179): one product solid, several striped, all neutral,
         const facts = new LegendFacts();
         const node = new NodeFacts('x', 'x', 0, 'lib', [], [last.product]);
         styler.record(facts, node, big);
-        expect(styler.dots(node, big).product).toContain(`fillcolor="${last.color}"`);
+        expect(paint.painter(big.colors, [last.product]).nodeDot(styler.dots(node).product, node.products)).toContain(
+            `fillcolor="${last.color}"`,
+        );
         expect(legend.productRows(facts)).toContain(last.color);
         expect(legend.productRows(facts)).not.toContain('past the palette');
     });
 
-    it('the legend counts each product (total and only-this-product), shared, several and none', () => {
+    it('the legend counts each product (total and only-this-product), shared, several, off and none', () => {
         const facts = new LegendFacts();
         styler.record(facts, new NodeFacts('a', 'a', 0, 'server', [], ['lang']), palette);
         styler.record(facts, new NodeFacts('b', 'b', 0, 'lib', [], ['helper', 'lang']), palette);
@@ -254,12 +243,30 @@ describe('Product mode (#1179): one product solid, several striped, all neutral,
         expect(rows).toContain('lang · 3<small>1 only lang</small>');
         expect(rows).toContain('helper · 2<small>0 only helper</small>');
         expect(rows).toContain('shared by every product · 1');
+        expect(rows).toContain('neutral only while every product is ON');
         expect(rows).toContain('data-wp-legend="several"');
+        expect(rows).toContain('one stripe per ON product');
+        expect(rows).toContain('data-wp-legend="off"');
+        expect(rows).toContain(PRODUCT_OFF_FILL);
         expect(rows).toContain('no product · 1');
+    });
+
+    it('makes every product row a toggle, unchecked in the markup (the page checks the first two), with the note', () => {
+        const facts = new LegendFacts();
+        styler.record(facts, new NodeFacts('a', 'a', 0, 'server', [], ['lang']), palette);
+        const rows = legend.productRows(facts);
+        for (const product of palette.names())
+            expect(rows).toContain(
+                `<label class="wp-legend-row wp-product-toggle" data-wp-legend="product:${product}"><input type="checkbox" data-wp-product-toggle="${product}">`,
+            );
+        expect(rows).not.toContain('checked');
+        expect(rows).toContain(`the first ${PRODUCTS_ON_AT_LOAD} are ON on every load`);
+        expect(rows).toContain('A color always means the same product.');
     });
 
     it('says how to declare a product when the workspace declares none', () => {
         expect(legend.productRows(new LegendFacts())).toContain('no products declared');
+        expect(legend.productRows(new LegendFacts())).not.toContain('data-wp-product-toggle');
     });
 });
 
@@ -268,14 +275,14 @@ describe('Product mode (#1204): product boundaries — dashed cross-product edge
     const entry = (name: string, allowed: string[]): ProductDependencyEntry =>
         Object.assign(new ProductDependencyEntry(), { name, allowedToDependOn: allowed });
 
-    it('an edge crosses when its target misses some product of its source, into the first product it adds', () => {
-        expect(boundary.crossedInto(['example'], ['platform'])).toBe('platform');
-        expect(boundary.crossedInto(['openapi'], ['platform', 'rules'])).toBe('platform');
-        expect(boundary.crossedInto(['example', 'platform'], ['platform'])).toBe('platform');
-        expect(boundary.crossedInto(['lang'], ['lang'])).toBeNull();
-        expect(boundary.crossedInto(['lang'], ['helper', 'lang'])).toBeNull();
-        expect(boundary.crossedInto([], ['lang'])).toBeNull();
-        expect(boundary.crossedInto(['lang'], [])).toBeNull();
+    it('an edge crosses when its target misses some product of its source, into the products it adds', () => {
+        expect(boundary.crossedInto(['example'], ['platform'])).toEqual(['platform']);
+        expect(boundary.crossedInto(['openapi'], ['platform', 'rules'])).toEqual(['platform', 'rules']);
+        expect(boundary.crossedInto(['example', 'platform'], ['platform'])).toEqual(['platform']);
+        expect(boundary.crossedInto(['lang'], ['lang'])).toEqual([]);
+        expect(boundary.crossedInto(['lang'], ['helper', 'lang'])).toEqual([]);
+        expect(boundary.crossedInto([], ['lang'])).toEqual([]);
+        expect(boundary.crossedInto(['lang'], [])).toEqual([]);
     });
 
     it('draws a cross-product edge dashed in the TARGET product color in Product mode only; same-product edges stay plain', () => {
@@ -288,11 +295,15 @@ describe('Product mode (#1204): product boundaries — dashed cross-product edge
         const palette = new ProductPalette(['example', 'platform']);
         const toPlat = model.edges.find((edge: RenderEdge): boolean => edge.to === 'plat')!;
         const toLib = model.edges.find((edge: RenderEdge): boolean => edge.to === 'lib')!;
-        expect(toLib.productDot).toBeNull();
+        expect(toLib.crossesInto).toEqual([]);
         expect(toPlat.dot).not.toContain('dashed');
-        expect(toPlat.productDot).toContain(
+        expect(toPlat.crossesInto).toEqual(['platform']);
+        const painter = FilterFixture.productPaint().painter(palette.colors, ['example', 'platform']);
+        expect(painter.edgeDot(toLib)).toBe(toLib.dot);
+        expect(painter.edgeDot(toPlat)).toContain(
             `[id="${toPlat.id}"] [style=dashed, color="${palette.colorOf('platform').color}", penwidth=2];`,
         );
+        expect(FilterFixture.productPaint().painter(palette.colors, ['example']).edgeDot(toPlat)).toBe(toPlat.dot);
         expect(model.fullDot).not.toContain('penwidth=2');
         expect(model.legend.crossProductEdges).toBe(1);
         expect(legend.productRows(model.legend)).toContain('crosses into another product · 1');

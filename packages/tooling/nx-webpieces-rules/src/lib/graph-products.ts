@@ -17,10 +17,14 @@
  *    between them. A service whose project carries no tag is in no product.
  *  - ProductPalette — the Product color mode's colors (#1244): eight fixed saturated colors, each
  *    product hashed (SHA-256 of its name) to a preferred one, with collisions resolved in sorted-name
- *    order. Both viewers build it over the FULL declared product set, so they agree. Neutral means
- *    shared by EVERY product; a dashed white box belongs to none.
+ *    order. Both viewers build it over the FULL declared product set, so they agree, and a color is
+ *    never reassigned when a product is toggled OFF.
+ *  - ProductTemplate — what a page needs to paint one box in the Product color mode (#1319). Each
+ *    product's legend row is a toggle and the page repaints in the browser from the ON set
+ *    (WpProductPainter, graph-product-paint.client.ts), so the box's product statement is computed
+ *    there, not here.
  *  - ProductBoundary — which dependency edges cross from one product into another (#1204), drawn
- *    dashed in the target product's color in the Product color mode.
+ *    dashed in the target product's color in the Product color mode while that product is ON.
  *
  * Membership is stable per checkout (it depends on tags only, never on a diff), so it is written into
  * the committed dependencies.json / runtime-dependencies.json rather than into a sidecar.
@@ -65,11 +69,48 @@ export const PRODUCT_PALETTE_SLOTS: readonly ProductPaletteSlot[] = [
     new ProductPaletteSlot('#ff9da7', DARK_TEXT),
 ];
 
-/** A box shared by EVERY product. */
+/** A box shared by EVERY product, drawn neutral only while every product is ON (#1319). */
 export const PRODUCT_SHARED_FILL = '#c9ced8';
 /** A box in no product: white, with a dashed border. */
 export const PRODUCT_NONE_FILL = '#ffffff';
 export const PRODUCT_NONE_BORDER = '#8a90a0';
+/**
+ * A box carrying only products switched OFF (#1319): light grey with a grey border, so it stays
+ * visible — hiding boxes is the Filter's job — and never reads as the neutral shared fill.
+ */
+export const PRODUCT_OFF_FILL = '#eef0f4';
+export const PRODUCT_OFF_BORDER = '#b4b9c4';
+
+/**
+ * How many products are ON when a page loads (#1319): the first ones in legend (sorted-name) order.
+ * Always this many, on every load — the selection is never persisted.
+ */
+export const PRODUCTS_ON_AT_LOAD = 2;
+
+/** Whether a ProductTemplate paints a styled box or restyles a contextual node's kind statement. */
+export enum ProductTemplateKind {
+    /** A project or service box: the page writes its whole statement. */
+    BOX = 'box',
+    /** A runtime queue, clock, datastore or vendor: the page recolors its kind statement's fill. */
+    CONTEXT = 'context',
+}
+
+/**
+ * What the page needs to write one node's Product-mode statement for any ON set (#1319). Data-only.
+ * A BOX statement is `head` + the paint's attributes + the label for its text color; a CONTEXT
+ * statement is `head` (the kind statement) with its fill replaced.
+ */
+export class ProductTemplate {
+    constructor(
+        public readonly kind: ProductTemplateKind,
+        /** BOX: `  "id" [`. CONTEXT: the node's whole kind statement. */
+        public readonly head: string,
+        /** BOX: the HTML label written in dark text; '' for CONTEXT. */
+        public readonly darkLabel: string,
+        /** BOX: the HTML label written in light text; '' for CONTEXT. */
+        public readonly lightLabel: string,
+    ) {}
+}
 
 export class ProductPalette {
     /** Every declared product, sorted, each with its color. */
@@ -143,16 +184,22 @@ export class ProductPalette {
  * Where a dependency edge crosses a product boundary (#1204), for the Product color mode: an edge
  * A -> B crosses when B does not carry every product of A, and it is drawn dashed in the color of the
  * product it crosses INTO, so the boundaries read at a glance while same-product edges stay quiet.
+ * Since #1319 that is the first of those products that is ON; with none ON the edge draws plain.
  * Whether a crossing is ALLOWED is the product dependency matrix's call (product-dependencies.ts):
  * with `product-tags` ON, generation already refused every crossing the matrix does not allow, so
  * every crossing drawn is an allowed one.
  */
 export class ProductBoundary {
-    /** The product the edge crosses into, or null when the target carries every product of the source. */
-    crossedInto(from: readonly string[], to: readonly string[]): string | null {
-        if (from.length === 0 || to.length === 0) return null;
-        if (from.every((product: string): boolean => to.includes(product))) return null;
-        return to.find((product: string): boolean => !from.includes(product)) ?? to[0];
+    /**
+     * The products the edge crosses into, in the target's order: the target's products its source
+     * lacks, else (a target narrower than its source) every product of the target. Empty when the
+     * target carries every product of the source. The page draws the edge in the first one that is ON.
+     */
+    crossedInto(from: readonly string[], to: readonly string[]): string[] {
+        if (from.length === 0 || to.length === 0) return [];
+        if (from.every((product: string): boolean => to.includes(product))) return [];
+        const added = to.filter((product: string): boolean => !from.includes(product));
+        return added.length > 0 ? added : [...to];
     }
 }
 

@@ -39,11 +39,11 @@ export class RenderEdge {
         public readonly dot: string,
         public readonly id: string,
         /**
-         * The statement the architecture page's Product color mode draws instead of `dot` (#1204): a
-         * dependency crossing into another product, dashed in that product's color. Null for every
-         * other edge, which draws `dot` in every mode.
+         * The products a dependency crosses into (#1204, ProductBoundary), in the target's order. The
+         * page's Product color mode draws the edge dashed in the first one that is ON (#1319); empty
+         * for every other edge, which draws `dot` in every mode.
          */
-        public readonly productDot: string | null = null,
+        public readonly crossesInto: string[] = [],
     ) {}
 }
 
@@ -123,16 +123,14 @@ export class GraphRenderModel {
     }
 
     /**
-     * One edge. `productAttrs`, when not empty, is the attribute list the Product color mode adds to
-     * the statement (a later list overrides an earlier one in DOT), e.g. a cross-product dependency's
-     * dash and color; `fullDot` always carries the plain statement.
+     * One edge. `crossesInto`, when not empty, names the products a cross-product dependency crosses
+     * into: the page's Product color mode dashes it in the first ON one; `fullDot` always carries the
+     * plain statement.
      */
-    edge(from: string, to: string, dot: string, productAttrs: string = ''): string {
+    edge(from: string, to: string, dot: string, crossesInto: string[] = []): string {
         const id = `wp-real-edge-${this.edges.length}`;
-        const base = `${dot.slice(0, -2)} [id="${id}"]`;
-        const statement = `${base};\n`;
-        const productDot = productAttrs === '' ? null : `${base} [${productAttrs}];\n`;
-        this.edges.push(new RenderEdge(from, to, statement, id, productDot));
+        const statement = `${dot.slice(0, -2)} [id="${id}"];\n`;
+        this.edges.push(new RenderEdge(from, to, statement, id, crossesInto));
         return statement;
     }
 }

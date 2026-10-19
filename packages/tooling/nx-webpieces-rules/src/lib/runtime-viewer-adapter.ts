@@ -2,7 +2,7 @@ import type { EnhancedGraph } from './graph-sorter';
 import type { RuntimeGraph, RuntimeService } from './runtime-graph-model';
 import { GraphRenderModel, RenderNode } from './graph-render-model';
 import { NodeFacts, NodeModeDots, NodeModeStyler } from './graph-color-modes';
-import { ProductPalette, PRODUCT_SHARED_FILL, PRODUCT_NONE_FILL } from './graph-products';
+import { ProductPalette, ProductTemplate, ProductTemplateKind } from './graph-products';
 import { LevelBand } from './graph-level-bands';
 import { RemoteServiceNodeId } from './remote-service-node-id';
 import { RuntimeExternalTriggers } from './runtime-external-triggers';
@@ -37,7 +37,7 @@ export class RuntimeViewerAdapter {
             `Implements (${new Set(service.implements).size})${service.serviceName === undefined ? '' : ` · "${service.serviceName}"`}`,
         );
         this.styler.record(model.legend, facts, this.palette);
-        return model.styledNode(facts, this.styler.dots(facts, this.palette));
+        return model.styledNode(facts, this.styler.dots(facts));
     }
 
     levelBands(model: GraphRenderModel): LevelBand[] {
@@ -85,24 +85,15 @@ export class RuntimeViewerAdapter {
             });
     }
 
-    /** Context keeps its shape/kind palette; Impact never paints a queue as a source owner. */
+    /**
+     * Context keeps its shape/kind palette; Impact never paints a queue as a source owner. In Product
+     * mode the page recolors the kind statement's fill from the ON set (#1319, WpProductPainter).
+     */
     contextModes(model: GraphRenderModel): void {
         for (let index = 0; index < model.nodes.length; index++) {
             const node = model.nodes[index];
             if (node.tags !== null) continue;
-            const colors = node.products.map((product) => this.palette.colorOf(product).color);
-            const fill =
-                colors.length === 0
-                    ? PRODUCT_NONE_FILL
-                    : this.palette.sharedByAll(node.products)
-                      ? PRODUCT_SHARED_FILL
-                      : colors.join(':');
-            // Graphviz cylinders cannot stripe; a gradient preserves recognizable kind geometry.
-            const recolored = node.dot.replace(/fillcolor="[^"]*"/, `fillcolor="${fill}"`);
-            const product =
-                colors.length === 0
-                    ? recolored.replace(/style="[^"]*"/, 'style="filled,dashed"')
-                    : recolored;
+            const product = new ProductTemplate(ProductTemplateKind.CONTEXT, node.dot, '', '');
             const modes = new NodeModeDots(
                 node.dot,
                 node.dot,
