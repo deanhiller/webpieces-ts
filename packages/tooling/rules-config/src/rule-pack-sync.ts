@@ -14,6 +14,8 @@ class OwnerFilePlan {
     constructor(
         readonly filename: string,
         readonly entries: Record<string, ConfigObject>,
+        /** The sync added nothing: the file is left byte-for-byte as its author formatted it (#1327). */
+        readonly unchanged: boolean,
     ) {}
 }
 
@@ -45,6 +47,7 @@ export class RulePackSync {
         const plans = this.prepare(root, selected, registry);
         const changed: string[] = [...layoutChanges];
         for (const plan of plans) {
+            if (plan.unchanged) continue;
             if (
                 this.atomic.writeIfChanged(
                     plan.filename,
@@ -65,7 +68,9 @@ export class RulePackSync {
         const errors: string[] = [];
         for (const pack of selected) {
             const filename = this.files.configPath(root, pack.declaration.config);
-            const entries = fs.existsSync(filename) ? this.files.read(filename) : {};
+            const exists = fs.existsSync(filename);
+            const entries = exists ? this.files.read(filename) : {};
+            const before = JSON.stringify(entries);
             for (const id of Object.keys(entries)) {
                 if (!registry.hasRule(id) || registry.ownerOf(id) !== pack.manifest.packageName) {
                     errors.push(
@@ -82,7 +87,8 @@ export class RulePackSync {
                 );
                 entries[definition.id] = value;
             }
-            plans.push(new OwnerFilePlan(filename, entries));
+            // Compared as CONTENT, not bytes: a re-serialization of the same entries would only reformat.
+            plans.push(new OwnerFilePlan(filename, entries, exists && JSON.stringify(entries) === before));
         }
         if (errors.length) throw new InformAiError(`Sync made no changes:\n${errors.join('\n')}`);
         return plans;

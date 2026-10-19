@@ -193,7 +193,7 @@ const BROKEN: readonly BrokenConfig[] = [
     }, 'wp-migrate-dirs'),
     new BrokenConfig('an owner file is not tracked by git', (repo: RepairRepo): void => {
         repo.git('rm', '-q', '--cached', '--', OWNER_0);
-    }, 'must be tracked by git'),
+    }, 'not tracked by git'),
     new BrokenConfig('committed policy is gitignored', (repo: RepairRepo): void => {
         fs.appendFileSync(repo.path('.gitignore'), '.webpieces-config/\n');
     }, 'policy is gitignored'),
@@ -224,6 +224,38 @@ describe('every config-repair deny names a cure the same hook permits (#1273)', 
             for (const cure of error.cures) new CureCheck().assertPermitted(repo, cure);
         });
     }
+});
+
+describe('an untracked declared owner file: git add is the cure, so git add is let through (#1327)', () => {
+    it('Write refused → git add of the file allowed → once tracked, work is allowed', () => {
+        const repo = new RepairRepo();
+        repo.git('rm', '-q', '--cached', '--', OWNER_0);
+
+        const deny = repo.write('guards', repo.path('src/work.ts'));
+        expect(deny).not.toBeNull();
+        expect(deny).toContain(OWNER_0);
+        expect(deny).toContain(`git add -- ${OWNER_0}`);
+        expect(deny).toContain('pnpm wp-migrate-dirs --stage');
+        expect(deny).not.toContain('Did you forget');
+
+        // The shape observed live: several paths, including ones that are already tracked.
+        expect(repo.bash(`git add ${OWNER_0} webpieces.config.json ${OWNER_1}`)).toBeNull();
+        expect(repo.bash(`cd ${repo.root} && git add -A`)).toBeNull();
+        // Only a PLAIN git add: anything riding along is still refused with the same deny.
+        expect(repo.bash(`git add ${OWNER_0} && rm -rf src`)).toContain(OWNER_0);
+        expect(repo.bash(`git add $(echo ${OWNER_0})`)).toContain(OWNER_0);
+        expect(repo.bash('git commit -m wip')).toContain(OWNER_0);
+
+        repo.git('add', '--', OWNER_0);
+        expect(repo.write('guards', repo.path('src/work.ts'))).toBeNull();
+        expect(repo.bash('git status')).toBeNull();
+    });
+
+    it('a git add is NOT waved through for any other config problem', () => {
+        const repo = new RepairRepo();
+        fs.writeFileSync(repo.path(OWNER_0), '{');
+        expect(repo.bash(`git add -- ${OWNER_0}`)).toContain('Cannot parse rule-pack config');
+    });
 });
 
 /**

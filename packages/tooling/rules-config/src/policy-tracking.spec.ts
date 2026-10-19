@@ -4,8 +4,10 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { RepositoryLayout } from '@webpieces/tooling-common';
 import { specTempDirs } from '@webpieces/tooling-testkit';
-import { PolicyTracking } from './policy-tracking';
+import { PolicyTracking, UntrackedPolicyError } from './policy-tracking';
 import { PackPolicyDeclaration } from './pack-policy-files';
+import { ConfigRepairCure } from './config-repair-error';
+import { toError } from '@webpieces/tooling-common/to-error';
 
 class TrackingFixture {
     readonly root = specTempDirs.makeReal('wp-tracked-policy-');
@@ -76,6 +78,38 @@ describe('policy must be committed inputs', () => {
         fixture.tracking.stage(fixture.root, fixture.declarations);
         expect(() => fixture.tracking.check(fixture.root, fixture.declarations)).not.toThrow();
     });
+    it('names the exact untracked files and both cures, never git\'s own pathspec advice (#1327)', () => {
+        const fixture = new TrackingFixture();
+        fixture.tracking.stage(fixture.root, fixture.declarations);
+        fs.writeFileSync(path.join(fixture.root, '.webpieces-config/rules/local.json'), '{}');
+        const declarations = [
+            ...fixture.declarations,
+            new PackPolicyDeclaration('./local-pack.cjs', '.webpieces-config/rules/local.json'),
+        ];
+        let thrown: Error | null = null;
+        // eslint-disable-next-line @webpieces/no-unmanaged-exceptions -- the spec inspects the thrown structure
+        try {
+            fixture.tracking.check(fixture.root, declarations);
+            // webpieces-disable no-any-unknown -- a caught value is unknown until narrowed
+        } catch (err: unknown) {
+            const error = toError(err);
+            thrown = error;
+        }
+        expect(thrown).toBeInstanceOf(UntrackedPolicyError);
+        const error = thrown as UntrackedPolicyError;
+        expect(error.untracked).toEqual(['.webpieces-config/rules/local.json']);
+        expect(error.message).toContain('  .webpieces-config/rules/local.json');
+        expect(error.message).not.toContain('client.json');
+        expect(error.message).not.toContain('pathspec');
+        expect(error.message).not.toContain('Did you forget');
+        expect(error.cures.map((cure: ConfigRepairCure) => cure.command)).toEqual([
+            'git add -- .webpieces-config/rules/local.json',
+            'pnpm wp-migrate-dirs --stage',
+        ]);
+        expect(error.message).toContain('Fix Option 1: (preferred) git add -- .webpieces-config/rules/local.json');
+        expect(error.message).toContain('Fix Option 2: pnpm wp-migrate-dirs --stage');
+    });
+
     it('requires every declared owner file and nothing generated (#1273: there is no lock or catalog)', () => {
         const fixture = new TrackingFixture();
         expect(() => fixture.tracking.check(fixture.root, fixture.declarations)).toThrow('client.json');
