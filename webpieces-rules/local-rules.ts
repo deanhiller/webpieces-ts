@@ -8,3 +8,5 @@ const pack = new LocalRulePack('local-rules', __filename, [new NoDeprecatedTagRu
 export const rulePackManifest = pack.rulePackManifest;
 export const sourceRuleRuntime = pack.sourceRuleRuntime;
 export const buildRuleRuntime = pack.buildRuleRuntime;
+// The one-rule `wp-validate-code --rule=<id>` debug run (#1330).
+export const buildDebugRuntime = pack.buildDebugRuntime;

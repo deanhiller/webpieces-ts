@@ -7,6 +7,8 @@ import { PolicyRuntimeRequest } from '@webpieces/rules-sdk';
 import { ConfigRepairError, RuleFailError, loadAndValidate, LoadedConfig } from '@webpieces/rules-config';
 import { BlockedResult, HookFileEvaluation, NormalizedEdit, NormalizedToolInput, ToolKind } from '@webpieces/hook-runtime';
 import { SourceHookRules } from '@webpieces/ai-hook-rules';
+import { CodeRulesBootstrap, RunRequestParser } from '@webpieces/code-rules';
+import { InformAiError } from '@webpieces/tooling-common';
 import {
     ConfigObject,
     FieldDef,
@@ -90,6 +92,9 @@ const FRESH_TEXT = [
     '',
 ].join('\n');
 
+const OTHER = 'libs/other/src/Other.ts';
+const OTHER_TEXT = 'export const other = (): void => console.log("other");\n';
+
 // webpieces-disable no-function-outside-class -- spec-local git helper
 function git(root: string, cmd: string): string {
     // core.hooksPath=/dev/null keeps machine-global git hooks out of the throwaway test repo.
@@ -115,6 +120,7 @@ class ConsumerRepo {
             "export const rulePackManifest = pack['rulePackManifest'];",
             "export const sourceRuleRuntime = pack['sourceRuleRuntime'];",
             "export const buildRuleRuntime = pack['buildRuleRuntime'];",
+            "export const buildDebugRuntime = pack['buildDebugRuntime'];",
             '',
         ].join('\n'));
         this.write('webpieces.config.json', JSON.stringify({
@@ -125,6 +131,10 @@ class ConsumerRepo {
         }, null, 2));
         this.configure(new RuleEntry());
         this.write(LEGACY, LEGACY_TEXT);
+        // Two nx projects, so a debug run has something to restrict to and count per.
+        this.write('src/project.json', '{"name":"app"}\n');
+        this.write('libs/other/project.json', '{"name":"other"}\n');
+        this.write(OTHER, OTHER_TEXT);
         git(this.root, 'add -A');
         git(this.root, 'commit -q -m base');
         for (const key of ['NX_BASE', 'NX_HEAD', 'GITHUB_HEAD_REF', 'GITHUB_EVENT_NAME', 'WEBPIECES_BRANCH']) {
@@ -180,6 +190,12 @@ class ConsumerRepo {
             return err.humanMessage.split('\n').filter((line: string) => /^\s+\S+:\d+ — /.test(line))
                 .map((line: string) => line.trim().split(' — ')[0]!);
         }
+    }
+
+    /** `wp-validate-code --rule=… --mode=… --projects=…`: the bin's composition root, end to end. */
+    async debugRun(mode: string | undefined, projects?: string): Promise<boolean> {
+        const request = new RunRequestParser().parse(RULE, mode, projects);
+        return (await new CodeRulesBootstrap().run(this.root, request)).success;
     }
 
     dispose(): void {
@@ -306,5 +322,98 @@ describe('repo-local rule packs (#1314): one LocalRule, run by the Write/Edit gu
         }
         expect(() => new LocalRulePack('local-rules', repo.root, [new Shadowing()])).toThrow(/framework-owned setting "excludePaths"/);
         expect(() => new LocalRulePack('local-rules', repo.root, [new BadId()])).toThrow(/must be kebab-case/);
+    });
+});
+
+
+describe('the one-rule debug run (#1330) runs a repo-local rule like a built-in one', () => {
+    let repo: ConsumerRepo;
+    let out: string[];
+
+    beforeEach(() => {
+        repo = new ConsumerRepo();
+        out = [];
+        const capture = (...args: unknown[]): void => {
+            out.push(args.map(String).join(' '));
+        };
+        vi.spyOn(console, 'log').mockImplementation(capture);
+        vi.spyOn(console, 'error').mockImplementation(capture);
+    });
+
+    afterEach(() => {
+        vi.restoreAllMocks();
+        repo.dispose();
+    });
+
+    it('at RUN_EVERY_TIME finds every committed site with an EMPTY diff, prints the rule\'s own text and a count per project', async () => {
+        const configBefore = fs.readFileSync(path.join(repo.root, OWNER_FILE), 'utf-8');
+        // The gate judges the diff, which is empty: nothing to report.
+        expect(await repo.gateSucceeds()).toBe(true);
+
+        expect(await repo.debugRun('RUN_EVERY_TIME')).toBe(false);
+
+        const text = out.join('\n');
+        expect(text).toContain(`DEBUG RUN of ${RULE}`);
+        expect(text).toContain('Mode: RUN_EVERY_TIME (committed: NEW_AND_MODIFIED_CODE)');
+        expect(text).toContain(`${LEGACY}:2 — console.log() is banned here.`);
+        expect(text).toContain(`${OTHER}:1 — console.log() is banned here.`);
+        expect(text).toContain(`${RULE} at RUN_EVERY_TIME: 2 site(s) left`);
+        expect(text).toContain('   app: 1');
+        expect(text).toContain('   other: 1');
+        expect(fs.readFileSync(path.join(repo.root, OWNER_FILE), 'utf-8')).toBe(configBefore);
+    });
+
+    it('--projects restricts the files judged and the counts printed', async () => {
+        expect(await repo.debugRun('RUN_EVERY_TIME', 'other')).toBe(false);
+        const text = out.join('\n');
+        expect(text).toContain(`${OTHER}:1`);
+        expect(text).not.toContain(`${LEGACY}:2`);
+        expect(text).toContain(`${RULE} at RUN_EVERY_TIME: 1 site(s) left`);
+        expect(text).not.toContain('   app:');
+    });
+
+    it('honours per-site disables and the rule\'s excludePaths, and passes once nothing is left', async () => {
+        repo.write(FRESH, FRESH_TEXT);
+        expect(await repo.debugRun('RUN_EVERY_TIME', 'app')).toBe(false);
+        // Legacy's one site plus Fresh's a() and d(): c() carries a disable with a reason, d()'s has none.
+        expect(out.join('\n')).toContain(`${RULE} at RUN_EVERY_TIME: 3 site(s) left`);
+        expect(out.join('\n')).not.toContain(`${FRESH}:6`);
+
+        const excluded = new RuleEntry();
+        excluded.excludePaths = ['src/**'];
+        repo.configure(excluded);
+        out.length = 0;
+        expect(await repo.debugRun('RUN_EVERY_TIME', 'app')).toBe(true);
+        expect(out.join('\n')).toContain(`${RULE} at RUN_EVERY_TIME: 0 site(s) left`);
+    });
+
+    it('ignores the escape hatches, and refuses a committed OFF without --mode', async () => {
+        const epoch = new RuleEntry();
+        epoch.turnOffRuleUntilEpoch = Math.floor(Date.now() / 1000) + 3600;
+        repo.configure(epoch);
+        expect(await repo.debugRun('RUN_EVERY_TIME')).toBe(false);
+
+        const off = new RuleEntry();
+        off.mode = 'OFF';
+        repo.configure(off);
+        await expect(repo.debugRun(undefined)).rejects.toThrow(InformAiError);
+        await expect(repo.debugRun(undefined)).rejects.toThrow('its committed mode is OFF');
+        await expect(repo.debugRun('SOMETIMES')).rejects.toThrow('--mode=SOMETIMES is not one of its modes');
+        await expect(repo.debugRun('RUN_EVERY_TIME', 'nope')).rejects.toThrow('no such nx project: nope');
+    });
+
+    it('a delete-only change: the diff modes have nothing to judge, RUN_EVERY_TIME still judges the repo', async () => {
+        git(repo.root, `rm -q -- ${OTHER}`);
+        expect(await repo.gateSucceeds()).toBe(true);
+
+        expect(await repo.debugRun('RUN_EVERY_TIME')).toBe(false);
+        expect(out.join('\n')).toContain(`${RULE} at RUN_EVERY_TIME: 1 site(s) left`);
+    });
+
+    it('an unknown rule is refused with a list that names the local rules too', async () => {
+        const request = new RunRequestParser().parse('no-such-rule', 'RUN_EVERY_TIME', undefined);
+        await expect(new CodeRulesBootstrap().run(repo.root, request)).rejects.toThrow(
+            new RegExp(`no-such-rule is not a rule that supports a debug run[\\s\\S]*no-any-unknown[\\s\\S]*${RULE}`),
+        );
     });
 });

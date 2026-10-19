@@ -73,7 +73,11 @@ const pack = new LocalRulePack('local-rules', __filename, [new NoBannedConsoleRu
 export const rulePackManifest = pack.rulePackManifest;
 export const sourceRuleRuntime = pack.sourceRuleRuntime;
 export const buildRuleRuntime = pack.buildRuleRuntime;
+export const buildDebugRuntime = pack.buildDebugRuntime;
 ```
+
+The fourth export is the one-rule debug run (below); without it `wp-validate-code --rule=<id>` refuses
+the pack's rules.
 
 **3. Register it** in `webpieces.config.json`, beside the packs you already declare, with its own owner file:
 
@@ -111,3 +115,17 @@ runners: `turnOffRuleUntilEpoch`, `turnOffRuleWhileOnBranch`, the optional `excl
 the per-site escape `// webpieces-disable no-banned-console -- <reason of at least 20 characters>` on the
 reported line or the line above it. A disable with no reason does not exempt the site. Rule ids must be
 kebab-case and must not collide with any other pack's.
+
+**Count what is left with the debug run** (#1330), exactly as for a built-in code rule and with no config
+edit:
+
+```bash
+pnpm exec wp-validate-code --rule=no-banned-console --mode=RUN_EVERY_TIME
+pnpm exec wp-validate-code --rule=no-banned-console --mode=RUN_EVERY_TIME --projects=my-app,my-lib
+```
+
+It runs only that rule, through the same build policy the gate runs, so per-site disables, the repo's
+`excludePaths` and the rule's own apply unchanged. It ignores the two escape hatches for that run, prints
+the rule's own report and then one site count per project, writes nothing, and exits non-zero while any
+site remains. `RUN_EVERY_TIME` judges every file in the repo and never consults the diff. An unknown
+`--rule` is refused with the list of rules that accept a debug run, local ones included.

@@ -69,7 +69,8 @@ export class RuleRuntimeModules {
     async runBuildDebug(exports: unknown, request: BuildDebugRequest): Promise<BuildPolicyResult> {
         if (!exports || typeof exports !== 'object' || !('buildDebugRuntime' in exports)) {
             throw new InformAiError(
-                `The build provider for ${request.selection.rule} does not support debug runs. Use its declared policy settings and normal validation.`,
+                `The build provider for ${request.selection.rule} does not support debug runs: its implementation module exports no buildDebugRuntime. ` +
+                    'A LocalRulePack module adds `export const buildDebugRuntime = pack.buildDebugRuntime;`; otherwise use its declared policy settings and normal validation.',
             );
         }
         const runtime = exports.buildDebugRuntime as BuildDebugRuntime;
