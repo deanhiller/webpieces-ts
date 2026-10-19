@@ -1,7 +1,20 @@
-import { BaseRuleConfig, ConfigObject, PolicyRuntimeRequest } from '@webpieces/rules-sdk';
+import {
+    BaseRuleConfig,
+    BuildDebugRequest,
+    ConfigObject,
+    PolicyDebugSelection,
+    PolicyRuntimeRequest,
+} from '@webpieces/rules-sdk';
 import 'reflect-metadata';
 import { CodeRuleRuntime } from './code-policy-composition';
-import { DiffScope, LoadedConfig, MatchRuleConfig, loadAndValidate } from '@webpieces/rules-config';
+import {
+    LoadedConfig,
+    MatchRuleConfig,
+    NodeRuleRuntimeModuleLoader,
+    RuleRuntimeModules,
+    RuntimeContributionGroup,
+    loadAndValidate,
+} from '@webpieces/rules-config';
 import { MODIFIED_CODE_MODES } from '@webpieces/rules-sdk';
 import { InformAiError } from '@webpieces/tooling-common';
 
@@ -10,17 +23,9 @@ import { CodeRulesApp } from './code-rules-app';
 import { MatchRulesHolder } from './code-rules-context';
 import { CODE_POLICIES, CodePolicy } from './code-policy-registry';
 import { CodeRulesRunRequest, RuleSelection } from './code-rules-run-request';
-import { ProjectCatalog, ProjectEntry, ScanScope } from './scan-scope';
-
-/** A validated debug run (#1027): the one rule, the mode it runs at, and the projects it is scoped to. */
-class DebugPlan {
-    constructor(
-        readonly rule: string,
-        readonly mode: string,
-        readonly committedMode: string,
-        readonly projects: readonly string[] | undefined,
-    ) {}
-}
+import { ScanScope } from './scan-scope';
+import { DebugAsk, DebugPlan, RuleDebugRun } from './rule-debug-run';
+import { rulePackManifest } from './rule-pack';
 
 /**
  * The ONE composition root of a code-rules run, shared by the `validate-code` nx executor and the
@@ -34,10 +39,16 @@ class DebugPlan {
  * is written — webpieces.config.json is untouched, so the gate keeps honouring the committed mode. It
  * prints the rule's own failure text, then one count per project, and fails when any site exists.
  *
+ * A rule another rule pack contributes to the build — a repo-local rule (#1330) — is not run here: the
+ * debug request is handed to that pack's own `buildDebugRuntime`, which shares {@link RuleDebugRun} so
+ * its refusals, banner and counts are identical.
+ *
  * A request it cannot run (no config, an unknown rule or project, --mode without --rule) THROWS an
  * {@link InformAiError} naming the cure; the bin's and the executor's top-level handlers print it.
  */
 export class CodeRulesBootstrap {
+    private readonly debug = new RuleDebugRun();
+
     async run(workspaceRoot: string, request: CodeRulesRunRequest): Promise<ExecutorResult> {
         const loaded = loadAndValidate(workspaceRoot);
         if (loaded.configPath === null) {
@@ -47,14 +58,20 @@ export class CodeRulesBootstrap {
         }
         console.log(`\n📄 Loaded config: ${loaded.configPath}`);
 
+        const provider =
+            request.rule === undefined || this.isOwnRule(request.rule, loaded)
+                ? undefined
+                : this.packProvider(request.rule, loaded);
+        if (provider !== undefined) return this.runPackDebug(workspaceRoot, loaded, provider, request);
+
         const plan = request.isDebug() ? this.plan(workspaceRoot, loaded, request) : undefined;
-        if (plan !== undefined) this.printBanner(plan);
+        if (plan !== undefined) this.debug.printBanner(plan);
 
         const configs: Record<string, ConfigObject> = {};
         for (const policy of CODE_POLICIES) {
             const config = loaded.rulesConfig[policy.ruleId] as BaseRuleConfig;
             configs[policy.ruleId] = (
-                plan?.rule === policy.ruleId ? this.overridden(config, plan) : config
+                plan?.rule === policy.ruleId ? this.debug.overridden(config, plan) : config
             ) as ConfigObject;
         }
         const runtimeRequest = new PolicyRuntimeRequest(
@@ -73,7 +90,7 @@ export class CodeRulesBootstrap {
         if (plan === undefined) return result;
         // A debug run FAILS whenever a site exists — including a rule that only warns at the gate
         // (no-client-creation-outside-server-or-client at severity "warn") — so it can gate a loop.
-        const sites = this.printCounts(workspaceRoot, plan, container.get(ScanScope), result);
+        const sites = this.debug.printCounts(workspaceRoot, plan, container.get(ScanScope), result.success);
         return { success: result.success && sites === 0 };
     }
 
@@ -85,60 +102,93 @@ export class CodeRulesBootstrap {
     ): DebugPlan {
         const rule = request.rule;
         if (rule === undefined)
-            throw this.refusal(
+            throw this.debug.refusal(
                 '--mode and --projects need --rule=<name>: a debug run judges exactly one rule.',
             );
         const modes = this.wholeScopeModesOf(rule, loaded);
         if (modes === undefined) {
-            throw this.refusal(
-                `--rule=${rule} is not a code rule that supports a debug run. Rules that do (they offer ` +
+            throw this.debug.refusal(
+                `--rule=${rule} is not a rule that supports a debug run. Rules that do (they offer ` +
                     `MODIFIED_PROJECTS and RUN_EVERY_TIME): ${this.debuggableRules(loaded).join(', ')}.`,
             );
         }
-        const committedMode = this.committedModeOf(rule, loaded) ?? 'OFF';
-        const mode = request.mode ?? committedMode;
-        if (!modes.includes(mode) || mode === 'OFF') {
-            const why =
-                request.mode === undefined
-                    ? `its committed mode is ${committedMode}`
-                    : `--mode=${mode} is not one of its modes`;
-            throw this.refusal(
-                `${rule} cannot run: ${why}. Pass --mode=<one of ${modes.filter((m: string) => m !== 'OFF').join(', ')}>.`,
-            );
-        }
-        const unknown = (request.projects ?? []).filter(
-            (name: string) => !this.projectNames(workspaceRoot).includes(name),
+        return this.debug.plan(
+            workspaceRoot,
+            new DebugAsk(rule, request.mode, this.committedModeOf(rule, loaded) ?? 'OFF', modes, request.projects),
         );
-        if (unknown.length > 0) {
-            throw this.refusal(
-                `--projects names no such nx project: ${unknown.join(', ')}. Known projects: ` +
-                    `${this.projectNames(workspaceRoot).join(', ')}.`,
-            );
-        }
-        return new DebugPlan(rule, mode, committedMode, request.projects);
     }
 
-    private refusal(reason: string): InformAiError {
-        return new InformAiError(`[debug run] ${reason}`);
+    /** True for a rule THIS pack runs: a built-in code rule or a match-rule. */
+    private isOwnRule(rule: string, loaded: LoadedConfig): boolean {
+        return (
+            CODE_POLICIES.some((binding: CodePolicy) => binding.ruleId === rule) ||
+            loaded.matchRules.some((mr: MatchRuleConfig) => mr.name === rule)
+        );
+    }
+
+    /**
+     * The build contribution of ANOTHER rule pack (a repo-local pack, #1330) that runs `rule`, when the
+     * rule's modes support a debug run; undefined otherwise.
+     */
+    private packProvider(rule: string, loaded: LoadedConfig): RuntimeContributionGroup | undefined {
+        return this.packBuildGroups(loaded).find(
+            (group: RuntimeContributionGroup) =>
+                group.ruleIds.includes(rule) && this.debug.supports(this.schemaModesOf(rule, loaded)),
+        );
+    }
+
+    private packBuildGroups(loaded: LoadedConfig): readonly RuntimeContributionGroup[] {
+        return new RuleRuntimeModules()
+            .groups(loaded.ruleRegistry, 'build')
+            .filter((group: RuntimeContributionGroup) => group.providerPack !== rulePackManifest.packageName);
+    }
+
+    private schemaModesOf(rule: string, loaded: LoadedConfig): readonly string[] {
+        return loaded.ruleRegistry.schemaFor(rule)['mode']?.enumValues ?? [];
+    }
+
+    /** Hand the debug request to the pack that owns the rule; it refuses, prints and counts as this runner does. */
+    private async runPackDebug(
+        workspaceRoot: string,
+        loaded: LoadedConfig,
+        group: RuntimeContributionGroup,
+        request: CodeRulesRunRequest,
+    ): Promise<ExecutorResult> {
+        const modules = new RuleRuntimeModules();
+        const exports = modules.load(
+            group,
+            loaded.ruleRegistry.manifestModules,
+            new NodeRuleRuntimeModuleLoader(workspaceRoot),
+        );
+        const result = await modules.runBuildDebug(
+            exports,
+            new BuildDebugRequest(
+                workspaceRoot,
+                new PolicyDebugSelection(request.rule!, request.mode, request.projects),
+            ),
+        );
+        return { success: result.success };
     }
 
     /** The mode set of a rule that reads its files through ScanScope, or undefined for any other rule. */
     private wholeScopeModesOf(rule: string, loaded: LoadedConfig): readonly string[] | undefined {
         if (loaded.matchRules.some((mr: MatchRuleConfig) => mr.name === rule))
             return MODIFIED_CODE_MODES;
-        if (!CODE_POLICIES.some((binding: CodePolicy) => binding.ruleId === rule)) return undefined;
-        const modes =
-            CODE_POLICIES.find((binding: CodePolicy) => binding.ruleId === rule)?.schema['mode']
-                ?.enumValues ?? [];
-        return modes.includes('MODIFIED_PROJECTS') && modes.includes('RUN_EVERY_TIME')
-            ? modes
-            : undefined;
+        const binding = CODE_POLICIES.find((each: CodePolicy) => each.ruleId === rule);
+        if (binding === undefined) return undefined;
+        const modes = binding.schema['mode']?.enumValues ?? [];
+        return this.debug.supports(modes) ? modes : undefined;
     }
 
+    /** Every rule a debug run accepts: built-in code rules, match-rules, and other packs' rules (#1330). */
     private debuggableRules(loaded: LoadedConfig): string[] {
         const builtIns = CODE_POLICIES.map((binding: CodePolicy) => binding.ruleId as string);
         const names = [...builtIns, ...loaded.matchRules.map((mr: MatchRuleConfig) => mr.name)];
-        return names.filter((name: string) => this.wholeScopeModesOf(name, loaded) !== undefined);
+        const own = names.filter((name: string) => this.wholeScopeModesOf(name, loaded) !== undefined);
+        const packs = this.packBuildGroups(loaded)
+            .flatMap((group: RuntimeContributionGroup) => [...group.ruleIds])
+            .filter((name: string) => this.packProvider(name, loaded) !== undefined);
+        return [...own, ...packs];
     }
 
     private committedModeOf(rule: string, loaded: LoadedConfig): string | undefined {
@@ -150,61 +200,10 @@ export class CodeRulesBootstrap {
         return configured?.mode;
     }
 
-    private projectNames(workspaceRoot: string): string[] {
-        return new ProjectCatalog(new DiffScope())
-            .all(workspaceRoot)
-            .map((p: ProjectEntry) => p.name)
-            .sort();
-    }
-
     /** The match-rules, with the debugged one (if it is a match rule) overridden. */
     private matchRules(loaded: LoadedConfig, plan: DebugPlan | undefined): MatchRuleConfig[] {
         return loaded.matchRules.map((mr: MatchRuleConfig) =>
-            plan?.rule === mr.name ? this.overridden(mr, plan) : mr,
+            plan?.rule === mr.name ? this.debug.overridden(mr, plan) : mr,
         );
-    }
-
-    /** A copy of `config` at the plan's mode with both escape hatches cleared. The original is untouched. */
-    private overridden<C extends BaseRuleConfig>(config: C, plan: DebugPlan): C {
-        const copy = Object.assign(
-            Object.create(Object.getPrototypeOf(config) as object) as C,
-            config,
-        );
-        copy.mode = plan.mode;
-        copy.turnOffRuleUntilEpoch = 0;
-        copy.turnOffRuleWhileOnBranch = null;
-        return copy;
-    }
-
-    private printBanner(plan: DebugPlan): void {
-        console.log('');
-        console.log(
-            `🔍 DEBUG RUN of ${plan.rule} — NOT the gate. webpieces.config.json is unchanged and nothing is written.`,
-        );
-        console.log(
-            `   Mode: ${plan.mode} (committed: ${plan.committedMode})` +
-                ` · Projects: ${plan.projects === undefined ? 'every project' : plan.projects.join(', ')}` +
-                ' · escape hatches (turnOffRuleUntilEpoch / turnOffRuleWhileOnBranch) ignored for this run',
-        );
-    }
-
-    /** Print one count per project and return the total. */
-    private printCounts(
-        workspaceRoot: string,
-        plan: DebugPlan,
-        scan: ScanScope,
-        result: ExecutorResult,
-    ): number {
-        const counts = scan.countsByProject(workspaceRoot);
-        const names = plan.projects ?? Array.from(counts.keys()).sort();
-        const total = Array.from(counts.values()).reduce((sum: number, n: number) => sum + n, 0);
-        console.log('');
-        console.log(`🔍 ${plan.rule} at ${plan.mode}: ${total} site(s) left`);
-        for (const name of names) console.log(`   ${name}: ${counts.get(name) ?? 0}`);
-        if (!result.success && total === 0) {
-            console.log('   (the rule failed without reporting sites — read its output above)');
-        }
-        console.log('');
-        return total;
     }
 }

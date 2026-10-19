@@ -66,6 +66,7 @@ export { default as validateCode } from './validate-code';
 export { CodeRulesBootstrap } from './code-rules-bootstrap';
 export { CodeRulesRunRequest, RuleSelection, RunRequestParser } from './code-rules-run-request';
 export { ScanScope, GateScanScope, ScanRestriction, ProjectCatalog, ProjectEntry, RecordedSite } from './scan-scope';
+export { RuleDebugRun, DebugAsk, DebugPlan } from './rule-debug-run';
 // Where code-rules applies the framework-owned path exclusions to every rule it composes (#1253).
 export { ExclusionScopedPolicy, GlobalExcludePaths, RuleExclusionsFactory } from './rule-dispatch';
 

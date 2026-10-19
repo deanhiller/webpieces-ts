@@ -2,7 +2,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { BuildPolicy, BuildPolicyResult } from '@webpieces/rules-sdk';
 import { AbstractRule, DiffScope, RuleFailError, RuleFileScope } from '@webpieces/rules-config';
-import { GateScanScope } from '@webpieces/code-rules';
+import { ScanScope } from '@webpieces/code-rules';
 import { LocalRule, LocalRuleConfig } from './local-rule';
 import { LocalRuleJudge, LocalRuleVerdict } from './local-rule-judge';
 
@@ -25,6 +25,10 @@ export class LocatedLocalVerdict {
  * top-level `excludePaths` and the rule's own are applied to that listing; OFF and the epoch and branch
  * switches are checked by `shouldRun()` here and again by the build runner. A failure is ONE thrown
  * `RuleFailError` listing every site, rendered by the build runner.
+ *
+ * The files come from the {@link ScanScope} it is handed: the gate's (`GateScanScope`, no restriction), or a
+ * debug run's (#1330), restricted to `--projects`. Every site found is recorded there too, so a debug run
+ * counts them per project exactly as it does for a built-in rule.
  */
 export class LocalBuildPolicy extends AbstractRule<LocalRuleConfig> implements BuildPolicy {
     private readonly judge: LocalRuleJudge;
@@ -34,6 +38,7 @@ export class LocalBuildPolicy extends AbstractRule<LocalRuleConfig> implements B
         config: LocalRuleConfig,
         private readonly rule: LocalRule,
         private readonly globalExcludePaths: readonly string[],
+        private readonly scanScope: ScanScope,
     ) {
         super(config, rule.id, rule.id);
         this.judge = new LocalRuleJudge(rule);
@@ -42,6 +47,7 @@ export class LocalBuildPolicy extends AbstractRule<LocalRuleConfig> implements B
     async run(workspaceRoot: string): Promise<BuildPolicyResult> {
         const found = await new RuleFileScope().runWithin(this.fileExclusions(this.globalExcludePaths), async () => this.scan(workspaceRoot));
         if (found === undefined || found.length === 0) return new BuildPolicyResult(true);
+        this.scanScope.recordSites(this.name, found.map((each: LocatedLocalVerdict) => each.relFile));
         throw this.failure(found);
     }
 
@@ -56,7 +62,7 @@ export class LocalBuildPolicy extends AbstractRule<LocalRuleConfig> implements B
         }
         const base = range.base ?? '';
         const found: LocatedLocalVerdict[] = [];
-        for (const relFile of new GateScanScope().files(workspaceRoot, mode, base, range.head, { tsOnly: false })) {
+        for (const relFile of this.scanScope.files(workspaceRoot, mode, base, range.head, { tsOnly: false })) {
             const absFile = path.join(workspaceRoot, relFile);
             if (!this.judge.judges(relFile) || !fs.existsSync(absFile)) continue;
             const changed = mode === 'NEW_AND_MODIFIED_CODE'

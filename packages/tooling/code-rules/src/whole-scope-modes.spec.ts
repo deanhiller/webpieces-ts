@@ -229,7 +229,7 @@ describe('the DEBUG run (#1027): --rule / --mode / --projects, no config edit', 
         await expect(new CodeRulesBootstrap().run(repo.root, debug('one-enum-spelling-in-api-lib', 'RUN_EVERY_TIME', 'nope')))
             .rejects.toThrow('no such nx project: nope');
         await expect(new CodeRulesBootstrap().run(repo.root, debug('max-method-lines', 'RUN_EVERY_TIME', undefined)))
-            .rejects.toThrow('is not a code rule that supports a debug run');
+            .rejects.toThrow('is not a rule that supports a debug run');
         await expect(new CodeRulesBootstrap().run(repo.root, debug(undefined, 'RUN_EVERY_TIME', undefined)))
             .rejects.toThrow('need --rule=<name>');
     });

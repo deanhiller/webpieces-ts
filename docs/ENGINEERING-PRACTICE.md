@@ -205,7 +205,10 @@ count per project, and exits non-zero while any site remains — so it can gate 
 writes nothing, ignores the rule's two escape hatches for that run, and changes nothing about the gate:
 `validate-code` and `wp-build` keep honouring the committed mode. `--projects` names nx projects
 (`project.json` `name`); `--mode`/`--projects` without `--rule` is refused, as is a rule that does not
-offer the whole-scope modes.
+offer the whole-scope modes. It works the same for a repo-local rule (#1314, #1330): every local rule
+offers all five modes, so `pnpm exec wp-validate-code --rule=no-deprecated-tag --mode=RUN_EVERY_TIME`
+counts its sites with per-site disables and `excludePaths` applied exactly as at the gate, and the list an
+unknown `--rule` is refused with names the local rules too.
 
 **A rule configured per directory: `required-type-suffix`** (#1037). Its one entry-list shape is the
 worked example of a rule you adopt on a repo with hundreds of existing violations. Every EXPORTED
