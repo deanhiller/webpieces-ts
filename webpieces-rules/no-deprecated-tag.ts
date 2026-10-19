@@ -27,6 +27,9 @@ export class NoDeprecatedTagRule extends LocalRule<LocalRuleConfig> {
         const visit = (node: ts.Node): void => {
             for (const tag of ts.getJSDocTags(node)) {
                 if (tag.tagName.text !== 'deprecated' || seen.has(tag.pos)) continue;
+                // TypeScript starts a tag at ANY @word after whitespace, so prose that merely mentions
+                // the tag mid-sentence parses as one. Only a tag that opens its own JSDoc line is real.
+                if (!this.opensItsLine(file.text, tag.getStart(file.source))) continue;
                 seen.add(tag.pos);
                 const line = file.lineOf(tag);
                 findings.push(new LocalRuleFinding(line, line,
@@ -36,5 +39,10 @@ export class NoDeprecatedTagRule extends LocalRule<LocalRuleConfig> {
         };
         visit(file.source);
         return findings;
+    }
+
+    private opensItsLine(text: string, tagStart: number): boolean {
+        const lineStart = text.lastIndexOf('\n', tagStart - 1) + 1;
+        return /^\s*(\/\*\*|\*)?\s*$/.test(text.slice(lineStart, tagStart));
     }
 }
