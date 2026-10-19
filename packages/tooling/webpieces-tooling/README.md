@@ -81,6 +81,14 @@ export const buildRuleRuntime = pack.buildRuleRuntime;
 { "package": "./webpieces-rules/local-rules.ts", "config": ".webpieces-config/rules/local.json" }
 ```
 
+Two things trip the first registration (both measured dogfooding this in webpieces-ts, #1320):
+
+- The pack lives outside every nx project, so a repo running `validate-ts-in-src` refuses to create it
+  until its folder is listed in that rule's `excludePaths` (e.g. `"webpieces-rules/**"`).
+- A declared owner file must be tracked by git, and the guard refuses every tool call, `git add`
+  included, until it is. Create the owner file, then run `pnpm wp-migrate-dirs --stage`, which stages the
+  declaration and the owner files.
+
 The `.ts` module is transpiled in memory when it loads, so there is no build step. The next tool call
 refuses the missing owner entry and prints the rule's seed to paste:
 

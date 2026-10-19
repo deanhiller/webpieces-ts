@@ -228,6 +228,10 @@
     {
       "config": ".webpieces-config/rules/nx-webpieces-rules.json",
       "package": "@webpieces/nx-webpieces-rules"
+    },
+    {
+      "config": ".webpieces-config/rules/local.json",
+      "package": "./webpieces-rules/local-rules.ts"
     }
   ]
 }
