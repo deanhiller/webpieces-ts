@@ -26,17 +26,20 @@
  *                 grey. Which box is which is only known per checkout, so every box carries every
  *                 variant and the page picks one from the sidecar (graph-impact.ts). The state is
  *                 never written on the box: color + legend + the "why" panel a click opens.
- *  - PRODUCT      "which products it belongs to" (#1179, graph-products.ts). One product is a solid
- *                 fill in that product's palette color; two or more (but not all) are the same
- *                 vertical stripes the multi-runtime box uses, one per product; a box shared by EVERY
- *                 product is one neutral fill (otherwise a shared foundation would be four-stripe
- *                 noise); a box in no product is white with a dashed border. The Filter HIDES other
- *                 products' boxes; this mode keeps every box and makes ownership visible.
+ *  - PRODUCT      "which products it belongs to" (#1179, graph-products.ts). Each product's legend
+ *                 row is a toggle; the first two (sorted-name order) are ON at every load, and the
+ *                 page repaints in the browser from the ON set (#1319, graph-product-paint.client.ts):
+ *                 exactly one ON product is a solid fill in that product's fixed palette color; two
+ *                 or more ON are the same vertical stripes the multi-runtime box uses, one per ON
+ *                 product; a box carrying only OFF products is light grey; a box in no product is
+ *                 white with a dashed border. The neutral "shared by every product" fill applies
+ *                 only while EVERY product is ON and the box carries them all. The Filter HIDES
+ *                 other products' boxes; this mode keeps every box and makes ownership visible.
  */
 
 import { KNOWN_FRAMEWORKS, KnownFramework } from '@webpieces/rules-sdk';
 import { dotValue, htmlLabelText } from './dot-syntax';
-import { PRODUCT_NONE_BORDER, PRODUCT_NONE_FILL, PRODUCT_SHARED_FILL, ProductColor, ProductPalette } from './graph-products';
+import { ProductPalette, ProductTemplate, ProductTemplateKind } from './graph-products';
 import type { ProductDependencyEntry } from '../configs/tag-truth-configs';
 
 export enum GraphMode {
@@ -214,7 +217,8 @@ export class NodeModeDots {
         public readonly unexplained: string,
         public readonly buildInput: string,
         public readonly untouched: string,
-        public readonly product: string,
+        /** Product mode's statement depends on which products are ON, so the page writes it (#1319). */
+        public readonly product: ProductTemplate,
     ) {}
 }
 
@@ -293,7 +297,7 @@ export class NodeModeStyler {
         return undefined;
     }
 
-    dots(facts: NodeFacts, palette: ProductPalette): NodeModeDots {
+    dots(facts: NodeFacts): NodeModeDots {
         return new NodeModeDots(
             this.runtime(facts),
             this.plain(facts, this.roleStyle(facts.role).fill, this.roleStyle(facts.role).fontColor, ''),
@@ -310,7 +314,7 @@ export class NodeModeStyler {
                 'filled,dashed',
             ),
             this.plain(facts, IMPACT_UNTOUCHED, IMPACT_UNTOUCHED_TEXT, ', color="#b4b9c4"'),
-            this.product(facts, palette),
+            this.product(facts),
         );
     }
 
@@ -414,19 +418,15 @@ export class NodeModeStyler {
     }
 
     /**
-     * Product mode (#1179): one product solid in its color; several (not all) striped, one stripe per
-     * product; every product the neutral shared fill; no product a white box with a dashed border.
+     * Product mode (#1179): the statement's head and its label in both text colors. Which fill a box
+     * gets depends on the products switched ON in the legend, so the page decides it (#1319).
      */
-    private product(facts: NodeFacts, palette: ProductPalette): string {
-        if (facts.products.length === 0)
-            return this.plain(facts, PRODUCT_NONE_FILL, DARK_TEXT, `, color="${PRODUCT_NONE_BORDER}", penwidth=1.5`, 'filled,dashed');
-        if (palette.sharedByAll(facts.products)) return this.plain(facts, PRODUCT_SHARED_FILL, DARK_TEXT, '');
-        const colors = facts.products.map((product: string): ProductColor => palette.colorOf(product));
-        if (colors.length === 1) return this.plain(facts, colors[0].color, colors[0].fontColor, '');
-        return this.statement(
-            facts,
-            `${this.stripes(colors.map((color: ProductColor): string => color.color))}, fontcolor="${DARK_TEXT}"`,
+    private product(facts: NodeFacts): ProductTemplate {
+        return new ProductTemplate(
+            ProductTemplateKind.BOX,
+            `  "${dotValue(facts.nodeId)}" [`,
             this.labelText(facts, DARK_TEXT),
+            this.labelText(facts, LIGHT_TEXT),
         );
     }
 

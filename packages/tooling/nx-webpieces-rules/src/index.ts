@@ -34,6 +34,8 @@ export {
     ProductPaletteSlot,
     PRODUCT_PALETTE_SLOTS,
     ProductBoundary,
+    ProductTemplate,
+    ProductTemplateKind,
 } from './lib/graph-products';
 export { ProductDependencyMatrix } from './lib/product-dependencies';
 export { ProductResolver, ProductResolution, PRODUCT_TAG_PREFIX } from './lib/product-resolver';

@@ -1,9 +1,16 @@
 import { describe, expect, it } from 'vitest';
-import { ProductPalette } from '../graph-products';
+import { ProductPalette, ProductTemplateKind } from '../graph-products';
+import type { GraphRenderModel } from '../graph-render-model';
 import { GraphLegend } from '../graph-legend';
 import { FilterFixture } from './graph-filter-fixture';
 import { generateRuntimeRenderModel, RuntimeVizOptions } from '../runtime-visualizer';
 import { NO_RUNTIME_COLOR, IMPACT_DEPENDENT, IMPACT_TOUCHED } from '../graph-color-modes';
+
+/** The producer's Product-mode statement as the page paints it with `on` switched ON (#1319). */
+function paintProducer(model: GraphRenderModel, on: string[]): string {
+    const node = model.nodes.find((candidate) => candidate.id === 'producer')!;
+    return FilterFixture.productPaint().painter(model.legend.palette.colors, on).nodeDot(node.modes!.product, node.products);
+}
 
 describe('saved runtime presentation adapter', () => {
     it('uses declared framework/role facts while preserving saved call-depth and canonical identities', () => {
@@ -60,7 +67,7 @@ describe('saved runtime presentation adapter', () => {
         const palette = new ProductPalette(['api-model', 'core', 'example', 'openapi', 'platform', 'rules']);
         const model = generateRuntimeRenderModel(graph);
         const color = palette.colorOf('platform').color;
-        expect(model.nodes.find((node) => node.id === 'producer')?.modes?.product).toContain(`fillcolor="${color}"`);
+        expect(paintProducer(model, ['platform'])).toContain(`fillcolor="${color}"`);
         expect(new GraphLegend().productRows(model.legend)).toContain(color);
     });
     it('builds its palette over the FULL declared set, not the products it happens to draw (#1244)', () => {
@@ -74,7 +81,7 @@ describe('saved runtime presentation adapter', () => {
         const projects = { core: { level: 0, dependsOn: [], products: ['core'] } };
         const model = generateRuntimeRenderModel(graph, 'Runtime', new RuntimeVizOptions(true, projects));
         const expected = full.colorOf('openapi');
-        expect(model.nodes.find((node) => node.id === 'producer')?.modes?.product).toContain(`fillcolor="${expected.color}"`);
+        expect(paintProducer(model, ['openapi'])).toContain(`fillcolor="${expected.color}"`);
         expect(model.legend.palette.colorOf('openapi')).toEqual(expected);
         expect(new GraphLegend().productRows(model.legend)).toContain(expected.color);
     });
@@ -84,7 +91,7 @@ describe('saved runtime presentation adapter', () => {
         graph.services['hidden'].products = ['core'];
         const model = generateRuntimeRenderModel(graph);
         const expected = new ProductPalette(['core', 'openapi']).colorOf('openapi').color;
-        expect(model.nodes.find((node) => node.id === 'producer')?.modes?.product).toContain(`fillcolor="${expected}"`);
+        expect(paintProducer(model, ['openapi'])).toContain(`fillcolor="${expected}"`);
     });
     it('never guesses framework or role from a legacy service name; queues keep context styling', () => {
         const graph = FilterFixture.runtime();
@@ -97,7 +104,9 @@ describe('saved runtime presentation adapter', () => {
         expect(queue.tags).toBeNull();
         expect(queue.modes?.touched).toBe(queue.dot);
         expect(queue.modes?.dependent).toBe(queue.dot);
-        expect(queue.modes?.product).toContain('shape=Mrecord');
+        expect(queue.modes?.product.kind).toBe(ProductTemplateKind.CONTEXT);
+        expect(queue.modes?.product.head).toBe(queue.dot);
+        expect(FilterFixture.productPaint().painter([], []).nodeDot(queue.modes!.product, [])).toContain('shape=Mrecord');
         expect(model.nodes.some((node) => node.id === 'hidden')).toBe(false);
     });
 });

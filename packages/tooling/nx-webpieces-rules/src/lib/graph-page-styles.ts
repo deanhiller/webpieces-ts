@@ -82,6 +82,9 @@ export class GraphPageStyles {
         .wp-legend-row { display: flex; align-items: center; gap: 10px; line-height: 1.25; }
         .wp-legend-row svg { flex: none; }
         .wp-legend-row small { display: block; color: var(--wp-side-muted); font-size: 11.5px; }
+        .wp-product-toggle { cursor: pointer; }
+        .wp-product-toggle input { flex: none; margin: 0; accent-color: var(--wp-accent); cursor: pointer; }
+        .wp-product-note { margin: 2px 0 0; font-size: 11.5px; color: var(--wp-side-muted); }
         .wp-impact-note { margin: 2px 0 0; font-size: 11.5px; color: var(--wp-side-muted); }
         .wp-impact-note:empty { display: none; }
         .wp-foot { margin-top: auto; padding: 10px 18px 0; border-top: 1px solid var(--wp-side-line); display: flex; gap: 14px; flex-wrap: wrap; }`;
@@ -170,7 +173,7 @@ export class GraphPageStyles {
             border-radius: 10px; box-shadow: 0 8px 24px #0002; padding: 12px 14px; font-size: 13px; box-sizing: border-box; }
         .wp-pop header { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-weight: 600; margin-bottom: 8px; }
         .wp-legend-popout { left: 12px; bottom: 12px; width: 270px; max-height: 60vh; overflow: auto; }
-        .wp-legend-popout .wp-legend-row small, .wp-legend-popout .wp-impact-note { color: var(--wp-muted); }
+        .wp-legend-popout .wp-legend-row small, .wp-legend-popout .wp-impact-note, .wp-legend-popout .wp-product-note { color: var(--wp-muted); }
         .wp-help { right: 12px; top: 56px; width: min(380px, calc(100% - 24px)); line-height: 1.5; }
         .wp-help p { margin: 0 0 8px; }
         .wp-snapshot { left: 12px; bottom: 12px; width: min(440px, calc(100% - 24px)); }

@@ -83,6 +83,34 @@ interface RenderModelJson {
     footer: string;
     /** Runtime pages (#1239): the Goal vs Current overlay, or why it is unavailable. Absent elsewhere. */
     comparison?: RuntimeComparisonJson | null;
+    /** LegendFacts (graph-color-modes.ts): the page reads the ONE product palette from it (#1319). */
+    legend: LegendJson;
+}
+
+/** The part of LegendFacts the page reads. */
+interface LegendJson {
+    palette: ProductPaletteJson;
+}
+
+/** ProductPalette (graph-products.ts), as JSON: every declared product, sorted, with its fixed color. */
+interface ProductPaletteJson {
+    colors: ProductColorJson[];
+}
+
+/** ProductColor (graph-products.ts), as JSON. */
+interface ProductColorJson {
+    product: string;
+    color: string;
+    fontColor: string;
+}
+
+/** ProductTemplate (graph-products.ts), as JSON: what the page paints a Product-mode node from (#1319). */
+interface ProductTemplateJson {
+    /** 'box' | 'context' (ProductTemplateKind). */
+    kind: string;
+    head: string;
+    darkLabel: string;
+    lightLabel: string;
 }
 
 /** RuntimeComparisonView (graph-render-model.ts), as JSON. */
@@ -122,8 +150,8 @@ interface NodeModeDotsJson {
     unexplained: string;
     buildInput: string;
     untouched: string;
-    /** Product color mode (#1179). */
-    product: string;
+    /** Product color mode (#1179): painted by the page from the ON products (#1319). */
+    product: ProductTemplateJson;
 }
 
 /**
@@ -227,8 +255,8 @@ interface RenderEdgeJson {
     to: string;
     dot: string;
     id: string;
-    /** The Product color mode's statement for a cross-product dependency (#1204); null draws `dot`. */
-    productDot: string | null;
+    /** The products a cross-product dependency crosses into (#1204); empty for every other edge. */
+    crossesInto: string[];
 }
 interface RenderBandJson {
     selfQueueNames: string[];

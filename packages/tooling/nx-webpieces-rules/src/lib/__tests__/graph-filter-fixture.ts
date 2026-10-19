@@ -3,7 +3,8 @@ import * as path from 'path';
 import * as vm from 'vm';
 import * as ts from 'typescript';
 import { GraphVisualizer } from '../graph-visualizer';
-import { GraphRenderModel } from '../graph-render-model';
+import { GraphRenderModel, RenderEdge } from '../graph-render-model';
+import type { ProductColor, ProductTemplate } from '../graph-products';
 import type { EnhancedGraph } from '../graph-sorter';
 import type { RuntimeGraph } from '../runtime-graph';
 
@@ -23,7 +24,25 @@ interface RenderNodeShape {
 }
 interface RenderEdgeShape {
     dot: string;
-    productDot: string | null;
+    crossesInto: string[];
+}
+/** WpProductPaint (graph-product-paint.client.ts), as the VM returns it. */
+export interface ProductPaintShape {
+    kind: string;
+    colors: string[];
+    fontColor: string;
+}
+/** WpProductPainter (graph-product-paint.client.ts), run from the shipped client source. */
+export interface ProductPainterShape {
+    paint(products: string[]): ProductPaintShape;
+    edgeColor(crossesInto: string[]): string | null;
+    nodeDot(template: ProductTemplate, products: string[]): string;
+    edgeDot(edge: RenderEdge): string;
+}
+interface ProductPaintApi {
+    painter(legend: ProductColor[], on: string[]): ProductPainterShape;
+    initialOn(order: string[]): string[];
+    constants: Record<string, string | number>;
 }
 interface FilterApi {
     chain(model: GraphRenderModel): ChainReader;
@@ -32,7 +51,10 @@ interface FilterApi {
 
 export class FilterFixture {
     static client(name: string): string {
-        const prefix = name === 'graph-visualizer.client.ts' ? FilterFixture.client('graph-mode-state.client.ts') : '';
+        const prefix =
+            name === 'graph-visualizer.client.ts'
+                ? FilterFixture.client('graph-mode-state.client.ts') + FilterFixture.client('graph-product-paint.client.ts')
+                : '';
         return prefix + ts.transpileModule(fs.readFileSync(path.join(__dirname, '..', name), 'utf8'), {
             compilerOptions: { target: ts.ScriptTarget.ES2022 },
         }).outputText;
@@ -45,6 +67,24 @@ export class FilterFixture {
             chain: model => new WpGraphChain(model), dot: model => new WpFilteredDot(model)
         })`,
         ) as FilterApi;
+    }
+
+    /** The page's Product-mode painter (#1319), from the shipped client source in a bare VM. */
+    static productPaint(): ProductPaintApi {
+        return vm.runInNewContext(
+            FilterFixture.client('graph-product-paint.client.ts') +
+                `\n({
+            painter: (legend, on) => new WpProductPainter(JSON.parse(JSON.stringify(legend)), new Set(on)),
+            initialOn: order => [...new WpProductSelection().initialOn(order)],
+            constants: {
+                SHARED_FILL: WpProductPainter.SHARED_FILL, NONE_FILL: WpProductPainter.NONE_FILL,
+                NONE_BORDER: WpProductPainter.NONE_BORDER, OFF_FILL: WpProductPainter.OFF_FILL,
+                OFF_BORDER: WpProductPainter.OFF_BORDER, DARK_TEXT: WpProductPainter.DARK_TEXT,
+                LIGHT_TEXT: WpProductPainter.LIGHT_TEXT, STRIPED_CLASS: WpProductPainter.STRIPED_CLASS,
+                ON_AT_LOAD: WpProductPainter.ON_AT_LOAD,
+            },
+        })`,
+        ) as ProductPaintApi;
     }
 
     static visualizer(): GraphVisualizer {

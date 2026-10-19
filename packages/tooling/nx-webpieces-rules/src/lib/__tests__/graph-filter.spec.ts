@@ -17,9 +17,10 @@ describe('the Product mode edge statement (#1204)', () => {
         expect(api.dot(model).render(all)).not.toContain('penwidth=2');
         const product = api
             .dot(model)
-            .render(all, (node) => node.dot, true, (edge) => edge.productDot ?? edge.dot);
-        expect(product).toContain('[style=dashed, color=');
-        expect(product).toContain('penwidth=2];');
+            .render(all, (node) => node.dot, true, (edge) =>
+                edge.crossesInto.length === 0 ? edge.dot : `${edge.dot.slice(0, -2)} [style=dashed];\n`,
+            );
+        expect(product).toContain('[style=dashed];');
     });
 });
 

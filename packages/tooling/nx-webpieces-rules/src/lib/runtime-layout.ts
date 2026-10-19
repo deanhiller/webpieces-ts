@@ -16,7 +16,7 @@ export class RuntimeLayout {
                 edge.to,
                 this.unconstrained(edge.dot),
                 edge.id,
-                edge.productDot === null ? null : this.unconstrained(edge.productDot),
+                edge.crossesInto,
             );
         }
         return this.assemble(model);

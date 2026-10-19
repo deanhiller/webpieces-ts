@@ -35,7 +35,10 @@ import {
 import {
     PRODUCT_NONE_BORDER,
     PRODUCT_NONE_FILL,
+    PRODUCT_OFF_BORDER,
+    PRODUCT_OFF_FILL,
     PRODUCT_SHARED_FILL,
+    PRODUCTS_ON_AT_LOAD,
     ProductColor,
     ProductPalette,
 } from './graph-products';
@@ -151,8 +154,9 @@ export class GraphLegend {
     }
 
     /**
-     * Product mode (#1179): one row per product with its counts, then the shared, several-products and
-     * no-product rows that some drawn box actually uses.
+     * Product mode (#1179): one TOGGLE row per product with its counts (#1319), then the shared,
+     * several-products, only-OFF and no-product rows that some drawn box can use. The page switches the
+     * first two products ON at every load and repaints from the toggles; colors never move.
      */
     productRows(facts: LegendFacts): string {
         if (facts.products.length === 0)
@@ -167,17 +171,22 @@ export class GraphLegend {
         for (const count of facts.products) {
             const color = palette.colorOf(count.product);
             const detail = `${count.only} only ${count.product}`;
-            rows += this.row(`product:${count.product}`, this.solid(color.color, '', ''), `${count.product} · ${count.total}`, detail);
+            rows += this.productToggle(
+                `data-wp-legend="product:${count.product}"`,
+                count.product,
+                this.solid(color.color, '', '') + `<span>${count.product} · ${count.total}<small>${detail}</small></span>`,
+            );
         }
         if (facts.sharedByAll > 0)
             rows += this.row(
                 'shared',
                 this.solid(PRODUCT_SHARED_FILL, '', ''),
                 `shared by every product · ${facts.sharedByAll}`,
-                'a change here is a change to every product',
+                'neutral only while every product is ON; a change here is a change to every product',
             );
-        if (facts.multiProduct)
-            rows += this.row('several', this.productStripes(palette), 'several products', 'one stripe per product');
+        if (facts.multiProduct || facts.sharedByAll > 0)
+            rows += this.row('several', this.productStripes(palette), 'several products ON', 'one stripe per ON product');
+        rows += this.row('off', this.solid(PRODUCT_OFF_FILL, PRODUCT_OFF_BORDER, ''), 'only products switched off', 'light grey; still drawn');
         if (facts.noProduct > 0)
             rows += this.row(
                 'no-product',
@@ -185,7 +194,27 @@ export class GraphLegend {
                 `no product · ${facts.noProduct}`,
                 'needs a product:<name> tag',
             );
-        return rows + this.boundaryRows(facts, palette);
+        return rows + this.productNote() + this.boundaryRows(facts, palette);
+    }
+
+    /**
+     * A product's legend row as a toggle (#1319), shared by both viewers: `attrs` are the row's data
+     * attributes and `body` its swatch and text. The page sets every checkbox from its ON set.
+     */
+    productToggle(attrs: string, product: string, body: string): string {
+        return (
+            `<label class="wp-legend-row wp-product-toggle" ${attrs}>` +
+            `<input type="checkbox" data-wp-product-toggle="${product}">${body}</label>`
+        );
+    }
+
+    /** What the toggles do, in both viewers' Product legend (#1319). */
+    productNote(): string {
+        return (
+            `<p class="wp-product-note">Toggle products to color them; the first ${PRODUCTS_ON_AT_LOAD} are ON on every load. ` +
+            'One ON product: its color · several ON: stripes · only OFF products: light grey · ' +
+            'neutral: carries every product while all are ON · white dashed: no product. A color always means the same product.</p>'
+        );
     }
 
     /**
@@ -199,7 +228,7 @@ export class GraphLegend {
                 'cross-product',
                 this.line(PRODUCT_NONE_BORDER, '4 3'),
                 `crosses into another product · ${facts.crossProductEdges}`,
-                "dashed, in the color of the product it depends on",
+                'dashed, in the color of the product it depends on, while that product is ON',
             );
         const matrix = facts.productDependencies;
         if (matrix === null) return rows;
@@ -278,7 +307,7 @@ export class GraphLegend {
         return this.open() + stripes + this.frame();
     }
 
-    /** The first three product colors as stripes: the "several products" swatch. */
+    /** The first three product colors as stripes: the "several products ON" swatch. */
     private productStripes(palette: ProductPalette): string {
         const colors = palette.colors.slice(0, 3);
         const width = SWATCH_W / colors.length;

@@ -186,15 +186,22 @@ After upgrading, regenerate old RPC-only JSON with `pnpm nx run architecture:gen
   products. An untagged library belongs to every product whose tagged project reaches it over
   `dependsOn` without passing through another tagged project, written per project as
   `"products": [...]` into `dependencies.json`. A published library whose entry points live in other
-  repos carries its own tag. One product is a solid fill in that product's color (a fixed palette of 8 in
-  sorted-name order; any product past 8 uses the neutral fill and the legend says so); two or more,
-  but not all, are vertical stripes, one per product; a box shared by every product is one neutral
-  fill; a box in no product is white with a dashed border. The legend counts each product's boxes
-  and how many belong to it alone. A dependency that crosses into another product (its target does
-  not carry every product of its source) is drawn dashed in the color of the product it depends on, so
-  product boundaries read at a glance while same-product edges stay plain (#1204); the legend counts
-  those edges and lists the `product-tags` rule's allowed matrix (`example → openapi, platform`).
-  Which crossings are ALLOWED is `product-tags.productDependencies`: generation refuses any other.
+  repos carries its own tag. Every product's legend row is a **toggle** (#1319), and the page
+  repaints in the browser from the products that are ON — no regeneration. On every load the first
+  2 products in legend (sorted-name) order are ON and the rest OFF; nothing is persisted (no
+  localStorage, no URL hash), so the page always resets to that. Given the ON set, a box carrying
+  exactly one ON product is a solid fill in that product's color; two or more ON products are
+  vertical stripes, one per ON product (the overlap the toggles exist to show); only OFF products
+  is light grey (still drawn — hiding boxes is the Filter's job); no product is white with a dashed
+  border. The neutral "shared by every product" fill applies only while EVERY product is ON and the
+  box carries them all; otherwise it is striped. Each product keeps its fixed palette color (#1244)
+  whatever else is ON. The legend counts each product's boxes and how many belong to it alone. A
+  dependency that crosses into another product (its target does not carry every product of its
+  source) is drawn dashed in the color of the product it depends on while that product is ON, and
+  plain otherwise, so product boundaries read at a glance while same-product edges stay plain
+  (#1204); the legend counts those edges and lists the `product-tags` rule's allowed matrix
+  (`example → openapi, platform`). Which crossings are ALLOWED is
+  `product-tags.productDependencies`: generation refuses any other.
 
 **Filter** opens a popover of four groups that INTERSECT: the changes of the active Impact
 comparison, headed by its label and carrying the same branch / last-commit toggle (All ·
@@ -251,8 +258,10 @@ file is **Changed**. Build input sets come from compile dependencies, never runt
 Main/detached HEAD compares the last commit; a fresh feature branch compares its fork point only;
 a feature with commits offers both. Missing git/Nx data disables Impact-dependent controls.
 Queues/vendors never claim source ownership or CI status: Runtime/Architecture/Impact retain
-kind colors and shapes; Product uses inherited product colors (a gradient on contextual shapes).
-No product is white, membership shared by all products is neutral. Runtime services use the
+kind colors and shapes; Product uses inherited product colors (a gradient on contextual shapes)
+with the same per-product legend toggles as the dependency viewer: the first 2 ON at every load,
+light grey for only-OFF membership, white for no product, neutral only while every product is ON
+and the node carries them all. Runtime services use the
 established nested/striped framework palette and Architecture uses declared roles.
 
 Lock from Focus, the sidebar switch, or a box menu pins separate complete incoming/outgoing

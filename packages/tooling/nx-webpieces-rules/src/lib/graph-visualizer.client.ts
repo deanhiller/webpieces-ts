@@ -649,6 +649,13 @@ class GraphPage extends WpFilterPage {
     private readonly why = new ImpactWhyPanel();
 
     private readonly edges = new WpEdgeOverlay(this.modes);
+    /**
+     * The products switched ON in the Product legend (#1319): the first two in legend order at EVERY
+     * load. Never persisted — no storage, no hash — so the page stays stateless.
+     */
+    private readonly toggles = new WpProductToggles();
+    private readonly productsOn: Set<string> = new WpProductSelection().initialOn(this.toggles.products());
+    private painter: WpProductPainter = this.toggles.painter(this.base.legend.palette.colors, this.productsOn);
 
     /** In Impact mode a box's menu leads with WHY it is in the build, and its edge changes (#1264). */
     impactItems(name: string, node: SVGGElement): WpNodeMenuItem[] {
@@ -674,6 +681,7 @@ class GraphPage extends WpFilterPage {
     protected override wireControls(): void {
         this.syncModel();
         this.drawer.wire();
+        this.toggles.wire((product: string, on: boolean): void => this.setProductOn(product, on));
         this.syncControls();
     }
 
@@ -701,13 +709,16 @@ class GraphPage extends WpFilterPage {
         if (modes === null) return node.dot;
         if (this.modes.mode === 'architecture') return modes.architecture;
         if (this.modes.mode === 'impact') return modes[this.modes.status(node.id)];
-        if (this.modes.mode === 'product') return modes.product;
+        if (this.modes.mode === 'product') return this.painter.nodeDot(modes.product, node.products);
         return modes.runtime;
     }
 
-    /** Product mode dashes a dependency that crosses into another product (#1204); every other mode draws it plain. */
+    /**
+     * Product mode dashes a dependency that crosses into another product (#1204) while that product is
+     * ON (#1319); every other mode draws it plain.
+     */
     protected override edgeDot(edge: RenderEdgeJson): string {
-        if (this.modes.mode === 'product' && edge.productDot !== null) return edge.productDot;
+        if (this.modes.mode === 'product') return this.painter.edgeDot(edge);
         if (this.modes.mode === 'impact') return this.edges.edgeDot(edge) ?? edge.dot;
         return edge.dot;
     }
@@ -785,6 +796,15 @@ class GraphPage extends WpFilterPage {
         this.redraw();
     }
 
+    /** A product legend toggle (#1319): repaint at once from the new ON set. */
+    setProductOn(product: string, on: boolean): void {
+        if (on) this.productsOn.add(product);
+        else this.productsOn.delete(product);
+        this.painter = this.toggles.painter(this.base.legend.palette.colors, this.productsOn);
+        this.syncControls();
+        if (this.modes.mode === 'product') this.redraw();
+    }
+
     /** Switch the active Impact scan: Impact recolours and an active change-scope filter re-applies. */
     setImpactKind(kind: string): void {
         if (kind === this.modes.kind || !this.modes.setKind(kind)) return;
@@ -841,6 +861,7 @@ class GraphPage extends WpFilterPage {
     private syncControls(): void {
         document.body.dataset['wpMode'] = this.modes.mode;
         this.drawer.sync(this.modes, this.locked, this.anchor !== null, this.applied);
+        this.toggles.sync(this.productsOn);
         const count = this.model.nodes.filter(node => this.retained.has(node.id) && this.projects.isService(node)).length;
         const empty = document.getElementById('wp-empty');
         if (empty !== null) empty.hidden = count !== 0;

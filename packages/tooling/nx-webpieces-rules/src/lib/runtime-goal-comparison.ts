@@ -189,7 +189,7 @@ export class RuntimeGoalComparison {
             const edge = model.edges[index];
             const changes = this.changes(ids.edge(edge, nodes), diff);
             const status = this.styler.status(changes);
-            model.edges[index] = new RenderEdge(edge.from, edge.to, this.styler.edge(edge.dot, status), edge.id, null);
+            model.edges[index] = new RenderEdge(edge.from, edge.to, this.styler.edge(edge.dot, status), edge.id, []);
             details[edge.id] = [`${edge.from} → ${edge.to}`, ...changes.flatMap((change: RuntimeFactChange) => change.lines())];
         }
     }
