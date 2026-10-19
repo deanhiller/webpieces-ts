@@ -1,0 +1,7 @@
+{
+  "no-deprecated-tag": {
+    "mode": "NEW_AND_MODIFIED_CODE",
+    "turnOffRuleUntilEpoch": 0,
+    "turnOffRuleWhileOnBranch": null
+  }
+}

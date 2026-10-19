@@ -18,6 +18,7 @@
     ],
     "excludePaths": [
       "scripts/**",
+      "webpieces-rules/**",
       "**/codegen.ts"
     ],
     "turnOffRuleWhileOnBranch": null
