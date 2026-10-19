@@ -45,8 +45,13 @@ export const OPERATION_SEMANTICS = [
  * - `{ hidden: true }` on ONE `@Endpoint` subtracts that method from the CUSTOMER document only. It
  *   stays in the private document, and in the MCP document when it is a tool.
  *
+ * - `@hidden` in ONE field's JSDoc subtracts that field from the CUSTOMER document only (#1246),
+ *   with exactly the audience of `{ hidden: true }`: kept in the private document, and in the MCP
+ *   document and tool catalogs.
+ *
  * The per-method case is real and cannot be said at class level: a NEW endpoint on an
- * already-published API, built on main before it is announced. The per-contract case is the one that
+ * already-published API, built on main before it is announced. The per-field case is the same thing
+ * one level down: a new field on an already-published DTO. The per-contract case is the one that
  * must not default to permissive, and at class level naming it costs one token per contract.
  *
  * ## Select, then render — never render, then filter
@@ -79,7 +84,11 @@ export class DocumentSelection {
         readonly fileName: string,
         /** The `@ApiType` a contract must declare to appear in this document. */
         readonly apiType: ApiTypeKind,
-        /** Drop methods marked `{ hidden: true }`. True for the customer document alone. */
+        /**
+         * Drop methods marked `{ hidden: true }` AND fields marked `@hidden` (#1246). True for the
+         * customer document alone — one flag, because the two are one audience decision at two
+         * levels, and a second flag could only ever disagree with the first.
+         */
         readonly dropHidden: boolean,
         /** Stamp `x-mcp-tool` and its siblings. Only the MCP document has a reader for them. */
         readonly includeMcpExtensions: boolean,
@@ -144,7 +153,7 @@ export class DocumentSelection {
     }
 
     /**
-     * Every contract declaring `MCP`. A HIDDEN method is kept — an internal endpoint that is an agent
+     * Every contract declaring `MCP`. A HIDDEN method is kept, and so is a `@hidden` field (#1246) — an internal endpoint that is an agent
      * tool is still a tool, and requiring it to be published to customers in order to be one would be
      * exactly the wrong coupling.
      */

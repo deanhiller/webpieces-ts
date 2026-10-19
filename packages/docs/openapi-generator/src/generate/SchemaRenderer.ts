@@ -48,6 +48,12 @@ export class UnmappedField {
  * description, and `properties` even when empty — instead of as a `$ref`; it is never added to
  * `components.schemas`. It is recorded in {@link inlinedTypes} so the description guard still judges
  * it: inlining is never a way around a missing JSDoc.
+ *
+ * ## A `@hidden` field is never rendered into the customer document (#1246)
+ *
+ * With `dropsHiddenFields`, an object schema simply skips the field — its property, its prose, its
+ * `required` entry — wherever that schema is written: a component, an inlined wrapper, a webhook
+ * payload, a nested `$ref` target. Nothing is built and then removed.
  */
 export class SchemaRenderer {
     private readonly reached = new Set<string>();
@@ -61,6 +67,12 @@ export class SchemaRenderer {
         private readonly placement: SchemaPlacement,
         /** The wrappers an operation defines inline rather than by `$ref` (#1303). */
         private readonly wrappers: InlinedWrappers,
+        /**
+         * Omit every `@hidden` field (#1246) — the customer document alone. The field is never
+         * rendered, so a type reached ONLY through it is never reached either: select-then-render,
+         * exactly as for a hidden method (see `DocumentSelection`).
+         */
+        private readonly dropsHiddenFields: boolean,
     ) {}
 
     /** Keys of the named types this document DEFINES, reached directly or through another schema. */
@@ -175,6 +187,9 @@ export class SchemaRenderer {
         const properties = new JsonObject();
         const required: string[] = [];
         for (const field of type.fields) {
+            if (this.dropsHiddenFields && field.hidden) {
+                continue;
+            }
             properties.set(field.name, this.field(field, `${pointer}/properties/${field.name}`));
             if (!field.optional) {
                 required.push(field.name);

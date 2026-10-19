@@ -237,6 +237,8 @@ function field(name: string, type: TypeRef): DocumentedField {
         undefined,
         undefined,
         `spec-fixture.ts:1:1`,
+        false,
+        undefined,
     );
 }
 

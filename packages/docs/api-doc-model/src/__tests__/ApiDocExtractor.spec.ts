@@ -93,6 +93,25 @@ beforeAll(() => {
     model = harness.extract('ExampleApi.ts');
 });
 
+describe('a field-level @hidden tag (#1246)', () => {
+    it('records hidden and its reason, and keeps the tag out of the description', () => {
+        const hidden = harness.extract('HiddenFieldApi.ts');
+        const order = harness.type(hidden, 'HiddenOrder');
+        const eta = harness.field(order, 'deliveryEta');
+        expect(eta.hidden).toBe(true);
+        expect(eta.hiddenReason).toBe('ships with the delivery-ETA launch');
+        expect(eta.description).toBe('Estimated delivery time.');
+        expect(eta.format).toBe('date-time');
+        const note = harness.field(order, 'note');
+        expect(note.hidden).toBe(true);
+        expect(note.hiddenReason).toBeUndefined();
+        expect(note.description).toBe('Bare tag, no reason.');
+        const id = harness.field(order, 'orderId');
+        expect(id.hidden).toBe(false);
+        expect(id.hiddenReason).toBeUndefined();
+    });
+});
+
 describe('the contract itself', () => {
     it('reads the class, its @ApiPath and its prose, with {@link} RESOLVED by the compiler (#1284)', () => {
         expect(model.contractName).toBe('ExampleApi');

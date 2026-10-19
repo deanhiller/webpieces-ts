@@ -22,16 +22,24 @@ const RETURNS_TAG = 'returns';
 const SUMMARY_TAG = 'summary';
 
 /**
+ * The field-level visibility tag (#1246): the field is withheld from the CUSTOMER document. Read by
+ * PRESENCE — a bare `@hidden` hides exactly like one with a reason — and its text is never published.
+ */
+const HIDDEN_TAG = 'hidden';
+
+/**
  * The PROSE half of the model: the JSDoc body, the `@summary` tag, the `@returns` tag, the `@format`
- * tag and the `@mcp` override.
+ * tag, the `@mcp` override and the field-level `@hidden` flag (#1246).
  *
  * ## Every `/** *\/` is published — except `@privateRemarks` (#1292)
  *
- * The body and the five tags named here are the ONLY text read out of a block. Every other block tag
+ * The body and the tags named here are the ONLY text read out of a block. Every other block tag
  * is dropped together with its text, and `@privateRemarks` — TSDoc's standard "inside the doc block,
  * never published" tag — is the one an author writes ON PURPOSE to keep a note out of every document:
  * OpenAPI, MCP tool catalogs, tag and schema descriptions. It is dropped HERE, at extraction, so no
- * renderer can ever reach it — the same reason `{@link}` is read here (below). `//` and `/* *\/`
+ * renderer can ever reach it — the same reason `{@link}` is read here (below). `@hidden`'s text (#1246)
+ * is read, but only into its own field: it is the author's reason for withholding a field, and like
+ * `@privateRemarks` it is published nowhere. `//` and `/* *\/`
  * comments are private by construction: the compiler attaches no JSDoc for them.
  *
  * `{@link Foo.bar}` is RESOLVED here, by the compiler, into a `DocLink` encoded in the prose (#1284):
@@ -82,6 +90,14 @@ export class JsDoc {
          * same thing, and #984 deleted it.
          */
         readonly mcpHeader: string | undefined,
+        /**
+         * True when the block carries the `@hidden` tag (#1246). Only a FIELD's is read into the
+         * model (`DocumentedField.hidden`); the tag and its text are, like every other tag, never part
+         * of {@link description}, so the reason an author gives cannot leak into a published document.
+         */
+        readonly hidden: boolean,
+        /** The `@hidden` tag's text, trimmed; undefined when the tag has none or is absent. */
+        readonly hiddenReason: string | undefined,
     ) {}
 
     /** Read the JSDoc attached to one declaration, resolving every `{@link}` with `links`. */
@@ -95,6 +111,8 @@ export class JsDoc {
         let format: string | undefined;
         let mcp: string | undefined;
         let mcpHeader: string | undefined;
+        let hidden = false;
+        let hiddenReason: string | undefined;
 
         for (const block of blocks) {
             bodies.push(JsDoc.flatten(block.comment, links));
@@ -113,11 +131,23 @@ export class JsDoc {
                     mcp = text;
                 } else if (name === 'mcpHeader' && text !== '') {
                     mcpHeader = text;
+                } else if (name === HIDDEN_TAG) {
+                    hidden = true;
+                    hiddenReason = text === '' ? hiddenReason : text;
                 }
             }
         }
 
-        return new JsDoc(bodies.join('\n').trim(), summary, returns, format, mcp, mcpHeader);
+        return new JsDoc(
+            bodies.join('\n').trim(),
+            summary,
+            returns,
+            format,
+            mcp,
+            mcpHeader,
+            hidden,
+            hiddenReason,
+        );
     }
 
     /**

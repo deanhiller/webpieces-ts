@@ -17,7 +17,8 @@ export enum DocLinkKind {
      * A member — property or enum member — written BARE (`{@link storeId}`), as TypeScript resolves
      * it inside a member's own JSDoc: a sibling, or one its type inherits (#1308). Published as the
      * member's own name, with no type prefix, because the reader is already on that schema — the one
-     * the member is a field of, its inherited fields flattened in. Every output publishes it.
+     * the member is a field of, its inherited fields flattened in. Every output publishes it — except
+     * a customer document, when the member is a `@hidden` field it omits (#1246).
      */
     MEMBER = 'member',
     /** A method of an `@ApiPath` contract: a published operation. */
@@ -165,9 +166,6 @@ export class DocLinkText {
     ): string {
         return text.replace(ENCODED, (_all: string, body: string) => {
             const link = DocLinkText.decode(body);
-            if (link.kind === DocLinkKind.MEMBER) {
-                return DocLinkText.spell(link, link.member);
-            }
             const name =
                 link.kind === DocLinkKind.UNRESOLVED ? undefined : naming.publishedName(link);
             if (name === undefined) {
@@ -194,7 +192,11 @@ export class DocLinkText {
     private static why(link: DocLink, output: string): string {
         switch (link.kind) {
             case DocLinkKind.TYPE:
-                return `type ${link.ownerName} is not published in ${output}`;
+                return link.member === ''
+                    ? `type ${link.ownerName} is not published in ${output}`
+                    : `${link.ownerName}${link.member} is not published in ${output}`;
+            case DocLinkKind.MEMBER:
+                return `field ${link.ownerName}.${link.member} is not published in ${output}`;
             case DocLinkKind.OPERATION:
                 return `operation ${link.owner}.${link.ownerName} is not published in ${output}`;
             default:

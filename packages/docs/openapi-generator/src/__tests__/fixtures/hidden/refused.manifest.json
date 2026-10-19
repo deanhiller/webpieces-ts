@@ -1,0 +1,8 @@
+{
+    "title": "Refused hidden fields",
+    "summary": "A fixture generation refuses (#1246).",
+    "operationIds": "method",
+    "version": "1.0.0",
+    "apis": [{ "entry": "RefusedHiddenApi.ts", "tag": "Refused" }],
+    "securitySchemeNames": []
+}

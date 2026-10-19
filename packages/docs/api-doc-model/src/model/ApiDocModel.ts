@@ -108,6 +108,22 @@ export class DocumentedField {
          * syntax node, and a second reader deriving it would be a second answer to "where is this".
          */
         readonly location: string,
+        /**
+         * The `@hidden` JSDoc tag (#1246) — this field is withheld from the CUSTOMER document
+         * (`public-openapi.json` and its bundled sibling). The field-level twin of
+         * {@link DocumentedEndpoint.hidden}, and audienced exactly like it: it stays in the private
+         * document, and in the MCP document and tool catalogs, which keep hidden methods too.
+         *
+         * A documentation decision, never an access-control one: the server still accepts and returns
+         * the field. It is for a field that was NEVER published — hiding one a partner already reads
+         * is a removal from their point of view.
+         */
+        readonly hidden: boolean,
+        /**
+         * The `@hidden` tag's text — WHY it is withheld (`not announced yet; ships with …`).
+         * Undefined when the tag has no text. Never published anywhere: it is the author's note.
+         */
+        readonly hiddenReason: string | undefined,
     ) {}
 }
 

@@ -1,0 +1,12 @@
+{
+    "title": "Orders API",
+    "summary": "Fetch orders, and the order events we send.",
+    "operationIds": "method",
+    "version": "1.0.0",
+    "apisWhy": "Field-level @hidden withholds a field from the customer document only (#1246).",
+    "apis": [
+        { "entry": "OrdersApi.ts", "tag": "Orders" },
+        { "entry": "OrderEventsApi.ts", "tag": "Order events", "kind": "webhook" }
+    ],
+    "securitySchemeNames": []
+}

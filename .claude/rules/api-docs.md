@@ -214,6 +214,22 @@ checked by `@seriousme/openapi-schema-validator`.
 `InlinedWrappers.spec.ts` (openapi-generator) proves each rule; the cross-package case is in
 `ChainedComponents.spec.ts`.
 
+## Withholding ONE field: the `@hidden` JSDoc tag (#1246)
+
+The field-level twin of `@Endpoint(..., { hidden: true })`, with the same audience: the field is ABSENT
+from `public-openapi.json` and its bundled sibling (property, prose, `required` entry — wherever the
+schema is written, webhook payloads and inlined wrappers included; a type only a hidden field reaches is
+not defined), and KEPT in `full-private-openapi.json`, `mcp-openapi.json` and every MCP catalog. The
+tag's text is a reason for the author, read into `DocumentedField.hiddenReason` and published nowhere.
+
+Generation REFUSES a required hidden field, a type whose every field is hidden, a `{@link}` to a hidden
+field from prose the customer document carries, and a hidden field on a type the split customer
+document `$ref`s into another package's `components.openapi.json` (one document for every audience, so
+it cannot withhold one). **`@hidden` is only for a field that was NEVER published**: hiding one a partner
+already reads is a removal from their side, and nothing can detect it without a baseline. It is
+documentation, never access control — the server still accepts and returns the field (a runtime
+response filter is #1321's question). `HiddenFields.spec.ts` (openapi-generator) proves each rule.
+
 ## One short title per endpoint, from ONE source: `@summary` (#1296)
 
 Each level has three forms, and each form has exactly one source:
