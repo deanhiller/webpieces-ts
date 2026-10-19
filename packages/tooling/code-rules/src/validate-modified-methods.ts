@@ -22,7 +22,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as ts from 'typescript';
-import { writeTemplate, WEBPIECES_DISABLE, detectBase, getChangedFiles, getFileDiff, getChangedLineNumbers, findNewMethodSignaturesInDiff } from "@webpieces/rules-config";
+import { writeTemplate, WEBPIECES_DISABLE, detectBase, getChangedFiles, getFileDiff, getChangedLineNumbers, findNewMethodSignaturesInDiff, TurnOffRuleCure } from "@webpieces/rules-config";
 import { MaxMethodLinesConfig, MethodLimitMode } from "./configs/rule-configs";
 import { CodeValidator, ExecutorResult } from './code-validator';
 import { injectable, bindingScopeValues } from 'inversify';
@@ -348,6 +348,29 @@ function findViolations(
 }
 
 /**
+ * The guidance printed when `disableAllowed` is false: refactor, or a HUMAN turns the rule off — by
+ * BRANCH first, by a +1 hour epoch only as a last resort, because a future epoch is REPO-WIDE (#1318).
+ * The setting lives on the max-method-lines entry of its owner rule file, never in nx.json, and the
+ * epoch is in SECONDS.
+ */
+// webpieces-disable no-function-outside-class -- pure value builder, sibling of the file-scoped helpers here
+export function disableNotAllowedLines(turnOff: TurnOffRuleCure = new TurnOffRuleCure()): string[] {
+    const entry =
+        'the "max-method-lines" entry in its owner rule file (the @webpieces/code-rules entry of "rulePacks" in ' +
+        'webpieces.config.json, conventionally .webpieces-config/rules/code-rules.json)';
+    return [
+        '   This rule must be met and cannot be disabled since disableAllowed is false on the max-method-lines entry.',
+        '   You MUST refactor to reduce method size.',
+        '',
+        '   For a major refactor, a HUMAN may let methods expand while each PR shrinks them as it touches them.',
+        '   AI agents should NOT turn this rule off - ask a human to do it.',
+        `   Preferred: ${turnOff.byBranchText(entry)}`,
+        `   ${turnOff.byEpochText(entry)}`,
+        '',
+    ];
+}
+
+/**
  * Report violations to console
  */
 // webpieces-disable max-lines-new-methods -- Error output formatting with multiple message sections
@@ -389,14 +412,7 @@ function reportViolations(violations: MethodViolation[], limit: number, disableA
         console.error('');
     } else {
         console.error('   \u26a0\ufe0f  disableAllowed is false - disable comments are NOT allowed.');
-        console.error('   This rule must be met and cannot be disabled since nx.json disableAllowed is set to false.');
-        console.error('   You MUST refactor to reduce method size.');
-        console.error('');
-        console.error('   For a major refactor, a human can add "turnOffRuleUntilEpoch" to nx.json validate-code options.');
-        console.error('   This is an expiry timestamp (epoch ms) for when we start forcing everyone to meet size rules again.');
-        console.error('   Sometimes for speed, we allow methods to expand during a refactor and over time,');
-        console.error('   each PR reduces methods as they get touched.');
-        console.error('   AI agents should NOT add turnOffRuleUntilEpoch - ask a human to do it.');
+        for (const line of disableNotAllowedLines()) console.error(line);
         console.error('');
     }
 }

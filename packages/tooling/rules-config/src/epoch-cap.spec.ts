@@ -28,7 +28,7 @@ function validMatchRule(overrides: Record<string, unknown> = {}): Record<string,
 // turnOffRuleUntilEpoch is capped at MAX_TURN_OFF_EPOCH_DAYS days into the future. The epoch hatch is
 // REPO-WIDE while it lasts, so a long window silently shelters every unrelated change landing inside it —
 // a fleet repo was found with max-file-lines/max-method-lines off until 2026-10-01, 43 days out. Renewing
-// it WEEKLY is the intended workflow. The BRANCH hatch is deliberately uncapped (see the constant's docstring).
+// it WEEKLY was the old advice; #1318 replaced it with the branch hatch first, a +1 hour epoch last. The BRANCH hatch is deliberately uncapped (see the constant's docstring).
 // ---------------------------------------------------------------------------------------------------
 describe('turnOffRuleUntilEpoch is capped at one week out', () => {
     const DAY = 24 * 60 * 60;
@@ -68,9 +68,14 @@ describe('turnOffRuleUntilEpoch is capped at one week out', () => {
 
         expect(msg).toContain('the maximum is 7 days');
         expect(msg).toContain('CURE:');
-        expect(msg).toMatch(/re-set it WEEKLY/);
-        // The largest acceptable epoch AND its human date, so the fix is a copy-paste.
-        expect(msg).toMatch(/set it to at most \d{10} \(\d{4}-\d{2}-\d{2}\)/);
+        // #1318: the BRANCH hatch leads; the epoch is a +1 hour, explicitly repo-wide last resort.
+        expect(msg).toContain('"turnOffRuleWhileOnBranch": "<exact branch name>"');
+        expect(msg.indexOf('turnOffRuleWhileOnBranch')).toBeLessThan(msg.indexOf('now + 1 hour'));
+        expect(msg).toMatch(/now \+ 1 hour in epoch SECONDS \(right now that is \d{10}\)/);
+        expect(msg).toContain('REPO-WIDE for that hour');
+        expect(msg).not.toMatch(/WEEKLY|epoch ms|nx\.json/);
+        // The largest acceptable epoch AND its human date, so the bound is a copy-paste.
+        expect(msg).toMatch(/never past \d{10} \(\d{4}-\d{2}-\d{2}\)/);
     });
 
     it('REJECTS the 43-day window this cap exists to catch', () => {

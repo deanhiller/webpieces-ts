@@ -1,6 +1,6 @@
 import { execSync } from 'child_process';
 
-import { Option } from "@webpieces/rules-config";
+import { Option, TurnOffRuleCure } from "@webpieces/rules-config";
 import { BranchCreationGuardConfig } from "../../configs/rule-configs";
 import { BranchIdentity, DeletableBranch, MergedBranchesCache, MergedBranchesService, WorktreeService, readMainSyncStatus } from '@webpieces/repo-workflow-core';
 
@@ -10,6 +10,11 @@ import { BashRuleBase } from '@webpieces/hook-runtime';
 import { FixHint } from '@webpieces/hook-runtime';
 import { CapRemedies } from './cap-remedies';
 import { toError } from '@webpieces/tooling-common/to-error';
+
+/** Where this rule's hatches live, as a turn-off cure names it (#1318). */
+const BRANCH_CREATION_GUARD_ENTRY =
+    'the "branch-creation-guard" entry in its owner rule file (the @webpieces/agent-workflow-rules entry of "rulePacks" in ' +
+    'webpieces.config.json, conventionally .webpieces-config/rules/agent-workflow-rules.json)';
 
 // Defaults used when the rule has no explicit value in webpieces.config.json.
 // branchFormat is a human sentence telling the AI how to name a branch created off main; it is
@@ -183,7 +188,7 @@ export class BranchCreationGuardRule extends BashRuleBase<BranchCreationGuardCon
 
     // Mode-aware fix hints. Branches off main follow branchFormat — never the sub-branch
     // convention. The sub-branch affordance only appears under mode 'ON'; 'ON_NO_SUBBRANCHES'
-    // hard-blocks it and points instead at the turnOffRuleUntilEpoch escape hatch.
+    // hard-blocks it and points instead at the turnOffRuleWhileOnBranch escape hatch (epoch only as a +1 hour last resort).
     get fixHint(): FixHint {
         const remedies = new CapRemedies();
         if (this.worktreeCapCache) return remedies.worktreeCap();
@@ -193,7 +198,9 @@ export class BranchCreationGuardRule extends BashRuleBase<BranchCreationGuardCon
 
         const options = [new Option(create, true), new Option(`Name a branch off main per branch-creation-guard.branchFormat: ${this.branchFormat}`)];
         if (this.config.mode === 'ON_NO_SUBBRANCHES') {
-            options.push(new Option('Sub-branches (branching off another feature branch) are disabled. To temporarily allow one, set ' + 'branch-creation-guard.turnOffRuleUntilEpoch to a future epoch in webpieces.config.json'));
+            // #1318: the BRANCH hatch leads; a future epoch is REPO-WIDE, so it is a +1 hour last resort.
+            const turnOff = new TurnOffRuleCure();
+            options.push(new Option(`Sub-branches (branching off another feature branch) are disabled. To allow one stacked on the branch you are on (requires human approval): ${turnOff.byBranchText(BRANCH_CREATION_GUARD_ENTRY)}\n${turnOff.byEpochText(BRANCH_CREATION_GUARD_ENTRY)}`));
         } else {
             options.push(new Option(`If you truly need a stacked sub-branch (requires human approval), name it per branch-creation-guard.subBranchNaming: ${this.subBranchNaming}`));
         }
@@ -268,8 +275,9 @@ export class BranchCreationGuardRule extends BashRuleBase<BranchCreationGuardCon
                     `You are on '${currentBranch}', not main. Create the branch OFF origin/main instead of ` +
                         `stacking it on this branch: ${this.freshMainCommand(requestedName)} ` +
                         `(works here and inside a worktree). ${this.branchFormat}. ` +
-                        `You can temporarily turn this off if you truly need a sub-branch by setting ` +
-                        `branch-creation-guard.turnOffRuleUntilEpoch (a future epoch) in webpieces.config.json.`,
+                        `If you truly need a sub-branch (requires human approval), turn this rule off for '${currentBranch}' ` +
+                        `only with "turnOffRuleWhileOnBranch": "${currentBranch}" on ${BRANCH_CREATION_GUARD_ENTRY} — ` +
+                        `not with a future turnOffRuleUntilEpoch, which turns it off REPO-WIDE.`,
                 ),
             ];
         }
