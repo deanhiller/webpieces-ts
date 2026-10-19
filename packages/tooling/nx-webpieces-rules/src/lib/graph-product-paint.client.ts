@@ -7,8 +7,8 @@
  * legend (sorted-name) order at EVERY load, never persisted — and repaints from it without
  * regenerating anything: the page already carries each node's products and the ONE palette (#1244).
  *
- * Prepended to graph-visualizer.client.js like graph-mode-state.client.ts. Pure: no DOM, so a spec
- * runs it in a bare VM. The colors it writes are graph-products.ts's (a spec pins that they agree);
+ * Prepended to graph-visualizer.client.js like graph-mode-state.client.ts. The painter is pure (no
+ * DOM), so a spec runs it in a bare VM; WpProductToggles is the only class here that touches the page. The colors it writes are graph-products.ts's (a spec pins that they agree);
  * they are spelled here because this script is not a module and cannot import them.
  */
 
@@ -160,5 +160,44 @@ class WpProductPainter {
         if (paint.kind === WpProductPaintKind.OFF) return WpProductPainter.OFF_FILL;
         if (paint.kind === WpProductPaintKind.SHARED) return WpProductPainter.SHARED_FILL;
         return paint.colors.join(':');
+    }
+}
+
+/** The Product legend's checkboxes (#1319): one per product, in the drawer AND the popped-out legend. */
+class WpProductToggles {
+    /** The products the legend lists, in its order, once each. */
+    products(): string[] {
+        const order: string[] = [];
+        this.inputs().forEach((input: HTMLInputElement) => {
+            const product = input.dataset['wpProductToggle'] ?? '';
+            if (product !== '' && !order.includes(product)) order.push(product);
+        });
+        return order;
+    }
+
+    /** Each checkbox switches its product ON or OFF. */
+    wire(onChange: (product: string, on: boolean) => void): void {
+        this.inputs().forEach((input: HTMLInputElement) => {
+            input.addEventListener('change', () => onChange(input.dataset['wpProductToggle'] ?? '', input.checked));
+        });
+    }
+
+    /** Every copy of every checkbox shows the ON set. */
+    sync(on: ReadonlySet<string>): void {
+        this.inputs().forEach((input: HTMLInputElement) => {
+            input.checked = on.has(input.dataset['wpProductToggle'] ?? '');
+        });
+    }
+
+    /** A painter over the legend's products with their FIXED palette colors, for a snapshot of `on`. */
+    painter(palette: ProductColorJson[], on: ReadonlySet<string>): WpProductPainter {
+        const legend = this.products()
+            .map((product: string): ProductColorJson | undefined => palette.find((color: ProductColorJson): boolean => color.product === product))
+            .filter((color: ProductColorJson | undefined): color is ProductColorJson => color !== undefined);
+        return new WpProductPainter(legend, new Set(on));
+    }
+
+    private inputs(): NodeListOf<HTMLInputElement> {
+        return document.querySelectorAll<HTMLInputElement>('[data-wp-product-toggle]');
     }
 }
