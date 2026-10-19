@@ -30,6 +30,7 @@ import {
 import { NoUtilityTypesInApiLibConfig } from './configs/no-utility-types-config';
 import { RequiredTypeSuffixConfig } from './configs/required-type-suffix-config';
 import { FrameworkTsconfigConfig, FrameworkPackagesConfig } from './configs/tag-truth-configs';
+import { CatchMustPropagateConfig } from './configs/catch-must-propagate-config';
 
 /** The owner entry declares both its schema token and executable validator. */
 export type ConfigCtor = new () => BaseRuleConfig;
@@ -113,6 +114,12 @@ export const CODE_POLICIES: readonly CodePolicy[] = [
         async () =>
             (await import('./validate-no-unmanaged-exceptions')).NoUnmanagedExceptionsValidator,
         NoUnmanagedExceptionsConfig.SCHEMA,
+    ),
+    new CodePolicy(
+        CatchMustPropagateConfig,
+        'catch-must-propagate',
+        async () => (await import('./validate-catch-must-propagate')).CatchMustPropagateValidator,
+        CatchMustPropagateConfig.SCHEMA,
     ),
     new CodePolicy(
         AngularNoDirectApiInResolverConfig,

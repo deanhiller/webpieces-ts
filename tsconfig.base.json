@@ -67,7 +67,8 @@
             "@webpieces/webpieces-tooling": ["packages/tooling/webpieces-tooling/src/index.ts"],
             "@webpieces/rules-sdk": ["packages/tooling/rules-sdk/src/index.ts"],
             "@webpieces/tooling-testkit": ["packages/tooling/tooling-testkit/src/index.ts"],
-            "@webpieces/tooling-common/source-syntax": ["packages/tooling/tooling-common/src/source-syntax.ts"]
+            "@webpieces/tooling-common/source-syntax": ["packages/tooling/tooling-common/src/source-syntax.ts"],
+            "@webpieces/tooling-common/catch-propagation": ["packages/tooling/tooling-common/src/catch-propagation.ts"]
         }
     },
     "exclude": ["node_modules", "tmp"]

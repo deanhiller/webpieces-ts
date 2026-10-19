@@ -72,6 +72,7 @@ export default defineConfig({
             '@webpieces/rules-sdk': path.resolve(__dirname, 'packages/tooling/rules-sdk/src/index.ts'),
             '@webpieces/tooling-testkit': path.resolve(__dirname, 'packages/tooling/tooling-testkit/src/index.ts'),
             '@webpieces/tooling-common/source-syntax': path.resolve(__dirname, 'packages/tooling/tooling-common/src/source-syntax.ts'),
+            '@webpieces/tooling-common/catch-propagation': path.resolve(__dirname, 'packages/tooling/tooling-common/src/catch-propagation.ts'),
             '@webpieces/tooling-common': path.resolve(__dirname, 'packages/tooling/tooling-common/src/index.ts'),
             '@webpieces/repo-workflow-core': path.resolve(__dirname, 'packages/tooling/repo-workflow-core/src/index.ts'),
             '@webpieces/hook-runtime/harness-vocabulary': path.resolve(__dirname, 'packages/tooling/hook-runtime/src/harness-vocabulary.ts'),

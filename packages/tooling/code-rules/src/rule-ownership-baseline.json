@@ -626,6 +626,70 @@
       "turnOffRuleWhileOnBranch": null
     }
   },
+  "catch-must-propagate": {
+    "schema": {
+      "mode": {
+        "type": "string",
+        "enumValues": [
+          "OFF",
+          "NEW_AND_MODIFIED_CODE",
+          "NEW_AND_MODIFIED_FILES",
+          "MODIFIED_PROJECTS",
+          "RUN_EVERY_TIME"
+        ],
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "forwards": {
+        "type": "string[]",
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "turnOffRuleUntilEpoch": {
+        "type": "number",
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "turnOffRuleWhileOnBranch": {
+        "type": "string",
+        "optional": false,
+        "nullable": true,
+        "nonEmpty": false
+      },
+      "excludePaths": {
+        "type": "string[]",
+        "optional": true,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "reason": {
+        "type": "string",
+        "optional": true,
+        "nullable": false,
+        "nonEmpty": false
+      }
+    },
+    "optionalTuning": {},
+    "recommendedSeed": {
+      "mode": "NEW_AND_MODIFIED_CODE",
+      "turnOffRuleUntilEpoch": 0,
+      "turnOffRuleWhileOnBranch": null,
+      "forwards": [
+        "error",
+        "warn",
+        "info",
+        "debug",
+        "trace",
+        "reject",
+        "handleError",
+        "reportError",
+        "captureException"
+      ]
+    }
+  },
   "angular-no-direct-api-in-resolver": {
     "schema": {
       "mode": {

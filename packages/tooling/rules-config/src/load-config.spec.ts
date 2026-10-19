@@ -55,6 +55,7 @@ const CODE_RULE_NAMES = [
     'no-destructure',
     'no-unmanaged-exceptions',
     'catch-error-pattern',
+    'catch-must-propagate',
     'throw-cause-required',
     'angular-no-direct-api-in-resolver',
     'no-symbol-di-tokens',
@@ -101,6 +102,8 @@ const EXTRA_REQUIRED: Record<string, Record<string, unknown>> = {
     // Schema-required so unattended branch deletion is never a silent default — see rule-configs.ts.
     // Schema-required (#1017): both are BEHAVIOUR, so a config states them rather than inheriting one.
     'branch-creation-guard': { autoReapMergedBranches: false, subBranchNaming: 'feature/<t>/<d>' },
+    // Schema-required (#1313): which callees count as forwarding a caught error decides which catches pass.
+    'catch-must-propagate': { forwards: ['warn'] },
     // Schema-required (#1026): WHICH files are api contracts is the consumer's call.
     'no-utility-types-in-api-lib': { paths: ['libraries/apis/**'] },
     // Schema-required (#1037): which directories carry which suffixes is the consumer's call.

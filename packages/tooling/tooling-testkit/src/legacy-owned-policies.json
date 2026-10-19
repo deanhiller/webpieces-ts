@@ -260,6 +260,27 @@
         "nonEmpty": false
       }
     },
+    "catch-must-propagate": {
+      "mode": {
+        "type": "string",
+        "enumValues": [
+          "OFF",
+          "NEW_AND_MODIFIED_CODE",
+          "NEW_AND_MODIFIED_FILES",
+          "MODIFIED_PROJECTS",
+          "RUN_EVERY_TIME"
+        ],
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "forwards": {
+        "type": "string[]",
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      }
+    },
     "catch-error-pattern": {
       "mode": {
         "type": "string",
@@ -1234,6 +1255,7 @@
     },
     "catch-error-pattern": {},
     "no-unmanaged-exceptions": {},
+    "catch-must-propagate": {},
     "no-file-import-cycles": {},
     "runtime-architecture": {},
     "prisma-validate-dtos": {},
@@ -1351,6 +1373,22 @@
       "mode": "NEW_AND_MODIFIED_CODE",
       "turnOffRuleUntilEpoch": 0,
       "turnOffRuleWhileOnBranch": null
+    },
+    "catch-must-propagate": {
+      "mode": "NEW_AND_MODIFIED_CODE",
+      "turnOffRuleUntilEpoch": 0,
+      "turnOffRuleWhileOnBranch": null,
+      "forwards": [
+        "error",
+        "warn",
+        "info",
+        "debug",
+        "trace",
+        "reject",
+        "handleError",
+        "reportError",
+        "captureException"
+      ]
     },
     "catch-error-pattern": {
       "mode": "NEW_AND_MODIFIED_CODE",
@@ -1918,6 +1956,7 @@
       "no-destructure",
       "catch-error-pattern",
       "no-unmanaged-exceptions",
+      "catch-must-propagate",
       "angular-no-direct-api-in-resolver",
       "no-symbol-di-tokens",
       "no-client-creation-outside-server-or-client",

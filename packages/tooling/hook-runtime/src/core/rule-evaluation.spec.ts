@@ -8,7 +8,7 @@ import { ExcludePaths, RuleFailError, Option } from '@webpieces/rules-config';
 
 
 
-import { runRuleCheck } from '@webpieces/hook-runtime';
+import { runRuleCheck, ProjectionRefusal } from '@webpieces/hook-runtime';
 import { filterByExcludedPaths } from '@webpieces/hook-runtime';
 import { GovernedPath } from '@webpieces/hook-runtime';
 import { Rule, Violation, BashContext, BlockedResult, NormalizedToolInput, NormalizedEdit } from '@webpieces/hook-runtime';
@@ -143,6 +143,14 @@ describe('runRuleCheck (N-legs: a rule may return violations OR throw; never pro
         // rule's static FixHint, so a thrown cure and a declared cure read identically to the AI.
         expect(vs[0]?.message).toContain('Fix Option 1: (preferred) use unknown');
         expect(vs[0]?.message).toContain('Fix Option 2: add a type');
+    });
+
+    it('renders a thrown structured refusal (a ProposedFile projection error) as the deny it is, never "crashed"', () => {
+        const refusal = new ProjectionRefusal('src/a.ts', 'the text to replace does not match the current file.');
+        const vs = runRuleCheck(ruleThatThrows('catch-must-propagate', refusal), ctx);
+        expect(vs).toHaveLength(1);
+        expect(vs[0]?.message).toBe('Cannot judge the edit of src/a.ts: the text to replace does not match the current file.');
+        expect(vs[0]?.message).not.toContain('crashed');
     });
 
     it('converts a thrown plain Error (a bug) into a visible "crashed" Violation, not a propagated throw', () => {

@@ -73,7 +73,9 @@ contract drift. Organizationally this removes an entire class of cross-team coor
 ### 3. Explicit error, context, and logging discipline
 
 Errors chain their cause (`throw-cause-required`), catches follow one shape
-(`catch-error-pattern`), nothing throws un-modelled (`no-unmanaged-exceptions`). Request context is
+(`catch-error-pattern`), a caught error leaves its catch whole — rethrown, thrown as a cause, forwarded,
+returned or stored, never replaced by its message (`catch-must-propagate`, judged on the syntax tree by the
+Write/Edit guard and the build gate alike), nothing throws un-modelled (`no-unmanaged-exceptions`). Request context is
 typed at the key (`ContextKey<V>`), propagates across async/process/**queue** boundaries, and
 **deliberately excludes credentials** so a caller's token cannot ride to the next hop or into a
 Cloud Task. See [`architecture/context-propagation.md`](./architecture/context-propagation.md) and

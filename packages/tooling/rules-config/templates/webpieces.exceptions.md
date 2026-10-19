@@ -739,6 +739,53 @@ const config = JSON.parse(raw);
 The `cause` field is available on the original error object and will appear in stack traces
 and in `/debugLocal/{traceId}` responses.
 
+## Rule: catch-must-propagate
+
+`throw-cause-required` only fires on a THROW inside a catch. A catch that copies `error.message` into a
+field, a variable or a return value, and lets the error go, throws nothing — so the cause disappears and
+a later, generic error says nothing of why. `catch-must-propagate` judges the catch itself: the caught
+error must leave it WHOLE.
+
+### BAD (triggers violation)
+```typescript
+} catch (err: unknown) {
+  const error = toError(err);
+  this.diagnostic = error.message;   // ← only the text survives
+}
+
+} catch {                            // ← no binding: the error is dropped
+  return undefined;
+}
+```
+
+### GOOD — any one of these, with the error whole
+```typescript
+} catch (err: unknown) {
+  const error = toError(err);
+  throw new Error('Cannot decode the saved script', { cause: error });   // thrown as a cause
+}
+} catch (err: unknown) {
+  log.warn('decode failed', toError(err));   // a configured forwarder (catch-must-propagate.forwards)
+}
+} catch (err: unknown) {
+  this.lastError = toError(err);             // stored whole on a member for a later throw
+}
+} catch (err: unknown) {
+  return toError(err);                       // returned whole to a caller that throws it
+}
+```
+
+Only `err.message`, `String(err)`, `JSON.stringify(err)`, a template or `+` does NOT count. A helper
+the error is passed to (`report(err)`) counts only once its name is listed in the rule's `forwards`.
+
+If dropping the error is genuinely correct (an EXPECTED condition, not a defect), say why, per site, on
+the catch's line or the line above it — a reason of at least 20 characters is required:
+
+```typescript
+// webpieces-disable catch-must-propagate -- a missing file is the expected first-run state
+} catch {
+```
+
 ## Summary
 
 **The webpieces philosophy**: Errors should bubble to the global handler where they are logged with traceId and stored for debugging. Local try-catch blocks break this architecture and create blind spots in production.

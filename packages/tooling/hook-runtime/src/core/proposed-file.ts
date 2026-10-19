@@ -21,6 +21,22 @@ export class ProposedContent {
     }
 }
 
+/**
+ * The proposed file cannot be projected from this edit: its context is stale, ambiguous or empty, so no
+ * rule may judge guessed content. A structured refusal, not a rule bug — `runRuleCheck` renders it as the
+ * deny it is (never "Rule … crashed"). Worded for every harness: Claude Code, Codex and openclaw each name
+ * the edit's fields differently, so the cure names the INTENT, never a tool's parameter.
+ */
+export class ProjectionRefusal extends InformAiError {
+    readonly filePath: string;
+
+    constructor(filePath: string, reason: string) {
+        super(`Cannot judge the edit of ${filePath}: ${reason}`);
+        this.name = 'ProjectionRefusal';
+        this.filePath = filePath;
+    }
+}
+
 /** Lazily projects an operation in memory; existing non-syntax rules need not read the file. */
 export class ProposedFile {
     private content: ProposedContent | null = null;
@@ -38,14 +54,14 @@ export class ProposedFile {
         let text = original;
         let changes: ChangedRange[] = [];
         for (const edit of this.input.edits) {
-            if (!edit.oldString) throw new InformAiError(`Cannot project edit of ${this.input.filePath}: old_string is empty. Use Write for a complete file.`);
+            if (!edit.oldString) throw new ProjectionRefusal(this.input.filePath, 'the edit names no existing text to replace, so there is nothing to locate. Write the complete file in one whole-file write instead, or base the edit on text the file already contains.');
             let offset = 0;
             let count = 0;
             while (true) {
                 const start = text.indexOf(edit.oldString, offset);
                 if (start < 0) break;
                 if (!edit.replaceAll && text.indexOf(edit.oldString, start + edit.oldString.length) >= 0)
-                    throw new InformAiError(`Cannot project edit of ${this.input.filePath}: old_string matches multiple locations. Supply unique context or replace_all.`);
+                    throw new ProjectionRefusal(this.input.filePath, 'the text to replace matches multiple locations, so the edit is ambiguous. Include enough surrounding lines that it matches exactly once, or make it an edit that replaces every occurrence.');
                 const end = start + edit.oldString.length;
                 if (edit.oldString === edit.newString) {
                     count++;
@@ -68,7 +84,7 @@ export class ProposedFile {
                 offset = start + edit.newString.length;
                 if (!edit.replaceAll) break;
             }
-            if (count === 0) throw new InformAiError(`Cannot project edit of ${this.input.filePath}: old_string does not match the current file. Read the file and retry with current context.`);
+            if (count === 0) throw new ProjectionRefusal(this.input.filePath, 'the text to replace does not match the current file. Read the file again and base the edit on its current content.');
         }
         this.content = new ProposedContent(original, text, text === original ? [] : changes);
         return this.content;

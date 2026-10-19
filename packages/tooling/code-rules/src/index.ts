@@ -79,5 +79,7 @@ export { DEFAULT_TEMPLATE_DIRS, DEFAULT_BANNED_STATE_PATH_PREFIXES, NoStatePaths
 export { NoInlineImportInApiLibConfig, OneEnumSpellingInApiLibConfig } from './configs/api-lib-spelling-configs';
 export { NoUtilityTypesInApiLibConfig } from './configs/no-utility-types-config';
 export { RequiredTypeSuffixEntry, RequiredTypeSuffixConfig } from './configs/required-type-suffix-config';
+export { CatchMustPropagateConfig } from './configs/catch-must-propagate-config';
+export { CatchMustPropagateValidator, LocatedCatchFinding } from './validate-catch-must-propagate';
 export { PROJECT_SCAN_MODES, FrameworkTsconfigConfig, FrameworkPackagesEntry, FrameworkPackagesConfig } from './configs/tag-truth-configs';
 export type { ProjectScanMode } from './configs/tag-truth-configs';

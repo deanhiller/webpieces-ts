@@ -9,7 +9,8 @@
         "./package.json": "./package.json",
         "./to-error": "./src/to-error.js",
         "./repository-layout": "./src/repository-layout.js",
-        "./source-syntax": "./src/source-syntax.js"
+        "./source-syntax": "./src/source-syntax.js",
+        "./catch-propagation": "./src/catch-propagation.js"
     },
     "files": [
         "src/**/*"

@@ -73,6 +73,12 @@
             "turnOffRuleUntilEpoch": 0,
             "turnOffRuleWhileOnBranch": null
         },
+        "catch-must-propagate": {
+            "mode": "NEW_AND_MODIFIED_CODE",
+            "forwards": ["error", "warn", "info", "debug", "trace", "reject", "handleError", "reportError", "captureException"],
+            "turnOffRuleUntilEpoch": 0,
+            "turnOffRuleWhileOnBranch": null
+        },
         "throw-cause-required": {
             "mode": "NEW_AND_MODIFIED_CODE",
             "disableAllowed": false,

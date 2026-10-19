@@ -23,6 +23,11 @@ Build-time code validation gate. Standalone (no Nx dependency) CLI that validate
   governs a file, so a narrower entry is listed first and `exempt: true` explicitly skips its suffix policy): every unexempt
   exported interface / class / enum / type alias must end in an allowed suffix, and the failure prints
   the rename.
+- `catch-must-propagate` (#1313): a caught error must leave its catch whole (rethrown, thrown as a cause,
+  passed to a configured `forwards` callee, returned, or stored on a member). This pack OWNS the rule (its
+  schema — required `mode` and `forwards` — seed and help) and runs the gate half; the syntax-only judgement
+  is `CatchPropagationAnalyzer` in `@webpieces/tooling-common/catch-propagation`, the same module the
+  `@webpieces/ai-hook-rules` guard half calls, so both runners report the same catches at the same lines.
 - The two PROJECT rules that make a `framework:` tag true (#1064), sharing `ProjectScanTargets`
   (MODIFIED_PROJECTS / RUN_EVERY_TIME, `--projects`-restrictable): `framework-tsconfig` checks a
   library's `tsconfig.lib.json` (with its `extends` chain) resolves to the `lib` / `types` its framework
