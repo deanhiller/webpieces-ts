@@ -237,7 +237,7 @@ export function runRead(
     );
     if (rules.length === 0) return null;
 
-    const ctx = new FileContext('Read', filePath, relativePath, workspaceRoot, 0, 0, 0, 0);
+    const ctx = new FileContext('Read', filePath, relativePath, workspaceRoot, null, 0, 0, 0, 0);
     const groups = runFileRules(rules, ctx);
     if (groups.length === 0) return null;
 

@@ -6,6 +6,7 @@ import { stripTsNoise } from './strip-ts-noise';
 import { createIsLineDisabled } from './disable-directives';
 import { EditContext, FileContext, BashContext } from './types';
 import { ToolKind, NormalizedToolInput, NormalizedEdit } from '../protocol';
+import { ProposedFile } from './proposed-file';
 
 export class BuiltContexts {
     readonly fileContext: FileContext;
@@ -46,6 +47,7 @@ export function buildContexts(
         filePath,
         relativePath,
         workspaceRoot,
+        new ProposedFile(toolKind, input),
         currentFileLines,
         linesAdded,
         linesRemoved,

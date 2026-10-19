@@ -110,7 +110,7 @@ describe('runBash / run — an unloadable config blocks work but never read-only
     it('still blocks WRITES to other files while the config is invalid', () => {
         breakConfig();
         const input = new NormalizedToolInput(nodePath.join(root, 'src', 'x.ts'), [
-            new NormalizedEdit('', 'const a = 1;'),
+            new NormalizedEdit('', 'const a = 1;', false),
         ]);
         expect(() => run('Write', input, root, 'guards')).toThrow('could not be parsed as JSON');
     });
@@ -119,7 +119,7 @@ describe('runBash / run — an unloadable config blocks work but never read-only
         breakConfig();
         expect(runRead(nodePath.join(root, 'webpieces.config.json'), root, 'guards')).toBeNull();
         const input = new NormalizedToolInput(nodePath.join(root, 'webpieces.config.json'), [
-            new NormalizedEdit('', '{}'),
+            new NormalizedEdit('', '{}', false),
         ]);
         expect(run('Write', input, root, 'guards')).toBeNull();
     });
@@ -128,7 +128,7 @@ describe('runBash / run — an unloadable config blocks work but never read-only
         writeGuardConfig(root, []);
         const owner = nodePath.join(root, '.webpieces-config/rules/fixture-0.json');
         fs.writeFileSync(owner, '{');
-        const repair = new NormalizedToolInput(owner, [new NormalizedEdit('', '{}')]);
+        const repair = new NormalizedToolInput(owner, [new NormalizedEdit('', '{}', false)]);
         expect(run('Write', repair, root, 'guards')).toBeNull();
         expect(runRead(owner, root, 'guards')).toBeNull();
         expect(
@@ -143,7 +143,7 @@ describe('runBash / run — an unloadable config blocks work but never read-only
                 run(
                     'Write',
                     new NormalizedToolInput(nodePath.join(root, filename), [
-                        new NormalizedEdit('', '{}'),
+                        new NormalizedEdit('', '{}', false),
                     ]),
                     root,
                     'guards',
@@ -152,7 +152,7 @@ describe('runBash / run — an unloadable config blocks work but never read-only
         }
         const unrelated = new NormalizedToolInput(
             nodePath.join(root, 'src/undeclared.json'),
-            [new NormalizedEdit('', '{}')],
+            [new NormalizedEdit('', '{}', false)],
         );
         expect(() => run('Write', unrelated, root, 'guards')).toThrow(
             'Cannot parse rule-pack config',
