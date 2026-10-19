@@ -15,7 +15,7 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
-import { writeTemplate, hasDisable, detectBase, getChangedFiles, isPathExcluded, GENERATED_CODE_PATHS, RuleFailError, Option } from "@webpieces/rules-config";
+import { writeTemplate, hasDisable, detectBase, getChangedFiles, isPathExcluded, GENERATED_CODE_PATHS, RuleFailError, Option, TurnOffRuleCure } from "@webpieces/rules-config";
 import { MaxFileLinesConfig } from "./configs/rule-configs";
 import { FileLimitMode } from '@webpieces/rules-sdk';
 import { CodeValidator, ExecutorResult } from './code-validator';
@@ -228,7 +228,11 @@ export function violationsError(violations: readonly FileViolation[], limit: num
     if (disableAllowed) {
         cures.push(new Option(`Put this on the FIRST 5 lines of the file (it expires in 1 month): // webpieces-disable max-lines-modified-files ${getTodayDateString()} -- [your reason]`));
     } else {
-        cures.push(new Option('For a major refactor a HUMAN — never an AI agent — can set "turnOffRuleUntilEpoch" (an expiry, in epoch seconds) on the max-file-lines entry in webpieces.config.json, so files may expand during the refactor and each PR shrinks them as it touches them.'));
+        // A HUMAN decision (never an AI agent's), and the branch hatch LEADS: a future epoch is REPO-WIDE (#1318).
+        const entry = 'the "max-file-lines" entry in its owner rule file (the @webpieces/code-rules entry of "rulePacks" in webpieces.config.json, conventionally .webpieces-config/rules/code-rules.json)';
+        const turnOff = new TurnOffRuleCure();
+        cures.push(new Option(`For a major refactor a HUMAN — never an AI agent — may let files expand while each PR shrinks them as it touches them (e.g. porting legacy code into the repo). ${turnOff.byBranchText(entry)}`));
+        cures.push(new Option(`(HUMAN only) ${turnOff.byEpochText(entry)}`));
     }
 
     return new RuleFailError('max-file-lines', message, undefined, undefined, cures);

@@ -2,7 +2,7 @@
 
 ## Requirement
 
-**~99% of the time**, you can stay under the `limit` from nx.json
+**~99% of the time**, you can stay under the `limit` on the max-method-lines entry of your rule config
 by extracting logical units into well-named methods.
 Nearly all software can be written with methods under this size.
 Take the extra time to refactor - it's worth it for long-term maintainability.
@@ -26,8 +26,8 @@ Methods under reasonable limits are:
 ## Gradual Cleanup Strategy
 
 This codebase uses a gradual cleanup approach:
-- **New methods**: Must be under `limit` from nx.json
-- **Modified methods**: Must be under `limit` from nx.json
+- **New methods**: Must be under `limit` (the max-method-lines entry of your rule config)
+- **Modified methods**: Must be under `limit` (the max-method-lines entry of your rule config)
 - **Untouched methods**: No limit (legacy code is allowed until touched)
 
 ## How to Refactor

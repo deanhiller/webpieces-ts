@@ -1,3 +1,5 @@
+import { TurnOffRuleCure } from './turn-off-rule-cure';
+
 export const MAX_TURN_OFF_EPOCH_DAYS = 7;
 
 /** Generic consumer-field constraints are shared by owner files and client-authored match rules. */
@@ -7,13 +9,13 @@ export class PolicyFieldConstraints {
         if (value <= maxEpoch) return null;
         const daysOut = Math.round((value - Date.now() / 1000) / (24 * 60 * 60));
         const maxDate = new Date(maxEpoch * 1000).toISOString().split('T')[0];
+        const cure = new TurnOffRuleCure();
         return (
             `${label} "turnOffRuleUntilEpoch": ${value} is ${daysOut} days in the future — the maximum is ` +
             `${MAX_TURN_OFF_EPOCH_DAYS} days. A rule switched off for longer than that is off for work nobody ` +
             `had in mind when it was written, because this hatch is REPO-WIDE while it lasts.\n` +
-            `  CURE: set it to at most ${maxEpoch} (${maxDate}), then re-set it WEEKLY for as long as you ` +
-            `still need it — that renewal is the intended workflow, not a workaround. If the rule is off for ` +
-            `ONE branch's work, use "turnOffRuleWhileOnBranch": "<exact branch name>" instead; that one has no cap.`
+            `  CURE: ${cure.byBranchText(`the ${label} entry`)} That hatch has no cap.\n` +
+            `  ${cure.byEpochText(`the ${label} entry`)} Never past ${maxEpoch} (${maxDate}).`
         );
     }
 

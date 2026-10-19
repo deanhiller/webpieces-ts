@@ -11,6 +11,7 @@ import * as fs from 'fs';
 import { InformAiError } from '@webpieces/tooling-common';
 import { RuleFailError } from './rule-fail-error';
 import { Option } from './fix-option';
+import { TurnOffRuleCure } from './turn-off-rule-cure';
 import { toError } from '@webpieces/tooling-common/to-error';
 
 // Universal "should this rule be skipped right now?" logic, shared by code-rules,
@@ -129,7 +130,8 @@ function readHeadRepoFullName(branchName: string): string | null {
             undefined,
             [
                 new Option(
-                    'Use turnOffRuleUntilEpoch instead — it is TIME based and needs no event file.',
+                    'Use turnOffRuleUntilEpoch instead — it is TIME based and needs no event file. ' +
+                        new TurnOffRuleCure().byEpochText("the same rule's entry"),
                     true,
                 ),
                 new Option(
@@ -169,8 +171,9 @@ function forkRefusal(branchName: string, what: string): RuleFailError {
         [
             new Option(
                 'If the rule must be off for outside contributions too, use turnOffRuleUntilEpoch — it is TIME ' +
-                    'based, so it cannot be self-granted by naming a branch. Keep the date short: it is repo-wide ' +
-                    'while it lasts, so it also shelters unrelated work landing in the same window.',
+                    'based, so it cannot be self-granted by naming a branch. It also shelters unrelated work ' +
+                    'landing in the same window, so keep it to one hour. ' +
+                    new TurnOffRuleCure().byEpochText("the same rule's entry"),
                 true,
             ),
             new Option(

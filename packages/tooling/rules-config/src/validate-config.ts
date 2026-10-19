@@ -27,9 +27,9 @@ import { DEFAULT_MATCH_RULES } from './match-rules-config';
 import { toError } from '@webpieces/tooling-common/to-error';
 
 /**
- * The longest a `turnOffRuleUntilEpoch` may reach into the future: ONE WEEK. Poke it again next week to
- * extend — that weekly re-set IS the intended workflow, not a workaround: it is what makes a rule that is
- * off on purpose stay a decision somebody keeps making, instead of one nobody remembers.
+ * The longest a `turnOffRuleUntilEpoch` may reach into the future: ONE WEEK — a hard ceiling, not the
+ * advice. The advice every cure gives (#1318) is the BRANCH hatch first, and the epoch only as a last
+ * resort set to now + 1 hour, because it is REPO-WIDE while it lasts (see TurnOffRuleCure).
  *
  * DELIBERATELY ASYMMETRIC with turnOffRuleWhileOnBranch, which has NO cap and must not get one. The epoch
  * hatch is REPO-WIDE while it lasts, so a long window shelters every unrelated change that lands inside it

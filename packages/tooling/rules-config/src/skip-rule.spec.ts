@@ -163,6 +163,12 @@ describe('shouldSkipRule refuses to honor a hatch on a fork pull request', () =>
         // The framework, not this rule, decides which cure leads — so the flag must survive the throw.
         expect(thrown?.fixOptions[0]?.preferred).toBe(true);
         expect(thrown?.aiMessage).not.toMatch(/\n\s*[12]\./);
+        // #1318: the epoch cure is a concrete +1 hour in epoch SECONDS and says it is REPO-WIDE.
+        const epochCure = thrown?.fixOptions[0]?.text ?? '';
+        expect(epochCure).toContain('now + 1 hour, in epoch SECONDS');
+        expect(epochCure).toContain('REPO-WIDE');
+        expect(epochCure).not.toContain('Keep the date short');
+        expect(epochCure).not.toMatch(/epoch ms/i);
     });
 
     it('honors the hatch on a pull_request from a branch of THIS repo', () => {

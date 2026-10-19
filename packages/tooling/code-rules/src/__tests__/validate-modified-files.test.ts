@@ -112,6 +112,24 @@ describe('violationsError — one thrown failure value, cures as Option[]', () =
         expect(err.humanMessage).not.toContain('Fix Option');
     });
 
+    // #1318: a future epoch is REPO-WIDE (shouldSkipRule ORs the hatches), so the BRANCH hatch leads and
+    // the epoch is a +1 hour last resort that says so.
+    it('leads with turnOffRuleWhileOnBranch and offers the epoch only as a +1 hour, repo-wide last resort', () => {
+        const err = violationsError(findViolations(root, [HAND_WRITTEN], LIMIT, false, GENERATED_CODE_PATHS), LIMIT, false);
+        const texts = err.fixOptions.map((o: { text: string }): string => o.text);
+        const branchIdx = texts.findIndex((t: string): boolean => t.includes('"turnOffRuleWhileOnBranch": "<exact branch name>"'));
+        const epochIdx = texts.findIndex((t: string): boolean => t.includes('LAST RESORT'));
+        expect(branchIdx).toBeGreaterThanOrEqual(0);
+        expect(texts[branchIdx]).toContain('"turnOffRuleUntilEpoch": 0');
+        expect(epochIdx).toBeGreaterThan(branchIdx);
+        expect(texts[epochIdx]).toContain('now + 1 hour, in epoch SECONDS');
+        expect(texts[epochIdx]).toContain('REPO-WIDE');
+        expect(texts[epochIdx]).toContain('.webpieces-config/rules/code-rules.json');
+        const all = texts.join('\n');
+        expect(all).not.toContain('nx.json');
+        expect(all).not.toMatch(/epoch ms/i);
+    });
+
     it('offers the dated inline disable instead when disableAllowed is true', () => {
         const err = violationsError(findViolations(root, [HAND_WRITTEN], LIMIT, true, GENERATED_CODE_PATHS), LIMIT, true);
         expect(err.fixOptions.some((o: { text: string }): boolean => o.text.includes('webpieces-disable max-lines-modified-files'))).toBe(true);

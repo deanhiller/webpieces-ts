@@ -34,7 +34,7 @@
  */
 
 import type { ExecutorContext } from '@nx/devkit';
-import { loadAndValidate, shouldSkipRule } from '@webpieces/rules-config';
+import { loadAndValidate, shouldSkipRule, TurnOffRuleCure, formatFixOptions } from '@webpieces/rules-config';
 import * as fs from 'fs';
 import * as path from 'path';
 import { toError } from '../../toError';
@@ -338,11 +338,13 @@ function reportCycles(projectName: string, cycles: string[][]): void {
     });
     console.error('\nTo fix, break the cycle (extract a shared module, or use an interface).');
     console.error('To exempt a path (generated code, a deliberate bidirectional model), add a pattern to');
-    console.error(`"${RULE_NAME}".excludeRegExp in webpieces.config.json. Patterns match paths RELATIVE`);
+    console.error(`"${RULE_NAME}".excludeRegExp in its owner rule file. Patterns match paths RELATIVE`);
     console.error('TO THE PROJECT, e.g. "^src/generated/" or "^src/modules/(item|category)/".');
-    console.error('To time-box a known cycle, a human can set "turnOffRuleUntilEpoch"');
-    console.error(`(epoch seconds) on the "${RULE_NAME}" rule in webpieces.config.json,`);
-    console.error(`or "turnOffRuleWhileOnBranch" (a branch name) to shelter one refactor branch.`);
+    // #1318: the BRANCH hatch leads; a future epoch is REPO-WIDE, so it is only a +1 hour last resort.
+    const entry = `the "${RULE_NAME}" entry in its owner rule file (the @webpieces/nx-webpieces-rules entry of "rulePacks" in webpieces.config.json, conventionally .webpieces-config/rules/nx-webpieces-rules.json)`;
+    const turnOff = new TurnOffRuleCure();
+    console.error('To shelter a known cycle during one refactor, a human can turn the rule off:');
+    for (const line of formatFixOptions(turnOff.options(entry))) console.error(line);
     console.error(`To turn the gate off entirely, set "${RULE_NAME}".mode to "OFF".\n`);
 }
 

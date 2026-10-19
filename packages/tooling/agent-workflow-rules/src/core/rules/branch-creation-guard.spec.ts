@@ -155,14 +155,18 @@ describe('branch-creation-guard', () => {
         expect(violations[0].message).toContain('subBranchNaming');
     });
 
-    it('mode ON_NO_SUBBRANCHES: off a feature branch, blocks with strict recovery + epoch escape, no sub-branch affordance', () => {
+    it('mode ON_NO_SUBBRANCHES: off a feature branch, blocks with strict recovery + branch escape, no sub-branch affordance', () => {
         git.branch = 'dean/existing';
         const violations = rule('ON_NO_SUBBRANCHES').check(ctx('git checkout -b dean/another'));
         expect(violations.length).toBe(1);
         const msg = violations[0].message;
         expect(msg).toContain('git fetch origin main && git checkout -b dean/another origin/main');
         expect(msg).toContain('instead of stacking it on this branch');
-        expect(msg).toContain('turnOffRuleUntilEpoch');
+        // #1318: the escape is the BRANCH hatch for the exact branch, never a repo-wide future epoch.
+        expect(msg).toContain('"turnOffRuleWhileOnBranch": "dean/existing"');
+        expect(msg).toContain('REPO-WIDE');
+        expect(msg).toContain('.webpieces-config/rules/agent-workflow-rules.json');
+        expect(msg).not.toContain('a future epoch');
         // The strict mode must NOT dangle the sub-branch naming convention.
         expect(msg).not.toContain('subBranchNaming');
     });
@@ -200,11 +204,15 @@ describe('branch-creation-guard', () => {
         expect(violations[0].message).toContain(format);
     });
 
-    it('fixHint is mode-aware: ON_NO_SUBBRANCHES points to the epoch escape; ON points to subBranchNaming', () => {
+    it('fixHint is mode-aware: ON_NO_SUBBRANCHES points to the branch escape (epoch a +1 hour last resort); ON points to subBranchNaming', () => {
         const flatten = (fh: { mainMessage: string; fixOptions: readonly { text: string }[] }): string => [fh.mainMessage, ...fh.fixOptions.map((o: { text: string }): string => o.text)].join('\n');
 
         const strict = flatten(rule('ON_NO_SUBBRANCHES').fixHint);
-        expect(strict).toContain('turnOffRuleUntilEpoch');
+        expect(strict).toContain('"turnOffRuleWhileOnBranch": "<exact branch name>"');
+        expect(strict.indexOf('turnOffRuleWhileOnBranch')).toBeLessThan(strict.indexOf('LAST RESORT'));
+        expect(strict).toContain('now + 1 hour, in epoch SECONDS');
+        expect(strict).toContain('REPO-WIDE');
+        expect(strict).not.toContain('a future epoch');
         expect(strict).not.toContain('subBranchNaming');
 
         const normal = flatten(rule('ON').fixHint);
