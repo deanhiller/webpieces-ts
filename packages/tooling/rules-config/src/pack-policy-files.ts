@@ -23,7 +23,7 @@ export class PackPolicyDeclaration {
     }
 
     moduleName(): string {
-        return /\.(?:cjs|mjs|js)$/.test(this.package) ? this.package : `${this.package}/rule-pack`;
+        return /\.(?:cjs|mjs|js|cts|ts)$/.test(this.package) ? this.package : `${this.package}/rule-pack`;
     }
 }
 

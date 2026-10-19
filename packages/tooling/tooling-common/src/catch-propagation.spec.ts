@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import * as ts from 'typescript';
-import { CatchFinding, CatchPropagationAnalyzer, MIN_DISABLE_REASON } from './catch-propagation';
+import { CatchFinding, CatchPropagationAnalyzer } from './catch-propagation';
+import { MIN_DISABLE_REASON } from './source-syntax';
 
 const FORWARDS = ['error', 'warn', 'reject', 'logger.capture'];
 

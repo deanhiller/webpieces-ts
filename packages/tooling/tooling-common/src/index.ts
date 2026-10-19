@@ -6,3 +6,4 @@ export * from './claude-config-dir';
 export * from './state-path-constants';
 
 export * from './repository-layout';
+export * from './typescript-require';

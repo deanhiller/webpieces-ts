@@ -1,4 +1,5 @@
 import * as ts from 'typescript';
+import { MIN_DISABLE_REASON, SiteDisables } from './source-syntax';
 
 /**
  * `catch-must-propagate` (#1313): a caught error must PROPAGATE — never be replaced by its message.
@@ -39,16 +40,8 @@ export class CatchFinding {
     ) {}
 }
 
-/** One `catch-must-propagate` disable directive's target line and written reason. Data-only. */
-class DisableDirective {
-    constructor(readonly reason: string) {}
-}
-
 /** The rule id, shared by both runners and every message. */
 export const CATCH_MUST_PROPAGATE = 'catch-must-propagate';
-
-/** A disable's reason must say WHY this one site may drop its error. */
-export const MIN_DISABLE_REASON = 20;
 
 /** One cure, worded once for both runners; each renders it as its own `Option`. Data-only. */
 export class CatchCure {
@@ -68,8 +61,6 @@ export const CATCH_MUST_PROPAGATE_CURES: readonly CatchCure[] = [
 export const CATCH_MUST_PROPAGATE_DISABLE =
     `// webpieces-disable ${CATCH_MUST_PROPAGATE} -- <why dropping this error is correct, at least ${MIN_DISABLE_REASON} characters>`;
 
-const DIRECTIVE = /\/\/\s*webpieces-disable\s+([\w-]+(?:\s*,\s*[\w-]+)*)(?:\s*--\s*(.*?))?\s*$/;
-const DIRECTIVE_LINE = /^\/\/\s*webpieces-disable\b/;
 const TEST_PATH = /(\.(spec|test)\.[cm]?tsx?$)|(^|\/)__tests__\//;
 const SOURCE_PATH = /\.[cm]?tsx?$/;
 
@@ -117,7 +108,7 @@ export class CatchPropagationAnalyzer {
      */
     analyze(source: ts.SourceFile, changedLines?: ReadonlySet<number>): CatchFinding[] {
         const lines = source.text.split('\n');
-        const directives = this.directives(lines);
+        const directives = new SiteDisables(source.text, CATCH_MUST_PROPAGATE);
         const findings: CatchFinding[] = [];
         const visit = (node: ts.Node): void => {
             const finding = this.judgeNode(source, lines, node);
@@ -138,36 +129,14 @@ export class CatchPropagationAnalyzer {
     }
 
     /** true = exempt; a finding = the disable is there but carries no usable reason; undefined = none. */
-    private exempted(directives: ReadonlyMap<number, DisableDirective>, finding: CatchFinding): true | CatchFinding | undefined {
-        const directive = directives.get(finding.line);
-        if (directive === undefined) return undefined;
-        if (directive.reason.length >= MIN_DISABLE_REASON) return true;
+    private exempted(directives: SiteDisables, finding: CatchFinding): true | CatchFinding | undefined {
+        const reason = directives.reasonAt(finding.line);
+        if (reason === undefined) return undefined;
+        if (reason.length >= MIN_DISABLE_REASON) return true;
         return new CatchFinding(finding.line, finding.endLine, finding.snippet,
             `${finding.message} The \`// webpieces-disable ${CATCH_MUST_PROPAGATE}\` aimed at it does not exempt it: ` +
                 `it needs a written reason after \` -- \` of at least ${MIN_DISABLE_REASON} characters, ` +
                 `the only record of why this one site may drop its error.`);
-    }
-
-    /** Disable target line → its directive, resolved exactly like every other webpieces-disable. */
-    private directives(lines: readonly string[]): Map<number, DisableDirective> {
-        const found = new Map<number, DisableDirective>();
-        lines.forEach((line: string, index: number) => {
-            const match = DIRECTIVE.exec(line);
-            if (!match) return;
-            const rules = (match[1] ?? '').split(',').map((rule: string) => rule.trim());
-            if (!rules.includes(CATCH_MUST_PROPAGATE)) return;
-            const target = line.slice(0, line.indexOf('//')).trim() !== '' ? index + 1 : this.nextCodeLine(lines, index);
-            if (target !== undefined) found.set(target, new DisableDirective((match[2] ?? '').trim()));
-        });
-        return found;
-    }
-
-    private nextCodeLine(lines: readonly string[], index: number): number | undefined {
-        for (let next = index + 1; next < lines.length; next++) {
-            const trimmed = (lines[next] ?? '').trim();
-            if (trimmed !== '' && !DIRECTIVE_LINE.test(trimmed)) return next + 1;
-        }
-        return undefined;
     }
 
     /** A finding when `node` is a catch clause or `.catch(callback)` that drops its error. */

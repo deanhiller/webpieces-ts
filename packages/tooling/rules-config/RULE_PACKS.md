@@ -20,7 +20,10 @@ Policy settings live in those files. The root keeps `commands`, `excludePaths`, 
 ```
 
 Choose the packs your repository uses; installed dependencies are never inferred as selected packs.
-Each package exports `rule-pack`. An explicit local JavaScript manifest module is also supported.
+Each package exports `rule-pack`. An explicit local manifest module (`.js`, `.cjs`, `.mjs`, or a `.ts` / `.cts`
+module transpiled in memory when it loads) is also supported. A repository's own rules are written as
+`LocalRule` classes and declared through one `LocalRulePack` module; see "Repo-local rules" in the
+`@webpieces/webpieces-tooling` README.
 A package declaration must agree with its manifest's owner name. Paths must stay inside the repository,
 including through symlinks, and each owner must have a distinct config file.
 

@@ -7,4 +7,7 @@ runners — the Write/Edit guard (`@webpieces/ai-hook-rules`) and the build gate
 `SourceSyntax` (`./source-syntax`) is the one TypeScript parse, and `CatchPropagationAnalyzer`
 (`./catch-propagation`, rule `catch-must-propagate`, #1313) is the first analyzer on it. They live here,
 below both packs, so one module parses and judges for both; each pack keeps the rule's config, scoping and
-rendering. Each sits behind its own subpath so the root entry never loads `typescript`.
+rendering. `SiteDisables` (`./source-syntax`) resolves one rule's per-site disables and their written reasons for
+the same analyzers. Each sits behind its own subpath so the root entry never loads `typescript`;
+`TypeScriptRequire` (root entry) loads a repo's own `.ts` rule-pack module and requires `typescript` only
+when it transpiles one.

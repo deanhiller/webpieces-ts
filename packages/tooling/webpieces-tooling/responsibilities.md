@@ -7,6 +7,10 @@ Thin installation umbrella for the complete webpieces toolchain and the single c
 - Workspace dependencies that ship every tooling package and existing public bin.
 - The OpenClaw adapter and metadata, composing source and workflow providers in their established order.
 - Small manifest, bin, publication-order, and composition checks.
+- The repo-local rule API (`./local-rules`, #1314): `LocalRule` and `LocalRulePack`, which compose ONE
+  syntax-only rule definition into both runners — a source-hook policy and a build policy. It lives here
+  because a consumer depends on this package alone, and composing hook-runtime with code-rules' scan
+  scope needs a package above both.
 
 ## Out of Scope
 
