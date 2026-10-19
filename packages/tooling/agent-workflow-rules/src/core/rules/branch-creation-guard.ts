@@ -182,6 +182,18 @@ export class BranchCreationGuardRule extends BashRuleBase<BranchCreationGuardCon
     }
 
     // The recovery command for "base this off fresh main", in the flavour of whatever was blocked.
+    // #1318: the escape is the BRANCH hatch for the exact branch, never a repo-wide future epoch.
+    private noSubBranchMessage(currentBranch: string, requestedName: string): string {
+        return (
+            `You are on '${currentBranch}', not main. Create the branch OFF origin/main instead of ` +
+            `stacking it on this branch: ${this.freshMainCommand(requestedName)} ` +
+            `(works here and inside a worktree). ${this.branchFormat}. ` +
+            `If you truly need a sub-branch (requires human approval), turn this rule off for '${currentBranch}' ` +
+            `only with "turnOffRuleWhileOnBranch": "${currentBranch}" on ${BRANCH_CREATION_GUARD_ENTRY} — ` +
+            `not with a future turnOffRuleUntilEpoch, which turns it off REPO-WIDE.`
+        );
+    }
+
     private freshMainCommand(name: string): string {
         return this.worktreeAdd ? `git fetch origin main && git worktree add ../${name.replace(/\//g, '-')} -b ${name} origin/main` : `git fetch origin main && git checkout -b ${name} origin/main`;
     }
@@ -268,18 +280,7 @@ export class BranchCreationGuardRule extends BashRuleBase<BranchCreationGuardCon
 
         // Not on main: creating this branch would stack it on a feature branch (a sub-branch).
         if (this.config.mode === 'ON_NO_SUBBRANCHES') {
-            return [
-                new V(
-                    1,
-                    truncate(ctx.command),
-                    `You are on '${currentBranch}', not main. Create the branch OFF origin/main instead of ` +
-                        `stacking it on this branch: ${this.freshMainCommand(requestedName)} ` +
-                        `(works here and inside a worktree). ${this.branchFormat}. ` +
-                        `If you truly need a sub-branch (requires human approval), turn this rule off for '${currentBranch}' ` +
-                        `only with "turnOffRuleWhileOnBranch": "${currentBranch}" on ${BRANCH_CREATION_GUARD_ENTRY} — ` +
-                        `not with a future turnOffRuleUntilEpoch, which turns it off REPO-WIDE.`,
-                ),
-            ];
+            return [new V(1, truncate(ctx.command), this.noSubBranchMessage(currentBranch, requestedName))];
         }
 
         return [
