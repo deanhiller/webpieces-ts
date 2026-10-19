@@ -59,6 +59,7 @@ export const SOURCE_POLICIES: readonly SourcePolicy[] = [
         'NoUnmanagedExceptionsRule',
     ),
     new SourcePolicy('catch-error-pattern', '@webpieces/code-rules', 'CatchErrorPatternRule'),
+    new SourcePolicy('catch-must-propagate', '@webpieces/code-rules', 'CatchMustPropagateRule'),
     new SourcePolicy('throw-cause-required', '@webpieces/ai-hook-rules', 'ThrowCauseRequiredRule'),
     new SourcePolicy('no-symbol-di-tokens', '@webpieces/code-rules', 'NoSymbolDiTokensRule'),
     new SourcePolicy('no-custom-css', '@webpieces/code-rules', 'NoCustomCssRule'),

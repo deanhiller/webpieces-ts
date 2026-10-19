@@ -1,5 +1,6 @@
 import { RuleFailError, renderRuleFailForAi } from '@webpieces/rules-config';
 import { toError } from '@webpieces/tooling-common/to-error';
+import { InformAiError } from '@webpieces/tooling-common';
 import {
     Rule,
     EditContext,
@@ -26,6 +27,11 @@ export function runRuleCheck(
         const error = toError(err);
         if (error instanceof RuleFailError) {
             return [violationFromRuleFail(error)];
+        }
+        // A structured refusal written for the AI — e.g. ProposedFile refusing stale or ambiguous edit
+        // context — is the deny itself, not a bug in the rule, so it is never rendered as "crashed".
+        if (error instanceof InformAiError) {
+            return [new Violation(0, '', error.message)];
         }
         return [new Violation(0, '', `Rule '${rule.name}' crashed: ${error.message}`)];
     }

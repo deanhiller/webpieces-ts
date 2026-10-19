@@ -19,6 +19,7 @@ export const optionalTuning: Readonly<Record<string, ConfigObject>> = {
     },
     "catch-error-pattern": {},
     "no-unmanaged-exceptions": {},
+    "catch-must-propagate": {},
     "angular-no-direct-api-in-resolver": {},
     "no-symbol-di-tokens": {},
     "no-client-creation-outside-server-or-client": {},
@@ -116,6 +117,22 @@ export const recommendedSeeds: Readonly<Record<string, ConfigObject>> = {
         "mode": "NEW_AND_MODIFIED_CODE",
         "turnOffRuleUntilEpoch": 0,
         "turnOffRuleWhileOnBranch": null
+    },
+    "catch-must-propagate": {
+        "mode": "NEW_AND_MODIFIED_CODE",
+        "turnOffRuleUntilEpoch": 0,
+        "turnOffRuleWhileOnBranch": null,
+        "forwards": [
+            "error",
+            "warn",
+            "info",
+            "debug",
+            "trace",
+            "reject",
+            "handleError",
+            "reportError",
+            "captureException"
+        ]
     },
     "angular-no-direct-api-in-resolver": {
         "mode": "NEW_AND_MODIFIED_CODE",

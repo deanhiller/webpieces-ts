@@ -6,4 +6,6 @@ export class SourceContributionConfig extends BaseRuleConfig {
     disableAllowed?: boolean;
     allowTopLevel?: boolean;
     allowGlobs?: string[];
+    /** catch-must-propagate: forwarder / logger callee names a caught error may be handed to whole. */
+    forwards?: string[];
 }

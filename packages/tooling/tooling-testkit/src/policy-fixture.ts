@@ -147,6 +147,7 @@ export class PolicyFixture {
             'require-return-type',
             'no-unmanaged-exceptions',
             'catch-error-pattern',
+            'catch-must-propagate',
             'no-symbol-di-tokens',
             'no-custom-css',
             'no-process-exit-outside-main',

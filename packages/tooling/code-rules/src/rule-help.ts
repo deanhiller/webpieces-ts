@@ -50,6 +50,10 @@ export const ruleHelp: Readonly<Record<string, RuleHelp>> = {
         'Keep direct API client construction out of Angular resolvers.',
         'Apply this policy in source, or review its explicit settings in {configFile}. An intentional opt-out requires complete OFF settings.',
     ),
+    'catch-must-propagate': new RuleHelp(
+        'Require a caught error to propagate whole: rethrown, thrown as a cause, forwarded, returned or stored.',
+        'Apply this policy in source, or review its explicit settings in {configFile}. An intentional opt-out requires complete OFF settings.',
+    ),
     'no-symbol-di-tokens': new RuleHelp(
         'Use class tokens for dependency injection instead of symbol tokens.',
         'Apply this policy in source, or review its explicit settings in {configFile}. An intentional opt-out requires complete OFF settings.',

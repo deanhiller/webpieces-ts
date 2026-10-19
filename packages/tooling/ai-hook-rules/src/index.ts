@@ -8,6 +8,7 @@ export { NoDestructureRule } from './core/rules/no-destructure';
 export { RequireReturnTypeRule } from './core/rules/require-return-type';
 export { NoUnmanagedExceptionsRule } from './core/rules/no-unmanaged-exceptions';
 export { CatchErrorPatternRule } from './core/rules/catch-error-pattern';
+export { CatchMustPropagateRule } from './core/rules/catch-must-propagate';
 export { ThrowCauseRequiredRule } from './core/rules/throw-cause-required';
 export { NoSymbolDiTokensRule } from './core/rules/no-symbol-di-tokens';
 export { NoProcessExitOutsideMainRule } from './core/rules/no-process-exit-outside-main';
