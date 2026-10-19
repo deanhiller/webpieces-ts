@@ -377,6 +377,7 @@ export {
     RunCommandCure,
     RepositoryLayoutRepair,
 } from './config-repair-error';
+export { UntrackedPolicyError } from './policy-tracking';
 export {
     RuleRuntimeModules,
     RuleRuntimeModuleLoader,

@@ -104,6 +104,25 @@ describe('explicit owner config sync (installer and wp-migrate-dirs)', () => {
         expect(fs.existsSync(path.join(fixture.root, fixture.declarations[1].config))).toBe(false);
     });
 
+    it('leaves an owner file whose content it does not change byte-identical, however it is formatted (#1327)', () => {
+        const fixture = new SyncFixture();
+        fixture.write();
+        fixture.run();
+        const unchanged = path.join(fixture.root, fixture.declarations[0].config);
+        const compact = JSON.stringify(JSON.parse(fs.readFileSync(unchanged, 'utf8')));
+        fs.writeFileSync(unchanged, compact);
+        const seeded = path.join(fixture.root, fixture.declarations[1].config);
+        const partial = JSON.parse(fs.readFileSync(seeded, 'utf8'));
+        delete partial[Object.keys(partial)[0]];
+        fs.writeFileSync(seeded, JSON.stringify(partial));
+
+        const changed = fixture.run();
+        expect(changed).toHaveLength(1);
+        expect(fs.realpathSync(changed[0])).toBe(fs.realpathSync(seeded));
+        expect(fs.readFileSync(unchanged, 'utf8')).toBe(compact);
+        expect(fs.readFileSync(seeded, 'utf8')).not.toBe(JSON.stringify(partial));
+    });
+
     it('rejects a retired root section instead of guessing owners or values', () => {
         const fixture = new SyncFixture();
         fixture.write({ rulesDir: ['custom'] });

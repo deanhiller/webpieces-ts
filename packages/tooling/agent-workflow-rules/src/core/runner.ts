@@ -13,7 +13,9 @@ import {
     seedEntryForRule,
     CONFIG_FILENAME,
     renderRuleFailForAi,
+    UntrackedPolicyError,
 } from '@webpieces/rules-config';
+import { PolicyStagingCommand } from './policy-staging-command';
 
 import { buildContexts, buildBashContext } from '@webpieces/hook-runtime';
 import { DeleteScopedRules } from '@webpieces/hook-runtime';
@@ -312,6 +314,10 @@ function loadConfigOrAllowInspection(command: string, cwd: string): LoadedConfig
     } catch (err: unknown) {
         const error = toError(err);
         if (error instanceof InformAiError && new ReadOnlyInspectionScan().isReadOnlyInspection(command)) {
+            return null;
+        }
+        // The untracked-policy refusal's cure IS `git add` (#1327) — refusing it was a loop.
+        if (error instanceof UntrackedPolicyError && new PolicyStagingCommand().isPlainGitAdd(command)) {
             return null;
         }
         throw error;

@@ -85,9 +85,10 @@ Two things trip the first registration (both measured dogfooding this in webpiec
 
 - The pack lives outside every nx project, so a repo running `validate-ts-in-src` refuses to create it
   until its folder is listed in that rule's `excludePaths` (e.g. `"webpieces-rules/**"`).
-- A declared owner file must be tracked by git, and the guard refuses every tool call, `git add`
-  included, until it is. Create the owner file, then run `pnpm wp-migrate-dirs --stage`, which stages the
-  declaration and the owner files.
+- A declared owner file must be tracked by git, and the guard refuses every other tool call until it
+  is. Create the owner file, then stage it: a plain `git add -- <owner file>` is let through while that
+  refusal is active (#1327), and so is `pnpm wp-migrate-dirs --stage`, which stages the declaration and
+  every owner file without reformatting the ones it does not change.
 
 The `.ts` module is transpiled in memory when it loads, so there is no build step. The next tool call
 refuses the missing owner entry and prints the rule's seed to paste:
