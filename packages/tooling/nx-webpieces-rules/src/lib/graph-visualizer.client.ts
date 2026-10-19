@@ -668,7 +668,7 @@ class GraphPage extends WpFilterPage {
      * The products switched ON in the Product legend (#1319): the first two in legend order at EVERY
      * load. Never persisted — no storage, no hash — so the page stays stateless.
      */
-    private readonly productsOn: Set<string> = WpProductPainter.initialOn(this.legendProducts());
+    private readonly productsOn: Set<string> = new WpProductSelection().initialOn(this.legendProducts());
     private painter: WpProductPainter = this.newPainter();
 
     /** In Impact mode a box's menu leads with WHY it is in the build, and its edge changes (#1264). */

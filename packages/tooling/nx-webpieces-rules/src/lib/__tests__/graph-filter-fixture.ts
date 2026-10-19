@@ -75,7 +75,7 @@ export class FilterFixture {
             FilterFixture.client('graph-product-paint.client.ts') +
                 `\n({
             painter: (legend, on) => new WpProductPainter(JSON.parse(JSON.stringify(legend)), new Set(on)),
-            initialOn: order => [...WpProductPainter.initialOn(order)],
+            initialOn: order => [...new WpProductSelection().initialOn(order)],
             constants: {
                 SHARED_FILL: WpProductPainter.SHARED_FILL, NONE_FILL: WpProductPainter.NONE_FILL,
                 NONE_BORDER: WpProductPainter.NONE_BORDER, OFF_FILL: WpProductPainter.OFF_FILL,

@@ -37,6 +37,14 @@ class WpProductPaint {
     ) {}
 }
 
+/** Which products are ON when a page loads (#1319): the same answer on every load, never persisted. */
+class WpProductSelection {
+    /** The first two products in legend order. */
+    initialOn(order: string[]): Set<string> {
+        return new Set(order.slice(0, WpProductPainter.ON_AT_LOAD));
+    }
+}
+
 /** Decides and writes every Product-mode statement for one ON set. Immutable: a toggle builds a new one. */
 class WpProductPainter {
     /** graph-products.ts PRODUCT_SHARED_FILL. */
@@ -66,11 +74,6 @@ class WpProductPainter {
         private readonly on: ReadonlySet<string>,
     ) {
         for (const color of legend) this.colors.set(color.product, color);
-    }
-
-    /** The ON set every load starts from: the first two products in legend order. */
-    static initialOn(order: string[]): Set<string> {
-        return new Set(order.slice(0, WpProductPainter.ON_AT_LOAD));
     }
 
     /** The paint for a node carrying `products`. */
