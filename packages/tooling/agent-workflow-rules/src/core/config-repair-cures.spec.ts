@@ -121,7 +121,7 @@ class CureCheck {
     assertPermitted(repo: RepairRepo, cure: ConfigRepairCure): void {
         expect(cure.editFile !== null || cure.command !== null).toBe(true);
         if (cure.editFile !== null) {
-            const input = new NormalizedToolInput(cure.editFile, [new NormalizedEdit('', '{}')]);
+            const input = new NormalizedToolInput(cure.editFile, [new NormalizedEdit('', '{}', false)]);
             expect(run('Write', input, repo.root, 'guards'), cure.editFile).toBeNull();
             expect(run('Edit', input, repo.root, 'rules'), cure.editFile).toBeNull();
             expect(repo.write('guards', cure.editFile), cure.editFile).toBeNull();

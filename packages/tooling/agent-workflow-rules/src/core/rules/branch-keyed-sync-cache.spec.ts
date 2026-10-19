@@ -104,7 +104,7 @@ function editGuardBlocks(branch: string): boolean {
     // `/tmp/x/src/a.ts` in `tool`, `src/a.ts` in `filePath` and left `workspaceRoot` UNDEFINED — harmless
     // only for as long as nothing read those fields. The guard now resolves its tree from `filePath`
     // against `workspaceRoot` (issue #851), so the shorthand stopped being harmless.
-    const ctx = new FileContext('Edit', '/tmp/x/src/a.ts', 'src/a.ts', '/tmp/x', 0, 0, 0, 0);
+    const ctx = new FileContext('Edit', '/tmp/x/src/a.ts', 'src/a.ts', '/tmp/x', null, 0, 0, 0, 0);
     return new FeatureBranchGuardRule(cfg).check(ctx).length > 0;
 }
 

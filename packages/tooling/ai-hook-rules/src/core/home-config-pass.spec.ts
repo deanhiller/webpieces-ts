@@ -15,12 +15,12 @@ describe('run — the ~/.webpieces/config.json carve-out', () => {
 
     it('passes a Write to ~/.webpieces/config.json unconditionally', () => {
         const home = nodePath.join(os.homedir(), '.webpieces', 'config.json');
-        const input = new NormalizedToolInput(home, [new NormalizedEdit('', offending)]);
+        const input = new NormalizedToolInput(home, [new NormalizedEdit('', offending, false)]);
         expect(run('Write', input, homeRoot, 'rules')).toBeNull();
     });
 
     it('CONTROL — the same content at an ordinary path is still judged', () => {
-        const input = new NormalizedToolInput(nodePath.join(homeRoot, 'src', 'x.ts'), [new NormalizedEdit('', offending)]);
+        const input = new NormalizedToolInput(nodePath.join(homeRoot, 'src', 'x.ts'), [new NormalizedEdit('', offending, false)]);
         expect(run('Write', input, homeRoot, 'rules')).toBeInstanceOf(BlockedResult);
     });
 });

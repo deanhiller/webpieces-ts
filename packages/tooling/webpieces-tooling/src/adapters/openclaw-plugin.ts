@@ -51,12 +51,12 @@ function mapToolInput(toolName: string, args: Record<string, unknown>): Normaliz
 
     if (toolName === 'write') {
         const content = typeof args['content'] === 'string' ? (args['content'] as string) : '';
-        return new NormalizedToolInput(filePath, [new NormalizedEdit('', content)]);
+        return new NormalizedToolInput(filePath, [new NormalizedEdit('', content, false)]);
     }
     if (toolName === 'edit') {
         const oldStr = typeof args['old_string'] === 'string' ? (args['old_string'] as string) : '';
         const newStr = typeof args['new_string'] === 'string' ? (args['new_string'] as string) : '';
-        return new NormalizedToolInput(filePath, [new NormalizedEdit(oldStr, newStr)]);
+        return new NormalizedToolInput(filePath, [new NormalizedEdit(oldStr, newStr, false)]);
     }
     return null;
 }

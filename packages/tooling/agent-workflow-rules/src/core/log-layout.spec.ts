@@ -65,7 +65,7 @@ function exerciseEveryWriter(root: string): void {
     logL1Decision(root, new GuardDecision('force-to-root', 'Bash', 'git status', 'dean/x', 'BLOCK_AI_CURE', 'git/gh from subdir', '-', '-', new MatrixRef('L1', '5')));
     logSyncEvent(root, new SyncLogEvent('FINISH', 123, 'main', 'done'));
 
-    const input = new NormalizedToolInput(path.join(root, 'src/x.ts'), [new NormalizedEdit('a', 'b')]);
+    const input = new NormalizedToolInput(path.join(root, 'src/x.ts'), [new NormalizedEdit('a', 'b', false)]);
     logRejection('Edit', input, new BlockedResult('[some-rule] (a reason)\nblocked'), root);
 }
 
@@ -145,7 +145,7 @@ describe('every webpieces log lives under logs/, and nothing else does', () => {
 
     it('gives two DIFFERENT agents two different detail directories, so neither overwrites the other', () => {
         const root = tmpRoot();
-        const input = new NormalizedToolInput(path.join(root, 'src/x.ts'), [new NormalizedEdit('a', 'b')]);
+        const input = new NormalizedToolInput(path.join(root, 'src/x.ts'), [new NormalizedEdit('a', 'b', false)]);
         const result = new BlockedResult('[some-rule] (a reason)\nblocked');
 
         // The collision this replaced: BOTH details were `hooks/<today>/writeInfo-<epochMs>.md`, so two

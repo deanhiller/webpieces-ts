@@ -82,7 +82,7 @@ export class ApplyPatchParser {
             content.push(line.slice(1));
             index += 1;
         }
-        ops.push(new FileOperation('Write', new NormalizedToolInput(filePath, [new NormalizedEdit('', content.join('\n'))])));
+        ops.push(new FileOperation('Write', new NormalizedToolInput(filePath, [new NormalizedEdit('', content.join('\n'), false)])));
         return index;
     }
 
@@ -96,6 +96,7 @@ export class ApplyPatchParser {
     private parseUpdate(body: readonly string[], start: number, cwd: string, ops: FileOperation[]): number {
         let index = start + 1;
         let filePath = this.resolve(body[start].slice(UPDATE_FILE.length), cwd);
+        const sourcePath = filePath;
         if (index < body.length && body[index].startsWith(MOVE_TO)) {
             filePath = this.resolve(body[index].slice(MOVE_TO.length), cwd);
             index += 1;
@@ -129,12 +130,14 @@ export class ApplyPatchParser {
                 }
                 index += 1;
             }
-            edits.push(new NormalizedEdit(oldLines.join('\n'), newLines.join('\n')));
+            edits.push(new NormalizedEdit(oldLines.join('\n'), newLines.join('\n'), false));
         }
         if (edits.length === 0) {
             throw new InformAiError(`[apply-patch] '${UPDATE_FILE.trim()}' section for ${filePath} carries no '@@' hunk — refusing to allow an edit whose content could not be read.`);
         }
-        ops.push(new FileOperation('Edit', new NormalizedToolInput(filePath, edits)));
+        const input = new NormalizedToolInput(filePath, edits);
+        input.sourcePath = sourcePath;
+        ops.push(new FileOperation('Edit', input));
         return index;
     }
 

@@ -8,7 +8,8 @@
         ".": "./src/index.js",
         "./package.json": "./package.json",
         "./to-error": "./src/to-error.js",
-        "./repository-layout": "./src/repository-layout.js"
+        "./repository-layout": "./src/repository-layout.js",
+        "./source-syntax": "./src/source-syntax.js"
     },
     "files": [
         "src/**/*"
@@ -23,7 +24,8 @@
     "dependencies": {
         "inversify": "7.10.4",
         "reflect-metadata": "0.2.2",
-        "tslib": "2.8.1"
+        "tslib": "2.8.1",
+        "typescript": "5.9.3"
     },
     "publishConfig": {
         "access": "public"

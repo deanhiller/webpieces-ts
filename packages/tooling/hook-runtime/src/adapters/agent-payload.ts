@@ -31,6 +31,7 @@ export interface AgentToolInput {
     content?: string;
     old_string?: string;
     new_string?: string;
+    replace_all?: boolean;
     edits?: AgentEditEntry[];
     command?: string;
 }
@@ -38,6 +39,7 @@ export interface AgentToolInput {
 export interface AgentEditEntry {
     old_string?: string;
     new_string?: string;
+    replace_all?: boolean;
 }
 
 export class AgentPayloadParser {

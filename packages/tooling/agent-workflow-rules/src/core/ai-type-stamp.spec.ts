@@ -43,7 +43,7 @@ function writeAllStreams(root: string): readonly string[] {
     logGuardDecision(root, decision);
     logL1Decision(root, decision);
 
-    const input = new NormalizedToolInput(path.join(root, 'src/x.ts'), [new NormalizedEdit('a', 'b')]);
+    const input = new NormalizedToolInput(path.join(root, 'src/x.ts'), [new NormalizedEdit('a', 'b', false)]);
     logRejection('Edit', input, new BlockedResult('[some-rule] (a reason)\nblocked', L0_FAULT_NONE), root);
 
     return [CALLS_STREAM, L2_DECISIONS_STREAM, L1_LOCATION_STREAM, REJECTIONS_STREAM]
