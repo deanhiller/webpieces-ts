@@ -1,5 +1,6 @@
 import { validateCommandsSection } from './commands-section-validators';
 import { validateTopLevelKeys } from './config-key-rules';
+import { CONFIG_DOCUMENTATION_PATH } from './config-documentation';
 
 // Specs for the `commands` section and the shared key-level rules. Split out of validate-config.spec.ts
 // to mirror the source split (commands-section-validators.ts / config-key-rules.ts) and to keep both
@@ -43,31 +44,22 @@ describe('validateCommandsSection', () => {
         ).toBe(true);
     });
 
-    it('rejects an unknown key in the commands section and points at the *Why convention', () => {
+    it('rejects an unknown key and points at the generated guide', () => {
         const errors = validateCommandsSection(
             { 'pr-gate': { mode: 'OFF' }, buildCommand: 'pnpm ci' },
             undefined,
         );
         expect(errors.some((e) => e.includes('[commands] Unknown key "buildCommand"'))).toBe(true);
-        expect(errors.some((e) => e.includes('"<key>Why"'))).toBe(true);
+        expect(errors.some((e) => e.includes(CONFIG_DOCUMENTATION_PATH))).toBe(true);
     });
 
-    it('accepts a *Why rationale key beside a real key, and requires it to be a string', () => {
-        expect(
-            validateCommandsSection(
-                { 'pr-gate': { mode: 'OFF' }, guardHintsWhy: 'why we set these' },
-                undefined,
-            ),
-        ).toEqual([]);
-        const errors = validateCommandsSection(
-            { 'pr-gate': { mode: 'OFF' }, guardHintsWhy: 42 },
-            undefined,
-        );
-        expect(
-            errors.some((e) =>
-                e.includes('"guardHintsWhy" is a *Why rationale note and must be a string'),
-            ),
-        ).toBe(true);
+    it('rejects inline rationale regardless of its value', () => {
+        for (const value of ['why we set these', 42]) {
+            const errors = validateCommandsSection(
+                { 'pr-gate': { mode: 'OFF' }, guardHintsWhy: value }, undefined,
+            );
+            expect(errors.some((e) => e.includes('retired inline documentation key'))).toBe(true);
+        }
     });
 
     it('rejects an unknown field inside guardHints (a hint nothing would ever read)', () => {
@@ -122,7 +114,7 @@ describe('validateCommandsSection', () => {
 describe('validateTopLevelKeys', () => {
     it('accepts the defined top-level sections', () => {
         expect(
-            validateTopLevelKeys({
+            validateTopLevelKeys({ webpiecesConfigJsonDocumentation: CONFIG_DOCUMENTATION_PATH,
                 rulePacks: [],
                 commands: {},
                 excludePaths: [],
@@ -132,26 +124,39 @@ describe('validateTopLevelKeys', () => {
     });
 
     it('rejects an unknown top-level key', () => {
-        const errors = validateTopLevelKeys({ rulePacks: [], rulez: {} });
+        const errors = validateTopLevelKeys({ webpiecesConfigJsonDocumentation: CONFIG_DOCUMENTATION_PATH, rulePacks: [], rulez: {} });
         expect(errors.some((e) => e.includes('[webpieces.config.json] Unknown key "rulez"'))).toBe(
             true,
         );
     });
 
-    it('allows a *Why rationale note (this is how the file documents itself) and requires a string', () => {
-        expect(
-            validateTopLevelKeys({
-                rulePacks: [],
-                upgradePolicyWhy: 'never released backwards-compatible',
-            }),
-        ).toEqual([]);
-        const errors = validateTopLevelKeys({ rulePacks: [], upgradePolicyWhy: 42 });
-        expect(errors.some((e) => e.includes('must be a string'))).toBe(true);
+    it('requires the exact generated documentation path', () => {
+        for (const value of [undefined, '', 'README.md', 42, null]) {
+            expect(validateTopLevelKeys({ webpiecesConfigJsonDocumentation: value })
+                .some((e) => e.includes(CONFIG_DOCUMENTATION_PATH))).toBe(true);
+        }
+    });
+
+    it('rejects upgradePolicyWhy with a Markdown migration instruction', () => {
+        const errors = validateTopLevelKeys({
+            webpiecesConfigJsonDocumentation: CONFIG_DOCUMENTATION_PATH,
+            upgradePolicyWhy: 'never released backwards-compatible',
+        });
+        expect(errors.some((e) => e.includes('retired inline documentation key') && e.includes('tracked Markdown'))).toBe(true);
+    });
+
+    it('rejects notes nested inside arrays and sections even when the gate is OFF', () => {
+        const errors = validateTopLevelKeys({
+            webpiecesConfigJsonDocumentation: CONFIG_DOCUMENTATION_PATH,
+            commands: { 'pr-gate': { mode: 'OFF', gates: [{ nameWhy: 'note' }] } },
+            rulePacks: [{ packageWhy: 'another note' }],
+        });
+        expect(errors.filter((error) => error.includes('retired inline documentation key'))).toHaveLength(2);
     });
 
     // The retired top-level pr-gate block has its own precise "move it under commands" message from
     // validateCommandsSection. Reporting it here too would bury that instruction under a generic error.
     it('leaves the retired top-level pr-gate block to validateCommandsSection', () => {
-        expect(validateTopLevelKeys({ rulePacks: [], 'pr-gate': {} })).toEqual([]);
+        expect(validateTopLevelKeys({ webpiecesConfigJsonDocumentation: CONFIG_DOCUMENTATION_PATH, rulePacks: [], 'pr-gate': {} })).toEqual([]);
     });
 });

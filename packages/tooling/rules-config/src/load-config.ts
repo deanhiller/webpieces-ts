@@ -17,6 +17,8 @@ import { WebpiecesRulesConfig } from './WebpiecesRulesConfig';
 import { PolicyTracking } from './policy-tracking';
 import { formatConfigErrorsBanner } from './config-error-banner';
 import { ConfigRepairError, EditFileCure, RepositoryLayoutRepair, RunCommandCure } from './config-repair-error';
+import { writeTemplate } from './load-template';
+import { CONFIG_POLICY_DOC } from './config-error-banner';
 import { PRUNE_UNKNOWN_COMMAND } from './constants';
 
 /** One root parse and one owner-resolution pass supply all consumers with the same registry and settings. */
@@ -49,6 +51,7 @@ export class ConfigLoader {
             root = path.dirname(configPath);
         // webpieces-disable no-any-unknown -- the root parser returns opaque client JSON; these validators narrow every accepted field
         const document = raw as Record<string, unknown>;
+        writeTemplate(root, CONFIG_POLICY_DOC);
         const errors = [
             ...validateTopLevelKeys(document),
             ...validateCommandsSection(raw.commands, document['pr-gate'], root),

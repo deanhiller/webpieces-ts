@@ -55,7 +55,7 @@ export class FinishBanner {
     }
 
     // TRUE only for the outcomes where nothing further is owed: merged, queued behind green-able checks,
-    // or deliberately left for a human. Everything else — BEHIND, config mismatch, gh failure, no PR —
+    // or published without an automatic merge. Everything else — BEHIND, config mismatch, gh failure, no PR —
     // is unfinished work, and the banner must not decorate it with a checkmark.
     isDone(merge: MergeOutcome): boolean {
         return merge.result === MERGE_RESULT_MERGED
@@ -69,7 +69,7 @@ export class FinishBanner {
             return '✅ PR finished — auto-merge is ON; it lands itself when the checks pass\n';
         }
         if (merge.result === MERGE_RESULT_LEFT_TO_HUMAN) {
-            return '✅ PR finished — posted for a human to merge (that is this repo\'s policy)\n';
+            return '✅ PR published — automatic merging by wp-finish-upsert-pr is disabled\n';
         }
         // NOT "PR NOT FINISHED". Everything this command owns SUCCEEDED — the branch is pushed, the body
         // is written, the build gate is green. What happened is that another author landed on main
@@ -186,8 +186,10 @@ export class FinishBanner {
                 this.watchOffer();
         }
         if (merge.result === MERGE_RESULT_LEFT_TO_HUMAN) {
-            return '   Nothing else is owed by the tooling — a person merges it. You can stop here.\n' +
-                this.watchOffer() +
+            return '   This command published the PR without attempting a merge.\n' +
+                '   This setting does not require additional authorization or override existing user instructions.\n' +
+                '   If landing was requested (including $full-cycle or /full-cycle), continue through the\n' +
+                '   required checks and run `pnpm wp-land-pr`.\n' +
                 '\n' +
                 '   ℹ️  Clicking Merge in the GitHub UI is CORRECT here and produces the right history. The\n' +
                 '       PR description IS the commit body this flow rendered — compact, non-green flags\n' +

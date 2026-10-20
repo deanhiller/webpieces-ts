@@ -35,6 +35,7 @@ export class ConfigParseAttempt {
 
 /** Parsed but unvalidated root declaration. Concrete policy settings live only in declared owner files. */
 export class RawConfigFile {
+    webpiecesConfigJsonDocumentation?: string;
     // webpieces-disable no-any-unknown -- opaque client JSON is validated at the root/owner boundary
     rulePacks?: unknown;
     // webpieces-disable no-any-unknown -- command behavior has its own structural validator

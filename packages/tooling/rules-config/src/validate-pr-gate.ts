@@ -1,3 +1,4 @@
+import { ConfigDocumentation } from './config-documentation';
 import { validateChecklistsSection, validateDevDeploySection, validateLandPrSection, validateNoGateSaltRationale, validateReviewerAgentKeys } from './pr-gate-section-validators';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -15,10 +16,12 @@ const MERGE_MODE_HELP =
     `           GitHub auto-merge, both with an explicit --subject/--body-file so main's history\n` +
     `           gets the PR title + the compact risk/flags body. Needs allow_auto_merge on the repo\n` +
     `           (gh api repos/{owner}/{repo} --jq .allow_auto_merge).\n` +
-    `  "NONE" — wp-finish-upsert-pr only opens/updates the PR; a human merges it, and that still\n` +
+    `  "NONE" — wp-finish-upsert-pr only opens/updates the PR without attempting to merge. It still\n` +
     `           lands the compact body: the PR DESCRIPTION *is* that body, and stage \u2462 keeps the repo's\n` +
     `           squash_merge_commit_title/message pinned to PR_TITLE/PR_BODY so a UI merge copies it\n` +
-    `           verbatim (SquashSettingsEnforcer). Nothing to set by hand.`;
+    `           verbatim (SquashSettingsEnforcer). Nothing to set by hand.\n` +
+    `           This is tooling behavior, not an authorization requirement. Honor existing user\n` +
+    `           instructions, including $full-cycle; use pnpm wp-land-pr when landing was requested.`;
 
 // Copy-paste example for the top-level `pr-gate` block (sibling of `rules`). Kept inline rather
 // than imported from pr-gate-config.ts to avoid a load-config ↔ pr-gate-config import cycle.
@@ -112,7 +115,7 @@ export function validatePrGateSection(section: unknown, repoRoot?: string): stri
     }
     // webpieces-disable no-any-unknown -- narrowing the opaque pr-gate section from consumer JSON
     const s = section as Record<string, unknown>;
-    const errors: string[] = [];
+    const errors: string[] = new ConfigDocumentation().inlineErrors(section, '[pr-gate]');
 
     if (!('mode' in s)) {
         errors.push(

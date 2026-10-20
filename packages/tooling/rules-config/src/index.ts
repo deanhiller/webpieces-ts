@@ -99,10 +99,9 @@ export {
 export { validateCommandsSection } from './commands-section-validators';
 export {
     unknownKeyErrors,
-    isCommentKey,
     validateTopLevelKeys,
-    COMMENT_KEY_SUFFIX,
 } from './config-key-rules';
+export { CONFIG_DOCUMENTATION_KEY, CONFIG_DOCUMENTATION_PATH } from './config-documentation';
 // The retired-key table + the no-back-compat policy it enforces. Exported so the installer can migrate
 // what the errors instruct, and so consumers can enumerate retirements.
 export {

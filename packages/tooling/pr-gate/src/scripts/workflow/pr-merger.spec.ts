@@ -278,6 +278,9 @@ describe('mergeMode NONE — "a human clicks merge" repos', () => {
         // reader. "both must be set" was true for exactly one release; it is homework nobody owes now.
         expect(outcome.message).not.toContain('both must be');
         expect(outcome.message).toContain('Nothing to set up');
+        expect(outcome.message).not.toContain('left for a human');
+        expect(outcome.message).toContain('does not require additional authorization');
+        expect(outcome.message).toContain('$full-cycle');
     });
 });
 

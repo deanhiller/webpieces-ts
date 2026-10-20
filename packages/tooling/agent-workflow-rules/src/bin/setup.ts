@@ -366,12 +366,11 @@ export async function main(): Promise<void> {
     // a first install), never a subdir cwd, so `.webpieces`/hooks/config all land at the root.
     const projectRoot = new RepoRootFinder().resolveRepoRoot(process.cwd());
 
-    seedOrSyncConfig(projectRoot);
     // Always refreshed: it explains why a retired key is rejected rather than accepted, and what to do
     // about it — which is exactly what an agent needs on the run where a migration just moved keys out
     // from under its config.
     writeTemplate(projectRoot, CONFIG_POLICY_DOC);
-
+    seedOrSyncConfig(projectRoot);
     scaffoldCiGate(projectRoot);
 
     const targets = installTargets(projectRoot);
