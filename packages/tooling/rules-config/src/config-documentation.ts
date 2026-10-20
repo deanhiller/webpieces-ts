@@ -8,12 +8,12 @@ export class ConfigDocumentation {
         if (Array.isArray(value))
             return value.flatMap((entry, index) => this.inlineErrors(entry, `${label}[${index}]`));
         if (value === null || typeof value !== 'object') return [];
-        return Object.entries(value).flatMap(([key, entry]) =>
-            key.endsWith('Why')
-                ? [`${label} "${key}" is a retired inline documentation key. Remove it from JSON; ` +
+        return Object.entries(value).flatMap((entry) =>
+            entry[0].endsWith('Why')
+                ? [`${label} "${entry[0]}" is a retired inline documentation key. Remove it from JSON; ` +
                    `keep repository-specific rationale in tracked Markdown. ` +
                    `Config instructions: ${CONFIG_DOCUMENTATION_PATH}.`]
-                : this.inlineErrors(entry, `${label}.${key}`),
+                : this.inlineErrors(entry[1], `${label}.${entry[0]}`),
         );
     }
 }
