@@ -85,4 +85,4 @@ put reusable config instructions in this guide's source template. Generated file
 This setting does not require extra merge authorization and does not override user instructions.
 When the user has requested landing, including through `$full-cycle` or `/full-cycle`, continue with
 `pnpm wp-land-pr` after the required checks. That command works with either value. GitHub permissions
-and merge requirements still apply. See `webpieces.git-workflow.md` for the workflow.
+and merge requirements still apply.

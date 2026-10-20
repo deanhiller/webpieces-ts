@@ -124,6 +124,7 @@ class ConsumerRepo {
             '',
         ].join('\n'));
         this.write('webpieces.config.json', JSON.stringify({
+            webpiecesConfigJsonDocumentation: '.webpieces/instruct-ai/webpieces.config-policy.md',
             rulePacks: [{ package: `./${PACK_MODULE}`, config: OWNER_FILE }],
             commands: { 'pr-gate': { mode: 'OFF', buildCommand: 'pnpm test', gates: [] } },
             excludePaths: [],

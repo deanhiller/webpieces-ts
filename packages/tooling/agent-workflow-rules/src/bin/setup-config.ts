@@ -1,7 +1,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { AtomicFile, InformAiError } from '@webpieces/tooling-common';
-import { ConfigFile, CONFIG_FILENAME, PackPolicyFiles, RulePackSync } from '@webpieces/rules-config';
+import { ConfigFile, CONFIG_FILENAME, CONFIG_DOCUMENTATION_KEY, CONFIG_DOCUMENTATION_PATH, PackPolicyFiles, RulePackSync } from '@webpieces/rules-config';
 import { INSTALL_HOOKS_CMD } from './l0-allowlist';
 
 /** Installation seeds the declared owner files; a flat root config must first declare its rulePacks. */
@@ -10,7 +10,7 @@ export function seedOrSyncConfig(projectRoot: string): void {
     const filename = path.join(projectRoot, CONFIG_FILENAME);
     if (!fs.existsSync(filename)) {
         throw new InformAiError(
-            `Create webpieces.config.json with explicit rulePacks, commands, excludePaths and match-rules, then rerun ${INSTALL_HOOKS_CMD}: it writes the owners' recommended seeds into the declared files for review. Installed packages are never inferred as selected policy packs.`,
+            `Create webpieces.config.json with "${CONFIG_DOCUMENTATION_KEY}": "${CONFIG_DOCUMENTATION_PATH}", explicit rulePacks, commands, excludePaths and match-rules, then rerun ${INSTALL_HOOKS_CMD}: it writes the owners' recommended seeds into the declared files for review. Installed packages are never inferred as selected policy packs.`,
         );
     }
     const configFile = new ConfigFile(),
