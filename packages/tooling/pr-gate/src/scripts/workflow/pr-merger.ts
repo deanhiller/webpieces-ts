@@ -10,7 +10,7 @@ import { injectable, bindingScopeValues } from 'inversify';
 export const MERGE_RESULT_MERGED = 'MERGED';
 /** Not merged YET, but queued: auto-merge is enabled and lands it when the checks pass. Self-healing. */
 export const MERGE_RESULT_AUTO_QUEUED = 'AUTO_QUEUED';
-/** Not merged BY DESIGN: pr-gate.mergeMode is not AUTO, so a person merges. Nothing is owed here. */
+/** This command did not attempt a merge; the caller may still owe landing under the user request. */
 export const MERGE_RESULT_LEFT_TO_HUMAN = 'LEFT_TO_HUMAN';
 /**
  * Not merged and it NEVER will be without action: `gh pr view --json mergeStateStatus` says BEHIND, i.e.
@@ -165,7 +165,7 @@ export class MergeIntent {
  *   queue to fall back to, so we say so loudly instead of firing a `--auto` that can only fail.
  *
  * WHICH of those a repo gets is not guessed — `pr-gate.mergeMode` is REQUIRED config. AUTO means the
- * tooling lands PRs; NONE means it only posts them and a person merges. No mode can force a queue the
+ * tooling attempts landing; NONE means this automatic step only publishes the PR. No mode can force a queue the
  * repo has turned off, so AUTO on a repo with allow_auto_merge=false is a CONFIG error, reported as
  * one rather than papered over — but ONLY when the AUTO was read from config. A commanded merge
  * (`wp-land-pr`) on a NONE repo is not a mismatch at all; see MergeIntent.
@@ -192,14 +192,16 @@ export class PrMerger {
             // long dashboard. It is now the compact git-log body (see Dashboard.renderPrBody), so
             // `squash_merge_commit_message: PR_BODY` copies exactly the right text and a UI merge is
             // CORRECT — provided both settings are right. Naming them is the useful thing to say; telling
-            // a mergeMode=NONE repo to stop using the UI is not, since using it is the whole policy.
+            // a mergeMode=NONE repo to stop using the UI is not; either landing route is valid.
             return new MergeOutcome(false, false,
-                `did NOT merge — pr-gate.mergeMode is ${mergeMode === MERGE_MODE_NONE ? 'NONE' : `"${mergeMode}"`}, so the PR is left for a human to merge.\n` +
+                `did NOT merge — pr-gate.mergeMode is ${mergeMode === MERGE_MODE_NONE ? 'NONE' : `"${mergeMode}"`}, so wp-finish-upsert-pr published the PR without attempting a merge.\n` +
                 `      Clicking Merge is fine and writes the right history: this flow keeps\n` +
                 `      squash_merge_commit_title=PR_TITLE and squash_merge_commit_message=PR_BODY pinned on\n` +
                 `      the repo, so the subject becomes "${subject}" and the body is the gated description\n` +
                 `      verbatim. Nothing to set up.\n` +
-                `      \`pnpm wp-land-pr\` lands the same bytes from the CLI if you would rather not click.`,
+                `      \`pnpm wp-land-pr\` lands the same bytes from the CLI.\n` +
+                `      This setting does not require additional authorization. Honor existing user instructions,\n` +
+                `      including $full-cycle or /full-cycle, and continue to landing when requested.`,
                 MERGE_RESULT_LEFT_TO_HUMAN);
         }
 

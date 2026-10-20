@@ -4,7 +4,7 @@ import { retiredKeyErrorsIn } from './retired-config-keys';
 import { validatePrGateSection } from './validate-config';
 
 // The `commands` section of webpieces.config.json, plus the key-level rules every section shares: strict
-// unknown-key rejection and the `*Why` comment convention. Split out of validate-config.ts only for size,
+// unknown-key rejection and external documentation. Split out of validate-config.ts only for size,
 // exactly as pr-gate-section-validators.ts was; loadAndValidate still reaches this through
 // validateCommandsSection, which validate-config.ts re-exports.
 

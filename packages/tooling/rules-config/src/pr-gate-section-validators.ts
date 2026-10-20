@@ -11,8 +11,7 @@ import { retiredKeyErrorsIn } from './retired-config-keys';
 // and the one rationale key that is rejected outright. Split out of validate-config.ts only for size;
 // loadAndValidate still reaches both through validatePrGateSection.
 
-// The `*Why` convention (buildCommandWhy, mergeModeWhy, gatesWhy…) is free-form rationale a consumer keeps
-// beside a field, and pr-gate tolerates any of them — EXCEPT this one. See validateNoGateSaltRationale.
+// Inline rationale is retired. This salt-specific error also avoids publishing bypass details.
 const GATE_SALT_WHY = 'gateSaltWhy';
 
 /**
@@ -22,8 +21,7 @@ const GATE_SALT_WHY = 'gateSaltWhy';
  * necessarily explains what the token protects, that the salt is committed, and therefore how to forge it —
  * i.e. it is a bypass how-to, sitting in the most-read file in the repo, defeating the only thing an
  * obscurity-grade mechanism has going for it. The rationale belongs in the webpieces source (pr-gate-config.ts
- * documents it in full for humans reading the tooling), never in consumer config. Every other `*Why` key
- * stays allowed; this is not a general ban on documenting your config.
+ * documents it in full for humans reading the tooling), never in consumer config. All other `*Why` keys are rejected by unknownKeyErrors; config prose lives in Markdown.
  */
 // webpieces-disable no-any-unknown -- the already-narrowed opaque pr-gate section; only key PRESENCE is read
 // webpieces-disable no-function-outside-class -- module-level config validator, matches the rest of this file
@@ -303,7 +301,7 @@ function reviewerAgentsErrors(s: Record<string, unknown>): string[] {
 
 // The `landPr` block: what happens to the LOCAL branch once its PR is in main. Optional — omitted
 // means "archive-tag", which is deliberately the DEFAULT so a consumer gets the branch-accumulation
-// fix without editing config at all. `branchRetentionWhy` (and any other `*Why` sibling) is free-form
+// fix without editing config at all. Repository-specific rationale belongs in Markdown, not free-form
 // rationale prose and is tolerated, per the repo's convention for documenting comment-less JSON.
 // webpieces-disable no-any-unknown -- `value` is the opaque consumer `landPr` value until narrowed here
 // webpieces-disable no-function-outside-class -- module-level config validator, matches the rest of this file

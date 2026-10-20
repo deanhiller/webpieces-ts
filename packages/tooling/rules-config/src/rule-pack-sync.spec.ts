@@ -29,11 +29,11 @@ class SyncFixture {
     // webpieces-disable no-any-unknown -- fixture root JSON is opaque config written for the loader
     write(extra: Record<string, unknown> = {}): void {
         this.atomic.writeJsonAtomic(path.join(this.root, 'webpieces.config.json'), {
+            webpiecesConfigJsonDocumentation: '.webpieces/instruct-ai/webpieces.config-policy.md',
             rulePacks: this.declarations,
             commands: { 'pr-gate': { mode: 'OFF', buildCommand: 'pnpm test', gates: [] } },
             excludePaths: [],
             'match-rules': [],
-            migrationWhy: 'Preserve chosen enforcement values.',
             ...extra,
         });
     }

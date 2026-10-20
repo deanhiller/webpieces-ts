@@ -58,19 +58,30 @@ version-drift guard compares the pin against the installed version *before* the 
 every tool call with its own message and its own cure. So if you are reading a validation error, no drift
 was detected.
 
-## Documenting your own config: the `*Why` convention
+## Documentation lives outside JSON
 
-JSON has no comments, so any key ending in **`Why`** is free-form rationale kept beside the key it explains,
-and must be a string:
+The first entry in `webpieces.config.json` must be exactly:
 
 ```json
-"mergeModeWhy": "NONE, deliberately: a human always clicks merge in this repo.",
-"mergeMode": "NONE"
+"webpiecesConfigJsonDocumentation": ".webpieces/instruct-ai/webpieces.config-policy.md"
 ```
 
-Unknown keys are rejected — a silently-ignored key is how a stale config survives an upgrade — so if you
-want a note in the file, give it a `*Why` name rather than inventing a key.
+This path is required and validated literally. The loader regenerates this guide before validating the
+config, including when validation fails, so the link has a real destination on a fresh checkout.
+`wp-install-ai-hooks` also writes it. Do not hand-edit the generated guide.
 
-One exception: **`gateSaltWhy` is rejected outright.** Rationale next to the gate salt necessarily explains
-what the token protects and that the salt is committed, i.e. it is a bypass how-to sitting in the most-read
-file in the repo. That reasoning lives in the webpieces source instead.
+Inline `*Why` keys, including `upgradePolicyWhy`, are rejected at every config section.
+Remove them from JSON. Keep repository-specific decisions in tracked Markdown in the repository;
+put reusable config instructions in this guide's source template. Generated files are overwritten.
+
+## Merge automation and existing authorization
+
+`commands.pr-gate.mergeMode` controls only what `wp-finish-upsert-pr` does:
+
+- `AUTO`: attempt to squash-merge; if necessary and available, queue GitHub auto-merge.
+- `NONE`: publish/update the PR without attempting to merge it.
+
+This setting does not require extra merge authorization and does not override user instructions.
+When the user has requested landing, including through `$full-cycle` or `/full-cycle`, continue with
+`pnpm wp-land-pr` after the required checks. That command works with either value. GitHub permissions
+and merge requirements still apply. See `webpieces.git-workflow.md` for the workflow.

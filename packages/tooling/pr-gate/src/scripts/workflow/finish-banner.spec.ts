@@ -79,7 +79,7 @@ describe('the optional watch offer names the efficient wait, and both blocking o
 describe('mergeMode NONE — a human merges', () => {
     it('reads as success: the tooling owed only the PR', () => {
         const out = render(HUMAN);
-        expect(out).toContain('✅ PR finished');
+        expect(out).toContain('✅ PR published');
         expect(out).not.toContain('NOT FINISHED');
     });
 
@@ -106,7 +106,12 @@ describe('mergeMode NONE — a human merges', () => {
         expect(out).toContain('nothing for you to configure');
         expect(out).not.toContain('as long as this repo has');
         // Still the "nothing is owed" shape — no STOP/DO-NOT-report escalation on a policy outcome.
-        expect(out).toContain('You can stop here.');
+        expect(out).not.toContain('You can stop here.');
+        expect(out).not.toContain('posted for a human');
+        expect(out).not.toContain("that is this repo's policy");
+        expect(out).toContain('does not require additional authorization');
+        expect(out).toContain('$full-cycle');
+        expect(out).toContain('pnpm wp-land-pr');
         expect(out).not.toContain('DO NOT report this PR as done');
     });
 });

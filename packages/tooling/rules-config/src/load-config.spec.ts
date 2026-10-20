@@ -681,3 +681,15 @@ describe('loadAndValidate resolves the reviewer agent (overrideReviewerAgent)', 
         expect(() => loadAndValidate(dir)).toThrow('must be true or false');
     });
 });
+
+
+describe('config documentation delivery', () => {
+    it('generates the required guide even when a fresh config fails validation', () => {
+        const root = policyFixture.makeRepo('wp-config-guide-');
+        fs.writeFileSync(path.join(root, CONFIG_FILENAME), JSON.stringify({ upgradePolicyWhy: 'old prose' }));
+        expect(() => loadAndValidate(root)).toThrow('webpiecesConfigJsonDocumentation');
+        const guide = fs.readFileSync(path.join(root, '.webpieces/instruct-ai/webpieces.config-policy.md'), 'utf8');
+        expect(guide).toContain('Documentation lives outside JSON');
+        expect(guide).toContain('$full-cycle');
+    });
+});

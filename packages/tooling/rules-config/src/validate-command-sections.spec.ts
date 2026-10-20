@@ -349,7 +349,7 @@ describe('validatePrGateSection rejects gateSaltWhy', () => {
         );
     });
 
-    it('leaves every other *Why rationale key alone', () => {
+    it('rejects all other inline rationale keys', () => {
         const section = {
             mode: 'ON',
             buildCommand: 'pnpm ci',
@@ -359,7 +359,7 @@ describe('validatePrGateSection rejects gateSaltWhy', () => {
             buildCommandWhy: 'because',
             gatesWhy: 'because',
         };
-        expect(validatePrGateSection(section)).toEqual([]);
+        expect(validatePrGateSection(section).filter((error) => error.includes('retired inline documentation key'))).toHaveLength(2);
     });
 });
 

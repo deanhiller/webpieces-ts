@@ -140,7 +140,7 @@ export class LandPrCommand {
             bookkeeping +
             (policy === MERGE_MODE_AUTO
                 ? ''
-                : `   (pr-gate.mergeMode is ${policy} — wp-finish-upsert-pr will keep leaving PRs for a human.)\n`) +
+                : `   (pr-gate.mergeMode is ${policy} — wp-finish-upsert-pr publishes PRs without attempting a merge.)\n`) +
             '\n',
         );
     }

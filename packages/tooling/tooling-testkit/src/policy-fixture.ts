@@ -55,7 +55,7 @@ export class PolicyFixture {
             return { package: `./fixture-policy-${index}.cjs`, config: filename };
         });
         // webpieces-disable no-any-unknown -- external JSON or runtime exports are validated before policy execution
-        const next = { ...document, rulePacks: declarations } as Record<string, unknown>;
+        const next = { webpiecesConfigJsonDocumentation: '.webpieces/instruct-ai/webpieces.config-policy.md', ...document, rulePacks: declarations } as Record<string, unknown>;
         delete next['rules'];
         delete next['hookGuards'];
         if (Array.isArray(next['rulesDir']) && next['rulesDir'].length === 0)
