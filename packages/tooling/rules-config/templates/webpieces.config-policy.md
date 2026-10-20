@@ -62,6 +62,7 @@ was detected.
 
 The first entry in `webpieces.config.json` must be exactly:
 
+<!-- webpieces-disable no-state-paths-in-templates -- This example documents the exact required literal config value, not a resolved runtime state path. -->
 ```json
 "webpiecesConfigJsonDocumentation": ".webpieces/instruct-ai/webpieces.config-policy.md"
 ```
