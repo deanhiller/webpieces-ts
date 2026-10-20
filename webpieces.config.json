@@ -1,4 +1,5 @@
 {
+  "webpiecesConfigJsonDocumentation": ".webpieces/instruct-ai/webpieces.config-policy.md",
   "commands": {
     "pr-gate": {
       "mode": "ON",
