@@ -44,16 +44,28 @@ jobs:
               run: sudo apt-get update && sudo apt-get install -y graphviz
 
             - name: Ensure Nx cache directory exists
-              run: mkdir -p .nx/cache
+              run: mkdir -p .nx/cache .nx/workspace-data
 
-            - name: Cache Nx
-              uses: actions/cache@v5
+            - name: Restore Nx cache
+              # RESTORE ONLY. A PR reads the cache main's release.yml saved (a PR run can read its base
+              # branch's caches) and never saves its own: every PR used to save a ~440 MB copy, which put
+              # the repo over GitHub's 10 GB cache limit (issue #1363). The db is restored with the
+              # outputs because nx serves only hashes its db lists — see scripts/ci-nx-cache.sh. The path
+              # list must stay identical to release.yml's, or the restore never matches what it saved.
+              # There is no bare nx-<os>- fallback: a lockfile change starts from an empty cache.
+              uses: actions/cache/restore@v5
               with:
-                  path: .nx/cache
+                  path: |
+                      .nx/cache
+                      .nx/workspace-data/*.db
                   key: nx-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-${{ hashFiles('**/*.ts', '**/*.js', '!**/node_modules/**', '!**/dist/**') }}
                   restore-keys: |
                       nx-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-
-                      nx-${{ runner.os }}-
+
+            - name: Adopt the restored Nx cache db
+              # nx names its db after the machine id, which differs between runners; without the rename
+              # nx opens an empty db and every restored output is a miss.
+              run: bash scripts/ci-nx-cache.sh adopt-db
 
             - name: Run branch-appropriate CI checks
               # --parallel=4 matches the 4 vCPUs on ubuntu-latest (nx defaults to 3). A core-package
