@@ -13,6 +13,7 @@ import {
     ApiErrorPayload,
     SurfaceEndUserStatus,
     WEBPIECES_DEFAULT_ERROR_TRANSLATOR,
+    verbCarriesBody,
 } from '@webpieces/core-util';
 import {
     RequestContext,
@@ -77,7 +78,7 @@ export class ExpressWrapper {
         private formPost: boolean = false,
         /**
          * True for an @Endpoint(..., { rawBody: true }) route: RETAIN the verbatim bytes + the
-         * absolute url on the published {@link HttpRequest}, so an webhook(...) hook can verify a
+         * absolute url on the published {@link HttpRequest}, so a vendorAuth(...) hook can verify a
          * vendor signature over what the sender actually transmitted. Also switches the JSON parse
          * failure from "throw now" to "hold it for AuthFilter" — see {@link RawRequest.bodyParseError}.
          */
@@ -133,7 +134,7 @@ export class ExpressWrapper {
         //    know" and step aside. The translator was never too late; the context it needs was.
         //
         //    No `raw` yet — the bytes have not been read. Step 3 republishes WITH them, below the
-        //    same request scope and still above the filter chain, so webhook(...) signature
+        //    same request scope and still above the filter chain, so vendorAuth(...) credential
         //    verification sees exactly what it saw before.
         //
         //    KNOWN ISSUE, ACCEPTED AND NOT FIXED (issue #862): this publishes the request but does
@@ -172,7 +173,16 @@ export class ExpressWrapper {
             : [parsed.requestDto];
         const result = await this.clientMethod(...args);
 
-        // 5. The contract chooses body-only 200 JSON or caller-owned status/headers/body.
+        // 5. The contract chooses body-only 200 JSON, a 0-byte 204, or caller-owned status/headers/body.
+        this.sendResult(res, result);
+    }
+
+    /**
+     * Write the controller's result as the contract declared: `responseType: 'full'` is the caller's
+     * own status/headers/body, `responseBody: NONE` is a 0-byte 204, and anything else a 200 JSON body.
+     */
+    // webpieces-disable no-any-unknown -- the controller result is erased at the routing boundary
+    private sendResult(res: Response, result: unknown): void {
         if (this.routeMeta?.responseType === 'full') {
             if (!(result instanceof HttpResponseDto)) {
                 throw new ApiImplementationError(
@@ -182,6 +192,11 @@ export class ExpressWrapper {
                 );
             }
             this.send(res, result);
+            return;
+        }
+        if (this.routeMeta?.noResponseBody) {
+            // `responseBody: NONE` — 0 bytes on the wire: 204, no body, no Content-Type.
+            this.send(res, new HttpResponseDto(new HttpResponseStatus(204, 'No Content'), [], undefined));
             return;
         }
         if (result instanceof HttpResponseDto) {
@@ -201,7 +216,7 @@ export class ExpressWrapper {
      * Content-Type header — the annotation is the single source of truth.
      */
     private async parseBody(req: Request): Promise<ParsedBody> {
-        if (!['POST', 'PUT', 'PATCH'].includes(req.method)) {
+        if (!verbCarriesBody(req.method)) {
             return new ParsedBody({}, undefined);
         }
 

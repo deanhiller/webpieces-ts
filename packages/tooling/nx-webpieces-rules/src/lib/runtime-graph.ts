@@ -240,7 +240,7 @@ class RuntimeGraphDeriver {
 
     /**
      * The clock- and outside-driven entry points: for every contract a node IMPLEMENTS, each method
-     * declared `cron` or `external` becomes a trigger pointing AT that node.
+     * declared `cron` or `external-inbound` becomes a trigger pointing AT that node.
      *
      * Driven off `implements` rather than `uses` on purpose — these have no in-repo caller at all,
      * which is why they never produced an edge and stayed invisible.
@@ -250,11 +250,13 @@ class RuntimeGraphDeriver {
         for (const decl of decls) {
             for (const ref of decl.implementsApis) {
                 for (const method of this.methodsOf(ref.api)) {
-                    if (method.kind !== 'cron' && method.kind !== 'external') continue;
+                    if (method.kind !== 'cron' && method.kind !== 'external-inbound') continue;
                     const trigger: RuntimeTrigger = {
                         level: 0,
                         levelBecause: '',
-                        kind: method.kind,
+                        // A trigger's 'external' IS inbound: an outbound method has no in-repo
+                        // implementer, so it never reaches this loop.
+                        kind: method.kind === 'cron' ? 'cron' : 'external',
                         api: ref.api,
                         method: method.name,
                         service: decl.name,
@@ -262,7 +264,7 @@ class RuntimeGraphDeriver {
                     if (method.kind === 'cron') trigger.queueName = method.queueName;
                     // ONLY for 'external' (a clock needs no vendor name), and only when declared —
                     // a graph committed before callers were required has none and must still render.
-                    if (method.kind === 'external' && method.caller !== undefined)
+                    if (method.kind === 'external-inbound' && method.caller !== undefined)
                         trigger.caller = method.caller;
                     triggers.push(trigger);
                 }

@@ -16,16 +16,17 @@ import {
     WRITE_IDEMPOTENT,
     WRITE,
 } from './HttpEndpointOptions';
-import { GET, HttpMethod, POST } from './HttpContract';
+import { HTTP_METHODS, HttpMethod, isHttpMethod } from './HttpContract';
 import { AuthorizationDeclaration, AuthorizationType, AUTHORIZATION_METHODS_KEY, getAuthorization } from './authorization';
 import { HTTP_PARAMETERS_METADATA_KEY } from './http-parameter-decorators';
 
 export type { EndpointOptions, ExternalEndpointOptions } from './HttpEndpointOptions';
 export type { EndpointOperation } from './HttpEndpointOptions';
-export { READ, WRITE_IDEMPOTENT, WRITE } from './HttpEndpointOptions';
+export { READ, WRITE_IDEMPOTENT, WRITE, NONE } from './HttpEndpointOptions';
+export type { ResponseBodyKind } from './HttpEndpointOptions';
 export type { HttpMethod } from './HttpContract';
-export { GET, POST } from './HttpContract';
-export { PathParam, QueryParam, getHttpParameterDeclarations } from './http-parameter-decorators';
+export { GET, POST, PUT, PATCH, DELETE } from './HttpContract';
+export { PathParam, QueryParam, QueryString, getHttpParameterDeclarations } from './http-parameter-decorators';
 
 /**
  * Metadata keys for storing API routing information.
@@ -47,9 +48,9 @@ export const METADATA_KEYS = {
     ENDPOINT_HTTP_METHOD: 'webpieces:endpoint-http-method',
     /** Per-method required read/write semantics, parallel to ENDPOINTS. */
     ENDPOINT_OPERATION: 'webpieces:endpoint-operation',
-    /** Per-method @Endpoint trigger kind (rpc | cloudtasks | cron | external), parallel to ENDPOINTS. */
+    /** Per-method @Endpoint trigger kind (rpc | cloudtasks | cron | external-inbound | external-outbound), parallel to ENDPOINTS. */
     ENDPOINT_KIND: 'webpieces:endpoint-kind',
-    /** Per-method declared external CALLER (only for kind 'external'), parallel to ENDPOINTS. */
+    /** Per-method declared external CALLER (only for kind 'external-inbound'), parallel to ENDPOINTS. */
     ENDPOINT_CALLER: ENDPOINT_CALLER_KEY,
     /** Per-method @MaskLog spec (which DTO fields the LogApiCall path masks). */
     MASK_LOG: 'webpieces:mask-log',
@@ -70,17 +71,33 @@ enum EndpointKindValue {
     RPC = 'rpc',
     CLOUDTASKS = 'cloudtasks',
     CRON = 'cron',
-    EXTERNAL = 'external',
+    EXTERNAL_INBOUND = 'external-inbound',
+    EXTERNAL_OUTBOUND = 'external-outbound',
 }
 
 /** Short, statically importable decorator arguments. */
 export const RPC = EndpointKindValue.RPC;
 export const CLOUDTASKS = EndpointKindValue.CLOUDTASKS;
 export const CRON = EndpointKindValue.CRON;
-export const EXTERNAL = EndpointKindValue.EXTERNAL;
+/**
+ * An OUTSIDE system calls US (a vendor webhook, a push subscription). Requires `calledBy`, which names
+ * that system on the runtime architecture graph.
+ */
+export const EXTERNAL_INBOUND = EndpointKindValue.EXTERNAL_INBOUND;
+/**
+ * WE call an OUTSIDE system (a vendor API, a partner's webhook receiver). No server in this repo
+ * implements it, every method of the contract must be this kind, and the client sends ONLY the
+ * context keys listed with `@ExternalContextKeys(...)` and merges no response header into our context.
+ */
+export const EXTERNAL_OUTBOUND = EndpointKindValue.EXTERNAL_OUTBOUND;
 
 /** Runtime trigger/delivery owner used by validation, architecture, and infrastructure tooling. */
-export type EndpointKind = typeof RPC | typeof CLOUDTASKS | typeof CRON | typeof EXTERNAL;
+export type EndpointKind =
+    | typeof RPC
+    | typeof CLOUDTASKS
+    | typeof CRON
+    | typeof EXTERNAL_INBOUND
+    | typeof EXTERNAL_OUTBOUND;
 
 /** Class decorator that sets the shared base path for all endpoints. */
 export function ApiPath(basePath: string): ClassDecorator {
@@ -101,7 +118,7 @@ export function ApiPath(basePath: string): ClassDecorator {
 
 /**
  * Registers `@Endpoint(POST, path, WRITE, RPC)`. Method, operation, and trigger are required enum
- * values. Operation is independent of the HTTP verb. EXTERNAL additionally requires `calledBy`.
+ * values. Operation is independent of the HTTP verb. EXTERNAL_INBOUND additionally requires `calledBy`.
  * Each classification rides a parallel metadata map while ENDPOINTS remains method-name -> path.
  */
 // webpieces-disable no-function-outside-class -- decorator factory; decorators are inherently module-scope
@@ -109,7 +126,7 @@ export function Endpoint(
     httpMethod: HttpMethod,
     path: string,
     operation: EndpointOperation,
-    kind: typeof EXTERNAL,
+    kind: typeof EXTERNAL_INBOUND,
     options: ExternalEndpointOptions,
 ): MethodDecorator;
 // webpieces-disable no-function-outside-class -- decorator factory; decorators are inherently module-scope
@@ -117,7 +134,7 @@ export function Endpoint(
     httpMethod: HttpMethod,
     path: string,
     operation: EndpointOperation,
-    kind: Exclude<EndpointKind, typeof EXTERNAL>,
+    kind: Exclude<EndpointKind, typeof EXTERNAL_INBOUND>,
     options?: EndpointOptions,
 ): MethodDecorator;
 // webpieces-disable no-function-outside-class -- decorator factory; decorators are inherently module-scope
@@ -152,7 +169,7 @@ function validateEndpointClassification(
 ): void {
     if (!isHttpMethod(httpMethod)) {
         throw new Error(
-            `@Endpoint httpMethod must be GET or POST, received '${String(httpMethod)}'.`,
+            `@Endpoint httpMethod must be one of ${HTTP_METHODS.join(', ')}, received '${String(httpMethod)}'.`,
         );
     }
     if (!isEndpointOperation(operation)) {
@@ -162,7 +179,7 @@ function validateEndpointClassification(
     }
     if (!isEndpointKind(kind)) {
         throw new Error(
-            `@Endpoint trigger must be RPC, CLOUDTASKS, CRON, or EXTERNAL, received '${String(kind)}'.`,
+            `@Endpoint trigger must be RPC, CLOUDTASKS, CRON, EXTERNAL_INBOUND, or EXTERNAL_OUTBOUND, received '${String(kind)}'.`,
         );
     }
 }
@@ -206,7 +223,7 @@ function recordEndpointMetadata(
 
     const declared = options as ExternalEndpointOptions;
     if (
-        kind !== EXTERNAL ||
+        kind !== EXTERNAL_INBOUND ||
         typeof declared.calledBy !== 'string' ||
         declared.calledBy === ''
     )
@@ -358,7 +375,7 @@ export function getEndpointHttpMethod(apiClass: Function, methodName: string): H
     const method = methods[methodName];
     if (!isHttpMethod(method)) {
         throw new Error(
-            `@Endpoint ${apiClass.name || 'Unknown'}.${methodName} must declare GET or POST.`,
+            `@Endpoint ${apiClass.name || 'Unknown'}.${methodName} must declare one of ${HTTP_METHODS.join(', ')}.`,
         );
     }
     return method;
@@ -403,42 +420,57 @@ function isEndpointOperation(value: unknown): value is EndpointOperation {
     );
 }
 
-// webpieces-disable no-function-outside-class -- runtime backstop for JavaScript and `as any` callers; webpieces-disable no-any-unknown -- untrusted runtime value is narrowed to an HTTP method
-function isHttpMethod(value: unknown): value is HttpMethod {
-    return value === GET || value === POST;
-}
-
 // webpieces-disable no-function-outside-class -- runtime backstop for JavaScript and `as any` callers; webpieces-disable no-any-unknown -- untrusted runtime value is narrowed to an endpoint kind
 function isEndpointKind(value: unknown): value is EndpointKind {
     return (
         value === RPC ||
         value === CLOUDTASKS ||
         value === CRON ||
-        value === EXTERNAL
+        value === EXTERNAL_INBOUND ||
+        value === EXTERNAL_OUTBOUND
     );
 }
 
 /**
- * Fail-fast at wiring time when an `external` endpoint declared no caller. The {@link Endpoint}
- * overloads already make that a COMPILE error; this is the backstop for the ways TS is bypassed —
- * a JS caller, an `as any` options object, a hand-rolled Reflect.defineMetadata.
- * @throws Error naming the first external endpoint with no `calledBy`.
+ * Fail-fast at wiring time on the two EXTERNAL_* rules, called by `RouteMetadataFactory` for every
+ * transport (server routes and every client). The {@link Endpoint} overloads already make a missing
+ * `calledBy` a COMPILE error; this is the backstop for the ways TS is bypassed — a JS caller, an
+ * `as any` options object, a hand-rolled Reflect.defineMetadata. The second rule cannot be a type:
+ * "every method of this class" spans several decorators.
+ *
+ * @throws Error naming the first EXTERNAL_INBOUND endpoint with no `calledBy`, or the first method of
+ * a contract that mixes EXTERNAL_OUTBOUND with any other kind.
  */
 // webpieces-disable no-function-outside-class -- wiring-time assert, sibling of assertEveryEndpointHasAuthMode
-export function assertEveryExternalEndpointDeclaresCaller(apiClass: Function): void {
+export function assertExternalEndpointKinds(apiClass: Function): void {
     const kinds = getEndpointKinds(apiClass);
-    for (const methodName of Object.keys(kinds)) {
-        if (
-            kinds[methodName] !== 'external' ||
-            getEndpointCaller(apiClass, methodName) !== undefined
-        )
+    const apiName = apiClass.name || 'Unknown';
+    const methods = Object.keys(kinds);
+    const outbound = methods.filter((methodName: string) => kinds[methodName] === EXTERNAL_OUTBOUND);
+    if (outbound.length > 0 && outbound.length !== methods.length) {
+        const other = methods.find((methodName: string) => kinds[methodName] !== EXTERNAL_OUTBOUND)!;
+        throw new Error(
+            `${apiName} mixes EXTERNAL_OUTBOUND (${outbound[0]}) with ${String(kinds[other]).toUpperCase()} (${other}). ` +
+                `An EXTERNAL_OUTBOUND contract is an outside system's API that no server in this repo implements, so ` +
+                `EVERY method of it must be EXTERNAL_OUTBOUND; move the other methods to their own contract.`,
+        );
+    }
+    for (const methodName of methods) {
+        if (kinds[methodName] !== EXTERNAL_INBOUND || getEndpointCaller(apiClass, methodName) !== undefined)
             continue;
         throw new Error(
-            `External endpoint '${methodName}' in ${apiClass.name || 'Unknown'} declares no caller. Say WHO ` +
-                `posts to it: @Endpoint(POST, path, WRITE, EXTERNAL, { calledBy: '<vendor>' }) — the runtime architecture ` +
+            `External endpoint '${methodName}' in ${apiName} declares no caller. Say WHO ` +
+                `posts to it: @Endpoint(POST, path, WRITE, EXTERNAL_INBOUND, { calledBy: '<vendor>' }) — the runtime architecture ` +
                 `graph cannot name an inbound caller it was never told about.`,
         );
     }
+}
+
+/** True when the contract is an outside system's API: every method is EXTERNAL_OUTBOUND. */
+// webpieces-disable no-function-outside-class -- reflect-metadata reader, sibling of getEndpointKinds
+export function isExternalOutboundApi(apiClass: Function): boolean {
+    const kinds = Object.values(getEndpointKinds(apiClass));
+    return kinds.length > 0 && kinds.every((kind: EndpointKind) => kind === EXTERNAL_OUTBOUND);
 }
 
 /**
@@ -452,7 +484,7 @@ export function isFormPost(apiClass: Function, methodName: string): boolean {
 
 /**
  * True when the method's @Endpoint declared `{ rawBody: true }` — the transport must retain the
- * verbatim bytes + absolute url for an {@link WebhookAuthCallback} hook to verify.
+ * verbatim bytes + absolute url for a `VendorAuthHook.verify` to check.
  */
 // webpieces-disable no-function-outside-class -- reflect-metadata reader, sibling of isFormPost
 export function isRawBody(apiClass: Function, methodName: string): boolean {
@@ -460,29 +492,29 @@ export function isRawBody(apiClass: Function, methodName: string): boolean {
 }
 
 /**
- * Fail-fast at wiring time when an `webhook(...)` endpoint did not ask the transport to keep the
+ * Fail-fast at wiring time when a SERVED `vendorAuth(...)` endpoint did not ask the transport to keep the
  * bytes it is supposed to verify. A hook with nothing to verify is a MISCONFIGURATION, and it must
  * surface at startup, naming the fix — not as a 401 in production on exactly the traffic the endpoint
  * exists for.
  *
  * This pairing is a runtime assert rather than a type because the two halves live on DIFFERENT
- * decorators (`webhook(...)` and `@Endpoint`), and no union over one decorator's argument can say
+ * decorators (`vendorAuth(...)` and `@Endpoint`), and no union over one decorator's argument can say
  * anything about the other's.
  *
- * @throws Error naming the first `webhook(...)` endpoint missing `{ rawBody: true }`.
+ * @throws Error naming the first `vendorAuth(...)` endpoint missing `{ rawBody: true }`.
  */
 // webpieces-disable no-function-outside-class -- wiring-time assert, sibling of assertEveryEndpointHasAuthMode
-export function assertEveryWebhookEndpointRetainsRawBody(apiClass: Function): void {
+export function assertEveryVendorAuthEndpointRetainsRawBody(apiClass: Function): void {
     const endpoints = getEndpoints(apiClass) || {};
     for (const methodName of Object.keys(endpoints)) {
         if (
-            !getAuthMeta(apiClass, methodName)?.methods.some((method: AuthMode) => method.kind === 'webhook') ||
+            !getAuthMeta(apiClass, methodName)?.methods.some((method: AuthMode) => method.kind === 'vendorAuth') ||
             isRawBody(apiClass, methodName)
         )
             continue;
         throw new Error(
-            `Endpoint '${methodName}' in ${apiClass.name || 'Unknown'} is webhook(...) but its @Endpoint ` +
-                `does not declare { rawBody: true }. A webhook hook verifies a signature over the bytes and ` +
+            `Endpoint '${methodName}' in ${apiClass.name || 'Unknown'} is vendorAuth(...) but its @Endpoint ` +
+                `does not declare { rawBody: true }. VendorAuthHook.verify checks a credential over the bytes and ` +
                 `the url the SENDER transmitted, and without that option the transport parses the body and ` +
                 `throws them away — leaving the hook nothing to check.`,
         );
@@ -512,7 +544,7 @@ export function getAuthMeta(apiClass: Function, methodName: string): AuthMeta | 
  * the first thing offered should not be the widest grant.
  */
 export const MISSING_AUTH_DECORATOR_FIX =
-    "Declare @WpAuth([jwt(), oidcSameProject() or oidcSvcs(['svc-a']), sharedSecret(key), webhook(name), apiKey('regime', [{in: 'header', key: MyKeys.API_KEY}])]) " +
+    "Declare @WpAuth([jwt(), oidcSameProject() or oidcSvcs(['svc-a']), sharedSecret(key), vendorAuth(name), apiKey('regime', [{in: 'header', key: MyKeys.API_KEY}])]) " +
     "or @WpAuthPublic('reason'), and exactly one @WpAuthorization on every endpoint. Add @WpLocalOnly() separately when locality is required.";
 
 /**

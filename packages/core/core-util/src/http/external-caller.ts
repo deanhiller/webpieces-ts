@@ -1,5 +1,5 @@
 /**
- * WHO calls us from outside — the vocabulary an `external` @Endpoint uses to name its caller.
+ * WHO calls us from outside — the vocabulary an `EXTERNAL_INBOUND` @Endpoint uses to name its caller.
  *
  * Deliberately the SAME `(kind, label)` vocabulary the runtime architecture graph already uses for
  * OUTBOUND vendor seams (`@externalSystem saas twilio`). An inbound `saas twilio` and an outbound
@@ -10,24 +10,19 @@
  * anything in that file, and decorators.ts is near its file-size limit. The dependency is strictly
  * one-way (decorators.ts imports this; this imports only reflect-metadata), so no cycle is possible.
  *
- * ## MIGRATION (breaking, 0.5.x)
+ * ## `calledBy` is REQUIRED on every `EXTERNAL_INBOUND` endpoint
  *
- * `calledBy` is REQUIRED on every `EXTERNAL` endpoint — `@Endpoint(POST, path, WRITE, EXTERNAL, options)` no
- * longer compiles without it. That is the point: a lint rule can be ignored, a compile error cannot,
- * and the alternative was a graph that names our own contract where the vendor belongs. One property
- * per endpoint migrates it:
+ * `@Endpoint(POST, path, WRITE, EXTERNAL_INBOUND, options)` does not compile without it. A lint rule
+ * can be ignored, a compile error cannot, and the alternative was a graph that names our own contract
+ * where the vendor belongs:
  *
  * ```ts
- * // before
- * @Endpoint(POST, '/inbound', WRITE, EXTERNAL, { formPost: true })
- * // after
- * @Endpoint(POST, '/inbound', WRITE, EXTERNAL, { formPost: true, calledBy: 'twilio' })
+ * @Endpoint(POST, '/inbound', WRITE, EXTERNAL_INBOUND, { formPost: true, calledBy: 'twilio' })
  * // infrastructure rather than a vendor product:
- * @Endpoint(POST, '/push', WRITE, EXTERNAL, { calledBy: 'pubsub-push', callerKind: 'system' })
+ * @Endpoint(POST, '/push', WRITE, EXTERNAL_INBOUND, { calledBy: 'pubsub-push', callerKind: 'system' })
  * ```
  *
- * Nothing else changes: `rpc` / `cloudtasks` / `cron` endpoints keep their exact signature, options
- * stay optional there, and the ENDPOINTS path map every consumer iterates is untouched.
+ * `rpc` / `cloudtasks` / `cron` / `external-outbound` endpoints keep options optional.
  */
 
 import 'reflect-metadata';
@@ -57,7 +52,7 @@ export function isExternalSystemKind(value: string): value is ExternalSystemKind
 }
 
 /**
- * The declared caller of ONE `external` endpoint, normalized: `callerKind` defaulted, `calledBy`
+ * The declared caller of ONE `EXTERNAL_INBOUND` endpoint, normalized: `callerKind` defaulted, `calledBy`
  * carried as the label.
  *
  * `label` is the node IDENTITY on the runtime graph, not merely display text — two endpoints
@@ -70,7 +65,7 @@ export class ExternalCaller {
     ) {}
 }
 
-/** The kind an `external` @Endpoint gets when it declares `calledBy` but no `callerKind`. */
+/** The kind an `EXTERNAL_INBOUND` @Endpoint gets when it declares `calledBy` but no `callerKind`. */
 export const DEFAULT_CALLER_KIND: ExternalSystemKind = 'saas';
 
 /**
@@ -81,8 +76,8 @@ export const DEFAULT_CALLER_KIND: ExternalSystemKind = 'saas';
 export const ENDPOINT_CALLER_KEY = 'webpieces:endpoint-caller';
 
 /**
- * The DECLARED caller of one method, or undefined when it is not `external` (or is `external` but
- * bypassed TS — see `assertEveryExternalEndpointDeclaresCaller`). Mirrors `getEndpointOptions`.
+ * The DECLARED caller of one method, or undefined when it is not `EXTERNAL_INBOUND` (or is, but
+ * bypassed TS — see `assertExternalEndpointKinds`). Mirrors `getEndpointOptions`.
  */
 // webpieces-disable no-function-outside-class -- reflect-metadata reader, sibling of getEndpointOptions
 export function getEndpointCaller(

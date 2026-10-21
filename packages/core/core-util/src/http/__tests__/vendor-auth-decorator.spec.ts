@@ -1,11 +1,11 @@
-import { WpAuthorization, AuthorizationType, WpAuth, webhook as webhookAuth, jwt as jwtAuth } from '@webpieces/core-util';
+import { WpAuthorization, AuthorizationType, WpAuth, vendorAuth, jwt as jwtAuth } from '@webpieces/core-util';
 import 'reflect-metadata';
 import { describe, it, expect } from 'vitest';
-import { ApiPath, DestinationTrust, Endpoint, ContextKey, WpAuthPublic, assertEveryEndpointHasAuthMode, assertEveryWebhookEndpointRetainsRawBody, getAuthMeta, isFormPost, isRawBody, EXTERNAL, POST, READ, RPC, WRITE } from '../../index';
+import { ApiPath, DestinationTrust, Endpoint, ContextKey, WpAuthPublic, assertEveryEndpointHasAuthMode, assertEveryVendorAuthEndpointRetainsRawBody, getAuthMeta, isFormPost, isRawBody, EXTERNAL_INBOUND, POST, READ, RPC, WRITE } from '../../index';
 
 /**
- * The CONTRACT half of `@WpAuthWebhook` (the enforcement half is pinned in http-routing's
- * `WpAuthWebhook.spec.ts`, and the transport half in http-server's `ExpressWrapperRawBody.spec.ts`).
+ * The CONTRACT half of `vendorAuth(...)` (the enforcement half is pinned in http-routing's
+ * `WpAuthVendor.spec.ts`, and the transport half in http-server's `ExpressWrapperRawBody.spec.ts`).
  *
  * This file is itself acceptance check 2: the contracts below declare a verified webhook using
  * NOTHING but `@webpieces/core-util` — no server package, no vendor SDK — which is what keeps a
@@ -15,9 +15,9 @@ import { ApiPath, DestinationTrust, Endpoint, ContextKey, WpAuthPublic, assertEv
 
 @ApiPath('/hook')
 abstract class SentryHookApi {
-    @WpAuth([webhookAuth('sentry')])
+    @WpAuth([vendorAuth('sentry')])
     @WpAuthorization({ authType: AuthorizationType.USERS_OR_SERVICES })
-    @Endpoint(POST, '/sentry/issue', WRITE, EXTERNAL, { calledBy: 'sentry', rawBody: true })
+    @Endpoint(POST, '/sentry/issue', WRITE, EXTERNAL_INBOUND, { calledBy: 'sentry', rawBody: true })
     notify(_r: object): Promise<object> {
         throw new Error('subclass');
     }
@@ -26,9 +26,9 @@ abstract class SentryHookApi {
 /** The Twilio case: the hook needs the bytes + url, the controller still wants the flat DTO. */
 @ApiPath('/hook')
 abstract class TwilioHookApi {
-    @WpAuth([webhookAuth('twilio')])
+    @WpAuth([vendorAuth('twilio')])
     @WpAuthorization({ authType: AuthorizationType.USERS_OR_SERVICES })
-    @Endpoint(POST, '/twilio/sms', WRITE, EXTERNAL, {
+    @Endpoint(POST, '/twilio/sms', WRITE, EXTERNAL_INBOUND, {
         calledBy: 'twilio',
         formPost: true,
         rawBody: true,
@@ -41,20 +41,20 @@ abstract class TwilioHookApi {
 /** The misconfiguration the wiring-time assert exists to catch: verify what, exactly? */
 @ApiPath('/hook')
 abstract class ForgotRawBodyApi {
-    @WpAuth([webhookAuth('sentry')])
+    @WpAuth([vendorAuth('sentry')])
     @WpAuthorization({ authType: AuthorizationType.USERS_OR_SERVICES })
-    @Endpoint(POST, '/sentry/issue', WRITE, EXTERNAL, { calledBy: 'sentry' })
+    @Endpoint(POST, '/sentry/issue', WRITE, EXTERNAL_INBOUND, { calledBy: 'sentry' })
     notify(_r: object): Promise<object> {
         throw new Error('subclass');
     }
 }
 
-describe('@WpAuthWebhook declares a verified external caller on the contract', () => {
-    it('records a webhook AuthMode carrying the vendor name the hook switches on', () => {
+describe('vendorAuth(...) declares a verified external caller on the contract', () => {
+    it('records a vendorAuth AuthMode carrying the vendor name the hook switches on', () => {
         const mode = getAuthMeta(SentryHookApi, 'notify')?.methods[0];
 
-        expect(mode?.kind).toBe('webhook');
-        if (mode?.kind === 'webhook') {
+        expect(mode?.kind).toBe('vendorAuth');
+        if (mode?.kind === 'vendorAuth') {
             expect(mode.name).toBe('sentry');
         }
     });
@@ -69,8 +69,8 @@ describe('@WpAuthWebhook declares a verified external caller on the contract', (
             abstract class TwoModesApi {
                 @WpAuthPublic('Anonymous access is intentionally required')
                 @WpAuthorization({ authType: AuthorizationType.ANONYMOUS, reason: 'Anonymous access is intentionally required' })
-                @WpAuth([webhookAuth('sentry')])
-                @Endpoint(POST, '/y', WRITE, EXTERNAL, { calledBy: 'sentry', rawBody: true })
+                @WpAuth([vendorAuth('sentry')])
+                @Endpoint(POST, '/y', WRITE, EXTERNAL_INBOUND, { calledBy: 'sentry', rawBody: true })
                 hook(_r: object): Promise<object> {
                     throw new Error('subclass');
                 }
@@ -110,19 +110,19 @@ describe('{ rawBody: true } is retained per endpoint, beside formPost', () => {
  * The alternative — discovering it as a 401 in production — lands on exactly the traffic the endpoint
  * was built for, which is the failure mode this whole feature exists to remove.
  */
-describe('assertEveryWebhookEndpointRetainsRawBody', () => {
-    it('throws for @WpAuthWebhook without { rawBody: true }, naming the endpoint and the fix', () => {
-        expect(() => assertEveryWebhookEndpointRetainsRawBody(ForgotRawBodyApi)).toThrow(
-            /'notify' in ForgotRawBodyApi is webhook\(\.\.\.\).*rawBody: true/s,
+describe('assertEveryVendorAuthEndpointRetainsRawBody', () => {
+    it('throws for vendorAuth(...) without { rawBody: true }, naming the endpoint and the fix', () => {
+        expect(() => assertEveryVendorAuthEndpointRetainsRawBody(ForgotRawBodyApi)).toThrow(
+            /'notify' in ForgotRawBodyApi is vendorAuth\(\.\.\.\).*rawBody: true/s,
         );
     });
 
     it('passes when the pairing is right', () => {
-        expect(() => assertEveryWebhookEndpointRetainsRawBody(SentryHookApi)).not.toThrow();
-        expect(() => assertEveryWebhookEndpointRetainsRawBody(TwilioHookApi)).not.toThrow();
+        expect(() => assertEveryVendorAuthEndpointRetainsRawBody(SentryHookApi)).not.toThrow();
+        expect(() => assertEveryVendorAuthEndpointRetainsRawBody(TwilioHookApi)).not.toThrow();
     });
 
-    it('ignores endpoints that are not @WpAuthWebhook — rawBody is theirs to skip', () => {
+    it('ignores endpoints that are not vendorAuth(...) — rawBody is theirs to skip', () => {
         @ApiPath('/api')
         abstract class JwtApi {
             @WpAuth([jwtAuth()])
@@ -133,28 +133,28 @@ describe('assertEveryWebhookEndpointRetainsRawBody', () => {
             }
         }
 
-        expect(() => assertEveryWebhookEndpointRetainsRawBody(JwtApi)).not.toThrow();
+        expect(() => assertEveryVendorAuthEndpointRetainsRawBody(JwtApi)).not.toThrow();
     });
 });
 
 /**
- * The OUTBOUND half of the trust model. `webhook` authenticates its sender — but the sender is an
+ * The OUTBOUND half of the trust model. `vendorAuth` authenticates its sender — but the sender is an
  * outside VENDOR, not a peer in this repo, so there is no identity of ours to forward and nothing of
  * theirs to believe. Same answer as `AuthFilter.verifiesCaller` on the inbound side; if the two ends
  * disagreed, every such call would 401 in a way that looks like a framework bug.
  */
-describe('DestinationTrust classifies webhook as NOT caller-verifying (trusted keys stay home)', () => {
+describe('DestinationTrust classifies vendorAuth as NOT caller-verifying (trusted keys stay home)', () => {
     const USER_ID = ContextKey.trusted<string>('userId', 'jwt claim `sub`', 'x-user-id');
     const TENANT = ContextKey.untrusted<string>('tenantId', 'x-tenant-id');
 
-    it('omits a TRUSTED key for a webhook destination', () => {
-        const trust = DestinationTrust.forAuthMode({ kind: 'webhook', name: 'sentry' });
+    it('omits a TRUSTED key for a vendorAuth destination', () => {
+        const trust = DestinationTrust.forAuthMode({ kind: 'vendorAuth', name: 'sentry' });
 
         expect(trust.allows(USER_ID)).toBe(false);
     });
 
     it('still lets UNTRUSTED keys travel', () => {
-        const trust = DestinationTrust.forAuthMode({ kind: 'webhook', name: 'sentry' });
+        const trust = DestinationTrust.forAuthMode({ kind: 'vendorAuth', name: 'sentry' });
 
         expect(trust.allows(TENANT)).toBe(true);
     });

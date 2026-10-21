@@ -154,7 +154,7 @@ RequestContext.putTrusted(AUTHENTICATED_CALLER_KEY, caller); // a TRUSTED Contex
 ```
 
 The same three lines run for `apikey` (`ApiKeyHook.verifyApiKey(name, request)`) and for `webhook`
-(`WebhookAuthCallback.verifyWebhook(name, rawHttpRequest)`) — every authenticating hook resolves to an
+(`VendorAuthHook.verify(name, rawHttpRequest)`) — every authenticating hook resolves to an
 `AuthenticatedCaller` and seeds context through this ONE path. `AUTHENTICATED_CALLER_KEY` has **no**
 `httpHeader`: the principal is proof THIS hop's authenticator made, and it never travels.
 

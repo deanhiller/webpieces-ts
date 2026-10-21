@@ -11,8 +11,10 @@ export class DeletedAuthCompileAssertions {
         void CoreUtil.oidc;
         // @ts-expect-error use WpAuth([sharedSecret(...)]) and WpAuthorization
         void CoreUtil.WpAuthSharedSecret;
-        // @ts-expect-error use WpAuth([webhook(...)]) and WpAuthorization
+        // @ts-expect-error use WpAuth([vendorAuth(...)]) and WpAuthorization
         void CoreUtil.WpAuthWebhook;
+        // @ts-expect-error webhook(name) is renamed vendorAuth(name): one VendorAuthHook mints, refreshes and verifies
+        void CoreUtil.webhook;
         // @ts-expect-error use WpAuth([apiKey(...)]) and WpAuthorization
         void CoreUtil.WpAuthApiKey;
         // @ts-expect-error use separate WpLocalOnly, authentication and authorization

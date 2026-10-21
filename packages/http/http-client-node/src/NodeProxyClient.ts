@@ -16,12 +16,15 @@ import {
     TestCaseRecorder,
     toError,
     ClientRole,
+    HttpCallFactsHolder,
 } from '@webpieces/core-util';
 import {
     RequestContext,
     RequestContextApiCallContext,
     RequestContextHeaders,
     provideFrameworkTransient,
+    VendorAuthHook,
+    VENDOR_AUTH_HOOK,
 } from '@webpieces/core-context';
 import { GcpOidc } from '@webpieces/gcp-identity';
 import {
@@ -38,7 +41,6 @@ import { ContextFullUrlFilter } from './ContextFullUrlFilter';
 import { OutboundAuthFilter } from './OutboundAuthFilter';
 import { SsrfGuardFilter } from './SsrfGuardFilter';
 import { SsrfPolicy } from './SsrfPolicy';
-import { WEBHOOK_SIGNER_CALLBACK, WebhookSignerCallback } from './WebhookSignerCallback';
 
 /**
  * The two framework built-ins' priorities, RELATIVE TO EACH OTHER and to nothing else — they are
@@ -66,7 +68,7 @@ export class NodeProxyClient extends ProxyClient {
         const selected = methods.find((method: import('@webpieces/core-util').AuthMode) =>
             method.kind === 'oidc' || method.kind === 'public' ||
             (method.kind === 'shared-secret' && !!this.secrets?.get(method.secretKey)) ||
-            (method.kind === 'webhook' && !!this.webhookSigner));
+            (method.kind === 'vendorAuth' && !!this.vendorAuthHook));
         if (selected) return selected;
         if (methods.length === 1) return methods[0];
         throw new Error('No configured Node client credential can satisfy this endpoint; bind a declared service credential.');
@@ -83,12 +85,12 @@ export class NodeProxyClient extends ProxyClient {
         // @optional: only sharedSecret(...) endpoints need it; the client sends its bound value.
         // webpieces-disable inject-annotation-not-needed-for-concrete-class -- DI-resolved param; the esbuild/vitest path elides type-only imports (no design:paramtypes), so the explicit token is required
         @optional() @inject(SECRETS) private readonly secrets?: Secrets,
-        // @optional: only webhook(...) endpoints need it, and an unbound one makes them THROW
-        // rather than deliver unsigned — see WebhookSignerCallback.
+        // @optional: only vendorAuth(...) endpoints need it, and an unbound one makes them THROW
+        // rather than send unauthenticated — see VendorAuthHook.
         // webpieces-disable inject-annotation-not-needed-for-concrete-class -- DI-resolved param; the esbuild/vitest path elides type-only imports (no design:paramtypes), so the explicit token is required
         @optional()
-        @inject(WEBHOOK_SIGNER_CALLBACK)
-        private readonly webhookSigner?: WebhookSignerCallback,
+        @inject(VENDOR_AUTH_HOOK)
+        private readonly vendorAuthHook?: VendorAuthHook,
     ) {
         // This package is node-only and already depends on core-context, so it builds the
         // RequestContext-backed ApiCallContext itself. No startup install, and therefore nothing a
@@ -214,7 +216,7 @@ export class NodeProxyClient extends ProxyClient {
             ),
             new ClientFilterDefinition(
                 OUTBOUND_AUTH_PRIORITY,
-                new OutboundAuthFilter(this.gcpOidc, this.secrets, this.webhookSigner),
+                new OutboundAuthFilter(this.gcpOidc, this.secrets, this.vendorAuthHook),
             ),
         ];
     }
@@ -280,6 +282,7 @@ export class NodeProxyClient extends ProxyClient {
         requestDto: unknown,
         // webpieces-disable no-any-unknown -- DTO types are erased at the proxy boundary
         method: () => Promise<unknown>,
+        http?: HttpCallFactsHolder,
         // webpieces-disable no-any-unknown -- DTO types are erased at the proxy boundary
     ): Promise<unknown> {
         // Preserve the context precondition before logging, which also requires an active scope.
@@ -290,9 +293,9 @@ export class NodeProxyClient extends ProxyClient {
         }
         const recorder = this.headers.findRecorder();
         if (!recorder) {
-            return super.execute(route, requestDto, method);
+            return super.execute(route, requestDto, method, http);
         }
-        return this.recordCall(recorder, route, requestDto, method);
+        return this.recordCall(recorder, route, requestDto, method, http);
     }
 
     /**
@@ -308,6 +311,7 @@ export class NodeProxyClient extends ProxyClient {
         requestDto: unknown,
         // webpieces-disable no-any-unknown -- DTO types are erased at the proxy boundary
         method: () => Promise<unknown>,
+        http: HttpCallFactsHolder | undefined,
         // webpieces-disable no-any-unknown -- DTO types are erased at the proxy boundary
     ): Promise<unknown> {
         const ctxSnapshot: Record<string, string> = {};
@@ -324,7 +328,7 @@ export class NodeProxyClient extends ProxyClient {
 
         // eslint-disable-next-line @webpieces/no-unmanaged-exceptions -- capture failure into the recording, then rethrow unchanged
         try {
-            const response = await super.execute(route, requestDto, method);
+            const response = await super.execute(route, requestDto, method, http);
             recorded.successResponse = response;
             return response;
         } catch (err: unknown) {

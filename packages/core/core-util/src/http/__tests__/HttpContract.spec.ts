@@ -9,10 +9,18 @@ import {
     WpAuthPublic,
     GET,
     POST,
+    PUT,
+    PATCH,
+    DELETE,
     READ,
     RPC,
+    CLOUDTASKS,
+    CRON,
     WRITE,
+    WRITE_IDEMPOTENT,
+    NONE,
 } from '../decorators';
+import { verbCarriesBody } from '../HttpContract';
 import { HttpContractMapper, HttpParameterBinding } from '../HttpContract';
 import { RouteMetadataFactory } from '../RouteMetadataFactory';
 
@@ -210,6 +218,121 @@ describe('contract mapping validation', () => {
         );
         expect(() => RouteMetadataFactory.create(DuplicateQueryApi, 'get')).toThrow(
             /maps 'query:q' more than once/,
+        );
+    });
+
+    it('verbCarriesBody is true for POST, PUT and PATCH only', () => {
+        expect([GET, POST, PUT, PATCH, DELETE].map((verb: string) => verbCarriesBody(verb))).toEqual([
+            false,
+            true,
+            true,
+            true,
+            false,
+        ]);
+    });
+
+    it('PUT and PATCH take one unannotated body; DELETE must map every argument', () => {
+        @ApiPath('/things')
+        class VerbApi {
+            @WpAuthPublic('Test fixture')
+            @WpAuthorization({ authType: AuthorizationType.ANONYMOUS, reason: 'Test fixture' })
+            @Endpoint(PUT, '/{id}', WRITE_IDEMPOTENT, RPC)
+            put(@PathParam('id') _id: string, _body: object): Promise<object> {
+                return Promise.resolve({});
+            }
+
+            @WpAuthPublic('Test fixture')
+            @WpAuthorization({ authType: AuthorizationType.ANONYMOUS, reason: 'Test fixture' })
+            @Endpoint(PATCH, '/{id}', WRITE, RPC)
+            patch(@PathParam('id') _id: string, _body: object): Promise<object> {
+                return Promise.resolve({});
+            }
+
+            @WpAuthPublic('Test fixture')
+            @WpAuthorization({ authType: AuthorizationType.ANONYMOUS, reason: 'Test fixture' })
+            @Endpoint(DELETE, '/{id}', WRITE_IDEMPOTENT, RPC)
+            remove(@PathParam('id') _id: string): Promise<object> {
+                return Promise.resolve({});
+            }
+        }
+
+        @ApiPath('/things')
+        class BodyOnDeleteApi {
+            @WpAuthPublic('Test fixture')
+            @WpAuthorization({ authType: AuthorizationType.ANONYMOUS, reason: 'Test fixture' })
+            @Endpoint(DELETE, '/{id}', WRITE_IDEMPOTENT, RPC, { formPost: true })
+            remove(@PathParam('id') _id: string): Promise<object> {
+                return Promise.resolve({});
+            }
+
+            @WpAuthPublic('Test fixture')
+            @WpAuthorization({ authType: AuthorizationType.ANONYMOUS, reason: 'Test fixture' })
+            @Endpoint(DELETE, '/other/{id}', WRITE_IDEMPOTENT, RPC)
+            removeWithBody(@PathParam('id') _id: string, _body: object): Promise<object> {
+                return Promise.resolve({});
+            }
+        }
+
+        expect(RouteMetadataFactory.create(VerbApi, 'put').bodyParameterIndex).toBe(1);
+        expect(RouteMetadataFactory.create(VerbApi, 'patch').bodyParameterIndex).toBe(1);
+        const removal = RouteMetadataFactory.create(VerbApi, 'remove');
+        expect(removal.httpMethod).toBe('DELETE');
+        expect(removal.bodyParameterIndex).toBeUndefined();
+        expect(() => RouteMetadataFactory.create(BodyOnDeleteApi, 'remove')).toThrow(
+            'BodyOnDeleteApi.remove is DELETE and cannot declare formPost:true because DELETE has no request body.',
+        );
+        expect(() => RouteMetadataFactory.create(BodyOnDeleteApi, 'removeWithBody')).toThrow(
+            'BodyOnDeleteApi.removeWithBody is DELETE, so every parameter must use @PathParam(...) or @QueryParam(...); argument 1 is unmapped.',
+        );
+    });
+
+    it('refuses a CLOUDTASKS or CRON endpoint that is not POST', () => {
+        @ApiPath('/tasks')
+        class TaskVerbApi {
+            @WpAuthPublic('Test fixture')
+            @WpAuthorization({ authType: AuthorizationType.ANONYMOUS, reason: 'Test fixture' })
+            @Endpoint(PUT, '/run', WRITE, CLOUDTASKS)
+            run(_body: object): Promise<object> {
+                return Promise.resolve({});
+            }
+
+            @WpAuthPublic('Test fixture')
+            @WpAuthorization({ authType: AuthorizationType.ANONYMOUS, reason: 'Test fixture' })
+            @Endpoint(GET, '/tick', READ, CRON)
+            tick(): Promise<object> {
+                return Promise.resolve({});
+            }
+        }
+
+        expect(() => RouteMetadataFactory.create(TaskVerbApi, 'run')).toThrow(
+            'TaskVerbApi.run is a CLOUDTASKS endpoint declared PUT; task and scheduler delivery always uses POST, so declare @Endpoint(POST, ...).',
+        );
+        expect(() => RouteMetadataFactory.create(TaskVerbApi, 'tick')).toThrow(
+            'TaskVerbApi.tick is a CRON endpoint declared GET',
+        );
+    });
+
+    it('responseBody: NONE marks the route 0-byte, and cannot combine with a full response', () => {
+        @ApiPath('/void')
+        class VoidApi {
+            @WpAuthPublic('Test fixture')
+            @WpAuthorization({ authType: AuthorizationType.ANONYMOUS, reason: 'Test fixture' })
+            @Endpoint(POST, '/ack', WRITE, RPC, { responseBody: NONE })
+            ack(_body: object): Promise<void> {
+                return Promise.resolve();
+            }
+
+            @WpAuthPublic('Test fixture')
+            @WpAuthorization({ authType: AuthorizationType.ANONYMOUS, reason: 'Test fixture' })
+            @Endpoint(POST, '/full', WRITE, RPC, { responseBody: NONE, responseType: 'full' })
+            full(_body: object): Promise<void> {
+                return Promise.resolve();
+            }
+        }
+
+        expect(RouteMetadataFactory.create(VoidApi, 'ack').noResponseBody).toBe(true);
+        expect(() => RouteMetadataFactory.create(VoidApi, 'full')).toThrow(
+            "VoidApi.full declares responseBody: NONE together with responseType: 'full'",
         );
     });
 });

@@ -1,19 +1,20 @@
 import {
     DocumentedAuthMethod,
     DocumentedEndpoint,
+    DocumentedParameter,
     OperationIds,
     OperationIdStyle,
 } from '@webpieces/api-doc-model';
 import {
     CLOUDTASKS,
     CRON,
-    EXTERNAL,
+    EXTERNAL_INBOUND,
     mcpHintsForOperation,
-    POST,
     READ,
     RPC,
     WRITE,
     WRITE_IDEMPOTENT,
+    verbCarriesBody,
 } from '@webpieces/core-util';
 import { JsonObject, JsonValue } from '../json/JsonObject';
 import { ErrorResponseEntry } from '../manifest/OpenApiManifest';
@@ -23,6 +24,12 @@ import { OpenApiGenerationError } from '../OpenApiGenerationError';
 
 /** What a webhook's `void` return means on the wire, said once. */
 const ACKNOWLEDGE = 'Return any 2xx to acknowledge delivery. The body is ignored.';
+
+/**
+ * What a served route's `void` return (`responseBody: NONE`) means on the wire: our server answers
+ * `204` with 0 bytes (#1339). Only a WEBHOOK keeps {@link ACKNOWLEDGE} — there the PARTNER answers.
+ */
+const NO_CONTENT = 'Success. The response has no body.';
 
 /** The response document, and the responses a document-wide failure contract adds to it. */
 export class ResponseContract {
@@ -156,8 +163,9 @@ export class OperationRenderer {
             .set('summary', endpoint.summary)
             .set('description', this.describe(endpoint, isRoute))
             .set('tags', [tag])
+            .set('parameters', this.parameters(endpoint, contractName))
             .set('requestBody', this.requestBody(endpoint, contractName))
-            .set('responses', this.responses(endpoint, contractName, contract));
+            .set('responses', this.responses(endpoint, contractName, contract, isRoute));
     }
 
     /** The declared `@WpAuth` methods, verbatim — never in the public document (#1303). */
@@ -220,7 +228,7 @@ export class OperationRenderer {
         if (endpoint.kind === CRON) {
             return 'Triggered on a schedule, not by a caller.';
         }
-        if (endpoint.kind === EXTERNAL) {
+        if (endpoint.kind === EXTERNAL_INBOUND) {
             const caller = endpoint.options.calledBy;
             return caller === undefined
                 ? 'Triggered by an outside system.'
@@ -310,14 +318,45 @@ export class OperationRenderer {
     }
 
     /**
-     * The request DTO as a body. Only for `POST`: OpenAPI gives a `GET` body no defined semantics and
-     * most tooling drops it, so publishing one would document a request no generated client sends.
+     * Every `@PathParam` / `@QueryParam` argument as an OpenAPI Parameter Object, in declaration order.
+     * A list query argument is `style: form, explode: true` — repeated keys (`a=1&a=2`), which is what
+     * the webpieces client sends. Absent (not `[]`) when the endpoint binds nothing to the URL, so a
+     * contract with no URL parameters renders byte-identically to before.
+     */
+    private parameters(
+        endpoint: DocumentedEndpoint,
+        contractName: string,
+    ): readonly JsonValue[] | undefined {
+        if (endpoint.parameters.length === 0) {
+            return undefined;
+        }
+        return endpoint.parameters.map((parameter: DocumentedParameter, index: number) => {
+            const pointer = `#/paths/${contractName}_${endpoint.methodName}/parameters/${index}`;
+            const schema =
+                parameter.type === undefined
+                    ? new JsonObject().set('type', 'string')
+                    : this.schemas.type(parameter.type, pointer);
+            const isList = parameter.type?.kind === 'array';
+            return new JsonObject()
+                .set('name', parameter.name)
+                .set('in', parameter.location)
+                .set('required', parameter.required)
+                .set('style', isList ? 'form' : undefined)
+                .set('explode', isList ? true : undefined)
+                .set('schema', schema);
+        });
+    }
+
+    /**
+     * The request DTO as a body. Only for a verb that carries one (`verbCarriesBody`: POST, PUT,
+     * PATCH): OpenAPI gives a `GET`/`DELETE` body no defined semantics and most tooling drops it, so
+     * publishing one would document a request no generated client sends.
      */
     private requestBody(
         endpoint: DocumentedEndpoint,
         contractName: string,
     ): JsonObject | undefined {
-        if (endpoint.httpMethod !== 'POST' || endpoint.request === undefined) {
+        if (!verbCarriesBody(endpoint.httpMethod) || endpoint.request === undefined) {
             return undefined;
         }
         const pointer = `#/paths/${contractName}_${endpoint.methodName}/requestBody`;
@@ -339,9 +378,13 @@ export class OperationRenderer {
         endpoint: DocumentedEndpoint,
         contractName: string,
         contract: ResponseContract,
+        isRoute: boolean,
     ): JsonObject {
         const responses = new JsonObject();
-        responses.set('200', this.success(endpoint, contractName, contract));
+        // A void ROUTE is 204 with 0 bytes, exactly what our server sends. A void WEBHOOK stays a
+        // `200` the partner returns — any 2xx acknowledges, and its body is ignored.
+        const status = isRoute && this.body.isVoid(endpoint.response) ? '204' : '200';
+        responses.set(status, this.success(endpoint, contractName, contract, isRoute));
         for (const error of contract.errors) {
             // A failure only an AUTHENTICATED operation can have (a 401) is not one a public
             // endpoint can return, so it is not documented there.
@@ -357,10 +400,11 @@ export class OperationRenderer {
         endpoint: DocumentedEndpoint,
         contractName: string,
         contract: ResponseContract,
+        isRoute: boolean,
     ): JsonObject {
         const isVoid = this.body.isVoid(endpoint.response);
         const response = new JsonObject()
-            .set('description', this.successDescription(endpoint, contractName, isVoid))
+            .set('description', this.successDescription(endpoint, contractName, isVoid, isRoute))
             .set('headers', contract.headers);
         if (isVoid) {
             return response;
@@ -392,8 +436,9 @@ export class OperationRenderer {
     }
 
     /**
-     * The method's `@returns` text (#1292). With none, a `void` operation keeps the derived
-     * acknowledgement sentence — there is no body for `@returns` to describe. A body-carrying
+     * The method's `@returns` text (#1292). With none, a `void` operation gets a derived sentence —
+     * there is no body for `@returns` to describe: "no body" for a served route (a 204), and the
+     * acknowledgement sentence for a webhook the partner answers. A body-carrying
      * operation with none never gets here: {@link MissingReturnsGuard} refuses it before any document
      * renders, so there is no filler fallback to publish.
      */
@@ -401,6 +446,7 @@ export class OperationRenderer {
         endpoint: DocumentedEndpoint,
         contractName: string,
         isVoid: boolean,
+        isRoute: boolean,
     ): string {
         const returns = this.prose(endpoint.returnsDescription);
         if (returns !== undefined) {
@@ -414,7 +460,7 @@ export class OperationRenderer {
                     'before rendering; reaching here is a generator defect.',
             );
         }
-        return ACKNOWLEDGE;
+        return isRoute ? NO_CONTENT : ACKNOWLEDGE;
     }
 
     private prose(text: string | undefined): string | undefined {

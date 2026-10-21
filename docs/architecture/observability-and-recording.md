@@ -31,9 +31,10 @@ Four log lines per call (text form):
 - `[API-{side}-resp-FAIL] {id} errorType=… error=…` (a server error → `error`)
 
 where `id = {apiClass}.{methodName}` and `side ∈ {client, server}`. Captured fields: request body +
-UTF-8 byte size, response body + byte size, and `durationMs`. There is **deliberately no
+UTF-8 byte size, response body + byte size, and `durationMs`. There is **deliberately no top-level
 `statusCode`** — LogApiCall runs over in-process calls, pub-sub handlers, and cloud-task enqueues,
-"none of which have an HTTP status." Correlation fields (`requestId`, `orgId`, …) are **not**
+"none of which have an HTTP status." The HTTP CLIENT alone adds the nested, optional `http` (#1339):
+the last transmission's verb, masked url and status, so a vendor's 404 is told from its 500. Correlation fields (`requestId`, `orgId`, …) are **not**
 stamped here — a logging *backend* owns that, reading `RequestContext` on every record (see
 [`context-propagation.md`](./context-propagation.md)).
 
@@ -61,7 +62,9 @@ context key `API_CALL_INFO` (`name: 'api'`), which the winston/bunyan backends n
 - `ApiMethodInfo`: `side` (`client`|`server`), `apiClass` (**required**, the contract),
   `methodName` (**required**), `controllerName?` (server impl class).
 - `ApiCallInfo`: `method: ApiMethodInfo`, `type` (`request`|`response`), `result?`
-  (`success`|`failure`), `durationMs?`, `requestSize?`, `responseSize?`.
+  (`success`|`failure`), `durationMs?`, `requestSize?`, `responseSize?`, `responseCount?`, and
+  `http?: HttpCallFacts` (`method`, `url` — userinfo dropped, `@MaskLog` query values redacted —
+  `status`), on the RESPONSE tag of an HTTP client call only.
 
 **The field names here ARE the GCP field names** — rename a field and the filter renames with it.
 Enabled GCP filters include:
@@ -69,6 +72,7 @@ Enabled GCP filters include:
 - `jsonPayload.api.method.side="client"`
 - `jsonPayload.api.result="failure"`
 - `jsonPayload.api.durationMs>1000`
+- `jsonPayload.api.http.status=429` — a vendor throttling one of our HTTP client calls
 
 ## Console rendering — `[API.{side}.{phase}]`
 

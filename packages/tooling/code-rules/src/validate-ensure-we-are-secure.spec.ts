@@ -79,13 +79,13 @@ describe('ensure-we-are-secure HTTP contracts', () => {
     it('accepts canonical credentials, OR alternatives, and separate locality', () => {
         write('packages/api/src/Api.ts', `
             import { ApiPath, Endpoint, WpAuth, WpAuthPublic, WpAuthorization,
-                AuthorizationType, WpLocalOnly, jwt, oidcSameProject, oidcSvcs, webhook, sharedSecret, apiKey } from '@webpieces/core-util';
+                AuthorizationType, WpLocalOnly, jwt, oidcSameProject, oidcSvcs, vendorAuth, sharedSecret, apiKey } from '@webpieces/core-util';
             @ApiPath('/x') class Api {
                 @Endpoint() @WpAuth([jwt()]) @WpAuthorization({authType: AuthorizationType.ALL_USERS}) user(v: object): Promise<object> {throw 0;}
                 @Endpoint() @WpAuth([oidcSameProject()]) @WpAuthorization({authType: AuthorizationType.SERVICE_ONLY}) service(v: object): Promise<object> {throw 0;}
                 @Endpoint() @WpAuth([oidcSvcs(['svc-a', 'partner@other-project.iam.gserviceaccount.com'])]) @WpAuthorization({authType: AuthorizationType.SERVICE_ONLY}) listed(v: object): Promise<object> {throw 0;}
                 @Endpoint() @WpAuth([oidcSameProject(), oidcSvcs(['partner@other-project.iam.gserviceaccount.com']), jwt()]) @WpAuthorization({authType: AuthorizationType.USERS_OR_SERVICES}) paired(v: object): Promise<object> {throw 0;}
-                @Endpoint() @WpAuth([webhook('x')]) @WpAuthorization({authType: AuthorizationType.USERS_OR_SERVICES}) hook(v: object): Promise<object> {throw 0;}
+                @Endpoint() @WpAuth([vendorAuth('x')]) @WpAuthorization({authType: AuthorizationType.USERS_OR_SERVICES}) hook(v: object): Promise<object> {throw 0;}
                 @Endpoint() @WpAuth([sharedSecret('x'), jwt()]) @WpAuthorization({authType: AuthorizationType.USERS_OR_SERVICES}) either(v: object): Promise<object> {throw 0;}
                 @Endpoint() @WpAuth([apiKey('partner', [{in:'header',key:PartnerKeys.API_KEY}])]) @WpAuthorization({authType: AuthorizationType.ROLES, roles:['agent']}) key(v: object): Promise<object> {throw 0;}
                 @Endpoint() @WpLocalOnly() @WpAuthPublic('diagnostics') @WpAuthorization({authType: AuthorizationType.ANONYMOUS, reason:'diagnostics'}) local(v: object): Promise<object> {throw 0;}

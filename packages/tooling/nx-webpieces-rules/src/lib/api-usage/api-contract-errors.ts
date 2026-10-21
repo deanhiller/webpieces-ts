@@ -17,6 +17,7 @@ import {
     UndeclaredExternalCaller,
     UnresolvedApiCall,
     UnresolvedEndpointPath,
+    VoidResponseMismatch,
 } from './api-relations';
 import { RootUnionApiType, RootUnionFindings, ROOT_UNION_RULE } from './root-union-scan';
 import {
@@ -270,6 +271,26 @@ export class RootUnionApiTypeError extends Error {
     }
 }
 
+/** Endpoints whose `responseBody: NONE` and `Promise<void>` signature disagree (#1339). */
+export class VoidResponseMismatchError extends Error {
+    constructor(public readonly endpoints: readonly VoidResponseMismatch[]) {
+        super(
+            `${endpoints.length} @Endpoint(s) disagree with their return type about a response body:\n` +
+                endpoints
+                    .map((e: VoidResponseMismatch) =>
+                        e.declaresNone
+                            ? `     • ${e.api}.${e.method} declares responseBody: NONE but does not return Promise<void> — at ${e.at}`
+                            : `     • ${e.api}.${e.method} returns Promise<void> but does not declare responseBody: NONE — at ${e.at}`,
+                    )
+                    .join('\n') +
+                `\n   A Promise<void> endpoint answers 204 with 0 bytes, and the runtime cannot see 'void'\n` +
+                `   (design:returntype is just Promise). Add { responseBody: NONE } to @Endpoint's options on\n` +
+                `   every Promise<void> method, and only on those.`,
+        );
+        this.name = 'VoidResponseMismatchError';
+    }
+}
+
 /** Endpoints missing the operation declaration that drives retry safety and MCP annotations. */
 export class UndeclaredEndpointOperationError extends Error {
     constructor(public readonly endpoints: readonly UndeclaredEndpointOperation[]) {
@@ -348,19 +369,19 @@ export class UnresolvedEndpointPathError extends Error {
 export class UndeclaredExternalCallerError extends Error {
     constructor(public readonly callers: readonly UndeclaredExternalCaller[]) {
         super(
-            `${callers.length} 'external' @Endpoint(s) do not declare WHO calls them:\n` +
+            `${callers.length} 'external-inbound' @Endpoint(s) do not declare WHO calls them:\n` +
                 callers
                     .map(
                         (c: UndeclaredExternalCaller) =>
                             `     • ${c.api}.${c.method} — ${c.argument} at ${c.at}`,
                     )
                     .join('\n') +
-                `\n   An 'external' endpoint is driven by a system OUTSIDE this repo, and the runtime\n` +
+                `\n   An EXTERNAL_INBOUND endpoint is driven by a system OUTSIDE this repo, and the runtime\n` +
                 `   architecture graph draws that system as an inbound box. Name it:\n` +
-                `     @Endpoint(POST, '/hook', WRITE, EXTERNAL, { calledBy: 'twilio' })\n` +
+                `     @Endpoint(POST, '/hook', WRITE, EXTERNAL_INBOUND, { calledBy: 'twilio' })\n` +
                 `   Add callerKind for anything that is not a vendor SaaS — database | cache | queue |\n` +
                 `   storage | saas | system — e.g. a GCP Pub/Sub push subscription:\n` +
-                `     @Endpoint(POST, '/push', WRITE, EXTERNAL, { calledBy: 'pubsub-push', callerKind: 'system' })\n` +
+                `     @Endpoint(POST, '/push', WRITE, EXTERNAL_INBOUND, { calledBy: 'pubsub-push', callerKind: 'system' })\n` +
                 `   Use a string LITERAL or a SAME-module const: this scan is parser-only by design.`,
         );
         this.name = 'UndeclaredExternalCallerError';
@@ -387,7 +408,7 @@ export class EmptiedApiContractError extends Error {
                 `\n   A contract with zero usable methods is DROPPED from the api contracts, so the class,\n` +
                 `   its queues and its triggers disappear from the architecture graph with no error.\n` +
                 `   Every @Endpoint argument must be readable: the path as a string literal or a\n` +
-                `   SAME-module const, the kind as 'rpc' | 'cloudtasks' | 'cron' | 'external', and\n` +
+                `   SAME-module const, the kind as RPC | CLOUDTASKS | CRON | EXTERNAL_INBOUND | EXTERNAL_OUTBOUND, and\n` +
                 `   the options must declare operation. Fix the arguments above, or remove the decorators if the\n` +
                 `   class is genuinely not routed.`,
         );

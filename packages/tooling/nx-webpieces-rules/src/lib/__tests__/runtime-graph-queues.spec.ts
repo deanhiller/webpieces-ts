@@ -353,7 +353,7 @@ const PUSH_CONTRACTS: ApiContracts = {
             {
                 name: 'notify',
                 path: '/notify',
-                kind: 'external',
+                kind: 'external-inbound',
                 operation: 'write',
                 caller: { kind: 'system', label: 'pubsub-push' },
             },
@@ -367,7 +367,7 @@ const LEGACY_PUSH_CONTRACTS: ApiContracts = {
         owner: 'shared-api',
         apiKind: 'rpc',
         basePath: '/api/push',
-        methods: [{ name: 'notify', path: '/notify', kind: 'external', operation: 'write' }],
+        methods: [{ name: 'notify', path: '/notify', kind: 'external-inbound', operation: 'write' }],
     },
 };
 

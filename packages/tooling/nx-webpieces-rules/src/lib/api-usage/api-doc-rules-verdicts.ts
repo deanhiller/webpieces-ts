@@ -32,16 +32,18 @@ export const RPC_KIND: EndpointKind = 'rpc';
 /**
  * The endpoint kinds whose response a caller WAITS FOR, and which therefore must name a DTO (#1017).
  *
- * `rpc` and `external` are both synchronous request/response: somebody posts and reads what comes
- * back, so there IS a body and it must be a named type that can gain a field later. `void` on either
- * is a one-way door — a `void` response can never grow without breaking every generated client, where
- * an empty DTO grows additively forever. #1016 refused it on `rpc` only, because `external` was
- * unstated at the time; it is stated now.
+ * `rpc` is synchronous request/response between our own services: somebody posts and reads what
+ * comes back, so there IS a body and it must be a named type that can gain a field later. `void` on
+ * it is a one-way door — a `void` response can never grow without breaking every generated client,
+ * where an empty DTO grows additively forever.
  *
  * `cloudtasks` and `cron` are deliberately NOT here: delivery is fire-and-forget, nobody waits for a
- * body, and `Promise<void>` is the CONTRACT rather than an omission.
+ * body, and `Promise<void>` is the CONTRACT rather than an omission. Neither are `external-inbound`
+ * and `external-outbound` (#1339): the OUTSIDE system owns that wire — a vendor's webhook expects a
+ * bare 2xx, and a vendor's API documents ops that answer nothing — so a `Promise<void>` there
+ * describes somebody else's contract rather than choosing ours.
  */
-export const ANSWERING_KINDS: readonly EndpointKind[] = ['rpc', 'external'];
+export const ANSWERING_KINDS: readonly EndpointKind[] = ['rpc'];
 
 /** The scalar keywords a MIXED SCALAR union is made of. */
 const SCALAR_KEYWORDS = new Set<ts.SyntaxKind>([
@@ -96,14 +98,13 @@ export function unknownValueCure(rule: string): string {
     );
 }
 
-/** The one cure for a `void` endpoint that somebody is WAITING on (rpc or external). */
+/** The one cure for a `void` endpoint that somebody is WAITING on (rpc). */
 export const VOID_RPC_CURE =
     'Declare a named response DTO and return Promise<That>, even when it has no fields today: an ' +
     'empty object grows additively forever, and a void response cannot gain a field without ' +
-    'breaking every generated client. An external endpoint is a synchronous call an outside caller ' +
-    'waits on, so it has a body too — an empty one serializes as {} and the failure detail rides on ' +
-    'the thrown error. Promise<void> stays legal on a cloudtasks or cron endpoint, where ' +
-    'fire-and-forget is the contract.';
+    'breaking every generated client. Promise<void> stays legal on a cloudtasks, cron, ' +
+    'EXTERNAL_INBOUND or EXTERNAL_OUTBOUND endpoint, where fire-and-forget or an outside system ' +
+    'owns the contract.';
 
 /**
  * Why the resolver could not map this type, said in the author's vocabulary.
@@ -251,8 +252,8 @@ export function toolFailures(
         found.push(
             new Verdict(
                 `an MCP tool is declared on a '${endpoint.kind}' endpoint`,
-                'Only an RPC endpoint can be a tool — a cloudtasks, cron or external endpoint is ' +
-                    'driven by something other than a caller. Make it RPC, or drop the @WpMcpTool.',
+                'Only an RPC endpoint can be a tool — a cloudtasks, cron or external-inbound endpoint is ' +
+                    'driven by something other than a caller, and an external-outbound one is an outside system\'s. Make it RPC, or drop the @WpMcpTool.',
             ),
         );
     }

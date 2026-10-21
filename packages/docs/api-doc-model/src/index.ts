@@ -22,6 +22,7 @@ export {
     DocumentedAuthMethod,
     DocumentedEndpoint,
     DocumentedEndpointOptions,
+    DocumentedParameter,
     DocumentedField,
     DocumentedMcpTool,
     DocumentedType,

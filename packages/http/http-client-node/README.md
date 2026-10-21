@@ -77,7 +77,7 @@ It is not a different kind of client. It is ONE filter:
 @ApiPath('/ot-webhook')
 export class PartnerWebhookApi {
     @Endpoint(POST, '/deliver', WRITE, RPC)
-    @WpAuth([webhook('partner-hmac')])
+    @WpAuth([vendorAuth('partner-hmac')])
     @WpAuthorization({authType: AuthorizationType.USERS_OR_SERVICES})
     deliver(envelope: WebhookEnvelope): Promise<DeliveryAck>;
 }
@@ -119,7 +119,7 @@ for (const webhook of webhooks) {
   `new ContextFullUrlFilter(new SsrfTestingPolicy('local fake in the delivery e2e'))`.
 - **Every auth mode still works.** `oidcSameProject()` / `oidcSvcs(...)` mint for the FINAL base URL, `sharedSecret(...)`
   sends the value this client holds (N services implementing one contract behind one agreed secret is
-  a real topology), and `@WpAuth([webhook(name)])` calls your bound `WebhookSignerCallback`. The minter runs
+  a real topology), and `@WpAuth([vendorAuth(name)])` calls your bound `VendorAuthHook.mint`. The minter runs
   BELOW the SSRF guard, so a destination that is going to be refused never causes a credential to be
   created.
 - **The hop is VISIBLE.** `@externalSystem runtime <identity>` on the contract draws the destination
@@ -136,30 +136,39 @@ checks the caller itself: `oidcSameProject()` admits service accounts of its own
 tests, which a server on GCP refuses. See [Cloud Run OIDC](../../../docs/architecture/cloud-run-oidc.md)
 for deployment assumptions and why a direct application-verifier test does not test the edge.
 
-## Signing an OUTBOUND webhook — `webhook(...)`, the other way round
+## A vendor's credential, both ways — `vendorAuth(...)`
 
-`@WpAuth([webhook(name)])` names a signing SCHEME, not a direction. Inbound, a vendor signs and your bound
-`WebhookAuthCallback` (in `@webpieces/http-routing`) verifies. Outbound, WE are the vendor, so your
-bound `WebhookSignerCallback` produces the signature over the final URL and the exact wire bytes:
+`@WpAuth([vendorAuth(name)])` names a vendor's credential SCHEME, not a direction. ONE app-bound
+`VendorAuthHook` (in `@webpieces/core-context`, re-exported here and by `@webpieces/http-routing`)
+serves both ends: `verify` when the vendor calls US, `mint` when WE call the vendor (a per-merchant
+OAuth bearer, a partner's HMAC over the final URL and the exact wire bytes), and `refresh` when the
+vendor answers our call with a `401`:
 
 ```ts
 @provideSingleton()
-export class PartnerHmacSigner implements WebhookSignerCallback {
-    async sign(name: string, request: SignableRequest): Promise<Map<string, string>> {
+export class PartnerAuth extends VendorAuthHook {
+    async mint(name: string, request: SignableRequest): Promise<Map<string, string>> {
         const mac = createHmac('sha256', secretFor(name)).update(request.body ?? '').digest('hex');
         return new Map([['x-partner-signature', `sha256=${mac}`]]);
     }
+    async refresh(name: string): Promise<void> { /* renew the OAuth token, log in again */ }
+    async verify(name: string, request: RawHttpRequest): Promise<AuthenticatedCaller> { /* ... */ }
 }
 
 // AppModule.ts
-options.bind(WEBHOOK_SIGNER_CALLBACK).to(PartnerHmacSigner);
+options.bind(VENDOR_AUTH_HOOK).to(PartnerAuth);
 ```
+
+On a raw `401`, `OutboundAuthFilter` cancels the 401's body, calls `refresh(name)` ONCE, mints again
+and re-sends ONCE — never for a streaming upload, and once per logical call (the SSRF redirect loop
+re-enters the filter). A second `401` fails the call exactly as before. Serializing a refresh across
+instances (single-use refresh tokens) is the hook's job.
 
 The framework ships no vendor crypto, deliberately: Twilio signs the full URL with sorted params,
 Slack signs `v0:{ts}:{body}`, Meta signs the raw body. The scheme lives in your hook and the vendor on
-the contract. With **no** `WebhookSignerCallback` bound, every outbound `webhook(...)` call THROWS
-rather than delivering unsigned — the mirror of an unbound `WebhookAuthCallback` 401ing every inbound
-one.
+the contract. With **no** `VendorAuthHook` bound, every outbound `vendorAuth(...)` call THROWS
+(`MissingVendorAuthHookError`) rather than sending unauthenticated — the mirror of an unbound hook
+401ing every inbound one.
 
 Calls have a **30-second default timeout**, including URL resolution, filters/auth, fetch and body
 reading. `CallRegistry` from `@webpieces/core-util` shares ALL, API and API-method overrides with the

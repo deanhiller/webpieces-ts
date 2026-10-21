@@ -4,8 +4,10 @@ export {
     Endpoint,
     PathParam,
     QueryParam,
+    QueryString,
+    QueryParams,
     WpAuthPublic,
-    WpAuth, WpLocalOnly, isLocalOnly, jwt, oidcSameProject, oidcSvcs, sharedSecret, webhook, apiKey,
+    WpAuth, WpLocalOnly, isLocalOnly, jwt, oidcSameProject, oidcSvcs, sharedSecret, vendorAuth, apiKey,
     WpAuthorization, AuthorizationType, getAuthorization,
     Rpc,
     PubSub,
@@ -33,13 +35,20 @@ export {
     ValidateImplementation,
     GET,
     POST,
+    PUT,
+    PATCH,
+    DELETE,
+    verbCarriesBody,
     READ,
     WRITE_IDEMPOTENT,
     WRITE,
+    NONE,
     RPC,
     CLOUDTASKS,
     CRON,
-    EXTERNAL,
+    EXTERNAL_INBOUND,
+    EXTERNAL_OUTBOUND,
+    ExternalContextKeys,
     // @DocumentDesign moved to core-util (design-root marker, browser + Node);
     // re-exported here for back-compat.
     DocumentDesign,
@@ -108,7 +117,7 @@ export { ApiClient, ApiClientProxy } from './ApiClient';
 
 // Auth: the app-provided, container-bound pieces the framework AuthFilter injects.
 //  - AuthConfig: shared-secret STATE (sharedSecret(...) values).
-//  - JwtHook / OidcHook / WebhookAuthCallback / ApiKeyHook: OPTIONAL verification mechanisms
+//  - JwtHook / OidcHook / VendorAuthHook / ApiKeyHook: OPTIONAL verification mechanisms
 //    (bind only what you use; unbound means the matching endpoints 401, never open).
 //  - DefaultOidcVerifier: the built-in Google OIDC verifier used when no OidcHook is bound.
 export {
@@ -125,11 +134,12 @@ export {
     JWT_HOOK,
     OidcHook,
     OIDC_HOOK,
-    WebhookAuthCallback,
-    WEBHOOK_AUTH_CALLBACK,
     ApiKeyHook,
     API_KEY_HOOK,
 } from './AuthHooks';
+// vendorAuth(name): ONE hook — mint/refresh on the client, verify on this server. Defined in
+// @webpieces/core-context so the node client and this router share it; re-exported beside its siblings.
+export { VendorAuthHook, VENDOR_AUTH_HOOK, SignableRequest } from '@webpieces/core-context';
 export { DefaultOidcVerifier } from './DefaultOidcVerifier';
 // DefaultJwtHook: batteries-included HS256 JwtHook — `new DefaultJwtHook(secret)` and go.
 export { DefaultJwtHook, DefaultJwtMintRequest } from './DefaultJwtHook';

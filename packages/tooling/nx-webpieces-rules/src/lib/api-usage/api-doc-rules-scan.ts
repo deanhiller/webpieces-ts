@@ -25,11 +25,11 @@
  *    field). The extractor maps it to a primitive and the generator publishes `{}`, which in JSON
  *    Schema means "anything" — a partner-facing field with no shape, which is the defect the
  *    unmapped guard exists for, arriving through a door the guard does not watch.
- *  - an `rpc` or `external` endpoint whose response is `void`. Fire-and-forget is the CONTRACT of a
- *    `cloudtasks` or `cron` endpoint and is allowed there; an endpoint somebody WAITS on that answers
- *    nothing can never gain a field without a breaking change, where a named empty response object
- *    grows additively forever (#1017 — #1016 read this narrowly as rpc-only because `external` was
- *    unstated).
+ *  - an `rpc` endpoint whose response is `void`. Fire-and-forget is the CONTRACT of a
+ *    `cloudtasks` or `cron` endpoint and is allowed there, and an `external-inbound` /
+ *    `external-outbound` endpoint's wire is the outside system's (#1339); an rpc somebody WAITS on
+ *    that answers nothing can never gain a field without a breaking change, where a named empty
+ *    response object grows additively forever (#1017).
  *
  * ## Why it lives in the rules engine and not in the doc parser
  *
@@ -405,9 +405,9 @@ export class ApiDocRulesScan {
      * An endpoint somebody WAITS ON must NAME a response DTO, even an empty one.
      *
      * `Promise<void>` on a `cloudtasks` or `cron` endpoint is the CONTRACT — fire-and-forget, nothing
-     * to shape — and is allowed. On an `rpc` OR an `external` it is a one-way door: both are
-     * synchronous request/response, an outside caller reads what comes back, and a `void` response
-     * can never gain a field without breaking every generated client where `{}` grows additively
+     * to shape — and is allowed, as it is on `external-inbound` / `external-outbound`, whose wire an
+     * outside system owns (#1339). On an `rpc` it is a one-way door: a synchronous request/response
+     * whose caller reads what comes back, and a `void` response can never gain a field without breaking every generated client where `{}` grows additively
      * forever. This is a contract-EVOLUTION rule, which is why it is here and not in the MCP half: it
      * is worth having on an endpoint that never becomes a tool. See ANSWERING_KINDS (#1017).
      */

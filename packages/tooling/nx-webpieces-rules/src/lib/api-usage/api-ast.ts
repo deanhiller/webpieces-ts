@@ -8,7 +8,9 @@ import {
     ApiClassInfo,
     ApiMethodMeta,
     ApiParameterMeta,
+    CONTRACT_HTTP_METHODS,
     ContractHttpMethod,
+    contractVerbCarriesBody,
     ApiTransport,
     EmptiedApiContract,
     EndpointKind,
@@ -19,21 +21,32 @@ import {
     UndeclaredExternalCaller,
     UndeclaredEndpointOperation,
     UnresolvedEndpointPath,
+    VoidResponseMismatch,
 } from './api-relations';
 
 /** Legal enum-backed `@Endpoint` symbols; tooling reads source without importing application code. */
-const ENDPOINT_KINDS: readonly EndpointKind[] = ['rpc', 'cloudtasks', 'cron', 'external'];
+const ENDPOINT_KINDS: readonly EndpointKind[] = [
+    'rpc',
+    'cloudtasks',
+    'cron',
+    'external-inbound',
+    'external-outbound',
+];
 const ENDPOINT_OPERATIONS: readonly EndpointOperation[] = ['read', 'write-idempotent', 'write'];
 const ENDPOINT_SYMBOLS: Readonly<Record<string, string>> = {
     GET: 'GET',
     POST: 'POST',
+    PUT: 'PUT',
+    PATCH: 'PATCH',
+    DELETE: 'DELETE',
     READ: 'read',
     WRITE_IDEMPOTENT: 'write-idempotent',
     WRITE: 'write',
     RPC: 'rpc',
     CLOUDTASKS: 'cloudtasks',
     CRON: 'cron',
-    EXTERNAL: 'external',
+    EXTERNAL_INBOUND: 'external-inbound',
+    EXTERNAL_OUTBOUND: 'external-outbound',
 };
 
 /**
@@ -140,6 +153,7 @@ export class DecoratorArgDiagnostics {
     private readonly emptied: EmptiedApiContract[] = [];
     private readonly undeclaredCallers: UndeclaredExternalCaller[] = [];
     private readonly undeclaredOperations: UndeclaredEndpointOperation[] = [];
+    private readonly voidMismatches: VoidResponseMismatch[] = [];
 
     constructor(private readonly workspaceRoot: string) {}
 
@@ -182,6 +196,15 @@ export class DecoratorArgDiagnostics {
         );
     }
 
+    /** Record an `@Endpoint` whose `responseBody: NONE` disagrees with its `Promise<void>` signature. */
+    recordVoidMismatch(api: string, method: string, declaresNone: boolean, node: ts.Node): void {
+        this.voidMismatches.push(new VoidResponseMismatch(api, method, declaresNone, this.locate(node)));
+    }
+
+    voidResponseMismatches(): VoidResponseMismatch[] {
+        return this.voidMismatches;
+    }
+
     all(): NonLiteralDecoratorArg[] {
         return this.found;
     }
@@ -219,12 +242,25 @@ export function apiClassInfoFrom(
     if (!isAbstractClass(cls) || !hasClassDecorator(cls, 'ApiPath') || !cls.name) return null;
     const api = cls.name.text;
     const constants = stringConstantsOf(cls.getSourceFile());
+    const methods = endpointMethodsOf(cls, api, constants, diagnostics);
+    const outbound =
+        methods.length > 0 &&
+        methods.every((method: ApiMethodMeta) => method.kind === 'external-outbound');
     const info: ApiClassInfo = {
         api,
         owner: project,
-        type: apiTransport(cls),
-        methods: endpointMethodsOf(cls, api, constants, diagnostics),
+        type: outbound ? 'external' : apiTransport(cls),
+        methods,
     };
+    // An EXTERNAL_OUTBOUND contract is an outside system's API: it is a VENDOR node on the runtime
+    // graph, named by its `@externalSystem <kind> [label]` JSDoc tag or, without one, a `saas` box
+    // labelled with the contract name minus `Api`.
+    if (outbound) {
+        info.externalSystem = externalSystemTagFrom(cls, api) ?? {
+            kind: 'saas',
+            label: api.replace(/Api$/, ''),
+        };
+    }
     const basePath = decoratorStringArg(cls, 'ApiPath', constants, diagnostics, api);
     if (basePath !== null) info.basePath = basePath;
     return info;
@@ -267,10 +303,12 @@ export function endpointMethodsOf(
             diagnostics.recordUnresolvedPath(api, name, pathArg.unresolvedName, endpoint);
         }
         const httpMethod = methodArg.value;
+        reportUnknownVerb(diagnostics, api, name, httpMethod, endpoint);
         const operation = endpointOperationOf(args[2], constants, diagnostics, api, name, endpoint);
         const kind = kindArg.value;
         if (
-            (httpMethod !== 'GET' && httpMethod !== 'POST') ||
+            httpMethod === null ||
+            !CONTRACT_HTTP_METHODS.includes(httpMethod as ContractHttpMethod) ||
             pathArg.value === null ||
             operation === null ||
             kind === null ||
@@ -282,15 +320,15 @@ export function endpointMethodsOf(
             path: pathArg.value,
             kind: kind as EndpointKind,
             operation,
-            httpMethod,
+            httpMethod: httpMethod as ContractHttpMethod,
         };
-        const parameters = httpParametersOf(member, httpMethod, constants, diagnostics, api, name);
+        const parameters = httpParametersOf(member, httpMethod as ContractHttpMethod, constants, diagnostics, api, name);
         if (parameters.length > 0) method.parameters = parameters;
-        if (endpointResponseTypeOf(args[4], constants) === 'full') method.responseType = 'full';
+        readResponseShape(method, member, args[4], constants, diagnostics, api, endpoint);
         if (QUEUED_KINDS.includes(method.kind)) {
             method.queueName = queueNameOf(member, api, name, constants, diagnostics);
         }
-        if (method.kind === 'external') {
+        if (method.kind === 'external-inbound') {
             const caller = externalCallerOf(args[4], constants);
             if (caller.declaration !== null) method.caller = caller.declaration;
             else if (diagnostics !== null)
@@ -302,6 +340,42 @@ export function endpointMethodsOf(
         diagnostics.recordEmptiedContract(api, declared, cls);
     }
     return methods;
+}
+
+/** An unknown verb must fail generation, never silently drop the endpoint from the graph. */
+// webpieces-disable no-function-outside-class -- pure AST accessor, matching the sibling helpers
+function reportUnknownVerb(
+    diagnostics: DecoratorArgDiagnostics | null,
+    api: string,
+    name: string,
+    httpMethod: string | null,
+    endpoint: ts.Node,
+): void {
+    if (diagnostics === null || httpMethod === null) return;
+    if (CONTRACT_HTTP_METHODS.includes(httpMethod as ContractHttpMethod)) return;
+    diagnostics.record(api, 'Endpoint.httpMethod', name, httpMethod, endpoint);
+}
+
+/**
+ * The response-shape options: `responseType: 'full'`, and `responseBody: NONE`, which must agree with
+ * a `Promise<void>` signature in both directions (a mismatch is a fatal diagnostic).
+ */
+// webpieces-disable no-function-outside-class -- pure AST accessor, matching the sibling helpers
+function readResponseShape(
+    method: ApiMethodMeta,
+    member: ts.MethodDeclaration,
+    options: ts.Expression | undefined,
+    constants: ModuleStringConstants,
+    diagnostics: DecoratorArgDiagnostics | null,
+    api: string,
+    endpoint: ts.Node,
+): void {
+    if (endpointResponseTypeOf(options, constants) === 'full') method.responseType = 'full';
+    const declaresNone = endpointResponseBodyIsNone(options, constants);
+    if (declaresNone) method.responseBody = 'none';
+    if (diagnostics !== null && declaresNone !== returnsPromiseOfVoid(member)) {
+        diagnostics.recordVoidMismatch(api, method.name, declaresNone, endpoint);
+    }
 }
 
 /** Required side-effect declaration; no inference from GET/POST is permitted. */
@@ -352,7 +426,9 @@ export function httpMethodOf(
 ): ContractHttpMethod | null {
     const declared = endpointSymbolArgValue(methodArgument, constants);
     reportUnresolved(diagnostics, api, 'Endpoint.httpMethod', method, declared, node);
-    if (declared.value === 'GET' || declared.value === 'POST') return declared.value;
+    if (CONTRACT_HTTP_METHODS.includes(declared.value as ContractHttpMethod)) {
+        return declared.value as ContractHttpMethod;
+    }
     return null;
 }
 
@@ -368,7 +444,38 @@ export function endpointResponseTypeOf(
         : 'body';
 }
 
-/** Explicit `@PathParam` / `@QueryParam` mappings in source declaration order. */
+/** `{ responseBody: NONE }` (the enum member, or its `'none'` value) in `@Endpoint`'s options. */
+// webpieces-disable no-function-outside-class -- pure AST accessor, matching the sibling helpers
+export function endpointResponseBodyIsNone(
+    options: ts.Expression | undefined,
+    constants: ModuleStringConstants,
+): boolean {
+    if (options === undefined || !ts.isObjectLiteralExpression(options)) return false;
+    for (const property of options.properties) {
+        if (!ts.isPropertyAssignment(property) || !ts.isIdentifier(property.name)) continue;
+        if (property.name.text !== 'responseBody') continue;
+        const value = property.initializer;
+        if (ts.isIdentifier(value) && value.text === 'NONE') return true;
+        return decoratorArgValue(value, constants).value === 'none';
+    }
+    return false;
+}
+
+/** True when the method is declared `Promise<void>` (or `Promise<undefined>`). */
+// webpieces-disable no-function-outside-class -- pure AST accessor, matching the sibling helpers
+export function returnsPromiseOfVoid(member: ts.MethodDeclaration): boolean {
+    const type = member.type;
+    if (type === undefined || !ts.isTypeReferenceNode(type)) return false;
+    if (!ts.isIdentifier(type.typeName) || type.typeName.text !== 'Promise') return false;
+    const argument = type.typeArguments?.[0];
+    if (argument === undefined) return false;
+    if (argument.kind === ts.SyntaxKind.VoidKeyword || argument.kind === ts.SyntaxKind.UndefinedKeyword) {
+        return true;
+    }
+    return false;
+}
+
+/** Explicit `@PathParam` / `@QueryParam` / `@QueryString` mappings in source declaration order. */
 // webpieces-disable no-function-outside-class -- pure AST accessor, matching the sibling helpers
 export function httpParametersOf(
     member: ts.MethodDeclaration,
@@ -381,6 +488,10 @@ export function httpParametersOf(
     const parameters: ApiParameterMeta[] = [];
     member.parameters.forEach((parameter: ts.ParameterDeclaration, index: number) => {
         let mapped = false;
+        if (decoratorOn(parameter, 'QueryString') !== null) {
+            parameters.push({ index, source: 'query-map' });
+            return;
+        }
         for (const source of ['path', 'query'] as const) {
             const decoratorNameWanted = source === 'path' ? 'PathParam' : 'QueryParam';
             const decorator = decoratorOn(parameter, decoratorNameWanted);
@@ -392,15 +503,15 @@ export function httpParametersOf(
                 parameters.push({ index, source, wireName: wireName.value });
             }
         }
-        if (!mapped && httpMethod === 'POST') parameters.push({ index, source: 'body' });
+        if (!mapped && contractVerbCarriesBody(httpMethod)) parameters.push({ index, source: 'body' });
     });
     return parameters;
 }
 
-/** Default `callerKind` when an `external` endpoint declares `calledBy` alone — mirrors core-util. */
+/** Default `callerKind` when an `external-inbound` endpoint declares `calledBy` alone — mirrors core-util. */
 const DEFAULT_CALLER_KIND = 'saas';
 
-/** Resolved EXTERNAL caller declaration, or the source problem that prevented resolution. */
+/** Resolved EXTERNAL_INBOUND caller declaration, or the source problem that prevented resolution. */
 export class ExternalCallerRead {
     constructor(
         public readonly declaration: ExternalSystemDeclaration | null,

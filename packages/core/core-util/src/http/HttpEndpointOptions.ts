@@ -16,20 +16,42 @@ export const WRITE = EndpointOperationValue.WRITE;
 /** The side-effect contract callers use to decide whether repeating an operation is safe. */
 export type EndpointOperation = typeof READ | typeof WRITE_IDEMPOTENT | typeof WRITE;
 
+/** Nominal backing for {@link EndpointOptions.responseBody}. */
+enum ResponseBodyValue {
+    NONE = 'none',
+}
+
+/** `@Endpoint(..., { responseBody: NONE })` — the success response carries 0 bytes. */
+export const NONE = ResponseBodyValue.NONE;
+
+/** The one response-body declaration an endpoint can make; absent means a JSON body. */
+export type ResponseBodyKind = typeof NONE;
+
 /** Options for one `@Endpoint`, stored parallel to the method-to-path metadata. */
 export interface EndpointOptions {
     /** Return only a JSON body (default), or the full transport-neutral status/header/body value. */
     responseType?: EndpointResponseType;
+    /**
+     * `NONE`: this method returns `Promise<void>` and its success response is 0 BYTES. Our server
+     * answers `204 No Content` with no body and no Content-Type, and every client (node, browser,
+     * in-process) resolves `undefined` — while still ACCEPTING `{}`, an empty `200` or a `204`,
+     * because a vendor whose spec documents no body may still send one.
+     *
+     * WHY a declaration: `design:returntype` of an async method is just `Promise`, so the runtime
+     * cannot see `void`. The architecture scan checks this option agrees with the declared
+     * `Promise<void>` in both directions, so it cannot drift from the signature.
+     */
+    responseBody?: ResponseBodyKind;
     /**
      * Parse the request body as application/x-www-form-urlencoded instead of JSON. The request
      * DTO must be flat; urlencoded has no nesting. Default false = JSON.
      */
     formPost?: boolean;
     /**
-     * Retain the verbatim request bytes and absolute URL for a `webhook(...)` callback to verify.
+     * Retain the verbatim request bytes and absolute URL for a `vendorAuth(...)` hook to verify.
      * This is retention, not new buffering: the Express adapter already accumulates the body.
      *
-     * `webhook(...)` requires this option at wiring time. It combines with `formPost` for vendors
+     * A served `vendorAuth(...)` endpoint requires this option at wiring time. It combines with `formPost` for vendors
      * that sign flat form bodies, e.g. `{ formPost: true, rawBody: true }`.
      */
     rawBody?: boolean;
@@ -139,7 +161,7 @@ export interface EndpointOptions {
     openWorld?: boolean;
 }
 
-/** An external endpoint must also identify the outside system that calls it. */
+/** An EXTERNAL_INBOUND endpoint must also identify the outside system that calls it. */
 export interface ExternalEndpointOptions extends EndpointOptions {
     /** The outside system (`'twilio'`) — graph identity, not display text. */
     calledBy: string;

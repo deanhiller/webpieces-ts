@@ -4,6 +4,7 @@ import {
     ApiType,
     Endpoint,
     EXTERNAL_CUSTOMER,
+    NONE,
     POST,
     RPC,
     SVC_TO_SVC,
@@ -54,7 +55,7 @@ export abstract class PartnerDeliveryWebhookApi {
      *
      * @summary Order state changed
      */
-    @Endpoint(POST, '/order.state-changed', WRITE, RPC)
+    @Endpoint(POST, '/order.state-changed', WRITE, RPC, { responseBody: NONE })
     @WpAuthPublic(
         'Never served by this process: this contract declares the payload we SEND to a partner endpoint, and the manifest is what selects it into the webhooks block.',
     )

@@ -1,4 +1,4 @@
-import { ApiImplementationError, RouteMetadata } from '@webpieces/core-util';
+import { ApiImplementationError, RouteMetadata, verbCarriesBody } from '@webpieces/core-util';
 
 /**
  * ONE outbound request DTO -> the bytes on the wire, in exactly the encoding the endpoint DECLARED.
@@ -18,8 +18,9 @@ export class RequestBodySerializer {
      * rather than by the caller, because the encoding and the header that declares it are one
      * decision and splitting them is how they drift apart.
      *
-     * GET is always bodyless: a GET with a body is accepted by some servers, dropped by some proxies
-     * and cached wrongly by others, so the contract's declared verb settles it.
+     * GET and DELETE are always bodyless (`verbCarriesBody`): a GET with a body is accepted by some
+     * servers, dropped by some proxies and cached wrongly by others, so the contract's declared verb
+     * settles it. POST, PUT and PATCH send the one unannotated argument.
      */
     // webpieces-disable no-any-unknown -- request DTO type is erased at the generated proxy boundary
     serialize(
@@ -28,7 +29,7 @@ export class RequestBodySerializer {
         requestDto: unknown,
         headers: Map<string, string>,
     ): string | undefined {
-        if (route.httpMethod === 'GET' || requestDto === undefined) {
+        if (!verbCarriesBody(route.httpMethod) || requestDto === undefined) {
             return undefined;
         }
         if (route.formPost) {

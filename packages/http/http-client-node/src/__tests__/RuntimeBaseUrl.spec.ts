@@ -1,9 +1,9 @@
-import { ClientRole, WpAuthorization, AuthorizationType, WpAuth, oidcSameProject, sharedSecret as sharedSecretAuth, webhook as webhookAuth } from '@webpieces/core-util';
+import { ClientRole, WpAuthorization, AuthorizationType, WpAuth, oidcSameProject, sharedSecret as sharedSecretAuth, vendorAuth } from '@webpieces/core-util';
 import 'reflect-metadata';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { ApiPath, ClientRegistry, DestinationTrust, Endpoint, Filter, WpAuthPublic, Rpc, Secrets, Service, TestCaseRecorder, WebpiecesCoreHeaders, POST, RPC, WRITE } from '@webpieces/core-util';
 import type { RequestContextHeaders } from '@webpieces/core-context';
-import { RequestContext } from '@webpieces/core-context';
+import { RequestContext, SignableRequest, VendorAuthHook } from '@webpieces/core-context';
 import type { GcpOidc } from '@webpieces/gcp-identity';
 import type { ApiPrototype } from '@webpieces/http-client-core';
 import { buildClientProxy, ClientFilterDefinition, ClientRequest } from '@webpieces/http-client-core';
@@ -14,7 +14,6 @@ import { NodeProxyClient } from '../NodeProxyClient';
 import { SsrfTestingPolicy } from '../SsrfPolicy';
 import { SsrfRefusedError } from '../SsrfRefusedError';
 import { MissingRuntimeBaseUrlError } from '../MissingRuntimeBaseUrlError';
-import { SignableRequest, WebhookSignerCallback } from '../WebhookSignerCallback';
 
 class DeliverRequest {
     constructor(public readonly eventId: string) {}
@@ -70,7 +69,7 @@ abstract class SharedSecretApi {
 @ApiPath('/ot-webhook')
 abstract class SignedWebhookApi {
     @Endpoint(POST, '/deliver', WRITE, RPC)
-    @WpAuth([webhookAuth('partner-hmac')])
+    @WpAuth([vendorAuth('partner-hmac')])
     @WpAuthorization({ authType: AuthorizationType.USERS_OR_SERVICES })
     // webpieces-disable no-unmanaged-exceptions -- abstract contract stub, never executed
     deliver(_request: DeliverRequest): Promise<void> {
@@ -111,15 +110,26 @@ class StubSecrets {
     }
 }
 
-/** Records exactly what it was handed to sign, so a test can compare with the wire. */
-class RecordingWebhookSigner extends WebhookSignerCallback {
+/** Records exactly what it was handed to mint over, so a test can compare with the wire. */
+class RecordingVendorAuthHook extends VendorAuthHook {
     signedName: string | undefined;
     signed: SignableRequest | undefined;
+    mints = 0;
+    refreshes: string[] = [];
 
-    override async sign(name: string, request: SignableRequest): Promise<Map<string, string>> {
+    override async mint(name: string, request: SignableRequest): Promise<Map<string, string>> {
         this.signedName = name;
         this.signed = request;
-        return new Map([['x-partner-signature', `v1=${(request.body ?? '').length}:${request.url}`]]);
+        this.mints += 1;
+        return new Map([['x-partner-signature', `v${this.refreshes.length + 1}=${(request.body ?? '').length}:${request.url}`]]);
+    }
+
+    override async refresh(name: string): Promise<void> {
+        this.refreshes.push(name);
+    }
+
+    override async verify(): Promise<never> {
+        throw new Error('this spec is the OUTBOUND half; nothing here verifies');
     }
 }
 
@@ -178,9 +188,34 @@ function stubTransport(responses: Response[]): void {
     );
 }
 
+/**
+ * Like {@link stubTransport}, but each call gets a FRESH response from its factory rather than a
+ * clone. A cloned body is a tee, and cancelling one branch of a tee waits for the other — which a
+ * real fetch response never has.
+ */
+function stubFreshTransport(responses: (() => Response)[]): void {
+    let call = 0;
+    vi.stubGlobal(
+        'fetch',
+        vi.fn((url: string, options: RequestInit) => {
+            sent.push(new SentCall(url, options.body as string | undefined, options.headers as Record<string, string>));
+            const response = responses[Math.min(call, responses.length - 1)]();
+            call += 1;
+            return Promise.resolve(response);
+        }),
+    );
+}
+
 function ok(): Response {
     return new Response(JSON.stringify({}), {
         status: 200,
+        headers: { 'Content-Type': 'application/json' },
+    });
+}
+
+function unauthorized(): Response {
+    return new Response(JSON.stringify({ message: 'expired token' }), {
+        status: 401,
         headers: { 'Content-Type': 'application/json' },
     });
 }
@@ -199,7 +234,7 @@ class Doubles {
     readonly oidc = new StubOidc();
     readonly dns = publicDns();
 
-    constructor(readonly signer: WebhookSignerCallback | undefined = undefined) {}
+    constructor(readonly signer: VendorAuthHook | undefined = undefined) {}
 }
 
 /** A real NodeProxyClient bound to a contract, behind the same Proxy the factory would build. */
@@ -444,9 +479,9 @@ describe('outbound auth against a re-pointed URL', () => {
     });
 });
 
-describe('@WpAuthWebhook, outbound — WE are the vendor', () => {
+describe('vendorAuth(...), outbound — WE present the vendor credential', () => {
     it('hands the signer the FINAL url and the EXACT bytes that are transmitted', async () => {
-        const signer = new RecordingWebhookSigner();
+        const signer = new RecordingVendorAuthHook();
         const signedClient = client(
             SignedWebhookApi,
             new ClientConfig('partner-webhooks', ClientRole.SERVER),
@@ -468,7 +503,7 @@ describe('@WpAuthWebhook, outbound — WE are the vendor', () => {
         expect(sent[0].headers['x-partner-signature']).toBe(`v1=${signer.signed?.body?.length}:https://api.partner.example/ot-webhook/deliver`);
     });
 
-    it('FAILS CLOSED with no signer bound — it does not deliver unsigned', async () => {
+    it('FAILS CLOSED with no VendorAuthHook bound — it does not send unauthenticated', async () => {
         const unsigned = client(
             SignedWebhookApi,
             new ClientConfig('partner-webhooks', ClientRole.SERVER),
@@ -477,13 +512,57 @@ describe('@WpAuthWebhook, outbound — WE are the vendor', () => {
         );
 
         await expect(withOverride('https://api.partner.example', () => unsigned.deliver(new DeliverRequest('e1')))).rejects.toThrow(
-            /no WebhookSignerCallback is bound/,
+            /no VendorAuthHook is bound/,
         );
         expect(sent).toHaveLength(0);
     });
 
-    it('is callable at all — binding the client no longer throws for @WpAuthWebhook', () => {
-        expect(() => client(SignedWebhookApi, new ClientConfig('partner-webhooks', ClientRole.SERVER), [], new Doubles(new RecordingWebhookSigner()))).not.toThrow();
+    it('is callable at all — binding the client does not throw for vendorAuth(...)', () => {
+        expect(() => client(SignedWebhookApi, new ClientConfig('partner-webhooks', ClientRole.SERVER), [], new Doubles(new RecordingVendorAuthHook()))).not.toThrow();
+    });
+
+    it('on a 401: refreshes ONCE, mints again and re-sends ONCE', async () => {
+        stubFreshTransport([unauthorized, ok]);
+        const hook = new RecordingVendorAuthHook();
+        const signedClient = client(
+            SignedWebhookApi,
+            new ClientConfig('partner-webhooks', ClientRole.SERVER),
+            [new ClientFilterDefinition(1000, new ContextBaseUrlFilter())],
+            new Doubles(hook),
+        );
+
+        await withOverride('https://api.partner.example', () => signedClient.deliver(new DeliverRequest('e1')));
+
+        expect(hook.refreshes).toEqual(['partner-hmac']);
+        expect(hook.mints).toBe(2);
+        expect(sent).toHaveLength(2);
+        expect(sent[0].headers['x-partner-signature']).toMatch(/^v1=/);
+        expect(sent[1].headers['x-partner-signature']).toMatch(/^v2=/);
+    });
+
+    it('a SECOND 401 is not retried again — it fails the call as before', async () => {
+        stubFreshTransport([unauthorized]);
+        const hook = new RecordingVendorAuthHook();
+        const signedClient = client(
+            SignedWebhookApi,
+            new ClientConfig('partner-webhooks', ClientRole.SERVER),
+            [new ClientFilterDefinition(1000, new ContextBaseUrlFilter())],
+            new Doubles(hook),
+        );
+
+        await expect(
+            withOverride('https://api.partner.example', () => signedClient.deliver(new DeliverRequest('e1'))),
+        ).rejects.toThrow();
+        expect(hook.refreshes).toEqual(['partner-hmac']);
+        expect(sent).toHaveLength(2);
+    });
+
+    it('never refreshes for a mode other than vendorAuth', async () => {
+        stubFreshTransport([unauthorized]);
+        await expect(
+            withOverride('https://api.partner.example', () => partnerClient().deliver(new DeliverRequest('e1'))),
+        ).rejects.toThrow();
+        expect(sent).toHaveLength(1);
     });
 });
 

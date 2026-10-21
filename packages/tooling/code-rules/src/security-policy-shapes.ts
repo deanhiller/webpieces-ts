@@ -14,7 +14,7 @@ const DESCRIPTOR_KEYS: ReadonlyMap<string, string> = new Map([
     ['oidcSameProject', 'oidc:same-project'],
     ['oidcSvcs', 'oidc:services'],
     ['sharedSecret', 'shared-secret'],
-    ['webhook', 'webhook'],
+    ['vendorAuth', 'vendorAuth'],
     ['apiKey', 'apikey'],
 ]);
 
@@ -32,7 +32,7 @@ export class SecurityPolicyShapes {
             const name = ts.isCallExpression(element) ? this.canonicalName(element.expression, named, namespaces) : undefined;
             const key = name === undefined ? undefined : DESCRIPTOR_KEYS.get(name);
             if (!name || !key || seenKeys.has(key)) {
-                problems.push(new SecurityPolicyShapeProblem('HTTP_AUTH_METHODS', '@WpAuth accepts unique jwt/oidcSameProject/oidcSvcs/sharedSecret/webhook/apiKey descriptors; public/locality are separate declarations.'));
+                problems.push(new SecurityPolicyShapeProblem('HTTP_AUTH_METHODS', '@WpAuth accepts unique jwt/oidcSameProject/oidcSvcs/sharedSecret/vendorAuth/apiKey descriptors; public/locality are separate declarations.'));
             } else {
                 seenKeys.add(key);
                 if (ts.isCallExpression(element)) problems.push(...this.descriptor(name, element));
@@ -46,7 +46,7 @@ export class SecurityPolicyShapes {
         if (name === 'jwt' && call.arguments.length) return [new SecurityPolicyShapeProblem('HTTP_AUTH_METHODS', 'jwt() takes no policy; put roles/application policy in @WpAuthorization.')];
         if (name === 'oidcSameProject' && call.arguments.length) return [new SecurityPolicyShapeProblem('HTTP_AUTH_METHODS', 'oidcSameProject() takes no arguments; name service accounts with oidcSvcs([...]) instead.')];
         if (name === 'oidcSvcs') return this.oidcServices(call);
-        if (['sharedSecret', 'webhook', 'apiKey'].includes(name) && !call.arguments.length) return [new SecurityPolicyShapeProblem('HTTP_AUTH_METHODS', `${name}(...) requires its named credential configuration.`)];
+        if (['sharedSecret', 'vendorAuth', 'apiKey'].includes(name) && !call.arguments.length) return [new SecurityPolicyShapeProblem('HTTP_AUTH_METHODS', `${name}(...) requires its named credential configuration.`)];
         if (name === 'apiKey' && !call.arguments[1]) return [new SecurityPolicyShapeProblem('HTTP_AUTH_METHODS', 'apiKey(regime, credentials) requires a nonempty credentials tuple.')];
         if (name === 'apiKey' && ts.isArrayLiteralExpression(call.arguments[1]) && !call.arguments[1].elements.length) return [new SecurityPolicyShapeProblem('HTTP_AUTH_METHODS', 'apiKey credentials cannot be empty.')];
         return [];
