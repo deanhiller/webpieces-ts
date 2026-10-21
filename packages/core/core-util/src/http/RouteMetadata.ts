@@ -126,7 +126,8 @@ export class RouteMetadata {
      */
     readonly allowUpgradeInFlight: boolean;
     /**
-     * True when @Endpoint(..., { responseBody: NONE }): the method returns `Promise<void>` and the
+     * True when the endpoint is CLOUDTASKS or CRON (no response body BY KIND, #1348), or declares
+     * @Endpoint(..., { responseBody: NONE }): the method returns `Promise<void>` and the
      * success response is 0 bytes. The server answers 204 with no body; every client accepts `{}`,
      * an empty 200 or a 204 and resolves `undefined`. Default false = a JSON body.
      */

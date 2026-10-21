@@ -53,7 +53,8 @@ exemptions. There is no nx executor in v1: it writes committed source, run on de
   unannotated argument; and, when the spec documents any query parameter, one
   `@QueryString() query?: QueryParams` — a free-form multimap, because a vendor's query grammar is the
   vendor's (the documented keys and types are listed in the method's JSDoc)
-- `{ responseBody: NONE }` and `Promise<void>` when the spec documents no 2xx JSON body
+- `Promise<void>` (and no `responseBody` option: the vendor shapes an outbound response and the
+  client accepts any 2xx) when the spec documents no 2xx JSON body
 - DTO **classes** (`<Schema>Dto`, inline bodies `<Method>Request` / `<Method>Response`, nested inline
   objects `<Parent><Property>Dto`) and **string enums**; `allOf` is flattened, `oneOf`/`anyOf` become a
   union, `nullable` / `type: [T, "null"]` become `T | null`

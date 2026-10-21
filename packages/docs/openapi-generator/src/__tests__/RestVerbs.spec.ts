@@ -73,4 +73,13 @@ describe('REST verbs and URL parameters in OpenAPI', () => {
         const touch = harness.operation(document, '/gadgets/{shopId}/{gadgetId}/touch', 'put');
         expect(touch['responses']).toEqual({ '204': { description: 'Success. The response has no body.' } });
     });
+
+    it('an EXTERNAL_OUTBOUND void webhook documents any 2xx as the acknowledgement, never a 204 (#1348)', () => {
+        const webhooks = document['webhooks'] as Record<string, Record<string, Record<string, unknown>>>;
+        const shipped = webhooks['gadget.shipped']?.['post'];
+        expect(shipped, 'no gadget.shipped webhook').toBeDefined();
+        expect(shipped!['responses']).toEqual({
+            '200': { description: 'Return any 2xx to acknowledge delivery. The body is ignored.' },
+        });
+    });
 });

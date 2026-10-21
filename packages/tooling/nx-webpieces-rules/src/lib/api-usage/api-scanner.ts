@@ -132,7 +132,7 @@ export interface ApiScanResult {
     undeclaredExternalCallers: UndeclaredExternalCaller[];
     /** Endpoints lacking the explicit side-effect contract used for retry safety and MCP hints. */
     undeclaredEndpointOperations: UndeclaredEndpointOperation[];
-    /** Endpoints whose `responseBody: NONE` disagrees with a `Promise<void>` signature. Fatal. */
+    /** Endpoints whose response-body declaration disagrees with their kind or signature. Fatal. */
     voidResponseMismatches: VoidResponseMismatch[];
     /** `no-root-union-api-type`'s findings. Fatal in buildApiContracts — see root-union-scan.ts. */
     rootUnions: RootUnionFindings;

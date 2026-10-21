@@ -3,7 +3,7 @@ import 'reflect-metadata';
 import express from 'express';
 import type { Server as HttpServer } from 'http';
 import { ContainerModule, ContainerModuleLoadOptions } from 'inversify';
-import { ApiPath, ClientRegistry, ContextKey, Endpoint, HeaderRegistry, HttpHeader, HttpResponseDto, HttpResponseStatus, PathParam, QueryParam, Rpc, WpAuthPublic, GET, POST, PUT, PATCH, DELETE, NONE, READ, RPC, WRITE, WRITE_IDEMPOTENT, EXTERNAL_OUTBOUND, ExternalContextKeys, WebpiecesCoreHeaders, QueryParams, QueryString } from '@webpieces/core-util';
+import { ApiPath, ClientRegistry, ContextKey, Endpoint, HeaderRegistry, HttpHeader, HttpResponseDto, HttpResponseStatus, PathParam, QueryParam, Rpc, WpAuthPublic, GET, POST, PUT, PATCH, DELETE, NONE, READ, RPC, WRITE, WRITE_IDEMPOTENT, EXTERNAL_OUTBOUND, CLOUDTASKS, CRON, PubSub, ExternalContextKeys, WebpiecesCoreHeaders, QueryParams, QueryString } from '@webpieces/core-util';
 import {
     AuthenticatedCaller,
     JWT_HOOK,
@@ -228,6 +228,53 @@ abstract class VoidVendorApi {
     }
 }
 
+/** CLOUDTASKS / CRON endpoints have no response body BY KIND (#1348): no responseBody option. */
+@PubSub()
+@ApiPath('/typed/trigger')
+abstract class TriggerApi {
+    @WpAuthPublic('Trigger fixture')
+    @WpAuthorization({ authType: AuthorizationType.ANONYMOUS, reason: 'Trigger fixture' })
+    @Endpoint(POST, '/run', WRITE, CLOUDTASKS)
+    // webpieces-disable no-unmanaged-exceptions -- contract stub
+    run(_request: RenameRequest): Promise<void> {
+        throw new Error('contract only');
+    }
+
+    @WpAuthPublic('Trigger fixture')
+    @WpAuthorization({ authType: AuthorizationType.ANONYMOUS, reason: 'Trigger fixture' })
+    @Endpoint(POST, '/tick', WRITE, CRON)
+    // webpieces-disable no-unmanaged-exceptions -- contract stub
+    tick(_request: RenameRequest): Promise<void> {
+        throw new Error('contract only');
+    }
+}
+
+/** A vendor acknowledging our outbound calls with any 2xx (#1348): no responseBody option. */
+@ApiPath('/ack')
+abstract class AckVendorApi {
+    @WpAuthPublic('Outbound ack fixture')
+    @WpAuthorization({ authType: AuthorizationType.ANONYMOUS, reason: 'Outbound ack fixture' })
+    @Endpoint(POST, '/{shape}', WRITE, EXTERNAL_OUTBOUND)
+    // webpieces-disable no-unmanaged-exceptions -- contract stub
+    notify(@PathParam('shape') _shape: string): Promise<void> {
+        throw new Error('contract only');
+    }
+}
+
+class TriggerController extends TriggerApi {
+    readonly delivered: string[] = [];
+
+    override run(request: RenameRequest): Promise<void> {
+        this.delivered.push(`run:${request.name}`);
+        return Promise.resolve();
+    }
+
+    override tick(request: RenameRequest): Promise<void> {
+        this.delivered.push(`tick:${request.name}`);
+        return Promise.resolve();
+    }
+}
+
 class ContextProbeController extends ContextProbeApi {
     override active(): Promise<object> {
         return Promise.resolve({ active: RequestContext.isActive() });
@@ -348,6 +395,7 @@ describe('real server + node typed HTTP transport', () => {
     let apiRouter: WebpiecesRouter;
     let nodeTransportClient: TypedTransportApi;
     let transportController: TypedTransportController;
+    const triggerController = new TriggerController();
 
     beforeAll(async () => {
         HeaderRegistry.configure([AUTHORIZATION, VENDOR_MERCHANT], true);
@@ -367,6 +415,11 @@ describe('real server + node typed HTTP transport', () => {
             res.setHeader('x-request-id', 'vendor-minted-id');
             res.status(200).json({ headers });
         };
+        vendor.post('/ack/no-content', (_req: express.Request, res: express.Response) => res.status(204).end());
+        vendor.post('/ack/empty', (_req: express.Request, res: express.Response) => res.status(200).end());
+        vendor.post('/ack/accepted', (_req: express.Request, res: express.Response) => res.status(202).json({ id: 'x' }));
+        vendor.post('/ack/text', (_req: express.Request, res: express.Response) => res.status(200).type('text/plain').send('OK'));
+        vendor.post('/ack/mislabelled', (_req: express.Request, res: express.Response) => res.status(200).type('application/json').send('OK'));
         vendor.get('/vendor/echo', echo);
         vendor.get('/vendor/echo-merchant', echo);
         vendor.get('/vendor/search/:shop', (req: express.Request, res: express.Response) => res.status(200).json({ url: req.originalUrl }));
@@ -379,6 +432,7 @@ describe('real server + node typed HTTP transport', () => {
         const bindings = new ContainerModule((options: ContainerModuleLoadOptions) => {
             options.bind(ContextProbeController).toConstantValue(contextController);
             options.bind(TypedTransportController).toConstantValue(transportController);
+            options.bind(TriggerController).toConstantValue(triggerController);
             options.bind(JWT_HOOK).toConstantValue(new AllowJwtHook());
         });
         apiRouter = await WebpiecesRouterFactory.create({
@@ -386,6 +440,7 @@ describe('real server + node typed HTTP transport', () => {
         });
         apiRouter.addRoutes(ContextProbeApi, ContextProbeController);
         apiRouter.addRoutes(TypedTransportApi, TypedTransportController);
+        apiRouter.addRoutes(TriggerApi, TriggerController);
         server = await new WebpiecesExpressRouter(apiRouter).bindAndStartExpress(express(), PORT);
 
         nodeTransportClient = nodeClient(TypedTransportApi);
@@ -526,6 +581,39 @@ describe('real server + node typed HTTP transport', () => {
         });
         expect(inProcess).toBeUndefined();
         expect(transportController.touched).toEqual(['one', 'two', 'three']);
+    });
+
+    it('CLOUDTASKS and CRON answer 204 with 0 bytes by KIND, and the in-process client resolves undefined', async () => {
+        for (const path of ['run', 'tick']) {
+            const raw = await fetch(`http://localhost:${PORT}/typed/trigger/${path}`, {
+                method: 'POST',
+                headers: { 'content-type': 'application/json' },
+                body: JSON.stringify({ name: 'wire' }),
+            });
+            expect(raw.status).toBe(204);
+            expect(raw.headers.get('content-type')).toBeNull();
+            expect(await raw.text()).toBe('');
+        }
+
+        const inProcess = apiRouter.createApiClient<TriggerApi>(TriggerApi);
+        const results = await RequestContext.run(async () => {
+            RequestContext.setRequest(new HttpRequest('POST', '/feature-test', new Map()));
+            return [await inProcess.run(new RenameRequest('local')), await inProcess.tick(new RenameRequest('local'))];
+        });
+        expect(results).toEqual([undefined, undefined]);
+        expect(triggerController.delivered).toEqual(['run:wire', 'tick:wire', 'run:local', 'tick:local']);
+    });
+
+    it('an EXTERNAL_OUTBOUND void call accepts ANY 2xx: 204/empty/text -> undefined, JSON -> parsed, never throws', async () => {
+        const vendor = nodeClient(AckVendorApi, 'void-vendor');
+        const results = await RequestContext.run(async () => {
+            const seen: unknown[] = [];
+            for (const shape of ['no-content', 'empty', 'accepted', 'text', 'mislabelled']) {
+                seen.push(await vendor.notify(shape));
+            }
+            return seen;
+        });
+        expect(results).toEqual([undefined, undefined, { id: 'x' }, undefined, undefined]);
     });
 
     it('a void route on a foreign server accepts an empty 200, {} or an undocumented body', async () => {

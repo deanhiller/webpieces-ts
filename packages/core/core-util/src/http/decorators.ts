@@ -12,6 +12,7 @@ import {
     EndpointOperation,
     EndpointOptions,
     ExternalEndpointOptions,
+    NoResponseBodyOptionEndpointOptions,
     READ,
     WRITE_IDEMPOTENT,
     WRITE,
@@ -20,7 +21,7 @@ import { HTTP_METHODS, HttpMethod, isHttpMethod } from './HttpContract';
 import { AuthorizationDeclaration, AuthorizationType, AUTHORIZATION_METHODS_KEY, getAuthorization } from './authorization';
 import { HTTP_PARAMETERS_METADATA_KEY } from './http-parameter-decorators';
 
-export type { EndpointOptions, ExternalEndpointOptions } from './HttpEndpointOptions';
+export type { EndpointOptions, ExternalEndpointOptions, NoResponseBodyOptionEndpointOptions } from './HttpEndpointOptions';
 export type { EndpointOperation } from './HttpEndpointOptions';
 export { READ, WRITE_IDEMPOTENT, WRITE, NONE } from './HttpEndpointOptions';
 export type { ResponseBodyKind } from './HttpEndpointOptions';
@@ -134,7 +135,15 @@ export function Endpoint(
     httpMethod: HttpMethod,
     path: string,
     operation: EndpointOperation,
-    kind: Exclude<EndpointKind, typeof EXTERNAL_INBOUND>,
+    kind: typeof CLOUDTASKS | typeof CRON | typeof EXTERNAL_OUTBOUND,
+    options?: NoResponseBodyOptionEndpointOptions,
+): MethodDecorator;
+// webpieces-disable no-function-outside-class -- decorator factory; decorators are inherently module-scope
+export function Endpoint(
+    httpMethod: HttpMethod,
+    path: string,
+    operation: EndpointOperation,
+    kind: typeof RPC,
     options?: EndpointOptions,
 ): MethodDecorator;
 // webpieces-disable no-function-outside-class -- decorator factory; decorators are inherently module-scope

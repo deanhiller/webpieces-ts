@@ -26,8 +26,11 @@ import { OpenApiGenerationError } from '../OpenApiGenerationError';
 const ACKNOWLEDGE = 'Return any 2xx to acknowledge delivery. The body is ignored.';
 
 /**
- * What a served route's `void` return (`responseBody: NONE`) means on the wire: our server answers
- * `204` with 0 bytes (#1339). Only a WEBHOOK keeps {@link ACKNOWLEDGE} — there the PARTNER answers.
+ * What a served route's `void` return means on the wire: our server answers `204` with 0 bytes
+ * (#1339) — whether `responseBody: NONE` declares it (RPC / EXTERNAL_INBOUND) or the CLOUDTASKS / CRON kind
+ * implies it (#1348; the scan requires such a method to return `Promise<void>`, so it renders here
+ * exactly like NONE). Only a WEBHOOK keeps {@link ACKNOWLEDGE} — there the PARTNER answers, and an
+ * EXTERNAL_OUTBOUND contract is always published as one, so its void is never documented as a 204.
  */
 const NO_CONTENT = 'Success. The response has no body.';
 

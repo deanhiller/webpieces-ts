@@ -166,6 +166,7 @@ export type {
     EndpointOperation,
     EndpointOptions,
     ExternalEndpointOptions,
+    NoResponseBodyOptionEndpointOptions,
 } from './http/decorators';
 export {
     RPC,
