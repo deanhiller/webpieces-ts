@@ -95,7 +95,7 @@ beforeAll(async () => {
 
 beforeEach(() => {
     translators = new SurfaceTranslator();
-    ClientRegistry.setErrorTranslator(translators);
+    ClientRegistry.setErrorTranslator(translators, 'ALL');
 });
 
 afterAll(async () => {

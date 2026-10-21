@@ -125,7 +125,7 @@ describe('browser api clients capture the caller stack on a failed call (#1175)'
     it('rejects with the SAME instance the translator threw — identity and class intact', async () => {
         stubFetch500();
         const instance = new AppRejectedError('portal suspended');
-        ClientRegistry.setErrorTranslator(new InstanceThrowingTranslator(instance));
+        ClientRegistry.setErrorTranslator(new InstanceThrowingTranslator(instance), 'ALL');
         const client = new ClientHttpBrowserFactory(new MutableContextStore()).createRpcClient(
             SaveApi,
             new ClientConfig('save-svc', ClientRole.END_USER_CLIENT),

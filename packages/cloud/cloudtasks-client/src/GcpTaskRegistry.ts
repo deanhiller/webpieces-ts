@@ -1,15 +1,11 @@
 import type { CallOptions } from 'google-gax';
+import { CallScopeLadder } from '@webpieces/core-util';
 import type { CallScope } from '@webpieces/core-util';
 import { TaskCustomizer } from './TaskTypes';
 
 class GcpTaskPolicy {
     customizer?: TaskCustomizer;
     gax?: CallOptions;
-}
-
-class ApiGcpTaskPolicies {
-    readonly policy = new GcpTaskPolicy();
-    readonly methods = new Map<string, GcpTaskPolicy>();
 }
 
 /**
@@ -29,59 +25,34 @@ class ApiGcpTaskPolicies {
  * invoker has no Google request and ignores both).
  */
 export class GcpTaskRegistry {
-    private static all = new GcpTaskPolicy();
-    private static readonly apis = new Map<Function, ApiGcpTaskPolicies>();
+    private static readonly ladder = new CallScopeLadder<GcpTaskPolicy>(() => new GcpTaskPolicy());
 
     // webpieces-disable no-function-outside-class -- process-global startup registry
     static setCustomizer(customizer: TaskCustomizer | undefined, ...scope: CallScope): void {
-        GcpTaskRegistry.policy(scope[0], scope[1]).customizer = customizer;
+        GcpTaskRegistry.ladder.at(...scope).customizer = customizer;
     }
 
     // webpieces-disable no-function-outside-class -- process-global startup registry
     static setGax(gax: CallOptions | undefined, ...scope: CallScope): void {
-        GcpTaskRegistry.policy(scope[0], scope[1]).gax = gax;
+        GcpTaskRegistry.ladder.at(...scope).gax = gax;
     }
 
     /** The registered customizer, method -> API -> ALL, or undefined. */
     // webpieces-disable no-function-outside-class -- process-global registry lookup
     static customizerFor(api: Function, methodName: string): TaskCustomizer | undefined {
-        const policies = GcpTaskRegistry.apis.get(api);
-        return (
-            policies?.methods.get(methodName)?.customizer ??
-            policies?.policy.customizer ??
-            GcpTaskRegistry.all.customizer
-        );
+        return GcpTaskRegistry.ladder
+            .rungs(api, methodName)
+            .find((p: GcpTaskPolicy) => p.customizer !== undefined)?.customizer;
     }
 
     /** The registered gax CallOptions, method -> API -> ALL, or undefined. */
     // webpieces-disable no-function-outside-class -- process-global registry lookup
     static gaxFor(api: Function, methodName: string): CallOptions | undefined {
-        const policies = GcpTaskRegistry.apis.get(api);
-        return policies?.methods.get(methodName)?.gax ?? policies?.policy.gax ?? GcpTaskRegistry.all.gax;
+        return GcpTaskRegistry.ladder.rungs(api, methodName).find((p: GcpTaskPolicy) => p.gax !== undefined)?.gax;
     }
 
     // webpieces-disable no-function-outside-class -- process-global registry reset for tests
     static clear(): void {
-        GcpTaskRegistry.all = new GcpTaskPolicy();
-        GcpTaskRegistry.apis.clear();
-    }
-
-    // webpieces-disable no-function-outside-class -- process-global registry storage
-    private static policy(api: Function | 'ALL', methodName?: string): GcpTaskPolicy {
-        if (api === 'ALL') {
-            return GcpTaskRegistry.all;
-        }
-        let policies = GcpTaskRegistry.apis.get(api);
-        if (!policies) {
-            policies = new ApiGcpTaskPolicies();
-            GcpTaskRegistry.apis.set(api, policies);
-        }
-        if (methodName === undefined) return policies.policy;
-        let policy = policies.methods.get(methodName);
-        if (!policy) {
-            policy = new GcpTaskPolicy();
-            policies.methods.set(methodName, policy);
-        }
-        return policy;
+        GcpTaskRegistry.ladder.clear();
     }
 }

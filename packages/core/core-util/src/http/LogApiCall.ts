@@ -413,8 +413,8 @@ export class LogApiCallImpl {
         // per failure now that `ApiErrorBoundary` writes none. An operator error message is never
         // published to a caller (see `ApiErrorCodec.publicMessage`), so the log is the one place it
         // exists at all — dropping it on the caller-error branch would lose it outright.
-        // Pluggable classification (ClientRegistry): a per-apiClass EXTERNAL-client classifier wins,
-        // else the app default, else the webpieces built-in — which is side-dependent (a 4xx the SERVER
+        // Pluggable classification (ClientRegistry): the CallScope ladder of the call's contract class
+        // (method, then API, then ALL), else the webpieces built-in — which is side-dependent (a 4xx the SERVER
         // raised is a handled non-failure; the same 4xx a CLIENT receives means its call FAILED; 266 is
         // never a failure either side). This line is FINAL BY POSITION: it only sees what escaped every
         // retry, so a TRANSIENT_FAILURE here was never retried (no strategy, or a WRITE) or gave up —

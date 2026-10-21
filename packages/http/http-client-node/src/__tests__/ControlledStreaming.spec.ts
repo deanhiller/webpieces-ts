@@ -17,6 +17,8 @@ import {
     RPC,
     RequestStream,
     ResponseStream,
+    RouteMetadata,
+    RouteMetadataFactory,
     StreamDirection,
     StreamDisconnectedError,
     StreamErrorControl,
@@ -78,6 +80,14 @@ registerStreamingSchemas(ControlledApi, 'full', {
         .required('received', new ApiJsonSchema('boolean'))
         .build(),
 });
+
+/** The route every control record of this contract is encoded/decoded for. */
+const CONTROLLED_ROUTE = RouteMetadataFactory.create(ControlledApi, 'full');
+
+/** A synthetic OTHER contract, to show a per-API translator governs its own contract only. */
+abstract class OtherStreamApi {}
+const OTHER_ROUTE = new RouteMetadata('POST', '/other', 'other', READ);
+OTHER_ROUTE.apiClass = OtherStreamApi;
 
 class OrderError extends Error {
     constructor(readonly orderId: string) {
@@ -155,7 +165,7 @@ afterEach(() => ClientRegistry.resetForTests());
 
 describe('generated-client streaming features over controlled transport', () => {
     it('sends a typed request-side control when the response consumer throws', async () => {
-        ClientRegistry.setErrorTranslator(new OrderTranslator());
+        ClientRegistry.setErrorTranslator(new OrderTranslator(), 'ALL');
         await RequestContext.run(async (): Promise<void> => {
             const feature = new ControlledFeature();
             const error = new OrderError('client-handler');
@@ -170,7 +180,7 @@ describe('generated-client streaming features over controlled transport', () => 
             const requests = await opening;
             response.enqueueJsonLine({ received: true });
             const control = await call.nextRawLine();
-            expect(new StreamErrorControl().decode(control!, ClientRole.SERVER)).toMatchObject({
+            expect(new StreamErrorControl(CONTROLLED_ROUTE).decode(control!, ClientRole.SERVER)).toMatchObject({
                 orderId: 'client-handler',
             });
             await vi.waitFor(() => expect(feature.cancelled).toEqual([error]));
@@ -179,7 +189,7 @@ describe('generated-client streaming features over controlled transport', () => 
     });
 
     it('reads a typed HTTP handshake failure before aborting the upload', async () => {
-        ClientRegistry.setErrorTranslator(new OrderTranslator());
+        ClientRegistry.setErrorTranslator(new OrderTranslator(), 'ALL');
         await RequestContext.run(async (): Promise<void> => {
             const feature = new ControlledFeature();
             const opening = feature.open();
@@ -196,7 +206,7 @@ describe('generated-client streaming features over controlled transport', () => 
     });
 
     it('uses default masking for errors not claimed by an application translator', async () => {
-        ClientRegistry.setErrorTranslator(new OrderTranslator());
+        ClientRegistry.setErrorTranslator(new OrderTranslator(), 'ALL');
         await RequestContext.run(async (): Promise<void> => {
             const feature = new ControlledFeature();
             const opening = feature.open();
@@ -205,7 +215,7 @@ describe('generated-client streaming features over controlled transport', () => 
             const response = call.respondStream();
             response.enqueueJsonLine({ session: 'accepted' });
             await opening;
-            const control = new StreamErrorControl().encode(new Error('private database password'));
+            const control = new StreamErrorControl(CONTROLLED_ROUTE).encode(new Error('private database password'));
             expect(control).not.toContain('private database password');
             response.enqueueBytes(new TextEncoder().encode(control));
             await vi.waitFor(() => expect(feature.cancelled).toHaveLength(1));
@@ -243,7 +253,7 @@ describe('generated-client streaming features over controlled transport', () => 
     });
 
     it('round-trips a custom response cancellation split across chunks and rejects subsequent operations with that error', async () => {
-        ClientRegistry.setErrorTranslator(new OrderTranslator());
+        ClientRegistry.setErrorTranslator(new OrderTranslator(), 'ALL');
         await RequestContext.run(async (): Promise<void> => {
             const feature = new ControlledFeature();
             const opening = feature.open();
@@ -252,7 +262,7 @@ describe('generated-client streaming features over controlled transport', () => 
             const response = call.respondStream();
             response.enqueueJsonLine({ session: 'accepted' });
             const requests = await opening;
-            const control = new StreamErrorControl().encode(new OrderError('o-17'));
+            const control = new StreamErrorControl(CONTROLLED_ROUTE).encode(new OrderError('o-17'));
             response.enqueueBytes(new TextEncoder().encode(control.slice(0, 19)));
             response.enqueueBytes(new TextEncoder().encode(control.slice(19)));
             await vi.waitFor(() => expect(feature.cancelled[0]).toBeInstanceOf(OrderError));
@@ -263,7 +273,7 @@ describe('generated-client streaming features over controlled transport', () => 
     });
 
     it('round-trips custom request cancellation through the raw control record', async () => {
-        ClientRegistry.setErrorTranslator(new OrderTranslator());
+        ClientRegistry.setErrorTranslator(new OrderTranslator(), 'ALL');
         await RequestContext.run(async (): Promise<void> => {
             const feature = new ControlledFeature();
             const opening = feature.open();
@@ -275,12 +285,23 @@ describe('generated-client streaming features over controlled transport', () => 
             const cancellation = requests.cancel(new OrderError('o-18'));
             const line = await call.nextRawLine();
             expect(line?.charCodeAt(0)).toBe(0x1e);
-            expect(new StreamErrorControl().decode(line!, ClientRole.SERVER)).toMatchObject({
+            expect(new StreamErrorControl(CONTROLLED_ROUTE).decode(line!, ClientRole.SERVER)).toMatchObject({
                 orderId: 'o-18',
             });
             await cancellation;
             response.end();
         });
+    });
+
+    it('resolves the control-record translator on the CallScope ladder: a per-API one governs its contract only', () => {
+        ClientRegistry.setErrorTranslator(new OrderTranslator(), ControlledApi);
+        const own = new StreamErrorControl(CONTROLLED_ROUTE);
+        expect(own.decode(own.encode(new OrderError('o-20')), ClientRole.SERVER)).toBeInstanceOf(OrderError);
+
+        const other = new StreamErrorControl(OTHER_ROUTE);
+        const record = other.encode(new OrderError('o-21'));
+        expect(record).not.toContain('o-21');
+        expect(other.decode(record, ClientRole.SERVER)).not.toBeInstanceOf(OrderError);
     });
 
     it('synthesizes a transport cancellation with the native failure as cause', async () => {
@@ -309,8 +330,8 @@ describe('generated-client streaming features over controlled transport', () => 
             toWire: (): HttpResponseDto =>
                 new HttpResponseDto(new HttpResponseStatus(200, 'OK'), [], {}),
             fromWire: (): void => undefined,
-        });
-        const control = new StreamErrorControl();
+        }, 'ALL');
+        const control = new StreamErrorControl(CONTROLLED_ROUTE);
         expect(
             control.decode(control.encode(new Error('failure')), ClientRole.SERVER),
         ).toBeInstanceOf(StreamProtocolError);
@@ -323,7 +344,7 @@ describe('generated-client streaming features over controlled transport', () => 
                 throw encodeFailure;
             },
             fromWire: (): void => undefined,
-        });
+        }, 'ALL');
         await RequestContext.run(async (): Promise<void> => {
             const feature = new ControlledFeature();
             const opening = feature.open();

@@ -468,7 +468,7 @@ describe('handleError — what still goes out on purpose', () => {
     });
 
     it('an app-installed toWire result is passed through untouched — status, REASON and body', () => {
-        ClientRegistry.setErrorTranslator(new VendorPortalTranslator());
+        ClientRegistry.setErrorTranslator(new VendorPortalTranslator(), 'ALL');
 
         const res = harness.send(new VendorPortalError('portal says: contract 8812 is suspended'));
 
@@ -482,7 +482,7 @@ describe('handleError — what still goes out on purpose', () => {
     });
 
     it('the app owns HEADERS too — and repeats survive, which a Map would have dropped', () => {
-        ClientRegistry.setErrorTranslator(new VendorPortalTranslator());
+        ClientRegistry.setErrorTranslator(new VendorPortalTranslator(), 'ALL');
 
         const res = harness.send(new VendorPortalError('suspended'));
 

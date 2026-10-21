@@ -23,6 +23,18 @@ import {MaskSpec} from "./LogFieldMask";
 export type ApiSide = 'client' | 'server';
 
 export class ApiMethodInfo {
+    /**
+     * The contract CLASS (the `@ApiPath` contract, or an SDK-wrapping api-client's abstract
+     * `XxxApi`) — the key {@link ClientRegistry.classify} resolves the `CallScope` ladder on
+     * (method -> API -> ALL). {@link apiClass} stays the LOGGED name. Undefined for a call with no
+     * contract class (an IPC hop, an MCP protocol step), which reaches only the ALL rung; an SDK
+     * wrapper that omits it is fail-safe the same way.
+     *
+     * NON-enumerable on purpose: this object is nested into every `[API-*]` log record as
+     * `jsonPayload.api.method`, and a class reference is not log data.
+     */
+    declare readonly contract?: Function;
+
     constructor(
         readonly side: ApiSide,
         /** REQUIRED — the API CONTRACT class name (e.g. 'SaveApi'). Matches client + server so both
@@ -52,5 +64,9 @@ export class ApiMethodInfo {
          *  whole call identity travels together. webpieces itself does not act on it; an app's upgrade
          *  logic does. Default false. */
         readonly allowUpgradeInFlight: boolean = false,
-    ) {}
+        /** OPTIONAL — see {@link ApiMethodInfo.contract}. */
+        contract?: Function,
+    ) {
+        Object.defineProperty(this, 'contract', { value: contract, enumerable: false });
+    }
 }

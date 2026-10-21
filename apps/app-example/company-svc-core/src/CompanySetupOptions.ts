@@ -3,7 +3,6 @@ import {
     ConsoleLoggerFactory,
     ErrorTranslator,
     ErrorClassifier,
-    KeyedErrorClassifier,
     Locality,
 } from '@webpieces/core-util';
 import { ContainerModule } from 'inversify';
@@ -29,18 +28,17 @@ export class CompanySetupOptions {
      * @param appOverrides - Single DI module loaded LAST, so tests can rebind bindings
      *   (e.g. a downstream Api) to a mock/simulator.
      * @param config - Optional WebpiecesConfig (e.g. recording flags); defaults to a fresh one.
-     * @param errorTranslators - The app's ONE {@link ErrorTranslator}, installed on ClientRegistry at
-     *   startup. This binds it "only when express is used"; an app may instead call
-     *   ClientRegistry.setErrorTranslator(...) directly at its own startup site (and MUST do the
-     *   same on the browser/Angular side, since `fromWire` runs client-side). ONE object, not a
-     *   list: an app with several layers of error policy composes them inside its own `toWire`,
-     *   where the precedence is written down.
-     * @param defaultErrorClassifier - Optional app/company DEFAULT error classifier installed on
-     *   ClientRegistry at startup (see {@link ErrorClassifier}). ONE per app; reads `side`, so it
-     *   covers the server router AND all internal clients. Unset ⇒ webpieces' built-in classification.
-     * @param errorClassifiers - Per-EXTERNAL-client classifiers, each keyed by apiClass
-     *   ('FirestoreAdminClient', ...). Installed on ClientRegistry at startup. Same "only when express
-     *   is used" binding as errorTranslators; the browser side registers its own via ClientRegistry.
+     * @param errorTranslator - The app's {@link ErrorTranslator}, installed on ClientRegistry at
+     *   startup at the `'ALL'` rung of the `CallScope` ladder. This binds it "only when express is
+     *   used"; an app may instead call `ClientRegistry.setErrorTranslator(t, 'ALL')` directly at its
+     *   own startup site (and MUST do the same on the browser/Angular side, since `fromWire` runs
+     *   client-side). A contract whose errors travel in a vendor's own format registers its own with
+     *   `ClientRegistry.setErrorTranslator(t, VendorApi)` at the same startup site.
+     * @param errorClassifier - Optional app/company error classifier installed on ClientRegistry at
+     *   startup at the `'ALL'` rung (see {@link ErrorClassifier}). It reads `side`, so it covers the
+     *   server router AND all internal clients. Unset means webpieces' built-in classification. An
+     *   SDK-wrapping client registers its own with `ClientRegistry.setErrorClassifier(c, XxxApi)`,
+     *   keyed by its abstract contract CLASS.
      * @param svcName - This service's name, forwarded into RuntimeSetupOptions so {@link setupRuntime}
      *   publishes it to ServiceInfo. It names every log line and stamps `requestIdSource` on request-ids
      *   this service mints.
@@ -68,9 +66,8 @@ export class CompanySetupOptions {
         public readonly loggerFactory: LoggerFactory = new ConsoleLoggerFactory(),
         public readonly appOverrides?: ContainerModule,
         public readonly config?: WebpiecesConfig,
-        public readonly errorTranslators?: ErrorTranslator,
-        public readonly defaultErrorClassifier?: ErrorClassifier,
-        public readonly errorClassifiers: KeyedErrorClassifier[] = [],
+        public readonly errorTranslator?: ErrorTranslator,
+        public readonly errorClassifier?: ErrorClassifier,
         public readonly svcName: string = 'app-example',
         public readonly svcVersion: string = 'local-dev',
         public readonly locality: Locality = 'deployed',

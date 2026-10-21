@@ -92,6 +92,8 @@ export class LogApiFilter extends Filter<MethodMeta, WpResponse<unknown>> {
             rm.noLogging,
             rm.hideProgress,
             rm.allowUpgradeInFlight,
+            // The contract CLASS: the key ClientRegistry.classify resolves its CallScope ladder on.
+            rm.apiClass,
         );
         const response = await this.logApiCall.execute(info, meta.requestDto, method);
         return new WpResponse(response);

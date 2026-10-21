@@ -13,7 +13,7 @@ import {
     ApiRetriesExhaustedError,
     ApiUnavailableError,
 } from '../../errors';
-import { CallOutcome, ErrorClassifier, KeyedErrorClassifier } from '../ErrorClassifier';
+import { CallOutcome, ErrorClassifier } from '../ErrorClassifier';
 import { MaskSpec } from '../LogFieldMask';
 import { LogManager } from '../../logging/LogManager';
 import { HeaderRegistry } from '../HeaderRegistry';
@@ -48,9 +48,12 @@ class RecordingApiCallContext implements ApiCallContext {
     }
 }
 
+/** A synthetic contract CLASS: the classifier ladder is keyed by it, never by its name. */
+class SaveApi {}
+
 /** The call identity per side: apiClass 'SaveApi' matches client+server; controllerName is server impl. */
 const info = (side: ApiSide): ApiMethodInfo =>
-    new ApiMethodInfo(side, 'SaveApi', 'save', 'SaveController');
+    new ApiMethodInfo(side, 'SaveApi', 'save', 'SaveController', undefined, false, false, false, SaveApi);
 const API = WebpiecesCoreHeaders.API_CALL_INFO;
 
 describe('LogApiCall.execute — success + active guard', () => {
@@ -188,11 +191,9 @@ describe('LogApiCall.execute — pluggable per-client failure classification', (
         ClientRegistry.resetForTests();
     });
 
-    it('a per-apiClass classifier flips a client-side error from failure → success (OTHER)', async () => {
+    it('a per-contract classifier flips a client-side error from failure → success (OTHER)', async () => {
         // Firestore-style: a not-found miss on this client is EXPECTED, not a failure.
-        ClientRegistry.addErrorClassifier(
-            new KeyedErrorClassifier('SaveApi', new NotFoundIsExpected()),
-        );
+        ClientRegistry.setErrorClassifier(new NotFoundIsExpected(), SaveApi);
 
         const ctx = new RecordingApiCallContext();
 
@@ -211,9 +212,7 @@ describe('LogApiCall.execute — pluggable per-client failure classification', (
     });
 
     it('an error the classifier DEFERS on still uses the built-in (client → failure)', async () => {
-        ClientRegistry.addErrorClassifier(
-            new KeyedErrorClassifier('SaveApi', new NotFoundIsExpected()),
-        );
+        ClientRegistry.setErrorClassifier(new NotFoundIsExpected(), SaveApi);
 
         const ctx = new RecordingApiCallContext();
 

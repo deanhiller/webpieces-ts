@@ -84,7 +84,7 @@ beforeEach(() => {
     // NEITHER half has a "not mine" any more: a registered translator answers every error and every
     // response, declining by DELEGATING to the webpieces default — which is exactly what installing
     // the default itself does, so this is the "registered nothing" baseline said out loud.
-    ClientRegistry.setErrorTranslator(new WebpiecesDefaultErrorTranslator());
+    ClientRegistry.setErrorTranslator(new WebpiecesDefaultErrorTranslator(), 'ALL');
 });
 
 describe('the app owns the WHOLE response: status, reason, headers and body', () => {

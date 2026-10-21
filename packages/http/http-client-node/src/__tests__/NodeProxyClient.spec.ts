@@ -412,7 +412,7 @@ describe('an app-installed fromWire WINS over the uniform rule', () => {
     }
 
     it('a 404 the app claims relays the downstream status as the app chose', async () => {
-        ClientRegistry.setErrorTranslator(new RelayNotFound());
+        ClientRegistry.setErrorTranslator(new RelayNotFound(), 'ALL');
         stubApiErrorPayload(404, 'no such store');
 
         const error = await callAndCatch();
@@ -423,7 +423,7 @@ describe('an app-installed fromWire WINS over the uniform rule', () => {
     });
 
     it('a status the translator does NOT claim falls to the webpieces default', async () => {
-        ClientRegistry.setErrorTranslator(new RelayNotFound());
+        ClientRegistry.setErrorTranslator(new RelayNotFound(), 'ALL');
         stubApiErrorPayload(403, 'our service account is not on the allow-list');
 
         const error = await callAndCatch();

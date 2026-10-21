@@ -272,7 +272,8 @@ export {
 export { HeaderRegistry } from './http/HeaderRegistry';
 export { ClientRegistry } from './http/ClientRegistry';
 export { CallRegistry } from './http/CallRegistry';
-export type { CallScope } from './http/CallRegistry';
+export type { CallScope } from './http/CallScope';
+export { CallScopeLadder } from './http/CallScope';
 export { TransportDefault } from './http/TransportDefault';
 export { RetryStrategy } from './http/RetryStrategy';
 export { CallDeadline } from './http/CallDeadline';
@@ -310,7 +311,7 @@ export { ReceivedApiErrorRule } from './errors/ReceivedApiErrorRule';
 // FAILURE) per thrown API-call error. Registered on ClientRegistry at startup; read by RetryStrategy,
 // CallRegistry's per-attempt log line, LogApiCall and the MCP renderer's retry advice.
 export type { ErrorClassifier } from './http/ErrorClassifier';
-export { CallOutcome, KeyedErrorClassifier } from './http/ErrorClassifier';
+export { CallOutcome } from './http/ErrorClassifier';
 export {
     WebpiecesDefaultErrorClassifier,
     WEBPIECES_DEFAULT_ERROR_CLASSIFIER,

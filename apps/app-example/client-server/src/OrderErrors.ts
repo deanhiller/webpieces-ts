@@ -101,5 +101,5 @@ export class OrderErrorTranslator implements ErrorTranslator {
  */
 // webpieces-disable no-function-outside-class -- one-line startup registration, mirroring ClientRegistry's own static API
 export function installOrderErrorTranslator(): void {
-    ClientRegistry.setErrorTranslator(new OrderErrorTranslator());
+    ClientRegistry.setErrorTranslator(new OrderErrorTranslator(), 'ALL');
 }

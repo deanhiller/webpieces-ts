@@ -14,7 +14,8 @@ import { HttpHeader, HttpResponseDto, HttpResponseStatus } from './HttpResponseD
  * THE webpieces default {@link ErrorTranslator} — ONE class, BOTH halves, used by the node server, by
  * every node client and by the browser bundle alike.
  *
- * It is what {@link ClientRegistry.getErrorTranslator} holds until an app installs its own, and it is
+ * It is what {@link ClientRegistry.getErrorTranslator} answers for a call no `CallScope` rung
+ * (method, API, ALL) has a translator for, and it is
  * what an app's own translator calls to DECLINE an error:
  *
  * ```ts

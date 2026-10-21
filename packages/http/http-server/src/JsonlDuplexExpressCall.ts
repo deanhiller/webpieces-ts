@@ -120,7 +120,7 @@ export class JsonlResponseWriter {
         }
         // eslint-disable-next-line @webpieces/no-unmanaged-exceptions -- a failed error-control write must reset rather than send an invented remote DTO
         try {
-            await this.deliver(new StreamErrorControl().encode(error));
+            await this.deliver(new StreamErrorControl(this.route).encode(error));
             this.failure = error;
             this.ended = true;
             if (this.opened) this.res.end();
@@ -209,7 +209,7 @@ export class JsonlDuplexExpressCall {
                 if (line === undefined) break;
                 if (line.charCodeAt(0) === 0x1e) {
                     // The SERVER is the receiver of a record its caller wrote mid-upload (#1173).
-                    const error = new StreamErrorControl().decode(line, ClientRole.SERVER);
+                    const error = new StreamErrorControl(this.route).decode(line, ClientRole.SERVER);
                     await inbound.cancel(error);
                     await outbound.cancel(error);
                     return;

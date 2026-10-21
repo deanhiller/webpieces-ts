@@ -369,9 +369,13 @@ export class ExpressWrapper {
      *
      * PUBLIC so wrapExpress can call it for symmetric error handling.
      *
-     * ONE source, unconditionally: `ClientRegistry.getErrorTranslator()`. It is never undefined — it
-     * holds {@link WebpiecesDefaultErrorTranslator} until an app replaces it, and an app's own
-     * translator declines an error by DELEGATING to that default. So there is no "did this process
+     * ONE source, unconditionally: `ClientRegistry.getErrorTranslator(api, method)` for THIS route's
+     * contract class and method, resolved on the `CallScope` ladder (method -> API -> ALL -> webpieces
+     * default) — so an inbound vendor contract can render the error body that vendor expects while
+     * every other contract keeps the app's ALL translator. A wrapper with no route (a failure before
+     * routing) reaches the ALL rung alone. It is never undefined — below every rung sits
+     * {@link WebpiecesDefaultErrorTranslator}, and an app's own translator declines an error by
+     * DELEGATING to that default. So there is no "did this process
      * install one" branch and no per-error "not mine" branch; the app owns the WHOLE response —
      * status code, reason phrase, headers and body — which is what lets it publish its own envelope
      * AND its own `Retry-After` / `WWW-Authenticate` / trace header / cookie.
@@ -385,7 +389,10 @@ export class ExpressWrapper {
             return;
         }
         // ONE narrowing, at the top, and every layer below it is honest about holding an `Error`.
-        const wire = ClientRegistry.getErrorTranslator().toWire(toError(thrown));
+        const wire = ClientRegistry.getErrorTranslator(
+            this.routeMeta?.apiClass,
+            this.routeMeta?.methodName,
+        ).toWire(toError(thrown));
         this.send(res, this.publishedForCallerSurface(wire));
     }
 
