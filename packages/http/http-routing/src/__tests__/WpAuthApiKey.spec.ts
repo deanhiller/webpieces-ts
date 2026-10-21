@@ -18,6 +18,7 @@ import { AuthenticatedCaller, AUTHENTICATED_CALLER_KEY } from '../AuthConfig';
 import { MethodMeta } from '../MethodMeta';
 import { Service } from '@webpieces/core-util';
 import { WpResponse } from '../WpResponse';
+import { UnverifiableAuthModeError } from '../UnverifiableAuthModeError';
 
 /**
  * The ENFORCEMENT half of `@WpAuthApiKey` (the contract half is pinned in core-util's
@@ -218,16 +219,18 @@ describe('AuthFilter enforces @WpAuthApiKey', () => {
     });
 
     /**
-     * FAIL CLOSED, matching JwtHook and VendorAuthVerifier. An app that forgot the binding must not have
-     * its partner-facing route silently open.
+     * FAIL AT STARTUP (#1362), matching JwtHook and VendorAuthVerifier. An app that forgot the binding
+     * must not have its partner-facing route silently open — nor discover it from a partner's 401s.
      */
-    it('401s on every api-key endpoint when NO ApiKeyHook is bound', async () => {
-        const next = new RecordingNext();
+    it('refuses to BOOT a served api-key endpoint when NO ApiKeyHook is bound, naming the bind line', () => {
+        expect(() => newAuthFilter(undefined).assertRouteVerifiable(API_KEY_ROUTE)).toThrow(UnverifiableAuthModeError);
+        expect(() => newAuthFilter(undefined).assertRouteVerifiable(API_KEY_ROUTE)).toThrow(
+            /declares apiKey\('onetablet-partner', credentials\).*binder\.bind\(API_KEY_HOOK\)\.to\(YourApiKeyHook\)\.inSingletonScope\(\);/s,
+        );
+    });
 
-        await expect(
-            runFilter(next, undefined, partnerRequest({ 'x-api-key': 'live-key-123' })),
-        ).rejects.toThrow(/API-key auth is not enabled/);
-        expect(next.invoked).toBe(false);
+    it('boots a served api-key endpoint when an ApiKeyHook is bound', () => {
+        expect(() => newAuthFilter(new TestApiKeyHook()).assertRouteVerifiable(API_KEY_ROUTE)).not.toThrow();
     });
 
     /** Backstop for a caller that drove the route in-process without publishing an HttpRequest. */

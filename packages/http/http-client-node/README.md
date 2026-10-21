@@ -144,8 +144,8 @@ role (both defined in `@webpieces/core-context`):
 
 | role | token | methods | who binds it | re-exported by |
 |---|---|---|---|---|
-| `VendorAuthMinter` | `VENDOR_AUTH_MINTER` | `mint`, `refresh` | a process that SENDS `vendorAuth(...)` calls (a CLI, a worker, a server calling a vendor) | `@webpieces/http-client-node` |
-| `VendorAuthVerifier` | `VENDOR_AUTH_VERIFIER` | `verify` | a server that RECEIVES `vendorAuth(...)` calls | `@webpieces/http-routing` |
+| `VendorAuthMinter` | `VENDOR_AUTH_MINTER` | `supportedVendorNames`, `mint`, `refresh` | a process that SENDS `vendorAuth(...)` calls (a CLI, a worker, a server calling a vendor) | `@webpieces/http-client-node` |
+| `VendorAuthVerifier` | `VENDOR_AUTH_VERIFIER` | `supportedVendorNames`, `verify` | a server that RECEIVES `vendorAuth(...)` calls | `@webpieces/http-routing` |
 
 A process binds neither, one, or both. `mint` produces the credential WE present when we call the
 vendor (a per-merchant OAuth bearer, a partner's HMAC over the final URL and the exact wire bytes),
@@ -154,6 +154,8 @@ and `refresh` renews it when the vendor answers our call with a `401`:
 ```ts
 @provideSingleton()
 export class PartnerAuthMinter extends VendorAuthMinter {
+    // PURE: a fixed list of every name mint()/refresh() below handle. createRpcClient calls it.
+    supportedVendorNames(): readonly string[] { return ['partner-hmac']; }
     async mint(name: string, request: SignableRequest): Promise<Map<string, string>> {
         const mac = createHmac('sha256', secretFor(name)).update(request.body ?? '').digest('hex');
         return new Map([['x-partner-signature', `sha256=${mac}`]]);
@@ -175,8 +177,9 @@ verifier that looks a credential up through such a client closed a DI cycle
 | configuration | minter required? | verifier required? |
 |---|---|---|
 | OIDC-only or public-only outbound client | no | no |
-| outbound call selecting `vendorAuth(name)` | yes, to send that call | no |
-| server receiving a `vendorAuth(name)` request | no | yes |
+| outbound endpoint whose ONLY sendable method is `vendorAuth(name)` | yes, listing `name` — or `createRpcClient` throws | no |
+| outbound endpoint that also allows OIDC (or a held shared secret) | no | no |
+| server SERVING a `vendorAuth(name)` route | no | yes, listing `name` — or the server refuses to boot |
 | server receiving vendor calls and calling an OIDC-only API downstream | no (not for the OIDC hop) | yes |
 | process both sending and receiving vendor calls | yes | yes |
 
@@ -190,7 +193,9 @@ The unified hook is DELETED (no alias): the old import stops compiling, which is
 - A SERVER process: `extends VendorAuthVerifier`, keep `verify`, delete the meaningless
   `mint`/`refresh`, and bind `VENDOR_AUTH_VERIFIER`. Its constructor may inject the typed
   `oidcSameProject()` RPC client it uses to check the credential.
-- `MissingVendorAuthHookError` is now `MissingVendorAuthMinterError`.
+- `MissingVendorAuthHookError` and its successor `MissingVendorAuthMinterError` (and
+  `MissingSharedSecretError`) are DELETED: `createRpcClient` throws `MissingClientCredentialError`
+  instead, before any call (#1362).
 - Contracts are unchanged: `@WpAuth([vendorAuth(name)])` keeps its meaning.
 
 On a raw `401`, `OutboundAuthFilter` cancels the 401's body, calls `refresh(name)` ONCE, mints again
@@ -200,11 +205,30 @@ instances (single-use refresh tokens) is the minter's job.
 
 The framework ships no vendor crypto, deliberately: Twilio signs the full URL with sorted params,
 Slack signs `v0:{ts}:{body}`, Meta signs the raw body. The scheme lives in your minter / verifier and
-the vendor on the contract. With **no** `VendorAuthMinter` bound, every outbound `vendorAuth(...)`
-call THROWS (`MissingVendorAuthMinterError`) before anything is sent, rather than sending
-unauthenticated — the mirror of an unbound `VendorAuthVerifier` 401ing every inbound one. A bound
-verifier never counts as a minter, and an unbound minter never breaks an OIDC, shared-secret or
-public call.
+the vendor on the contract.
+
+### It fails at STARTUP, not on the first call (#1362)
+
+Both roles declare the vendors they handle with a required, PURE `supportedVendorNames()` beside
+`verify` / `mint` — add a vendor to both in one edit. The framework calls it at boot / client
+creation and never calls `verify`, `mint`, `refresh` or the network then.
+
+- **Client — one per endpoint.** `createRpcClient` throws `MissingClientCredentialError` (naming the
+  contract, the method and the binding to add) when an endpoint declares no method this client can
+  send now: OIDC and public always; `sharedSecret(key)` when the bound `Secrets` holds `key`;
+  `vendorAuth(name)` when a bound minter's `supportedVendorNames()` lists `name`; and `jwt()` /
+  `apiKey(...)`, which the framework never mints but the app relays per call (a forwarded user JWT
+  in a context key, a partner SDK's headers set by a client filter) — chosen only when no
+  framework-sent method is available. A client needs only ONE — a CLI need not hold OIDC
+  credentials because the contract also allows OIDC.
+- **Server — strict.** Route registration refuses to boot (`UnverifiableAuthModeError`, naming the
+  endpoint, the mode and the exact `binder.bind(...)` line) when a SERVED route declares any mode
+  nothing can verify — including a dead alternative such as `[oidcSameProject(), vendorAuth('x')]`
+  with no verifier. See `@webpieces/http-routing`.
+
+A bound verifier never counts as a minter, and an unbound minter never breaks an OIDC, shared-secret
+or public call. A name the minter's / verifier's own dispatch does not know still refuses at request
+time, as a backstop.
 
 Calls have a **30-second default timeout**, including URL resolution, filters/auth, fetch and body
 reading. `ClientRegistry` from `@webpieces/core-util` shares ALL, API and API-method overrides with the

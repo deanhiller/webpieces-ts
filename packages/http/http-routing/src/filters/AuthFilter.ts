@@ -16,6 +16,7 @@ import {
     ApiUnauthorizedError,
     ApiImplementationError,
     LogManager,
+    RouteMetadata,
     RuntimeLocality,
     Surface,
     toError,
@@ -36,6 +37,7 @@ import {
 import { AuthenticatedCallerContext } from '../AuthenticatedCallerContext';
 import { VERIFIED_MACHINE_CALLER, VerifiedMachineCaller } from '../AuthorizationHook';
 import { DefaultOidcVerifier } from '../DefaultOidcVerifier';
+import { UnverifiableAuthModeError } from '../UnverifiableAuthModeError';
 
 const log = LogManager.getLogger('AuthFilter');
 
@@ -66,21 +68,24 @@ const SHARED_SECRET_SCHEME = 'Webpieces';
  * RequestContext (never express), so the SAME check runs over HTTP and via createApiClient.
  *
  * It enforces the endpoint's AuthMode from separately-bound pieces, each OPTIONAL except the OIDC
- * default:
- *  - shared-secret → constant-time compare vs the {@link AuthConfig} secret VALUE (state). No
- *                    AuthConfig bound → no accepted secret → fail fast (401).
+ * default. An app binds only the pieces its SERVED routes declare — and a served route that declares
+ * a mode whose piece is absent FAILS STARTUP ({@link assertRouteVerifiable}, #1362), so none of the
+ * rows below is ever "not enabled" at request time:
+ *  - shared-secret → constant-time compare vs the {@link AuthConfig} secret VALUE (state). Startup
+ *                    requires an AuthConfig holding the route's key.
  *  - jwt           → the bound {@link JwtHook} (`parseJwt`, awaited — an app's
- *                    strategy may reach a JWKS or a datastore). No JwtHook bound → "not enabled"
- *                    (401): JWT needs an app secret + payload shape.
+ *                    strategy may reach a JWKS or a datastore). Startup requires a JwtHook: JWT needs
+ *                    an app secret + payload shape.
  *  - oidc          → the bound {@link OidcHook} if any, else the framework {@link DefaultOidcVerifier}
  *                    run DIRECTLY — so a server that wires NOTHING still verifies Google OIDC against
  *                    the endpoint's caller scope (`oidcSameProject()` or `oidcSvcs([...])`).
  *  - vendorAuth    → the bound {@link VendorAuthVerifier} `verify`s the VENDOR's credential over the
- *                    retained raw request. No VendorAuthVerifier bound → 401, like jwt: an unverified
- *                    vendor call is never waved through because wiring was forgotten. The INBOUND role
- *                    only — this filter never depends on the outbound VendorAuthMinter (#1358).
+ *                    retained raw request. Startup requires a verifier whose `supportedVendorNames()` lists the
+ *                    route's name: an unverified vendor call is never waved through because wiring was
+ *                    forgotten. The INBOUND role only — this filter never depends on the outbound
+ *                    VendorAuthMinter (#1358).
  *  - apikey        → the bound {@link ApiKeyHook} looks the CUSTOMER's key up (async, over the whole
- *                    header set) and returns the context to seed. No ApiKeyHook bound → 401, like jwt.
+ *                    header set) and returns the context to seed. Startup requires an ApiKeyHook.
  *  - public        → BEST-EFFORT jwt parse (only if a JwtHook is bound): stamp the user's context so
  *                    a logged-out page still knows who is logged in; never fails.
  *  - local-only    → serve only when {@link RuntimeLocality} says this process is a developer's
@@ -98,7 +103,8 @@ export class AuthFilter extends Filter<MethodMeta, WpResponse<unknown>> {
         // Framework default, always available — verifies Google OIDC with zero app wiring.
         // webpieces-disable inject-annotation-not-needed-for-concrete-class -- AuthFilter is DI-resolved via the esbuild/vitest path, which elides type-only imports (no design:paramtypes), so every param needs its explicit token
         @inject(DefaultOidcVerifier) private readonly oidcVerifier: DefaultOidcVerifier,
-        // @optional: only bind an AuthConfig to enable sharedSecret(...) endpoints.
+        // @optional: only bind an AuthConfig to enable sharedSecret(...) endpoints (startup refuses a
+        // served one without it — see assertRouteVerifiable).
         // webpieces-disable inject-annotation-not-needed-for-concrete-class -- see above: explicit token required for DI-resolved param
         @optional() @inject(AUTH_CONFIG) private readonly authConfig?: AuthConfig,
         // @optional: only bind a JwtHook to enable jwt() endpoints.
@@ -107,18 +113,112 @@ export class AuthFilter extends Filter<MethodMeta, WpResponse<unknown>> {
         // @optional: only bind an OidcHook to OVERRIDE the DefaultOidcVerifier caller policy.
         // webpieces-disable inject-annotation-not-needed-for-concrete-class -- see above: explicit token required for DI-resolved param
         @optional() @inject(OIDC_HOOK) private readonly oidcHook?: OidcHook,
-        // @optional: only bind a VendorAuthVerifier to enable vendorAuth(...) endpoints. Unbound = every
-        // such endpoint 401s, which is the ONE default that must not be the other way round.
+        // @optional: only bind a VendorAuthVerifier to enable vendorAuth(...) endpoints. Unbound = a
+        // server serving one refuses to boot (assertRouteVerifiable), never an allow-all.
         // webpieces-disable inject-annotation-not-needed-for-concrete-class -- see above: explicit token required for DI-resolved param
         @optional()
         @inject(VENDOR_AUTH_VERIFIER)
         private readonly vendorAuthVerifier?: VendorAuthVerifier,
-        // @optional: only bind an ApiKeyHook to enable apiKey(...) endpoints. Unbound = every such
-        // endpoint 401s, for the same reason as the vendor hook above.
+        // @optional: only bind an ApiKeyHook to enable apiKey(...) endpoints. Unbound = a server serving
+        // one refuses to boot, for the same reason as the vendor verifier above.
         // webpieces-disable inject-annotation-not-needed-for-concrete-class -- see above: explicit token required for DI-resolved param
         @optional() @inject(API_KEY_HOOK) private readonly apiKeyHook?: ApiKeyHook,
     ) {
         super();
+    }
+
+    /**
+     * STARTUP check (#1362), called by route registration for EVERY served route: each auth mode the
+     * route declares must be verifiable by what is bound, or boot fails naming the endpoint, the mode
+     * and the exact binding line. STRICT — a multi-method route (`[oidcSameProject(), vendorAuth('x')]`)
+     * with no verifier fails too: a declared alternative nobody can verify is dead, and is almost
+     * always a wiring mistake. OIDC needs no app binding (the framework verifier) and a public route
+     * none.
+     *
+     * Reads bindings this filter already holds and nothing else: it never calls `verify`, `parseJwt`
+     * or `verifyApiKey`, touches no network, and constructs nothing (#1358's cycle stays closed).
+     * The request path resolves each piece through the SAME `require*` methods, so there is one
+     * decision, made at boot. The one boot-only check is a verifier's `supportedVendorNames()`: at request time
+     * the verifier's OWN dispatch stays the backstop for a name it does not know, and refuses (401).
+     */
+    assertRouteVerifiable(routeMeta: RouteMetadata): void {
+        const auth = routeMeta.authMeta;
+        if (!auth) throw new ApiImplementationError('Every endpoint requires @WpAuth or @WpAuthPublic.');
+        for (const method of auth.methods) {
+            switch (method.kind) {
+                case 'jwt': this.requireJwtHook(routeMeta); break;
+                case 'shared-secret': this.requireSharedSecrets(method.secretKey, routeMeta); break;
+                case 'vendorAuth': this.assertVendorDeclared(this.requireVendorVerifier(method.name, routeMeta), method.name, routeMeta); break;
+                case 'apikey': this.requireApiKeyHook(method.regime, routeMeta); break;
+                case 'oidc':
+                case 'public':
+                    break;
+            }
+        }
+    }
+
+    // webpieces-disable no-function-outside-class -- static pure formatter of the route identity, kept beside its only callers
+    private static endpointOf(routeMeta: RouteMetadata): string {
+        return `${routeMeta.apiName ?? routeMeta.controllerClassName ?? 'UnknownApi'}.${routeMeta.methodName} (${routeMeta.httpMethod} ${routeMeta.path})`;
+    }
+
+    private unverifiable(routeMeta: RouteMetadata, mode: string, problem: string, bindLine: string): UnverifiableAuthModeError {
+        const endpoint = AuthFilter.endpointOf(routeMeta);
+        return new UnverifiableAuthModeError(
+            `Endpoint ${endpoint} declares ${mode}, but ${problem}, so this server cannot verify it and ` +
+                `refuses to start. Add:\n    ${bindLine}\n` +
+                `(Or remove ${mode} from the endpoint's @WpAuth if this server should not accept it.)`,
+            endpoint,
+            mode,
+        );
+    }
+
+    private requireJwtHook(routeMeta: RouteMetadata): JwtHook<never> {
+        if (this.jwtHook) return this.jwtHook;
+        throw this.unverifiable(routeMeta, 'jwt()', 'no JwtHook is bound',
+            'binder.bind(JWT_HOOK).to(YourJwtHook).inSingletonScope();');
+    }
+
+    private requireSharedSecrets(secretKey: string, routeMeta: RouteMetadata): SharedSecrets {
+        const config = this.authConfig;
+        const mode = `sharedSecret('${secretKey}')`;
+        if (!config) {
+            throw this.unverifiable(routeMeta, mode, 'no AuthConfig is bound',
+                `binder.bind(AUTH_CONFIG).to(YourAuthConfig).inSingletonScope();   // YourAuthConfig extends AuthConfig and passes { '${secretKey}': new SharedSecrets(secret1, secret2) }`);
+        }
+        const accepted = config.sharedSecrets[secretKey];
+        if (accepted) return accepted;
+        throw this.unverifiable(routeMeta, mode,
+            `the bound AuthConfig (${config.constructor.name}) holds no SharedSecrets for '${secretKey}'`,
+            `'${secretKey}': new SharedSecrets(secret1, secret2),   // add to the sharedSecrets ${config.constructor.name} passes to AuthConfig, which AUTH_CONFIG is bound to`);
+    }
+
+    private requireVendorVerifier(name: string, routeMeta: RouteMetadata): VendorAuthVerifier {
+        const verifier = this.vendorAuthVerifier;
+        const mode = `vendorAuth('${name}')`;
+        if (!verifier) {
+            throw this.unverifiable(routeMeta, mode,
+                'no VendorAuthVerifier is bound (a VENDOR_AUTH_MINTER binding only signs OUTBOUND calls)',
+                'binder.bind(VENDOR_AUTH_VERIFIER).to(YourVendorAuthVerifier).inSingletonScope();');
+        }
+        return verifier;
+    }
+
+    /** Boot only: the bound verifier must DECLARE the route's vendor (#1362). Never calls verify. */
+    private assertVendorDeclared(verifier: VendorAuthVerifier, name: string, routeMeta: RouteMetadata): void {
+        const supported = verifier.supportedVendorNames();
+        if (supported.includes(name)) return;
+        const mode = `vendorAuth('${name}')`;
+        const declared = supported.map((n: string) => `'${n}'`).join(', ');
+        throw this.unverifiable(routeMeta, mode,
+            `the bound VendorAuthVerifier (${verifier.constructor.name}) returns [${declared}] from supportedVendorNames(), which does not include '${name}'`,
+            `'${name}' to ${verifier.constructor.name}.supportedVendorNames() (return [${declared}, '${name}']) AND handle '${name}' in its verify()`);
+    }
+
+    private requireApiKeyHook(regime: string, routeMeta: RouteMetadata): ApiKeyHook {
+        if (this.apiKeyHook) return this.apiKeyHook;
+        throw this.unverifiable(routeMeta, `apiKey('${regime}', credentials)`, 'no ApiKeyHook is bound',
+            'binder.bind(API_KEY_HOOK).to(YourApiKeyHook).inSingletonScope();');
     }
 
     // webpieces-disable no-any-unknown -- Filter generic params use unknown for response flexibility
@@ -176,10 +276,10 @@ export class AuthFilter extends Filter<MethodMeta, WpResponse<unknown>> {
 
     private async authenticateMethod(mode: AuthMode, header: string | undefined, meta: MethodMeta, oidc: OidcAuthMethods | undefined): Promise<void> {
         switch (mode.kind) {
-            case 'jwt': await this.enforceJwt(header); return;
+            case 'jwt': await this.enforceJwt(header, meta.routeMeta); return;
             case 'oidc': await this.enforceOidc(header, oidc ?? [mode]); return;
             case 'shared-secret':
-                this.enforceSharedSecret(this.credential(header, SHARED_SECRET_SCHEME), mode.secretKey);
+                this.enforceSharedSecret(this.credential(header, SHARED_SECRET_SCHEME), mode.secretKey, meta.routeMeta);
                 RequestContext.putTrusted(VERIFIED_MACHINE_CALLER, new VerifiedMachineCaller('shared-secret', mode.secretKey));
                 return;
             case 'vendorAuth': await this.enforceVendorAuth(mode.name, meta); return;
@@ -246,29 +346,23 @@ export class AuthFilter extends Filter<MethodMeta, WpResponse<unknown>> {
 
     /**
      * `vendorAuth(name)`: hand the app's {@link VendorAuthVerifier} the verbatim request and let it call the
-     * VENDOR's own validator. Three ways to fail, all 401, all before the controller is entered:
+     * VENDOR's own validator. A missing verifier, or one not declaring `name`, is not a case here: it
+     * failed STARTUP ({@link assertRouteVerifiable}). Two ways to fail, both 401, both before the
+     * controller is entered:
      *
-     * 1. NO verifier bound — the endpoint is not enabled. Matches {@link JwtHook}'s documented behavior;
-     *    an unverified vendor call must never be waved through because wiring was forgotten.
-     * 2. NO raw request — the transport kept no bytes. `assertEveryVendorAuthEndpointRetainsRawBody`
+     * 1. NO raw request — the transport kept no bytes. `assertEveryVendorAuthEndpointRetainsRawBody`
      *    normally makes this a startup error, so reaching it means either a hand-registered route or
      *    an in-process caller (a spec) that published an HttpRequest with no {@link RawRequest}. The
      *    message says which fix applies rather than leaving a bare 401.
-     * 3. The verifier threw — the credential did not verify.
+     * 2. The verifier threw — the credential did not verify (including a name its own dispatch does
+     *    not know: that stays the request-time backstop).
      *
-     * Case 2 is checked HERE and nowhere else. {@link hasRawBytes} narrows the request to
+     * Case 1 is checked HERE and nowhere else. {@link hasRawBytes} narrows the request to
      * {@link RawHttpRequest} at this one gate, so the verifier's signature promises `raw` is present and
      * no vendor implementation ever writes `raw!` or a guard of its own.
      */
     private async enforceVendorAuth(name: string, meta: MethodMeta): Promise<void> {
-        if (!this.vendorAuthVerifier) {
-            log.warn(
-                `Refusing vendorAuth('${name}') endpoint ${meta.routeMeta.path}: no VendorAuthVerifier is bound. ` +
-                    `Bind the INBOUND role (binder.bind(VENDOR_AUTH_VERIFIER).to(YourVendorAuthVerifier).inSingletonScope()) ` +
-                    `to enable vendor verification; a VENDOR_AUTH_MINTER binding only signs outbound calls.`,
-            );
-            throw new ApiUnauthorizedError('Vendor auth is not enabled on this server');
-        }
+        const verifier = this.requireVendorVerifier(name, meta.routeMeta);
         const request = RequestContext.getRequest();
         if (!this.hasRawBytes(request)) {
             log.warn(
@@ -282,7 +376,7 @@ export class AuthFilter extends Filter<MethodMeta, WpResponse<unknown>> {
         }
         // Throws ApiUnauthorizedError to deny. On success the vendor account the signature proved is
         // stamped through the SAME path a jwt or api-key caller takes.
-        const caller = await this.vendorAuthVerifier.verify(name, request);
+        const caller = await verifier.verify(name, request);
         this.callerContext.publish(caller);
     }
 
@@ -299,27 +393,20 @@ export class AuthFilter extends Filter<MethodMeta, WpResponse<unknown>> {
     /**
      * `apiKey(regime, credentials)`: hand the app's {@link ApiKeyHook} the regime name and the inbound
      * headers and let it look the CUSTOMER's key up. The declared `credentials` are NOT read here — they
-     * describe the contract for generators; the hook owns extraction. Three ways to fail, all 401, all
-     * before the controller:
+     * describe the contract for generators; the hook owns extraction. A missing hook is not a case here:
+     * it failed STARTUP ({@link assertRouteVerifiable}). Two ways to fail, both 401, both before the
+     * controller:
      *
-     * 1. NO hook bound — the endpoint is not enabled. Matches {@link JwtHook}'s documented behavior; an
-     *    unverified partner request must never be waved through because wiring was forgotten.
-     * 2. NO inbound request in scope — there are no headers to read, so there is nothing to verify. That
+     * 1. NO inbound request in scope — there are no headers to read, so there is nothing to verify. That
      *    means a caller drove this route without publishing an HttpRequest; the message says so rather
      *    than leaving a bare 401.
-     * 3. The hook threw — the key, or the key/organization pair, did not check out.
+     * 2. The hook threw — the key, or the key/organization pair, did not check out.
      *
      * On success the hook's {@link AuthenticatedCaller} is stamped exactly as a jwt parse's is, which is
      * what puts the resolved organization into `RequestContext` for every downstream repository call.
      */
     private async enforceApiKey(regime: string, meta: MethodMeta): Promise<void> {
-        if (!this.apiKeyHook) {
-            log.warn(
-                `Refusing apiKey('${regime}') endpoint ${meta.routeMeta.path}: no ApiKeyHook is bound. ` +
-                    `Bind one (options.bind(API_KEY_HOOK).to(YourApiKeyHook)) to enable api-key verification.`,
-            );
-            throw new ApiUnauthorizedError('API-key auth is not enabled on this server');
-        }
+        const hook = this.requireApiKeyHook(regime, meta.routeMeta);
         const request = RequestContext.getRequest();
         if (!request) {
             log.warn(
@@ -333,7 +420,7 @@ export class AuthFilter extends Filter<MethodMeta, WpResponse<unknown>> {
         }
         // Throws ApiUnauthorizedError to deny. The hook gets the WHOLE request so it can cross-check
         // the key against a second header (the organization the customer is acting for).
-        const caller = await this.apiKeyHook.verifyApiKey(regime, request);
+        const caller = await hook.verifyApiKey(regime, request);
         this.callerContext.publish(caller);
     }
 
@@ -415,11 +502,11 @@ export class AuthFilter extends Filter<MethodMeta, WpResponse<unknown>> {
         throw new ApiEndpointNotFoundError(`No endpoint at ${meta.routeMeta.path}`);
     }
 
-    private async enforceJwt(header: string | undefined): Promise<void> {
+    private async enforceJwt(header: string | undefined, routeMeta: RouteMetadata): Promise<void> {
+        const hook = this.requireJwtHook(routeMeta);
         const token = this.credential(header, BEARER_SCHEME);
         if (!token) throw new ApiUnauthorizedError('Authentication required');
-        if (!this.jwtHook) throw new ApiUnauthorizedError('User-JWT auth is not enabled on this server');
-        this.callerContext.publish(await this.jwtHook.parseJwt(token));
+        this.callerContext.publish(await hook.parseJwt(token));
     }
 
     private async enforceOidc(header: string | undefined, methods: OidcAuthMethods): Promise<void> {
@@ -433,9 +520,9 @@ export class AuthFilter extends Filter<MethodMeta, WpResponse<unknown>> {
     }
 
     /** `provided` is the Authorization bearer value — the secret itself, same header as a JWT. */
-    private enforceSharedSecret(provided: string | undefined, secretKey: string): void {
-        const accepted = this.authConfig?.sharedSecrets[secretKey];
-        if (!accepted || !provided || !this.matchesEither(provided, accepted)) {
+    private enforceSharedSecret(provided: string | undefined, secretKey: string, routeMeta: RouteMetadata): void {
+        const accepted = this.requireSharedSecrets(secretKey, routeMeta);
+        if (!provided || !this.matchesEither(provided, accepted)) {
             throw new ApiUnauthorizedError(
                 'Invalid shared secret for sharedSecret(...) endpoint',
             );

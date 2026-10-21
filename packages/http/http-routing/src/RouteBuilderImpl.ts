@@ -9,6 +9,7 @@ import { WpResponse } from './WpResponse';
 import { FilterMatcher, HttpFilter } from './FilterMatcher';
 import { LogManager } from '@webpieces/core-util';
 import { AuthorizationService } from './AuthorizationHook';
+import { AuthFilter } from './filters/AuthFilter';
 
 const log = LogManager.getLogger('RouteBuilder');
 
@@ -111,6 +112,10 @@ export class RouteBuilderImpl implements RouteBuilder {
      * Uses createRouteHandlerWithMeta() to create the handler, then stores it
      * in both the routes array and the routeMap for O(1) lookup.
      *
+     * Two STARTUP checks run first, so a wiring mistake refuses to boot instead of 401ing / 403ing
+     * the first real request: the authorization policy must be enforceable, and every auth mode the
+     * route declares must be verifiable by what is bound (`AuthFilter.assertRouteVerifiable`, #1362).
+     *
      * @param route - Route definition with controller class and method name
      */
     addRoute(route: RouteDefinition): void {
@@ -118,12 +123,27 @@ export class RouteBuilderImpl implements RouteBuilder {
         if (!route.routeMeta.authMeta || !policy) throw new Error(`Endpoint ${route.routeMeta.path} requires @WpAuth/@WpAuthPublic and @WpAuthorization.`);
         if (!this.container) throw new Error('Set the route container before registering endpoints.');
         this.container.get(AuthorizationService).validate(policy);
+        this.installedAuthFilter()?.assertRouteVerifiable(route.routeMeta);
         const routeWithMeta = this.createRouteHandlerWithMeta(route);
         this.routes.push(routeWithMeta);
 
         // Also add to map for O(1) lookup by method:path
         const key = this.createRouteKey(route.routeMeta.httpMethod, route.routeMeta.path);
         this.routeMap.set(key, routeWithMeta);
+    }
+
+    /**
+     * The AuthFilter that will actually enforce routes — the instance `WebpiecesRouter` installed as a
+     * fixed filter BEFORE any route is added, so it already holds every app binding. Asking IT (not a
+     * fresh `container.get`) means the startup check judges exactly the bindings the request path
+     * will use. A hand-assembled builder that installed no AuthFilter enforces no auth mode, so there
+     * is nothing to verify.
+     */
+    private installedAuthFilter(): AuthFilter | undefined {
+        for (const entry of this.filterRegistry) {
+            if (entry.filter instanceof AuthFilter) return entry.filter;
+        }
+        return undefined;
     }
 
     /**

@@ -19,7 +19,8 @@ import { DefaultOidcVerifier } from '../DefaultOidcVerifier';
 import { ApiRoutingFactory } from '../ApiRoutingFactory';
 import { AuthenticatedCaller, AUTHENTICATED_CALLER_KEY } from '../AuthConfig';
 import { MethodMeta } from '../MethodMeta';
-import { HeaderRegistry, Service, LogManager, LoggerFactory, Logger } from '@webpieces/core-util';
+import { HeaderRegistry, Service, toError } from '@webpieces/core-util';
+import { UnverifiableAuthModeError } from '../UnverifiableAuthModeError';
 import { WpResponse } from '../WpResponse';
 import { RouteBuilder, RouteDefinition, FilterDefinition } from '../WebAppMeta';
 
@@ -108,6 +109,9 @@ class RecordingNext implements Service<MethodMeta, WpResponse<unknown>> {
  * `createApiClient` can rebind this over VENDOR_AUTH_VERIFIER and never touch a real signature).
  */
 class TestVendorAuthVerifier extends VendorAuthVerifier {
+    override supportedVendorNames(): readonly string[] {
+        return ['sentry'];
+    }
     seenName?: string;
     seenBody?: Buffer;
     seenUrl?: string;
@@ -206,20 +210,11 @@ async function runFilter(
     });
 }
 
-/** Captures what the filter WARNS, so the refusal's cure can be asserted. */
-class WarningCapture implements LoggerFactory {
-    constructor(private readonly lines: string[]) {}
-
-    getLogger(_name: string): Logger {
-        const record = (message: string): void => {
-            this.lines.push(message);
-        };
-        return { trace: record, debug: record, info: record, warn: record, error: record };
-    }
-}
-
 /** A verifier that knows ONE vendor: any other name on a route is a credential it cannot check. */
 class OneVendorVerifier extends VendorAuthVerifier {
+    override supportedVendorNames(): readonly string[] {
+        return ['stripe'];
+    }
     calls: string[] = [];
 
     override async verify(name: string, _request: RawHttpRequest): Promise<AuthenticatedCaller> {
@@ -252,39 +247,13 @@ describe('AuthFilter enforces vendorAuth(...)', () => {
         expect(next.invoked).toBe(false);
     });
 
-    it('401s an UNKNOWN vendor name: the verifier is asked, refuses, and the controller never runs', async () => {
+    it('401s an UNDECLARED vendor name at request time: the verifier is asked, refuses, and the controller never runs', async () => {
         const next = new RecordingNext();
         const verifier = new OneVendorVerifier();
 
         await expect(runFilter(next, verifier, webhookRequest('{}'))).rejects.toThrow(ApiUnauthorizedError);
         expect(verifier.calls).toEqual(['sentry']);
         expect(next.invoked).toBe(false);
-    });
-
-    /**
-     * FAIL CLOSED, matching JwtHook. An app that forgot the binding must not have its webhook route
-     * silently open — that is the one default that cannot be the other way round.
-     */
-    it('401s on every webhook endpoint when NO VendorAuthVerifier is bound', async () => {
-        const next = new RecordingNext();
-
-        const warnings: string[] = [];
-        if (!HeaderRegistry.isConfigured()) HeaderRegistry.configure([VENDOR_ACCOUNT], true);
-        const original = LogManager.getFactory();
-        LogManager.setFactory(new WarningCapture(warnings));
-        // eslint-disable-next-line @webpieces/no-unmanaged-exceptions -- restore the process logger whatever the assertion outcome
-        try {
-            await expect(runFilter(next, undefined, webhookRequest('{}'))).rejects.toThrow(
-                /Vendor auth is not enabled/,
-            );
-        } finally {
-            LogManager.setFactory(original);
-        }
-        expect(next.invoked).toBe(false);
-        // The refusal names the INBOUND role to bind, and never the deleted unified hook (#1358).
-        const refusal = warnings.find((line: string) => line.includes("vendorAuth('sentry')"));
-        expect(refusal).toContain('binder.bind(VENDOR_AUTH_VERIFIER)');
-        expect(refusal).not.toMatch(/VendorAuthHook|VENDOR_AUTH_HOOK/);
     });
 
     /** Backstop for a hand-registered route or an in-process caller that published no raw request. */
@@ -416,6 +385,45 @@ describe('a malformed body answers 401 before it answers 400', () => {
             ),
         ).rejects.toThrow(ApiBadRequestError);
         expect(next.invoked).toBe(false);
+    });
+});
+
+/**
+ * FAIL AT STARTUP (#1362), not on the first webhook. Route registration calls
+ * `assertRouteVerifiable` for every served route; these drive it directly on the same route.
+ */
+describe('a served vendorAuth(...) route must be verifiable at STARTUP', () => {
+    it('refuses to boot with NO VendorAuthVerifier bound, naming the endpoint, the mode and the bind line', () => {
+        if (!HeaderRegistry.isConfigured()) HeaderRegistry.configure([VENDOR_ACCOUNT], true);
+        let thrown: Error | undefined;
+        // eslint-disable-next-line @webpieces/no-unmanaged-exceptions -- capture the startup refusal to assert its fields
+        try {
+            newAuthFilter(undefined).assertRouteVerifiable(WEBHOOK_ROUTE);
+        } catch (err: unknown) { // webpieces-disable no-any-unknown -- narrowed by toError, asserted to be the typed refusal below
+            const error = toError(err);
+            thrown = error;
+        }
+        expect(thrown).toBeInstanceOf(UnverifiableAuthModeError);
+        const refusal = thrown as UnverifiableAuthModeError;
+        expect(refusal.endpoint).toBe('SentryHookApi.notify (POST /hook/sentry/issue)');
+        expect(refusal.mode).toBe("vendorAuth('sentry')");
+        expect(refusal.message).toContain('binder.bind(VENDOR_AUTH_VERIFIER).to(YourVendorAuthVerifier).inSingletonScope();');
+        expect(refusal.message).toContain('refuses to start');
+        // Names the INBOUND role, never the deleted unified hook (#1358).
+        expect(refusal.message).not.toMatch(/VendorAuthHook|VENDOR_AUTH_HOOK/);
+    });
+
+    it("refuses to boot when the bound verifier's supportedVendorNames() does not list the route's vendor — and never calls verify", () => {
+        const verifier = new OneVendorVerifier();
+
+        expect(() => newAuthFilter(verifier).assertRouteVerifiable(WEBHOOK_ROUTE)).toThrow(
+            /declares vendorAuth\('sentry'\).*OneVendorVerifier.*\['stripe'\] from supportedVendorNames\(\).*'stripe', 'sentry'.*verify\(\)/s,
+        );
+        expect(verifier.calls).toEqual([]);
+    });
+
+    it('boots when the bound verifier declares the vendor', () => {
+        expect(() => newAuthFilter(new TestVendorAuthVerifier(true)).assertRouteVerifiable(WEBHOOK_ROUTE)).not.toThrow();
     });
 });
 

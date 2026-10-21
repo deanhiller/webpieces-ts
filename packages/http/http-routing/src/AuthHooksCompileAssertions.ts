@@ -66,6 +66,11 @@ export class AuthHooksCompileAssertions {
     /** The ALIGNED spellings must keep compiling; asserted by the ABSENCE of an error. */
     legitimate(): void {
         void class extends VendorAuthVerifier {
+            // The vendors it handles, read at route registration so an unhandled name fails boot (#1362).
+            override supportedVendorNames(): readonly string[] {
+                return ['sentry'];
+            }
+
             // No meaningless mint()/refresh(): a server-only verifier implements verify and nothing else.
             override async verify(_name: string, request: RawHttpRequest): Promise<AuthenticatedCaller> {
                 // No `raw!`, no `if (!raw) throw`: AuthFilter checked once and the TYPE carries it.
@@ -85,12 +90,18 @@ export class AuthHooksCompileAssertions {
     /** Every spelling this change deleted must now be UNWRITABLE. */
     rejected(): void {
         void class extends VendorAuthVerifier {
+            override supportedVendorNames(): readonly string[] {
+                return ['sentry'];
+            }
             // @ts-expect-error verify takes (name, RawHttpRequest): the three-parameter spelling is gone
             override async verify(_name: string, _request: HttpRequest, _raw: RawRequest): Promise<AuthenticatedCaller> {
                 return new AuthenticatedCaller('u1');
             }
         };
         void class extends VendorAuthVerifier {
+            override supportedVendorNames(): readonly string[] {
+                return ['sentry'];
+            }
             // @ts-expect-error verify returns the caller it proved: a void override must not compile
             override async verify(_name: string, _request: RawHttpRequest): Promise<void> {
                 // a hook that verifies and then has no way to say what it proved

@@ -17,14 +17,18 @@ export class DeletedAuthCompileAssertions {
         void ClientNode.WebhookSignerCallback;
         // @ts-expect-error WEBHOOK_SIGNER_CALLBACK is replaced by VENDOR_AUTH_MINTER
         void ClientNode.WEBHOOK_SIGNER_CALLBACK;
-        // @ts-expect-error MissingWebhookSignerError is replaced by MissingVendorAuthMinterError
+        // @ts-expect-error MissingWebhookSignerError is replaced by MissingClientCredentialError (thrown by createRpcClient)
         void ClientNode.MissingWebhookSignerError;
         // @ts-expect-error VendorAuthHook is DELETED: the client binds the OUTBOUND role VendorAuthMinter
         void ClientNode.VendorAuthHook;
         // @ts-expect-error VENDOR_AUTH_HOOK is DELETED: bind VENDOR_AUTH_MINTER
         void ClientNode.VENDOR_AUTH_HOOK;
-        // @ts-expect-error MissingVendorAuthHookError is RENAMED to MissingVendorAuthMinterError
+        // @ts-expect-error MissingVendorAuthHookError is replaced by MissingClientCredentialError (thrown by createRpcClient)
         void ClientNode.MissingVendorAuthHookError;
+        // @ts-expect-error MissingVendorAuthMinterError is DELETED (#1362): createRpcClient throws MissingClientCredentialError instead of the first call
+        void ClientNode.MissingVendorAuthMinterError;
+        // @ts-expect-error MissingSharedSecretError is DELETED (#1362): createRpcClient throws MissingClientCredentialError instead of the first call
+        void ClientNode.MissingSharedSecretError;
         // @ts-expect-error the INBOUND role is the server's (http-routing); a client package never exports it
         void ClientNode.VENDOR_AUTH_VERIFIER;
     }

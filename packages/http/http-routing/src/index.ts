@@ -118,7 +118,8 @@ export { ApiClient, ApiClientProxy } from './ApiClient';
 // Auth: the app-provided, container-bound pieces the framework AuthFilter injects.
 //  - AuthConfig: shared-secret STATE (sharedSecret(...) values).
 //  - JwtHook / OidcHook / VendorAuthVerifier / ApiKeyHook: OPTIONAL verification mechanisms
-//    (bind only what you use; unbound means the matching endpoints 401, never open).
+//    (bind only what your served routes declare; a served route declaring a mode whose piece is
+//    unbound FAILS STARTUP with UnverifiableAuthModeError naming the binding, never open — #1362).
 //  - DefaultOidcVerifier: the built-in Google OIDC verifier used when no OidcHook is bound.
 export {
     AuthConfig,
@@ -141,6 +142,7 @@ export {
 // @webpieces/core-context beside its OUTBOUND twin VendorAuthMinter (re-exported by
 // @webpieces/http-client-node); the two are independent DI roles, never one binding (#1358).
 export { VendorAuthVerifier, VENDOR_AUTH_VERIFIER } from '@webpieces/core-context';
+export { UnverifiableAuthModeError } from './UnverifiableAuthModeError';
 export { DefaultOidcVerifier } from './DefaultOidcVerifier';
 // DefaultJwtHook: batteries-included HS256 JwtHook — `new DefaultJwtHook(secret)` and go.
 export { DefaultJwtHook, DefaultJwtMintRequest } from './DefaultJwtHook';

@@ -38,14 +38,16 @@ export { ContextBaseUrlFilter } from './ContextBaseUrlFilter';
 export { ContextFullUrlFilter } from './ContextFullUrlFilter';
 export { MissingRuntimeBaseUrlError } from './MissingRuntimeBaseUrlError';
 
-// The two ways outbound auth refuses to send: a binding a contract's auth mode requires is absent.
-// Typed, so a delivery worker tells 'we are misconfigured' from 'the partner registered something
-// hostile' (SsrfRefusedError) without matching message text.
-export { MissingSharedSecretError, MissingVendorAuthMinterError } from './OutboundAuthErrors';
+// The ONE way outbound auth refuses a contract: an endpoint declares no credential this client can
+// send. Thrown by createRpcClient, before any call (#1362). Typed, so a host tells 'we are
+// misconfigured' from 'the partner registered something hostile' (SsrfRefusedError) without
+// matching message text.
+export { MissingClientCredentialError } from './OutboundAuthErrors';
 
 // vendorAuth(name), OUTBOUND role: the minter mints (and refreshes once on a 401) what this client
-// sends. Defined in @webpieces/core-context; bind VENDOR_AUTH_MINTER, or every outbound
-// vendorAuth(...) call throws rather than sending unauthenticated. The INBOUND VendorAuthVerifier is
+// sends. Defined in @webpieces/core-context; bind VENDOR_AUTH_MINTER (its supportedVendorNames() listing the
+// vendor), or createRpcClient refuses a contract whose endpoint has no other sendable credential —
+// never an unauthenticated send. The INBOUND VendorAuthVerifier is
 // http-routing's, and no client ever depends on it (#1358).
 export { VendorAuthMinter, VENDOR_AUTH_MINTER, SignableRequest } from '@webpieces/core-context';
 

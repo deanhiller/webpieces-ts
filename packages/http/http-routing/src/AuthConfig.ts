@@ -60,7 +60,8 @@ export const AUTHENTICATED_CALLER_KEY = ContextKey.trusted<AuthenticatedCaller>(
  *
  * So a zero-wiring server accepts service-to-service OIDC out of the box, and an app only binds the
  * pieces it actually uses. This class is injected `@optional` into AuthFilter (rebindable in tests);
- * when unbound, shared-secret endpoints simply have no accepted secret and fail fast (401).
+ * a server SERVING a `sharedSecret(key)` endpoint with no AuthConfig, or one not holding `key`, refuses
+ * to boot (#1362, `AuthFilter.assertRouteVerifiable`).
  */
 export class AuthConfig {
     /** Accepted shared-secret values keyed by `sharedSecret(name)`. DEFAULT empty — pass to enable. */

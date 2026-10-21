@@ -14,7 +14,7 @@ import { NodeProxyClient } from '../NodeProxyClient';
 import { SsrfTestingPolicy } from '../SsrfPolicy';
 import { SsrfRefusedError } from '../SsrfRefusedError';
 import { MissingRuntimeBaseUrlError } from '../MissingRuntimeBaseUrlError';
-import { MissingVendorAuthMinterError } from '../OutboundAuthErrors';
+import { MissingClientCredentialError } from '../OutboundAuthErrors';
 
 class DeliverRequest {
     constructor(public readonly eventId: string) {}
@@ -78,6 +78,32 @@ abstract class SignedWebhookApi {
     }
 }
 
+/** A sharedSecret(...) key the stub Secrets does NOT hold. */
+@Rpc()
+@ApiPath('/internal')
+abstract class UnheldSecretApi {
+    @Endpoint(POST, '/work', WRITE, RPC)
+    @WpAuth([sharedSecretAuth('absent-secret')])
+    @WpAuthorization({ authType: AuthorizationType.SERVICE_ONLY })
+    // webpieces-disable no-unmanaged-exceptions -- abstract contract stub, never executed
+    work(_request: DeliverRequest): Promise<void> {
+        throw new Error('contract only');
+    }
+}
+
+/** ONE PER ENDPOINT: OIDC is always sendable, so this needs no minter even though it also allows vendorAuth. */
+@Rpc()
+@ApiPath('/ot-webhook')
+abstract class OidcOrSignedApi {
+    @Endpoint(POST, '/deliver', WRITE, RPC)
+    @WpAuth([vendorAuth('partner-hmac'), oidcSameProject()])
+    @WpAuthorization({ authType: AuthorizationType.USERS_OR_SERVICES })
+    // webpieces-disable no-unmanaged-exceptions -- abstract contract stub, never executed
+    deliver(_request: DeliverRequest): Promise<void> {
+        throw new Error('contract only');
+    }
+}
+
 class StubHeaders {
     buildOutboundHeaders(_destination: DestinationTrust): Map<string, string> {
         return new Map<string, string>();
@@ -113,6 +139,10 @@ class StubSecrets {
 
 /** Records exactly what it was handed to mint over, so a test can compare with the wire. */
 class RecordingVendorAuthMinter extends VendorAuthMinter {
+    override supportedVendorNames(): readonly string[] {
+        return ['partner-hmac'];
+    }
+
     signedName: string | undefined;
     signed: SignableRequest | undefined;
     mints = 0;
@@ -127,6 +157,21 @@ class RecordingVendorAuthMinter extends VendorAuthMinter {
 
     override async refresh(name: string): Promise<void> {
         this.refreshes.push(name);
+    }
+}
+
+/** A minter for a DIFFERENT vendor: bound, but it cannot mint 'partner-hmac'. */
+class OtherVendorMinter extends VendorAuthMinter {
+    override supportedVendorNames(): readonly string[] {
+        return ['clover'];
+    }
+
+    override async mint(_name: string, _request: SignableRequest): Promise<Map<string, string>> {
+        throw new Error('mint must never run at client creation');
+    }
+
+    override async refresh(_name: string): Promise<void> {
+        throw new Error('refresh must never run at client creation');
     }
 }
 
@@ -500,20 +545,39 @@ describe('vendorAuth(...), outbound — WE present the vendor credential', () =>
         expect(sent[0].headers['x-partner-signature']).toBe(`v1=${signer.signed?.body?.length}:https://api.partner.example/ot-webhook/deliver`);
     });
 
-    it('FAILS CLOSED with no VendorAuthMinter bound — it does not send unauthenticated', async () => {
-        const unsigned = client(
-            SignedWebhookApi,
-            new ClientConfig('partner-webhooks', ClientRole.SERVER),
-            [new ClientFilterDefinition(1000, new ContextBaseUrlFilter())],
-            new Doubles(undefined),
-        );
+    /** FAIL AT CREATION (#1362): createRpcClient refuses, so no call can go out unauthenticated. */
+    it('createRpcClient REFUSES a vendorAuth-only contract with no VendorAuthMinter bound', () => {
+        const create = (): SignedWebhookApi => client(SignedWebhookApi, new ClientConfig('partner-webhooks', ClientRole.SERVER), [], new Doubles(undefined));
 
-        const refused = withOverride('https://api.partner.example', () => unsigned.deliver(new DeliverRequest('e1')));
-        await expect(refused).rejects.toBeInstanceOf(MissingVendorAuthMinterError);
-        await expect(refused).rejects.toThrow(/no VendorAuthMinter is bound/);
-        await expect(refused).rejects.toThrow(/binder\.bind\(VENDOR_AUTH_MINTER\)/);
-        await expect(refused).rejects.not.toThrow(/VendorAuthHook|VENDOR_AUTH_HOOK/);
+        expect(create).toThrow(MissingClientCredentialError);
+        expect(create).toThrow(/SignedWebhookApi\.deliver declares vendorAuth\('partner-hmac'\)/);
+        expect(create).toThrow(/binder\.bind\(VENDOR_AUTH_MINTER\)\.to\(YourVendorAuthMinter\)\.inSingletonScope\(\);/);
+        expect(create).not.toThrow(/VendorAuthHook|VENDOR_AUTH_HOOK/);
         expect(sent).toHaveLength(0);
+    });
+
+    it("createRpcClient REFUSES when the bound minter's supportedVendorNames() lacks the vendor — and never mints", () => {
+        const create = (): SignedWebhookApi => client(SignedWebhookApi, new ClientConfig('partner-webhooks', ClientRole.SERVER), [], new Doubles(new OtherVendorMinter()));
+
+        expect(create).toThrow(MissingClientCredentialError);
+        expect(create).toThrow(/OtherVendorMinter\) supportedVendorNames\(\) returns \['clover'\] — add 'partner-hmac'/);
+    });
+
+    it('createRpcClient REFUSES a sharedSecret-only endpoint whose secret this client does not hold', () => {
+        const create = (): UnheldSecretApi => client(UnheldSecretApi, new ClientConfig('internal', ClientRole.SERVER), [], new Doubles());
+
+        expect(create).toThrow(MissingClientCredentialError);
+        expect(create).toThrow(/UnheldSecretApi\.work declares sharedSecret\('absent-secret'\).*holds no value for 'absent-secret'/s);
+    });
+
+    it('ONE PER ENDPOINT: a contract that also allows OIDC is created with no minter, and sends OIDC', async () => {
+        const doubles = new Doubles(undefined);
+        const either = client(OidcOrSignedApi, new ClientConfig('partner-webhooks', ClientRole.SERVER), [new ClientFilterDefinition(1000, new ContextBaseUrlFilter())], doubles);
+
+        await withOverride('https://api.partner.example', () => either.deliver(new DeliverRequest('e1')));
+
+        expect(doubles.oidc.audiences).toEqual(['https://api.partner.example']);
+        expect(sent[0].headers['Authorization']).toBe('Bearer token-for-https://api.partner.example');
     });
 
     it('is callable at all — binding the client does not throw for vendorAuth(...)', () => {

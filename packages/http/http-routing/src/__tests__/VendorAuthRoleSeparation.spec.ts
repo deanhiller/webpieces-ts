@@ -80,6 +80,10 @@ let tally = new Tally();
 /** The SERVER's inbound role, shaped exactly like the consumer's: it depends on the OIDC RPC proxy. */
 @injectable()
 class LookupVendorVerifier extends VendorAuthVerifier {
+    override supportedVendorNames(): readonly string[] {
+        return ['bugfixer-agent'];
+    }
+
     constructor(
         // webpieces-disable inject-annotation-not-needed-for-concrete-class -- an abstract contract class is the DI token; esbuild/vitest elides design:paramtypes
         @inject(CredentialLookupApi) public readonly lookup: CredentialLookupApi,
@@ -97,6 +101,10 @@ class LookupVendorVerifier extends VendorAuthVerifier {
 /** An inbound verifier with no dependencies, to observe what resolving AuthFilter constructs. */
 @injectable()
 class PlainVendorVerifier extends VendorAuthVerifier {
+    override supportedVendorNames(): readonly string[] {
+        return ['bugfixer-agent'];
+    }
+
     constructor() {
         super();
         tally.plainVerifierConstructed += 1;
@@ -111,6 +119,10 @@ class PlainVendorVerifier extends VendorAuthVerifier {
 /** The CLIENT's outbound role, shaped like the CLI's signer: it reads a credential it already holds. */
 @injectable()
 class HeldTokenMinter extends VendorAuthMinter {
+    override supportedVendorNames(): readonly string[] {
+        return ['bugfixer-agent'];
+    }
+
     constructor() {
         super();
         tally.minterConstructed += 1;

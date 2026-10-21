@@ -1,3 +1,4 @@
+
 /**
  * ONE outbound request, as the thing being authenticated — what {@link VendorAuthMinter.mint}
  * receives. Data only.
@@ -64,15 +65,25 @@ export class SignableRequest {
  * itself inject a typed RPC client. Validating a credential server-side is the verifier's job, on
  * the server.
  *
- * ## It FAILS CLOSED
+ * ## It FAILS AT CLIENT CREATION
  *
- * With no minter bound, every outbound `vendorAuth(...)` call THROWS `MissingVendorAuthMinterError`
- * before anything is sent, rather than going out unauthenticated. There is no framework default and
- * there never will be one. OIDC, shared-secret and public calls never need it.
+ * `createRpcClient` refuses a contract with an endpoint whose only declared credential this client
+ * could send is `vendorAuth(name)` when no minter is bound, or the bound minter's {@link supportedVendorNames}
+ * does not list `name` — it throws `MissingClientCredentialError` naming the contract, the method and
+ * the binding, before any call is made (#1362). An endpoint that also declares a credential this
+ * client CAN send (OIDC, a held shared secret) needs no minter. There is no framework default and
+ * there never will be one.
  *
  * ```typescript
  * // the CLI / client process's BindModule
  * binder.bind(VENDOR_AUTH_MINTER).to(MyVendorAuthMinter).inSingletonScope();
+ *
+ * class MyVendorAuthMinter extends VendorAuthMinter {
+ *     override supportedVendorNames(): readonly string[] {
+ *         return ['clover'];   // every name mint()/refresh() below handle
+ *     }
+ *     // mint(...) and refresh(...)
+ * }
  * ```
  *
  * ## Refresh-once, and who owns serializing it
@@ -85,6 +96,17 @@ export class SignableRequest {
  * credential source; it never authenticates through the call it is refreshing for.
  */
 export abstract class VendorAuthMinter {
+    /**
+     * Every vendor name {@link mint} and {@link refresh} handle — each `vendorAuth(name)` this process
+     * can call. A METHOD beside `mint` so the list sits next to the code that dispatches on those
+     * names: add a vendor to both in one edit. REQUIRED, no default.
+     *
+     * Called at CLIENT CREATION by `createRpcClient` (#1362), to refuse a contract it cannot call. It
+     * MUST therefore be PURE — return a fixed list, with no I/O, no network, no credential work and no
+     * side effect. {@link mint} and {@link refresh} are never called then.
+     */
+    abstract supportedVendorNames(): readonly string[];
+
     /**
      * Produce the headers that authenticate ONE outbound request, or throw to refuse to send it. An
      * empty map is legal and means "this vendor needs no header".
@@ -106,7 +128,7 @@ export abstract class VendorAuthMinter {
  * DI identifier for the optional {@link VendorAuthMinter} binding — the OUTBOUND role only. It is a
  * Symbol (not the class) so the app container's inversify autobind never auto-constructs this token,
  * keeping `@optional() @inject(VENDOR_AUTH_MINTER)` correct — undefined when unbound, which is what
- * makes the fail-closed refusal reachable.
+ * lets `createRpcClient` refuse a contract this process cannot call.
  */
 // webpieces-disable no-symbol-di-tokens -- optional DI token: must be a Symbol so the app container's autobind never auto-constructs this token, keeping @optional() @inject(...) correct (undefined when unbound)
 export const VENDOR_AUTH_MINTER = Symbol.for('VendorAuthMinter');

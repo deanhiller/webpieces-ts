@@ -4,6 +4,7 @@ import { request as httpRequest, IncomingMessage } from 'node:http';
 import { request as httpsRequest } from 'node:https';
 import { Readable } from 'node:stream';
 import {
+    AuthMode,
     ClientRegistry,
     DestinationTrust,
     ApiImplementationError,
@@ -38,6 +39,7 @@ import { AddressResolver } from './AddressResolver';
 import { ClientConfig } from './ClientConfig';
 import { ContextBaseUrlFilter } from './ContextBaseUrlFilter';
 import { ContextFullUrlFilter } from './ContextFullUrlFilter';
+import { MissingClientCredentialError } from './OutboundAuthErrors';
 import { OutboundAuthFilter } from './OutboundAuthFilter';
 import { SsrfGuardFilter } from './SsrfGuardFilter';
 import { SsrfPolicy } from './SsrfPolicy';
@@ -62,17 +64,123 @@ const OUTBOUND_AUTH_PRIORITY = 800;
  */
 @provideFrameworkTransient()
 export class NodeProxyClient extends ProxyClient {
-    protected override selectAuthMethod(route: import('@webpieces/core-util').RouteMetadata): import('@webpieces/core-util').AuthMode {
+    /**
+     * The declared method this client sends. ONE implementation, run at client creation by
+     * {@link assertEndpointSupported} (which is what makes `createRpcClient` fail fast, #1362) and per
+     * call by the base class — so the per-call run always finds what creation found, and there is no
+     * "send an unsatisfiable `methods[0]` and let it fail later" fallback.
+     *
+     * A credential the FRAMEWORK can send now wins (the first in declaration order); otherwise a
+     * credential the APP relays per call (a user JWT or a partner's api key, carried by a context key
+     * or a client filter — see {@link appRelays}); otherwise nothing is sendable and creation fails.
+     */
+    protected override selectAuthMethod(route: RouteMetadata): AuthMode {
         const methods = route.authMeta?.methods;
         if (!methods) throw new Error('Endpoint requires @WpAuth or @WpAuthPublic.');
-        const selected = methods.find((method: import('@webpieces/core-util').AuthMode) =>
-            method.kind === 'oidc' || method.kind === 'public' ||
-            (method.kind === 'shared-secret' && !!this.secrets?.get(method.secretKey)) ||
-            (method.kind === 'vendorAuth' && !!this.vendorAuthMinter));
+        const selected =
+            methods.find((method: AuthMode) => this.frameworkSends(method)) ??
+            methods.find((method: AuthMode) => NodeProxyClient.appRelays(method));
         if (selected) return selected;
-        if (methods.length === 1) return methods[0];
-        throw new Error('No configured Node client credential can satisfy this endpoint; bind a declared service credential.');
+        throw this.noSendableCredential(route, methods);
     }
+
+    /**
+     * ONE PER ENDPOINT (#1362): every route of the contract must declare at least one method this
+     * client can send, or `createRpcClient` throws {@link MissingClientCredentialError}. Reads the bound
+     * `Secrets` and the minter's pure `supportedVendorNames()` only — never mints, never refreshes, no network — and
+     * never touches the inbound `VendorAuthVerifier`, so the #1358 construction cycle stays closed.
+     */
+    protected override assertEndpointSupported(route: RouteMetadata): void {
+        this.selectAuthMethod(route);
+    }
+
+    /**
+     * Can the FRAMEWORK send `method` from what this process holds NOW? An exhaustive switch with no
+     * `default`, so a new AuthMode kind is a compile error here rather than silently sendable or not.
+     */
+    private frameworkSends(method: AuthMode): boolean {
+        switch (method.kind) {
+            case 'oidc':
+            case 'public':
+                return true;
+            case 'shared-secret':
+                return !!this.secrets?.get(method.secretKey);
+            case 'vendorAuth':
+                return this.vendorAuthMinter?.supportedVendorNames().includes(method.name) ?? false;
+            // Never minted by the framework: see appRelays.
+            case 'jwt':
+            case 'apikey':
+                return false;
+        }
+    }
+
+    /**
+     * A credential the framework never mints but the APP supplies PER CALL — a user JWT a node BFF
+     * forwards from its own caller through a context key, a partner SDK's api-key headers set by a
+     * client filter. Whether a given call carries it is unknowable at creation, exactly as for a
+     * browser's JWT, so it is not refused here: a call without it is the callee's 401.
+     */
+    // webpieces-disable no-function-outside-class -- static pure predicate over the AuthMode union, kept beside its only caller
+    private static appRelays(method: AuthMode): boolean {
+        switch (method.kind) {
+            case 'jwt':
+            case 'apikey':
+                return true;
+            case 'oidc':
+            case 'public':
+            case 'shared-secret':
+            case 'vendorAuth':
+                return false;
+        }
+    }
+
+    private noSendableCredential(route: RouteMetadata, methods: readonly AuthMode[]): MissingClientCredentialError {
+        const endpoint = `${this.contractName()}.${route.methodName}`;
+        const declared = methods.map((method: AuthMode) => NodeProxyClient.spell(method));
+        const cures = methods.map((method: AuthMode) => `  - ${NodeProxyClient.spell(method)}: ${this.cureFor(method)}`);
+        return new MissingClientCredentialError(
+            `${endpoint} declares ${declared.join(', ')}, and this client can send none of them, so ` +
+                `createRpcClient refuses the contract rather than fail on the first call. Make ONE of ` +
+                `these sendable (a client needs only one):\n${cures.join('\n')}`,
+            endpoint,
+            declared,
+        );
+    }
+
+    private cureFor(method: AuthMode): string {
+        switch (method.kind) {
+            case 'shared-secret':
+                return this.secrets
+                    ? `the bound Secrets (${this.secrets.constructor.name}) holds no value for '${method.secretKey}' — give it one`
+                    : `bind a Secrets carrying '${method.secretKey}': binder.bind(SECRETS).to(YourSecrets).inSingletonScope();`;
+            case 'vendorAuth':
+                return this.vendorAuthMinter
+                    ? `the bound VendorAuthMinter (${this.vendorAuthMinter.constructor.name}) supportedVendorNames() returns ` +
+                          `[${this.vendorAuthMinter.supportedVendorNames().map((name: string) => `'${name}'`).join(', ')}] — add '${method.name}' to ` +
+                          `supportedVendorNames() and handle it in mint()/refresh()`
+                    : `bind the OUTBOUND role: binder.bind(VENDOR_AUTH_MINTER).to(YourVendorAuthMinter).inSingletonScope(); ` +
+                          `(a VENDOR_AUTH_VERIFIER binding does not count: it verifies inbound calls and never sends)`;
+            case 'jwt':
+            case 'apikey':
+                return 'relayed by the app per call';
+            case 'oidc':
+            case 'public':
+                return 'always sendable';
+        }
+    }
+
+    // webpieces-disable no-function-outside-class -- static pure formatter of the AuthMode union, kept beside its only callers
+    private static spell(method: AuthMode): string {
+        switch (method.kind) {
+            case 'oidc': return method.callerScope === 'same-project' ? 'oidcSameProject()' : `oidcSvcs([${method.callers.join(', ')}])`;
+            case 'public': return '@WpAuthPublic';
+            case 'jwt': return 'jwt()';
+            case 'shared-secret': return `sharedSecret('${method.secretKey}')`;
+            case 'vendorAuth': return `vendorAuth('${method.name}')`;
+            case 'apikey': return `apiKey('${method.regime}', credentials)`;
+        }
+    }
+
     private config!: ClientConfig;
 
     constructor(
@@ -85,8 +193,9 @@ export class NodeProxyClient extends ProxyClient {
         // @optional: only sharedSecret(...) endpoints need it; the client sends its bound value.
         // webpieces-disable inject-annotation-not-needed-for-concrete-class -- DI-resolved param; the esbuild/vitest path elides type-only imports (no design:paramtypes), so the explicit token is required
         @optional() @inject(SECRETS) private readonly secrets?: Secrets,
-        // @optional: only OUTBOUND vendorAuth(...) calls need it, and an unbound one makes them THROW
-        // rather than send unauthenticated — see VendorAuthMinter. The OUTBOUND role ONLY: this
+        // @optional: only OUTBOUND vendorAuth(...) calls need it, and createRpcClient refuses a contract
+        // whose endpoint can be sent ONLY with a minter that is absent or does not list the vendor
+        // (assertEndpointSupported) — see VendorAuthMinter. The OUTBOUND role ONLY: this
         // client must never depend on the server's inbound VendorAuthVerifier, because a verifier
         // that itself uses an RPC client would then close a construction cycle (#1358).
         // webpieces-disable inject-annotation-not-needed-for-concrete-class -- DI-resolved param; the esbuild/vitest path elides type-only imports (no design:paramtypes), so the explicit token is required

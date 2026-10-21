@@ -1,6 +1,6 @@
-import { injectable } from 'inversify';
+import { ContainerModule, ContainerModuleLoadOptions, injectable } from 'inversify';
 import { AuthConfig, JwtHook, AuthenticatedCaller, MintedJwt, SharedSecrets } from '@webpieces/http-routing';
-import { ContextTuple, WebpiecesCoreHeaders } from '@webpieces/core-util';
+import { ContextTuple, Secrets, SECRETS, WebpiecesCoreHeaders } from '@webpieces/core-util';
 
 /**
  * The two shared-secret VALUES this stub accepts. Exported so the test drives BOTH sides from the
@@ -26,6 +26,29 @@ export class TestAuthConfig extends AuthConfig {
         // Two accepted values so tests can prove BOTH secret1 and secret2 pass (rotation window).
         super({
             INTERNAL_API_SECRET: new SharedSecrets(TEST_SHARED_SECRET, TEST_SHARED_SECRET_ROTATING),
+        });
+    }
+}
+
+/**
+ * TestSecrets - the OUTBOUND twin of {@link TestAuthConfig}: the value this service SENDS for
+ * `sharedSecret('INTERNAL_API_SECRET')` (its Server2Api client). The production binding reads
+ * process.env, which a test does not set — and since #1362 `createRpcClient` refuses, at boot, a
+ * client that holds no value for a sharedSecret-only endpoint, so a test booting the real wiring binds
+ * this instead of mutating process.env.
+ */
+@injectable()
+export class TestSecrets extends Secrets {
+    constructor() {
+        super({ INTERNAL_API_SECRET: TEST_SHARED_SECRET });
+    }
+}
+
+/** A container override that rebinds SECRETS to {@link TestSecrets} — for specs booting the real wiring. */
+export class TestSecretsOverride extends ContainerModule {
+    constructor() {
+        super(async (options: ContainerModuleLoadOptions) => {
+            (await options.rebind(SECRETS)).to(TestSecrets).inSingletonScope();
         });
     }
 }

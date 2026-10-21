@@ -21,8 +21,9 @@ import {
     NodeProxyClient,
 } from '@webpieces/http-client-node';
 import { PublicApi } from '@webpieces/client-server-api';
-import { setupCompanyRuntime } from '@webpieces/company-svc-core';
+import { setupCompanyRuntime, CompanySetupOptions } from '@webpieces/company-svc-core';
 import { ClientServerWiring } from '../../client-server/src/wiring';
+import { TestSecretsOverride } from '../../client-server/src/test/TestAuthConfig';
 import {
     ORDER_SURFACE_HEADER,
     OrderErrorPayload,
@@ -69,7 +70,7 @@ const post = (path: string, body: string): Promise<Response> =>
     });
 
 beforeAll(async () => {
-    const factory = await setupCompanyRuntime(new ClientServerWiring());
+    const factory = await setupCompanyRuntime(new ClientServerWiring(), new CompanySetupOptions(undefined, new TestSecretsOverride()));
     httpServer = await new WebpiecesExpressRouter(factory).bindAndStartExpress(express(), PORT);
     ClientRegistry.resetForTests();
     ApiRegistry.resetForTests();

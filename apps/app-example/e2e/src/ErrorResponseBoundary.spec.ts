@@ -25,8 +25,9 @@ import { ClientFilterDefinition, ClientRequest } from '@webpieces/http-client-co
 import { ClientHttpFactory, ClientConfig, ClientRole, NodeProxyClient, DnsAddressResolver } from '@webpieces/http-client-node';
 import { GcpOidc } from '@webpieces/gcp-identity';
 import { PublicApi, SecureApi } from '@webpieces/client-server-api';
-import { setupCompanyRuntime } from '@webpieces/company-svc-core';
+import { setupCompanyRuntime, CompanySetupOptions } from '@webpieces/company-svc-core';
 import { ClientServerWiring } from '../../client-server/src/wiring';
+import { TestSecretsOverride } from '../../client-server/src/test/TestAuthConfig';
 
 class SurfaceError extends Error {}
 
@@ -98,7 +99,7 @@ beforeAll(async () => {
     ClientRegistry.resetForTests();
     ApiRegistry.resetForTests();
     // Actual production modules, routes, filters and controllers from the example app.
-    factory = await setupCompanyRuntime(new ClientServerWiring());
+    factory = await setupCompanyRuntime(new ClientServerWiring(), new CompanySetupOptions(undefined, new TestSecretsOverride()));
     server = await new WebpiecesExpressRouter(factory).bindAndStartExpress(express(), 0);
     baseUrl = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
     ClientRegistry.addUrlMapping('boundary-demo', baseUrl);
