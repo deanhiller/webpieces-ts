@@ -42,13 +42,13 @@ export class TestSecrets extends Secrets {
     constructor() {
         super({ INTERNAL_API_SECRET: TEST_SHARED_SECRET });
     }
-}
 
-/** A container override that rebinds SECRETS to {@link TestSecrets} — for specs booting the real wiring. */
-export function testSecretsOverride(): ContainerModule {
-    return new ContainerModule(async (options: ContainerModuleLoadOptions) => {
-        (await options.rebind(SECRETS)).to(TestSecrets).inSingletonScope();
-    });
+    /** A container override that rebinds SECRETS to TestSecrets — for specs booting the real wiring. */
+    static override(): ContainerModule {
+        return new ContainerModule(async (options: ContainerModuleLoadOptions) => {
+            (await options.rebind(SECRETS)).to(TestSecrets).inSingletonScope();
+        });
+    }
 }
 
 /**
