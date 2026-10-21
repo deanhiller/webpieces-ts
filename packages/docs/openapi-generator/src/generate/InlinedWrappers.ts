@@ -1,4 +1,5 @@
 import { DocumentedEndpoint, DocumentedType, TypeRef } from '@webpieces/api-doc-model';
+import { verbCarriesBody } from '@webpieces/core-util';
 import { ContractModel } from './GenerationInputs';
 import { SuccessBody } from './SuccessBody';
 
@@ -65,8 +66,9 @@ class WrapperUseCounter {
     constructor(private readonly types: ReadonlyMap<string, DocumentedType>) {}
 
     /**
-     * Every body an operation of any document can render: a POST's request (the only method a body is
-     * published for — see `OperationRenderer.requestBody`) and a non-void success response. A
+     * Every body an operation of any document can render: a POST/PUT/PATCH request (the verbs a body is
+     * published for — `verbCarriesBody`, see `OperationRenderer.requestBody`) and a non-void success
+     * response. A URL parameter's type is a NESTED use: a parameter schema is never an inlined wrapper. A
      * `@WpLocalOnly` endpoint is in no document, so it uses nothing.
      */
     countOperations(contracts: readonly ContractModel[]): void {
@@ -118,8 +120,13 @@ class WrapperUseCounter {
         if (endpoint.localOnly) {
             return;
         }
-        if (endpoint.httpMethod === 'POST' && endpoint.request !== undefined) {
+        if (verbCarriesBody(endpoint.httpMethod) && endpoint.request !== undefined) {
             this.countBody(endpoint.request);
+        }
+        for (const parameter of endpoint.parameters) {
+            if (parameter.type !== undefined) {
+                this.walk(parameter.type);
+            }
         }
         if (!this.body.isVoid(endpoint.response)) {
             this.countBody(endpoint.response!);

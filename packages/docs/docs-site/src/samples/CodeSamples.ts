@@ -1,4 +1,4 @@
-import { ApiSpec, OperationInfo, SecuritySchemeInfo } from '../spec/ApiSpec';
+import { ApiSpec, OperationInfo, ResponseInfo, SecuritySchemeInfo } from '../spec/ApiSpec';
 import { ExampleBuilder } from '../spec/ExampleBuilder';
 
 /** One language's sample for one operation. `id` is the tab's value, `label` is what a reader sees. */
@@ -125,8 +125,17 @@ export class CodeSampleBuilder {
             lines.push(`    body: JSON.stringify(${this.indent(body, '    ')}),`);
         }
         lines.push('});');
-        lines.push('const result = await response.json();');
+        // A success with no body (a 204) has nothing to parse (#1339).
+        if (this.successHasBody(operation)) {
+            lines.push('const result = await response.json();');
+        }
         return lines.join('\n');
+    }
+
+    /** True unless the operation's only 2xx response documents no body. */
+    private successHasBody(operation: OperationInfo): boolean {
+        const success = operation.responses.find((response: ResponseInfo) => response.status.startsWith('2'));
+        return success === undefined || success.schema !== undefined;
     }
 
     private go(

@@ -1,4 +1,20 @@
-import { Mcp } from '@webpieces/core-util';
+import {
+    Mcp,
+    ApiPath,
+    ApiType,
+    AuthorizationType,
+    Endpoint,
+    MCP,
+    PathParam,
+    PUT,
+    RPC,
+    SVC_TO_SVC,
+    WpAuth,
+    WpAuthorization,
+    WpMcpTool,
+    WRITE_IDEMPOTENT,
+    jwt as jwtAuth,
+} from '@webpieces/core-util';
 import { AuthorizationService } from '@webpieces/http-routing';
 import 'reflect-metadata';
 import * as fs from 'node:fs';
@@ -304,6 +320,40 @@ describe('McpToolRegistry pairs each binding with ITS contract’s catalog', () 
     it('refuses an empty catalog list, saying so', () => {
         expect(() => new McpToolRegistry([search()], [], factory.authorizationService())).toThrow(
             /\(none — toolCatalogs is empty\)/,
+        );
+    });
+
+    it('refuses a tool whose method binds an argument to the URL (#1339)', () => {
+        class PathBodyRequest {
+            name!: string;
+        }
+
+        @ApiPath('/mcp-path')
+        @ApiType(SVC_TO_SVC, MCP)
+        abstract class PathBoundApi {
+            /**
+             * Rename one record.
+             *
+             * @summary Rename
+             */
+            @WpAuth([jwtAuth()])
+            @WpAuthorization({ authType: AuthorizationType.ALL_USERS })
+            @Endpoint(PUT, '/records/{id}', WRITE_IDEMPOTENT, RPC)
+            @WpMcpTool('rename_record')
+            rename(@PathParam('id') _id: string, _request: PathBodyRequest): Promise<object> {
+                throw new Error('contract only');
+            }
+        }
+
+        expect(
+            () =>
+                new McpToolRegistry(
+                    [McpApiBinding.local(PathBoundApi, factory)],
+                    [],
+                    factory.authorizationService(),
+                ),
+        ).toThrow(
+            '@WpMcpTool PathBoundApi.rename binds arguments to the URL with @PathParam/@QueryParam.',
         );
     });
 });

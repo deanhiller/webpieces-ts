@@ -102,7 +102,10 @@ describe('a conforming document this package did not generate', () => {
         expect(request).toContain('<span class="field-required">REQUIRED</span>');
         expect(request).toContain('Correlates the call across services.');
         expect(request).toContain('<span class="field-name">X-Tree-Owner</span>');
-        expect(page).not.toContain('<span class="field-name">dryRun</span>');
+        // A query parameter is not a header (#1339): it is listed, but in its own section.
+        expect(request).not.toContain('<span class="field-name">dryRun</span>');
+        const query = page.slice(page.indexOf('<h2>Query parameters</h2>'), page.indexOf('<h2>Request headers</h2>'));
+        expect(query).toContain('<span class="field-name">dryRun</span>');
     });
 
     it('renders no Headers heading for an operation that declares none', () => {

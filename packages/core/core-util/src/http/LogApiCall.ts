@@ -1,6 +1,6 @@
 import { toError } from '../lib/errorUtils';
 import { LogManager } from '../logging/LogManager';
-import { ApiCallInfo } from './ApiCallInfo';
+import { ApiCallInfo, HttpCallFactsHolder } from './ApiCallInfo';
 import { ApiMethodInfo } from './ApiMethodInfo';
 import { ApiCallContext } from './ApiCallContext';
 import { WebpiecesCoreHeaders } from './WebpiecesCoreHeaders';
@@ -205,6 +205,8 @@ export class LogApiCallImpl {
         requestDto: Q,
         method: (dto: Q) => Promise<R>,
         responseCount?: (response: R) => number | undefined,
+        /** The HTTP client's per-call slot — see {@link HttpCallFactsHolder}. Absent everywhere else. */
+        http?: HttpCallFactsHolder,
     ): Promise<R> {
         if (methodInfo.noLogging) {
             return this.executeUnlogged(methodInfo, requestDto, method);
@@ -251,6 +253,7 @@ export class LogApiCallImpl {
                     requestSize,
                     this.byteSize(responseBody),
                     count,
+                    http?.facts,
                 ),
                 () =>
                     log.info(
@@ -263,7 +266,7 @@ export class LogApiCallImpl {
             const error = toError(err);
             // Duration comes off the SAME start as the success path, so a slow failure (a timeout, a
             // hung dependency) reports its real cost rather than nothing.
-            this.logFailure(error, methodInfo, Date.now() - startMs, requestSize, stamp);
+            this.logFailure(error, methodInfo, Date.now() - startMs, requestSize, stamp, http);
             throw err;
         }
     }
@@ -405,6 +408,7 @@ export class LogApiCallImpl {
         durationMs: number,
         requestSize: number | undefined,
         stamp: (info: ApiCallInfo, emit: () => void) => void,
+        http: HttpCallFactsHolder | undefined,
     ): void {
         const side = methodInfo.side;
         const id = `${methodInfo.apiClass}.${methodInfo.methodName}`;
@@ -428,6 +432,9 @@ export class LogApiCallImpl {
                 isUser ? 'success' : 'failure',
                 durationMs,
                 requestSize,
+                undefined,
+                undefined,
+                http?.facts,
             ),
             () =>
                 isUser

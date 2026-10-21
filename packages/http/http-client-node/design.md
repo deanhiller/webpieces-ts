@@ -18,13 +18,13 @@ graph TD
     NodeProxyClient["NodeProxyClient"]:::many
     RequestContextHeaders["RequestContextHeaders"]
     Secrets{{"Secrets ?"}}:::unresolved
-    WebhookSignerCallback{{"WebhookSignerCallback ?"}}:::unresolved
+    VendorAuthHook{{"VendorAuthHook ?"}}:::unresolved
     ClientHttpFactory --> NodeProxyClient
     NodeProxyClient --> DnsAddressResolver
     NodeProxyClient --> GcpOidc
     NodeProxyClient --> RequestContextHeaders
     NodeProxyClient --> Secrets
-    NodeProxyClient --> WebhookSignerCallback
+    NodeProxyClient --> VendorAuthHook
     classDef controller fill:#1f6feb,color:#ffffff,stroke:#0d419d
     classDef apiImpl fill:#0d9488,color:#ffffff,stroke:#0f766e
     classDef component fill:#2da44e,color:#ffffff,stroke:#1a7f37

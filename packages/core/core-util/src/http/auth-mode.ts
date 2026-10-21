@@ -48,7 +48,7 @@ export type AuthMethod =
     | { kind: 'jwt' }
     | OidcAuthMethod
     | { kind: 'shared-secret'; secretKey: string }
-    | { kind: 'webhook'; name: string }
+    | { kind: 'vendorAuth'; name: string }
     | { kind: 'apikey'; regime: string; credentials: ApiKeyCredentials };
 
 export type AuthMethods = readonly [AuthMethod, ...AuthMethod[]];
@@ -117,9 +117,9 @@ export class AuthDeclaration {
             case 'shared-secret':
                 keys = ['kind', 'secretKey'];
                 this.requireText(method.secretKey, 'sharedSecret'); break;
-            case 'webhook':
+            case 'vendorAuth':
                 keys = ['kind', 'name'];
-                this.requireText(method.name, 'webhook'); break;
+                this.requireText(method.name, 'vendorAuth'); break;
             case 'apikey':
                 keys = ['kind', 'regime', 'credentials'];
                 this.requireText(method.regime, 'apiKey');
@@ -129,7 +129,7 @@ export class AuthDeclaration {
                     else if (credential.in !== 'bearer' || Object.hasOwn(credential, 'key')) throw new Error('Invalid API-key credential location.');
                 }
                 break;
-            default: throw new Error('Unknown @WpAuth method; use jwt/oidcSameProject/oidcSvcs/sharedSecret/webhook/apiKey descriptors.');
+            default: throw new Error('Unknown @WpAuth method; use jwt/oidcSameProject/oidcSvcs/sharedSecret/vendorAuth/apiKey descriptors.');
         }
         for (const key of Object.keys(method)) {
             if (!keys.includes(key)) throw new Error(`Auth method rejects '${key}'; operation policy belongs in @WpAuthorization.`);
@@ -183,7 +183,13 @@ export function oidcSameProject(): OidcAuthMethod { return { kind: 'oidc', calle
 export function oidcSvcs(callers: OidcCallers): OidcAuthMethod { return { kind: 'oidc', callerScope: 'services', callers }; }
 // webpieces-disable no-function-outside-class -- canonical credential descriptor factory
 export function sharedSecret(secretKey: string): AuthMethod { return { kind: 'shared-secret', secretKey }; }
+/**
+ * A credential in a VENDOR's scheme, on both ends of a hop: the app-bound `VendorAuthHook` (core-context)
+ * mints it when WE call the vendor (and refreshes it once on a 401), and verifies it when the vendor
+ * calls US. `name` selects the vendor. A served `vendorAuth(...)` endpoint requires
+ * `@Endpoint(..., { rawBody: true })` so the hook has the exact bytes to verify.
+ */
 // webpieces-disable no-function-outside-class -- canonical credential descriptor factory
-export function webhook(name: string): AuthMethod { return { kind: 'webhook', name }; }
+export function vendorAuth(name: string): AuthMethod { return { kind: 'vendorAuth', name }; }
 // webpieces-disable no-function-outside-class -- canonical credential descriptor factory
 export function apiKey(regime: string, credentials: ApiKeyCredentials): AuthMethod { return { kind: 'apikey', regime, credentials }; }

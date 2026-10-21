@@ -217,6 +217,15 @@ constructor dependencies must establish a real business consumer of the contract
 and test doubles alone do not establish uses. Existing approved external-system contract metadata
 and project tags determine vendor system identity.
 
+An `EXTERNAL_OUTBOUND` contract — an `@ApiPath` class whose every `@Endpoint` is `EXTERNAL_OUTBOUND`,
+an outside system's HTTP API that webpieces' own client calls — is bound with the ordinary
+`binder.createRpcClientAndBind(VendorApi, 'vendor')` (the base URL comes from
+`ClientRegistry.addUrlMapping('vendor', url)`). The call records an external `uses` edge to a VENDOR
+node, named by the contract's `@externalSystem <kind> [label]` JSDoc tag or, without one, a `saas`
+box labelled with the contract name minus `Api`. No server in this repo may implement it:
+`router.addRoutes` on one fails extraction, and an approved graph listing an implementer fails
+validation.
+
 ## Build proof and review
 
 Tagged projects require an explicit `build.options.outputPath`. The inferred

@@ -4,7 +4,8 @@ import {
     RPC,
     CLOUDTASKS,
     CRON,
-    EXTERNAL,
+    EXTERNAL_INBOUND,
+    EXTERNAL_OUTBOUND,
     METADATA_KEYS,
     getEndpoints,
     getEndpointKinds,
@@ -101,14 +102,15 @@ export function assertApiKind(apiClass: Function, expected: ApiKind): void {
 /**
  * Which {@link EndpointKind}s each {@link ApiKind} may declare. A @PubSub contract is delivered
  * asynchronously by definition, so `rpc` is meaningless on it; an @Rpc contract has no queue, so
- * `cloudtasks`/`cron` on it would name a queue/schedule nothing could ever deliver to. `external`
- * is legal on both — a webhook posts synchronously, a push subscription does not.
+ * `cloudtasks`/`cron` on it would name a queue/schedule nothing could ever deliver to.
+ * `external-inbound` is legal on both — a webhook posts synchronously, a push subscription does not.
+ * `external-outbound` is an outside system's synchronous API WE call, so it is @Rpc only.
  *
  * Shared so the wiring-time assert below and the build-time architecture scan enforce ONE rule.
  */
 export const ENDPOINT_KINDS_BY_API_KIND: Record<ApiKind, readonly EndpointKind[]> = {
-    rpc: [RPC, EXTERNAL],
-    pubsub: [CLOUDTASKS, CRON, EXTERNAL],
+    rpc: [RPC, EXTERNAL_INBOUND, EXTERNAL_OUTBOUND],
+    pubsub: [CLOUDTASKS, CRON, EXTERNAL_INBOUND],
 };
 
 /**

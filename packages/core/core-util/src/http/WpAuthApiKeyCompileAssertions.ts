@@ -131,8 +131,8 @@ export class AuthApiKeyCompileAssertions {
                 return 'oidc';
             case 'shared-secret':
                 return 'shared-secret';
-            case 'webhook':
-                return 'webhook';
+            case 'vendorAuth':
+                return 'vendorAuth';
             case 'apikey':
                 return 'apikey';
         }

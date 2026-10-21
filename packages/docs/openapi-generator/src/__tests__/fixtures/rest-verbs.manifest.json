@@ -1,0 +1,14 @@
+{
+    "title": "Gadgets API",
+    "summary": "Address gadgets with REST verbs.",
+    "operationIds": "contract_method",
+    "version": "1.0.0",
+    "apisWhy": "One contract using PUT, PATCH and DELETE with path and query parameters.",
+    "apis": [
+        {
+            "entry": "RestVerbsApi.ts",
+            "tag": "Gadgets"
+        }
+    ],
+    "securitySchemeNames": []
+}

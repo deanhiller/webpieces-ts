@@ -7,7 +7,7 @@ import {
     getEndpoints,
     getEndpointOptions,
     isFormPost,
-    EXTERNAL,
+    EXTERNAL_INBOUND,
     POST,
     RPC,
     WRITE,
@@ -27,7 +27,7 @@ abstract class SampleWebhookApi {
     // an `external` endpoint must now NAME (calledBy is required by the @Endpoint overloads).
     @WpAuthPublic('Inbound form post fixture')
     @WpAuthorization({ authType: AuthorizationType.ANONYMOUS, reason: 'Inbound form post fixture' })
-    @Endpoint(POST, '/hook', WRITE, EXTERNAL, { formPost: true, calledBy: 'twilio' })
+    @Endpoint(POST, '/hook', WRITE, EXTERNAL_INBOUND, { formPost: true, calledBy: 'twilio' })
     inbound(_req: object): Promise<object> {
         throw new Error('subclass');
     }

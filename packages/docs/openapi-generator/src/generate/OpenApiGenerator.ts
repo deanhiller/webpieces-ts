@@ -9,6 +9,7 @@ import {
     TypeNameCollision,
     TypeRef,
 } from '@webpieces/api-doc-model';
+import { EXTERNAL_OUTBOUND } from '@webpieces/core-util';
 import { JsonObject, JsonValue } from '../json/JsonObject';
 import { OpenApiGenerationError } from '../OpenApiGenerationError';
 import { ErrorResponseEntry, ServerEntry } from '../manifest/OpenApiManifest';
@@ -576,6 +577,14 @@ export class OpenApiGenerator {
             }
             // A tag is added only by an operation that survived, so a document never advertises a
             // section of its sidebar that turns out to be empty.
+            if (endpoint.kind === EXTERNAL_OUTBOUND && !contractModel.entry.isWebhook()) {
+                throw new OpenApiGenerationError(
+                    `${model.contractName}.${endpoint.methodName} is EXTERNAL_OUTBOUND: an outside system serves it, ` +
+                        'so it is not a route of ours to publish',
+                    contractModel.entry.entry,
+                    'List the contract with "kind": "webhook" in the manifest when partners host it, or remove it from the manifest.',
+                );
+            }
             tags.add(tag);
             if (contractModel.entry.isWebhook()) {
                 webhooks.set(

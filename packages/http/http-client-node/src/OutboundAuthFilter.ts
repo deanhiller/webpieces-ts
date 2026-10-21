@@ -1,8 +1,8 @@
-import { Filter, Secrets, Service } from '@webpieces/core-util';
+import { Filter, Secrets, Service, StreamDirection } from '@webpieces/core-util';
+import { SignableRequest, VendorAuthHook } from '@webpieces/core-context';
 import { GcpOidc } from '@webpieces/gcp-identity';
 import { ClientRequest } from '@webpieces/http-client-core';
-import { MissingSharedSecretError, MissingWebhookSignerError } from './OutboundAuthErrors';
-import { SignableRequest, WebhookSignerCallback } from './WebhookSignerCallback';
+import { MissingSharedSecretError, MissingVendorAuthHookError } from './OutboundAuthErrors';
 
 /**
  * Attaches the endpoint's outbound credential, against the destination the call is ACTUALLY going
@@ -28,8 +28,13 @@ import { SignableRequest, WebhookSignerCallback } from './WebhookSignerCallback'
  * - `sharedSecret(...)` → the value this client holds for that key, as `Authorization: Webpieces …`.
  *   Legitimate against a re-pointed URL: N services implementing ONE contract behind ONE agreed
  *   secret is a real and common topology, and often stands in for OIDC where OIDC is not available.
- * - `webhook(name)` → the app's bound {@link WebhookSignerCallback} produces the headers. WE
- *   are the vendor on this side; see that class.
+ * - `vendorAuth(name)` → the app's bound {@link VendorAuthHook} `mint`s the headers (a vendor's
+ *   OAuth bearer, a partner's HMAC signature — the scheme is the app's). On a raw `401` it is the ONE
+ *   mode that retries: cancel the 401's body, `refresh(name)` once, `mint` again and re-send ONCE.
+ *   Never for a streaming upload (its body cannot be replayed), and once per logical call — the SSRF
+ *   guard's redirect loop re-enters this filter for each hop, and a second 401 goes up the chain to
+ *   `ClientErrorTranslator` exactly as before, because a service that cannot log in to its vendor
+ *   twice running is a bug in THAT service.
  *
  * Both credential-minting modes ride in the ONE `Authorization` header under their own scheme —
  * `Bearer <oidc>` / `Webpieces <secret>` — which is never a context key, so neither can leak onto
@@ -40,18 +45,42 @@ export class OutboundAuthFilter extends Filter<ClientRequest, Response> {
         private readonly gcpOidc: GcpOidc,
         /** Only sharedSecret(...) endpoints need it; a server that has none binds nothing. */
         private readonly secrets: Secrets | undefined,
-        /** Only webhook(...) endpoints need it, and an unbound one makes them THROW. */
-        private readonly webhookSigner: WebhookSignerCallback | undefined,
+        /** Only vendorAuth(...) endpoints need it, and an unbound one makes them THROW. */
+        private readonly vendorAuthHook: VendorAuthHook | undefined,
     ) {
         super();
     }
+
+    /** Requests that already spent their one refresh — keyed by the request, so redirect hops share it. */
+    private readonly refreshed = new WeakSet<ClientRequest>();
 
     override async filter(
         request: ClientRequest,
         nextFilter: Service<ClientRequest, Response>,
     ): Promise<Response> {
         await this.attach(request);
+        const response = await nextFilter.invoke(request);
+        const mode = request.route.authMeta?.methods[0];
+        if (
+            response.status !== 401 ||
+            mode?.kind !== 'vendorAuth' ||
+            this.refreshed.has(request) ||
+            this.uploadsAStream(request)
+        ) {
+            return response;
+        }
+        this.refreshed.add(request);
+        // The 401's body is never read: release the connection before the second attempt.
+        await response.body?.cancel();
+        await this.vendorAuthHook!.refresh(mode.name);
+        await this.mintVendorAuth(request, mode.name);
         return nextFilter.invoke(request);
+    }
+
+    /** A request-streaming call's body is a one-shot stream, so it can never be re-sent. */
+    private uploadsAStream(request: ClientRequest): boolean {
+        const streaming = request.route.streaming;
+        return streaming !== undefined && streaming.direction !== StreamDirection.RESPONSE;
     }
 
     private async attach(request: ClientRequest): Promise<void> {
@@ -81,25 +110,25 @@ export class OutboundAuthFilter extends Filter<ClientRequest, Response> {
             request.headers.set('Authorization', `Webpieces ${secret}`);
             return;
         }
-        if (mode?.kind === 'webhook') {
-            await this.signWebhook(request, mode.name);
+        if (mode?.kind === 'vendorAuth') {
+            await this.mintVendorAuth(request, mode.name);
         }
     }
 
     /**
-     * @throws MissingWebhookSignerError when no {@link WebhookSignerCallback} is bound. FAIL CLOSED,
-     *         matching the inbound side exactly: an unbound `WebhookAuthCallback` 401s every
-     *         `webhook(...)` endpoint rather than admitting it unverified, so an unbound signer must
-     *         refuse to send rather than deliver something the partner is obliged to reject.
+     * @throws MissingVendorAuthHookError when no {@link VendorAuthHook} is bound. FAIL CLOSED,
+     *         matching the inbound side exactly: an unbound hook 401s every served `vendorAuth(...)`
+     *         endpoint rather than admitting it unverified, so it must also refuse to SEND rather than
+     *         deliver something the vendor is obliged to reject.
      */
-    private async signWebhook(request: ClientRequest, name: string): Promise<void> {
-        if (this.webhookSigner === undefined) {
-            throw new MissingWebhookSignerError(
-                `${request.contractName}.${request.route.methodName} is webhook('${name}'), so this ` +
-                    `client must SIGN the request the way ${name} verifies it — but no WebhookSignerCallback ` +
-                    `is bound, so there is nothing to produce the signature. Bind one:\n` +
-                    `    options.bind(WEBHOOK_SIGNER_CALLBACK).to(MyWebhookSigner);\n` +
-                    `Refusing to send is deliberate: an unsigned delivery is one the partner will reject, ` +
+    private async mintVendorAuth(request: ClientRequest, name: string): Promise<void> {
+        if (this.vendorAuthHook === undefined) {
+            throw new MissingVendorAuthHookError(
+                `${request.contractName}.${request.route.methodName} is vendorAuth('${name}'), so this ` +
+                    `client must present ${name}'s credential — but no VendorAuthHook is bound, so there is ` +
+                    `nothing to mint it. Bind one:\n` +
+                    `    options.bind(VENDOR_AUTH_HOOK).to(MyVendorAuthHook);\n` +
+                    `Refusing to send is deliberate: an unauthenticated call is one the vendor will reject, ` +
                     `and sending it anyway would hide the missing binding until they complained.`,
                 `${request.contractName}.${request.route.methodName}`,
                 name,
@@ -113,8 +142,8 @@ export class OutboundAuthFilter extends Filter<ClientRequest, Response> {
             request.contractName,
             request.route.methodName,
         );
-        const signed = await this.webhookSigner.sign(name, signable);
-        for (const entry of signed.entries()) {
+        const minted = await this.vendorAuthHook.mint(name, signable);
+        for (const entry of minted.entries()) {
             request.headers.set(entry[0], entry[1]);
         }
     }

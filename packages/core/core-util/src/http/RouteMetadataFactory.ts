@@ -2,6 +2,7 @@ import {
     getApiPath,
     getAuthMeta,
     getEndpointHttpMethod,
+    getEndpointKind,
     getEndpointOperation,
     getEndpointOptions,
     getEndpoints,
@@ -14,11 +15,21 @@ import {
     HttpParameterDeclaration,
     HttpParameterValueType,
     HttpMethod,
+    POST,
+    verbCarriesBody,
 } from './HttpContract';
 import { RouteMetadata } from './RouteMetadata';
+import { QueryParams } from './QueryParams';
+import { EndpointOptions, NONE } from './HttpEndpointOptions';
 import { getStreamingEndpoint } from './StreamingContract';
 import { getAuthorization } from './authorization';
-import { assertEveryEndpointHasAuthMode, isLocalOnly } from './decorators';
+import {
+    assertEveryEndpointHasAuthMode,
+    assertExternalEndpointKinds,
+    isExternalOutboundApi,
+    isLocalOnly,
+} from './decorators';
+import { declaresExternalContextKeys, getExternalContextKeys } from './ExternalContextKeys';
 import { StreamDirection, StreamingEndpointMetadata } from './StreamingContract';
 
 /**
@@ -34,14 +45,17 @@ export class RouteMetadataFactory {
         controllerClassName?: string,
     ): RouteMetadata {
         assertEveryEndpointHasAuthMode(apiClass);
+        const externalOutbound = this.externalOutbound(apiClass);
         const fullPath = this.joinPath(getApiPath(apiClass) ?? '', this.endpointPath(apiClass, methodName));
         const options = getEndpointOptions(apiClass, methodName);
         const streaming = getStreamingEndpoint(apiClass, methodName);
         const httpMethod = getEndpointHttpMethod(apiClass, methodName);
         const operation = getEndpointOperation(apiClass, methodName);
         this.validateEndpointOptions(apiClass, methodName, httpMethod, options.formPost, options.rawBody);
+        this.validateTriggerVerb(apiClass, methodName, httpMethod);
         const parameterTypes = this.parameterTypes(apiClass, methodName);
         const declarations = getHttpParameterDeclarations(apiClass, methodName);
+        this.validateQueryDeclarations(apiClass, methodName, externalOutbound, parameterTypes, declarations);
         const bodyParameterIndex = streaming
             ? this.validateStreamingParameters(
                   apiClass,
@@ -59,17 +73,7 @@ export class RouteMetadataFactory {
                   parameterTypes,
                   declarations,
               );
-        const bindings = declarations
-            .map(
-                (declaration: HttpParameterDeclaration) =>
-                    new HttpParameterBinding(
-                        declaration.index,
-                        declaration.source,
-                        declaration.wireName,
-                        this.valueType(parameterTypes[declaration.index]),
-                    ),
-            )
-            .sort((a: HttpParameterBinding, b: HttpParameterBinding) => a.index - b.index);
+        const bindings = this.bindingsOf(declarations, parameterTypes);
         const route = new RouteMetadata(
             httpMethod,
             fullPath,
@@ -88,12 +92,35 @@ export class RouteMetadataFactory {
             options.hideProgress === true,
             options.noLogging === true,
             options.allowUpgradeInFlight === true,
+            this.noResponseBody(options, streaming, apiClass, methodName),
         );
         route.authorization = getAuthorization(apiClass, methodName);
         route.apiClass = apiClass;
         route.localOnly = isLocalOnly(apiClass, methodName);
+        route.externalOutbound = externalOutbound;
+        route.externalContextKeys = getExternalContextKeys(apiClass, methodName);
         return route;
     }
+    /** Each declaration resolved against its argument's reflected type, in argument order. */
+    // webpieces-disable no-function-outside-class -- private pure helper for static route metadata construction
+    private static bindingsOf(
+        declarations: readonly HttpParameterDeclaration[],
+        parameterTypes: readonly Function[],
+    ): HttpParameterBinding[] {
+        return declarations
+            .map(
+                (declaration: HttpParameterDeclaration) =>
+                    new HttpParameterBinding(
+                        declaration.index,
+                        declaration.source,
+                        declaration.wireName,
+                        this.valueType(parameterTypes[declaration.index]),
+                        declaration.itemType,
+                    ),
+            )
+            .sort((a: HttpParameterBinding, b: HttpParameterBinding) => a.index - b.index);
+    }
+
     // webpieces-disable no-function-outside-class -- private pure helper for static route metadata construction
     private static endpointPath(apiClass: Function, methodName: string): string {
         const path = (getEndpoints(apiClass) ?? {})[methodName];
@@ -109,14 +136,31 @@ export class RouteMetadataFactory {
         formPost?: boolean,
         rawBody?: boolean,
     ): void {
-        if (httpMethod === 'GET' && formPost === true) {
+        if (verbCarriesBody(httpMethod)) return;
+        if (formPost === true) {
             throw new Error(
-                `${apiClass.name}.${methodName} is GET and cannot declare formPost:true because GET has no request body.`,
+                `${apiClass.name}.${methodName} is ${httpMethod} and cannot declare formPost:true because ${httpMethod} has no request body.`,
             );
         }
-        if (httpMethod === 'GET' && rawBody === true) {
+        if (rawBody === true) {
             throw new Error(
-                `${apiClass.name}.${methodName} is GET and cannot declare rawBody:true because GET has no request body.`,
+                `${apiClass.name}.${methodName} is ${httpMethod} and cannot declare rawBody:true because ${httpMethod} has no request body.`,
+            );
+        }
+    }
+
+    /**
+     * A CLOUDTASKS or CRON endpoint must be POST: Cloud Tasks, Cloud Scheduler and the in-memory task
+     * invoker all deliver with POST, so any other verb would register a route nothing ever reaches
+     * (a 404 at delivery time, not at startup).
+     */
+    // webpieces-disable no-function-outside-class -- private pure validator for the static metadata factory
+    private static validateTriggerVerb(apiClass: Function, methodName: string, httpMethod: HttpMethod): void {
+        const kind = getEndpointKind(apiClass, methodName);
+        if ((kind === 'cloudtasks' || kind === 'cron') && httpMethod !== POST) {
+            throw new Error(
+                `${apiClass.name || 'Unknown'}.${methodName} is a ${kind.toUpperCase()} endpoint declared ${httpMethod}; ` +
+                    `task and scheduler delivery always uses POST, so declare @Endpoint(POST, ...).`,
             );
         }
     }
@@ -141,7 +185,7 @@ export class RouteMetadataFactory {
                 `${label} requires generated streaming schemas. Run wp-openapi and registerStreamingCatalog(${apiClass.name}, catalog) before binding.`,
             );
         }
-        if (httpMethod !== 'POST') throw new Error(`${label} is streaming and must use POST.`);
+        if (httpMethod !== POST) throw new Error(`${label} is streaming and must use POST.`);
         if (declarations.length > 0)
             throw new Error(`${label} is streaming and cannot declare path/query parameters.`);
         const expected = streaming.direction === StreamDirection.REQUEST ? 1 : 2;
@@ -225,6 +269,86 @@ export class RouteMetadataFactory {
         );
     }
 
+    /**
+     * The EXTERNAL_* rules ({@link assertExternalEndpointKinds}), then whether the contract is an
+     * outside system's API. `@ExternalContextKeys` says which context an OUTSIDE system may see, so it
+     * is refused on a contract this repo serves, which already receives the platform context.
+     */
+    // webpieces-disable no-function-outside-class -- private pure validator for the static metadata factory
+    private static externalOutbound(apiClass: Function): boolean {
+        assertExternalEndpointKinds(apiClass);
+        const externalOutbound = isExternalOutboundApi(apiClass);
+        if (!externalOutbound && declaresExternalContextKeys(apiClass)) {
+            throw new Error(
+                `${apiClass.name || 'Unknown'} declares @ExternalContextKeys but is not an EXTERNAL_OUTBOUND contract. ` +
+                    'The list says which context an OUTSIDE system may see; a contract served in this repo already ' +
+                    'receives the platform context.',
+            );
+        }
+        return externalOutbound;
+    }
+
+    /**
+     * `@QueryString()` (a free-form {@link QueryParams}) is the query spelling of an EXTERNAL_OUTBOUND
+     * contract ONLY — our own contracts keep the typed `@QueryParam` — and its argument must BE a
+     * `QueryParams`. An item type (`@QueryParam('ids', Number)`) only means something on a list.
+     */
+    // webpieces-disable no-function-outside-class -- private pure validator for the static metadata factory
+    private static validateQueryDeclarations(
+        apiClass: Function,
+        methodName: string,
+        externalOutbound: boolean,
+        parameterTypes: readonly Function[],
+        declarations: readonly HttpParameterDeclaration[],
+    ): void {
+        const label = `${apiClass.name || 'Unknown'}.${methodName}`;
+        for (const declaration of declarations) {
+            const type = parameterTypes[declaration.index];
+            if (declaration.source === 'query-map' && !externalOutbound) {
+                throw new Error(
+                    `${label} declares @QueryString(), which only an EXTERNAL_OUTBOUND contract may use — a vendor's ` +
+                        `query string is free-form. A contract this repo serves names each key: @QueryParam('name').`,
+                );
+            }
+            if (declaration.source === 'query-map' && type !== undefined && type !== QueryParams) {
+                throw new Error(`${label} argument ${declaration.index} is @QueryString() and must be typed QueryParams.`);
+            }
+            if (declaration.itemType !== undefined && type !== undefined && type !== Array) {
+                throw new Error(
+                    `${label} @QueryParam('${declaration.wireName}', ${declaration.itemType.name}) names an item type, ` +
+                        `but argument ${declaration.index} is not a list.`,
+                );
+            }
+        }
+    }
+
+    /**
+     * `responseBody: NONE` means the success response is 0 bytes, so it cannot combine with a
+     * caller-owned full response or a streaming endpoint (both of which DEFINE a response).
+     */
+    // webpieces-disable no-function-outside-class -- private pure helper for the static metadata factory
+    private static noResponseBody(
+        options: EndpointOptions,
+        streaming: StreamingEndpointMetadata | undefined,
+        apiClass: Function,
+        methodName: string,
+    ): boolean {
+        if (options.responseBody === undefined) return false;
+        const label = `${apiClass.name || 'Unknown'}.${methodName}`;
+        if (options.responseBody !== NONE) {
+            throw new Error(
+                `${label} declares unsupported responseBody '${String(options.responseBody)}'; the only value is NONE.`,
+            );
+        }
+        if (options.responseType === 'full' || streaming !== undefined) {
+            throw new Error(
+                `${label} declares responseBody: NONE together with ${streaming ? 'a stream' : "responseType: 'full'"}; ` +
+                    'a 0-byte response cannot also carry a caller-owned or streamed response.',
+            );
+        }
+        return true;
+    }
+
     // webpieces-disable no-function-outside-class -- Reflect metadata lookup has no injectable dependency
     private static parameterTypes(apiClass: Function, methodName: string): Function[] {
         return Reflect.getMetadata('design:paramtypes', apiClass.prototype, methodName) ?? [];
@@ -284,14 +408,14 @@ export class RouteMetadataFactory {
         for (let index = 0; index < declaredCount; index++) {
             if (!mappedIndexes.has(index)) unbound.push(index);
         }
-        if (httpMethod === 'GET' && unbound.length > 0) {
+        if (!verbCarriesBody(httpMethod) && unbound.length > 0) {
             throw new Error(
-                `${label} is GET, so every parameter must use @PathParam(...) or @QueryParam(...); argument ${unbound[0]} is unmapped.`,
+                `${label} is ${httpMethod}, so every parameter must use @PathParam(...) or @QueryParam(...); argument ${unbound[0]} is unmapped.`,
             );
         }
         if (unbound.length > 1) {
             throw new Error(
-                `${label} has ${unbound.length} unmapped parameters. POST permits exactly one unannotated request body; map every other parameter explicitly.`,
+                `${label} has ${unbound.length} unmapped parameters. ${httpMethod} permits exactly one unannotated request body; map every other parameter explicitly.`,
             );
         }
         return unbound[0];

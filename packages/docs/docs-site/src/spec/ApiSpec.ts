@@ -97,6 +97,10 @@ export class OperationInfo {
          * header from a security scheme is not here: the authorization card documents those.
          */
         readonly requestHeaders: readonly HeaderInfo[],
+        /** Every `in: "path"` parameter, the path item's and the operation's. */
+        readonly pathParameters: readonly HeaderInfo[],
+        /** Every `in: "query"` parameter, the path item's and the operation's. */
+        readonly queryParameters: readonly HeaderInfo[],
         readonly responses: readonly ResponseInfo[],
         readonly isWebhook: boolean,
         readonly securityKeys: readonly string[],

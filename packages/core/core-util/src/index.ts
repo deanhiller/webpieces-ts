@@ -68,16 +68,20 @@ export {
     isApiPath,
     getAuthMeta,
     assertEveryEndpointHasAuthMode,
-    assertEveryExternalEndpointDeclaresCaller,
-    assertEveryWebhookEndpointRetainsRawBody,
+    assertExternalEndpointKinds,
+    isExternalOutboundApi,
+    assertEveryVendorAuthEndpointRetainsRawBody,
     validateNoConflictingDecorators,
     METADATA_KEYS,
 } from './http/decorators';
 export {
     PathParam,
     QueryParam,
+    QueryString,
     getHttpParameterDeclarations,
 } from './http/http-parameter-decorators';
+export { QueryParams } from './http/QueryParams';
+export type { QueryParamValue } from './http/QueryParams';
 export { WpInt, WpMin, WpMax, NUMERIC_METADATA_KEYS } from './http/numeric-field-decorators';
 export type { Integer } from './http/numeric-field-decorators';
 export {
@@ -145,15 +149,41 @@ export type {
     HttpMethod,
     HttpParameterSource,
     HttpParameterValueType,
+    HttpQueryItemType,
 } from './http/HttpContract';
-export { GET, POST } from './http/HttpContract';
+export {
+    GET,
+    POST,
+    PUT,
+    PATCH,
+    DELETE,
+    HTTP_METHODS,
+    verbCarriesBody,
+    isHttpMethod,
+} from './http/HttpContract';
 export type {
     EndpointKind,
     EndpointOperation,
     EndpointOptions,
     ExternalEndpointOptions,
 } from './http/decorators';
-export { RPC, CLOUDTASKS, CRON, EXTERNAL, READ, WRITE_IDEMPOTENT, WRITE } from './http/decorators';
+export {
+    RPC,
+    CLOUDTASKS,
+    CRON,
+    EXTERNAL_INBOUND,
+    EXTERNAL_OUTBOUND,
+    READ,
+    WRITE_IDEMPOTENT,
+    WRITE,
+    NONE,
+} from './http/decorators';
+export {
+    ExternalContextKeys,
+    getExternalContextKeys,
+    declaresExternalContextKeys,
+} from './http/ExternalContextKeys';
+export type { ResponseBodyKind } from './http/decorators';
 export {
     InvalidEndpointForMcp,
     InvalidEndpointForMcpMetadata,
@@ -199,7 +229,7 @@ export {
     oidcSameProject,
     oidcSvcs,
     sharedSecret,
-    webhook,
+    vendorAuth,
     apiKey,
 } from './http/auth-mode';
 export type {
@@ -225,8 +255,8 @@ export {
     getQueueName,
 } from './http/api-kind';
 export type { ApiKind } from './http/api-kind';
-// WHO calls an `external` endpoint — the caller declaration
-// @Endpoint(POST, ..., WRITE, EXTERNAL, { calledBy })
+// WHO calls an EXTERNAL_INBOUND endpoint — the caller declaration
+// @Endpoint(POST, ..., WRITE, EXTERNAL_INBOUND, { calledBy })
 // requires, and the reader for it.
 export {
     EXTERNAL_SYSTEM_KINDS,
@@ -346,7 +376,7 @@ export type { MaskMode } from './http/LogFieldMask';
 // The structured `api` tag + the context-writer seam LogApiCall stamps through. The Node
 // RequestContext-backed impl lives in @webpieces/core-context, the browser one in
 // @webpieces/http-client-browser; each is CONSTRUCTED by its package, never installed globally.
-export { ApiCallInfo } from './http/ApiCallInfo';
+export { ApiCallInfo, HttpCallFacts, HttpCallFactsHolder } from './http/ApiCallInfo';
 export type { ApiCallDirection, ApiResult } from './http/ApiCallInfo';
 // Console-render bridge: turns LogApiCall's [LogApiCall] bracket into [API.{side}.{phase}] locally.
 export {

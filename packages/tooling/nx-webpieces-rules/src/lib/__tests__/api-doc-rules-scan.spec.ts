@@ -236,17 +236,15 @@ describe('api-rules-for-openapi', () => {
      * is a body and it must be a named DTO that can gain a field later. `cloudtasks` and `cron` keep
      * it, because nobody is waiting for one.
      */
-    it('REFUSES rpc AND external returning void, and ALLOWS cloudtasks and cron that do', () => {
+    it('REFUSES rpc returning void, and ALLOWS external-inbound, cloudtasks and cron that do', () => {
         const findings = scan('void-rpc-api');
 
         expect(lines(findings.openApi.violations).sort()).toEqual([
-            'StoresApi.closed: an external endpoint returns nothing a document can name (void, ' +
-                'unknown, or no declared return type)',
             'StoresApi.pause: an rpc endpoint returns nothing a document can name (void, unknown, ' +
                 'or no declared return type)',
         ]);
         expect(findings.openApi.violations[0].cure).toContain('empty object grows additively');
-        expect(findings.openApi.violations[0].cure).toContain('An external endpoint is a synchronous');
+        expect(findings.openApi.violations[0].cure).toContain('EXTERNAL_INBOUND or EXTERNAL_OUTBOUND endpoint');
     });
 
     it('REFUSES an unknown VALUE TYPE, is not silenced by a no-any-unknown disable, and honours its own', () => {

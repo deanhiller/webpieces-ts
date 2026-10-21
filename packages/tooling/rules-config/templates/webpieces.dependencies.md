@@ -162,7 +162,9 @@ binder.bindExternal(BrowserStorageApi, new UseExisting(LoggedBrowserStorage)); /
 Supply `ClientBindOptions` / `PubSubBindOptions` with a `token` only when two clients of the same
 API must coexist; filters ride on `ClientBindOptions` for RPC clients. `bindExternal(Api,
 VendorImpl)` binds a vendor implementation AND records the external-contract graph edge; the
-browser spelling names its recipe, `new UseClass(Vendor)` or `new UseExisting(Token)`.
+browser spelling names its recipe, `new UseClass(Vendor)` or `new UseExisting(Token)`. An
+`EXTERNAL_OUTBOUND` contract (an outside system's HTTP API webpieces' client calls) uses plain
+`createRpcClientAndBind` and is drawn as a vendor node; no server here may `addRoutes` it.
 `RuntimeClients`, `RuntimeTaskClients`, `provideRpcClient`, `ExternalContractUse`, `ClientToken`,
 `BrowserBindings` and `BindingModule` no longer exist; `getBindingModules` / `getRoutingModules`
 are now `getBindModules` / `getRouteModules`, and `runtime-deps.json` uses `bindModules` /

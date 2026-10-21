@@ -27,20 +27,20 @@ export class MissingSharedSecretError extends Error {
 }
 
 /**
- * An `webhook(name)` endpoint was called outbound with no `WebhookSignerCallback` bound, so
- * nothing can produce the signature the partner verifies. Thrown at CALL time, from
- * `OutboundAuthFilter`, rather than delivering unsigned — the mirror of the inbound side, where an
- * unbound `WebhookAuthCallback` 401s every `webhook(...)` endpoint instead of admitting it.
+ * A `vendorAuth(name)` endpoint was called outbound with no `VendorAuthHook` bound, so nothing can
+ * mint the credential the vendor checks. Thrown at CALL time, from `OutboundAuthFilter`, rather than
+ * sending unauthenticated — the mirror of the inbound side, where an unbound hook 401s every served
+ * `vendorAuth(...)` endpoint instead of admitting it.
  */
-export class MissingWebhookSignerError extends Error {
+export class MissingVendorAuthHookError extends Error {
     constructor(
         message: string,
         /** `Contract.method`, so the log line names the call without a stack read. */
         public readonly endpoint: string,
-        /** The vendor on the contract's `webhook(name)`, which selects the scheme. */
-        public readonly webhookName: string,
+        /** The vendor on the contract's `vendorAuth(name)`, which selects the scheme. */
+        public readonly vendorName: string,
     ) {
         super(message);
-        this.name = 'MissingWebhookSignerError';
+        this.name = 'MissingVendorAuthHookError';
     }
 }

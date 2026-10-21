@@ -4,6 +4,7 @@ import { EndpointResponseType, HttpParameterBinding } from './HttpContract';
 import { StreamingEndpointMetadata } from './StreamingContract';
 import { EndpointOperation } from './HttpEndpointOptions';
 import { CallMode } from '../errors/CallMode';
+import { AnyContextKey } from '../ContextKey';
 
 /**
  * Route metadata stored per-method at runtime.
@@ -19,6 +20,13 @@ export class RouteMetadata {
     // webpieces-disable no-any-unknown -- erased application policy is validated by AuthorizationHook at server startup
     authorization?: import('./authorization').AuthorizationRequirement<unknown>;
     localOnly = false;
+    /**
+     * True when the contract is `EXTERNAL_OUTBOUND`: an outside system's API. Its client sends ONLY
+     * {@link externalContextKeys} and believes no response header (`DestinationTrust.forRoute`).
+     */
+    externalOutbound = false;
+    /** `@ExternalContextKeys(...)` resolved for this method — class-level keys plus the method's own. */
+    externalContextKeys: readonly AnyContextKey[] = [];
 
     /** Clients clone metadata per call so a concrete winning mode governs both trust directions. */
     withSelectedAuth(method: import('./auth-mode').AuthMode): RouteMetadata {
@@ -59,10 +67,13 @@ export class RouteMetadata {
             true,
             this.noLogging,
             this.allowUpgradeInFlight,
+            this.noResponseBody,
         );
         route.apiClass = this.apiClass;
         route.authorization = this.authorization;
         route.localOnly = this.localOnly;
+        route.externalOutbound = this.externalOutbound;
+        route.externalContextKeys = this.externalContextKeys;
         route.callMode = mode;
         return route;
     }
@@ -87,7 +98,7 @@ export class RouteMetadata {
     readonly mask?: MaskSpec;
     /**
      * True when @Endpoint(..., { rawBody: true }): the transport must retain the verbatim bytes +
-     * absolute url for the `webhook(...)` hook to verify a vendor signature over. Rides the route
+     * absolute url for `VendorAuthHook.verify` to check a vendor credential over. Rides the route
      * metadata for the same reason {@link formPost} does — the transport adapter decides how to read
      * the body from the ROUTE, without knowing the apiClass/methodName.
      */
@@ -114,6 +125,12 @@ export class RouteMetadata {
      * upgrade while the call is in flight, and its success counts toward arming one.
      */
     readonly allowUpgradeInFlight: boolean;
+    /**
+     * True when @Endpoint(..., { responseBody: NONE }): the method returns `Promise<void>` and the
+     * success response is 0 bytes. The server answers 204 with no body; every client accepts `{}`,
+     * an empty 200 or a 204 and resolves `undefined`. Default false = a JSON body.
+     */
+    readonly noResponseBody: boolean;
 
     constructor(
         httpMethod: string,
@@ -138,6 +155,7 @@ export class RouteMetadata {
         hideProgress: boolean = false,
         noLogging: boolean = false,
         allowUpgradeInFlight: boolean = false,
+        noResponseBody: boolean = false,
     ) {
         this.httpMethod = httpMethod;
         this.path = path;
@@ -155,5 +173,6 @@ export class RouteMetadata {
         this.hideProgress = hideProgress;
         this.noLogging = noLogging;
         this.allowUpgradeInFlight = allowUpgradeInFlight;
+        this.noResponseBody = noResponseBody;
     }
 }

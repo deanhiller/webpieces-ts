@@ -9,7 +9,7 @@ where it runs through the full server filter chain.
 // one shared contract
 @PubSub() @ApiPath('/email')
 abstract class EmailApi {
-    @Endpoint(POST, '/send', WRITE, CLOUDTASKS)
+    @Endpoint(POST, '/send', WRITE, CLOUDTASKS, { responseBody: NONE })   // Promise<void>: delivered as 204, 0 bytes
     @WpAuth([oidcSameProject()])
     @WpAuthorization({ authType: AuthorizationType.SERVICE_ONLY })
     abstract sendEmail(r: SendEmailRequest): Promise<void>;

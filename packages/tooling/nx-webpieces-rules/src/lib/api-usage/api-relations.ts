@@ -144,19 +144,28 @@ export type ProjectApiRelations = Record<string, ApiRelation>;
  * on the framework it inspects (it reads decorators as TEXT, from projects that may be on a
  * different @webpieces version than the tooling itself).
  */
-export type EndpointKind = 'rpc' | 'cloudtasks' | 'cron' | 'external';
+export type EndpointKind = 'rpc' | 'cloudtasks' | 'cron' | 'external-inbound' | 'external-outbound';
 
 /** Side-effect semantics copied from the required third `@Endpoint` argument. */
 export type EndpointOperation = 'read' | 'write-idempotent' | 'write';
 
 /** HTTP verbs understood by the generated contract runtime. */
-export type ContractHttpMethod = 'GET' | 'POST';
+export type ContractHttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
+
+/** Every verb `@Endpoint` accepts, mirroring core-util's `HTTP_METHODS`. */
+export const CONTRACT_HTTP_METHODS: readonly ContractHttpMethod[] = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'];
+
+/** Mirrors core-util's `verbCarriesBody`: POST, PUT and PATCH carry the one unannotated body argument. */
+// webpieces-disable no-function-outside-class -- pure predicate mirroring the framework rule
+export function contractVerbCarriesBody(method: ContractHttpMethod): boolean {
+    return method === 'POST' || method === 'PUT' || method === 'PATCH';
+}
 
 /** One path/query/body mapping emitted into architecture/dependencies.json. */
 export interface ApiParameterMeta {
     index: number;
-    source: 'path' | 'query' | 'body';
-    /** Path/query wire name; a JSON/form body occupies the whole entity and has no key. */
+    source: 'path' | 'query' | 'query-map' | 'body';
+    /** Path/query wire name; a JSON/form body and a `@QueryString()` multimap have no key. */
     wireName?: string;
 }
 
@@ -177,20 +186,22 @@ export interface ApiMethodMeta {
     parameters?: ApiParameterMeta[];
     /** Present when callers receive the transport-neutral full response. */
     responseType?: 'full';
+    /** Present when `@Endpoint(..., { responseBody: NONE })`: a `Promise<void>` method, 0-byte success. */
+    responseBody?: 'none';
     /**
      * `@Queue(...)` override, else `${ApiClassName}-${methodName}`.
      *
      * ONLY on a `cloudtasks` or `cron` method — those are the kinds actually delivered through a
      * named queue or schedule, and Terraform matches on this string. A synchronous `rpc` (or an
-     * inbound `external`) endpoint has no queue and needs none; emitting a plausible-looking name for
+     * `external-inbound`) endpoint has no queue and needs none; emitting a plausible-looking name for
      * one put every synchronous endpoint one naive `methods.map(m => m.queueName)` away from being
      * provisioned as a queue.
      */
     queueName?: string;
     /**
-     * WHO outside this repo drives this endpoint, from `@Endpoint(POST, p, WRITE, EXTERNAL, { calledBy })`.
+     * WHO outside this repo drives this endpoint, from `@Endpoint(POST, p, WRITE, EXTERNAL_INBOUND, { calledBy })`.
      *
-     * ONLY on an `external` method, the same way `queueName` is only on the kinds that HAVE a queue.
+     * ONLY on an `external-inbound` method, the same way `queueName` is only on the kinds that HAVE a queue.
      *
      * Deliberately the SAME {@link ExternalSystemDeclaration} the OUTBOUND `@externalSystem` tag
      * resolves to, not a parallel inbound-only type: an inbound `saas twilio` and an outbound
@@ -198,7 +209,7 @@ export interface ApiMethodMeta {
      * converge on ONE node instead of drawing twilio twice facing opposite directions.
      *
      * Optional in the TYPE only for graphs generated before the caller was required — generation
-     * FAILS on an `external` method whose caller cannot be read (UndeclaredExternalCallerError).
+     * FAILS on an `external-inbound` method whose caller cannot be read (UndeclaredExternalCallerError).
      */
     caller?: ExternalSystemDeclaration;
 }
@@ -348,6 +359,23 @@ export class UndeclaredExternalCaller {
 }
 
 /** ONE `@Endpoint` whose required side-effect declaration could not be read from source. */
+/**
+ * An `@Endpoint` whose `responseBody: NONE` disagrees with its declared return type: NONE on a method
+ * that does not return `Promise<void>`, or a `Promise<void>` method without NONE. The runtime cannot
+ * see `void` (`design:returntype` is just `Promise`), so the option is the only thing a server and a
+ * client act on, and it must not drift from the signature.
+ */
+export class VoidResponseMismatch {
+    constructor(
+        public readonly api: string,
+        public readonly method: string,
+        /** True when the method declares NONE but does not return `Promise<void>`. */
+        public readonly declaresNone: boolean,
+        /** `path/to/file.ts:LINE`, workspace-relative. */
+        public readonly at: string,
+    ) {}
+}
+
 export class UndeclaredEndpointOperation {
     constructor(
         /** The contract class the method is declared on. */

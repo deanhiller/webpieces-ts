@@ -71,23 +71,23 @@ const INBOUND_PATH = '/inbound';
 
 @ApiPath(WHATSAPP_API_PATH)
 export abstract class WhatsAppTestApi {
-    @Endpoint(POST, '/test', WRITE, RPC)
+    @Endpoint(POST, '/test', WRITE, RPC, { responseBody: NONE })
     abstract test(): Promise<void>;
 
-    @Endpoint(POST, '/pg-security-test', WRITE, RPC)
+    @Endpoint(POST, '/pg-security-test', WRITE, RPC, { responseBody: NONE })
     abstract pgSecurityTest(): Promise<void>;
 }
 
 @PubSub()
 @ApiPath(WHATSAPP_API_PATH)
 export abstract class WhatsAppApi {
-    @Endpoint(POST, PROCESS_PATH, WRITE, CLOUDTASKS)
+    @Endpoint(POST, PROCESS_PATH, WRITE, CLOUDTASKS, { responseBody: NONE })
     abstract process(): Promise<void>;
 
-    @Endpoint(POST, CONTINUE_PATH, WRITE, CLOUDTASKS)
+    @Endpoint(POST, CONTINUE_PATH, WRITE, CLOUDTASKS, { responseBody: NONE })
     abstract continueConversation(): Promise<void>;
 
-    @Endpoint(POST, INBOUND_PATH, WRITE, EXTERNAL, { calledBy: 'twilio' })
+    @Endpoint(POST, INBOUND_PATH, WRITE, EXTERNAL_INBOUND, { calledBy: 'twilio', responseBody: NONE })
     abstract inbound(): Promise<void>;
 }
 `,
@@ -121,7 +121,7 @@ import { CROSS_PATH } from './paths';
 
 @ApiPath('/cross-base')
 export abstract class CrossApi {
-    @Endpoint(POST, CROSS_PATH, WRITE, RPC)
+    @Endpoint(POST, CROSS_PATH, WRITE, RPC, { responseBody: NONE })
     abstract go(): Promise<void>;
 }
 `,
@@ -161,16 +161,16 @@ import { A_PATH, B_PATH, C_PATH } from './paths';
 
 @ApiPath('/one')
 export abstract class OneApi {
-    @Endpoint(POST, A_PATH, WRITE, RPC)
+    @Endpoint(POST, A_PATH, WRITE, RPC, { responseBody: NONE })
     abstract a(): Promise<void>;
 
-    @Endpoint(POST, B_PATH, WRITE, RPC)
+    @Endpoint(POST, B_PATH, WRITE, RPC, { responseBody: NONE })
     abstract b(): Promise<void>;
 }
 
 @ApiPath('/two')
 export abstract class TwoApi {
-    @Endpoint(POST, C_PATH, WRITE, RPC)
+    @Endpoint(POST, C_PATH, WRITE, RPC, { responseBody: NONE })
     abstract c(): Promise<void>;
 }
 `,
@@ -208,10 +208,10 @@ import { RPC_KIND } from './kinds';
 
 @ApiPath('/badkind')
 export abstract class BadKindApi {
-    @Endpoint(POST, '/one', WRITE, RPC_KIND)
+    @Endpoint(POST, '/one', WRITE, RPC_KIND, { responseBody: NONE })
     abstract one(): Promise<void>;
 
-    @Endpoint(POST, '/two', WRITE, RPC_KIND)
+    @Endpoint(POST, '/two', WRITE, RPC_KIND, { responseBody: NONE })
     abstract two(): Promise<void>;
 }
 `,
@@ -249,7 +249,7 @@ import { HIDDEN_API_PATH } from './paths';
 
 @ApiPath(HIDDEN_API_PATH)
 export abstract class HiddenApi {
-    @Endpoint(POST, '/test', WRITE, RPC)
+    @Endpoint(POST, '/test', WRITE, RPC, { responseBody: NONE })
     abstract test(): Promise<void>;
 }
 `,
@@ -277,10 +277,10 @@ export function Endpoint(_p: string, _k: string, _o?: object): MethodDecorator {
 
 @ApiPath('/operation')
 export abstract class MissingOperationApi {
-    @Endpoint(POST, '/good', READ, RPC)
+    @Endpoint(POST, '/good', READ, RPC, { responseBody: NONE })
     abstract good(): Promise<void>;
 
-    @Endpoint(GET, '/bad', NOT_AN_OPERATION, RPC)
+    @Endpoint(GET, '/bad', NOT_AN_OPERATION, RPC, { responseBody: NONE })
     abstract bad(): Promise<void>;
 }
 `,
@@ -385,7 +385,7 @@ describe('ApiUsageScanner — decorator arguments that are same-module consts', 
         expect(methods.map((m: ApiMethodMeta) => m.kind)).toEqual([
             'cloudtasks',
             'cloudtasks',
-            'external',
+            'external-inbound',
         ]);
         // The external method must also name its caller — required by @Endpoint, fatal if unreadable.
         expect(methods[2].caller).toEqual({ kind: 'saas', label: 'twilio' });

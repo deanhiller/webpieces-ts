@@ -72,8 +72,12 @@ refuses them for OpenAPI (#1292). The server serves the catalog's descriptions v
 `McpServedDescriptions.integration.spec.ts` boots it on the partner-api golden catalog and reads them
 back through `tools/list`.
 
-Every `@Endpoint` declares one enum-backed operation, independent of its required `GET` or `POST`
-argument: a GET may deliberately write and a POST may be a read. A tool therefore cannot claim to be
+Every `@Endpoint` declares one enum-backed operation, independent of its required HTTP verb
+argument: a GET may deliberately write and a POST may be a read.
+
+A method that binds any argument to the URL (`@PathParam` / `@QueryParam`) is not an MCP tool: a
+tool receives exactly one input object, so `McpToolRegistry` refuses `@WpMcpTool` on such a method
+at boot. A tool therefore cannot claim to be
 read-only while its endpoint declares `WRITE` — the contradiction is unrepresentable.
 
 ## Booting: the server is constructed with the generated catalogs

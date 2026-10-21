@@ -23,7 +23,7 @@ export class HttpRequest {
         /**
          * The verbatim bytes + absolute url, present ONLY on an `@Endpoint(..., { rawBody: true })`
          * route (see {@link RawRequest}). Absent everywhere else, and absent is the SAFE state:
-         * `webhook(...)` has nothing to verify without it and 401s rather than waving the call
+         * `vendorAuth(...)` has nothing to verify without it and 401s rather than waving the call
          * through. A spec driving a webhook route in-process supplies one here, the same way a spec
          * today supplies an `authorization` header.
          */
@@ -47,7 +47,7 @@ export class HttpRequest {
  * RawHttpRequest - an {@link HttpRequest} on a `@Endpoint(..., { rawBody: true })` route, where
  * {@link HttpRequest.raw} is PRESENT rather than optional.
  *
- * It exists so a vendor's webhook hook never writes `request.raw!` or an `if (!raw) throw`. The
+ * It exists so a vendor's VendorAuthHook never writes `request.raw!` or an `if (!raw) throw`. The
  * absence of the bytes is checked in exactly ONE place — `AuthFilter` 401s before it calls the hook —
  * and this type is what carries the result of that check into the signature, so the bad state is
  * unrepresentable downstream instead of re-guarded at every implementor.

@@ -1,6 +1,6 @@
 import { WpAuthorization, AuthorizationType } from '@webpieces/core-util';
 /**
- * `@Endpoint(POST, path, WRITE, EXTERNAL, { calledBy })` — the compile-time forcing function that makes a human
+ * `@Endpoint(POST, path, WRITE, EXTERNAL_INBOUND, { calledBy })` — the compile-time forcing function that makes a human
  * name the system calling us from outside, plus the metadata it records for the architecture graph.
  *
  * The type-level half (omitting `calledBy` is a COMPILE error, non-external endpoints unaffected)
@@ -12,11 +12,11 @@ import {
     ApiPath,
     Endpoint,
     WpAuthPublic,
-    assertEveryExternalEndpointDeclaresCaller,
+    assertExternalEndpointKinds,
     getEndpointKinds,
     getEndpoints,
     METADATA_KEYS,
-    EXTERNAL,
+    EXTERNAL_INBOUND,
     POST,
     RPC,
     WRITE,
@@ -35,7 +35,7 @@ abstract class CallerApi {
     // Vendor webhook: kind defaults to 'saas'.
     @WpAuthPublic('External caller metadata fixture')
     @WpAuthorization({ authType: AuthorizationType.ANONYMOUS, reason: 'External caller metadata fixture' })
-    @Endpoint(POST, '/twilio', WRITE, EXTERNAL, { formPost: true, calledBy: 'twilio' })
+    @Endpoint(POST, '/twilio', WRITE, EXTERNAL_INBOUND, { formPost: true, calledBy: 'twilio' })
     inbound(_req: object): Promise<object> {
         throw new Error('subclass');
     }
@@ -43,7 +43,7 @@ abstract class CallerApi {
     // A SECOND method with the SAME caller — one vendor, several endpoints.
     @WpAuthPublic('External caller metadata fixture')
     @WpAuthorization({ authType: AuthorizationType.ANONYMOUS, reason: 'External caller metadata fixture' })
-    @Endpoint(POST, '/twilio-status', WRITE, EXTERNAL, { calledBy: 'twilio' })
+    @Endpoint(POST, '/twilio-status', WRITE, EXTERNAL_INBOUND, { calledBy: 'twilio' })
     status(_req: object): Promise<object> {
         throw new Error('subclass');
     }
@@ -51,7 +51,7 @@ abstract class CallerApi {
     // Infrastructure rather than a vendor product.
     @WpAuthPublic('External caller metadata fixture')
     @WpAuthorization({ authType: AuthorizationType.ANONYMOUS, reason: 'External caller metadata fixture' })
-    @Endpoint(POST, '/push', WRITE, EXTERNAL, { calledBy: 'pubsub-push', callerKind: 'system' })
+    @Endpoint(POST, '/push', WRITE, EXTERNAL_INBOUND, { calledBy: 'pubsub-push', callerKind: 'system' })
     push(_req: object): Promise<object> {
         throw new Error('subclass');
     }
@@ -67,9 +67,9 @@ describe('@Endpoint external caller metadata', () => {
         });
         expect(getEndpointKinds(CallerApi)).toEqual({
             plain: 'rpc',
-            inbound: 'external',
-            status: 'external',
-            push: 'external',
+            inbound: 'external-inbound',
+            status: 'external-inbound',
+            push: 'external-inbound',
         });
     });
 
@@ -104,9 +104,9 @@ describe('@Endpoint external caller metadata', () => {
     });
 });
 
-describe('assertEveryExternalEndpointDeclaresCaller', () => {
+describe('assertExternalEndpointKinds', () => {
     it('passes when every external endpoint named its caller', () => {
-        expect(() => assertEveryExternalEndpointDeclaresCaller(CallerApi)).not.toThrow();
+        expect(() => assertExternalEndpointKinds(CallerApi)).not.toThrow();
     });
 
     it('throws for an external endpoint that bypassed TS and declared none', () => {
@@ -116,15 +116,15 @@ describe('assertEveryExternalEndpointDeclaresCaller', () => {
             // wiring-time assert is the backstop behind the compile error.
             @WpAuthPublic('External caller metadata fixture')
             @WpAuthorization({ authType: AuthorizationType.ANONYMOUS, reason: 'External caller metadata fixture' })
-            @Endpoint(POST, '/hook', WRITE, EXTERNAL, { formPost: true } as never)
+            @Endpoint(POST, '/hook', WRITE, EXTERNAL_INBOUND, { formPost: true } as never)
             inbound(_req: object): Promise<object> {
                 throw new Error('subclass');
             }
         }
-        expect(() => assertEveryExternalEndpointDeclaresCaller(SneakyApi)).toThrow(
+        expect(() => assertExternalEndpointKinds(SneakyApi)).toThrow(
             /declares no caller/,
         );
-        expect(() => assertEveryExternalEndpointDeclaresCaller(SneakyApi)).toThrow(/calledBy/);
+        expect(() => assertExternalEndpointKinds(SneakyApi)).toThrow(/calledBy/);
     });
 
     it('ignores a class with no external endpoints at all', () => {
@@ -137,6 +137,6 @@ describe('assertEveryExternalEndpointDeclaresCaller', () => {
                 throw new Error('subclass');
             }
         }
-        expect(() => assertEveryExternalEndpointDeclaresCaller(PlainApi)).not.toThrow();
+        expect(() => assertExternalEndpointKinds(PlainApi)).not.toThrow();
     });
 });
