@@ -13,22 +13,13 @@ import {
     WpAuthPublic,
     GET,
     POST,
-    PUT,
-    PATCH,
-    DELETE,
-    NONE,
     READ,
     RPC,
     WRITE,
-    WRITE_IDEMPOTENT,
 } from '@webpieces/core-util';
 import { ClientConfig } from '../ClientConfig';
 import { ClientHttpBrowserFactory } from '../ClientHttpBrowserFactory';
 import { MutableContextStore } from '../MutableContextStore';
-
-class RenameRequest {
-    constructor(public readonly name: string) {}
-}
 
 class TokenRequest {
     constructor(
@@ -65,38 +56,6 @@ abstract class BrowserTypedApi {
     @Endpoint(GET, '/authorize', READ, RPC, { responseType: 'full' })
     // webpieces-disable no-unmanaged-exceptions -- contract stub
     authorize(@QueryParam('client_id') _clientId: string): Promise<HttpResponseDto<undefined>> {
-        throw new Error('contract only');
-    }
-
-    @WpAuthPublic('Verb round-trip fixture')
-    @WpAuthorization({ authType: AuthorizationType.ANONYMOUS, reason: 'Verb round-trip fixture' })
-    @Endpoint(PUT, '/items/{id}', WRITE_IDEMPOTENT, RPC)
-    // webpieces-disable no-unmanaged-exceptions -- contract stub
-    replace(@PathParam('id') _id: string, _request: RenameRequest): Promise<object> {
-        throw new Error('contract only');
-    }
-
-    @WpAuthPublic('Verb round-trip fixture')
-    @WpAuthorization({ authType: AuthorizationType.ANONYMOUS, reason: 'Verb round-trip fixture' })
-    @Endpoint(PATCH, '/items/{id}', WRITE, RPC)
-    // webpieces-disable no-unmanaged-exceptions -- contract stub
-    rename(@PathParam('id') _id: string, _request: RenameRequest): Promise<object> {
-        throw new Error('contract only');
-    }
-
-    @WpAuthPublic('Verb round-trip fixture')
-    @WpAuthorization({ authType: AuthorizationType.ANONYMOUS, reason: 'Verb round-trip fixture' })
-    @Endpoint(DELETE, '/items/{id}', WRITE_IDEMPOTENT, RPC)
-    // webpieces-disable no-unmanaged-exceptions -- contract stub
-    remove(@PathParam('id') _id: string, @QueryParam('reason') _reason?: string): Promise<object> {
-        throw new Error('contract only');
-    }
-
-    @WpAuthPublic('Void fixture')
-    @WpAuthorization({ authType: AuthorizationType.ANONYMOUS, reason: 'Void fixture' })
-    @Endpoint(PUT, '/touch/{id}', WRITE_IDEMPOTENT, RPC, { responseBody: NONE })
-    // webpieces-disable no-unmanaged-exceptions -- contract stub
-    touch(@PathParam('id') _id: string): Promise<void> {
         throw new Error('contract only');
     }
 }
@@ -183,53 +142,5 @@ describe('browser generated typed HTTP contracts', () => {
             expect.objectContaining({ name: 'location', value: '/consent' }),
         );
         expect(response.body).toBeUndefined();
-    });
-
-    it('sends PUT and PATCH with a JSON body and DELETE without one', async () => {
-        const fetchMock = vi.fn(
-            (_url: string | URL | Request, _init?: RequestInit): Promise<Response> =>
-                Promise.resolve(
-                    new Response('{"ok":true}', {
-                        status: 200,
-                        headers: { 'content-type': 'application/json' },
-                    }),
-                ),
-        );
-        vi.stubGlobal('fetch', fetchMock);
-
-        await client.replace('a b', new RenameRequest('first'));
-        await client.rename('a b', new RenameRequest('second'));
-        await client.remove('a b', 'stale');
-
-        const calls = fetchMock.mock.calls;
-        expect(calls[0][0]).toBe('https://api.example.test/oauth/items/a%20b?ngsw-bypass=true');
-        expect(calls[0][1]?.method).toBe('PUT');
-        expect(calls[0][1]?.body).toBe('{"name":"first"}');
-        expect(calls[1][1]?.method).toBe('PATCH');
-        expect(calls[1][1]?.body).toBe('{"name":"second"}');
-        expect(calls[2][0]).toBe(
-            'https://api.example.test/oauth/items/a%20b?reason=stale&ngsw-bypass=true',
-        );
-        expect(calls[2][1]?.method).toBe('DELETE');
-        expect(calls[2][1]?.body).toBeUndefined();
-    });
-
-    it('a void route resolves undefined for a 204, an empty 200, {} or an undocumented body', async () => {
-        const responses = [
-            new Response(null, { status: 204 }),
-            new Response('', { status: 200 }),
-            new Response('{}', { status: 200, headers: { 'content-type': 'application/json' } }),
-            new Response('{"id":"x"}', { status: 200, headers: { 'content-type': 'application/json' } }),
-        ];
-        const fetchMock = vi.fn(
-            (_url: string | URL | Request, _init?: RequestInit): Promise<Response> =>
-                Promise.resolve(responses.shift()!),
-        );
-        vi.stubGlobal('fetch', fetchMock);
-
-        for (let attempt = 0; attempt < 4; attempt++) {
-            expect(await client.touch('a')).toBeUndefined();
-        }
-        expect(fetchMock).toHaveBeenCalledTimes(4);
     });
 });

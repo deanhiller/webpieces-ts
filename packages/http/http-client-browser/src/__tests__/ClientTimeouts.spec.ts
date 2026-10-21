@@ -1,10 +1,11 @@
-import { ClientRole, WpAuthorization, AuthorizationType, CallScope } from '@webpieces/core-util';
+import { ClientRole, WpAuthorization, AuthorizationType } from '@webpieces/core-util';
 import 'reflect-metadata';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
     ApiPath,
     Attempt,
     CallContext,
+    CallRegistry,
     ClientRegistry,
     Endpoint,
     HeaderRegistry,
@@ -96,7 +97,7 @@ class Harness {
         const checked = expect(pending).rejects.toEqual(
             new ApiCallTimeoutError(
                 timeoutMs,
-                new CallContext(this.api.name, method, OPERATIONS[method], this.api),
+                new CallContext(this.api.name, method, OPERATIONS[method]),
             ),
         );
         void pending.then(
@@ -118,6 +119,7 @@ class Harness {
 beforeEach(() => {
     vi.useFakeTimers();
     HeaderRegistry.configure([], true);
+    CallRegistry.clear();
     ClientRegistry.resetForTests();
     ClientRegistry.addUrlMapping('timeout-test', 'https://timeout.example');
 });
@@ -125,6 +127,7 @@ beforeEach(() => {
 afterEach(() => {
     vi.useRealTimers();
     vi.unstubAllGlobals();
+    CallRegistry.clear();
     ClientRegistry.resetForTests();
 });
 
@@ -156,7 +159,7 @@ describe('browser generated client deadlines', () => {
         );
         const pending = h.invoke();
         const timeout = expect(pending).rejects.toEqual(
-            new ApiCallTimeoutError(30_000, new CallContext(h.api.name, 'work', WRITE, h.api)),
+            new ApiCallTimeoutError(30_000, new CallContext(h.api.name, 'work', WRITE)),
         );
         await vi.advanceTimersByTimeAsync(30_000);
         await timeout;
@@ -223,16 +226,16 @@ describe('browser generated client deadlines', () => {
 
     it('resolves timeout method -> API -> ALL and removes overrides with undefined', async () => {
         const h = new Harness();
-        ClientRegistry.setTimeout(300, CallScope.all());
-        ClientRegistry.setTimeout(200, CallScope.api(h.api));
-        ClientRegistry.setTimeout(100, CallScope.method(h.api, 'work'));
+        CallRegistry.setTimeout(300, 'ALL');
+        CallRegistry.setTimeout(200, h.api);
+        CallRegistry.setTimeout(100, h.api, 'work');
         await h.expectTimeout(100);
         await h.expectTimeout(200, 'other');
-        ClientRegistry.setTimeout(undefined, CallScope.method(h.api, 'work'));
+        CallRegistry.setTimeout(undefined, h.api, 'work');
         await h.expectTimeout(200);
-        ClientRegistry.setTimeout(undefined, CallScope.api(h.api));
+        CallRegistry.setTimeout(undefined, h.api);
         await h.expectTimeout(300);
-        ClientRegistry.setTimeout(undefined, CallScope.all());
+        CallRegistry.setTimeout(undefined, 'ALL');
         await h.expectTimeout(30_000);
     });
 
@@ -245,27 +248,27 @@ describe('browser generated client deadlines', () => {
                 seen.push(ctx);
                 return call(ms);
             };
-        ClientRegistry.setTimeout(1, CallScope.method(h.api, 'work'));
-        ClientRegistry.setStrategy(strategy(300), CallScope.all());
-        ClientRegistry.setStrategy(strategy(200), CallScope.api(h.api));
-        ClientRegistry.setStrategy(strategy(100), CallScope.method(h.api, 'work'));
+        CallRegistry.setTimeout(1, h.api, 'work');
+        CallRegistry.setStrategy(strategy(300), 'ALL');
+        CallRegistry.setStrategy(strategy(200), h.api);
+        CallRegistry.setStrategy(strategy(100), h.api, 'work');
         await h.expectTimeout(100);
-        ClientRegistry.setStrategy(undefined, CallScope.method(h.api, 'work'));
+        CallRegistry.setStrategy(undefined, h.api, 'work');
         await h.expectTimeout(200);
-        ClientRegistry.setStrategy(undefined, CallScope.api(h.api));
+        CallRegistry.setStrategy(undefined, h.api);
         await h.expectTimeout(300);
         expect(seen).toEqual(
-            Array.from({ length: 3 }, () => new CallContext(h.api.name, 'work', WRITE, h.api)),
+            Array.from({ length: 3 }, () => new CallContext(h.api.name, 'work', WRITE)),
         );
-        ClientRegistry.setStrategy(undefined, CallScope.all());
+        CallRegistry.setStrategy(undefined, 'ALL');
         await h.expectTimeout(1);
     });
 
     it('supports 30s attempt, 60s backoff, then 20s attempt with one final error', async () => {
         const h = new Harness();
         let firstError: Error | undefined;
-        ClientRegistry.setTimeout(1, CallScope.all());
-        ClientRegistry.setStrategy(async (call: Attempt<unknown>): Promise<unknown> => {
+        CallRegistry.setTimeout(1, 'ALL');
+        CallRegistry.setStrategy(async (call: Attempt<unknown>): Promise<unknown> => {
             // webpieces-disable no-unmanaged-exceptions -- application strategy retries only typed timeouts
             // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
             try {
@@ -277,10 +280,10 @@ describe('browser generated client deadlines', () => {
                 await new Promise<void>((resolve: () => void) => setTimeout(resolve, 60_000));
                 return call(20_000);
             }
-        }, CallScope.api(h.api));
+        }, h.api);
         const pending = h.invoke();
         const checked = expect(pending).rejects.toEqual(
-            new ApiCallTimeoutError(20_000, new CallContext(h.api.name, 'work', WRITE, h.api)),
+            new ApiCallTimeoutError(20_000, new CallContext(h.api.name, 'work', WRITE)),
         );
         await vi.advanceTimersByTimeAsync(30_000);
         expect(firstError).toBeInstanceOf(ApiCallTimeoutError);
@@ -304,14 +307,14 @@ describe('browser generated client deadlines', () => {
             new Promise<void>((resolve: () => void) => {
                 finishFirst = resolve;
             });
-        ClientRegistry.setStrategy(
+        CallRegistry.setStrategy(
             async (call: Attempt<unknown>): Promise<unknown> =>
                 call(10).catch((err: Error) => {
                     expect(err).toBeInstanceOf(ApiCallTimeoutError);
                     h.transport.work = () => Promise.resolve();
                     return call(20);
                 }),
-            CallScope.api(h.api),
+            h.api,
         );
         const pending = h.invoke();
         await vi.advanceTimersByTimeAsync(10);
@@ -331,7 +334,7 @@ describe('browser generated client deadlines', () => {
     it('passes strategy exceptions through by identity, including non-Error values', async () => {
         const h = new Harness();
         for (const failure of [new Error('business failure'), new Payload('sentinel')]) {
-            ClientRegistry.setStrategy(() => Promise.reject(failure), CallScope.api(h.api));
+            CallRegistry.setStrategy(() => Promise.reject(failure), h.api);
             await expect(h.invoke()).rejects.toBe(failure);
         }
         expect(h.transport.calls).toBe(0);
@@ -358,7 +361,7 @@ describe('browser generated client deadlines', () => {
         'rejects an invalid strategy timeout %s before sending',
         async (ms: number) => {
             const h = new Harness();
-            ClientRegistry.setStrategy((call: Attempt<unknown>) => call(ms), CallScope.api(h.api));
+            CallRegistry.setStrategy((call: Attempt<unknown>) => call(ms), h.api);
             await expect(h.invoke()).rejects.toBeInstanceOf(RangeError);
             expect(h.transport.calls).toBe(0);
             expect(vi.getTimerCount()).toBe(0);
@@ -408,8 +411,8 @@ describe('browser response body deadlines', () => {
 
     it('keeps concurrent deadlines independent', async () => {
         const h = new Harness();
-        ClientRegistry.setTimeout(10, CallScope.method(h.api, 'work'));
-        ClientRegistry.setTimeout(20, CallScope.method(h.api, 'other'));
+        CallRegistry.setTimeout(10, h.api, 'work');
+        CallRegistry.setTimeout(20, h.api, 'other');
         const first = expect(h.invoke()).rejects.toBeInstanceOf(ApiCallTimeoutError);
         const second = expect(h.invoke('other')).rejects.toBeInstanceOf(ApiCallTimeoutError);
         await vi.advanceTimersByTimeAsync(10);

@@ -1,21 +1,17 @@
 import {
     ApiImplementationError,
     ClientRole,
+    ClientRegistry,
     HttpResponseDto,
-    RouteMetadata,
     WEBPIECES_DEFAULT_ERROR_TRANSLATOR,
-    ApiRegistry,
 } from '@webpieces/core-util';
 
 /**
- * The CLIENT half of the wire seam: hand every response to the {@link ErrorTranslator} registered
- * for the called ROUTE — its contract class and method, resolved on the `CallScope` ladder (method ->
- * API -> ALL -> webpieces default) — and guarantee the one invariant a typed caller depends on. That
- * ladder is what lets one vendor contract read its OWN error body while every other contract in the
- * process keeps the app's ALL translator.
+ * The CLIENT half of the wire seam: hand every response to THE registered
+ * {@link ErrorTranslator}'s `fromWire`, and guarantee the one invariant a typed caller depends on.
  *
- * There is no "was a translator registered" question here — {@link ApiRegistry.getErrorTranslator}
- * never returns undefined — and no `TranslatedFailure` provenance record either. Provenance existed only to
+ * There is no "was a translator registered" question here — {@link ClientRegistry.getErrorTranslator}
+ * is non-optional — and no `TranslatedFailure` provenance record either. Provenance existed only to
  * feed `ProxyClient.adaptDownstreamFailure`, and the uniform 4xx/5xx rule in
  * {@link WebpiecesDefaultErrorTranslator} deleted that hook: an app that wants a downstream status
  * relayed as its own type says so by THROWING it from its own `fromWire`.
@@ -34,11 +30,10 @@ export class ClientErrorTranslator {
      * returns silently, so the normal path costs one predicate.
      *
      * @param role - who is receiving, from the calling client's `ClientConfig` (see {@link ClientRole}).
-     * @param route - the called route; its contract class and method select the translator.
      */
     // webpieces-disable no-function-outside-class -- pure stateless mapping shared by browser and node
-    static throwIfFailure(response: HttpResponseDto, role: ClientRole, route: RouteMetadata): void {
-        ApiRegistry.getErrorTranslator(route.apiClass, route.methodName).fromWire(response, role);
+    static throwIfFailure(response: HttpResponseDto, role: ClientRole): void {
+        ClientRegistry.getErrorTranslator().fromWire(response, role);
         WEBPIECES_DEFAULT_ERROR_TRANSLATOR.fromWire(response, role);
     }
 
@@ -51,8 +46,8 @@ export class ClientErrorTranslator {
      * called with an ordinary 2xx, which is a framework bug in the caller, and says so.
      */
     // webpieces-disable no-function-outside-class -- pure stateless mapping shared by browser and node
-    static throwFailure(response: HttpResponseDto, role: ClientRole, route: RouteMetadata): never {
-        ClientErrorTranslator.throwIfFailure(response, role, route);
+    static throwFailure(response: HttpResponseDto, role: ClientRole): never {
+        ClientErrorTranslator.throwIfFailure(response, role);
         throw new ApiImplementationError(
             `ClientErrorTranslator.throwFailure was called for HTTP ${response.status.code}, ` +
                 `which is an ordinary success. Only a non-2xx (or a 266) response reaches here; ` +

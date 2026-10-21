@@ -144,7 +144,7 @@ export interface RuntimeQueue extends RuntimeQueueFlow {
  * with real Terraform behind them, and the graph showed neither.
  */
 export interface RuntimeTrigger extends RuntimeLevel {
-    /** 'cron' → a scheduler fires it; 'external' → a system outside this repo posts to it (an EXTERNAL_INBOUND method). */
+    /** 'cron' → a scheduler fires it; 'external' → a system outside this repo posts to it. */
     kind: 'cron' | 'external';
     api: string;
     method: string;
@@ -154,7 +154,7 @@ export interface RuntimeTrigger extends RuntimeLevel {
     queueName?: string;
     /**
      * Present for 'external': WHO outside this repo posts to it, declared as
-     * `@Endpoint(POST, p, WRITE, EXTERNAL_INBOUND, { calledBy: 'twilio' })`.
+     * `@Endpoint(POST, p, WRITE, EXTERNAL, { calledBy: 'twilio' })`.
      *
      * The caller is drawn separately from an outbound system with the same label: callers
      * start the flow on the top row, while outbound systems are sinks on L0.

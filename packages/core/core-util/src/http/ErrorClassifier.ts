@@ -27,34 +27,42 @@ export enum CallOutcome {
  * This is BEHAVIOR, so it is an interface (per CLAUDE.md), passed as an object with a NAMED method
  * rather than a bare function — so "find usages" in an IDE lands on every implementation.
  *
- * Registered on `ApiRegistry` at startup — the same browser-safe, no-DI, populated-once
- * singleton that owns the {@link ErrorTranslator} — with
- * `ApiRegistry.setErrorClassifier(c, scope)`, on the same `CallScope` ladder as
- * `ClientRegistry`'s strategy and timeout. {@link ApiRegistry.classify} resolves it most specific
- * first:
+ * Registered on {@link ClientRegistry} at startup — the same browser-safe, no-DI, populated-once
+ * singleton that owns URL mappings and the {@link ErrorTranslator}. Resolved most-specific first by
+ * {@link ClientRegistry.classify}:
  *
- * 1. `setErrorClassifier(c, CallScope.method(XxxApi, 'method'))` — one method of one contract.
- * 2. `setErrorClassifier(c, CallScope.api(XxxApi))` — one contract, keyed by its CLASS (never a name). An
- *    SDK-wrapping api-client keys by its abstract `XxxApi`: each external API qualifies its errors
- *    differently (a document store's 404 miss is EXPECTED; a messaging vendor's 429 is TRANSIENT),
- *    so it overrides the rungs below for that contract only.
- * 3. `setErrorClassifier(c, CallScope.all())` — ONE per app/company. It reads {@link ApiMethodInfo.side}, so a
- *    single classifier covers the SERVER router AND every INTERNAL client (webpieces http client,
- *    cloud tasks).
- * 4. {@link WebpiecesDefaultErrorClassifier} — the terminal rung, which never defers.
+ * 1. `ClientRegistry.addErrorClassifier(new KeyedErrorClassifier(apiClass, c))` — per EXTERNAL
+ *    client, keyed by {@link ApiMethodInfo.apiClass} ('FirestoreAdminClient', 'ClaudeApi',
+ *    'TwilioApi'). Each external API qualifies its errors differently (a Firestore 404 miss is
+ *    EXPECTED; a Twilio 429 is TRANSIENT), so it overrides the tiers below for that apiClass only.
+ * 2. `ClientRegistry.setDefaultErrorClassifier(c)` — ONE per app/company. It reads
+ *    {@link ApiMethodInfo.side}, so a single classifier covers the SERVER router AND every INTERNAL
+ *    client (webpieces http client, cloud tasks).
+ * 3. {@link WebpiecesDefaultErrorClassifier} — the terminal tier, which never defers.
  *
- * Internal clients and the server register NOTHING per contract — the ABSENCE of a contract rung is
- * the signal. An external client that forgets to register is FAIL-SAFE: it falls to the rungs below,
- * where every client-side error except a 266 is a failure.
+ * Internal clients and the server register NOTHING — the ABSENCE of an apiClass entry is the signal.
+ * An external client that forgets to register is FAIL-SAFE: it falls to the tiers below, where every
+ * client-side error except a 266 is a failure.
  */
 export interface ErrorClassifier {
     /**
      * @param error - the already-normalized thrown error (callers pass `toError(err)`)
-     * @param methodInfo - the call identity; `side` distinguishes server/client, `contract` the API
-     * @returns the outcome, or `undefined` to DEFER to the next rung (method defers to API, API to
-     *   ALL, ALL to the webpieces built-in). Deferring is what makes classifiers additive AND
-     *   override-capable.
+     * @param methodInfo - the call identity; `side` distinguishes server/client, `apiClass` the client
+     * @returns the outcome, or `undefined` to DEFER to the next tier (a per-apiClass classifier defers
+     *   to the app default; the app default defers to the webpieces built-in). Deferring is what
+     *   makes classifiers additive AND override-capable.
      */
     classify(error: Error, methodInfo: ApiMethodInfo): CallOutcome | undefined;
 }
 
+/**
+ * A per-external-client registration pair: the {@link ApiMethodInfo.apiClass} to key on, and the
+ * {@link ErrorClassifier} to apply for it. Data only, so it is a class (not an inline object literal),
+ * per CLAUDE.md — handed to {@link ClientRegistry.addErrorClassifier}.
+ */
+export class KeyedErrorClassifier {
+    constructor(
+        public readonly apiClass: string,
+        public readonly classifier: ErrorClassifier,
+    ) {}
+}

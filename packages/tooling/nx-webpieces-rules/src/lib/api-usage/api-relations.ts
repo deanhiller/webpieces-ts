@@ -144,28 +144,19 @@ export type ProjectApiRelations = Record<string, ApiRelation>;
  * on the framework it inspects (it reads decorators as TEXT, from projects that may be on a
  * different @webpieces version than the tooling itself).
  */
-export type EndpointKind = 'rpc' | 'cloudtasks' | 'cron' | 'external-inbound' | 'external-outbound';
+export type EndpointKind = 'rpc' | 'cloudtasks' | 'cron' | 'external';
 
 /** Side-effect semantics copied from the required third `@Endpoint` argument. */
 export type EndpointOperation = 'read' | 'write-idempotent' | 'write';
 
 /** HTTP verbs understood by the generated contract runtime. */
-export type ContractHttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
-
-/** Every verb `@Endpoint` accepts, mirroring core-util's `HTTP_METHODS`. */
-export const CONTRACT_HTTP_METHODS: readonly ContractHttpMethod[] = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'];
-
-/** Mirrors core-util's `verbCarriesBody`: POST, PUT and PATCH carry the one unannotated body argument. */
-// webpieces-disable no-function-outside-class -- pure predicate mirroring the framework rule
-export function contractVerbCarriesBody(method: ContractHttpMethod): boolean {
-    return method === 'POST' || method === 'PUT' || method === 'PATCH';
-}
+export type ContractHttpMethod = 'GET' | 'POST';
 
 /** One path/query/body mapping emitted into architecture/dependencies.json. */
 export interface ApiParameterMeta {
     index: number;
-    source: 'path' | 'query' | 'query-map' | 'body';
-    /** Path/query wire name; a JSON/form body and a `@QueryString()` multimap have no key. */
+    source: 'path' | 'query' | 'body';
+    /** Path/query wire name; a JSON/form body occupies the whole entity and has no key. */
     wireName?: string;
 }
 
@@ -187,24 +178,19 @@ export interface ApiMethodMeta {
     /** Present when callers receive the transport-neutral full response. */
     responseType?: 'full';
     /**
-     * Present when `@Endpoint(..., { responseBody: NONE })`: a `Promise<void>` method, 0-byte success.
-     * Absent on a CLOUDTASKS / CRON method, whose KIND already means no response body (#1348).
-     */
-    responseBody?: 'none';
-    /**
      * `@Queue(...)` override, else `${ApiClassName}-${methodName}`.
      *
      * ONLY on a `cloudtasks` or `cron` method — those are the kinds actually delivered through a
      * named queue or schedule, and Terraform matches on this string. A synchronous `rpc` (or an
-     * `external-inbound`) endpoint has no queue and needs none; emitting a plausible-looking name for
+     * inbound `external`) endpoint has no queue and needs none; emitting a plausible-looking name for
      * one put every synchronous endpoint one naive `methods.map(m => m.queueName)` away from being
      * provisioned as a queue.
      */
     queueName?: string;
     /**
-     * WHO outside this repo drives this endpoint, from `@Endpoint(POST, p, WRITE, EXTERNAL_INBOUND, { calledBy })`.
+     * WHO outside this repo drives this endpoint, from `@Endpoint(POST, p, WRITE, EXTERNAL, { calledBy })`.
      *
-     * ONLY on an `external-inbound` method, the same way `queueName` is only on the kinds that HAVE a queue.
+     * ONLY on an `external` method, the same way `queueName` is only on the kinds that HAVE a queue.
      *
      * Deliberately the SAME {@link ExternalSystemDeclaration} the OUTBOUND `@externalSystem` tag
      * resolves to, not a parallel inbound-only type: an inbound `saas twilio` and an outbound
@@ -212,7 +198,7 @@ export interface ApiMethodMeta {
      * converge on ONE node instead of drawing twilio twice facing opposite directions.
      *
      * Optional in the TYPE only for graphs generated before the caller was required — generation
-     * FAILS on an `external-inbound` method whose caller cannot be read (UndeclaredExternalCallerError).
+     * FAILS on an `external` method whose caller cannot be read (UndeclaredExternalCallerError).
      */
     caller?: ExternalSystemDeclaration;
 }
@@ -356,40 +342,6 @@ export class UndeclaredExternalCaller {
         public readonly method: string,
         /** What was wrong, as written — `<missing>`, `SOME_CONST`, `callerKind: 'vendor'`. */
         public readonly argument: string,
-        /** `path/to/file.ts:LINE`, workspace-relative. */
-        public readonly at: string,
-    ) {}
-}
-
-/** What is wrong with one endpoint's response-body declaration (#1339, #1348). */
-export enum VoidResponseProblem {
-    /** RPC / EXTERNAL_INBOUND: declares `responseBody: NONE` but does not return `Promise<void>`. */
-    NONE_WITHOUT_VOID = 'none-without-void',
-    /** RPC / EXTERNAL_INBOUND: returns `Promise<void>` but does not declare `responseBody: NONE`. */
-    VOID_WITHOUT_NONE = 'void-without-none',
-    /** EXTERNAL_OUTBOUND: declares `responseBody: NONE`, but the VENDOR shapes an outbound response. */
-    OUTBOUND_NONE = 'outbound-none',
-    /** CLOUDTASKS / CRON: declares `responseBody: NONE`, which the kind already implies. */
-    REDUNDANT_NONE = 'redundant-none',
-    /** CLOUDTASKS / CRON: does not return `Promise<void>`, but the kind is fire-and-forget. */
-    TRIGGER_NOT_VOID = 'trigger-not-void',
-}
-
-/**
- * An `@Endpoint` whose response-body declaration disagrees with its kind or its declared return
- * type. The runtime cannot see `void` (`design:returntype` is just `Promise`), so the kind (CLOUDTASKS
- * and CRON imply no body, #1348) or the `responseBody: NONE` option (RPC, EXTERNAL_INBOUND) is the
- * only thing a server and a client act on, and it must not drift from the signature. EXTERNAL_OUTBOUND
- * takes no option at all: the vendor shapes its responses and the client accepts any 2xx.
- */
-export class VoidResponseMismatch {
-    constructor(
-        public readonly api: string,
-        public readonly method: string,
-        /** Which of the five disagreements this is. */
-        public readonly problem: VoidResponseProblem,
-        /** The endpoint kind as written in the graph (`rpc`, `cloudtasks`, ...). */
-        public readonly kind: EndpointKind,
         /** `path/to/file.ts:LINE`, workspace-relative. */
         public readonly at: string,
     ) {}

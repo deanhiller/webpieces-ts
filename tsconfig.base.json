@@ -22,7 +22,6 @@
             "@webpieces/api-doc-model": ["packages/docs/api-doc-model/src/index.ts"],
             "@webpieces/docs-site": ["packages/docs/docs-site/src/index.ts"],
             "@webpieces/openapi-generator": ["packages/docs/openapi-generator/src/index.ts"],
-            "@webpieces/openapi-import": ["packages/docs/openapi-import/src/index.ts"],
             "@webpieces/core-context": ["packages/core/core-context/src/index.ts"],
             "@webpieces/core-mock": ["packages/core/core-mock/src/index.ts"],
             "@webpieces/core-util": ["packages/core/core-util/src/index.ts"],

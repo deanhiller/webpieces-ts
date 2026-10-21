@@ -84,7 +84,7 @@ const newAuthFilter = (): AuthFilter =>
         /*authConfig*/ undefined,
         new DefaultJwtHook(SECRET),
         new PassingOidcHook(),
-        /*vendorAuthHook*/ undefined,
+        /*webhookAuthCallback*/ undefined,
         new OrgApiKeyHook(),
     );
 

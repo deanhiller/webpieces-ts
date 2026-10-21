@@ -55,7 +55,6 @@ export class IpcServerFactory {
                         this.logging,
                         request.context,
                         'server',
-                        apiClass,
                         apiId,
                         methodId,
                         getIpcMaskSpec(apiClass, key) ?? new MaskSpec({}),

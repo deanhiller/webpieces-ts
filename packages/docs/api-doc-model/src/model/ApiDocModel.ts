@@ -281,29 +281,12 @@ export class DocumentedAuth {
     ) {}
 }
 
-/**
- * ONE `@PathParam` / `@QueryParam` argument of an endpoint: an OpenAPI `parameters` entry. A path
- * parameter is always required; a query one is required unless its argument is optional (`?`) or
- * its type admits `undefined`.
- */
-export class DocumentedParameter {
-    constructor(
-        /** `path` or `query` — the OpenAPI `in`. */
-        readonly location: string,
-        /** The wire name, folded from the decorator argument. */
-        readonly name: string,
-        readonly required: boolean,
-        /** The argument's declared type (`string`, `number`, `string[]`, a string enum, ...). */
-        readonly type: TypeRef | undefined,
-    ) {}
-}
-
 /** One `@Endpoint` method of one contract. */
 export class DocumentedEndpoint {
     constructor(
         readonly methodName: string,
         /**
-         * `GET`, `POST`, `PUT`, `PATCH` or `DELETE`, constant-folded from `@Endpoint`'s FIRST argument. A document cannot be
+         * `GET` or `POST`, constant-folded from `@Endpoint`'s FIRST argument. A document cannot be
          * written without it — the verb is the key an operation hangs under in `paths`.
          */
         readonly httpMethod: string,
@@ -315,7 +298,7 @@ export class DocumentedEndpoint {
          * inferring safety from the verb, which for this framework would be wrong.
          */
         readonly operation: string,
-        /** `rpc` | `cloudtasks` | `cron` | `external-inbound` | `external-outbound`, verbatim — this package invents no taxonomy. */
+        /** `rpc` | `cloudtasks` | `cron` | `external`, verbatim — this package invents no taxonomy. */
         readonly kind: string,
         /**
          * `{ hidden: true }` — this method is absent from the CUSTOMER document. It stays in the
@@ -363,8 +346,6 @@ export class DocumentedEndpoint {
         readonly response: TypeRef | undefined,
         readonly streaming?: DocumentedStreaming,
         readonly localOnly: boolean = false,
-        /** Every `@PathParam` / `@QueryParam` argument, in declaration order. */
-        readonly parameters: readonly DocumentedParameter[] = [],
     ) {}
 }
 

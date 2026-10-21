@@ -1,7 +1,7 @@
 import {AuthorizationType} from '@webpieces/core-util';
 import {AuthorizationService} from '../AuthorizationHook';
 import {AuthorizationFilter} from '../filters/AuthorizationFilter';
-import { WpAuthorization, AuthorizationType, WpAuth, vendorAuth } from '@webpieces/core-util';
+import { WpAuthorization, AuthorizationType, WpAuth, webhook as webhookAuth } from '@webpieces/core-util';
 import 'reflect-metadata';
 import { describe, it, expect } from 'vitest';
 import { GcpOidc } from '@webpieces/gcp-identity';
@@ -11,12 +11,12 @@ import {
     RawHttpRequest,
     RawRequest,
     RequestContext,
-    VendorAuthHook,
 } from '@webpieces/core-context';
-import { ApiPath, AuthMeta, ContextKey, ContextTuple, Endpoint, ApiBadRequestError, ApiUnauthorizedError, RouteMetadata, EXTERNAL_INBOUND, POST, WRITE } from '@webpieces/core-util';
+import { ApiPath, AuthMeta, ContextKey, ContextTuple, Endpoint, ApiBadRequestError, ApiUnauthorizedError, RouteMetadata, EXTERNAL, POST, WRITE } from '@webpieces/core-util';
 import { AuthFilter } from '../filters/AuthFilter';
 import { DefaultOidcVerifier } from '../DefaultOidcVerifier';
 import { ApiRoutingFactory } from '../ApiRoutingFactory';
+import { WebhookAuthCallback } from '../AuthHooks';
 import { AuthenticatedCaller, AUTHENTICATED_CALLER_KEY } from '../AuthConfig';
 import { MethodMeta } from '../MethodMeta';
 import { Service } from '@webpieces/core-util';
@@ -24,8 +24,8 @@ import { WpResponse } from '../WpResponse';
 import { RouteBuilder, RouteDefinition, FilterDefinition } from '../WebAppMeta';
 
 /**
- * The ENFORCEMENT half of `vendorAuth(...)` (the contract half is pinned in core-util's
- * `vendor-auth-decorator.spec.ts`, the transport half in http-server's `ExpressWrapperRawBody.spec.ts`).
+ * The ENFORCEMENT half of `@WpAuthWebhook` (the contract half is pinned in core-util's
+ * `webhook-decorator.spec.ts`, the transport half in http-server's `ExpressWrapperRawBody.spec.ts`).
  *
  * Everything here is about one property: an `external` endpoint's `calledBy` becomes a FACT instead of
  * a claim, and every way that can go wrong ends in 401 with the controller never entered.
@@ -33,9 +33,9 @@ import { RouteBuilder, RouteDefinition, FilterDefinition } from '../WebAppMeta';
 
 @ApiPath('/hook')
 abstract class SentryHookApi {
-    @WpAuth([vendorAuth('sentry')])
+    @WpAuth([webhookAuth('sentry')])
     @WpAuthorization({ authType: AuthorizationType.USERS_OR_SERVICES })
-    @Endpoint(POST, '/sentry/issue', WRITE, EXTERNAL_INBOUND, { calledBy: 'sentry', rawBody: true })
+    @Endpoint(POST, '/sentry/issue', WRITE, EXTERNAL, { calledBy: 'sentry', rawBody: true })
     notify(_r: object): Promise<object> {
         throw new Error('subclass');
     }
@@ -49,9 +49,9 @@ class SentryHookController extends SentryHookApi {
 
 @ApiPath('/hook')
 abstract class ForgotRawBodyApi {
-    @WpAuth([vendorAuth('sentry')])
+    @WpAuth([webhookAuth('sentry')])
     @WpAuthorization({ authType: AuthorizationType.USERS_OR_SERVICES })
-    @Endpoint(POST, '/sentry/issue', WRITE, EXTERNAL_INBOUND, { calledBy: 'sentry' })
+    @Endpoint(POST, '/sentry/issue', WRITE, EXTERNAL, { calledBy: 'sentry' })
     notify(_r: object): Promise<object> {
         throw new Error('subclass');
     }
@@ -69,7 +69,7 @@ const WEBHOOK_ROUTE = new RouteMetadata(
     'notify',
     WRITE,
     'SentryHookController',
-    new AuthMeta([{ kind: 'vendorAuth', name: 'sentry' }], undefined),
+    new AuthMeta([{ kind: 'webhook', name: 'sentry' }], undefined),
     'SentryHookApi',
     /*formPost*/ false,
     /*mask*/ undefined,
@@ -78,11 +78,11 @@ const WEBHOOK_ROUTE = new RouteMetadata(
 
 /**
  * The vendor ACCOUNT a signed payload belongs to — a TRUSTED key, so only an authenticator may write
- * it. Proving the signature proves the account, which is exactly what `verify` now returns.
+ * it. Proving the signature proves the account, which is exactly what `verifyWebhook` now returns.
  */
 const VENDOR_ACCOUNT = ContextKey.trusted<string>(
     'orgId',
-    'derived from a verified vendor signature by an app-bound VendorAuthHook (a ContextTuple in AuthenticatedCaller)',
+    'derived from a verified vendor signature by an app-bound WebhookAuthCallback (a ContextTuple in AuthenticatedCaller)',
     'x-org-id',
 );
 
@@ -103,11 +103,11 @@ class RecordingNext implements Service<MethodMeta, WpResponse<unknown>> {
 
 /**
  * Exactly what an app's hook is: it calls the VENDOR's validator over the raw request. Here it records
- * what it was handed and answers from `allow`, which is all a `TestVendorAuthHook` in a consumer repo
+ * what it was handed and answers from `allow`, which is all a `TestWebhookAuthCallback` in a consumer repo
  * needs to do (acceptance check 10 — a spec that builds the real server and drives it through
- * `createApiClient` can rebind this over VENDOR_AUTH_HOOK and never touch a real signature).
+ * `createApiClient` can rebind this over WEBHOOK_AUTH_CALLBACK and never touch a real signature).
  */
-class TestVendorAuthHook extends VendorAuthHook {
+class TestWebhookAuthCallback extends WebhookAuthCallback {
     seenName?: string;
     seenBody?: Buffer;
     seenUrl?: string;
@@ -121,15 +121,7 @@ class TestVendorAuthHook extends VendorAuthHook {
      * `request.raw` is read with NO `!` and NO guard — that is the point of {@link RawHttpRequest}.
      * AuthFilter checked the bytes are there once, and the type carries the result here.
      */
-    override async mint(): Promise<Map<string, string>> {
-        throw new Error('this spec is the INBOUND half; nothing here mints');
-    }
-
-    override async refresh(): Promise<void> {
-        throw new Error('this spec is the INBOUND half; nothing here refreshes');
-    }
-
-    override async verify(
+    override async verifyWebhook(
         name: string,
         request: RawHttpRequest,
     ): Promise<AuthenticatedCaller> {
@@ -162,7 +154,7 @@ class CollectingRouteBuilder implements RouteBuilder {
     }
 }
 
-function newAuthFilter(hook?: VendorAuthHook): AuthFilter {
+function newAuthFilter(hook?: WebhookAuthCallback): AuthFilter {
     return new AuthFilter(
         new DefaultOidcVerifier(new GcpOidc()),
         /*authConfig*/ undefined,
@@ -198,7 +190,7 @@ class AuthorizedNext implements Service<MethodMeta, WpResponse<unknown>> {
 
 async function runFilter(
     next: RecordingNext,
-    hook: VendorAuthHook | undefined,
+    hook: WebhookAuthCallback | undefined,
     request: HttpRequest,
     onTheWire: ContextTuple[] = [],
 ): Promise<WpResponse<unknown>> {
@@ -213,9 +205,9 @@ async function runFilter(
     });
 }
 
-describe('AuthFilter enforces vendorAuth(...)', () => {
+describe('AuthFilter enforces @WpAuthWebhook', () => {
     it('hands the hook the vendor name, the verbatim bytes, the absolute url and the headers', async () => {
-        const hook = new TestVendorAuthHook(true);
+        const hook = new TestWebhookAuthCallback(true);
         const next = new RecordingNext();
 
         await runFilter(next, hook, webhookRequest('{"title":"boom"}'));
@@ -231,7 +223,7 @@ describe('AuthFilter enforces vendorAuth(...)', () => {
         const next = new RecordingNext();
 
         await expect(
-            runFilter(next, new TestVendorAuthHook(false), webhookRequest('{}')),
+            runFilter(next, new TestWebhookAuthCallback(false), webhookRequest('{}')),
         ).rejects.toThrow(ApiUnauthorizedError);
         expect(next.invoked).toBe(false);
     });
@@ -240,11 +232,11 @@ describe('AuthFilter enforces vendorAuth(...)', () => {
      * FAIL CLOSED, matching JwtHook. An app that forgot the binding must not have its webhook route
      * silently open — that is the one default that cannot be the other way round.
      */
-    it('401s on every webhook endpoint when NO VendorAuthHook is bound', async () => {
+    it('401s on every webhook endpoint when NO WebhookAuthCallback is bound', async () => {
         const next = new RecordingNext();
 
         await expect(runFilter(next, undefined, webhookRequest('{}'))).rejects.toThrow(
-            /Vendor auth is not enabled/,
+            /Webhook auth is not enabled/,
         );
         expect(next.invoked).toBe(false);
     });
@@ -254,7 +246,7 @@ describe('AuthFilter enforces vendorAuth(...)', () => {
         const next = new RecordingNext();
         const noRaw = new HttpRequest('POST', '/hook/sentry/issue', new Map());
 
-        await expect(runFilter(next, new TestVendorAuthHook(true), noRaw)).rejects.toThrow(
+        await expect(runFilter(next, new TestWebhookAuthCallback(true), noRaw)).rejects.toThrow(
             /no raw request was retained/,
         );
         expect(next.invoked).toBe(false);
@@ -265,7 +257,7 @@ describe('AuthFilter enforces vendorAuth(...)', () => {
         // re-stringifying the DTO is not a workaround: the signature would verify in every test and
         // fail on the first real payload.
         const body = '{"title":"café 🚨 crash","rate":1e3}';
-        const hook = new TestVendorAuthHook(true);
+        const hook = new TestWebhookAuthCallback(true);
 
         await runFilter(new RecordingNext(), hook, webhookRequest(body));
 
@@ -275,7 +267,7 @@ describe('AuthFilter enforces vendorAuth(...)', () => {
 });
 
 /**
- * NEW CAPABILITY. `verify` returns an {@link AuthenticatedCaller} instead of `void`, so a
+ * NEW CAPABILITY. `verifyWebhook` returns an {@link AuthenticatedCaller} instead of `void`, so a
  * vendor hook can say WHICH account the signature proved — and the framework seeds it through the
  * SAME `putTrusted` path a jwt or api-key caller takes. Before this, the hook could prove the fact
  * and had no way to hand it on; every controller re-derived it from the payload.
@@ -286,7 +278,7 @@ describe('a webhook hook seeds TRUSTED context the controller reads back', () =>
 
         await runFilter(
             next,
-            new TestVendorAuthHook(true),
+            new TestWebhookAuthCallback(true),
             webhookRequest('{"title":"boom"}'),
         );
 
@@ -297,7 +289,7 @@ describe('a webhook hook seeds TRUSTED context the controller reads back', () =>
     it('stamps the caller under the TRUSTED ContextKey that replaced the principal magic string', async () => {
         const next = new RecordingNext();
 
-        await runFilter(next, new TestVendorAuthHook(true), webhookRequest('{}'));
+        await runFilter(next, new TestWebhookAuthCallback(true), webhookRequest('{}'));
 
         expect(next.callerSeenByController?.userId).toBe('sentry-account');
         // Context-only: an object principal has no honest header form, and forwarding one would hand
@@ -310,25 +302,25 @@ describe('a webhook hook seeds TRUSTED context the controller reads back', () =>
         const next = new RecordingNext();
 
         await expect(
-            runFilter(next, new TestVendorAuthHook(false), webhookRequest('{}')),
+            runFilter(next, new TestWebhookAuthCallback(false), webhookRequest('{}')),
         ).rejects.toThrow(ApiUnauthorizedError);
         expect(next.accountSeenByController).toBeUndefined();
     });
 });
 
 /**
- * THE SECURITY REGRESSION, unchanged by the hook now returning a caller. `vendorAuth` stays in the
+ * THE SECURITY REGRESSION, unchanged by the hook now returning a caller. `webhook` stays in the
  * `false` branch of `verifiesCaller`: the sender is an outside VENDOR, not a peer service, so the
  * trusted context headers arriving alongside a perfectly valid signature are NOT believed. Only a
  * value the hook itself independently derived is admitted.
  */
-describe('vendorAuth(...) does NOT verify its caller, so forwarded trusted context is not believed', () => {
+describe('@WpAuthWebhook does NOT verify its caller, so forwarded trusted context is not believed', () => {
     it('rejects an inbound trusted header the hook did not independently derive', async () => {
         const next = new RecordingNext();
         const victimKey = ContextKey.trusted<string>('userId', 'a verified user id', 'x-user-id');
 
         await expect(
-            runFilter(next, new TestVendorAuthHook(true), webhookRequest('{}'), [
+            runFilter(next, new TestWebhookAuthCallback(true), webhookRequest('{}'), [
                 new ContextTuple(victimKey, 'someone-elses-user'),
             ]),
         ).rejects.toThrow(/cannot be supplied by the caller on this endpoint/);
@@ -338,7 +330,7 @@ describe('vendorAuth(...) does NOT verify its caller, so forwarded trusted conte
     it('admits an inbound trusted header ONLY when the hook derived the very same value', async () => {
         const next = new RecordingNext();
 
-        await runFilter(next, new TestVendorAuthHook(true), webhookRequest('{}'), [
+        await runFilter(next, new TestWebhookAuthCallback(true), webhookRequest('{}'), [
             new ContextTuple(VENDOR_ACCOUNT, 'org-777'),
         ]);
 
@@ -359,7 +351,7 @@ describe('a malformed body answers 401 before it answers 400', () => {
         await expect(
             runFilter(
                 next,
-                new TestVendorAuthHook(false),
+                new TestWebhookAuthCallback(false),
                 webhookRequest('not json', parseError),
             ),
         ).rejects.toThrow(ApiUnauthorizedError);
@@ -373,7 +365,7 @@ describe('a malformed body answers 401 before it answers 400', () => {
         await expect(
             runFilter(
                 next,
-                new TestVendorAuthHook(true),
+                new TestWebhookAuthCallback(true),
                 webhookRequest('not json', parseError),
             ),
         ).rejects.toThrow(ApiBadRequestError);
@@ -387,7 +379,7 @@ describe('ApiRoutingFactory refuses a webhook route that kept no bytes', () => {
             new ApiRoutingFactory(ForgotRawBodyApi, ForgotRawBodyController).configure(
                 new CollectingRouteBuilder(),
             ),
-        ).toThrow(/is vendorAuth\(\.\.\.\).*rawBody: true/s);
+        ).toThrow(/is webhook\(\.\.\.\).*rawBody: true/s);
     });
 
     it('registers the route, carrying rawBody on its metadata, when the pairing is right', () => {

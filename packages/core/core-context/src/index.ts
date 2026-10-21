@@ -24,10 +24,6 @@ export { RequestContextApiCallContext } from './RequestContextApiCallContext';
 export { HttpRequest, RawHttpRequest } from './HttpRequest';
 // The verbatim bytes + absolute url a webhook SIGNATURE is computed over ({ rawBody: true } routes).
 export { RawRequest } from './RawRequest';
-// What an authenticator PROVED about a caller (http-routing re-exports it beside its hooks).
-export { AuthenticatedCaller, AuthenticatedMachineIdentity } from './AuthenticatedCaller';
-// vendorAuth(name): ONE app hook that mints/refreshes on the client and verifies on the server.
-export { VendorAuthHook, VENDOR_AUTH_HOOK, SignableRequest } from './VendorAuthHook';
 
 // DI provider decorators (shared DI seam; http-routing re-exports for back-compat)
 export { provideSingletonDefaultForApi } from './provide';

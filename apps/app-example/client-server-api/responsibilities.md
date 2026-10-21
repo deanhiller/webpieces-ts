@@ -4,7 +4,7 @@ Shared API contract for the client-server service: `SaveApi`/`PublicApi` abstrac
 
 ## In Scope
 
-- Abstract API classes (`SaveApi`, `PublicApi`) with `@ApiPath`, whose `@Endpoint` methods each declare exactly one method-level auth decorator (`@WpAuthPublic` / `jwt()` / `oidcSameProject()` / `oidcSvcs(...)` / `sharedSecret(...)` / `vendorAuth(...)` / `@WpLocalOnly`)
+- Abstract API classes (`SaveApi`, `PublicApi`) with `@ApiPath`, whose `@Endpoint` methods each declare exactly one method-level auth decorator (`@WpAuthPublic` / `jwt()` / `oidcSameProject()` / `oidcSvcs(...)` / `sharedSecret(...)` / `webhook(...)` / `@WpLocalOnly`)
 - Request/response DTO interfaces shared between server and clients
 - The contract that `client-server` implements and `angular-site` calls via generated clients
 

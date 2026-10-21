@@ -82,15 +82,9 @@ export class OperationPageRenderer {
         return `<div class="op-head"><span class="badge">${this.html.escape(operation.httpMethod)}</span><code class="op-path">${this.html.escape(operation.path)}</code>${id}</div>`;
     }
 
-    /** The request's path, query and header parameters, then its body — each only when there is one. */
+    /** The request's `in: "header"` parameters, then its body — each only when there is one. */
     private requestSection(operation: OperationInfo, prefix: string): string {
         const parts: string[] = [];
-        if (operation.pathParameters.length > 0) {
-            parts.push(`<h2>Path parameters</h2>${this.headers.render(operation.pathParameters, prefix)}`);
-        }
-        if (operation.queryParameters.length > 0) {
-            parts.push(`<h2>Query parameters</h2>${this.headers.render(operation.queryParameters, prefix)}`);
-        }
         if (operation.requestHeaders.length > 0) {
             parts.push(`<h2>Request headers</h2>${this.headers.render(operation.requestHeaders, prefix)}`);
         }

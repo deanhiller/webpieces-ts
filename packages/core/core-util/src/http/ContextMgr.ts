@@ -1,5 +1,4 @@
 import { ContextKey } from '../ContextKey';
-import { ApiImplementationError } from '../errors/ApiError';
 import { ContextStore } from './ContextWriter';
 import { DestinationTrust } from './DestinationTrust';
 import { HeaderRegistry } from './HeaderRegistry';
@@ -61,24 +60,14 @@ export class ContextMgr {
     buildOutboundHeaders(destination: DestinationTrust): Map<string, string> {
         const outbound = new Map<string, string>();
 
-        // An EXTERNAL_OUTBOUND destination lists EXACTLY what it sends, and each listed key is required.
-        const listed = destination.listedKeys();
-        for (const key of listed ?? HeaderRegistry.get().getTransferredKeys()) {
+        for (const key of HeaderRegistry.get().getTransferredKeys()) {
             if (!destination.allows(key)) {
                 continue;
             }
             const value = this.contextStore.read(key);
             if (value !== undefined && value !== null && value !== '') {
                 outbound.set(key.httpHeader!, value);
-            } else if (listed !== undefined) {
-                throw new ApiImplementationError(
-                    `Context key '${key.name}' (header ${key.httpHeader}) is listed in @ExternalContextKeys for this ` +
-                        `outbound call but has no value in the context store. Set it before calling — nothing was sent.`,
-                );
             }
-        }
-        if (!destination.allows(WebpiecesCoreHeaders.CLIENT_VERSION)) {
-            return outbound;
         }
 
         // CLIENT_VERSION: a browser ORIGINATES a call, so it sends its OWN app build version (from
@@ -117,7 +106,7 @@ export class ContextMgr {
             if (value === null || value === '') {
                 continue;
             }
-            if (!destination.believesResponse(key) || key.isTrusted()) {
+            if (!destination.allows(key) || key.isTrusted()) {
                 // DROPPED: a browser proves nothing, so it may never hold a trusted value.
                 continue;
             }

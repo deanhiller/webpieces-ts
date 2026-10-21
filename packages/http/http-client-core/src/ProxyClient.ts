@@ -10,7 +10,7 @@ import {
     HttpContractMapper,
     RouteMetadataFactory,
     FilterChain,
-    ClientRegistry,
+    CallRegistry,
     TransportDefault,
     CallDeadline,
     CallContext,
@@ -19,8 +19,6 @@ import {
     ClientRole,
     CallMode,
     CallModeMarker,
-    HttpCallFacts,
-    HttpCallFactsHolder,
 } from '@webpieces/core-util';
 import { ApiPrototype } from './ApiPrototype';
 import { ClientFilterDefinition } from './ClientFilter';
@@ -154,8 +152,6 @@ export abstract class ProxyClient {
         requestDto: unknown,
         // webpieces-disable no-any-unknown -- DTO types are erased at the proxy boundary
         method: () => Promise<unknown>,
-        /** Filled by the transport with the last transmission's verb, masked url and status. */
-        http?: HttpCallFactsHolder,
         // webpieces-disable no-any-unknown -- DTO types are erased at the proxy boundary
     ): Promise<unknown> {
         // apiClass = the CONTRACT name (this.apiName, e.g. 'SaveApi') so this client log line MATCHES
@@ -164,14 +160,13 @@ export abstract class ProxyClient {
             'client',
             this.apiName,
             route.methodName,
-            this.apiClass,
             undefined,
             route.mask,
             route.noLogging,
             route.hideProgress,
             route.allowUpgradeInFlight,
         );
-        return this.logApiCall.execute(info, requestDto, method, undefined, http);
+        return this.logApiCall.execute(info, requestDto, method);
     }
 
     /**
@@ -359,10 +354,11 @@ export abstract class ProxyClient {
                     `so a webpieces client has no credential to send.`,
             );
         }
-        // vendorAuth(...) is DELIBERATELY absent from this list: `vendorAuth(name)` names a vendor's
-        // credential SCHEME, not a direction. When WE call the vendor (or a partner's webhook), the
-        // environment's outbound-auth filter asks the bound VendorAuthHook to `mint` the credential —
-        // the exact mirror of the `verify` the same hook runs when the vendor calls us.
+        // webhook(...) is DELIBERATELY absent from this list. It used to be here, on the assumption
+        // that the vendor is always somebody else — but `webhook(name)` names a signing SCHEME,
+        // not a direction, and for an OUTBOUND partner webhook WE are the vendor. The environment's
+        // outbound-auth filter asks its bound signer to produce the signature, which is the exact
+        // mirror of the inbound WebhookAuthCallback that verifies one.
     }
 
     /**
@@ -398,8 +394,7 @@ export abstract class ProxyClient {
             args,
         );
         const logValue = mapped.body === undefined ? args : mapped.body;
-        const http = new HttpCallFactsHolder();
-        return this.execute(route, logValue, () => this.executeCall(route, args, http), http);
+        return this.execute(route, logValue, () => this.executeCall(route, args));
     }
 
     // webpieces-disable no-any-unknown -- generated proxy arguments are runtime-validated here
@@ -428,7 +423,7 @@ export abstract class ProxyClient {
             (): Promise<string> => this.resolveBaseUrl(),
             (current: RouteMetadata): Map<string, string> =>
                 this.outboundContextHeaders(
-                    DestinationTrust.forRoute(current),
+                    DestinationTrust.forAuthMode(current.authMeta?.methods[0]),
                 ),
             (request: ClientRequest, signal: AbortSignal): Promise<Response> =>
                 this.chain.execute(request, () => this.sendOnce(request, signal)),
@@ -460,8 +455,8 @@ export abstract class ProxyClient {
         let response: Response | undefined;
         // eslint-disable-next-line @webpieces/no-unmanaged-exceptions -- lifecycle reports the original handshake failure
         try {
-            const callContext = new CallContext(this.apiName, route.methodName, route.operation, this.apiClass);
-            const requestStream = await ClientRegistry.execute(
+            const callContext = new CallContext(this.apiName, route.methodName, route.operation);
+            const requestStream = await CallRegistry.execute(
                 this.apiClass,
                 callContext,
                 (timeoutMs: number) =>
@@ -474,7 +469,7 @@ export abstract class ProxyClient {
                                 (): Promise<string> => this.resolveBaseUrl(),
                                 (current: RouteMetadata): Map<string, string> =>
                                     this.outboundContextHeaders(
-                                        DestinationTrust.forRoute(current),
+                                        DestinationTrust.forAuthMode(current.authMeta?.methods[0]),
                                     ),
                                 (
                                     request: ClientRequest,
@@ -523,17 +518,12 @@ export abstract class ProxyClient {
         }
         this.acceptResponseContext(
             response.headers,
-            DestinationTrust.forRoute(route),
+            DestinationTrust.forAuthMode(route.authMeta?.methods[0]),
         );
     }
 
     // webpieces-disable no-any-unknown -- response DTO is erased at the proxy boundary
-    private async executeCall(
-        route: RouteMetadata,
-        // webpieces-disable no-any-unknown -- generated proxy arguments are runtime-validated here
-        args: unknown[],
-        http: HttpCallFactsHolder,
-    ): Promise<unknown> {
+    private async executeCall(route: RouteMetadata, args: unknown[]): Promise<unknown> {
         this.onRequestStart(route);
         let response: Response | undefined;
         // webpieces-disable no-any-unknown -- response DTO is erased at the proxy boundary
@@ -541,8 +531,8 @@ export abstract class ProxyClient {
         // webpieces-disable no-unmanaged-exceptions -- report one logical END, preserving the original thrown value
         // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
         try {
-            const callContext = new CallContext(this.apiName, route.methodName, route.operation, this.apiClass);
-            result = await ClientRegistry.execute(
+            const callContext = new CallContext(this.apiName, route.methodName, route.operation);
+            result = await CallRegistry.execute(
                 this.apiClass,
                 callContext,
                 (timeoutMs: number) => {
@@ -555,11 +545,6 @@ export abstract class ProxyClient {
                         );
                         CallDeadline.throwIfAborted(signal);
                         response = received;
-                        http.facts = new HttpCallFacts(
-                            route.httpMethod,
-                            HttpCallFacts.maskUrl(request.url, route.mask),
-                            received.status,
-                        );
                         return this.readResponse(received, route);
                     });
                 },
@@ -595,7 +580,7 @@ export abstract class ProxyClient {
         const headers = new Map<string, string>();
         const body = this.bodySerializer.serialize(this.apiName, route, mapped.body, headers);
         const context = this.outboundContextHeaders(
-            DestinationTrust.forRoute(route),
+            DestinationTrust.forAuthMode(route.authMeta?.methods[0]),
         );
         for (const entry of context.entries()) headers.set(entry[0], entry[1]);
         return new ClientRequest(
@@ -683,21 +668,6 @@ export abstract class ProxyClient {
             );
         }
         // 266 is protocol success, but its body represents an expected user exception.
-        if (response.ok && response.status !== 266 && route.noResponseBody) {
-            return this.readVoidSuccess(response);
-        }
-        // An EXTERNAL_OUTBOUND success is shaped by the vendor, and the runtime cannot see `void`, so
-        // ANY 2xx is accepted (#1348). 266 is OUR protocol's code and means nothing on a vendor's wire.
-        if (response.ok && route.externalOutbound) {
-            // webpieces-disable no-any-unknown -- a vendor success body is the caller's own DTO, erased here
-            const body: unknown = await this.readOutboundSuccessBody(response);
-            ClientErrorTranslator.throwIfFailure(
-                this.responseDtoFactory.fromFetch(response, body),
-                this.clientRole(),
-                route,
-            );
-            return body;
-        }
         if (response.ok && response.status !== 266) {
             if (!this.bodyReader.isJson(response)) {
                 throw new Error(
@@ -712,7 +682,6 @@ export abstract class ProxyClient {
             ClientErrorTranslator.throwIfFailure(
                 this.responseDtoFactory.fromFetch(response, body),
                 this.clientRole(),
-                route,
             );
             return body;
         }
@@ -723,41 +692,7 @@ export abstract class ProxyClient {
         ClientErrorTranslator.throwFailure(
             this.responseDtoFactory.fromFetch(response, protocolError),
             this.clientRole(),
-            route,
         );
-    }
-
-    /**
-     * A `responseBody: NONE` route's success: resolve `undefined` whatever the server sent — a 204,
-     * an empty 200, `{}`, or a vendor's undocumented body (a spec that documents no response is not
-     * proof the wire is empty). The body is DRAINED so the connection is reusable, and never parsed:
-     * there is no DTO for it to become.
-     */
-    private async readVoidSuccess(response: Response): Promise<undefined> {
-        if (response.status !== 204) await response.text();
-        return undefined;
-    }
-
-    /**
-     * An EXTERNAL_OUTBOUND 2xx body (#1348): a 204 or an empty body is `undefined`, a JSON body is
-     * parsed (a `Promise<void>` caller ignores it), and a non-JSON body — a vendor's `OK`, even one
-     * mislabelled `application/json` — is `undefined`. It never throws: a vendor acknowledging with
-     * an odd body still succeeded.
-     */
-    // webpieces-disable no-any-unknown -- a vendor success body is the caller's own DTO, erased here
-    private async readOutboundSuccessBody(response: Response): Promise<unknown> {
-        if (response.status === 204 || response.status === 205) return undefined;
-        const text = await response.text();
-        if (text.trim() === '' || !this.bodyReader.isJson(response)) return undefined;
-        // eslint-disable-next-line @webpieces/no-unmanaged-exceptions -- a malformed vendor ack is still a success
-        try {
-            // webpieces-disable no-any-unknown -- parsed vendor JSON is returned to the typed contract caller
-            return JSON.parse(text) as unknown;
-            // webpieces-disable catch-must-propagate -- a 2xx whose body is not valid JSON is the vendor acknowledging, not a failure (#1348)
-        } catch (err: unknown) {
-            //const error = toError(err);
-            return undefined;
-        }
     }
 
     /** Preserve empty, JSON, and protocol text bodies for caller-owned full responses. */

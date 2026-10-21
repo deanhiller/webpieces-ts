@@ -6,13 +6,10 @@ import {
     CLOUDTASKS,
     CRON,
     Endpoint,
-    EXTERNAL_INBOUND,
-    EXTERNAL_OUTBOUND,
-    HTTP_METHODS as CONTRACT_HTTP_METHODS,
+    EXTERNAL,
+    GET,
     MaskLog,
-    PathParam,
-    QueryParam,
-    QueryString,
+    POST,
     READ,
     RPC,
     WRITE,
@@ -36,7 +33,6 @@ import {
     DocumentedEndpoint,
     DocumentedEndpointOptions,
     DocumentedMcpTool,
-    DocumentedParameter,
 } from '../model/ApiDocModel';
 import { TypeRef } from '../model/TypeRef';
 import { ApiDocExtractionError } from './ApiDocExtractionError';
@@ -88,16 +84,9 @@ const API_TYPE = ApiType.name;
  * quietly matching nothing.
  */
 /** The REAL trigger kinds and side-effect contracts, so a contract cannot declare one that is not. */
-const ENDPOINT_KINDS: readonly string[] = [RPC, CLOUDTASKS, CRON, EXTERNAL_INBOUND, EXTERNAL_OUTBOUND];
+const ENDPOINT_KINDS: readonly string[] = [RPC, CLOUDTASKS, CRON, EXTERNAL];
 const ENDPOINT_OPERATIONS: readonly string[] = [READ, WRITE_IDEMPOTENT, WRITE];
-const HTTP_METHODS: readonly string[] = CONTRACT_HTTP_METHODS;
-
-/** The parameter decorators that bind an argument to the URL; every other argument is the body. */
-const PATH_PARAM = PathParam.name;
-const QUERY_PARAM = QueryParam.name;
-/** `@QueryString()` binds the WHOLE query string (a free-form multimap) — never a body, never a named parameter. */
-const QUERY_STRING = QueryString.name;
-const URL_BINDINGS: readonly string[] = [PATH_PARAM, QUERY_PARAM, QUERY_STRING];
+const HTTP_METHODS: readonly string[] = [GET, POST];
 
 /** `@Endpoint`'s four required positions, named so a failure can say which one is missing. */
 const ARGUMENT_NAMES = ['http method', 'path', 'operation', 'trigger kind'];
@@ -474,7 +463,6 @@ export class ApiDocExtractor {
             streaming?.initialResponse ?? this.responseOf(member, methodName, resolver),
             streaming,
             ApiDocExtractor.decoratorCall(member, WpLocalOnly.name) !== undefined,
-            this.parametersOf(member, methodName, folder, resolver),
         );
     }
 
@@ -541,70 +529,17 @@ export class ApiDocExtractor {
         return declared.length === 0 ? DEFAULT_API_TYPES : declared;
     }
 
-    /**
-     * The request BODY: the one argument WITHOUT a URL binding (`@PathParam` / `@QueryParam` /
-     * `@QueryString`) — the
-     * same rule the router uses. An endpoint whose every argument is URL-bound has no request
-     * document. A single-argument contract is unchanged: its one argument is the body.
-     */
+    /** The FIRST parameter's declared type. An endpoint with no parameter has no request document. */
     private requestOf(
         member: ts.MethodDeclaration,
         methodName: string,
         resolver: TypeResolver,
     ): TypeRef | undefined {
-        const parameter = member.parameters.find(
-            (candidate: ts.ParameterDeclaration) => ApiDocExtractor.urlBindingOf(candidate) === undefined,
-        );
+        const parameter = member.parameters[0];
         if (parameter?.type === undefined) {
             return undefined;
         }
         return resolver.resolve(parameter.type, `${methodName}.request`);
-    }
-
-    /** Every URL-bound argument, in declaration order — an OpenAPI `parameters` list. */
-    private parametersOf(
-        member: ts.MethodDeclaration,
-        methodName: string,
-        folder: ConstantFolder,
-        resolver: TypeResolver,
-    ): DocumentedParameter[] {
-        const parameters: DocumentedParameter[] = [];
-        for (const parameter of member.parameters) {
-            const binding = ApiDocExtractor.urlBindingOf(parameter);
-            if (binding === undefined) continue;
-            // A free-form query string documents no named parameter: the vendor's grammar is the vendor's.
-            if (ApiDocExtractor.canonicalCallName(binding.expression) === QUERY_STRING) continue;
-            const wireArgument = binding.arguments[0];
-            if (wireArgument === undefined) {
-                throw new ApiDocExtractionError(
-                    `a URL parameter of '${methodName}' declares no wire name`,
-                    SourceLocation.of(binding),
-                    "Name the wire key: @PathParam('id') / @QueryParam('limit').",
-                );
-            }
-            const name = folder.foldString(wireArgument, `URL parameter name on '${methodName}'`);
-            const isPath = ApiDocExtractor.canonicalCallName(binding.expression) === PATH_PARAM;
-            const type =
-                parameter.type === undefined
-                    ? undefined
-                    : resolver.resolve(parameter.type, `${methodName}.${name}`);
-            const optional =
-                parameter.questionToken !== undefined || parameter.initializer !== undefined;
-            parameters.push(
-                new DocumentedParameter(isPath ? 'path' : 'query', name, isPath || !optional, type),
-            );
-        }
-        return parameters;
-    }
-
-    /** The `@PathParam(...)` / `@QueryParam(...)` call on one argument, if it has one. */
-    // webpieces-disable no-function-outside-class -- private static declaration reader
-    private static urlBindingOf(parameter: ts.ParameterDeclaration): ts.CallExpression | undefined {
-        for (const name of URL_BINDINGS) {
-            const call = ApiDocExtractor.decoratorCall(parameter, name);
-            if (call !== undefined) return call;
-        }
-        return undefined;
     }
 
     /** The declared return type, unwrapped from `Promise<...>` by the resolver. */
@@ -636,8 +571,8 @@ export class ApiDocExtractor {
         for (const element of array.elements) {
             if (!ts.isCallExpression(element)) throw new ApiDocExtractionError('Auth method is not a descriptor call', SourceLocation.of(element), 'Use canonical credential descriptors.');
             const name = this.canonicalCallName(element.expression);
-            const kind = new Map([['jwt', 'jwt'], ['oidcSameProject', 'oidc'], ['oidcSvcs', 'oidc'], ['sharedSecret', 'shared-secret'], ['vendorAuth', 'vendorAuth'], ['apiKey', 'apikey']]).get(name ?? '');
-            if (!kind) throw new ApiDocExtractionError('Unknown authentication descriptor', SourceLocation.of(element), 'Import jwt/oidcSameProject/oidcSvcs/sharedSecret/vendorAuth/apiKey from core-util.');
+            const kind = new Map([['jwt', 'jwt'], ['oidcSameProject', 'oidc'], ['oidcSvcs', 'oidc'], ['sharedSecret', 'shared-secret'], ['webhook', 'webhook'], ['apiKey', 'apikey']]).get(name ?? '');
+            if (!kind) throw new ApiDocExtractionError('Unknown authentication descriptor', SourceLocation.of(element), 'Import jwt/oidcSameProject/oidcSvcs/sharedSecret/webhook/apiKey from core-util.');
             methods.push(new DocumentedAuthMethod(kind, element.arguments.map((argument: ts.Expression) => argument.getText()), name === API_KEY_AUTH ? this.apiKeyOf(element, folder) : undefined));
         }
         return new DocumentedAuth(undefined, methods);

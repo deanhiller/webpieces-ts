@@ -1,5 +1,5 @@
 /**
- * WHO calls an `external` endpoint — read from `@Endpoint(POST, p, WRITE, EXTERNAL_INBOUND, { calledBy })`, carried onto
+ * WHO calls an `external` endpoint — read from `@Endpoint(POST, p, WRITE, EXTERNAL, { calledBy })`, carried onto
  * the trigger, and drawn as the INBOUND box.
  *
  * The bug this closes: that box named OUR OWN contract (`WhatsAppApi`), which the service box the
@@ -63,7 +63,7 @@ describe('reading calledBy / callerKind out of the @Endpoint options literal', (
         const scanned = scan(`
 @ApiPath('/hooks')
 export abstract class HookApi {
-    @Endpoint(POST, '/inbound', WRITE, EXTERNAL_INBOUND, { formPost: true, calledBy: 'twilio' })
+    @Endpoint(POST, '/inbound', WRITE, EXTERNAL, { formPost: true, calledBy: 'twilio' })
     abstract inbound(): Promise<void>;
 }`);
         expect(byName(scanned.methods, 'inbound').caller).toEqual({
@@ -77,7 +77,7 @@ export abstract class HookApi {
         const scanned = scan(`
 @ApiPath('/hooks')
 export abstract class HookApi {
-    @Endpoint(POST, '/push', WRITE, EXTERNAL_INBOUND, { calledBy: 'pubsub-push', callerKind: 'system' })
+    @Endpoint(POST, '/push', WRITE, EXTERNAL, { calledBy: 'pubsub-push', callerKind: 'system' })
     abstract push(): Promise<void>;
 }`);
         expect(byName(scanned.methods, 'push').caller).toEqual({
@@ -91,7 +91,7 @@ export abstract class HookApi {
 const TWILIO = 'twilio';
 @ApiPath('/hooks')
 export abstract class HookApi {
-    @Endpoint(POST, '/inbound', WRITE, EXTERNAL_INBOUND, { calledBy: TWILIO })
+    @Endpoint(POST, '/inbound', WRITE, EXTERNAL, { calledBy: TWILIO })
     abstract inbound(): Promise<void>;
 }`);
         expect(byName(scanned.methods, 'inbound').caller).toEqual({
@@ -123,22 +123,22 @@ describe('an unreadable caller is a FATAL generation diagnostic', () => {
     const cases: [string, string, string][] = [
         [
             'options without calledBy',
-            `@Endpoint(POST, '/a', WRITE, EXTERNAL_INBOUND)`,
+            `@Endpoint(POST, '/a', WRITE, EXTERNAL)`,
             '<no options argument>',
         ],
         [
             'options without calledBy',
-            `@Endpoint(POST, '/a', WRITE, EXTERNAL_INBOUND, { formPost: true })`,
+            `@Endpoint(POST, '/a', WRITE, EXTERNAL, { formPost: true })`,
             '<no calledBy>',
         ],
         [
             'a cross-module const',
-            `@Endpoint(POST, '/a', WRITE, EXTERNAL_INBOUND, { calledBy: IMPORTED })`,
+            `@Endpoint(POST, '/a', WRITE, EXTERNAL, { calledBy: IMPORTED })`,
             'IMPORTED',
         ],
         [
             'an unknown callerKind',
-            `@Endpoint(POST, '/a', WRITE, EXTERNAL_INBOUND, { calledBy: 'x', callerKind: 'vendor' })`,
+            `@Endpoint(POST, '/a', WRITE, EXTERNAL, { calledBy: 'x', callerKind: 'vendor' })`,
             "callerKind: 'vendor'",
         ],
     ];
@@ -178,7 +178,7 @@ export abstract class HookApi {
                 at: 'libraries/b/src/index.ts:30',
             },
         ]);
-        expect(error.message).toContain("2 'external-inbound' @Endpoint(s) do not declare WHO calls them");
+        expect(error.message).toContain("2 'external' @Endpoint(s) do not declare WHO calls them");
         expect(error.message).toContain('WhatsAppApi.inbound');
         expect(error.message).toContain('GmailApi.watch');
         expect(error.message).toContain("calledBy: 'twilio'");
@@ -245,7 +245,7 @@ describe('drawing the inbound caller', () => {
                     {
                         name: 'inbound',
                         path: '/inbound',
-                        kind: 'external-inbound',
+                        kind: 'external',
                         operation: 'write',
                         caller: { kind: 'saas', label: 'twilio' },
                     },
@@ -266,14 +266,14 @@ describe('drawing the inbound caller', () => {
                     {
                         name: 'inbound',
                         path: '/in',
-                        kind: 'external-inbound',
+                        kind: 'external',
                         operation: 'write',
                         caller: { kind: 'saas', label: 'twilio' },
                     },
                     {
                         name: 'status',
                         path: '/status',
-                        kind: 'external-inbound',
+                        kind: 'external',
                         operation: 'write',
                         caller: { kind: 'saas', label: 'twilio' },
                     },
@@ -297,14 +297,14 @@ describe('drawing the inbound caller', () => {
                     {
                         name: 'inbound',
                         path: '/in',
-                        kind: 'external-inbound',
+                        kind: 'external',
                         operation: 'write',
                         caller: { kind: 'saas', label: 'twilio' },
                     },
                     {
                         name: 'watch',
                         path: '/watch',
-                        kind: 'external-inbound',
+                        kind: 'external',
                         operation: 'write',
                         caller: { kind: 'saas', label: 'gmail' },
                     },
@@ -326,7 +326,7 @@ describe('drawing the inbound caller', () => {
                     {
                         name: 'drain',
                         path: '/drain',
-                        kind: 'external-inbound',
+                        kind: 'external',
                         operation: 'write',
                         caller: { kind: 'queue', label: 'sqs-inbox' },
                     },
@@ -348,7 +348,7 @@ describe('inbound callers and outbound sinks occupy separate rows for the same v
                 {
                     name: 'inbound',
                     path: '/in',
-                    kind: 'external-inbound',
+                    kind: 'external',
                     operation: 'write',
                     caller: { kind: 'saas', label: 'twilio' },
                 },

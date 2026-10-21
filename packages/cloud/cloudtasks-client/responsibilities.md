@@ -6,7 +6,7 @@ Cloud Tasks enqueue client generated from a shared `@PubSub` API contract — th
 
 - Enqueue client generation from a `@PubSub` contract (`ClientCloudTasksFactory.createPubSubClient`, `TaskProxyClient`, `TaskClientConfig`)
 - `CloudTaskScheduler` (addToQueue / schedule / cancelJob) + the out-of-band schedule-frame bridge
-- Enqueue-attempt naming (`TaskName`), ALREADY_EXISTS-as-success (`TaskAlreadyExistsError`, `[ENQUEUE-DEDUP]`), gRPC → webpieces error mapping (`GrpcErrorMapper`), the process-wide Google-request customizer / gax defaults (`GcpTaskRegistry`) and the overridable `CloudTasksClientProvider`. The retry itself is NOT here: it is core-util's shared `RetryStrategy` via `ClientRegistry`
+- Enqueue-attempt naming (`TaskName`), ALREADY_EXISTS-as-success (`TaskAlreadyExistsError`, `[ENQUEUE-DEDUP]`), gRPC → webpieces error mapping (`GrpcErrorMapper`), the process-wide Google-request customizer / gax defaults (`GcpTaskRegistry`) and the overridable `CloudTasksClientProvider`. The retry itself is NOT here: it is core-util's shared `RetryStrategy` via `CallRegistry`
 - `TaskInvoker` abstraction and impls: `GcpTaskInvoker` (real @google-cloud/tasks) and `InMemoryTaskInvoker` (in-process queue that delivers via a real HTTP `fetch` to `targetUrl + path`, e.g. `localhost:{port}`, for tests/local dev)
 
 ## Out of Scope

@@ -48,7 +48,6 @@ import {
     ProjectApiRelations,
     UndeclaredExternalCaller,
     UndeclaredEndpointOperation,
-    VoidResponseMismatch,
     UnresolvedApiCall,
     UnresolvedEndpointPath,
     apiRefKey,
@@ -63,7 +62,6 @@ import {
     RootUnionApiTypeError,
     UndeclaredExternalCallerError,
     UndeclaredEndpointOperationError,
-    VoidResponseMismatchError,
     UnresolvedEndpointPathError,
 } from './api-contract-errors';
 import { RootUnionFindings, RootUnionRule, RootUnionScan } from './root-union-scan';
@@ -132,8 +130,6 @@ export interface ApiScanResult {
     undeclaredExternalCallers: UndeclaredExternalCaller[];
     /** Endpoints lacking the explicit side-effect contract used for retry safety and MCP hints. */
     undeclaredEndpointOperations: UndeclaredEndpointOperation[];
-    /** Endpoints whose response-body declaration disagrees with their kind or signature. Fatal. */
-    voidResponseMismatches: VoidResponseMismatch[];
     /** `no-root-union-api-type`'s findings. Fatal in buildApiContracts — see root-union-scan.ts. */
     rootUnions: RootUnionFindings;
     /**
@@ -362,7 +358,6 @@ export class ApiUsageScanner {
             undeclaredExternalCallers: this.decoratorArgDiagnostics.undeclaredExternalCallers(),
             undeclaredEndpointOperations:
                 this.decoratorArgDiagnostics.undeclaredEndpointOperations(),
-            voidResponseMismatches: this.decoratorArgDiagnostics.voidResponseMismatches(),
             rootUnions: new RootUnionScan(
                 this.workspaceRoot,
                 this.projectInfos,
@@ -592,9 +587,6 @@ export function buildApiContracts(scan: ApiScanResult): ApiContracts {
     if (scan.undeclaredEndpointOperations.length > 0) {
         throw new UndeclaredEndpointOperationError(scan.undeclaredEndpointOperations);
     }
-    if ((scan.voidResponseMismatches ?? []).length > 0) {
-        throw new VoidResponseMismatchError(scan.voidResponseMismatches);
-    }
     // A shape no function-calling API will accept, read perfectly well — unlike the four above, which
     // are contracts the scan could not READ at all.
     if (!scan.rootUnions.isEmpty()) throw new RootUnionApiTypeError(scan.rootUnions);
@@ -668,9 +660,8 @@ export function describeNonLiteralDecoratorArgs(args: readonly NonLiteralDecorat
 // webpieces-disable no-function-outside-class -- pure formatter, mirrors describeUnresolvedApiCalls
 export function describeMismatchedEndpointKinds(contracts: ApiContracts): string[] {
     const allowedByKind: Record<string, readonly EndpointKind[]> = {
-        rpc: ['rpc', 'external-inbound', 'external-outbound'],
-        pubsub: ['cloudtasks', 'cron', 'external-inbound'],
-        external: ['external-outbound'],
+        rpc: ['rpc', 'external'],
+        pubsub: ['cloudtasks', 'cron', 'external'],
     };
     const problems: string[] = [];
     for (const api of Object.keys(contracts)) {

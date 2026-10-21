@@ -52,7 +52,6 @@ import { McpBindOptions } from './McpBindOptions';
 import { McpInvocationContext, McpProgressReporter } from './McpInvocationContext';
 import { AuthorizedMcpTools, McpToolRegistry, RegisteredMcpTool } from './McpToolRegistry';
 import { McpCorrelation } from './McpToolCallRendering';
-import { McpProtocol } from './McpProtocol';
 import { WpMcpErrorTranslator } from './WpMcpErrorTranslator';
 
 const log = LogManager.getLogger('WpMcpServer');
@@ -336,7 +335,7 @@ export class WpMcpServer<TGrant> {
     /** Run one un-filtered edge step under `LogApiCall`, so its failure gets exactly one log line. */
     private async logEdge<R>(step: string, work: () => Promise<R>): Promise<R> {
         return this.logApiCall.execute(
-            new ApiMethodInfo('server', 'McpEndpoint', step, McpProtocol),
+            new ApiMethodInfo('server', 'McpEndpoint', step),
             new McpEdgeRequest(step),
             work,
         );
@@ -491,12 +490,10 @@ export class WpMcpServer<TGrant> {
         const name = request.params.name;
         const operation = new McpSdkOperation(`tools/call ${name}`);
         return this.sdkBoundary(operation, async () => {
-            McpCorrelation.stamp(new McpCorrelation(sdkContext.mcpReq.id, McpProtocol, name));
+            McpCorrelation.stamp(new McpCorrelation(sdkContext.mcpReq.id, name));
             const tool = authentication.tools.find(name);
             if (!tool) throw this.translator.unknownTool(name);
-            McpCorrelation.stamp(
-                new McpCorrelation(sdkContext.mcpReq.id, tool.apiClass, name, tool.operation),
-            );
+            McpCorrelation.stamp(new McpCorrelation(sdkContext.mcpReq.id, name, tool.operation));
             operation.toolStage = true;
             const result = await this.callTool(tool, request, authentication, sdkContext);
             result._meta = this.translator.resultMeta(McpCorrelation.requestId());
@@ -642,7 +639,6 @@ export class WpMcpServer<TGrant> {
         const name = params?.['name'];
         return new McpCorrelation(
             typeof id === 'string' || typeof id === 'number' ? id : null,
-            McpProtocol,
             typeof name === 'string' ? name : undefined,
         );
     }

@@ -219,9 +219,7 @@ export class SpecReader {
             node.text('description') ?? '',
             this.tagOf(node),
             this.requestSchemaOf(node),
-            this.requestParametersOf(root, pathItem, node, 'header'),
-            this.requestParametersOf(root, pathItem, node, 'path'),
-            this.requestParametersOf(root, pathItem, node, 'query'),
+            this.requestHeadersOf(root, pathItem, node),
             this.responsesOf(root, node),
             isWebhook,
             isWebhook ? [] : this.operationSecurityKeys(root, node),
@@ -277,26 +275,24 @@ export class SpecReader {
     }
 
     /**
-     * Every parameter `in` one location (`header`, `path` or `query`): the PATH ITEM's first, then the
-     * operation's — an operation parameter of the same name overrides the path item's, which is
-     * OpenAPI's own rule. A header name compares case-insensitively; a path or query name does not.
+     * Every `in: "header"` parameter: the PATH ITEM's first, then the operation's — an operation
+     * parameter of the same name overrides the path item's, which is OpenAPI's own rule.
      */
-    private requestParametersOf(
+    private requestHeadersOf(
         root: JsonNode,
         pathItem: JsonNode,
         node: JsonNode,
-        location: string,
     ): readonly HeaderInfo[] {
         const byName = new Map<string, HeaderInfo>();
         for (const holder of [pathItem, node]) {
             for (const listed of holder.list('parameters')) {
                 const parameter = this.dereference(root, listed);
                 const name = parameter.text('name');
-                if (parameter.text('in') !== location || name === undefined) {
+                if (parameter.text('in') !== 'header' || name === undefined) {
                     continue;
                 }
                 byName.set(
-                    location === 'header' ? name.toLowerCase() : name,
+                    name.toLowerCase(),
                     new HeaderInfo(
                         name,
                         parameter.flag('required') === true,

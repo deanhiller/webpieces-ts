@@ -11,16 +11,8 @@ export class DeletedAuthCompileAssertions {
         void CoreUtil.oidc;
         // @ts-expect-error use WpAuth([sharedSecret(...)]) and WpAuthorization
         void CoreUtil.WpAuthSharedSecret;
-        // @ts-expect-error use WpAuth([vendorAuth(...)]) and WpAuthorization
+        // @ts-expect-error use WpAuth([webhook(...)]) and WpAuthorization
         void CoreUtil.WpAuthWebhook;
-        // @ts-expect-error webhook(name) is renamed vendorAuth(name): one VendorAuthHook mints, refreshes and verifies
-        void CoreUtil.webhook;
-        // @ts-expect-error EXTERNAL is split: EXTERNAL_INBOUND (an outside system calls us) or EXTERNAL_OUTBOUND (we call it)
-        void CoreUtil.EXTERNAL;
-        // @ts-expect-error renamed assertExternalEndpointKinds, which also checks EXTERNAL_OUTBOUND contracts
-        void CoreUtil.assertEveryExternalEndpointDeclaresCaller;
-        // @ts-expect-error renamed assertEveryVendorAuthEndpointRetainsRawBody
-        void CoreUtil.assertEveryWebhookEndpointRetainsRawBody;
         // @ts-expect-error use WpAuth([apiKey(...)]) and WpAuthorization
         void CoreUtil.WpAuthApiKey;
         // @ts-expect-error use separate WpLocalOnly, authentication and authorization

@@ -6,8 +6,6 @@ import { ApiCallContext } from '../ApiCallContext';
 import { ContextKey, AnyContextKey } from '../../ContextKey';
 import { WebpiecesCoreHeaders } from '../WebpiecesCoreHeaders';
 import { ClientRegistry } from '../ClientRegistry';
-import { ApiRegistry } from '../ApiRegistry';
-import { CallScope } from '../CallScope';
 import {
     ApiBadRequestError,
     ApiEndUserError,
@@ -15,17 +13,12 @@ import {
     ApiRetriesExhaustedError,
     ApiUnavailableError,
 } from '../../errors';
-import { CallOutcome, ErrorClassifier } from '../ErrorClassifier';
+import { CallOutcome, ErrorClassifier, KeyedErrorClassifier } from '../ErrorClassifier';
 import { MaskSpec } from '../LogFieldMask';
 import { LogManager } from '../../logging/LogManager';
 import { HeaderRegistry } from '../HeaderRegistry';
 import { Logger } from '../../logging/Logger';
 import { LoggerFactory } from '../../logging/LoggerFactory';
-
-/** Synthetic contract classes: a call identity always names its contract CLASS (#1350). */
-class BrowserLogApi {}
-class HelperFsdbApi {}
-class OfflineApi {}
 
 /**
  * A recording {@link ApiCallContext}: keeps every (key, value) it was asked to stamp so a test can
@@ -55,12 +48,9 @@ class RecordingApiCallContext implements ApiCallContext {
     }
 }
 
-/** A synthetic contract CLASS: the classifier ladder is keyed by it, never by its name. */
-class SaveApi {}
-
 /** The call identity per side: apiClass 'SaveApi' matches client+server; controllerName is server impl. */
 const info = (side: ApiSide): ApiMethodInfo =>
-    new ApiMethodInfo(side, 'SaveApi', 'save', SaveApi, 'SaveController');
+    new ApiMethodInfo(side, 'SaveApi', 'save', 'SaveController');
 const API = WebpiecesCoreHeaders.API_CALL_INFO;
 
 describe('LogApiCall.execute — success + active guard', () => {
@@ -95,7 +85,7 @@ describe('LogApiCall.execute — success + active guard', () => {
 
         const tag = ctx.values()[0];
         expect(tag.method).toEqual(
-            new ApiMethodInfo('server', 'SaveApi', 'save', SaveApi, 'SaveController'),
+            new ApiMethodInfo('server', 'SaveApi', 'save', 'SaveController'),
         );
         expect(tag.method.apiClass).toBe('SaveApi');
         expect(tag.type).toBe('request');
@@ -196,12 +186,13 @@ describe('LogApiCall.execute — pluggable per-client failure classification', (
     // other specs in this file (which assert the built-in behavior).
     afterEach(() => {
         ClientRegistry.resetForTests();
-        ApiRegistry.resetForTests();
     });
 
-    it('a per-contract classifier flips a client-side error from failure → success (OTHER)', async () => {
+    it('a per-apiClass classifier flips a client-side error from failure → success (OTHER)', async () => {
         // Firestore-style: a not-found miss on this client is EXPECTED, not a failure.
-        ApiRegistry.setErrorClassifier(new NotFoundIsExpected(), CallScope.api(SaveApi));
+        ClientRegistry.addErrorClassifier(
+            new KeyedErrorClassifier('SaveApi', new NotFoundIsExpected()),
+        );
 
         const ctx = new RecordingApiCallContext();
 
@@ -220,7 +211,9 @@ describe('LogApiCall.execute — pluggable per-client failure classification', (
     });
 
     it('an error the classifier DEFERS on still uses the built-in (client → failure)', async () => {
-        ApiRegistry.setErrorClassifier(new NotFoundIsExpected(), CallScope.api(SaveApi));
+        ClientRegistry.addErrorClassifier(
+            new KeyedErrorClassifier('SaveApi', new NotFoundIsExpected()),
+        );
 
         const ctx = new RecordingApiCallContext();
 
@@ -470,7 +463,6 @@ describe('LogApiCall.execute — opt-in field masking', () => {
             side,
             'HelperFsdbApi',
             'getEmailAccount',
-            HelperFsdbApi,
             undefined,
             new MaskSpec({ refreshToken: 'full', accessToken: 'last4' }),
         );
@@ -543,7 +535,7 @@ describe('LogApiCall.execute — opt-in field masking', () => {
     });
 });
 
-describe('LogApiCall outcome mapping (ApiRegistry.classify, final by position)', () => {
+describe('LogApiCall outcome mapping (ClientRegistry.classify, final by position)', () => {
     const resultOf = async (side: ApiSide, error: Error): Promise<string | undefined> => {
         const ctx = new RecordingApiCallContext();
         await expect(
@@ -598,7 +590,7 @@ describe('LogApiCall.execute — noLogging routes are not api-logged', () => {
 
     /** The log-shipping endpoint: a real call identity, declared noLogging. */
     const noLoggingInfo = (side: ApiSide): ApiMethodInfo =>
-        new ApiMethodInfo(side, 'BrowserLogApi', 'sendBatch', BrowserLogApi, undefined, undefined, true);
+        new ApiMethodInfo(side, 'BrowserLogApi', 'sendBatch', undefined, undefined, true);
 
     /** True when any captured line carries `marker` — the "it still logs" half of each pair. */
     const logged = (marker: string): boolean =>
@@ -689,7 +681,7 @@ describe('LogApiCall.execute — noLogging routes are not api-logged', () => {
     });
 
     it('defaults to false, so every existing ApiMethodInfo caller keeps logging', () => {
-        expect(new ApiMethodInfo('client', 'SaveApi', 'save', SaveApi).noLogging).toBe(false);
+        expect(new ApiMethodInfo('client', 'SaveApi', 'save').noLogging).toBe(false);
         expect(info('client').noLogging).toBe(false);
         expect(noLoggingInfo('client').noLogging).toBe(true);
     });
@@ -702,7 +694,6 @@ describe('LogApiCall.execute — noLogging routes are not api-logged', () => {
             'client',
             'OfflineApi',
             'fetchManifest',
-            OfflineApi,
             undefined,
             undefined,
             false,
@@ -711,8 +702,8 @@ describe('LogApiCall.execute — noLogging routes are not api-logged', () => {
         );
         expect(hiddenButLogged.hideProgress).toBe(true);
         expect(hiddenButLogged.allowUpgradeInFlight).toBe(true);
-        expect(new ApiMethodInfo('client', 'SaveApi', 'save', SaveApi).hideProgress).toBe(false);
-        expect(new ApiMethodInfo('client', 'SaveApi', 'save', SaveApi).allowUpgradeInFlight).toBe(false);
+        expect(new ApiMethodInfo('client', 'SaveApi', 'save').hideProgress).toBe(false);
+        expect(new ApiMethodInfo('client', 'SaveApi', 'save').allowUpgradeInFlight).toBe(false);
 
         await ctx.logApiCall.execute(hiddenButLogged, { q: 'x' }, async () => ({ ok: true }));
         expect(logged('[API-client-req]')).toBe(true);
@@ -797,7 +788,6 @@ describe('LogApiCall — logged body cap (#1300)', () => {
             'client',
             'HelperFsdbApi',
             'getEmailAccount',
-            HelperFsdbApi,
             undefined,
             new MaskSpec({ refreshToken: 'full' }),
         );

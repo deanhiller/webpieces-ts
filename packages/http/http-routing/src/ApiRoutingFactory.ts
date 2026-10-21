@@ -3,7 +3,7 @@ import {
     isApiPath,
     getEndpoints,
     getAuthMeta,
-    assertEveryVendorAuthEndpointRetainsRawBody,
+    assertEveryWebhookEndpointRetainsRawBody,
     assertNotInternalApi,
     LogManager,
     RouteMetadataFactory,
@@ -11,7 +11,6 @@ import {
     MISSING_AUTH_DECORATOR_FIX,
     RuntimeLocality,
     isLocalOnly,
-    isExternalOutboundApi,
 } from '@webpieces/core-util';
 import 'reflect-metadata';
 import { ROUTING_METADATA_KEYS } from './decorators';
@@ -84,18 +83,10 @@ export class ApiRoutingFactory<TApi = unknown, TController extends TApi = TApi> 
      * Validates controller methods and auth decorators in single loop.
      */
     configure(routeBuilder: RouteBuilder): void {
-        // An EXTERNAL_OUTBOUND contract is an outside system's API: nothing in this repo serves it.
-        if (isExternalOutboundApi(this.apiMetaClass)) {
-            throw new Error(
-                `${this.apiMetaClass.name || 'Unknown'} is an EXTERNAL_OUTBOUND contract — an outside system's API that ` +
-                    `this repo only CALLS — so no server may addRoutes it. Bind a client to it instead ` +
-                    `(createRpcClientAndBind), or change its endpoints to RPC / EXTERNAL_INBOUND if this service serves them.`,
-            );
-        }
-        // A vendorAuth route whose transport keeps no bytes has nothing to verify. That is a wiring
+        // A webhook route whose transport keeps no bytes has nothing to verify. That is a wiring
         // mistake, so it dies at STARTUP naming the fix — not as a 401 in production on exactly the
         // traffic the endpoint exists for.
-        assertEveryVendorAuthEndpointRetainsRawBody(this.apiMetaClass);
+        assertEveryWebhookEndpointRetainsRawBody(this.apiMetaClass);
         // Two endpoints on one method + path would silently shadow each other in the route map.
         RouteMetadataFactory.assertNoDuplicateRoutes(this.apiMetaClass);
 

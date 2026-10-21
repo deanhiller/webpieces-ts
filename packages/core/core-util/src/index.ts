@@ -68,20 +68,16 @@ export {
     isApiPath,
     getAuthMeta,
     assertEveryEndpointHasAuthMode,
-    assertExternalEndpointKinds,
-    isExternalOutboundApi,
-    assertEveryVendorAuthEndpointRetainsRawBody,
+    assertEveryExternalEndpointDeclaresCaller,
+    assertEveryWebhookEndpointRetainsRawBody,
     validateNoConflictingDecorators,
     METADATA_KEYS,
 } from './http/decorators';
 export {
     PathParam,
     QueryParam,
-    QueryString,
     getHttpParameterDeclarations,
 } from './http/http-parameter-decorators';
-export { QueryParams } from './http/QueryParams';
-export type { QueryParamValue } from './http/QueryParams';
 export { WpInt, WpMin, WpMax, NUMERIC_METADATA_KEYS } from './http/numeric-field-decorators';
 export type { Integer } from './http/numeric-field-decorators';
 export {
@@ -149,42 +145,15 @@ export type {
     HttpMethod,
     HttpParameterSource,
     HttpParameterValueType,
-    HttpQueryItemType,
 } from './http/HttpContract';
-export {
-    GET,
-    POST,
-    PUT,
-    PATCH,
-    DELETE,
-    HTTP_METHODS,
-    verbCarriesBody,
-    isHttpMethod,
-} from './http/HttpContract';
+export { GET, POST } from './http/HttpContract';
 export type {
     EndpointKind,
     EndpointOperation,
     EndpointOptions,
     ExternalEndpointOptions,
-    NoResponseBodyOptionEndpointOptions,
 } from './http/decorators';
-export {
-    RPC,
-    CLOUDTASKS,
-    CRON,
-    EXTERNAL_INBOUND,
-    EXTERNAL_OUTBOUND,
-    READ,
-    WRITE_IDEMPOTENT,
-    WRITE,
-    NONE,
-} from './http/decorators';
-export {
-    ExternalContextKeys,
-    getExternalContextKeys,
-    declaresExternalContextKeys,
-} from './http/ExternalContextKeys';
-export type { ResponseBodyKind } from './http/decorators';
+export { RPC, CLOUDTASKS, CRON, EXTERNAL, READ, WRITE_IDEMPOTENT, WRITE } from './http/decorators';
 export {
     InvalidEndpointForMcp,
     InvalidEndpointForMcpMetadata,
@@ -230,7 +199,7 @@ export {
     oidcSameProject,
     oidcSvcs,
     sharedSecret,
-    vendorAuth,
+    webhook,
     apiKey,
 } from './http/auth-mode';
 export type {
@@ -256,8 +225,8 @@ export {
     getQueueName,
 } from './http/api-kind';
 export type { ApiKind } from './http/api-kind';
-// WHO calls an EXTERNAL_INBOUND endpoint — the caller declaration
-// @Endpoint(POST, ..., WRITE, EXTERNAL_INBOUND, { calledBy })
+// WHO calls an `external` endpoint — the caller declaration
+// @Endpoint(POST, ..., WRITE, EXTERNAL, { calledBy })
 // requires, and the reader for it.
 export {
     EXTERNAL_SYSTEM_KINDS,
@@ -302,9 +271,8 @@ export {
 // Context keys + registry (the global magic-context header system)
 export { HeaderRegistry } from './http/HeaderRegistry';
 export { ClientRegistry } from './http/ClientRegistry';
-// What BOTH sides of a call read (error translator + classifier), scoped by CallScope.
-export { ApiRegistry } from './http/ApiRegistry';
-export { CallScope, CallScopeLadder } from './http/CallScope';
+export { CallRegistry } from './http/CallRegistry';
+export type { CallScope } from './http/CallRegistry';
 export { TransportDefault } from './http/TransportDefault';
 export { RetryStrategy } from './http/RetryStrategy';
 export { CallDeadline } from './http/CallDeadline';
@@ -324,7 +292,7 @@ export type { Locality } from './http/RuntimeLocality';
 // normalised into, so an ErrorTranslator implementation is written once and serves both.
 export { HttpHeader, HttpResponseStatus, HttpResponseDto } from './http/HttpResponseDto';
 // Pluggable, bidirectional error translation (app exception <-> the WHOLE response). Set on
-// ApiRegistry at startup; consulted before the built-in webpieces mapping on BOTH sides.
+// ClientRegistry at startup; consulted before the built-in webpieces mapping on BOTH sides.
 export type { ErrorTranslator } from './http/ErrorTranslator';
 // THE webpieces default translator — always installed, and what an app's own translator delegates to
 // in order to decline an error. ONE class, both halves, node and browser alike.
@@ -339,10 +307,10 @@ export type { Surface } from './http/Surface';
 // The ONE rule for an error RECEIVED from another process, shared verbatim by HTTP and IPC.
 export { ReceivedApiErrorRule } from './errors/ReceivedApiErrorRule';
 // Pluggable per-client error classification: one CallOutcome (EXPECTED / TRANSIENT_FAILURE /
-// FAILURE) per thrown API-call error. Registered on ApiRegistry at startup; read by RetryStrategy,
-// ClientRegistry's per-attempt log line, LogApiCall and the MCP renderer's retry advice.
+// FAILURE) per thrown API-call error. Registered on ClientRegistry at startup; read by RetryStrategy,
+// CallRegistry's per-attempt log line, LogApiCall and the MCP renderer's retry advice.
 export type { ErrorClassifier } from './http/ErrorClassifier';
-export { CallOutcome } from './http/ErrorClassifier';
+export { CallOutcome, KeyedErrorClassifier } from './http/ErrorClassifier';
 export {
     WebpiecesDefaultErrorClassifier,
     WEBPIECES_DEFAULT_ERROR_CLASSIFIER,
@@ -377,7 +345,7 @@ export type { MaskMode } from './http/LogFieldMask';
 // The structured `api` tag + the context-writer seam LogApiCall stamps through. The Node
 // RequestContext-backed impl lives in @webpieces/core-context, the browser one in
 // @webpieces/http-client-browser; each is CONSTRUCTED by its package, never installed globally.
-export { ApiCallInfo, HttpCallFacts, HttpCallFactsHolder } from './http/ApiCallInfo';
+export { ApiCallInfo } from './http/ApiCallInfo';
 export type { ApiCallDirection, ApiResult } from './http/ApiCallInfo';
 // Console-render bridge: turns LogApiCall's [LogApiCall] bracket into [API.{side}.{phase}] locally.
 export {

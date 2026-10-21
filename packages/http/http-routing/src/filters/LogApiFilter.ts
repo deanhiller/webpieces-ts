@@ -10,7 +10,6 @@ import {
     ApiMethodInfo,
 } from '@webpieces/core-util';
 import { Filter, Service } from '@webpieces/core-util';
-import { ApiImplementationError } from '@webpieces/core-util/errors';
 import { WpResponse } from '../WpResponse';
 import { MethodMeta } from '../MethodMeta';
 
@@ -82,19 +81,10 @@ export class LogApiFilter extends Filter<MethodMeta, WpResponse<unknown>> {
             RequestContext.putUntrusted(WebpiecesCoreHeaders.METHOD, rm.methodName);
         }
 
-        // Every routed endpoint is built by RouteMetadataFactory from its contract CLASS, so a route
-        // reaching this filter without one is a framework wiring bug — never an `undefined` contract.
-        if (rm.apiClass === undefined) {
-            throw new ApiImplementationError(
-                `Route ${rm.httpMethod} ${rm.path} (${rm.methodName}) has no contract class.`,
-            );
-        }
         const info = new ApiMethodInfo(
             'server',
             rm.apiName ?? rm.controllerClassName ?? 'Unknown',
             rm.methodName,
-            // The contract CLASS: the key ApiRegistry.classify resolves its CallScope ladder on.
-            rm.apiClass,
             rm.controllerClassName,
             rm.mask,
             // The server half of the same self-reference: `[API-server-req]` for a log-INGEST

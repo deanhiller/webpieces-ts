@@ -138,7 +138,6 @@ jobs:
                       - [@webpieces/api-doc-model@${{ steps.version.outputs.full_version }}](https://www.npmjs.com/package/@webpieces/api-doc-model/v/${{ steps.version.outputs.full_version }})
                       - [@webpieces/openapi-generator@${{ steps.version.outputs.full_version }}](https://www.npmjs.com/package/@webpieces/openapi-generator/v/${{ steps.version.outputs.full_version }})
                       - [@webpieces/docs-site@${{ steps.version.outputs.full_version }}](https://www.npmjs.com/package/@webpieces/docs-site/v/${{ steps.version.outputs.full_version }})
-                      - [@webpieces/openapi-import@${{ steps.version.outputs.full_version }}](https://www.npmjs.com/package/@webpieces/openapi-import/v/${{ steps.version.outputs.full_version }})
                       - [@webpieces/core-mock@${{ steps.version.outputs.full_version }}](https://www.npmjs.com/package/@webpieces/core-mock/v/${{ steps.version.outputs.full_version }})
                       - [@webpieces/core-context@${{ steps.version.outputs.full_version }}](https://www.npmjs.com/package/@webpieces/core-context/v/${{ steps.version.outputs.full_version }})
                       - [@webpieces/core-util@${{ steps.version.outputs.full_version }}](https://www.npmjs.com/package/@webpieces/core-util/v/${{ steps.version.outputs.full_version }})

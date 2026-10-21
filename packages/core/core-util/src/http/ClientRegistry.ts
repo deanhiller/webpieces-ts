@@ -1,76 +1,8 @@
-import { Attempt, CallContext, CallStrategy } from './CallStrategy';
-import { CallDeadline } from './CallDeadline';
-import { TransportDefault } from './TransportDefault';
-import { ApiRegistry } from './ApiRegistry';
-import { CallOutcome } from './ErrorClassifier';
+import { ErrorTranslator } from './ErrorTranslator';
+import { CallOutcome, ErrorClassifier, KeyedErrorClassifier } from './ErrorClassifier';
+import { WEBPIECES_DEFAULT_ERROR_CLASSIFIER } from './WebpiecesDefaultErrorClassifier';
+import { WEBPIECES_DEFAULT_ERROR_TRANSLATOR } from './WebpiecesDefaultErrorTranslator';
 import { ApiMethodInfo } from './ApiMethodInfo';
-import { LogManager } from '../logging/LogManager';
-import { LOG_API_CALL_LOGGER_NAME } from './ApiCallLogName';
-import { toError } from '../lib/errorUtils';
-import { CallScope, CallScopeLadder } from './CallScope';
-
-// The same logger LogApiCall writes its [API-*] lines to, so an attempt line sits beside the final one.
-const log = LogManager.getLogger(LOG_API_CALL_LOGGER_NAME);
-
-class CallPolicy {
-    timeoutMs?: number;
-    // webpieces-disable no-any-unknown -- global policy spans heterogeneous response DTOs
-    strategy?: CallStrategy<unknown>;
-}
-
-/**
- * Counts the attempts of ONE call and logs each retried TRANSIENT failure. It wraps the attempt
- * BEFORE any strategy sees it, so an app-written strategy gets the same lines as `RetryStrategy`.
- *
- * The line for attempt N is written when attempt N+1 STARTS — i.e. only for an attempt that was
- * actually retried. The last attempt's failure is what escapes, and `LogApiCall`'s final
- * `[API-client-resp-FAIL]` line covers it, so a call that gave up after 4 attempts logs 3 attempt
- * lines and 1 FAIL line, never the last failure twice. An EXPECTED or FAILURE attempt is not logged
- * here either; the final line covers it.
- */
-class LoggedAttempts<T> {
-    private attempts = 0;
-    private pendingTransient?: Error;
-
-    constructor(
-        private readonly context: CallContext,
-        private readonly attempt: Attempt<T>,
-    ) {}
-
-    readonly run: Attempt<T> = async (timeoutMs: number): Promise<T> => {
-        this.flushRetried();
-        this.attempts += 1;
-        // webpieces-disable no-unmanaged-exceptions -- observe the attempt's failure, rethrow it unchanged
-        // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
-        try {
-            return await this.attempt(timeoutMs);
-        } catch (err: unknown) {
-            const error = toError(err);
-            const methodInfo = new ApiMethodInfo(
-                'client',
-                this.context.apiName,
-                this.context.methodName,
-                this.context.contract,
-            );
-            this.pendingTransient =
-                ApiRegistry.classify(error, methodInfo) === CallOutcome.TRANSIENT_FAILURE
-                    ? error
-                    : undefined;
-            // eslint-disable-next-line @webpieces/no-unmanaged-exceptions -- rethrows the attempt's own failure unchanged
-            throw err;
-        }
-    };
-
-    private flushRetried(): void {
-        const error = this.pendingTransient;
-        if (error === undefined) return;
-        this.pendingTransient = undefined;
-        log.warn(
-            `[API-client-attempt-TRANSIENT] ${this.context.apiName}.${this.context.methodName} ` +
-                `attempt ${this.attempts} errorType=${error.constructor.name} error=${error.message}`,
-        );
-    }
-}
 
 /**
  * Derives a base URL for a service name that has NO registered mapping — the pluggable half of
@@ -119,22 +51,6 @@ export type ServiceUrlDeriver = (svcName: string) => Promise<string>;
  * ClientRegistry.addUrlMapping('email', 'https://email.other-region.example');
  * ClientRegistry.setDeriver(gcpCloudRunDeriver());                  // everything else, on GCP
  * ```
- *
- * The OTHER half: everything ONLY an outbound call reads besides its URL — the per-call timeout and
- * strategy, for browser RPC, node RPC, and Cloud Tasks ENQUEUE. ONE implementation; every transport
- * calls {@link ClientRegistry.execute}. (What BOTH sides read — the error translator and classifier —
- * lives on `ApiRegistry`.)
- *
- * Ladder: strategy method -> API -> ALL first; ANY strategy replaces the ENTIRE timeout ladder.
- * Otherwise timeout method -> API -> ALL. Otherwise the transport's {@link TransportDefault} (its
- * timeout, and its strategy if it has one). A registered TIMEOUT is therefore a decision for a single
- * attempt and also replaces a transport's default strategy; to keep retrying with a different attempt
- * deadline, register a `RetryStrategy` instead.
- *
- * RPC has no default retry (only the application knows whether repeating a POST is safe); Cloud Tasks
- * enqueue does (see `TransportDefault`). An app opts RPC in with
- * `ClientRegistry.setStrategy(new RetryStrategy(...).run, CallScope.api(CatalogApi))` — and `RetryStrategy` never
- * retries a `WRITE`, even registered at ALL.
  */
 export class ClientRegistry {
     /** svcName -> resolved base URL. Process-global; populated at startup per environment. */
@@ -143,8 +59,38 @@ export class ClientRegistry {
     /** The fallback for svcNames with no mapping. Undefined = no derivation in this environment. */
     private static deriver: ServiceUrlDeriver | undefined;
 
-    /** The timeout / strategy per {@link CallScope} — method -> API -> ALL -> the transport default. */
-    private static readonly policies = new CallScopeLadder<CallPolicy>(() => new CallPolicy());
+    /**
+     * The process's ONE {@link ErrorTranslator}. NEVER undefined — it starts life holding
+     * {@link WEBPIECES_DEFAULT_ERROR_TRANSLATOR}, and {@link ClientRegistry.setErrorTranslator}
+     * REPLACES it. Process-global, set once at startup on the SERVER and in the BROWSER — the same
+     * no-DI pattern as {@link ClientRegistry.mappings} above.
+     *
+     * There is no "did anyone register one" question anywhere in the framework because this field
+     * cannot be empty: every caller makes ONE unconditional call, and an app translator declines an
+     * error by DELEGATING to {@link WebpiecesDefaultErrorTranslator}.
+     *
+     * ONE, not a list, on purpose: an app that has several layers of error policy composes them
+     * INSIDE its own `toWire`, where the precedence is written down, instead of leaving it implicit
+     * in the order two unrelated startup paths happened to register.
+     */
+    private static errorTranslator: ErrorTranslator = WEBPIECES_DEFAULT_ERROR_TRANSLATOR;
+
+    /**
+     * The app/company DEFAULT {@link ErrorClassifier} — ONE per process, reads {@link ApiMethodInfo.side}
+     * so a single classifier covers the server router AND all internal clients. NEVER undefined: it
+     * starts life holding the webpieces built-in ({@link WEBPIECES_DEFAULT_ERROR_CLASSIFIER}) and
+     * {@link ClientRegistry.setDefaultErrorClassifier} replaces it. Populated once at startup on the
+     * SERVER and in the BROWSER — same no-DI pattern as {@link ClientRegistry.mappings}.
+     */
+    private static appDefaultErrorClassifier: ErrorClassifier = WEBPIECES_DEFAULT_ERROR_CLASSIFIER;
+
+    /**
+     * Per-EXTERNAL-client {@link ErrorClassifier}s, keyed by {@link ApiMethodInfo.apiClass}
+     * ('FirestoreAdminClient', 'ClaudeApi', ...). Consulted BEFORE the default tier, so an external
+     * client overrides the default for its own apiClass only. Internal clients / the server register
+     * nothing here and fall through to the default. See {@link ClientRegistry.classify}.
+     */
+    private static readonly errorClassifiersByApiClass = new Map<string, ErrorClassifier>();
 
     /** Map a service name to `http://localhost:<port>`. */
     // webpieces-disable no-function-outside-class -- static global singleton (like HeaderRegistry/LogManager); populated once at startup, never DI-injected
@@ -237,80 +183,94 @@ export class ClientRegistry {
         return url;
     }
 
-    // webpieces-disable no-function-outside-class -- process-global startup registry
-    static setTimeout(timeoutMs: number | undefined, scope: CallScope): void {
-        if (timeoutMs !== undefined) CallDeadline.validate(timeoutMs);
-        ClientRegistry.policies.at(scope).timeoutMs = timeoutMs;
-    }
-
-    // webpieces-disable no-function-outside-class -- process-global startup registry
-    static setStrategy(
-        // webpieces-disable no-any-unknown -- registry strategies span heterogeneous response DTOs
-        strategy: CallStrategy<unknown> | undefined,
-        scope: CallScope,
-    ): void {
-        ClientRegistry.policies.at(scope).strategy = strategy;
-    }
-
     /**
-     * Run one call under its registered policy. `context` names the method (its `methodName` selects
-     * the per-method policy) and carries the endpoint's declared operation, so the SAME context a
-     * strategy sees is the one the transport's deadline puts on an `ApiCallTimeoutError`. The context
-     * a strategy sees always carries `api` as its {@link CallContext.contract}, so the error
-     * classification inside a strategy resolves on the same ladder.
+     * Install the app's {@link ErrorTranslator} — the ONE symmetric owner of error translation for
+     * this process, server side AND every client side. Consulted BEFORE webpieces' built-in mapping
+     * in both directions. Call ONCE at startup, on the server AND in the browser, mirroring
+     * {@link ClientRegistry.addMapping}.
      *
-     * Every attempt is wrapped so a retried TRANSIENT failure logs one
-     * `WARN [API-client-attempt-TRANSIENT]` line (see {@link LoggedAttempts}).
+     * `set`, not `add`: see the field doc above for why a registry LIST is not wanted.
      */
-    // webpieces-disable no-function-outside-class -- transport-independent policy execution
-    static async execute<T>(
-        api: Function,
-        context: CallContext,
-        attempt: Attempt<T>,
-        fallback: TransportDefault,
-    ): Promise<T> {
-        const scoped =
-            context.contract === api
-                ? context
-                : new CallContext(context.apiName, context.methodName, context.operation, api);
-        const logged = new LoggedAttempts<T>(scoped, attempt).run;
-        const rungs = ClientRegistry.policies.rungs(api, scoped.methodName);
-        const strategy = rungs.find((p: CallPolicy) => p.strategy !== undefined)?.strategy;
-        if (strategy !== undefined) {
-            return (await strategy(logged, scoped)) as T;
-        }
-        const timeoutMs = rungs.find((p: CallPolicy) => p.timeoutMs !== undefined)?.timeoutMs;
-        if (timeoutMs !== undefined) {
-            return logged(timeoutMs);
-        }
-        if (fallback.strategy !== undefined) {
-            return (await fallback.strategy(logged, scoped)) as T;
-        }
-        return logged(fallback.timeoutMs);
+    // webpieces-disable no-function-outside-class -- static global singleton (like HeaderRegistry/LogManager); populated once at startup, never DI-injected
+    static setErrorTranslator(translator: ErrorTranslator): void {
+        ClientRegistry.errorTranslator = translator;
     }
 
     /**
-     * The registered TIMEOUT for a call — method -> API -> ALL -> `defaultMs` — ignoring every
-     * strategy. For a transport that hands timing to someone else for this call (Cloud Tasks enqueue
-     * with caller-supplied gax `CallOptions`) and still needs ONE safety cap so a hung channel cannot
-     * block forever. Raise it with {@link ClientRegistry.setTimeout}.
+     * THE {@link ErrorTranslator} for this process — never `undefined`, so a caller never branches.
+     *
+     * Until an app calls {@link ClientRegistry.setErrorTranslator} this is
+     * {@link WEBPIECES_DEFAULT_ERROR_TRANSLATOR}. A registered translator answers EVERY error and
+     * EVERY response, declining by delegating to the webpieces default (see {@link ErrorTranslator}),
+     * so every call site in the framework is one unconditional line.
      */
-    // webpieces-disable no-function-outside-class -- process-global registry lookup
-    static resolveTimeout(api: Function, methodName: string, defaultMs: number): number {
-        const rungs = ClientRegistry.policies.rungs(api, methodName);
-        return rungs.find((p: CallPolicy) => p.timeoutMs !== undefined)?.timeoutMs ?? defaultMs;
+    // webpieces-disable no-function-outside-class -- static global singleton (like HeaderRegistry/LogManager); populated once at startup, never DI-injected
+    static getErrorTranslator(): ErrorTranslator {
+        return ClientRegistry.errorTranslator;
+    }
+
+    /**
+     * Set the app/company DEFAULT error classifier — ONE per process, covering the server router and
+     * all internal clients (it branches on {@link ApiMethodInfo.side}). Call ONCE at startup, on the
+     * server AND in the browser. Overrides the webpieces built-in for calls no per-apiClass classifier
+     * claims. See {@link ErrorClassifier}.
+     */
+    // webpieces-disable no-function-outside-class -- static global singleton (like HeaderRegistry/LogManager); populated once at startup, never DI-injected
+    static setDefaultErrorClassifier(classifier: ErrorClassifier): void {
+        ClientRegistry.appDefaultErrorClassifier = classifier;
+    }
+
+    /**
+     * Register a per-EXTERNAL-client error classifier, keyed by its
+     * {@link KeyedErrorClassifier.apiClass} (e.g. 'FirestoreAdminClient'). Consulted BEFORE the
+     * default tier for calls with that apiClass. Call ONCE at startup. See {@link ErrorClassifier}.
+     */
+    // webpieces-disable no-function-outside-class -- static global singleton (like HeaderRegistry/LogManager); populated once at startup, never DI-injected
+    static addErrorClassifier(keyed: KeyedErrorClassifier): void {
+        ClientRegistry.errorClassifiersByApiClass.set(keyed.apiClass, keyed.classifier);
+    }
+
+    /**
+     * The {@link CallOutcome} of a thrown API-call error. Resolved most-specific-first, and ALWAYS
+     * definitive:
+     *   1. the per-apiClass classifier, if one is registered for `methodInfo.apiClass` — unless it defers;
+     *   2. else the app default classifier — unless it defers;
+     *   3. else the webpieces built-in ({@link WEBPIECES_DEFAULT_ERROR_CLASSIFIER}), which never defers.
+     *
+     * The ONE verdict read by `RetryStrategy` (retry only TRANSIENT), `CallRegistry`'s per-attempt
+     * log line, `LogApiCall` (EXPECTED → OTHER, else FAIL) and the MCP renderer's retry advice.
+     */
+    // webpieces-disable no-function-outside-class -- static global singleton (like HeaderRegistry/LogManager); populated once at startup, never DI-injected
+    static classify(error: Error, methodInfo: ApiMethodInfo): CallOutcome {
+        const perClient = ClientRegistry.errorClassifiersByApiClass.get(methodInfo.apiClass);
+        if (perClient !== undefined) {
+            const verdict = perClient.classify(error, methodInfo);
+            if (verdict !== undefined) {
+                return verdict;
+            }
+        }
+        const verdict = ClientRegistry.appDefaultErrorClassifier.classify(error, methodInfo);
+        if (verdict !== undefined) {
+            return verdict;
+        }
+        return WEBPIECES_DEFAULT_ERROR_CLASSIFIER.classify(error, methodInfo);
     }
 
     /**
      * Put the process-globals back to the state a fresh process starts in. For TESTS, so one spec
-     * cannot leak its registrations into the next: every URL mapping, the deriver, and every
-     * timeout / strategy rung. (`ApiRegistry.resetForTests()` resets the error translators and
-     * classifiers.)
+     * cannot leak its registrations into the next.
+     *
+     * It RESTORES the webpieces defaults rather than emptying the pluggable slots, which is the whole
+     * reason it is not called `clear()` any more: `getErrorTranslator()` and the default error
+     * classifier are non-optional now, so "cleared" is not a state they have. A spec that wants
+     * webpieces' own behaviour back asks for exactly that.
      */
     // webpieces-disable no-function-outside-class -- static global singleton (like HeaderRegistry/LogManager); populated once at startup, never DI-injected
     static resetForTests(): void {
         ClientRegistry.mappings.clear();
         ClientRegistry.deriver = undefined;
-        ClientRegistry.policies.clear();
+        ClientRegistry.errorTranslator = WEBPIECES_DEFAULT_ERROR_TRANSLATOR;
+        ClientRegistry.appDefaultErrorClassifier = WEBPIECES_DEFAULT_ERROR_CLASSIFIER;
+        ClientRegistry.errorClassifiersByApiClass.clear();
     }
 }

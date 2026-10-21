@@ -4,16 +4,11 @@ import {
     ClientRegistry,
     ApiErrorPayload,
     ApiBadRequestError,
-    ApiNotFoundError,
     ErrorTranslator,
     HttpHeader,
     HttpResponseDto,
     HttpResponseStatus,
-    RouteMetadata,
-    WRITE,
     WebpiecesDefaultErrorTranslator,
-    ApiRegistry,
-    CallScope,
 } from '@webpieces/core-util';
 import { ExpressWrapper } from '../ExpressWrapper';
 import { RequestContextHeaders } from '@webpieces/core-context';
@@ -105,11 +100,10 @@ function newWrapper(): ExpressWrapper {
 describe('ExpressWrapper.handleError registry integration', () => {
     beforeEach(() => {
         ClientRegistry.resetForTests();
-        ApiRegistry.resetForTests();
     });
 
     it('serializes an installed custom type (460) the built-in ladder cannot, VERBATIM', () => {
-        ApiRegistry.setErrorTranslator(new AiErrorTranslator(), CallScope.all());
+        ClientRegistry.setErrorTranslator(new AiErrorTranslator());
 
         const res = new FakeResponse();
         newWrapper().handleError(asResponse(res), new AiBadRequestError('bad ai input'));
@@ -129,7 +123,7 @@ describe('ExpressWrapper.handleError registry integration', () => {
         const withNone = new FakeResponse();
         newWrapper().handleError(asResponse(withNone), declined);
 
-        ApiRegistry.setErrorTranslator(new AiErrorTranslator(), CallScope.all()); // only claims AiBadRequestError
+        ClientRegistry.setErrorTranslator(new AiErrorTranslator()); // only claims AiBadRequestError
         const withTranslator = new FakeResponse();
         newWrapper().handleError(asResponse(withTranslator), declined);
 
@@ -144,7 +138,7 @@ describe('ExpressWrapper.handleError registry integration', () => {
     });
 
     it('does nothing once headers are already sent', () => {
-        ApiRegistry.setErrorTranslator(new AiErrorTranslator(), CallScope.all());
+        ClientRegistry.setErrorTranslator(new AiErrorTranslator());
 
         const res = new FakeResponse();
         res.headersSent = true;
@@ -152,107 +146,5 @@ describe('ExpressWrapper.handleError registry integration', () => {
 
         expect(res.statusCode).toBeUndefined();
         expect(res.body).toBeUndefined();
-    });
-});
-
-/** Synthetic contract classes: the translator ladder is keyed by the CLASS, never by its name. */
-abstract class InboundVendorApi {
-    abstract legacy(): Promise<void>;
-}
-abstract class OrdersApi {}
-
-/** The error envelope an INBOUND vendor expects back from us — nothing like ApiErrorPayload. */
-class VendorErrorEnvelope {
-    constructor(
-        readonly ok: boolean,
-        readonly reason: string,
-    ) {}
-}
-
-/** Renders every failure of the vendor's contract in the vendor's own envelope. */
-class InboundVendorTranslator implements ErrorTranslator {
-    private readonly fallback = new WebpiecesDefaultErrorTranslator();
-
-    toWire(error: Error): HttpResponseDto {
-        const notFound = error instanceof ApiNotFoundError;
-        return new HttpResponseDto(
-            new HttpResponseStatus(notFound ? 404 : 422, 'Vendor Error'),
-            [],
-            new VendorErrorEnvelope(false, notFound ? 'not_found' : 'rejected'),
-        );
-    }
-    fromWire(response: HttpResponseDto, role: ClientRole): void {
-        this.fallback.fromWire(response, role);
-    }
-}
-
-function routedWrapper(api: Function, methodName: string): ExpressWrapper {
-    const route = new RouteMetadata('POST', `/${methodName}`, methodName, WRITE);
-    route.apiClass = api;
-    return new ExpressWrapper(
-        () => Promise.resolve({}),
-        route.path,
-        new RequestContextHeaders(),
-        false,
-        false,
-        undefined,
-        route,
-    );
-}
-
-/**
- * The server half of the CallScope ladder: `toWire` is resolved for the MATCHED route's contract
- * class and method, so one inbound vendor contract answers in the vendor's envelope while every
- * other contract — and a failure with no route at all — keeps the default.
- */
-describe('ExpressWrapper.handleError resolves toWire per matched route (method -> API -> ALL)', () => {
-    beforeEach(() => {
-        ClientRegistry.resetForTests();
-        ApiRegistry.resetForTests();
-        ApiRegistry.setErrorTranslator(new InboundVendorTranslator(), CallScope.api(InboundVendorApi));
-    });
-
-    it('a per-API toWire renders the vendor envelope for its own contract', () => {
-        const res = new FakeResponse();
-        routedWrapper(InboundVendorApi, 'notify').handleError(asResponse(res), new ApiNotFoundError('order 9'));
-
-        expect(res.statusCode).toBe(404);
-        expect(JSON.parse(res.body ?? '{}')).toEqual({ ok: false, reason: 'not_found' });
-    });
-
-    it('another contract keeps the default for the very same error', () => {
-        const vendor = new FakeResponse();
-        routedWrapper(InboundVendorApi, 'notify').handleError(asResponse(vendor), new ApiNotFoundError('order 9'));
-        const other = new FakeResponse();
-        routedWrapper(OrdersApi, 'fetch').handleError(asResponse(other), new ApiNotFoundError('order 9'));
-
-        expect(other.statusCode).toBe(404);
-        expect(other.body).not.toBe(vendor.body);
-        expect(JSON.parse(other.body ?? '{}')).not.toHaveProperty('reason');
-    });
-
-    it('a 404 with no matched route (a failure before routing) uses ALL, here the default', () => {
-        const res = new FakeResponse();
-        newWrapper().handleError(asResponse(res), new ApiNotFoundError('no route'));
-
-        expect(res.statusCode).toBe(404);
-        expect(JSON.parse(res.body ?? '{}')).not.toHaveProperty('reason');
-    });
-
-    it('a per-method toWire beats the per-API one for that method only; ALL governs the rest', () => {
-        ApiRegistry.setErrorTranslator(new WebpiecesDefaultErrorTranslator(), CallScope.method(InboundVendorApi, 'legacy'));
-        ApiRegistry.setErrorTranslator(new AiErrorTranslator(), CallScope.all());
-
-        const legacy = new FakeResponse();
-        routedWrapper(InboundVendorApi, 'legacy').handleError(asResponse(legacy), new ApiBadRequestError('x'));
-        expect(JSON.parse(legacy.body ?? '{}')).not.toHaveProperty('reason');
-
-        const notify = new FakeResponse();
-        routedWrapper(InboundVendorApi, 'notify').handleError(asResponse(notify), new ApiBadRequestError('x'));
-        expect(JSON.parse(notify.body ?? '{}')).toEqual({ ok: false, reason: 'rejected' });
-
-        const orders = new FakeResponse();
-        routedWrapper(OrdersApi, 'fetch').handleError(asResponse(orders), new AiBadRequestError('bad ai input'));
-        expect(orders.statusCode).toBe(460);
     });
 });

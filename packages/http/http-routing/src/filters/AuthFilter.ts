@@ -5,8 +5,6 @@ import {
     HttpRequest,
     RawHttpRequest,
     RequestContext,
-    VendorAuthHook,
-    VENDOR_AUTH_HOOK,
 } from '@webpieces/core-context';
 import {
     AuthMode,
@@ -32,6 +30,8 @@ import {
     JWT_HOOK,
     OidcHook,
     OIDC_HOOK,
+    WebhookAuthCallback,
+    WEBHOOK_AUTH_CALLBACK,
 } from '../AuthHooks';
 import { AuthenticatedCallerContext } from '../AuthenticatedCallerContext';
 import { VERIFIED_MACHINE_CALLER, VerifiedMachineCaller } from '../AuthorizationHook';
@@ -75,8 +75,8 @@ const SHARED_SECRET_SCHEME = 'Webpieces';
  *  - oidc          → the bound {@link OidcHook} if any, else the framework {@link DefaultOidcVerifier}
  *                    run DIRECTLY — so a server that wires NOTHING still verifies Google OIDC against
  *                    the endpoint's caller scope (`oidcSameProject()` or `oidcSvcs([...])`).
- *  - vendorAuth    → the bound {@link VendorAuthHook} `verify`s the VENDOR's credential over the retained
- *                    raw request. No VendorAuthHook bound → 401, like jwt: an unverified vendor call is
+ *  - webhook       → the bound {@link WebhookAuthCallback} verifies the VENDOR's signature over the retained
+ *                    raw request. No WebhookAuthCallback bound → 401, like jwt: an unverified webhook is
  *                    never waved through because wiring was forgotten.
  *  - apikey        → the bound {@link ApiKeyHook} looks the CUSTOMER's key up (async, over the whole
  *                    header set) and returns the context to seed. No ApiKeyHook bound → 401, like jwt.
@@ -106,14 +106,14 @@ export class AuthFilter extends Filter<MethodMeta, WpResponse<unknown>> {
         // @optional: only bind an OidcHook to OVERRIDE the DefaultOidcVerifier caller policy.
         // webpieces-disable inject-annotation-not-needed-for-concrete-class -- see above: explicit token required for DI-resolved param
         @optional() @inject(OIDC_HOOK) private readonly oidcHook?: OidcHook,
-        // @optional: only bind a VendorAuthHook to enable vendorAuth(...) endpoints. Unbound = every such
+        // @optional: only bind a WebhookAuthCallback to enable webhook(...) endpoints. Unbound = every such
         // endpoint 401s, which is the ONE default that must not be the other way round.
         // webpieces-disable inject-annotation-not-needed-for-concrete-class -- see above: explicit token required for DI-resolved param
         @optional()
-        @inject(VENDOR_AUTH_HOOK)
-        private readonly vendorAuthHook?: VendorAuthHook,
+        @inject(WEBHOOK_AUTH_CALLBACK)
+        private readonly webhookAuthCallback?: WebhookAuthCallback,
         // @optional: only bind an ApiKeyHook to enable apiKey(...) endpoints. Unbound = every such
-        // endpoint 401s, for the same reason as the vendor hook above.
+        // endpoint 401s, for the same reason as the webhook hook above.
         // webpieces-disable inject-annotation-not-needed-for-concrete-class -- see above: explicit token required for DI-resolved param
         @optional() @inject(API_KEY_HOOK) private readonly apiKeyHook?: ApiKeyHook,
     ) {
@@ -181,7 +181,7 @@ export class AuthFilter extends Filter<MethodMeta, WpResponse<unknown>> {
                 this.enforceSharedSecret(this.credential(header, SHARED_SECRET_SCHEME), mode.secretKey);
                 RequestContext.putTrusted(VERIFIED_MACHINE_CALLER, new VerifiedMachineCaller('shared-secret', mode.secretKey));
                 return;
-            case 'vendorAuth': await this.enforceVendorAuth(mode.name, meta); return;
+            case 'webhook': await this.enforceWebhook(mode.name, meta); return;
             case 'apikey': await this.enforceApiKey(mode.regime, meta); return;
             case 'public': throw new ApiImplementationError('Public is not a protected auth alternative.');
         }
@@ -220,7 +220,7 @@ export class AuthFilter extends Filter<MethodMeta, WpResponse<unknown>> {
      * The auth mode -> {@link Surface} table, and the ONE place it is written down.
      *
      * `undefined` means "this mode is not a surface", which is a different statement from "unknown":
-     * `oidc` and `shared-secret` are internal hops that RELAY somebody else's surface, `vendorAuth`'s
+     * `oidc` and `shared-secret` are internal hops that RELAY somebody else's surface, `webhook`'s
      * sender is a vendor with no webpieces surface at all, and `local-only` is a developer's own box.
      *
      * An exhaustive switch with NO `default`, like {@link verifiesCaller} and
@@ -237,56 +237,56 @@ export class AuthFilter extends Filter<MethodMeta, WpResponse<unknown>> {
                 return 'public-api';
             case 'oidc':
             case 'shared-secret':
-            case 'vendorAuth':
+            case 'webhook':
             case 'public':
                 return undefined;
         }
     }
 
     /**
-     * `vendorAuth(name)`: hand the app's {@link VendorAuthHook} the verbatim request and let it call the
+     * `webhook(name)`: hand the app's {@link WebhookAuthCallback} the verbatim request and let it call the
      * VENDOR's own validator. Three ways to fail, all 401, all before the controller is entered:
      *
      * 1. NO hook bound — the endpoint is not enabled. Matches {@link JwtHook}'s documented behavior;
-     *    an unverified vendor call must never be waved through because wiring was forgotten.
-     * 2. NO raw request — the transport kept no bytes. `assertEveryVendorAuthEndpointRetainsRawBody`
+     *    an unverified webhook must never be waved through because wiring was forgotten.
+     * 2. NO raw request — the transport kept no bytes. `assertEveryWebhookEndpointRetainsRawBody`
      *    normally makes this a startup error, so reaching it means either a hand-registered route or
      *    an in-process caller (a spec) that published an HttpRequest with no {@link RawRequest}. The
      *    message says which fix applies rather than leaving a bare 401.
-     * 3. The hook threw — the credential did not verify.
+     * 3. The hook threw — the signature did not verify.
      *
      * Case 2 is checked HERE and nowhere else. {@link hasRawBytes} narrows the request to
      * {@link RawHttpRequest} at this one gate, so the hook's signature promises `raw` is present and
      * no vendor implementation ever writes `raw!` or a guard of its own.
      */
-    private async enforceVendorAuth(name: string, meta: MethodMeta): Promise<void> {
-        if (!this.vendorAuthHook) {
+    private async enforceWebhook(name: string, meta: MethodMeta): Promise<void> {
+        if (!this.webhookAuthCallback) {
             log.warn(
-                `Refusing vendorAuth('${name}') endpoint ${meta.routeMeta.path}: no VendorAuthHook is bound. ` +
-                    `Bind one (options.bind(VENDOR_AUTH_HOOK).to(YourVendorAuthHook)) to enable vendor verification.`,
+                `Refusing webhook('${name}') endpoint ${meta.routeMeta.path}: no WebhookAuthCallback is bound. ` +
+                    `Bind one (options.bind(WEBHOOK_AUTH_CALLBACK).to(YourWebhookAuthCallback)) to enable webhook verification.`,
             );
-            throw new ApiUnauthorizedError('Vendor auth is not enabled on this server');
+            throw new ApiUnauthorizedError('Webhook auth is not enabled on this server');
         }
         const request = RequestContext.getRequest();
         if (!this.hasRawBytes(request)) {
             log.warn(
-                `Refusing vendorAuth('${name}') endpoint ${meta.routeMeta.path}: the inbound request carries ` +
-                    `no raw bytes. Declare @Endpoint(POST, path, WRITE, EXTERNAL_INBOUND, { calledBy: '${name}', rawBody: true }); a ` +
+                `Refusing webhook('${name}') endpoint ${meta.routeMeta.path}: the inbound request carries ` +
+                    `no raw bytes. Declare @Endpoint(POST, path, WRITE, EXTERNAL, { calledBy: '${name}', rawBody: true }); a ` +
                     `spec driving this route in-process must publish an HttpRequest built with a RawRequest.`,
             );
             throw new ApiUnauthorizedError(
-                'Vendor credential cannot be verified: no raw request was retained',
+                'Webhook signature cannot be verified: no raw request was retained',
             );
         }
         // Throws ApiUnauthorizedError to deny. On success the vendor account the signature proved is
         // stamped through the SAME path a jwt or api-key caller takes.
-        const caller = await this.vendorAuthHook.verify(name, request);
+        const caller = await this.webhookAuthCallback.verifyWebhook(name, request);
         this.callerContext.publish(caller);
     }
 
     /**
      * The ONE place the framework decides a request carries the verbatim bytes. A TYPE PREDICATE, so
-     * the `true` branch hands {@link enforceVendorAuth} a {@link RawHttpRequest} with no cast and no
+     * the `true` branch hands {@link enforceWebhook} a {@link RawHttpRequest} with no cast and no
      * non-null assertion — the bad state stops being representable past this line rather than being
      * re-thrown about by every hook.
      */
@@ -366,12 +366,12 @@ export class AuthFilter extends Filter<MethodMeta, WpResponse<unknown>> {
                 return true;
             case 'jwt':
             case 'public':
-            // `vendorAuth` DOES authenticate its sender — but the sender is an outside VENDOR, not a
+            // `webhook` DOES authenticate its sender — but the sender is an outside VENDOR, not a
             // peer in this repo, and a vendor neither speaks nor forwards webpieces context headers.
             // So there is no forwarded identity to believe, and admitting one would mean trusting a
             // key a vendor's payload could carry. Same answer as the OUTBOUND half
             // (DestinationTrust.forAuthMode), which is the invariant that keeps the two ends agreeing.
-            case 'vendorAuth':
+            case 'webhook':
             // `apikey` authenticates the SENDER — but the sender is a CUSTOMER's codebase, not a peer
             // service in this repo, so its forwarded trusted context is exactly what must NOT be
             // believed: admitting it would let a partner assert another customer's org id on the wire.

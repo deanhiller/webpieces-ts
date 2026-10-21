@@ -1,12 +1,10 @@
 import { ClientRole } from '../errors/ClientRole';
-import { ApiRegistry } from './ApiRegistry';
+import { ClientRegistry } from './ClientRegistry';
 import { HttpHeader, HttpResponseDto, HttpResponseStatus } from './HttpResponseDto';
 import { WEBPIECES_DEFAULT_ERROR_TRANSLATOR } from './WebpiecesDefaultErrorTranslator';
 import { DtoValue } from '../mcp/DtoSchema';
 import { toError } from '../lib/errorUtils';
 import { StreamTransportError } from './StreamingContract';
-import { RouteMetadata } from './RouteMetadata';
-import { ErrorTranslator } from './ErrorTranslator';
 
 export class StreamProtocolError extends StreamTransportError {}
 
@@ -33,16 +31,10 @@ class ControlRecord {
     response?: ControlResponse;
 }
 
-/**
- * Reserved ASCII-RS controls share exactly the unary ErrorTranslator seam in both directions —
- * including its `CallScope` ladder: the translator is resolved for the streaming ROUTE's contract
- * class and method (method -> API -> ALL -> webpieces default), exactly as a unary call's is.
- */
+/** Reserved ASCII-RS controls share exactly the unary ErrorTranslator seam in both directions. */
 export class StreamErrorControl {
-    constructor(private readonly route: RouteMetadata) {}
-
     encode(error: Error): string {
-        const response = this.translator().toWire(error);
+        const response = ClientRegistry.getErrorTranslator().toWire(error);
         return `${String.fromCharCode(0x1e)}${JSON.stringify({ control: 'error', response })}\n`;
     }
 
@@ -51,7 +43,7 @@ export class StreamErrorControl {
         const response = this.response(line);
         // eslint-disable-next-line @webpieces/no-unmanaged-exceptions -- fromWire returns its typed result by throwing
         try {
-            this.translator().fromWire(response, role);
+            ClientRegistry.getErrorTranslator().fromWire(response, role);
             WEBPIECES_DEFAULT_ERROR_TRANSLATOR.fromWire(response, role);
         } catch (err: unknown) {
             const error = toError(err);
@@ -60,10 +52,6 @@ export class StreamErrorControl {
         return new StreamProtocolError(
             'Error translator returned for a JSONL error control record.',
         );
-    }
-
-    private translator(): ErrorTranslator {
-        return ApiRegistry.getErrorTranslator(this.route.apiClass, this.route.methodName);
     }
 
     private response(line: string): HttpResponseDto {

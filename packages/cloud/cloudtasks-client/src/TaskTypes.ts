@@ -99,7 +99,7 @@ export class TaskRequest {
  * HTTP POST to `targetUrl + path` — GcpTaskInvoker via Google Cloud Tasks, and
  * InMemoryTaskInvoker via an in-process queue that fetches the target directly.
  *
- * An invoker performs ONE attempt and never retries: retries belong to `ClientRegistry` (webpieces'
+ * An invoker performs ONE attempt and never retries: retries belong to `CallRegistry` (webpieces'
  * `RetryStrategy` by default) or, when `plan.gax` is set, to gax. It throws
  * `TaskAlreadyExistsError` for a name that already exists.
  */

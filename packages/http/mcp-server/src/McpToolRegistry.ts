@@ -5,7 +5,6 @@ import {
     assertApiTypeMatchesMcpTools,
     getAuthMeta,
     getEndpointKind,
-    getHttpParameterDeclarations,
     getEndpointOperation,
     getEndpoints,
     getWpMcpTools,
@@ -142,14 +141,6 @@ export class McpToolRegistry {
         if (getEndpointKind(apiClass, metadata.methodName) !== 'rpc') {
             throw new Error(
                 `@WpMcpTool ${apiClass.name}.${metadata.methodName} must be an RPC endpoint.`,
-            );
-        }
-        if (getHttpParameterDeclarations(apiClass, metadata.methodName).length > 0) {
-            throw new Error(
-                `@WpMcpTool ${apiClass.name}.${metadata.methodName} binds arguments to the URL with ` +
-                    '@PathParam/@QueryParam. An MCP tool receives exactly ONE argument (its input object), so ' +
-                    'an endpoint with path or query bindings is not an MCP tool: remove @WpMcpTool, or move ' +
-                    'those values into the request body.',
             );
         }
         const authMeta = getAuthMeta(apiClass, metadata.methodName);

@@ -162,7 +162,7 @@ describe('application-owned tools/call error translation', () => {
                 .setAuthorizationServers(['https://login.example.test'])
                 .setRequiredScopes(['tools']),
         );
-        // The translator is a PROCESS-GLOBAL now (issue #968 R4), mirroring ApiRegistry and
+        // The translator is a PROCESS-GLOBAL now (issue #968 R4), mirroring ClientRegistry and
         // IpcRegistry, not a member of WpMcpServerConfig.
         McpRegistry.setErrorTranslator(translators);
         const app: Express = express();

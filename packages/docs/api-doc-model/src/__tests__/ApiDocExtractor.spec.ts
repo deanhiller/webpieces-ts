@@ -134,7 +134,7 @@ describe('the contract itself', () => {
         expect(harness.endpoint(model, 'save').kind).toBe('rpc');
         expect(harness.endpoint(model, 'enqueue').kind).toBe('cloudtasks');
         expect(harness.endpoint(model, 'nightly').kind).toBe('cron');
-        expect(harness.endpoint(model, 'hook').kind).toBe('external-inbound');
+        expect(harness.endpoint(model, 'hook').kind).toBe('external');
     });
 
     it('FOLDS the verb and the operation, which arrive as ENUM MEMBERS and not literals', () => {

@@ -9,7 +9,7 @@ where it runs through the full server filter chain.
 // one shared contract
 @PubSub() @ApiPath('/email')
 abstract class EmailApi {
-    @Endpoint(POST, '/send', WRITE, CLOUDTASKS)   // Promise<void> by kind: delivered as 204, 0 bytes
+    @Endpoint(POST, '/send', WRITE, CLOUDTASKS)
     @WpAuth([oidcSameProject()])
     @WpAuthorization({ authType: AuthorizationType.SERVICE_ONLY })
     abstract sendEmail(r: SendEmailRequest): Promise<void>;
@@ -43,7 +43,7 @@ await scheduler.schedule(() => emailTasks.sendEmail(req), Date.now() + 60_000, n
 ## Enqueue retries (this is ENQUEUE, not delivery)
 
 The `createTask` gRPC call is retried by webpieces' shared `RetryStrategy` — the same
-`ClientRegistry.execute` the RPC clients use, with the enqueue transport default
+`CallRegistry.execute` the RPC clients use, with the enqueue transport default
 `RetryStrategy(5_000, 3, 500, 2, 4_000)`: 5 s per attempt, 3 retries, backoff 500 ms ×2 capped at
 4 s. Only a transient failure is retried (gRPC UNAVAILABLE, DEADLINE_EXCEEDED, RESOURCE_EXHAUSTED →
 `GrpcErrorMapper`); giving up throws a 502 `ApiRetriesExhaustedError`. Each retried attempt logs
@@ -68,13 +68,13 @@ for about an hour after its task runs or is deleted.
 new ScheduleOptions(taskName, taskTimeoutSeconds?, customizeTask?, gax?)
 ```
 
-- **`customizeTask`** (or `GcpTaskRegistry.setCustomizer(c, scope)`) — the Google
+- **`customizeTask`** (or `GcpTaskRegistry.setCustomizer(c, ...scope)`) — the Google
   `ICreateTaskRequest`, run LAST on every attempt's freshly built request. Request only, never timing.
   Call site wins over the registry (method → API → ALL).
-- **`gax`** (or `GcpTaskRegistry.setGax(options, scope)`) — `CallOptions` for the one `createTask`
+- **`gax`** (or `GcpTaskRegistry.setGax(options, ...scope)`) — `CallOptions` for the one `createTask`
   RPC. **Set ⇒ you own timing:** no webpieces strategy, ONE attempt, `createTask(request, yourGax)`
-  as given, under a safety cap from `ClientRegistry`'s timeout ladder (method → API → ALL → 30 s). Raise
-  the cap with `ClientRegistry.setTimeout(60_000, CallScope.api(EmailApi))` to give gax retries room. Exactly one retry
+  as given, under a safety cap from `CallRegistry`'s timeout ladder (method → API → ALL → 30 s). Raise
+  the cap with `CallRegistry.setTimeout(60_000, EmailApi)` to give gax retries room. Exactly one retry
   layer per enqueue — ours or gax's, never both.
 - **The client** — override `CloudTasksClientProvider` for channel/client settings:
 
@@ -95,11 +95,11 @@ construct any unbound class token, `@optional()` included, and fails on `CloudTa
 // you own timing AND retries (gax retries UNAVAILABLE); raise the safety cap
 await scheduler.addToQueue(() => api.sendEmail(req),
     new ScheduleOptions(TaskName.dedup(id), undefined, undefined, { timeout: 10_000, retry: { retryCodes: [14] } }));
-ClientRegistry.setTimeout(60_000, CallScope.api(EmailApi));
+CallRegistry.setTimeout(60_000, EmailApi);
 
 // process-wide defaults, no call-site edits
-GcpTaskRegistry.setCustomizer((request) => { request.task!.dispatchDeadline = { seconds: 900 }; return request; }, CallScope.all());
-ClientRegistry.setStrategy(new RetryStrategy(2_000, 5, 200, 2, 2_000).run, CallScope.api(WhatsAppProcessApi));  // tune OUR retries
+GcpTaskRegistry.setCustomizer((request) => { request.task!.dispatchDeadline = { seconds: 900 }; return request; }, 'ALL');
+CallRegistry.setStrategy(new RetryStrategy(2_000, 5, 200, 2, 2_000).run, WhatsAppProcessApi);  // tune OUR retries
 ```
 
 `createTask`'s public promise exposes no `cancel()`; on the default path the gRPC deadline equals the

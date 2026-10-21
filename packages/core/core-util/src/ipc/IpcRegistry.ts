@@ -5,7 +5,7 @@ import { WEBPIECES_DEFAULT_IPC_ERROR_TRANSLATOR } from './WebpiecesDefaultIpcErr
 
 /**
  * IpcRegistry - the process-global home of the ONE {@link IpcErrorTranslator}, mirroring
- * `ApiRegistry` for HTTP and `McpRegistry` for MCP.
+ * `ClientRegistry` for HTTP and `McpRegistry` for MCP.
  *
  * ONE REGISTRY PER PROTOCOL, and that is the design: the three speak different wire shapes
  * (`HttpResponseDto`, `CallToolResult`, `ApiErrorPayload`), so one combined registry would either

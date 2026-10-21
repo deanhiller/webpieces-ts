@@ -1,6 +1,6 @@
 # Client timeouts, retries and strategies
 
-Browser RPC, node RPC and Cloud Tasks enqueue all run through ONE implementation: `ClientRegistry.execute` in `@webpieces/core-util`. A strategy registered at ALL / API / method governs every transport identically. The only per-transport difference is the `TransportDefault` each passes — what happens when nobody registered anything:
+Browser RPC, node RPC and Cloud Tasks enqueue all run through ONE implementation: `CallRegistry.execute` in `@webpieces/core-util`. A strategy registered at ALL / API / method governs every transport identically. The only per-transport difference is the `TransportDefault` each passes — what happens when nobody registered anything:
 
 | transport | `TransportDefault` | meaning |
 |---|---|---|
@@ -9,15 +9,15 @@ Browser RPC, node RPC and Cloud Tasks enqueue all run through ONE implementation
 
 A deadline rejects with `ApiCallTimeoutError`; it never silently resolves.
 
-Configure the shared, browser-safe `ClientRegistry` at application startup (separately in each browser/server process). Keys use the actual API class identity, not its name. Existing clients read the policy on every call.
+Configure the shared, browser-safe `CallRegistry` at application startup (separately in each browser/server process). Keys use the actual API class identity, not its name. Existing clients read the policy on every call.
 
 ```ts
-import { CallScope, ClientRegistry, RetryStrategy } from '@webpieces/core-util';
+import { CallRegistry, RetryStrategy } from '@webpieces/core-util';
 
-ClientRegistry.setTimeout(5_000, CallScope.all());
-ClientRegistry.setTimeout(10_000, CallScope.api(CatalogApi));
-ClientRegistry.setTimeout(45_000, CallScope.method(CatalogApi, 'upload'));
-ClientRegistry.setStrategy(new RetryStrategy(2_000, 5, 200, 2, 2_000).run, CallScope.api(CatalogApi));
+CallRegistry.setTimeout(5_000, 'ALL');
+CallRegistry.setTimeout(10_000, CatalogApi);
+CallRegistry.setTimeout(45_000, CatalogApi, 'upload');
+CallRegistry.setStrategy(new RetryStrategy(2_000, 5, 200, 2, 2_000).run, CatalogApi);
 ```
 
 The ladder, in this order:
@@ -26,7 +26,7 @@ The ladder, in this order:
 2. Only without a registered strategy: timeout API method → API → ALL — one attempt with that deadline.
 3. Only with neither: the transport's `TransportDefault` (its timeout, and its strategy if it has one).
 
-**A strategy found at any level replaces the entire timeout ladder**, even a more-specific method timeout. **A registered timeout replaces the transport default, including its strategy**: registering `ClientRegistry.setTimeout(10_000, CallScope.api(EmailApi))` makes that contract's enqueue a single 10 s attempt. To keep retrying with a different attempt deadline, register a `RetryStrategy` instead. Passing `undefined` to either setter removes that level's setting, exposing the next level. `ClientRegistry.resetForTests()` resets policies for test isolation.
+**A strategy found at any level replaces the entire timeout ladder**, even a more-specific method timeout. **A registered timeout replaces the transport default, including its strategy**: registering `CallRegistry.setTimeout(10_000, EmailApi)` makes that contract's enqueue a single 10 s attempt. To keep retrying with a different attempt deadline, register a `RetryStrategy` instead. Passing `undefined` to either setter removes that level's setting, exposing the next level. `CallRegistry.clear()` resets policies for test isolation.
 
 Timeouts are milliseconds, positive and finite, at most 2,147,483,647 (the platform timer limit). Invalid registered values and invalid `call(timeoutMs)` values reject configuration/calls instead of accidentally becoming near-immediate platform timers.
 
@@ -36,7 +36,7 @@ Timeouts are milliseconds, positive and finite, at most 2,147,483,647 (the platf
 
 It asks two questions with two owners:
 
-- **The error** — `ApiRegistry.classify(error, methodInfo)` returns a `CallOutcome`. Only `TRANSIENT_FAILURE` is retried (unavailable, connection, timeouts, 429 / backoff, bad-gateway). `EXPECTED` and `FAILURE` are definitive and rethrown unchanged. See [portable IPC and errors](portable-ipc-and-errors.md) for the classifier tiers.
+- **The error** — `ClientRegistry.classify(error, methodInfo)` returns a `CallOutcome`. Only `TRANSIENT_FAILURE` is retried (unavailable, connection, timeouts, 429 / backoff, bad-gateway). `EXPECTED` and `FAILURE` are definitive and rethrown unchanged. See [portable IPC and errors](portable-ipc-and-errors.md) for the classifier tiers.
 - **The endpoint** — `CallContext.operation`. A `WRITE` is **never** retried, even with the strategy registered at ALL: a transient failure on a non-idempotent write may already have happened. `READ` and `WRITE_IDEMPOTENT` are retried. Cloud Tasks enqueue reports `WRITE_IDEMPOTENT` (every attempt carries the same task name).
 
 When it actually retried and ran out it throws `ApiRetriesExhaustedError` (`cause` = the last attempt's error, `attempts` = how many ran). That error is classified `FAILURE` and published as **HTTP 502**, never 503, so no layer above retries again: retries happen at ONE layer. A call that made a single attempt rethrows its own error unchanged.
@@ -47,14 +47,14 @@ There is no second "retry-safe operations" strategy: `RetryStrategy` IS it. It l
 
 ```ts
 // once, at app startup — a browser bundle, an Expo shell, or a node server
-ClientRegistry.setStrategy(new RetryStrategy(10_000, 2, 250, 2, 1_000).run, CallScope.all());
+CallRegistry.setStrategy(new RetryStrategy(10_000, 2, 250, 2, 1_000).run, 'ALL');
 ```
 
 Registered at ALL it retries `ApiConnectionError` and `ApiCallTimeoutError` (and the other transient kinds above) only on `READ` / `WRITE_IDEMPOTENT` endpoints, never a `WRITE` — a dropped connection does not prove the request never left. In a browser, a connection failure arrives as `ApiConnectionError` because the browser client bypasses Angular's service worker by default (see the [browser client README](../packages/http/http-client-browser/README.md)); without that, ngsw's synthetic 504 would hide it.
 
 ## Logging each attempt
 
-`ClientRegistry.execute` wraps the attempt BEFORE handing it to any strategy — `RetryStrategy` or one you wrote — so every RETRIED transient attempt logs one line:
+`CallRegistry.execute` wraps the attempt BEFORE handing it to any strategy — `RetryStrategy` or one you wrote — so every RETRIED transient attempt logs one line:
 
 ```
 WARN [API-client-attempt-TRANSIENT] EmailApi.send attempt 2 errorType=ApiUnavailableError error=…
@@ -65,7 +65,7 @@ The line for attempt N is written when attempt N+1 starts, so the last failure i
 ## Writing your own strategy
 
 ```ts
-import { Attempt, CallScope, CallStrategy, ClientRegistry, ApiCallTimeoutError } from '@webpieces/core-util';
+import { Attempt, CallStrategy, CallRegistry, ApiCallTimeoutError } from '@webpieces/core-util';
 
 const patientRetry: CallStrategy<unknown> = async (call, ctx) => {
     try {
@@ -78,12 +78,12 @@ const patientRetry: CallStrategy<unknown> = async (call, ctx) => {
 };
 
 // Install only where the application knows a repeated operation is safe.
-ClientRegistry.setStrategy(patientRetry, CallScope.method(CatalogApi, 'upload'));
+CallRegistry.setStrategy(patientRetry, CatalogApi, 'upload');
 ```
 
 `Attempt<T>` is `(timeoutMs: number) => Promise<T>`.
 `CallStrategy<T>` is `(call: Attempt<T>, ctx: CallContext) => Promise<T>`.
-Context has readonly `apiName`, `methodName` and `operation` — the endpoint's declared `@Endpoint` operation (`READ`, `WRITE_IDEMPOTENT` or `WRITE`), so a strategy can decide whether repeating the call is safe. IPC contracts declare no operation, so an IPC deadline reports the conservative `WRITE`. `ClientRegistry.execute(api, context, attempt, fallback: TransportDefault)` takes that same `CallContext`. `ApiCallTimeoutError` carries `timeoutMs` and `context`. Whatever a strategy throws reaches the caller unchanged, preserving error identity and `instanceof` checks.
+Context has readonly `apiName`, `methodName` and `operation` — the endpoint's declared `@Endpoint` operation (`READ`, `WRITE_IDEMPOTENT` or `WRITE`), so a strategy can decide whether repeating the call is safe. IPC contracts declare no operation, so an IPC deadline reports the conservative `WRITE`. `CallRegistry.execute(api, context, attempt, fallback: TransportDefault)` takes that same `CallContext`. `ApiCallTimeoutError` carries `timeoutMs` and `context`. Whatever a strategy throws reaches the caller unchanged, preserving error identity and `instanceof` checks.
 
 ## Showing a timeout to an end user
 
@@ -115,7 +115,7 @@ Every enqueue is retry-safe by construction: the task name is resolved ONCE per 
 Exactly one retry layer runs per enqueue:
 
 - **Path A — no gax options (the default): webpieces owns timing.** The ladder above, ending in the enqueue `RetryStrategy`. Each attempt sends `createTask(request, { timeout: attemptMs })` — a real gRPC deadline per attempt, no gax retry loop. The gRPC deadline equals the attempt deadline, so gRPC itself cancels a hung RPC.
-- **Path B — `ScheduleOptions.gax` or `GcpTaskRegistry.setGax(...)` set: you own timing.** No strategy lookup and ONE attempt, sending `createTask(request, yourGax)` as given, under a safety cap from the timeout ladder (method → API → ALL → 30 s) so a hung channel cannot block forever. Raise the cap with `ClientRegistry.setTimeout(...)` to give gax retries room. On `@google-cloud/tasks` 6.3.0 / google-gax 5, a gax retry gets a real per-attempt deadline (google-gax 4 sent 0 ms to every retry). `createTask`'s public promise exposes no `cancel()`, so when the safety cap fires first the RPC is left to gax's own `timeout`.
+- **Path B — `ScheduleOptions.gax` or `GcpTaskRegistry.setGax(...)` set: you own timing.** No strategy lookup and ONE attempt, sending `createTask(request, yourGax)` as given, under a safety cap from the timeout ladder (method → API → ALL → 30 s) so a hung channel cannot block forever. Raise the cap with `CallRegistry.setTimeout(...)` to give gax retries room. On `@google-cloud/tasks` 6.3.0 / google-gax 5, a gax retry gets a real per-attempt deadline (google-gax 4 sent 0 ms to every retry). `createTask`'s public promise exposes no `cancel()`, so when the safety cap fires first the RPC is left to gax's own `timeout`.
 
 ## High-level tests without network access
 

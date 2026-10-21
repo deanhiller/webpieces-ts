@@ -92,15 +92,6 @@ describe('ServiceTargetValidator — targets outside the workspace', () => {
         expect(() => validator.validate(graph('reporter-vm'), contracts(), {}, remotes())).not.toThrow();
     });
 
-    it('rejects a workspace project implementing an EXTERNAL_OUTBOUND contract (#1339)', () => {
-        const withVendor = contracts();
-        withVendor['VendorApi'] = { owner: 'internal-api', apiKind: 'external', basePath: '/v', methods: [] };
-        const implementing = graph('reporter-vm');
-        implementing['internal'].apiRelations!['internal-api'].implements.push({ api: 'VendorApi', type: 'external' });
-        const message = failure(() => validator.validate(implementing, withVendor, {}, remotes()));
-        expect(message).toContain('internal: implements internal-api#VendorApi, an EXTERNAL_OUTBOUND contract.');
-    });
-
     it('rejects an undeclared target name, naming the remoteServices table', () => {
         const message = failure(() => validator.validate(graph('reporter-vm'), contracts(), {}, {}));
         expect(message).toContain('target reporter-vm');

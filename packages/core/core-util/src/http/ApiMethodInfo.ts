@@ -23,20 +23,6 @@ import {MaskSpec} from "./LogFieldMask";
 export type ApiSide = 'client' | 'server';
 
 export class ApiMethodInfo {
-    /**
-     * The contract CLASS (the `@ApiPath` contract, or an SDK-wrapping api-client's abstract
-     * `XxxApi`) — the key {@link ApiRegistry.classify} resolves the `CallScope` ladder on
-     * (method -> API -> ALL). {@link apiClass} stays the LOGGED name. REQUIRED as a constructor
-     * argument so every caller states it, and never `undefined`: an SDK-wrapping client passes its
-     * abstract `XxxApi`, an IPC hop its `@WpInternal` class, and an MCP protocol step (which has no
-     * user contract) the framework-owned `McpProtocol` class — which reaches the ALL rung unless
-     * somebody registers for that class.
-     *
-     * NON-enumerable on purpose: this object is nested into every `[API-*]` log record as
-     * `jsonPayload.api.method`, and a class reference is not log data.
-     */
-    declare readonly contract: Function;
-
     constructor(
         readonly side: ApiSide,
         /** REQUIRED — the API CONTRACT class name (e.g. 'SaveApi'). Matches client + server so both
@@ -44,8 +30,6 @@ export class ApiMethodInfo {
         readonly apiClass: string,
         /** REQUIRED — the method on the contract (e.g. 'save'). */
         readonly methodName: string,
-        /** REQUIRED — the contract CLASS; see {@link ApiMethodInfo.contract}. */
-        contract: Function,
         /** OPTIONAL — server-side impl class (e.g. 'SaveController'). Absent on clients, which have no
          *  impl. Surfaces as `jsonPayload.api.method.controllerName` for server-only drill-down. */
         readonly controllerName?: string,
@@ -68,7 +52,5 @@ export class ApiMethodInfo {
          *  whole call identity travels together. webpieces itself does not act on it; an app's upgrade
          *  logic does. Default false. */
         readonly allowUpgradeInFlight: boolean = false,
-    ) {
-        Object.defineProperty(this, 'contract', { value: contract, enumerable: false });
-    }
+    ) {}
 }

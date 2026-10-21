@@ -16,6 +16,7 @@ import { ByteReadResult } from './ByteStream';
 /** First raw JSONL record resolves the call; subsequent records obey ordered consumer backpressure. */
 export class JsonlResponseStream {
     private readonly validator = new StreamEventValidator();
+    private readonly controls = new StreamErrorControl();
 
     /** @param role - who is reading the stream; an error control record is decoded as that role. */
     constructor(private readonly role: ClientRole) {}
@@ -41,7 +42,7 @@ export class JsonlResponseStream {
                     const line = pending.slice(0, newline).replace(/\r$/, '');
                     pending = pending.slice(newline + 1);
                     if (line === '') continue;
-                    const initial = this.parseData(line, route);
+                    const initial = this.parseData(line);
                     if (initial === null)
                         throw new StreamProtocolError('Initial response must be non-null.');
                     if (route.streaming?.initialResponseSchema) {
@@ -131,7 +132,7 @@ export class JsonlResponseStream {
         destination: ResponseStream<DtoValue>,
         onConsumerFailure?: (error: Error) => Promise<void>,
     ): Promise<void> {
-        const value = this.parseData(line, route);
+        const value = this.parseData(line);
         if (route.streaming?.responseSchema)
             this.validator.validate(route.streaming.responseSchema, value, 'response');
         // eslint-disable-next-line @webpieces/no-unmanaged-exceptions -- a client handler error uses the still-open request control channel
@@ -144,9 +145,9 @@ export class JsonlResponseStream {
         }
     }
 
-    private parseData(line: string, route: RouteMetadata): DtoValue {
+    private parseData(line: string): DtoValue {
         this.checkLength(line);
-        if (line.charCodeAt(0) === 0x1e) throw new StreamErrorControl(route).decode(line, this.role);
+        if (line.charCodeAt(0) === 0x1e) throw this.controls.decode(line, this.role);
         // eslint-disable-next-line @webpieces/no-unmanaged-exceptions -- JSON.parse is the untrusted JSONL boundary
         try {
             return JSON.parse(line) as DtoValue;

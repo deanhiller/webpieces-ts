@@ -23,8 +23,8 @@ import { ApiMethodInfo } from './ApiMethodInfo';
 import { CallOutcome, ErrorClassifier } from './ErrorClassifier';
 
 /**
- * The webpieces built-in {@link ErrorClassifier} — the terminal rung, used when no classifier on the
- * `CallScope` ladder (method, API, ALL) claims an error. Two tables, one per question:
+ * The webpieces built-in {@link ErrorClassifier} — the terminal tier, used when no per-apiClass
+ * classifier and no app default claims an error. Two tables, one per question:
  *
  * # 1. EXPECTED or not — "are things WORKING?"
  *

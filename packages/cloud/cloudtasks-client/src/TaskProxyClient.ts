@@ -15,7 +15,7 @@ import {
     LogManager,
     LogApiCallImpl,
     ApiMethodInfo,
-    ClientRegistry,
+    CallRegistry,
     CallDeadline,
     CallContext,
     RetryStrategy,
@@ -75,7 +75,7 @@ class EndpointPlan {
 @provideFrameworkTransient()
 export class TaskProxyClient {
     /**
-     * The enqueue transport's default for `ClientRegistry.execute` (Path A): 30 s if a caller only
+     * The enqueue transport's default for `CallRegistry.execute` (Path A): 30 s if a caller only
      * registers a strategy-free timeout ladder, otherwise webpieces' shared `RetryStrategy` — 5 s per
      * attempt, 3 retries, backoff 500 ms x2 capped at 4 s. RPC passes `new TransportDefault(30_000)`
      * (no retry); this is the ONLY place the two transports differ.
@@ -139,7 +139,7 @@ export class TaskProxyClient {
      * and the effective customizer and gax options (call site, else `GcpTaskRegistry` method -> API
      * -> ALL). Then exactly ONE retry layer runs:
      *
-     * - **Path A, no gax — webpieces owns timing.** `ClientRegistry.execute` with
+     * - **Path A, no gax — webpieces owns timing.** `CallRegistry.execute` with
      *   {@link TaskProxyClient.ENQUEUE_TRANSPORT_DEFAULT}: a registered strategy (method -> API -> ALL), else a
      *   registered timeout, else `RetryStrategy(5_000, 3, 500, 2, 4_000)`. Each attempt sends
      *   `createTask(request, { timeout: attemptMs })`.
@@ -176,16 +176,9 @@ export class TaskProxyClient {
         // the ONE seam above BOTH GcpTaskInvoker (prod) and InMemoryTaskInvoker (localhost) — whichever
         // TaskInvoker is bound, this method sits above it — so the enqueue edge gets structured
         // `jsonPayload.api.*` logging uniformly, without touching either invoker impl.
-        const info = new ApiMethodInfo(
-            'client',
-            this.apiName,
-            methodName,
-            this.apiClass,
-            undefined,
-            plan.mask,
-        );
+        const info = new ApiMethodInfo('client', this.apiName, methodName, undefined, plan.mask);
         await this.logApiCall.execute(info, requestDto, async () => {
-            const callContext = new CallContext(this.apiName, methodName, WRITE_IDEMPOTENT, this.apiClass);
+            const callContext = new CallContext(this.apiName, methodName, WRITE_IDEMPOTENT);
             const attempt = (timeoutMs: number): Promise<JobReference> =>
                 CallDeadline.run(timeoutMs, callContext, (signal: AbortSignal) =>
                     this.attempt(plan, enqueuePlan, frame.info, requestDto, timeoutMs, signal),
@@ -193,8 +186,8 @@ export class TaskProxyClient {
             // Only the winning attempt may publish the reference. A late enqueue cannot overwrite it.
             frame.jobRef = await this.dedupAware(methodName, () =>
                 enqueuePlan.gax === undefined
-                    ? ClientRegistry.execute(this.apiClass, callContext, attempt, TaskProxyClient.ENQUEUE_TRANSPORT_DEFAULT)
-                    : attempt(ClientRegistry.resolveTimeout(this.apiClass, methodName, TaskProxyClient.ENQUEUE_SAFETY_CAP_MS)),
+                    ? CallRegistry.execute(this.apiClass, callContext, attempt, TaskProxyClient.ENQUEUE_TRANSPORT_DEFAULT)
+                    : attempt(CallRegistry.resolveTimeout(this.apiClass, methodName, TaskProxyClient.ENQUEUE_SAFETY_CAP_MS)),
             );
             // Fire-and-forget: the enqueue ack is not a meaningful response, but it is non-null so
             // LogApiCall's null-response guard passes; a recorded test asserts the enqueued REQUEST.

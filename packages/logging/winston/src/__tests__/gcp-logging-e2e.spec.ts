@@ -14,9 +14,6 @@ import {
 import { RequestContext, RequestContextApiCallContext } from '@webpieces/core-context';
 import { WinstonGcpFactory } from '../WinstonGcpFactory';
 
-/** Synthetic contract classes: a call identity always names its contract CLASS (#1350). */
-class SaveApi {}
-
 /**
  * End-to-end, with NOTHING stubbed: a real LogApiCall inside a real RequestContext, logging through a
  * real WinstonGcpFactory (real format stack, real ChunkingConsoleTransport), asserting on the actual
@@ -69,7 +66,7 @@ async function logApiCall(response: object, delayMs: number): Promise<LogRecord[
     await RequestContext.run(async () => {
         RequestContext.putUntrusted(REQUEST_ID, 'req-e2e');
         await new LogApiCallImpl(new RequestContextApiCallContext()).execute(
-            new ApiMethodInfo('server', 'SaveApi', 'save', SaveApi, 'SaveController'),
+            new ApiMethodInfo('server', 'SaveApi', 'save', 'SaveController'),
             { q: 'x' },
             async () => {
                 await new Promise((resolve: () => void) => setTimeout(resolve, delayMs));

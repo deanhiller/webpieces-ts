@@ -5,12 +5,7 @@ import type { HeaderReader } from './AuthHooks';
 // @ts-expect-error AuthValues is RENAMED to AuthenticatedCaller — there is no alias, by policy.
 import type { AuthValues } from './AuthConfig';
 import { OidcAuthMethod, OidcAuthMethods } from '@webpieces/core-util';
-import { VendorAuthHook } from '@webpieces/core-context';
-// @ts-expect-error WebhookAuthCallback is REPLACED by VendorAuthHook (mint/refresh/verify) — no alias, by policy.
-import type { WebhookAuthCallback } from './AuthHooks';
-// @ts-expect-error WEBHOOK_AUTH_CALLBACK is REPLACED by VENDOR_AUTH_HOOK.
-import { WEBHOOK_AUTH_CALLBACK } from './AuthHooks';
-import { ApiKeyHook, OidcHook } from './AuthHooks';
+import { ApiKeyHook, OidcHook, WebhookAuthCallback } from './AuthHooks';
 import { AuthenticatedCaller, AuthenticatedMachineIdentity } from './AuthConfig';
 
 /**
@@ -37,25 +32,14 @@ export class AuthHooksCompileAssertions {
     deletedNames(): void {
         const headerReaderIsGone: HeaderReader | undefined = undefined;
         const authValuesIsGone: AuthValues | undefined = undefined;
-        const webhookAuthCallbackIsGone: WebhookAuthCallback | undefined = undefined;
         void headerReaderIsGone;
         void authValuesIsGone;
-        void webhookAuthCallbackIsGone;
-        void WEBHOOK_AUTH_CALLBACK;
     }
 
     /** The ALIGNED spellings must keep compiling; asserted by the ABSENCE of an error. */
     legitimate(): void {
-        void class extends VendorAuthHook {
-            override async mint(): Promise<Map<string, string>> {
-                return new Map([['Authorization', 'Bearer t']]);
-            }
-
-            override async refresh(): Promise<void> {
-                // renew the vendor credential
-            }
-
-            override async verify(_name: string, request: RawHttpRequest): Promise<AuthenticatedCaller> {
+        void class extends WebhookAuthCallback {
+            override async verifyWebhook(_name: string, request: RawHttpRequest): Promise<AuthenticatedCaller> {
                 // No `raw!`, no `if (!raw) throw`: AuthFilter checked once and the TYPE carries it.
                 const bytes: Buffer = request.raw.rawBody;
                 return new AuthenticatedCaller(`sentry:${bytes.length}`);
@@ -72,31 +56,19 @@ export class AuthHooksCompileAssertions {
 
     /** Every spelling this change deleted must now be UNWRITABLE. */
     rejected(): void {
-        void class extends VendorAuthHook {
-            override async mint(): Promise<Map<string, string>> {
-                return new Map();
-            }
-
-            override async refresh(): Promise<void> {
-                // renew the vendor credential
-            }
-
-            // @ts-expect-error verify takes (name, RawHttpRequest): the three-parameter spelling is gone
-            override async verify(_name: string, _request: HttpRequest, _raw: RawRequest): Promise<AuthenticatedCaller> {
+        void class extends WebhookAuthCallback {
+            override async verifyWebhook(_name: string, _request: RawHttpRequest): Promise<AuthenticatedCaller> {
                 return new AuthenticatedCaller('u1');
             }
+
+            // @ts-expect-error `verify` was renamed to `verifyWebhook`: the old name overrides nothing
+            override async verify(_name: string, _request: HttpRequest, _raw: RawRequest): Promise<void> {
+                // the three-parameter, void-returning spelling this change deletes
+            }
         };
-        void class extends VendorAuthHook {
-            override async mint(): Promise<Map<string, string>> {
-                return new Map();
-            }
-
-            override async refresh(): Promise<void> {
-                // renew the vendor credential
-            }
-
-            // @ts-expect-error verify returns the caller it proved: a void override must not compile
-            override async verify(_name: string, _request: RawHttpRequest): Promise<void> {
+        void class extends WebhookAuthCallback {
+            // @ts-expect-error verifyWebhook returns the caller it proved: a void override must not compile
+            override async verifyWebhook(_name: string, _request: RawHttpRequest): Promise<void> {
                 // a hook that verifies and then has no way to say what it proved
             }
         };

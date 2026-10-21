@@ -13,27 +13,11 @@ export type Attempt<T> = (timeoutMs: number) => Promise<T>;
  * it never invites a blind retry of something that may already have happened.
  */
 export class CallContext {
-    /**
-     * The contract CLASS the call belongs to — the key of the `CallScope` ladder, so a strategy's
-     * per-attempt error classification resolves the classifier registered for THIS contract.
-     * REQUIRED and never `undefined`: every transport knows its contract class (HTTP and Cloud Tasks
-     * clients hold it, the IPC client proxy holds its `@WpInternal` class), and
-     * `ClientRegistry.execute` re-keys the context a strategy sees onto the class it was given.
-     *
-     * NON-enumerable on purpose: this context rides on `ApiCallTimeoutError`, which is logged and
-     * compared as data, and a class reference is not data.
-     */
-    declare readonly contract: Function;
-
     constructor(
         public readonly apiName: string,
         public readonly methodName: string,
         public readonly operation: EndpointOperation,
-        /** REQUIRED — the contract CLASS; see {@link CallContext.contract}. */
-        contract: Function,
-    ) {
-        Object.defineProperty(this, 'contract', { value: contract, enumerable: false });
-    }
+    ) {}
 }
 
 /** Owns all timing and retry decisions. No public cancellation signal. */

@@ -31,10 +31,9 @@ Four log lines per call (text form):
 - `[API-{side}-resp-FAIL] {id} errorType=… error=…` (a server error → `error`)
 
 where `id = {apiClass}.{methodName}` and `side ∈ {client, server}`. Captured fields: request body +
-UTF-8 byte size, response body + byte size, and `durationMs`. There is **deliberately no top-level
+UTF-8 byte size, response body + byte size, and `durationMs`. There is **deliberately no
 `statusCode`** — LogApiCall runs over in-process calls, pub-sub handlers, and cloud-task enqueues,
-"none of which have an HTTP status." The HTTP CLIENT alone adds the nested, optional `http` (#1339):
-the last transmission's verb, masked url and status, so a vendor's 404 is told from its 500. Correlation fields (`requestId`, `orgId`, …) are **not**
+"none of which have an HTTP status." Correlation fields (`requestId`, `orgId`, …) are **not**
 stamped here — a logging *backend* owns that, reading `RequestContext` on every record (see
 [`context-propagation.md`](./context-propagation.md)).
 
@@ -43,10 +42,9 @@ stamped here — a logging *backend* owns that, reading `RequestContext` on ever
   fixed framework filter (auto-installed at priority 1,000,000 on every route, above AuthFilter)."
   It logs request *and* response/failure for every call, over HTTP **or** via `createApiClient`.
 - **Client outbound** — `packages/http/http-client-core/src/ProxyClient.ts` calls
-  `this.logApiCall.execute(new ApiMethodInfo('client', this.apiName, route.methodName, this.apiClass, …), …)`
-  on the `LogApiCallImpl` its subclass handed to `super(...)`, using the **contract** name so "this
-  client log line MATCHES the server's for the same call", and the contract CLASS, which is the key the
-  error classifier's `CallScope` ladder resolves on.
+  `this.logApiCall.execute(new ApiMethodInfo('client', this.apiName, route.methodName), …)` on the
+  `LogApiCallImpl` its subclass handed to `super(...)`, using the **contract** name so "this client log
+  line MATCHES the server's for the same call."
 - **Cloud-task enqueue** — `TaskProxyClient.enqueue` wraps the enqueue in its own
   `LogApiCallImpl.execute` too, so the queue edge gets the same structured logging as HTTP "without
   touching either invoker."
@@ -62,9 +60,7 @@ context key `API_CALL_INFO` (`name: 'api'`), which the winston/bunyan backends n
 - `ApiMethodInfo`: `side` (`client`|`server`), `apiClass` (**required**, the contract),
   `methodName` (**required**), `controllerName?` (server impl class).
 - `ApiCallInfo`: `method: ApiMethodInfo`, `type` (`request`|`response`), `result?`
-  (`success`|`failure`), `durationMs?`, `requestSize?`, `responseSize?`, `responseCount?`, and
-  `http?: HttpCallFacts` (`method`, `url` — userinfo dropped, `@MaskLog` query values redacted —
-  `status`), on the RESPONSE tag of an HTTP client call only.
+  (`success`|`failure`), `durationMs?`, `requestSize?`, `responseSize?`.
 
 **The field names here ARE the GCP field names** — rename a field and the filter renames with it.
 Enabled GCP filters include:
@@ -72,7 +68,6 @@ Enabled GCP filters include:
 - `jsonPayload.api.method.side="client"`
 - `jsonPayload.api.result="failure"`
 - `jsonPayload.api.durationMs>1000`
-- `jsonPayload.api.http.status=429` — a vendor throttling one of our HTTP client calls
 
 ## Console rendering — `[API.{side}.{phase}]`
 

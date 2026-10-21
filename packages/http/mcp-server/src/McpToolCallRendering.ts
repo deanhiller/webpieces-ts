@@ -4,14 +4,13 @@ import {
     ApiErrorPayload,
     ApiMethodInfo,
     CallOutcome,
+    ClientRegistry,
     ContextKey,
     DtoValue,
     EndpointOperation,
     WebpiecesCoreHeaders,
-    ApiRegistry,
 } from '@webpieces/core-util';
 import { RequestContext } from '@webpieces/core-context';
-import { McpProtocol } from './McpProtocol';
 
 /** `_meta` key carrying the Webpieces requestId on every tools/call result, success or failure. */
 export const MCP_REQUEST_ID_META_KEY = 'webpieces/requestId';
@@ -42,11 +41,6 @@ export class McpCorrelation {
 
     constructor(
         public readonly jsonRpcId: string | number | null,
-        /**
-         * The contract CLASS this request is classified under: the resolved tool's bound `@ApiPath`
-         * contract, or {@link McpProtocol} while no tool is resolved (a protocol step, an unknown tool).
-         */
-        public readonly contract: Function,
         public readonly toolName?: string,
         public readonly operation?: EndpointOperation,
     ) {}
@@ -60,7 +54,7 @@ export class McpCorrelation {
     /** A renderer reached before anything stamped (a failure with no parseable body) still renders. */
     // webpieces-disable no-function-outside-class -- static accessor trio for one context key
     static current(): McpCorrelation {
-        return RequestContext.getUntrusted(McpCorrelation.KEY) ?? new McpCorrelation(null, McpProtocol);
+        return RequestContext.getUntrusted(McpCorrelation.KEY) ?? new McpCorrelation(null);
     }
 
     /** The webpieces requestId of the request being served, as every MCP reply reports it. */
@@ -115,7 +109,7 @@ export class McpHttpErrorDetail {
 
 /**
  * The application's own `tools/call` error translation — the MCP twin of the `ErrorTranslator` an app
- * registers on `ApiRegistry` for HTTP and the `IpcErrorTranslator` it registers on `IpcRegistry`.
+ * registers on `ClientRegistry` for HTTP and the `IpcErrorTranslator` it registers on `IpcRegistry`.
  * Register one with {@link McpRegistry.setErrorTranslator}.
  *
  * An app owns its error taxonomy and owns how those errors should be explained to a model, so a
@@ -182,7 +176,7 @@ export class McpDefaultToolCallRenderer implements McpErrorTranslator {
 
     /**
      * MCP has no retry table of its own: the advice is f(outcome, operation, retryAfterSeconds), and
-     * the outcome is the ONE verdict `ApiRegistry.classify` gives every other reader (RetryStrategy,
+     * the outcome is the ONE verdict `ClientRegistry.classify` gives every other reader (RetryStrategy,
      * LogApiCall). A TRANSIENT_FAILURE becomes operation-aware retry guidance; everything else is
      * rendered by kind, with `retry: 'never'` or `'after-correction'`.
      *
@@ -199,10 +193,9 @@ export class McpDefaultToolCallRenderer implements McpErrorTranslator {
         if (payload.kind === 'implementation') {
             return this.bug(payload, requestId, support);
         }
-        const correlation = McpCorrelation.current();
-        const toolName = correlation.toolName ?? 'unknown';
-        const methodInfo = new ApiMethodInfo('server', 'WpMcpServer', toolName, correlation.contract);
-        if (ApiRegistry.classify(error, methodInfo) === CallOutcome.TRANSIENT_FAILURE) {
+        const toolName = McpCorrelation.current().toolName ?? 'unknown';
+        const methodInfo = new ApiMethodInfo('server', 'WpMcpServer', toolName);
+        if (ClientRegistry.classify(error, methodInfo) === CallOutcome.TRANSIENT_FAILURE) {
             return this.transient(payload, requestId, this.transientMessage(payload));
         }
         return this.settled(payload, requestId, support);

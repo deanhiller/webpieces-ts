@@ -15,8 +15,6 @@ export class IpcCallLogger {
         logging: IpcLogging,
         context: IpcCallContext,
         side: ApiSide,
-        /** The `@WpInternal` contract CLASS — the `CallScope` ladder key (see {@link ApiMethodInfo.contract}). */
-        contract: Function,
         apiId: string,
         methodId: string,
         mask: MaskSpec,
@@ -24,7 +22,7 @@ export class IpcCallLogger {
         invoke: (request: Q) => Promise<R>,
     ): Promise<R> {
         return new LogApiCallImpl(logging.context(context)).execute(
-            new ApiMethodInfo(side, apiId, methodId, contract, undefined, mask),
+            new ApiMethodInfo(side, apiId, methodId, undefined, mask),
             request,
             invoke,
         ) as Promise<R>;

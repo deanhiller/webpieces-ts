@@ -30,7 +30,7 @@ describe('declared credential OR in generated OpenAPI', () => {
     });
 
     it('does not invent wire headers for an application-owned vendor signature', () => {
-        const auth = new DocumentedAuth(undefined, [new DocumentedAuthMethod('jwt', [], undefined),new DocumentedAuthMethod('vendorAuth', ["'vendor'"], undefined)]);
+        const auth = new DocumentedAuth(undefined, [new DocumentedAuthMethod('jwt', [], undefined),new DocumentedAuthMethod('webhook', ["'vendor'"], undefined)]);
         expect(new SecurityDeriver().operation(auth, undefined)).toBeUndefined();
     });
 });

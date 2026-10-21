@@ -59,13 +59,13 @@
                     "detail": "SECRETS"
                 },
                 {
-                    "id": "VendorAuthHook",
-                    "className": "VendorAuthHook",
+                    "id": "WebhookSignerCallback",
+                    "className": "WebhookSignerCallback",
                     "kind": "unresolved",
                     "scope": "transient",
                     "file": "packages/http/http-client-node/src/NodeProxyClient.ts",
                     "level": 2,
-                    "detail": "VENDOR_AUTH_HOOK"
+                    "detail": "WEBHOOK_SIGNER_CALLBACK"
                 }
             ],
             "edges": [
@@ -116,17 +116,17 @@
                 },
                 {
                     "from": "NodeProxyClient",
-                    "to": "VendorAuthHook",
+                    "to": "WebhookSignerCallback",
                     "injection": "token",
-                    "token": "VENDOR_AUTH_HOOK",
-                    "tokenKey": "symbol.for:VendorAuthHook",
-                    "paramName": "vendorAuthHook",
-                    "paramType": "VendorAuthHook"
+                    "token": "WEBHOOK_SIGNER_CALLBACK",
+                    "tokenKey": "symbol.for:WebhookSignerCallback",
+                    "paramName": "webhookSigner",
+                    "paramType": "WebhookSignerCallback"
                 }
             ],
             "unresolved": [
                 "SECRETS",
-                "VENDOR_AUTH_HOOK"
+                "WEBHOOK_SIGNER_CALLBACK"
             ]
         }
     ]

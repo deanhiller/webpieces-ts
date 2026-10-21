@@ -72,12 +72,8 @@ refuses them for OpenAPI (#1292). The server serves the catalog's descriptions v
 `McpServedDescriptions.integration.spec.ts` boots it on the partner-api golden catalog and reads them
 back through `tools/list`.
 
-Every `@Endpoint` declares one enum-backed operation, independent of its required HTTP verb
-argument: a GET may deliberately write and a POST may be a read.
-
-A method that binds any argument to the URL (`@PathParam` / `@QueryParam`) is not an MCP tool: a
-tool receives exactly one input object, so `McpToolRegistry` refuses `@WpMcpTool` on such a method
-at boot. A tool therefore cannot claim to be
+Every `@Endpoint` declares one enum-backed operation, independent of its required `GET` or `POST`
+argument: a GET may deliberately write and a POST may be a read. A tool therefore cannot claim to be
 read-only while its endpoint declares `WRITE` — the contradiction is unrepresentable.
 
 ## Booting: the server is constructed with the generated catalogs
@@ -330,7 +326,7 @@ precise `kind`, a small ownership `category`, explicit `retry` guidance, a safe 
 `retryAfterSeconds`, and `statusCode`. It never repeats `isError` inside the content.
 
 MCP keeps no retry table of its own: the advice is a function of the ONE outcome
-`ApiRegistry.classify` gives every reader (`RetryStrategy`, `LogApiCall`), the endpoint's
+`ClientRegistry.classify` gives every reader (`RetryStrategy`, `LogApiCall`), the endpoint's
 operation, and `retryAfterSeconds`. Implementation failures are `category: "bug", retry: "never"` and
 tell the caller to give the request ID to support; operator details remain redacted. Generic
 dependency failures are also non-retryable, and so is `retries-exhausted` (`category: "dependency",
@@ -349,7 +345,7 @@ Every reply carries the requestId so a user can quote it: `_meta["webpieces/requ
 An app owns its error taxonomy and owns how those errors should be explained to a model, so a
 registered translator REPLACES the webpieces default for every `tools/call` failure — the same
 convention `ExpressWrapper.handleError` applies on the HTTP path. Register one with
-`McpRegistry.setErrorTranslator(...)`: ONE process-global per protocol, mirroring `ApiRegistry`
+`McpRegistry.setErrorTranslator(...)`: ONE process-global per protocol, mirroring `ClientRegistry`
 for HTTP and `IpcRegistry` for IPC, so every call site is one unconditional line. (Two MCP servers in
 one process therefore share one translator, and registration order matters rather than being fixed at
 construction — the trade taken deliberately in issue #968 to make all three protocols read alike.)

@@ -4,9 +4,6 @@ import { ApiCallTimeoutError } from '../ApiCallTimeoutError';
 import { CallContext } from '../CallStrategy';
 import { EndpointOperation, READ, WRITE, WRITE_IDEMPOTENT } from '../HttpEndpointOptions';
 
-/** Synthetic contract classes: a call identity always names its contract CLASS (#1350). */
-class SaveApi {}
-
 /** Issue #1170: a client deadline carries calm, operation-aware end-user text beside the developer text. */
 describe('ApiCallTimeoutError.userMessage', () => {
     it.each([READ, WRITE_IDEMPOTENT])(
@@ -14,7 +11,7 @@ describe('ApiCallTimeoutError.userMessage', () => {
         (operation: EndpointOperation) => {
             const error = new ApiCallTimeoutError(
                 30_000,
-                new CallContext('SaveApi', 'load', operation, SaveApi),
+                new CallContext('SaveApi', 'load', operation),
             );
             expect(error.userMessage).toBe(
                 'The network timed out. It probably just flaked. Please try your request again.',
@@ -24,7 +21,7 @@ describe('ApiCallTimeoutError.userMessage', () => {
     );
 
     it('WRITE: the change may already be applied, so the user is told to check first', () => {
-        const error = new ApiCallTimeoutError(30_000, new CallContext('SaveApi', 'save', WRITE, SaveApi));
+        const error = new ApiCallTimeoutError(30_000, new CallContext('SaveApi', 'save', WRITE));
         expect(error.userMessage).toBe(
             'The network timed out. Your change may or may not have been saved — please check before trying again.',
         );
@@ -32,7 +29,7 @@ describe('ApiCallTimeoutError.userMessage', () => {
     });
 
     it('keeps message as the developer text and stays an ApiDependencyTimeoutError', () => {
-        const error = new ApiCallTimeoutError(30_000, new CallContext('SaveApi', 'save', WRITE, SaveApi));
+        const error = new ApiCallTimeoutError(30_000, new CallContext('SaveApi', 'save', WRITE));
         expect(error.message).toBe('SaveApi.save timed out after 30000ms');
         expect(error.message).not.toBe(error.userMessage);
         expect(error).toBeInstanceOf(ApiDependencyTimeoutError);

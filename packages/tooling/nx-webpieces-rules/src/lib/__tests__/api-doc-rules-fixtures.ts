@@ -223,9 +223,8 @@ export const UNKNOWN_VALUE_API = `/** Promotions, published to partners. */
 `;
 
 /**
- * Every endpoint kind answering `void` at once: an `rpc` (REFUSED — somebody is waiting on the
- * response), beside an `external-inbound` (ALLOWED — the outside caller owns that wire, #1339), a
- * `cloudtasks` and a `cron` (both ALLOWED — fire-and-forget).
+ * Every endpoint kind answering `void` at once: an `rpc` and an `external` (both REFUSED — somebody
+ * is waiting on the response), beside a `cloudtasks` and a `cron` (both ALLOWED — fire-and-forget).
  */
 export const VOID_RPC_API = `/** Stores. */
     @ApiPath('/stores')
@@ -235,7 +234,7 @@ export const VOID_RPC_API = `/** Stores. */
         abstract pause(request: PauseRequest): Promise<void>;
 
         /** Notify us that a store closed — posted by a partner, synchronously. */
-        @Endpoint('POST', '/closed', 'write', 'external-inbound')
+        @Endpoint('POST', '/closed', 'write', 'external')
         abstract closed(request: PauseRequest): Promise<void>;
 
         /** Reindex, in the background. */

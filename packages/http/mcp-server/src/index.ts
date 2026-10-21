@@ -22,7 +22,6 @@ export { McpDeployment } from './McpDeployment';
 export type { McpDeploymentMode } from './McpDeployment';
 export { McpApiDispatcher } from './McpApiDispatcher';
 export { WpMcpServer } from './WpMcpServer';
-export { McpProtocol } from './McpProtocol';
 export {
     MCP_REQUEST_ID_META_KEY,
     McpCorrelation,
@@ -34,5 +33,5 @@ export {
 } from './McpToolCallRendering';
 export { WpMcpErrorTranslator } from './WpMcpErrorTranslator';
 export type { McpErrorTranslator } from './McpToolCallRendering';
-// The process-global home of the ONE MCP translator, mirroring ApiRegistry / IpcRegistry.
+// The process-global home of the ONE MCP translator, mirroring ClientRegistry / IpcRegistry.
 export { McpRegistry } from './McpRegistry';

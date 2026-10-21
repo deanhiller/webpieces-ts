@@ -6,7 +6,7 @@ import { WpAuthorization, AuthorizationType, WpAuth, jwt as jwtAuth, apiKey as a
  * plausibly have written, not a synthetic AST — and it uses the REAL decorators, so it cannot drift
  * from the signatures it exists to exercise.
  */
-import { ApiPath, ApiType, CLOUDTASKS, CRON, Endpoint, EXTERNAL_INBOUND, EXTERNAL_CUSTOMER, GET, Integer, MaskLog, MCP, POST, READ, RPC, SVC_TO_SVC, WRITE, WpAuthPublic, WpInt, WpMax, WpMcpTool, WpMin } from '@webpieces/core-util';
+import { ApiPath, ApiType, CLOUDTASKS, CRON, Endpoint, EXTERNAL, EXTERNAL_CUSTOMER, GET, Integer, MaskLog, MCP, POST, READ, RPC, SVC_TO_SVC, WRITE, WpAuthPublic, WpInt, WpMax, WpMcpTool, WpMin } from '@webpieces/core-util';
 import { PartnerKeys, PartnerKeyTable, SAVE_PATH } from './contract-constants';
 
 /** A string-literal union with a NAME — becomes one enum entry a renderer can `$ref`. */
@@ -209,7 +209,7 @@ export class ExampleApi {
     }
 
     /** Posted by a vendor. */
-    @Endpoint(POST, '/hook', WRITE, EXTERNAL_INBOUND, {
+    @Endpoint(POST, '/hook', WRITE, EXTERNAL, {
         formPost: true,
         calledBy: 'twilio',
         callerKind: 'saas',

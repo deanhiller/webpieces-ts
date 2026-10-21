@@ -40,7 +40,6 @@ export class ApiContractEvidence {
             emptiedApiContracts: diagnostics.emptiedContracts(),
             undeclaredExternalCallers: diagnostics.undeclaredExternalCallers(),
             undeclaredEndpointOperations: diagnostics.undeclaredEndpointOperations(),
-            voidResponseMismatches: diagnostics.voidResponseMismatches(),
             rootUnions: new RootUnionScan(
                 workspaceRoot,
                 infos,

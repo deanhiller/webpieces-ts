@@ -15,7 +15,7 @@ const CONTRACT_DECORATORS = new Set([
     ...HTTP_AUTH,
     ...LEGACY_AUTH,
     'WpAuthorization', 'WpLocalOnly', 'AuthorizationType',
-    'jwt', 'oidcSameProject', 'oidcSvcs', 'sharedSecret', 'vendorAuth', 'apiKey',
+    'jwt', 'oidcSameProject', 'oidcSvcs', 'sharedSecret', 'webhook', 'apiKey',
     'ApiPath',
     'Endpoint',
     'WpInternal',

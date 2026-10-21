@@ -41,12 +41,15 @@ export { MissingRuntimeBaseUrlError } from './MissingRuntimeBaseUrlError';
 // The two ways outbound auth refuses to send: a binding a contract's auth mode requires is absent.
 // Typed, so a delivery worker tells 'we are misconfigured' from 'the partner registered something
 // hostile' (SsrfRefusedError) without matching message text.
-export { MissingSharedSecretError, MissingVendorAuthHookError } from './OutboundAuthErrors';
+export { MissingSharedSecretError, MissingWebhookSignerError } from './OutboundAuthErrors';
 
-// vendorAuth(name): ONE hook mints (and refreshes once on a 401) here and verifies on the server.
-// Defined in @webpieces/core-context; bind it, or every outbound vendorAuth(...) call throws rather
-// than sending unauthenticated.
-export { VendorAuthHook, VENDOR_AUTH_HOOK, SignableRequest } from '@webpieces/core-context';
+// The OUTBOUND half of webhook(name) — the mirror of http-routing's WebhookAuthCallback. Bind
+// one, or every outbound webhook(...) call throws rather than delivering unsigned.
+export {
+    WebhookSignerCallback,
+    SignableRequest,
+    WEBHOOK_SIGNER_CALLBACK,
+} from './WebhookSignerCallback';
 
 // The SSRF policy a re-pointed URL is judged under, and the refusal it produces. Automatic, armed by
 // the ACT of re-pointing; the ONLY way to relax it is naming SsrfTestingPolicy at a call site.

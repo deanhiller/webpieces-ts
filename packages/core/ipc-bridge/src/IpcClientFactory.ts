@@ -74,7 +74,6 @@ export class IpcClientFactory {
             this.logging,
             context,
             'client',
-            apiClass,
             apiId,
             methodId,
             getIpcMaskSpec(apiClass, key) ?? new MaskSpec({}),
@@ -86,7 +85,6 @@ export class IpcClientFactory {
                     );
                 const reply = await this.connection.request(
                     new IpcRequest(apiId, methodId, context, request),
-                    apiClass,
                 );
                 // EVERY reply passes the seam, success included, so an app can turn an
                 // apparently-successful reply into a throw. `asserts reply is IpcSuccess`

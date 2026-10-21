@@ -33,14 +33,6 @@ export class ServiceTargetValidator {
         this.validateRemoteServices(graph, hosts, contracts, remoteServices);
         for (const [name, entry] of Object.entries(graph))
             for (const [owner, relation] of Object.entries(entry.apiRelations ?? {})) {
-                // An EXTERNAL_OUTBOUND contract (apiKind 'external') is an outside system's API: a
-                // workspace project that implements it would be a server of ours answering for a vendor.
-                for (const ref of relation.implements) {
-                    if (ref.type === 'external' || contracts[ref.api]?.apiKind === 'external')
-                        this.fail(
-                            `${name}: implements ${owner}#${ref.api}, an EXTERNAL_OUTBOUND contract. No server in this repo may implement an outside system's API — bind a client to it instead.`,
-                        );
-                }
                 for (const ref of [...relation.implements, ...relation.uses]) {
                     if (
                         ref.type !== 'external' &&

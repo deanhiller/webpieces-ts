@@ -5,12 +5,8 @@ import { HttpResponseDto } from './HttpResponseDto';
  * ErrorTranslator - ONE symmetric place an app owns HTTP error translation, in BOTH directions, over
  * the WHOLE response.
  *
- * An app implements this ONCE and registers it per process via
- * `ApiRegistry.setErrorTranslator(t, CallScope.all())` — on the server AND in the browser. A contract whose
- * errors travel in a DIFFERENT wire format (a vendor's own 4xx body, or the error body an inbound
- * vendor expects back) gets its own translator on the same `CallScope` ladder as `ClientRegistry`'s
- * strategy and timeout: `setErrorTranslator(t, CallScope.api(VendorApi))` or
- * `setErrorTranslator(t, CallScope.method(VendorApi, 'method'))`, resolved method -> API -> ALL -> webpieces default. Its `toWire` runs on
+ * An app implements this ONCE and registers it ONCE per process via
+ * {@link ClientRegistry.setErrorTranslator} — on the server AND in the browser. Its `toWire` runs on
  * the SERVER (`ExpressWrapper.handleError`) and its `fromWire` runs on every CLIENT in that process
  * (`ClientErrorTranslator.throwIfFailure`, shared by `http-client-node` and `http-client-browser`).
  * The payoff is type symmetry across the wire: the server throws `OrderNotFoundError` and the caller
@@ -18,7 +14,7 @@ import { HttpResponseDto } from './HttpResponseDto';
  *
  * # THERE IS ALWAYS A TRANSLATOR
  *
- * {@link ApiRegistry.getErrorTranslator} is non-optional: below every rung of the ladder sits
+ * {@link ClientRegistry.getErrorTranslator} is non-optional and starts life holding
  * {@link WebpiecesDefaultErrorTranslator}. So no caller anywhere asks "did anyone register one" —
  * every call site is ONE unconditional line. A registered app translator REPLACES the default and
  * declines by DELEGATING to it:
@@ -94,7 +90,7 @@ import { HttpResponseDto } from './HttpResponseDto';
  * }
  *
  * // startup, ONCE per process (server AND browser)
- * ApiRegistry.setErrorTranslator(new OrderErrorTranslator(), CallScope.all());
+ * ClientRegistry.setErrorTranslator(new OrderErrorTranslator());
  * ```
  */
 export interface ErrorTranslator {

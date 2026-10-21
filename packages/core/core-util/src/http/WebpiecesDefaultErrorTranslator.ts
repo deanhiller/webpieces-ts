@@ -14,8 +14,7 @@ import { HttpHeader, HttpResponseDto, HttpResponseStatus } from './HttpResponseD
  * THE webpieces default {@link ErrorTranslator} — ONE class, BOTH halves, used by the node server, by
  * every node client and by the browser bundle alike.
  *
- * It is what {@link ApiRegistry.getErrorTranslator} answers for a call no `CallScope` rung
- * (method, API, ALL) has a translator for, and it is
+ * It is what {@link ClientRegistry.getErrorTranslator} holds until an app installs its own, and it is
  * what an app's own translator calls to DECLINE an error:
  *
  * ```ts
@@ -23,7 +22,7 @@ import { HttpHeader, HttpResponseDto, HttpResponseStatus } from './HttpResponseD
  * ```
  *
  * so "no translator registered" and "a translator that does not claim this error" produce
- * byte-identical output. It lives in core-util, beside {@link ApiRegistry}, because core-util is
+ * byte-identical output. It lives in core-util, beside {@link ClientRegistry}, because core-util is
  * the package every API contract already depends on and the only one both a server and a browser
  * bundle can reach. Both halves needed nothing else: the outbound half wants
  * {@link ApiErrorBoundary} + {@link ApiErrorHttpStatus}, the inbound half wants

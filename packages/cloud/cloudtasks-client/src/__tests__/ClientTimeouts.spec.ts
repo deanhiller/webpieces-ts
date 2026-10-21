@@ -1,4 +1,4 @@
-import { WpAuthorization, AuthorizationType, WpAuth, oidcSameProject, CallScope } from '@webpieces/core-util';
+import { WpAuthorization, AuthorizationType, WpAuth, oidcSameProject } from '@webpieces/core-util';
 import 'reflect-metadata';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
@@ -7,6 +7,7 @@ import {
     ApiUnavailableError,
     Attempt,
     CallContext,
+    CallRegistry,
     ClientRegistry,
     Endpoint,
     HeaderRegistry,
@@ -68,7 +69,7 @@ class ControlledTransport extends TaskInvoker {
 
 /** Enqueue is WRITE_IDEMPOTENT in every naming mode: one name for every attempt. */
 const ctx = (method: 'work' | 'other'): CallContext =>
-    new CallContext(TaskApi.name, method, WRITE_IDEMPOTENT, TaskApi);
+    new CallContext(TaskApi.name, method, WRITE_IDEMPOTENT);
 
 class Harness {
     readonly transport = new ControlledTransport();
@@ -126,16 +127,18 @@ class Harness {
 beforeEach(() => {
     vi.useFakeTimers();
     HeaderRegistry.configure([], true);
-    ClientRegistry.resetForTests();
+    CallRegistry.clear();
     GcpTaskRegistry.clear();
+    ClientRegistry.resetForTests();
     ClientRegistry.addUrlMapping('timeout-test', 'https://timeout.example');
 });
 
 afterEach(() => {
     vi.useRealTimers();
     vi.unstubAllGlobals();
-    ClientRegistry.resetForTests();
+    CallRegistry.clear();
     GcpTaskRegistry.clear();
+    ClientRegistry.resetForTests();
 });
 
 describe('tasks generated client deadlines — Path A, webpieces owns timing', () => {
@@ -167,16 +170,16 @@ describe('tasks generated client deadlines — Path A, webpieces owns timing', (
 
     it('resolves timeout method -> API -> ALL; a registered timeout is a single attempt', async () => {
         const h = new Harness();
-        ClientRegistry.setTimeout(300, CallScope.all());
-        ClientRegistry.setTimeout(200, CallScope.api(h.api));
-        ClientRegistry.setTimeout(100, CallScope.method(h.api, 'work'));
+        CallRegistry.setTimeout(300, 'ALL');
+        CallRegistry.setTimeout(200, h.api);
+        CallRegistry.setTimeout(100, h.api, 'work');
         await h.expectTimeout(100);
         await h.expectTimeout(200, 'other');
-        ClientRegistry.setTimeout(undefined, CallScope.method(h.api, 'work'));
+        CallRegistry.setTimeout(undefined, h.api, 'work');
         await h.expectTimeout(200);
-        ClientRegistry.setTimeout(undefined, CallScope.api(h.api));
+        CallRegistry.setTimeout(undefined, h.api);
         await h.expectTimeout(300);
-        ClientRegistry.setTimeout(undefined, CallScope.all());
+        CallRegistry.setTimeout(undefined, 'ALL');
         await h.expectDefaultRetriesExhausted();
     });
 
@@ -189,23 +192,23 @@ describe('tasks generated client deadlines — Path A, webpieces owns timing', (
                 seen.push(context);
                 return call(ms);
             };
-        ClientRegistry.setTimeout(1, CallScope.method(h.api, 'work'));
-        ClientRegistry.setStrategy(strategy(300), CallScope.all());
-        ClientRegistry.setStrategy(strategy(200), CallScope.api(h.api));
-        ClientRegistry.setStrategy(strategy(100), CallScope.method(h.api, 'work'));
+        CallRegistry.setTimeout(1, h.api, 'work');
+        CallRegistry.setStrategy(strategy(300), 'ALL');
+        CallRegistry.setStrategy(strategy(200), h.api);
+        CallRegistry.setStrategy(strategy(100), h.api, 'work');
         await h.expectTimeout(100);
-        ClientRegistry.setStrategy(undefined, CallScope.method(h.api, 'work'));
+        CallRegistry.setStrategy(undefined, h.api, 'work');
         await h.expectTimeout(200);
-        ClientRegistry.setStrategy(undefined, CallScope.api(h.api));
+        CallRegistry.setStrategy(undefined, h.api);
         await h.expectTimeout(300);
         expect(seen).toEqual(Array.from({ length: 3 }, () => ctx('work')));
-        ClientRegistry.setStrategy(undefined, CallScope.all());
+        CallRegistry.setStrategy(undefined, 'ALL');
         await h.expectTimeout(1);
     });
 
     it('tunes OUR retries per API with a registered RetryStrategy', async () => {
         const h = new Harness();
-        ClientRegistry.setStrategy(new RetryStrategy(1_000, 1, 100, 2, 100).run, CallScope.api(h.api));
+        CallRegistry.setStrategy(new RetryStrategy(1_000, 1, 100, 2, 100).run, h.api);
         let failure: Error | undefined;
         const pending = h.invoke().catch((err: unknown) => {
             const error = toError(err);
@@ -221,8 +224,8 @@ describe('tasks generated client deadlines — Path A, webpieces owns timing', (
     it('supports 30s attempt, 60s backoff, then 20s attempt with one final error', async () => {
         const h = new Harness();
         let firstError: Error | undefined;
-        ClientRegistry.setTimeout(1, CallScope.all());
-        ClientRegistry.setStrategy(async (call: Attempt<unknown>): Promise<unknown> => {
+        CallRegistry.setTimeout(1, 'ALL');
+        CallRegistry.setStrategy(async (call: Attempt<unknown>): Promise<unknown> => {
             // webpieces-disable no-unmanaged-exceptions -- application strategy retries only typed timeouts
             // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
             try {
@@ -234,7 +237,7 @@ describe('tasks generated client deadlines — Path A, webpieces owns timing', (
                 await new Promise<void>((resolve: () => void) => setTimeout(resolve, 60_000));
                 return call(20_000);
             }
-        }, CallScope.api(h.api));
+        }, h.api);
         const pending = h.invoke();
         const checked = expect(pending).rejects.toEqual(new ApiCallTimeoutError(20_000, ctx('work')));
         await vi.advanceTimersByTimeAsync(30_000);
@@ -256,14 +259,14 @@ describe('tasks generated client deadlines — Path A, webpieces owns timing', (
             new Promise<void>((resolve: () => void) => {
                 finishFirst = resolve;
             });
-        ClientRegistry.setStrategy(
+        CallRegistry.setStrategy(
             async (call: Attempt<unknown>): Promise<unknown> =>
                 call(10).catch((err: Error) => {
                     expect(err).toBeInstanceOf(ApiCallTimeoutError);
                     h.transport.work = () => Promise.resolve();
                     return call(20);
                 }),
-            CallScope.api(h.api),
+            h.api,
         );
         const pending = h.invoke();
         await vi.advanceTimersByTimeAsync(10);
@@ -280,7 +283,7 @@ describe('tasks generated client deadlines — Path A, webpieces owns timing', (
     it('passes strategy exceptions through by identity, including non-Error values', async () => {
         const h = new Harness();
         for (const failure of [new Error('business failure'), new Payload('sentinel')]) {
-            ClientRegistry.setStrategy(() => Promise.reject(failure), CallScope.api(h.api));
+            CallRegistry.setStrategy(() => Promise.reject(failure), h.api);
             await expect(h.invoke()).rejects.toBe(failure);
         }
         expect(h.transport.calls).toBe(0);
@@ -310,7 +313,7 @@ describe('tasks generated client deadlines — Path A, webpieces owns timing', (
         'rejects an invalid strategy timeout %s before sending',
         async (ms: number) => {
             const h = new Harness();
-            ClientRegistry.setStrategy((call: Attempt<unknown>) => call(ms), CallScope.api(h.api));
+            CallRegistry.setStrategy((call: Attempt<unknown>) => call(ms), h.api);
             await expect(h.invoke()).rejects.toBeInstanceOf(RangeError);
             expect(h.transport.calls).toBe(0);
             expect(vi.getTimerCount()).toBe(0);
@@ -338,7 +341,7 @@ describe('tasks generated client deadlines — Path A, webpieces owns timing', (
 describe('tasks generated client — Path B, the caller owns timing (gax set)', () => {
     it('makes exactly ONE attempt under the 30 s safety cap, ignoring every registered strategy', async () => {
         const h = new Harness();
-        ClientRegistry.setStrategy(new RetryStrategy(1_000, 5, 1, 1, 1).run, CallScope.all());
+        CallRegistry.setStrategy(new RetryStrategy(1_000, 5, 1, 1, 1).run, 'ALL');
         h.transport.work = () => Promise.reject(new ApiUnavailableError('reset'));
         const opts = new ScheduleOptions(TaskName.dedup('order-1'), undefined, undefined, { timeout: 10_000 });
         await expect(h.invoke('work', opts)).rejects.toBeInstanceOf(ApiUnavailableError);
@@ -348,8 +351,8 @@ describe('tasks generated client — Path B, the caller owns timing (gax set)', 
 
     it('the safety cap follows the timeout ladder and holds on a hung transport', async () => {
         const h = new Harness();
-        GcpTaskRegistry.setGax({ timeout: 10_000 }, CallScope.method(h.api, 'work'));
-        ClientRegistry.setTimeout(300, CallScope.api(h.api));
+        GcpTaskRegistry.setGax({ timeout: 10_000 }, h.api, 'work');
+        CallRegistry.setTimeout(300, h.api);
         await h.expectTimeout(300);
         expect(h.transport.calls).toBe(1);
         expect(h.transport.timeouts).toEqual([300]);

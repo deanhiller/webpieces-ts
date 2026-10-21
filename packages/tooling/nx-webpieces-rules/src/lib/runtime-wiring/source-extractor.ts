@@ -121,10 +121,6 @@ export class WiringSourceExtractor {
         const contract = this.values.identity(api!);
         const direction = method === 'addRoutes' ? 'implements' : 'uses';
         const contractTransport = this.values.transport(api!);
-        if (contractTransport === 'external') {
-            this.recordExternalOutbound(call, method, owner, contract);
-            return;
-        }
         const transport =
             method === 'addRoutes'
                 ? contractTransport
@@ -146,41 +142,6 @@ export class WiringSourceExtractor {
                 direction === 'implements'
                     ? new ImplementsFacts(transport, this.values.condition(call))
                     : new UsesFacts(transport, target!, this.values.condition(call)),
-            ),
-        );
-        this.exported[owner] = exported;
-    }
-
-    /**
-     * An EXTERNAL_OUTBOUND contract — an outside system's API. A client bound to it is a `uses` edge
-     * to a VENDOR node, never to a service of ours, and no server in this repo may implement it.
-     */
-    private recordExternalOutbound(
-        call: ts.CallExpression,
-        method: string,
-        owner: string,
-        contract: ContractIdentity,
-    ): void {
-        if (method === 'addRoutes')
-            this.fail(
-                `${contract.project}#${contract.exportedName} is EXTERNAL_OUTBOUND — an outside system's API — so no server in this repo may addRoutes it. Bind a client to it, or change its endpoints to RPC / EXTERNAL_INBOUND.`,
-            );
-        if (method === 'createPubSubClientAndBind' || method === 'createPubSubClient')
-            this.fail(
-                `${contract.project}#${contract.exportedName} is EXTERNAL_OUTBOUND, a synchronous outside API; bind it with createRpcClientAndBind.`,
-            );
-        const exported = this.exported[owner];
-        exported.relationships.push(
-            new WiringRelationship(
-                contract,
-                new UsesFacts(
-                    'external',
-                    {
-                        kind: 'unknown',
-                        reason: 'EXTERNAL_OUTBOUND contract; destination classified by approved contract metadata',
-                    },
-                    this.values.condition(call),
-                ),
             ),
         );
         this.exported[owner] = exported;

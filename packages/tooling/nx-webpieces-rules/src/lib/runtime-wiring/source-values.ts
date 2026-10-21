@@ -73,11 +73,10 @@ export class WiringSourceValues {
         );
     }
 
-    transport(expression: ts.Expression): 'rpc' | 'pubsub' | 'external' {
+    transport(expression: ts.Expression): 'rpc' | 'pubsub' {
         const declaration = this.symbol(expression)?.declarations?.[0];
         if (declaration === undefined || !ts.isClassDeclaration(declaration))
             this.fail(`API ${expression.getText()} must resolve to its source contract class.`);
-        if (this.isExternalOutbound(declaration as ts.ClassDeclaration)) return 'external';
         for (const decorator of ts.getDecorators(declaration as ts.ClassDeclaration) ?? []) {
             const expression = decorator.expression;
             const name = this.symbolName(
@@ -86,24 +85,6 @@ export class WiringSourceValues {
             if (name === 'PubSub') return 'pubsub';
         }
         return 'rpc';
-    }
-
-    /**
-     * True when every `@Endpoint` of the contract declares `EXTERNAL_OUTBOUND` (its 4th argument): an
-     * outside system's API, which a client reaches as a VENDOR node and no server here implements.
-     */
-    private isExternalOutbound(declaration: ts.ClassDeclaration): boolean {
-        let endpoints = 0;
-        for (const member of declaration.members) {
-            for (const decorator of ts.canHaveDecorators(member) ? (ts.getDecorators(member) ?? []) : []) {
-                const call = decorator.expression;
-                if (!ts.isCallExpression(call) || this.symbolName(call.expression) !== 'Endpoint') continue;
-                endpoints++;
-                const kind = call.arguments[3];
-                if (kind === undefined || this.symbolName(kind) !== 'EXTERNAL_OUTBOUND') return false;
-            }
-        }
-        return endpoints > 0;
     }
 
     arguments(invocation: ts.NewExpression | ts.CallExpression): Record<string, DeclaredTarget> {

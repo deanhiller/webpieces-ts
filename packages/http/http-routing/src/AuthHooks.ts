@@ -54,12 +54,67 @@ export abstract class OidcHook {
 export const OIDC_HOOK = Symbol.for('OidcHook');
 
 /**
+ * WebhookAuthCallback - the OPTIONAL mechanism behind `webhook(name)`: prove that an inbound request was
+ * really authored by the outside vendor the contract names. Its DI token is the {@link WEBHOOK_AUTH_CALLBACK}
+ * Symbol injected via `@inject(WEBHOOK_AUTH_CALLBACK)` (a Symbol, because the app container uses autobind;
+ * rebindable in tests). The third hook, symmetric with {@link JwtHook} / {@link OidcHook}:
+ *
+ * ```typescript
+ * // AppModule.ts, beside the CompanyJwtHook binding
+ * options.bind(WEBHOOK_AUTH_CALLBACK).to(CompanyWebhookAuthCallback);
+ * ```
+ *
+ * When NO WebhookAuthCallback is bound, the framework {@link AuthFilter} 401s every `webhook(...)` endpoint,
+ * exactly as it does for an unbound JwtHook. There is no framework default and there never will be
+ * one: silently allowing an unverified webhook is the single default that must not exist, and the
+ * framework ships no vendor crypto by design (see {@link webhook} for why reimplementing five
+ * vendors' schemes is a losing trade).
+ *
+ * ONE hook serves EVERY vendor: `name` selects which, so an app with a Sentry hook and a Twilio hook
+ * switches on it rather than binding a token per vendor. What arrives is enough of the raw request to
+ * call the vendor's OWN validator — `request.raw.rawBody` for a body-signing vendor (Sentry, GitHub,
+ * Stripe, Slack), `request.raw.absoluteUrl` for one that signs the url instead (Twilio).
+ */
+export abstract class WebhookAuthCallback {
+    /**
+     * Verify ONE inbound request. Return the {@link AuthenticatedCaller} the vendor's signature
+     * proved; throw {@link ApiUnauthorizedError} to deny.
+     *
+     * IT RETURNS A CALLER, not `void`, for the same reason {@link ApiKeyHook.verifyApiKey} does: once
+     * the signature checks out, the payload's vendor account is a PROVEN fact, and a hook that could
+     * only return `void` had no way to say so. The framework seeds `entries` with
+     * `RequestContext.putTrusted` exactly as it does for a jwt or api-key caller, so a controller
+     * reads which vendor account this webhook is for off the context instead of re-deriving it.
+     *
+     * Return only what THIS hook proved from the signature it just verified. `webhook` remains
+     * caller-NOT-verified (see `AuthFilter.verifiesCaller`): a vendor is not a peer service, so
+     * nothing the vendor merely ASSERTED on the wire is admitted.
+     *
+     * @param name    the string on the contract's `webhook(name)` — which vendor this route is.
+     * @param request the transport-neutral request, narrowed to {@link RawHttpRequest}: `request.raw`
+     *                holds the verbatim bytes + absolute url and is PRESENT, never optional.
+     *                `webhook(...)` requires `@Endpoint(..., { rawBody: true })` at wiring time, and
+     *                AuthFilter 401s rather than calling this hook with nothing to check — so an
+     *                implementation never writes `raw!` or a guard of its own.
+     */
+    abstract verifyWebhook(name: string, request: RawHttpRequest): Promise<AuthenticatedCaller>;
+}
+
+/**
+ * DI identifier for the optional {@link WebhookAuthCallback} binding. It is a Symbol (not the class) so the app
+ * container's inversify autobind never auto-constructs this token, keeping `@optional() @inject(WEBHOOK_AUTH_CALLBACK)`
+ * correct — undefined when unbound. The WebhookAuthCallback class stays the TYPE and the impl base.
+ */
+// webpieces-disable no-symbol-di-tokens -- optional DI token: must be a Symbol so the app container's autobind never auto-constructs this token, keeping @optional() @inject(...) correct (undefined when unbound)
+export const WEBHOOK_AUTH_CALLBACK = Symbol.for('WebhookAuthCallback');
+
+/**
  * ApiKeyHook - the OPTIONAL mechanism behind `apiKey(regime, credentials)`: authenticate a
  * CUSTOMER-held api key
  * against the app's own datastore and return the context to seed. Its DI token is the
  * {@link API_KEY_HOOK} Symbol injected via `@inject(API_KEY_HOOK)` (a Symbol, because the app container
  * uses autobind; rebindable in tests). The fourth hook, symmetric with {@link JwtHook} /
- * {@link OidcHook} / `VendorAuthHook` (@webpieces/core-context):
+ * {@link OidcHook} / {@link WebhookAuthCallback}:
  *
  * ```typescript
  * // AppModule.ts, beside the CompanyJwtHook binding

@@ -37,8 +37,6 @@ import {
     Surface,
     WebpiecesCoreHeaders,
     WebpiecesDefaultErrorTranslator,
-    ApiRegistry,
-    CallScope,
 } from '@webpieces/core-util';
 import { ExpressWrapper } from '../ExpressWrapper';
 import { RequestContext, RequestContextHeaders } from '@webpieces/core-context';
@@ -206,7 +204,6 @@ beforeAll(() => {
 
 beforeEach(() => {
     ClientRegistry.resetForTests();
-    ApiRegistry.resetForTests();
     capturing.lines.length = 0;
 });
 
@@ -471,7 +468,7 @@ describe('handleError — what still goes out on purpose', () => {
     });
 
     it('an app-installed toWire result is passed through untouched — status, REASON and body', () => {
-        ApiRegistry.setErrorTranslator(new VendorPortalTranslator(), CallScope.all());
+        ClientRegistry.setErrorTranslator(new VendorPortalTranslator());
 
         const res = harness.send(new VendorPortalError('portal says: contract 8812 is suspended'));
 
@@ -485,7 +482,7 @@ describe('handleError — what still goes out on purpose', () => {
     });
 
     it('the app owns HEADERS too — and repeats survive, which a Map would have dropped', () => {
-        ApiRegistry.setErrorTranslator(new VendorPortalTranslator(), CallScope.all());
+        ClientRegistry.setErrorTranslator(new VendorPortalTranslator());
 
         const res = harness.send(new VendorPortalError('suspended'));
 

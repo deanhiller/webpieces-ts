@@ -5,7 +5,7 @@ import {
     ApiPath,
     Endpoint,
     WpAuthPublic,
-    EXTERNAL_INBOUND,
+    EXTERNAL,
     POST,
     RPC,
     WRITE,
@@ -16,7 +16,7 @@ import { getEndpointCaller } from '../external-caller';
 abstract class TypeCheckApi {
     @WpAuthPublic('Declared external endpoint fixture')
     @WpAuthorization({ authType: AuthorizationType.ANONYMOUS, reason: 'Declared external endpoint fixture' })
-    @Endpoint(POST, '/ok', WRITE, EXTERNAL_INBOUND, { calledBy: 'twilio' })
+    @Endpoint(POST, '/ok', WRITE, EXTERNAL, { calledBy: 'twilio' })
     declared(_req: object): Promise<object> {
         throw new Error('subclass');
     }

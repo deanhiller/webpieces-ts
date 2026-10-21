@@ -9,14 +9,8 @@ import {
     ErrorTranslator,
     HttpResponseDto,
     HttpResponseStatus,
-    READ,
-    RouteMetadata,
-    ApiNotFoundError,
-    ApiRateLimitedError,
     toError,
     WebpiecesDefaultErrorTranslator,
-    ApiRegistry,
-    CallScope,
 } from '@webpieces/core-util';
 import { ClientErrorTranslator } from '../ClientErrorTranslator';
 
@@ -68,49 +62,6 @@ class SilentTranslator implements ErrorTranslator {
 }
 
 /** The response DTO a client's HttpResponseDtoFactory hands the translator. */
-/** Synthetic contract classes: the translator ladder is keyed by the CLASS, never by its name. */
-abstract class SaveApi {}
-abstract class VendorApi {
-    abstract fetchThing(): Promise<void>;
-}
-
-const routeOf = (api: Function, methodName: string): RouteMetadata => {
-    const route = new RouteMetadata('POST', `/${methodName}`, methodName, READ);
-    route.apiClass = api;
-    return route;
-};
-const SAVE_ROUTE = routeOf(SaveApi, 'save');
-const VENDOR_ROUTE = routeOf(VendorApi, 'fetchThing');
-
-/** A vendor's OWN error envelope — nothing like webpieces' ApiErrorPayload. Synthetic. */
-class VendorFault {
-    constructor(
-        readonly errorCode: string,
-        readonly detail: string,
-    ) {}
-}
-
-/**
- * Reads the vendor's own error body into the typed webpieces errors; anything else (a 2xx, a body
- * that is not the vendor's) DECLINES by delegating to the webpieces default.
- */
-class VendorErrorTranslator implements ErrorTranslator {
-    private readonly fallback = new WebpiecesDefaultErrorTranslator();
-
-    toWire(error: Error): HttpResponseDto {
-        return this.fallback.toWire(error);
-    }
-
-    fromWire(response: HttpResponseDto, role: ClientRole): void {
-        const body = response.body as VendorFault | undefined;
-        if (response.status.code >= 400 && typeof body?.errorCode === 'string') {
-            if (body.errorCode === 'NO_SUCH_THING') throw new ApiNotFoundError(`vendor: ${body.detail}`);
-            if (body.errorCode === 'SLOW_DOWN') throw new ApiRateLimitedError(`vendor: ${body.detail}`);
-        }
-        this.fallback.fromWire(response, role);
-    }
-}
-
 const fakeResponse = (
     status: number,
     body: unknown = new ApiErrorPayload('', 'Request Failed'),
@@ -137,18 +88,17 @@ const catchOf = (run: () => void): Error => {
 describe('ClientErrorTranslator', () => {
     beforeEach(() => {
         ClientRegistry.resetForTests();
-        ApiRegistry.resetForTests();
     });
 
     it('with nothing registered, applies the webpieces default: 4xx is MY bug', () => {
         expect(() =>
-            ClientErrorTranslator.throwIfFailure(fakeResponse(404), ClientRole.SERVER, SAVE_ROUTE),
+            ClientErrorTranslator.throwIfFailure(fakeResponse(404), ClientRole.SERVER),
         ).toThrow(ApiImplementationError);
     });
 
     it('with nothing registered, 5xx is the PEER bug, not ours', () => {
         expect(() =>
-            ClientErrorTranslator.throwIfFailure(fakeResponse(503), ClientRole.SERVER, SAVE_ROUTE),
+            ClientErrorTranslator.throwIfFailure(fakeResponse(503), ClientRole.SERVER),
         ).toThrow(ApiDependencyError);
     });
 
@@ -156,37 +106,37 @@ describe('ClientErrorTranslator', () => {
         expect(() =>
             ClientErrorTranslator.throwIfFailure(
                 fakeResponse(200, { ok: true }),
-                ClientRole.SERVER, SAVE_ROUTE,
+                ClientRole.SERVER,
             ),
         ).not.toThrow();
     });
 
     it('a registered translator reconstructs a custom type (460) the default cannot', () => {
-        ApiRegistry.setErrorTranslator(new AiErrorTranslator(), CallScope.all());
+        ClientRegistry.setErrorTranslator(new AiErrorTranslator());
         const pe = new ApiErrorPayload('bad-request', 'Bad Request');
         pe.message = 'bad ai input';
 
         expect(() =>
-            ClientErrorTranslator.throwIfFailure(fakeResponse(460, pe), ClientRole.SERVER, SAVE_ROUTE),
+            ClientErrorTranslator.throwIfFailure(fakeResponse(460, pe), ClientRole.SERVER),
         ).toThrow(AiBadRequestError);
     });
 
     it('a status the app does not claim DELEGATES to the default, not to a sentinel', () => {
-        ApiRegistry.setErrorTranslator(new AiErrorTranslator(), CallScope.all()); // only claims 460
+        ClientRegistry.setErrorTranslator(new AiErrorTranslator()); // only claims 460
 
         expect(() =>
-            ClientErrorTranslator.throwIfFailure(fakeResponse(403), ClientRole.SERVER, SAVE_ROUTE),
+            ClientErrorTranslator.throwIfFailure(fakeResponse(403), ClientRole.SERVER),
         ).toThrow(ApiImplementationError);
     });
 
     it('registering a translator that only delegates is identical to registering nothing', () => {
         const withNothing = catchOf(() =>
-            ClientErrorTranslator.throwIfFailure(fakeResponse(500), ClientRole.SERVER, SAVE_ROUTE),
+            ClientErrorTranslator.throwIfFailure(fakeResponse(500), ClientRole.SERVER),
         );
 
-        ApiRegistry.setErrorTranslator(new WebpiecesDefaultErrorTranslator(), CallScope.all());
+        ClientRegistry.setErrorTranslator(new WebpiecesDefaultErrorTranslator());
         const withDelegating = catchOf(() =>
-            ClientErrorTranslator.throwIfFailure(fakeResponse(500), ClientRole.SERVER, SAVE_ROUTE),
+            ClientErrorTranslator.throwIfFailure(fakeResponse(500), ClientRole.SERVER),
         );
 
         expect(withDelegating.constructor).toBe(withNothing.constructor);
@@ -195,19 +145,19 @@ describe('ClientErrorTranslator', () => {
 
     it('an app translator can turn a 200 into a throw', () => {
         class PaymentDeclined extends Error {}
-        ApiRegistry.setErrorTranslator({
+        ClientRegistry.setErrorTranslator({
             toWire: (error: Error) => new WebpiecesDefaultErrorTranslator().toWire(error),
             fromWire: (dto: HttpResponseDto, role: ClientRole) => {
                 const body = dto.body as { status?: string } | undefined;
                 if (body?.status === 'DECLINED') throw new PaymentDeclined('card declined');
                 new WebpiecesDefaultErrorTranslator().fromWire(dto, role);
             },
-        }, CallScope.all());
+        });
 
         expect(() =>
             ClientErrorTranslator.throwIfFailure(
                 fakeResponse(200, { status: 'DECLINED' }),
-                ClientRole.SERVER, SAVE_ROUTE,
+                ClientRole.SERVER,
             ),
         ).toThrow(PaymentDeclined);
     });
@@ -217,7 +167,7 @@ describe('ClientErrorTranslator', () => {
             new ApiEndUserError('say it again'),
         );
 
-        const error = catchOf(() => ClientErrorTranslator.throwIfFailure(wire, ClientRole.SERVER, SAVE_ROUTE));
+        const error = catchOf(() => ClientErrorTranslator.throwIfFailure(wire, ClientRole.SERVER));
         expect(error).toBeInstanceOf(ApiEndUserError);
         expect(error.message).toBe('say it again');
     });
@@ -229,13 +179,13 @@ describe('ClientErrorTranslator', () => {
      */
     describe('a non-2xx can never return normally', () => {
         it('an app translator that silently returns is backstopped by the webpieces default', () => {
-            ApiRegistry.setErrorTranslator(new SilentTranslator(), CallScope.all());
+            ClientRegistry.setErrorTranslator(new SilentTranslator());
 
             expect(() =>
-                ClientErrorTranslator.throwIfFailure(fakeResponse(404), ClientRole.SERVER, SAVE_ROUTE),
+                ClientErrorTranslator.throwIfFailure(fakeResponse(404), ClientRole.SERVER),
             ).toThrow(ApiImplementationError);
             expect(() =>
-                ClientErrorTranslator.throwIfFailure(fakeResponse(500), ClientRole.SERVER, SAVE_ROUTE),
+                ClientErrorTranslator.throwIfFailure(fakeResponse(500), ClientRole.SERVER),
             ).toThrow(ApiDependencyError);
         });
 
@@ -243,72 +193,9 @@ describe('ClientErrorTranslator', () => {
             expect(() =>
                 ClientErrorTranslator.throwFailure(
                     fakeResponse(200, { ok: true }),
-                    ClientRole.SERVER, SAVE_ROUTE,
+                    ClientRole.SERVER,
                 ),
             ).toThrow(/ordinary success/);
         });
-    });
-});
-
-describe('ClientErrorTranslator — the translator is resolved per ROUTE on the CallScope ladder', () => {
-    beforeEach(() => {
-    ClientRegistry.resetForTests();
-    ApiRegistry.resetForTests();
-});
-
-    const vendorBody = (status: number, fault: VendorFault): HttpResponseDto =>
-        new HttpResponseDto(new HttpResponseStatus(status, ''), [], fault);
-
-    it('a per-API translator maps a vendor error body to a typed Api*Error', () => {
-        ApiRegistry.setErrorTranslator(new VendorErrorTranslator(), CallScope.api(VendorApi));
-
-        const notFound = catchOf(() =>
-            ClientErrorTranslator.throwIfFailure(
-                vendorBody(404, new VendorFault('NO_SUCH_THING', 'thing 7')),
-                ClientRole.SERVER,
-                VENDOR_ROUTE,
-            ),
-        );
-        expect(notFound).toBeInstanceOf(ApiNotFoundError);
-        expect(notFound.message).toBe('vendor: thing 7');
-
-        const limited = catchOf(() =>
-            ClientErrorTranslator.throwIfFailure(
-                vendorBody(429, new VendorFault('SLOW_DOWN', 'retry later')),
-                ClientRole.SERVER,
-                VENDOR_ROUTE,
-            ),
-        );
-        expect(limited).toBeInstanceOf(ApiRateLimitedError);
-    });
-
-    it('another API in the same process keeps the default for the very same body', () => {
-        ApiRegistry.setErrorTranslator(new VendorErrorTranslator(), CallScope.api(VendorApi));
-
-        const error = catchOf(() =>
-            ClientErrorTranslator.throwIfFailure(
-                vendorBody(404, new VendorFault('NO_SUCH_THING', 'thing 7')),
-                ClientRole.SERVER,
-                SAVE_ROUTE,
-            ),
-        );
-        // The webpieces default: a received 4xx is OUR bug, never the vendor's typed not-found.
-        expect(error).toBeInstanceOf(ApiImplementationError);
-        expect(error.message).not.toContain('vendor:');
-    });
-
-    it('a per-method translator beats the per-API one for that method only', () => {
-        ApiRegistry.setErrorTranslator(new WebpiecesDefaultErrorTranslator(), CallScope.api(VendorApi));
-        ApiRegistry.setErrorTranslator(new VendorErrorTranslator(), CallScope.method(VendorApi, 'fetchThing'));
-        const fault = vendorBody(404, new VendorFault('NO_SUCH_THING', 'thing 7'));
-
-        expect(
-            catchOf(() => ClientErrorTranslator.throwIfFailure(fault, ClientRole.SERVER, VENDOR_ROUTE)),
-        ).toBeInstanceOf(ApiNotFoundError);
-        expect(
-            catchOf(() =>
-                ClientErrorTranslator.throwIfFailure(fault, ClientRole.SERVER, routeOf(VendorApi, 'other')),
-            ),
-        ).toBeInstanceOf(ApiImplementationError);
     });
 });

@@ -1,6 +1,5 @@
 import {
     AnyContextKey,
-    ApiImplementationError,
     DestinationTrust,
     HeaderRegistry,
     RecorderKeys,
@@ -56,26 +55,17 @@ export class RequestContextHeaders {
         this.requireActiveContext();
 
         const headers = new Map<string, string>();
-        // An EXTERNAL_OUTBOUND destination lists EXACTLY what it sends, and each listed key is
-        // required; every other destination filters the registry's transferred keys
-        // (getTransferredKeys() is precomputed at configure() time).
-        const listed = destination.listedKeys();
-        for (const key of listed ?? HeaderRegistry.get().getTransferredKeys()) {
+        // getTransferredKeys() is precomputed at configure() time.
+        for (const key of HeaderRegistry.get().getTransferredKeys()) {
             if (!destination.allows(key)) {
                 continue;
             }
-            // The key list is AnyContextKey[] — mixed in both value type and trust — so this reads
-            // through getAny (serialization to the wire, not a trust decision) and narrows with the
-            // typeof-string guard; every transferred value is a wire string.
+            // getTransferredKeys() is AnyContextKey[] — mixed in both value type and trust — so this
+            // reads through getAny (serialization to the wire, not a trust decision) and narrows with
+            // the typeof-string guard; every transferred value is a wire string.
             const value = RequestContext.getAny(key);
             if (typeof value === 'string' && value !== '') {
                 headers.set(key.httpHeader!, value);
-            } else if (listed !== undefined) {
-                throw new ApiImplementationError(
-                    `Context key '${key.name}' (header ${key.httpHeader}) is listed in @ExternalContextKeys for this ` +
-                        `outbound call but has no value in the RequestContext. Put it in the context before calling — ` +
-                        `nothing was sent.`,
-                );
             }
         }
 
@@ -83,10 +73,6 @@ export class RequestContextHeaders {
         // one) so a downstream server logs which build actually called it. Overwrite whatever the loop
         // copied from an inbound clientVersion with ours; if THIS service has no version, drop it
         // rather than forward the caller's as if it were ours. Non-throwing read — absent before setInfo.
-        // An EXTERNAL_OUTBOUND destination gets no version stamp unless it LISTS the key.
-        if (!destination.allows(WebpiecesCoreHeaders.CLIENT_VERSION)) {
-            return headers;
-        }
         const myVersion = ServiceInfo.getVersion();
         const clientVersionHeader = WebpiecesCoreHeaders.CLIENT_VERSION.httpHeader!;
         if (myVersion) {
@@ -170,9 +156,8 @@ export class RequestContextHeaders {
             if (value === null || value === '') {
                 continue;
             }
-            if (!destination.believesResponse(key)) {
-                // DROPPED: a trusted key asserted by a destination we did not authenticate to, or ANY
-                // key from an EXTERNAL_OUTBOUND (vendor) destination.
+            if (!destination.allows(key)) {
+                // DROPPED: a trusted key asserted by a destination we did not authenticate to.
                 continue;
             }
             const merged = key.mergeResponseValue(RequestContext.getAny(key), value);

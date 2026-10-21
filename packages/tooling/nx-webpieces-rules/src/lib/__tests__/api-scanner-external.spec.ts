@@ -207,12 +207,12 @@ describe('describeMismatchedEndpointKinds', () => {
         });
         expect(problems).toHaveLength(2);
         expect(problems[0]).toContain('TaskApi.nope');
-        expect(problems[0]).toContain('cloudtasks | cron | external-inbound');
+        expect(problems[0]).toContain('cloudtasks | cron | external');
         expect(problems[1]).toContain('WebApi.sweep');
-        expect(problems[1]).toContain('rpc | external-inbound | external-outbound');
+        expect(problems[1]).toContain('rpc | external');
     });
 
-    it('accepts external-inbound on BOTH kinds — a webhook posts synchronously, a push subscription does not', () => {
+    it('accepts external on BOTH kinds — a webhook posts synchronously, a push subscription does not', () => {
         expect(
             describeMismatchedEndpointKinds({
                 Hook: {
@@ -220,14 +220,14 @@ describe('describeMismatchedEndpointKinds', () => {
                     apiKind: 'rpc',
                     basePath: '/a',
                     methods: [
-                        { name: 'inbound', path: '/in', kind: 'external-inbound', operation: 'write' },
+                        { name: 'inbound', path: '/in', kind: 'external', operation: 'write' },
                     ],
                 },
                 Push: {
                     owner: 'b',
                     apiKind: 'pubsub',
                     basePath: '/b',
-                    methods: [{ name: 'notify', path: '/n', kind: 'external-inbound', operation: 'write' }],
+                    methods: [{ name: 'notify', path: '/n', kind: 'external', operation: 'write' }],
                 },
             }),
         ).toEqual([]);

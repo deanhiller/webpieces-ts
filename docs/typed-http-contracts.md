@@ -7,8 +7,7 @@ mode. Every transport reads the same metadata and uses the same argument mapper.
 
 ## GET, path, and query parameters
 
-Every endpoint names its verb explicitly — `GET`, `POST`, `PUT`, `PATCH` or `DELETE`; there is no
-method default. Name every path/query
+Every endpoint names `GET` or `POST` explicitly; there is no method default. Name every path/query
 parameter explicitly so a TypeScript variable rename can never change the public wire contract:
 
 ```typescript
@@ -50,22 +49,17 @@ GET /catalog/owners/A%2FB/items/42?include_archived=false&tag=red&tag=blue
 ```
 
 Incoming values are converted from strings using emitted TypeScript design metadata. `string`,
-`number`, `boolean`, and repeated array parameters are supported. Design metadata erases `number[]`
-to `Array`, so a list of numbers or booleans names its item type — `@QueryParam('id', Number) ids:
-number[]` — and its items arrive converted (a non-numeric item is a 400); without it they are strings. Missing path values, invalid
+`number`, `boolean`, and repeated array parameters are supported. Missing path values, invalid
 numbers/booleans, or a repeated scalar are a `400 ApiBadRequestError`. A missing query value is
 passed as `undefined`; controllers own any domain-level required-field validation.
 
-A `GET` or `DELETE` contract must map every method parameter with `@PathParam` or `@QueryParam`,
-and every `{placeholder}` must have exactly one matching path parameter. These are startup/client-creation
+A `GET` contract must map every method parameter with `@PathParam` or `@QueryParam`, and every
+`{placeholder}` must have exactly one matching path parameter. These are startup/client-creation
 errors, rather than malformed requests discovered in production.
 
-## POST, PUT and PATCH bodies and forms
+## POST bodies and forms
 
-A `POST`, `PUT` or `PATCH` method may have one unannotated parameter: that parameter is the request
-body. `verbCarriesBody(method)` (`@webpieces/core-util`) is the one rule every client, the server,
-the scanner and the OpenAPI renderer use for "may this verb carry a body"; `GET` and `DELETE` never
-do. Path and
+A `POST` method may have one unannotated parameter: that parameter is the request body. Path and
 query parameters can sit beside it:
 
 ```typescript
@@ -94,79 +88,7 @@ token(request: TokenRequest): Promise<HttpResponseDto<TokenResponse | OAuthError
 
 The Node and browser clients serialize form fields symmetrically with the server parser. Nullish
 fields are omitted and arrays are repeated. Form DTOs remain flat; nested values belong in JSON.
-`formPost` and `rawBody` require a body-carrying verb (POST, PUT or PATCH).
-
-A `CLOUDTASKS` or `CRON` endpoint must be `POST`: task and scheduler delivery always POSTs, so any
-other verb is refused at startup rather than registering a route nothing reaches.
-
-## Void methods: 0 bytes
-
-A method that returns `Promise<void>` declares `{ responseBody: NONE }`:
-
-```typescript
-@Endpoint(PUT, '/items/{id}/touch', WRITE_IDEMPOTENT, RPC, { responseBody: NONE })
-touch(@PathParam('id') id: string): Promise<void> {
-    throw new Error('contract only');
-}
-```
-
-Our server answers `204 No Content` with no body and no Content-Type. Every client — node,
-browser and the in-process `createApiClient` — resolves `undefined`, and ACCEPTS a `204`, an empty
-`200`, `{}` or any undocumented body on such a route (a vendor whose spec documents no response may
-still send one). The option exists because `design:returntype` of an async method is just
-`Promise`; the architecture scan refuses a `Promise<void>` method without it, and `NONE` on a method
-that returns anything else. It cannot combine with `responseType: 'full'` or a stream.
-
-`NONE` is for `RPC` and `EXTERNAL_INBOUND`, where OUR server answers and a body is a real question.
-An `EXTERNAL_OUTBOUND` endpoint is served by the vendor, which shapes its own responses, so NONE —
-what our server sends — does not compile there and is refused at startup and by the scan (#1348).
-Its client accepts ANY 2xx: a 204 or an empty body resolves `undefined`, a JSON body is parsed (a
-`Promise<void>` caller ignores it), and a non-JSON body such as `OK` resolves `undefined`; it never
-throws on a 2xx. The generated OpenAPI documents an outbound void as "any 2xx acknowledges", never
-as `204 No Content`. A
-`CLOUDTASKS` or `CRON` endpoint is fire-and-forget BY KIND — Cloud Tasks and the scheduler read
-nothing but the status — so the kind itself means no response body (#1348): such a method returns
-`Promise<void>` and writes no `responseBody` option, and gets the same 204 / `undefined` behaviour.
-Writing `{ responseBody: NONE }` on one does not compile and is refused at startup and by the
-architecture scan as redundant; a CLOUDTASKS / CRON method returning a value is refused by the scan.
-
-```typescript
-@Endpoint(POST, '/send', WRITE, CLOUDTASKS)
-sendEmail(request: SendEmailRequest): Promise<void> {
-    throw new Error('contract only');
-}
-```
-
-## Calling an outside system: `EXTERNAL_OUTBOUND`
-
-A contract for a vendor's API — one WE call and no server in this repo implements — marks every
-method `EXTERNAL_OUTBOUND` (its inbound twin, `EXTERNAL_INBOUND`, is a vendor calling US and still
-requires `calledBy`). Mixing `EXTERNAL_OUTBOUND` with any other kind on one contract is refused.
-
-```typescript
-@ApiPath('/v3')
-@ExternalContextKeys(WebpiecesCoreHeaders.REQUEST_ID)   // class: every endpoint sends these
-abstract class VendorApi {
-    @Endpoint(GET, '/merchants/{mId}/items', READ, EXTERNAL_OUTBOUND)
-    @ExternalContextKeys(VendorKeys.MERCHANT_ID)        // method: ADDS keys for this method
-    @WpAuth([vendorAuth('vendor')])
-    @WpAuthorization({ authType: AuthorizationType.SERVICE_ONLY })
-    getItems(@PathParam('mId') mId: string): Promise<ItemsDto> {
-        throw new Error('contract only');
-    }
-}
-```
-
-Its query string is free-form: one `@QueryString() query: QueryParams` argument (a multimap —
-`new QueryParams().add('filter', 'a').add('filter', 'b').set('limit', 100)` sends
-`?filter=a&filter=b&limit=100`; `getAll`, `getSingle` (400 when repeated), `getNumber`, `getBoolean`
-read it). `@QueryString()` is allowed ONLY on an `EXTERNAL_OUTBOUND` contract — a vendor's query
-grammar is the vendor's; our own contracts name each key with the typed `@QueryParam`.
-
-Its client sends ONLY the listed context keys — no `x-request-id`, no `x-webpieces-*` key, no app
-transferred key unless listed — and merges NO response header from the vendor into our context. A
-listed key with no value throws before any I/O. `DestinationTrust.forAuthMode` is unchanged, so the
-wire to our own servers is identical. `Promise<void>` is allowed on `EXTERNAL_*` endpoints.
+`formPost` and `rawBody` are POST-only.
 
 ## Owning the complete response
 
@@ -213,7 +135,7 @@ Authentication and authorization apply identically to every verb and encoding:
 
 - `@WpAuthPublic(reason)` pairs with `@WpAuthorization({authType: AuthorizationType.ANONYMOUS, reason})`.
   Protocol credentials and payload validation remain the controller's responsibility.
-- `@WpAuth([jwt(), oidcSameProject(), sharedSecret(...), vendorAuth(...), apiKey(...)])` accepts any
+- `@WpAuth([jwt(), oidcSameProject(), sharedSecret(...), webhook(...), apiKey(...)])` accepts any
   declared credential mechanism, one per kind, except that `oidcSameProject()` and `oidcSvcs([...])` may
   pair to admit this project's service accounts or the listed ones. A separate `@WpAuthorization(...)`
   controls access.

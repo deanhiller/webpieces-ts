@@ -1,6 +1,5 @@
 import { AnyContextKey } from '../ContextKey';
 import { AuthMode } from './auth-mode';
-import { RouteMetadata } from './RouteMetadata';
 
 /**
  * DestinationTrust - the OUTBOUND half of the trust model: may a TRUSTED context key
@@ -38,55 +37,21 @@ export class DestinationTrust {
      * believe context WE vouch for — this is the service-to-service identity propagation that trusted
      * keys keep an `httpHeader` for.
      */
-    private static readonly VERIFIES_CALLER = new DestinationTrust(true, undefined);
+    private static readonly VERIFIES_CALLER = new DestinationTrust(true);
 
     /**
-     * The destination cannot tell us from a browser with curl (jwt() / @WpAuthPublic / vendorAuth(...) /
+     * The destination cannot tell us from a browser with curl (jwt() / @WpAuthPublic / webhook(...) /
      * apiKey(...) / @WpLocalOnly / an endpoint with no declared mode), so trusted keys are omitted.
      * Untrusted keys still travel.
      */
-    private static readonly CANNOT_VERIFY_CALLER = new DestinationTrust(false, undefined);
+    private static readonly CANNOT_VERIFY_CALLER = new DestinationTrust(false);
 
-    private constructor(
-        private readonly verifiesCaller: boolean,
-        /**
-         * Set ONLY for an `EXTERNAL_OUTBOUND` destination: the `@ExternalContextKeys` list, which is
-         * then the WHOLE of what may be sent. Undefined for every destination in this repo, whose wire
-         * is governed by {@link forAuthMode} exactly as before.
-         */
-        private readonly externalKeys: readonly AnyContextKey[] | undefined,
-    ) {}
+    private constructor(private readonly verifiesCaller: boolean) {}
 
     /**
-     * The destination of ONE route. An `EXTERNAL_OUTBOUND` route (an outside system's API) gets a
-     * destination that sends ONLY its `@ExternalContextKeys` and believes NO response header: a vendor
-     * is somebody else's process, so our `x-request-id`, `x-webpieces-*` and app keys stay home unless
-     * the contract lists them, and nothing it answers may write into our context. Every other route is
-     * {@link forAuthMode}, unchanged — so the wire to our own servers is identical.
-     */
-    // webpieces-disable no-function-outside-class -- static factory beside forAuthMode, for the same reason
-    static forRoute(route: RouteMetadata): DestinationTrust {
-        if (route.externalOutbound) {
-            return new DestinationTrust(false, route.externalContextKeys);
-        }
-        return DestinationTrust.forAuthMode(route.authMeta?.methods[0]);
-    }
-
-    /**
-     * The keys an `EXTERNAL_OUTBOUND` destination sends — every one is REQUIRED, so a builder throws
-     * before any I/O when one has no value. Undefined for every other destination, whose builder
-     * iterates the registry's transferred keys and filters them with {@link allows}.
-     */
-    listedKeys(): readonly AnyContextKey[] | undefined {
-        return this.externalKeys;
-    }
-
-    /**
-     * The destination of a route of OURS, from its auth mode alone. An HTTP client always uses
-     * {@link forRoute}, which also covers an `EXTERNAL_OUTBOUND` route; this remains for a caller
-     * that holds only the mode — the cloud-task client, whose @PubSub contracts can never be
-     * EXTERNAL_OUTBOUND. `undefined` (an endpoint that declared no mode) is treated as
-     * un-verifying, i.e. the SAFE answer — an absent declaration must never be the widest one.
+     * The ONLY way to obtain one: state the destination endpoint's auth mode. `undefined` (an
+     * endpoint that declared no mode) is treated as un-verifying, i.e. the SAFE answer — an absent
+     * declaration must never be the widest one.
      */
     // webpieces-disable no-function-outside-class -- static factory replacing the (now private) constructor, exactly as ContextKey.trusted/untrusted do: the destination's auth mode must be part of the CALL, and a DI-injected instance method would let a caller hold one without ever naming a route
     static forAuthMode(mode: AuthMode | undefined): DestinationTrust {
@@ -99,11 +64,12 @@ export class DestinationTrust {
                 return DestinationTrust.VERIFIES_CALLER;
             case 'jwt':
             case 'public':
-            // vendorAuth(...) authenticates an OUTSIDE VENDOR, which is not the same thing as
+            // webhook(...) authenticates an OUTSIDE VENDOR, which is not the same thing as
             // authenticating a peer in this repo. The vendor knows nothing of webpieces context
             // headers and would never send one, so there is no identity to propagate in either
-            // direction. Trusted keys stay home.
-            case 'vendorAuth':
+            // direction — and a webpieces client cannot call such an endpoint anyway (it cannot mint
+            // the vendor's signature). Trusted keys stay home.
+            case 'webhook':
             // apiKey(...) authenticates a CUSTOMER, not a peer service. The holder of the key is
             // another company's codebase, so nothing it forwards may be believed, and no webpieces
             // client can call it anyway (the framework extracts no api-key header — the app's hook
@@ -132,24 +98,11 @@ export class DestinationTrust {
      *   service in our own trust domain, while a `@WpAuthPublic` / `jwt()` / partner endpoint is
      *   somebody else's process whose response headers are an assertion, not a proof.
      *
-     * For every destination in this repo the two directions are one question, so the response side
-     * ({@link believesResponse}) delegates here; only an `EXTERNAL_OUTBOUND` destination answers them
-     * differently (it sends listed keys and believes none).
+     * A second, identically-bodied `believesResponsesFrom(key)` would be two spellings of one
+     * decision — the shim shape `.claude/rules/no-backwards-compat.md` rejects — so the direction
+     * lives in the CALLER's name and the rule lives here, once.
      */
     allows(key: AnyContextKey): boolean {
-        if (this.externalKeys !== undefined) return this.externalKeys.includes(key);
         return this.verifiesCaller || !key.isTrusted();
-    }
-
-    /**
-     * May a key that came BACK on this destination's response be merged into our context? Exactly
-     * {@link allows} for a destination in this repo — and NOTHING from an `EXTERNAL_OUTBOUND` one,
-     * whose response headers are an outside system's, not a peer's. A separate method because for
-     * that destination the two directions genuinely differ: a key we LIST to send (`x-request-id`)
-     * is not thereby a key we let the vendor write back.
-     */
-    believesResponse(key: AnyContextKey): boolean {
-        if (this.externalKeys !== undefined) return false;
-        return this.allows(key);
     }
 }

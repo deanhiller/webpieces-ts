@@ -1,13 +1,10 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { ClientRole } from '../../errors/ClientRole';
 import { ClientRegistry } from '../ClientRegistry';
-import { ApiRegistry } from '../ApiRegistry';
-import { CallScope } from '../CallScope';
 import { ErrorTranslator } from '../ErrorTranslator';
 import { WebpiecesDefaultErrorTranslator } from '../WebpiecesDefaultErrorTranslator';
 import { HttpHeader, HttpResponseDto, HttpResponseStatus } from '../HttpResponseDto';
-import { CallOutcome, ErrorClassifier } from '../ErrorClassifier';
-import * as coreUtil from '../../index';
+import { CallOutcome, ErrorClassifier, KeyedErrorClassifier } from '../ErrorClassifier';
 import { ApiMethodInfo } from '../ApiMethodInfo';
 import {
     ApiBadRequestError,
@@ -20,7 +17,6 @@ describe('ClientRegistry', () => {
     beforeEach(() => {
         // The registry is a process-global; reset it so specs do not leak into one another.
         ClientRegistry.resetForTests();
-        ApiRegistry.resetForTests();
     });
 
     it('addMapping stores http://localhost:<port>', () => {
@@ -54,7 +50,6 @@ describe('ClientRegistry', () => {
     it('clear() empties the registry', () => {
         ClientRegistry.addMapping('server2', 8202);
         ClientRegistry.resetForTests();
-        ApiRegistry.resetForTests();
         expect(ClientRegistry.tryLookup('server2')).toBeUndefined();
     });
 });
@@ -66,7 +61,6 @@ describe('ClientRegistry', () => {
 describe('ClientRegistry resolution chain', () => {
     beforeEach(() => {
         ClientRegistry.resetForTests();
-        ApiRegistry.resetForTests();
     });
 
     it('a mapping WINS over the deriver', async () => {
@@ -123,7 +117,6 @@ describe('ClientRegistry resolution chain', () => {
             Promise.resolve(`https://${svc}.derived.example`),
         );
         ClientRegistry.resetForTests();
-        ApiRegistry.resetForTests();
 
         expect(await ClientRegistry.tryResolve('helper-fsdb')).toBeUndefined();
     });
@@ -185,16 +178,15 @@ const wireResponse = (code: number, pe: ApiErrorPayload = new ApiErrorPayload())
 describe('ClientRegistry error translator', () => {
     beforeEach(() => {
         ClientRegistry.resetForTests();
-        ApiRegistry.resetForTests();
     });
 
     it('is NEVER undefined — a fresh process already has the webpieces default installed', () => {
-        expect(ApiRegistry.getErrorTranslator(undefined, undefined)).toBeInstanceOf(WebpiecesDefaultErrorTranslator);
+        expect(ClientRegistry.getErrorTranslator()).toBeInstanceOf(WebpiecesDefaultErrorTranslator);
     });
 
     it('round-trips a custom type: toWire then fromWire throws the typed error back', () => {
-        ApiRegistry.setErrorTranslator(new AiErrorTranslator(), CallScope.all());
-        const translator = ApiRegistry.getErrorTranslator(undefined, undefined);
+        ClientRegistry.setErrorTranslator(new AiErrorTranslator());
+        const translator = ClientRegistry.getErrorTranslator();
 
         const wire = translator.toWire(new AiBadRequestError('bad ai input'));
         expect(wire.status.code).toBe(460);
@@ -207,8 +199,8 @@ describe('ClientRegistry error translator', () => {
     });
 
     it('a translator that does not claim the error/response DELEGATES to the default', () => {
-        ApiRegistry.setErrorTranslator(new AiErrorTranslator(), CallScope.all());
-        const translator = ApiRegistry.getErrorTranslator(undefined, undefined);
+        ClientRegistry.setErrorTranslator(new AiErrorTranslator());
+        const translator = ClientRegistry.getErrorTranslator();
 
         expect(translator.toWire(new Error('other')).status.code).toBe(500);
         // 503 is not claimed, so the webpieces default answers — and its answer for a 5xx is
@@ -218,10 +210,10 @@ describe('ClientRegistry error translator', () => {
 
     it('registering a translator that only delegates is byte-identical to registering nothing', () => {
         const declineEverything: ErrorTranslator = new WebpiecesDefaultErrorTranslator();
-        const withNothing = ApiRegistry.getErrorTranslator(undefined, undefined).toWire(new ApiNotFoundError('gone'));
+        const withNothing = ClientRegistry.getErrorTranslator().toWire(new ApiNotFoundError('gone'));
 
-        ApiRegistry.setErrorTranslator(declineEverything, CallScope.all());
-        const withDelegating = ApiRegistry.getErrorTranslator(undefined, undefined).toWire(
+        ClientRegistry.setErrorTranslator(declineEverything);
+        const withDelegating = ClientRegistry.getErrorTranslator().toWire(
             new ApiNotFoundError('gone'),
         );
 
@@ -238,28 +230,27 @@ describe('ClientRegistry error translator', () => {
                 );
             },
         };
-        ApiRegistry.setErrorTranslator(override, CallScope.all());
+        ClientRegistry.setErrorTranslator(override);
 
-        expect(() => ApiRegistry.getErrorTranslator(undefined, undefined).fromWire(wireResponse(400), ClientRole.SERVER)).toThrow(
+        expect(() => ClientRegistry.getErrorTranslator().fromWire(wireResponse(400), ClientRole.SERVER)).toThrow(
             AiBadRequestError,
         );
     });
 
     it('SET replaces — a second install is the only one consulted, so precedence is never implicit', () => {
-        ApiRegistry.setErrorTranslator(new AiErrorTranslator(), CallScope.all());
-        ApiRegistry.setErrorTranslator(new WebpiecesDefaultErrorTranslator(), CallScope.all());
+        ClientRegistry.setErrorTranslator(new AiErrorTranslator());
+        ClientRegistry.setErrorTranslator(new WebpiecesDefaultErrorTranslator());
 
-        expect(ApiRegistry.getErrorTranslator(undefined, undefined).toWire(new AiBadRequestError('x')).status.code).toBe(
+        expect(ClientRegistry.getErrorTranslator().toWire(new AiBadRequestError('x')).status.code).toBe(
             500,
         );
     });
 
     it('resetForTests() RESTORES the webpieces default, so nothing leaks into the next spec', () => {
-        ApiRegistry.setErrorTranslator(new AiErrorTranslator(), CallScope.all());
+        ClientRegistry.setErrorTranslator(new AiErrorTranslator());
         ClientRegistry.resetForTests();
-        ApiRegistry.resetForTests();
 
-        expect(ApiRegistry.getErrorTranslator(undefined, undefined)).toBeInstanceOf(WebpiecesDefaultErrorTranslator);
+        expect(ClientRegistry.getErrorTranslator()).toBeInstanceOf(WebpiecesDefaultErrorTranslator);
     });
 });
 
@@ -275,171 +266,45 @@ class OneTypeClassifier implements ErrorClassifier {
     }
 }
 
-/** Synthetic contract classes: the ladder is keyed by the CLASS, never by its name. */
-class VendorApi {
-    send(): void {}
-    list(): void {}
-}
-class SaveApi {}
-class UnregisteredApi {}
+describe('ClientRegistry.classify tiers (per-apiClass -> app default -> webpieces built-in)', () => {
+    const twilio = new ApiMethodInfo('client', 'TwilioApi', 'send');
+    const internal = new ApiMethodInfo('client', 'SaveApi', 'save');
+    const server = new ApiMethodInfo('server', 'SaveApi', 'save');
 
-const info = (side: 'client' | 'server', contract: Function, methodName: string): ApiMethodInfo =>
-    new ApiMethodInfo(side, contract.name, methodName, contract);
-
-describe('ApiRegistry.classify ladder (method -> API -> ALL -> webpieces built-in)', () => {
-    const vendorSend = info('client', VendorApi, 'send');
-    const vendorList = info('client', VendorApi, 'list');
-    const internal = info('client', SaveApi, 'save');
-    const server = info('server', SaveApi, 'save');
-
-    beforeEach(() => {
-    ClientRegistry.resetForTests();
-    ApiRegistry.resetForTests();
-});
+    beforeEach(() => ClientRegistry.resetForTests());
 
     it('falls to the webpieces built-in when nothing is registered', () => {
-        expect(ApiRegistry.classify(new ApiNotFoundError('x'), vendorSend)).toBe(CallOutcome.FAILURE);
-        expect(ApiRegistry.classify(new ApiBadRequestError('x'), server)).toBe(CallOutcome.EXPECTED);
+        expect(ClientRegistry.classify(new ApiNotFoundError('x'), twilio)).toBe(CallOutcome.FAILURE);
+        expect(ClientRegistry.classify(new ApiBadRequestError('x'), server)).toBe(CallOutcome.EXPECTED);
     });
 
-    it('ALL beats the webpieces built-in', () => {
-        ApiRegistry.setErrorClassifier(new OneTypeClassifier(ApiNotFoundError, CallOutcome.EXPECTED), CallScope.all());
-        expect(ApiRegistry.classify(new ApiNotFoundError('x'), internal)).toBe(CallOutcome.EXPECTED);
-    });
-
-    it('API beats ALL, for its contract CLASS only', () => {
-        ApiRegistry.setErrorClassifier(new OneTypeClassifier(ApiNotFoundError, CallOutcome.FAILURE), CallScope.all());
-        ApiRegistry.setErrorClassifier(new OneTypeClassifier(ApiNotFoundError, CallOutcome.EXPECTED), CallScope.api(VendorApi));
-        expect(ApiRegistry.classify(new ApiNotFoundError('x'), vendorSend)).toBe(CallOutcome.EXPECTED);
-        expect(ApiRegistry.classify(new ApiNotFoundError('x'), internal)).toBe(CallOutcome.FAILURE);
-    });
-
-    it('method beats API, for that method only', () => {
-        ApiRegistry.setErrorClassifier(new OneTypeClassifier(ApiNotFoundError, CallOutcome.EXPECTED), CallScope.api(VendorApi));
-        ApiRegistry.setErrorClassifier(
-            new OneTypeClassifier(ApiNotFoundError, CallOutcome.TRANSIENT_FAILURE),
-            CallScope.method(VendorApi, 'send'),
+    it('a per-apiClass classifier wins for its apiClass only', () => {
+        ClientRegistry.addErrorClassifier(
+            new KeyedErrorClassifier('TwilioApi', new OneTypeClassifier(ApiNotFoundError, CallOutcome.EXPECTED)),
         );
-        expect(ApiRegistry.classify(new ApiNotFoundError('x'), vendorSend)).toBe(CallOutcome.TRANSIENT_FAILURE);
-        expect(ApiRegistry.classify(new ApiNotFoundError('x'), vendorList)).toBe(CallOutcome.EXPECTED);
+        expect(ClientRegistry.classify(new ApiNotFoundError('x'), twilio)).toBe(CallOutcome.EXPECTED);
+        expect(ClientRegistry.classify(new ApiNotFoundError('x'), internal)).toBe(CallOutcome.FAILURE);
     });
 
-    it('a deferring classifier falls through every rung down to the built-in', () => {
-        ApiRegistry.setErrorClassifier(new OneTypeClassifier(ApiNotFoundError, CallOutcome.EXPECTED), CallScope.method(VendorApi, 'send'));
-        ApiRegistry.setErrorClassifier(new OneTypeClassifier(ApiBadRequestError, CallOutcome.EXPECTED), CallScope.api(VendorApi));
-        ApiRegistry.setErrorClassifier(
+    it('a deferring per-apiClass classifier falls to the app default, which falls to the built-in', () => {
+        ClientRegistry.addErrorClassifier(
+            new KeyedErrorClassifier('TwilioApi', new OneTypeClassifier(ApiNotFoundError, CallOutcome.EXPECTED)),
+        );
+        ClientRegistry.setDefaultErrorClassifier(
             new OneTypeClassifier(ApiDependencyError, CallOutcome.TRANSIENT_FAILURE),
-            CallScope.all(),
         );
-        expect(ApiRegistry.classify(new ApiBadRequestError('x'), vendorSend)).toBe(CallOutcome.EXPECTED);
-        expect(ApiRegistry.classify(new ApiDependencyError('x'), vendorSend)).toBe(
+        expect(ClientRegistry.classify(new ApiDependencyError('x'), twilio)).toBe(
             CallOutcome.TRANSIENT_FAILURE,
         );
-        expect(ApiRegistry.classify(new Error('boom'), vendorSend)).toBe(CallOutcome.FAILURE);
+        expect(ClientRegistry.classify(new Error('boom'), twilio)).toBe(CallOutcome.FAILURE);
     });
 
-    it('a contract nothing is registered for reaches the ALL rung alone', () => {
-        ApiRegistry.setErrorClassifier(new OneTypeClassifier(Error, CallOutcome.TRANSIENT_FAILURE), CallScope.api(VendorApi));
-        ApiRegistry.setErrorClassifier(new OneTypeClassifier(Error, CallOutcome.EXPECTED), CallScope.all());
-        expect(ApiRegistry.classify(new Error('boom'), info('client', UnregisteredApi, 'send'))).toBe(
-            CallOutcome.EXPECTED,
+    it('resetForTests restores the built-in default and forgets per-apiClass classifiers', () => {
+        ClientRegistry.setDefaultErrorClassifier(new OneTypeClassifier(Error, CallOutcome.EXPECTED));
+        ClientRegistry.addErrorClassifier(
+            new KeyedErrorClassifier('TwilioApi', new OneTypeClassifier(Error, CallOutcome.EXPECTED)),
         );
-    });
-
-    it('resetForTests restores the built-in default and forgets every rung', () => {
-        ApiRegistry.setErrorClassifier(new OneTypeClassifier(Error, CallOutcome.EXPECTED), CallScope.all());
-        ApiRegistry.setErrorClassifier(new OneTypeClassifier(Error, CallOutcome.EXPECTED), CallScope.api(VendorApi));
         ClientRegistry.resetForTests();
-        ApiRegistry.resetForTests();
-        expect(ApiRegistry.classify(new Error('boom'), vendorSend)).toBe(CallOutcome.FAILURE);
-    });
-});
-
-/** A translator that renders one fixed status, so a spec can see WHICH rung answered. */
-class StatusTranslator implements ErrorTranslator {
-    private readonly fallback = new WebpiecesDefaultErrorTranslator();
-
-    constructor(private readonly code: number) {}
-
-    toWire(): HttpResponseDto {
-        return new HttpResponseDto(new HttpResponseStatus(this.code, 'Rung'), [], undefined);
-    }
-
-    fromWire(response: HttpResponseDto, role: ClientRole): void {
-        this.fallback.fromWire(response, role);
-    }
-}
-
-describe('ApiRegistry.getErrorTranslator ladder (method -> API -> ALL -> webpieces default)', () => {
-    beforeEach(() => {
-    ClientRegistry.resetForTests();
-    ApiRegistry.resetForTests();
-});
-
-    const code = (api: Function | undefined, methodName: string | undefined): number =>
-        ApiRegistry.getErrorTranslator(api, methodName).toWire(new Error('x')).status.code;
-
-    it('ALL beats the webpieces default', () => {
-        expect(code(SaveApi, 'save')).toBe(500);
-        ApiRegistry.setErrorTranslator(new StatusTranslator(471), CallScope.all());
-        expect(code(SaveApi, 'save')).toBe(471);
-    });
-
-    it('API beats ALL, and another contract keeps ALL', () => {
-        ApiRegistry.setErrorTranslator(new StatusTranslator(471), CallScope.all());
-        ApiRegistry.setErrorTranslator(new StatusTranslator(472), CallScope.api(VendorApi));
-        expect(code(VendorApi, 'send')).toBe(472);
-        expect(code(SaveApi, 'save')).toBe(471);
-    });
-
-    it('method beats API, and a sibling method keeps the API translator', () => {
-        ApiRegistry.setErrorTranslator(new StatusTranslator(472), CallScope.api(VendorApi));
-        ApiRegistry.setErrorTranslator(new StatusTranslator(473), CallScope.method(VendorApi, 'send'));
-        expect(code(VendorApi, 'send')).toBe(473);
-        expect(code(VendorApi, 'list')).toBe(472);
-    });
-
-    it('no route (an unmatched request, a failure before routing) reaches ALL alone', () => {
-        ApiRegistry.setErrorTranslator(new StatusTranslator(472), CallScope.api(VendorApi));
-        expect(code(undefined, undefined)).toBe(500);
-        ApiRegistry.setErrorTranslator(new StatusTranslator(471), CallScope.all());
-        expect(code(undefined, undefined)).toBe(471);
-    });
-});
-
-/**
- * The removed spellings. Their COMPILE errors are pinned in ErrorLadderCompileAssertions.ts (tsc
- * compiles it; a spec's @ts-expect-error is inert). This asserts the runtime surface too: nothing is
- * left behind as an alias.
- */
-describe('the deleted unscoped classifier surface', () => {
-    it('ClientRegistry has no setDefaultErrorClassifier / addErrorClassifier', () => {
-        expect('setDefaultErrorClassifier' in ClientRegistry).toBe(false);
-        expect('addErrorClassifier' in ClientRegistry).toBe(false);
-        expect(typeof ApiRegistry.setErrorClassifier).toBe('function');
-    });
-
-    it('core-util no longer exports KeyedErrorClassifier', () => {
-        expect('KeyedErrorClassifier' in coreUtil).toBe(false);
-    });
-
-    it('CallRegistry is deleted; the error ladder moved off ClientRegistry onto ApiRegistry (#1354)', () => {
-        expect('CallRegistry' in coreUtil).toBe(false);
-        expect('ApiRegistry' in coreUtil).toBe(true);
-        expect('CallScope' in coreUtil).toBe(true);
-        for (const moved of ['setErrorTranslator', 'getErrorTranslator', 'setErrorClassifier', 'classify']) {
-            expect(moved in ClientRegistry).toBe(false);
-            expect(moved in ApiRegistry).toBe(true);
-        }
-        for (const outbound of ['setTimeout', 'setStrategy', 'execute', 'resolveTimeout']) {
-            expect(outbound in ClientRegistry).toBe(true);
-        }
-    });
-
-    it('CallScope factories carry the contract class and method', () => {
-        expect(CallScope.all().api).toBeUndefined();
-        expect(CallScope.api(VendorApi).api).toBe(VendorApi);
-        expect(CallScope.api(VendorApi).methodName).toBeUndefined();
-        expect(CallScope.method(VendorApi, 'send').methodName).toBe('send');
+        expect(ClientRegistry.classify(new Error('boom'), twilio)).toBe(CallOutcome.FAILURE);
     });
 });

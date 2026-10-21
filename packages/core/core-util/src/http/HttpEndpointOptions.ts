@@ -16,49 +16,20 @@ export const WRITE = EndpointOperationValue.WRITE;
 /** The side-effect contract callers use to decide whether repeating an operation is safe. */
 export type EndpointOperation = typeof READ | typeof WRITE_IDEMPOTENT | typeof WRITE;
 
-/** Nominal backing for {@link EndpointOptions.responseBody}. */
-enum ResponseBodyValue {
-    NONE = 'none',
-}
-
-/** `@Endpoint(..., { responseBody: NONE })` — the success response carries 0 bytes. */
-export const NONE = ResponseBodyValue.NONE;
-
-/** The one response-body declaration an endpoint can make; absent means a JSON body. */
-export type ResponseBodyKind = typeof NONE;
-
 /** Options for one `@Endpoint`, stored parallel to the method-to-path metadata. */
 export interface EndpointOptions {
     /** Return only a JSON body (default), or the full transport-neutral status/header/body value. */
     responseType?: EndpointResponseType;
-    /**
-     * `NONE`: this method returns `Promise<void>` and OUR SERVER's success response is 0 BYTES: it
-     * answers `204 No Content` with no body and no Content-Type, and every client (node, browser,
-     * in-process) resolves `undefined` — while still ACCEPTING `{}`, an empty `200` or a `204`.
-     *
-     * WHY a declaration: `design:returntype` of an async method is just `Promise`, so the runtime
-     * cannot see `void`. The architecture scan checks this option agrees with the declared
-     * `Promise<void>` in both directions, so it cannot drift from the signature.
-     *
-     * Only for `RPC` and `EXTERNAL_INBOUND`, where our server answers and a body is a real
-     * question (#1348). Every other kind refuses it (see {@link NoResponseBodyOptionEndpointOptions}):
-     * - `CLOUDTASKS` / `CRON` are fire-and-forget BY KIND — the caller reads nothing but the status —
-     *   so the kind itself implies no response body; such a method must return `Promise<void>`.
-     * - `EXTERNAL_OUTBOUND` is served by the VENDOR, which shapes its own responses; no server of
-     *   ours implements it. Its client accepts any 2xx: 204 / empty -> `undefined`, a JSON body is
-     *   parsed, a non-JSON body -> `undefined`.
-     */
-    responseBody?: ResponseBodyKind;
     /**
      * Parse the request body as application/x-www-form-urlencoded instead of JSON. The request
      * DTO must be flat; urlencoded has no nesting. Default false = JSON.
      */
     formPost?: boolean;
     /**
-     * Retain the verbatim request bytes and absolute URL for a `vendorAuth(...)` hook to verify.
+     * Retain the verbatim request bytes and absolute URL for a `webhook(...)` callback to verify.
      * This is retention, not new buffering: the Express adapter already accumulates the body.
      *
-     * A served `vendorAuth(...)` endpoint requires this option at wiring time. It combines with `formPost` for vendors
+     * `webhook(...)` requires this option at wiring time. It combines with `formPost` for vendors
      * that sign flat form bodies, e.g. `{ formPost: true, rawBody: true }`.
      */
     rawBody?: boolean;
@@ -168,20 +139,10 @@ export interface EndpointOptions {
     openWorld?: boolean;
 }
 
-/** An EXTERNAL_INBOUND endpoint must also identify the outside system that calls it. */
+/** An external endpoint must also identify the outside system that calls it. */
 export interface ExternalEndpointOptions extends EndpointOptions {
     /** The outside system (`'twilio'`) — graph identity, not display text. */
     calledBy: string;
     /** What that caller is; picks its graph shape. Defaults to `'saas'`. */
     callerKind?: ExternalSystemKind;
-}
-
-/**
- * The options of a `CLOUDTASKS`, `CRON` or `EXTERNAL_OUTBOUND` endpoint, where `responseBody: NONE`
- * cannot be written (#1348): the CLOUDTASKS / CRON kind already says the response has no body (one
- * spelling per decision), and an EXTERNAL_OUTBOUND response is shaped by the vendor, not by us.
- */
-export interface NoResponseBodyOptionEndpointOptions extends EndpointOptions {
-    /** Implied by CLOUDTASKS / CRON, the vendor's to shape on EXTERNAL_OUTBOUND: `NONE` does not compile. */
-    responseBody?: never;
 }

@@ -134,10 +134,10 @@ describe('method authentication and authorization declarations', () => {
     });
 
     it('teaches the new declarations in missing-auth diagnostics', () => {
-        for (const current of ['@WpAuth([', 'jwt()', 'oidcSameProject()', 'oidcSvcs([', 'sharedSecret(', 'vendorAuth(', 'apiKey(', '@WpAuthorization', '@WpLocalOnly()']) {
+        for (const current of ['@WpAuth([', 'jwt()', 'oidcSameProject()', 'oidcSvcs([', 'sharedSecret(', 'webhook(', 'apiKey(', '@WpAuthorization', '@WpLocalOnly()']) {
             expect(MISSING_AUTH_DECORATOR_FIX).toContain(current);
         }
-        for (const removed of ['@WpAuthJwt', '@WpAuthOidc', '@WpAuthLocalOnly', '@Authentication', 'oidc(', 'webhook(']) {
+        for (const removed of ['@WpAuthJwt', '@WpAuthOidc', '@WpAuthLocalOnly', '@Authentication', 'oidc(']) {
             expect(MISSING_AUTH_DECORATOR_FIX).not.toContain(removed);
         }
     });

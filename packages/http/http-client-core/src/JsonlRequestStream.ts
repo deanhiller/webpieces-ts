@@ -92,7 +92,7 @@ export class JsonlRequestStream implements RequestStream<DtoValue, DtoValue> {
         }
         // eslint-disable-next-line @webpieces/no-unmanaged-exceptions -- failed control delivery must abort the transport
         try {
-            const record = new StreamErrorControl(this.route).encode(error);
+            const record = new StreamErrorControl().encode(error);
             this.failure = error;
             this.rejectFailure(error);
             await this.initialWrite;

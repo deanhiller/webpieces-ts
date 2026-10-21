@@ -1,12 +1,11 @@
 import {
+    ClientRegistry,
     ErrorTranslator,
     HttpHeader,
     HttpResponseDto,
     HttpResponseStatus,
     WebpiecesDefaultErrorTranslator,
     ClientRole,
-    ApiRegistry,
-    CallScope,
 } from '@webpieces/core-util';
 import { RequestContext } from '@webpieces/core-context';
 
@@ -102,5 +101,5 @@ export class OrderErrorTranslator implements ErrorTranslator {
  */
 // webpieces-disable no-function-outside-class -- one-line startup registration, mirroring ClientRegistry's own static API
 export function installOrderErrorTranslator(): void {
-    ApiRegistry.setErrorTranslator(new OrderErrorTranslator(), CallScope.all());
+    ClientRegistry.setErrorTranslator(new OrderErrorTranslator());
 }

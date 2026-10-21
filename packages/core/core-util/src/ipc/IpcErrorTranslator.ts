@@ -12,7 +12,7 @@ import { IpcReply } from './IpcProtocol';
  * reach. An app whose two processes share an error taxonomy had nowhere to put it.
  *
  * Register one with {@link IpcRegistry.setErrorTranslator} — one registry per PROTOCOL, mirroring
- * `ApiRegistry` for HTTP and `McpRegistry` for MCP, because the three speak different wire shapes
+ * `ClientRegistry` for HTTP and `McpRegistry` for MCP, because the three speak different wire shapes
  * and an app rarely wants the same answer on all three.
  *
  * There is ALWAYS a translator ({@link IpcRegistry.getErrorTranslator} is non-optional), so every call

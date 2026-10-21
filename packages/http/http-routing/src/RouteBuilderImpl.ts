@@ -266,11 +266,9 @@ export class RouteBuilderImpl implements RouteBuilder {
         const controllerService: Service<MethodMeta, WpResponse<unknown>> = {
             invoke: async (meta: MethodMeta): Promise<WpResponse<unknown>> => {
                 const result = await routeWithMeta.invokeControllerHandler.execute(meta);
-                // A `responseBody: NONE` endpoint (Promise<void>) has NO response: every transport
-                // sends 0 bytes (HTTP 204) and every client resolves undefined, so the in-process
-                // client must too. LogApiCall logs an undefined response as `response=undefined`.
-                if (routeMeta.noResponseBody) return new WpResponse(undefined);
-                // Any other route that yields undefined/null still answers a JSON body: coerce to {}.
+                // A void endpoint (e.g. a @PubSub cloud-task handler returning Promise<void>)
+                // yields undefined; coerce to {} so the response is a non-null JSON body
+                // (downstream LogApiCall/serialization require one), mirroring `result ?? {}`.
                 return new WpResponse(result ?? {});
             },
         };
