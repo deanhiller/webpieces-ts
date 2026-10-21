@@ -129,7 +129,7 @@ export class IpcConnection {
                         this.options.timeoutMs,
                         // IPC contracts declare no @Endpoint operation, so the deadline reports the
                         // conservative WRITE: the user is told to check before repeating the call.
-                        new CallContext(request.apiId, request.methodId, WRITE),
+                        new CallContext(request.apiId, request.methodId, WRITE, undefined),
                     ),
                     'expired',
                 );

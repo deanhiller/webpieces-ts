@@ -66,7 +66,7 @@ async function logApiCall(response: object, delayMs: number): Promise<LogRecord[
     await RequestContext.run(async () => {
         RequestContext.putUntrusted(REQUEST_ID, 'req-e2e');
         await new LogApiCallImpl(new RequestContextApiCallContext()).execute(
-            new ApiMethodInfo('server', 'SaveApi', 'save', 'SaveController'),
+            new ApiMethodInfo('server', 'SaveApi', 'save', undefined, 'SaveController'),
             { q: 'x' },
             async () => {
                 await new Promise((resolve: () => void) => setTimeout(resolve, delayMs));

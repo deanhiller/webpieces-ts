@@ -1,6 +1,9 @@
 import { ClientRegistry } from './ClientRegistry';
 import { ErrorClassifier } from './ErrorClassifier';
 import { ErrorTranslator } from './ErrorTranslator';
+import { ApiMethodInfo } from './ApiMethodInfo';
+import { CallContext } from './CallStrategy';
+import { WRITE } from './HttpEndpointOptions';
 
 /**
  * Compiled by tsc (spec files are not), never executed. Pins the ONE spelling of the error ladder:
@@ -26,6 +29,13 @@ class ErrorLadderCompileAssertions {
         ClientRegistry.setErrorTranslator(translator, 'ALL', 'work');
         // @ts-expect-error ALL cannot select a method
         ClientRegistry.setErrorClassifier(classifier, 'ALL', 'work');
+    }
+
+    callIdentityStatesItsContract(): void {
+        // @ts-expect-error ApiMethodInfo's contract CLASS is required (pass undefined only when there is none)
+        void new ApiMethodInfo('client', 'SaveApi', 'save');
+        // @ts-expect-error CallContext's contract CLASS is required (pass undefined only when there is none)
+        void new CallContext('SaveApi', 'save', WRITE);
     }
 
     keyedByClassNeverByName(classifier: ErrorClassifier): void {

@@ -160,12 +160,12 @@ export abstract class ProxyClient {
             'client',
             this.apiName,
             route.methodName,
+            this.apiClass,
             undefined,
             route.mask,
             route.noLogging,
             route.hideProgress,
             route.allowUpgradeInFlight,
-            this.apiClass,
         );
         return this.logApiCall.execute(info, requestDto, method);
     }

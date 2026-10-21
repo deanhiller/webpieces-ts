@@ -180,12 +180,9 @@ export class TaskProxyClient {
             'client',
             this.apiName,
             methodName,
+            this.apiClass,
             undefined,
             plan.mask,
-            false,
-            false,
-            false,
-            this.apiClass,
         );
         await this.logApiCall.execute(info, requestDto, async () => {
             const callContext = new CallContext(this.apiName, methodName, WRITE_IDEMPOTENT, this.apiClass);

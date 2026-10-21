@@ -335,7 +335,7 @@ export class WpMcpServer<TGrant> {
     /** Run one un-filtered edge step under `LogApiCall`, so its failure gets exactly one log line. */
     private async logEdge<R>(step: string, work: () => Promise<R>): Promise<R> {
         return this.logApiCall.execute(
-            new ApiMethodInfo('server', 'McpEndpoint', step),
+            new ApiMethodInfo('server', 'McpEndpoint', step, undefined),
             new McpEdgeRequest(step),
             work,
         );

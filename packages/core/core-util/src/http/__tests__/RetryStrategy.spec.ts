@@ -58,7 +58,7 @@ class ScriptedAttempts {
 const capturing = new CapturingLoggerFactory();
 const original = LogManager.getFactory();
 const context = (operation: EndpointOperation): CallContext =>
-    new CallContext('CatalogApi', 'list', operation);
+    new CallContext('CatalogApi', 'list', operation, undefined);
 const strategy = new RetryStrategy(5_000, 3, 500, 2, 4_000);
 
 beforeAll(() => {
@@ -320,7 +320,7 @@ describe('ApiRetriesExhaustedError on the wire', () => {
         }
         expect(received).toBeInstanceOf(ApiRetriesExhaustedError);
         expect(
-            ClientRegistry.classify(received!, new ApiMethodInfo('client', 'EmailApi', 'send')),
+            ClientRegistry.classify(received!, new ApiMethodInfo('client', 'EmailApi', 'send', undefined)),
         ).toBe(CallOutcome.FAILURE);
     });
 });

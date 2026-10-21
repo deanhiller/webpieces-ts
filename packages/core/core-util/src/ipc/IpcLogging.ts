@@ -22,7 +22,7 @@ export class IpcCallLogger {
         invoke: (request: Q) => Promise<R>,
     ): Promise<R> {
         return new LogApiCallImpl(logging.context(context)).execute(
-            new ApiMethodInfo(side, apiId, methodId, undefined, mask),
+            new ApiMethodInfo(side, apiId, methodId, undefined, undefined, mask),
             request,
             invoke,
         ) as Promise<R>;

@@ -272,7 +272,7 @@ class VendorApi {}
 class SaveApi {}
 
 const info = (side: 'client' | 'server', contract: Function | undefined, methodName: string): ApiMethodInfo =>
-    new ApiMethodInfo(side, contract?.name ?? 'NoContract', methodName, undefined, undefined, false, false, false, contract);
+    new ApiMethodInfo(side, contract?.name ?? 'NoContract', methodName, contract);
 
 describe('ClientRegistry.classify ladder (method -> API -> ALL -> webpieces built-in)', () => {
     const vendorSend = info('client', VendorApi, 'send');

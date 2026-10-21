@@ -5,9 +5,9 @@ import { ApiMethodInfo, ApiSide } from '../ApiMethodInfo';
 
 /** The stamped `api` tag as it reaches a console backend, for a given side + response outcome. */
 const request = (side: ApiSide): ApiCallInfo =>
-    new ApiCallInfo(new ApiMethodInfo(side, 'AuthStoreApi', 'findOrCreateUser'), 'request');
+    new ApiCallInfo(new ApiMethodInfo(side, 'AuthStoreApi', 'findOrCreateUser', undefined), 'request');
 const response = (side: ApiSide, result: 'success' | 'failure'): ApiCallInfo =>
-    new ApiCallInfo(new ApiMethodInfo(side, 'AuthStoreApi', 'findOrCreateUser'), 'response', result);
+    new ApiCallInfo(new ApiMethodInfo(side, 'AuthStoreApi', 'findOrCreateUser', undefined), 'response', result);
 
 describe('ApiCallLogName.describe', () => {
     it('names the request phase from the client side', () => {

@@ -54,11 +54,6 @@ export class RetryStrategy {
             'client',
             ctx.apiName,
             ctx.methodName,
-            undefined,
-            undefined,
-            false,
-            false,
-            false,
             ctx.contract,
         );
         let delayMs = this.initialDelayMs;

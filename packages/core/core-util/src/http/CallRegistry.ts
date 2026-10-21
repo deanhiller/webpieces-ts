@@ -50,11 +50,6 @@ class LoggedAttempts<T> {
                 'client',
                 this.context.apiName,
                 this.context.methodName,
-                undefined,
-                undefined,
-                false,
-                false,
-                false,
                 this.context.contract,
             );
             this.pendingTransient =

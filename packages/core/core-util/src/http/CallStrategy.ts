@@ -22,14 +22,14 @@ export class CallContext {
      * NON-enumerable on purpose: this context rides on `ApiCallTimeoutError`, which is logged and
      * compared as data, and a class reference is not data.
      */
-    declare readonly contract?: Function;
+    declare readonly contract: Function | undefined;
 
     constructor(
         public readonly apiName: string,
         public readonly methodName: string,
         public readonly operation: EndpointOperation,
-        /** OPTIONAL — see {@link CallContext.contract}. */
-        contract?: Function,
+        /** REQUIRED — the contract CLASS, or explicit `undefined`; see {@link CallContext.contract}. */
+        contract: Function | undefined,
     ) {
         Object.defineProperty(this, 'contract', { value: contract, enumerable: false });
     }

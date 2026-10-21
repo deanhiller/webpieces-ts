@@ -316,7 +316,7 @@ describe('NodeProxyClient reports a 5xx as the DEPENDENCY failing, not as its ow
 
         expect(error).toBeInstanceOf(ApiRetriesExhaustedError);
         expect(
-            ClientRegistry.classify(error as Error, new ApiMethodInfo('client', 'SaveApi', 'save')),
+            ClientRegistry.classify(error as Error, new ApiMethodInfo('client', 'SaveApi', 'save', undefined)),
         ).toBe(CallOutcome.FAILURE);
     });
 

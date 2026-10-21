@@ -194,7 +194,7 @@ export class McpDefaultToolCallRenderer implements McpErrorTranslator {
             return this.bug(payload, requestId, support);
         }
         const toolName = McpCorrelation.current().toolName ?? 'unknown';
-        const methodInfo = new ApiMethodInfo('server', 'WpMcpServer', toolName);
+        const methodInfo = new ApiMethodInfo('server', 'WpMcpServer', toolName, undefined);
         if (ClientRegistry.classify(error, methodInfo) === CallOutcome.TRANSIENT_FAILURE) {
             return this.transient(payload, requestId, this.transientMessage(payload));
         }
