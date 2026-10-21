@@ -1,4 +1,4 @@
-import { execSync } from 'child_process';
+import { gitCheckout } from '@webpieces/tooling-common';
 
 
 import { PR_LIFECYCLE_GUARD_KEY } from '../../policy-keys';
@@ -88,10 +88,7 @@ export class PrMergeGuardRule extends BashRuleBase<PrLifecycleGuardConfig> {
         if (!/gh\s+pr\s+merge/.test(ctx.commandCode)) return [];
 
         this.treeKind = this.recovery.kindOf(ctx.workspaceRoot);
-        this.currentBranch = execSync('git rev-parse --abbrev-ref HEAD', {
-            cwd: ctx.workspaceRoot,
-            encoding: 'utf8',
-        }).trim();
+        this.currentBranch = gitCheckout.requireBranch(ctx.workspaceRoot);
         this.worktreePath = ctx.workspaceRoot;
 
         return [new V(1, truncate(ctx.command))];

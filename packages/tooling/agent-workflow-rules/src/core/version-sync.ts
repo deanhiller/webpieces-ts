@@ -1,6 +1,7 @@
 import { AiType } from '@webpieces/hook-runtime';
 import { spawnSync } from 'child_process';
 import * as path from 'path';
+import { DETACHED_HEAD, gitCheckout } from '@webpieces/tooling-common';
 
 import { WORKSPACE_MANIFEST } from '@webpieces/rules-config';
 import { EffectiveTree } from '@webpieces/hook-runtime';
@@ -385,19 +386,17 @@ export class VersionSyncGuard {
     /**
      * Is HEAD DETACHED in this tree — i.e. is there no branch for a pin edit to belong to?
      *
-     * `branch --show-current`, NOT `rev-parse --abbrev-ref HEAD`: it answers on an UNBORN branch (which
-     * every freshly-created worktree is until its first commit, and where `rev-parse` fatals) and prints
-     * EMPTY on a detached HEAD, which is exactly the distinction case B needs.
+     * Asked of GitCheckout, the one branch resolver (#1355): it answers an UNBORN branch with its name
+     * (every freshly-created worktree is unborn until its first commit) and a detached HEAD with
+     * DETACHED_HEAD, which is exactly the distinction case B needs.
      *
-     * A git FAILURE is NOT detached, and the difference is load-bearing: `--show-current` prints nothing
-     * in both situations, so keying off the output alone would tell anyone whose tree git cannot read
-     * (no repo, a broken index, git absent) that their HEAD is detached — a confident diagnosis of a
-     * state nobody measured. Only an exit-0-with-empty-output is detached; anything else falls back to
-     * the ordinary branch wording, whose worst case is prescribing an edit that turns out to be moot.
+     * A git FAILURE is NOT detached, and the difference is load-bearing: GitCheckout answers null there,
+     * never DETACHED_HEAD, so a tree git cannot read (no repo, git absent) is not told its HEAD is
+     * detached — a confident diagnosis of a state nobody measured. It falls back to the ordinary branch
+     * wording, whose worst case is prescribing an edit that turns out to be moot.
      */
     private isDetachedHead(root: string): boolean {
-        const result = spawnSync('git', ['-C', root, 'branch', '--show-current'], { encoding: 'utf8' });
-        return result.status === 0 && (result.stdout ?? '').trim() === '';
+        return gitCheckout.branch(root) === DETACHED_HEAD;
     }
 
     /**

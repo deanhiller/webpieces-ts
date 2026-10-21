@@ -1,7 +1,5 @@
-import { execSync } from 'child_process';
 import { injectable, bindingScopeValues } from 'inversify';
-import { InformAiError } from '@webpieces/tooling-common';
-import { toError } from '@webpieces/tooling-common/to-error';
+import { gitCheckout } from '@webpieces/tooling-common';
 
 // The actual checked-out branch. The grab bag of ambient env vars (BRANCH_NAME, GIT_BRANCH,
 // CI_COMMIT_BRANCH, …) was intentionally REMOVED and must stay removed: a stray GIT_BRANCH=main
@@ -34,16 +32,7 @@ export class BranchIdentity {
         const override = process.env['WEBPIECES_BRANCH'];
         if (override) return override;
 
-        // webpieces-disable no-unmanaged-exceptions -- rethrow as InformAiError so global catch surfaces readable message to AI
-        // eslint-disable-next-line @webpieces/no-unmanaged-exceptions -- rethrow as InformAiError so global catch surfaces readable message to AI
-        try {
-            return execSync('git rev-parse --abbrev-ref HEAD', { encoding: 'utf8' }).trim();
-        } catch (err: unknown) {
-            const error = toError(err);
-            throw new InformAiError(`Failed to determine current git branch: ${error.message}`, {
-                cause: error,
-            });
-        }
+        return gitCheckout.requireBranch(process.cwd());
     }
 
     isHotfix(branchName: string = this.current()): boolean {

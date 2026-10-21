@@ -38,6 +38,18 @@ vi.mock('child_process', () => ({
     },
 }));
 
+// The branch comes from the ONE shared resolver (#1355), not from a spawned `git rev-parse`; it answers
+// what this suite dictates.
+vi.mock('@webpieces/tooling-common', async (importOriginal: () => Promise<typeof import('@webpieces/tooling-common')>) => {
+    const actual = await importOriginal();
+    class DictatedCheckout extends actual.GitCheckout {
+        override branch(): string | null {
+            return git.branch;
+        }
+    }
+    return { ...actual, gitCheckout: new DictatedCheckout() };
+});
+
 type FsModule = typeof import('fs');
 
 vi.mock('fs', async (importOriginal: () => Promise<FsModule>): Promise<FsModule> => {

@@ -401,6 +401,14 @@
                     "level": 3
                 },
                 {
+                    "id": "GitCheckout",
+                    "className": "GitCheckout",
+                    "kind": "class",
+                    "scope": "singleton",
+                    "file": "packages/tooling/tooling-common/src/git-checkout.ts",
+                    "level": 8
+                },
+                {
                     "id": "GitExec",
                     "className": "GitExec",
                     "kind": "class",
@@ -1505,6 +1513,15 @@
                     "tokenKey": "class:packages/tooling/rules-config/src/review-json.ts#ReviewJsonService",
                     "paramName": "reviewJsonService",
                     "paramType": "ReviewJsonService"
+                },
+                {
+                    "from": "DotWebpieces",
+                    "to": "GitCheckout",
+                    "injection": "type",
+                    "token": "GitCheckout",
+                    "tokenKey": "class:packages/tooling/tooling-common/src/git-checkout.ts#GitCheckout",
+                    "paramName": "git",
+                    "paramType": "GitCheckout"
                 },
                 {
                     "from": "DotWebpieces",

@@ -16,9 +16,9 @@ type RulesConfigModule = typeof import('@webpieces/repo-workflow-core');
 //                 1 = cleanly behind
 //                 128 = git could not answer (bad object) → must fail OPEN
 //   branchThrows — simulate git being unavailable entirely
-//   gitHead     — contents of .git/HEAD, or null to make the fast path unavailable (fall back to git)
+//   gitHead     — contents of the `.git` entry the worktree check reads, or null when there is none
 //   gitIsDir    — false simulates a worktree, where .git is a FILE and HEAD lives elsewhere
-//   execBranchCalls — counts spawns of `git rev-parse --abbrev-ref`, to prove the fast path avoids them
+//   execBranchCalls — counts spawns of `git rev-parse --abbrev-ref`, to prove the guard makes none
 const state = vi.hoisted(() => ({
     branch: 'main',
     status: null as MainSyncStatus | null,
@@ -66,6 +66,18 @@ vi.mock('child_process', () => ({
     },
     spawnSync: (): { status: number } => ({ status: state.ancestorRc }),
 }));
+
+// The branch comes from the ONE shared resolver (#1355), not from a spawned `git rev-parse`; it answers
+// what this suite dictates (null = git cannot say).
+vi.mock('@webpieces/tooling-common', async (importOriginal: () => Promise<typeof import('@webpieces/tooling-common')>) => {
+    const actual = await importOriginal();
+    class DictatedCheckout extends actual.GitCheckout {
+        override branch(): string | null {
+            return state.branchThrows ? null : state.branch;
+        }
+    }
+    return { ...actual, gitCheckout: new DictatedCheckout() };
+});
 
 vi.mock('@webpieces/repo-workflow-core', async (importActual: () => Promise<RulesConfigModule>) => {
     const actual = await importActual();
@@ -164,32 +176,25 @@ describe('read-stale-guard — cached commit threshold', () => {
 describe('read-stale-guard — branch detection cost', () => {
     beforeEach(reset);
 
+    // The branch comes from GitCheckout, which reads HEAD itself (primary clone, linked worktree and
+    // detached HEAD are pinned in git-checkout.spec.ts); this guard must never spawn its own lookup.
     describe('branch detection cost', () => {
-        it('reads .git/HEAD instead of spawning git, on the common feature-branch path', () => {
-            state.gitHead = 'ref: refs/heads/dean/x\n';
+        it('takes the branch from the shared resolver instead of spawning git, on the common feature-branch path', () => {
+            state.branch = 'dean/x';
             expect(rule().check(ctx()).length).toBe(0);
             expect(state.execBranchCalls).toBe(0);
         });
 
-        it('still blocks correctly when .git/HEAD says main', () => {
-            state.gitHead = 'ref: refs/heads/main\n';
+        it('still blocks correctly when the branch is main, without spawning git', () => {
+            state.branch = 'main';
             expect(rule().check(ctx()).length).toBe(1);
             expect(state.execBranchCalls).toBe(0);
         });
 
-        it('falls back to spawning git in a worktree (.git is a file, HEAD lives elsewhere)', () => {
-            state.gitHead = 'gitdir: /elsewhere/.git/worktrees/wt\n';
-            state.gitIsDir = false;
-            state.branch = 'dean/x';
+        it('fails open when no branch can be resolved', () => {
+            state.branchThrows = true;
             expect(rule().check(ctx()).length).toBe(0);
-            expect(state.execBranchCalls).toBe(1);
-        });
-
-        it('falls back to spawning git on a detached HEAD (raw sha, no ref: line)', () => {
-            state.gitHead = 'a8b1b91ea4b117cc05e15364108c094b16e3a1c9\n';
-            state.branch = 'dean/x';
-            expect(rule().check(ctx()).length).toBe(0);
-            expect(state.execBranchCalls).toBe(1);
+            expect(state.execBranchCalls).toBe(0);
         });
     });
 });
@@ -383,9 +388,8 @@ describe('read-stale-guard — merged feature branch', () => {
         expect(rule().check(ctx()).length, 'clean and dirty must be judged alike').toBe(1);
     });
 
-    it('does not spawn git on this path either (.git/HEAD fast path)', () => {
+    it('does not spawn git for the branch on this path either (shared resolver)', () => {
         onMergedBranch();
-        state.gitHead = 'ref: refs/heads/dean/x\n';
         expect(rule().check(ctx()).length).toBe(1);
         expect(state.execBranchCalls).toBe(0);
     });

@@ -85,7 +85,9 @@ Normal loading refuses only policy still left inside `.webpieces/`, and any owne
 runtime directory.
 
 In a Git checkout, every declared owner file must be tracked and
-must not match any ignore pattern, even if it was force-added previously. After reviewing a
+must not match any ignore pattern, even if it was force-added previously. That is checked by `wp-ci`
+(the PR gate's build command, and CI's), not on config load: it is a commit-time invariant, and config
+load runs on every guard-hook call (#1355). After reviewing a
 migration, `pnpm wp-migrate-dirs --stage` explicitly stages the new policy and declaration.
 Commit the deletion of the old policy paths as well. The migration command remains allowed
 while configuration is invalid, and `.gitignore` remains editable for policy-ignore repairs.

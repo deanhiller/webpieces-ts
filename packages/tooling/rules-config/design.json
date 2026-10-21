@@ -73,6 +73,14 @@
                     "level": 4
                 },
                 {
+                    "id": "GitCheckout",
+                    "className": "GitCheckout",
+                    "kind": "class",
+                    "scope": "singleton",
+                    "file": "packages/tooling/tooling-common/src/git-checkout.ts",
+                    "level": 5
+                },
+                {
                     "id": "InstructAiDocSet",
                     "className": "InstructAiDocSet",
                     "kind": "class",
@@ -188,6 +196,15 @@
                     "tokenKey": "class:packages/tooling/rules-config/src/pack-policy-files.ts#PackPolicyFiles",
                     "paramName": "files",
                     "paramType": "PackPolicyFiles"
+                },
+                {
+                    "from": "DotWebpieces",
+                    "to": "GitCheckout",
+                    "injection": "type",
+                    "token": "GitCheckout",
+                    "tokenKey": "class:packages/tooling/tooling-common/src/git-checkout.ts#GitCheckout",
+                    "paramName": "git",
+                    "paramType": "GitCheckout"
                 },
                 {
                     "from": "DotWebpieces",

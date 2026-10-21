@@ -10,6 +10,17 @@ vi.mock('child_process', () => ({
     }),
 }));
 
+// The current branch comes from the ONE shared resolver (#1355); `/repo` is fictional, so it is dictated.
+vi.mock('@webpieces/tooling-common', async (importOriginal: () => Promise<typeof import('@webpieces/tooling-common')>) => {
+    const actual = await importOriginal();
+    class DictatedCheckout extends actual.GitCheckout {
+        override branch(): string {
+            return 'dean/feature';
+        }
+    }
+    return { ...actual, gitCheckout: new DictatedCheckout() };
+});
+
 import { PrLifecycleGuardConfig } from "../../configs/rule-configs";
 import { BashContext } from '@webpieces/hook-runtime';
 import { PrMergeGuardRule } from './pr-merge-guard';

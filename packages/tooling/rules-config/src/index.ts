@@ -9,7 +9,7 @@ export { CliExitError } from './cli-exit-error';
 export { CliUsage, CliFlag, CliArgSet, CliArgsCheck, CliArgs } from './cli-args';
 export { runMain } from './run-main';
 
-export { loadAndValidate, LoadedConfig, ConfigLoader } from './load-config';
+export { loadAndValidate, assertPolicyTracked, LoadedConfig, ConfigLoader } from './load-config';
 // The validation-failure banner: ONE cure (edit the file), plus the marker phrases the validator
 // messages embed rather than re-type.
 export {

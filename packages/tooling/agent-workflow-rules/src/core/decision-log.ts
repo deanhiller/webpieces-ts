@@ -1,8 +1,7 @@
-import { execSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 
-import { dotWebpieces } from '@webpieces/tooling-common';
+import { dotWebpieces, gitCheckout } from '@webpieces/tooling-common';
 import { readMainSyncStatus, MainSyncStatus } from '@webpieces/repo-workflow-core';
 import { RepoRootFinder, claudeEnv } from '@webpieces/rules-config';
 import { L1_LOCATION_STREAM, L2_DECISIONS_STREAM, CALLS_STREAM } from './log-streams';
@@ -388,18 +387,7 @@ function summarizeSyncStatus(status: MainSyncStatus | null): string {
 // repo) — this is for display only, never for a control decision.
 // webpieces-disable no-function-outside-class -- existing stateless module helper moved intact with its callers; ownership extraction preserves its functional API
 export function branchForLog(root: string): string {
-    // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
-    try {
-        return execSync('git rev-parse --abbrev-ref HEAD', {
-            cwd: root,
-            encoding: 'utf8',
-            stdio: ['pipe', 'pipe', 'pipe'],
-        }).trim() || 'unknown';
-    } catch (err: unknown) {
-        const error = toError(err);
-        void error;
-        return 'unknown';
-    }
+    return gitCheckout.branch(root) || 'unknown';
 }
 
 // Collapse newlines/tabs and cap length so one decision is always one log line. The collapse itself

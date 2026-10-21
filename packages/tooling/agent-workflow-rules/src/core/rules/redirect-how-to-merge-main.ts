@@ -1,4 +1,4 @@
-import { execSync } from 'child_process';
+import { gitCheckout } from '@webpieces/tooling-common';
 
 import { RepoRootFinder, SyncFlowGuidance, writeTemplate } from '@webpieces/rules-config';
 import { PR_LIFECYCLE_GUARD_KEY } from '../../policy-keys';
@@ -142,10 +142,7 @@ export class RedirectHowToMergeMainRule extends BashRuleBase<PrLifecycleGuardCon
             return this.block(ctx, segment, 'Blocked.');
         }
 
-        const currentBranch = execSync('git rev-parse --abbrev-ref HEAD', {
-            cwd: ctx.workspaceRoot,
-            encoding: 'utf8',
-        }).trim();
+        const currentBranch = gitCheckout.requireBranch(ctx.workspaceRoot);
         if (currentBranch === 'main') return null;
 
         return this.block(ctx, segment, `Pulling main into feature branch '${currentBranch}' is blocked.`);

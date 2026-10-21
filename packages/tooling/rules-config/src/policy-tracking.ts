@@ -13,9 +13,8 @@ class ShellQuote {
 }
 
 /**
- * Declared policy files git's index does not hold (#1327). Its own type because the guard hook treats it
- * specially: while THIS refusal is why the config will not load, a plain `git add` is let through
- * (agent-workflow-rules `PolicyStagingCommand`) — staging is literally the cure, so refusing it was a loop.
+ * Declared policy files git's index does not hold (#1327) — the PR gate's refusal (`wp-ci`), never a
+ * config-load one (#1355): the guard hooks do not check tracking, so nothing blocks the `git add` cure.
  */
 export class UntrackedPolicyError extends ConfigRepairError {
     readonly untracked: readonly string[];
@@ -27,7 +26,6 @@ export class UntrackedPolicyError extends ConfigRepairError {
                 'Webpieces policy files are not tracked by git. Policy is shared through the git index, so every',
                 'declared owner file must be staged and committed with your change. Untracked:',
                 ...untracked.map((file: string) => `  ${file}`),
-                'A plain `git add` is permitted while this refusal is active.',
             ].join('\n'),
             [
                 new RunCommandCure(
@@ -45,7 +43,13 @@ export class UntrackedPolicyError extends ConfigRepairError {
     }
 }
 
-/** Git repositories must share policy through their index, including rules switched OFF. */
+/**
+ * Git repositories must share policy through their index, including rules switched OFF.
+ *
+ * Checked at the PR gate and in CI (`wp-ci` → ConfigLoader.assertPolicyTracked), NOT on config load:
+ * it is a commit-time invariant that costs two `git` processes, and config load runs on every guard-hook
+ * invocation (#1355). `stage()` is wp-migrate-dirs' cure and is unchanged.
+ */
 export class PolicyTracking {
     check(root: string, declarations: readonly PackPolicyDeclaration[]): void {
         // Standalone non-git schema validation is supported; CI and governed checkouts have .git.

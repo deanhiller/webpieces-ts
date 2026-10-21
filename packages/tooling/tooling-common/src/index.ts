@@ -1,5 +1,6 @@
 export * from './atomic-file';
 export * from './state-dir';
+export * from './git-checkout';
 export * from './state-dir-migration';
 export * from './inform-ai-error';
 export * from './claude-config-dir';

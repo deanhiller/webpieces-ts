@@ -69,14 +69,14 @@ describe('DotWebpieces.local()/shared() over a real linked worktree', () => {
 
     it('local() in a LINKED worktree resolves under the primary clone worktrees/<name>/ namespace', () => {
         // git names the worktree after its directory, and that name is the namespace key.
-        expect(dot.isLinkedWorktree(worktree)).toBe(true);
+        expect(dot.gitDirs(worktree)?.isLinkedWorktree).toBe(true);
         expect(dot.worktreeName(worktree)).toBe('wt-feature');
         expect(dot.local(worktree)).toBe(
             path.join(primary, '.webpieces', WORKTREE_STATE_DIR, 'wt-feature'));
     });
 
     it('local() in the PRIMARY clone is unchanged — still <primary>/.webpieces, no namespace', () => {
-        expect(dot.isLinkedWorktree(primary)).toBe(false);
+        expect(dot.gitDirs(primary)?.isLinkedWorktree).toBe(false);
         expect(dot.worktreeName(primary)).toBe('');
         expect(dot.local(primary)).toBe(path.join(primary, '.webpieces'));
     });
