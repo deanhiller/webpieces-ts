@@ -129,6 +129,11 @@ ORDER=(
     # anywhere in this list; it goes here to keep the docs family together. It carries the
     # `wp-docs-site` bin in publishConfig.bin, which this script hoists into the dist manifest below.
     packages/docs/docs-site
+    # openapi-import depends on NOTHING (Node builtins only) — the code generator that turns a vendor's
+    # OpenAPI spec into an EXTERNAL_OUTBOUND contract (#1339). It carries the `wp-openapi-import` bin in
+    # publishConfig.bin, hoisted below. Its NAME must be bootstrapped on npm by one authenticated manual
+    # publish (the bootstrap-npm-package skill) before the first automated release can publish it.
+    packages/docs/openapi-import
     packages/core/ipc-bridge
     packages/core/core-context
     # A test/mock helper with no @webpieces deps. It was in SKIP for a long time because npm

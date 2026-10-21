@@ -1,0 +1,31 @@
+{
+    "name": "openapi-import",
+    "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+    "sourceRoot": "packages/docs/openapi-import/src",
+    "projectType": "library",
+    "targets": {
+        "test": {
+            "executor": "nx:run-commands",
+            "options": {
+                "command": "vitest run packages/docs/openapi-import/"
+            }
+        },
+        "build": {
+            "executor": "@nx/js:tsc",
+            "outputs": ["{options.outputPath}"],
+            "options": {
+                "outputPath": "dist/packages/docs/openapi-import",
+                "main": "packages/docs/openapi-import/src/index.ts",
+                "tsConfig": "packages/docs/openapi-import/tsconfig.lib.json",
+                "assets": [
+                    "packages/docs/openapi-import/package.json",
+                    "packages/docs/openapi-import/README.md"
+                ]
+            }
+        },
+        "ci": {
+            "dependsOn": ["lint", "build", "test", "architecture:validate-complete"]
+        }
+    },
+    "tags": ["framework:node", "role:lib", "product:openapi"]
+}

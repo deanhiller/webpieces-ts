@@ -82,9 +82,11 @@ export class DestinationTrust {
     }
 
     /**
-     * The ONLY way to obtain one: state the destination endpoint's auth mode. `undefined` (an
-     * endpoint that declared no mode) is treated as un-verifying, i.e. the SAFE answer — an absent
-     * declaration must never be the widest one.
+     * The destination of a route of OURS, from its auth mode alone. An HTTP client always uses
+     * {@link forRoute}, which also covers an `EXTERNAL_OUTBOUND` route; this remains for a caller
+     * that holds only the mode — the cloud-task client, whose @PubSub contracts can never be
+     * EXTERNAL_OUTBOUND. `undefined` (an endpoint that declared no mode) is treated as
+     * un-verifying, i.e. the SAFE answer — an absent declaration must never be the widest one.
      */
     // webpieces-disable no-function-outside-class -- static factory replacing the (now private) constructor, exactly as ContextKey.trusted/untrusted do: the destination's auth mode must be part of the CALL, and a DI-injected instance method would let a caller hold one without ever naming a route
     static forAuthMode(mode: AuthMode | undefined): DestinationTrust {
