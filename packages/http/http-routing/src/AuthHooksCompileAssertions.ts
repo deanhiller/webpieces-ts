@@ -5,11 +5,14 @@ import type { HeaderReader } from './AuthHooks';
 // @ts-expect-error AuthValues is RENAMED to AuthenticatedCaller — there is no alias, by policy.
 import type { AuthValues } from './AuthConfig';
 import { OidcAuthMethod, OidcAuthMethods } from '@webpieces/core-util';
-import { VendorAuthHook } from '@webpieces/core-context';
-// @ts-expect-error WebhookAuthCallback is REPLACED by VendorAuthHook (mint/refresh/verify) — no alias, by policy.
+import { VendorAuthMinter, VendorAuthVerifier } from '@webpieces/core-context';
+// @ts-expect-error WebhookAuthCallback is REPLACED by VendorAuthVerifier (the inbound role) — no alias, by policy.
 import type { WebhookAuthCallback } from './AuthHooks';
-// @ts-expect-error WEBHOOK_AUTH_CALLBACK is REPLACED by VENDOR_AUTH_HOOK.
+// @ts-expect-error WEBHOOK_AUTH_CALLBACK is REPLACED by VENDOR_AUTH_VERIFIER.
 import { WEBHOOK_AUTH_CALLBACK } from './AuthHooks';
+import * as Routing from './index';
+import { AuthFilter } from './filters/AuthFilter';
+import { DefaultOidcVerifier } from './DefaultOidcVerifier';
 import { ApiKeyHook, OidcHook } from './AuthHooks';
 import { AuthenticatedCaller, AuthenticatedMachineIdentity } from './AuthConfig';
 
@@ -42,19 +45,28 @@ export class AuthHooksCompileAssertions {
         void authValuesIsGone;
         void webhookAuthCallbackIsGone;
         void WEBHOOK_AUTH_CALLBACK;
+        // @ts-expect-error VendorAuthHook is DELETED (#1358): this server binds the INBOUND role VendorAuthVerifier
+        void Routing.VendorAuthHook;
+        // @ts-expect-error VENDOR_AUTH_HOOK is DELETED (#1358): bind VENDOR_AUTH_VERIFIER
+        void Routing.VENDOR_AUTH_HOOK;
+        // @ts-expect-error the OUTBOUND role is the client's (http-client-node); the router never exports it
+        void Routing.VENDOR_AUTH_MINTER;
+    }
+
+    /**
+     * The server's AuthFilter takes the INBOUND role only. Handing it an outbound minter must not
+     * compile: a minter cannot verify, and an AuthFilter depending on one would construct a client's
+     * credential source just to receive a call (#1358).
+     */
+    authFilterRefusesTheMinter(oidc: DefaultOidcVerifier, minter: VendorAuthMinter): void {
+        // @ts-expect-error a VendorAuthMinter cannot verify: AuthFilter takes a VendorAuthVerifier
+        void new AuthFilter(oidc, undefined, undefined, undefined, minter);
     }
 
     /** The ALIGNED spellings must keep compiling; asserted by the ABSENCE of an error. */
     legitimate(): void {
-        void class extends VendorAuthHook {
-            override async mint(): Promise<Map<string, string>> {
-                return new Map([['Authorization', 'Bearer t']]);
-            }
-
-            override async refresh(): Promise<void> {
-                // renew the vendor credential
-            }
-
+        void class extends VendorAuthVerifier {
+            // No meaningless mint()/refresh(): a server-only verifier implements verify and nothing else.
             override async verify(_name: string, request: RawHttpRequest): Promise<AuthenticatedCaller> {
                 // No `raw!`, no `if (!raw) throw`: AuthFilter checked once and the TYPE carries it.
                 const bytes: Buffer = request.raw.rawBody;
@@ -72,29 +84,13 @@ export class AuthHooksCompileAssertions {
 
     /** Every spelling this change deleted must now be UNWRITABLE. */
     rejected(): void {
-        void class extends VendorAuthHook {
-            override async mint(): Promise<Map<string, string>> {
-                return new Map();
-            }
-
-            override async refresh(): Promise<void> {
-                // renew the vendor credential
-            }
-
+        void class extends VendorAuthVerifier {
             // @ts-expect-error verify takes (name, RawHttpRequest): the three-parameter spelling is gone
             override async verify(_name: string, _request: HttpRequest, _raw: RawRequest): Promise<AuthenticatedCaller> {
                 return new AuthenticatedCaller('u1');
             }
         };
-        void class extends VendorAuthHook {
-            override async mint(): Promise<Map<string, string>> {
-                return new Map();
-            }
-
-            override async refresh(): Promise<void> {
-                // renew the vendor credential
-            }
-
+        void class extends VendorAuthVerifier {
             // @ts-expect-error verify returns the caller it proved: a void override must not compile
             override async verify(_name: string, _request: RawHttpRequest): Promise<void> {
                 // a hook that verifies and then has no way to say what it proved

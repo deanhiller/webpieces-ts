@@ -59,13 +59,13 @@
                     "detail": "SECRETS"
                 },
                 {
-                    "id": "VendorAuthHook",
-                    "className": "VendorAuthHook",
+                    "id": "VendorAuthMinter",
+                    "className": "VendorAuthMinter",
                     "kind": "unresolved",
                     "scope": "transient",
                     "file": "packages/http/http-client-node/src/NodeProxyClient.ts",
                     "level": 2,
-                    "detail": "VENDOR_AUTH_HOOK"
+                    "detail": "VENDOR_AUTH_MINTER"
                 }
             ],
             "edges": [
@@ -116,17 +116,17 @@
                 },
                 {
                     "from": "NodeProxyClient",
-                    "to": "VendorAuthHook",
+                    "to": "VendorAuthMinter",
                     "injection": "token",
-                    "token": "VENDOR_AUTH_HOOK",
-                    "tokenKey": "symbol.for:VendorAuthHook",
-                    "paramName": "vendorAuthHook",
-                    "paramType": "VendorAuthHook"
+                    "token": "VENDOR_AUTH_MINTER",
+                    "tokenKey": "symbol.for:VendorAuthMinter",
+                    "paramName": "vendorAuthMinter",
+                    "paramType": "VendorAuthMinter"
                 }
             ],
             "unresolved": [
                 "SECRETS",
-                "VENDOR_AUTH_HOOK"
+                "VENDOR_AUTH_MINTER"
             ]
         }
     ]

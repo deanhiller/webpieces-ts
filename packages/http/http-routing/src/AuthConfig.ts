@@ -2,8 +2,8 @@ import { ContextKey } from '@webpieces/core-util';
 import { AuthenticatedCaller } from '@webpieces/core-context';
 
 // Defined in @webpieces/core-context (beside HttpRequest, which http-routing re-exports the same way)
-// so VendorAuthHook — ONE hook serving the client (mint/refresh) and the server (verify) — can name
-// it from a package both the node client and this router depend on.
+// so VendorAuthVerifier (defined there beside its outbound twin VendorAuthMinter) can name it from a
+// package both the node client and this router depend on.
 export { AuthenticatedCaller, AuthenticatedMachineIdentity } from '@webpieces/core-context';
 
 /**
@@ -41,7 +41,7 @@ export class SharedSecrets {
  */
 export const AUTHENTICATED_CALLER_KEY = ContextKey.trusted<AuthenticatedCaller>(
     'authenticatedCaller',
-    'resolved by the framework AuthFilter from a credential an app-bound JwtHook, ApiKeyHook or VendorAuthHook verified',
+    'resolved by the framework AuthFilter from a credential an app-bound JwtHook, ApiKeyHook or VendorAuthVerifier verified',
     /*httpHeader*/ undefined,
     /*maskInLogs*/ false,
     /*isLogged*/ false,

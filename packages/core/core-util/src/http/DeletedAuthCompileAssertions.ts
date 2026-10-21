@@ -13,7 +13,7 @@ export class DeletedAuthCompileAssertions {
         void CoreUtil.WpAuthSharedSecret;
         // @ts-expect-error use WpAuth([vendorAuth(...)]) and WpAuthorization
         void CoreUtil.WpAuthWebhook;
-        // @ts-expect-error webhook(name) is renamed vendorAuth(name): one VendorAuthHook mints, refreshes and verifies
+        // @ts-expect-error webhook(name) is renamed vendorAuth(name): a VendorAuthMinter sends it, a VendorAuthVerifier receives it
         void CoreUtil.webhook;
         // @ts-expect-error EXTERNAL is split: EXTERNAL_INBOUND (an outside system calls us) or EXTERNAL_OUTBOUND (we call it)
         void CoreUtil.EXTERNAL;

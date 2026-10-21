@@ -218,7 +218,7 @@ describe('AuthFilter enforces @WpAuthApiKey', () => {
     });
 
     /**
-     * FAIL CLOSED, matching JwtHook and VendorAuthHook. An app that forgot the binding must not have
+     * FAIL CLOSED, matching JwtHook and VendorAuthVerifier. An app that forgot the binding must not have
      * its partner-facing route silently open.
      */
     it('401s on every api-key endpoint when NO ApiKeyHook is bound', async () => {

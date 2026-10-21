@@ -3,7 +3,7 @@ import { ContextTuple } from '@webpieces/core-util';
 /**
  * AuthenticatedCaller - what an authenticator PROVED about the caller of ONE request. Every hook
  * that authenticates resolves to this: {@link JwtHook.parseJwt}, {@link ApiKeyHook.verifyApiKey} and
- * {@link VendorAuthHook.verify}. Four fields, three jobs:
+ * {@link VendorAuthVerifier.verify}. Four fields, three jobs:
  *
  *  - `userId`          — WHO the caller is, as the credential proved it.
  *  - `roles` / `claims` — the AUTHORIZATION inputs: `roles` is what the framework's own any-of check

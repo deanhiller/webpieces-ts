@@ -184,10 +184,12 @@ export function oidcSvcs(callers: OidcCallers): OidcAuthMethod { return { kind: 
 // webpieces-disable no-function-outside-class -- canonical credential descriptor factory
 export function sharedSecret(secretKey: string): AuthMethod { return { kind: 'shared-secret', secretKey }; }
 /**
- * A credential in a VENDOR's scheme, on both ends of a hop: the app-bound `VendorAuthHook` (core-context)
- * mints it when WE call the vendor (and refreshes it once on a 401), and verifies it when the vendor
- * calls US. `name` selects the vendor. A served `vendorAuth(...)` endpoint requires
- * `@Endpoint(..., { rawBody: true })` so the hook has the exact bytes to verify.
+ * A credential in a VENDOR's scheme, on both ends of a hop, served by TWO independent app-bound DI
+ * roles (core-context): the `VendorAuthMinter` mints it when WE call the vendor (and refreshes it once
+ * on a 401), and the `VendorAuthVerifier` verifies it when the vendor calls US. The direction is
+ * decided by whether the runtime is sending or receiving, so one contract declaration serves both.
+ * `name` selects the vendor. A served `vendorAuth(...)` endpoint requires
+ * `@Endpoint(..., { rawBody: true })` so the verifier has the exact bytes to verify.
  */
 // webpieces-disable no-function-outside-class -- canonical credential descriptor factory
 export function vendorAuth(name: string): AuthMethod { return { kind: 'vendorAuth', name }; }

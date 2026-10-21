@@ -47,8 +47,8 @@ export class HttpRequest {
  * RawHttpRequest - an {@link HttpRequest} on a `@Endpoint(..., { rawBody: true })` route, where
  * {@link HttpRequest.raw} is PRESENT rather than optional.
  *
- * It exists so a vendor's VendorAuthHook never writes `request.raw!` or an `if (!raw) throw`. The
- * absence of the bytes is checked in exactly ONE place — `AuthFilter` 401s before it calls the hook —
+ * It exists so a vendor's VendorAuthVerifier never writes `request.raw!` or an `if (!raw) throw`. The
+ * absence of the bytes is checked in exactly ONE place — `AuthFilter` 401s before it calls the verifier —
  * and this type is what carries the result of that check into the signature, so the bad state is
  * unrepresentable downstream instead of re-guarded at every implementor.
  *

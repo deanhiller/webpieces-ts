@@ -59,7 +59,7 @@ export const OIDC_HOOK = Symbol.for('OidcHook');
  * against the app's own datastore and return the context to seed. Its DI token is the
  * {@link API_KEY_HOOK} Symbol injected via `@inject(API_KEY_HOOK)` (a Symbol, because the app container
  * uses autobind; rebindable in tests). The fourth hook, symmetric with {@link JwtHook} /
- * {@link OidcHook} / `VendorAuthHook` (@webpieces/core-context):
+ * {@link OidcHook} / `VendorAuthVerifier` (@webpieces/core-context):
  *
  * ```typescript
  * // AppModule.ts, beside the CompanyJwtHook binding

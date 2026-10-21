@@ -23,8 +23,8 @@ import {
     RequestContextApiCallContext,
     RequestContextHeaders,
     provideFrameworkTransient,
-    VendorAuthHook,
-    VENDOR_AUTH_HOOK,
+    VendorAuthMinter,
+    VENDOR_AUTH_MINTER,
 } from '@webpieces/core-context';
 import { GcpOidc } from '@webpieces/gcp-identity';
 import {
@@ -68,7 +68,7 @@ export class NodeProxyClient extends ProxyClient {
         const selected = methods.find((method: import('@webpieces/core-util').AuthMode) =>
             method.kind === 'oidc' || method.kind === 'public' ||
             (method.kind === 'shared-secret' && !!this.secrets?.get(method.secretKey)) ||
-            (method.kind === 'vendorAuth' && !!this.vendorAuthHook));
+            (method.kind === 'vendorAuth' && !!this.vendorAuthMinter));
         if (selected) return selected;
         if (methods.length === 1) return methods[0];
         throw new Error('No configured Node client credential can satisfy this endpoint; bind a declared service credential.');
@@ -85,12 +85,14 @@ export class NodeProxyClient extends ProxyClient {
         // @optional: only sharedSecret(...) endpoints need it; the client sends its bound value.
         // webpieces-disable inject-annotation-not-needed-for-concrete-class -- DI-resolved param; the esbuild/vitest path elides type-only imports (no design:paramtypes), so the explicit token is required
         @optional() @inject(SECRETS) private readonly secrets?: Secrets,
-        // @optional: only vendorAuth(...) endpoints need it, and an unbound one makes them THROW
-        // rather than send unauthenticated — see VendorAuthHook.
+        // @optional: only OUTBOUND vendorAuth(...) calls need it, and an unbound one makes them THROW
+        // rather than send unauthenticated — see VendorAuthMinter. The OUTBOUND role ONLY: this
+        // client must never depend on the server's inbound VendorAuthVerifier, because a verifier
+        // that itself uses an RPC client would then close a construction cycle (#1358).
         // webpieces-disable inject-annotation-not-needed-for-concrete-class -- DI-resolved param; the esbuild/vitest path elides type-only imports (no design:paramtypes), so the explicit token is required
         @optional()
-        @inject(VENDOR_AUTH_HOOK)
-        private readonly vendorAuthHook?: VendorAuthHook,
+        @inject(VENDOR_AUTH_MINTER)
+        private readonly vendorAuthMinter?: VendorAuthMinter,
     ) {
         // This package is node-only and already depends on core-context, so it builds the
         // RequestContext-backed ApiCallContext itself. No startup install, and therefore nothing a
@@ -216,7 +218,7 @@ export class NodeProxyClient extends ProxyClient {
             ),
             new ClientFilterDefinition(
                 OUTBOUND_AUTH_PRIORITY,
-                new OutboundAuthFilter(this.gcpOidc, this.secrets, this.vendorAuthHook),
+                new OutboundAuthFilter(this.gcpOidc, this.secrets, this.vendorAuthMinter),
             ),
         ];
     }

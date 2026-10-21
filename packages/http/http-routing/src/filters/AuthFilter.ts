@@ -5,8 +5,8 @@ import {
     HttpRequest,
     RawHttpRequest,
     RequestContext,
-    VendorAuthHook,
-    VENDOR_AUTH_HOOK,
+    VendorAuthVerifier,
+    VENDOR_AUTH_VERIFIER,
 } from '@webpieces/core-context';
 import {
     AuthMode,
@@ -75,9 +75,10 @@ const SHARED_SECRET_SCHEME = 'Webpieces';
  *  - oidc          → the bound {@link OidcHook} if any, else the framework {@link DefaultOidcVerifier}
  *                    run DIRECTLY — so a server that wires NOTHING still verifies Google OIDC against
  *                    the endpoint's caller scope (`oidcSameProject()` or `oidcSvcs([...])`).
- *  - vendorAuth    → the bound {@link VendorAuthHook} `verify`s the VENDOR's credential over the retained
- *                    raw request. No VendorAuthHook bound → 401, like jwt: an unverified vendor call is
- *                    never waved through because wiring was forgotten.
+ *  - vendorAuth    → the bound {@link VendorAuthVerifier} `verify`s the VENDOR's credential over the
+ *                    retained raw request. No VendorAuthVerifier bound → 401, like jwt: an unverified
+ *                    vendor call is never waved through because wiring was forgotten. The INBOUND role
+ *                    only — this filter never depends on the outbound VendorAuthMinter (#1358).
  *  - apikey        → the bound {@link ApiKeyHook} looks the CUSTOMER's key up (async, over the whole
  *                    header set) and returns the context to seed. No ApiKeyHook bound → 401, like jwt.
  *  - public        → BEST-EFFORT jwt parse (only if a JwtHook is bound): stamp the user's context so
@@ -106,12 +107,12 @@ export class AuthFilter extends Filter<MethodMeta, WpResponse<unknown>> {
         // @optional: only bind an OidcHook to OVERRIDE the DefaultOidcVerifier caller policy.
         // webpieces-disable inject-annotation-not-needed-for-concrete-class -- see above: explicit token required for DI-resolved param
         @optional() @inject(OIDC_HOOK) private readonly oidcHook?: OidcHook,
-        // @optional: only bind a VendorAuthHook to enable vendorAuth(...) endpoints. Unbound = every such
-        // endpoint 401s, which is the ONE default that must not be the other way round.
+        // @optional: only bind a VendorAuthVerifier to enable vendorAuth(...) endpoints. Unbound = every
+        // such endpoint 401s, which is the ONE default that must not be the other way round.
         // webpieces-disable inject-annotation-not-needed-for-concrete-class -- see above: explicit token required for DI-resolved param
         @optional()
-        @inject(VENDOR_AUTH_HOOK)
-        private readonly vendorAuthHook?: VendorAuthHook,
+        @inject(VENDOR_AUTH_VERIFIER)
+        private readonly vendorAuthVerifier?: VendorAuthVerifier,
         // @optional: only bind an ApiKeyHook to enable apiKey(...) endpoints. Unbound = every such
         // endpoint 401s, for the same reason as the vendor hook above.
         // webpieces-disable inject-annotation-not-needed-for-concrete-class -- see above: explicit token required for DI-resolved param
@@ -244,26 +245,27 @@ export class AuthFilter extends Filter<MethodMeta, WpResponse<unknown>> {
     }
 
     /**
-     * `vendorAuth(name)`: hand the app's {@link VendorAuthHook} the verbatim request and let it call the
+     * `vendorAuth(name)`: hand the app's {@link VendorAuthVerifier} the verbatim request and let it call the
      * VENDOR's own validator. Three ways to fail, all 401, all before the controller is entered:
      *
-     * 1. NO hook bound — the endpoint is not enabled. Matches {@link JwtHook}'s documented behavior;
+     * 1. NO verifier bound — the endpoint is not enabled. Matches {@link JwtHook}'s documented behavior;
      *    an unverified vendor call must never be waved through because wiring was forgotten.
      * 2. NO raw request — the transport kept no bytes. `assertEveryVendorAuthEndpointRetainsRawBody`
      *    normally makes this a startup error, so reaching it means either a hand-registered route or
      *    an in-process caller (a spec) that published an HttpRequest with no {@link RawRequest}. The
      *    message says which fix applies rather than leaving a bare 401.
-     * 3. The hook threw — the credential did not verify.
+     * 3. The verifier threw — the credential did not verify.
      *
      * Case 2 is checked HERE and nowhere else. {@link hasRawBytes} narrows the request to
-     * {@link RawHttpRequest} at this one gate, so the hook's signature promises `raw` is present and
+     * {@link RawHttpRequest} at this one gate, so the verifier's signature promises `raw` is present and
      * no vendor implementation ever writes `raw!` or a guard of its own.
      */
     private async enforceVendorAuth(name: string, meta: MethodMeta): Promise<void> {
-        if (!this.vendorAuthHook) {
+        if (!this.vendorAuthVerifier) {
             log.warn(
-                `Refusing vendorAuth('${name}') endpoint ${meta.routeMeta.path}: no VendorAuthHook is bound. ` +
-                    `Bind one (options.bind(VENDOR_AUTH_HOOK).to(YourVendorAuthHook)) to enable vendor verification.`,
+                `Refusing vendorAuth('${name}') endpoint ${meta.routeMeta.path}: no VendorAuthVerifier is bound. ` +
+                    `Bind the INBOUND role (binder.bind(VENDOR_AUTH_VERIFIER).to(YourVendorAuthVerifier).inSingletonScope()) ` +
+                    `to enable vendor verification; a VENDOR_AUTH_MINTER binding only signs outbound calls.`,
             );
             throw new ApiUnauthorizedError('Vendor auth is not enabled on this server');
         }
@@ -280,7 +282,7 @@ export class AuthFilter extends Filter<MethodMeta, WpResponse<unknown>> {
         }
         // Throws ApiUnauthorizedError to deny. On success the vendor account the signature proved is
         // stamped through the SAME path a jwt or api-key caller takes.
-        const caller = await this.vendorAuthHook.verify(name, request);
+        const caller = await this.vendorAuthVerifier.verify(name, request);
         this.callerContext.publish(caller);
     }
 

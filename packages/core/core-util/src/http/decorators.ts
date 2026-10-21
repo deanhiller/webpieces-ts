@@ -493,7 +493,7 @@ export function isFormPost(apiClass: Function, methodName: string): boolean {
 
 /**
  * True when the method's @Endpoint declared `{ rawBody: true }` — the transport must retain the
- * verbatim bytes + absolute url for a `VendorAuthHook.verify` to check.
+ * verbatim bytes + absolute url for a `VendorAuthVerifier.verify` to check.
  */
 // webpieces-disable no-function-outside-class -- reflect-metadata reader, sibling of isFormPost
 export function isRawBody(apiClass: Function, methodName: string): boolean {
@@ -523,9 +523,9 @@ export function assertEveryVendorAuthEndpointRetainsRawBody(apiClass: Function):
             continue;
         throw new Error(
             `Endpoint '${methodName}' in ${apiClass.name || 'Unknown'} is vendorAuth(...) but its @Endpoint ` +
-                `does not declare { rawBody: true }. VendorAuthHook.verify checks a credential over the bytes and ` +
+                `does not declare { rawBody: true }. VendorAuthVerifier.verify checks a credential over the bytes and ` +
                 `the url the SENDER transmitted, and without that option the transport parses the body and ` +
-                `throws them away — leaving the hook nothing to check.`,
+                `throws them away — leaving the verifier nothing to check.`,
         );
     }
 }
