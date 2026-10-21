@@ -1,6 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
 import {
-    ClientRegistry,
     ApiBadRequestError,
     HttpContractMapper,
     HttpResponseDto,
@@ -14,6 +13,7 @@ import {
     SurfaceEndUserStatus,
     WEBPIECES_DEFAULT_ERROR_TRANSLATOR,
     verbCarriesBody,
+    ApiRegistry,
 } from '@webpieces/core-util';
 import {
     RequestContext,
@@ -384,7 +384,7 @@ export class ExpressWrapper {
      *
      * PUBLIC so wrapExpress can call it for symmetric error handling.
      *
-     * ONE source, unconditionally: `ClientRegistry.getErrorTranslator(api, method)` for THIS route's
+     * ONE source, unconditionally: `ApiRegistry.getErrorTranslator(api, method)` for THIS route's
      * contract class and method, resolved on the `CallScope` ladder (method -> API -> ALL -> webpieces
      * default) — so an inbound vendor contract can render the error body that vendor expects while
      * every other contract keeps the app's ALL translator. A wrapper with no route (a failure before
@@ -404,7 +404,7 @@ export class ExpressWrapper {
             return;
         }
         // ONE narrowing, at the top, and every layer below it is honest about holding an `Error`.
-        const wire = ClientRegistry.getErrorTranslator(
+        const wire = ApiRegistry.getErrorTranslator(
             this.routeMeta?.apiClass,
             this.routeMeta?.methodName,
         ).toWire(toError(thrown));

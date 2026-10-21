@@ -39,12 +39,12 @@ status it has no named class for. Below 500 it is classified as a caller error (
 which mirror `ApiRequestTimeoutError` and `ApiRateLimitedError`); 500 and above is a server fault.
 
 There are no HTTP-prefixed aliases. Applications that need a custom exception TYPE for a status
-register an `ErrorTranslator` on `ClientRegistry` and THROW it from `fromWire`.
+register an `ErrorTranslator` on `ApiRegistry` and THROW it from `fromWire`.
 
-The translator sits on the same `CallScope` ladder as `CallRegistry`'s strategy and timeout,
+The translator sits on the same `CallScope` ladder as `ClientRegistry`'s strategy and timeout,
 resolved method -> API -> ALL -> `WebpiecesDefaultErrorTranslator`, and the scope is required:
-`ClientRegistry.setErrorTranslator(t, 'ALL')` for the app, `setErrorTranslator(t, VendorApi)` for a
-contract whose errors travel in a vendor's OWN format, `setErrorTranslator(t, VendorApi, 'method')`
+`ApiRegistry.setErrorTranslator(t, CallScope.all())` for the app, `setErrorTranslator(t, CallScope.api(VendorApi))` for a
+contract whose errors travel in a vendor's OWN format, `setErrorTranslator(t, CallScope.method(VendorApi, 'method'))`
 for one method. The client resolves it for the called route's contract class and method, the server's
 `ExpressWrapper` for the matched route (a failure with no route reaches ALL alone), and streaming
 error controls for the streaming route. A translator still declines by delegating to
@@ -60,8 +60,8 @@ keeps its `ApiEndUserError` verbatim. The rule is shared by node, browser, and I
 
 ### One verdict per error: `ErrorClassifier` and `CallOutcome`
 
-`ClientRegistry.classify(error, methodInfo)` answers ONE question for every reader — `RetryStrategy`
-(retry only transient), `CallRegistry`'s per-attempt log line, `LogApiCall` (OTHER vs FAIL) and the
+`ApiRegistry.classify(error, methodInfo)` answers ONE question for every reader — `RetryStrategy`
+(retry only transient), `ClientRegistry`'s per-attempt log line, `LogApiCall` (OTHER vs FAIL) and the
 MCP renderer's model-visible `retry` advice — with a `CallOutcome`:
 
 | outcome | means | examples (webpieces default) |
@@ -71,9 +71,9 @@ MCP renderer's model-visible `retry` advice — with a `CallOutcome`:
 | `FAILURE` | broken, repeating will not help | a 4xx a CLIENT received (our bug), implementation, 501, a generic dependency defect, retries exhausted |
 
 Classifiers sit on the same `CallScope` ladder, keyed by the contract CLASS (never its name), and
-the scope is required: `ClientRegistry.setErrorClassifier(c, VendorApi, 'method')` for one method,
-`setErrorClassifier(c, VendorApi)` for one contract (an SDK-wrapping api-client keys by its abstract
-`XxxApi`), `setErrorClassifier(c, 'ALL')` once per app (reads `side`), then
+the scope is required: `ApiRegistry.setErrorClassifier(c, CallScope.method(VendorApi, 'method'))` for one method,
+`setErrorClassifier(c, CallScope.api(VendorApi))` for one contract (an SDK-wrapping api-client keys by its abstract
+`XxxApi`), `setErrorClassifier(c, CallScope.all())` once per app (reads `side`), then
 `WebpiecesDefaultErrorClassifier`. A classifier returns `undefined` to defer to the next rung. The
 class reaches the classifier as `ApiMethodInfo.contract` (and `CallContext.contract` inside a
 strategy). That class is REQUIRED and never `undefined` (#1350): an IPC call — and its timeout —

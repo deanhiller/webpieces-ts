@@ -27,18 +27,18 @@ export enum CallOutcome {
  * This is BEHAVIOR, so it is an interface (per CLAUDE.md), passed as an object with a NAMED method
  * rather than a bare function — so "find usages" in an IDE lands on every implementation.
  *
- * Registered on {@link ClientRegistry} at startup — the same browser-safe, no-DI, populated-once
- * singleton that owns URL mappings and the {@link ErrorTranslator} — with
- * `ClientRegistry.setErrorClassifier(c, ...scope)`, on the same `CallScope` ladder as
- * `CallRegistry`'s strategy and timeout. {@link ClientRegistry.classify} resolves it most specific
+ * Registered on `ApiRegistry` at startup — the same browser-safe, no-DI, populated-once
+ * singleton that owns the {@link ErrorTranslator} — with
+ * `ApiRegistry.setErrorClassifier(c, scope)`, on the same `CallScope` ladder as
+ * `ClientRegistry`'s strategy and timeout. {@link ApiRegistry.classify} resolves it most specific
  * first:
  *
- * 1. `setErrorClassifier(c, XxxApi, 'method')` — one method of one contract.
- * 2. `setErrorClassifier(c, XxxApi)` — one contract, keyed by its CLASS (never a name). An
+ * 1. `setErrorClassifier(c, CallScope.method(XxxApi, 'method'))` — one method of one contract.
+ * 2. `setErrorClassifier(c, CallScope.api(XxxApi))` — one contract, keyed by its CLASS (never a name). An
  *    SDK-wrapping api-client keys by its abstract `XxxApi`: each external API qualifies its errors
  *    differently (a document store's 404 miss is EXPECTED; a messaging vendor's 429 is TRANSIENT),
  *    so it overrides the rungs below for that contract only.
- * 3. `setErrorClassifier(c, 'ALL')` — ONE per app/company. It reads {@link ApiMethodInfo.side}, so a
+ * 3. `setErrorClassifier(c, CallScope.all())` — ONE per app/company. It reads {@link ApiMethodInfo.side}, so a
  *    single classifier covers the SERVER router AND every INTERNAL client (webpieces http client,
  *    cloud tasks).
  * 4. {@link WebpiecesDefaultErrorClassifier} — the terminal rung, which never defers.

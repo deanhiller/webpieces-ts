@@ -1,6 +1,6 @@
 import { Attempt, CallContext, CallStrategy } from './CallStrategy';
 import { CallDeadline } from './CallDeadline';
-import { ClientRegistry } from './ClientRegistry';
+import { ApiRegistry } from './ApiRegistry';
 import { CallOutcome } from './ErrorClassifier';
 import { ApiMethodInfo } from './ApiMethodInfo';
 import { WRITE } from './HttpEndpointOptions';
@@ -9,11 +9,11 @@ import { toError } from '../lib/errorUtils';
 
 /**
  * THE webpieces retry strategy, shared by every transport — register its {@link RetryStrategy.run}
- * with `CallRegistry.setStrategy(...)`, or hand it to a `TransportDefault`.
+ * with `ClientRegistry.setStrategy(...)`, or hand it to a `TransportDefault`.
  *
  * Two questions, two owners, and it asks both:
  *
- * - **the ERROR** — `ClientRegistry.classify(error, …)`. Only `CallOutcome.TRANSIENT_FAILURE` is
+ * - **the ERROR** — `ApiRegistry.classify(error, …)`. Only `CallOutcome.TRANSIENT_FAILURE` is
  *   retried; an EXPECTED or FAILURE outcome is a definitive answer and is rethrown unchanged.
  * - **the ENDPOINT** — `CallContext.operation`. A `WRITE` is NEVER retried, even when this strategy is
  *   registered at ALL: a transient error on a non-idempotent write may already have happened.
@@ -66,7 +66,7 @@ export class RetryStrategy {
                 const error = toError(err);
                 const retryable =
                     ctx.operation !== WRITE &&
-                    ClientRegistry.classify(error, methodInfo) === CallOutcome.TRANSIENT_FAILURE;
+                    ApiRegistry.classify(error, methodInfo) === CallOutcome.TRANSIENT_FAILURE;
                 if (!retryable) {
                     // eslint-disable-next-line @webpieces/no-unmanaged-exceptions -- a definitive answer is rethrown unchanged
                     throw err;

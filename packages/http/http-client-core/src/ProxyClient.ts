@@ -10,7 +10,7 @@ import {
     HttpContractMapper,
     RouteMetadataFactory,
     FilterChain,
-    CallRegistry,
+    ClientRegistry,
     TransportDefault,
     CallDeadline,
     CallContext,
@@ -461,7 +461,7 @@ export abstract class ProxyClient {
         // eslint-disable-next-line @webpieces/no-unmanaged-exceptions -- lifecycle reports the original handshake failure
         try {
             const callContext = new CallContext(this.apiName, route.methodName, route.operation, this.apiClass);
-            const requestStream = await CallRegistry.execute(
+            const requestStream = await ClientRegistry.execute(
                 this.apiClass,
                 callContext,
                 (timeoutMs: number) =>
@@ -542,7 +542,7 @@ export abstract class ProxyClient {
         // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
         try {
             const callContext = new CallContext(this.apiName, route.methodName, route.operation, this.apiClass);
-            result = await CallRegistry.execute(
+            result = await ClientRegistry.execute(
                 this.apiClass,
                 callContext,
                 (timeoutMs: number) => {

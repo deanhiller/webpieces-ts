@@ -34,5 +34,5 @@ export {
 } from './McpToolCallRendering';
 export { WpMcpErrorTranslator } from './WpMcpErrorTranslator';
 export type { McpErrorTranslator } from './McpToolCallRendering';
-// The process-global home of the ONE MCP translator, mirroring ClientRegistry / IpcRegistry.
+// The process-global home of the ONE MCP translator, mirroring ApiRegistry / IpcRegistry.
 export { McpRegistry } from './McpRegistry';

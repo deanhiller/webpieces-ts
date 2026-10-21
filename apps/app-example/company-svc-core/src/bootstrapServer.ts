@@ -4,7 +4,8 @@ import { ApiFactory, AppWiring, setupRuntime, RuntimeSetupOptions } from '@webpi
 import {
     toError,
     LogManager,
-    ClientRegistry,
+    ApiRegistry,
+    CallScope,
 } from '@webpieces/core-util';
 import { BootstrapOptions } from './BootstrapOptions';
 import { CompanySetupOptions } from './CompanySetupOptions';
@@ -23,19 +24,19 @@ export async function setupCompanyRuntime(
     appModules: AppWiring,
     options: CompanySetupOptions = new CompanySetupOptions(),
 ): Promise<ApiFactory> {
-    // Install the app's ErrorTranslator at the 'ALL' rung at the same point we install the
+    // Install the app's ErrorTranslator at the CallScope.all() rung at the same point we install the
     // logger/registry config, so exception<->response translation is part of the express-server
     // wiring "only when express is used." Consulted before the built-in webpieces mapping on BOTH
     // sides (see ErrorTranslator).
     if (options.errorTranslator !== undefined) {
-        ClientRegistry.setErrorTranslator(options.errorTranslator, 'ALL');
+        ApiRegistry.setErrorTranslator(options.errorTranslator, CallScope.all());
     }
 
-    // Same "only when express is used" install point for the app's error classifier, at 'ALL'
+    // Same "only when express is used" install point for the app's error classifier, at CallScope.all()
     // (server + internal clients). Per-contract classifiers are keyed by the contract CLASS via
-    // ClientRegistry.setErrorClassifier(c, XxxApi). See ErrorClassifier.
+    // ApiRegistry.setErrorClassifier(c, CallScope.api(XxxApi)). See ErrorClassifier.
     if (options.errorClassifier !== undefined) {
-        ClientRegistry.setErrorClassifier(options.errorClassifier, 'ALL');
+        ApiRegistry.setErrorClassifier(options.errorClassifier, CallScope.all());
     }
     return setupRuntime(
         new RuntimeSetupOptions(

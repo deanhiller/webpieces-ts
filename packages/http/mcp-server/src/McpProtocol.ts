@@ -6,7 +6,7 @@
  * ladder; an app that wants MCP-protocol-specific classification registers for this class:
  *
  * ```ts
- * ClientRegistry.setErrorClassifier(new MyMcpProtocolClassifier(), McpProtocol);
+ * ApiRegistry.setErrorClassifier(new MyMcpProtocolClassifier(), CallScope.api(McpProtocol));
  * ```
  *
  * A `tools/call` whose tool WAS resolved names the tool's bound `@ApiPath` contract instead.

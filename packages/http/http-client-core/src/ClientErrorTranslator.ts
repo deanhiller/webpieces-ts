@@ -1,10 +1,10 @@
 import {
     ApiImplementationError,
     ClientRole,
-    ClientRegistry,
     HttpResponseDto,
     RouteMetadata,
     WEBPIECES_DEFAULT_ERROR_TRANSLATOR,
+    ApiRegistry,
 } from '@webpieces/core-util';
 
 /**
@@ -14,7 +14,7 @@ import {
  * ladder is what lets one vendor contract read its OWN error body while every other contract in the
  * process keeps the app's ALL translator.
  *
- * There is no "was a translator registered" question here — {@link ClientRegistry.getErrorTranslator}
+ * There is no "was a translator registered" question here — {@link ApiRegistry.getErrorTranslator}
  * never returns undefined — and no `TranslatedFailure` provenance record either. Provenance existed only to
  * feed `ProxyClient.adaptDownstreamFailure`, and the uniform 4xx/5xx rule in
  * {@link WebpiecesDefaultErrorTranslator} deleted that hook: an app that wants a downstream status
@@ -38,7 +38,7 @@ export class ClientErrorTranslator {
      */
     // webpieces-disable no-function-outside-class -- pure stateless mapping shared by browser and node
     static throwIfFailure(response: HttpResponseDto, role: ClientRole, route: RouteMetadata): void {
-        ClientRegistry.getErrorTranslator(route.apiClass, route.methodName).fromWire(response, role);
+        ApiRegistry.getErrorTranslator(route.apiClass, route.methodName).fromWire(response, role);
         WEBPIECES_DEFAULT_ERROR_TRANSLATOR.fromWire(response, role);
     }
 

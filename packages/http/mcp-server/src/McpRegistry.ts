@@ -2,7 +2,7 @@ import { McpDefaultToolCallRenderer, McpErrorTranslator } from './McpToolCallRen
 
 /**
  * McpRegistry - the process-global home of the ONE {@link McpErrorTranslator}, mirroring
- * `ClientRegistry` for HTTP and `IpcRegistry` for IPC.
+ * `ApiRegistry` for HTTP and `IpcRegistry` for IPC.
  *
  * ```ts
  * // startup, ONCE per process

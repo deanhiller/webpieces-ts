@@ -302,9 +302,9 @@ export {
 // Context keys + registry (the global magic-context header system)
 export { HeaderRegistry } from './http/HeaderRegistry';
 export { ClientRegistry } from './http/ClientRegistry';
-export { CallRegistry } from './http/CallRegistry';
-export type { CallScope } from './http/CallScope';
-export { CallScopeLadder } from './http/CallScope';
+// What BOTH sides of a call read (error translator + classifier), scoped by CallScope.
+export { ApiRegistry } from './http/ApiRegistry';
+export { CallScope, CallScopeLadder } from './http/CallScope';
 export { TransportDefault } from './http/TransportDefault';
 export { RetryStrategy } from './http/RetryStrategy';
 export { CallDeadline } from './http/CallDeadline';
@@ -324,7 +324,7 @@ export type { Locality } from './http/RuntimeLocality';
 // normalised into, so an ErrorTranslator implementation is written once and serves both.
 export { HttpHeader, HttpResponseStatus, HttpResponseDto } from './http/HttpResponseDto';
 // Pluggable, bidirectional error translation (app exception <-> the WHOLE response). Set on
-// ClientRegistry at startup; consulted before the built-in webpieces mapping on BOTH sides.
+// ApiRegistry at startup; consulted before the built-in webpieces mapping on BOTH sides.
 export type { ErrorTranslator } from './http/ErrorTranslator';
 // THE webpieces default translator — always installed, and what an app's own translator delegates to
 // in order to decline an error. ONE class, both halves, node and browser alike.
@@ -339,8 +339,8 @@ export type { Surface } from './http/Surface';
 // The ONE rule for an error RECEIVED from another process, shared verbatim by HTTP and IPC.
 export { ReceivedApiErrorRule } from './errors/ReceivedApiErrorRule';
 // Pluggable per-client error classification: one CallOutcome (EXPECTED / TRANSIENT_FAILURE /
-// FAILURE) per thrown API-call error. Registered on ClientRegistry at startup; read by RetryStrategy,
-// CallRegistry's per-attempt log line, LogApiCall and the MCP renderer's retry advice.
+// FAILURE) per thrown API-call error. Registered on ApiRegistry at startup; read by RetryStrategy,
+// ClientRegistry's per-attempt log line, LogApiCall and the MCP renderer's retry advice.
 export type { ErrorClassifier } from './http/ErrorClassifier';
 export { CallOutcome } from './http/ErrorClassifier';
 export {

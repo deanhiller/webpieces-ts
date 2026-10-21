@@ -6,6 +6,8 @@ import { ApiCallContext } from '../ApiCallContext';
 import { ContextKey, AnyContextKey } from '../../ContextKey';
 import { WebpiecesCoreHeaders } from '../WebpiecesCoreHeaders';
 import { ClientRegistry } from '../ClientRegistry';
+import { ApiRegistry } from '../ApiRegistry';
+import { CallScope } from '../CallScope';
 import {
     ApiBadRequestError,
     ApiEndUserError,
@@ -194,11 +196,12 @@ describe('LogApiCall.execute — pluggable per-client failure classification', (
     // other specs in this file (which assert the built-in behavior).
     afterEach(() => {
         ClientRegistry.resetForTests();
+        ApiRegistry.resetForTests();
     });
 
     it('a per-contract classifier flips a client-side error from failure → success (OTHER)', async () => {
         // Firestore-style: a not-found miss on this client is EXPECTED, not a failure.
-        ClientRegistry.setErrorClassifier(new NotFoundIsExpected(), SaveApi);
+        ApiRegistry.setErrorClassifier(new NotFoundIsExpected(), CallScope.api(SaveApi));
 
         const ctx = new RecordingApiCallContext();
 
@@ -217,7 +220,7 @@ describe('LogApiCall.execute — pluggable per-client failure classification', (
     });
 
     it('an error the classifier DEFERS on still uses the built-in (client → failure)', async () => {
-        ClientRegistry.setErrorClassifier(new NotFoundIsExpected(), SaveApi);
+        ApiRegistry.setErrorClassifier(new NotFoundIsExpected(), CallScope.api(SaveApi));
 
         const ctx = new RecordingApiCallContext();
 
@@ -540,7 +543,7 @@ describe('LogApiCall.execute — opt-in field masking', () => {
     });
 });
 
-describe('LogApiCall outcome mapping (ClientRegistry.classify, final by position)', () => {
+describe('LogApiCall outcome mapping (ApiRegistry.classify, final by position)', () => {
     const resultOf = async (side: ApiSide, error: Error): Promise<string | undefined> => {
         const ctx = new RecordingApiCallContext();
         await expect(

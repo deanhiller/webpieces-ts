@@ -1,4 +1,4 @@
-import { WpAuthorization, AuthorizationType, WpAuth, oidcSameProject } from '@webpieces/core-util';
+import { WpAuthorization, AuthorizationType, WpAuth, oidcSameProject, CallScope } from '@webpieces/core-util';
 import 'reflect-metadata';
 
 // Force gcp-metadata to report "not on GCP" instantly so these tests are hermetic
@@ -214,14 +214,14 @@ describe('TaskProxyClient task naming and per-enqueue resolution (#1199)', () =>
         const global = (request: ICreateTaskRequest): ICreateTaskRequest => request;
         const perApi = (request: ICreateTaskRequest): ICreateTaskRequest => request;
         const callSite = (request: ICreateTaskRequest): ICreateTaskRequest => request;
-        GcpTaskRegistry.setCustomizer(global, 'ALL');
-        GcpTaskRegistry.setGax({ timeout: 1_000 }, 'ALL');
+        GcpTaskRegistry.setCustomizer(global, CallScope.all());
+        GcpTaskRegistry.setGax({ timeout: 1_000 }, CallScope.all());
         await send();
         expect(invoker.captured!.plan.customizeTask).toBe(global);
         expect(invoker.captured!.plan.gax).toEqual({ timeout: 1_000 });
 
-        GcpTaskRegistry.setCustomizer(perApi, EmailApi);
-        GcpTaskRegistry.setGax({ timeout: 3_000 }, EmailApi, 'sendEmail');
+        GcpTaskRegistry.setCustomizer(perApi, CallScope.api(EmailApi));
+        GcpTaskRegistry.setGax({ timeout: 3_000 }, CallScope.method(EmailApi, 'sendEmail'));
         await send();
         expect(invoker.captured!.plan.customizeTask).toBe(perApi);
         expect(invoker.captured!.plan.gax).toEqual({ timeout: 3_000 });

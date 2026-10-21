@@ -8,7 +8,7 @@ import { TaskAlreadyExistsError } from './TaskAlreadyExistsError';
 
 /**
  * Translates a gRPC failure from the Cloud Tasks API into the portable webpieces error taxonomy, so
- * the ONE classifier (`ClientRegistry.classify`) — and therefore `RetryStrategy` and `LogApiCall` —
+ * the ONE classifier (`ApiRegistry.classify`) — and therefore `RetryStrategy` and `LogApiCall` —
  * judges an enqueue exactly like any other call:
  *
  * | gRPC code | becomes | outcome |

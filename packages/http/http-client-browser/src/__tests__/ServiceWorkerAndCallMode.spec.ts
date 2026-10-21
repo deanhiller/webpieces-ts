@@ -9,7 +9,6 @@ import {
     AuthorizationType,
     CallMode,
     CallModeMarker,
-    CallRegistry,
     ClientRegistry,
     ClientRole,
     Endpoint,
@@ -25,6 +24,7 @@ import {
     WpAuthPublic,
     WRITE,
     WRITE_IDEMPOTENT,
+    CallScope,
 } from '@webpieces/core-util';
 import { RequestOutcome } from '@webpieces/http-client-core';
 import { ClientConfig } from '../ClientConfig';
@@ -154,14 +154,12 @@ class Clients {
 beforeEach(() => {
     HeaderRegistry.configure([], true);
     ClientRegistry.resetForTests();
-    CallRegistry.clear();
     ClientRegistry.addUrlMapping('items-svc', 'https://items.example');
 });
 
 afterEach(() => {
     vi.useRealTimers();
     vi.unstubAllGlobals();
-    CallRegistry.clear();
     ClientRegistry.resetForTests();
 });
 
@@ -266,7 +264,7 @@ describe('per-call background marker (#1293)', () => {
     it('marks a deadline failure too, keeping ApiCallTimeoutError', async () => {
         vi.useFakeTimers();
         new ScriptedFetch([() => new Promise<Response>(() => {})]);
-        CallRegistry.setTimeout(50, 'ALL');
+        ClientRegistry.setTimeout(50, CallScope.all());
 
         const pending = Clients.failureOf(Clients.build(undefined, CallMode.BACKGROUND).list(new ItemsRequest()));
         await vi.advanceTimersByTimeAsync(50);
@@ -282,7 +280,7 @@ describe('stock RetryStrategy registered at ALL for a browser client (#1293)', (
 
     async function attemptsFor(method: ItemsMethod, failure: () => Promise<Response>): Promise<number> {
         const fetched = new ScriptedFetch([failure, Ok.step]);
-        CallRegistry.setStrategy(strategy.run, 'ALL');
+        ClientRegistry.setStrategy(strategy.run, CallScope.all());
         const client = Clients.build(undefined, CallMode.FOREGROUND, ServiceWorkerRouting.ALLOW);
         await client[method](new ItemsRequest()).then(
             (): void => undefined,
@@ -309,7 +307,7 @@ describe('stock RetryStrategy registered at ALL for a browser client (#1293)', (
 
     it('gives up with ApiRetriesExhaustedError, still carrying the call mode', async () => {
         new ScriptedFetch([Rejected.step]);
-        CallRegistry.setStrategy(strategy.run, 'ALL');
+        ClientRegistry.setStrategy(strategy.run, CallScope.all());
 
         const error = await Clients.failureOf(
             Clients.build(undefined, CallMode.BACKGROUND).list(new ItemsRequest()),

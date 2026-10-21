@@ -1,4 +1,4 @@
-import { ClientRole, WpAuthorization, AuthorizationType } from '@webpieces/core-util';
+import { ClientRole, WpAuthorization, AuthorizationType, ApiRegistry, CallScope } from '@webpieces/core-util';
 import 'reflect-metadata';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
@@ -161,11 +161,14 @@ class ControlledFeature {
     }
 }
 
-afterEach(() => ClientRegistry.resetForTests());
+afterEach(() => {
+    ClientRegistry.resetForTests();
+    ApiRegistry.resetForTests();
+});
 
 describe('generated-client streaming features over controlled transport', () => {
     it('sends a typed request-side control when the response consumer throws', async () => {
-        ClientRegistry.setErrorTranslator(new OrderTranslator(), 'ALL');
+        ApiRegistry.setErrorTranslator(new OrderTranslator(), CallScope.all());
         await RequestContext.run(async (): Promise<void> => {
             const feature = new ControlledFeature();
             const error = new OrderError('client-handler');
@@ -189,7 +192,7 @@ describe('generated-client streaming features over controlled transport', () => 
     });
 
     it('reads a typed HTTP handshake failure before aborting the upload', async () => {
-        ClientRegistry.setErrorTranslator(new OrderTranslator(), 'ALL');
+        ApiRegistry.setErrorTranslator(new OrderTranslator(), CallScope.all());
         await RequestContext.run(async (): Promise<void> => {
             const feature = new ControlledFeature();
             const opening = feature.open();
@@ -206,7 +209,7 @@ describe('generated-client streaming features over controlled transport', () => 
     });
 
     it('uses default masking for errors not claimed by an application translator', async () => {
-        ClientRegistry.setErrorTranslator(new OrderTranslator(), 'ALL');
+        ApiRegistry.setErrorTranslator(new OrderTranslator(), CallScope.all());
         await RequestContext.run(async (): Promise<void> => {
             const feature = new ControlledFeature();
             const opening = feature.open();
@@ -253,7 +256,7 @@ describe('generated-client streaming features over controlled transport', () => 
     });
 
     it('round-trips a custom response cancellation split across chunks and rejects subsequent operations with that error', async () => {
-        ClientRegistry.setErrorTranslator(new OrderTranslator(), 'ALL');
+        ApiRegistry.setErrorTranslator(new OrderTranslator(), CallScope.all());
         await RequestContext.run(async (): Promise<void> => {
             const feature = new ControlledFeature();
             const opening = feature.open();
@@ -273,7 +276,7 @@ describe('generated-client streaming features over controlled transport', () => 
     });
 
     it('round-trips custom request cancellation through the raw control record', async () => {
-        ClientRegistry.setErrorTranslator(new OrderTranslator(), 'ALL');
+        ApiRegistry.setErrorTranslator(new OrderTranslator(), CallScope.all());
         await RequestContext.run(async (): Promise<void> => {
             const feature = new ControlledFeature();
             const opening = feature.open();
@@ -294,7 +297,7 @@ describe('generated-client streaming features over controlled transport', () => 
     });
 
     it('resolves the control-record translator on the CallScope ladder: a per-API one governs its contract only', () => {
-        ClientRegistry.setErrorTranslator(new OrderTranslator(), ControlledApi);
+        ApiRegistry.setErrorTranslator(new OrderTranslator(), CallScope.api(ControlledApi));
         const own = new StreamErrorControl(CONTROLLED_ROUTE);
         expect(own.decode(own.encode(new OrderError('o-20')), ClientRole.SERVER)).toBeInstanceOf(OrderError);
 
@@ -326,11 +329,11 @@ describe('generated-client streaming features over controlled transport', () => 
     });
 
     it('rejects a declared control error even if both translators return', () => {
-        ClientRegistry.setErrorTranslator({
+        ApiRegistry.setErrorTranslator({
             toWire: (): HttpResponseDto =>
                 new HttpResponseDto(new HttpResponseStatus(200, 'OK'), [], {}),
             fromWire: (): void => undefined,
-        }, 'ALL');
+        }, CallScope.all());
         const control = new StreamErrorControl(CONTROLLED_ROUTE);
         expect(
             control.decode(control.encode(new Error('failure')), ClientRole.SERVER),
@@ -339,12 +342,12 @@ describe('generated-client streaming features over controlled transport', () => 
 
     it('aborts when the application translator cannot encode cancellation', async () => {
         const encodeFailure = new Error('translator failed');
-        ClientRegistry.setErrorTranslator({
+        ApiRegistry.setErrorTranslator({
             toWire: (): HttpResponseDto => {
                 throw encodeFailure;
             },
             fromWire: (): void => undefined,
-        }, 'ALL');
+        }, CallScope.all());
         await RequestContext.run(async (): Promise<void> => {
             const feature = new ControlledFeature();
             const opening = feature.open();

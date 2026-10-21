@@ -1,4 +1,4 @@
-import { WpAuthorization, AuthorizationType, WpAuth, oidcSameProject } from '@webpieces/core-util';
+import { WpAuthorization, AuthorizationType, WpAuth, oidcSameProject, CallScope } from '@webpieces/core-util';
 import 'reflect-metadata';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { CloudTasksClient } from '@google-cloud/tasks';
@@ -9,7 +9,6 @@ import {
     ApiPath,
     ApiRetriesExhaustedError,
     ApiUnavailableError,
-    CallRegistry,
     ClientRegistry,
     Endpoint,
     HeaderRegistry,
@@ -37,7 +36,7 @@ import { FakeBehavior, FakeCloudTasksServer, ReceivedCreateTask } from './FakeCl
 /**
  * #1199 — the REAL GcpTaskInvoker and the REAL CloudTasksClient (real gax, real grpc-js, a real
  * socket) against a local fake Cloud Tasks server, wired through the full enqueue stack
- * (CloudTaskScheduler → generated client → TaskProxyClient → LogApiCall → CallRegistry).
+ * (CloudTaskScheduler → generated client → TaskProxyClient → LogApiCall → ClientRegistry).
  *
  * Every scenario fails on the code before #1199: `createTask` was called with NO call options (gax's
  * own 20 s CreateTask deadline, no retry codes), every enqueue without a caller-chosen name was unnamed, and
@@ -139,14 +138,13 @@ beforeEach(() => {
     server.script = [];
     capturing.lines.length = 0;
     sentOptions = [];
-    CallRegistry.clear();
-    GcpTaskRegistry.clear();
     ClientRegistry.resetForTests();
+    GcpTaskRegistry.clear();
     ClientRegistry.addUrlMapping('email-svc', 'https://email.example');
 });
 
 afterEach(() => {
-    CallRegistry.clear();
+    ClientRegistry.resetForTests();
     GcpTaskRegistry.clear();
 });
 
@@ -255,7 +253,7 @@ describe('GcpTaskInvoker over a real gRPC channel — Path A (webpieces owns tim
         GcpTaskRegistry.setCustomizer((request: ICreateTaskRequest): ICreateTaskRequest => {
             request.task!.httpRequest!.headers!['x-priority'] = 'high';
             return request;
-        }, 'ALL');
+        }, CallScope.all());
 
         await send(new ScheduleOptions(TaskName.generated(), undefined, deadline900));
         await send();
@@ -290,8 +288,8 @@ describe('GcpTaskInvoker over a real gRPC channel — Path B (gax set: the calle
 
     it('GcpTaskRegistry.setGax: the safety cap from the timeout ladder holds on a silent server', async () => {
         server.script = [FakeBehavior.SILENT];
-        GcpTaskRegistry.setGax({ timeout: 10_000 }, EmailApi, 'sendEmail');
-        CallRegistry.setTimeout(300, EmailApi);
+        GcpTaskRegistry.setGax({ timeout: 10_000 }, CallScope.method(EmailApi, 'sendEmail'));
+        ClientRegistry.setTimeout(300, CallScope.api(EmailApi));
 
         const started = Date.now();
         const error = await sendAndCatch();
@@ -305,7 +303,7 @@ describe('GcpTaskInvoker over a real gRPC channel — Path B (gax set: the calle
 
     it('gax 5 retries on the caller request: the retried attempt carries a REAL (non-zero) deadline', async () => {
         server.script = [FakeBehavior.RESET, FakeBehavior.OK];
-        CallRegistry.setTimeout(20_000, EmailApi);
+        ClientRegistry.setTimeout(20_000, CallScope.api(EmailApi));
 
         const ref = await send(
             new ScheduleOptions(TaskName.dedup('order-8'), undefined, undefined, {

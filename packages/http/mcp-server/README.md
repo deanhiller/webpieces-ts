@@ -330,7 +330,7 @@ precise `kind`, a small ownership `category`, explicit `retry` guidance, a safe 
 `retryAfterSeconds`, and `statusCode`. It never repeats `isError` inside the content.
 
 MCP keeps no retry table of its own: the advice is a function of the ONE outcome
-`ClientRegistry.classify` gives every reader (`RetryStrategy`, `LogApiCall`), the endpoint's
+`ApiRegistry.classify` gives every reader (`RetryStrategy`, `LogApiCall`), the endpoint's
 operation, and `retryAfterSeconds`. Implementation failures are `category: "bug", retry: "never"` and
 tell the caller to give the request ID to support; operator details remain redacted. Generic
 dependency failures are also non-retryable, and so is `retries-exhausted` (`category: "dependency",
@@ -349,7 +349,7 @@ Every reply carries the requestId so a user can quote it: `_meta["webpieces/requ
 An app owns its error taxonomy and owns how those errors should be explained to a model, so a
 registered translator REPLACES the webpieces default for every `tools/call` failure — the same
 convention `ExpressWrapper.handleError` applies on the HTTP path. Register one with
-`McpRegistry.setErrorTranslator(...)`: ONE process-global per protocol, mirroring `ClientRegistry`
+`McpRegistry.setErrorTranslator(...)`: ONE process-global per protocol, mirroring `ApiRegistry`
 for HTTP and `IpcRegistry` for IPC, so every call site is one unconditional line. (Two MCP servers in
 one process therefore share one translator, and registration order matters rather than being fixed at
 construction — the trade taken deliberately in issue #968 to make all three protocols read alike.)
