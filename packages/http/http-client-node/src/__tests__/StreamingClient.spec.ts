@@ -109,6 +109,10 @@ registerStreamingSchemas(VendorUploadApi, 'upload', {
 
 /** The outbound role alone: counts what it was asked to do. */
 class CountingMinter extends VendorAuthMinter {
+    override supportedVendorNames(): readonly string[] {
+        return ['partner-upload'];
+    }
+
     mints = 0;
     refreshes = 0;
 

@@ -12,17 +12,37 @@ import { RawHttpRequest } from './HttpRequest';
  * `oidcSameProject()` RPC client (to look a credential or a signing secret up) without closing a
  * construction cycle (#1358).
  *
- * ## It FAILS CLOSED
+ * ## It FAILS AT STARTUP
  *
- * With no verifier bound, every inbound `vendorAuth(...)` endpoint answers 401 before the controller
- * runs. There is no framework default and there never will be one — never an allow-all.
+ * A server that SERVES a `vendorAuth(name)` endpoint with no verifier bound, or with a verifier whose
+ * {@link supportedVendorNames} does not list `name`, refuses to boot: route registration names the endpoint,
+ * the vendor and the binding line (#1362). There is no framework default and there never will be
+ * one — never an allow-all.
  *
  * ```typescript
  * // the API server's BindModule
  * binder.bind(VENDOR_AUTH_VERIFIER).to(MyVendorAuthVerifier).inSingletonScope();
+ *
+ * class MyVendorAuthVerifier extends VendorAuthVerifier {
+ *     override supportedVendorNames(): readonly string[] {
+ *         return ['bugfixer-sentry'];   // every name verify() below handles
+ *     }
+ *     override async verify(name: string, request: RawHttpRequest): Promise<AuthenticatedCaller> { ... }
+ * }
  * ```
  */
 export abstract class VendorAuthVerifier {
+    /**
+     * Every vendor name {@link verify} handles — each `vendorAuth(name)` this server can verify. A
+     * METHOD beside `verify` so the list sits next to the code that dispatches on those names: add a
+     * vendor to both in one edit. REQUIRED, no default.
+     *
+     * Called at STARTUP by route registration (#1362): a served `vendorAuth(name)` route whose name
+     * is not listed fails boot. It MUST therefore be PURE — return a fixed list, with no I/O, no
+     * network, no credential work and no side effect. {@link verify} is never called at boot.
+     */
+    abstract supportedVendorNames(): readonly string[];
+
     /**
      * Verify ONE inbound request. Return the {@link AuthenticatedCaller} the vendor's credential
      * proved; throw `ApiUnauthorizedError` to deny. The framework seeds `entries` with
@@ -41,7 +61,7 @@ export abstract class VendorAuthVerifier {
 /**
  * DI identifier for the optional {@link VendorAuthVerifier} binding — the INBOUND role only. A Symbol
  * for the same reason as `VENDOR_AUTH_MINTER`: autobind never constructs it, so an unbound verifier
- * is `undefined` and the fail-closed 401 is reachable.
+ * is `undefined` and route registration can refuse a served `vendorAuth(...)` endpoint at startup.
  */
 // webpieces-disable no-symbol-di-tokens -- optional DI token: must be a Symbol so the app container's autobind never auto-constructs this token, keeping @optional() @inject(...) correct (undefined when unbound)
 export const VENDOR_AUTH_VERIFIER = Symbol.for('VendorAuthVerifier');

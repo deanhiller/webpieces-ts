@@ -34,6 +34,8 @@ import {
 import { GcpOidc, resetMetadataForTests } from '@webpieces/gcp-identity';
 import { DefaultOidcVerifier } from '../DefaultOidcVerifier';
 import { AuthFilter } from '../filters/AuthFilter';
+import { JwtHook, MintedJwt } from '../AuthHooks';
+import { AuthenticatedCaller } from '../AuthConfig';
 import { MethodMeta } from '../MethodMeta';
 import { WpResponse } from '../WpResponse';
 
@@ -49,6 +51,21 @@ const route = new RouteMetadata(
     new AuthMeta([oidcSameProject(), oidcSvcs([PARTNER]), jwt()], undefined),
     'PairApi',
 );
+
+/**
+ * The route declares jwt(), and a served route's every mode must be verifiable at startup (#1362), so
+ * the filter gets a JwtHook. It rejects every token: these specs are about the OIDC pair, and a
+ * Google-signed service token is not a user JWT.
+ */
+class RejectingJwtHook extends JwtHook<never> {
+    override async mint(_request: never): Promise<MintedJwt> {
+        throw new Error('never minted here');
+    }
+
+    override async parseJwt(_token: string): Promise<AuthenticatedCaller> {
+        throw new ApiUnauthorizedError('not a user JWT');
+    }
+}
 
 class RecordingNext implements Service<MethodMeta, WpResponse<object>> {
     invoked = false;
@@ -109,7 +126,8 @@ describe('AuthFilter: oidcSameProject() + oidcSvcs([...]) on one endpoint, on GC
 
     async function call(email: string): Promise<RecordingNext> {
         const next = new RecordingNext();
-        const filter = new AuthFilter(new DefaultOidcVerifier(new GcpOidc()));
+        const filter = new AuthFilter(new DefaultOidcVerifier(new GcpOidc()), undefined, new RejectingJwtHook());
+        filter.assertRouteVerifiable(route);
         await RequestContext.run(async () => {
             RequestContext.setRequest(
                 new HttpRequest(

@@ -66,8 +66,8 @@ export const OIDC_HOOK = Symbol.for('OidcHook');
  * options.bind(API_KEY_HOOK).to(OneTabletApiKeyHook);
  * ```
  *
- * When NO ApiKeyHook is bound, the framework {@link AuthFilter} 401s every `apiKey(...)` endpoint,
- * exactly as it does for an unbound JwtHook. There is no framework default and there never will be
+ * When NO ApiKeyHook is bound, a server SERVING an `apiKey(...)` endpoint refuses to boot (#1362,
+ * `AuthFilter.assertRouteVerifiable`), exactly as it does for an unbound JwtHook. There is no framework default and there never will be
  * one: the key regime lives in the app's datastore, under the app's hashing scheme, behind the app's
  * choice of header names.
  *

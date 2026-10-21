@@ -41,7 +41,7 @@ import { GcpOidc } from '@webpieces/gcp-identity';
 import {
     ClientConfig,
     ClientHttpFactory,
-    MissingVendorAuthMinterError,
+    MissingClientCredentialError,
 } from '@webpieces/http-client-node'; // eslint-disable-line @webpieces/enforce-architecture -- test-only loopback proof that a server's outbound OIDC client and its inbound vendor verifier are independent DI roles (#1358)
 import {
     Binder,
@@ -161,6 +161,10 @@ class AcceptApiServerOidc extends OidcHook {
 
 /** fsdb serves no vendorAuth endpoint; a verifier bound here must never be consulted. */
 class FsdbVendorVerifierTrap extends VendorAuthVerifier {
+    override supportedVendorNames(): readonly string[] {
+        return ['bugfixer-agent'];
+    }
+
     override async verify(_name: string, _request: RawHttpRequest): Promise<AuthenticatedCaller> {
         probe.fsdbVendorVerifies += 1;
         throw new ApiUnauthorizedError('fsdb never verifies vendor credentials');
@@ -192,6 +196,10 @@ class StubGcpOidc {
 /** The server's INBOUND role, exactly the consumer's shape: it checks the token through fsdb. */
 @injectable()
 class AgentTokenVerifier extends VendorAuthVerifier {
+    override supportedVendorNames(): readonly string[] {
+        return ['bugfixer-agent'];
+    }
+
     constructor(
         // webpieces-disable inject-annotation-not-needed-for-concrete-class -- abstract contract class is the token; esbuild elides design:paramtypes
         @inject(FsdbAgentApi) private readonly fsdb: FsdbAgentApi,
@@ -223,6 +231,10 @@ class AgentTokenVerifier extends VendorAuthVerifier {
 /** Bound in the API server too, to prove its OIDC hop to fsdb never asks the vendor minter. */
 @injectable()
 class ApiServerMinterTrap extends VendorAuthMinter {
+    override supportedVendorNames(): readonly string[] {
+        return ['bugfixer-agent'];
+    }
+
     override async mint(_name: string, _request: SignableRequest): Promise<Map<string, string>> {
         probe.apiServerMints += 1;
         throw new Error('the API server sends no vendorAuth call in this topology');
@@ -248,6 +260,10 @@ class BugfixerAgentController extends BugfixerAgentApi {
 /** The CLI's OUTBOUND role: it reads the worker token it already holds. No RPC, no validation. */
 @injectable()
 class AgentTokenMinter extends VendorAuthMinter {
+    override supportedVendorNames(): readonly string[] {
+        return ['bugfixer-agent'];
+    }
+
     constructor() {
         super();
     }
@@ -266,6 +282,10 @@ class AgentTokenMinter extends VendorAuthMinter {
 /** A verifier bound in the SENDING process: it must never be called to send a request. */
 @injectable()
 class CliVerifierTrap extends VendorAuthVerifier {
+    override supportedVendorNames(): readonly string[] {
+        return ['bugfixer-agent'];
+    }
+
     constructor() {
         super();
         probe.cliVerifierConstructed += 1;
@@ -472,16 +492,18 @@ describe('vendorAuth over loopback: CLI minter -> API verifier -> fsdb over OIDC
             expect(probe.apiControllerCalls).toBe(0);
         });
 
-        it('with NO minter bound, refuses with MissingVendorAuthMinterError and sends nothing', async () => {
+        it('with NO minter bound, createRpcClient refuses the contract (MissingClientCredentialError) and nothing is sent', async () => {
             const cli = await cliRouter(false);
-            const agentApi = cli.getContainer().get(BugfixerAgentApi);
 
-            const refused = RequestContext.run(() => agentApi.firebaseToken(new FirebaseTokenRequest('sign-in')));
+            // The proxy is built on first injection, and building it is where the refusal happens
+            // (#1362) — not on the first call.
+            const create = (): BugfixerAgentApi => cli.getContainer().get(BugfixerAgentApi);
 
-            await expect(refused).rejects.toBeInstanceOf(MissingVendorAuthMinterError);
-            await expect(refused).rejects.toThrow(/VENDOR_AUTH_MINTER/);
+            expect(create).toThrow(MissingClientCredentialError);
+            expect(create).toThrow(/binder\.bind\(VENDOR_AUTH_MINTER\)/);
             expect(probe.apiServerRequests).toBe(0);
             expect(probe.cliVerifies).toBe(0);
+            expect(probe.cliMints).toBe(0);
         });
     });
 

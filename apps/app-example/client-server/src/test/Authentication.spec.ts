@@ -6,7 +6,8 @@ import { RequestContext, HttpRequest } from '@webpieces/core-context';
 import { ApiUnauthorizedError, ApiForbiddenError } from '@webpieces/core-util';
 import { GcpOidc } from '@webpieces/gcp-identity';
 import { SecureApi } from '@webpieces/client-server-api';
-import { TestAuthConfig, TEST_SHARED_SECRET, TEST_SHARED_SECRET_ROTATING } from './TestAuthConfig';
+import { TestAuthConfig, TestSecrets, testSecretsOverride, TEST_SHARED_SECRET, TEST_SHARED_SECRET_ROTATING } from './TestAuthConfig';
+import { SECRETS } from '@webpieces/core-util';
 import { setupCompanyRuntime, CompanySetupOptions } from '@webpieces/company-svc-core';
 import { ClientServerWiring } from '../wiring';
 
@@ -56,6 +57,7 @@ describe('Authentication: shared-secret (bound state)', () => {
     // Bind a known secret VALUE — the whole point: a test passes the string in and validates it.
     const overrides = new ContainerModule(async (options: ContainerModuleLoadOptions) => {
         (await options.rebind(AUTH_CONFIG)).to(TestAuthConfig); // sharedSecrets: { INTERNAL_API_SECRET: TEST_SHARED_SECRET }
+        (await options.rebind(SECRETS)).to(TestSecrets); // the value its Server2Api client sends (#1362: required at boot)
     });
 
     let api: SecureApi;
@@ -92,7 +94,7 @@ describe('Authentication: shared-secret (bound state)', () => {
 
 describe('Authentication: jwt (real signed token, role-gated)', () => {
     // Use the REAL CompanyAuthConfig (default binding) with a known signing secret.
-    const overrides = new ContainerModule(() => Promise.resolve());
+    const overrides = testSecretsOverride();
     let priorSecret: string | undefined;
     let api: SecureApi;
 
@@ -153,7 +155,7 @@ describe('Authentication: jwt (real signed token, role-gated)', () => {
 });
 
 describe('Authentication: oidc (real dev token, oidcSameProject())', () => {
-    const overrides = new ContainerModule(() => Promise.resolve()); // real CompanyAuthConfig → gcp-identity
+    const overrides = testSecretsOverride(); // real CompanyAuthConfig → gcp-identity
 
     let api: SecureApi;
     beforeEach(async () => {

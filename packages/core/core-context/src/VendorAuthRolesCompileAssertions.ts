@@ -6,6 +6,10 @@ import { VendorAuthVerifier, VENDOR_AUTH_VERIFIER } from './VendorAuthVerifier';
 
 /** A CLIENT-only process's minter: mint + refresh, and NOTHING meaningless beside them. */
 class MinterOnly extends VendorAuthMinter {
+    override supportedVendorNames(): readonly string[] {
+        return ['bugfixer-worker'];
+    }
+
     override async mint(_name: string, _request: SignableRequest): Promise<Map<string, string>> {
         return new Map([['Authorization', 'Bearer held-worker-token']]);
     }
@@ -17,6 +21,10 @@ class MinterOnly extends VendorAuthMinter {
 
 /** A SERVER-only process's verifier: verify, and NOTHING meaningless beside it. */
 class VerifierOnly extends VendorAuthVerifier {
+    override supportedVendorNames(): readonly string[] {
+        return ['bugfixer-sentry'];
+    }
+
     override async verify(_name: string, request: RawHttpRequest): Promise<AuthenticatedCaller> {
         return new AuthenticatedCaller(`vendor:${request.raw.rawBody.length}`);
     }
@@ -59,6 +67,10 @@ export class VendorAuthRolesCompileAssertions {
         const verifier: VendorAuthVerifier = new MinterOnly();
         void verifier;
         void class extends VendorAuthMinter {
+            override supportedVendorNames(): readonly string[] {
+                return ['x'];
+            }
+
             override async mint(): Promise<Map<string, string>> {
                 return new Map();
             }
@@ -80,6 +92,10 @@ export class VendorAuthRolesCompileAssertions {
         const minter: VendorAuthMinter = new VerifierOnly();
         void minter;
         void class extends VendorAuthVerifier {
+            override supportedVendorNames(): readonly string[] {
+                return ['x'];
+            }
+
             override async verify(): Promise<AuthenticatedCaller> {
                 return new AuthenticatedCaller('vendor');
             }
@@ -87,6 +103,37 @@ export class VendorAuthRolesCompileAssertions {
             // @ts-expect-error mint is not a member of the inbound role, so it cannot be overridden there
             override async mint(): Promise<Map<string, string>> {
                 return new Map();
+            }
+        };
+    }
+
+    /**
+     * Each role DECLARES the vendor names it handles (#1362): a required abstract method with no
+     * default, because startup and `createRpcClient` call it to refuse a route nothing can serve.
+     */
+    supportedVendorNamesIsRequired(): void {
+        // @ts-expect-error a minter must implement supportedVendorNames() — there is no default
+        void class extends VendorAuthMinter {
+            override async mint(): Promise<Map<string, string>> {
+                return new Map();
+            }
+
+            override async refresh(): Promise<void> {
+                // renew
+            }
+        };
+        // @ts-expect-error a verifier must implement supportedVendorNames() — there is no default
+        void class extends VendorAuthVerifier {
+            override async verify(): Promise<AuthenticatedCaller> {
+                return new AuthenticatedCaller('vendor');
+            }
+        };
+        void class extends VendorAuthVerifier {
+            // @ts-expect-error it is a METHOD beside verify(), not a field
+            override readonly supportedVendorNames: readonly string[] = ['x'];
+
+            override async verify(): Promise<AuthenticatedCaller> {
+                return new AuthenticatedCaller('vendor');
             }
         };
     }

@@ -2,7 +2,6 @@ import { Filter, Secrets, Service, StreamDirection } from '@webpieces/core-util'
 import { SignableRequest, VendorAuthMinter } from '@webpieces/core-context';
 import { GcpOidc } from '@webpieces/gcp-identity';
 import { ClientRequest } from '@webpieces/http-client-core';
-import { MissingSharedSecretError, MissingVendorAuthMinterError } from './OutboundAuthErrors';
 
 /**
  * Attaches the endpoint's outbound credential, against the destination the call is ACTUALLY going
@@ -39,15 +38,23 @@ import { MissingSharedSecretError, MissingVendorAuthMinterError } from './Outbou
  * Both credential-minting modes ride in the ONE `Authorization` header under their own scheme —
  * `Bearer <oidc>` / `Webpieces <secret>` — which is never a context key, so neither can leak onto
  * the next hop.
+ *
+ * ## A missing credential never reaches this filter
+ *
+ * The route's mode was selected by `NodeProxyClient.selectAuthMethod`, the same code that made
+ * `createRpcClient` refuse the contract when no declared method was sendable (#1362). So a
+ * `sharedSecret(key)` arriving here has a held value and a `vendorAuth(name)` a minter listing `name`;
+ * the two checks below only narrow the types, and name the broken invariant if they ever fire.
  */
 export class OutboundAuthFilter extends Filter<ClientRequest, Response> {
     constructor(
         private readonly gcpOidc: GcpOidc,
-        /** Only sharedSecret(...) endpoints need it; a server that has none binds nothing. */
+        /** Only sharedSecret(...) endpoints need it; a process that calls none binds nothing. */
         private readonly secrets: Secrets | undefined,
         /**
-         * The OUTBOUND role only. Only vendorAuth(...) calls need it, and an unbound one makes them
-         * THROW. Never the inbound VendorAuthVerifier: sending a request verifies nothing (#1358).
+         * The OUTBOUND role only. Only vendorAuth(...) calls need it, and createRpcClient refuses a
+         * contract it cannot call without one. Never the inbound VendorAuthVerifier: sending a request
+         * verifies nothing (#1358).
          */
         private readonly vendorAuthMinter: VendorAuthMinter | undefined,
     ) {
@@ -98,14 +105,9 @@ export class OutboundAuthFilter extends Filter<ClientRequest, Response> {
         if (mode?.kind === 'shared-secret') {
             const secret = this.secrets?.get(mode.secretKey);
             if (!secret) {
-                throw new MissingSharedSecretError(
-                    `${request.contractName}.${request.route.methodName} is ` +
-                        `sharedSecret('${mode.secretKey}'), but this client's bound Secrets holds no ` +
-                        `value for that key, so there is no credential to send. Bind a Secrets carrying ` +
-                        `'${mode.secretKey}'. Refusing to send is deliberate: the callee is obliged to 401 an ` +
-                        `unauthenticated request, so sending it would report as the peer's failure.`,
-                    `${request.contractName}.${request.route.methodName}`,
-                    mode.secretKey,
+                throw new Error(
+                    `Invariant broken: ${request.contractName}.${request.route.methodName} selected ` +
+                        `sharedSecret('${mode.secretKey}') with no held value; NodeProxyClient.selectAuthMethod never selects it.`,
                 );
             }
             // Same header as a JWT/OIDC token, but its OWN scheme, so a secret can never be
@@ -118,24 +120,11 @@ export class OutboundAuthFilter extends Filter<ClientRequest, Response> {
         }
     }
 
-    /**
-     * @throws MissingVendorAuthMinterError when no {@link VendorAuthMinter} is bound. FAIL CLOSED,
-     *         matching the inbound side exactly: an unbound verifier 401s every served
-     *         `vendorAuth(...)` endpoint rather than admitting it unverified, so an unbound minter
-     *         must also refuse to SEND rather than deliver something the vendor is obliged to reject.
-     */
     private async mintVendorAuth(request: ClientRequest, name: string): Promise<void> {
         if (this.vendorAuthMinter === undefined) {
-            throw new MissingVendorAuthMinterError(
-                `${request.contractName}.${request.route.methodName} is vendorAuth('${name}'), so this ` +
-                    `client must present ${name}'s credential — but no VendorAuthMinter is bound, so there ` +
-                    `is nothing to mint it. Bind the OUTBOUND role in this process:\n` +
-                    `    binder.bind(VENDOR_AUTH_MINTER).to(MyVendorAuthMinter).inSingletonScope();\n` +
-                    `(A VENDOR_AUTH_VERIFIER binding does not count: it verifies inbound calls and never sends.)\n` +
-                    `Refusing to send is deliberate: an unauthenticated call is one the vendor will reject, ` +
-                    `and sending it anyway would hide the missing binding until they complained.`,
-                `${request.contractName}.${request.route.methodName}`,
-                name,
+            throw new Error(
+                `Invariant broken: ${request.contractName}.${request.route.methodName} selected ` +
+                    `vendorAuth('${name}') with no VendorAuthMinter bound; NodeProxyClient.selectAuthMethod never selects it.`,
             );
         }
         const signable = new SignableRequest(

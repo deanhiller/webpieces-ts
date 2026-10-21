@@ -1,46 +1,29 @@
 /**
- * The two ways outbound auth refuses to send, each its own type for the reason
- * {@link MissingRuntimeBaseUrlError} is one: a delivery worker has to tell these apart from
- * {@link SsrfRefusedError}. Both mean THIS SERVICE is misconfigured — page somebody, retrying is
- * pointless — where an SSRF refusal means a partner registered something hostile and the delivery
- * should be dead-lettered. A bare `Error` forces that decision to be made by matching message text.
+ * The ONE way outbound auth refuses a contract: an endpoint declares no credential this client can
+ * send. Thrown at CLIENT CREATION (`createRpcClient`, from `NodeProxyClient.assertEndpointSupported`),
+ * before any call is made (#1362) — it replaces the call-time `MissingSharedSecretError` and
+ * `MissingVendorAuthMinterError`, which fired only on the first call and only for one mode.
  *
- * Neither is thrown for anything a caller can influence: they fire when the binding a contract's
- * auth mode requires is simply absent.
+ * Its own type for the reason {@link MissingRuntimeBaseUrlError} is one: it means THIS SERVICE is
+ * misconfigured — page somebody, retrying is pointless — and nothing a caller sends can cause it. A
+ * bare `Error` would force a host to tell it apart from {@link SsrfRefusedError} by matching message
+ * text.
+ *
+ * ONE PER ENDPOINT, not every alternative: a client needs only ONE declared method it can send now
+ * (OIDC and public always; `sharedSecret(key)` when its bound `Secrets` holds `key`; `vendorAuth(name)`
+ * when its bound `VendorAuthMinter`'s `supportedVendorNames()` lists `name`; `jwt()` / `apiKey(...)`,
+ * which the app relays per call). A CLI need not hold OIDC credentials just because
+ * the contract ALSO allows OIDC.
  */
-
-/**
- * An `sharedSecret(key)` endpoint was called by a client whose bound `Secrets` holds no value
- * for that key. Thrown at CALL time, from `OutboundAuthFilter`.
- */
-export class MissingSharedSecretError extends Error {
+export class MissingClientCredentialError extends Error {
     constructor(
         message: string,
-        /** `Contract.method`, so the log line names the call without a stack read. */
+        /** `Contract.method`, so the log line names the endpoint without a stack read. */
         public readonly endpoint: string,
-        /** The `sharedSecret(...)` key that had no value, so the fix names itself. */
-        public readonly secretKey: string,
+        /** Every declared method, as written on the contract, e.g. `vendorAuth('clover')`. */
+        public readonly declared: readonly string[],
     ) {
         super(message);
-        this.name = 'MissingSharedSecretError';
-    }
-}
-
-/**
- * A `vendorAuth(name)` endpoint was called outbound with no `VendorAuthMinter` (VENDOR_AUTH_MINTER)
- * bound, so nothing can mint the credential the vendor checks. Thrown at CALL time, from
- * `OutboundAuthFilter`, BEFORE anything is sent — the mirror of the inbound side, where an unbound
- * `VendorAuthVerifier` 401s every served `vendorAuth(...)` endpoint instead of admitting it.
- */
-export class MissingVendorAuthMinterError extends Error {
-    constructor(
-        message: string,
-        /** `Contract.method`, so the log line names the call without a stack read. */
-        public readonly endpoint: string,
-        /** The vendor on the contract's `vendorAuth(name)`, which selects the scheme. */
-        public readonly vendorName: string,
-    ) {
-        super(message);
-        this.name = 'MissingVendorAuthMinterError';
+        this.name = 'MissingClientCredentialError';
     }
 }
