@@ -7,6 +7,9 @@ import { AnyContextKey } from '../../ContextKey';
 import { ApiNotFoundError } from '../../errors';
 import { MaskSpec } from '../LogFieldMask';
 
+/** Synthetic contract classes: a call identity always names its contract CLASS (#1350). */
+class VendorApi {}
+
 /** Records every tag {@link LogApiCallImpl} stamps, so a test can read the response tag back. */
 class RecordingApiCallContext implements ApiCallContext {
     readonly logApiCall = new LogApiCallImpl(this);
@@ -24,7 +27,7 @@ class RecordingApiCallContext implements ApiCallContext {
     }
 }
 
-const info = (side: ApiSide): ApiMethodInfo => new ApiMethodInfo(side, 'VendorApi', 'items', undefined);
+const info = (side: ApiSide): ApiMethodInfo => new ApiMethodInfo(side, 'VendorApi', 'items', VendorApi);
 
 /**
  * `ApiCallInfo.http` (#1339): the HTTP client's verb, masked url and status, stamped on the RESPONSE

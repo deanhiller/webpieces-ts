@@ -21,6 +21,9 @@ import { ApiCallTimeoutError } from '../ApiCallTimeoutError';
 import { CallContext } from '../CallStrategy';
 import { WRITE } from '../HttpEndpointOptions';
 
+/** Synthetic contract classes: a call identity always names its contract CLASS (#1350). */
+class SaveApi {}
+
 const translator = new WebpiecesDefaultErrorTranslator();
 
 const response = (code: number, body: unknown = undefined, reason = ''): HttpResponseDto =>
@@ -207,7 +210,7 @@ describe('WebpiecesDefaultErrorTranslator.toWire', () => {
 
     it('a client deadline is never titled Gateway Timeout, but keeps its 504 semantics (#1170)', () => {
         const wire = wireOf(
-            new ApiCallTimeoutError(30_000, new CallContext('SaveApi', 'save', WRITE, undefined)),
+            new ApiCallTimeoutError(30_000, new CallContext('SaveApi', 'save', WRITE, SaveApi)),
         );
         expect(wire.status.code).toBe(504);
         expect(wire.status.reason).toBe('Network Timeout');

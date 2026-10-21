@@ -20,6 +20,11 @@ import { HeaderRegistry } from '../HeaderRegistry';
 import { Logger } from '../../logging/Logger';
 import { LoggerFactory } from '../../logging/LoggerFactory';
 
+/** Synthetic contract classes: a call identity always names its contract CLASS (#1350). */
+class BrowserLogApi {}
+class HelperFsdbApi {}
+class OfflineApi {}
+
 /**
  * A recording {@link ApiCallContext}: keeps every (key, value) it was asked to stamp so a test can
  * assert the request → response transition {@link LogApiCallImpl} makes. `active` toggles isActive().
@@ -88,7 +93,7 @@ describe('LogApiCall.execute — success + active guard', () => {
 
         const tag = ctx.values()[0];
         expect(tag.method).toEqual(
-            new ApiMethodInfo('server', 'SaveApi', 'save', undefined, 'SaveController'),
+            new ApiMethodInfo('server', 'SaveApi', 'save', SaveApi, 'SaveController'),
         );
         expect(tag.method.apiClass).toBe('SaveApi');
         expect(tag.type).toBe('request');
@@ -462,7 +467,7 @@ describe('LogApiCall.execute — opt-in field masking', () => {
             side,
             'HelperFsdbApi',
             'getEmailAccount',
-            undefined,
+            HelperFsdbApi,
             undefined,
             new MaskSpec({ refreshToken: 'full', accessToken: 'last4' }),
         );
@@ -590,7 +595,7 @@ describe('LogApiCall.execute — noLogging routes are not api-logged', () => {
 
     /** The log-shipping endpoint: a real call identity, declared noLogging. */
     const noLoggingInfo = (side: ApiSide): ApiMethodInfo =>
-        new ApiMethodInfo(side, 'BrowserLogApi', 'sendBatch', undefined, undefined, undefined, true);
+        new ApiMethodInfo(side, 'BrowserLogApi', 'sendBatch', BrowserLogApi, undefined, undefined, true);
 
     /** True when any captured line carries `marker` — the "it still logs" half of each pair. */
     const logged = (marker: string): boolean =>
@@ -681,7 +686,7 @@ describe('LogApiCall.execute — noLogging routes are not api-logged', () => {
     });
 
     it('defaults to false, so every existing ApiMethodInfo caller keeps logging', () => {
-        expect(new ApiMethodInfo('client', 'SaveApi', 'save', undefined).noLogging).toBe(false);
+        expect(new ApiMethodInfo('client', 'SaveApi', 'save', SaveApi).noLogging).toBe(false);
         expect(info('client').noLogging).toBe(false);
         expect(noLoggingInfo('client').noLogging).toBe(true);
     });
@@ -694,7 +699,7 @@ describe('LogApiCall.execute — noLogging routes are not api-logged', () => {
             'client',
             'OfflineApi',
             'fetchManifest',
-            undefined,
+            OfflineApi,
             undefined,
             undefined,
             false,
@@ -703,8 +708,8 @@ describe('LogApiCall.execute — noLogging routes are not api-logged', () => {
         );
         expect(hiddenButLogged.hideProgress).toBe(true);
         expect(hiddenButLogged.allowUpgradeInFlight).toBe(true);
-        expect(new ApiMethodInfo('client', 'SaveApi', 'save', undefined).hideProgress).toBe(false);
-        expect(new ApiMethodInfo('client', 'SaveApi', 'save', undefined).allowUpgradeInFlight).toBe(false);
+        expect(new ApiMethodInfo('client', 'SaveApi', 'save', SaveApi).hideProgress).toBe(false);
+        expect(new ApiMethodInfo('client', 'SaveApi', 'save', SaveApi).allowUpgradeInFlight).toBe(false);
 
         await ctx.logApiCall.execute(hiddenButLogged, { q: 'x' }, async () => ({ ok: true }));
         expect(logged('[API-client-req]')).toBe(true);
@@ -789,7 +794,7 @@ describe('LogApiCall — logged body cap (#1300)', () => {
             'client',
             'HelperFsdbApi',
             'getEmailAccount',
-            undefined,
+            HelperFsdbApi,
             undefined,
             new MaskSpec({ refreshToken: 'full' }),
         );

@@ -22,6 +22,7 @@ export { McpDeployment } from './McpDeployment';
 export type { McpDeploymentMode } from './McpDeployment';
 export { McpApiDispatcher } from './McpApiDispatcher';
 export { WpMcpServer } from './WpMcpServer';
+export { McpProtocol } from './McpProtocol';
 export {
     MCP_REQUEST_ID_META_KEY,
     McpCorrelation,

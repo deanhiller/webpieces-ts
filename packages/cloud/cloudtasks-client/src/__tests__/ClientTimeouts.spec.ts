@@ -69,7 +69,7 @@ class ControlledTransport extends TaskInvoker {
 
 /** Enqueue is WRITE_IDEMPOTENT in every naming mode: one name for every attempt. */
 const ctx = (method: 'work' | 'other'): CallContext =>
-    new CallContext(TaskApi.name, method, WRITE_IDEMPOTENT, undefined);
+    new CallContext(TaskApi.name, method, WRITE_IDEMPOTENT, TaskApi);
 
 class Harness {
     readonly transport = new ControlledTransport();

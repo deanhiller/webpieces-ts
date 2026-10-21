@@ -3,11 +3,14 @@ import { ApiCallLogName, LOG_API_CALL_LOGGER_NAME } from '../ApiCallLogName';
 import { ApiCallInfo } from '../ApiCallInfo';
 import { ApiMethodInfo, ApiSide } from '../ApiMethodInfo';
 
+/** Synthetic contract classes: a call identity always names its contract CLASS (#1350). */
+class AuthStoreApi {}
+
 /** The stamped `api` tag as it reaches a console backend, for a given side + response outcome. */
 const request = (side: ApiSide): ApiCallInfo =>
-    new ApiCallInfo(new ApiMethodInfo(side, 'AuthStoreApi', 'findOrCreateUser', undefined), 'request');
+    new ApiCallInfo(new ApiMethodInfo(side, 'AuthStoreApi', 'findOrCreateUser', AuthStoreApi), 'request');
 const response = (side: ApiSide, result: 'success' | 'failure'): ApiCallInfo =>
-    new ApiCallInfo(new ApiMethodInfo(side, 'AuthStoreApi', 'findOrCreateUser', undefined), 'response', result);
+    new ApiCallInfo(new ApiMethodInfo(side, 'AuthStoreApi', 'findOrCreateUser', AuthStoreApi), 'response', result);
 
 describe('ApiCallLogName.describe', () => {
     it('names the request phase from the client side', () => {

@@ -24,6 +24,9 @@ import {
     ApiUnavailableError,
 } from '../../errors';
 
+/** Synthetic contract classes: a call identity always names its contract CLASS (#1350). */
+class EmailApi {}
+
 class CapturingLoggerFactory implements LoggerFactory {
     readonly lines: string[] = [];
     getLogger(_name: string): Logger {
@@ -58,7 +61,7 @@ class ScriptedAttempts {
 const capturing = new CapturingLoggerFactory();
 const original = LogManager.getFactory();
 const context = (operation: EndpointOperation): CallContext =>
-    new CallContext('CatalogApi', 'list', operation, undefined);
+    new CallContext('CatalogApi', 'list', operation, CatalogApi);
 const strategy = new RetryStrategy(5_000, 3, 500, 2, 4_000);
 
 beforeAll(() => {
@@ -320,7 +323,7 @@ describe('ApiRetriesExhaustedError on the wire', () => {
         }
         expect(received).toBeInstanceOf(ApiRetriesExhaustedError);
         expect(
-            ClientRegistry.classify(received!, new ApiMethodInfo('client', 'EmailApi', 'send', undefined)),
+            ClientRegistry.classify(received!, new ApiMethodInfo('client', 'EmailApi', 'send', EmailApi)),
         ).toBe(CallOutcome.FAILURE);
     });
 });
