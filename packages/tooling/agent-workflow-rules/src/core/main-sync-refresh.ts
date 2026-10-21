@@ -3,12 +3,18 @@ import * as fs from 'fs';
 import * as path from 'path';
 
 import { toError } from '@webpieces/tooling-common/to-error';
+import { MainSyncLock, MainSyncLockService, MainSyncStatusService, RefreshClaimOutcome, RefreshOutcome } from '@webpieces/repo-workflow-core';
 import { logSyncEvent, SyncLogEvent, refresherChildStdioPath } from './main-sync-log';
 import { logStream, StreamIdentity } from './log-stream';
 
 // Per-process latch for the spawn below. A hook process handles exactly one tool call, so this makes
 // the refresher at-most-once per tool call. Exported reset is test-only.
 let alreadyTriggered = false;
+
+// The services the spawner throttles and claims through. Module scope, like the latch: this path must
+// stay callable from a tree too broken to build a DI container.
+const mainSyncStatus = new MainSyncStatusService();
+const mainSyncLocks = new MainSyncLockService(undefined, undefined, mainSyncStatus);
 
 // webpieces-disable no-function-outside-class -- test-only latch reset, matching this module's function shape
 export function resetMainSyncRefreshLatchForTest(): void {
@@ -18,13 +24,16 @@ export function resetMainSyncRefreshLatchForTest(): void {
 /**
  * The detached child's argv, spawner side. Positions here are offset by two from the child's
  * `process.argv` (node + script path), so this array's 3/4/5 are the child's 4/5/6 — which is what
- * `sync-main.ts:spawnerIdentity` reads. The two are pinned against each other by ONE test, because a
+ * `sync-main.ts:spawnerIdentity` reads — and its 2 (the lock's `startedMs`) is the child's 3, which
+ * `sync-main.ts:claimStartedFromArgv` reads. The hang timeout no longer travels: the child adopts a
+ * lock the spawner already took, so it has nothing to time out. The two are pinned against each other
+ * by ONE test, because a
  * silent disagreement about these positions IS the bug being fixed: the child previously received no
  * identity at all and wrote every line to the shared `unknown-coordinator-hook-` stream.
  */
 // webpieces-disable no-function-outside-class -- argv builder for this module's spawn, matching its function shape
-export function refresherArgv(refresher: string, workspaceRoot: string, hangTimeoutMinutes: number, identity: StreamIdentity): string[] {
-    return [refresher, workspaceRoot, String(hangTimeoutMinutes), identity.sessionId, identity.agentId, identity.hook];
+export function refresherArgv(refresher: string, workspaceRoot: string, claimStarted: number, identity: StreamIdentity): string[] {
+    return [refresher, workspaceRoot, String(claimStarted), identity.sessionId, identity.agentId, identity.hook];
 }
 
 /**
@@ -32,6 +41,13 @@ export function refresherArgv(refresher: string, workspaceRoot: string, hangTime
  * not a bin). The child outlives this hook process (`detached` + `unref`), does the slow
  * merged-PR/fetch/merge-base/overlap work, and writes the cache the feature-branch-guard reads on
  * the NEXT call. This is the first detached spawn in the codebase — every existing hook is synchronous.
+ *
+ * THROTTLED AND SINGLE-FLIGHT IN THE SPAWNER (#1342): at most one refresher START per
+ * MIN_REFRESH_INTERVAL_MINUTES per repo, decided here by one read of `lastRefreshStartedMs` in
+ * `main-sync-status.json` before any process is launched. Past the interval the spawner creates
+ * `main-sync.lock.json` exclusively, so of several hook processes firing at once exactly one launches.
+ * The child ADOPTS that lock (it never creates one itself), stamps the status file, and deletes the
+ * lock last.
  *
  * Observability: we log SPAWN_ATTEMPT here and the child logs START/FINISH/ERROR, all to
  * `.webpieces/logs/async-refresh/<writer>.log` (LogStream names every writer). The child's
@@ -61,20 +77,48 @@ export function triggerMainSyncRefresh(workspaceRoot: string, hangTimeoutMinutes
     // fast path in hook-core AND read-stale-guard's own check(), for one — which is why the log showed
     // two SPAWN_ATTEMPTs ~20ms apart from the same pid on every cycle. The loser only ever reached the
     // lock and exited, so the second child was pure waste (and one more `git fetch` racing the
-    // agent's). The child's lock still guards against refreshers from OTHER hook processes.
+    // agent's). The claim below guards against refreshers from OTHER hook processes.
     if (alreadyTriggered) return;
     alreadyTriggered = true;
 
     // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
     try {
-        const refresher = path.join(__dirname, 'sync-main.js');
-        // SPAWN_ATTEMPT first — this also creates .webpieces/logs so the stderr fd below can open.
-        logSyncEvent(workspaceRoot, new SyncLogEvent('SPAWN_ATTEMPT', process.pid, '-', `refresher=${refresher}`));
+        // THE THROTTLE LIVES HERE, IN THE SPAWNER (#1342) — not in the child, which only learned it had
+        // nothing to do after node had already booted (measured: 6500 SPAWN_ATTEMPTs, 2677 of them
+        // ending in SKIP_INPROGRESS). One read of the status file's stamp decides; a throttled call
+        // launches nothing. The lock is created exclusively, so of N hook processes firing at once
+        // exactly one spawns. See MainSyncLockService.claimRefresh for the stamp semantics.
+        //
+        // A skip writes NO log line. It is the outcome of nearly every tool call, so logging it would
+        // trade the SPAWN_ATTEMPT flood for a SKIP flood. The throttle is visible instead as
+        // SPAWN_ATTEMPTs at least MIN_REFRESH_INTERVAL_MINUTES apart, each naming the run it follows.
+        const claim = mainSyncLocks.claimRefresh(workspaceRoot, hangTimeoutMinutes);
+        if (claim.outcome !== RefreshClaimOutcome.CLAIMED || claim.lock === null) return;
+        spawnRefresher(workspaceRoot, claim.lock, claim.lastRefreshStartedMs);
+    } catch (err: unknown) { // webpieces-disable catch-must-propagate -- warming a background cache must never block or fail the agent's tool call; there is no caller to propagate to
+        const error = toError(err);
+        void error;
+    }
+}
 
+/**
+ * Launch the detached refresher for a lock this process WON. If the launch fails synchronously the run
+ * is recorded as an ERROR (stamp first) and the lock deleted (last), so the next attempt waits out the
+ * interval like any failed run, rather than an unadopted lock sitting until the hang window expires.
+ */
+// webpieces-disable no-function-outside-class -- the spawn half of triggerMainSyncRefresh, beside it in this module-scope spawner
+function spawnRefresher(workspaceRoot: string, claim: MainSyncLock, lastRefreshStartedMs: number | null): void {
+    const refresher = path.join(__dirname, 'sync-main.js');
+    const after = lastRefreshStartedMs === null ? 'none' : new Date(lastRefreshStartedMs).toISOString();
+    // SPAWN_ATTEMPT first — this also creates .webpieces/logs so the stderr fd below can open.
+    logSyncEvent(workspaceRoot, new SyncLogEvent('SPAWN_ATTEMPT', process.pid, '-', `refresher=${refresher} lockStartedMs=${String(claim.startedMs)} previousStart=${after}`));
+
+    // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
+    try {
         // Redirect the detached child's stdout+stderr to a file (not /dev/null) so an uncaught crash
         // before the child's own logging — e.g. a module-load failure — is still captured.
         const errFd = fs.openSync(refresherChildStdioPath(workspaceRoot), 'a');
-        const child = spawn(process.execPath, refresherArgv(refresher, workspaceRoot, hangTimeoutMinutes, logStream.identity()), {
+        const child = spawn(process.execPath, refresherArgv(refresher, workspaceRoot, claim.startedMs, logStream.identity()), {
             detached: true,
             stdio: ['ignore', errFd, errFd],
         });
@@ -88,7 +132,8 @@ export function triggerMainSyncRefresh(workspaceRoot: string, hangTimeoutMinutes
         fs.closeSync(errFd);
     } catch (err: unknown) {
         const error = toError(err);
-        void error;
-        // Spawning the background refresh must never block or fail the tool call.
+        mainSyncStatus.recordRefreshOutcome(workspaceRoot, claim.startedMs, RefreshOutcome.ERROR);
+        mainSyncLocks.releaseMainSyncLock(workspaceRoot, claim);
+        throw error;
     }
 }

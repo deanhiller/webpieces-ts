@@ -41,6 +41,7 @@ graph TD
     ChecklistScopeHasher["ChecklistScopeHasher"]
     CleanTmp["CleanTmp"]
     CleanupCommand["CleanupCommand"]
+    CommandTimeouts["CommandTimeouts"]
     ConfigFile["ConfigFile"]
     Dashboard["Dashboard"]
     DevDeployRefs["DevDeployRefs"]
@@ -264,6 +265,7 @@ graph TD
     LandedWorktreeReaper --> WorktreeService
     MainSyncFileStore --> AtomicFile
     MainSyncStatusService --> AtomicFile
+    MainSyncStatusService --> CommandTimeouts
     MainSyncStatusService --> DotWebpieces
     MainSyncStatusService --> MainSyncFileStore
     MainSyncStatusService --> WorktreeService
@@ -281,6 +283,7 @@ graph TD
     MergeStart --> MergeState
     MergeState --> DotWebpieces
     MergedBranchesService --> AtomicFile
+    MergedBranchesService --> CommandTimeouts
     MergedBranchesService --> DotWebpieces
     MergedBranchesService --> WorktreeLockVerdicts
     MergedBranchesService --> WorktreeService

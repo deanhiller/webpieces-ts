@@ -1,9 +1,9 @@
 import { specTempDirs } from '@webpieces/tooling-testkit';
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
 
-import { MainSyncLock, MainSyncStatusService } from '@webpieces/repo-workflow-core';
+import { MainSyncLock, MainSyncLockService, MainSyncStatusService, RefreshOutcome } from '@webpieces/repo-workflow-core';
 
 
 import { refreshMainSync } from './sync-main';
@@ -29,6 +29,26 @@ function streamName(stream: string, suffix: string = '.log'): string {
 
 let root: string;
 const service = new MainSyncStatusService();
+const locks = new MainSyncLockService(undefined, undefined, service);
+
+/**
+ * What the status file held at the instant the lock was deleted — the ORDERING contract: the stamp must
+ * be on disk before any other process can win the next lock race.
+ */
+class SeenAtRelease {
+    value: number | null = null;
+}
+
+function stampAtRelease(): SeenAtRelease {
+    const seen = new SeenAtRelease();
+    const original = MainSyncLockService.prototype.releaseMainSyncLock;
+    vi.spyOn(MainSyncLockService.prototype, 'releaseMainSyncLock').mockImplementation(
+        function (this: MainSyncLockService, repoRoot: string, held: MainSyncLock): boolean {
+            seen.value = service.readMainSyncStatusFile(repoRoot)?.lastRefreshStartedMs ?? null;
+            return original.call(this, repoRoot, held);
+        });
+    return seen;
+}
 
 function asyncLog(): string {
     const logPath = path.join(root, '.webpieces', 'logs', streamName(ASYNC_REFRESH_STREAM));
@@ -39,33 +59,68 @@ beforeEach(() => {
     root = specTempDirs.makeReal('syncmain-');
 });
 
-afterEach(() => { fs.rmSync(root, { recursive: true, force: true }); });
+afterEach(() => {
+    vi.restoreAllMocks();
+    fs.rmSync(root, { recursive: true, force: true });
+});
 
 describe('sync-main single-flight', () => {
-    it('a loser logs SKIP_INPROGRESS and writes no status at all', () => {
+    it('a child whose claim is no longer the lock logs SKIP_INPROGRESS and writes no status at all', () => {
         // A live refresher (this very process's pid, so the liveness probe says "running") holds the
-        // lock. The second refresher must not fetch, must not compute, must not write.
-        service.writeMainSyncLock(root, new MainSyncLock('inprocess', Date.now(), process.pid));
+        // lock — it reclaimed it while this child booted. This child must not fetch, compute or write.
+        const held = Date.now();
+        locks.writeMainSyncLock(root, new MainSyncLock(process.pid, held));
 
-        refreshMainSync(root, 5);
+        refreshMainSync(root, held - 1);
 
         expect(asyncLog()).toContain('SKIP_INPROGRESS');
         expect(asyncLog()).not.toContain('FINISH');
         expect(fs.existsSync(service.mainSyncStatusPath(root))).toBe(false);
-        // The holder's lock is untouched — a loser must never flip it to `finished`.
-        expect(service.readMainSyncLock(root)?.state).toBe('inprocess');
-        expect(service.readMainSyncLock(root)?.pid).toBe(process.pid);
+        // The holder's lock is untouched — a loser must never delete it.
+        expect(locks.readMainSyncLock(root)).toEqual(new MainSyncLock(process.pid, held));
     });
 
-    it('does not treat a DEAD holder as in flight — the lock is still reclaimable', () => {
-        service.writeMainSyncLock(root, new MainSyncLock('inprocess', Date.now(), 2147483646));
+    it('on success: adopts its spawner`s lock, stamps the status file FIRST, deletes the lock LAST', () => {
+        const claim = locks.claimRefresh(root, 5).lock;
+        expect(claim).not.toBeNull();
+        const started = claim?.startedMs ?? 0;
+        const seen = stampAtRelease();
 
-        refreshMainSync(root, 5);
+        refreshMainSync(root, started);
 
-        // It got past the acquire. The run itself is a no-op in a non-git directory, but it must not
-        // have been skipped, and the lock must end up released rather than wedged.
-        expect(asyncLog()).toContain('START');
+        // It got past the adopt. The run is a no-op in a non-git directory, but it completes.
+        expect(asyncLog()).toContain('FINISH');
         expect(asyncLog()).not.toContain('SKIP_INPROGRESS');
-        expect(service.readMainSyncLock(root)?.state).toBe('finished');
+        expect(seen.value).toBe(started);
+        expect(service.readMainSyncStatusFile(root)?.lastRefreshOutcome).toBe(RefreshOutcome.OK);
+        expect(fs.existsSync(locks.mainSyncLockPath(root))).toBe(false);
+    });
+
+    it('on error: records the stamp with outcome error, keeps old branch data, and still deletes the lock', () => {
+        service.writeMainSyncStatusFile(root, service.computeAllMainSyncStatuses(root));
+        const before = Object.keys(service.readMainSyncStatusFile(root)?.branches ?? {});
+        vi.spyOn(MainSyncStatusService.prototype, 'computeAllMainSyncStatuses').mockImplementation((): never => {
+            throw new Error('offline');
+        });
+        const claim = locks.claimRefresh(root, 5).lock;
+        const started = claim?.startedMs ?? 0;
+        const seen = stampAtRelease();
+
+        refreshMainSync(root, started);
+
+        expect(asyncLog()).toContain('offline');
+        expect(seen.value).toBe(started);
+        const file = service.readMainSyncStatusFile(root);
+        expect(file?.lastRefreshOutcome).toBe(RefreshOutcome.ERROR);
+        expect(Object.keys(file?.branches ?? {})).toEqual(before);
+        expect(fs.existsSync(locks.mainSyncLockPath(root))).toBe(false);
+    });
+
+    it('a hand-run with no lock handed to it adopts nothing and leaves an existing lock alone', () => {
+        const other = new MainSyncLock(process.pid, Date.now());
+        locks.writeMainSyncLock(root, other);
+        refreshMainSync(root, Number.NaN);
+        expect(asyncLog()).toContain('SKIP_INPROGRESS');
+        expect(locks.readMainSyncLock(root)).toEqual(other);
     });
 });

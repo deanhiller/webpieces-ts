@@ -13,7 +13,9 @@ import { logStream } from './log-stream';
 // exited, with stdio discarded, so when it fails to update the cache there is normally no trace.
 // This log captures its lifecycle — SPAWN_ATTEMPT (parent side), then START / SKIP_INPROGRESS /
 // FINISH / ERROR (child side) — so we can tell whether the detached child never launched, was killed
-// mid-run (START with no FINISH), or threw. Writes to
+// mid-run (START with no FINISH), or threw. A spawn happens at most once per MIN_REFRESH_INTERVAL_MINUTES
+// per repo, and a throttled call logs nothing (#1342), so one cycle per interval is the healthy shape.
+// Writes to
 // `.webpieces/logs/async-refresh/<writer>.log`, where <writer> is LogStream's
 // `<sessionId>-<agentId|coordinator>-<hook>` key (see LOGS_STATE_DIR and ASYNC_REFRESH_STREAM).
 //

@@ -6,6 +6,7 @@ import { AtomicFile } from '@webpieces/tooling-common';
 import { DotWebpieces, dotWebpieces } from '@webpieces/tooling-common';
 import { toError } from '@webpieces/tooling-common/to-error';
 import { Worktree, WorktreeService } from './worktrees';
+import { CommandTimeouts } from './command-timeouts';
 import { LockDecision, WorktreeLockVerdicts } from './worktree-lock-verdicts';
 import {
     CacheFreshness,
@@ -182,6 +183,7 @@ export class MergedBranchesService {
         private readonly dotDir: DotWebpieces = dotWebpieces,
         private readonly atomicFile: AtomicFile = new AtomicFile(),
         private readonly locks: WorktreeLockVerdicts = new WorktreeLockVerdicts(),
+        private readonly timeouts: CommandTimeouts = new CommandTimeouts(),
     ) {}
 
     /**
@@ -676,7 +678,7 @@ export class MergedBranchesService {
 
     // Run a command capturing trimmed stdout; ok=false on spawn failure or non-zero exit.
     private capture(repoRoot: string, cmd: string, args: string[]): CmdCapture {
-        const result = spawnSync(cmd, args, { cwd: repoRoot, encoding: 'utf8' });
+        const result = spawnSync(cmd, args, { cwd: repoRoot, encoding: 'utf8', timeout: this.timeouts.forCommand(cmd) });
         if (result.status !== 0 || typeof result.stdout !== 'string') return { ok: false, out: '' };
         return { ok: true, out: result.stdout.trim() };
     }

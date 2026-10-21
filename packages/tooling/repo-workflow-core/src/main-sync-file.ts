@@ -84,12 +84,30 @@ export class MainSyncStatus {
     }
 }
 
+/** How the last detached refresh ended. Recorded in the status file, never in the lock. */
+export enum RefreshOutcome {
+    OK = 'ok',
+    ERROR = 'error',
+}
+
 // Data-only. The whole document: every branch the last refresh could see, written as one unit.
 export class MainSyncStatusFile {
     version: number;
     // When the map as a whole was written. Each entry also carries its own timestamp.
     timestamp: string;
     branches: Record<string, MainSyncStatus>;
+    /**
+     * Epoch ms the last detached refresh STARTED: the throttle's stamp (#1342). The spawner reads it
+     * before launching anything and launches nothing while it is under MIN_REFRESH_INTERVAL_MINUTES
+     * old. It is the START, not the finish, so a failing run is retried after the interval rather than
+     * on every tool call. Null (an older file, or one pr-gate wrote before any refresh) means "due".
+     *
+     * The refresher writes it BEFORE it deletes main-sync.lock.json, so no process can win the next
+     * lock race and still see the previous stamp.
+     */
+    lastRefreshStartedMs: number | null = null;
+    /** How that run ended; null until a refresh has recorded one. */
+    lastRefreshOutcome: RefreshOutcome | null = null;
 
     constructor(version: number, timestamp: string, branches: Record<string, MainSyncStatus>) {
         this.version = version;
@@ -162,6 +180,8 @@ interface RawStatus {
 // v2 has `branches`; a v1 document instead has the RawStatus fields at the top level.
 interface RawFile extends RawStatus {
     version?: number;
+    lastRefreshStartedMs?: number | null;
+    lastRefreshOutcome?: string | null;
     branches?: Record<string, RawStatus>;
 }
 
@@ -230,8 +250,30 @@ export class MainSyncFileStore {
         const existing = this.readFile(statusPath);
         const branches: Record<string, MainSyncStatus> = existing === null ? {} : existing.branches;
         branches[status.branch] = status;
-        this.writeFile(statusPath, new MainSyncStatusFile(
-            MAIN_SYNC_STATUS_VERSION, new Date().toISOString(), branches));
+        const next = new MainSyncStatusFile(MAIN_SYNC_STATUS_VERSION, new Date().toISOString(), branches);
+        this.carryRefreshStamp(existing, next);
+        this.writeFile(statusPath, next);
+    }
+
+    /**
+     * READ-MODIFY-WRITE the refresh stamp alone, keeping every branch entry. The refresher's failure
+     * path: no new branch data, but the run still counts, so the throttle waits out the interval.
+     */
+    recordRefresh(statusPath: string, startedMs: number, outcome: RefreshOutcome): void {
+        const existing = this.readFile(statusPath);
+        const next = new MainSyncStatusFile(MAIN_SYNC_STATUS_VERSION, new Date().toISOString(),
+            existing === null ? {} : existing.branches);
+        next.lastRefreshStartedMs = startedMs;
+        next.lastRefreshOutcome = outcome;
+        this.writeFile(statusPath, next);
+    }
+
+    // A writer that rebuilds the document (mergeBranch) must not erase the throttle's stamp: losing it
+    // would make the very next tool call launch a refresh.
+    private carryRefreshStamp(from: MainSyncStatusFile | null, to: MainSyncStatusFile): void {
+        if (from === null) return;
+        to.lastRefreshStartedMs = from.lastRefreshStartedMs;
+        to.lastRefreshOutcome = from.lastRefreshOutcome;
     }
 
     // The entry for one branch, or null when this refresh never saw that branch.
@@ -281,6 +323,12 @@ export class MainSyncFileStore {
         if (state === 'OPEN' && !hasOwn(open, branch)) open[branch] = number;
     }
 
+    private toOutcome(raw: string | null | undefined): RefreshOutcome | null {
+        if (raw === RefreshOutcome.OK) return RefreshOutcome.OK;
+        if (raw === RefreshOutcome.ERROR) return RefreshOutcome.ERROR;
+        return null;
+    }
+
     // v2 documents pass through; a v1 document becomes a one-entry map keyed by its own `branch`.
     private adapt(raw: RawFile): MainSyncStatusFile {
         const branches: Record<string, MainSyncStatus> = {};
@@ -289,7 +337,10 @@ export class MainSyncFileStore {
             for (const [name, entry] of Object.entries(rawBranches)) {
                 if (entry !== null && typeof entry === 'object') branches[name] = this.toStatus(entry);
             }
-            return new MainSyncStatusFile(raw.version ?? MAIN_SYNC_STATUS_VERSION, raw.timestamp ?? '', branches);
+            const file = new MainSyncStatusFile(raw.version ?? MAIN_SYNC_STATUS_VERSION, raw.timestamp ?? '', branches);
+            file.lastRefreshStartedMs = typeof raw.lastRefreshStartedMs === 'number' ? raw.lastRefreshStartedMs : null;
+            file.lastRefreshOutcome = this.toOutcome(raw.lastRefreshOutcome);
+            return file;
         }
         // v1: one bare status at the top level. Key it by the branch it was computed for, so the
         // guard for THAT branch stays armed across the upgrade and every other branch simply misses

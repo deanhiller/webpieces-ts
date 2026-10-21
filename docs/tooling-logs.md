@@ -105,6 +105,12 @@ bytes on every run — it is written to only when the detached child dies before
 that is exactly when you want the crash output interleaved with the `SPAWN_ATTEMPT` above it rather
 than in a second file you have to think to open.
 
+`async-refresh/` is **quiet by design** between refreshes. The guard launches the refresher at most
+once every 10 minutes per repo and decides that before spawning anything, so a throttled tool call
+writes no line at all. Expect one `SPAWN_ATTEMPT` → `START` → `FINISH` cycle per interval, each
+`SPAWN_ATTEMPT` naming the start of the run it follows (`previousStart=<iso>`). `SKIP_INPROGRESS` now
+means a child found its spawner's lock gone while booting, which should be rare.
+
 `branch-mutations.log` is the one stream carrying a **bare** name. It is written by the `wp-*` bins,
 one command at a time, and `LogStream` lives in `ai-hook-rules`, which *depends on* `rules-config` —
 the import direction forbids reusing it there. If it ever gains a second concurrent writer it needs its

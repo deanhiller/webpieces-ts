@@ -5,103 +5,12 @@ import { execSync, spawnSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 
-import { MainSyncStatus, MainSyncLock, readMainSyncStatus, writeMainSyncStatus, writeMainSyncLock, readMainSyncLock, tryAcquireMainSyncLock, isLockStale, isRefreshInProgress, inProcessLock, finishedLock, computeMainSyncStatus, squashRecoverySteps } from '@webpieces/repo-workflow-core';
+import { MainSyncStatus, readMainSyncStatus, writeMainSyncStatus, computeMainSyncStatus, squashRecoverySteps } from '@webpieces/repo-workflow-core';
 
 
 function tmpRepoRoot(): string {
     return policyFixture.makeRepo('mss-');
 }
-
-describe('main-sync lock state machine', () => {
-    let root: string;
-    beforeEach(() => { root = tmpRepoRoot(); });
-    afterEach(() => { fs.rmSync(root, { recursive: true, force: true }); });
-
-    it('isLockStale: inprocess older than hangTimeoutMinutes is stale', () => {
-        const now = 10 * 60 * 1000;
-        const fresh = new MainSyncLock('inprocess', now - 2 * 60 * 1000);
-        const old = new MainSyncLock('inprocess', now - 6 * 60 * 1000);
-        expect(isLockStale(fresh, 5, now)).toBe(false);
-        expect(isLockStale(old, 5, now)).toBe(true);
-    });
-
-    it('isRefreshInProgress: false when no lock, finished, or stale; true only for a fresh inprocess lock', () => {
-        const now = 10 * 60 * 1000;
-        expect(isRefreshInProgress(root, 5, now)).toBe(false); // no lock
-
-        writeMainSyncLock(root, finishedLock(now));
-        expect(isRefreshInProgress(root, 5, now)).toBe(false); // finished
-
-        writeMainSyncLock(root, new MainSyncLock('inprocess', now - 60 * 1000));
-        expect(isRefreshInProgress(root, 5, now)).toBe(true); // fresh inprocess
-
-        writeMainSyncLock(root, new MainSyncLock('inprocess', now - 6 * 60 * 1000));
-        expect(isRefreshInProgress(root, 5, now)).toBe(false); // hung → reclaimable
-    });
-
-    it('isRefreshInProgress: a fresh inprocess lock whose refresher pid is dead is reclaimable', () => {
-        const now = 10 * 60 * 1000;
-        // Fresh (not stale) but owned by a pid that cannot exist → a killed refresher → reclaimable
-        // immediately, NOT wedged until hangTimeout.
-        writeMainSyncLock(root, new MainSyncLock('inprocess', now - 60 * 1000, 2147483646));
-        expect(isRefreshInProgress(root, 5, now)).toBe(false);
-        // Fresh inprocess owned by THIS live process → genuinely in progress.
-        writeMainSyncLock(root, new MainSyncLock('inprocess', now - 60 * 1000, process.pid));
-        expect(isRefreshInProgress(root, 5, now)).toBe(true);
-        // pid 0 (an old lock without a pid) → fall back to staleness only → still in progress.
-        writeMainSyncLock(root, new MainSyncLock('inprocess', now - 60 * 1000, 0));
-        expect(isRefreshInProgress(root, 5, now)).toBe(true);
-    });
-
-    it('inProcessLock/finishedLock build the expected states', () => {
-        expect(inProcessLock(123).state).toBe('inprocess');
-        expect(inProcessLock(123).started).toBe(123);
-        expect(inProcessLock(123).pid).toBe(process.pid);
-        expect(finishedLock(123).state).toBe('finished');
-    });
-});
-
-// The lock's whole job is stopping two detached refreshers from running `git fetch` at once. The old
-// check-then-write pair could not do that: both children passed `isRefreshInProgress` before either
-// wrote. Acquisition must be ONE atomic step.
-describe('main-sync lock acquisition (atomic)', () => {
-    let root: string;
-    beforeEach(() => { root = tmpRepoRoot(); });
-    afterEach(() => { fs.rmSync(root, { recursive: true, force: true }); });
-
-    it('tryAcquireMainSyncLock: exactly ONE of two racing refreshers gets the lock', () => {
-        const now = 10 * 60 * 1000;
-        // Both children reach the acquire with no lock on disk — the exact window the old
-        // check-then-write pair left open, in which BOTH went on to run `git fetch`.
-        const first = tryAcquireMainSyncLock(root, 5, now, process.pid);
-        const second = tryAcquireMainSyncLock(root, 5, now, process.pid);
-        expect(first).not.toBeNull();
-        expect(second).toBeNull();
-    });
-
-    it('tryAcquireMainSyncLock: reclaims a finished, hung, or dead-pid lock', () => {
-        const now = 10 * 60 * 1000;
-        const deadPid = 2147483646;
-
-        writeMainSyncLock(root, finishedLock(now - 60 * 1000));
-        expect(tryAcquireMainSyncLock(root, 5, now, process.pid)).not.toBeNull();   // finished
-
-        writeMainSyncLock(root, new MainSyncLock('inprocess', now - 6 * 60 * 1000, 0));
-        expect(tryAcquireMainSyncLock(root, 5, now, process.pid)).not.toBeNull();   // hung past timeout
-
-        writeMainSyncLock(root, new MainSyncLock('inprocess', now - 60 * 1000, deadPid));
-        expect(tryAcquireMainSyncLock(root, 5, now, process.pid)).not.toBeNull();   // killed refresher
-    });
-
-    it('tryAcquireMainSyncLock: records holder state/started/pid so the next caller can judge it', () => {
-        const now = 10 * 60 * 1000;
-        const lock = tryAcquireMainSyncLock(root, 5, now, process.pid);
-        expect(lock?.state).toBe('inprocess');
-        expect(lock?.started).toBe(now);
-        expect(readMainSyncLock(root)?.pid).toBe(process.pid);
-        expect(isRefreshInProgress(root, 5, now)).toBe(true);
-    });
-});
 
 describe('main-sync status IO', () => {
     let root: string;

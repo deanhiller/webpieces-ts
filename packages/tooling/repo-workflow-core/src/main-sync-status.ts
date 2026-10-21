@@ -1,6 +1,4 @@
 import { spawnSync } from 'child_process';
-import * as fs from 'fs';
-import * as path from 'path';
 import { injectable, bindingScopeValues } from 'inversify';
 
 import { AtomicFile } from '@webpieces/tooling-common';
@@ -10,49 +8,27 @@ import {
     MainSyncStatus,
     MainSyncStatusFile,
     PullRequestIndex,
+    RefreshOutcome,
 } from './main-sync-file';
 import { DotWebpieces, dotWebpieces } from '@webpieces/tooling-common';
 import { toError } from '@webpieces/tooling-common/to-error';
 import { WorktreeService } from './worktrees';
+import { CommandTimeouts } from './command-timeouts';
 
 // The on-disk shape lives in main-sync-file.ts; re-exported so every existing importer of
 // `MainSyncStatus` from this module keeps working.
-export { MainSyncStatus, MainSyncStatusFile, PullRequestIndex, MAIN_SYNC_STATUS_VERSION };
+export { MainSyncStatus, MainSyncStatusFile, PullRequestIndex, MAIN_SYNC_STATUS_VERSION, RefreshOutcome };
 
 // Shared "is my feature branch healthy relative to origin/main?" state. The SLOW signals (git fetch +
 // merge-base + same-file-overlap + a merged-PR lookup) are computed by the ai-hook-rules refresher in a
 // DETACHED background process; the feature-branch-guard only READS this cached file. pr-gate's merge
 // flow also writes it synchronously after a merge. Lives here (the shared dep of both).
 
-// How long an `inprocess` refresher lock may sit before a new refresher assumes the prior run hung.
+// How long a refresher may hold main-sync.lock.json before the next spawner assumes it hung, kills it
+// and reclaims the lock (see MainSyncLockService).
 export const DEFAULT_HANG_TIMEOUT_MINUTES = 5;
 
 const MAIN_SYNC_STATUS_FILE = 'main-sync-status.json';
-const MAIN_SYNC_LOCK_FILE = 'main-sync.lock.json';
-
-const LOCK_STATE_INPROCESS = 'inprocess';
-const LOCK_STATE_FINISHED = 'finished';
-
-// Concurrency state machine for the detached refresher. `started` is epoch ms. `pid` is the refresher
-// process's pid (0 = unknown) — used so a KILLED refresher doesn't wedge `inprocess` for the timeout.
-export class MainSyncLock {
-    state: string;
-    started: number;
-    pid: number;
-
-    constructor(state: string, started: number, pid: number = 0) {
-        this.state = state;
-        this.started = started;
-        this.pid = pid;
-    }
-}
-
-// Raw JSON shape for the cast at the parse boundary.
-interface RawLock {
-    state?: string;
-    started?: number;
-    pid?: number;
-}
 
 // Result of a captured git/gh invocation: ok=false on spawn failure or non-zero exit.
 interface CmdCapture {
@@ -61,7 +37,7 @@ interface CmdCapture {
 }
 
 /**
- * Reads/writes the main-sync cache + lock and computes the slow "is my branch healthy vs origin/main?"
+ * Reads/writes the main-sync cache and computes the slow "is my branch healthy vs origin/main?"
  * status. `@injectable(bindingScopeValues.Singleton)` so it's injectable and drawn in consumers’ DI designs.
  */
 @injectable(bindingScopeValues.Singleton)
@@ -71,6 +47,7 @@ export class MainSyncStatusService {
         private readonly atomicFile: AtomicFile = new AtomicFile(),
         private readonly store: MainSyncFileStore = new MainSyncFileStore(atomicFile),
         private readonly worktrees: WorktreeService = new WorktreeService(),
+        private readonly timeouts: CommandTimeouts = new CommandTimeouts(),
     ) {}
 
     /**
@@ -90,24 +67,6 @@ export class MainSyncStatusService {
      */
     mainSyncStatusPath(repoRoot: string): string {
         return this.dotDir.sharedFile(repoRoot, MAIN_SYNC_STATUS_FILE);
-    }
-
-    /**
-     * SHARED scope — the single-flight lock for the whole repo.
-     *
-     * This is the fix for the filed bug "the detached main-sync refresher's `git fetch` races the
-     * agent's foreground `git fetch`/`git pull` and corrupts `.git/FETCH_HEAD`". The lock was already
-     * atomic (O_CREAT|O_EXCL) and already serialised refreshers against each other — but only WITHIN
-     * one worktree, so N worktrees meant N locks and up to N concurrent `git fetch`es against the ONE
-     * shared `.git`, which is exactly how a duplicate `for-merge` line lands in FETCH_HEAD. There is
-     * one `.git`, so there is now one lock: at most one refresher in flight across all worktrees.
-     *
-     * Stale-lock handling is unchanged and still required (a lock nobody can clear is worse than the
-     * race): the holder records pid + start epoch, and `tryAcquireMainSyncLock` reclaims it once
-     * `isRefreshInProgress` proves the holder is finished, hung past hangTimeoutMinutes, or dead.
-     */
-    mainSyncLockPath(repoRoot: string): string {
-        return this.dotDir.sharedFile(repoRoot, MAIN_SYNC_LOCK_FILE);
     }
 
     /**
@@ -150,104 +109,14 @@ export class MainSyncStatusService {
         this.store.writeFile(this.mainSyncStatusPath(repoRoot), file);
     }
 
-    readMainSyncLock(repoRoot: string): MainSyncLock | null {
-        // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
-        try {
-            const lockPath = this.mainSyncLockPath(repoRoot);
-            if (!fs.existsSync(lockPath)) return null;
-            const raw = JSON.parse(fs.readFileSync(lockPath, 'utf8')) as RawLock;
-            return new MainSyncLock(raw.state ?? LOCK_STATE_FINISHED, raw.started ?? 0, raw.pid ?? 0);
-        } catch (err: unknown) {
-            const error = toError(err);
-            void error;
-            return null;
-        }
-    }
-
-    writeMainSyncLock(repoRoot: string, lock: MainSyncLock): void {
-        const lockPath = this.mainSyncLockPath(repoRoot);
-        this.ensureDir(lockPath);
-        fs.writeFileSync(lockPath, JSON.stringify(lock, null, 2) + '\n');
-    }
-
-    // A lock is stale (prior refresher assumed hung) once `inprocess` longer than hangTimeoutMinutes.
-    isLockStale(lock: MainSyncLock, hangTimeoutMinutes: number, now: number = Date.now()): boolean {
-        return now - lock.started > hangTimeoutMinutes * 60 * 1000;
-    }
-
-    // True when another refresher is actively running and we should NOT start a second one.
-    isRefreshInProgress(repoRoot: string, hangTimeoutMinutes: number, now: number = Date.now()): boolean {
-        const lock = this.readMainSyncLock(repoRoot);
-        if (!lock) return false;
-        if (lock.state !== LOCK_STATE_INPROCESS) return false;
-        if (this.isLockStale(lock, hangTimeoutMinutes, now)) return false;
-        return this.isProcessAlive(lock.pid);
-    }
-
     /**
-     * ATOMICALLY take the refresher lock. Returns the held lock, or null when someone else holds it.
-     *
-     * Replaces the check-then-write pair (`isRefreshInProgress` then `writeMainSyncLock`), whose gap
-     * let two detached refreshers both pass the check and then both run `git fetch` at once — the
-     * concurrency this lock exists to prevent. The create uses the `wx` flag (O_CREAT|O_EXCL), so of
-     * N racing refreshers exactly one creates the file.
-     *
-     * A lock file left behind by a FINISHED, hung, or killed refresher is reclaimed: we only unlink
-     * and re-take it once `isRefreshInProgress` says the holder is provably not running, and we
-     * re-read afterwards to confirm the entry we see is ours before claiming the lock.
+     * Record that a refresh STARTED at `startedMs` and ended with `outcome`, keeping every branch entry
+     * already on disk. The refresher's failure path: a run that produced no new branch data still
+     * counts as a run, so the throttle retries it after MIN_REFRESH_INTERVAL_MINUTES rather than on
+     * every tool call. A successful run stamps the whole document instead (writeMainSyncStatusFile).
      */
-    tryAcquireMainSyncLock(
-        repoRoot: string,
-        hangTimeoutMinutes: number,
-        now: number = Date.now(),
-        pid: number = process.pid,
-    ): MainSyncLock | null {
-        const lockPath = this.mainSyncLockPath(repoRoot);
-        this.ensureDir(lockPath);
-        const lock = this.inProcessLock(now, pid);
-        const payload = JSON.stringify(lock, null, 2) + '\n';
-
-        if (this.createExclusive(lockPath, payload)) return lock;
-
-        // The file already exists. Leave it alone while a live refresher owns it.
-        if (this.isRefreshInProgress(repoRoot, hangTimeoutMinutes, now)) return null;
-
-        // Reclaim it: remove the dead entry, then re-take it exclusively so only one reclaimer wins.
-        // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
-        try {
-            fs.unlinkSync(lockPath);
-        } catch (err: unknown) {
-            const error = toError(err);
-            void error;  // someone else reclaimed it first — the exclusive create below decides
-        }
-        if (!this.createExclusive(lockPath, payload)) return null;
-
-        // Confirm the lock on disk is OURS (a simultaneous reclaimer could have unlinked ours and
-        // written its own between the two calls above).
-        const held = this.readMainSyncLock(repoRoot);
-        if (!held || held.pid !== pid || held.started !== lock.started) return null;
-        return lock;
-    }
-
-    // O_CREAT|O_EXCL write: true when THIS call created the file, false when it already existed.
-    private createExclusive(lockPath: string, payload: string): boolean {
-        // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
-        try {
-            fs.writeFileSync(lockPath, payload, { flag: 'wx' });
-            return true;
-        } catch (err: unknown) {
-            const error = toError(err);
-            void error;
-            return false;
-        }
-    }
-
-    inProcessLock(now: number = Date.now(), pid: number = process.pid): MainSyncLock {
-        return new MainSyncLock(LOCK_STATE_INPROCESS, now, pid);
-    }
-
-    finishedLock(started: number): MainSyncLock {
-        return new MainSyncLock(LOCK_STATE_FINISHED, started, 0);
+    recordRefreshOutcome(repoRoot: string, startedMs: number, outcome: RefreshOutcome): void {
+        this.store.recordRefresh(this.mainSyncStatusPath(repoRoot), startedMs, outcome);
     }
 
     /**
@@ -423,11 +292,11 @@ export class MainSyncStatusService {
      */
     private fetchOriginMain(repoRoot: string): void {
         const safe = spawnSync('git', ['fetch', '--no-write-fetch-head', 'origin', 'main'], {
-            cwd: repoRoot, encoding: 'utf8', stdio: ['ignore', 'ignore', 'pipe'],
+            cwd: repoRoot, encoding: 'utf8', stdio: ['ignore', 'ignore', 'pipe'], timeout: CommandTimeouts.NETWORK_MS,
         });
         if (safe.status === 0) return;
         if (!this.isUnknownGitOption(safe.stderr)) return;  // a real failure (offline, auth) — not our business
-        spawnSync('git', ['fetch', 'origin', 'main'], { cwd: repoRoot, stdio: 'ignore' });
+        spawnSync('git', ['fetch', 'origin', 'main'], { cwd: repoRoot, stdio: 'ignore', timeout: CommandTimeouts.NETWORK_MS });
     }
 
     // Did git reject the flag itself (too old), as opposed to failing the network refresh?
@@ -436,26 +305,9 @@ export class MainSyncStatusService {
         return text.includes('unknown option') || text.includes('unknown switch') || text.includes('unrecognized option');
     }
 
-    private ensureDir(filePath: string): void {
-        fs.mkdirSync(path.dirname(filePath), { recursive: true });
-    }
-
-    // Liveness probe: is `pid` still a running process? pid <= 0 (unknown) → assume alive.
-    private isProcessAlive(pid: number): boolean {
-        if (pid <= 0) return true;
-        // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
-        try {
-            process.kill(pid, 0);
-            return true;
-        } catch (err: unknown) {
-            const error = toError(err);
-            return !error.message.includes('ESRCH');
-        }
-    }
-
     // Run a command capturing trimmed stdout; ok=false on spawn failure or non-zero exit.
     private capture(repoRoot: string, cmd: string, args: string[]): CmdCapture {
-        const result = spawnSync(cmd, args, { cwd: repoRoot, encoding: 'utf8' });
+        const result = spawnSync(cmd, args, { cwd: repoRoot, encoding: 'utf8', timeout: this.timeouts.forCommand(cmd) });
         if (result.status !== 0 || typeof result.stdout !== 'string') return { ok: false, out: '' };
         return { ok: true, out: result.stdout.trim() };
     }
@@ -554,8 +406,6 @@ const mainSyncSvc = new MainSyncStatusService();
 // webpieces-disable no-function-outside-class -- temporary back-compat delegator to MainSyncStatusService; removed once consumers inject it
 export function mainSyncStatusPath(repoRoot: string): string { return mainSyncSvc.mainSyncStatusPath(repoRoot); }
 // webpieces-disable no-function-outside-class -- temporary back-compat delegator to MainSyncStatusService; removed once consumers inject it
-export function mainSyncLockPath(repoRoot: string): string { return mainSyncSvc.mainSyncLockPath(repoRoot); }
-// webpieces-disable no-function-outside-class -- temporary back-compat delegator to MainSyncStatusService; removed once consumers inject it
 export function readMainSyncStatus(repoRoot: string, branch: string): MainSyncStatus | null { return mainSyncSvc.readMainSyncStatus(repoRoot, branch); }
 // webpieces-disable no-function-outside-class -- temporary back-compat delegator to MainSyncStatusService; removed once consumers inject it
 export function readMainSyncStatusFile(repoRoot: string): MainSyncStatusFile | null { return mainSyncSvc.readMainSyncStatusFile(repoRoot); }
@@ -563,20 +413,6 @@ export function readMainSyncStatusFile(repoRoot: string): MainSyncStatusFile | n
 export function writeMainSyncStatus(repoRoot: string, status: MainSyncStatus): void { mainSyncSvc.writeMainSyncStatus(repoRoot, status); }
 // webpieces-disable no-function-outside-class -- temporary back-compat delegator to MainSyncStatusService; removed once consumers inject it
 export function writeMainSyncStatusFile(repoRoot: string, file: MainSyncStatusFile): void { mainSyncSvc.writeMainSyncStatusFile(repoRoot, file); }
-// webpieces-disable no-function-outside-class -- temporary back-compat delegator to MainSyncStatusService; removed once consumers inject it
-export function readMainSyncLock(repoRoot: string): MainSyncLock | null { return mainSyncSvc.readMainSyncLock(repoRoot); }
-// webpieces-disable no-function-outside-class -- temporary back-compat delegator to MainSyncStatusService; removed once consumers inject it
-export function writeMainSyncLock(repoRoot: string, lock: MainSyncLock): void { mainSyncSvc.writeMainSyncLock(repoRoot, lock); }
-// webpieces-disable no-function-outside-class -- temporary back-compat delegator to MainSyncStatusService; removed once consumers inject it
-export function isLockStale(lock: MainSyncLock, hangTimeoutMinutes: number, now: number = Date.now()): boolean { return mainSyncSvc.isLockStale(lock, hangTimeoutMinutes, now); }
-// webpieces-disable no-function-outside-class -- temporary back-compat delegator to MainSyncStatusService; removed once consumers inject it
-export function isRefreshInProgress(repoRoot: string, hangTimeoutMinutes: number, now: number = Date.now()): boolean { return mainSyncSvc.isRefreshInProgress(repoRoot, hangTimeoutMinutes, now); }
-// webpieces-disable no-function-outside-class -- temporary back-compat delegator to MainSyncStatusService; removed once consumers inject it
-export function tryAcquireMainSyncLock(repoRoot: string, hangTimeoutMinutes: number, now: number = Date.now(), pid: number = process.pid): MainSyncLock | null { return mainSyncSvc.tryAcquireMainSyncLock(repoRoot, hangTimeoutMinutes, now, pid); }
-// webpieces-disable no-function-outside-class -- temporary back-compat delegator to MainSyncStatusService; removed once consumers inject it
-export function inProcessLock(now: number = Date.now(), pid: number = process.pid): MainSyncLock { return mainSyncSvc.inProcessLock(now, pid); }
-// webpieces-disable no-function-outside-class -- temporary back-compat delegator to MainSyncStatusService; removed once consumers inject it
-export function finishedLock(started: number): MainSyncLock { return mainSyncSvc.finishedLock(started); }
 // webpieces-disable no-function-outside-class -- temporary back-compat delegator to MainSyncStatusService; removed once consumers inject it
 export function computeMainSyncStatus(repoRoot: string): MainSyncStatus { return mainSyncSvc.computeMainSyncStatus(repoRoot); }
 // webpieces-disable no-function-outside-class -- temporary back-compat delegator to MainSyncStatusService; removed once consumers inject it

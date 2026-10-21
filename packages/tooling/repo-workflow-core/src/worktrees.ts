@@ -4,6 +4,7 @@ import * as path from 'path';
 import { injectable, bindingScopeValues } from 'inversify';
 
 import { toError } from '@webpieces/tooling-common/to-error';
+import { CommandTimeouts } from './command-timeouts';
 
 /**
  * Reading the git worktree list.
@@ -198,7 +199,7 @@ export class WorktreeService {
      * second as the first tells an operator to go look for edits that are not there.
      */
     workInFlight(worktreePath: string): WorktreeWorkInFlight {
-        const result = spawnSync('git', ['status', '--porcelain'], { cwd: worktreePath, encoding: 'utf8' });
+        const result = spawnSync('git', ['status', '--porcelain'], { cwd: worktreePath, encoding: 'utf8', timeout: CommandTimeouts.LOCAL_GIT_MS });
         if (result.status !== 0 || typeof result.stdout !== 'string') {
             return new WorktreeWorkInFlight(true,
                 '`git status` could not report on it, so it is not provably empty');
@@ -263,7 +264,7 @@ export class WorktreeService {
 
     // Run a git command capturing trimmed stdout; ok=false on spawn failure or non-zero exit.
     private capture(repoRoot: string, args: string[]): CmdCapture {
-        const result = spawnSync('git', args, { cwd: repoRoot, encoding: 'utf8' });
+        const result = spawnSync('git', args, { cwd: repoRoot, encoding: 'utf8', timeout: CommandTimeouts.LOCAL_GIT_MS });
         if (result.status !== 0 || typeof result.stdout !== 'string') return { ok: false, out: '' };
         return { ok: true, out: result.stdout.trim() };
     }

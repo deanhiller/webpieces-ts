@@ -77,6 +77,7 @@ function useCaseRow(useCase: L2UseCase): string {
 export function renderL2Doc(): string {
     return [
         ...renderHead(),
+        ...renderRefreshCadence(),
         ...renderTable(),
         ...renderTableNotes(),
         ...renderUseCases(),
@@ -153,6 +154,26 @@ function renderHead(): string[] {
         'one refresher writing one cache. It used to be declared four times and read four times, which,',
         'with the refresher\'s at-most-once-per-process latch and two config-blind callers ahead of the',
         'guards, meant at most one of the four values could ever reach a spawn.',
+        '',
+    ];
+}
+
+// The refresh cadence (#1342) — its own section of the head, split out to keep renderHead inside the
+// method-line budget. The join order in renderL2Doc places it right after the cache prose.
+// webpieces-disable no-function-outside-class -- a section of renderL2Doc's string, beside it in this module
+function renderRefreshCadence(): string[] {
+    return [
+        '**The refresher STARTS at most once every 10 minutes per repo** (`MIN_REFRESH_INTERVAL_MINUTES`).',
+        'The guard decides before it launches anything: one read of `lastRefreshStartedMs` in the status',
+        'file. Inside the interval nothing is spawned and no git runs; past it, the guard creates',
+        '`main-sync.lock.json` exclusively (so of several hook processes firing at once exactly one',
+        'launches), and the detached child adopts that lock rather than creating its own. The lock is only a',
+        'mutex (`pid`, `startedMs`): the child writes the status file and its stamp FIRST and deletes the',
+        'lock LAST. A failed run still records its start, so it is retried after the interval rather than on',
+        'every call; a hung or crashed one leaves its lock, which is reclaimed once past `hangTimeoutMinutes`,',
+        'its holder killed. Every command the refresher runs is bounded by a timeout. Commands that act on',
+        '`main` (`pnpm wp-sync-main`, the `wp-*` PR flow) fetch for themselves, so the interval never makes',
+        'a gate decision stale.',
         '',
     ];
 }
