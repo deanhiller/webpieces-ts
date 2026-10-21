@@ -46,16 +46,27 @@ jobs:
               run: pnpm install --frozen-lockfile
 
             - name: Ensure Nx cache directory exists
-              run: mkdir -p .nx/cache
+              run: mkdir -p .nx/cache .nx/workspace-data
 
-            - name: Cache Nx
-              uses: actions/cache@v5
+            - name: Restore Nx cache
+              # main is the ONLY place the nx cache is saved (see "Save Nx cache" below); ci.yml runs on
+              # pull_request and only restores. The db is cached with the outputs because nx serves only
+              # hashes its db lists — see scripts/ci-nx-cache.sh. The path list must stay identical to
+              # ci.yml's and the save step's. No bare nx-<os>- fallback: a lockfile change starts fresh.
+              id: nx-cache
+              uses: actions/cache/restore@v5
               with:
-                  path: .nx/cache
+                  path: |
+                      .nx/cache
+                      .nx/workspace-data/*.db
                   key: nx-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-${{ hashFiles('**/*.ts', '**/*.js', '!**/node_modules/**', '!**/dist/**') }}
                   restore-keys: |
                       nx-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-
-                      nx-${{ runner.os }}-
+
+            - name: Adopt the restored Nx cache db
+              # nx names its db after the machine id, which differs between runners; without the rename
+              # nx opens an empty db and every restored output is a miss.
+              run: bash scripts/ci-nx-cache.sh adopt-db
 
             - name: Upgrade npm for trusted publishing
               # Pinned (never @latest) so a stray npm release can't silently break CI.
@@ -95,6 +106,25 @@ jobs:
 
             - name: Build all packages
               run: pnpm nx run-many --target=build --all
+
+            - name: Prune Nx cache to what nx tracks
+              # nx.json's maxCacheSize LRU and nx's 7-days-unused sweep only ever delete entries the db
+              # lists, and LRU eviction leaves the entry's terminal output behind. Dropping everything
+              # the db does not list makes the saved entry this cache's tracked working set instead of
+              # a union that only grows (issue #1363). Runs only when a save follows.
+              if: steps.nx-cache.outputs.cache-hit != 'true'
+              run: bash scripts/ci-nx-cache.sh prune
+
+            - name: Save Nx cache
+              # Saved only after the build above succeeded (the implied success() condition), and skipped
+              # on an exact key hit, when the cache already holds this source tree.
+              if: steps.nx-cache.outputs.cache-hit != 'true'
+              uses: actions/cache/save@v5
+              with:
+                  path: |
+                      .nx/cache
+                      .nx/workspace-data/*.db
+                  key: ${{ steps.nx-cache.outputs.cache-primary-key }}
 
             - name: Verify dist versions
               run: |
