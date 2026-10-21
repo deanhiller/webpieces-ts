@@ -213,15 +213,36 @@ WP_LOG_DIR=""
 WP_PRIMARY_LOG_DIR=""
 WP_TAB="$(printf '\t')"     # one real tab, so the OPTIONAL bin= field can carry its own separator
 wp_resolve_log_dir() {
-  _wp_rp="$(git -C "$WP_CWD" rev-parse --git-dir --git-common-dir 2>/dev/null)"
-  _wp_gd="$(printf '%s\n' "$_wp_rp" | sed -n 1p)"
-  _wp_cd="$(printf '%s\n' "$_wp_rp" | sed -n 2p)"
+  _wp_gd=""
+  _wp_cd=""
+  _wp_d="$WP_CWD"
+  while [ -n "$_wp_d" ]; do
+    if [ -d "$_wp_d/.git" ]; then _wp_gd="$_wp_d/.git"; break; fi
+    if [ -f "$_wp_d/.git" ]; then
+      _wp_l=""; IFS= read -r _wp_l < "$_wp_d/.git" || :
+      case "$_wp_l" in "gitdir: "*) _wp_gd="${_wp_l#gitdir: }" ;; esac
+      case "$_wp_gd" in ''|/*) : ;; *) _wp_gd="$_wp_d/$_wp_gd" ;; esac
+      [ -d "$_wp_gd" ] || _wp_gd=""
+      break
+    fi
+    _wp_d="${_wp_d%/*}"
+  done
+  # The shared git dir: <gitdir>/commondir (relative to the git dir) when present, else the git dir.
+  # Normalized with `cd && pwd -P` — builtins in a subshell, never a process.
+  if [ -n "$_wp_gd" ]; then
+    _wp_cd="$_wp_gd"
+    if [ -f "$_wp_gd/commondir" ]; then
+      _wp_l=""; IFS= read -r _wp_l < "$_wp_gd/commondir" || :
+      case "$_wp_l" in ''|/*) : ;; *) _wp_l="$_wp_gd/$_wp_l" ;; esac
+      [ -n "$_wp_l" ] && _wp_cd="$(CDPATH= cd -- "$_wp_l" 2>/dev/null && pwd -P)"
+    fi
+  fi
   if [ -z "$_wp_gd" ] || [ -z "$_wp_cd" ]; then
     WP_TREE=primary; WP_LOG_DIR="$WP_CWD/.webpieces/logs"
     WP_PRIMARY_LOG_DIR="$WP_LOG_DIR"; return 0
   fi
-  # git prints a BARE .git from the primary clone and an absolute path from a linked worktree; the TS
-  # twin runs path.resolve(cwd, printed), so do the same before comparing or taking a basename.
+  # Both are absolute whenever the cwd is; a relative cwd (a hand-run) is anchored the way the TS twin's
+  # path.resolve(cwd, …) anchors it, before comparing or taking a basename.
   case "$_wp_gd" in /*) : ;; *) _wp_gd="$WP_CWD/$_wp_gd" ;; esac
   case "$_wp_cd" in /*) : ;; *) _wp_cd="$WP_CWD/$_wp_cd" ;; esac
   # The primary clone's root is the parent of the SHARED git dir — declining any layout whose shared
