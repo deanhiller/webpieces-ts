@@ -55,8 +55,8 @@ export class CallScopeLadder<T> {
 
     /**
      * The registered slots for one call, most specific first: method, then API, then ALL. A rung with
-     * no slot is skipped. `api` undefined (a call with no contract class — an IPC hop, an MCP protocol
-     * step, a failure before routing) reaches only the ALL rung.
+     * no slot is skipped. `api` undefined (a failure before routing, which has no route and so no
+     * contract class) reaches only the ALL rung.
      */
     rungs(api: Function | undefined, methodName: string | undefined): T[] {
         const found: T[] = [];

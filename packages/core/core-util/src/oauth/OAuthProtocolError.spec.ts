@@ -10,6 +10,9 @@ import { OAuthErrorCode, OAuthFixedStatusErrorCode } from './OAuthErrorCode';
 import { OAuthErrorResponse } from './OAuthErrorResponse';
 import { OAuthErrorExtras, OAuthProtocolError } from './OAuthProtocolError';
 
+/** Synthetic contract classes: a call identity always names its contract CLASS (#1350). */
+class OAuthApi {}
+
 class StatusCase {
     constructor(
         public readonly code: OAuthFixedStatusErrorCode,
@@ -159,8 +162,8 @@ describe('the webpieces default translator and classifier know OAuthProtocolErro
 
     it('a server refusing a caller is NOT a failure; server_error still is; a client receiving one is', () => {
         const classifier = new WebpiecesDefaultErrorClassifier();
-        const server = new ApiMethodInfo('server', 'OAuthApi', 'token', undefined);
-        const client = new ApiMethodInfo('client', 'OAuthApi', 'token', undefined);
+        const server = new ApiMethodInfo('server', 'OAuthApi', 'token', OAuthApi);
+        const client = new ApiMethodInfo('client', 'OAuthApi', 'token', OAuthApi);
         expect(
             classifier.classify(new OAuthProtocolError(OAuthErrorCode.INVALID_GRANT), server),
         ).toBe(CallOutcome.EXPECTED);

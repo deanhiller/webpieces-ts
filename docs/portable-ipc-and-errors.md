@@ -76,7 +76,10 @@ the scope is required: `ClientRegistry.setErrorClassifier(c, VendorApi, 'method'
 `XxxApi`), `setErrorClassifier(c, 'ALL')` once per app (reads `side`), then
 `WebpiecesDefaultErrorClassifier`. A classifier returns `undefined` to defer to the next rung. The
 class reaches the classifier as `ApiMethodInfo.contract` (and `CallContext.contract` inside a
-strategy); a call with no contract class reaches the ALL rung alone. The classifier judges the ERROR; whether repeating is safe for the ENDPOINT is
+strategy). That class is REQUIRED and never `undefined` (#1350): an IPC call — and its timeout —
+carries its `@WpInternal` contract class, and an MCP protocol step with no user contract carries the
+framework-owned `McpProtocol` class, so each reaches its own per-contract classifier, or ALL when
+nothing is registered for that class. The classifier judges the ERROR; whether repeating is safe for the ENDPOINT is
 `CallContext.operation`'s question (`READ` / `WRITE_IDEMPOTENT` / `WRITE`) — a transient error on a
 `WRITE` may already have happened, so `RetryStrategy` never retries one.
 

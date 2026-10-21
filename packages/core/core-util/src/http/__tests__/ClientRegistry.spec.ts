@@ -270,9 +270,10 @@ class OneTypeClassifier implements ErrorClassifier {
 /** Synthetic contract classes: the ladder is keyed by the CLASS, never by its name. */
 class VendorApi {}
 class SaveApi {}
+class UnregisteredApi {}
 
-const info = (side: 'client' | 'server', contract: Function | undefined, methodName: string): ApiMethodInfo =>
-    new ApiMethodInfo(side, contract?.name ?? 'NoContract', methodName, contract);
+const info = (side: 'client' | 'server', contract: Function, methodName: string): ApiMethodInfo =>
+    new ApiMethodInfo(side, contract.name, methodName, contract);
 
 describe('ClientRegistry.classify ladder (method -> API -> ALL -> webpieces built-in)', () => {
     const vendorSend = info('client', VendorApi, 'send');
@@ -324,10 +325,10 @@ describe('ClientRegistry.classify ladder (method -> API -> ALL -> webpieces buil
         expect(ClientRegistry.classify(new Error('boom'), vendorSend)).toBe(CallOutcome.FAILURE);
     });
 
-    it('a call with no contract class reaches the ALL rung alone', () => {
+    it('a contract nothing is registered for reaches the ALL rung alone', () => {
         ClientRegistry.setErrorClassifier(new OneTypeClassifier(Error, CallOutcome.TRANSIENT_FAILURE), VendorApi);
         ClientRegistry.setErrorClassifier(new OneTypeClassifier(Error, CallOutcome.EXPECTED), 'ALL');
-        expect(ClientRegistry.classify(new Error('boom'), info('client', undefined, 'send'))).toBe(
+        expect(ClientRegistry.classify(new Error('boom'), info('client', UnregisteredApi, 'send'))).toBe(
             CallOutcome.EXPECTED,
         );
     });

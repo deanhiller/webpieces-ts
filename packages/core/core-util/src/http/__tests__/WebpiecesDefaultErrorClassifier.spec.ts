@@ -29,8 +29,11 @@ import {
     ApiRetriesExhaustedError,
 } from '../../errors';
 
-const server = new ApiMethodInfo('server', 'SaveApi', 'save', undefined);
-const client = new ApiMethodInfo('client', 'SaveApi', 'save', undefined);
+/** Synthetic contract classes: a call identity always names its contract CLASS (#1350). */
+class SaveApi {}
+
+const server = new ApiMethodInfo('server', 'SaveApi', 'save', SaveApi);
+const client = new ApiMethodInfo('client', 'SaveApi', 'save', SaveApi);
 const classify = (error: Error, m: ApiMethodInfo): CallOutcome =>
     WEBPIECES_DEFAULT_ERROR_CLASSIFIER.classify(error, m);
 
@@ -84,7 +87,7 @@ describe('WebpiecesDefaultErrorClassifier — TRANSIENT_FAILURE vs FAILURE', () 
         for (const error of [
             new ApiRequestTimeoutError('x'),
             new ApiDependencyTimeoutError('x'),
-            new ApiCallTimeoutError(5_000, new CallContext('SaveApi', 'save', READ, undefined)),
+            new ApiCallTimeoutError(5_000, new CallContext('SaveApi', 'save', READ, SaveApi)),
             new ApiBadGatewayError('x'),
             new ApiUnavailableError('x'),
             new ApiDependencyBackoffError('x'),

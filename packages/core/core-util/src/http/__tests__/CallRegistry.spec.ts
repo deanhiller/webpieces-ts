@@ -4,7 +4,9 @@ import { CallContext } from '../CallStrategy';
 import { TransportDefault } from '../TransportDefault';
 import { READ } from '../HttpEndpointOptions';
 
-const work = new CallContext('SameApi', 'work', READ, undefined);
+/** The context's own contract; `execute` re-keys it onto whichever class it is given. */
+class SameApi {}
+const work = new CallContext('SameApi', 'work', READ, SameApi);
 
 afterEach(() => CallRegistry.clear());
 

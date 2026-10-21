@@ -32,10 +32,14 @@ class ErrorLadderCompileAssertions {
     }
 
     callIdentityStatesItsContract(): void {
-        // @ts-expect-error ApiMethodInfo's contract CLASS is required (pass undefined only when there is none)
+        // @ts-expect-error ApiMethodInfo's contract CLASS is required
         void new ApiMethodInfo('client', 'SaveApi', 'save');
-        // @ts-expect-error CallContext's contract CLASS is required (pass undefined only when there is none)
+        // @ts-expect-error CallContext's contract CLASS is required
         void new CallContext('SaveApi', 'save', WRITE);
+        // @ts-expect-error ApiMethodInfo's contract is a CLASS, never undefined — pass the real contract class
+        void new ApiMethodInfo('client', 'SaveApi', 'save', undefined);
+        // @ts-expect-error CallContext's contract is a CLASS, never undefined — pass the real contract class
+        void new CallContext('SaveApi', 'save', WRITE, undefined);
     }
 
     keyedByClassNeverByName(classifier: ErrorClassifier): void {

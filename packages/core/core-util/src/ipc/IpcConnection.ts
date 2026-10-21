@@ -115,7 +115,13 @@ export class IpcConnection {
         return new IpcCallContext(parent?.txId ?? id, id, parent?.callId);
     }
 
-    request(request: IpcRequest): Promise<IpcReply> {
+    /**
+     * Send one request and await its reply. `contract` is the `@WpInternal` contract CLASS the client
+     * proxy was created for: the wire carries only the string `apiId`, so the class rides beside the
+     * request and keys the deadline's {@link CallContext} onto the `CallScope` ladder — an IPC timeout
+     * reaches the classifier registered for THIS contract, exactly like HTTP and Cloud Tasks.
+     */
+    request(request: IpcRequest, contract: Function): Promise<IpcReply> {
         if (this.closed) return Promise.reject(this.closed);
         if (this.pending.has(request.context.callId))
             return Promise.reject(new ApiImplementationError('Duplicate pending IPC call'));
@@ -129,7 +135,7 @@ export class IpcConnection {
                         this.options.timeoutMs,
                         // IPC contracts declare no @Endpoint operation, so the deadline reports the
                         // conservative WRITE: the user is told to check before repeating the call.
-                        new CallContext(request.apiId, request.methodId, WRITE, undefined),
+                        new CallContext(request.apiId, request.methodId, WRITE, contract),
                     ),
                     'expired',
                 );

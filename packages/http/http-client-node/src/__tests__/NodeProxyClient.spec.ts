@@ -34,6 +34,9 @@ import { AddressResolver } from '../AddressResolver';
 import { ClientConfig } from '../ClientConfig';
 import { NodeProxyClient } from '../NodeProxyClient';
 
+/** Synthetic contract classes: a call identity always names its contract CLASS (#1350). */
+class SaveApi {}
+
 class FetchStoresRequest {
     constructor(public readonly limit: number) {}
 }
@@ -316,7 +319,7 @@ describe('NodeProxyClient reports a 5xx as the DEPENDENCY failing, not as its ow
 
         expect(error).toBeInstanceOf(ApiRetriesExhaustedError);
         expect(
-            ClientRegistry.classify(error as Error, new ApiMethodInfo('client', 'SaveApi', 'save', undefined)),
+            ClientRegistry.classify(error as Error, new ApiMethodInfo('client', 'SaveApi', 'save', SaveApi)),
         ).toBe(CallOutcome.FAILURE);
     });
 

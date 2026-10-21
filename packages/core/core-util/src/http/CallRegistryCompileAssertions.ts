@@ -11,9 +11,15 @@ class CallRegistryCompileAssertions {
         CallRegistry.setStrategy(undefined, 'ALL', 'work');
     }
 
+    /** A CallContext's contract is the CLASS, never undefined (#1350). */
+    contractIsNeverUndefined(): void {
+        // @ts-expect-error CallContext's contract is a CLASS, never undefined — pass the real contract class
+        void new CallContext('Api', 'work', WRITE, undefined);
+    }
+
     /** The transport fallback is a TransportDefault (timeout + optional strategy), never a bare number. */
     fallbackIsATransportDefault(): void {
-        const context = new CallContext('Api', 'work', WRITE, undefined);
+        const context = new CallContext('Api', 'work', WRITE, CallRegistryCompileAssertions);
         void CallRegistry.execute(
             CallRegistryCompileAssertions,
             context,

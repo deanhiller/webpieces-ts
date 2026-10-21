@@ -30,7 +30,17 @@ import {
     getIpcMaskSpec,
     ApiCallTimeoutError,
 } from '@webpieces/core-util/ipc';
-import { ApiPath, Endpoint, POST, RPC, WRITE } from '@webpieces/core-util';
+import {
+    ApiMethodInfo,
+    ApiPath,
+    CallOutcome,
+    ClientRegistry,
+    Endpoint,
+    ErrorClassifier,
+    POST,
+    RPC,
+    WRITE,
+} from '@webpieces/core-util';
 import type { AnyUntrustedContextKey } from '@webpieces/core-util';
 
 class Value {
@@ -138,7 +148,19 @@ class EchoController extends TestApi {
     async notify(_request: Value): Promise<void> {}
 }
 
-afterEach(() => vi.useRealTimers());
+/** Records every call it judges; answers one verdict for an IPC deadline, defers everything else. */
+class RecordingClassifier implements ErrorClassifier {
+    readonly seen: ApiMethodInfo[] = [];
+    classify(error: Error, methodInfo: ApiMethodInfo): CallOutcome | undefined {
+        this.seen.push(methodInfo);
+        return error instanceof ApiCallTimeoutError ? CallOutcome.TRANSIENT_FAILURE : undefined;
+    }
+}
+
+afterEach(() => {
+    vi.useRealTimers();
+    ClientRegistry.resetForTests();
+});
 describe('portable IPC JSON boundary', () => {
     it('requires internal contracts and rejects HTTP/IPC mixtures', () => {
         @ApiPath('/http')
@@ -259,6 +281,7 @@ describe('portable IPC JSON boundary', () => {
         expect(() => pair.left.setHandler(pair.reverse.handle)).toThrow('already');
         const reply = await pair.left.request(
             new IpcRequest('stable-api', 'missing', pair.left.newContext(), new Value('x')),
+            TestApi,
         );
         expect(reply.type).toBe('failure');
         if (reply.type === 'failure') expect(reply.error.kind).toBe('endpoint-not-found');
@@ -305,6 +328,36 @@ describe('portable IPC JSON boundary', () => {
         const outstanding = malformed.clients.createClient(TestApi).echo(new Value('x'));
         malformed.a.listener?.('not json');
         await expect(outstanding).rejects.toBeInstanceOf(Error);
+    });
+    it('an IPC deadline carries the @WpInternal contract CLASS and reaches its per-contract classifier (#1350)', async () => {
+        vi.useFakeTimers();
+        const perContract = new RecordingClassifier();
+        const all = new RecordingClassifier();
+        ClientRegistry.setErrorClassifier(perContract, TestApi);
+        ClientRegistry.setErrorClassifier(all, 'ALL');
+        const pair = new Pair();
+        pair.a.drop = true;
+        const pending = pair.clients
+            .createClient(TestApi)
+            .echo(new Value('x'))
+            .catch((error: Error) => error);
+        await vi.advanceTimersByTimeAsync(11);
+        const failure = await pending;
+        expect(failure).toBeInstanceOf(ApiCallTimeoutError);
+        const timeout = failure as ApiCallTimeoutError;
+        expect(timeout.context.contract).toBe(TestApi);
+        // Non-enumerable: the context still logs and compares as data.
+        expect(Object.keys(timeout.context)).not.toContain('contract');
+        // The client's log path classified the deadline on TestApi's rung; ALL was never reached.
+        expect(perContract.seen.length).toBeGreaterThan(0);
+        expect(perContract.seen.every((info: ApiMethodInfo) => info.contract === TestApi)).toBe(true);
+        expect(all.seen).toHaveLength(0);
+        expect(
+            ClientRegistry.classify(
+                timeout,
+                new ApiMethodInfo('client', timeout.context.apiName, timeout.context.methodName, timeout.context.contract),
+            ),
+        ).toBe(CallOutcome.TRANSIENT_FAILURE);
     });
     it('classifies duplicate, mismatched and unknown replies with bounded payload-free history', async () => {
         const pair = new Pair(new EchoController(), 2);

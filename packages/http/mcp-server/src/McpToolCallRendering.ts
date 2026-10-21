@@ -11,6 +11,7 @@ import {
     WebpiecesCoreHeaders,
 } from '@webpieces/core-util';
 import { RequestContext } from '@webpieces/core-context';
+import { McpProtocol } from './McpProtocol';
 
 /** `_meta` key carrying the Webpieces requestId on every tools/call result, success or failure. */
 export const MCP_REQUEST_ID_META_KEY = 'webpieces/requestId';
@@ -41,6 +42,11 @@ export class McpCorrelation {
 
     constructor(
         public readonly jsonRpcId: string | number | null,
+        /**
+         * The contract CLASS this request is classified under: the resolved tool's bound `@ApiPath`
+         * contract, or {@link McpProtocol} while no tool is resolved (a protocol step, an unknown tool).
+         */
+        public readonly contract: Function,
         public readonly toolName?: string,
         public readonly operation?: EndpointOperation,
     ) {}
@@ -54,7 +60,7 @@ export class McpCorrelation {
     /** A renderer reached before anything stamped (a failure with no parseable body) still renders. */
     // webpieces-disable no-function-outside-class -- static accessor trio for one context key
     static current(): McpCorrelation {
-        return RequestContext.getUntrusted(McpCorrelation.KEY) ?? new McpCorrelation(null);
+        return RequestContext.getUntrusted(McpCorrelation.KEY) ?? new McpCorrelation(null, McpProtocol);
     }
 
     /** The webpieces requestId of the request being served, as every MCP reply reports it. */
@@ -193,8 +199,9 @@ export class McpDefaultToolCallRenderer implements McpErrorTranslator {
         if (payload.kind === 'implementation') {
             return this.bug(payload, requestId, support);
         }
-        const toolName = McpCorrelation.current().toolName ?? 'unknown';
-        const methodInfo = new ApiMethodInfo('server', 'WpMcpServer', toolName, undefined);
+        const correlation = McpCorrelation.current();
+        const toolName = correlation.toolName ?? 'unknown';
+        const methodInfo = new ApiMethodInfo('server', 'WpMcpServer', toolName, correlation.contract);
         if (ClientRegistry.classify(error, methodInfo) === CallOutcome.TRANSIENT_FAILURE) {
             return this.transient(payload, requestId, this.transientMessage(payload));
         }
