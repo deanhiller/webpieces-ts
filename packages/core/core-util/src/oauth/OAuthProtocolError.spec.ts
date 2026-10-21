@@ -159,8 +159,8 @@ describe('the webpieces default translator and classifier know OAuthProtocolErro
 
     it('a server refusing a caller is NOT a failure; server_error still is; a client receiving one is', () => {
         const classifier = new WebpiecesDefaultErrorClassifier();
-        const server = new ApiMethodInfo('server', 'OAuthApi', 'token');
-        const client = new ApiMethodInfo('client', 'OAuthApi', 'token');
+        const server = new ApiMethodInfo('server', 'OAuthApi', 'token', undefined);
+        const client = new ApiMethodInfo('client', 'OAuthApi', 'token', undefined);
         expect(
             classifier.classify(new OAuthProtocolError(OAuthErrorCode.INVALID_GRANT), server),
         ).toBe(CallOutcome.EXPECTED);

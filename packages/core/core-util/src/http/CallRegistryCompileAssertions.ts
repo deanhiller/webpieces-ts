@@ -13,7 +13,7 @@ class CallRegistryCompileAssertions {
 
     /** The transport fallback is a TransportDefault (timeout + optional strategy), never a bare number. */
     fallbackIsATransportDefault(): void {
-        const context = new CallContext('Api', 'work', WRITE);
+        const context = new CallContext('Api', 'work', WRITE, undefined);
         void CallRegistry.execute(
             CallRegistryCompileAssertions,
             context,

@@ -176,9 +176,16 @@ export class TaskProxyClient {
         // the ONE seam above BOTH GcpTaskInvoker (prod) and InMemoryTaskInvoker (localhost) — whichever
         // TaskInvoker is bound, this method sits above it — so the enqueue edge gets structured
         // `jsonPayload.api.*` logging uniformly, without touching either invoker impl.
-        const info = new ApiMethodInfo('client', this.apiName, methodName, undefined, plan.mask);
+        const info = new ApiMethodInfo(
+            'client',
+            this.apiName,
+            methodName,
+            this.apiClass,
+            undefined,
+            plan.mask,
+        );
         await this.logApiCall.execute(info, requestDto, async () => {
-            const callContext = new CallContext(this.apiName, methodName, WRITE_IDEMPOTENT);
+            const callContext = new CallContext(this.apiName, methodName, WRITE_IDEMPOTENT, this.apiClass);
             const attempt = (timeoutMs: number): Promise<JobReference> =>
                 CallDeadline.run(timeoutMs, callContext, (signal: AbortSignal) =>
                     this.attempt(plan, enqueuePlan, frame.info, requestDto, timeoutMs, signal),

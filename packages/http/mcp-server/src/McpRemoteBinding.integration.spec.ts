@@ -143,7 +143,7 @@ describe('McpApiBinding.remote generated Node client integration', () => {
         logs = new RecordingLoggerFactory();
         LogManager.setFactory(logs);
         ClientRegistry.resetForTests();
-        ClientRegistry.setErrorTranslator(relay);
+        ClientRegistry.setErrorTranslator(relay, 'ALL');
         const jwtHook = new TestJwtHook();
         await startDownstream(jwtHook);
         await startFailureServers();

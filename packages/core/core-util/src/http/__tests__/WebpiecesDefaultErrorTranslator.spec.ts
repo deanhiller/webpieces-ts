@@ -207,7 +207,7 @@ describe('WebpiecesDefaultErrorTranslator.toWire', () => {
 
     it('a client deadline is never titled Gateway Timeout, but keeps its 504 semantics (#1170)', () => {
         const wire = wireOf(
-            new ApiCallTimeoutError(30_000, new CallContext('SaveApi', 'save', WRITE)),
+            new ApiCallTimeoutError(30_000, new CallContext('SaveApi', 'save', WRITE, undefined)),
         );
         expect(wire.status.code).toBe(504);
         expect(wire.status.reason).toBe('Network Timeout');

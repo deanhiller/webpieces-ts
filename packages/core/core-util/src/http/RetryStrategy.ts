@@ -50,7 +50,12 @@ export class RetryStrategy {
 
     // webpieces-disable no-any-unknown -- registry strategies span heterogeneous response DTOs
     private async execute(call: Attempt<unknown>, ctx: CallContext): Promise<unknown> {
-        const methodInfo = new ApiMethodInfo('client', ctx.apiName, ctx.methodName);
+        const methodInfo = new ApiMethodInfo(
+            'client',
+            ctx.apiName,
+            ctx.methodName,
+            ctx.contract,
+        );
         let delayMs = this.initialDelayMs;
         for (let attempt = 1; ; attempt++) {
             // webpieces-disable no-unmanaged-exceptions -- a strategy decides per failure whether to retry

@@ -4,7 +4,7 @@ import { CallRegistry } from '../CallRegistry';
 import { CallContext } from '../CallStrategy';
 import { TransportDefault } from '../TransportDefault';
 import { ClientRegistry } from '../ClientRegistry';
-import { CallOutcome } from '../ErrorClassifier';
+import { CallOutcome, ErrorClassifier } from '../ErrorClassifier';
 import { ApiMethodInfo } from '../ApiMethodInfo';
 import { ApiErrorHttpStatus } from '../ApiErrorHttpStatus';
 import { WebpiecesDefaultErrorTranslator } from '../WebpiecesDefaultErrorTranslator';
@@ -36,6 +36,13 @@ class CapturingLoggerFactory implements LoggerFactory {
 
 class CatalogApi {}
 
+/** A per-contract classifier: this vendor's dependency failures are worth repeating. */
+class DependencyIsTransient implements ErrorClassifier {
+    classify(error: Error): CallOutcome | undefined {
+        return error instanceof ApiDependencyError ? CallOutcome.TRANSIENT_FAILURE : undefined;
+    }
+}
+
 /** Scripted attempts: each call consumes the next outcome (an Error rejects, anything else resolves). */
 class ScriptedAttempts {
     readonly timeouts: number[] = [];
@@ -51,7 +58,7 @@ class ScriptedAttempts {
 const capturing = new CapturingLoggerFactory();
 const original = LogManager.getFactory();
 const context = (operation: EndpointOperation): CallContext =>
-    new CallContext('CatalogApi', 'list', operation);
+    new CallContext('CatalogApi', 'list', operation, undefined);
 const strategy = new RetryStrategy(5_000, 3, 500, 2, 4_000);
 
 beforeAll(() => {
@@ -97,6 +104,22 @@ describe('RetryStrategy', () => {
         const scripted = new ScriptedAttempts([failure, 'ok']);
         await expect(run(scripted, WRITE)).rejects.toBe(failure);
         expect(scripted.timeouts).toHaveLength(1);
+    });
+
+    it('consults the classifier registered for the CONTRACT CLASS the call ran under', async () => {
+        // The context carries only the NAME; CallRegistry.execute stamps the class it was handed, so
+        // the strategy's classification resolves CatalogApi's rung, and another contract's does not.
+        class OtherApi {}
+        const vendorTransient = new DependencyIsTransient();
+        ClientRegistry.setErrorClassifier(vendorTransient, OtherApi);
+        const notMine = new ScriptedAttempts([new ApiDependencyError('theirs'), 'ok']);
+        await expect(run(notMine, READ)).rejects.toBeInstanceOf(ApiDependencyError);
+        expect(notMine.timeouts).toHaveLength(1);
+
+        ClientRegistry.setErrorClassifier(vendorTransient, CatalogApi);
+        const mine = new ScriptedAttempts([new ApiDependencyError('theirs'), 'ok']);
+        expect(await run(mine, READ)).toBe('ok');
+        expect(mine.timeouts).toEqual([5_000, 5_000]);
     });
 
     it('never retries a FAILURE or an EXPECTED outcome', async () => {
@@ -297,7 +320,7 @@ describe('ApiRetriesExhaustedError on the wire', () => {
         }
         expect(received).toBeInstanceOf(ApiRetriesExhaustedError);
         expect(
-            ClientRegistry.classify(received!, new ApiMethodInfo('client', 'EmailApi', 'send')),
+            ClientRegistry.classify(received!, new ApiMethodInfo('client', 'EmailApi', 'send', undefined)),
         ).toBe(CallOutcome.FAILURE);
     });
 });

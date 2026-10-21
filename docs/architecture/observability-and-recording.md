@@ -42,9 +42,10 @@ stamped here — a logging *backend* owns that, reading `RequestContext` on ever
   fixed framework filter (auto-installed at priority 1,000,000 on every route, above AuthFilter)."
   It logs request *and* response/failure for every call, over HTTP **or** via `createApiClient`.
 - **Client outbound** — `packages/http/http-client-core/src/ProxyClient.ts` calls
-  `this.logApiCall.execute(new ApiMethodInfo('client', this.apiName, route.methodName), …)` on the
-  `LogApiCallImpl` its subclass handed to `super(...)`, using the **contract** name so "this client log
-  line MATCHES the server's for the same call."
+  `this.logApiCall.execute(new ApiMethodInfo('client', this.apiName, route.methodName, this.apiClass, …), …)`
+  on the `LogApiCallImpl` its subclass handed to `super(...)`, using the **contract** name so "this
+  client log line MATCHES the server's for the same call", and the contract CLASS, which is the key the
+  error classifier's `CallScope` ladder resolves on.
 - **Cloud-task enqueue** — `TaskProxyClient.enqueue` wraps the enqueue in its own
   `LogApiCallImpl.execute` too, so the queue edge gets the same structured logging as HTTP "without
   touching either invoker."

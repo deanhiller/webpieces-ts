@@ -4,7 +4,7 @@ import { CallContext } from '../CallStrategy';
 import { TransportDefault } from '../TransportDefault';
 import { READ } from '../HttpEndpointOptions';
 
-const work = new CallContext('SameApi', 'work', READ);
+const work = new CallContext('SameApi', 'work', READ, undefined);
 
 afterEach(() => CallRegistry.clear());
 

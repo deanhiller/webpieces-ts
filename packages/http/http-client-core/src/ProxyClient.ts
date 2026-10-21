@@ -160,6 +160,7 @@ export abstract class ProxyClient {
             'client',
             this.apiName,
             route.methodName,
+            this.apiClass,
             undefined,
             route.mask,
             route.noLogging,
@@ -455,7 +456,7 @@ export abstract class ProxyClient {
         let response: Response | undefined;
         // eslint-disable-next-line @webpieces/no-unmanaged-exceptions -- lifecycle reports the original handshake failure
         try {
-            const callContext = new CallContext(this.apiName, route.methodName, route.operation);
+            const callContext = new CallContext(this.apiName, route.methodName, route.operation, this.apiClass);
             const requestStream = await CallRegistry.execute(
                 this.apiClass,
                 callContext,
@@ -531,7 +532,7 @@ export abstract class ProxyClient {
         // webpieces-disable no-unmanaged-exceptions -- report one logical END, preserving the original thrown value
         // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
         try {
-            const callContext = new CallContext(this.apiName, route.methodName, route.operation);
+            const callContext = new CallContext(this.apiName, route.methodName, route.operation, this.apiClass);
             result = await CallRegistry.execute(
                 this.apiClass,
                 callContext,
@@ -682,6 +683,7 @@ export abstract class ProxyClient {
             ClientErrorTranslator.throwIfFailure(
                 this.responseDtoFactory.fromFetch(response, body),
                 this.clientRole(),
+                route,
             );
             return body;
         }
@@ -692,6 +694,7 @@ export abstract class ProxyClient {
         ClientErrorTranslator.throwFailure(
             this.responseDtoFactory.fromFetch(response, protocolError),
             this.clientRole(),
+            route,
         );
     }
 

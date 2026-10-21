@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { ClientRole, ApiDependencyError, ApiErrorPayload, toError } from '@webpieces/core-util';
+import { ClientRole, ApiDependencyError, ApiErrorPayload, READ, RouteMetadata, toError } from '@webpieces/core-util';
 import { ClientErrorTranslator } from '../ClientErrorTranslator';
 import { HttpResponseDtoFactory } from '../HttpResponseDtoFactory';
 import { ResponseBodyReader } from '../ResponseBodyReader';
@@ -35,6 +35,7 @@ function caughtFrom(response: Response, protocolError: ApiErrorPayload): Error {
         ClientErrorTranslator.throwFailure(
             dtoFactory.fromFetch(response, protocolError),
             ClientRole.SERVER,
+            new RouteMetadata('POST', '/read', 'read', READ),
         );
     } catch (err: unknown) {
         const error = toError(err);

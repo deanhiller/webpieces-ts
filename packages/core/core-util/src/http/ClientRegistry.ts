@@ -1,8 +1,19 @@
 import { ErrorTranslator } from './ErrorTranslator';
-import { CallOutcome, ErrorClassifier, KeyedErrorClassifier } from './ErrorClassifier';
+import { CallOutcome, ErrorClassifier } from './ErrorClassifier';
+import { CallScope, CallScopeLadder } from './CallScope';
 import { WEBPIECES_DEFAULT_ERROR_CLASSIFIER } from './WebpiecesDefaultErrorClassifier';
 import { WEBPIECES_DEFAULT_ERROR_TRANSLATOR } from './WebpiecesDefaultErrorTranslator';
 import { ApiMethodInfo } from './ApiMethodInfo';
+
+/** One {@link CallScope} rung of the error-translator ladder. Data only, so a class. */
+class TranslatorSlot {
+    translator?: ErrorTranslator;
+}
+
+/** One {@link CallScope} rung of the error-classifier ladder. Data only, so a class. */
+class ClassifierSlot {
+    classifier?: ErrorClassifier;
+}
 
 /**
  * Derives a base URL for a service name that has NO registered mapping — the pluggable half of
@@ -60,37 +71,31 @@ export class ClientRegistry {
     private static deriver: ServiceUrlDeriver | undefined;
 
     /**
-     * The process's ONE {@link ErrorTranslator}. NEVER undefined — it starts life holding
-     * {@link WEBPIECES_DEFAULT_ERROR_TRANSLATOR}, and {@link ClientRegistry.setErrorTranslator}
-     * REPLACES it. Process-global, set once at startup on the SERVER and in the BROWSER — the same
-     * no-DI pattern as {@link ClientRegistry.mappings} above.
+     * The {@link ErrorTranslator} per {@link CallScope} — method -> API -> ALL, and below every rung
+     * {@link WEBPIECES_DEFAULT_ERROR_TRANSLATOR}, so {@link ClientRegistry.getErrorTranslator} is
+     * never undefined. Process-global, set once at startup on the SERVER and in the BROWSER — the
+     * same no-DI pattern as {@link ClientRegistry.mappings} above.
      *
-     * There is no "did anyone register one" question anywhere in the framework because this field
-     * cannot be empty: every caller makes ONE unconditional call, and an app translator declines an
-     * error by DELEGATING to {@link WebpiecesDefaultErrorTranslator}.
-     *
-     * ONE, not a list, on purpose: an app that has several layers of error policy composes them
-     * INSIDE its own `toWire`, where the precedence is written down, instead of leaving it implicit
-     * in the order two unrelated startup paths happened to register.
+     * ONE translator per scope, not a list, on purpose: an app that has several layers of error
+     * policy for one scope composes them INSIDE its own `toWire`, where the precedence is written
+     * down. The ladder exists because vendors put their errors on the wire in their OWN formats — a
+     * per-API translator reads one vendor's 4xx body (`fromWire`), or writes the error body an
+     * inbound vendor expects back (`toWire`), while every other contract keeps the app's ALL one.
      */
-    private static errorTranslator: ErrorTranslator = WEBPIECES_DEFAULT_ERROR_TRANSLATOR;
+    private static readonly errorTranslators = new CallScopeLadder<TranslatorSlot>(
+        () => new TranslatorSlot(),
+    );
 
     /**
-     * The app/company DEFAULT {@link ErrorClassifier} — ONE per process, reads {@link ApiMethodInfo.side}
-     * so a single classifier covers the server router AND all internal clients. NEVER undefined: it
-     * starts life holding the webpieces built-in ({@link WEBPIECES_DEFAULT_ERROR_CLASSIFIER}) and
-     * {@link ClientRegistry.setDefaultErrorClassifier} replaces it. Populated once at startup on the
-     * SERVER and in the BROWSER — same no-DI pattern as {@link ClientRegistry.mappings}.
+     * The {@link ErrorClassifier} per {@link CallScope} — method -> API -> ALL, and below every rung
+     * {@link WEBPIECES_DEFAULT_ERROR_CLASSIFIER}. A classifier that DEFERS (`undefined`) falls through
+     * to the next rung. The ALL classifier reads {@link ApiMethodInfo.side}, so one classifier covers
+     * the server router AND every internal client; an SDK-wrapping api-client registers its own at
+     * its abstract `XxxApi` class. See {@link ClientRegistry.classify}.
      */
-    private static appDefaultErrorClassifier: ErrorClassifier = WEBPIECES_DEFAULT_ERROR_CLASSIFIER;
-
-    /**
-     * Per-EXTERNAL-client {@link ErrorClassifier}s, keyed by {@link ApiMethodInfo.apiClass}
-     * ('FirestoreAdminClient', 'ClaudeApi', ...). Consulted BEFORE the default tier, so an external
-     * client overrides the default for its own apiClass only. Internal clients / the server register
-     * nothing here and fall through to the default. See {@link ClientRegistry.classify}.
-     */
-    private static readonly errorClassifiersByApiClass = new Map<string, ErrorClassifier>();
+    private static readonly errorClassifiers = new CallScopeLadder<ClassifierSlot>(
+        () => new ClassifierSlot(),
+    );
 
     /** Map a service name to `http://localhost:<port>`. */
     // webpieces-disable no-function-outside-class -- static global singleton (like HeaderRegistry/LogManager); populated once at startup, never DI-injected
@@ -184,74 +189,73 @@ export class ClientRegistry {
     }
 
     /**
-     * Install the app's {@link ErrorTranslator} — the ONE symmetric owner of error translation for
-     * this process, server side AND every client side. Consulted BEFORE webpieces' built-in mapping
-     * in both directions. Call ONCE at startup, on the server AND in the browser, mirroring
-     * {@link ClientRegistry.addMapping}.
+     * Install an {@link ErrorTranslator} for one {@link CallScope}: `'ALL'` (the app's translator,
+     * server side AND every client side), one contract CLASS, or one method of one contract. The
+     * scope is REQUIRED — there is no unscoped spelling. Call at startup, on the server AND in the
+     * browser, mirroring {@link ClientRegistry.addMapping}.
      *
-     * `set`, not `add`: see the field doc above for why a registry LIST is not wanted.
-     */
-    // webpieces-disable no-function-outside-class -- static global singleton (like HeaderRegistry/LogManager); populated once at startup, never DI-injected
-    static setErrorTranslator(translator: ErrorTranslator): void {
-        ClientRegistry.errorTranslator = translator;
-    }
-
-    /**
-     * THE {@link ErrorTranslator} for this process — never `undefined`, so a caller never branches.
+     * ```ts
+     * ClientRegistry.setErrorTranslator(new AppErrorTranslator(), 'ALL');
+     * ClientRegistry.setErrorTranslator(new VendorErrorTranslator(), VendorApi);        // one contract
+     * ClientRegistry.setErrorTranslator(new LegacyErrorTranslator(), VendorApi, 'sync'); // one method
+     * ```
      *
-     * Until an app calls {@link ClientRegistry.setErrorTranslator} this is
-     * {@link WEBPIECES_DEFAULT_ERROR_TRANSLATOR}. A registered translator answers EVERY error and
-     * EVERY response, declining by delegating to the webpieces default (see {@link ErrorTranslator}),
-     * so every call site in the framework is one unconditional line.
+     * `set`, not `add`: see the field doc above for why a per-scope LIST is not wanted. A translator
+     * declines an error by DELEGATING to {@link WebpiecesDefaultErrorTranslator} — not to the next
+     * rung — exactly as before.
      */
     // webpieces-disable no-function-outside-class -- static global singleton (like HeaderRegistry/LogManager); populated once at startup, never DI-injected
-    static getErrorTranslator(): ErrorTranslator {
-        return ClientRegistry.errorTranslator;
+    static setErrorTranslator(translator: ErrorTranslator, ...scope: CallScope): void {
+        ClientRegistry.errorTranslators.at(...scope).translator = translator;
     }
 
     /**
-     * Set the app/company DEFAULT error classifier — ONE per process, covering the server router and
-     * all internal clients (it branches on {@link ApiMethodInfo.side}). Call ONCE at startup, on the
-     * server AND in the browser. Overrides the webpieces built-in for calls no per-apiClass classifier
-     * claims. See {@link ErrorClassifier}.
+     * THE {@link ErrorTranslator} for one call — method -> API -> ALL ->
+     * {@link WEBPIECES_DEFAULT_ERROR_TRANSLATOR}, never `undefined`, so a caller never branches.
+     *
+     * Both arguments are required so every call site states what it knows: the client and the server
+     * pass the route's contract class and method; a failure with no route (an unmatched request, a
+     * failure before routing) passes `undefined, undefined` and reaches the ALL rung alone.
      */
     // webpieces-disable no-function-outside-class -- static global singleton (like HeaderRegistry/LogManager); populated once at startup, never DI-injected
-    static setDefaultErrorClassifier(classifier: ErrorClassifier): void {
-        ClientRegistry.appDefaultErrorClassifier = classifier;
+    static getErrorTranslator(api: Function | undefined, methodName: string | undefined): ErrorTranslator {
+        const registered = ClientRegistry.errorTranslators
+            .rungs(api, methodName)
+            .find((slot: TranslatorSlot) => slot.translator !== undefined)?.translator;
+        return registered ?? WEBPIECES_DEFAULT_ERROR_TRANSLATOR;
     }
 
     /**
-     * Register a per-EXTERNAL-client error classifier, keyed by its
-     * {@link KeyedErrorClassifier.apiClass} (e.g. 'FirestoreAdminClient'). Consulted BEFORE the
-     * default tier for calls with that apiClass. Call ONCE at startup. See {@link ErrorClassifier}.
+     * Install an {@link ErrorClassifier} for one {@link CallScope}: `'ALL'` (the app/company
+     * classifier — it reads {@link ApiMethodInfo.side}, so it covers the server router and every
+     * internal client), one contract CLASS (an SDK-wrapping api-client keys by its abstract `XxxApi`),
+     * or one method of one contract. The scope is REQUIRED. Call at startup, on the server AND in the
+     * browser. See {@link ErrorClassifier}.
      */
     // webpieces-disable no-function-outside-class -- static global singleton (like HeaderRegistry/LogManager); populated once at startup, never DI-injected
-    static addErrorClassifier(keyed: KeyedErrorClassifier): void {
-        ClientRegistry.errorClassifiersByApiClass.set(keyed.apiClass, keyed.classifier);
+    static setErrorClassifier(classifier: ErrorClassifier, ...scope: CallScope): void {
+        ClientRegistry.errorClassifiers.at(...scope).classifier = classifier;
     }
 
     /**
-     * The {@link CallOutcome} of a thrown API-call error. Resolved most-specific-first, and ALWAYS
-     * definitive:
-     *   1. the per-apiClass classifier, if one is registered for `methodInfo.apiClass` — unless it defers;
-     *   2. else the app default classifier — unless it defers;
-     *   3. else the webpieces built-in ({@link WEBPIECES_DEFAULT_ERROR_CLASSIFIER}), which never defers.
+     * The {@link CallOutcome} of a thrown API-call error. Resolved on the {@link CallScope} ladder of
+     * `methodInfo.contract` / `methodInfo.methodName`, most specific first, and ALWAYS definitive:
+     *   1. the method classifier — unless it defers;
+     *   2. else the API classifier — unless it defers;
+     *   3. else the ALL classifier — unless it defers;
+     *   4. else the webpieces built-in ({@link WEBPIECES_DEFAULT_ERROR_CLASSIFIER}), which never defers.
      *
      * The ONE verdict read by `RetryStrategy` (retry only TRANSIENT), `CallRegistry`'s per-attempt
      * log line, `LogApiCall` (EXPECTED → OTHER, else FAIL) and the MCP renderer's retry advice.
      */
     // webpieces-disable no-function-outside-class -- static global singleton (like HeaderRegistry/LogManager); populated once at startup, never DI-injected
     static classify(error: Error, methodInfo: ApiMethodInfo): CallOutcome {
-        const perClient = ClientRegistry.errorClassifiersByApiClass.get(methodInfo.apiClass);
-        if (perClient !== undefined) {
-            const verdict = perClient.classify(error, methodInfo);
+        const rungs = ClientRegistry.errorClassifiers.rungs(methodInfo.contract, methodInfo.methodName);
+        for (const slot of rungs) {
+            const verdict = slot.classifier?.classify(error, methodInfo);
             if (verdict !== undefined) {
                 return verdict;
             }
-        }
-        const verdict = ClientRegistry.appDefaultErrorClassifier.classify(error, methodInfo);
-        if (verdict !== undefined) {
-            return verdict;
         }
         return WEBPIECES_DEFAULT_ERROR_CLASSIFIER.classify(error, methodInfo);
     }
@@ -260,17 +264,16 @@ export class ClientRegistry {
      * Put the process-globals back to the state a fresh process starts in. For TESTS, so one spec
      * cannot leak its registrations into the next.
      *
-     * It RESTORES the webpieces defaults rather than emptying the pluggable slots, which is the whole
-     * reason it is not called `clear()` any more: `getErrorTranslator()` and the default error
-     * classifier are non-optional now, so "cleared" is not a state they have. A spec that wants
-     * webpieces' own behaviour back asks for exactly that.
+     * It empties every translator and classifier rung, which RESTORES the webpieces defaults:
+     * `getErrorTranslator(...)` and `classify(...)` fall through to them below every rung, so
+     * "cleared" is not a state they have. A spec that wants webpieces' own behaviour back asks for
+     * exactly that.
      */
     // webpieces-disable no-function-outside-class -- static global singleton (like HeaderRegistry/LogManager); populated once at startup, never DI-injected
     static resetForTests(): void {
         ClientRegistry.mappings.clear();
         ClientRegistry.deriver = undefined;
-        ClientRegistry.errorTranslator = WEBPIECES_DEFAULT_ERROR_TRANSLATOR;
-        ClientRegistry.appDefaultErrorClassifier = WEBPIECES_DEFAULT_ERROR_CLASSIFIER;
-        ClientRegistry.errorClassifiersByApiClass.clear();
+        ClientRegistry.errorTranslators.clear();
+        ClientRegistry.errorClassifiers.clear();
     }
 }

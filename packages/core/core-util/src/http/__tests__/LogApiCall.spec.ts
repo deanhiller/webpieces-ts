@@ -13,7 +13,7 @@ import {
     ApiRetriesExhaustedError,
     ApiUnavailableError,
 } from '../../errors';
-import { CallOutcome, ErrorClassifier, KeyedErrorClassifier } from '../ErrorClassifier';
+import { CallOutcome, ErrorClassifier } from '../ErrorClassifier';
 import { MaskSpec } from '../LogFieldMask';
 import { LogManager } from '../../logging/LogManager';
 import { HeaderRegistry } from '../HeaderRegistry';
@@ -48,9 +48,12 @@ class RecordingApiCallContext implements ApiCallContext {
     }
 }
 
+/** A synthetic contract CLASS: the classifier ladder is keyed by it, never by its name. */
+class SaveApi {}
+
 /** The call identity per side: apiClass 'SaveApi' matches client+server; controllerName is server impl. */
 const info = (side: ApiSide): ApiMethodInfo =>
-    new ApiMethodInfo(side, 'SaveApi', 'save', 'SaveController');
+    new ApiMethodInfo(side, 'SaveApi', 'save', SaveApi, 'SaveController');
 const API = WebpiecesCoreHeaders.API_CALL_INFO;
 
 describe('LogApiCall.execute — success + active guard', () => {
@@ -85,7 +88,7 @@ describe('LogApiCall.execute — success + active guard', () => {
 
         const tag = ctx.values()[0];
         expect(tag.method).toEqual(
-            new ApiMethodInfo('server', 'SaveApi', 'save', 'SaveController'),
+            new ApiMethodInfo('server', 'SaveApi', 'save', undefined, 'SaveController'),
         );
         expect(tag.method.apiClass).toBe('SaveApi');
         expect(tag.type).toBe('request');
@@ -188,11 +191,9 @@ describe('LogApiCall.execute — pluggable per-client failure classification', (
         ClientRegistry.resetForTests();
     });
 
-    it('a per-apiClass classifier flips a client-side error from failure → success (OTHER)', async () => {
+    it('a per-contract classifier flips a client-side error from failure → success (OTHER)', async () => {
         // Firestore-style: a not-found miss on this client is EXPECTED, not a failure.
-        ClientRegistry.addErrorClassifier(
-            new KeyedErrorClassifier('SaveApi', new NotFoundIsExpected()),
-        );
+        ClientRegistry.setErrorClassifier(new NotFoundIsExpected(), SaveApi);
 
         const ctx = new RecordingApiCallContext();
 
@@ -211,9 +212,7 @@ describe('LogApiCall.execute — pluggable per-client failure classification', (
     });
 
     it('an error the classifier DEFERS on still uses the built-in (client → failure)', async () => {
-        ClientRegistry.addErrorClassifier(
-            new KeyedErrorClassifier('SaveApi', new NotFoundIsExpected()),
-        );
+        ClientRegistry.setErrorClassifier(new NotFoundIsExpected(), SaveApi);
 
         const ctx = new RecordingApiCallContext();
 
@@ -464,6 +463,7 @@ describe('LogApiCall.execute — opt-in field masking', () => {
             'HelperFsdbApi',
             'getEmailAccount',
             undefined,
+            undefined,
             new MaskSpec({ refreshToken: 'full', accessToken: 'last4' }),
         );
 
@@ -590,7 +590,7 @@ describe('LogApiCall.execute — noLogging routes are not api-logged', () => {
 
     /** The log-shipping endpoint: a real call identity, declared noLogging. */
     const noLoggingInfo = (side: ApiSide): ApiMethodInfo =>
-        new ApiMethodInfo(side, 'BrowserLogApi', 'sendBatch', undefined, undefined, true);
+        new ApiMethodInfo(side, 'BrowserLogApi', 'sendBatch', undefined, undefined, undefined, true);
 
     /** True when any captured line carries `marker` — the "it still logs" half of each pair. */
     const logged = (marker: string): boolean =>
@@ -681,7 +681,7 @@ describe('LogApiCall.execute — noLogging routes are not api-logged', () => {
     });
 
     it('defaults to false, so every existing ApiMethodInfo caller keeps logging', () => {
-        expect(new ApiMethodInfo('client', 'SaveApi', 'save').noLogging).toBe(false);
+        expect(new ApiMethodInfo('client', 'SaveApi', 'save', undefined).noLogging).toBe(false);
         expect(info('client').noLogging).toBe(false);
         expect(noLoggingInfo('client').noLogging).toBe(true);
     });
@@ -696,14 +696,15 @@ describe('LogApiCall.execute — noLogging routes are not api-logged', () => {
             'fetchManifest',
             undefined,
             undefined,
+            undefined,
             false,
             true,
             true,
         );
         expect(hiddenButLogged.hideProgress).toBe(true);
         expect(hiddenButLogged.allowUpgradeInFlight).toBe(true);
-        expect(new ApiMethodInfo('client', 'SaveApi', 'save').hideProgress).toBe(false);
-        expect(new ApiMethodInfo('client', 'SaveApi', 'save').allowUpgradeInFlight).toBe(false);
+        expect(new ApiMethodInfo('client', 'SaveApi', 'save', undefined).hideProgress).toBe(false);
+        expect(new ApiMethodInfo('client', 'SaveApi', 'save', undefined).allowUpgradeInFlight).toBe(false);
 
         await ctx.logApiCall.execute(hiddenButLogged, { q: 'x' }, async () => ({ ok: true }));
         expect(logged('[API-client-req]')).toBe(true);
@@ -788,6 +789,7 @@ describe('LogApiCall — logged body cap (#1300)', () => {
             'client',
             'HelperFsdbApi',
             'getEmailAccount',
+            undefined,
             undefined,
             new MaskSpec({ refreshToken: 'full' }),
         );

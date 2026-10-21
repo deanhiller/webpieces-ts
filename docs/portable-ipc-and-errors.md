@@ -41,6 +41,16 @@ which mirror `ApiRequestTimeoutError` and `ApiRateLimitedError`); 500 and above 
 There are no HTTP-prefixed aliases. Applications that need a custom exception TYPE for a status
 register an `ErrorTranslator` on `ClientRegistry` and THROW it from `fromWire`.
 
+The translator sits on the same `CallScope` ladder as `CallRegistry`'s strategy and timeout,
+resolved method -> API -> ALL -> `WebpiecesDefaultErrorTranslator`, and the scope is required:
+`ClientRegistry.setErrorTranslator(t, 'ALL')` for the app, `setErrorTranslator(t, VendorApi)` for a
+contract whose errors travel in a vendor's OWN format, `setErrorTranslator(t, VendorApi, 'method')`
+for one method. The client resolves it for the called route's contract class and method, the server's
+`ExpressWrapper` for the matched route (a failure with no route reaches ALL alone), and streaming
+error controls for the streaming route. A translator still declines by delegating to
+`WebpiecesDefaultErrorTranslator`, not to the next rung. HTTP only: `IpcRegistry` keeps its single
+`IpcErrorTranslator`.
+
 The webpieces default preserves retry-relevant dependency semantics: received 408/504 becomes
 `ApiDependencyTimeoutError`, 429 becomes `ApiDependencyBackoffError`, 502 becomes
 `ApiBadGatewayError`, and 503 becomes `ApiUnavailableError` (or backoff when `Retry-After` is
@@ -60,10 +70,13 @@ MCP renderer's model-visible `retry` advice — with a `CallOutcome`:
 | `TRANSIENT_FAILURE` | broken now, may work if repeated | unavailable, connection, timeouts, 429 / backoff, bad-gateway |
 | `FAILURE` | broken, repeating will not help | a 4xx a CLIENT received (our bug), implementation, 501, a generic dependency defect, retries exhausted |
 
-Tiers, most specific first: `ClientRegistry.addErrorClassifier(new KeyedErrorClassifier(apiClass,
-c))` per external client, then `ClientRegistry.setDefaultErrorClassifier(c)` (one per app; reads
-`side`), then `WebpiecesDefaultErrorClassifier`. A classifier returns `undefined` to defer to the next
-tier. The classifier judges the ERROR; whether repeating is safe for the ENDPOINT is
+Classifiers sit on the same `CallScope` ladder, keyed by the contract CLASS (never its name), and
+the scope is required: `ClientRegistry.setErrorClassifier(c, VendorApi, 'method')` for one method,
+`setErrorClassifier(c, VendorApi)` for one contract (an SDK-wrapping api-client keys by its abstract
+`XxxApi`), `setErrorClassifier(c, 'ALL')` once per app (reads `side`), then
+`WebpiecesDefaultErrorClassifier`. A classifier returns `undefined` to defer to the next rung. The
+class reaches the classifier as `ApiMethodInfo.contract` (and `CallContext.contract` inside a
+strategy); a call with no contract class reaches the ALL rung alone. The classifier judges the ERROR; whether repeating is safe for the ENDPOINT is
 `CallContext.operation`'s question (`READ` / `WRITE_IDEMPOTENT` / `WRITE`) — a transient error on a
 `WRITE` may already have happened, so `RetryStrategy` never retries one.
 
