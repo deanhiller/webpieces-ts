@@ -95,9 +95,11 @@ export function triggerMainSyncRefresh(workspaceRoot: string, hangTimeoutMinutes
         const claim = mainSyncLocks.claimRefresh(workspaceRoot, hangTimeoutMinutes);
         if (claim.outcome !== RefreshClaimOutcome.CLAIMED || claim.lock === null) return;
         spawnRefresher(workspaceRoot, claim.lock, claim.lastRefreshStartedMs);
-    } catch (err: unknown) { // webpieces-disable catch-must-propagate -- warming a background cache must never block or fail the agent's tool call; there is no caller to propagate to
+    } catch (err: unknown) { // webpieces-disable catch-must-propagate -- warming a background cache must never block or fail the agent's tool call; there is no caller to propagate to, so the failure is recorded in the async-refresh log instead
         const error = toError(err);
-        void error;
+        // A persistent claim failure (EACCES/EPERM on the lock) would otherwise stop every refresh
+        // without a trace. Only failures are logged; a throttled skip still writes nothing.
+        logSyncEvent(workspaceRoot, new SyncLogEvent('ERROR', process.pid, '-', `spawner claim/spawn failed: ${error.message}`));
     }
 }
 
