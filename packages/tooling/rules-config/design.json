@@ -33,6 +33,14 @@
                     "level": 2
                 },
                 {
+                    "id": "CommandTimeouts",
+                    "className": "CommandTimeouts",
+                    "kind": "class",
+                    "scope": "singleton",
+                    "file": "packages/tooling/repo-workflow-core/src/command-timeouts.ts",
+                    "level": 2
+                },
+                {
                     "id": "ConfigFile",
                     "className": "ConfigFile",
                     "kind": "class",
@@ -216,6 +224,15 @@
                     "tokenKey": "class:packages/tooling/tooling-common/src/atomic-file.ts#AtomicFile",
                     "paramName": "atomicFile",
                     "paramType": "AtomicFile"
+                },
+                {
+                    "from": "MainSyncStatusService",
+                    "to": "CommandTimeouts",
+                    "injection": "type",
+                    "token": "CommandTimeouts",
+                    "tokenKey": "class:packages/tooling/repo-workflow-core/src/command-timeouts.ts#CommandTimeouts",
+                    "paramName": "timeouts",
+                    "paramType": "CommandTimeouts"
                 },
                 {
                     "from": "MainSyncStatusService",

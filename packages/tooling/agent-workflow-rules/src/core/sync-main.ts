@@ -1,10 +1,14 @@
 import { BranchCreationGuardConfig } from '../configs/rule-configs';
-import { BranchReaper, DEFAULT_HANG_TIMEOUT_MINUTES, MainSyncStatusFile, MergedBranchesCache, MergedBranchesService, ReapResult, computeAllMainSyncStatuses, writeMainSyncStatusFile, writeMainSyncLock, tryAcquireMainSyncLock, finishedLock } from '@webpieces/repo-workflow-core';
+import { BranchReaper, MainSyncLockService, MainSyncStatusFile, MainSyncStatusService, MergedBranchesCache, MergedBranchesService, ReapResult, RefreshOutcome } from '@webpieces/repo-workflow-core';
 import { loadAndValidate } from '@webpieces/rules-config';
 
 import { toError } from '@webpieces/tooling-common/to-error';
 import { logSyncEvent, SyncLogEvent } from './main-sync-log';
 import { logStream, StreamIdentity } from './log-stream';
+
+// The services this detached process writes its results through, and adopts and deletes its lock through.
+const status = new MainSyncStatusService();
+const locks = new MainSyncLockService(undefined, undefined, status);
 
 /**
  * The detached, fire-and-forget refresher spawned (by file path, not a bin) from
@@ -12,12 +16,18 @@ import { logStream, StreamIdentity } from './log-stream';
  * same-file-overlap) and writes `.webpieces/main-sync-status.json` so the next hook call reads it
  * instantly. Nobody reads our exit code or output — we run after the spawning hook has returned.
  *
- * Concurrency: a lock file (`.webpieces/main-sync.lock.json`) holds `inprocess`/`finished` + a start
- * epoch + the holder's pid, taken with an ATOMIC exclusive create. If another refresher already holds
- * it and is alive, we exit immediately (don't pile up `git fetch`es). If the holder is finished, dead,
- * or older than hangTimeoutMinutes, the lock is reclaimed and we proceed.
+ * Concurrency: `.webpieces/main-sync.lock.json` is a mutex whose EXISTENCE is the lock (it holds only
+ * the holder's pid and start epoch). The SPAWNER creates it exclusively (main-sync-refresh.ts →
+ * claimRefresh), only once MIN_REFRESH_INTERVAL_MINUTES have passed since the last start, and passes
+ * its `startedMs` on argv. This child ADOPTS that lock (rewriting the pid to its own) and never creates
+ * one itself, so it cannot race its spawner. A lock that is no longer on disk (reclaimed while this
+ * child booted) means another refresher owns the run, and we exit.
  *
- * argv: [, , repoRoot, hangTimeoutMinutes, sessionId, agentId, hook]
+ * Ordering at the end is the point: the status file, carrying `lastRefreshStartedMs` and the outcome,
+ * is written FIRST and the lock deleted LAST, so no process can win the next lock race and still read
+ * the previous stamp.
+ *
+ * argv: [, , repoRoot, claimStarted, sessionId, agentId, hook]
  *
  * The last three are the SPAWNER's LogStream identity, and adopting them here is the whole reason
  * they are passed. This process has its own fresh module-level `logStream`; left unidentified it
@@ -32,24 +42,20 @@ export function main(): void {
     logStream.identify(spawnerIdentity(process.argv));
     refreshMainSync(
         process.argv[2] ?? process.cwd(),
-        hangTimeoutFromArgv(process.argv[3]),
+        claimStartedFromArgv(process.argv),
         process.argv.slice(2).join(' '),
     );
 }
 
 /**
- * Parse the hang timeout off argv, WITHOUT `||`.
- *
- * `Number(argv[3]) || DEFAULT` silently rewrote a configured `0` — "never treat a lock as stale" — into
- * the 5-minute default, because `0` is falsy. The knob now has exactly one reader (the branch-state
- * policy entry), so a value that survives the config only to be discarded at the process boundary is
- * the whole knob being a lie. Only a MISSING or non-numeric argument falls back.
+ * The `started` of the lock claim the spawner took for this run — argv position 3, which is
+ * `refresherArgv`'s 2 (see the offset note there). NaN when absent or malformed, which matches no
+ * lock, so a hand-run of this file without a claim adopts nothing and exits as SKIP_INPROGRESS.
  */
 // webpieces-disable no-function-outside-class -- argv parse for this detached main(), matching the file's existing shape
-export function hangTimeoutFromArgv(raw: string | undefined): number {
-    if (raw === undefined || raw.trim() === '') return DEFAULT_HANG_TIMEOUT_MINUTES;
-    const parsed = Number(raw);
-    return Number.isFinite(parsed) ? parsed : DEFAULT_HANG_TIMEOUT_MINUTES;
+export function claimStartedFromArgv(argv: string[]): number {
+    const raw = argv[3];
+    return raw === undefined || raw.trim() === '' ? Number.NaN : Number(raw);
 }
 
 /**
@@ -70,7 +76,7 @@ export function spawnerIdentity(argv: string[]): StreamIdentity {
  * test importing another module's `main` is what no-process-exit-outside-main exists to prevent.
  */
 // webpieces-disable no-function-outside-class -- module-level entry point of this detached refresher, matching the file's existing shape
-export function refreshMainSync(repoRoot: string, hangTimeoutMinutes: number, argvDetail: string = ''): void {
+export function refreshMainSync(repoRoot: string, claimStarted: number, argvDetail: string = ''): void {
     const startedMs = Date.now();
 
     // First action: prove the detached child actually started. If the async-refresh stream has no START line
@@ -79,21 +85,21 @@ export function refreshMainSync(repoRoot: string, hangTimeoutMinutes: number, ar
 
     // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
     try {
-        // ONE atomic acquire — not a check followed by a write. The old check-then-write pair had a
-        // gap in which two detached children could both pass the check and then both run `git fetch`.
-        const lock = tryAcquireMainSyncLock(repoRoot, hangTimeoutMinutes);
+        // ADOPT the spawner's lock, never create one: the spawner already won it atomically.
+        const lock = locks.adoptMainSyncLock(repoRoot, claimStarted);
         if (!lock) {
-            logSyncEvent(repoRoot, new SyncLogEvent('SKIP_INPROGRESS', process.pid, '-', 'another refresh is in progress'));
+            logSyncEvent(repoRoot, new SyncLogEvent('SKIP_INPROGRESS', process.pid, '-', `the spawner's lock ${String(claimStarted)} is no longer on disk; another refresh owns this run`));
             return;
         }
+        let file: MainSyncStatusFile | null = null;
+        let outcome = RefreshOutcome.ERROR;
         // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
         try {
             // EVERY worktree's branch, not just ours. The cache is shared by the whole repo but used
             // to describe only the branch of whichever tree won this lock, so every other worktree's
             // guards read a cross-branch cache and abstained. One fetch + one `gh` call now arms all
             // of them; the map is rebuilt from the live worktree set, so dead branches drop out.
-            const file = computeAllMainSyncStatuses(repoRoot);
-            writeMainSyncStatusFile(repoRoot, file);
+            file = status.computeAllMainSyncStatuses(repoRoot);
 
             // Second slow signal, same lock, same detached run: which local branches are dead. One bulk
             // `gh pr list --state merged` call. The branch-creation-guard reads the result to enforce its
@@ -111,16 +117,24 @@ export function refreshMainSync(repoRoot: string, hangTimeoutMinutes: number, ar
             // to be asked. Reuses the verdicts we JUST computed (no second `gh` call).
             const reaped = autoReap(repoRoot, cache);
 
-            // FINISH after a successful write — START-without-FINISH means we were killed mid-run.
+            // FINISH after a successful run — START-without-FINISH means we were killed mid-run.
+            outcome = RefreshOutcome.OK;
             const names = Object.keys(file.branches);
             logSyncEvent(repoRoot, new SyncLogEvent(
                 'FINISH', process.pid, names.join(','),
                 `branches=${String(names.length)} ${names.map(summarize(file)).join(' ')} deletableBranches=${String(cache.deletable.length)} reaped=${String(reaped)} ms=${String(Date.now() - startedMs)}`,
             ));
         } finally {
-            // Always flip the lock off so a compute failure can't wedge the guard until the
-            // staleness reclaim kicks in.
-            writeMainSyncLock(repoRoot, finishedLock(lock.started));
+            // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
+            try {
+                // Stamp FIRST: a failed run (offline, gh auth) still counts as a run, so it is retried
+                // after MIN_REFRESH_INTERVAL_MINUTES rather than hammered on every tool call.
+                recordRun(repoRoot, file, lock.startedMs, outcome);
+            } finally {
+                // Lock LAST, and only if still ours: a run that hung past its window was reclaimed,
+                // and deleting the newer holder's lock would let a third refresher start beside it.
+                locks.releaseMainSyncLock(repoRoot, lock);
+            }
         }
     } catch (err: unknown) {
         const error = toError(err);
@@ -128,6 +142,22 @@ export function refreshMainSync(repoRoot: string, hangTimeoutMinutes: number, ar
         // spawns a fresh refresher) — but record WHY it died so the failure isn't invisible.
         logSyncEvent(repoRoot, new SyncLogEvent('ERROR', process.pid, '-', `${error.message} | ${error.stack ?? ''}`));
     }
+}
+
+/**
+ * Write this run's results and its stamp to main-sync-status.json (atomically). With fresh branch data
+ * the whole document is replaced; without it (the compute threw) only the stamp and outcome are
+ * updated, keeping the previous branch data the guards are still reading.
+ */
+// webpieces-disable no-function-outside-class -- module-level helper of this detached main(), matching the file's existing shape
+function recordRun(repoRoot: string, file: MainSyncStatusFile | null, startedMs: number, outcome: RefreshOutcome): void {
+    if (file === null) {
+        status.recordRefreshOutcome(repoRoot, startedMs, outcome);
+        return;
+    }
+    file.lastRefreshStartedMs = startedMs;
+    file.lastRefreshOutcome = outcome;
+    status.writeMainSyncStatusFile(repoRoot, file);
 }
 
 /**

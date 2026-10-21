@@ -6,7 +6,7 @@ import * as path from 'path';
 
 import { DotWebpieces, WORKTREE_STATE_DIR } from '@webpieces/tooling-common';
 import { StateDirMigrator } from '@webpieces/tooling-common';
-import { MainSyncStatusService, MainSyncLock } from '@webpieces/repo-workflow-core';
+import { MainSyncStatusService, MainSyncLock, MainSyncLockService } from '@webpieces/repo-workflow-core';
 
 
 function git(cwd: string, cmd: string): string {
@@ -160,6 +160,7 @@ describe('legacy .webpieces migration — partial and repeat runs', () => {
 let worktreeA: string;
 let worktreeB: string;
 let service: MainSyncStatusService;
+let locks: MainSyncLockService;
 
 function makeTwoWorktreeRepo(): void {
     tmp = specTempDirs.makeReal('dotwp-lock-');
@@ -176,6 +177,7 @@ function makeTwoWorktreeRepo(): void {
     git(primary, `worktree add -q -b a ${worktreeA}`);
     git(primary, `worktree add -q -b b ${worktreeB}`);
     service = new MainSyncStatusService(new DotWebpieces());
+    locks = new MainSyncLockService(new DotWebpieces(), undefined, service);
 }
 
 describe('main-sync single-flight across worktrees', () => {
@@ -183,22 +185,22 @@ describe('main-sync single-flight across worktrees', () => {
     afterEach(cleanupMigrationRepo);
 
     it('only ONE of two worktrees acquires the lock — the other must skip and read the status', () => {
-        const first = service.tryAcquireMainSyncLock(worktreeA, 5, Date.now(), process.pid);
-        const second = service.tryAcquireMainSyncLock(worktreeB, 5, Date.now(), process.pid);
+        const first = locks.tryAcquireMainSyncLock(worktreeA, 5, Date.now(), process.pid);
+        const second = locks.tryAcquireMainSyncLock(worktreeB, 5, Date.now(), process.pid);
 
         expect(first).not.toBeNull();
         expect(second).toBeNull();
         // Same physical file from both trees — a per-worktree lock would have let both through.
-        expect(service.mainSyncLockPath(worktreeA)).toBe(service.mainSyncLockPath(worktreeB));
+        expect(locks.mainSyncLockPath(worktreeA)).toBe(locks.mainSyncLockPath(worktreeB));
         expect(fs.existsSync(path.join(primary, '.webpieces', 'main-sync.lock.json'))).toBe(true);
     });
 
     it('a STALE lock is recoverable — a hung holder does not wedge every worktree forever', () => {
         const longAgo = Date.now() - 60 * 60 * 1000;
-        service.writeMainSyncLock(worktreeA, new MainSyncLock('inprocess', longAgo, process.pid));
+        locks.writeMainSyncLock(worktreeA, new MainSyncLock(process.pid, longAgo));
 
         // hangTimeoutMinutes has passed, so the next refresher — in ANOTHER worktree — takes it over.
-        const taken = service.tryAcquireMainSyncLock(worktreeB, 5, Date.now(), process.pid);
+        const taken = locks.tryAcquireMainSyncLock(worktreeB, 5, Date.now(), process.pid);
         expect(taken).not.toBeNull();
     });
 
@@ -210,8 +212,8 @@ describe('main-sync lock recovery and status visibility', () => {
 
     it('a lock held by a DEAD process is reclaimed immediately, without waiting out the timeout', () => {
         // pid 0x7FFFFFFF is not a live process; the holder is provably gone, so waiting is pointless.
-        service.writeMainSyncLock(worktreeA, new MainSyncLock('inprocess', Date.now(), 0x7FFFFFFF));
-        expect(service.tryAcquireMainSyncLock(worktreeB, 5, Date.now(), process.pid)).not.toBeNull();
+        locks.writeMainSyncLock(worktreeA, new MainSyncLock(0x7FFFFFFF, Date.now()));
+        expect(locks.tryAcquireMainSyncLock(worktreeB, 5, Date.now(), process.pid)).not.toBeNull();
     });
 
     it('the status file written by the winner is visible from every other worktree', () => {

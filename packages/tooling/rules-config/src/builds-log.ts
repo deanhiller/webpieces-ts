@@ -377,7 +377,7 @@ export class BuildsLog {
      * Take the ledger lock, retrying every `LOCK_RETRY_MS` until `LOCK_TIMEOUT_MS`. False means "carry on
      * without it" — never an error, and never a reason to skip the append.
      *
-     * The mechanism is `MainSyncStatusService.tryAcquireMainSyncLock`'s, proven and deliberately copied
+     * The mechanism is `MainSyncLockService.tryAcquireMainSyncLock`'s, proven and deliberately copied
      * rather than re-invented: an `wx` (O_CREAT|O_EXCL) create so exactly one of N racers wins, a payload
      * carrying pid + started so a dead holder is identifiable, stale reclaim gated on pid liveness, and a
      * re-read afterwards to confirm the entry on disk is OURS (a simultaneous reclaimer could have

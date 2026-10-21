@@ -12,3 +12,5 @@ export * from './branch-archiver';
 export * from './branch-mutation-log';
 export * from './review-identity-stamp';
 export * from './branch-identity';
+export * from './command-timeouts';
+export * from './main-sync-lock';

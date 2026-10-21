@@ -7,7 +7,7 @@ import * as path from 'path';
 
 import { DotWebpieces, WORKTREE_STATE_DIR } from '@webpieces/tooling-common';
 import { MergedBranchesService } from '@webpieces/repo-workflow-core';
-import { MainSyncStatusService } from '@webpieces/repo-workflow-core';
+import { MainSyncLockService, MainSyncStatusService } from '@webpieces/repo-workflow-core';
 import { BranchMutationLog, BranchMutationEvent } from '@webpieces/repo-workflow-core';
 import { RepoRootFinder } from './repo-root';
 import { findConfigFile } from './config-file';
@@ -198,11 +198,12 @@ describe('scope assignment from inside a linked worktree', () => {
 
     it('main-sync status AND lock are SHARED — one refresher per repo, not per worktree', () => {
         const service = new MainSyncStatusService(new DotWebpieces());
+        const locks = new MainSyncLockService(new DotWebpieces());
         expect(service.mainSyncStatusPath(worktree))
             .toBe(path.join(primary, '.webpieces', 'main-sync-status.json'));
-        expect(service.mainSyncLockPath(worktree))
+        expect(locks.mainSyncLockPath(worktree))
             .toBe(path.join(primary, '.webpieces', 'main-sync.lock.json'));
-        expect(service.mainSyncLockPath(worktree)).toBe(service.mainSyncLockPath(primary));
+        expect(locks.mainSyncLockPath(worktree)).toBe(locks.mainSyncLockPath(primary));
     });
 
     it('branch-mutations.log is LOCAL — one writer per worktree, and it survives the worktree', () => {

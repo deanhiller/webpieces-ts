@@ -15,6 +15,7 @@ graph TD
     AtomicFile["AtomicFile"]
     BranchMutationLog["BranchMutationLog"]
     ChecklistOverrideService["ChecklistOverrideService"]
+    CommandTimeouts["CommandTimeouts"]
     ConfigFile["ConfigFile"]
     ConfigLoader["ConfigLoader"]
     DiffScope["DiffScope"]
@@ -37,6 +38,7 @@ graph TD
     InstructAiDocSet --> BranchMutationLog
     MainSyncFileStore --> AtomicFile
     MainSyncStatusService --> AtomicFile
+    MainSyncStatusService --> CommandTimeouts
     MainSyncStatusService --> DotWebpieces
     MainSyncStatusService --> MainSyncFileStore
     MainSyncStatusService --> WorktreeService

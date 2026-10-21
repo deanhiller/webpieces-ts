@@ -5,8 +5,8 @@ import * as fs from 'fs';
 import * as path from 'path';
 
 import { triggerMainSyncRefresh, resetMainSyncRefreshLatchForTest, refresherArgv } from './main-sync-refresh';
-import { spawnerIdentity } from './sync-main';
-import { DEFAULT_HANG_TIMEOUT_MINUTES } from '@webpieces/repo-workflow-core';
+import { claimStartedFromArgv, spawnerIdentity } from './sync-main';
+import { DEFAULT_HANG_TIMEOUT_MINUTES, MIN_REFRESH_INTERVAL_MINUTES, MainSyncLock, MainSyncLockService, MainSyncStatusService, RefreshOutcome } from '@webpieces/repo-workflow-core';
 
 
 // Log FILENAMES carry the stream prefix (see LogStream). Specs resolve the name exactly as
@@ -50,11 +50,58 @@ describe('triggerMainSyncRefresh — at most one refresher per hook process', ()
         expect(spawnAttempts(root)).toBe(1);
     });
 
-    it('spawns again in the NEXT hook process (the latch is per-process, not per-repo)', () => {
+    it('the latch is per-process: the NEXT hook process decides afresh, and is throttled here', () => {
         triggerMainSyncRefresh(root, DEFAULT_HANG_TIMEOUT_MINUTES);
         resetMainSyncRefreshLatchForTest();  // stands in for a fresh hook process
         triggerMainSyncRefresh(root, DEFAULT_HANG_TIMEOUT_MINUTES);
-        expect(spawnAttempts(root)).toBe(2);
+        // The second process got past the latch and was stopped by the repo-wide interval instead.
+        expect(spawnAttempts(root)).toBe(1);
+    });
+});
+
+const MINUTE = 60 * 1000;
+const status = new MainSyncStatusService();
+const locks = new MainSyncLockService(undefined, undefined, status);
+
+// #1342: the throttle is the SPAWNER's. A throttled tool call launches no node child and runs no git;
+// the async-refresh stream used to show a SPAWN_ATTEMPT (and a node boot) on every guard fire.
+describe('triggerMainSyncRefresh — at most one refresher START per interval per repo', () => {
+    let root: string;
+
+    beforeEach(() => {
+        root = policyFixture.makeRepo('wp-throttle-');
+        resetMainSyncRefreshLatchForTest();
+    });
+
+    it('launches nothing, and logs nothing, when the last refresh started inside the interval', () => {
+        status.recordRefreshOutcome(root, Date.now() - (MIN_REFRESH_INTERVAL_MINUTES - 1) * MINUTE, RefreshOutcome.OK);
+        triggerMainSyncRefresh(root, DEFAULT_HANG_TIMEOUT_MINUTES);
+        expect(spawnAttempts(root)).toBe(0);
+        expect(fs.existsSync(path.join(root, LOG_REL))).toBe(false);
+        expect(fs.existsSync(locks.mainSyncLockPath(root))).toBe(false);
+    });
+
+    it('launches once the interval has elapsed, and creates the lock for the child to adopt', () => {
+        status.recordRefreshOutcome(root, Date.now() - (MIN_REFRESH_INTERVAL_MINUTES + 1) * MINUTE, RefreshOutcome.ERROR);
+        const before = Date.now();
+        triggerMainSyncRefresh(root, DEFAULT_HANG_TIMEOUT_MINUTES);
+        expect(spawnAttempts(root)).toBe(1);
+
+        const claimed = locks.readMainSyncLock(root);
+        expect(claimed?.pid).toBe(0);
+        expect(claimed?.startedMs).toBeGreaterThanOrEqual(before);
+    });
+
+    it('launches nothing while a live refresher holds the lock past the interval but inside its hang window', () => {
+        locks.writeMainSyncLock(root, new MainSyncLock(process.pid, Date.now() - (MIN_REFRESH_INTERVAL_MINUTES + 1) * MINUTE));
+        triggerMainSyncRefresh(root, 30);
+        expect(spawnAttempts(root)).toBe(0);
+    });
+
+    it('takes over a stale holder (past interval and hang window) and launches', () => {
+        locks.writeMainSyncLock(root, new MainSyncLock(2147483646, Date.now() - 60 * MINUTE));
+        triggerMainSyncRefresh(root, DEFAULT_HANG_TIMEOUT_MINUTES);
+        expect(spawnAttempts(root)).toBe(1);
     });
 });
 
@@ -73,9 +120,16 @@ describe('the detached refresher inherits its spawner`s stream identity', () => 
     const IDENTITY = new StreamIdentity('sess-1', 'agent-9', 'guards');
 
     it('round-trips session/agent/hook from the spawn argv into the child`s LogStream', () => {
-        const argv = refresherArgv('/x/sync-main.js', '/repo', 30, IDENTITY);
+        const argv = refresherArgv('/x/sync-main.js', '/repo', 1234567, IDENTITY);
         // The child sees [execPath, script, ...argv] — the two-slot offset the positions depend on.
         expect(spawnerIdentity(['/usr/bin/node', ...argv])).toEqual(IDENTITY);
+    });
+
+    it('round-trips the lock claim`s started, which the child must match to adopt the lock', () => {
+        const argv = refresherArgv('/x/sync-main.js', '/repo', 1234567, IDENTITY);
+        expect(claimStartedFromArgv(['/usr/bin/node', ...argv])).toBe(1234567);
+        // A hand-run with no claim matches no lock.
+        expect(claimStartedFromArgv(['/usr/bin/node', '/x/sync-main.js', '/repo'])).toBeNaN();
     });
 
     it('makes parent and child name the SAME file, which is the whole point', () => {
