@@ -467,6 +467,17 @@
                 "api-doc-model"
             ]
         },
+        "openapi-import": {
+            "level": 1,
+            "framework": ["node"],
+            "role": "lib",
+            "products": ["openapi"],
+            "shortDescription": "Turn a vendor's OpenAPI 3.0/3.1 JSON document plus a per-vendor import file into a webpieces `EXTERNAL_OUTBOUND` contract source file, and ship the `wp-openapi-import` bin (#1339). The reverse direction of `@webpieces/openapi-generator` (contract → OpenAPI).",
+            "responsibilitiesFile": "packages/docs/openapi-import/responsibilities.md",
+            "dependsOn": [
+                "core-util"
+            ]
+        },
         "partner-api": {
             "level": 3,
             "framework": ["node"],

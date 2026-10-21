@@ -8,6 +8,8 @@ import { OidcAuthMethod, OidcAuthMethods } from '@webpieces/core-util';
 import { VendorAuthHook } from '@webpieces/core-context';
 // @ts-expect-error WebhookAuthCallback is REPLACED by VendorAuthHook (mint/refresh/verify) — no alias, by policy.
 import type { WebhookAuthCallback } from './AuthHooks';
+// @ts-expect-error WEBHOOK_AUTH_CALLBACK is REPLACED by VENDOR_AUTH_HOOK.
+import { WEBHOOK_AUTH_CALLBACK } from './AuthHooks';
 import { ApiKeyHook, OidcHook } from './AuthHooks';
 import { AuthenticatedCaller, AuthenticatedMachineIdentity } from './AuthConfig';
 
@@ -39,6 +41,7 @@ export class AuthHooksCompileAssertions {
         void headerReaderIsGone;
         void authValuesIsGone;
         void webhookAuthCallbackIsGone;
+        void WEBHOOK_AUTH_CALLBACK;
     }
 
     /** The ALIGNED spellings must keep compiling; asserted by the ABSENCE of an error. */

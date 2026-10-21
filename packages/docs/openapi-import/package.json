@@ -1,0 +1,31 @@
+{
+    "name": "@webpieces/openapi-import",
+    "version": "0.0.0-dev",
+    "description": "Generate a webpieces EXTERNAL_OUTBOUND contract (an @ApiPath class plus its DTO classes and string enums) from a vendor's OpenAPI 3.0/3.1 JSON document and a per-vendor import file. Node builtins only. Ships the wp-openapi-import bin.",
+    "type": "commonjs",
+    "main": "./src/index.js",
+    "types": "./src/index.d.ts",
+    "author": "Dean Hiller",
+    "license": "Apache-2.0",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/deanhiller/webpieces-ts.git",
+        "directory": "packages/docs/openapi-import"
+    },
+    "keywords": [
+        "webpieces",
+        "openapi",
+        "codegen",
+        "client",
+        "typescript"
+    ],
+    "publishConfig": {
+        "bin": {
+            "wp-openapi-import": "./src/cli/wp-openapi-import.js"
+        },
+        "access": "public"
+    },
+    "devDependencies": {
+        "@webpieces/core-util": "workspace:*"
+    }
+}
