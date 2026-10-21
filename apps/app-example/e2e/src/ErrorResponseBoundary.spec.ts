@@ -27,7 +27,7 @@ import { GcpOidc } from '@webpieces/gcp-identity';
 import { PublicApi, SecureApi } from '@webpieces/client-server-api';
 import { setupCompanyRuntime, CompanySetupOptions } from '@webpieces/company-svc-core';
 import { ClientServerWiring } from '../../client-server/src/wiring';
-import { TestSecrets } from '../../client-server/src/test/TestAuthConfig';
+import { TestSecretsOverride } from '../../client-server/src/test/TestAuthConfig';
 
 class SurfaceError extends Error {}
 
@@ -99,7 +99,7 @@ beforeAll(async () => {
     ClientRegistry.resetForTests();
     ApiRegistry.resetForTests();
     // Actual production modules, routes, filters and controllers from the example app.
-    factory = await setupCompanyRuntime(new ClientServerWiring(), new CompanySetupOptions(undefined, TestSecrets.override()));
+    factory = await setupCompanyRuntime(new ClientServerWiring(), new CompanySetupOptions(undefined, new TestSecretsOverride()));
     server = await new WebpiecesExpressRouter(factory).bindAndStartExpress(express(), 0);
     baseUrl = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
     ClientRegistry.addUrlMapping('boundary-demo', baseUrl);

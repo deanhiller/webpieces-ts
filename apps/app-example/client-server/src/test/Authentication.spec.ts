@@ -6,7 +6,7 @@ import { RequestContext, HttpRequest } from '@webpieces/core-context';
 import { ApiUnauthorizedError, ApiForbiddenError } from '@webpieces/core-util';
 import { GcpOidc } from '@webpieces/gcp-identity';
 import { SecureApi } from '@webpieces/client-server-api';
-import { TestAuthConfig, TestSecrets, TEST_SHARED_SECRET, TEST_SHARED_SECRET_ROTATING } from './TestAuthConfig';
+import { TestAuthConfig, TestSecrets, TestSecretsOverride, TEST_SHARED_SECRET, TEST_SHARED_SECRET_ROTATING } from './TestAuthConfig';
 import { SECRETS } from '@webpieces/core-util';
 import { setupCompanyRuntime, CompanySetupOptions } from '@webpieces/company-svc-core';
 import { ClientServerWiring } from '../wiring';
@@ -94,7 +94,7 @@ describe('Authentication: shared-secret (bound state)', () => {
 
 describe('Authentication: jwt (real signed token, role-gated)', () => {
     // Use the REAL CompanyAuthConfig (default binding) with a known signing secret.
-    const overrides = TestSecrets.override();
+    const overrides = new TestSecretsOverride();
     let priorSecret: string | undefined;
     let api: SecureApi;
 
@@ -155,7 +155,7 @@ describe('Authentication: jwt (real signed token, role-gated)', () => {
 });
 
 describe('Authentication: oidc (real dev token, oidcSameProject())', () => {
-    const overrides = TestSecrets.override(); // real CompanyAuthConfig → gcp-identity
+    const overrides = new TestSecretsOverride(); // real CompanyAuthConfig → gcp-identity
 
     let api: SecureApi;
     beforeEach(async () => {
