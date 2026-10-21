@@ -1,0 +1,16 @@
+{
+    "spec": "shop-openapi.json",
+    "contract": "ShopApi",
+    "auth": { "vendorAuth": "shop" },
+    "contextKeys": {
+        "*": [{ "from": "@webpieces/core-util", "symbol": "WebpiecesCoreHeaders.REQUEST_ID" }],
+        "orders.DeleteOrder": [{ "from": "@webpieces/core-util", "symbol": "WebpiecesCoreHeaders.CLIENT_VERSION" }]
+    },
+    "operations": [
+        "inventory.ListItems",
+        "inventory.CreateItem",
+        "inventory.UpdateItemStock",
+        "orders.DeleteOrder",
+        "orders.UpdateOrder"
+    ]
+}
