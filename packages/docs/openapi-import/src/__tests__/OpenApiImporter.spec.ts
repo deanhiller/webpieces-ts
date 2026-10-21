@@ -58,7 +58,7 @@ describe('wp-openapi-import — the generated contract', () => {
         expect(source).toContain('comment *&#47; early');
     });
 
-    it('is a contract webpieces binds: EXTERNAL_OUTBOUND, 0-byte voids, listed context keys', async () => {
+    it('is a contract webpieces binds: EXTERNAL_OUTBOUND, vendor-shaped voids, listed context keys', async () => {
         const ShopApi = await loadShopApi();
         const list = RouteMetadataFactory.create(ShopApi, 'listItems');
         expect(list.httpMethod).toBe('GET');
@@ -67,7 +67,8 @@ describe('wp-openapi-import — the generated contract', () => {
         expect(list.authMeta?.methods[0]).toEqual({ kind: 'vendorAuth', name: 'shop' });
 
         const remove = RouteMetadataFactory.create(ShopApi, 'deleteOrder');
-        expect(remove.noResponseBody).toBe(true);
+        // The vendor shapes the response; the outbound client accepts any 2xx (#1348).
+        expect(remove.noResponseBody).toBe(false);
         expect(remove.externalContextKeys).toEqual([WebpiecesCoreHeaders.REQUEST_ID, WebpiecesCoreHeaders.CLIENT_VERSION]);
 
         expect(RouteMetadataFactory.create(ShopApi, 'updateItemStock').bodyParameterIndex).toBe(2);
@@ -130,9 +131,11 @@ const importOf = (operations: string[], extra: object = {}): object => ({
 });
 
 describe('wp-openapi-import — refusals', () => {
-    it('generates a void GET with responseBody: NONE when the spec documents no body', () => {
+    it('generates a void GET with NO responseBody option when the spec documents no body (#1348)', () => {
         const source = new Scenario(PING_SPEC, importOf(['Ping'])).generate();
-        expect(source).toContain("@Endpoint(GET, '/ping', READ, EXTERNAL_OUTBOUND, { responseBody: NONE })");
+        expect(source).toContain("@Endpoint(GET, '/ping', READ, EXTERNAL_OUTBOUND)\n");
+        expect(source).not.toContain('responseBody');
+        expect(source).not.toContain('NONE');
         expect(source).toContain('ping(): Promise<void> {');
     });
 

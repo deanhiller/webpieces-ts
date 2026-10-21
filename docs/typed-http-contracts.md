@@ -117,6 +117,26 @@ still send one). The option exists because `design:returntype` of an async metho
 `Promise`; the architecture scan refuses a `Promise<void>` method without it, and `NONE` on a method
 that returns anything else. It cannot combine with `responseType: 'full'` or a stream.
 
+`NONE` is for `RPC` and `EXTERNAL_INBOUND`, where OUR server answers and a body is a real question.
+An `EXTERNAL_OUTBOUND` endpoint is served by the vendor, which shapes its own responses, so NONE —
+what our server sends — does not compile there and is refused at startup and by the scan (#1348).
+Its client accepts ANY 2xx: a 204 or an empty body resolves `undefined`, a JSON body is parsed (a
+`Promise<void>` caller ignores it), and a non-JSON body such as `OK` resolves `undefined`; it never
+throws on a 2xx. The generated OpenAPI documents an outbound void as "any 2xx acknowledges", never
+as `204 No Content`. A
+`CLOUDTASKS` or `CRON` endpoint is fire-and-forget BY KIND — Cloud Tasks and the scheduler read
+nothing but the status — so the kind itself means no response body (#1348): such a method returns
+`Promise<void>` and writes no `responseBody` option, and gets the same 204 / `undefined` behaviour.
+Writing `{ responseBody: NONE }` on one does not compile and is refused at startup and by the
+architecture scan as redundant; a CLOUDTASKS / CRON method returning a value is refused by the scan.
+
+```typescript
+@Endpoint(POST, '/send', WRITE, CLOUDTASKS)
+sendEmail(request: SendEmailRequest): Promise<void> {
+    throw new Error('contract only');
+}
+```
+
 ## Calling an outside system: `EXTERNAL_OUTBOUND`
 
 A contract for a vendor's API — one WE call and no server in this repo implements — marks every

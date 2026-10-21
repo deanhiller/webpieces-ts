@@ -186,7 +186,10 @@ export interface ApiMethodMeta {
     parameters?: ApiParameterMeta[];
     /** Present when callers receive the transport-neutral full response. */
     responseType?: 'full';
-    /** Present when `@Endpoint(..., { responseBody: NONE })`: a `Promise<void>` method, 0-byte success. */
+    /**
+     * Present when `@Endpoint(..., { responseBody: NONE })`: a `Promise<void>` method, 0-byte success.
+     * Absent on a CLOUDTASKS / CRON method, whose KIND already means no response body (#1348).
+     */
     responseBody?: 'none';
     /**
      * `@Queue(...)` override, else `${ApiClassName}-${methodName}`.
@@ -358,24 +361,41 @@ export class UndeclaredExternalCaller {
     ) {}
 }
 
-/** ONE `@Endpoint` whose required side-effect declaration could not be read from source. */
+/** What is wrong with one endpoint's response-body declaration (#1339, #1348). */
+export enum VoidResponseProblem {
+    /** RPC / EXTERNAL_INBOUND: declares `responseBody: NONE` but does not return `Promise<void>`. */
+    NONE_WITHOUT_VOID = 'none-without-void',
+    /** RPC / EXTERNAL_INBOUND: returns `Promise<void>` but does not declare `responseBody: NONE`. */
+    VOID_WITHOUT_NONE = 'void-without-none',
+    /** EXTERNAL_OUTBOUND: declares `responseBody: NONE`, but the VENDOR shapes an outbound response. */
+    OUTBOUND_NONE = 'outbound-none',
+    /** CLOUDTASKS / CRON: declares `responseBody: NONE`, which the kind already implies. */
+    REDUNDANT_NONE = 'redundant-none',
+    /** CLOUDTASKS / CRON: does not return `Promise<void>`, but the kind is fire-and-forget. */
+    TRIGGER_NOT_VOID = 'trigger-not-void',
+}
+
 /**
- * An `@Endpoint` whose `responseBody: NONE` disagrees with its declared return type: NONE on a method
- * that does not return `Promise<void>`, or a `Promise<void>` method without NONE. The runtime cannot
- * see `void` (`design:returntype` is just `Promise`), so the option is the only thing a server and a
- * client act on, and it must not drift from the signature.
+ * An `@Endpoint` whose response-body declaration disagrees with its kind or its declared return
+ * type. The runtime cannot see `void` (`design:returntype` is just `Promise`), so the kind (CLOUDTASKS
+ * and CRON imply no body, #1348) or the `responseBody: NONE` option (RPC, EXTERNAL_INBOUND) is the
+ * only thing a server and a client act on, and it must not drift from the signature. EXTERNAL_OUTBOUND
+ * takes no option at all: the vendor shapes its responses and the client accepts any 2xx.
  */
 export class VoidResponseMismatch {
     constructor(
         public readonly api: string,
         public readonly method: string,
-        /** True when the method declares NONE but does not return `Promise<void>`. */
-        public readonly declaresNone: boolean,
+        /** Which of the five disagreements this is. */
+        public readonly problem: VoidResponseProblem,
+        /** The endpoint kind as written in the graph (`rpc`, `cloudtasks`, ...). */
+        public readonly kind: EndpointKind,
         /** `path/to/file.ts:LINE`, workspace-relative. */
         public readonly at: string,
     ) {}
 }
 
+/** ONE `@Endpoint` whose required side-effect declaration could not be read from source. */
 export class UndeclaredEndpointOperation {
     constructor(
         /** The contract class the method is declared on. */

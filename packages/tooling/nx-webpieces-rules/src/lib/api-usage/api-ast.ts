@@ -22,6 +22,7 @@ import {
     UndeclaredEndpointOperation,
     UnresolvedEndpointPath,
     VoidResponseMismatch,
+    VoidResponseProblem,
 } from './api-relations';
 
 /** Legal enum-backed `@Endpoint` symbols; tooling reads source without importing application code. */
@@ -196,9 +197,15 @@ export class DecoratorArgDiagnostics {
         );
     }
 
-    /** Record an `@Endpoint` whose `responseBody: NONE` disagrees with its `Promise<void>` signature. */
-    recordVoidMismatch(api: string, method: string, declaresNone: boolean, node: ts.Node): void {
-        this.voidMismatches.push(new VoidResponseMismatch(api, method, declaresNone, this.locate(node)));
+    /** Record an `@Endpoint` whose response-body declaration disagrees with its kind or signature. */
+    recordVoidMismatch(
+        api: string,
+        method: string,
+        problem: VoidResponseProblem,
+        kind: EndpointKind,
+        node: ts.Node,
+    ): void {
+        this.voidMismatches.push(new VoidResponseMismatch(api, method, problem, kind, this.locate(node)));
     }
 
     voidResponseMismatches(): VoidResponseMismatch[] {
@@ -357,8 +364,12 @@ function reportUnknownVerb(
 }
 
 /**
- * The response-shape options: `responseType: 'full'`, and `responseBody: NONE`, which must agree with
- * a `Promise<void>` signature in both directions (a mismatch is a fatal diagnostic).
+ * The response-shape options: `responseType: 'full'`, and the response body (a mismatch is a fatal
+ * diagnostic). A CLOUDTASKS / CRON endpoint has no response body BY KIND (#1348): it must return
+ * `Promise<void>`, and an explicit `responseBody: NONE` on it is a redundant second spelling. An
+ * EXTERNAL_OUTBOUND endpoint's response is shaped by the VENDOR, so NONE (what OUR server sends) is
+ * refused there and not required on `Promise<void>`. RPC and EXTERNAL_INBOUND declare
+ * `responseBody: NONE`, which must agree with a `Promise<void>` signature in both directions.
  */
 // webpieces-disable no-function-outside-class -- pure AST accessor, matching the sibling helpers
 function readResponseShape(
@@ -372,10 +383,40 @@ function readResponseShape(
 ): void {
     if (endpointResponseTypeOf(options, constants) === 'full') method.responseType = 'full';
     const declaresNone = endpointResponseBodyIsNone(options, constants);
-    if (declaresNone) method.responseBody = 'none';
-    if (diagnostics !== null && declaresNone !== returnsPromiseOfVoid(member)) {
-        diagnostics.recordVoidMismatch(api, method.name, declaresNone, endpoint);
+    const returnsVoid = returnsPromiseOfVoid(member);
+    const problem = responseBodyProblem(method.kind, declaresNone, returnsVoid);
+    if (declaresNone && problem === null) method.responseBody = 'none';
+    if (diagnostics !== null && problem !== null) {
+        diagnostics.recordVoidMismatch(api, method.name, problem, method.kind, endpoint);
     }
+}
+
+/** The one response-body rule per kind (#1348). */
+// webpieces-disable no-function-outside-class -- pure AST accessor, matching the sibling helpers
+function responseBodyProblem(
+    kind: EndpointKind,
+    declaresNone: boolean,
+    returnsVoid: boolean,
+): VoidResponseProblem | null {
+    if (QUEUED_KINDS.includes(kind)) return triggerVoidProblem(declaresNone, returnsVoid);
+    if (kind === 'external-outbound') return declaresNone ? VoidResponseProblem.OUTBOUND_NONE : null;
+    return declaredVoidProblem(declaresNone, returnsVoid);
+}
+
+/** CLOUDTASKS / CRON: void by kind, so NONE is redundant and a non-void signature is refused. */
+// webpieces-disable no-function-outside-class -- pure AST accessor, matching the sibling helpers
+function triggerVoidProblem(declaresNone: boolean, returnsVoid: boolean): VoidResponseProblem | null {
+    if (declaresNone) return VoidResponseProblem.REDUNDANT_NONE;
+    if (!returnsVoid) return VoidResponseProblem.TRIGGER_NOT_VOID;
+    return null;
+}
+
+/** RPC / EXTERNAL_INBOUND: `responseBody: NONE` and `Promise<void>` must agree in both directions. */
+// webpieces-disable no-function-outside-class -- pure AST accessor, matching the sibling helpers
+function declaredVoidProblem(declaresNone: boolean, returnsVoid: boolean): VoidResponseProblem | null {
+    if (declaresNone && !returnsVoid) return VoidResponseProblem.NONE_WITHOUT_VOID;
+    if (!declaresNone && returnsVoid) return VoidResponseProblem.VOID_WITHOUT_NONE;
+    return null;
 }
 
 /** Required side-effect declaration; no inference from GET/POST is permitted. */

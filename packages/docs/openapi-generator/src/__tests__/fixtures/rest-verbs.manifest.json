@@ -8,6 +8,11 @@
         {
             "entry": "RestVerbsApi.ts",
             "tag": "Gadgets"
+        },
+        {
+            "entry": "OutboundAckApi.ts",
+            "tag": "Gadget events",
+            "kind": "webhook"
         }
     ],
     "securitySchemeNames": []

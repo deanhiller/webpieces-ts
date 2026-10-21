@@ -19,6 +19,8 @@ import {
     WRITE,
     WRITE_IDEMPOTENT,
     NONE,
+    EXTERNAL_INBOUND,
+    EXTERNAL_OUTBOUND,
 } from '../decorators';
 import { verbCarriesBody } from '../HttpContract';
 import { HttpContractMapper, HttpParameterBinding } from '../HttpContract';
@@ -333,6 +335,101 @@ describe('contract mapping validation', () => {
         expect(RouteMetadataFactory.create(VoidApi, 'ack').noResponseBody).toBe(true);
         expect(() => RouteMetadataFactory.create(VoidApi, 'full')).toThrow(
             "VoidApi.full declares responseBody: NONE together with responseType: 'full'",
+        );
+    });
+
+    it('CLOUDTASKS and CRON imply no response body; RPC still needs NONE (#1348)', () => {
+        @ApiPath('/kinds')
+        class KindVoidApi {
+            @WpAuthPublic('Test fixture')
+            @WpAuthorization({ authType: AuthorizationType.ANONYMOUS, reason: 'Test fixture' })
+            @Endpoint(POST, '/task', WRITE, CLOUDTASKS)
+            task(_body: object): Promise<void> {
+                return Promise.resolve();
+            }
+
+            @WpAuthPublic('Test fixture')
+            @WpAuthorization({ authType: AuthorizationType.ANONYMOUS, reason: 'Test fixture' })
+            @Endpoint(POST, '/cron', WRITE, CRON)
+            cron(_body: object): Promise<void> {
+                return Promise.resolve();
+            }
+
+            @WpAuthPublic('Test fixture')
+            @WpAuthorization({ authType: AuthorizationType.ANONYMOUS, reason: 'Test fixture' })
+            @Endpoint(POST, '/rpc', WRITE, RPC)
+            rpc(_body: object): Promise<object> {
+                return Promise.resolve({});
+            }
+        }
+
+        expect(RouteMetadataFactory.create(KindVoidApi, 'task').noResponseBody).toBe(true);
+        expect(RouteMetadataFactory.create(KindVoidApi, 'cron').noResponseBody).toBe(true);
+        expect(RouteMetadataFactory.create(KindVoidApi, 'rpc').noResponseBody).toBe(false);
+    });
+
+    it('refuses an explicit responseBody: NONE on a CLOUDTASKS or CRON endpoint, naming the kind', () => {
+        @ApiPath('/redundant')
+        class RedundantNoneApi {
+            @WpAuthPublic('Test fixture')
+            @WpAuthorization({ authType: AuthorizationType.ANONYMOUS, reason: 'Test fixture' })
+            // @ts-expect-error simulates an untyped caller: the kind already implies no response body
+            @Endpoint(POST, '/task', WRITE, CLOUDTASKS, { responseBody: NONE })
+            task(_body: object): Promise<void> {
+                return Promise.resolve();
+            }
+
+            @WpAuthPublic('Test fixture')
+            @WpAuthorization({ authType: AuthorizationType.ANONYMOUS, reason: 'Test fixture' })
+            // @ts-expect-error simulates an untyped caller: the kind already implies no response body
+            @Endpoint(POST, '/cron', WRITE, CRON, { responseBody: NONE })
+            cron(_body: object): Promise<void> {
+                return Promise.resolve();
+            }
+        }
+
+        expect(() => RouteMetadataFactory.create(RedundantNoneApi, 'task')).toThrow(
+            'RedundantNoneApi.task is a CLOUDTASKS endpoint and declares responseBody: NONE, which is redundant',
+        );
+        expect(() => RouteMetadataFactory.create(RedundantNoneApi, 'cron')).toThrow(
+            'RedundantNoneApi.cron is a CRON endpoint and declares responseBody: NONE, which is redundant',
+        );
+    });
+
+    it('EXTERNAL_INBOUND keeps responseBody: NONE; EXTERNAL_OUTBOUND refuses it (the vendor shapes it)', () => {
+        @ApiPath('/hooks')
+        class InboundApi {
+            @WpAuthPublic('Test fixture')
+            @WpAuthorization({ authType: AuthorizationType.ANONYMOUS, reason: 'Test fixture' })
+            @Endpoint(POST, '/stripe', WRITE, EXTERNAL_INBOUND, { calledBy: 'stripe', responseBody: NONE })
+            stripe(_body: object): Promise<void> {
+                return Promise.resolve();
+            }
+        }
+
+        @ApiPath('/vendor')
+        class OutboundApi {
+            @WpAuthPublic('Test fixture')
+            @WpAuthorization({ authType: AuthorizationType.ANONYMOUS, reason: 'Test fixture' })
+            @Endpoint(DELETE, '/{id}', WRITE_IDEMPOTENT, EXTERNAL_OUTBOUND)
+            remove(@PathParam('id') _id: string): Promise<void> {
+                return Promise.resolve();
+            }
+
+            @WpAuthPublic('Test fixture')
+            @WpAuthorization({ authType: AuthorizationType.ANONYMOUS, reason: 'Test fixture' })
+            // @ts-expect-error simulates an untyped caller: NONE describes OUR server, not the vendor's
+            @Endpoint(POST, '/ping', WRITE, EXTERNAL_OUTBOUND, { responseBody: NONE })
+            ping(_body: object): Promise<void> {
+                return Promise.resolve();
+            }
+        }
+
+        expect(RouteMetadataFactory.create(InboundApi, 'stripe').noResponseBody).toBe(true);
+        // The client reads an outbound void like any outbound call: any 2xx, see ProxyClient.
+        expect(RouteMetadataFactory.create(OutboundApi, 'remove').noResponseBody).toBe(false);
+        expect(() => RouteMetadataFactory.create(OutboundApi, 'ping')).toThrow(
+            'OutboundApi.ping is an EXTERNAL_OUTBOUND endpoint and declares responseBody: NONE, which does not apply',
         );
     });
 });

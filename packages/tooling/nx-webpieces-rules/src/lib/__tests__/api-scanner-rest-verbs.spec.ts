@@ -84,6 +84,70 @@ export abstract class VoidApi {
     );
 }
 
+/** The per-kind response-body rules of #1348: CLOUDTASKS / CRON, EXTERNAL_INBOUND, EXTERNAL_OUTBOUND. */
+function writeKindFixtures(): void {
+    writeLib(
+        'trigger-api',
+        `import { ApiPath, Endpoint } from './decorators';
+
+@ApiPath('/triggers')
+export abstract class TriggerApi {
+    @Endpoint(POST, '/task', WRITE, CLOUDTASKS)
+    abstract task(): Promise<void>;
+
+    @Endpoint(POST, '/cron', WRITE, CRON)
+    abstract cron(): Promise<void>;
+}
+`,
+    );
+    writeLib(
+        'external-void-api',
+        `import { ApiPath, Endpoint } from './decorators';
+
+@ApiPath('/hooks')
+export abstract class InboundHookApi {
+    @Endpoint(POST, '/ok', WRITE, EXTERNAL_INBOUND, { calledBy: 'stripe', responseBody: NONE })
+    abstract ok(): Promise<void>;
+
+    @Endpoint(POST, '/missing', WRITE, EXTERNAL_INBOUND, { calledBy: 'stripe' })
+    abstract missing(): Promise<void>;
+
+    @Endpoint(POST, '/wrong', WRITE, EXTERNAL_INBOUND, { calledBy: 'stripe', responseBody: NONE })
+    abstract wrong(): Promise<object>;
+}
+
+@ApiPath('/partner')
+export abstract class PartnerHookApi {
+    @Endpoint(POST, '/notify', WRITE, EXTERNAL_OUTBOUND)
+    abstract notify(): Promise<void>;
+
+    @Endpoint(POST, '/declared', WRITE, EXTERNAL_OUTBOUND, { responseBody: NONE })
+    abstract declared(): Promise<void>;
+}
+`,
+    );
+    writeLib(
+        'bad-trigger-api',
+        `import { ApiPath, Endpoint } from './decorators';
+
+@ApiPath('/bad-triggers')
+export abstract class BadTriggerApi {
+    @Endpoint(POST, '/redundant-task', WRITE, CLOUDTASKS, { responseBody: NONE })
+    abstract redundantTask(): Promise<void>;
+
+    @Endpoint(POST, '/redundant-cron', WRITE, CRON, { responseBody: NONE })
+    abstract redundantCron(): Promise<void>;
+
+    @Endpoint(POST, '/valued-task', WRITE, CLOUDTASKS)
+    abstract valuedTask(): Promise<object>;
+
+    @Endpoint(POST, '/valued-cron', WRITE, CRON)
+    abstract valuedCron(): Promise<object>;
+}
+`,
+    );
+}
+
 function writeVendorFixtures(): void {
     writeLib(
         'vendor-api',
@@ -101,7 +165,7 @@ export abstract class AcmeApi {
  */
 @ApiPath('/blobs')
 export abstract class BlobsApi {
-    @Endpoint(DELETE, '/{id}', WRITE_IDEMPOTENT, EXTERNAL_OUTBOUND, { responseBody: NONE })
+    @Endpoint(DELETE, '/{id}', WRITE_IDEMPOTENT, EXTERNAL_OUTBOUND)
     abstract remove(id: string): Promise<void>;
 }
 `,
@@ -123,6 +187,7 @@ beforeAll(() => {
     root = specTempDirs.makeReal('wp-api-verbs-');
     writeVerbFixtures();
     writeVendorFixtures();
+    writeKindFixtures();
 });
 
 afterAll(() => {
@@ -172,6 +237,57 @@ describe('ApiUsageScanner — every @Endpoint verb is scanned', () => {
             'wrong',
         ]);
         expect(scan.apiIndex.get('VoidApi')!.methods[0].responseBody).toBe('none');
+    });
+
+    it('EXTERNAL_INBOUND keeps the both-directions NONE check; EXTERNAL_OUTBOUND refuses NONE and needs none (#1348)', () => {
+        const scan = new ApiUsageScanner(root, projectsOf('external-void-api')).scan();
+        expect(scan.voidResponseMismatches.map((m: { api: string; method: string; problem: string }) => [m.api, m.method, m.problem])).toEqual([
+            ['InboundHookApi', 'missing', 'void-without-none'],
+            ['InboundHookApi', 'wrong', 'none-without-void'],
+            ['PartnerHookApi', 'declared', 'outbound-none'],
+        ]);
+        expect(() => buildApiContracts(scan)).toThrow(
+            'InboundHookApi.missing returns Promise<void> but does not declare responseBody: NONE',
+        );
+        expect(() => buildApiContracts(scan)).toThrow(
+            'PartnerHookApi.declared is an EXTERNAL_OUTBOUND endpoint and declares responseBody: NONE, which does not apply',
+        );
+        expect(scan.apiIndex.get('InboundHookApi')!.methods[0].responseBody).toBe('none');
+        expect(scan.apiIndex.get('PartnerHookApi')!.methods[0].responseBody).toBeUndefined();
+    });
+
+    it('accepts a Promise<void> CLOUDTASKS / CRON endpoint with no responseBody: the kind implies it (#1348)', () => {
+        const scan = new ApiUsageScanner(root, projectsOf('trigger-api')).scan();
+        expect(scan.voidResponseMismatches).toEqual([]);
+        const contracts = buildApiContracts(scan);
+        expect(contracts['TriggerApi'].methods.map((m: ApiMethodMeta) => [m.name, m.kind])).toEqual([
+            ['task', 'cloudtasks'],
+            ['cron', 'cron'],
+        ]);
+    });
+
+    it('refuses a redundant responseBody: NONE and a non-void signature on CLOUDTASKS / CRON, naming the kind', () => {
+        const scan = new ApiUsageScanner(root, projectsOf('bad-trigger-api')).scan();
+        expect(scan.voidResponseMismatches.map((m: { method: string; problem: string }) => [m.method, m.problem])).toEqual([
+            ['redundantTask', 'redundant-none'],
+            ['redundantCron', 'redundant-none'],
+            ['valuedTask', 'trigger-not-void'],
+            ['valuedCron', 'trigger-not-void'],
+        ]);
+        expect(() => buildApiContracts(scan)).toThrow(VoidResponseMismatchError);
+        expect(() => buildApiContracts(scan)).toThrow(
+            'BadTriggerApi.redundantTask is a CLOUDTASKS endpoint and declares responseBody: NONE, which is redundant',
+        );
+        expect(() => buildApiContracts(scan)).toThrow(
+            'BadTriggerApi.redundantCron is a CRON endpoint and declares responseBody: NONE, which is redundant',
+        );
+        expect(() => buildApiContracts(scan)).toThrow(
+            'BadTriggerApi.valuedTask is a CLOUDTASKS endpoint but does not return Promise<void>',
+        );
+        expect(() => buildApiContracts(scan)).toThrow(
+            'BadTriggerApi.valuedCron is a CRON endpoint but does not return Promise<void>',
+        );
+        expect(scan.apiIndex.get('BadTriggerApi')!.methods[0].responseBody).toBeUndefined();
     });
 
     it('indexes an EXTERNAL_OUTBOUND contract as a vendor seam with an external system identity', () => {

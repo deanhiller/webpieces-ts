@@ -686,6 +686,18 @@ export abstract class ProxyClient {
         if (response.ok && response.status !== 266 && route.noResponseBody) {
             return this.readVoidSuccess(response);
         }
+        // An EXTERNAL_OUTBOUND success is shaped by the vendor, and the runtime cannot see `void`, so
+        // ANY 2xx is accepted (#1348). 266 is OUR protocol's code and means nothing on a vendor's wire.
+        if (response.ok && route.externalOutbound) {
+            // webpieces-disable no-any-unknown -- a vendor success body is the caller's own DTO, erased here
+            const body: unknown = await this.readOutboundSuccessBody(response);
+            ClientErrorTranslator.throwIfFailure(
+                this.responseDtoFactory.fromFetch(response, body),
+                this.clientRole(),
+                route,
+            );
+            return body;
+        }
         if (response.ok && response.status !== 266) {
             if (!this.bodyReader.isJson(response)) {
                 throw new Error(
@@ -724,6 +736,28 @@ export abstract class ProxyClient {
     private async readVoidSuccess(response: Response): Promise<undefined> {
         if (response.status !== 204) await response.text();
         return undefined;
+    }
+
+    /**
+     * An EXTERNAL_OUTBOUND 2xx body (#1348): a 204 or an empty body is `undefined`, a JSON body is
+     * parsed (a `Promise<void>` caller ignores it), and a non-JSON body — a vendor's `OK`, even one
+     * mislabelled `application/json` — is `undefined`. It never throws: a vendor acknowledging with
+     * an odd body still succeeded.
+     */
+    // webpieces-disable no-any-unknown -- a vendor success body is the caller's own DTO, erased here
+    private async readOutboundSuccessBody(response: Response): Promise<unknown> {
+        if (response.status === 204 || response.status === 205) return undefined;
+        const text = await response.text();
+        if (text.trim() === '' || !this.bodyReader.isJson(response)) return undefined;
+        // eslint-disable-next-line @webpieces/no-unmanaged-exceptions -- a malformed vendor ack is still a success
+        try {
+            // webpieces-disable no-any-unknown -- parsed vendor JSON is returned to the typed contract caller
+            return JSON.parse(text) as unknown;
+            // webpieces-disable catch-must-propagate -- a 2xx whose body is not valid JSON is the vendor acknowledging, not a failure (#1348)
+        } catch (err: unknown) {
+            //const error = toError(err);
+            return undefined;
+        }
     }
 
     /** Preserve empty, JSON, and protocol text bodies for caller-owned full responses. */

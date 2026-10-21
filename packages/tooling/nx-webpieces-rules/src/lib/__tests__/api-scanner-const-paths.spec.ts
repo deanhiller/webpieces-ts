@@ -81,10 +81,10 @@ export abstract class WhatsAppTestApi {
 @PubSub()
 @ApiPath(WHATSAPP_API_PATH)
 export abstract class WhatsAppApi {
-    @Endpoint(POST, PROCESS_PATH, WRITE, CLOUDTASKS, { responseBody: NONE })
+    @Endpoint(POST, PROCESS_PATH, WRITE, CLOUDTASKS)
     abstract process(): Promise<void>;
 
-    @Endpoint(POST, CONTINUE_PATH, WRITE, CLOUDTASKS, { responseBody: NONE })
+    @Endpoint(POST, CONTINUE_PATH, WRITE, CLOUDTASKS)
     abstract continueConversation(): Promise<void>;
 
     @Endpoint(POST, INBOUND_PATH, WRITE, EXTERNAL_INBOUND, { calledBy: 'twilio', responseBody: NONE })

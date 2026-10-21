@@ -24,6 +24,10 @@ import { EndpointOptions, NONE } from './HttpEndpointOptions';
 import { getStreamingEndpoint } from './StreamingContract';
 import { getAuthorization } from './authorization';
 import {
+    CLOUDTASKS,
+    CRON,
+    EndpointKind,
+    EXTERNAL_OUTBOUND,
     assertEveryEndpointHasAuthMode,
     assertExternalEndpointKinds,
     isExternalOutboundApi,
@@ -92,7 +96,7 @@ export class RouteMetadataFactory {
             options.hideProgress === true,
             options.noLogging === true,
             options.allowUpgradeInFlight === true,
-            this.noResponseBody(options, streaming, apiClass, methodName),
+            this.noResponseBody(options, streaming, apiClass, methodName, getEndpointKind(apiClass, methodName)),
         );
         route.authorization = getAuthorization(apiClass, methodName);
         route.apiClass = apiClass;
@@ -323,7 +327,14 @@ export class RouteMetadataFactory {
     }
 
     /**
-     * `responseBody: NONE` means the success response is 0 bytes, so it cannot combine with a
+     * Whether the success response is 0 bytes (server 204, every client resolves `undefined`).
+     *
+     * A CLOUDTASKS or CRON endpoint is fire-and-forget BY KIND — Cloud Tasks and the scheduler read
+     * nothing but the status — so the kind implies it (#1348), and an explicit `responseBody: NONE`
+     * there is a second spelling of a decision the kind already made, so it is refused. On an
+     * EXTERNAL_OUTBOUND endpoint the VENDOR shapes the response, so NONE (what OUR server sends) is
+     * refused there too and the client accepts any 2xx. On RPC / EXTERNAL_INBOUND
+     * `responseBody: NONE` declares it. Either way the 0-byte response cannot combine with a
      * caller-owned full response or a streaming endpoint (both of which DEFINE a response).
      */
     // webpieces-disable no-function-outside-class -- private pure helper for the static metadata factory
@@ -332,17 +343,36 @@ export class RouteMetadataFactory {
         streaming: StreamingEndpointMetadata | undefined,
         apiClass: Function,
         methodName: string,
+        kind: EndpointKind | undefined,
     ): boolean {
-        if (options.responseBody === undefined) return false;
         const label = `${apiClass.name || 'Unknown'}.${methodName}`;
-        if (options.responseBody !== NONE) {
+        if (kind === EXTERNAL_OUTBOUND && options.responseBody !== undefined) {
+            throw new Error(
+                `${label} is an EXTERNAL_OUTBOUND endpoint and declares responseBody: NONE, which does not apply: ` +
+                    `NONE describes what OUR server sends, and the vendor shapes an outbound response. The outbound ` +
+                    `client accepts any 2xx (204 or empty -> undefined, JSON -> parsed). Delete responseBody: NONE.`,
+            );
+        }
+        const impliedByKind = kind === CLOUDTASKS || kind === CRON;
+        if (impliedByKind && options.responseBody !== undefined) {
+            throw new Error(
+                `${label} is a ${kind.toUpperCase()} endpoint and declares responseBody: NONE, which is redundant: ` +
+                    `a ${kind.toUpperCase()} endpoint is fire-and-forget, so its kind already means no response body ` +
+                    `(204, 0 bytes). Delete responseBody: NONE from its @Endpoint options.`,
+            );
+        }
+        if (!impliedByKind && options.responseBody === undefined) return false;
+        if (!impliedByKind && options.responseBody !== NONE) {
             throw new Error(
                 `${label} declares unsupported responseBody '${String(options.responseBody)}'; the only value is NONE.`,
             );
         }
         if (options.responseType === 'full' || streaming !== undefined) {
+            const why = impliedByKind
+                ? `is a ${kind.toUpperCase()} endpoint (no response body by kind)`
+                : 'declares responseBody: NONE';
             throw new Error(
-                `${label} declares responseBody: NONE together with ${streaming ? 'a stream' : "responseType: 'full'"}; ` +
+                `${label} ${why} together with ${streaming ? 'a stream' : "responseType: 'full'"}; ` +
                     'a 0-byte response cannot also carry a caller-owned or streamed response.',
             );
         }

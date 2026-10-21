@@ -14,7 +14,7 @@ direction of `@webpieces/openapi-generator` (contract → OpenAPI).
 - Emitting, deterministically: the banner, the imports, every REACHED DTO class and string enum
   (sorted, declared BEFORE the contract so decorator metadata never meets a class in its TDZ), then
   the `@ApiPath('')` class with `EXTERNAL_OUTBOUND` endpoints, `@PathParam` / `@QueryString`
-  arguments, `{ responseBody: NONE }` voids, `vendorAuth(...)` and `@ExternalContextKeys`
+  arguments, `Promise<void>` voids (no `responseBody` option — the vendor shapes outbound responses), `vendorAuth(...)` and `@ExternalContextKeys`
 - Escaping vendor prose for JSDoc
 
 ## Out of Scope

@@ -18,6 +18,7 @@ import {
     UnresolvedApiCall,
     UnresolvedEndpointPath,
     VoidResponseMismatch,
+    VoidResponseProblem,
 } from './api-relations';
 import { RootUnionApiType, RootUnionFindings, ROOT_UNION_RULE } from './root-union-scan';
 import {
@@ -271,23 +272,52 @@ export class RootUnionApiTypeError extends Error {
     }
 }
 
-/** Endpoints whose `responseBody: NONE` and `Promise<void>` signature disagree (#1339). */
+/**
+ * Endpoints whose response-body declaration disagrees with their kind or their signature (#1339,
+ * #1348): CLOUDTASKS / CRON are void BY KIND, EXTERNAL_OUTBOUND is the vendor's to shape, and RPC /
+ * EXTERNAL_INBOUND declare `responseBody: NONE`.
+ */
 export class VoidResponseMismatchError extends Error {
     constructor(public readonly endpoints: readonly VoidResponseMismatch[]) {
         super(
-            `${endpoints.length} @Endpoint(s) disagree with their return type about a response body:\n` +
+            `${endpoints.length} @Endpoint(s) disagree with their kind or return type about a response body:\n` +
                 endpoints
-                    .map((e: VoidResponseMismatch) =>
-                        e.declaresNone
-                            ? `     • ${e.api}.${e.method} declares responseBody: NONE but does not return Promise<void> — at ${e.at}`
-                            : `     • ${e.api}.${e.method} returns Promise<void> but does not declare responseBody: NONE — at ${e.at}`,
-                    )
+                    .map((e: VoidResponseMismatch) => `     • ${VoidResponseMismatchError.line(e)} — at ${e.at}`)
                     .join('\n') +
                 `\n   A Promise<void> endpoint answers 204 with 0 bytes, and the runtime cannot see 'void'\n` +
-                `   (design:returntype is just Promise). Add { responseBody: NONE } to @Endpoint's options on\n` +
-                `   every Promise<void> method, and only on those.`,
+                `   (design:returntype is just Promise). A CLOUDTASKS or CRON endpoint is fire-and-forget, so its\n` +
+                `   KIND already means no response body: it returns Promise<void> and writes no responseBody option.\n` +
+                `   An EXTERNAL_OUTBOUND endpoint is served by the vendor, which shapes its own responses, so it writes\n` +
+                `   no responseBody option either (its client accepts any 2xx). RPC and EXTERNAL_INBOUND add\n` +
+                `   { responseBody: NONE } to @Endpoint's options on every Promise<void> method, and only on those.`,
         );
         this.name = 'VoidResponseMismatchError';
+    }
+
+    // webpieces-disable no-function-outside-class -- builds the super() message, which runs before `this` exists (parameter property)
+    private static line(e: VoidResponseMismatch): string {
+        const kind = e.kind.toUpperCase();
+        switch (e.problem) {
+            case VoidResponseProblem.NONE_WITHOUT_VOID:
+                return `${e.api}.${e.method} declares responseBody: NONE but does not return Promise<void>`;
+            case VoidResponseProblem.VOID_WITHOUT_NONE:
+                return `${e.api}.${e.method} returns Promise<void> but does not declare responseBody: NONE`;
+            case VoidResponseProblem.REDUNDANT_NONE:
+                return (
+                    `${e.api}.${e.method} is a ${kind} endpoint and declares responseBody: NONE, which is redundant: ` +
+                    `the ${kind} kind already means no response body — delete responseBody: NONE`
+                );
+            case VoidResponseProblem.OUTBOUND_NONE:
+                return (
+                    `${e.api}.${e.method} is an EXTERNAL_OUTBOUND endpoint and declares responseBody: NONE, which does not apply: ` +
+                    `NONE describes what OUR server sends, and the vendor shapes an outbound response — delete responseBody: NONE`
+                );
+            case VoidResponseProblem.TRIGGER_NOT_VOID:
+                return (
+                    `${e.api}.${e.method} is a ${kind} endpoint but does not return Promise<void>: ` +
+                    `a ${kind} endpoint is fire-and-forget and its caller reads only the status — return Promise<void>`
+                );
+        }
     }
 }
 

@@ -109,14 +109,14 @@ export class ContractEmitter {
         const pascal = this.names.pascal(methodName);
         const parameters = this.parameters(operation, pascal, types, symbols);
         const returnType = operation.responseBody === undefined ? 'void' : types.typeOf(operation.responseBody, `${pascal}Response`);
-        const options = returnType === 'void' ? ', { responseBody: NONE }' : '';
-        if (returnType === 'void') symbols.add('NONE');
+        // No `responseBody` option, even on a void: the VENDOR shapes an outbound response, and the
+        // outbound client accepts any 2xx (#1348).
         const methodKeys = config.methodContextKeys.get(operation.operationId) ?? [];
         const lines = [
             this.methodDoc(operation, returnType),
             `    @WpAuth([vendorAuth(${this.names.literal(config.vendorAuth)})])\n`,
             '    @WpAuthorization({ authType: AuthorizationType.SERVICE_ONLY })\n',
-            `    @Endpoint(${operation.verb}, ${this.names.literal(operation.path)}, ${OPERATION_OF_VERB[operation.verb]}, EXTERNAL_OUTBOUND${options})\n`,
+            `    @Endpoint(${operation.verb}, ${this.names.literal(operation.path)}, ${OPERATION_OF_VERB[operation.verb]}, EXTERNAL_OUTBOUND)\n`,
             methodKeys.length === 0 ? '' : `    @ExternalContextKeys(${methodKeys.map((key: ContextKeyRef) => key.symbol).join(', ')})\n`,
             '    // webpieces-disable no-unmanaged-exceptions -- generated contract stub, never executed\n',
             `    ${methodName}(${parameters}): Promise<${returnType}> {\n`,

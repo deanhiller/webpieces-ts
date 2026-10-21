@@ -10,7 +10,6 @@ import {
     Endpoint,
     ExternalContextKeys,
     GET,
-    NONE,
     PATCH,
     POST,
     PUT,
@@ -171,7 +170,7 @@ export abstract class ShopApi {
      */
     @WpAuth([vendorAuth('shop')])
     @WpAuthorization({ authType: AuthorizationType.SERVICE_ONLY })
-    @Endpoint(PUT, '/v1/shops/{shopId}/item_stocks/{itemId}', WRITE_IDEMPOTENT, EXTERNAL_OUTBOUND, { responseBody: NONE })
+    @Endpoint(PUT, '/v1/shops/{shopId}/item_stocks/{itemId}', WRITE_IDEMPOTENT, EXTERNAL_OUTBOUND)
     // webpieces-disable no-unmanaged-exceptions -- generated contract stub, never executed
     updateItemStock(@PathParam('shopId') shopId: string, @PathParam('itemId') itemId: string, request: UpdateItemStockRequest): Promise<void> {
         throw new Error('contract only');
@@ -184,7 +183,7 @@ export abstract class ShopApi {
      */
     @WpAuth([vendorAuth('shop')])
     @WpAuthorization({ authType: AuthorizationType.SERVICE_ONLY })
-    @Endpoint(DELETE, '/v1/shops/{shopId}/orders/{orderId}', WRITE_IDEMPOTENT, EXTERNAL_OUTBOUND, { responseBody: NONE })
+    @Endpoint(DELETE, '/v1/shops/{shopId}/orders/{orderId}', WRITE_IDEMPOTENT, EXTERNAL_OUTBOUND)
     @ExternalContextKeys(WebpiecesCoreHeaders.CLIENT_VERSION)
     // webpieces-disable no-unmanaged-exceptions -- generated contract stub, never executed
     deleteOrder(@PathParam('shopId') shopId: string, @PathParam('orderId') orderId: string): Promise<void> {
