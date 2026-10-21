@@ -18,7 +18,7 @@ export class CallContext {
      * per-attempt error classification resolves the classifier registered for THIS contract.
      * REQUIRED and never `undefined`: every transport knows its contract class (HTTP and Cloud Tasks
      * clients hold it, the IPC client proxy holds its `@WpInternal` class), and
-     * `CallRegistry.execute` re-keys the context a strategy sees onto the class it was given.
+     * `ClientRegistry.execute` re-keys the context a strategy sees onto the class it was given.
      *
      * NON-enumerable on purpose: this context rides on `ApiCallTimeoutError`, which is logged and
      * compared as data, and a class reference is not data.

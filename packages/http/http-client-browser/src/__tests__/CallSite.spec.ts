@@ -19,6 +19,8 @@ import {
     WpAuthorization,
     WpAuthPublic,
     WRITE,
+    ApiRegistry,
+    CallScope,
 } from '@webpieces/core-util';
 import { ClientConfig } from '../ClientConfig';
 import { ClientHttpBrowserFactory } from '../ClientHttpBrowserFactory';
@@ -88,11 +90,13 @@ async function onSaveButtonClicked(client: SaveApi): Promise<unknown> {
 beforeEach(() => {
     HeaderRegistry.configure([], /*platformHeaders*/ true);
     ClientRegistry.resetForTests();
+    ApiRegistry.resetForTests();
     ClientRegistry.addUrlMapping('save-svc', 'https://save.example.com');
 });
 
 afterEach(() => {
     ClientRegistry.resetForTests();
+    ApiRegistry.resetForTests();
     vi.unstubAllGlobals();
 });
 
@@ -125,7 +129,7 @@ describe('browser api clients capture the caller stack on a failed call (#1175)'
     it('rejects with the SAME instance the translator threw — identity and class intact', async () => {
         stubFetch500();
         const instance = new AppRejectedError('portal suspended');
-        ClientRegistry.setErrorTranslator(new InstanceThrowingTranslator(instance), 'ALL');
+        ApiRegistry.setErrorTranslator(new InstanceThrowingTranslator(instance), CallScope.all());
         const client = new ClientHttpBrowserFactory(new MutableContextStore()).createRpcClient(
             SaveApi,
             new ClientConfig('save-svc', ClientRole.END_USER_CLIENT),

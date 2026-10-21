@@ -8,6 +8,8 @@ import {
     Secrets,
     WebpiecesDefaultErrorTranslator,
     WebpiecesCoreHeaders,
+    ApiRegistry,
+    CallScope,
 } from '@webpieces/core-util';
 import { GcpOidc } from '@webpieces/gcp-identity';
 import { Provider, RequestContext, RequestContextHeaders } from '@webpieces/core-context';
@@ -70,11 +72,13 @@ beforeAll(async () => {
     const factory = await setupCompanyRuntime(new ClientServerWiring());
     httpServer = await new WebpiecesExpressRouter(factory).bindAndStartExpress(express(), PORT);
     ClientRegistry.resetForTests();
+    ApiRegistry.resetForTests();
     ClientRegistry.addUrlMapping('client-server', url(''));
 });
 
 afterAll(async () => {
     ClientRegistry.resetForTests();
+    ApiRegistry.resetForTests();
     await new Promise<void>((resolve: () => void) => httpServer.close(() => resolve()));
 });
 
@@ -84,7 +88,7 @@ beforeEach(() => {
     // NEITHER half has a "not mine" any more: a registered translator answers every error and every
     // response, declining by DELEGATING to the webpieces default — which is exactly what installing
     // the default itself does, so this is the "registered nothing" baseline said out loud.
-    ClientRegistry.setErrorTranslator(new WebpiecesDefaultErrorTranslator(), 'ALL');
+    ApiRegistry.setErrorTranslator(new WebpiecesDefaultErrorTranslator(), CallScope.all());
 });
 
 describe('the app owns the WHOLE response: status, reason, headers and body', () => {

@@ -4,6 +4,8 @@ import {
     WpAuth,
     jwt as jwtAuth,
     ClientRole,
+    ApiRegistry,
+    CallScope,
 } from '@webpieces/core-util';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { IpcClientFactory, IpcServerFactory } from '@webpieces/ipc-bridge';
@@ -160,6 +162,7 @@ class RecordingClassifier implements ErrorClassifier {
 afterEach(() => {
     vi.useRealTimers();
     ClientRegistry.resetForTests();
+    ApiRegistry.resetForTests();
 });
 describe('portable IPC JSON boundary', () => {
     it('requires internal contracts and rejects HTTP/IPC mixtures', () => {
@@ -333,8 +336,8 @@ describe('portable IPC JSON boundary', () => {
         vi.useFakeTimers();
         const perContract = new RecordingClassifier();
         const all = new RecordingClassifier();
-        ClientRegistry.setErrorClassifier(perContract, TestApi);
-        ClientRegistry.setErrorClassifier(all, 'ALL');
+        ApiRegistry.setErrorClassifier(perContract, CallScope.api(TestApi));
+        ApiRegistry.setErrorClassifier(all, CallScope.all());
         const pair = new Pair();
         pair.a.drop = true;
         const pending = pair.clients
@@ -353,7 +356,7 @@ describe('portable IPC JSON boundary', () => {
         expect(perContract.seen.every((info: ApiMethodInfo) => info.contract === TestApi)).toBe(true);
         expect(all.seen).toHaveLength(0);
         expect(
-            ClientRegistry.classify(
+            ApiRegistry.classify(
                 timeout,
                 new ApiMethodInfo('client', timeout.context.apiName, timeout.context.methodName, timeout.context.contract),
             ),

@@ -674,7 +674,7 @@ external consumer. So:
 - A client must branch on the error TYPE, on `subType`, on `errorCode` or on `callerMessage` — never
   on the prose of `message`. Against a current webpieces server that prose is a constant per status.
 - An app that deliberately wants to publish richer text installs an `ErrorTranslator` on
-  `ClientRegistry` (`setErrorTranslator(t, 'ALL')`, or per contract class); its `toWire()` response — status, reason phrase, headers
+  `ApiRegistry` (`setErrorTranslator(t, CallScope.all())`, or `CallScope.api(X)` per contract class); its `toWire()` response — status, reason phrase, headers
   and body — is sent verbatim. That is the explicit, greppable opt-out.
 
 ## How to Request Approval

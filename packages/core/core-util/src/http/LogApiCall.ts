@@ -5,7 +5,7 @@ import { ApiMethodInfo } from './ApiMethodInfo';
 import { ApiCallContext } from './ApiCallContext';
 import { WebpiecesCoreHeaders } from './WebpiecesCoreHeaders';
 import { LOG_API_CALL_LOGGER_NAME } from './ApiCallLogName';
-import { ClientRegistry } from './ClientRegistry';
+import { ApiRegistry } from './ApiRegistry';
 import { CallOutcome } from './ErrorClassifier';
 
 // The console backends special-case THIS logger name into a self-describing [API.{side}.{phase}]
@@ -175,7 +175,7 @@ export class LogApiCall {
  *   (request and response bodies are capped at {@link LogApiCall.maxLoggedBodyChars} chars, #1300)
  * - [API-{side}-resp-SUCCESS] ClassName.methodName response={...}
  * - [API-{side}-resp-OTHER] ClassName.methodName errorType={...} error={...}  (CallOutcome.EXPECTED)
- * - [API-{side}-resp-FAIL] ClassName.methodName error={...}  (TRANSIENT_FAILURE or FAILURE — final by position; each retried attempt is logged by CallRegistry as [API-client-attempt-TRANSIENT])
+ * - [API-{side}-resp-FAIL] ClassName.methodName error={...}  (TRANSIENT_FAILURE or FAILURE — final by position; each retried attempt is logged by ClientRegistry as [API-client-attempt-TRANSIENT])
  */
 export class LogApiCallImpl {
     /**
@@ -417,13 +417,13 @@ export class LogApiCallImpl {
         // per failure now that `ApiErrorBoundary` writes none. An operator error message is never
         // published to a caller (see `ApiErrorCodec.publicMessage`), so the log is the one place it
         // exists at all — dropping it on the caller-error branch would lose it outright.
-        // Pluggable classification (ClientRegistry): the CallScope ladder of the call's contract class
+        // Pluggable classification (ApiRegistry): the CallScope ladder of the call's contract class
         // (method, then API, then ALL), else the webpieces built-in — which is side-dependent (a 4xx the SERVER
         // raised is a handled non-failure; the same 4xx a CLIENT receives means its call FAILED; 266 is
         // never a failure either side). This line is FINAL BY POSITION: it only sees what escaped every
         // retry, so a TRANSIENT_FAILURE here was never retried (no strategy, or a WRITE) or gave up —
         // it logs FAIL exactly like a FAILURE. Only EXPECTED is "OTHER / result:'success'".
-        const isUser = ClientRegistry.classify(error, methodInfo) === CallOutcome.EXPECTED;
+        const isUser = ApiRegistry.classify(error, methodInfo) === CallOutcome.EXPECTED;
 
         stamp(
             new ApiCallInfo(

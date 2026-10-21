@@ -4,11 +4,11 @@ import {
     ApiErrorPayload,
     ApiMethodInfo,
     CallOutcome,
-    ClientRegistry,
     ContextKey,
     DtoValue,
     EndpointOperation,
     WebpiecesCoreHeaders,
+    ApiRegistry,
 } from '@webpieces/core-util';
 import { RequestContext } from '@webpieces/core-context';
 import { McpProtocol } from './McpProtocol';
@@ -115,7 +115,7 @@ export class McpHttpErrorDetail {
 
 /**
  * The application's own `tools/call` error translation — the MCP twin of the `ErrorTranslator` an app
- * registers on `ClientRegistry` for HTTP and the `IpcErrorTranslator` it registers on `IpcRegistry`.
+ * registers on `ApiRegistry` for HTTP and the `IpcErrorTranslator` it registers on `IpcRegistry`.
  * Register one with {@link McpRegistry.setErrorTranslator}.
  *
  * An app owns its error taxonomy and owns how those errors should be explained to a model, so a
@@ -182,7 +182,7 @@ export class McpDefaultToolCallRenderer implements McpErrorTranslator {
 
     /**
      * MCP has no retry table of its own: the advice is f(outcome, operation, retryAfterSeconds), and
-     * the outcome is the ONE verdict `ClientRegistry.classify` gives every other reader (RetryStrategy,
+     * the outcome is the ONE verdict `ApiRegistry.classify` gives every other reader (RetryStrategy,
      * LogApiCall). A TRANSIENT_FAILURE becomes operation-aware retry guidance; everything else is
      * rendered by kind, with `retry: 'never'` or `'after-correction'`.
      *
@@ -202,7 +202,7 @@ export class McpDefaultToolCallRenderer implements McpErrorTranslator {
         const correlation = McpCorrelation.current();
         const toolName = correlation.toolName ?? 'unknown';
         const methodInfo = new ApiMethodInfo('server', 'WpMcpServer', toolName, correlation.contract);
-        if (ClientRegistry.classify(error, methodInfo) === CallOutcome.TRANSIENT_FAILURE) {
+        if (ApiRegistry.classify(error, methodInfo) === CallOutcome.TRANSIENT_FAILURE) {
             return this.transient(payload, requestId, this.transientMessage(payload));
         }
         return this.settled(payload, requestId, support);

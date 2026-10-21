@@ -17,6 +17,8 @@ import {
     LoggerFactory,
     LogManager,
     Service,
+    ApiRegistry,
+    CallScope,
 } from '@webpieces/core-util';
 import {
     HttpRequest,
@@ -143,7 +145,8 @@ describe('McpApiBinding.remote generated Node client integration', () => {
         logs = new RecordingLoggerFactory();
         LogManager.setFactory(logs);
         ClientRegistry.resetForTests();
-        ClientRegistry.setErrorTranslator(relay, 'ALL');
+        ApiRegistry.resetForTests();
+        ApiRegistry.setErrorTranslator(relay, CallScope.all());
         const jwtHook = new TestJwtHook();
         await startDownstream(jwtHook);
         await startFailureServers();
@@ -264,6 +267,7 @@ describe('McpApiBinding.remote generated Node client integration', () => {
     afterAll(async () => {
         LogManager.setFactory(originalLoggerFactory);
         ClientRegistry.resetForTests();
+        ApiRegistry.resetForTests();
         await gateway.close();
         await TestServers.close(gatewayServer);
         await TestServers.close(garbageServer);

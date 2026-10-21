@@ -28,16 +28,16 @@ export class CompanySetupOptions {
      * @param appOverrides - Single DI module loaded LAST, so tests can rebind bindings
      *   (e.g. a downstream Api) to a mock/simulator.
      * @param config - Optional WebpiecesConfig (e.g. recording flags); defaults to a fresh one.
-     * @param errorTranslator - The app's {@link ErrorTranslator}, installed on ClientRegistry at
-     *   startup at the `'ALL'` rung of the `CallScope` ladder. This binds it "only when express is
-     *   used"; an app may instead call `ClientRegistry.setErrorTranslator(t, 'ALL')` directly at its
+     * @param errorTranslator - The app's {@link ErrorTranslator}, installed on ApiRegistry at
+     *   startup at the `CallScope.all()` rung of the `CallScope` ladder. This binds it "only when express is
+     *   used"; an app may instead call `ApiRegistry.setErrorTranslator(t, CallScope.all())` directly at its
      *   own startup site (and MUST do the same on the browser/Angular side, since `fromWire` runs
      *   client-side). A contract whose errors travel in a vendor's own format registers its own with
-     *   `ClientRegistry.setErrorTranslator(t, VendorApi)` at the same startup site.
-     * @param errorClassifier - Optional app/company error classifier installed on ClientRegistry at
-     *   startup at the `'ALL'` rung (see {@link ErrorClassifier}). It reads `side`, so it covers the
+     *   `ApiRegistry.setErrorTranslator(t, CallScope.api(VendorApi))` at the same startup site.
+     * @param errorClassifier - Optional app/company error classifier installed on ApiRegistry at
+     *   startup at the `CallScope.all()` rung (see {@link ErrorClassifier}). It reads `side`, so it covers the
      *   server router AND all internal clients. Unset means webpieces' built-in classification. An
-     *   SDK-wrapping client registers its own with `ClientRegistry.setErrorClassifier(c, XxxApi)`,
+     *   SDK-wrapping client registers its own with `ApiRegistry.setErrorClassifier(c, CallScope.api(XxxApi))`,
      *   keyed by its abstract contract CLASS.
      * @param svcName - This service's name, forwarded into RuntimeSetupOptions so {@link setupRuntime}
      *   publishes it to ServiceInfo. It names every log line and stamps `requestIdSource` on request-ids

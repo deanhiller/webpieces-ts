@@ -25,7 +25,7 @@ export type ApiSide = 'client' | 'server';
 export class ApiMethodInfo {
     /**
      * The contract CLASS (the `@ApiPath` contract, or an SDK-wrapping api-client's abstract
-     * `XxxApi`) — the key {@link ClientRegistry.classify} resolves the `CallScope` ladder on
+     * `XxxApi`) — the key {@link ApiRegistry.classify} resolves the `CallScope` ladder on
      * (method -> API -> ALL). {@link apiClass} stays the LOGGED name. REQUIRED as a constructor
      * argument so every caller states it, and never `undefined`: an SDK-wrapping client passes its
      * abstract `XxxApi`, an IPC hop its `@WpInternal` class, and an MCP protocol step (which has no

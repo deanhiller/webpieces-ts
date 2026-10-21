@@ -1,5 +1,5 @@
 import { ClientRole } from '../errors/ClientRole';
-import { ClientRegistry } from './ClientRegistry';
+import { ApiRegistry } from './ApiRegistry';
 import { HttpHeader, HttpResponseDto, HttpResponseStatus } from './HttpResponseDto';
 import { WEBPIECES_DEFAULT_ERROR_TRANSLATOR } from './WebpiecesDefaultErrorTranslator';
 import { DtoValue } from '../mcp/DtoSchema';
@@ -63,7 +63,7 @@ export class StreamErrorControl {
     }
 
     private translator(): ErrorTranslator {
-        return ClientRegistry.getErrorTranslator(this.route.apiClass, this.route.methodName);
+        return ApiRegistry.getErrorTranslator(this.route.apiClass, this.route.methodName);
     }
 
     private response(line: string): HttpResponseDto {

@@ -20,7 +20,7 @@ normal endpoint filter chain, DTO validation, and safe error boundary.
 - Let an application's `McpErrorTranslator`, registered on the process-global `McpRegistry`, REPLACE
   the webpieces `tools/call` rendering (declining by delegating to `McpDefaultToolCallRenderer`), and
   own the reply for `tools/list` and the pre-SDK HTTP boundary outright. The registry is never empty,
-  so `toToolCallResult` makes ONE unconditional call — the same shape `ClientRegistry` gives HTTP and
+  so `toToolCallResult` makes ONE unconditional call — the same shape `ApiRegistry` gives HTTP and
   `IpcRegistry` gives IPC.
 - Have `toWire` and NO `fromWire`: webpieces is never the MCP client, so there is no return path to
   translate. Documented on `McpErrorTranslator` so it does not read as an oversight.

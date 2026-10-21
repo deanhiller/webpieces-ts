@@ -93,7 +93,7 @@ export class LogApiFilter extends Filter<MethodMeta, WpResponse<unknown>> {
             'server',
             rm.apiName ?? rm.controllerClassName ?? 'Unknown',
             rm.methodName,
-            // The contract CLASS: the key ClientRegistry.classify resolves its CallScope ladder on.
+            // The contract CLASS: the key ApiRegistry.classify resolves its CallScope ladder on.
             rm.apiClass,
             rm.controllerClassName,
             rm.mask,

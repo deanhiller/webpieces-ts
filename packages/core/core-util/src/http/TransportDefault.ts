@@ -2,10 +2,10 @@ import { CallStrategy } from './CallStrategy';
 
 /**
  * What a TRANSPORT does for a call nobody registered a policy for — the last rung of
- * {@link CallRegistry.execute}'s ladder (strategy method → API → ALL, else timeout method → API →
+ * {@link ClientRegistry.execute}'s ladder (strategy method → API → ALL, else timeout method → API →
  * ALL, else this).
  *
- * It is the ONLY per-transport difference: every transport calls the same `CallRegistry.execute`, so
+ * It is the ONLY per-transport difference: every transport calls the same `ClientRegistry.execute`, so
  * a strategy registered at ALL / API / method governs RPC and Cloud Tasks enqueue identically.
  *
  * - RPC (node and browser, through `ProxyClient`): `new TransportDefault(30_000)` — one attempt, no

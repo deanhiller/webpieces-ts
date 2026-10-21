@@ -4,9 +4,19 @@ import express from 'express';
 import { request, type Server, type IncomingMessage } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import {
-    ApiBadRequestError, ApiUnauthorizedError, ClientRegistry, Filter,
-    HttpHeader, HttpResponseDto, HttpResponseStatus, Secrets, WebpiecesDefaultErrorTranslator,
-    type ErrorTranslator, type Service,
+    ApiBadRequestError,
+    ApiUnauthorizedError,
+    ClientRegistry,
+    Filter,
+    HttpHeader,
+    HttpResponseDto,
+    HttpResponseStatus,
+    Secrets,
+    WebpiecesDefaultErrorTranslator,
+    type ErrorTranslator,
+    type Service,
+    ApiRegistry,
+    CallScope,
 } from '@webpieces/core-util';
 import { Provider, RequestContext, RequestContextHeaders } from '@webpieces/core-context';
 import { type ApiFactory } from '@webpieces/http-routing';
@@ -86,6 +96,7 @@ let translators: SurfaceTranslator;
 
 beforeAll(async () => {
     ClientRegistry.resetForTests();
+    ApiRegistry.resetForTests();
     // Actual production modules, routes, filters and controllers from the example app.
     factory = await setupCompanyRuntime(new ClientServerWiring());
     server = await new WebpiecesExpressRouter(factory).bindAndStartExpress(express(), 0);
@@ -95,11 +106,12 @@ beforeAll(async () => {
 
 beforeEach(() => {
     translators = new SurfaceTranslator();
-    ClientRegistry.setErrorTranslator(translators, 'ALL');
+    ApiRegistry.setErrorTranslator(translators, CallScope.all());
 });
 
 afterAll(async () => {
     ClientRegistry.resetForTests();
+    ApiRegistry.resetForTests();
     if (server) await new Promise<void>((resolve: () => void, reject: (error: Error) => void) =>
         server.close((error?: Error) => error ? reject(error) : resolve()),
     );

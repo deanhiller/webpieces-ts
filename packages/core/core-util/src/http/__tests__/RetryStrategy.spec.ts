@@ -1,9 +1,10 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { RetryStrategy } from '../RetryStrategy';
-import { CallRegistry } from '../CallRegistry';
+import { ClientRegistry } from '../ClientRegistry';
+import { ApiRegistry } from '../ApiRegistry';
+import { CallScope } from '../CallScope';
 import { CallContext } from '../CallStrategy';
 import { TransportDefault } from '../TransportDefault';
-import { ClientRegistry } from '../ClientRegistry';
 import { CallOutcome, ErrorClassifier } from '../ErrorClassifier';
 import { ApiMethodInfo } from '../ApiMethodInfo';
 import { ApiErrorHttpStatus } from '../ApiErrorHttpStatus';
@@ -37,7 +38,9 @@ class CapturingLoggerFactory implements LoggerFactory {
     }
 }
 
-class CatalogApi {}
+class CatalogApi {
+    list(): void {}
+}
 
 /** A per-contract classifier: this vendor's dependency failures are worth repeating. */
 class DependencyIsTransient implements ErrorClassifier {
@@ -75,14 +78,14 @@ beforeEach(() => {
 });
 afterEach(() => {
     vi.useRealTimers();
-    CallRegistry.clear();
     ClientRegistry.resetForTests();
+    ApiRegistry.resetForTests();
 });
 
-/** Run through the shared CallRegistry exactly as a transport would, advancing every backoff timer. */
+/** Run through the shared ClientRegistry exactly as a transport would, advancing every backoff timer. */
 async function run(scripted: ScriptedAttempts, operation: EndpointOperation): Promise<string> {
-    CallRegistry.setStrategy(strategy.run, CatalogApi);
-    const pending = CallRegistry.execute(
+    ClientRegistry.setStrategy(strategy.run, CallScope.api(CatalogApi));
+    const pending = ClientRegistry.execute(
         CatalogApi,
         context(operation),
         scripted.attempt,
@@ -110,16 +113,16 @@ describe('RetryStrategy', () => {
     });
 
     it('consults the classifier registered for the CONTRACT CLASS the call ran under', async () => {
-        // The context carries only the NAME; CallRegistry.execute stamps the class it was handed, so
+        // The context carries only the NAME; ClientRegistry.execute stamps the class it was handed, so
         // the strategy's classification resolves CatalogApi's rung, and another contract's does not.
         class OtherApi {}
         const vendorTransient = new DependencyIsTransient();
-        ClientRegistry.setErrorClassifier(vendorTransient, OtherApi);
+        ApiRegistry.setErrorClassifier(vendorTransient, CallScope.api(OtherApi));
         const notMine = new ScriptedAttempts([new ApiDependencyError('theirs'), 'ok']);
         await expect(run(notMine, READ)).rejects.toBeInstanceOf(ApiDependencyError);
         expect(notMine.timeouts).toHaveLength(1);
 
-        ClientRegistry.setErrorClassifier(vendorTransient, CatalogApi);
+        ApiRegistry.setErrorClassifier(vendorTransient, CallScope.api(CatalogApi));
         const mine = new ScriptedAttempts([new ApiDependencyError('theirs'), 'ok']);
         expect(await run(mine, READ)).toBe('ok');
         expect(mine.timeouts).toEqual([5_000, 5_000]);
@@ -141,8 +144,8 @@ describe('RetryStrategy', () => {
             new ApiUnavailableError('reset 3'),
             last,
         ]);
-        CallRegistry.setStrategy(strategy.run, CatalogApi);
-        const pending = CallRegistry.execute(
+        ClientRegistry.setStrategy(strategy.run, CallScope.api(CatalogApi));
+        const pending = ClientRegistry.execute(
             CatalogApi,
             context(READ),
             scripted.attempt,
@@ -173,14 +176,14 @@ describe('RetryStrategy', () => {
 
     it('caps the backoff at maxDelayMs', async () => {
         const capped = new RetryStrategy(1_000, 4, 3_000, 10, 4_000);
-        CallRegistry.setStrategy(capped.run, CatalogApi);
+        ClientRegistry.setStrategy(capped.run, CallScope.api(CatalogApi));
         const scripted = new ScriptedAttempts([
             new ApiUnavailableError('1'),
             new ApiUnavailableError('2'),
             new ApiUnavailableError('3'),
             'ok',
         ]);
-        const pending = CallRegistry.execute(
+        const pending = ClientRegistry.execute(
             CatalogApi,
             context(READ),
             scripted.attempt,
@@ -196,11 +199,11 @@ describe('RetryStrategy', () => {
 
     it('throws ApiRetriesExhaustedError only when it actually retried (maxRetries 0 rethrows)', async () => {
         const single = new RetryStrategy(5_000, 0, 500, 2, 4_000);
-        CallRegistry.setStrategy(single.run, CatalogApi);
+        ClientRegistry.setStrategy(single.run, CallScope.api(CatalogApi));
         const failure = new ApiUnavailableError('reset');
         const scripted = new ScriptedAttempts([failure]);
         await expect(
-            CallRegistry.execute(
+            ClientRegistry.execute(
                 CatalogApi,
                 context(READ),
                 scripted.attempt,
@@ -228,12 +231,12 @@ describe('RetryStrategy', () => {
     });
 
     it('the per-attempt line also covers an app-written strategy', async () => {
-        CallRegistry.setStrategy(
+        ClientRegistry.setStrategy(
             (call: (ms: number) => Promise<unknown>) => call(10).catch(() => call(20)),
-            CatalogApi,
+            CallScope.api(CatalogApi),
         );
         const scripted = new ScriptedAttempts([new ApiUnavailableError('flaky'), 'ok']);
-        await CallRegistry.execute(
+        await ClientRegistry.execute(
             CatalogApi,
             context(WRITE),
             scripted.attempt,
@@ -260,7 +263,7 @@ describe('TransportDefault', () => {
     it('applies its strategy only when nothing is registered; a registered timeout replaces it', async () => {
         const fallback = new TransportDefault(30_000, strategy.run);
         const retried = new ScriptedAttempts([new ApiUnavailableError('reset'), 'ok']);
-        const pending = CallRegistry.execute(
+        const pending = ClientRegistry.execute(
             CatalogApi,
             context(WRITE_IDEMPOTENT),
             retried.attempt,
@@ -270,10 +273,10 @@ describe('TransportDefault', () => {
         expect(await pending).toBe('ok');
         expect(retried.timeouts).toEqual([5_000, 5_000]);
 
-        CallRegistry.setTimeout(700, CatalogApi);
+        ClientRegistry.setTimeout(700, CallScope.api(CatalogApi));
         const single = new ScriptedAttempts(['ok']);
         expect(
-            await CallRegistry.execute(CatalogApi, context(WRITE_IDEMPOTENT), single.attempt, fallback),
+            await ClientRegistry.execute(CatalogApi, context(WRITE_IDEMPOTENT), single.attempt, fallback),
         ).toBe('ok');
         expect(single.timeouts).toEqual([700]);
     });
@@ -281,7 +284,7 @@ describe('TransportDefault', () => {
     it('without a strategy it makes one attempt with its timeout (the RPC default)', async () => {
         const scripted = new ScriptedAttempts(['ok']);
         expect(
-            await CallRegistry.execute(
+            await ClientRegistry.execute(
                 CatalogApi,
                 context(READ),
                 scripted.attempt,
@@ -292,14 +295,14 @@ describe('TransportDefault', () => {
     });
 
     it('resolveTimeout walks method -> API -> ALL -> default and ignores strategies', () => {
-        CallRegistry.setStrategy(strategy.run, CatalogApi);
-        expect(CallRegistry.resolveTimeout(CatalogApi, 'list', 30_000)).toBe(30_000);
-        CallRegistry.setTimeout(3_000, 'ALL');
-        expect(CallRegistry.resolveTimeout(CatalogApi, 'list', 30_000)).toBe(3_000);
-        CallRegistry.setTimeout(2_000, CatalogApi);
-        expect(CallRegistry.resolveTimeout(CatalogApi, 'list', 30_000)).toBe(2_000);
-        CallRegistry.setTimeout(1_000, CatalogApi, 'list');
-        expect(CallRegistry.resolveTimeout(CatalogApi, 'list', 30_000)).toBe(1_000);
+        ClientRegistry.setStrategy(strategy.run, CallScope.api(CatalogApi));
+        expect(ClientRegistry.resolveTimeout(CatalogApi, 'list', 30_000)).toBe(30_000);
+        ClientRegistry.setTimeout(3_000, CallScope.all());
+        expect(ClientRegistry.resolveTimeout(CatalogApi, 'list', 30_000)).toBe(3_000);
+        ClientRegistry.setTimeout(2_000, CallScope.api(CatalogApi));
+        expect(ClientRegistry.resolveTimeout(CatalogApi, 'list', 30_000)).toBe(2_000);
+        ClientRegistry.setTimeout(1_000, CallScope.method(CatalogApi, 'list'));
+        expect(ClientRegistry.resolveTimeout(CatalogApi, 'list', 30_000)).toBe(1_000);
     });
 });
 
@@ -323,7 +326,7 @@ describe('ApiRetriesExhaustedError on the wire', () => {
         }
         expect(received).toBeInstanceOf(ApiRetriesExhaustedError);
         expect(
-            ClientRegistry.classify(received!, new ApiMethodInfo('client', 'EmailApi', 'send', EmailApi)),
+            ApiRegistry.classify(received!, new ApiMethodInfo('client', 'EmailApi', 'send', EmailApi)),
         ).toBe(CallOutcome.FAILURE);
     });
 });

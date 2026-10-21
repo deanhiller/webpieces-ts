@@ -1,4 +1,4 @@
-import { ClientRole, WpAuthorization, AuthorizationType } from '@webpieces/core-util';
+import { ClientRole, WpAuthorization, AuthorizationType, ApiRegistry, CallScope } from '@webpieces/core-util';
 import 'reflect-metadata';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import {
@@ -187,11 +187,13 @@ async function callAndCatch(): Promise<unknown> {
 
 beforeEach(() => {
     ClientRegistry.resetForTests();
+    ApiRegistry.resetForTests();
     ClientRegistry.addUrlMapping('pg-dataaccess', 'https://pg-dataaccess.example.com');
 });
 
 afterEach(() => {
     ClientRegistry.resetForTests();
+    ApiRegistry.resetForTests();
     vi.unstubAllGlobals();
 });
 
@@ -319,7 +321,7 @@ describe('NodeProxyClient reports a 5xx as the DEPENDENCY failing, not as its ow
 
         expect(error).toBeInstanceOf(ApiRetriesExhaustedError);
         expect(
-            ClientRegistry.classify(error as Error, new ApiMethodInfo('client', 'SaveApi', 'save', SaveApi)),
+            ApiRegistry.classify(error as Error, new ApiMethodInfo('client', 'SaveApi', 'save', SaveApi)),
         ).toBe(CallOutcome.FAILURE);
     });
 
@@ -415,7 +417,7 @@ describe('an app-installed fromWire WINS over the uniform rule', () => {
     }
 
     it('a 404 the app claims relays the downstream status as the app chose', async () => {
-        ClientRegistry.setErrorTranslator(new RelayNotFound(), 'ALL');
+        ApiRegistry.setErrorTranslator(new RelayNotFound(), CallScope.all());
         stubApiErrorPayload(404, 'no such store');
 
         const error = await callAndCatch();
@@ -426,7 +428,7 @@ describe('an app-installed fromWire WINS over the uniform rule', () => {
     });
 
     it('a status the translator does NOT claim falls to the webpieces default', async () => {
-        ClientRegistry.setErrorTranslator(new RelayNotFound(), 'ALL');
+        ApiRegistry.setErrorTranslator(new RelayNotFound(), CallScope.all());
         stubApiErrorPayload(403, 'our service account is not on the allow-list');
 
         const error = await callAndCatch();

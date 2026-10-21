@@ -12,6 +12,8 @@ import {
     RouteMetadata,
     WRITE,
     WebpiecesDefaultErrorTranslator,
+    ApiRegistry,
+    CallScope,
 } from '@webpieces/core-util';
 import { ExpressWrapper } from '../ExpressWrapper';
 import { RequestContextHeaders } from '@webpieces/core-context';
@@ -103,10 +105,11 @@ function newWrapper(): ExpressWrapper {
 describe('ExpressWrapper.handleError registry integration', () => {
     beforeEach(() => {
         ClientRegistry.resetForTests();
+        ApiRegistry.resetForTests();
     });
 
     it('serializes an installed custom type (460) the built-in ladder cannot, VERBATIM', () => {
-        ClientRegistry.setErrorTranslator(new AiErrorTranslator(), 'ALL');
+        ApiRegistry.setErrorTranslator(new AiErrorTranslator(), CallScope.all());
 
         const res = new FakeResponse();
         newWrapper().handleError(asResponse(res), new AiBadRequestError('bad ai input'));
@@ -126,7 +129,7 @@ describe('ExpressWrapper.handleError registry integration', () => {
         const withNone = new FakeResponse();
         newWrapper().handleError(asResponse(withNone), declined);
 
-        ClientRegistry.setErrorTranslator(new AiErrorTranslator(), 'ALL'); // only claims AiBadRequestError
+        ApiRegistry.setErrorTranslator(new AiErrorTranslator(), CallScope.all()); // only claims AiBadRequestError
         const withTranslator = new FakeResponse();
         newWrapper().handleError(asResponse(withTranslator), declined);
 
@@ -141,7 +144,7 @@ describe('ExpressWrapper.handleError registry integration', () => {
     });
 
     it('does nothing once headers are already sent', () => {
-        ClientRegistry.setErrorTranslator(new AiErrorTranslator(), 'ALL');
+        ApiRegistry.setErrorTranslator(new AiErrorTranslator(), CallScope.all());
 
         const res = new FakeResponse();
         res.headersSent = true;
@@ -153,7 +156,9 @@ describe('ExpressWrapper.handleError registry integration', () => {
 });
 
 /** Synthetic contract classes: the translator ladder is keyed by the CLASS, never by its name. */
-abstract class InboundVendorApi {}
+abstract class InboundVendorApi {
+    abstract legacy(): Promise<void>;
+}
 abstract class OrdersApi {}
 
 /** The error envelope an INBOUND vendor expects back from us — nothing like ApiErrorPayload. */
@@ -203,7 +208,8 @@ function routedWrapper(api: Function, methodName: string): ExpressWrapper {
 describe('ExpressWrapper.handleError resolves toWire per matched route (method -> API -> ALL)', () => {
     beforeEach(() => {
         ClientRegistry.resetForTests();
-        ClientRegistry.setErrorTranslator(new InboundVendorTranslator(), InboundVendorApi);
+        ApiRegistry.resetForTests();
+        ApiRegistry.setErrorTranslator(new InboundVendorTranslator(), CallScope.api(InboundVendorApi));
     });
 
     it('a per-API toWire renders the vendor envelope for its own contract', () => {
@@ -234,8 +240,8 @@ describe('ExpressWrapper.handleError resolves toWire per matched route (method -
     });
 
     it('a per-method toWire beats the per-API one for that method only; ALL governs the rest', () => {
-        ClientRegistry.setErrorTranslator(new WebpiecesDefaultErrorTranslator(), InboundVendorApi, 'legacy');
-        ClientRegistry.setErrorTranslator(new AiErrorTranslator(), 'ALL');
+        ApiRegistry.setErrorTranslator(new WebpiecesDefaultErrorTranslator(), CallScope.method(InboundVendorApi, 'legacy'));
+        ApiRegistry.setErrorTranslator(new AiErrorTranslator(), CallScope.all());
 
         const legacy = new FakeResponse();
         routedWrapper(InboundVendorApi, 'legacy').handleError(asResponse(legacy), new ApiBadRequestError('x'));
