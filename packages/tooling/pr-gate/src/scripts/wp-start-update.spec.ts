@@ -5,12 +5,22 @@ import { CliExitError, RepoRootFinder } from '@webpieces/rules-config';
 // simulates gh's exit code (0 = answered; non-zero = couldn't reach GitHub → must fail fast).
 const state = vi.hoisted(() => ({ branch: 'dean/x', openPrNumber: '', ghStatus: 0, ghStderr: '' }));
 
-// execSync → current branch; spawnSync → the `gh pr list … --state open` lookup (openPrForBranch).
+// spawnSync → the `gh pr list … --state open` lookup (openPrForBranch).
 vi.mock('child_process', () => ({
-    execSync: (): string => `${state.branch}\n`,
     spawnSync: (): { status: number; stdout: string; stderr: string } =>
         ({ status: state.ghStatus, stdout: `${state.openPrNumber}\n`, stderr: state.ghStderr }),
 }));
+
+// The current branch comes from the ONE shared resolver (#1355); it answers what this suite dictates.
+vi.mock('@webpieces/tooling-common', async (importOriginal: () => Promise<typeof import('@webpieces/tooling-common')>) => {
+    const actual = await importOriginal();
+    class DictatedCheckout extends actual.GitCheckout {
+        override branch(): string {
+            return state.branch;
+        }
+    }
+    return { ...actual, gitCheckout: new DictatedCheckout() };
+});
 
 import { StartUpdateCommand } from './commands/start-update-command';
 import { OpenPrCheck } from './workflow/open-pr-check';

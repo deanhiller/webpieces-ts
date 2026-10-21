@@ -61,6 +61,7 @@ graph TD
     GatedPrPublisher["GatedPrPublisher"]
     GatherInfo["GatherInfo"]
     GeneratedArtifactRegistry["GeneratedArtifactRegistry"]
+    GitCheckout["GitCheckout"]
     GitExec["GitExec"]
     GitStatusParser["GitStatusParser"]
     HarnessAgentActivityReader["HarnessAgentActivityReader"]
@@ -191,6 +192,7 @@ graph TD
     DiffBasisResolver --> ForkPoint
     DiffBasisResolver --> GitStatusParser
     DiffMaterializer --> ReviewJsonService
+    DotWebpieces --> GitCheckout
     DotWebpieces --> StateDirMigrator
     FinishPushDevCommand --> DevResolveRunner
     FinishPushDevCommand --> PushDevStateStore

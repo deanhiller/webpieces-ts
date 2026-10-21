@@ -1,4 +1,4 @@
-import { execSync } from 'child_process';
+import { gitCheckout } from '@webpieces/tooling-common';
 
 import { Option } from '@webpieces/rules-config';
 import { BRANCH_STATE_GUARD_KEY } from '../../policy-keys';
@@ -9,7 +9,6 @@ import type { BashContext, Violation } from '@webpieces/hook-runtime';
 import { Violation as V } from '@webpieces/hook-runtime';
 import { BashRuleBase } from '@webpieces/hook-runtime';
 import { FixHint } from '@webpieces/hook-runtime';
-import { toError } from '@webpieces/tooling-common/to-error';
 import { triggerMainSyncRefresh } from '../main-sync-refresh';
 import { hangTimeoutOf } from '../main-sync-timeout';
 import { logGuardDecision, GuardDecision, Verdict, matrixL2Row } from '../decision-log';
@@ -171,18 +170,7 @@ export class MergedBranchBashGuardRule extends BashRuleBase<BranchStateGuardConf
     }
 
     private currentBranch(workspaceRoot: string): string | null {
-        // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
-        try {
-            return execSync('git rev-parse --abbrev-ref HEAD', {
-                cwd: workspaceRoot,
-                encoding: 'utf8',
-                stdio: ['pipe', 'pipe', 'pipe'],
-            }).trim();
-        } catch (err: unknown) {
-            const error = toError(err);
-            void error;
-            return null;
-        }
+        return gitCheckout.branch(workspaceRoot);
     }
 }
 

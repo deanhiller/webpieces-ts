@@ -10,7 +10,7 @@ import {
     PullRequestIndex,
     RefreshOutcome,
 } from './main-sync-file';
-import { DotWebpieces, dotWebpieces } from '@webpieces/tooling-common';
+import { DotWebpieces, dotWebpieces, gitCheckout } from '@webpieces/tooling-common';
 import { toError } from '@webpieces/tooling-common/to-error';
 import { WorktreeService } from './worktrees';
 import { CommandTimeouts } from './command-timeouts';
@@ -314,8 +314,7 @@ export class MainSyncStatusService {
 
     // The actual checked-out branch in repoRoot — cwd-correct so the cache's `branch` label matches.
     private gitBranch(repoRoot: string): string {
-        const result = this.capture(repoRoot, 'git', ['rev-parse', '--abbrev-ref', 'HEAD']);
-        return result.ok ? result.out : '';
+        return gitCheckout.branch(repoRoot) ?? '';
     }
 
     // The LOCAL main hash. `refs/heads/main` (not the bare name) so it can never resolve to a remote

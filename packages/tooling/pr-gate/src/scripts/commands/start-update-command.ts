@@ -1,4 +1,4 @@
-import { execSync } from 'child_process';
+import { gitCheckout } from '@webpieces/tooling-common';
 import { writeTemplate, CliExitError, RepoRootFinder } from '@webpieces/rules-config';
 import { injectable, bindingScopeValues } from 'inversify';
 import { OpenPrCheck } from '../workflow/open-pr-check';
@@ -49,7 +49,7 @@ export class StartUpdateCommand {
     // does NOT refresh the PR body/review or run the authoritative build gate. Fail fast and steer to
     // the PR flow, which re-merges main AND updates the PR.
     assertNoOpenPr(repoRoot: string): void {
-        const branch = execSync('git rev-parse --abbrev-ref HEAD', { cwd: repoRoot, encoding: 'utf8' }).trim();
+        const branch = gitCheckout.requireBranch(repoRoot);
         const openPr = this.openPrCheck.openPrForBranch(repoRoot, branch);
         if (openPr === '') return;
         throw new CliExitError(2,

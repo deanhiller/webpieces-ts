@@ -20,6 +20,7 @@ graph TD
     ConfigLoader["ConfigLoader"]
     DiffScope["DiffScope"]
     DotWebpieces["DotWebpieces"]
+    GitCheckout["GitCheckout"]
     InstructAiDocSet["InstructAiDocSet"]:::many
     MainSyncFileStore["MainSyncFileStore"]
     MainSyncStatusService["MainSyncStatusService"]
@@ -34,6 +35,7 @@ graph TD
     BranchMutationLog --> DotWebpieces
     ConfigLoader --> ConfigFile
     ConfigLoader --> PackPolicyFiles
+    DotWebpieces --> GitCheckout
     DotWebpieces --> StateDirMigrator
     InstructAiDocSet --> BranchMutationLog
     MainSyncFileStore --> AtomicFile

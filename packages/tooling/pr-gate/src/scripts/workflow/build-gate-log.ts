@@ -1,6 +1,7 @@
 import { spawn, spawnSync, ChildProcess } from 'child_process';
 import * as fs from 'fs';
 import { BuildTermination } from '@webpieces/rules-config';
+import { gitCheckout } from '@webpieces/tooling-common';
 import { injectable, bindingScopeValues } from 'inversify';
 
 import { GateLogFile } from './gate-log-file';
@@ -121,7 +122,7 @@ export class BuildGateLog {
     /** `build.log` for `wp-build`; `build-gate-<stage>-<branch>-<shortSha>.log` for the PR-flow stages. */
     fileNameFor(repoRoot: string, stage: string): string {
         if (stage === BUILD_STAGE) return BUILD_LOG_NAME;
-        const branch = this.slug(this.git(repoRoot, ['rev-parse', '--abbrev-ref', 'HEAD']));
+        const branch = this.slug(gitCheckout.branch(repoRoot) ?? '');
         const sha = this.slug(this.git(repoRoot, ['rev-parse', '--short', 'HEAD']));
         return `build-gate-${this.slug(stage)}-${branch === '' ? 'nobranch' : branch}-${sha === '' ? 'nosha' : sha}.log`;
     }

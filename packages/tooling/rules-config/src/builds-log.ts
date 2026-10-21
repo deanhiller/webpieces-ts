@@ -1,11 +1,10 @@
-import { spawnSync } from 'child_process';
 import * as crypto from 'crypto';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { injectable, bindingScopeValues } from 'inversify';
 
-import { DotWebpieces } from '@webpieces/tooling-common';
+import { DotWebpieces, gitCheckout } from '@webpieces/tooling-common';
 import { HOME_CONFIG_DIR } from './home-config';
 import { toError } from '@webpieces/tooling-common/to-error';
 
@@ -519,19 +518,8 @@ export class BuildsLog {
         }
     }
 
-    // The checked-out branch in `startDir`, or '' when git cannot say. spawnSync does not throw on a
-    // non-zero exit, so "not a repo" arrives as a status, not an exception.
+    // The checked-out branch in `startDir`, or '' when git cannot say.
     private gitBranch(startDir: string): string {
-        // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
-        try {
-            const result = spawnSync('git', ['rev-parse', '--abbrev-ref', 'HEAD'],
-                { cwd: startDir, encoding: 'utf8' });
-            if (result.status !== 0 || typeof result.stdout !== 'string') return '';
-            return result.stdout.trim();
-        } catch (err: unknown) {
-            const error = toError(err);
-            void error;
-            return '';
-        }
+        return gitCheckout.branch(startDir) ?? '';
     }
 }

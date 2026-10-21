@@ -1,4 +1,5 @@
 import { execSync } from 'child_process';
+import { gitCheckout } from '@webpieces/tooling-common';
 
 import { Option, TurnOffRuleCure } from "@webpieces/rules-config";
 import { BranchCreationGuardConfig } from "../../configs/rule-configs";
@@ -270,10 +271,7 @@ export class BranchCreationGuardRule extends BashRuleBase<BranchCreationGuardCon
         // The exact `/hotfix/` convention explicitly authorizes a nested emergency branch.
         if (this.branchIdentity.isHotfix(requestedName)) return [];
 
-        const currentBranch = execSync('git rev-parse --abbrev-ref HEAD', {
-            cwd: ctx.workspaceRoot,
-            encoding: 'utf8',
-        }).trim();
+        const currentBranch = gitCheckout.requireBranch(ctx.workspaceRoot);
 
         if (currentBranch === 'main') {
             return checkMainIsUpToDate(ctx, requestedName);
@@ -436,18 +434,7 @@ export class BranchCreationGuardRule extends BashRuleBase<BranchCreationGuardCon
     }
 
     private currentBranchOrNull(workspaceRoot: string): string | null {
-        // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
-        try {
-            return execSync('git rev-parse --abbrev-ref HEAD', {
-                cwd: workspaceRoot,
-                encoding: 'utf8',
-                stdio: ['pipe', 'pipe', 'pipe'],
-            }).trim();
-        } catch (err: unknown) {
-            const error = toError(err);
-            void error;
-            return null;
-        }
+        return gitCheckout.branch(workspaceRoot);
     }
 
     /**

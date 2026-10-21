@@ -1,10 +1,10 @@
-import { spawnSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 import { injectable, bindingScopeValues } from 'inversify';
 
 import { PR_REVIEW_DIR, WEBPIECES_TMP_DIR } from './state-path-constants';
 import { StateDirMigrator } from './state-dir-migration';
+import { GitCheckout, gitCheckout } from './git-checkout';
 
 // The per-worktree namespace inside the primary clone's `.webpieces/`. A LINKED worktree's local state
 // lives at `<primary>/.webpieces/worktrees/<worktreeName>/`; the primary clone keeps using
@@ -139,9 +139,11 @@ export class GitDirs {
  * working. Config resolution is untouched — still per-worktree, via findConfigFile /
  * RepoRootFinder.resolveRepoRoot. Nothing in this class reads or moves config.
  *
- * ─── Why `--git-dir` / `--git-common-dir`, and not one of the existing services ────────────────────
- * They are git's own answers, from any subdirectory, in one cheap local call, with no `.git`-file
- * parsing by hand (which gets `--separate-git-dir` and submodules wrong). Two existing mechanisms do
+ * ─── Why the git dir / common git dir, and not one of the existing services ────────────────────────
+ * They are git's own notion of "which checkout", from any subdirectory. They come from `GitCheckout`
+ * (git-checkout.ts), the ONE process-wide resolver, which reads them from the filesystem the way git's
+ * discovery does — `.git` dir, or `.git` file + `commondir` — with NO git process, because this runs on
+ * every guard-hook invocation (#1355); this class only turns its answers into paths. Two existing mechanisms do
  * distinguish primary from linked, and neither is the right authority here:
  *   • `WorktreeService` answers "what worktrees exist and what do they hold" — a repo-wide ENUMERATION
  *     (`git worktree list --porcelain`) for the caps and the reaper. Using it for a path lookup would
@@ -160,15 +162,16 @@ export class GitDirs {
  */
 @injectable(bindingScopeValues.Singleton)
 export class DotWebpieces {
-    // treeRoot → git's answer. One `git rev-parse` pair per root per process; every later path lookup
-    // in that invocation is a Map hit.
-    private readonly gitDirsByRoot = new Map<string, GitDirs | null>();
-    // startDir → `git rev-parse --show-toplevel`, cached on the same terms as gitDirsByRoot.
-    private readonly treeRootByDir = new Map<string, string | null>();
     // Roots whose legacy per-worktree `.webpieces/` has already been considered for migration.
     private readonly migrated = new Set<string>();
 
-    constructor(private readonly migrator: StateDirMigrator = new StateDirMigrator()) {}
+    // Every git answer comes from the ONE process-wide resolver (#1355). This class keeps no git cache of
+    // its own: it used to, per INSTANCE, and with a DI singleton beside the module-level `dotWebpieces`
+    // that was two caches and twice the `git rev-parse` processes on every hook invocation; now none.
+    constructor(
+        private readonly migrator: StateDirMigrator = new StateDirMigrator(),
+        private readonly git: GitCheckout = gitCheckout,
+    ) {}
 
     /**
      * REPO-WIDE state: `<primary>/.webpieces`. Use ONLY for facts about the repo rather than about one
@@ -246,14 +249,8 @@ export class DotWebpieces {
         return path.join(this.logs(startDir), ...segments);
     }
 
-    /** True when `startDir` sits in a LINKED worktree rather than the primary clone. */
-    isLinkedWorktree(startDir: string): boolean {
-        const dirs = this.gitDirs(startDir);
-        return dirs !== null && dirs.isLinkedWorktree;
-    }
-
     /**
-     * git's two dir answers for `startDir`, memoized — null when it is not a git repo / git is
+     * The two git dirs for `startDir` (GitCheckout's process-wide answer) — null when it is not a git repo / git is
      * unavailable.
      *
      * PUBLIC because TREE IDENTITY is decided from these two strings and nothing else. `commonDir`
@@ -262,37 +259,26 @@ export class DotWebpieces {
      * inside the repo at `.claude/worktrees/**`) from a nested clone under `repositories/**` (not
      * ours). `gitDirs.isLinkedWorktree` then separates primary from linked. See
      * `EffectiveTreeResolver.classify`, the caller that runs this on the hook's blocking path, which is
-     * why it goes through this cache rather than spawning its own `rev-parse`.
+     * why it goes through GitCheckout rather than spawning its own `rev-parse`.
      */
     gitDirs(startDir: string): GitDirs | null {
-        const cached = this.gitDirsByRoot.get(startDir);
-        if (cached !== undefined) return cached;
-
-        const gitDir = this.revParse(startDir, '--git-dir');
-        const commonDir = this.revParse(startDir, '--git-common-dir');
-        const dirs = gitDir === null || commonDir === null ? null : new GitDirs(gitDir, commonDir);
-        this.gitDirsByRoot.set(startDir, dirs);
-        return dirs;
+        const facts = this.git.facts(startDir);
+        if (facts.gitDir === null || facts.commonDir === null) return null;
+        return new GitDirs(facts.gitDir, facts.commonDir);
     }
 
     /**
-     * The WORKING TREE root containing `startDir` (`git rev-parse --show-toplevel`), memoized, or null
+     * The WORKING TREE root containing `startDir` (what `git rev-parse --show-toplevel` prints), from GitCheckout, or null
      * when `startDir` is not in a git repo. In a linked worktree this is the WORKTREE's own root, which
      * is exactly what a caller judging "which checkout am I standing in" needs.
      *
-     * THE ONE tree-root resolver. There used to be three byte-identical `spawnSync … --show-toplevel`
-     * copies — this one, `RepoRootFinder`'s and `effective-tree.ts`'s — each commenting that it
-     * "mirrors" one of the others, and one of those comments was already stale. Both copies are deleted;
-     * everything that needs a tree root calls this. Do not add a fourth.
+     * THE tree-root accessor for state paths. There used to be three byte-identical `spawnSync …
+     * --show-toplevel` copies — this one, `RepoRootFinder`'s and `effective-tree.ts`'s; all three now
+     * end in `GitCheckout.facts()`, which answers it from the filesystem with the two git dirs (#1355).
+     * Do not add a spawn here or anywhere else.
      */
     treeRoot(startDir: string): string | null {
-        const cached = this.treeRootByDir.get(startDir);
-        if (cached !== undefined) return cached;
-        // `status !== 0` IS the expected "not a repo" answer (spawnSync does not throw on a non-zero
-        // exit), so nothing here swallows a real git crash.
-        const root = this.revParse(startDir, '--show-toplevel');
-        this.treeRootByDir.set(startDir, root);
-        return root;
+        return this.git.facts(startDir).toplevel;
     }
 
     /**
@@ -328,28 +314,17 @@ export class DotWebpieces {
     // Drain a legacy per-worktree `.webpieces/` into this worktree's namespace, at most once per tree
     // per process. Migration is idempotent, but it touches the filesystem on the hook's blocking path.
     private migrateOnce(startDir: string, target: string): void {
-        // Guard on the CHEAP key first. `local()` is called many times per invocation, and resolving the
-        // worktree toplevel costs a `git rev-parse` — doing that before the once-check would put a
-        // process spawn on the hook's blocking path for every single state-path lookup.
+        // Guard on the CHEAP key first. `local()` is called many times per invocation; the toplevel is a
+        // memoized GitCheckout answer, but the migration below touches the filesystem, so it runs once.
         if (this.migrated.has(startDir)) return;
         this.migrated.add(startDir);
         const toplevel = this.treeRoot(startDir);
         if (toplevel === null) return;
         this.migrator.migrate(this.legacyDir(toplevel), target, AI_WRITABLE_STATE_DIRS);
     }
-
-    // One `git rev-parse <flag>`, resolved to an absolute path (git prints a bare `.git`, relative to
-    // the tree, in the primary clone, and an absolute path from a linked worktree).
-    private revParse(cwd: string, flag: string): string | null {
-        const result = spawnSync('git', ['-C', cwd, 'rev-parse', flag], { encoding: 'utf8' });
-        if (result.status !== 0) return null;
-        const printed = (result.stdout ?? '').trim();
-        if (printed === '') return null;
-        return path.resolve(cwd, printed);
-    }
 }
 
 // Process-wide instance for the many non-DI call sites (hooks, detached refreshers, wp-* bins, eslint
-// rules). Sharing one instance is what makes the git-resolution cache and the once-per-tree migration
-// worth having; inversify still injects the singleton wherever a container is in play.
+// rules). Sharing one instance is what makes the once-per-tree migration worth having (the git answers
+// are GitCheckout's, shared process-wide by every instance); inversify still injects the singleton wherever a container is in play.
 export const dotWebpieces = new DotWebpieces();

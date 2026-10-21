@@ -13,9 +13,16 @@ import { toError } from '@webpieces/tooling-common/to-error';
 // refs/pull/<N>/merge returns — the exact condition this suite pins.
 const state = vi.hoisted(() => ({ branch: 'main' }));
 
-vi.mock('child_process', () => ({
-    execSync: (): string => `${state.branch}\n`,
-}));
+// The one branch resolver every caller goes through (#1355), answering what this suite dictates.
+vi.mock('@webpieces/tooling-common', async (importOriginal: () => Promise<typeof import('@webpieces/tooling-common')>) => {
+    const actual = await importOriginal();
+    class DictatedCheckout extends actual.GitCheckout {
+        override branch(): string {
+            return state.branch;
+        }
+    }
+    return { ...actual, gitCheckout: new DictatedCheckout() };
+});
 
 describe('shouldSkipRule branch hatch in a detached checkout', () => {
     beforeEach(() => {

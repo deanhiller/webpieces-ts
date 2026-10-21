@@ -1,6 +1,4 @@
-import { execSync } from 'child_process';
-import * as fs from 'fs';
-import * as path from 'path';
+import { gitCheckout } from '@webpieces/tooling-common';
 
 import { Option } from '@webpieces/rules-config';
 import { BRANCH_STATE_GUARD_KEY } from '../../policy-keys';
@@ -11,7 +9,6 @@ import type { FileContext, Violation } from '@webpieces/hook-runtime';
 import { Violation as V } from '@webpieces/hook-runtime';
 import { FileRuleBase } from '@webpieces/hook-runtime';
 import { FixHint } from '@webpieces/hook-runtime';
-import { toError } from '@webpieces/tooling-common/to-error';
 import { triggerMainSyncRefresh } from '../main-sync-refresh';
 import { hangTimeoutOf } from '../main-sync-timeout';
 import { logGuardDecision, GuardDecision, Verdict, matrixL2Row } from '../decision-log';
@@ -303,51 +300,11 @@ export class ReadStaleGuardRule extends FileRuleBase<BranchStateGuardConfig> {
     }
 
     /**
-     * The current branch, WITHOUT spawning git on the common path.
-     *
-     * This runs on EVERY read, so it is the one call whose cost actually matters. Spawning
-     * `git rev-parse --abbrev-ref HEAD` measures ~12ms — essentially all process-spawn overhead —
-     * whereas `.git/HEAD` is a single tiny file whose read is microseconds. On a feature branch
-     * (the overwhelmingly common case) that file read is the ONLY work this guard does before
-     * short-circuiting, so reads stay effectively free.
-     *
-     * Falls back to spawning git whenever `.git/HEAD` cannot answer authoritatively:
-     *   - `.git` is a FILE, not a dir → we are in a worktree and HEAD lives elsewhere
-     *   - detached HEAD → the file holds a raw sha, not a `ref:` line
-     *   - anything unreadable/unexpected
-     * The fallback is correct in all those cases; it is just slower, and they are rare.
+     * The current branch, WITHOUT spawning git for it. This runs on EVERY read, so it is the one call
+     * whose cost matters most: `GitCheckout.branch()` reads the worktree's own HEAD file (primary clone
+     * and linked worktree alike, detached HEAD included) with no git process at all (#1355).
      */
     private currentBranch(workspaceRoot: string): string | null {
-        const fromHead = this.branchFromGitHead(workspaceRoot);
-        if (fromHead !== null) return fromHead;
-        // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
-        try {
-            return execSync('git rev-parse --abbrev-ref HEAD', {
-                cwd: workspaceRoot,
-                encoding: 'utf8',
-                stdio: ['pipe', 'pipe', 'pipe'],
-            }).trim();
-        } catch (err: unknown) {
-            const error = toError(err);
-            void error;
-            return null;
-        }
-    }
-
-    // Parse `.git/HEAD` ("ref: refs/heads/<branch>"). null = cannot answer, caller must fall back.
-    private branchFromGitHead(workspaceRoot: string): string | null {
-        // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
-        try {
-            const gitPath = path.join(workspaceRoot, '.git');
-            // A worktree/submodule has `.git` as a file pointing at the real gitdir — HEAD is not here.
-            if (!fs.statSync(gitPath).isDirectory()) return null;
-            const head = fs.readFileSync(path.join(gitPath, 'HEAD'), 'utf8').trim();
-            const match = /^ref:\s*refs\/heads\/(.+)$/.exec(head);
-            return match ? match[1] : null; // no match = detached HEAD → fall back
-        } catch (err: unknown) {
-            const error = toError(err);
-            void error;
-            return null;
-        }
+        return gitCheckout.branch(workspaceRoot);
     }
 }

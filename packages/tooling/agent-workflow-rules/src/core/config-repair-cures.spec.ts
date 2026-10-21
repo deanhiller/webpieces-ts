@@ -16,6 +16,8 @@ import {
     ConfigRepairCure,
     ConfigRepairError,
     RulePackRegistry,
+    UntrackedPolicyError,
+    assertPolicyTracked,
     loadAndValidate,
     prepareLegacyUpgrade,
 } from '@webpieces/rules-config';
@@ -191,12 +193,6 @@ const BROKEN: readonly BrokenConfig[] = [
         fs.mkdirSync(repo.path('.webpieces/rules'), { recursive: true });
         fs.writeFileSync(repo.path('.webpieces/rules/code.json'), '{}');
     }, 'wp-migrate-dirs'),
-    new BrokenConfig('an owner file is not tracked by git', (repo: RepairRepo): void => {
-        repo.git('rm', '-q', '--cached', '--', OWNER_0);
-    }, 'not tracked by git'),
-    new BrokenConfig('committed policy is gitignored', (repo: RepairRepo): void => {
-        fs.appendFileSync(repo.path('.gitignore'), '.webpieces-config/\n');
-    }, 'policy is gitignored'),
 ];
 
 describe('every config-repair deny names a cure the same hook permits (#1273)', () => {
@@ -226,35 +222,46 @@ describe('every config-repair deny names a cure the same hook permits (#1273)', 
     }
 });
 
-describe('an untracked declared owner file: git add is the cure, so git add is let through (#1327)', () => {
-    it('Write refused → git add of the file allowed → once tracked, work is allowed', () => {
+/**
+ * Policy tracking is a COMMIT-TIME invariant, checked by the PR gate and CI (`wp-ci` →
+ * assertPolicyTracked), never by the guard hooks (#1355): it costs two `git` processes and config load
+ * runs on every tool call. So an untracked or ignored owner file blocks nothing here — the `git add` cure
+ * needs no carve-out — and the gate still refuses it with the same error and cures.
+ */
+describe('an untracked or ignored declared owner file is the GATE\'s refusal, not the hook\'s (#1355)', () => {
+    it('lets work and the git add cure through, and the gate check names the file and both cures', () => {
         const repo = new RepairRepo();
         repo.git('rm', '-q', '--cached', '--', OWNER_0);
 
-        const deny = repo.write('guards', repo.path('src/work.ts'));
-        expect(deny).not.toBeNull();
-        expect(deny).toContain(OWNER_0);
-        expect(deny).toContain(`git add -- ${OWNER_0}`);
-        expect(deny).toContain('pnpm wp-migrate-dirs --stage');
-        expect(deny).not.toContain('Did you forget');
-
-        // The shape observed live: several paths, including ones that are already tracked.
-        expect(repo.bash(`git add ${OWNER_0} webpieces.config.json ${OWNER_1}`)).toBeNull();
-        expect(repo.bash(`cd ${repo.root} && git add -A`)).toBeNull();
-        // Only a PLAIN git add: anything riding along is still refused with the same deny.
-        expect(repo.bash(`git add ${OWNER_0} && rm -rf src`)).toContain(OWNER_0);
-        expect(repo.bash(`git add $(echo ${OWNER_0})`)).toContain(OWNER_0);
-        expect(repo.bash('git commit -m wip')).toContain(OWNER_0);
-
-        repo.git('add', '--', OWNER_0);
         expect(repo.write('guards', repo.path('src/work.ts'))).toBeNull();
         expect(repo.bash('git status')).toBeNull();
+        expect(repo.bash(`git add -- ${OWNER_0}`)).toBeNull();
+
+        let refusal: ConfigRepairError | null = null;
+        // eslint-disable-next-line @webpieces/no-unmanaged-exceptions -- the spec inspects the thrown structure
+        try {
+            assertPolicyTracked(repo.root);
+        // webpieces-disable no-any-unknown -- a caught value is unknown until narrowed
+        } catch (err: unknown) {
+            const error = toError(err);
+            refusal = error instanceof UntrackedPolicyError ? error : null;
+        }
+        expect(refusal).not.toBeNull();
+        expect(refusal?.message).toContain(OWNER_0);
+        expect(refusal?.cures.map((cure: ConfigRepairCure) => cure.command)).toEqual([
+            `git add -- ${OWNER_0}`,
+            'pnpm wp-migrate-dirs --stage',
+        ]);
+
+        repo.git('add', '--', OWNER_0);
+        expect(() => assertPolicyTracked(repo.root)).not.toThrow();
     });
 
-    it('a git add is NOT waved through for any other config problem', () => {
+    it('refuses gitignored policy at the gate while the hook keeps allowing work', () => {
         const repo = new RepairRepo();
-        fs.writeFileSync(repo.path(OWNER_0), '{');
-        expect(repo.bash(`git add -- ${OWNER_0}`)).toContain('Cannot parse rule-pack config');
+        fs.appendFileSync(repo.path('.gitignore'), '.webpieces-config/\n');
+        expect(repo.write('guards', repo.path('src/work.ts'))).toBeNull();
+        expect(() => assertPolicyTracked(repo.root)).toThrow('policy is gitignored');
     });
 });
 

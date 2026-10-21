@@ -169,27 +169,50 @@ export const SHIM_LOG_PRINTF =
  * asserts it returns exactly what `dotWebpieces.worktreeName()` returns. If the two ever disagree the
  * lock goes red rather than the logs quietly splitting in half.
  *
- * It asks git the SAME question the TS side asks — `--git-dir` vs `--git-common-dir`, which differ if
- * and only if this is a linked worktree — but in ONE `rev-parse` (it accepts both flags and prints a
- * line each) rather than two, because this runs on the blocking path of every tool call.
+ * It answers the SAME question the TS side answers — git dir vs common git dir, which differ if and only
+ * if this is a linked worktree — the SAME way `GitCheckout` does: by reading the filesystem, with NO git
+ * process (#1355), because this runs on the blocking path of every tool call. Walk up from the cwd: a
+ * `.git` DIRECTORY is both dirs (the primary clone); a `.git` FILE's `gitdir:` line names the git dir,
+ * whose `commondir` file names the shared one. Only shell builtins run (`read`, `cd`, `pwd`).
  *
  * The tree is derived from the PAYLOAD's `cwd` (Claude Code documents it as the working directory the
  * hook was invoked from), not from `$ROOT`. `$ROOT` is where the shim FILE lives and stays the anchor
  * for what the drift guard MEASURES — this fragment changes only where the log is WRITTEN.
  *
- * Fails soft, exactly like the TS side: when git cannot answer, the log collapses to
+ * Fails soft, exactly like the TS side: when no checkout is found, the log collapses to
  * `<cwd>/.webpieces/logs`, which is the pre-change behaviour.
  */
 export const RESOLVE_LOG_DIR_SH = `wp_resolve_log_dir() {
-  _wp_rp="$(git -C "$WP_CWD" rev-parse --git-dir --git-common-dir 2>/dev/null)"
-  _wp_gd="$(printf '%s\\n' "$_wp_rp" | sed -n 1p)"
-  _wp_cd="$(printf '%s\\n' "$_wp_rp" | sed -n 2p)"
+  _wp_gd=""
+  _wp_cd=""
+  _wp_d="$WP_CWD"
+  while [ -n "$_wp_d" ]; do
+    if [ -d "$_wp_d/.git" ]; then _wp_gd="$_wp_d/.git"; break; fi
+    if [ -f "$_wp_d/.git" ]; then
+      _wp_l=""; IFS= read -r _wp_l < "$_wp_d/.git" || :
+      case "$_wp_l" in "gitdir: "*) _wp_gd="\${_wp_l#gitdir: }" ;; esac
+      case "$_wp_gd" in ''|/*) : ;; *) _wp_gd="$_wp_d/$_wp_gd" ;; esac
+      [ -d "$_wp_gd" ] || _wp_gd=""
+      break
+    fi
+    _wp_d="\${_wp_d%/*}"
+  done
+  # The shared git dir: <gitdir>/commondir (relative to the git dir) when present, else the git dir.
+  # Normalized with \`cd && pwd -P\` — builtins in a subshell, never a process.
+  if [ -n "$_wp_gd" ]; then
+    _wp_cd="$_wp_gd"
+    if [ -f "$_wp_gd/commondir" ]; then
+      _wp_l=""; IFS= read -r _wp_l < "$_wp_gd/commondir" || :
+      case "$_wp_l" in ''|/*) : ;; *) _wp_l="$_wp_gd/$_wp_l" ;; esac
+      [ -n "$_wp_l" ] && _wp_cd="$(CDPATH= cd -- "$_wp_l" 2>/dev/null && pwd -P)"
+    fi
+  fi
   if [ -z "$_wp_gd" ] || [ -z "$_wp_cd" ]; then
     WP_TREE=primary; WP_LOG_DIR="$WP_CWD/${WEBPIECES_TMP_DIR}/${LOGS_STATE_DIR}"
     WP_PRIMARY_LOG_DIR="$WP_LOG_DIR"; return 0
   fi
-  # git prints a BARE .git from the primary clone and an absolute path from a linked worktree; the TS
-  # twin runs path.resolve(cwd, printed), so do the same before comparing or taking a basename.
+  # Both are absolute whenever the cwd is; a relative cwd (a hand-run) is anchored the way the TS twin's
+  # path.resolve(cwd, …) anchors it, before comparing or taking a basename.
   case "$_wp_gd" in /*) : ;; *) _wp_gd="$WP_CWD/$_wp_gd" ;; esac
   case "$_wp_cd" in /*) : ;; *) _wp_cd="$WP_CWD/$_wp_cd" ;; esac
   # The primary clone's root is the parent of the SHARED git dir — declining any layout whose shared

@@ -1,5 +1,6 @@
 import { CliExitError, DevDeployConfig, loadAndValidate, WP_PUSH_DEV } from '@webpieces/rules-config';
 import { injectable, bindingScopeValues } from 'inversify';
+import { gitCheckout } from '@webpieces/tooling-common';
 
 import { GitExec } from './git-exec';
 
@@ -48,8 +49,7 @@ export class DevDeployRefs {
 
     /** The checked-out branch name, or `'HEAD'` on a detached HEAD (which {@link assertPushable} refuses). */
     currentBranch(repoRoot: string): string {
-        return this.gitExec.gitQuery(['rev-parse', '--abbrev-ref', 'HEAD'], repoRoot,
-            'Failed to read the current branch (git rev-parse --abbrev-ref HEAD).');
+        return gitCheckout.requireBranch(repoRoot);
     }
 
     /**

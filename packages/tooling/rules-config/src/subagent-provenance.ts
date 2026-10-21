@@ -1,10 +1,9 @@
-import { spawnSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 import { injectable, bindingScopeValues } from 'inversify';
 import { claudeConfigDir } from '@webpieces/tooling-common';
 import { toError } from '@webpieces/tooling-common/to-error';
-import { dotWebpieces } from '@webpieces/tooling-common';
+import { gitCheckout, DETACHED_HEAD } from '@webpieces/tooling-common';
 import { reviewIdentityStamps } from '@webpieces/repo-workflow-core';
 
 // Outcome of a provenance check.
@@ -584,8 +583,8 @@ export class SubagentProvenanceService {
      *
      * It reviewed A. Every past reviewer run in that clone would be credited for whatever branch is
      * checked out at finish time — which in a repo with a required reviewer on every PR is not an
-     * exotic sequence, it is the normal one. So the fallback is gated on `dotWebpieces.isLinkedWorktree`
-     * (git's own `--git-dir != --git-common-dir` test, reused rather than re-derived), and a primary
+     * exotic sequence, it is the normal one. So the fallback is gated on `gitCheckout.isLinkedWorktree`
+     * (git's own git-dir != common-git-dir test, read from the filesystem, reused rather than re-derived), and a primary
      * clone falls through to a refusal exactly as it does today.
      *
      * That gate keeps the anti-forgery property intact: `cwd` is harness-written in the same record by
@@ -694,11 +693,9 @@ export class SubagentProvenanceService {
      */
     private pinnedBranch(cwd: string): string {
         if (!fs.existsSync(cwd)) return '';
-        if (!dotWebpieces.isLinkedWorktree(cwd)) return '';
-        const result = spawnSync('git', ['-C', cwd, 'rev-parse', '--abbrev-ref', 'HEAD'], { encoding: 'utf8' });
-        if (result.status !== 0) return '';
-        const printed = (result.stdout ?? '').trim();
-        return printed === 'HEAD' ? '' : printed;
+        if (!gitCheckout.isLinkedWorktree(cwd)) return '';
+        const branch = gitCheckout.branch(cwd);
+        return branch === null || branch === DETACHED_HEAD ? '' : branch;
     }
 
     private stripWp(branch: string): string {

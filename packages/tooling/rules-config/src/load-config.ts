@@ -69,7 +69,6 @@ export class ConfigLoader {
         new RepositoryLayoutRepair().run(() => new RepositoryLayout().assertCurrent(root));
         const declarations = this.files.declarations(raw.rulePacks, root);
         const policy = this.files.resolve(root, this.files.select(root, declarations));
-        new PolicyTracking().check(root, declarations);
         return this.loaded(
             configPath,
             raw.commands,
@@ -77,6 +76,23 @@ export class ConfigLoader {
             raw['match-rules'] as MatchRuleConfig[],
             policy,
         );
+    }
+
+    /**
+     * "Policy is shared through the git index": every declared owner file is tracked and not ignored.
+     *
+     * NOT part of loadAndValidate (#1355). It is a COMMIT-TIME invariant — nothing about it changes
+     * between two tool calls — and it costs two `git` processes, so running it on every config load put
+     * it on the hottest path there is: every guard-hook invocation. It runs where work is SHARED instead:
+     * `wp-ci`, which is the PR gate's build command and CI's. Its refusal (UntrackedPolicyError and the
+     * gitignored-policy ConfigRepairError) and their cures are unchanged.
+     */
+    assertPolicyTracked(cwd: string): void {
+        const configPath = this.configFile.findConfigFile(cwd);
+        if (!configPath) return;
+        const raw = this.configFile.readRawConfig(configPath),
+            root = path.dirname(configPath);
+        new PolicyTracking().check(root, this.files.declarations(raw.rulePacks, root));
     }
 
     private loaded(
@@ -135,4 +151,10 @@ const configLoaderSvc = new ConfigLoader(new ConfigFile(), new PackPolicyFiles()
 // webpieces-disable no-function-outside-class -- canonical public loader function for CLI and executor entry points
 export function loadAndValidate(cwd: string): LoadedConfig {
     return configLoaderSvc.loadAndValidate(cwd);
+}
+
+/** The gate-time policy-tracking check — see ConfigLoader.assertPolicyTracked. */
+// webpieces-disable no-function-outside-class -- the public function twin of loadAndValidate, for the wp-ci bin
+export function assertPolicyTracked(cwd: string): void {
+    configLoaderSvc.assertPolicyTracked(cwd);
 }
