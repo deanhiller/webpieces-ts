@@ -119,7 +119,7 @@ for (const webhook of webhooks) {
   `new ContextFullUrlFilter(new SsrfTestingPolicy('local fake in the delivery e2e'))`.
 - **Every auth mode still works.** `oidcSameProject()` / `oidcSvcs(...)` mint for the FINAL base URL, `sharedSecret(...)`
   sends the value this client holds (N services implementing one contract behind one agreed secret is
-  a real topology), and `@WpAuth([vendorAuth(name)])` calls your bound `VendorAuthHook.mint`. The minter runs
+  a real topology), and `@WpAuth([vendorAuth(name)])` calls your bound `VendorAuthMinter.mint`. The minter runs
   BELOW the SSRF guard, so a destination that is going to be refused never causes a credential to be
   created.
 - **The hop is VISIBLE.** `@externalSystem runtime <identity>` on the contract draws the destination
@@ -138,37 +138,73 @@ for deployment assumptions and why a direct application-verifier test does not t
 
 ## A vendor's credential, both ways — `vendorAuth(...)`
 
-`@WpAuth([vendorAuth(name)])` names a vendor's credential SCHEME, not a direction. ONE app-bound
-`VendorAuthHook` (in `@webpieces/core-context`, re-exported here and by `@webpieces/http-routing`)
-serves both ends: `verify` when the vendor calls US, `mint` when WE call the vendor (a per-merchant
-OAuth bearer, a partner's HMAC over the final URL and the exact wire bytes), and `refresh` when the
-vendor answers our call with a `401`:
+`@WpAuth([vendorAuth(name)])` names a vendor's credential SCHEME, not a direction. The direction is
+decided by whether THIS runtime is sending or receiving, and each direction is its OWN optional DI
+role (both defined in `@webpieces/core-context`):
+
+| role | token | methods | who binds it | re-exported by |
+|---|---|---|---|---|
+| `VendorAuthMinter` | `VENDOR_AUTH_MINTER` | `mint`, `refresh` | a process that SENDS `vendorAuth(...)` calls (a CLI, a worker, a server calling a vendor) | `@webpieces/http-client-node` |
+| `VendorAuthVerifier` | `VENDOR_AUTH_VERIFIER` | `verify` | a server that RECEIVES `vendorAuth(...)` calls | `@webpieces/http-routing` |
+
+A process binds neither, one, or both. `mint` produces the credential WE present when we call the
+vendor (a per-merchant OAuth bearer, a partner's HMAC over the final URL and the exact wire bytes),
+and `refresh` renews it when the vendor answers our call with a `401`:
 
 ```ts
 @provideSingleton()
-export class PartnerAuth extends VendorAuthHook {
+export class PartnerAuthMinter extends VendorAuthMinter {
     async mint(name: string, request: SignableRequest): Promise<Map<string, string>> {
         const mac = createHmac('sha256', secretFor(name)).update(request.body ?? '').digest('hex');
         return new Map([['x-partner-signature', `sha256=${mac}`]]);
     }
     async refresh(name: string): Promise<void> { /* renew the OAuth token, log in again */ }
-    async verify(name: string, request: RawHttpRequest): Promise<AuthenticatedCaller> { /* ... */ }
 }
 
-// AppModule.ts
-options.bind(VENDOR_AUTH_HOOK).to(PartnerAuth);
+// the SENDING process's BindModule
+binder.bind(VENDOR_AUTH_MINTER).to(PartnerAuthMinter).inSingletonScope();
 ```
+
+**Why two roles (#1358).** Every typed RPC client this package builds is a `NodeProxyClient`, and it
+depends on the OUTBOUND role only. When one `VendorAuthHook` served both directions, every proxy —
+including an ordinary `oidcSameProject()` client — constructed the server's inbound verifier, and a
+verifier that looks a credential up through such a client closed a DI cycle
+(`Circular dependency found`) before the server could listen. With the roles split, a
+`VendorAuthVerifier` may depend on any RPC client, in any binding order, and the graph stays acyclic.
+
+| configuration | minter required? | verifier required? |
+|---|---|---|
+| OIDC-only or public-only outbound client | no | no |
+| outbound call selecting `vendorAuth(name)` | yes, to send that call | no |
+| server receiving a `vendorAuth(name)` request | no | yes |
+| server receiving vendor calls and calling an OIDC-only API downstream | no (not for the OIDC hop) | yes |
+| process both sending and receiving vendor calls | yes | yes |
+
+### Migrating from `VendorAuthHook` / `VENDOR_AUTH_HOOK`
+
+The unified hook is DELETED (no alias): the old import stops compiling, which is the migration.
+
+- A CLIENT process (e.g. a CLI holding a worker token): `extends VendorAuthMinter`, keep `mint` and
+  `refresh`, delete the meaningless `verify`, and bind `VENDOR_AUTH_MINTER`. The minter keeps reading
+  the credential it already holds — it never validates it server-side.
+- A SERVER process: `extends VendorAuthVerifier`, keep `verify`, delete the meaningless
+  `mint`/`refresh`, and bind `VENDOR_AUTH_VERIFIER`. Its constructor may inject the typed
+  `oidcSameProject()` RPC client it uses to check the credential.
+- `MissingVendorAuthHookError` is now `MissingVendorAuthMinterError`.
+- Contracts are unchanged: `@WpAuth([vendorAuth(name)])` keeps its meaning.
 
 On a raw `401`, `OutboundAuthFilter` cancels the 401's body, calls `refresh(name)` ONCE, mints again
 and re-sends ONCE — never for a streaming upload, and once per logical call (the SSRF redirect loop
 re-enters the filter). A second `401` fails the call exactly as before. Serializing a refresh across
-instances (single-use refresh tokens) is the hook's job.
+instances (single-use refresh tokens) is the minter's job.
 
 The framework ships no vendor crypto, deliberately: Twilio signs the full URL with sorted params,
-Slack signs `v0:{ts}:{body}`, Meta signs the raw body. The scheme lives in your hook and the vendor on
-the contract. With **no** `VendorAuthHook` bound, every outbound `vendorAuth(...)` call THROWS
-(`MissingVendorAuthHookError`) rather than sending unauthenticated — the mirror of an unbound hook
-401ing every inbound one.
+Slack signs `v0:{ts}:{body}`, Meta signs the raw body. The scheme lives in your minter / verifier and
+the vendor on the contract. With **no** `VendorAuthMinter` bound, every outbound `vendorAuth(...)`
+call THROWS (`MissingVendorAuthMinterError`) before anything is sent, rather than sending
+unauthenticated — the mirror of an unbound `VendorAuthVerifier` 401ing every inbound one. A bound
+verifier never counts as a minter, and an unbound minter never breaks an OIDC, shared-secret or
+public call.
 
 Calls have a **30-second default timeout**, including URL resolution, filters/auth, fetch and body
 reading. `ClientRegistry` from `@webpieces/core-util` shares ALL, API and API-method overrides with the

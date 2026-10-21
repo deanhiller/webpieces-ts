@@ -1,4 +1,4 @@
-import { ClientRole, WpAuthorization, AuthorizationType } from '@webpieces/core-util';
+import { ClientRole, WpAuthorization, AuthorizationType, WpAuth, vendorAuth } from '@webpieces/core-util';
 import 'reflect-metadata';
 import { AddressInfo, createServer, IncomingMessage, Server, ServerResponse } from 'node:http';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -23,7 +23,7 @@ import {
     READ,
     RPC,
 } from '@webpieces/core-util';
-import { RequestContext } from '@webpieces/core-context';
+import { RequestContext, SignableRequest, VendorAuthMinter } from '@webpieces/core-context';
 import type { RequestContextHeaders } from '@webpieces/core-context';
 import type { GcpOidc } from '@webpieces/gcp-identity';
 import { buildClientProxy } from '@webpieces/http-client-core';
@@ -85,6 +85,40 @@ abstract class DuplexApi {
     @WpStream(StreamDirection.REQUEST)
     upload(_request: ClientEvent): Promise<RequestStream<ServerEvent, ClientEvent>> {
         throw new Error('contract only');
+    }
+}
+
+/** A vendor-authenticated UPLOAD: its body is a one-shot stream, so a 401 can never be replayed. */
+@Rpc()
+@ApiPath('/stream')
+abstract class VendorUploadApi {
+    @Endpoint(POST, '/vendor-upload', READ, RPC)
+    @WpAuth([vendorAuth('partner-upload')])
+    @WpAuthorization({ authType: AuthorizationType.SERVICE_ONLY })
+    @WpStream(StreamDirection.REQUEST)
+    upload(_request: ClientEvent): Promise<RequestStream<ServerEvent, ClientEvent>> {
+        throw new Error('contract only');
+    }
+}
+
+registerStreamingSchemas(VendorUploadApi, 'upload', {
+    initialRequestSchema: clientEventSchema,
+    initialResponseSchema: serverEventSchema,
+    requestSchema: clientEventSchema,
+});
+
+/** The outbound role alone: counts what it was asked to do. */
+class CountingMinter extends VendorAuthMinter {
+    mints = 0;
+    refreshes = 0;
+
+    override async mint(_name: string, _request: SignableRequest): Promise<Map<string, string>> {
+        this.mints += 1;
+        return new Map([['Authorization', 'Bearer upload-credential']]);
+    }
+
+    override async refresh(_name: string): Promise<void> {
+        this.refreshes += 1;
     }
 }
 
@@ -312,5 +346,41 @@ describe('Node generated typed streaming client', () => {
                 client.exchange({ value: 7 } as unknown as ClientEvent, responses),
             ).rejects.toThrow(/Invalid request stream event/);
         });
+    });
+
+    it('a vendorAuth streaming UPLOAD that gets a 401 is never refreshed or replayed', async () => {
+        let requests = 0;
+        const refusing = createServer((request: IncomingMessage, response: ServerResponse) => {
+            requests += 1;
+            request.resume();
+            response.writeHead(401, { 'Content-Type': 'application/json' });
+            response.end('{"message":"expired"}');
+        });
+        await new Promise<void>((resolve: () => void) => refusing.listen(0, '127.0.0.1', resolve));
+        ClientRegistry.addUrlMapping('stream-service', `http://127.0.0.1:${(refusing.address() as AddressInfo).port}`);
+        const minter = new CountingMinter();
+        const proxy = new NodeProxyClient(
+            new StubHeaders() as unknown as RequestContextHeaders,
+            new StubOidc() as unknown as GcpOidc,
+            new NeverResolveAddress(),
+            undefined,
+            minter,
+        );
+        proxy.init(VendorUploadApi, new ClientConfig('stream-service', ClientRole.SERVER), []);
+        const client = buildClientProxy(VendorUploadApi, proxy);
+
+        // eslint-disable-next-line @webpieces/no-unmanaged-exceptions -- the listener is closed whatever the assertion outcome
+        try {
+            await RequestContext.run(async () => {
+                await expect(client.upload({ value: 'open' })).rejects.toThrow();
+            });
+        } finally {
+            refusing.closeAllConnections();
+            await new Promise<void>((resolve: () => void) => refusing.close(() => resolve()));
+        }
+
+        expect(minter.mints).toBe(1);
+        expect(minter.refreshes).toBe(0);
+        expect(requests).toBe(1);
     });
 });

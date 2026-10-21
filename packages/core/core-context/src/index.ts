@@ -26,8 +26,11 @@ export { HttpRequest, RawHttpRequest } from './HttpRequest';
 export { RawRequest } from './RawRequest';
 // What an authenticator PROVED about a caller (http-routing re-exports it beside its hooks).
 export { AuthenticatedCaller, AuthenticatedMachineIdentity } from './AuthenticatedCaller';
-// vendorAuth(name): ONE app hook that mints/refreshes on the client and verifies on the server.
-export { VendorAuthHook, VENDOR_AUTH_HOOK, SignableRequest } from './VendorAuthHook';
+// vendorAuth(name): TWO independent optional DI roles — the outbound minter (a client sends) and the
+// inbound verifier (a server receives). Never one binding for both: that put the inbound verifier
+// into every outbound RPC proxy's construction and closed a startup cycle (#1358).
+export { VendorAuthMinter, VENDOR_AUTH_MINTER, SignableRequest } from './VendorAuthMinter';
+export { VendorAuthVerifier, VENDOR_AUTH_VERIFIER } from './VendorAuthVerifier';
 
 // DI provider decorators (shared DI seam; http-routing re-exports for back-compat)
 export { provideSingletonDefaultForApi } from './provide';

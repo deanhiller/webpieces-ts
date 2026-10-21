@@ -48,7 +48,7 @@ describe('wp-openapi-import — the generated contract', () => {
         const source = new OpenApiImporter().generate(SHOP_IMPORT);
         expect(source).not.toContain('NeverReached');
         expect(source).not.toContain('unused');
-        // The header parameter is the import file's / VendorAuthHook's concern, never an argument.
+        // The header parameter is the import file's / VendorAuthMinter's concern, never an argument.
         expect(source).not.toContain('User-Agent');
     });
 

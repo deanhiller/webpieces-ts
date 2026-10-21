@@ -67,7 +67,7 @@ export class ImportConfigLoader {
             throw new OpenApiImportError(
                 'auth must be exactly { "vendorAuth": "<name>" }',
                 absolute,
-                'Name the vendor whose VendorAuthHook mints the credential, e.g. "auth": { "vendorAuth": "vendor" }.',
+                'Name the vendor whose VendorAuthMinter mints the credential, e.g. "auth": { "vendorAuth": "vendor" }.',
             );
         }
         return vendorAuth;

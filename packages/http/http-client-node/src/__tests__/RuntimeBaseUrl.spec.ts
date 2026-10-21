@@ -3,7 +3,7 @@ import 'reflect-metadata';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { ApiPath, ClientRegistry, DestinationTrust, Endpoint, Filter, WpAuthPublic, Rpc, Secrets, Service, TestCaseRecorder, WebpiecesCoreHeaders, POST, RPC, WRITE } from '@webpieces/core-util';
 import type { RequestContextHeaders } from '@webpieces/core-context';
-import { RequestContext, SignableRequest, VendorAuthHook } from '@webpieces/core-context';
+import { RequestContext, SignableRequest, VendorAuthMinter } from '@webpieces/core-context';
 import type { GcpOidc } from '@webpieces/gcp-identity';
 import type { ApiPrototype } from '@webpieces/http-client-core';
 import { buildClientProxy, ClientFilterDefinition, ClientRequest } from '@webpieces/http-client-core';
@@ -14,6 +14,7 @@ import { NodeProxyClient } from '../NodeProxyClient';
 import { SsrfTestingPolicy } from '../SsrfPolicy';
 import { SsrfRefusedError } from '../SsrfRefusedError';
 import { MissingRuntimeBaseUrlError } from '../MissingRuntimeBaseUrlError';
+import { MissingVendorAuthMinterError } from '../OutboundAuthErrors';
 
 class DeliverRequest {
     constructor(public readonly eventId: string) {}
@@ -111,7 +112,7 @@ class StubSecrets {
 }
 
 /** Records exactly what it was handed to mint over, so a test can compare with the wire. */
-class RecordingVendorAuthHook extends VendorAuthHook {
+class RecordingVendorAuthMinter extends VendorAuthMinter {
     signedName: string | undefined;
     signed: SignableRequest | undefined;
     mints = 0;
@@ -126,10 +127,6 @@ class RecordingVendorAuthHook extends VendorAuthHook {
 
     override async refresh(name: string): Promise<void> {
         this.refreshes.push(name);
-    }
-
-    override async verify(): Promise<never> {
-        throw new Error('this spec is the OUTBOUND half; nothing here verifies');
     }
 }
 
@@ -234,7 +231,7 @@ class Doubles {
     readonly oidc = new StubOidc();
     readonly dns = publicDns();
 
-    constructor(readonly signer: VendorAuthHook | undefined = undefined) {}
+    constructor(readonly signer: VendorAuthMinter | undefined = undefined) {}
 }
 
 /** A real NodeProxyClient bound to a contract, behind the same Proxy the factory would build. */
@@ -481,7 +478,7 @@ describe('outbound auth against a re-pointed URL', () => {
 
 describe('vendorAuth(...), outbound — WE present the vendor credential', () => {
     it('hands the signer the FINAL url and the EXACT bytes that are transmitted', async () => {
-        const signer = new RecordingVendorAuthHook();
+        const signer = new RecordingVendorAuthMinter();
         const signedClient = client(
             SignedWebhookApi,
             new ClientConfig('partner-webhooks', ClientRole.SERVER),
@@ -503,7 +500,7 @@ describe('vendorAuth(...), outbound — WE present the vendor credential', () =>
         expect(sent[0].headers['x-partner-signature']).toBe(`v1=${signer.signed?.body?.length}:https://api.partner.example/ot-webhook/deliver`);
     });
 
-    it('FAILS CLOSED with no VendorAuthHook bound — it does not send unauthenticated', async () => {
+    it('FAILS CLOSED with no VendorAuthMinter bound — it does not send unauthenticated', async () => {
         const unsigned = client(
             SignedWebhookApi,
             new ClientConfig('partner-webhooks', ClientRole.SERVER),
@@ -511,19 +508,21 @@ describe('vendorAuth(...), outbound — WE present the vendor credential', () =>
             new Doubles(undefined),
         );
 
-        await expect(withOverride('https://api.partner.example', () => unsigned.deliver(new DeliverRequest('e1')))).rejects.toThrow(
-            /no VendorAuthHook is bound/,
-        );
+        const refused = withOverride('https://api.partner.example', () => unsigned.deliver(new DeliverRequest('e1')));
+        await expect(refused).rejects.toBeInstanceOf(MissingVendorAuthMinterError);
+        await expect(refused).rejects.toThrow(/no VendorAuthMinter is bound/);
+        await expect(refused).rejects.toThrow(/binder\.bind\(VENDOR_AUTH_MINTER\)/);
+        await expect(refused).rejects.not.toThrow(/VendorAuthHook|VENDOR_AUTH_HOOK/);
         expect(sent).toHaveLength(0);
     });
 
     it('is callable at all — binding the client does not throw for vendorAuth(...)', () => {
-        expect(() => client(SignedWebhookApi, new ClientConfig('partner-webhooks', ClientRole.SERVER), [], new Doubles(new RecordingVendorAuthHook()))).not.toThrow();
+        expect(() => client(SignedWebhookApi, new ClientConfig('partner-webhooks', ClientRole.SERVER), [], new Doubles(new RecordingVendorAuthMinter()))).not.toThrow();
     });
 
     it('on a 401: refreshes ONCE, mints again and re-sends ONCE', async () => {
         stubFreshTransport([unauthorized, ok]);
-        const hook = new RecordingVendorAuthHook();
+        const hook = new RecordingVendorAuthMinter();
         const signedClient = client(
             SignedWebhookApi,
             new ClientConfig('partner-webhooks', ClientRole.SERVER),
@@ -542,7 +541,7 @@ describe('vendorAuth(...), outbound — WE present the vendor credential', () =>
 
     it('a SECOND 401 is not retried again — it fails the call as before', async () => {
         stubFreshTransport([unauthorized]);
-        const hook = new RecordingVendorAuthHook();
+        const hook = new RecordingVendorAuthMinter();
         const signedClient = client(
             SignedWebhookApi,
             new ClientConfig('partner-webhooks', ClientRole.SERVER),

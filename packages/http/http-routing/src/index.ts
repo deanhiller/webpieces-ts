@@ -117,7 +117,7 @@ export { ApiClient, ApiClientProxy } from './ApiClient';
 
 // Auth: the app-provided, container-bound pieces the framework AuthFilter injects.
 //  - AuthConfig: shared-secret STATE (sharedSecret(...) values).
-//  - JwtHook / OidcHook / VendorAuthHook / ApiKeyHook: OPTIONAL verification mechanisms
+//  - JwtHook / OidcHook / VendorAuthVerifier / ApiKeyHook: OPTIONAL verification mechanisms
 //    (bind only what you use; unbound means the matching endpoints 401, never open).
 //  - DefaultOidcVerifier: the built-in Google OIDC verifier used when no OidcHook is bound.
 export {
@@ -137,9 +137,10 @@ export {
     ApiKeyHook,
     API_KEY_HOOK,
 } from './AuthHooks';
-// vendorAuth(name): ONE hook — mint/refresh on the client, verify on this server. Defined in
-// @webpieces/core-context so the node client and this router share it; re-exported beside its siblings.
-export { VendorAuthHook, VENDOR_AUTH_HOOK, SignableRequest } from '@webpieces/core-context';
+// vendorAuth(name), INBOUND role: the verifier this server's AuthFilter calls. Defined in
+// @webpieces/core-context beside its OUTBOUND twin VendorAuthMinter (re-exported by
+// @webpieces/http-client-node); the two are independent DI roles, never one binding (#1358).
+export { VendorAuthVerifier, VENDOR_AUTH_VERIFIER } from '@webpieces/core-context';
 export { DefaultOidcVerifier } from './DefaultOidcVerifier';
 // DefaultJwtHook: batteries-included HS256 JwtHook — `new DefaultJwtHook(secret)` and go.
 export { DefaultJwtHook, DefaultJwtMintRequest } from './DefaultJwtHook';

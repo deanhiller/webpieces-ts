@@ -98,7 +98,7 @@ export class RouteMetadata {
     readonly mask?: MaskSpec;
     /**
      * True when @Endpoint(..., { rawBody: true }): the transport must retain the verbatim bytes +
-     * absolute url for `VendorAuthHook.verify` to check a vendor credential over. Rides the route
+     * absolute url for `VendorAuthVerifier.verify` to check a vendor credential over. Rides the route
      * metadata for the same reason {@link formPost} does — the transport adapter decides how to read
      * the body from the ROUTE, without knowing the apiClass/methodName.
      */

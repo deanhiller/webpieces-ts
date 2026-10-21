@@ -26,7 +26,7 @@ credentials, the vendor node on the runtime architecture graph, and tests that m
 |---|---|
 | `spec` | the vendor's OpenAPI 3.0/3.1 **JSON**, relative to the import file (YAML and Swagger 2.0 are not supported yet — convert first) |
 | `contract` | the generated class name |
-| `auth.vendorAuth` | every endpoint declares `@WpAuth([vendorAuth('<name>')])`; your bound `VendorAuthHook` mints the credential |
+| `auth.vendorAuth` | every endpoint declares `@WpAuth([vendorAuth('<name>')])`; your bound `VendorAuthMinter` (`VENDOR_AUTH_MINTER`) mints the credential |
 | `contextKeys` | `"*"` → class-level `@ExternalContextKeys(...)` (every endpoint sends them); an operationId → method-level keys ADDED for that operation. Each entry is `{ from, symbol }`: the module and the dotted symbol to import |
 | `operations` | the operationIds to generate, in contract order. The allowlist is mandatory: only what you call is generated |
 
@@ -62,5 +62,5 @@ exemptions. There is no nx executor in v1: it writes committed source, run on de
   `@summary` per method, and a generated-file banner
 
 Header parameters (a constant `User-Agent`, a per-call routing id) are not arguments: a constant is
-your `VendorAuthHook`'s or a client filter's job, and a per-call value is a `ContextKey` listed in
+your `VendorAuthMinter`'s or a client filter's job, and a per-call value is a `ContextKey` listed in
 `contextKeys`.

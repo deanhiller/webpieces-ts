@@ -1,8 +1,8 @@
 import { Filter, Secrets, Service, StreamDirection } from '@webpieces/core-util';
-import { SignableRequest, VendorAuthHook } from '@webpieces/core-context';
+import { SignableRequest, VendorAuthMinter } from '@webpieces/core-context';
 import { GcpOidc } from '@webpieces/gcp-identity';
 import { ClientRequest } from '@webpieces/http-client-core';
-import { MissingSharedSecretError, MissingVendorAuthHookError } from './OutboundAuthErrors';
+import { MissingSharedSecretError, MissingVendorAuthMinterError } from './OutboundAuthErrors';
 
 /**
  * Attaches the endpoint's outbound credential, against the destination the call is ACTUALLY going
@@ -28,7 +28,7 @@ import { MissingSharedSecretError, MissingVendorAuthHookError } from './Outbound
  * - `sharedSecret(...)` → the value this client holds for that key, as `Authorization: Webpieces …`.
  *   Legitimate against a re-pointed URL: N services implementing ONE contract behind ONE agreed
  *   secret is a real and common topology, and often stands in for OIDC where OIDC is not available.
- * - `vendorAuth(name)` → the app's bound {@link VendorAuthHook} `mint`s the headers (a vendor's
+ * - `vendorAuth(name)` → the app's bound {@link VendorAuthMinter} `mint`s the headers (a vendor's
  *   OAuth bearer, a partner's HMAC signature — the scheme is the app's). On a raw `401` it is the ONE
  *   mode that retries: cancel the 401's body, `refresh(name)` once, `mint` again and re-send ONCE.
  *   Never for a streaming upload (its body cannot be replayed), and once per logical call — the SSRF
@@ -45,8 +45,11 @@ export class OutboundAuthFilter extends Filter<ClientRequest, Response> {
         private readonly gcpOidc: GcpOidc,
         /** Only sharedSecret(...) endpoints need it; a server that has none binds nothing. */
         private readonly secrets: Secrets | undefined,
-        /** Only vendorAuth(...) endpoints need it, and an unbound one makes them THROW. */
-        private readonly vendorAuthHook: VendorAuthHook | undefined,
+        /**
+         * The OUTBOUND role only. Only vendorAuth(...) calls need it, and an unbound one makes them
+         * THROW. Never the inbound VendorAuthVerifier: sending a request verifies nothing (#1358).
+         */
+        private readonly vendorAuthMinter: VendorAuthMinter | undefined,
     ) {
         super();
     }
@@ -72,7 +75,7 @@ export class OutboundAuthFilter extends Filter<ClientRequest, Response> {
         this.refreshed.add(request);
         // The 401's body is never read: release the connection before the second attempt.
         await response.body?.cancel();
-        await this.vendorAuthHook!.refresh(mode.name);
+        await this.vendorAuthMinter!.refresh(mode.name);
         await this.mintVendorAuth(request, mode.name);
         return nextFilter.invoke(request);
     }
@@ -116,18 +119,19 @@ export class OutboundAuthFilter extends Filter<ClientRequest, Response> {
     }
 
     /**
-     * @throws MissingVendorAuthHookError when no {@link VendorAuthHook} is bound. FAIL CLOSED,
-     *         matching the inbound side exactly: an unbound hook 401s every served `vendorAuth(...)`
-     *         endpoint rather than admitting it unverified, so it must also refuse to SEND rather than
-     *         deliver something the vendor is obliged to reject.
+     * @throws MissingVendorAuthMinterError when no {@link VendorAuthMinter} is bound. FAIL CLOSED,
+     *         matching the inbound side exactly: an unbound verifier 401s every served
+     *         `vendorAuth(...)` endpoint rather than admitting it unverified, so an unbound minter
+     *         must also refuse to SEND rather than deliver something the vendor is obliged to reject.
      */
     private async mintVendorAuth(request: ClientRequest, name: string): Promise<void> {
-        if (this.vendorAuthHook === undefined) {
-            throw new MissingVendorAuthHookError(
+        if (this.vendorAuthMinter === undefined) {
+            throw new MissingVendorAuthMinterError(
                 `${request.contractName}.${request.route.methodName} is vendorAuth('${name}'), so this ` +
-                    `client must present ${name}'s credential — but no VendorAuthHook is bound, so there is ` +
-                    `nothing to mint it. Bind one:\n` +
-                    `    options.bind(VENDOR_AUTH_HOOK).to(MyVendorAuthHook);\n` +
+                    `client must present ${name}'s credential — but no VendorAuthMinter is bound, so there ` +
+                    `is nothing to mint it. Bind the OUTBOUND role in this process:\n` +
+                    `    binder.bind(VENDOR_AUTH_MINTER).to(MyVendorAuthMinter).inSingletonScope();\n` +
+                    `(A VENDOR_AUTH_VERIFIER binding does not count: it verifies inbound calls and never sends.)\n` +
                     `Refusing to send is deliberate: an unauthenticated call is one the vendor will reject, ` +
                     `and sending it anyway would hide the missing binding until they complained.`,
                 `${request.contractName}.${request.route.methodName}`,
@@ -142,7 +146,7 @@ export class OutboundAuthFilter extends Filter<ClientRequest, Response> {
             request.contractName,
             request.route.methodName,
         );
-        const minted = await this.vendorAuthHook.mint(name, signable);
+        const minted = await this.vendorAuthMinter.mint(name, signable);
         for (const entry of minted.entries()) {
             request.headers.set(entry[0], entry[1]);
         }

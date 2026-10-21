@@ -27,12 +27,12 @@ export class MissingSharedSecretError extends Error {
 }
 
 /**
- * A `vendorAuth(name)` endpoint was called outbound with no `VendorAuthHook` bound, so nothing can
- * mint the credential the vendor checks. Thrown at CALL time, from `OutboundAuthFilter`, rather than
- * sending unauthenticated — the mirror of the inbound side, where an unbound hook 401s every served
- * `vendorAuth(...)` endpoint instead of admitting it.
+ * A `vendorAuth(name)` endpoint was called outbound with no `VendorAuthMinter` (VENDOR_AUTH_MINTER)
+ * bound, so nothing can mint the credential the vendor checks. Thrown at CALL time, from
+ * `OutboundAuthFilter`, BEFORE anything is sent — the mirror of the inbound side, where an unbound
+ * `VendorAuthVerifier` 401s every served `vendorAuth(...)` endpoint instead of admitting it.
  */
-export class MissingVendorAuthHookError extends Error {
+export class MissingVendorAuthMinterError extends Error {
     constructor(
         message: string,
         /** `Contract.method`, so the log line names the call without a stack read. */
@@ -41,6 +41,6 @@ export class MissingVendorAuthHookError extends Error {
         public readonly vendorName: string,
     ) {
         super(message);
-        this.name = 'MissingVendorAuthHookError';
+        this.name = 'MissingVendorAuthMinterError';
     }
 }

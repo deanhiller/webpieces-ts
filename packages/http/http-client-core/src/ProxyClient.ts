@@ -361,8 +361,9 @@ export abstract class ProxyClient {
         }
         // vendorAuth(...) is DELIBERATELY absent from this list: `vendorAuth(name)` names a vendor's
         // credential SCHEME, not a direction. When WE call the vendor (or a partner's webhook), the
-        // environment's outbound-auth filter asks the bound VendorAuthHook to `mint` the credential —
-        // the exact mirror of the `verify` the same hook runs when the vendor calls us.
+        // environment's outbound-auth filter asks the bound VendorAuthMinter to `mint` the credential —
+        // the mirror of the `verify` the server's independent VendorAuthVerifier runs when the vendor
+        // calls us. Two DI roles, never one binding (#1358).
     }
 
     /**
