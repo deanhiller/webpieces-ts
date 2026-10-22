@@ -27,14 +27,14 @@ class NamedFlow {
  * Two kinds of problem, because they have different cures:
  *  - STRUCTURAL (shape, dangling references): only an edit of the goal file fixes them.
  *  - DERIVED (a missing or invalid level, a missing contract queue, maxLevel): the explicit
- *    `--prepare` step computes them from the relationships, so it must accept a goal that has them.
+ *    `--prepare-goal` step computes them from the relationships, so it must accept a goal that has them.
  * Facts that are present but merely disagree with the relationships are drift, reported by
  * RuntimeGoalFile.drift().
  */
 export class RuntimeGoalValidator {
     constructor(private readonly goalPath: string) {}
 
-    /** Problems only an edit of the goal file can fix; empty when `--prepare` can run. */
+    /** Problems only an edit of the goal file can fix; empty when `--prepare-goal` can run. */
     // webpieces-disable no-any-unknown -- hand-authored JSON is untrusted until its shape has been checked
     structural(graph: unknown): string[] {
         if (!this.isMap(graph)) return [`${this.goalPath} must contain a JSON object (a RuntimeGraph).`];
@@ -44,7 +44,7 @@ export class RuntimeGoalValidator {
         return this.references(typed);
     }
 
-    /** Derived facts `--prepare` computes; call only on a structurally valid goal. */
+    /** Derived facts `--prepare-goal` computes; call only on a structurally valid goal. */
     derived(graph: RuntimeGraph): string[] {
         const problems: string[] = [];
         if (!Number.isInteger(graph.maxLevel)) problems.push(`${this.goalPath}: "maxLevel" must be an integer.`);
@@ -130,7 +130,7 @@ export class RuntimeGoalValidator {
         return problems;
     }
 
-    /** Every contract-level pubsub edge needs its contract queue, which `--prepare` derives. */
+    /** Every contract-level pubsub edge needs its contract queue, which `--prepare-goal` derives. */
     private contractQueues(graph: RuntimeGraph): string[] {
         const problems: string[] = [];
         graph.runtimeEdges.forEach((edge: RuntimeEdge, index: number) => {
