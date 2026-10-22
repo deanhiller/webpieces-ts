@@ -376,12 +376,13 @@ function isDtoTouched(dto: DtoInfo, changedLines: Set<number>): boolean {
 /**
  * Filter Dtos to only those that have changed lines in the diff (MODIFIED_CLASS mode).
  */
-function filterTouchedDtos(
+// webpieces-disable no-function-outside-class -- pre-existing module helper, made async only because DiffScope now reaches git through the injected process edge (#1381)
+async function filterTouchedDtos(
     dtos: DtoInfo[],
     workspaceRoot: string,
     base: string,
     head?: string
-): DtoInfo[] {
+): Promise<DtoInfo[]> {
     // Group dtos by file to avoid re-fetching diffs
     const byFile = new Map<string, DtoInfo[]>();
     for (const dto of dtos) {
@@ -391,32 +392,34 @@ function filterTouchedDtos(
     }
 
     const touched: DtoInfo[] = [];
-    byFile.forEach((fileDtos, file) => {
-        const diff = getFileDiff(workspaceRoot, file, base, head);
+    for (const file of byFile.keys()) {
+        const fileDtos = byFile.get(file) ?? [];
+        const diff = await getFileDiff(workspaceRoot, file, base, head);
         const changedLines = getChangedLineNumbers(diff);
         for (const dto of fileDtos) {
             if (isDtoTouched(dto, changedLines)) {
                 touched.push(dto);
             }
         }
-    });
+    }
     return touched;
 }
 
 /**
  * Resolve git base ref from env vars or auto-detection.
  */
-function resolveBase(workspaceRoot: string): string | undefined {
+// webpieces-disable no-function-outside-class -- pre-existing module helper, made async only because DiffScope now reaches git through the injected process edge (#1381)
+async function resolveBase(workspaceRoot: string): Promise<string | undefined> {
     const envBase = process.env['NX_BASE'];
     if (envBase) return envBase;
-    return detectBase(workspaceRoot) ?? undefined;
+    return await detectBase(workspaceRoot) ?? undefined;
 }
 
 /**
  * Run the core validation after early-exit checks have passed.
  */
-// webpieces-disable max-lines-new-methods -- Core validation orchestration with multiple early-exit checks
-function validateDtoFiles(
+// webpieces-disable max-lines-new-methods, no-function-outside-class -- Core validation orchestration with multiple early-exit checks
+async function validateDtoFiles(
     workspaceRoot: string,
     prismaSchemaPath: string,
     changedFiles: string[],
@@ -424,7 +427,7 @@ function validateDtoFiles(
     mode: PrismaValidateDtosMode,
     base: string,
     head?: string
-): ExecutorResult {
+): Promise<ExecutorResult> {
     if (changedFiles.some((f) => f.endsWith(prismaSchemaPath))) {
         console.log('⏭️  Skipping validate-dtos (schema.prisma is modified - schema in flux)');
         console.log('');
@@ -460,7 +463,7 @@ function validateDtoFiles(
 
     // In MODIFIED_CLASS mode, narrow to only Dtos with changed lines
     if (mode === 'MODIFIED_CLASS') {
-        allDtos = filterTouchedDtos(allDtos, workspaceRoot, base, head);
+        allDtos = await filterTouchedDtos(allDtos, workspaceRoot, base, head);
         if (allDtos.length === 0) {
             console.log('✅ No Dto classes were modified');
             return { success: true };
@@ -507,7 +510,7 @@ async function runValidatorImpl(
     console.log(`   Schema: ${prismaSchemaPath}`);
     console.log(`   Dto paths: ${dtoSourcePaths.join(', ')}`);
 
-    const base = resolveBase(workspaceRoot);
+    const base = await resolveBase(workspaceRoot);
     const head = process.env['NX_HEAD'];
 
     if (!base) {
@@ -520,9 +523,9 @@ async function runValidatorImpl(
     console.log(`   Head: ${head ?? 'working tree (includes uncommitted changes)'}`);
     console.log('');
 
-    const changedFiles = getChangedFiles(workspaceRoot, base, head, { tsOnly: false });
+    const changedFiles = await getChangedFiles(workspaceRoot, base, head, { tsOnly: false });
 
-    return validateDtoFiles(workspaceRoot, prismaSchemaPath, changedFiles, dtoSourcePaths, mode, base, head);
+    return await validateDtoFiles(workspaceRoot, prismaSchemaPath, changedFiles, dtoSourcePaths, mode, base, head);
 }
 
 @injectable(bindingScopeValues.Singleton)

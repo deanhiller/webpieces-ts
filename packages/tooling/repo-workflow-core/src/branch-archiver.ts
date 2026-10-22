@@ -1,5 +1,5 @@
-import { spawnSync } from 'child_process';
 import { injectable, bindingScopeValues } from 'inversify';
+import { GitProcessApi, GitProcessClient } from '@webpieces/tooling-common';
 
 /**
  * Archive a branch tip as a git TAG immediately before the branch is deleted.
@@ -20,7 +20,7 @@ import { injectable, bindingScopeValues } from 'inversify';
  *
  * Cost: one ref, zero new objects — the commits are already in the object store.
  *
- * Round trip (verified by hand, and asserted in branch-archiver.spec.ts against a real repo):
+ * Round trip (verified by hand; branch-archiver.spec.ts asserts the commands issued, against scripted git):
  *   git tag archive/2026-07-30/dean/foo dean/foo
  *   git branch -D dean/foo
  *   git checkout -b dean/foo archive/2026-07-30/dean/foo    # exact objects restored
@@ -59,15 +59,17 @@ export class ArchiveResult {
     }
 }
 
-// Result of a captured git invocation. `err` carries stderr so a refused tag can be reported verbatim.
-interface CmdCapture {
-    ok: boolean;
-    out: string;
-    err: string;
+// Internal: one git call's verdict, trimmed stdout, and stderr so a refused tag can be reported verbatim. Data only.
+class CapturedOutput {
+    constructor(readonly ok: boolean, readonly out: string, readonly err: string) {}
 }
 
 @injectable(bindingScopeValues.Singleton)
 export class BranchArchiver {
+    // Defaulted so the non-DI call sites can `new BranchArchiver()`, while inversify injects the container's
+    // git edge — which is what a feature test rebinds.
+    constructor(private readonly git: GitProcessApi = new GitProcessClient()) {}
+
     /**
      * `archive/<YYYY-MM-DD>/<branch>`. The date segment is what makes the namespace browsable
      * chronologically (`git tag --list 'archive/2026-07-*'`) and is also what keeps two archives of the
@@ -93,18 +95,18 @@ export class BranchArchiver {
      * archive namespace fills with `…` / `…-2` pairs at one sha, which reads like two distinct
      * snapshots and is one more ref to explain.
      */
-    archive(repoRoot: string, branch: string, when: Date = new Date()): ArchiveResult {
-        const resolved = this.capture(repoRoot, ['rev-parse', branch]);
+    async archive(repoRoot: string, branch: string, when: Date = new Date()): Promise<ArchiveResult> {
+        const resolved = await this.capture(repoRoot, ['rev-parse', branch]);
         if (!resolved.ok) return new ArchiveResult('', '', false, `cannot resolve ${branch}: ${resolved.err}`);
         const sha = resolved.out;
 
         const base = this.archiveTagName(branch, when);
-        if (this.tagExists(repoRoot, base) && this.tagSha(repoRoot, base) === sha) {
+        if (await this.tagExists(repoRoot, base) && await this.tagSha(repoRoot, base) === sha) {
             return new ArchiveResult(base, sha, true, '');
         }
 
-        const tag = this.freeTagName(repoRoot, base);
-        const tagged = this.capture(repoRoot, ['tag', tag, sha]);
+        const tag = await this.freeTagName(repoRoot, base);
+        const tagged = await this.capture(repoRoot, ['tag', tag, sha]);
         if (!tagged.ok) return new ArchiveResult('', sha, false, tagged.err);
         return new ArchiveResult(tag, sha, true, '');
     }
@@ -115,8 +117,8 @@ export class BranchArchiver {
     }
 
     /** Every archive tag currently in the repo, newest namespace segment first (plain lexical on the date). */
-    listArchiveTags(repoRoot: string): string[] {
-        const result = this.capture(repoRoot, ['tag', '--list', `${ARCHIVE_TAG_PREFIX}/*`]);
+    async listArchiveTags(repoRoot: string): Promise<string[]> {
+        const result = await this.capture(repoRoot, ['tag', '--list', `${ARCHIVE_TAG_PREFIX}/*`]);
         if (!result.ok || result.out === '') return [];
         return result.out
             .split('\n')
@@ -128,11 +130,11 @@ export class BranchArchiver {
 
     // First unused name in the `<base>`, `<base>-2`, `<base>-3` … series. Bounded so a pathological repo
     // cannot spin: past the bound we hand back the last candidate and let `git tag` report the collision.
-    private freeTagName(repoRoot: string, base: string): string {
+    private async freeTagName(repoRoot: string, base: string): Promise<string> {
         const MAX_ATTEMPTS = 50;
         let candidate = base;
         for (let attempt = 2; attempt <= MAX_ATTEMPTS; attempt += 1) {
-            if (!this.tagExists(repoRoot, candidate)) return candidate;
+            if (!await this.tagExists(repoRoot, candidate)) return candidate;
             candidate = `${base}-${String(attempt)}`;
         }
         return candidate;
@@ -140,14 +142,13 @@ export class BranchArchiver {
 
     // The COMMIT an existing tag points at, '' when it cannot be resolved. `^{commit}` peels an
     // annotated tag, so an archive written by hand with `git tag -a` compares equal to a lightweight one.
-    private tagSha(repoRoot: string, tag: string): string {
-        const result = this.capture(repoRoot, ['rev-parse', `refs/tags/${tag}^{commit}`]);
+    private async tagSha(repoRoot: string, tag: string): Promise<string> {
+        const result = await this.capture(repoRoot, ['rev-parse', `refs/tags/${tag}^{commit}`]);
         return result.ok ? result.out : '';
     }
 
-    // Seam: overridden in the spec so name-collision logic is testable with no git and no repo.
-    protected tagExists(repoRoot: string, tag: string): boolean {
-        return this.capture(repoRoot, ['rev-parse', '--verify', '--quiet', `refs/tags/${tag}`]).ok;
+    private async tagExists(repoRoot: string, tag: string): Promise<boolean> {
+        return (await this.capture(repoRoot, ['rev-parse', '--verify', '--quiet', `refs/tags/${tag}`])).ok;
     }
 
     // YYYY-MM-DD in LOCAL time: the archive is browsed by the human who created it, on their calendar.
@@ -156,12 +157,10 @@ export class BranchArchiver {
         return `${String(when.getFullYear())}-${pad(when.getMonth() + 1)}-${pad(when.getDate())}`;
     }
 
-    private capture(repoRoot: string, args: string[]): CmdCapture {
-        const result = spawnSync('git', args, { cwd: repoRoot, encoding: 'utf8' });
-        const err = typeof result.stderr === 'string' ? result.stderr.trim() : '';
-        if (result.status !== 0 || typeof result.stdout !== 'string') {
-            return { ok: false, out: '', err: err !== '' ? err : 'git command failed' };
-        }
-        return { ok: true, out: result.stdout.trim(), err };
+    private async capture(repoRoot: string, args: string[]): Promise<CapturedOutput> {
+        const result = await this.git.run(args, repoRoot);
+        const err = result.stderr.trim();
+        if (!result.ok) return new CapturedOutput(false, '', err !== '' ? err : 'git command failed');
+        return new CapturedOutput(true, result.stdout.trim(), err);
     }
 }

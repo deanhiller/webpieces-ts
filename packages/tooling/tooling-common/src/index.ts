@@ -15,4 +15,10 @@ export * from './process/git-process-api';
 export * from './process/native-process-api';
 export * from './process/git-process-client';
 export * from './process/native-process-client';
+// The clock edge (#1381): production code schedules through TimerApi; a feature test runs the task itself.
+export * from './process/timer-api';
+export * from './process/timer-client';
+// The exit edge (#1381): runMain ends the process through it, so a feature test can run a bin in process.
+export * from './process/process-exit-api';
+export * from './process/process-exit-client';
 export * from './process/process-bindings';

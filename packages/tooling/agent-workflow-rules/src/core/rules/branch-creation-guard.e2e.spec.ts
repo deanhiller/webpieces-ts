@@ -60,7 +60,7 @@ const merged = new MergedBranchesService(worktrees);
  * exactly the load the budget exists to survive. Do not re-add a number here; raise it in
  * vitest.setup.mts for the whole class or not at all.
  */
-beforeAll(() => {
+beforeAll(async () => {
     root = specTempDirs.make('wp-worktree-cap-');
     repo = path.join(root, 'repo');
     fs.mkdirSync(repo);
@@ -91,7 +91,7 @@ beforeAll(() => {
 
     // What the detached refresher does. `gh` fails here (no GitHub remote) — the fail-soft path, so
     // NOTHING is provably merged, and therefore nothing is reapable.
-    merged.writeMergedBranches(repo, merged.computeMergedBranches(repo, false));
+    merged.writeMergedBranches(repo, await merged.computeMergedBranches(repo, false));
 });
 
 afterAll(() => {
@@ -150,8 +150,8 @@ describe('branch-creation-guard against real git — the merged half', () => {
      * reapable on that evidence alone. `gh` cannot run here, so the merged verdict is injected the same
      * way the refresher would have written it, and the guard is asked what it does with it.
      */
-    it('does offer a worktree whose PR is merged — but still only via wp-cleanup', () => {
-        const cache = merged.computeMergedBranches(repo, false);
+    it('does offer a worktree whose PR is merged — but still only via wp-cleanup', async () => {
+        const cache = await merged.computeMergedBranches(repo, false);
         // git reports its own canonicalised path (on macOS /var/… resolves to /private/var/…), so take
         // the path from git rather than reconstructing it — reconcile() matches on exactly this string.
         const wt1 = cache.worktrees[0].path;

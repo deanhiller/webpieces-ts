@@ -1,9 +1,8 @@
 import { specTempDirs } from '@webpieces/tooling-testkit';
-import { describe, it, expect, vi } from 'vitest';
-import { execSync } from 'child_process';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
-import { AtomicFile, GitProcessClient } from '@webpieces/tooling-common';
+import { AtomicFile } from '@webpieces/tooling-common';
 import { toError } from '@webpieces/tooling-common/to-error';
 import { CK_ORANGE_FIXED, CK_OVERRIDDEN, ChecklistDefinition, ChecklistInstructionsService, DEFAULT_MAX_CONCURRENT_BUILDS, DiffScope, HomeConfig, HomeConfigService, REVIEWER_AGENTS_PLACEHOLDER, RepoRootFinder, RequiredChecklist, ReviewJsonService, ReviewerAgentPolicy, toChecklist } from '@webpieces/rules-config';
 import { AiBranchName } from './git-readAiBranchName';
@@ -12,9 +11,6 @@ import { ChecklistDetector } from './checklist-detector';
 import { ChecklistScan, ChecklistScanOptions, ChecklistScanner } from './checklist-scanner';
 import { ChecklistScopeHasher } from './checklist-scope-hasher';
 import { DiffBasisResolver } from './diff-basis';
-import { DiffMaterializer } from './diff-materializer';
-import { ForkPoint } from './git-findForkPoint';
-import { GitStatusParser } from './git-status';
 import { PrContextWriter } from './pr-context-writer';
 import { ReviewRoundStateService, ROUND_ACTION_FINISH, ROUND_ACTION_REVIEW } from './review-round-state';
 import { ReviewStageReceipt, ReviewStageReceiptService } from './review-stage-receipt';
@@ -23,12 +19,15 @@ import {
     STANDING_CARRIED, SubmittedVerdict, VerdictProvenance, VerdictProvenanceService, VerdictStanding,
 } from './verdict-provenance';
 import { WriteReviewFixesCommand, WriteReviewFixesOptions } from '../commands/write-review-fixes-command';
+import { PrGateFeature } from '../../__tests__/feature-harness';
+import { ScriptedRepo } from '../../__tests__/scripted-repo';
 
 /**
  * Issue #1053 end to end: `maxReviewerRounds` is a HARD ceiling ("1 round means 1 round"), the final round
  * has no red — it has ORANGE, fixed once and never re-reviewed — the checklist set is frozen at the
  * briefing, and staleness never demands a review. Each spec replays a branch against the real scan, round
- * planner, fix recorder and finish gate, with verdicts written as `wp-write-review` writes them.
+ * planner, fix recorder and finish gate, with verdicts written as `wp-write-review` writes them. The branch's
+ * history is a {@link ScriptedRepo}: the shipped container's git edge answers from it, so no git runs (#1381).
  */
 
 const FEATURE = 'dean-feat';
@@ -43,14 +42,19 @@ class FixedBranchName extends AiBranchName {
     }
 }
 
-// Still a REAL git: the scan's changed-file set comes from `@webpieces/rules-config`'s DiffScope, which is
-// not routed through the injected process edge yet (a later slice of #1381).
-const realGit = new GitProcessClient();
-
 const reviewJson = new ReviewJsonService();
 const provenance = new VerdictProvenanceService(reviewJson, new AtomicFile());
 const receipts = new ReviewStageReceiptService(reviewJson);
-const rounds = new ReviewRoundStateService(reviewJson, provenance, new AtomicFile(), realGit);
+// The program and its scratch repository, fresh for every test. `rounds` is the production round planner
+// from the shipped container, so its git is the scripted repository.
+let feature: PrGateFeature;
+let repoModel: ScriptedRepo;
+let rounds: ReviewRoundStateService;
+
+beforeEach(async () => {
+    feature = await PrGateFeature.create();
+    rounds = feature.container.get(ReviewRoundStateService);
+});
 const gate = new ReviewerVerdictGate(reviewJson, new ChecklistInstructionsService(reviewJson));
 const POLICY = new ReviewerAgentPolicy('webpieces-reviewer', REVIEWER_AGENTS_PLACEHOLDER);
 
@@ -65,26 +69,20 @@ const CHECKLISTS: ChecklistDefinition[] = [
     toChecklist({ id: SECRETS, patterns: ['**/*.env'], required: true }, POLICY),
 ];
 
-function git(cwd: string, cmd: string): string {
-    return execSync(cmd, { cwd, stdio: 'pipe', encoding: 'utf8' }).trim();
-}
-
 function scanner(): ChecklistScanner {
-    const diffScope = new DiffScope();
+    const c = feature.container;
     const home = new HomeConfigService();
     vi.spyOn(home, 'load').mockReturnValue(new HomeConfig(false, false, DEFAULT_MAX_CONCURRENT_BUILDS, false));
     return new ChecklistScanner(
-        new FixedBranchName(), new ChecklistDetector(diffScope), diffScope,
-        new DiffBasisResolver(new ForkPoint(null as never, null as never, null as never, null as never, realGit), new GitStatusParser(), realGit),
-        new PrContextWriter(diffScope, reviewJson), reviewJson, home,
-        new ChecklistScopeHasher(new DiffMaterializer(reviewJson, realGit)), provenance, receipts, rounds,
+        new FixedBranchName(), c.get(ChecklistDetector), c.get(DiffScope), c.get(DiffBasisResolver),
+        c.get(PrContextWriter), reviewJson, home, c.get(ChecklistScopeHasher), provenance, receipts, rounds,
     );
 }
 
 function commit(dir: string, file: string, body: string): void {
-    fs.writeFileSync(path.join(dir, file), body);
-    git(dir, 'git add -A');
-    git(dir, `git commit -qm "edit ${file}"`);
+    expect(dir).toBe(repoModel.root);
+    repoModel.write(file, body);
+    repoModel.commitAll(`edit ${file}`);
 }
 
 function summaryPath(dir: string): string {
@@ -93,12 +91,10 @@ function summaryPath(dir: string): string {
 
 function repo(): string {
     const dir = specTempDirs.make('wp-orange-');
-    git(dir, 'git init -q -b main');
-    git(dir, 'git config user.email t@t.co');
-    git(dir, 'git config user.name T');
+    repoModel = ScriptedRepo.init(dir, 'main', feature.git);
     fs.writeFileSync(path.join(dir, '.gitignore'), '.webpieces/\n');
     commit(dir, 'README.md', '# base\n');
-    git(dir, 'git checkout -q -b dean/feat');
+    repoModel.checkoutNewBranch('dean/feat');
     commit(dir, 'store.ts', 'export function load(): string { try { return read(); } catch { return ""; } }\n');
     return dir;
 }
@@ -235,8 +231,8 @@ describe('maxReviewerRounds: 1 — round 1 is the final round, and it ends orang
         submit(dir, receipt, ISSUE, 'green', 'ok');
         submit(dir, receipt, ERRORS, 'orange', 'throw on corrupt JSON');
         await fixAndRecord(dir, [ERRORS], 'export function load(): string { return read(); }\n');
-        git(dir, 'git reset -q --soft main');
-        git(dir, 'git commit -qm "Squash merge of dean/feat"');
+        repoModel.resetSoft('main');
+        repoModel.commitIndex('Squash merge of dean/feat');
 
         expect(refusal(await finishScan(dir, 1))).toContain('1 ORANGE');
         await record(dir, [ERRORS]);

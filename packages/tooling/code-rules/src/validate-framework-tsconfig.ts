@@ -148,8 +148,8 @@ export class FrameworkTsconfigValidator extends CodeValidator<FrameworkTsconfigC
         const mode = this.config.mode ?? 'OFF';
         if (mode === 'OFF') return { success: true };
         const allowed = this.config.allowedPaths ?? [];
-        const projects = this.targets
-            .projects(workspaceRoot, mode, "framework-tsconfig")
+        const projects = (await this.targets
+            .projects(workspaceRoot, mode, "framework-tsconfig"))
             .filter((p: ScannedProject) => !matchesAnyGlob(p.dir, allowed));
         const violations = new FrameworkTsconfigAudit().audit(workspaceRoot, projects);
         if (violations.length === 0) return { success: true };

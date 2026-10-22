@@ -51,18 +51,17 @@ export class ReapWorktreeCommand {
      * remove". The token is the last thing written, and LandedWorktreeReaper strips it before printing.
      */
     async run(args: string[]): Promise<void> {
-        await Promise.resolve();
         const request = this.parse(args);
         const repoRoot = this.repoRootFinder.resolveRepoRoot(process.cwd());
 
-        const target = this.resolveTarget(repoRoot, request);
+        const target = await this.resolveTarget(repoRoot, request);
         if (target === null) {
             process.stdout.write(this.signal.line(REAP_OUTCOME_REFUSED));
             return;
         }
 
         const retention = loadAndValidate(repoRoot).prGate.landPr.branchRetention;
-        const result = this.worktreeSection.reap(repoRoot, 'wp-land-pr', [target], retention);
+        const result = await this.worktreeSection.reap(repoRoot, 'wp-land-pr', [target], retention);
         process.stdout.write(this.render(repoRoot, result));
         process.stdout.write(this.signal.line(this.outcomeOf(result)));
     }
@@ -83,11 +82,11 @@ export class ReapWorktreeCommand {
      * successful landing would report a landed PR as a failed command. That is exactly why `run` also
      * emits a ReapOutcomeSignal — the caller must be able to tell this exit 0 from a successful one.
      */
-    private resolveTarget(repoRoot: string, request: ReapRequest): DeletableWorktree | null {
+    private async resolveTarget(repoRoot: string, request: ReapRequest): Promise<DeletableWorktree | null> {
         const wanted = path.resolve(request.worktreePath);
         // `false`: this reaps ONE named worktree after its PR landed, and it is not the place to
         // override anybody's lock — a lock still standing here is exactly the refusal this prints.
-        const target = this.worktreeSection.verdicts(repoRoot, false)
+        const target = (await this.worktreeSection.verdicts(repoRoot, false))
             .find((tree: DeletableWorktree): boolean => path.resolve(tree.path) === wanted);
 
         if (target === undefined) {

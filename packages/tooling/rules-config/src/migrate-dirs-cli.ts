@@ -19,7 +19,7 @@ export class MigrateDirsCli {
         new RulePackSync(new ConfigFile(), new PackPolicyFiles(), new AtomicFile()).run(root);
         if (args.includes('--stage')) {
             const raw = new ConfigFile().readRawConfig(`${root}/webpieces.config.json`);
-            new PolicyTracking().stage(
+            await new PolicyTracking().stage(
                 root,
                 new PackPolicyFiles().declarations(raw.rulePacks, root),
             );

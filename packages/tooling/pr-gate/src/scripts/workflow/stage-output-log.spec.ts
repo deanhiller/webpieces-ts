@@ -1,10 +1,11 @@
 import { specTempDirs } from '@webpieces/tooling-testkit';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { spawnSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 import { GateLogFile } from './gate-log-file';
-import { CheckoutLayout } from '../../__tests__/feature-harness';
+import { checkoutLayout, MockProcessExitApi, MockProcessExited } from '@webpieces/tooling-testkit';
+import { CliExitError, Option, RuleFailError, runMain } from '@webpieces/rules-config';
+import { toError } from '@webpieces/tooling-common/to-error';
 import { StageOutputLog, REVIEW_CONSOLE_LOG, FINISH_CONSOLE_LOG } from './stage-output-log';
 
 
@@ -36,7 +37,7 @@ beforeEach(() => {
     fs.mkdirSync(primary, { recursive: true });
     // The layout git leaves, written directly (#1381): placement is decided by reading these files, so no
     // git process is needed to prove it.
-    CheckoutLayout.primaryWithWorktree(primary, worktree, 'feature');
+    checkoutLayout.primaryWithWorktree(primary, worktree, 'feature');
     files = new GateLogFile();
     stage = new StageOutputLog(files);
     terminal = '';
@@ -173,38 +174,49 @@ describe('StageOutputLog file placement', () => {
     });
 });
 
-// Exercise the real terminal boundary in a child: runMain exits, so a mocked exit would hide ordering.
+/**
+ * The global CLI handler (`runMain`) driven IN PROCESS (#1381). Its exit goes through the ProcessExitApi
+ * edge: `MockProcessExitApi` records the code and STOPS the run by throwing, exactly where the real exit
+ * would end the process — so nothing runMain would never have run after exiting runs here either, and
+ * the ordering the old node child proved (the failure is recorded in the log before it is closed and
+ * before the process ends) is still what is asserted.
+ */
+class TerminalRun {
+    constructor(readonly code: number | null, readonly stderr: string) {}
+}
+
+async function runThroughCliHandler(failure: () => unknown): Promise<TerminalRun> {
+    const exit = new MockProcessExitApi();
+    let stderr = '';
+    const realStderr = process.stderr.write.bind(process.stderr);
+    // webpieces-disable no-any-unknown -- matching node's overloaded write signature for a test double
+    process.stderr.write = ((chunk: string): boolean => { stderr += chunk; return true; }) as typeof process.stderr.write;
+    const ended = await runMain(() => new StageOutputLog(new GateLogFile()).withCapture(primary,
+        REVIEW_CONSOLE_LOG, async (): Promise<void> => {
+            process.stdout.write('before failure\n');
+            throw failure();
+        }), exit).then(
+        (): Error | null => null,
+        (err: unknown): Error => toError(err));
+    process.stderr.write = realStderr;
+    expect(ended).toBeInstanceOf(MockProcessExited);
+    return new TerminalRun(exit.codes[0] ?? null, stderr);
+}
+
+const FAILURES: readonly [string, () => unknown][] = [
+    ['new Error("build failed")', (): unknown => new Error('build failed')],
+    ['"non-Error rejection"', (): unknown => 'non-Error rejection'],
+    ['new CliExitError(2, "terminal refusal")', (): unknown => new CliExitError(2, 'terminal refusal')],
+    ['new RuleFailError("test", "ai refusal", undefined, undefined, [new Option("repair this", true)], "human refusal")',
+        (): unknown => new RuleFailError('test', 'ai refusal', undefined, undefined, [new Option('repair this', true)], 'human refusal')],
+];
+
 describe('stage failure diagnostics survive the global CLI handler', () => {
-    it.each([
-        'new Error("build failed")',
-        '"non-Error rejection"',
-        'new CliExitError(2, "terminal refusal")',
-        'new RuleFailError("test", "ai refusal", undefined, undefined, [new Option("repair this", true)], "human refusal")',
-    ])('records the normalized failure before closure: %s', (failure: string) => {
-        const entry = path.resolve(
-            'packages/tooling/pr-gate/src/scripts/workflow/stage-output-log.ts',
-        );
-        const gateFile = path.resolve(
-            'packages/tooling/pr-gate/src/scripts/workflow/gate-log-file.ts',
-        );
-        const script = `const {runMain, CliExitError, RuleFailError, Option} = require('@webpieces/rules-config');
-            const {StageOutputLog} = require(${JSON.stringify(entry)});
-            const {GateLogFile} = require(${JSON.stringify(gateFile)});
-            runMain(() => new StageOutputLog(new GateLogFile()).withCapture(${JSON.stringify(primary)},
-                'wp-review-upsert-pr.log', async () => { process.stdout.write('before failure\\n'); throw ${failure}; }));`;
-        const result = spawnSync(
-            process.execPath,
-            ['-r', '@swc-node/register', '-r', 'tsconfig-paths/register', '-e', script],
-            {
-                cwd: process.cwd(),
-                encoding: 'utf8',
-                env: { ...process.env, TS_NODE_PROJECT: path.resolve('tsconfig.base.json') },
-            },
-        );
-        expect(result.status).toBe(failure.startsWith('new CliExitError') ? 2 : 1);
-        // Nx sets both color variables; Node may prepend its unrelated color-warning banner.
-        const message = result.stderr.trim().split('\n').filter((line: string): boolean =>
-            !line.startsWith('(node:') && !line.startsWith('(Use `node --trace-warnings')).join('\n');
+    it.each(FAILURES)('records the normalized failure before closure: %s', async (failure: string, make: () => unknown) => {
+        const result = await runThroughCliHandler(make);
+
+        expect(result.code).toBe(failure.startsWith('new CliExitError') ? 2 : 1);
+        const message = result.stderr.trim();
         if (failure.startsWith('new RuleFailError')) {
             expect(message).toContain('human refusal');
             expect(message).toContain('repair this');
@@ -218,7 +230,7 @@ describe('stage failure diagnostics survive the global CLI handler', () => {
             );
         }
         expect(readLog(primary)).toContain(message);
-        expect(result.stdout).toContain(`FullLog : ${logPath(primary)}`);
+        expect(terminal).toContain(`FullLog : ${logPath(primary)}`);
         expect(readLog(primary).indexOf('before failure')).toBeLessThan(
             readLog(primary).indexOf(message),
         );

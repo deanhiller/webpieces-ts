@@ -97,7 +97,7 @@ export class NoClientCreationOutsideServerOrClientValidator extends CodeValidato
         console.log(`\n📏 Validating No Client Creation Outside Server Or Client\n`);
         console.log(`   Mode: ${mode} · Severity: ${severity}`);
 
-        const base = this.resolveBase(workspaceRoot);
+        const base = await this.resolveBase(workspaceRoot);
         if (base === null) return { success: true };
         const head = process.env['NX_HEAD'];
 
@@ -105,14 +105,14 @@ export class NoClientCreationOutsideServerOrClientValidator extends CodeValidato
         console.log(`   Head: ${head ?? 'working tree (includes uncommitted changes)'}`);
         console.log('');
 
-        const changedFiles = this.scanScope.files(workspaceRoot, mode, base, head);
+        const changedFiles = await this.scanScope.files(workspaceRoot, mode, base, head);
         if (changedFiles.length === 0) {
             console.log('✅ No TypeScript files changed');
             return { success: true };
         }
 
         console.log(`📂 Checking ${changedFiles.length} changed file(s)...`);
-        const violations = this.findViolations(workspaceRoot, changedFiles, mode, base, head);
+        const violations = await this.findViolations(workspaceRoot, changedFiles, mode, base, head);
 
         if (violations.length === 0) {
             console.log('✅ No client-creation-in-a-library violations found');
@@ -134,10 +134,10 @@ export class NoClientCreationOutsideServerOrClientValidator extends CodeValidato
         return this.config.disableAllowed ?? true;
     }
 
-    private resolveBase(workspaceRoot: string): string | null {
+    private async resolveBase(workspaceRoot: string): Promise<string | null> {
         const envBase = process.env['NX_BASE'];
         if (envBase) return envBase;
-        const detected = detectBase(workspaceRoot);
+        const detected = await detectBase(workspaceRoot);
         if (!detected) {
             console.log(`\n⏭️  Skipping ${RULE_NAME} validation (could not detect base branch)`);
             console.log('');
@@ -149,13 +149,13 @@ export class NoClientCreationOutsideServerOrClientValidator extends CodeValidato
     /** Violations across changed files: a creation site in a project whose role is not allowed. In
      *  NEW_AND_MODIFIED_CODE only sites on changed lines count; in NEW_AND_MODIFIED_FILES (and the whole-scope modes) every site
      *  in a changed file counts. */
-    private findViolations(
+    private async findViolations(
         workspaceRoot: string,
         changedFiles: string[],
         mode: ModifiedCodeMode,
         base: string,
         head: string | undefined,
-    ): Violation[] {
+    ): Promise<Violation[]> {
         const allowed = new Set(this.allowedRoles());
         const violations: Violation[] = [];
         for (const file of changedFiles) {
@@ -166,7 +166,7 @@ export class NoClientCreationOutsideServerOrClientValidator extends CodeValidato
             if (role === null || allowed.has(role)) continue;
 
             const changedLines = this.scanScope.isLineScoped(mode)
-                ? getChangedLineNumbers(getFileDiff(workspaceRoot, file, base, head))
+                ? getChangedLineNumbers(await getFileDiff(workspaceRoot, file, base, head))
                 : null;
             if (changedLines !== null && changedLines.size === 0) continue;
 

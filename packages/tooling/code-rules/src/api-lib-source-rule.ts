@@ -100,15 +100,15 @@ export abstract class ApiLibSourceRule<C extends ApiLibConfig> extends CodeValid
         const mode: ModifiedCodeMode | undefined = this.config.mode;
         if (mode === undefined || mode === 'OFF') return { success: true };
         // NX_BASE / NX_HEAD when nx set them, else the merge-base with main.
-        const range = this.diffScope.resolveBase(workspaceRoot);
+        const range = await this.diffScope.resolveBase(workspaceRoot);
         const base = range.base;
         if (base === undefined) {
             console.log(`\n⏭️  Skipping ${this.name} validation (could not detect base branch)\n`);
             return { success: true };
         }
         const found: FoundSite[] = [];
-        for (const relFile of this.scanScope.files(workspaceRoot, mode, base, range.head)) {
-            found.push(...this.judge(workspaceRoot, relFile, mode, base, range.head));
+        for (const relFile of await this.scanScope.files(workspaceRoot, mode, base, range.head)) {
+            found.push(...await this.judge(workspaceRoot, relFile, mode, base, range.head));
         }
         if (found.length === 0) return { success: true };
         this.scanScope.recordSites(this.name, found.map((each: FoundSite) => each.relFile));
@@ -116,16 +116,16 @@ export abstract class ApiLibSourceRule<C extends ApiLibConfig> extends CodeValid
     }
 
     /** The unexempt, in-scope violating sites of one changed file. */
-    private judge(
+    private async judge(
         workspaceRoot: string,
         relFile: string,
         mode: ModifiedCodeMode,
         base: string,
         head: string | undefined,
-    ): FoundSite[] {
+    ): Promise<FoundSite[]> {
         if (!this.inScope(workspaceRoot, relFile)) return [];
         const changedLines = this.scanScope.isLineScoped(mode)
-            ? this.diffScope.getChangedLineNumbers(this.diffScope.getFileDiff(workspaceRoot, relFile, base, head))
+            ? this.diffScope.getChangedLineNumbers(await this.diffScope.getFileDiff(workspaceRoot, relFile, base, head))
             : undefined;
         if (changedLines !== undefined && changedLines.size === 0) return [];
         const absFile = path.join(workspaceRoot, relFile);

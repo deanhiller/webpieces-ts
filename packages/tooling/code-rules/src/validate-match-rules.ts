@@ -64,7 +64,7 @@ export class MatchRulesChecker {
         let base = process.env['NX_BASE'];
         const head = process.env['NX_HEAD'];
         if (!base) {
-            base = detectBase(workspaceRoot) ?? undefined;
+            base = await detectBase(workspaceRoot) ?? undefined;
             if (!base) {
                 console.log(`\n⏭️  Skipping ${config.name} validation (could not detect base branch)\n`);
                 return { success: true };
@@ -74,7 +74,7 @@ export class MatchRulesChecker {
         console.log(`   Base: ${base}`);
         console.log(`   Head: ${head ?? 'working tree (includes uncommitted changes)'}\n`);
 
-        const changedFiles = this.scanScope.files(workspaceRoot, mode, base, head);
+        const changedFiles = await this.scanScope.files(workspaceRoot, mode, base, head);
         if (changedFiles.length === 0) {
             console.log('✅ No TypeScript files changed');
             return { success: true };
@@ -82,7 +82,7 @@ export class MatchRulesChecker {
 
         console.log(`📂 Checking ${changedFiles.length} changed file(s)...`);
         const violations = this.scanScope.isLineScoped(mode)
-            ? this.findViolationsForModifiedCode(workspaceRoot, changedFiles, base, head, config)
+            ? await this.findViolationsForModifiedCode(workspaceRoot, changedFiles, base, head, config)
             : this.findViolationsForModifiedFiles(workspaceRoot, changedFiles, config);
 
         if (violations.length === 0) {
@@ -114,16 +114,16 @@ export class MatchRulesChecker {
         });
     }
 
-    private findViolationsForModifiedCode(
+    private async findViolationsForModifiedCode(
         workspaceRoot: string,
         changedFiles: string[],
         base: string,
         head: string | undefined,
         config: MatchRuleConfig,
-    ): MatchViolation[] {
+    ): Promise<MatchViolation[]> {
         const violations: MatchViolation[] = [];
         for (const file of changedFiles) {
-            const diff = getFileDiff(workspaceRoot, file, base, head);
+            const diff = await getFileDiff(workspaceRoot, file, base, head);
             const changedLines = getChangedLineNumbers(diff);
             if (changedLines.size === 0) continue;
 

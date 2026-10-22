@@ -1,15 +1,12 @@
-import { policyFixture } from '@webpieces/tooling-testkit';
-import { specTempDirs } from '@webpieces/tooling-testkit';
-import { execFileSync } from 'child_process';
+import { checkoutLayout, policyFixture } from '@webpieces/tooling-testkit';
 import * as fs from 'fs';
 import * as path from 'path';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { BranchArchiver } from '@webpieces/repo-workflow-core';
-import { GitProcessApi, InformAiError, NativeProcessApi, ProcessResultDto } from '@webpieces/tooling-common';
+import { GitProcessApi, GitResultDto, InformAiError, NativeProcessApi, ProcessResultDto } from '@webpieces/tooling-common';
 import { toError } from '@webpieces/tooling-common/to-error';
 import { RepoRootFinder } from '@webpieces/rules-config';
 import { MockNativeProcessApi, ProcessCallDto } from '@webpieces/tooling-testkit';
-import { Container } from 'inversify';
 
 import { LandPrCommand, LandPrRequest } from './land-pr-command';
 import { RepoConfigFixture } from '../workflow/repo-config-testkit';
@@ -20,7 +17,7 @@ import { LandedWorktreeReaper } from '../workflow/landed-worktree-reaper';
 import { MergeBodyTempFile } from '../workflow/merge-body-temp-file';
 import { MergeInfoIndex } from '../workflow/merge-info-index';
 import { PrMerger } from '../workflow/pr-merger';
-import { PrGateContainer } from '../pr-gate-container';
+import { PrGateFeature } from '../../__tests__/feature-harness';
 
 /**
  * The READ half of the finish→land contract, end to end through the real PrMerger.
@@ -30,9 +27,11 @@ import { PrGateContainer } from '../pr-gate-container';
  * about this command: what exactly reached main's history. Nothing here touches the network, and no
  * merge is ever performed.
  *
- * git is still REAL here: the bookkeeping half (archive tags, worktree lookup) is
- * `@webpieces/repo-workflow-core`'s, which is not routed through the injected process edge yet — a later
- * slice of #1381 — so its answers have to come from a real repository.
+ * git is SCRIPTED too (#1381): the bookkeeping half (archive tags, the worktree lookup) is
+ * `@webpieces/repo-workflow-core`'s, and it now reaches git through the same injected edge. Each clone is a
+ * {@link ScriptedClone} — its branch tips, which worktree holds which branch at which commit, the tags the
+ * program created — answering every command exactly as git would. The `.git` layout of each tree is laid
+ * out on disk by checkoutLayout (no git), because the state readers (DotWebpieces) read it from files.
  *
  * ─── What changed, and why the old scenarios are gone ──────────────────────────────────────────────
  * The gated body used to be a file on THIS MACHINE (`~/.webpieces/prs/<host>/<owner>/<repo>/<n>/`), so
@@ -44,29 +43,97 @@ import { PrGateContainer } from '../pr-gate-container';
  */
 
 const BRANCH = 'dean/feature';
-const REMOTE = 'git@github.com:acme/widgets.git';
 // What `wp-finish-upsert-pr` publishes as the PR description, verbatim. See dashboard.renderPrBody and
 // pr-body-is-merge-body.spec.ts: this string IS both surfaces.
 const PR_DESCRIPTION = 'https://github.com/acme/widgets/pull/604\n\nRisk: green\n\nSummary.\n';
 
+/** One working tree of a clone: where it is, and what it has checked out. Data only. */
+class TreeState {
+    constructor(readonly path: string, public branch: string) {}
+}
+
+/**
+ * One clone of "acme/widgets" as git knows it: ONE set of refs (branch tips, tags) shared by the primary
+ * tree and every linked worktree, and which branch each tree has checked out.
+ */
+class ScriptedClone {
+    readonly branches = new Map<string, string>();
+    readonly tags = new Map<string, string>();
+    readonly trees: TreeState[] = [];
+
+    constructor(readonly primary: string) {
+        this.trees.push(new TreeState(primary, BRANCH));
+    }
+
+    /** Does `cwd` lie in one of this clone's trees? The innermost (longest) tree wins. */
+    treeAt(cwd: string): TreeState | undefined {
+        return this.trees
+            .filter((tree: TreeState): boolean => cwd === tree.path || cwd.startsWith(`${tree.path}${path.sep}`))
+            .sort((a: TreeState, b: TreeState): number => b.path.length - a.path.length)[0];
+    }
+
+    answer(call: ProcessCallDto, tree: TreeState): GitResultDto {
+        const args = call.args;
+        const line = args.join(' ');
+        if (line === 'branch --show-current') return this.ok(tree.branch);
+        if (line === 'worktree list --porcelain') return new GitResultDto(0, this.porcelain(), '');
+        if (args[0] === 'tag' && args.length === 3) {
+            if (this.tags.has(args[1])) return new GitResultDto(128, '', `fatal: tag '${args[1]}' already exists`);
+            this.tags.set(args[1], args[2]);
+            return new GitResultDto(0, '', '');
+        }
+        if (args[0] === 'rev-parse' && args[1] === '--verify') {
+            return new GitResultDto(this.tags.has(args[3].replace('refs/tags/', '')) ? 0 : 1, '', '');
+        }
+        if (args[0] === 'rev-parse' && args[1].startsWith('refs/tags/')) {
+            const sha = this.tags.get(args[1].replace('refs/tags/', '').replace('^{commit}', ''));
+            return sha === undefined ? this.unknown(args[1]) : this.ok(sha);
+        }
+        if (args[0] === 'rev-parse' && args.length === 2) {
+            const sha = this.branches.get(args[1]);
+            // No remote has ever been fetched, so `origin/main` is unknown — exactly as in a fresh clone.
+            return sha === undefined ? this.unknown(args[1]) : this.ok(sha);
+        }
+        return new GitResultDto(1, '', `unscripted git ${line}`);
+    }
+
+    /** The archive tags in this clone — what `git tag --list 'archive/*'` would print. */
+    archiveTags(): string {
+        return [...this.tags.keys()].filter((tag: string): boolean => tag.startsWith('archive/')).join('\n');
+    }
+
+    private porcelain(): string {
+        return this.trees.map((tree: TreeState): string =>
+            `worktree ${tree.path}\nHEAD ${this.branches.get(tree.branch) ?? ''}\nbranch refs/heads/${tree.branch}\n`).join('\n');
+    }
+
+    private ok(stdout: string): GitResultDto {
+        return new GitResultDto(0, `${stdout}\n`, '');
+    }
+
+    private unknown(ref: string): GitResultDto {
+        return new GitResultDto(128, `${ref}\n`, `fatal: ambiguous argument '${ref}': unknown revision or path not in the working tree.`);
+    }
+}
+
 let tmp = '';
 let primary = '';
+let primaryClone: ScriptedClone;
+const clones: ScriptedClone[] = [];
 let landed = '';
 let savedCwd = '';
 let prBody = PR_DESCRIPTION;
 let prHeadOid = '';
 let prJson: string | null = null;
-let container: Container;
+let feature: PrGateFeature;
 let gh: MockNativeProcessApi;
 const savedInitCwd = process.env['INIT_CWD'];
 
-function git(cwd: string, ...args: string[]): string {
-    return execFileSync('git', args, { cwd, encoding: 'utf8' }).trim();
-}
-
 /**
  * THIS repo's own webpieces.config.json, prepared for a temp clone by RepoConfigFixture — the real file
- * rather than a hand-rolled stub, so the spec exercises the same validator the tool really faces.
+ * rather than a hand-rolled stub, so the spec exercises the same validator the tool really faces. Written
+ * BEFORE the tree's `.git` is laid out: the fixture stages its files when it finds a `.git`, and this
+ * spec starts no git.
  */
 function writeConfig(dir: string): void {
     const fixture = new RepoConfigFixture();
@@ -74,24 +141,39 @@ function writeConfig(dir: string): void {
 }
 
 // A clone of "acme/widgets" with a main commit and the feature branch checked out.
-function makeClone(name: string): string {
+function makeClone(name: string): ScriptedClone {
     const dir = path.join(tmp, name);
     fs.mkdirSync(dir, { recursive: true });
-    git(dir, 'init', '-q', '-b', 'main');
-    // The global pre-push/pre-commit hooks on this machine refuse commits to main.
-    git(dir, 'config', 'core.hooksPath', '/dev/null');
-    git(dir, 'config', 'user.email', 'spec@example.com');
-    git(dir, 'config', 'user.name', 'spec');
-    git(dir, 'remote', 'add', 'origin', REMOTE);
     writeConfig(dir);
     fs.writeFileSync(path.join(dir, 'README.md'), `# ${name}\n`);
-    git(dir, 'add', '.');
-    git(dir, 'commit', '-qm', 'init');
-    git(dir, 'checkout', '-q', '-b', BRANCH);
     fs.writeFileSync(path.join(dir, 'feature.txt'), 'work\n');
-    git(dir, 'add', '.');
-    git(dir, 'commit', '-qm', 'feature');
-    return dir;
+    checkoutLayout.primary(dir, BRANCH);
+    const clone = new ScriptedClone(dir);
+    clone.branches.set('main', `main-of-${name}`);
+    // Every clone commits its OWN feature work, so the same branch name is a different commit in each.
+    clone.branches.set(BRANCH, `feature-of-${name}`);
+    clones.push(clone);
+    return clone;
+}
+
+/**
+ * A linked worktree of the primary clone, holding the feature branch while the primary goes back to main —
+ * what `git worktree add --detach <wt>`, `git checkout main` in the primary and `git checkout <branch>`
+ * in the worktree leave behind.
+ */
+function addWorktreeHoldingBranch(worktree: string): void {
+    fs.mkdirSync(worktree, { recursive: true });
+    // Checking the branch out materializes its committed files — the primary clone's, which hold the
+    // same commit — so the worktree carries the same owner policy files beside its config.
+    for (const entry of fs.readdirSync(primary)) {
+        if (entry === '.git' || entry === '.claude') continue;
+        fs.cpSync(path.join(primary, entry), path.join(worktree, entry), { recursive: true });
+    }
+    writeConfig(worktree);
+    checkoutLayout.linkedWorktree(primary, worktree, BRANCH);
+    checkoutLayout.checkoutBranch(primary, 'main');
+    primaryClone.trees[0].branch = 'main';
+    primaryClone.trees.push(new TreeState(worktree, BRANCH));
 }
 
 /**
@@ -109,6 +191,17 @@ function scriptGitHub(): void {
         const at = call.args.indexOf('--body-file');
         if (at >= 0) landed = fs.readFileSync(call.args[at + 1], 'utf8');
         return gh.ok('merged\n');
+    });
+}
+
+// git answers from whichever clone owns the directory the command runs in.
+function scriptGit(): void {
+    feature.git.respondToPrefix([], (call: ProcessCallDto): GitResultDto => {
+        for (const clone of clones) {
+            const tree = clone.treeAt(call.cwd ?? '');
+            if (tree !== undefined) return clone.answer(call, tree);
+        }
+        return new GitResultDto(128, '', `fatal: not a git repository: ${call.cwd ?? ''}`);
     });
 }
 
@@ -148,8 +241,9 @@ class CwdRepoRootFinder extends RepoRootFinder {
 }
 
 // The command with every collaborator from the shipped container. Only repo-root resolution is pinned,
-// because the temp clone has no enclosing workspace to discover, and `gh` is the scripted edge.
+// because the temp clone has no enclosing workspace to discover; git and `gh` are the scripted edges.
 function build(): LandPrCommand {
+    const container = feature.container;
     return new LandPrCommand(
         new CwdRepoRootFinder(),
         container.get(AiBranchName),
@@ -214,15 +308,18 @@ function landedBody(): string {
 
 beforeEach(async (): Promise<void> => {
     savedCwd = process.cwd();
-    tmp = policyFixture.makeRepo('wp-land-pr-');
+    // realpath: git reports worktree paths resolved (/private/var/… on macOS), so the model does too.
+    tmp = fs.realpathSync(policyFixture.makeRepo('wp-land-pr-'));
     landed = '';
-    container = new PrGateContainer().create();
-    gh = new MockNativeProcessApi();
-    (await container.rebind(NativeProcessApi)).toConstantValue(gh);
+    clones.length = 0;
+    feature = await PrGateFeature.create();
+    gh = feature.processes;
     scriptGitHub();
-    primary = makeClone('primary');
+    scriptGit();
+    primaryClone = makeClone('primary');
+    primary = primaryClone.primary;
     prBody = PR_DESCRIPTION;
-    prHeadOid = git(primary, 'rev-parse', BRANCH);
+    prHeadOid = primaryClone.branches.get(BRANCH) ?? '';
     ghPrSays(prBody, prHeadOid);
 });
 
@@ -249,7 +346,7 @@ describe('wp-land-pr — the commit body comes from the PR description', () => {
     it('lands from a clone that never rendered anything — nothing local is read', async (): Promise<void> => {
         const second = makeClone('second-clone');
 
-        await land(second);
+        await land(second.primary);
 
         expect(landedBody()).toBe(PR_DESCRIPTION);
     });
@@ -278,7 +375,10 @@ describe('wp-land-pr — the bookkeeping half is re-derived from headRefOid', ()
         const out = await land(primary);
 
         expect(out).not.toContain('SKIPPED');
-        expect(git(primary, 'tag', '--list', 'archive/*')).toContain(`/${BRANCH}`);
+        expect(primaryClone.archiveTags()).toContain(`/${BRANCH}`);
+        // The tag points at the commit GitHub squashed, and was issued in this clone.
+        expect(feature.git.calls.some((call: ProcessCallDto): boolean =>
+            call.cwd === primary && call.args[0] === 'tag' && call.args[2] === prHeadOid)).toBe(true);
     });
 
     /**
@@ -289,14 +389,15 @@ describe('wp-land-pr — the bookkeeping half is re-derived from headRefOid', ()
     it('declines the bookkeeping OUT LOUD when this tree holds a different commit', async (): Promise<void> => {
         const second = makeClone('second-clone');
 
-        const out = await land(second);
+        const out = await land(second.primary);
 
         expect(landedBody()).toBe(PR_DESCRIPTION);
         expect(out).toContain('Archive + worktree cleanup SKIPPED');
         expect(out).toContain(prHeadOid);
-        expect(out).toContain(git(second, 'rev-parse', BRANCH));
+        expect(out).toContain(second.branches.get(BRANCH) ?? '<missing>');
         // The wrong-objects rail: no archive tag in the clone that does not hold the landed commit.
-        expect(git(second, 'tag', '--list', 'archive/*')).toBe('');
+        expect(second.archiveTags()).toBe('');
+        expect(feature.git.commandLines().some((line: string): boolean => line.startsWith('git tag '))).toBe(false);
     });
 
     /**
@@ -306,16 +407,13 @@ describe('wp-land-pr — the bookkeeping half is re-derived from headRefOid', ()
      */
     it('archives from a LINKED WORKTREE of the same clone, which holds the same commit', async (): Promise<void> => {
         const worktree = path.join(tmp, 'wt-a');
-        git(primary, 'worktree', 'add', '-q', '--detach', worktree);
-        git(primary, 'checkout', '-q', 'main');
-        git(worktree, 'checkout', '-q', BRANCH);
-        writeConfig(worktree);
+        addWorktreeHoldingBranch(worktree);
 
         const out = await land(worktree);
 
         expect(landedBody()).toBe(PR_DESCRIPTION);
         expect(out).not.toContain('SKIPPED');
-        expect(git(primary, 'tag', '--list', 'archive/*')).toContain(`/${BRANCH}`);
+        expect(primaryClone.archiveTags()).toContain(`/${BRANCH}`);
     });
 });
 
@@ -331,11 +429,7 @@ describe('wp-land-pr — the invocation directory, not pnpm\'s hoisted one', () 
      */
     it('reads the NESTED agent worktree\'s branch, not the primary clone\'s', async (): Promise<void> => {
         const agent = path.join(primary, '.claude', 'worktrees', 'agent-x');
-        fs.mkdirSync(path.dirname(agent), { recursive: true });
-        git(primary, 'worktree', 'add', '-q', '--detach', agent);
-        git(primary, 'checkout', '-q', 'main');
-        git(agent, 'checkout', '-q', BRANCH);
-        writeConfig(agent);
+        addWorktreeHoldingBranch(agent);
 
         // Typed in the agent worktree; pnpm hoisted the process into the primary clone, which is on main.
         const out = await landFrom(agent, primary, new LandPrRequest(false, ''));
@@ -345,7 +439,10 @@ describe('wp-land-pr — the invocation directory, not pnpm\'s hoisted one', () 
         expect(landedBody()).toBe(PR_DESCRIPTION);
         expect(out).toContain('Landing PR #604');
         expect(out).not.toContain('SKIPPED');
-        expect(git(primary, 'tag', '--list', 'archive/*')).toContain(`/${BRANCH}`);
+        expect(primaryClone.archiveTags()).toContain(`/${BRANCH}`);
+        // The branch was asked of the directory the operator TYPED in, not of the hoisted cwd.
+        expect(feature.git.calls.find((call: ProcessCallDto): boolean =>
+            call.args.join(' ') === 'branch --show-current')?.cwd).toBe(agent);
     });
 
     /**
@@ -356,11 +453,7 @@ describe('wp-land-pr — the invocation directory, not pnpm\'s hoisted one', () 
      */
     it('lands --pr <n> from the primary clone and still finds the agent\'s worktree', async (): Promise<void> => {
         const agent = path.join(primary, '.claude', 'worktrees', 'agent-y');
-        fs.mkdirSync(path.dirname(agent), { recursive: true });
-        git(primary, 'worktree', 'add', '-q', '--detach', agent);
-        git(primary, 'checkout', '-q', 'main');
-        git(agent, 'checkout', '-q', BRANCH);
-        writeConfig(agent);
+        addWorktreeHoldingBranch(agent);
 
         const out = await landFrom(primary, primary, new LandPrRequest(true, '604'));
 
@@ -369,7 +462,7 @@ describe('wp-land-pr — the invocation directory, not pnpm\'s hoisted one', () 
         expect(out).not.toContain('SKIPPED');
         // The reap names the AGENT's directory, not the clone the coordinator is standing in.
         expect(out).toContain(agent);
-        expect(git(primary, 'tag', '--list', 'archive/*')).toContain(`/${BRANCH}`);
+        expect(primaryClone.archiveTags()).toContain(`/${BRANCH}`);
     });
 
     /** `--pr` with no number must refuse, never silently fall back to this directory's branch. */

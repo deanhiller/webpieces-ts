@@ -86,7 +86,7 @@ export class NoCustomCssValidator extends CodeValidator<NoCustomCssConfig> {
         let base = process.env['NX_BASE'];
         const head = process.env['NX_HEAD'];
         if (!base) {
-            base = detectBase(workspaceRoot) ?? undefined;
+            base = await detectBase(workspaceRoot) ?? undefined;
             if (!base) {
                 console.log('\n⏭️  Skipping no-custom-css validation (could not detect base branch)\n');
                 return { success: true };
@@ -96,7 +96,7 @@ export class NoCustomCssValidator extends CodeValidator<NoCustomCssConfig> {
         console.log(`   Head: ${head ?? 'working tree (includes uncommitted changes)'}\n`);
 
         // tsOnly:false so changed .html templates are included; then filter to relevant files.
-        const changedFiles = this.scanScope.files(workspaceRoot, mode, base, head, { tsOnly: false }).filter((f: string) => this.isRelevantFile(f));
+        const changedFiles = (await this.scanScope.files(workspaceRoot, mode, base, head, { tsOnly: false })).filter((f: string) => this.isRelevantFile(f));
         if (changedFiles.length === 0) {
             console.log('✅ No Angular .ts/.html files changed');
             return { success: true };
@@ -105,7 +105,7 @@ export class NoCustomCssValidator extends CodeValidator<NoCustomCssConfig> {
 
         const violations =
             this.scanScope.isLineScoped(mode)
-                ? this.findViolationsForModifiedCode(workspaceRoot, changedFiles, base, head, disableAllowed)
+                ? await this.findViolationsForModifiedCode(workspaceRoot, changedFiles, base, head, disableAllowed)
                 : this.findViolationsForModifiedFiles(workspaceRoot, changedFiles, disableAllowed);
 
         if (violations.length === 0) {
@@ -138,16 +138,16 @@ export class NoCustomCssValidator extends CodeValidator<NoCustomCssConfig> {
     }
 
     /** NEW_AND_MODIFIED_CODE: only hits whose line is in the diff hunks. */
-    private findViolationsForModifiedCode(
+    private async findViolationsForModifiedCode(
         workspaceRoot: string,
         changedFiles: string[],
         base: string,
         head: string | undefined,
         disableAllowed: boolean,
-    ): CssViolation[] {
+    ): Promise<CssViolation[]> {
         const violations: CssViolation[] = [];
         for (const file of changedFiles) {
-            const changedLines = getChangedLineNumbers(getFileDiff(workspaceRoot, file, base, head));
+            const changedLines = getChangedLineNumbers(await getFileDiff(workspaceRoot, file, base, head));
             if (changedLines.size === 0) continue;
             for (const h of this.findHitsForFile(file, workspaceRoot)) {
                 if (disableAllowed && h.hasDisableComment) continue;

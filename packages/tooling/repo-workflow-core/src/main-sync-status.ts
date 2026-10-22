@@ -1,4 +1,3 @@
-import { spawnSync } from 'child_process';
 import { injectable, bindingScopeValues } from 'inversify';
 
 import { AtomicFile } from '@webpieces/tooling-common';
@@ -30,10 +29,9 @@ export const DEFAULT_HANG_TIMEOUT_MINUTES = 5;
 
 const MAIN_SYNC_STATUS_FILE = 'main-sync-status.json';
 
-// Result of a captured git/gh invocation: ok=false on spawn failure or non-zero exit.
-interface CmdCapture {
-    ok: boolean;
-    out: string;
+// Internal: one bounded command's verdict and trimmed stdout. Data only.
+class CapturedOutput {
+    constructor(readonly ok: boolean, readonly out: string) {}
 }
 
 /**
@@ -47,7 +45,7 @@ export class MainSyncStatusService {
         private readonly atomicFile: AtomicFile = new AtomicFile(),
         private readonly store: MainSyncFileStore = new MainSyncFileStore(atomicFile),
         private readonly worktrees: WorktreeService = new WorktreeService(),
-        private readonly timeouts: CommandTimeouts = new CommandTimeouts(),
+        private readonly commands: CommandTimeouts = new CommandTimeouts(),
     ) {}
 
     /**
@@ -124,10 +122,10 @@ export class MainSyncStatusService {
      * own `gh` query, so it is the right entry point for a single-worktree caller and for tests.
      * The refresher uses computeAllMainSyncStatuses instead — see there for why.
      */
-    computeMainSyncStatus(repoRoot: string): MainSyncStatus {
+    async computeMainSyncStatus(repoRoot: string): Promise<MainSyncStatus> {
         // Best-effort network refresh; offline just means we evaluate against the last-fetched ref.
-        this.fetchOriginMain(repoRoot);
-        return this.computeBranchStatus(repoRoot, this.gitBranch(repoRoot), this.loadPullRequestIndex(repoRoot));
+        await this.fetchOriginMain(repoRoot);
+        return this.computeBranchStatus(repoRoot, this.gitBranch(repoRoot), await this.loadPullRequestIndex(repoRoot));
     }
 
     /**
@@ -145,19 +143,19 @@ export class MainSyncStatusService {
      * The map is rebuilt from the LIVE worktree set every refresh, so a deleted branch or removed
      * worktree simply stops appearing. No pruning pass, no unbounded growth.
      */
-    computeAllMainSyncStatuses(repoRoot: string): MainSyncStatusFile {
-        this.fetchOriginMain(repoRoot);
-        const index = this.loadPullRequestIndex(repoRoot);
+    async computeAllMainSyncStatuses(repoRoot: string): Promise<MainSyncStatusFile> {
+        await this.fetchOriginMain(repoRoot);
+        const index = await this.loadPullRequestIndex(repoRoot);
         const branches: Record<string, MainSyncStatus> = {};
         for (const tree of this.worktrees.listWorktrees(repoRoot)) {
             // Detached HEAD (and a bare worktree) has no branch to key an entry on. Skipping it must
             // not stop the others being recorded, which is why this is a `continue`, not a bail-out.
             if (tree.branch === '' || this.hasBranch(branches, tree.branch)) continue;
-            branches[tree.branch] = this.computeBranchStatus(tree.path, tree.branch, index);
+            branches[tree.branch] = await this.computeBranchStatus(tree.path, tree.branch, index);
         }
         // `main` always present, even with no worktree on it: read-stale-guard's state A looks itself
         // up under 'main', and an absent entry there would silently disarm the stale-main block.
-        if (!this.hasBranch(branches, 'main')) branches['main'] = this.mainOnlyStatus(repoRoot);
+        if (!this.hasBranch(branches, 'main')) branches['main'] = await this.mainOnlyStatus(repoRoot);
         return new MainSyncStatusFile(MAIN_SYNC_STATUS_VERSION, new Date().toISOString(), branches);
     }
 
@@ -171,8 +169,8 @@ export class MainSyncStatusService {
      * `gh`: both are done once per refresh by the caller.
      */
     // webpieces-disable max-lines-new-methods -- one cohesive slow-path computation
-    private computeBranchStatus(repoRoot: string, branch: string, index: PullRequestIndex): MainSyncStatus {
-        return this.stampForge(this.computeBranchStatusInner(repoRoot, branch, index), index);
+    private async computeBranchStatus(repoRoot: string, branch: string, index: PullRequestIndex): Promise<MainSyncStatus> {
+        return this.stampForge(await this.computeBranchStatusInner(repoRoot, branch, index), index);
     }
 
     // Every return path of the computation below has to carry the forge flag, and threading it through
@@ -183,13 +181,13 @@ export class MainSyncStatusService {
     }
 
     // webpieces-disable max-lines-new-methods -- one cohesive slow-path computation
-    private computeBranchStatusInner(repoRoot: string, branch: string, index: PullRequestIndex): MainSyncStatus {
+    private async computeBranchStatusInner(repoRoot: string, branch: string, index: PullRequestIndex): Promise<MainSyncStatus> {
         const mergedPr = index.mergedFor(branch);
         const openPr = index.openFor(branch);
 
-        const head = this.capture(repoRoot, 'git', ['rev-parse', 'HEAD']);
-        const originMain = this.capture(repoRoot, 'git', ['rev-parse', 'origin/main']);
-        const localMain = this.localMainHash(repoRoot);
+        const head = await this.git(repoRoot, ['rev-parse', 'HEAD']);
+        const originMain = await this.git(repoRoot, ['rev-parse', 'origin/main']);
+        const localMain = await this.localMainHash(repoRoot);
         const featureHead = head.ok ? head.out : '';
         if (!head.ok || !originMain.ok) {
             const status = this.benignStatus(branch, featureHead);
@@ -197,21 +195,21 @@ export class MainSyncStatusService {
             status.mergedPr = mergedPr;
             status.openPr = openPr;
             status.localMain = localMain;
-            status.commitsBehind = this.commitDistance(repoRoot, localMain, originMain.ok ? originMain.out : '');
+            status.commitsBehind = await this.commitDistance(repoRoot, localMain, originMain.ok ? originMain.out : '');
             return status;
         }
 
-        const forkPoint = this.capture(repoRoot, 'git', ['merge-base', 'origin/main', 'HEAD']);
+        const forkPoint = await this.git(repoRoot, ['merge-base', 'origin/main', 'HEAD']);
         if (!forkPoint.ok || forkPoint.out === '') {
             const noFork = new MainSyncStatus(branch, mergedPr !== '', mergedPr, false, null, originMain.out, featureHead, false, [], new Date().toISOString());
             noFork.openPr = openPr;
             noFork.localMain = localMain;
-            noFork.commitsBehind = this.commitDistance(repoRoot, localMain, originMain.out);
+            noFork.commitsBehind = await this.commitDistance(repoRoot, localMain, originMain.out);
             return noFork;
         }
 
-        const featureFiles = new Set(this.featureChangedFiles(repoRoot, forkPoint.out));
-        const mainFiles = this.changedFiles(repoRoot, forkPoint.out, 'origin/main');
+        const featureFiles = new Set(await this.featureChangedFiles(repoRoot, forkPoint.out));
+        const mainFiles = await this.changedFiles(repoRoot, forkPoint.out, 'origin/main');
         const conflictFiles = mainFiles.filter((file: string): boolean => featureFiles.has(file));
 
         const status = new MainSyncStatus(
@@ -228,7 +226,7 @@ export class MainSyncStatusService {
         );
         status.openPr = openPr;
         status.localMain = localMain;
-        status.commitsBehind = this.commitDistance(repoRoot, localMain, originMain.out);
+        status.commitsBehind = await this.commitDistance(repoRoot, localMain, originMain.out);
         return status;
     }
 
@@ -256,17 +254,17 @@ export class MainSyncStatusService {
      * goes through writeMainSyncStatus, which MERGES its entry into the existing map; writing a whole
      * document from here would wipe every other worktree's entry.
      */
-    stampCleanMainSyncStatus(repoRoot: string): void {
+    async stampCleanMainSyncStatus(repoRoot: string): Promise<void> {
         // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
         try {
             const branch = this.gitBranch(repoRoot);
-            const originMain = this.capture(repoRoot, 'git', ['rev-parse', 'origin/main']);
-            const featureHead = this.capture(repoRoot, 'git', ['rev-parse', 'HEAD']);
+            const originMain = await this.git(repoRoot, ['rev-parse', 'origin/main']);
+            const featureHead = await this.git(repoRoot, ['rev-parse', 'HEAD']);
             if (!originMain.ok || !featureHead.ok) return;
             const status = new MainSyncStatus(
                 branch, false, '', true, originMain.out, originMain.out, featureHead.out, false, [], new Date().toISOString(),
             );
-            status.localMain = this.localMainHash(repoRoot);
+            status.localMain = await this.localMainHash(repoRoot);
             status.commitsBehind = 0;
             this.writeMainSyncStatus(repoRoot, status);
         } catch (err: unknown) {
@@ -290,26 +288,23 @@ export class MainSyncStatusService {
      * Older git rejects the flag; only then do we retry the plain form, accepting the old behaviour
      * rather than losing the refresh entirely on a pre-2020 git.
      */
-    private fetchOriginMain(repoRoot: string): void {
-        const safe = spawnSync('git', ['fetch', '--no-write-fetch-head', 'origin', 'main'], {
-            cwd: repoRoot, encoding: 'utf8', stdio: ['ignore', 'ignore', 'pipe'], timeout: CommandTimeouts.NETWORK_MS,
-        });
-        if (safe.status === 0) return;
+    private async fetchOriginMain(repoRoot: string): Promise<void> {
+        const safe = await this.commands.networkGit(['fetch', '--no-write-fetch-head', 'origin', 'main'], repoRoot);
+        if (safe.ok) return;
         if (!this.isUnknownGitOption(safe.stderr)) return;  // a real failure (offline, auth) — not our business
-        spawnSync('git', ['fetch', 'origin', 'main'], { cwd: repoRoot, stdio: 'ignore', timeout: CommandTimeouts.NETWORK_MS });
+        await this.commands.networkGit(['fetch', 'origin', 'main'], repoRoot);
     }
 
     // Did git reject the flag itself (too old), as opposed to failing the network refresh?
-    private isUnknownGitOption(stderr: string | null): boolean {
-        const text = (stderr ?? '').toLowerCase();
+    private isUnknownGitOption(stderr: string): boolean {
+        const text = stderr.toLowerCase();
         return text.includes('unknown option') || text.includes('unknown switch') || text.includes('unrecognized option');
     }
 
-    // Run a command capturing trimmed stdout; ok=false on spawn failure or non-zero exit.
-    private capture(repoRoot: string, cmd: string, args: string[]): CmdCapture {
-        const result = spawnSync(cmd, args, { cwd: repoRoot, encoding: 'utf8', timeout: this.timeouts.forCommand(cmd) });
-        if (result.status !== 0 || typeof result.stdout !== 'string') return { ok: false, out: '' };
-        return { ok: true, out: result.stdout.trim() };
+    // Local git, bounded (CommandTimeouts), stdout trimmed; ok=false on a non-zero exit, a kill or a failed start.
+    private async git(repoRoot: string, args: string[]): Promise<CapturedOutput> {
+        const result = await this.commands.localGit(args, repoRoot);
+        return new CapturedOutput(result.ok, result.ok ? result.stdout.trim() : '');
     }
 
     // The actual checked-out branch in repoRoot — cwd-correct so the cache's `branch` label matches.
@@ -319,41 +314,41 @@ export class MainSyncStatusService {
 
     // The LOCAL main hash. `refs/heads/main` (not the bare name) so it can never resolve to a remote
     // ref or a tag. '' when main does not exist locally — which the guard treats as fail-open.
-    private localMainHash(repoRoot: string): string {
-        const result = this.capture(repoRoot, 'git', ['rev-parse', 'refs/heads/main']);
+    private async localMainHash(repoRoot: string): Promise<string> {
+        const result = await this.git(repoRoot, ['rev-parse', 'refs/heads/main']);
         return result.ok ? result.out : '';
     }
 
     // Slow-path only: the detached refresher calls this after fetching. Guards never count commits.
-    private commitDistance(repoRoot: string, localMain: string, originMain: string): number | null {
+    private async commitDistance(repoRoot: string, localMain: string, originMain: string): Promise<number | null> {
         if (localMain === '' || originMain === '') return null;
-        const result = this.capture(repoRoot, 'git', ['rev-list', '--count', `${localMain}..${originMain}`]);
+        const result = await this.git(repoRoot, ['rev-list', '--count', `${localMain}..${originMain}`]);
         if (!result.ok || !/^\d+$/.test(result.out)) return null;
         return Number(result.out);
     }
 
-    private changedFiles(repoRoot: string, base: string, head: string): string[] {
-        const result = this.capture(repoRoot, 'git', ['diff', '--name-only', base, head]);
+    private async changedFiles(repoRoot: string, base: string, head: string): Promise<string[]> {
+        const result = await this.git(repoRoot, ['diff', '--name-only', base, head]);
         if (!result.ok || result.out === '') return [];
         return result.out.split('\n').map((line: string): string => line.trim()).filter((line: string): boolean => line.length > 0);
     }
 
     // Every file this feature branch has touched since the fork point — committed AND still in the
     // working tree (staged / unstaged / untracked), so a conflict is visible WHILE editing.
-    private featureChangedFiles(repoRoot: string, forkPoint: string): string[] {
+    private async featureChangedFiles(repoRoot: string, forkPoint: string): Promise<string[]> {
         const out = new Set<string>();
-        const add = (args: string[]): void => {
-            const r = this.capture(repoRoot, 'git', args);
+        const add = async (args: string[]): Promise<void> => {
+            const r = await this.git(repoRoot, args);
             if (!r.ok || r.out === '') return;
             for (const line of r.out.split('\n')) {
                 const f = line.trim();
                 if (f.length > 0) out.add(f);
             }
         };
-        add(['diff', '--name-only', forkPoint, 'HEAD']);      // committed since the fork point
-        add(['diff', '--name-only', 'HEAD']);                 // unstaged working-tree edits
-        add(['diff', '--name-only', '--cached', 'HEAD']);     // staged edits
-        add(['ls-files', '--others', '--exclude-standard']);  // untracked new files (respects .gitignore)
+        await add(['diff', '--name-only', forkPoint, 'HEAD']);      // committed since the fork point
+        await add(['diff', '--name-only', 'HEAD']);                 // unstaged working-tree edits
+        await add(['diff', '--name-only', '--cached', 'HEAD']);     // staged edits
+        await add(['ls-files', '--others', '--exclude-standard']);  // untracked new files (respects .gitignore)
         return [...out];
     }
 
@@ -363,10 +358,11 @@ export class MainSyncStatusService {
      * falls out of the index and reads as "no PR", which is the fail-OPEN direction (no merged PR =
      * no block), the same way a missing `gh` or an offline machine already degraded.
      */
-    private loadPullRequestIndex(repoRoot: string): PullRequestIndex {
-        const result = this.capture(repoRoot, 'gh', [
+    private async loadPullRequestIndex(repoRoot: string): Promise<PullRequestIndex> {
+        const gh = await this.commands.gh([
             'pr', 'list', '--state', 'all', '--json', 'number,headRefName,state', '--limit', '200',
-        ]);
+        ], repoRoot);
+        const result = new CapturedOutput(gh.ok, gh.ok ? gh.stdout.trim() : '');
         // `gh` could not be run, or exited non-zero (missing, unauthenticated, rate-limited, offline).
         // An EMPTY index is the same fail-open answer as before — but it is now labelled UNREACHABLE, so
         // the guards can report an abstention rather than an approval. Empty STDOUT on a zero exit is a
@@ -381,15 +377,15 @@ export class MainSyncStatusService {
      * read-stale-guard / stale-main-bash-guard actually compare (originMain vs the live tree's
      * ancestry) — never merged, never conflicting, so it can only ever produce the stale-main verdict.
      */
-    private mainOnlyStatus(repoRoot: string): MainSyncStatus {
-        const originMain = this.capture(repoRoot, 'git', ['rev-parse', 'origin/main']);
-        const localMain = this.localMainHash(repoRoot);
+    private async mainOnlyStatus(repoRoot: string): Promise<MainSyncStatus> {
+        const originMain = await this.git(repoRoot, ['rev-parse', 'origin/main']);
+        const localMain = await this.localMainHash(repoRoot);
         const status = new MainSyncStatus(
             'main', false, '', true, localMain === '' ? null : localMain,
             originMain.ok ? originMain.out : '', localMain, false, [], new Date().toISOString(),
         );
         status.localMain = localMain;
-        status.commitsBehind = this.commitDistance(repoRoot, localMain, originMain.ok ? originMain.out : '');
+        status.commitsBehind = await this.commitDistance(repoRoot, localMain, originMain.ok ? originMain.out : '');
         return status;
     }
 
@@ -413,10 +409,5 @@ export function writeMainSyncStatus(repoRoot: string, status: MainSyncStatus): v
 // webpieces-disable no-function-outside-class -- temporary back-compat delegator to MainSyncStatusService; removed once consumers inject it
 export function writeMainSyncStatusFile(repoRoot: string, file: MainSyncStatusFile): void { mainSyncSvc.writeMainSyncStatusFile(repoRoot, file); }
 // webpieces-disable no-function-outside-class -- temporary back-compat delegator to MainSyncStatusService; removed once consumers inject it
-export function computeMainSyncStatus(repoRoot: string): MainSyncStatus { return mainSyncSvc.computeMainSyncStatus(repoRoot); }
-// webpieces-disable no-function-outside-class -- temporary back-compat delegator to MainSyncStatusService; removed once consumers inject it
-export function computeAllMainSyncStatuses(repoRoot: string): MainSyncStatusFile { return mainSyncSvc.computeAllMainSyncStatuses(repoRoot); }
-// webpieces-disable no-function-outside-class -- temporary back-compat delegator to MainSyncStatusService; removed once consumers inject it
 export function squashRecoverySteps(currentBranch: string): string[] { return mainSyncSvc.squashRecoverySteps(currentBranch); }
-// webpieces-disable no-function-outside-class -- temporary back-compat delegator to MainSyncStatusService; removed once consumers inject it
-export function stampCleanMainSyncStatus(repoRoot: string): void { mainSyncSvc.stampCleanMainSyncStatus(repoRoot); }
+

@@ -47,7 +47,7 @@ export class WireClosureRule {
 
     /** `required-type-suffix`'s entries, unless that rule is OFF or time-boxed / branch-scoped off. */
     // webpieces-disable no-function-outside-class -- static factory of this class
-    static fromConfig(workspaceRoot: string): WireClosureRule {
+    static async fromConfig(workspaceRoot: string): Promise<WireClosureRule> {
         if (new RuleGate().skipReason(workspaceRoot, 'required-type-suffix', true) !== null) {
             return WireClosureRule.withoutSuffixes();
         }
@@ -55,7 +55,7 @@ export class WireClosureRule {
         const rule = loaded.resolved.rules.get('required-type-suffix')!;
         return new WireClosureRule(
             rule.options['entries'] as WireSuffixEntry[],
-            new WireSuffixScope(
+            await WireSuffixScope.create(
                 workspaceRoot,
                 rule.options['mode'] as ModifiedCodeMode,
                 new RuleFileExclusions(

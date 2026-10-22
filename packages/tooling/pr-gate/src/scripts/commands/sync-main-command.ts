@@ -82,7 +82,7 @@ export class SyncMainCommand {
             new DeleteSelection(FLAG_DELETE_BRANCHES, false, ''),
             new DeleteSelection(FLAG_DELETE_WORKTREES, false, ''),
             false, false, false));
-        this.sweep(repoRoot);
+        await this.sweep(repoRoot);
         this.reportStashed(stashed);
     }
 
@@ -100,7 +100,7 @@ export class SyncMainCommand {
             + 'Most worktrees never need this: `wp-cleanup` removes the whole directory once its branch\n'
             + 'lands, which takes any orphan directories inside it along. Run this command again from the\n'
             + 'primary clone to go to main there.\n\n');
-        this.sweep(repoRoot);
+        await this.sweep(repoRoot);
         return Promise.resolve();
     }
 
@@ -139,8 +139,8 @@ export class SyncMainCommand {
      * Sweep, then print. Never throws: the checkout and pull above already succeeded, and a tidier is not
      * permitted to turn somebody's completed sync into a failed command.
      */
-    private sweep(repoRoot: string): void {
-        const report = this.orphanDirSweeper.sweep(repoRoot, new Date());
+    private async sweep(repoRoot: string): Promise<void> {
+        const report = await this.orphanDirSweeper.sweep(repoRoot, new Date());
         const rendered = report.render();
         if (rendered === '') return;
         process.stdout.write(`\n${rendered}`);

@@ -614,11 +614,11 @@ export class EnsureWeAreSecureValidator extends CodeValidator<EnsureWeAreSecureC
 
     async run(workspaceRoot: string): Promise<ExecutorResult> {
         if (this.config.mode === 'OFF') return { success: true };
-        const base = process.env['NX_BASE'] ?? detectBase(workspaceRoot);
+        const base = process.env['NX_BASE'] ?? await detectBase(workspaceRoot);
         if (base === null || base === undefined) {
             throw missingSecurityBaseError();
         }
-        const changed = getChangedFiles(workspaceRoot, base, process.env['NX_HEAD'], {
+        const changed = await getChangedFiles(workspaceRoot, base, process.env['NX_HEAD'], {
             tsOnly: false,
         });
         const roots = findDirectlyChangedProjectRoots(workspaceRoot, changed);

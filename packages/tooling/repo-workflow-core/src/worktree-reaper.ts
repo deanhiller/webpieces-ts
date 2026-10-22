@@ -1,6 +1,6 @@
-import { spawnSync } from 'child_process';
 import * as path from 'path';
 import { injectable, bindingScopeValues } from 'inversify';
+import { GitProcessApi, GitProcessClient } from '@webpieces/tooling-common';
 
 import {
     ArchiveResult,
@@ -103,11 +103,9 @@ class ProtectedPaths {
     }
 }
 
-// Result of a captured git invocation. `err` carries stderr so a refused removal can be reported.
-interface CmdCapture {
-    ok: boolean;
-    out: string;
-    err: string;
+// Internal: one git call's verdict, trimmed stdout, and stderr so a refused removal can be reported. Data only.
+class CapturedOutput {
+    constructor(readonly ok: boolean, readonly out: string, readonly err: string) {}
 }
 
 @injectable(bindingScopeValues.Singleton)
@@ -118,6 +116,7 @@ export class WorktreeReaper {
         private readonly worktrees: WorktreeService = new WorktreeService(),
         private readonly mutationLog: BranchMutationLog = new BranchMutationLog(),
         private readonly archiver: BranchArchiver = new BranchArchiver(),
+        private readonly git: GitProcessApi = new GitProcessClient(),
     ) {}
 
     /**
@@ -132,13 +131,13 @@ export class WorktreeReaper {
      * no answer at a prompt can authorise removing your own cwd or the primary clone.
      */
     // eslint-disable-next-line @typescript-eslint/max-params
-    reapWorktrees(
+    async reapWorktrees(
         repoRoot: string,
         cwd: string,
         verb: MutationVerb,
         targets: DeletableWorktree[],
         retention: string = BRANCH_RETENTION_ARCHIVE_TAG,
-    ): WorktreeReapResult {
+    ): Promise<WorktreeReapResult> {
         // 'keep' means "delete nothing, ever" — the reap degrades to a pure report, exactly as it does
         // for branches, so a repo that opted out of destructive cleanup still SEES what would have gone.
         if (retention === BRANCH_RETENTION_KEEP) return new WorktreeReapResult([], [], targets);
@@ -155,7 +154,7 @@ export class WorktreeReaper {
                     target.path, target.branch, refusal, target.pr, false, target.classification));
                 continue;
             }
-            const outcome = this.removeOne(repoRoot, verb, target, retention);
+            const outcome = await this.removeOne(repoRoot, verb, target, retention);
             if (outcome.ok) reaped.push(outcome);
             else failed.push(outcome);
         }
@@ -229,17 +228,17 @@ export class WorktreeReaper {
      * `git worktree prune`. There is also nothing to archive from a directory that no longer exists —
      * the branch itself is still archived, since it may well still hold the only copy of some work.
      */
-    private removeOne(
+    private async removeOne(
         repoRoot: string,
         verb: MutationVerb,
         target: DeletableWorktree,
         retention: string,
-    ): ReapedWorktree {
+    ): Promise<ReapedWorktree> {
         // Tip first: after the branch is gone there is nothing left to resolve, and the audit line's
         // whole job is to record what was destroyed while it still exists.
-        const sha = target.branch !== '' ? this.revParse(repoRoot, target.branch) : '';
+        const sha = target.branch !== '' ? await this.revParse(repoRoot, target.branch) : '';
 
-        const archive = this.archiveBranch(repoRoot, target, retention, sha);
+        const archive = await this.archiveBranch(repoRoot, target, retention, sha);
         if (!archive.ok) return this.archiveFailed(repoRoot, verb, target, sha, archive);
 
         // A worktree left LOCKED by an agent that has since died: git refuses `worktree remove` while
@@ -249,16 +248,16 @@ export class WorktreeReaper {
         // verdict that reaches here. A failed unlock is not reported on its own: the removal that
         // follows fails with git's own words, which is the message a human can actually act on.
         const unlockedOk = target.unlockBeforeRemove && target.classification !== CLASSIFICATION_PRUNABLE
-            && this.capture(repoRoot, ['worktree', 'unlock', target.path]).ok;
+            && (await this.capture(repoRoot, ['worktree', 'unlock', target.path])).ok;
 
         const removed = target.classification === CLASSIFICATION_PRUNABLE
-            ? this.capture(repoRoot, ['worktree', 'prune'])
-            : this.capture(repoRoot, ['worktree', 'remove', target.path]);
+            ? await this.capture(repoRoot, ['worktree', 'prune'])
+            : await this.capture(repoRoot, ['worktree', 'remove', target.path]);
         if (!removed.ok) return this.removalFailed(repoRoot, verb, target, sha, archive, removed.err);
 
         // Only NOW may the branch go: git refuses while a worktree still holds it.
         const branchDeleted = target.branch === ''
-            || this.capture(repoRoot, ['branch', '-D', target.branch]).ok;
+            || (await this.capture(repoRoot, ['branch', '-D', target.branch])).ok;
 
         const result = new ReapedWorktree(
             target.path, target.branch, sha, target.reason, target.pr, true, '');
@@ -278,9 +277,9 @@ export class WorktreeReaper {
 
     // Archiving is skipped for a detached worktree (no branch to tag) and under retention 'delete'.
     // Both report ok=true with an empty tag: there is nothing to archive, which is not a failure.
-    private archiveBranch(
+    private async archiveBranch(
         repoRoot: string, target: DeletableWorktree, retention: string, sha: string,
-    ): ArchiveResult {
+    ): Promise<ArchiveResult> {
         if (target.branch === '' || retention !== BRANCH_RETENTION_ARCHIVE_TAG) {
             return new ArchiveResult('', sha, true, '');
         }
@@ -340,18 +339,16 @@ export class WorktreeReaper {
         return `git worktree add -b ${target.branch} ${target.path} ${ref}`;
     }
 
-    private revParse(repoRoot: string, ref: string): string {
-        const result = this.capture(repoRoot, ['rev-parse', ref]);
+    private async revParse(repoRoot: string, ref: string): Promise<string> {
+        const result = await this.capture(repoRoot, ['rev-parse', ref]);
         return result.ok ? result.out : '';
     }
 
     // Run a git command capturing trimmed stdout/stderr; ok=false on spawn failure or non-zero exit.
-    private capture(repoRoot: string, args: string[]): CmdCapture {
-        const result = spawnSync('git', args, { cwd: repoRoot, encoding: 'utf8' });
-        const err = typeof result.stderr === 'string' ? result.stderr.trim() : '';
-        if (result.status !== 0 || typeof result.stdout !== 'string') {
-            return { ok: false, out: '', err: err !== '' ? err : 'git command failed' };
-        }
-        return { ok: true, out: result.stdout.trim(), err };
+    private async capture(repoRoot: string, args: string[]): Promise<CapturedOutput> {
+        const result = await this.git.run(args, repoRoot);
+        const err = result.stderr.trim();
+        if (!result.ok) return new CapturedOutput(false, '', err !== '' ? err : 'git command failed');
+        return new CapturedOutput(true, result.stdout.trim(), err);
     }
 }

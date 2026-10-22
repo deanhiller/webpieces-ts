@@ -1,6 +1,5 @@
-import { specTempDirs } from '@webpieces/tooling-testkit';
+import { checkoutLayout, specTempDirs } from '@webpieces/tooling-testkit';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { execSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -8,12 +7,7 @@ import { DotWebpieces, WORKTREE_STATE_DIR } from '@webpieces/tooling-common';
 import { StateDirMigrator } from '@webpieces/tooling-common';
 import { MainSyncStatusService, MainSyncLock, MainSyncLockService } from '@webpieces/repo-workflow-core';
 
-
-function git(cwd: string, cmd: string): string {
-    return execSync(`git -c core.hooksPath=/dev/null ${cmd}`, {
-        cwd, encoding: 'utf-8', stdio: ['pipe', 'pipe', 'pipe'],
-    }).trim();
-}
+import { RulesConfigFeature } from './__tests__/rules-config-feature';
 
 function writeFile(root: string, relPath: string, content: string): void {
     const full = path.join(root, relPath);
@@ -22,9 +16,9 @@ function writeFile(root: string, relPath: string, content: string): void {
 }
 
 /**
- * The migration is the part that can destroy real work, so it is tested against a real linked worktree
- * holding a real in-flight merge — the exact situation that existed in a sibling worktree when this
- * change was written.
+ * The migration is the part that can destroy real work, so it is tested against a linked worktree laid
+ * out on disk exactly as git lays one out (checkoutLayout — no git process, #1381) holding a real in-flight
+ * merge — the exact situation that existed in a sibling worktree when this change was written.
  */
 // Shared fixture: a primary clone with one linked worktree, plus that worktree's namespace path.
 let tmp: string;
@@ -37,13 +31,8 @@ function makeMigrationRepo(): void {
     primary = path.join(tmp, 'primary');
     worktree = path.join(tmp, 'wt-inflight');
     fs.mkdirSync(primary, { recursive: true });
-    git(primary, 'init -q -b main');
-    git(primary, 'config user.email test@example.com');
-    git(primary, 'config user.name Test');
+    checkoutLayout.primaryWithWorktree(primary, worktree, 'feature');
     writeFile(primary, 'webpieces.config.json', '{}\n');
-    git(primary, 'add -A');
-    git(primary, 'commit -q -m init');
-    git(primary, `worktree add -q -b feature ${worktree}`);
     namespace = path.join(primary, '.webpieces', WORKTREE_STATE_DIR, 'wt-inflight');
 }
 
@@ -168,14 +157,10 @@ function makeTwoWorktreeRepo(): void {
     worktreeA = path.join(tmp, 'wt-a');
     worktreeB = path.join(tmp, 'wt-b');
     fs.mkdirSync(primary, { recursive: true });
-    git(primary, 'init -q -b main');
-    git(primary, 'config user.email test@example.com');
-    git(primary, 'config user.name Test');
+    checkoutLayout.primary(primary, 'main');
+    checkoutLayout.linkedWorktree(primary, worktreeA, 'a');
+    checkoutLayout.linkedWorktree(primary, worktreeB, 'b');
     writeFile(primary, 'webpieces.config.json', '{}\n');
-    git(primary, 'add -A');
-    git(primary, 'commit -q -m init');
-    git(primary, `worktree add -q -b a ${worktreeA}`);
-    git(primary, `worktree add -q -b b ${worktreeB}`);
     service = new MainSyncStatusService(new DotWebpieces());
     locks = new MainSyncLockService(new DotWebpieces(), undefined, service);
 }
@@ -216,8 +201,15 @@ describe('main-sync lock recovery and status visibility', () => {
         expect(locks.tryAcquireMainSyncLock(worktreeB, 5, Date.now(), process.pid)).not.toBeNull();
     });
 
-    it('the status file written by the winner is visible from every other worktree', () => {
-        const status = service.computeMainSyncStatus(primary);
+    it('the status file written by the winner is visible from every other worktree', async () => {
+        // The winner COMPUTES the status through the process edges: script what git and `gh` answer.
+        const feature = await RulesConfigFeature.create();
+        feature.git.respondToPrefix([], feature.git.ok('abc'));
+        feature.processes.respondToPrefix('gh', ['pr', 'list'], feature.processes.ok('[]'));
+        const winner = feature.container.get(MainSyncStatusService);
+
+        const status = await winner.computeMainSyncStatus(primary);
+        expect(feature.git.commandLines()).toContain('git fetch --no-write-fetch-head origin main');
         service.writeMainSyncStatus(primary, status);
         expect(service.readMainSyncStatus(worktreeB, status.branch)).not.toBeNull();
         expect(service.mainSyncStatusPath(worktreeA)).toBe(service.mainSyncStatusPath(worktreeB));

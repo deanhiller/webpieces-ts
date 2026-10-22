@@ -62,10 +62,10 @@ class FakeDiff extends DiffScope {
     ) {
         super();
     }
-    override detectBase(): string | null {
+    override async detectBase(): Promise<string | null> {
         return this.base;
     }
-    override getChangedFiles(_root: string, base: string, head?: string): string[] {
+    override async getChangedFiles(_root: string, base: string, head?: string): Promise<string[]> {
         this.bases.push(`${base}..${head ?? 'WORKTREE'}`);
         return this.files;
     }
@@ -146,8 +146,8 @@ class FakeGit extends ImpactGit {
 const branchAt = (base: string | null): ImpactComparison =>
     new ImpactComparison(ImpactKind.BRANCH, base, 'Changed on this branch (since abcdef1)', false, '');
 
-function plan(git: FakeGit, fork: string | null = FORK): ImpactPlan {
-    const result = new ImpactScopeResolver(git, new FakeDiff(fork, [])).resolve('/ws');
+async function plan(git: FakeGit, fork: string | null = FORK): Promise<ImpactPlan> {
+    const result = await new ImpactScopeResolver(git, new FakeDiff(fork, [])).resolve('/ws');
     expect(result).toBeInstanceOf(ImpactPlan);
     return result as ImpactPlan;
 }
@@ -157,8 +157,8 @@ const reportKinds = (results: (ImpactReport | ImpactUnavailable)[]): string[] =>
     results.map((result: ImpactReport | ImpactUnavailable): string => (result as ImpactReport).kind);
 
 describe('ImpactScopeResolver: which comparisons exist where HEAD is (#1163)', () => {
-    it('main, clean: last commit only, labelled with its base and HEAD subject', () => {
-        const p = plan(new FakeGit('main', PARENT, false));
+    it('main, clean: last commit only, labelled with its base and HEAD subject', async () => {
+        const p = await plan(new FakeGit('main', PARENT, false));
         expect(kinds(p)).toEqual([ImpactKind.COMMIT]);
         expect(p.defaultKind).toBe(ImpactKind.COMMIT);
         expect(p.comparisons[0].base).toBe(PARENT);
@@ -166,57 +166,57 @@ describe('ImpactScopeResolver: which comparisons exist where HEAD is (#1163)', (
         expect(p.comparisons[0].dirty).toBe(false);
     });
 
-    it('main, dirty: last commit, "+ uncommitted changes"', () => {
-        const p = plan(new FakeGit('main', PARENT, true));
+    it('main, dirty: last commit, "+ uncommitted changes"', async () => {
+        const p = await plan(new FakeGit('main', PARENT, true));
         expect(kinds(p)).toEqual([ImpactKind.COMMIT]);
         expect(p.comparisons[0].label).toBe('Changed since eeee000 — Upgrade the thing (#1162) + uncommitted changes');
         expect(p.comparisons[0].dirty).toBe(true);
     });
 
-    it('main with unpushed commits: still last commit — decided by the branch NAME, not merge-base', () => {
+    it('main with unpushed commits: still last commit — decided by the branch NAME, not merge-base', async () => {
         // merge-base with origin/main is an older commit, which would look like "a branch with commits".
-        const p = plan(new FakeGit('main', PARENT, false), FORK);
+        const p = await plan(new FakeGit('main', PARENT, false), FORK);
         expect(kinds(p)).toEqual([ImpactKind.COMMIT]);
         expect(p.defaultKind).toBe(ImpactKind.COMMIT);
     });
 
-    it('detached HEAD: last commit only', () => {
-        const p = plan(new FakeGit(null, PARENT, false), HEAD);
+    it('detached HEAD: last commit only', async () => {
+        const p = await plan(new FakeGit(null, PARENT, false), HEAD);
         expect(kinds(p)).toEqual([ImpactKind.COMMIT]);
         expect(p.defaultKind).toBe(ImpactKind.COMMIT);
     });
 
-    it("fresh feature branch, clean: the branch comparison only — never main's last commit", () => {
-        const p = plan(new FakeGit('dean/x', PARENT, false), HEAD);
+    it("fresh feature branch, clean: the branch comparison only — never main's last commit", async () => {
+        const p = await plan(new FakeGit('dean/x', PARENT, false), HEAD);
         expect(kinds(p)).toEqual([ImpactKind.BRANCH]);
         expect(p.defaultKind).toBe(ImpactKind.BRANCH);
         expect(p.comparisons[0].label).toBe('Changed on this branch (since ffff000)');
     });
 
-    it('fresh feature branch, dirty: the branch comparison, counting the edits', () => {
-        const p = plan(new FakeGit('dean/x', PARENT, true), HEAD.slice(0, 12));
+    it('fresh feature branch, dirty: the branch comparison, counting the edits', async () => {
+        const p = await plan(new FakeGit('dean/x', PARENT, true), HEAD.slice(0, 12));
         expect(kinds(p)).toEqual([ImpactKind.BRANCH]);
         expect(p.comparisons[0].label).toBe('Changed on this branch (since ffff000) + uncommitted changes');
         expect(p.comparisons[0].dirty).toBe(true);
     });
 
-    it('feature branch with commits: both, branch first and default', () => {
-        const p = plan(new FakeGit('dean/x', PARENT, false), FORK);
+    it('feature branch with commits: both, branch first and default', async () => {
+        const p = await plan(new FakeGit('dean/x', PARENT, false), FORK);
         expect(kinds(p)).toEqual([ImpactKind.BRANCH, ImpactKind.COMMIT]);
         expect(p.defaultKind).toBe(ImpactKind.BRANCH);
         expect(p.comparisons.map((c: ImpactComparison): string | null => c.base)).toEqual([FORK, PARENT]);
         expect(p.comparisons[0].label).toBe('Changed on this branch (since aaaa000)');
     });
 
-    it('root commit: the last commit exists but is unavailable, with the reason', () => {
-        const p = plan(new FakeGit('main', null, false));
+    it('root commit: the last commit exists but is unavailable, with the reason', async () => {
+        const p = await plan(new FakeGit('main', null, false));
         expect(kinds(p)).toEqual([ImpactKind.COMMIT]);
         expect(p.comparisons[0].base).toBeNull();
         expect(p.comparisons[0].reason).toBe(ROOT_COMMIT_REASON);
     });
 
-    it('is unavailable when git cannot resolve HEAD', () => {
-        const result = new ImpactScopeResolver(new FakeGit('main', null, false, null), new FakeDiff(FORK, [])).resolve('/ws');
+    it('is unavailable when git cannot resolve HEAD', async () => {
+        const result = await new ImpactScopeResolver(new FakeGit('main', null, false, null), new FakeDiff(FORK, [])).resolve('/ws');
         expect(result).toBeInstanceOf(ImpactUnavailable);
     });
 });
@@ -251,7 +251,7 @@ describe('NxImpactScanner', () => {
         const nx = new FakeNx('["core"]');
         const diff = new FakeDiff(null, ['libs/core/src/a.ts']);
         const loader = new FakeLoader();
-        const comparisons = plan(new FakeGit('dean/x', PARENT, false), FORK).comparisons;
+        const comparisons = (await plan(new FakeGit('dean/x', PARENT, false), FORK)).comparisons;
         const results = await new NxImpactScanner(diff, nx, loader).scanAll('/ws', GRAPH, comparisons);
         expect(nx.calls).toEqual([
             ['show', 'projects', '--affected', `--base=${FORK}`, '--json'],
@@ -322,7 +322,7 @@ describe('NxImpactScanner', () => {
 
     it("reports the root commit's last-commit comparison as unavailable with its reason, asking nx nothing", async () => {
         const nx = new FakeNx('[]');
-        const comparison = plan(new FakeGit('main', null, false)).comparisons[0];
+        const comparison = (await plan(new FakeGit('main', null, false))).comparisons[0];
         const scanner = new NxImpactScanner(new FakeDiff(null, []), nx, new FakeLoader());
         const report = (await scanner.scan('/ws', GRAPH, comparison)) as ImpactReport;
         expect(report.available).toBe(false);
@@ -346,7 +346,7 @@ class FixedResolver extends ImpactScopeResolver {
     constructor(private readonly fixed: ImpactPlan | ImpactUnavailable) {
         super();
     }
-    override resolve(): ImpactPlan | ImpactUnavailable {
+    override async resolve(): Promise<ImpactPlan | ImpactUnavailable> {
         return this.fixed;
     }
 }
@@ -365,7 +365,7 @@ describe('ImpactRefresh + ImpactSidecar', () => {
     it('writes a self-ignoring sidecar that sets one window global of { scans, defaultKind }', async () => {
         const dir = specTempDirs.make('wp-impact-');
         const scanner = new NxImpactScanner(new FakeDiff(null, ['libs/core/src/a.ts']), new FakeNx('["core","app"]'), new FakeLoader());
-        const resolver = new FixedResolver(plan(new FakeGit('dean/x', PARENT, false), FORK));
+        const resolver = new FixedResolver(await plan(new FakeGit('dean/x', PARENT, false), FORK));
         const line = await new ImpactRefresh(scanner, new ImpactSidecar(), resolver).run(dir, dir, GRAPH, VISUALIZE_IMPACT_KINDS, LIVE);
         // One result line per comparison.
         expect(line).toContain('Changed on this branch (since aaaa000): 1 changed · 1 dependents · 1 dependencies');
@@ -388,7 +388,7 @@ describe('ImpactRefresh + ImpactSidecar', () => {
         const dir = specTempDirs.make('wp-impact-generate-');
         const nx = new FakeNx('["core"]');
         const scanner = new NxImpactScanner(new FakeDiff(null, ['libs/core/src/a.ts']), nx, new FakeLoader());
-        const resolver = new FixedResolver(plan(new FakeGit('dean/x', PARENT, false), FORK));
+        const resolver = new FixedResolver(await plan(new FakeGit('dean/x', PARENT, false), FORK));
         await new ImpactRefresh(scanner, new ImpactSidecar(), resolver).run(dir, dir, GRAPH, GENERATE_IMPACT_KINDS, LIVE);
         expect(nx.calls).toEqual([['show', 'projects', '--affected', `--base=${FORK}`, '--json']]);
         expect(scanKinds(sidecarData(dir))).toEqual(['branch']);
@@ -400,7 +400,7 @@ describe('ImpactRefresh + ImpactSidecar', () => {
         sidecar.write(dir, new ImpactSidecarData([], ImpactKind.BRANCH, NO_EDGES));
         const nx = new FakeNx('["core"]');
         const scanner = new NxImpactScanner(new FakeDiff(null, []), nx, new FakeLoader());
-        const resolver = new FixedResolver(plan(new FakeGit('main', PARENT, false)));
+        const resolver = new FixedResolver(await plan(new FakeGit('main', PARENT, false)));
         const line = await new ImpactRefresh(scanner, sidecar, resolver).run(dir, dir, GRAPH, GENERATE_IMPACT_KINDS, LIVE);
         expect(line).toContain('no sidecar written');
         expect(line).toContain('pnpm arch:visualize');
@@ -413,7 +413,7 @@ describe('ImpactRefresh + ImpactSidecar', () => {
         const sidecar = new ImpactSidecar();
         sidecar.write(dir, new ImpactSidecarData([], ImpactKind.BRANCH, NO_EDGES));
         const scanner = new NxImpactScanner(new FakeDiff(null, []), new FakeNx(null), new FakeLoader());
-        const resolver = new FixedResolver(plan(new FakeGit('main', PARENT, false)));
+        const resolver = new FixedResolver(await plan(new FakeGit('main', PARENT, false)));
         const line = await new ImpactRefresh(scanner, sidecar, resolver).run(dir, dir, GRAPH, VISUALIZE_IMPACT_KINDS, LIVE);
         expect(line).toContain('no sidecar written');
         expect(fs.existsSync(path.join(dir, IMPACT_SIDECAR_DIR, IMPACT_SIDECAR_FILE))).toBe(false);
@@ -422,7 +422,7 @@ describe('ImpactRefresh + ImpactSidecar', () => {
     it('writes the root commit as an unavailable scan with its reason', async () => {
         const dir = specTempDirs.make('wp-impact-root-');
         const scanner = new NxImpactScanner(new FakeDiff(null, []), new FakeNx('[]'), new FakeLoader());
-        const resolver = new FixedResolver(plan(new FakeGit('main', null, false)));
+        const resolver = new FixedResolver(await plan(new FakeGit('main', null, false)));
         const line = await new ImpactRefresh(scanner, new ImpactSidecar(), resolver).run(dir, dir, GRAPH, VISUALIZE_IMPACT_KINDS, LIVE);
         expect(line).toContain(ROOT_COMMIT_REASON);
         const data = sidecarData(dir);

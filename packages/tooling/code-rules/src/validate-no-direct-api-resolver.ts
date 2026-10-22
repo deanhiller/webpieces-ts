@@ -195,18 +195,18 @@ function findViolationsInFile(filePath: string, workspaceRoot: string, disableAl
 /**
  * NEW_AND_MODIFIED_CODE mode: Flag violations on changed lines in diff hunks.
  */
-// webpieces-disable max-lines-new-methods -- File iteration with diff parsing and line filtering
-function findViolationsForModifiedCode(
+// webpieces-disable max-lines-new-methods, no-function-outside-class -- File iteration with diff parsing and line filtering
+async function findViolationsForModifiedCode(
     workspaceRoot: string,
     changedFiles: string[],
     base: string,
     head: string | undefined,
     disableAllowed: boolean
-): Violation[] {
+): Promise<Violation[]> {
     const violations: Violation[] = [];
 
     for (const file of changedFiles) {
-        const diff = getFileDiff(workspaceRoot, file, base, head);
+        const diff = await getFileDiff(workspaceRoot, file, base, head);
         const changedLines = getChangedLineNumbers(diff);
 
         if (changedLines.size === 0) continue;
@@ -361,18 +361,18 @@ function findMethodRanges(filePath: string, workspaceRoot: string): RangeInfo[] 
  * - For *.routes.ts: If any line in a route object is changed, flag all inject(XxxApi) violations in that route
  * - For *.component.ts: If a method is new/modified, flag all snapshot.data violations in that method
  */
-// webpieces-disable max-lines-new-methods -- Method-scoped validation with route objects and component methods
-function findViolationsForModifiedMethods(
+// webpieces-disable max-lines-new-methods, no-function-outside-class -- Method-scoped validation with route objects and component methods
+async function findViolationsForModifiedMethods(
     workspaceRoot: string,
     changedFiles: string[],
     base: string,
     head: string | undefined,
     disableAllowed: boolean
-): Violation[] {
+): Promise<Violation[]> {
     const violations: Violation[] = [];
 
     for (const file of changedFiles) {
-        const diff = getFileDiff(workspaceRoot, file, base, head);
+        const diff = await getFileDiff(workspaceRoot, file, base, head);
         const changedLines = getChangedLineNumbers(diff);
         const newMethodNames = findNewMethodSignaturesInDiff(diff);
 
@@ -523,7 +523,7 @@ async function runValidatorImpl(
     const head = process.env['NX_HEAD'];
 
     if (!base) {
-        base = detectBase(workspaceRoot) ?? undefined;
+        base = await detectBase(workspaceRoot) ?? undefined;
 
         if (!base) {
             console.log('\n\u23ed\ufe0f  Skipping no-direct-api-resolver validation (could not detect base branch)');
@@ -536,7 +536,7 @@ async function runValidatorImpl(
     console.log(`   Head: ${head ?? 'working tree (includes uncommitted changes)'}`);
     console.log('');
 
-    const allChangedFiles = getChangedFiles(workspaceRoot, base, head);
+    const allChangedFiles = await getChangedFiles(workspaceRoot, base, head);
     const scopedFiles = filterByEnforcePaths(allChangedFiles, options.enforcePaths);
     const changedFiles = filterRelevantFiles(scopedFiles);
 
@@ -550,9 +550,9 @@ async function runValidatorImpl(
     let violations: Violation[] = [];
 
     if (mode === 'NEW_AND_MODIFIED_CODE') {
-        violations = findViolationsForModifiedCode(workspaceRoot, changedFiles, base, head, disableAllowed);
+        violations = await findViolationsForModifiedCode(workspaceRoot, changedFiles, base, head, disableAllowed);
     } else if (mode === 'NEW_AND_MODIFIED_METHODS') {
-        violations = findViolationsForModifiedMethods(workspaceRoot, changedFiles, base, head, disableAllowed);
+        violations = await findViolationsForModifiedMethods(workspaceRoot, changedFiles, base, head, disableAllowed);
     } else if (mode === 'NEW_AND_MODIFIED_FILES') {
         violations = findViolationsForModifiedFiles(workspaceRoot, changedFiles, disableAllowed);
     }

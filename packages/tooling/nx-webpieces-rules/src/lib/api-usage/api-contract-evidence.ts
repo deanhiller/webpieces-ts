@@ -13,11 +13,11 @@ import type { ProjectInfo } from '../project-info';
 
 /** Build evidence for API/DTO correctness. No runtime relationship scan or project compiler loop. */
 export class ApiContractEvidence {
-    collect(
+    async collect(
         workspaceRoot: string,
         infos: Map<string, ProjectInfo>,
         externalApiPaths: readonly string[],
-    ): ApiScanResult {
+    ): Promise<ApiScanResult> {
         const diagnostics = new DecoratorArgDiagnostics(workspaceRoot);
         const index = new ApiSourceIndexBuilder(
             workspaceRoot,
@@ -49,9 +49,9 @@ export class ApiContractEvidence {
             apiDocRules: new ApiDocRulesScan(
                 workspaceRoot,
                 infos,
-                ApiDocRule.fromConfig(workspaceRoot, OPENAPI_RULE),
-                ApiDocRule.fromConfig(workspaceRoot, MCP_RULE),
-                WireClosureRule.fromConfig(workspaceRoot),
+                await ApiDocRule.fromConfig(workspaceRoot, OPENAPI_RULE),
+                await ApiDocRule.fromConfig(workspaceRoot, MCP_RULE),
+                await WireClosureRule.fromConfig(workspaceRoot),
             ).run(),
         };
         new ApiContractApproval().verify(

@@ -64,7 +64,7 @@ export class CodeRulesBootstrap {
                 : this.packProvider(request.rule, loaded);
         if (provider !== undefined) return this.runPackDebug(workspaceRoot, loaded, provider, request);
 
-        const plan = request.isDebug() ? this.plan(workspaceRoot, loaded, request) : undefined;
+        const plan = request.isDebug() ? await this.plan(workspaceRoot, loaded, request) : undefined;
         if (plan !== undefined) this.debug.printBanner(plan);
 
         const configs: Record<string, ConfigObject> = {};
@@ -90,16 +90,16 @@ export class CodeRulesBootstrap {
         if (plan === undefined) return result;
         // A debug run FAILS whenever a site exists — including a rule that only warns at the gate
         // (no-client-creation-outside-server-or-client at severity "warn") — so it can gate a loop.
-        const sites = this.debug.printCounts(workspaceRoot, plan, container.get(ScanScope), result.success);
+        const sites = await this.debug.printCounts(workspaceRoot, plan, container.get(ScanScope), result.success);
         return { success: result.success && sites === 0 };
     }
 
     /** Validate a debug request against the loaded config and the repo's projects; throws on a refusal. */
-    private plan(
+    private async plan(
         workspaceRoot: string,
         loaded: LoadedConfig,
         request: CodeRulesRunRequest,
-    ): DebugPlan {
+    ): Promise<DebugPlan> {
         const rule = request.rule;
         if (rule === undefined)
             throw this.debug.refusal(

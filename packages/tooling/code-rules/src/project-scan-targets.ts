@@ -43,9 +43,9 @@ export class ProjectScanTargets {
     ) {}
 
     /** The projects `mode` judges, root project excluded. `mode` must not be OFF. */
-    projects(workspaceRoot: string, mode: ProjectScanMode, ruleName: string): ScannedProject[] {
-        const all = this.catalog.all(workspaceRoot).filter((p: ProjectEntry) => p.dir !== '');
-        const chosen = mode === 'RUN_EVERY_TIME' ? all : this.touched(workspaceRoot, all, ruleName);
+    async projects(workspaceRoot: string, mode: ProjectScanMode, ruleName: string): Promise<ScannedProject[]> {
+        const all = (await this.catalog.all(workspaceRoot)).filter((p: ProjectEntry) => p.dir !== '');
+        const chosen = mode === 'RUN_EVERY_TIME' ? all : await this.touched(workspaceRoot, all, ruleName);
         const names = this.restriction.projectNames;
         const restricted = names === undefined ? chosen : chosen.filter((p: ProjectEntry) => names.includes(p.name));
         return restricted
@@ -53,8 +53,8 @@ export class ProjectScanTargets {
             .sort((a: ScannedProject, b: ScannedProject) => a.dir.localeCompare(b.dir));
     }
 
-    private touched(workspaceRoot: string, all: ProjectEntry[], ruleName: string): ProjectEntry[] {
-        const range = this.diffScope.resolveBase(workspaceRoot);
+    private async touched(workspaceRoot: string, all: ProjectEntry[], ruleName: string): Promise<ProjectEntry[]> {
+        const range = await this.diffScope.resolveBase(workspaceRoot);
         if (range.base === undefined) {
             throw new InformAiError(
                 `${ruleName} could not determine the comparison base for MODIFIED_PROJECTS. Set NX_BASE to the ` +
@@ -62,8 +62,8 @@ export class ProjectScanTargets {
             );
         }
         const dirs = new Set<string>();
-        for (const file of this.diffScope.getChangedFiles(workspaceRoot, range.base, range.head, { tsOnly: false })) {
-            const owner = this.catalog.ownerOf(workspaceRoot, file);
+        for (const file of await this.diffScope.getChangedFiles(workspaceRoot, range.base, range.head, { tsOnly: false })) {
+            const owner = await this.catalog.ownerOf(workspaceRoot, file);
             if (owner !== undefined) dirs.add(owner.dir);
         }
         return all.filter((p: ProjectEntry) => dirs.has(p.dir));

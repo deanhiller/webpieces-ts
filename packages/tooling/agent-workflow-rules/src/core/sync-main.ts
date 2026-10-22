@@ -1,6 +1,6 @@
 import { BranchCreationGuardConfig } from '../configs/rule-configs';
 import { BranchReaper, MainSyncLockService, MainSyncStatusFile, MainSyncStatusService, MergedBranchesCache, MergedBranchesService, ReapResult, RefreshOutcome } from '@webpieces/repo-workflow-core';
-import { loadAndValidate } from '@webpieces/rules-config';
+import { loadAndValidate, runMain } from '@webpieces/rules-config';
 
 import { toError } from '@webpieces/tooling-common/to-error';
 import { logSyncEvent, SyncLogEvent } from './main-sync-log';
@@ -39,9 +39,9 @@ const locks = new MainSyncLockService(undefined, undefined, status);
  * (a hand-run of this file) leaves the default, which still prefixes.
  */
 // webpieces-disable no-function-outside-class -- existing stateless module helper moved intact with its callers; ownership extraction preserves its functional API
-export function main(): void {
+export async function main(): Promise<void> {
     logStream.identify(spawnerIdentity(process.argv));
-    refreshMainSync(
+    await refreshMainSync(
         process.argv[2] ?? process.cwd(),
         claimStartedFromArgv(process.argv),
         process.argv.slice(2).join(' '),
@@ -77,7 +77,7 @@ export function spawnerIdentity(argv: string[]): StreamIdentity {
  * test importing another module's `main` is what no-process-exit-outside-main exists to prevent.
  */
 // webpieces-disable no-function-outside-class -- module-level entry point of this detached refresher, matching the file's existing shape
-export function refreshMainSync(repoRoot: string, claimStarted: number, argvDetail: string = ''): void {
+export async function refreshMainSync(repoRoot: string, claimStarted: number, argvDetail: string = ''): Promise<void> {
     const startedMs = Date.now();
 
     // First action: prove the detached child actually started. If the async-refresh stream has no START line
@@ -100,7 +100,7 @@ export function refreshMainSync(repoRoot: string, claimStarted: number, argvDeta
             // to describe only the branch of whichever tree won this lock, so every other worktree's
             // guards read a cross-branch cache and abstained. One fetch + one `gh` call now arms all
             // of them; the map is rebuilt from the live worktree set, so dead branches drop out.
-            file = status.computeAllMainSyncStatuses(repoRoot);
+            file = await status.computeAllMainSyncStatuses(repoRoot);
 
             // Second slow signal, same lock, same detached run: which local branches are dead. One bulk
             // `gh pr list --state merged` call. The branch-creation-guard reads the result to enforce its
@@ -109,14 +109,14 @@ export function refreshMainSync(repoRoot: string, claimStarted: number, argvDeta
             // `false`: the background refresher NEVER ignores a standing agent lock. That flag is
             // wp-cleanup's, and it means "a human asked for this run" — nothing an unattended
             // refresher can claim on somebody's behalf.
-            const cache = mergedBranches.computeMergedBranches(repoRoot, false);
+            const cache = await mergedBranches.computeMergedBranches(repoRoot, false);
             mergedBranches.writeMergedBranches(repoRoot, cache);
 
             // Third step, same detached run: actually DELETE the dead branches. Reporting them was
             // never enough — the reap was only ever a `git branch -D` string in a fix hint, which an
             // agent reads as destructive and stalls on, so nothing was ever cleaned. Here nobody has
             // to be asked. Reuses the verdicts we JUST computed (no second `gh` call).
-            const reaped = autoReap(repoRoot, cache);
+            const reaped = await autoReap(repoRoot, cache);
 
             // FINISH after a successful run — START-without-FINISH means we were killed mid-run.
             outcome = RefreshOutcome.OK;
@@ -189,7 +189,7 @@ function summarize(file: MainSyncStatusFile): (branch: string) => string {
  * background deletion is exactly what nobody should have to trust.
  */
 // webpieces-disable no-function-outside-class -- module-level helper of this detached main(), matching the file's existing shape
-function autoReap(repoRoot: string, cache: MergedBranchesCache): number {
+async function autoReap(repoRoot: string, cache: MergedBranchesCache): Promise<number> {
     // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
     try {
         const config = loadAndValidate(repoRoot).rulesConfig['branch-creation-guard'] as BranchCreationGuardConfig | undefined;
@@ -199,7 +199,7 @@ function autoReap(repoRoot: string, cache: MergedBranchesCache): number {
         // that basis would be deleting on a preference nobody expressed.
         if (config?.mode === 'OFF' || config?.autoReapMergedBranches !== true) return 0;
 
-        const result: ReapResult = new BranchReaper().reap(repoRoot, 'auto-reap', cache);
+        const result: ReapResult = await new BranchReaper().reap(repoRoot, 'auto-reap', cache);
         for (const failure of result.failed) {
             logSyncEvent(repoRoot, new SyncLogEvent(
                 'ERROR', process.pid, failure.branch, `reap failed: ${failure.error}`));
@@ -212,6 +212,4 @@ function autoReap(repoRoot: string, cache: MergedBranchesCache): number {
     }
 }
 
-if (require.main === module) {
-    main();
-}
+if (require.main === module) runMain(main);

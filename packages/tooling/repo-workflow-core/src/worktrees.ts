@@ -1,4 +1,3 @@
-import { spawnSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 import { injectable, bindingScopeValues } from 'inversify';
@@ -102,23 +101,25 @@ export class Worktree {
     }
 }
 
-// Result of a captured git invocation: ok=false on spawn failure or non-zero exit.
-interface CmdCapture {
-    ok: boolean;
-    out: string;
-}
-
 @injectable(bindingScopeValues.Singleton)
 export class WorktreeService {
+    // Defaulted so the non-DI call sites (the branch-creation guard) can `new WorktreeService()`, while
+    // inversify injects the container's singleton — whose process edges a feature test rebinds.
+    constructor(private readonly commands: CommandTimeouts = new CommandTimeouts()) {}
+
     /**
      * Every worktree, main one first. Fails SOFT to [] — a repo with no worktree support, or a git
      * that errors, must read as "no worktrees" so the cap fails OPEN rather than blocking on data we
      * do not have.
+     *
+     * SYNCHRONOUS on purpose: the branch-creation guard reads it on the PreToolUse blocking path, whose
+     * `check()` contract is synchronous.
      */
     listWorktrees(repoRoot: string): Worktree[] {
-        const result = this.capture(repoRoot, ['worktree', 'list', '--porcelain']);
-        if (!result.ok || result.out === '') return [];
-        return this.parsePorcelain(result.out);
+        const result = this.commands.localGitNow(['worktree', 'list', '--porcelain'], repoRoot);
+        const out = result.stdout.trim();
+        if (!result.ok || out === '') return [];
+        return this.parsePorcelain(out);
     }
 
     // The linked worktrees — everything except the primary clone. This is what the cap counts.
@@ -198,9 +199,9 @@ export class WorktreeService {
      * since the fail-safe direction for deleting a directory is to leave it — but reporting the
      * second as the first tells an operator to go look for edits that are not there.
      */
-    workInFlight(worktreePath: string): WorktreeWorkInFlight {
-        const result = spawnSync('git', ['status', '--porcelain'], { cwd: worktreePath, encoding: 'utf8', timeout: CommandTimeouts.LOCAL_GIT_MS });
-        if (result.status !== 0 || typeof result.stdout !== 'string') {
+    async workInFlight(worktreePath: string): Promise<WorktreeWorkInFlight> {
+        const result = await this.commands.localGit(['status', '--porcelain'], worktreePath);
+        if (!result.ok) {
             return new WorktreeWorkInFlight(true,
                 '`git status` could not report on it, so it is not provably empty');
         }
@@ -260,12 +261,5 @@ export class WorktreeService {
         flush();
 
         return trees;
-    }
-
-    // Run a git command capturing trimmed stdout; ok=false on spawn failure or non-zero exit.
-    private capture(repoRoot: string, args: string[]): CmdCapture {
-        const result = spawnSync('git', args, { cwd: repoRoot, encoding: 'utf8', timeout: CommandTimeouts.LOCAL_GIT_MS });
-        if (result.status !== 0 || typeof result.stdout !== 'string') return { ok: false, out: '' };
-        return { ok: true, out: result.stdout.trim() };
     }
 }

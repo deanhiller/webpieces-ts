@@ -471,26 +471,26 @@ describe('the switches', () => {
         expect(findings.mcp.isEmpty()).toBe(true);
     });
 
-    it('reads mode: OFF out of webpieces.config.json', () => {
+    it('reads mode: OFF out of webpieces.config.json', async () => {
         const configured = writeConfig({ mode: 'OFF' });
 
-        expect(ApiDocRule.fromConfig(configured, OPENAPI_RULE).enabled).toBe(false);
-        expect(ApiDocRule.fromConfig(configured, MCP_RULE).enabled).toBe(false);
+        expect((await ApiDocRule.fromConfig(configured, OPENAPI_RULE)).enabled).toBe(false);
+        expect((await ApiDocRule.fromConfig(configured, MCP_RULE)).enabled).toBe(false);
     });
 
-    it('reads RUN_EVERY_TIME, and allowedPaths exempts that tree', () => {
+    it('reads RUN_EVERY_TIME, and allowedPaths exempts that tree', async () => {
         const armed = writeConfig({});
-        expect(ApiDocRule.fromConfig(armed, OPENAPI_RULE).enabled).toBe(true);
+        expect((await ApiDocRule.fromConfig(armed, OPENAPI_RULE)).enabled).toBe(true);
 
         const exempt = writeConfig({ allowedPaths: ['libraries/open-enum-api'] });
-        const rule = ApiDocRule.fromConfig(exempt, OPENAPI_RULE);
+        const rule = await ApiDocRule.fromConfig(exempt, OPENAPI_RULE);
         expect(rule.allowedPaths).toEqual(['libraries/open-enum-api']);
         expect(
             new ApiDocRulesScan(
                 root,
                 fixtureProjects('open-enum-api'),
                 rule,
-                ApiDocRule.fromConfig(exempt, MCP_RULE),
+                await ApiDocRule.fromConfig(exempt, MCP_RULE),
             )
                 .run()
                 .openApi.isEmpty(),
@@ -533,10 +533,10 @@ describe('the switches', () => {
         expect(ApiDocRule.armed(OPENAPI_RULE).coversProject('anything/at/all')).toBe(true);
     });
 
-    it('reads the MODE out of webpieces.config.json: RUN_EVERY_TIME scans all, AFFECTED_PROJECT asks the diff', () => {
-        expect(ApiDocRule.fromConfig(writeConfig({}), OPENAPI_RULE).changedPaths).toBeNull();
+    it('reads the MODE out of webpieces.config.json: RUN_EVERY_TIME scans all, AFFECTED_PROJECT asks the diff', async () => {
+        expect((await ApiDocRule.fromConfig(writeConfig({}), OPENAPI_RULE)).changedPaths).toBeNull();
 
-        const affected = ApiDocRule.fromConfig(
+        const affected = await ApiDocRule.fromConfig(
             writeConfig({ mode: 'AFFECTED_PROJECT' }),
             OPENAPI_RULE,
         );

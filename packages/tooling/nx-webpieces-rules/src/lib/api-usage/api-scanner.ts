@@ -539,20 +539,20 @@ export class ApiUsageScanner {
  * full scan so callers (validators, runtime graph) can reuse the api index.
  */
 // webpieces-disable no-function-outside-class -- module entry point, mirrors generateReducedGraph/collectBindings
-export function scanAndAttachApiRelations(
+export async function scanAndAttachApiRelations(
     workspaceRoot: string,
     graph: EnhancedGraph,
     projectInfos: Map<string, ProjectInfo>,
     externalApiPaths: readonly string[] = [],
-): ApiScanResult {
+): Promise<ApiScanResult> {
     const result = new ApiUsageScanner(
         workspaceRoot,
         projectInfos,
         externalApiPaths,
         RootUnionRule.fromConfig(workspaceRoot),
-        ApiDocRule.fromConfig(workspaceRoot, OPENAPI_RULE),
-        ApiDocRule.fromConfig(workspaceRoot, MCP_RULE),
-        WireClosureRule.fromConfig(workspaceRoot),
+        await ApiDocRule.fromConfig(workspaceRoot, OPENAPI_RULE),
+        await ApiDocRule.fromConfig(workspaceRoot, MCP_RULE),
+        await WireClosureRule.fromConfig(workspaceRoot),
     ).scan();
     for (const projectName of result.relationsByProject.keys()) {
         const entry = graph[projectName];

@@ -87,12 +87,12 @@ export class ConfigLoader {
      * `wp-ci`, which is the PR gate's build command and CI's. Its refusal (UntrackedPolicyError and the
      * gitignored-policy ConfigRepairError) and their cures are unchanged.
      */
-    assertPolicyTracked(cwd: string): void {
+    async assertPolicyTracked(cwd: string): Promise<void> {
         const configPath = this.configFile.findConfigFile(cwd);
         if (!configPath) return;
         const raw = this.configFile.readRawConfig(configPath),
             root = path.dirname(configPath);
-        new PolicyTracking().check(root, this.files.declarations(raw.rulePacks, root));
+        await new PolicyTracking().check(root, this.files.declarations(raw.rulePacks, root));
     }
 
     private loaded(
@@ -155,6 +155,6 @@ export function loadAndValidate(cwd: string): LoadedConfig {
 
 /** The gate-time policy-tracking check — see ConfigLoader.assertPolicyTracked. */
 // webpieces-disable no-function-outside-class -- the public function twin of loadAndValidate, for the wp-ci bin
-export function assertPolicyTracked(cwd: string): void {
-    configLoaderSvc.assertPolicyTracked(cwd);
+export function assertPolicyTracked(cwd: string): Promise<void> {
+    return configLoaderSvc.assertPolicyTracked(cwd);
 }

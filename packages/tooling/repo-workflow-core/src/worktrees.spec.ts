@@ -1,53 +1,60 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import * as fs from 'fs';
+import * as path from 'path';
+import { afterEach, describe, it, expect, beforeEach } from 'vitest';
+import { ProcessCallDto, specTempDirs } from '@webpieces/tooling-testkit';
 
-const git = vi.hoisted(() => ({
-    porcelain: '' as string,
-    status: 0,
-    // What `<root>/.git` is: a directory (primary clone), a file (linked worktree), or absent.
-    dotGit: 'dir' as 'dir' | 'file' | 'missing',
-}));
-
-vi.mock('child_process', () => ({
-    spawnSync: (): { status: number; stdout: string } => ({ status: git.status, stdout: git.porcelain }),
-}));
-
-vi.mock('fs', () => ({
-    statSync: (): { isDirectory: () => boolean } => {
-        if (git.dotGit === 'missing') throw new Error('ENOENT: no such file or directory');
-        return { isDirectory: (): boolean => git.dotGit === 'dir' };
-    },
-}));
-
+import { WorkflowFeature } from './__tests__/workflow-feature';
+import { CommandTimeouts } from './command-timeouts';
 import { WorktreeService, Worktree } from './worktrees';
 
-beforeEach(() => {
-    git.status = 0;
-    git.porcelain = '';
-    git.dotGit = 'dir';
+const WORKTREE_LIST = ['worktree', 'list', '--porcelain'];
+
+let feature: WorkflowFeature;
+let worktrees: WorktreeService;
+const dirs: string[] = [];
+
+beforeEach(async () => {
+    feature = await WorkflowFeature.create();
+    worktrees = feature.container.get(WorktreeService);
 });
+
+afterEach(() => {
+    for (const dir of dirs.splice(0)) fs.rmSync(dir, { recursive: true, force: true });
+});
+
+// A checkout root whose `.git` is a directory (primary clone), a file (linked worktree), or absent.
+function checkout(dotGit: 'dir' | 'file' | 'missing'): string {
+    const root = specTempDirs.make('wp-worktrees-');
+    dirs.push(root);
+    if (dotGit === 'dir') fs.mkdirSync(path.join(root, '.git'));
+    if (dotGit === 'file') fs.writeFileSync(path.join(root, '.git'), 'gitdir: /repo/.git/worktrees/feature\n');
+    return root;
+}
+
+function porcelain(lines: string[]): void {
+    feature.git.respond(WORKTREE_LIST, feature.git.ok(lines.join('\n')));
+}
 
 describe('WorktreeService.isLinkedWorktree', () => {
     it('is false in the primary clone (.git is a DIRECTORY)', () => {
-        git.dotGit = 'dir';
-        expect(new WorktreeService().isLinkedWorktree('/repo')).toBe(false);
+        expect(worktrees.isLinkedWorktree(checkout('dir'))).toBe(false);
+        expect(feature.git.calls).toEqual([]);
     });
 
     it('is true in a linked worktree (.git is a FILE holding a gitdir: pointer)', () => {
-        git.dotGit = 'file';
-        expect(new WorktreeService().isLinkedWorktree('/work/feature')).toBe(true);
+        expect(worktrees.isLinkedWorktree(checkout('file'))).toBe(true);
     });
 
     // Fail-open: an unreadable/absent .git must NOT be reported as a worktree, because callers print
     // the worktree-only command when this says true. Unknown → both forms → recoverable.
     it('is false when .git cannot be read at all', () => {
-        git.dotGit = 'missing';
-        expect(new WorktreeService().isLinkedWorktree('/not/a/repo')).toBe(false);
+        expect(worktrees.isLinkedWorktree(checkout('missing'))).toBe(false);
     });
 });
 
 describe('WorktreeService', () => {
     it('parses the porcelain records, marking the FIRST as the primary clone', () => {
-        git.porcelain = [
+        porcelain([
             'worktree /repo',
             'HEAD aaa',
             'branch refs/heads/main',
@@ -56,9 +63,9 @@ describe('WorktreeService', () => {
             'HEAD bbb',
             'branch refs/heads/dean/feature',
             '',
-        ].join('\n');
+        ]);
 
-        const trees = new WorktreeService().listWorktrees('/repo');
+        const trees = worktrees.listWorktrees('/repo');
 
         expect(trees.length).toBe(2);
         expect(trees[0].isMain).toBe(true);
@@ -67,6 +74,10 @@ describe('WorktreeService', () => {
         expect(trees[1].path).toBe('/work/feature');
         // refs/heads/ is stripped — `git branch -D` takes the short name.
         expect(trees[1].branch).toBe('dean/feature');
+        // The guard's blocking path: ONE synchronous call, bounded by the local-git ceiling.
+        const issued = feature.git.calls.map((call: ProcessCallDto): string =>
+            `${call.commandLine} @${call.cwd ?? ''} ${call.mode} ${String(call.timeoutMs)}`);
+        expect(issued).toEqual([`git worktree list --porcelain @/repo runSync ${String(CommandTimeouts.LOCAL_GIT_MS)}`]);
     });
 
     /**
@@ -76,7 +87,7 @@ describe('WorktreeService', () => {
      * the exact commit GitHub squashed. Reading it costs nothing — no extra git call.
      */
     it('carries each record\'s HEAD sha, which a branch name alone cannot identify', () => {
-        git.porcelain = [
+        porcelain([
             'worktree /repo',
             'HEAD aaa',
             'branch refs/heads/main',
@@ -89,17 +100,18 @@ describe('WorktreeService', () => {
             'HEAD ccc',
             'detached',
             '',
-        ].join('\n');
+        ]);
 
-        const trees = new WorktreeService().listWorktrees('/repo');
+        const trees = worktrees.listWorktrees('/repo');
 
         expect(trees.map((tree: Worktree): string => tree.head)).toEqual(['aaa', 'bbb', 'ccc']);
         // A detached worktree still has a HEAD — it is only the BRANCH that is missing.
         expect(trees[2].branch).toBe('');
+        expect(feature.git.calls).toHaveLength(1);
     });
 
     it('reads detached, prunable and locked records', () => {
-        git.porcelain = [
+        porcelain([
             'worktree /repo',
             'HEAD aaa',
             'branch refs/heads/main',
@@ -118,9 +130,9 @@ describe('WorktreeService', () => {
             'branch refs/heads/dean/held',
             'locked reason why',
             '',
-        ].join('\n');
+        ]);
 
-        const trees = new WorktreeService().listWorktrees('/repo');
+        const trees = worktrees.listWorktrees('/repo');
 
         expect(trees.length).toBe(4);
         // Detached: no branch to reap, so a human must decide.
@@ -131,14 +143,14 @@ describe('WorktreeService', () => {
 
     // Fail SOFT: a git that errors must read as "no worktrees" so the caller's cap fails OPEN.
     it('returns [] when git fails', () => {
-        git.status = 1;
-        expect(new WorktreeService().listWorktrees('/repo').length).toBe(0);
+        feature.git.respond(WORKTREE_LIST, feature.git.fail(1, 'fatal: not a git repository'));
+        expect(worktrees.listWorktrees('/repo').length).toBe(0);
     });
 });
 
 describe('WorktreeService budgets', () => {
     it('excludes the primary clone from linkedWorktrees — it is not removable, so it must not spend the budget', () => {
-        git.porcelain = [
+        porcelain([
             'worktree /repo',
             'HEAD aaa',
             'branch refs/heads/main',
@@ -147,16 +159,16 @@ describe('WorktreeService budgets', () => {
             'HEAD bbb',
             'branch refs/heads/one',
             '',
-        ].join('\n');
+        ]);
 
-        const linked = new WorktreeService().linkedWorktrees('/repo');
+        const linked = worktrees.linkedWorktrees('/repo');
         expect(linked.map((tree: Worktree): string => tree.path)).toEqual(['/work/one']);
     });
 
     // heldBranches drives BOTH the parked-branch count and the reap-safety spare, so it must include
     // the primary clone's own branch: git refuses to delete that one too.
     it('heldBranches includes the primary clone branch and skips detached worktrees', () => {
-        git.porcelain = [
+        porcelain([
             'worktree /repo',
             'HEAD aaa',
             'branch refs/heads/main',
@@ -169,9 +181,9 @@ describe('WorktreeService budgets', () => {
             'HEAD ccc',
             'detached',
             '',
-        ].join('\n');
+        ]);
 
-        const held = new WorktreeService().heldBranches('/repo');
+        const held = worktrees.heldBranches('/repo');
         expect([...held].sort()).toEqual(['dean/one', 'main']);
     });
 });

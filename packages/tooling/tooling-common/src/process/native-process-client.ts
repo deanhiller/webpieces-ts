@@ -1,7 +1,7 @@
 import { spawn } from 'child_process';
 import { bindingScopeValues, injectable } from 'inversify';
 
-import { ChildProcessCalls } from './child-process-calls';
+import { CapturedRunDto, ChildProcessCalls } from './child-process-calls';
 import { NativeProcessApi, ProcessResultDto, ShellTerminationDto } from './native-process-api';
 
 /** The production {@link NativeProcessApi}: programs started without a shell, except `runShellToFile`. */
@@ -9,8 +9,8 @@ import { NativeProcessApi, ProcessResultDto, ShellTerminationDto } from './nativ
 export class NativeProcessClient extends NativeProcessApi {
     private readonly calls = new ChildProcessCalls();
 
-    override run(program: string, args: string[], cwd?: string): Promise<ProcessResultDto> {
-        return this.calls.captured(program, args, cwd, process.env);
+    override run(program: string, args: string[], cwd?: string, signal?: AbortSignal): Promise<ProcessResultDto> {
+        return this.calls.captured(program, args, new CapturedRunDto(cwd, process.env, signal));
     }
 
     override passThrough(program: string, args: string[], cwd?: string): Promise<ProcessResultDto> {

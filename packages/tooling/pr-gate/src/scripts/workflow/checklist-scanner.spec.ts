@@ -1,44 +1,54 @@
 import { specTempDirs } from '@webpieces/tooling-testkit';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { execSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
-import { AtomicFile, GitProcessClient } from '@webpieces/tooling-common';
+import { AtomicFile } from '@webpieces/tooling-common';
 import { ChecklistDefinition, ChecklistOverride, ChecklistResult, checklistOverrideService, DEFAULT_MAX_CONCURRENT_BUILDS, DiffScope, HomeConfig, HomeConfigService, RepoRootFinder, RequiredChecklist, REVIEWER_AGENTS_PLACEHOLDER, ReviewerAgentPolicy, ReviewJsonService, toChecklist } from '@webpieces/rules-config';
 import { ChecklistDetector, TriggeredChecklist } from './checklist-detector';
 import { ChecklistScan, ChecklistScanner, ChecklistScanOptions } from './checklist-scanner';
 import { ForkPoint } from './git-findForkPoint';
-import { GitStatusParser } from './git-status';
-import { GitExec } from './git-exec';
 import { DiffBasisResolver } from './diff-basis';
 import { PrContextWriter } from './pr-context-writer';
 import { AiBranchName } from './git-readAiBranchName';
-import { BranchNaming } from './branch-naming';
+import { PrGateFeature } from '../../__tests__/feature-harness';
+import { ScriptedRepo } from '../../__tests__/scripted-repo';
 import { ChecklistScopeHasher } from './checklist-scope-hasher';
-import { DiffMaterializer } from './diff-materializer';
 import { ReviewStageReceipt, ReviewStageReceiptService } from './review-stage-receipt';
 import { ReviewRoundStateService } from './review-round-state';
 import {
     STANDING_CARRIED, STANDING_CURRENT, STANDING_REJECTED, SubmittedVerdict, VerdictProvenance, VerdictProvenanceService, VerdictStanding,
 } from './verdict-provenance';
 
-function git(cwd: string, cmd: string): void {
-    execSync(cmd, { cwd, stdio: 'pipe' });
-}
+// The program under test: the SHIPPED container with its process edges mocked (#1381), and the one scratch
+// repository its scripted git answers from. Fresh for every test.
+let feature: PrGateFeature;
+let repo: ScriptedRepo;
+
+beforeEach(async () => {
+    feature = await PrGateFeature.create();
+});
 
 /**
- * A real git repo with `main` at a baseline commit and a feature branch checked out. Real git because these
- * tests are precisely about which git plumbing gets invoked — a mock would only re-assert the mock.
+ * A repo with `main` at a baseline commit and a feature branch checked out — modelled by {@link ScriptedRepo}
+ * over a real scratch directory, so every git question the pipeline asks is answered as git would answer
+ * it without starting git. These tests are about which git plumbing gets invoked; the argv the mock
+ * records is that plumbing.
  */
 function repoOnBranch(): string {
     const dir = specTempDirs.make('wp-scan-');
-    git(dir, 'git init -q -b main');
-    git(dir, 'git config user.email t@t.co');
-    git(dir, 'git config user.name T');
-    fs.writeFileSync(path.join(dir, 'README.md'), '# base\n');
-    git(dir, 'git add -A');
-    git(dir, 'git commit -qm base');
-    git(dir, 'git checkout -q -b feature');
+    repo = ScriptedRepo.init(dir, 'main', feature.git);
+    repo.write('README.md', '# base\n');
+    repo.commitAll('base');
+    repo.checkoutNewBranch('feature');
+    return dir;
+}
+
+/** A repo whose only branch is `other`: neither origin/main nor main resolves. */
+function repoWithoutMain(prefix: string, file: string): string {
+    const dir = specTempDirs.make(prefix);
+    repo = ScriptedRepo.init(dir, 'other', feature.git);
+    repo.write(file, file.endsWith('.sql') ? 'x\n' : 'a\n');
+    repo.commitAll('a');
     return dir;
 }
 
@@ -60,16 +70,13 @@ function defs(items: readonly RawItem[], reviewer: ReviewerAgentPolicy = REVIEWE
     return items.map((i: RawItem): ChecklistDefinition => toChecklist({ required: true, ...i }, reviewer));
 }
 
-// Still a REAL git: the changed-file set comes from `@webpieces/rules-config`'s DiffScope, which is not
-// routed through the injected process edge yet (a later slice of #1381), so the repository must be real.
-const realGit = new GitProcessClient();
-
+// The production collaborators, from the shipped container: their git is the scripted repository above.
 function newAiBranchName(): AiBranchName {
-    return new AiBranchName(new BranchNaming(), new GitExec(new RepoRootFinder(), new GitStatusParser(), realGit));
+    return feature.container.get(AiBranchName);
 }
 
 function newForkPoint(): ForkPoint {
-    return new ForkPoint(null as never, null as never, null as never, null as never, realGit);
+    return feature.container.get(ForkPoint);
 }
 
 /**
@@ -86,21 +93,15 @@ function homeConfigWith(turnOffAllReviewers: boolean): HomeConfigService {
     return service;
 }
 
+// The production scanner — every collaborator from the shipped container — with the machine-local home
+// config pinned, so the developer's own `~/.webpieces/config.json` cannot change an expectation.
 function scannerFor(turnOffAllReviewers = false): ChecklistScanner {
-    const diffScope = new DiffScope();
-    const reviewJson = new ReviewJsonService();
-    const provenance = new VerdictProvenanceService(reviewJson, new AtomicFile());
-    // A REAL DiffBasisResolver over a REAL ForkPoint: these tests exist to pin which git plumbing runs, and
-    // the basis is now part of that plumbing (it is what makes the printed command match the matched range).
+    const c = feature.container;
     return new ChecklistScanner(
-        newAiBranchName(), new ChecklistDetector(diffScope), diffScope,
-        new DiffBasisResolver(newForkPoint(), new GitStatusParser(), realGit),
-        new PrContextWriter(diffScope, reviewJson), reviewJson,
-        homeConfigWith(turnOffAllReviewers),
-        new ChecklistScopeHasher(new DiffMaterializer(reviewJson, realGit)),
-        provenance,
-        new ReviewStageReceiptService(reviewJson),
-        new ReviewRoundStateService(reviewJson, provenance, new AtomicFile(), realGit),
+        c.get(AiBranchName), c.get(ChecklistDetector), c.get(DiffScope), c.get(DiffBasisResolver),
+        c.get(PrContextWriter), c.get(ReviewJsonService), homeConfigWith(turnOffAllReviewers),
+        c.get(ChecklistScopeHasher), c.get(VerdictProvenanceService), c.get(ReviewStageReceiptService),
+        c.get(ReviewRoundStateService),
     );
 }
 
@@ -187,8 +188,7 @@ describe('ChecklistScanner — UNCOMMITTED work counts', () => {
         const checklists = defs([{ id: 'db-reviewer', patterns: ['**/*.sql'] }]);
         fs.mkdirSync(path.join(dir, 'db'));
         fs.writeFileSync(path.join(dir, 'db', '001.sql'), 'CREATE TABLE a();\n');
-        git(dir, 'git add -A');
-        git(dir, 'git commit -qm work');
+        repo.commitAll('work');
         fs.writeFileSync(path.join(dir, 'db', '001.sql'), 'CREATE TABLE a(); -- edited\n'); // NOT committed
         const scan = await scannerFor().scan(dir, checklists, new ChecklistScanOptions(1, false));
         expect(scan.applicable.map((r: RequiredChecklist): string => r.id)).toEqual(['db-reviewer']);
@@ -344,20 +344,13 @@ describe('ForkPoint.resolveForkPoint — absolute, and no fetch', () => {
     it('is unchanged when main advances past the branch', async () => {
         const dir = repoOnBranch();
         fs.writeFileSync(path.join(dir, 'f.txt'), 'feature\n');
-        git(dir, 'git add -A');
-        git(dir, 'git commit -qm feat');
+        repo.commitAll('feat');
         const forkPoint = newForkPoint();
         const before = await forkPoint.resolveForkPoint(dir);
 
-        // Advance main via a side branch + `git branch -f`, NOT by committing on main directly: the
-        // developer's global core.hooksPath pre-commit hook refuses direct commits to main in EVERY repo,
-        // scratch ones included, so committing on main here would fail for reasons unrelated to the test.
-        git(dir, 'git checkout -q -b mainadvance main');
-        fs.writeFileSync(path.join(dir, 'm.txt'), 'main moved\n');
-        git(dir, 'git add -A');
-        git(dir, 'git commit -qm mainwork');
-        git(dir, 'git branch -f main mainadvance');
-        git(dir, 'git checkout -q feature');
+        // Advance main via a side branch + `git branch -f`: a commit lands on main that is not on this branch.
+        const moved = repo.advanceBranch('main', 'm.txt', 'main moved\n', 'mainwork');
+        expect(moved).not.toBe(before);
 
         // merge-base is the most recent common ancestor; main's new commit is not on this branch, so
         // advancing main cannot move it. THIS is why wp-review-upsert-pr need not fetch.
@@ -365,25 +358,13 @@ describe('ForkPoint.resolveForkPoint — absolute, and no fetch', () => {
     });
 
     it("returns '' rather than throwing when neither origin/main nor main resolves", async () => {
-        const dir = specTempDirs.make('wp-nomain-');
-        git(dir, 'git init -q -b other');
-        git(dir, 'git config user.email t@t.co');
-        git(dir, 'git config user.name T');
-        fs.writeFileSync(path.join(dir, 'a.txt'), 'a\n');
-        git(dir, 'git add -A');
-        git(dir, 'git commit -qm a');
+        const dir = repoWithoutMain('wp-nomain-', 'a.txt');
         // wp-review-upsert-pr must ALWAYS succeed, so an unresolvable fork point is a value, never an exception.
         expect(await newForkPoint().resolveForkPoint(dir)).toBe('');
     });
 
     it('a scan with no fork point yields no checklists instead of blowing up', async () => {
-        const dir = specTempDirs.make('wp-nomain2-');
-        git(dir, 'git init -q -b other');
-        git(dir, 'git config user.email t@t.co');
-        git(dir, 'git config user.name T');
-        fs.writeFileSync(path.join(dir, 'a.sql'), 'x\n');
-        git(dir, 'git add -A');
-        git(dir, 'git commit -qm a');
+        const dir = repoWithoutMain('wp-nomain2-', 'a.sql');
         const checklists = defs([{ id: 'db-reviewer', patterns: ['**/*.sql'] }]);
         const scan = await scannerFor().scan(dir, checklists, new ChecklistScanOptions(1, false));
         expect(scan.forkPoint).toBe('');
@@ -438,13 +419,7 @@ describe('ChecklistScanner — roster (all X, matched or not)', () => {
     // The false-all-clear guard. With no fork point NOTHING matches — not even a patternless checklist — so
     // an "all skipped ✅" roll-up would attest to a review that never happened.
     it('flags an unresolvable diff base rather than letting zero matches read as all-clear', async () => {
-        const dir = specTempDirs.make('wp-nobase-');
-        git(dir, 'git init -q -b other');
-        git(dir, 'git config user.email t@t.co');
-        git(dir, 'git config user.name T');
-        fs.writeFileSync(path.join(dir, 'a.sql'), 'x\n');
-        git(dir, 'git add -A');
-        git(dir, 'git commit -qm a');
+        const dir = repoWithoutMain('wp-nobase-', 'a.sql');
         const scan = await scannerFor().scan(dir, FOUR, new ChecklistScanOptions(1, false));
         expect(scan.roster.baseResolved).toBe(false);
         expect(scan.roster.entries).toHaveLength(4);          // still fully listed

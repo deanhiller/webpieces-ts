@@ -47,10 +47,14 @@ The process edges exist (#1381): `GitProcessApi` (git) and `NativeProcessApi` (e
 including a build command run into a log file) in `@webpieces/tooling-common`, bound by
 `new ProcessBindings().bind(container)`, with `MockGitProcessApi` / `MockNativeProcessApi` in
 `@webpieces/tooling-testkit` — scripted answers by argv, every call recorded, and an unscripted call
-THROWS naming the argv. `@webpieces/pr-gate` reaches every process through them; its feature tests build
-the shipped container and rebind only these two (`src/__tests__/feature-harness.ts`).
+THROWS naming the argv. The clock is `TimerApi` (`MockTimerApi`: `getScheduledTasks()` with each
+`delayMs`, the test calls `run()`), also bound by `ProcessBindings`; a bin's exit is `ProcessExitApi`
+(`runMain(main, new MockProcessExitApi())` runs a bin's top level in process); a checkout's `.git` layout
+without git is `CheckoutLayout` (`@webpieces/tooling-testkit`). `@webpieces/pr-gate`, `rules-config` and
+`repo-workflow-core` reach every process through these edges; their feature tests build the container
+and rebind only the edges (`src/__tests__/feature-harness.ts`, `rules-config-feature.ts`,
+`workflow-feature.ts`).
 
-Other `packages/tooling/**` packages (`rules-config`'s DiffScope, `repo-workflow-core`, the hooks) still
-call git and the shell directly. If the code you are testing does, the cure is to route it through those
-edges — or add a `Timer` the same way — not to write another process-spawning spec. Converting the rest
-is tracked on #1381.
+Other `packages/tooling/**` packages (the hooks in `agent-workflow-rules`, `code-rules`, the nx plugin)
+still call git and the shell directly. If the code you are testing does, the cure is to route it through
+those edges — not to write another process-spawning spec. Converting the rest is tracked on #1381.

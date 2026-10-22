@@ -1,6 +1,6 @@
-import { GitProcessApi, GitResultDto } from '@webpieces/tooling-common';
+import { GitProcessApi, GitResultDto, PROCESS_KILLED } from '@webpieces/tooling-common';
 
-import { ProcessCallDto, ScriptedAnswer, ScriptedProcessTable } from './scripted-process-table';
+import { AbortableAnswer, ProcessCallDto, ScriptedAnswer, ScriptedProcessTable } from './scripted-process-table';
 
 const GIT = 'git';
 
@@ -16,12 +16,15 @@ const GIT = 'git';
  * ```
  *
  * Scripting rules (exact beats prefix, answers in order with the last repeating, an unscripted call
- * THROWS naming the argv) are {@link ScriptedProcessTable}'s.
+ * THROWS naming the argv) are {@link ScriptedProcessTable}'s. A promise answer holds the call in flight;
+ * when the program's deadline (scheduled through `MockTimerApi`) aborts it, the call reports
+ * PROCESS_KILLED exactly as the production client does.
  */
 export class MockGitProcessApi extends GitProcessApi {
     private readonly table = new ScriptedProcessTable<GitResultDto>('MockGitProcessApi');
+    private readonly abortable = new AbortableAnswer();
 
-    /** Every call the program made, in order — captured and pass-through alike. */
+    /** Every call the program made, in order — captured, synchronous and pass-through alike. */
     get calls(): ProcessCallDto[] {
         return this.table.calls;
     }
@@ -58,12 +61,17 @@ export class MockGitProcessApi extends GitProcessApi {
         return new GitResultDto(code, stdout, stderr);
     }
 
-    override async run(args: string[], cwd?: string): Promise<GitResultDto> {
-        return this.table.answer(new ProcessCallDto(GIT, [...args], cwd, 'run'));
+    override run(args: string[], cwd?: string, signal?: AbortSignal): Promise<GitResultDto> {
+        const answer = this.table.answer(new ProcessCallDto(GIT, [...args], cwd, 'run'));
+        return this.abortable.settle(answer, signal, (): GitResultDto => new GitResultDto(PROCESS_KILLED, '', 'aborted'));
+    }
+
+    override runSync(args: string[], cwd: string, timeoutMs: number): GitResultDto {
+        return this.table.answerNow(new ProcessCallDto(GIT, [...args], cwd, 'runSync', timeoutMs));
     }
 
     override async passThrough(args: string[], cwd?: string): Promise<GitResultDto> {
-        const result = this.table.answer(new ProcessCallDto(GIT, [...args], cwd, 'passThrough'));
+        const result = await this.table.answer(new ProcessCallDto(GIT, [...args], cwd, 'passThrough'));
         // A pass-through run's output went to the terminal, never to the caller — exactly like production.
         return new GitResultDto(result.code, '', '');
     }

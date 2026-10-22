@@ -98,7 +98,7 @@ async function runStandalone(cwd: string): Promise<number> {
         console.log('ℹ️  Not an Nx repo and no webpieces.config.json found — nothing to validate.');
         return 0;
     }
-    assertPolicyTracked(workspaceRoot);
+    await assertPolicyTracked(workspaceRoot);
     console.log('ℹ️  Not an Nx repo — running standalone webpieces code validators.\n');
 
     const result = await new CodeRulesBootstrap().run(
@@ -152,7 +152,7 @@ async function main(): Promise<void> {
         // Policy is shared through the git index, so it is checked HERE, where work is shared (the PR
         // gate's build command and CI both invoke `pnpm wp-ci`) — never on config load, which every
         // guard-hook call does (#1355).
-        assertPolicyTracked(root);
+        await assertPolicyTracked(root);
         console.log('✅ webpieces policy files are tracked by git');
 
         // Run the architecture + code validators next (this also runs the wiring guard,

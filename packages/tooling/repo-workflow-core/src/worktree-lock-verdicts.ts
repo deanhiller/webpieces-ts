@@ -151,13 +151,13 @@ export class WorktreeLockVerdicts {
      * a path with no reap to veto there is nothing to ask, and asking would invite a later reader to
      * let the answer decide something.
      */
-    gather(tree: Worktree, branchDeletable: boolean, ignoreStaleAgentLocks: boolean): LockEvidence {
+    async gather(tree: Worktree, branchDeletable: boolean, ignoreStaleAgentLocks: boolean): Promise<LockEvidence> {
         const lock = this.agentLocks.parse(tree.lockReason);
         if (lock === null || (!branchDeletable && !ignoreStaleAgentLocks)) {
             return new LockEvidence(tree.lockReason, HARNESS_NOT_CONSULTED, false, '',
                 branchDeletable, ignoreStaleAgentLocks);
         }
-        const held = this.worktrees.workInFlight(tree.path);
+        const held = await this.worktrees.workInFlight(tree.path);
         return new LockEvidence(
             tree.lockReason, this.harness.activityOf(lock.agent, tree.path), held.held, held.reason,
             branchDeletable, ignoreStaleAgentLocks);

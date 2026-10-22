@@ -3,7 +3,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
 import { GateLogFile } from './gate-log-file';
-import { CheckoutLayout } from '../../__tests__/feature-harness';
+import { checkoutLayout } from '@webpieces/tooling-testkit';
 
 
 let tmp = '';
@@ -24,7 +24,7 @@ beforeEach(() => {
     fs.mkdirSync(primary, { recursive: true });
     // The layout git leaves, written directly (#1381): placement is decided by reading these files, so no
     // git process is needed to prove it.
-    CheckoutLayout.primaryWithWorktree(primary, worktree, 'feature');
+    checkoutLayout.primaryWithWorktree(primary, worktree, 'feature');
     files = new GateLogFile();
 });
 
@@ -60,7 +60,7 @@ describe('GateLogFile placement', () => {
 
     it('gives two worktrees DISJOINT logs of the same name', () => {
         const second = path.join(tmp, 'wt-other');
-        CheckoutLayout.linkedWorktree(primary, second, 'other');
+        checkoutLayout.linkedWorktree(primary, second, 'other');
         expect(files.logsPath(worktree, 'stage.log')).not.toBe(files.logsPath(second, 'stage.log'));
     });
 

@@ -1,7 +1,7 @@
 import * as fs from 'fs';
-import { NativeProcessApi, ProcessResultDto, ShellTerminationDto } from '@webpieces/tooling-common';
+import { NativeProcessApi, PROCESS_KILLED, ProcessResultDto, ShellTerminationDto } from '@webpieces/tooling-common';
 
-import { ProcessCallDto, ScriptedAnswer, ScriptedProcessTable } from './scripted-process-table';
+import { AbortableAnswer, ProcessCallDto, ScriptedAnswer, ScriptedProcessTable } from './scripted-process-table';
 
 /** The `program` a shell command is recorded under. */
 export const SHELL = 'sh -c';
@@ -25,6 +25,7 @@ export class ScriptedShellRun {
 export class MockNativeProcessApi extends NativeProcessApi {
     private readonly table = new ScriptedProcessTable<ProcessResultDto>('MockNativeProcessApi');
     private readonly shells = new ScriptedProcessTable<ScriptedShellRun>('MockNativeProcessApi (shell)');
+    private readonly abortable = new AbortableAnswer();
 
     get calls(): ProcessCallDto[] {
         return this.table.calls;
@@ -81,18 +82,19 @@ export class MockNativeProcessApi extends NativeProcessApi {
         return new ScriptedShellRun('', new ShellTerminationDto(null, null, reason));
     }
 
-    override async run(program: string, args: string[], cwd?: string): Promise<ProcessResultDto> {
-        return this.table.answer(new ProcessCallDto(program, [...args], cwd, 'run'));
+    override run(program: string, args: string[], cwd?: string, signal?: AbortSignal): Promise<ProcessResultDto> {
+        const answer = this.table.answer(new ProcessCallDto(program, [...args], cwd, 'run'));
+        return this.abortable.settle(answer, signal, (): ProcessResultDto => new ProcessResultDto(PROCESS_KILLED, '', 'aborted'));
     }
 
     override async passThrough(program: string, args: string[], cwd?: string): Promise<ProcessResultDto> {
-        const result = this.table.answer(new ProcessCallDto(program, [...args], cwd, 'passThrough'));
+        const result = await this.table.answer(new ProcessCallDto(program, [...args], cwd, 'passThrough'));
         // A pass-through run's output went to the terminal, never to the caller — exactly like production.
         return new ProcessResultDto(result.code, '', '');
     }
 
     override async runShellToFile(command: string, cwd: string, outputFd: number): Promise<ShellTerminationDto> {
-        const scripted = this.shells.answer(new ProcessCallDto(SHELL, [command], cwd, 'shellToFile'));
+        const scripted = await this.shells.answer(new ProcessCallDto(SHELL, [command], cwd, 'shellToFile'));
         if (scripted.output !== '') fs.writeSync(outputFd, scripted.output);
         return scripted.termination;
     }

@@ -29,9 +29,9 @@ beforeEach(() => {
 
 afterEach(() => fs.rmSync(root, { recursive: true, force: true }));
 
-function scope(mode: ModifiedCodeMode, excludePaths: string[] = [], globalExcludes: string[] = []): WireSuffixScope {
+function scope(mode: ModifiedCodeMode, excludePaths: string[] = [], globalExcludes: string[] = []): Promise<WireSuffixScope> {
     const exclusions = new RuleFileExclusions('required-type-suffix', globalExcludes, excludePaths);
-    return new WireSuffixScope(root, mode, exclusions, new DiffScope());
+    return WireSuffixScope.create(root, mode, exclusions, new DiffScope());
 }
 
 function includes(policy: WireSuffixScope, name = 'Legacy', line = 1): boolean {
@@ -39,41 +39,41 @@ function includes(policy: WireSuffixScope, name = 'Legacy', line = 1): boolean {
 }
 
 describe('wire suffix rollout uses the declaring type, independently of the doc rule', () => {
-    it('grandfathers an untouched declaration and an edit to its fields in line mode', () => {
-        expect(includes(scope('NEW_AND_MODIFIED_CODE'))).toBe(false);
+    it('grandfathers an untouched declaration and an edit to its fields in line mode', async () => {
+        expect(includes(await scope('NEW_AND_MODIFIED_CODE'))).toBe(false);
         fs.writeFileSync(path.join(root, file), initial.replace('value: string', 'value: number'));
-        expect(includes(scope('NEW_AND_MODIFIED_CODE'))).toBe(false);
-        expect(includes(scope('NEW_AND_MODIFIED_FILES'))).toBe(true);
+        expect(includes(await scope('NEW_AND_MODIFIED_CODE'))).toBe(false);
+        expect(includes(await scope('NEW_AND_MODIFIED_FILES'))).toBe(true);
     });
 
-    it('checks renamed and newly added declarations, including multiline name positions', () => {
+    it('checks renamed and newly added declarations, including multiline name positions', async () => {
         fs.writeFileSync(
             path.join(root, file),
             initial.replace('Legacy', 'Renamed') + 'export class\nFresh {}\n',
         );
-        expect(includes(scope('NEW_AND_MODIFIED_CODE'), 'Renamed')).toBe(true);
-        expect(includes(scope('NEW_AND_MODIFIED_CODE'), 'Fresh', 4)).toBe(true);
+        expect(includes(await scope('NEW_AND_MODIFIED_CODE'), 'Renamed')).toBe(true);
+        expect(includes(await scope('NEW_AND_MODIFIED_CODE'), 'Fresh', 4)).toBe(true);
     });
 
-    it('whole-project mode includes legacy types when only a README changes', () => {
+    it('whole-project mode includes legacy types when only a README changes', async () => {
         fs.writeFileSync(path.join(root, project, 'README.md'), 'Changed project');
-        expect(includes(scope('NEW_AND_MODIFIED_CODE'))).toBe(false);
-        expect(includes(scope('NEW_AND_MODIFIED_FILES'))).toBe(false);
-        expect(includes(scope('MODIFIED_PROJECTS'))).toBe(true);
-        expect(includes(scope('RUN_EVERY_TIME'))).toBe(true);
+        expect(includes(await scope('NEW_AND_MODIFIED_CODE'))).toBe(false);
+        expect(includes(await scope('NEW_AND_MODIFIED_FILES'))).toBe(false);
+        expect(includes(await scope('MODIFIED_PROJECTS'))).toBe(true);
+        expect(includes(await scope('RUN_EVERY_TIME'))).toBe(true);
     });
 
-    it('honors OFF and the framework-owned excludePaths (per-rule and top-level) even in whole-repo mode', () => {
-        expect(includes(scope('OFF'))).toBe(false);
-        expect(includes(scope('RUN_EVERY_TIME', ['libraries/api/**']))).toBe(false);
-        expect(includes(scope('RUN_EVERY_TIME', [], ['libraries/api/**']))).toBe(false);
+    it('honors OFF and the framework-owned excludePaths (per-rule and top-level) even in whole-repo mode', async () => {
+        expect(includes(await scope('OFF'))).toBe(false);
+        expect(includes(await scope('RUN_EVERY_TIME', ['libraries/api/**']))).toBe(false);
+        expect(includes(await scope('RUN_EVERY_TIME', [], ['libraries/api/**']))).toBe(false);
     });
 
-    it('does not mark a parent project touched by edits owned by a nested project', () => {
+    it('does not mark a parent project touched by edits owned by a nested project', async () => {
         fs.mkdirSync(path.join(root, project, 'nested'), { recursive: true });
         fs.writeFileSync(path.join(root, project, 'nested/README.md'), 'Nested project edit');
         expect(
-            scope('MODIFIED_PROJECTS').includes(
+            (await scope('MODIFIED_PROJECTS')).includes(
                 'Legacy',
                 file,
                 project,
@@ -89,9 +89,9 @@ describe('wire suffix rollout uses the declaring type, independently of the doc 
             'Legacy {',
             'Legacy { // webpieces-disable required-type-suffix -- published schema name',
         ),
-    ])('honors a per-site disable on or above the name line', (text: string) => {
+    ])('honors a per-site disable on or above the name line', async (text: string) => {
         fs.writeFileSync(path.join(root, file), text);
-        expect(includes(scope('RUN_EVERY_TIME'), 'Legacy', text.startsWith('//') ? 2 : 1)).toBe(
+        expect(includes(await scope('RUN_EVERY_TIME'), 'Legacy', text.startsWith('//') ? 2 : 1)).toBe(
             false,
         );
     });

@@ -39,12 +39,12 @@ export class PrContextWriter {
      * same reason: a DELETED migration is exactly what a checklist wants to see.
      */
     // eslint-disable-next-line @typescript-eslint/max-params
-    ensure(repoRoot: string, featureName: string, basis: DiffBasis, stage: string, changedFiles?: readonly string[], diffDir = ''): ChecklistReviewContext {
+    async ensure(repoRoot: string, featureName: string, basis: DiffBasis, stage: string, changedFiles?: readonly string[], diffDir = ''): Promise<ChecklistReviewContext> {
         if (basis.unresolved) return new ChecklistReviewContext();
         // Reuse the caller's changed-file set when it has one. ChecklistScanner already computed exactly
         // this list to do its matching, and recomputing it here was a second `git diff --name-only` per
         // command for a list we were handed — and a second chance for the two to disagree.
-        const changed = changedFiles ?? this.changedFiles(repoRoot, basis);
+        const changed = changedFiles ?? await this.changedFiles(repoRoot, basis);
         const p = this.reviewJsonService.writePrContext(repoRoot, featureName, new PrContext(
             basis.base, basis.headSha, [...changed],
             basis.dirty, basis.dirtyFiles, basis.diffCommand, diffDir, new Date().toISOString(),
@@ -61,7 +61,7 @@ export class PrContextWriter {
             basis.fileDiffCommand, '', basis.dirty);
     }
 
-    private changedFiles(repoRoot: string, basis: DiffBasis): string[] {
+    private async changedFiles(repoRoot: string, basis: DiffBasis): Promise<string[]> {
         const opts = new ChangedFilesOptions();
         opts.tsOnly = false;
         opts.includeDeletions = true;

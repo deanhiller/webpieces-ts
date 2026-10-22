@@ -1,6 +1,5 @@
 import { specTempDirs } from '@webpieces/tooling-testkit';
 import { describe, it, expect, afterEach } from 'vitest';
-import { spawnSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 import {
@@ -38,16 +37,16 @@ function readLog(home: string): string[] {
 }
 
 /**
- * The pid of a process that has REALLY run and REALLY exited — death as a fact, not a mock.
+ * A pid no process can hold — death as a fact, not a mock, and with no process started (#1381).
  *
- * `spawnSync` runs the child to completion AND reaps it, so by the time it returns there is no zombie
- * left for `process.kill(pid, 0)` to find addressable. A killed-but-unreaped child would still answer
- * "alive", which is exactly the trap a hand-rolled version of this walks into.
+ * It is above every kernel's pid ceiling (Linux caps `pid_max` at 2^22, macOS at 99999), so the kernel
+ * itself answers `process.kill(pid, 0)` with ESRCH: the same one answer a reaped child's pid gets. (A
+ * killed-but-UNREAPED child would still answer "alive", which is the trap this must never walk into.)
  */
 function deadPid(): number {
-    const pid = spawnSync('/bin/sh', ['-c', 'exit 0']).pid;
-    expect(pid).toBeGreaterThan(0);
-    return pid ?? 0;
+    const pid = 2 ** 31 - 2;
+    expect((): boolean => process.kill(pid, 0)).toThrow(/ESRCH/);
+    return pid;
 }
 
 /** Write a START row by hand for a pid we control. The renderer is exercised elsewhere. */

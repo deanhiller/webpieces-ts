@@ -52,21 +52,21 @@ export class LocalBuildPolicy extends AbstractRule<LocalRuleConfig> implements B
     }
 
     /** undefined when the diff base cannot be found, so a diff-scoped mode has nothing to compare against. */
-    private scan(workspaceRoot: string): LocatedLocalVerdict[] | undefined {
+    private async scan(workspaceRoot: string): Promise<LocatedLocalVerdict[] | undefined> {
         const mode = this.config.mode;
         if (mode === undefined || mode === 'OFF') return [];
-        const range = this.diffScope.resolveBase(workspaceRoot);
+        const range = await this.diffScope.resolveBase(workspaceRoot);
         if (range.base === undefined && mode !== 'RUN_EVERY_TIME') {
             console.log(`\n⏭️  Skipping ${this.name} validation (could not detect base branch)\n`);
             return undefined;
         }
         const base = range.base ?? '';
         const found: LocatedLocalVerdict[] = [];
-        for (const relFile of this.scanScope.files(workspaceRoot, mode, base, range.head, { tsOnly: false })) {
+        for (const relFile of await this.scanScope.files(workspaceRoot, mode, base, range.head, { tsOnly: false })) {
             const absFile = path.join(workspaceRoot, relFile);
             if (!this.judge.judges(relFile) || !fs.existsSync(absFile)) continue;
             const changed = mode === 'NEW_AND_MODIFIED_CODE'
-                ? this.diffScope.getChangedLineNumbers(this.diffScope.getFileDiff(workspaceRoot, relFile, base, range.head))
+                ? this.diffScope.getChangedLineNumbers(await this.diffScope.getFileDiff(workspaceRoot, relFile, base, range.head))
                 : undefined;
             if (changed !== undefined && changed.size === 0) continue;
             for (const verdict of this.judge.judge(relFile, fs.readFileSync(absFile, 'utf8'), this.config, changed)) {

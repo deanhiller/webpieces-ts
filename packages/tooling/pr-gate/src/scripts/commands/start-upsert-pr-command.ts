@@ -75,7 +75,7 @@ export class StartUpsertPrCommand {
         writeTemplate(repoRoot, 'webpieces.review-checklists.md');
         // Persist the PR diff context (base sha + the full changed-file set) so it exists even if the AI
         // stops here. Stage ② rewrites it with the materialized-diff dir once it has one.
-        const context = this.prContextWriter.ensure(repoRoot, await this.aiBranchName.getFeatureName(), await this.diffBasisResolver.resolve(repoRoot), 'stage1-start');
+        const context = await this.prContextWriter.ensure(repoRoot, await this.aiBranchName.getFeatureName(), await this.diffBasisResolver.resolve(repoRoot), 'stage1-start');
         process.stdout.write('\n' + SEP + '② Brief the reviewers and write the PR summary, then finish\n' + SEP + '\n');
         process.stdout.write(
             `Branch is updated (nothing pushed yet — finish does the one push, behind the build gate).\n` +

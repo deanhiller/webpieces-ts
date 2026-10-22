@@ -1,5 +1,5 @@
-import { spawnSync } from 'child_process';
 import { injectable, bindingScopeValues } from 'inversify';
+import { GitProcessApi, GitProcessClient } from '@webpieces/tooling-common';
 
 import {
     ArchiveResult,
@@ -104,11 +104,9 @@ export class ReapResult {
     }
 }
 
-// Result of a captured git invocation. `err` carries stderr so a failed delete can be reported.
-interface CmdCapture {
-    ok: boolean;
-    out: string;
-    err: string;
+// Internal: one git call's verdict, trimmed stdout, and stderr so a failed delete can be reported. Data only.
+class CapturedOutput {
+    constructor(readonly ok: boolean, readonly out: string, readonly err: string) {}
 }
 
 @injectable(bindingScopeValues.Singleton)
@@ -120,6 +118,7 @@ export class BranchReaper {
         private readonly mergedBranches: MergedBranchesService = new MergedBranchesService(),
         private readonly mutationLog: BranchMutationLog = new BranchMutationLog(),
         private readonly archiver: BranchArchiver = new BranchArchiver(),
+        private readonly git: GitProcessApi = new GitProcessClient(),
     ) {}
 
     /**
@@ -131,15 +130,15 @@ export class BranchReaper {
      * to go stale, which is fine for blocking a branch creation but is not fine for deleting, since a
      * branch may have gained commits since it was written. Deleting never reads the stale file.
      */
-    reap(
+    async reap(
         repoRoot: string,
         verb: MutationVerb,
         cache: MergedBranchesCache | null = null,
         retention: string = BRANCH_RETENTION_ARCHIVE_TAG,
-    ): ReapResult {
+    ): Promise<ReapResult> {
         // `false`: this is the BRANCH reap, and worktree locks are none of its business. Ignoring one
         // would only widen the WORKTREE verdicts it never reads.
-        const verdicts = cache ?? this.mergedBranches.computeMergedBranches(repoRoot, false);
+        const verdicts = cache ?? await this.mergedBranches.computeMergedBranches(repoRoot, false);
         // 'keep' means "never delete anything" — the reap becomes a pure report. Everything still lands
         // in `spared` so the human sees exactly what WOULD have been reaped under the other policies.
         if (retention === BRANCH_RETENTION_KEEP) {
@@ -154,18 +153,18 @@ export class BranchReaper {
      * deletion from an explicit human answer, not from a verdict, so nothing here may ever run unattended.
      * Archiving still happens first, which is precisely what makes that yes low-stakes.
      */
-    reapApproved(
+    async reapApproved(
         repoRoot: string,
         verb: MutationVerb,
         approved: DeletableBranch[],
         retention: string = BRANCH_RETENTION_ARCHIVE_TAG,
-    ): ReapResult {
+    ): Promise<ReapResult> {
         if (retention === BRANCH_RETENTION_KEEP) return new ReapResult([], [], approved);
         const reaped: ReapedBranch[] = [];
         const failed: ReapedBranch[] = [];
         const alreadyGone: ReapedBranch[] = [];
         for (const entry of approved) {
-            const outcome = this.deleteOne(repoRoot, verb, entry, retention);
+            const outcome = await this.deleteOne(repoRoot, verb, entry, retention);
             if (outcome.ok) reaped.push(outcome);
             else if (outcome.alreadyGone) alreadyGone.push(outcome);
             else failed.push(outcome);
@@ -173,18 +172,18 @@ export class BranchReaper {
         return new ReapResult(reaped, failed, [], alreadyGone);
     }
 
-    private reapBranches(
+    private async reapBranches(
         repoRoot: string,
         verb: MutationVerb,
         targets: DeletableBranch[],
         retention: string,
         verdicts: MergedBranchesCache,
-    ): ReapResult {
+    ): Promise<ReapResult> {
         const reaped: ReapedBranch[] = [];
         const failed: ReapedBranch[] = [];
         const alreadyGone: ReapedBranch[] = [];
         for (const entry of targets) {
-            const outcome = this.deleteOne(repoRoot, verb, entry, retention);
+            const outcome = await this.deleteOne(repoRoot, verb, entry, retention);
             if (outcome.ok) reaped.push(outcome);
             else if (outcome.alreadyGone) alreadyGone.push(outcome);
             else failed.push(outcome);
@@ -206,15 +205,15 @@ export class BranchReaper {
      * to stop relying on the reflog. Refusing to delete is the fail-safe direction: the worst case is a
      * branch that survives one more cleanup cycle.
      */
-    private deleteOne(
+    private async deleteOne(
         repoRoot: string,
         verb: MutationVerb,
         entry: DeletableBranch,
         retention: string,
-    ): ReapedBranch {
+    ): Promise<ReapedBranch> {
         // SHA first — after the delete there is no branch left to resolve, and the whole point of the
         // audit line is that it records what was destroyed while it still exists.
-        const resolved = this.capture(repoRoot, ['rev-parse', entry.branch]);
+        const resolved = await this.capture(repoRoot, ['rev-parse', entry.branch]);
         const sha = resolved.ok ? resolved.out : '';
 
         // It does not resolve ⇒ it is already gone, reaped by whoever won the race (see
@@ -224,11 +223,11 @@ export class BranchReaper {
         if (!resolved.ok) return this.alreadyGone(repoRoot, verb, entry);
 
         const archive = retention === BRANCH_RETENTION_ARCHIVE_TAG
-            ? this.archiver.archive(repoRoot, entry.branch)
+            ? await this.archiver.archive(repoRoot, entry.branch)
             : new ArchiveResult('', sha, true, '');
         if (!archive.ok) return this.archiveFailed(repoRoot, verb, entry, sha, archive);
 
-        const deleted = this.capture(repoRoot, ['branch', '-D', entry.branch]);
+        const deleted = await this.capture(repoRoot, ['branch', '-D', entry.branch]);
         const result = new ReapedBranch(
             entry.branch, sha, entry.reason, entry.pr, deleted.ok, deleted.ok ? '' : deleted.err);
         result.archiveTag = archive.tag;
@@ -294,12 +293,10 @@ export class BranchReaper {
     }
 
     // Run a git command capturing trimmed stdout/stderr; ok=false on spawn failure or non-zero exit.
-    private capture(repoRoot: string, args: string[]): CmdCapture {
-        const result = spawnSync('git', args, { cwd: repoRoot, encoding: 'utf8' });
-        const err = typeof result.stderr === 'string' ? result.stderr.trim() : '';
-        if (result.status !== 0 || typeof result.stdout !== 'string') {
-            return { ok: false, out: '', err: err !== '' ? err : 'git command failed' };
-        }
-        return { ok: true, out: result.stdout.trim(), err };
+    private async capture(repoRoot: string, args: string[]): Promise<CapturedOutput> {
+        const result = await this.git.run(args, repoRoot);
+        const err = result.stderr.trim();
+        if (!result.ok) return new CapturedOutput(false, '', err !== '' ? err : 'git command failed');
+        return new CapturedOutput(true, result.stdout.trim(), err);
     }
 }

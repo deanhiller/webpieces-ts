@@ -229,7 +229,7 @@ describe('every config-repair deny names a cure the same hook permits (#1273)', 
  * needs no carve-out — and the gate still refuses it with the same error and cures.
  */
 describe('an untracked or ignored declared owner file is the GATE\'s refusal, not the hook\'s (#1355)', () => {
-    it('lets work and the git add cure through, and the gate check names the file and both cures', () => {
+    it('lets work and the git add cure through, and the gate check names the file and both cures', async () => {
         const repo = new RepairRepo();
         repo.git('rm', '-q', '--cached', '--', OWNER_0);
 
@@ -240,7 +240,7 @@ describe('an untracked or ignored declared owner file is the GATE\'s refusal, no
         let refusal: ConfigRepairError | null = null;
         // eslint-disable-next-line @webpieces/no-unmanaged-exceptions -- the spec inspects the thrown structure
         try {
-            assertPolicyTracked(repo.root);
+            await assertPolicyTracked(repo.root);
         // webpieces-disable no-any-unknown -- a caught value is unknown until narrowed
         } catch (err: unknown) {
             const error = toError(err);
@@ -254,14 +254,14 @@ describe('an untracked or ignored declared owner file is the GATE\'s refusal, no
         ]);
 
         repo.git('add', '--', OWNER_0);
-        expect(() => assertPolicyTracked(repo.root)).not.toThrow();
+        await expect(assertPolicyTracked(repo.root)).resolves.toBeUndefined();
     });
 
-    it('refuses gitignored policy at the gate while the hook keeps allowing work', () => {
+    it('refuses gitignored policy at the gate while the hook keeps allowing work', async () => {
         const repo = new RepairRepo();
         fs.appendFileSync(repo.path('.gitignore'), '.webpieces-config/\n');
         expect(repo.write('guards', repo.path('src/work.ts'))).toBeNull();
-        expect(() => assertPolicyTracked(repo.root)).toThrow('policy is gitignored');
+        await expect(assertPolicyTracked(repo.root)).rejects.toThrow('policy is gitignored');
     });
 });
 

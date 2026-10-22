@@ -243,7 +243,7 @@ export class ReviewUpsertPrCommand {
         // write. The scan deliberately did not write it (ChecklistScanOptions.contextStage === ''); it used
         // to, which meant this command wrote the same file twice, the first time with an empty diffDir.
         // `scan.changedFiles` is passed through so the context is not recomputed from a second git call.
-        scan.context = this.prContextWriter.ensure(repoRoot, featureName, plan.basis, 'stage2-review', changedFiles, diffDir);
+        scan.context = await this.prContextWriter.ensure(repoRoot, featureName, plan.basis, 'stage2-review', changedFiles, diffDir);
         // ONLY the checklists still owed a verdict (issue #863). A green or yellow CARRIES whatever changed
         // since (issue #1053) — the scan left it in `reviewed` — so briefing it again would pay a reviewer to
         // re-read code it already judged. A later round re-briefs exactly the previous round's REDS.

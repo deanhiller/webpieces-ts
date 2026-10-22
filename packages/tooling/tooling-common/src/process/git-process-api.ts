@@ -26,8 +26,22 @@ export class GitResultDto {
  * before resolving the program, so no test that is not about git itself ever starts a git process.
  */
 export abstract class GitProcessApi {
-    /** Run git with stdout and stderr CAPTURED. Never interactive: a credential prompt fails instead of hanging. */
-    abstract run(args: string[], cwd?: string): Promise<GitResultDto>;
+    /**
+     * Run git with stdout and stderr CAPTURED. Never interactive: a credential prompt fails instead of hanging.
+     *
+     * `signal` bounds the run: when it aborts, the child is killed and the result is PROCESS_KILLED. A caller
+     * that needs a deadline schedules the abort through `TimerApi`, so a feature test fires the deadline
+     * itself instead of waiting for it.
+     */
+    abstract run(args: string[], cwd?: string, signal?: AbortSignal): Promise<GitResultDto>;
+
+    /**
+     * Run git SYNCHRONOUSLY, captured, killed after `timeoutMs`. Exists for exactly one kind of caller: a
+     * PreToolUse guard, whose `check()` contract (`PlainRule.check` in hook-runtime) returns its verdicts
+     * synchronously and which reads the worktree list and the local branch list on that blocking path.
+     * Every other caller uses {@link run}.
+     */
+    abstract runSync(args: string[], cwd: string, timeoutMs: number): GitResultDto;
 
     /**
      * Run git with its output going straight to THIS process's terminal — for the commands whose live

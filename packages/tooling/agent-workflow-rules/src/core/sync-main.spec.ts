@@ -65,13 +65,13 @@ afterEach(() => {
 });
 
 describe('sync-main single-flight', () => {
-    it('a child whose claim is no longer the lock logs SKIP_INPROGRESS and writes no status at all', () => {
+    it('a child whose claim is no longer the lock logs SKIP_INPROGRESS and writes no status at all', async () => {
         // A live refresher (this very process's pid, so the liveness probe says "running") holds the
         // lock — it reclaimed it while this child booted. This child must not fetch, compute or write.
         const held = Date.now();
         locks.writeMainSyncLock(root, new MainSyncLock(process.pid, held));
 
-        refreshMainSync(root, held - 1);
+        await refreshMainSync(root, held - 1);
 
         expect(asyncLog()).toContain('SKIP_INPROGRESS');
         expect(asyncLog()).not.toContain('FINISH');
@@ -80,13 +80,13 @@ describe('sync-main single-flight', () => {
         expect(locks.readMainSyncLock(root)).toEqual(new MainSyncLock(process.pid, held));
     });
 
-    it('on success: adopts its spawner`s lock, stamps the status file FIRST, deletes the lock LAST', () => {
+    it('on success: adopts its spawner`s lock, stamps the status file FIRST, deletes the lock LAST', async () => {
         const claim = locks.claimRefresh(root, 5, 'main').lock;
         expect(claim).not.toBeNull();
         const started = claim?.startedMs ?? 0;
         const seen = stampAtRelease();
 
-        refreshMainSync(root, started);
+        await refreshMainSync(root, started);
 
         // It got past the adopt. The run is a no-op in a non-git directory, but it completes.
         expect(asyncLog()).toContain('FINISH');
@@ -96,17 +96,17 @@ describe('sync-main single-flight', () => {
         expect(fs.existsSync(locks.mainSyncLockPath(root))).toBe(false);
     });
 
-    it('on error: records the stamp with outcome error, keeps old branch data, and still deletes the lock', () => {
-        service.writeMainSyncStatusFile(root, service.computeAllMainSyncStatuses(root));
+    it('on error: records the stamp with outcome error, keeps old branch data, and still deletes the lock', async () => {
+        service.writeMainSyncStatusFile(root, await service.computeAllMainSyncStatuses(root));
         const before = Object.keys(service.readMainSyncStatusFile(root)?.branches ?? {});
-        vi.spyOn(MainSyncStatusService.prototype, 'computeAllMainSyncStatuses').mockImplementation((): never => {
+        vi.spyOn(MainSyncStatusService.prototype, 'computeAllMainSyncStatuses').mockImplementation(async (): Promise<never> => {
             throw new Error('offline');
         });
         const claim = locks.claimRefresh(root, 5, 'main').lock;
         const started = claim?.startedMs ?? 0;
         const seen = stampAtRelease();
 
-        refreshMainSync(root, started);
+        await refreshMainSync(root, started);
 
         expect(asyncLog()).toContain('offline');
         expect(seen.value).toBe(started);
@@ -116,10 +116,10 @@ describe('sync-main single-flight', () => {
         expect(fs.existsSync(locks.mainSyncLockPath(root))).toBe(false);
     });
 
-    it('a hand-run with no lock handed to it adopts nothing and leaves an existing lock alone', () => {
+    it('a hand-run with no lock handed to it adopts nothing and leaves an existing lock alone', async () => {
         const other = new MainSyncLock(process.pid, Date.now());
         locks.writeMainSyncLock(root, other);
-        refreshMainSync(root, Number.NaN);
+        await refreshMainSync(root, Number.NaN);
         expect(asyncLog()).toContain('SKIP_INPROGRESS');
         expect(locks.readMainSyncLock(root)).toEqual(other);
     });

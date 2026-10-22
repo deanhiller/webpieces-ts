@@ -1,6 +1,6 @@
 import { bindingScopeValues, injectable } from 'inversify';
 
-import { ChildProcessCalls } from './child-process-calls';
+import { CapturedRunDto, ChildProcessCalls } from './child-process-calls';
 import { GitProcessApi, GitResultDto } from './git-process-api';
 import { ProcessResultDto } from './native-process-api';
 
@@ -21,13 +21,20 @@ export class GitProcessClient extends GitProcessApi {
 
     private readonly calls = new ChildProcessCalls();
 
-    override async run(args: string[], cwd?: string): Promise<GitResultDto> {
-        const env = { ...process.env, ...GitProcessClient.NON_INTERACTIVE };
-        return this.toGit(await this.calls.captured('git', args, cwd, env));
+    override async run(args: string[], cwd?: string, signal?: AbortSignal): Promise<GitResultDto> {
+        return this.toGit(await this.calls.captured('git', args, new CapturedRunDto(cwd, this.env(), signal)));
+    }
+
+    override runSync(args: string[], cwd: string, timeoutMs: number): GitResultDto {
+        return this.toGit(this.calls.capturedSync('git', args, cwd, this.env(), timeoutMs));
     }
 
     override async passThrough(args: string[], cwd?: string): Promise<GitResultDto> {
         return this.toGit(await this.calls.inherited('git', args, cwd));
+    }
+
+    private env(): NodeJS.ProcessEnv {
+        return { ...process.env, ...GitProcessClient.NON_INTERACTIVE };
     }
 
     private toGit(result: ProcessResultDto): GitResultDto {

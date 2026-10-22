@@ -96,7 +96,7 @@ export class HumanPostPrCommand {
         // FAIL FAST on a hand-written closing reference (issue #1310), before the human is asked to build.
         new IssueReferences().assertNoStrayClosingReferences(summary.summary, summary.addressesIssues, RETRY_COMMAND);
 
-        const status = this.mainSyncStatus.computeMainSyncStatus(repoRoot);
+        const status = await this.mainSyncStatus.computeMainSyncStatus(repoRoot);
         this.assertCurrentMain(status);
         const buildRan = await this.askToBuild();
         if (buildRan) await this.gitExec.assertCleanTree(repoRoot);

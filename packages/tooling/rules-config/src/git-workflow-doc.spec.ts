@@ -8,26 +8,18 @@ import { specTempDirs } from '@webpieces/tooling-testkit';
  * reader greps nothing, and the silence reads as "no deletions were logged", which is the opposite of
  * the truth from the one file whose job is to prove every deletion is recoverable.
  *
- * REAL repos with REAL linked worktrees, for the same reason state-dir.spec.ts uses them: the question
- * "am I in a linked worktree, and where is the primary clone?" is answered by git, so a mocked spawn
- * would only prove the mock returns what it was told to.
+ * The checkout is laid out on disk EXACTLY as git lays out a primary clone with a linked worktree
+ * (checkoutLayout, #1381): the question "am I in a linked worktree, and where is the primary clone?" is
+ * answered from those files (GitCheckout reads them; no process), so the layout is the real input.
  */
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { execSync } from 'child_process';
 import * as fs from 'fs';
-import * as os from 'os';
 import * as path from 'path';
+import { checkoutLayout } from '@webpieces/tooling-testkit';
 
 import { BranchMutationLog } from '@webpieces/repo-workflow-core';
 import { GIT_WORKFLOW_DOC } from './instruct-ai-docs';
 import { TemplateWriter, loadTemplate } from './load-template';
-
-
-function git(cwd: string, cmd: string): string {
-    return execSync(`git -c core.hooksPath=/dev/null ${cmd}`, {
-        cwd, encoding: 'utf-8', stdio: ['pipe', 'pipe', 'pipe'],
-    }).trim();
-}
 
 let tmp = '';
 let primary = '';
@@ -35,18 +27,13 @@ let worktree = '';
 
 describe('webpieces.git-workflow.md — the branch-mutation log path it delivers', () => {
     beforeEach(() => {
-        // realpathSync: macOS os.tmpdir() is a symlink and git answers with the real path.
+        // realpathSync: macOS os.tmpdir() is a symlink and the git-dir resolver answers with the real path.
         tmp = specTempDirs.makeReal('gitworkflow-doc-');
         primary = path.join(tmp, 'primary');
         worktree = path.join(tmp, 'wt-a');
         fs.mkdirSync(primary, { recursive: true });
-        git(primary, 'init -q -b main');
-        git(primary, 'config user.email test@example.com');
-        git(primary, 'config user.name Test');
+        checkoutLayout.primaryWithWorktree(primary, worktree, 'feature');
         fs.writeFileSync(path.join(primary, '.gitignore'), '.webpieces/\n');
-        git(primary, 'add -A');
-        git(primary, 'commit -q -m init');
-        git(primary, `worktree add -q -b feature ${worktree}`);
     });
 
     afterEach(() => {

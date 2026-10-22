@@ -265,7 +265,7 @@ export class ChecklistScanner {
         const base = basis.base;
         // ONE changed-file computation feeds both the roster (all X) and the applicable set (N). `detect` is
         // pure and defined as the roster minus its empty entries, so the two cannot disagree about a match.
-        const changedFiles = this.changedFiles(repoRoot, base);
+        const changedFiles = await this.changedFiles(repoRoot, base);
         const roster = new ChecklistRoster(
             this.checklistDetector.roster(defined, changedFiles), changedFiles.length, base !== '');
         const matched = this.checklistDetector.toRequired(this.checklistDetector.detect(defined, changedFiles));
@@ -275,7 +275,7 @@ export class ChecklistScanner {
         // existing. A second check in either command would be a second answer to one question.
         const context = opts.contextStage === ''
             ? this.prContextWriter.contextFor(repoRoot, featureName, basis)
-            : this.prContextWriter.ensure(repoRoot, featureName, basis, opts.contextStage, changedFiles);
+            : await this.prContextWriter.ensure(repoRoot, featureName, basis, opts.contextStage, changedFiles);
         const homeConfig = this.homeConfig.load();
         const projectDisabled = defined.some((d: ChecklistDefinition): boolean => d.reviewer.maxAgents === 0);
         if (homeConfig.turnOffAllReviewers || projectDisabled) {
@@ -421,7 +421,7 @@ export class ChecklistScanner {
      *                         deletes a migration, an auth check or a terraform rule changed exactly what a
      *                         checklist exists to catch, and under the default no checklist fires at all.
      */
-    private changedFiles(repoRoot: string, base: string): string[] {
+    private async changedFiles(repoRoot: string, base: string): Promise<string[]> {
         if (base === '') return [];
         const opts = new ChangedFilesOptions();
         opts.tsOnly = false;

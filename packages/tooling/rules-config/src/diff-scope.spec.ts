@@ -1,24 +1,63 @@
-import { specTempDirs } from '@webpieces/tooling-testkit';
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { execSync } from 'child_process';
-import * as fs from 'fs';
-import * as path from 'path';
+import { describe, it, expect, beforeEach } from 'vitest';
+import { GitResultDto } from '@webpieces/tooling-common';
+import { ProcessCallDto } from '@webpieces/tooling-testkit';
 
-import { ChangedFilesOptions, getChangedFiles } from './diff-scope';
+import { RulesConfigFeature } from './__tests__/rules-config-feature';
+import { ChangedFilesOptions, DiffScope } from './diff-scope';
 
+const BASE = 'base-sha';
+const HEAD = 'head-sha';
 
-function git(root: string, cmd: string): string {
-    // core.hooksPath=/dev/null: keep any machine-global git hooks out of the throwaway test repo.
-    return execSync(`git -c core.hooksPath=/dev/null ${cmd}`, {
-        cwd: root, encoding: 'utf-8', stdio: ['pipe', 'pipe', 'pipe'],
-    }).trim();
+/** One path git reports changed: A(dded), M(odified) or D(eleted). A rename is its D + its A. Data only. */
+class Change {
+    constructor(readonly status: string, readonly path: string) {}
 }
 
-function writeFile(root: string, relPath: string, content: string): void {
-    const fullPath = path.join(root, relPath);
-    fs.mkdirSync(path.dirname(fullPath), { recursive: true });
-    fs.writeFileSync(fullPath, content);
+/**
+ * What git knows about this repo (#1381): the changes between BASE and HEAD (committed), between BASE and
+ * the working tree, and the untracked files. `git diff --name-only` is answered from it exactly as git
+ * answers — `--diff-filter=d` drops the deletions, a two-ref diff reads the committed changes, a one-ref
+ * diff the working tree — so each scenario holds what DiffScope ASKED git and what it did with the answer.
+ */
+class ChangeWorld {
+    committed: Change[] = [];
+    working: Change[] = [];
+    untracked: string[] = [];
+
+    answer(call: ProcessCallDto): GitResultDto {
+        const args = call.args;
+        if (args[0] === 'ls-files') return new GitResultDto(0, this.untracked.join('\n') + '\n', '');
+        if (args[0] !== 'diff') return new GitResultDto(1, '', `unscripted git ${args.join(' ')}`);
+        const refs = args.slice(0, args.indexOf('--') < 0 ? args.length : args.indexOf('--'))
+            .filter((arg: string): boolean => arg === BASE || arg === HEAD);
+        const changes = refs.length === 2 ? this.committed : this.working;
+        const dropDeletions = args.includes('--diff-filter=d');
+        const names = changes
+            .filter((change: Change): boolean => !dropDeletions || change.status !== 'D')
+            .map((change: Change): string => change.path);
+        return new GitResultDto(0, names.join('\n') + '\n', '');
+    }
 }
+
+// The reorg every ghost-path scenario starts from: Moved.ts `git mv`ed under nested/, Deleted.ts removed.
+function reorg(): Change[] {
+    return [
+        new Change('D', 'libraries/foo/src/Moved.ts'),
+        new Change('A', 'libraries/nested/foo/src/Moved.ts'),
+        new Change('D', 'libraries/foo/src/Deleted.ts'),
+    ];
+}
+
+let world: ChangeWorld;
+let feature: RulesConfigFeature;
+let diffScope: DiffScope;
+
+beforeEach(async () => {
+    world = new ChangeWorld();
+    feature = await RulesConfigFeature.create();
+    feature.git.respondToPrefix([], (call: ProcessCallDto): GitResultDto => world.answer(call));
+    diffScope = feature.container.get(DiffScope);
+});
 
 /**
  * Reproduces BUG-validate-ts-in-src-false-positive: `git diff --name-only` lists the OLD side of
@@ -28,119 +67,86 @@ function writeFile(root: string, relPath: string, content: string): void {
  * from the working tree.
  */
 describe('getChangedFiles ghost paths (deleted/renamed old paths)', () => {
-    let root: string;
-    let base: string;
+    it('excludes deleted files and reports renames only at their new path', async () => {
+        world.working = reorg();
 
-    beforeEach(() => {
-        root = specTempDirs.makeReal('diff-scope-');
-        git(root, 'init -q -b main');
-        git(root, 'config user.email test@test.com');
-        git(root, 'config user.name test');
-        writeFile(root, 'libraries/foo/src/Keep.ts', 'export const keep = 1;\n');
-        writeFile(root, 'libraries/foo/src/Moved.ts', 'export const moved = 1;\n');
-        writeFile(root, 'libraries/foo/src/Deleted.ts', 'export const deleted = 1;\n');
-        git(root, 'add -A');
-        git(root, 'commit -q -m base');
-        base = git(root, 'rev-parse HEAD');
-    });
-
-    afterEach(() => { fs.rmSync(root, { recursive: true, force: true }); });
-
-    it('excludes deleted files and reports renames only at their new path', () => {
-        fs.mkdirSync(path.join(root, 'libraries/nested/foo/src'), { recursive: true });
-        git(root, 'mv libraries/foo/src/Moved.ts libraries/nested/foo/src/Moved.ts');
-        git(root, 'rm -q libraries/foo/src/Deleted.ts');
-        git(root, 'commit -q -m reorg');
-
-        const changed = getChangedFiles(root, base);
+        const changed = await diffScope.getChangedFiles('/repo', BASE);
 
         expect(changed).toContain('libraries/nested/foo/src/Moved.ts');
         expect(changed).not.toContain('libraries/foo/src/Moved.ts');
         expect(changed).not.toContain('libraries/foo/src/Deleted.ts');
+        expect(feature.git.commandLines()).toEqual([
+            `git diff --name-only --diff-filter=d ${BASE} -- *.ts *.tsx`,
+            'git ls-files --others --exclude-standard -- *.ts *.tsx',
+        ]);
     });
 
-    it('excludes an uncommitted working-tree deletion', () => {
-        fs.rmSync(path.join(root, 'libraries/foo/src/Deleted.ts'));
+    it('excludes an uncommitted working-tree deletion', async () => {
+        world.working = [new Change('D', 'libraries/foo/src/Deleted.ts')];
 
-        const changed = getChangedFiles(root, base);
+        const changed = await diffScope.getChangedFiles('/repo', BASE);
 
         expect(changed).not.toContain('libraries/foo/src/Deleted.ts');
     });
 
-    it('still reports modified and untracked files', () => {
-        writeFile(root, 'libraries/foo/src/Keep.ts', 'export const keep = 2;\n');
-        writeFile(root, 'libraries/foo/src/Untracked.ts', 'export const untracked = 1;\n');
+    it('still reports modified and untracked files', async () => {
+        world.working = [new Change('M', 'libraries/foo/src/Keep.ts')];
+        world.untracked = ['libraries/foo/src/Untracked.ts'];
 
-        const changed = getChangedFiles(root, base);
+        const changed = await diffScope.getChangedFiles('/repo', BASE);
 
         expect(changed).toContain('libraries/foo/src/Keep.ts');
         expect(changed).toContain('libraries/foo/src/Untracked.ts');
     });
 
-    it('excludes deletions in a two-ref (base..head) diff', () => {
-        fs.mkdirSync(path.join(root, 'libraries/nested/foo/src'), { recursive: true });
-        git(root, 'mv libraries/foo/src/Moved.ts libraries/nested/foo/src/Moved.ts');
-        git(root, 'rm -q libraries/foo/src/Deleted.ts');
-        git(root, 'commit -q -m reorg');
-        const head = git(root, 'rev-parse HEAD');
+    it('excludes deletions in a two-ref (base..head) diff', async () => {
+        world.committed = reorg();
 
-        const changed = getChangedFiles(root, base, head);
+        const changed = await diffScope.getChangedFiles('/repo', BASE, HEAD);
 
         expect(changed).toContain('libraries/nested/foo/src/Moved.ts');
         expect(changed).not.toContain('libraries/foo/src/Moved.ts');
         expect(changed).not.toContain('libraries/foo/src/Deleted.ts');
+        // A two-ref diff is a statement about commits: the working tree's untracked files are not asked for.
+        expect(feature.git.commandLines()).toEqual([`git diff --name-only --diff-filter=d ${BASE} ${HEAD} -- *.ts *.tsx`]);
     });
 
 });
 
 // Split out to keep each describe under the method-length limit.
 describe('getChangedFiles — deletions are opt-in', () => {
-    let root: string;
-    let base: string;
-
-    beforeEach(() => {
-        root = specTempDirs.makeReal('diff-scope-');
-        git(root, 'init -q -b main');
-        git(root, 'config user.email test@test.com');
-        git(root, 'config user.name test');
-        writeFile(root, 'libraries/foo/src/Keep.ts', 'export const keep = 1;\n');
-        writeFile(root, 'libraries/foo/src/Moved.ts', 'export const moved = 1;\n');
-        writeFile(root, 'libraries/foo/src/Deleted.ts', 'export const deleted = 1;\n');
-        git(root, 'add -A');
-        git(root, 'commit -q -m base');
-        base = git(root, 'rev-parse HEAD');
-    });
-
-    afterEach(() => { fs.rmSync(root, { recursive: true, force: true }); });
-
     /**
      * Deletions are excluded BY DEFAULT — right for a lint validator (you cannot lint a file that is gone),
      * and wrong for checklist matching. A PR that DELETES a migration, an auth check or a terraform rule
      * changed exactly the thing a checklist exists to catch, and under the default the file is invisible,
      * so no checklist fires and no reviewer is ever asked. `includeDeletions` is how the review flow opts in.
      */
-    it('includeDeletions:true surfaces a deleted file that the default hides', () => {
-        git(root, 'rm -q libraries/foo/src/Deleted.ts');
-        git(root, 'commit -q -m delete');
-        const head = git(root, 'rev-parse HEAD');
+    it('includeDeletions:true surfaces a deleted file that the default hides', async () => {
+        world.committed = [new Change('D', 'libraries/foo/src/Deleted.ts')];
         const opts = new ChangedFilesOptions();
         opts.tsOnly = false;
 
-        expect(getChangedFiles(root, base, head, opts)).not.toContain('libraries/foo/src/Deleted.ts');
+        expect(await diffScope.getChangedFiles('/repo', BASE, HEAD, opts)).not.toContain('libraries/foo/src/Deleted.ts');
 
         opts.includeDeletions = true;
-        expect(getChangedFiles(root, base, head, opts)).toContain('libraries/foo/src/Deleted.ts');
+        expect(await diffScope.getChangedFiles('/repo', BASE, HEAD, opts)).toContain('libraries/foo/src/Deleted.ts');
+        expect(feature.git.commandLines()).toEqual([
+            `git diff --name-only --diff-filter=d ${BASE} ${HEAD}`,
+            `git diff --name-only ${BASE} ${HEAD}`,
+        ]);
     });
 
     // The default must stay byte-identical, so every existing lint-validator caller is unaffected.
-    it('leaves the default untouched when includeDeletions is omitted or false', () => {
-        git(root, 'rm -q libraries/foo/src/Deleted.ts');
-        git(root, 'commit -q -m delete');
-        const head = git(root, 'rev-parse HEAD');
+    it('leaves the default untouched when includeDeletions is omitted or false', async () => {
+        world.committed = [new Change('D', 'libraries/foo/src/Deleted.ts'), new Change('M', 'libraries/foo/src/Keep.ts')];
         const opts = new ChangedFilesOptions();
         opts.tsOnly = false;
         opts.includeDeletions = false;
+        const omitted = new ChangedFilesOptions();
+        omitted.tsOnly = false;
 
-        expect(getChangedFiles(root, base, head, opts)).toEqual(getChangedFiles(root, base, head, { tsOnly: false }));
+        expect(await diffScope.getChangedFiles('/repo', BASE, HEAD, opts))
+            .toEqual(await diffScope.getChangedFiles('/repo', BASE, HEAD, omitted));
+        expect(feature.git.commandLines()[0]).toBe(feature.git.commandLines()[1]);
     });
 });
