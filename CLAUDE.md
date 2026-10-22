@@ -22,6 +22,7 @@ about to do; skip the rest.
 | `.claude/rules/never-tell-an-ai-to-end-its-turn.md` | your diff writes or edits ANY string webpieces prints at an agent — a gate banner, a guard cure, a `wp-*` output, a `templates/**` file — and especially one about WAITING |
 | `.claude/rules/api-docs.md` | you change a contract, an `openapi.manifest.json`, anything under `packages/docs/**`, or an `openapi-generate` / `docs-generate` target — or you are about to commit a generated document |
 | `.claude/rules/framework-tags.md` | you add or change a `framework:*` / `role:*` / `product:*` tag, the framework lattice, `role:api-lib` / `role:api-client`, or one of the six tag-truth rules (`api-lib-dependencies`, `api-lib-path`, `framework-folder`, `framework-tsconfig`, `framework-packages`, `product-tags`) |
+| `.claude/rules/feature-testing.md` | you are about to write or change ANY `*.spec.ts` — a server, a `wp-*` command, a hook or a library — or you are tempted to spawn git / a shell, sleep, or mock an internal class in a test |
 | `.claude/rules/framework-patterns.md` | you are writing a filter, a controller, a `Routes` class, or a test against the server, or you need the request-path architecture overview |
 | `.claude/rules/decorator-object-literal-carve-out.md` | you are about to write an object literal as a DECORATOR argument, or you are reviewing one |
 
@@ -194,7 +195,8 @@ The landing routes, the squash-body contract, and the cleanup rules (`pnpm wp-la
 2. ❌ Creating anonymous object literals for configs/definitions
 3. ❌ Forgetting to export classes from index.ts
 4. ❌ Using `any` instead of `unknown` for generic types
-5. ❌ Skipping tests for new features
+5. ❌ Skipping tests for new features — or writing unit tests of internals, or specs that spawn real
+   git / shell processes or wait on real time, instead of feature tests (see `.claude/rules/feature-testing.md`)
 6. ❌ Not documenting differences from Java version
 7. ❌ Stopping at a green build and asking "want me to open a PR?" instead of posting it (see
    `.claude/rules/finishing-a-feature.md`)

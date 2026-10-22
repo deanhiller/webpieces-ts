@@ -60,6 +60,14 @@ suite is real evidence nothing broke.** The market pattern — rewrite the test 
 refactor an *entire microservice* and the tests it never read are the ones still holding every legacy
 path in place.
 
+The same pattern covers **command-line tools and hooks**, not only servers: build the whole real DAG
+with `container.get(App)`, swap only the edges (git and child processes, filesystem, clock, executors,
+remote APIs) for mocks, run `app.run(args)`, and assert on what crossed an edge. Timers and executors
+are injected, so the test runs a scheduled task the instant it wants instead of waiting; a mock can
+return promises the test resolves out of order to prove a race is handled. A feature test never starts
+a real process. See
+[the section for every program](./architecture/testing-philosophy.md#the-same-pattern-for-every-program-servers-command-line-tools-hooks).
+
 ### 2. One contract, no codegen cascade
 
 Full argument: [`architecture/api-first-vs-codegen.md`](./architecture/api-first-vs-codegen.md),
