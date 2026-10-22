@@ -67,11 +67,26 @@ export function renderBumpSkewReport(aiType: AiType = 'claude-code'): string {
 }
 
 /**
- * EVERY skew report this guard can print — each of the five `SkewCase`s × both harnesses — keyed
+ * A worktree on a branch named `branch`, pinned BEHIND main the way a production-sha checkout is
+ * (issue #1371). A real repo, because the guard reads the branch off this tree's own HEAD — a fabricated
+ * path has no branch, is not a hotfix, and would render the ordinary `main-ahead` report instead.
+ * Exported for version-sync.spec.ts's hotfix suite.
+ */
+export function renderHotfixSkewReport(aiType: AiType = 'claude-code', branch: string = 'prod/dean/hotfix/2026-10-22/ONE-3461-test-log-line'): string {
+    const [main, wt] = fixture('0.4.965', '0.4.965', '0.4.932', null);
+    runGit(wt, ['init', '-q', '-b', branch]);
+    // Committed, so the pin is not a dirty manifest — that is the deliberate-bump signal, not this case.
+    runGit(wt, ['add', '.']);
+    runGit(wt, ['-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-qm', 'production sha']);
+    return skewReport(main, wt, aiType);
+}
+
+/**
+ * EVERY skew report this guard can print — each of the six `SkewCase`s × both harnesses — keyed
  * `<case> × <harness>`. Exported for `rules/no-turn-ending-instructions.spec.ts` (issue #1000): the
  * escalation block told subagents "Forwarding that message IS the end of your turn" for a release after
  * #902 because the turn-ending detector rendered wait-spin-guard and nothing else. A sweep that renders
- * one case of one harness is the same hole one level down, so this renders all ten.
+ * one case of one harness is the same hole one level down, so this renders all twelve.
  */
 export function renderEverySkewReport(): Map<string, string> {
     const reports = new Map<string, string>();
@@ -86,6 +101,7 @@ export function renderEverySkewReport(): Map<string, string> {
         const stale = fixture('0.4.616', '0.4.616', '0.4.616', '0.4.500');
         reports.set(`worktree-stale × ${aiType}`, skewReport(stale[0], stale[1], aiType));
         reports.set(`bump × ${aiType}`, renderBumpSkewReport(aiType));
+        reports.set(`hotfix × ${aiType}`, renderHotfixSkewReport(aiType));
     }
     return reports;
 }

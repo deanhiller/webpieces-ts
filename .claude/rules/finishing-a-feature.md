@@ -38,6 +38,14 @@ been deployed and verified. Re-run it after another commit to push again and upd
 run reviewers or create verdict files. On such a branch `wp-start-upsert-pr`, `wp-review-upsert-pr` and
 `wp-finish-upsert-pr` refuse, change nothing, and name `wp-upsert-hotfix-pr`.
 
+The ai-hooks are hotfix-aware on the same exact segment (issue #1371): no branch-state guard demands
+main there (L2 row 14), the edit-time code rules do not run (matching `hotfix-ci`), and a raw merge,
+rebase or pull of main is still refused with `wp-upsert-hotfix-pr` as its cure. Every other guard stays
+on. Work a hotfix in the MAIN tree: in a linked worktree its production-era pin skews against main's
+release, and the version-skew block (L1 row 8) stays — raising the pin would ship a webpieces upgrade
+inside the hotfix. The hooks that run on a hotfix are the production sha's release, so this applies only
+to hotfixes cut from a sha that already carries it.
+
 The full workflow (worktrees, conflicts, the 3-point merge) is documented in
 `.webpieces/instruct-ai/webpieces.git-workflow.md`, refreshed on every `wp-*` command.
 

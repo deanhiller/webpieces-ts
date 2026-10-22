@@ -217,13 +217,13 @@ const ruleHints = (): Map<string, string> => {
 };
 
 describe('no agent-workflow-rules surface tells an AI to end its turn', () => {
-    it('renders all ten skew reports (5 SkewCases × 2 harnesses), each non-empty', () => {
+    it('renders all twelve skew reports (6 SkewCases × 2 harnesses), each non-empty', () => {
         const reports = renderEverySkewReport();
-        expect(reports.size).toBe(10);
+        expect(reports.size).toBe(12);
         for (const [where, text] of reports)
             expect(text.length, `${where} rendered nothing`).toBeGreaterThan(0);
         // The escalating cases MUST still carry the retry refusal — the legitimate half of #679.
-        for (const skew of ['main-inconsistent', 'main-behind', 'bump']) {
+        for (const skew of ['main-inconsistent', 'main-behind', 'bump', 'hotfix']) {
             for (const aiType of ['claude-code', 'codex']) {
                 expect(reports.get(`${skew} × ${aiType}`), `${skew} × ${aiType}`).toContain(
                     'Do NOT retry this call',

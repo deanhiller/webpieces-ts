@@ -9,7 +9,7 @@ import { EffectiveTree } from '@webpieces/hook-runtime';
 import { AiType } from '@webpieces/hook-runtime';
 import { VersionSyncGuard } from './version-sync';
 import { WebpiecesVersions } from './webpieces-versions';
-import { renderBumpSkewReport } from './version-sync-harness.spec';
+import { renderBumpSkewReport, renderHotfixSkewReport } from './version-sync-harness.spec';
 
 
 /**
@@ -686,4 +686,46 @@ describe('WebpiecesVersions — reading', () => {
         expect(versions.quartet(agree.main, agree.wt).inSync).toBe(true);
         expect(versions.quartet(disagree.main, disagree.wt).inSync).toBe(false);
     });
+});
+
+/**
+ * Issue #1371 — a `/hotfix/` worktree. It is cut from the PRODUCTION sha, so it pins an OLDER release than
+ * main by definition, and the ordinary `main-ahead` cure — raise this tree's pin — would ship a webpieces
+ * upgrade inside a production hotfix. The block stays (exempting it would let main's newer release judge
+ * the hotfix's production-era config and code), and the cure is to run the hotfix in the MAIN tree.
+ */
+describe('VersionSyncGuard — a /hotfix/ worktree', () => {
+    it('still blocks, never tells the hotfix to raise its pin, and sends it to the MAIN tree', () => {
+        const report = renderHotfixSkewReport();
+        expect(report).toContain('@webpieces version SKEW');
+        expect(report).toContain('THIS IS A /hotfix/ BRANCH (`prod/dean/hotfix/2026-10-22/ONE-3461-test-log-line`)');
+        expect(report).toContain('do NOT raise it to');
+        expect(report).toContain('A HOTFIX RUNS IN THE MAIN TREE, never in a linked worktree');
+        expect(report).toContain('pnpm wp-upsert-hotfix-pr');
+        expect(report).not.toContain('THIS ONE IS YOURS, AND YOU CAN DO IT RIGHT HERE');
+        expect(report).not.toContain('That edit is ALLOWED');
+    });
+
+    it('hands a subagent a forwardable ask that never routes the hotfix into another worktree', () => {
+        for (const aiType of ['claude-code', 'codex'] as const) {
+            const report = renderHotfixSkewReport(aiType);
+            expect(report, aiType).toContain('Forward this to your coordinator verbatim');
+            expect(report, aiType).toContain('Do NOT redo it in another worktree');
+            expect(report, aiType).toContain('Do NOT retry this call');
+            expect(report, aiType).not.toContain('spawn a FRESH isolation: "worktree" subagent');
+        }
+    });
+
+    it('stays on the message diet', () => {
+        expect(renderHotfixSkewReport().split('\n').length).toBeLessThanOrEqual(42);
+        expect(renderHotfixSkewReport('codex').split('\n').length).toBeLessThanOrEqual(42);
+    });
+
+    for (const branch of ['feature/hotfix-thing', 'x/HotFix/y']) {
+        it(`CONTROL — '${branch}' is not a hotfix, and keeps the self-serve pin-raise cure`, () => {
+            const report = renderHotfixSkewReport('claude-code', branch);
+            expect(report).toContain('THIS ONE IS YOURS, AND YOU CAN DO IT RIGHT HERE');
+            expect(report).not.toContain('/hotfix/ BRANCH');
+        });
+    }
 });

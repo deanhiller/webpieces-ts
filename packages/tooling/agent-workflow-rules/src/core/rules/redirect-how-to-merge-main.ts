@@ -11,6 +11,7 @@ import { FixHint } from '@webpieces/hook-runtime';
 import { CommandScanner } from '@webpieces/hook-runtime';
 import { TreeRecovery } from './tree-recovery';
 import { BranchSwitch, BranchSwitchScan } from './branch-switch-scan';
+import { BranchIdentity } from '@webpieces/repo-workflow-core';
 
 const INSTRUCT_FILE = 'webpieces.git-workflow.md';
 const GUIDANCE = new SyncFlowGuidance();
@@ -74,6 +75,7 @@ export class RedirectHowToMergeMainRule extends BashRuleBase<PrLifecycleGuardCon
     // feature-switch block, so this guard rejected the very command stale-main-bash-guard prescribes,
     // with a reason ("switches to a feature branch") that was the opposite of the truth.
     private readonly switches = new BranchSwitchScan(this.scanner);
+    private readonly branches = new BranchIdentity();
 
     constructor(config: PrLifecycleGuardConfig) { super(config, 'redirect-how-to-merge-main', PR_LIFECYCLE_GUARD_KEY); }
 
@@ -145,10 +147,17 @@ export class RedirectHowToMergeMainRule extends BashRuleBase<PrLifecycleGuardCon
         const currentBranch = gitCheckout.requireBranch(ctx.workspaceRoot);
         if (currentBranch === 'main') return null;
 
-        return this.block(ctx, segment, `Pulling main into feature branch '${currentBranch}' is blocked.`);
+        const kind = this.branches.isHotfix(currentBranch) ? 'hotfix branch' : 'feature branch';
+        return this.block(ctx, segment, `Pulling main into ${kind} '${currentBranch}' is blocked.`);
     }
 
     private block(ctx: BashContext, segment: string, what: string): Violation {
+        // A `/hotfix/` branch is cut from the PRODUCTION sha (issue #1371). The block itself is unchanged
+        // there — a raw merge is even more wrong — but the cure below is a way to bring MAIN in, which a
+        // hotfix must never do, so on that branch the message names the hotfix route instead. The branch
+        // read decides only the WORDS, never the verdict (see checkSegment on why the verdict reads none).
+        const branch = gitCheckout.branch(ctx.workspaceRoot);
+        if (branch !== null && this.branches.isHotfix(branch)) return this.hotfixBlock(segment, what, branch);
         // Materialize the doc we are about to send the AI to. This guard fires long before any `wp-*`
         // command runs (those are what normally write it), so the linked path could easily not exist —
         // and a STALE copy from an older @webpieces is just as misleading, hence overwrite.
@@ -169,6 +178,14 @@ export class RedirectHowToMergeMainRule extends BashRuleBase<PrLifecycleGuardCon
             1,
             truncate(segment),
             `${what} Use the gated 3-point flow instead: 'pnpm wp-start-update' → 'pnpm wp-finish-update' when NO PR is open, or 'pnpm wp-start-upsert-pr' → 'pnpm wp-finish-upsert-pr' when a PR IS open (required then — the merge rewrites the branch and the PR must be re-pointed in the same run). If you truly need a raw merge/rebase, ask the HUMAN to run it — and warn them to push back. Full flow: READ ${docPath}.${updateMain}`,
+        );
+    }
+
+    private hotfixBlock(segment: string, what: string, branch: string): Violation {
+        return new V(
+            1,
+            truncate(segment),
+            `${what} '${branch}' is a /hotfix/ branch, cut from the production sha: it NEVER takes main — not by a raw merge or rebase, and not by the gated 3-point flows (\`wp-start-update\` / \`wp-start-upsert-pr\`) printed below either. Those are for feature branches; on this branch any of them would ship unpromoted main to production. Make the fix on this branch alone, then publish it with \`pnpm wp-upsert-hotfix-pr\` (hotfix-ci, no merge from main, one fast-forward push).`,
         );
     }
 }

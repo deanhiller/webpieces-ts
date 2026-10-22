@@ -3,7 +3,7 @@ import { gitCheckout } from '@webpieces/tooling-common';
 import { Option } from '@webpieces/rules-config';
 import { BRANCH_STATE_GUARD_KEY } from '../../policy-keys';
 import { BranchStateGuardConfig, DEFAULT_MAX_COMMITS_BEHIND } from "../../configs/main-sync-guard-configs";
-import { DEFAULT_HANG_TIMEOUT_MINUTES, readMainSyncStatus, MainSyncStatus } from '@webpieces/repo-workflow-core';
+import { BranchIdentity, DEFAULT_HANG_TIMEOUT_MINUTES, readMainSyncStatus, MainSyncStatus } from '@webpieces/repo-workflow-core';
 
 import type { FileContext, Violation } from '@webpieces/hook-runtime';
 import { Violation as V } from '@webpieces/hook-runtime';
@@ -87,6 +87,7 @@ export class ReadStaleGuardRule extends FileRuleBase<BranchStateGuardConfig> {
 
     // The ancestry test and the cache summary, shared with stale-main-bash-guard — see main-freshness.ts.
     private readonly freshness = new MainFreshness();
+    private readonly branches = new BranchIdentity();
 
     readonly description = 'Block reads on a branch that is stale to read from — a `main` beyond its configured commit-distance tolerance, or a feature branch whose PR is already merged.';
     override readonly files = ['**/*'];
@@ -127,6 +128,9 @@ export class ReadStaleGuardRule extends FileRuleBase<BranchStateGuardConfig> {
         // Mid-rebase in the target tree: no branch name, so no key into the branch-keyed cache and
         // nothing to judge. Matrix row 14 — abstain, and say WHY rather than logging a cache miss.
         if (branch === 'HEAD') return this.failOpen(ctx, branch, 'detached-head');
+        // A `/hotfix/` branch never takes main (issue #1371), so "merged" and "stale" are not states it can
+        // be cured out of by branching off main. L2 row 14: exempt.
+        if (this.branches.isHotfix(branch)) return this.exempt(ctx, branch, 'hotfix-branch (cut from production; main is never merged in)');
 
         // Keep the shared cache warm for the next call. Detached; never blocks this read. Fired for
         // BOTH states — the merged-branch signal comes out of that same cache. Rooted at the JUDGED
@@ -282,6 +286,12 @@ export class ReadStaleGuardRule extends FileRuleBase<BranchStateGuardConfig> {
 
     private allow(ctx: FileContext, branch: string | null, reason: string, cache: string = '-'): readonly Violation[] {
         this.logDecision(ctx, branch, 'ALLOW', reason, cache);
+        return [];
+    }
+
+    /** The policy does not apply to this branch at all — logged `ALLOW_EXEMPT`, never confused with an approval. */
+    private exempt(ctx: FileContext, branch: string, reason: string): readonly Violation[] {
+        this.logDecision(ctx, branch, 'ALLOW_EXEMPT', reason, '-');
         return [];
     }
 

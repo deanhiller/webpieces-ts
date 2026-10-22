@@ -3,7 +3,7 @@ import { gitCheckout } from '@webpieces/tooling-common';
 import { SyncFlowGuidance, Option } from '@webpieces/rules-config';
 import { BRANCH_STATE_GUARD_KEY } from '../../policy-keys';
 import { BranchStateGuardConfig } from "../../configs/main-sync-guard-configs";
-import { DEFAULT_HANG_TIMEOUT_MINUTES, readMainSyncStatus, squashRecoverySteps, MainSyncStatus } from '@webpieces/repo-workflow-core';
+import { BranchIdentity, DEFAULT_HANG_TIMEOUT_MINUTES, readMainSyncStatus, squashRecoverySteps, MainSyncStatus } from '@webpieces/repo-workflow-core';
 
 import type { FileContext, Violation } from '@webpieces/hook-runtime';
 import { Violation as V } from '@webpieces/hook-runtime';
@@ -83,6 +83,7 @@ export class FeatureBranchGuardRule extends FileRuleBase<BranchStateGuardConfig>
     // NAME is this class's operator identity (every `rule=` in the log, every deny header);
     // CONFIG KEY is the one branch-state policy entry all four of these guards read. See AbstractRule.
     constructor(config: BranchStateGuardConfig) { super(config, 'feature-branch-guard', BRANCH_STATE_GUARD_KEY); }
+    private readonly branches = new BranchIdentity();
 
     readonly description = 'Block edits unless you are on a proper feature branch (not main, not already-merged, forked, in sync with main).';
     override readonly files = ['**/*'];
@@ -119,6 +120,8 @@ export class FeatureBranchGuardRule extends FileRuleBase<BranchStateGuardConfig>
         // Mid-rebase / mid-bisect: `--abbrev-ref HEAD` prints the literal `HEAD`, there is no branch
         // name, and therefore no key into the branch-keyed cache. Matrix row 14 — abstain, out loud.
         if (branch === 'HEAD') return this.failOpen(ctx, branch, 'detached-head', this.treeSummary(judgedRoot));
+
+        if (this.branches.isHotfix(branch)) return this.exempt(ctx, branch, 'hotfix-branch (cut from production; main is never merged in)', this.treeSummary(judgedRoot)); // L2 row 14 (#1371): every state below cures BY main
 
         const judged = new JudgedTree(target, branch, target.governedRoot);
 
@@ -208,6 +211,12 @@ export class FeatureBranchGuardRule extends FileRuleBase<BranchStateGuardConfig>
 
     private allow(ctx: FileContext, branch: string | null, reason: string, cache: string = '-'): readonly Violation[] {
         this.logDecision(ctx, branch, 'ALLOW', reason, cache);
+        return [];
+    }
+
+    /** The policy does not apply to this branch at all — logged `ALLOW_EXEMPT`, never confused with an approval. */
+    private exempt(ctx: FileContext, branch: string, reason: string, cache: string = '-'): readonly Violation[] {
+        this.logDecision(ctx, branch, 'ALLOW_EXEMPT', reason, cache);
         return [];
     }
 

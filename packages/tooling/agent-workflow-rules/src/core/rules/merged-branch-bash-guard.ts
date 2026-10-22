@@ -3,7 +3,7 @@ import { gitCheckout } from '@webpieces/tooling-common';
 import { Option } from '@webpieces/rules-config';
 import { BRANCH_STATE_GUARD_KEY } from '../../policy-keys';
 import { BranchStateGuardConfig } from "../../configs/main-sync-guard-configs";
-import { DEFAULT_HANG_TIMEOUT_MINUTES, readMainSyncStatus, MainSyncStatus } from '@webpieces/repo-workflow-core';
+import { BranchIdentity, DEFAULT_HANG_TIMEOUT_MINUTES, readMainSyncStatus, MainSyncStatus } from '@webpieces/repo-workflow-core';
 
 import type { BashContext, Violation } from '@webpieces/hook-runtime';
 import { Violation as V } from '@webpieces/hook-runtime';
@@ -55,6 +55,7 @@ export class MergedBranchBashGuardRule extends BashRuleBase<BranchStateGuardConf
     // ROW 4, the skip list — shared with stale-main-bash-guard so the two states cannot drift apart
     // about what "gets you out" means. See recovery-allowlist.ts.
     private readonly recoveryList = new RecoveryAllowlist(this.scanner);
+    private readonly branches = new BranchIdentity();
 
     readonly description =
         'Block ordinary Bash on an already-merged branch (allowlisting only recovery/cleanup and ' +
@@ -76,6 +77,9 @@ export class MergedBranchBashGuardRule extends BashRuleBase<BranchStateGuardConf
         const branch = this.currentBranch(ctx.workspaceRoot);
         // Can't determine the branch (not a git repo, git unavailable) → never block. Fail-open.
         if (branch === null) return this.failOpen(ctx, branch, 'branch-undeterminable');
+        // A `/hotfix/` branch never takes main (issue #1371): its only cure here — branch off origin/main —
+        // would ship unpromoted main to production. L2 row 14: exempt.
+        if (this.branches.isHotfix(branch)) return this.exempt(ctx, branch, 'hotfix-branch (cut from production; main is never merged in)');
 
         // Keep the shared cache warm for the next call. Detached; never blocks this command. (The
         // runner also warms it, but only when feature-branch-guard is loaded — do it here too so this
@@ -147,6 +151,12 @@ export class MergedBranchBashGuardRule extends BashRuleBase<BranchStateGuardConf
 
     private allow(ctx: BashContext, branch: string | null, reason: string, cache: string = '-'): readonly Violation[] {
         this.logDecision(ctx, branch, 'ALLOW', reason, cache);
+        return [];
+    }
+
+    /** The policy does not apply to this branch at all — logged `ALLOW_EXEMPT`, never confused with an approval. */
+    private exempt(ctx: BashContext, branch: string, reason: string): readonly Violation[] {
+        this.logDecision(ctx, branch, 'ALLOW_EXEMPT', reason, '-');
         return [];
     }
 

@@ -4,6 +4,7 @@ import * as path from 'path';
 import { DETACHED_HEAD, gitCheckout } from '@webpieces/tooling-common';
 
 import { WORKSPACE_MANIFEST } from '@webpieces/rules-config';
+import { BranchIdentity } from '@webpieces/repo-workflow-core';
 import { EffectiveTree } from '@webpieces/hook-runtime';
 import { ReadOnlyInspectionScan } from './read-only-inspection';
 import { UMBRELLA_PACKAGE, VersionQuartet, WebpiecesVersions } from './webpieces-versions';
@@ -79,12 +80,17 @@ class VersionParts {
  *   `worktree-stale`    — every PIN agrees and so does main's install; only this tree's OWN node_modules
  *                         lags. The one state where a bare `pnpm install` HERE is exactly right.
  *   `main-behind`       — main is genuinely older and must move forward. Only the main agent can pull it.
+ *   `hotfix`            — this tree is on a `/hotfix/` branch, cut from the PRODUCTION sha, so its older
+ *                         pin is the release production runs and is RIGHT. Raising it (the `main-ahead`
+ *                         cure) would ship a webpieces upgrade inside a production hotfix (issue #1371).
+ *                         A hotfix is worked in the MAIN tree, where its own pinned release governs it.
  */
-type SkewCase = 'main-inconsistent' | 'bump' | 'main-ahead' | 'worktree-stale' | 'main-behind';
+type SkewCase = 'main-inconsistent' | 'hotfix' | 'bump' | 'main-ahead' | 'worktree-stale' | 'main-behind';
 
 export class VersionSyncGuard {
     private readonly inspection = new ReadOnlyInspectionScan();
     private readonly versions = new WebpiecesVersions();
+    private readonly branches = new BranchIdentity();
 
     /**
      * True when this tree is a linked worktree whose webpieces version disagrees with the main tree's.
@@ -161,7 +167,9 @@ export class VersionSyncGuard {
         // a saving: an escalation block on a cure the reader can perform HERE teaches it to stop and wait
         // for a main agent who has nothing to do. The other three genuinely need the main tree to move.
         const selfServe = skew === 'main-ahead' || skew === 'worktree-stale';
-        const escalation = selfServe ? [] : ['', ...this.escalationLines(tree, quartet, skew, aiType)];
+        const escalation = selfServe ? []
+            : skew === 'hotfix' ? ['', ...this.hotfixEscalationLines(tree, quartet, aiType)]
+            : ['', ...this.escalationLines(tree, quartet, skew, aiType)];
         return [
             `❌ @webpieces version SKEW — this worktree and the main tree disagree, so work here is blocked.`,
             '',
@@ -193,9 +201,13 @@ export class VersionSyncGuard {
         const mainPin = quartet.main.pinned;
         const mainInstalled = quartet.main.installed;
         if (mainPin !== null && mainInstalled !== null && mainPin !== mainInstalled) return 'main-inconsistent';
-        if (this.isDeliberateBump(tree, quartet)) return 'bump';
         const wtPin = quartet.worktree.pinned;
-        if (mainInstalled !== null && wtPin === mainInstalled && quartet.worktree.installed !== null) return 'worktree-stale';
+        const worktreeStale = mainInstalled !== null && wtPin === mainInstalled && quartet.worktree.installed !== null;
+        // A hotfix whose pins AGREE and only lags its own install is plain `worktree-stale`: installing
+        // the pin it already has ships nothing new. Every other hotfix skew is a pin production chose.
+        if (!worktreeStale && this.isHotfix(tree)) return 'hotfix';
+        if (this.isDeliberateBump(tree, quartet)) return 'bump';
+        if (worktreeStale) return 'worktree-stale';
         return this.compare(mainInstalled, wtPin) > 0 ? 'main-ahead' : 'main-behind';
     }
 
@@ -270,6 +282,7 @@ export class VersionSyncGuard {
      */
     private fixLines(tree: EffectiveTree, quartet: VersionQuartet, skew: SkewCase): readonly string[] {
         if (skew === 'main-inconsistent') return this.mainInconsistentFix(tree, quartet);
+        if (skew === 'hotfix') return this.hotfixFix(tree, quartet);
         if (skew === 'main-ahead') return this.mainAheadFix(tree, quartet);
         if (skew === 'worktree-stale') {
             // Every PIN agrees, and so does main's install. The ONLY disagreeing leg is this tree's own
@@ -380,6 +393,61 @@ export class VersionSyncGuard {
             ...install,
             `   Do NOT run a bare \`pnpm install\` first: this tree's pin is the STALE side, so installing`,
             `   before the edit materializes the OLD release and this guard fires again.`,
+        ];
+    }
+
+    /**
+     * Is this tree checked out on a `/hotfix/` branch? BranchIdentity's ONE exact, case-sensitive
+     * predicate, asked of the branch GitCheckout reads off this tree's own HEAD — no git process.
+     */
+    private isHotfix(tree: EffectiveTree): boolean {
+        const branch = gitCheckout.branch(tree.root);
+        return branch !== null && this.branches.isHotfix(branch);
+    }
+
+    /**
+     * THE HOTFIX CASE (issue #1371). Exempting a hotfix worktree from this block was the first idea, and
+     * it is unsafe for the reason this guard exists: the MAIN tree's newer release would then govern the
+     * hotfix — validating its production-era webpieces.config.json against rules that release requires
+     * (a new rule with no entry fails the config load) and linting its code by rules it never pinned — so
+     * the hotfix would trade this block for a config fault whose cure is ALSO a webpieces change shipped
+     * to production. And the cure this report would otherwise print, `main-ahead`'s "raise your pin",
+     * ships exactly that upgrade. So the block stays, and the cure is the one that keeps production's
+     * release: work the hotfix in the MAIN tree, where its own pin governs it.
+     */
+    private hotfixFix(tree: EffectiveTree, quartet: VersionQuartet): readonly string[] {
+        const branch = gitCheckout.branch(tree.root) ?? '<hotfix branch>';
+        return [
+            `   THIS IS A /hotfix/ BRANCH (\`${branch}\`), cut from the production sha. Its pin`,
+            `   ${this.show(quartet.worktree.pinned).trim()} is the release production runs, so it is RIGHT — do NOT raise it to`,
+            `   match main: that ships a webpieces upgrade inside a production hotfix.`,
+            `   A HOTFIX RUNS IN THE MAIN TREE, never in a linked worktree: here the main tree's newer release`,
+            `   governs this branch, and judges its production-era config and code by rules it never pinned.`,
+            `   FIX — move the hotfix to the main tree ${tree.mainRoot}:`,
+            `     1. Release \`${branch}\` from this worktree (git refuses to check out a branch another`,
+            `        worktree holds), then in the main tree: \`git switch ${branch} && pnpm install\` —`,
+            `        that install puts the branch's OWN pinned release in charge of it.`,
+            `     2. Make the fix there and publish it with \`pnpm wp-upsert-hotfix-pr\`.`,
+        ];
+    }
+
+    /**
+     * The forwardable ask for the hotfix case. NOT `escalationLines`: its afterward beat asks for a FRESH
+     * worktree subagent to redo the task once main is synced, which is the one place a hotfix must not go.
+     */
+    private hotfixEscalationLines(tree: EffectiveTree, quartet: VersionQuartet, aiType: AiType): readonly string[] {
+        const branch = gitCheckout.branch(tree.root) ?? '<hotfix branch>';
+        return [
+            `   SUBAGENT? Cross-tree git is REFUSED to you. Forward this to your coordinator verbatim:`,
+            `     > My worktree ${tree.root} is on /hotfix/ branch \`${branch}\`, pinned to @webpieces`,
+            `     > ${this.show(quartet.worktree.pinned).trim()} — production's release — while the main tree ${tree.mainRoot} runs ${this.show(quartet.main.installed).trim()}.`,
+            `     > A hotfix cannot run in a linked worktree, and its pin must not be raised. Please do this`,
+            `     > hotfix in the MAIN tree: check \`${branch}\` out there, \`pnpm install\`, make the fix, and`,
+            `     > publish it with \`pnpm wp-upsert-hotfix-pr\`. Do NOT redo it in another worktree.`,
+            `   Do NOT retry this call — RETRYING IS THE BUG. It re-fires this identical deny and buries the`,
+            `   ask above; one subagent did it 13 times, 25 across that whole session.`,
+            ...(aiType === 'codex' ? this.waitLines(aiType)
+                : [`   Nothing you can do from this tree clears it; the hotfix is done in the main tree.`]),
         ];
     }
 

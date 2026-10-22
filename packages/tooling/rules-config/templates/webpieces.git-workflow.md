@@ -63,6 +63,13 @@ Do not run or manufacture reviewer verdicts. On a `/hotfix/` branch `wp-start-up
 stage ① would merge main in, which is exactly what a hotfix must not ship. Normal branches retain the
 three-stage flow above.
 
+The PreToolUse hooks know the profile too. On a `/hotfix/` branch no branch-state guard demands main
+(L2 row 14: the main-moved, no-fork-point, merged-branch and stale-read blocks stand down), the edit-time
+code rules do not run (matching `hotfix-ci`), and a raw `git merge` / `git rebase` / `git pull origin main`
+is still refused — with `pnpm wp-upsert-hotfix-pr` as its cure. Work a hotfix in the MAIN tree: in a linked
+worktree its production-era pin skews against main's release, and that block (L1 row 8) stays, because
+raising the pin would ship a webpieces upgrade inside the hotfix.
+
 The tooling never commits for you (see the golden rule below), so **commit your work first**, then run
 `pnpm wp-start-upsert-pr`. The only reasons to stop *before* posting are: the human explicitly said "don't
 open a PR yet," or the build/tests are red. Otherwise, finishing the feature and posting the PR are the
