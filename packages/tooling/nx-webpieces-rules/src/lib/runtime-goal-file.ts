@@ -17,6 +17,7 @@ import { RuleFailError, Option } from '@webpieces/rules-config';
 import type { RuntimeGraph, RuntimeQueueFlow, RuntimeTrigger } from './runtime-graph-model';
 import { DEFAULT_RUNTIME_GRAPH_PATH, saveRuntimeGraph } from './runtime-graph-io';
 import { RuntimeNodeLevels } from './runtime-node-levels';
+import { RuntimeEdgeMerge } from './runtime-edge-merge';
 import { RuntimeGoalValidator } from './runtime-goal-validator';
 import { toError } from '../toError';
 
@@ -113,6 +114,8 @@ export class RuntimeGoalFile {
         const problems = this.validator.structural(parsed);
         if (problems.length > 0)
             throw this.failure(`${this.goalPath} is not a usable runtime goal:\n  ${problems.join('\n  ')}`, [this.editOption(true)]);
+        // A goal is hand-authored, so it may list one pair once per contract; every view draws ONE arrow per pair.
+        parsed.runtimeEdges = new RuntimeEdgeMerge().merge(parsed.runtimeEdges);
         return parsed;
     }
 
