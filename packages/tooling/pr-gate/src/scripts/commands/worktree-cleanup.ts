@@ -36,8 +36,8 @@ export class WorktreeCleanupSection {
      * deliberately allowed to go stale, which is fine for BLOCKING a `git worktree add` and never fine
      * for removing a directory, since the tree may have gained uncommitted work since it was written.
      */
-    verdicts(repoRoot: string, ignoreStaleLocks: boolean): DeletableWorktree[] {
-        return this.mergedBranches.computeMergedBranches(repoRoot, ignoreStaleLocks).worktrees;
+    async verdicts(repoRoot: string, ignoreStaleLocks: boolean): Promise<DeletableWorktree[]> {
+        return (await this.mergedBranches.computeMergedBranches(repoRoot, ignoreStaleLocks)).worktrees;
     }
 
     provablyDead(verdicts: DeletableWorktree[]): DeletableWorktree[] {
@@ -77,11 +77,11 @@ export class WorktreeCleanupSection {
      * backstop there — but a backstop that reports a FAILURE is not good enough for a delete nobody
      * was asked about, which is why the husk path states the spare instead of tripping over it.
      */
-    withoutUncommitted(husks: DeletableWorktree[]): DeletableWorktree[] {
+    async withoutUncommitted(husks: DeletableWorktree[]): Promise<DeletableWorktree[]> {
         const clean: DeletableWorktree[] = [];
         let spared = '';
         for (const tree of husks) {
-            const held = this.workInFlight(tree.path);
+            const held = await this.workInFlight(tree.path);
             if (held.held) {
                 // The REASON is printed verbatim, because "it has uncommitted files" and "git would
                 // not tell me" send an operator to two different places.
@@ -99,7 +99,7 @@ export class WorktreeCleanupSection {
 
     // Seam: one git spawn per candidate, overridden in the spec so the decision is testable with no
     // real worktrees on disk.
-    protected workInFlight(worktreePath: string): WorktreeWorkInFlight {
+    protected workInFlight(worktreePath: string): Promise<WorktreeWorkInFlight> {
         return this.worktreeService.workInFlight(worktreePath);
     }
 
@@ -108,7 +108,7 @@ export class WorktreeCleanupSection {
         verb: MutationVerb,
         targets: DeletableWorktree[],
         retention: string,
-    ): WorktreeReapResult {
+    ): Promise<WorktreeReapResult> {
         return this.reaper.reapWorktrees(repoRoot, process.cwd(), verb, targets, retention);
     }
 

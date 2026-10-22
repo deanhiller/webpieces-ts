@@ -179,10 +179,10 @@ function findRedundantInjectInFile(filePath: string, workspaceRoot: string, disa
 }
 
 // webpieces-disable no-function-outside-class -- the rule engine is inherently functional; validators can't be class members
-function findViolationsForModifiedCode(workspaceRoot: string, changedFiles: string[], base: string, head: string | undefined, disableAllowed: boolean): InjectViolation[] {
+async function findViolationsForModifiedCode(workspaceRoot: string, changedFiles: string[], base: string, head: string | undefined, disableAllowed: boolean): Promise<InjectViolation[]> {
     const violations: InjectViolation[] = [];
     for (const file of changedFiles) {
-        const changedLines = getChangedLineNumbers(getFileDiff(workspaceRoot, file, base, head));
+        const changedLines = getChangedLineNumbers(await getFileDiff(workspaceRoot, file, base, head));
         if (changedLines.size === 0) continue;
         for (const v of findRedundantInjectInFile(file, workspaceRoot, disableAllowed)) {
             if (disableAllowed && v.hasDisableComment) continue;
@@ -244,7 +244,7 @@ async function runValidatorImpl(
     let base = process.env['NX_BASE'];
     const head = process.env['NX_HEAD'];
     if (!base) {
-        base = detectBase(workspaceRoot) ?? undefined;
+        base = await detectBase(workspaceRoot) ?? undefined;
         if (!base) {
             console.log(`\n⏭️  Skipping ${RULE_NAME} validation (could not detect base branch)\n`);
             return { success: true };
@@ -254,7 +254,7 @@ async function runValidatorImpl(
     console.log(`   Base: ${base}`);
     console.log(`   Head: ${head ?? 'working tree (includes uncommitted changes)'}\n`);
 
-    const changedFiles = scan.files(workspaceRoot, mode, base, head);
+    const changedFiles = await scan.files(workspaceRoot, mode, base, head);
     if (changedFiles.length === 0) {
         console.log('✅ No TypeScript files changed');
         return { success: true };
@@ -264,7 +264,7 @@ async function runValidatorImpl(
 
     let violations: InjectViolation[] = [];
     if (mode === 'NEW_AND_MODIFIED_CODE') {
-        violations = findViolationsForModifiedCode(workspaceRoot, changedFiles, base, head, disableAllowed);
+        violations = await findViolationsForModifiedCode(workspaceRoot, changedFiles, base, head, disableAllowed);
     } else {
         // NEW_AND_MODIFIED_FILES and the whole-scope modes (#1027) all judge every site of every file.
         violations = findViolationsForModifiedFiles(workspaceRoot, changedFiles, disableAllowed);

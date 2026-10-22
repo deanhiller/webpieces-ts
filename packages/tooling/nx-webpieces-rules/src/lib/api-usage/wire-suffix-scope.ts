@@ -6,30 +6,50 @@ import { ModifiedCodeMode } from '@webpieces/rules-sdk';
 
 /** Suffix enforcement keeps its own rollout scope, independently of the enclosing doc rule. */
 export class WireSuffixScope {
-    private readonly changed: Set<string> | null;
-    private readonly lines = new Map<string, Set<number>>();
-    private readonly base: string | undefined;
-    private readonly head: string | undefined;
-
-    constructor(
+    private constructor(
         private readonly root: string,
         private readonly mode: ModifiedCodeMode,
         // required-type-suffix's framework-owned path exclusions (#1253): the repo's top-level
         // excludePaths plus the rule's own — the same RuleFileExclusions the code-rules runtime applies.
         private readonly exclusions: RuleFileExclusions,
-        private readonly diff: DiffScope,
-    ) {
-        const range = mode === 'RUN_EVERY_TIME' ? undefined : diff.resolveBase(root);
-        this.base = range?.base;
-        this.head = range?.head;
-        this.changed =
-            mode === 'RUN_EVERY_TIME'
-                ? null
-                : new Set(
-                      this.base === undefined
-                          ? []
-                          : diff.getChangedFiles(root, this.base, this.head, { tsOnly: false }),
-                  );
+        // null in RUN_EVERY_TIME: every file is in scope.
+        private readonly changed: Set<string> | null,
+        // NEW_AND_MODIFIED_CODE only: the changed lines of every changed TypeScript source file.
+        private readonly lines: Map<string, Set<number>>,
+    ) {}
+
+    /**
+     * Reads the diff ONCE, up front: the base, the changed files, and — in NEW_AND_MODIFIED_CODE — the
+     * changed lines of every changed TypeScript source file (the only files {@link includes} can judge in
+     * that mode), because the git reads are asynchronous and {@link includes} is not.
+     */
+    // webpieces-disable no-function-outside-class -- static async factory of this class
+    static async create(
+        root: string,
+        mode: ModifiedCodeMode,
+        exclusions: RuleFileExclusions,
+        diff: DiffScope,
+    ): Promise<WireSuffixScope> {
+        const lines = new Map<string, Set<number>>();
+        if (mode === 'RUN_EVERY_TIME') return new WireSuffixScope(root, mode, exclusions, null, lines);
+        const range = await diff.resolveBase(root);
+        if (range.base === undefined) return new WireSuffixScope(root, mode, exclusions, new Set<string>(), lines);
+        const changed = new Set(await diff.getChangedFiles(root, range.base, range.head, { tsOnly: false }));
+        if (mode === 'NEW_AND_MODIFIED_CODE') {
+            for (const relFile of changed) {
+                if (!WireSuffixScope.isJudgedSource(relFile)) continue;
+                lines.set(relFile, diff.getChangedLineNumbers(
+                    await diff.getFileDiff(root, relFile, range.base, range.head)));
+            }
+        }
+        return new WireSuffixScope(root, mode, exclusions, changed, lines);
+    }
+
+    // A file includes() can judge at all: TypeScript source, not a declaration file or a test.
+    // webpieces-disable no-function-outside-class -- static predicate shared by create() and includes()
+    private static isJudgedSource(relFile: string): boolean {
+        if (!/\.tsx?$/.test(relFile)) return false;
+        return !(relFile.endsWith('.d.ts') || /\.(spec|test)\.ts$/.test(relFile) || relFile.includes('__tests__/'));
     }
 
     includes(
@@ -106,16 +126,6 @@ export class WireSuffixScope {
     }
 
     private changedLines(relFile: string): ReadonlySet<number> {
-        let lines = this.lines.get(relFile);
-        if (lines === undefined) {
-            lines =
-                this.base === undefined
-                    ? new Set<number>()
-                    : this.diff.getChangedLineNumbers(
-                          this.diff.getFileDiff(this.root, relFile, this.base, this.head),
-                      );
-            this.lines.set(relFile, lines);
-        }
-        return lines;
+        return this.lines.get(relFile) ?? new Set<number>();
     }
 }

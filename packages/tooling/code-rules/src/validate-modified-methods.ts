@@ -304,18 +304,18 @@ function checkModifiedMethodViolation(file: string, method: MethodInfo, disableA
  * Find methods that exceed the limit.
  * Checks NEW methods with escape hatches and MODIFIED methods.
  */
-function findViolations(
+async function findViolations(
     workspaceRoot: string,
     changedFiles: string[],
     base: string,
     limit: number,
     disableAllowed: boolean,
     head?: string
-): MethodViolation[] {
+): Promise<MethodViolation[]> {
     const violations: MethodViolation[] = [];
 
     for (const file of changedFiles) {
-        const diff = getFileDiff(workspaceRoot, file, base, head);
+        const diff = await getFileDiff(workspaceRoot, file, base, head);
         if (!diff) continue;
 
         const newMethodNames = findNewMethodSignaturesInDiff(diff);
@@ -437,7 +437,7 @@ export async function runModifiedMethods(
     const head = process.env['NX_HEAD'];
 
     if (!base) {
-        base = detectBase(workspaceRoot) ?? undefined;
+        base = await detectBase(workspaceRoot) ?? undefined;
 
         if (!base) {
             console.log('\n\u23ed\ufe0f  Skipping modified method validation (could not detect base branch)');
@@ -460,7 +460,7 @@ export async function runModifiedMethods(
 
     // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
     try {
-        const changedFiles = getChangedFiles(workspaceRoot, base, head);
+        const changedFiles = await getChangedFiles(workspaceRoot, base, head);
 
         if (changedFiles.length === 0) {
             console.log('\u2705 No TypeScript files changed');
@@ -469,7 +469,7 @@ export async function runModifiedMethods(
 
         console.log(`\ud83d\udcc2 Checking ${changedFiles.length} changed file(s)...`);
 
-        const violations = findViolations(workspaceRoot, changedFiles, base, limit, disableAllowed, head);
+        const violations = await findViolations(workspaceRoot, changedFiles, base, limit, disableAllowed, head);
 
         if (violations.length === 0) {
             console.log('\u2705 All modified methods are under ' + limit + ' lines');

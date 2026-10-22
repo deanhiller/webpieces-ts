@@ -48,29 +48,29 @@ export class ProjectCatalog {
 
     constructor(private readonly diffScope: DiffScope) {}
 
-    all(workspaceRoot: string): ProjectEntry[] {
+    async all(workspaceRoot: string): Promise<ProjectEntry[]> {
         if (this.cachedRoot !== workspaceRoot) {
-            this.cached = this.load(workspaceRoot);
+            this.cached = await this.load(workspaceRoot);
             this.cachedRoot = workspaceRoot;
         }
         return this.cached;
     }
 
     /** The project owning `relFile`, or undefined when no project directory contains it. */
-    ownerOf(workspaceRoot: string, relFile: string): ProjectEntry | undefined {
+    async ownerOf(workspaceRoot: string, relFile: string): Promise<ProjectEntry | undefined> {
         const file = relFile.split(path.sep).join('/');
         let best: ProjectEntry | undefined;
-        for (const project of this.all(workspaceRoot)) {
+        for (const project of await this.all(workspaceRoot)) {
             const inside = project.dir === '' || file.startsWith(`${project.dir}/`);
             if (inside && (best === undefined || project.dir.length > best.dir.length)) best = project;
         }
         return best;
     }
 
-    private load(workspaceRoot: string): ProjectEntry[] {
+    private async load(workspaceRoot: string): Promise<ProjectEntry[]> {
         // OUTSIDE any rule run's path exclusions (#1253): the catalog is cached across rules, so one rule's
         // excludePaths must never hide a project from the next. Excluded FILES are dropped by their listing.
-        const listed = new RuleFileScope().outside(() => this.diffScope.getAllFiles(workspaceRoot, { tsOnly: false }));
+        const listed = await new RuleFileScope().outside(() => this.diffScope.getAllFiles(workspaceRoot, { tsOnly: false }));
         const jsons = listed
             .filter((f: string) => f === 'project.json' || f.endsWith('/project.json'));
         return jsons.map((rel: string) => {
@@ -129,8 +129,8 @@ export class ScanScope {
      * The files a rule in `mode` judges, restricted to the debug run's `--projects` when there is one.
      * `opts` is passed through to the git listing (`tsOnly: false` for a rule that reads templates/CSS).
      */
-    files(workspaceRoot: string, mode: ModifiedCodeMode, base: string, head: string | undefined, opts?: ChangedFilesOptions): string[] {
-        return this.restrict(workspaceRoot, this.unrestricted(workspaceRoot, mode, base, head, opts));
+    async files(workspaceRoot: string, mode: ModifiedCodeMode, base: string, head: string | undefined, opts?: ChangedFilesOptions): Promise<string[]> {
+        return this.restrict(workspaceRoot, await this.unrestricted(workspaceRoot, mode, base, head, opts));
     }
 
     /** Record every violating site a rule found, for the debug run's per-project count. */
@@ -139,41 +139,44 @@ export class ScanScope {
     }
 
     /** Sites recorded so far, counted per owning project name (`(no project)` for a file outside one). */
-    countsByProject(workspaceRoot: string): Map<string, number> {
+    async countsByProject(workspaceRoot: string): Promise<Map<string, number>> {
         const counts = new Map<string, number>();
         for (const site of this.sites) {
-            const name = this.catalog.ownerOf(workspaceRoot, site.relFile)?.name ?? '(no project)';
+            const name = (await this.catalog.ownerOf(workspaceRoot, site.relFile))?.name ?? '(no project)';
             counts.set(name, (counts.get(name) ?? 0) + 1);
         }
         return counts;
     }
 
-    private unrestricted(workspaceRoot: string, mode: ModifiedCodeMode, base: string, head: string | undefined, opts?: ChangedFilesOptions): string[] {
+    private async unrestricted(workspaceRoot: string, mode: ModifiedCodeMode, base: string, head: string | undefined, opts?: ChangedFilesOptions): Promise<string[]> {
         if (mode === 'RUN_EVERY_TIME') return this.diffScope.getAllFiles(workspaceRoot, opts);
-        const changed = this.diffScope.getChangedFiles(workspaceRoot, base, head, opts);
+        const changed = await this.diffScope.getChangedFiles(workspaceRoot, base, head, opts);
         if (mode !== 'MODIFIED_PROJECTS') return changed;
         // A project is TOUCHED by any changed file it owns — not only the files this rule reads — so a
         // project.json or README edit counts, exactly as nx affected would see it.
         const touched = new Set<string>();
-        for (const f of this.diffScope.getChangedFiles(workspaceRoot, base, head, { tsOnly: false })) {
-            const owner = this.catalog.ownerOf(workspaceRoot, f);
+        for (const f of await this.diffScope.getChangedFiles(workspaceRoot, base, head, { tsOnly: false })) {
+            const owner = await this.catalog.ownerOf(workspaceRoot, f);
             if (owner !== undefined) touched.add(owner.dir);
         }
-        const inTouched = this.diffScope.getAllFiles(workspaceRoot, opts).filter((f: string) => {
-            const owner = this.catalog.ownerOf(workspaceRoot, f);
-            return owner !== undefined && touched.has(owner.dir);
-        });
+        const inTouched: string[] = [];
+        for (const f of await this.diffScope.getAllFiles(workspaceRoot, opts)) {
+            const owner = await this.catalog.ownerOf(workspaceRoot, f);
+            if (owner !== undefined && touched.has(owner.dir)) inTouched.push(f);
+        }
         return Array.from(new Set([...changed, ...inTouched]));
     }
 
-    private restrict(workspaceRoot: string, files: string[]): string[] {
+    private async restrict(workspaceRoot: string, files: string[]): Promise<string[]> {
         const names = this.restriction.projectNames;
         if (names === undefined) return files;
         const wanted = new Set(names);
-        return files.filter((f: string) => {
-            const owner = this.catalog.ownerOf(workspaceRoot, f);
-            return owner !== undefined && wanted.has(owner.name);
-        });
+        const kept: string[] = [];
+        for (const f of files) {
+            const owner = await this.catalog.ownerOf(workspaceRoot, f);
+            if (owner !== undefined && wanted.has(owner.name)) kept.push(f);
+        }
+        return kept;
     }
 }
 

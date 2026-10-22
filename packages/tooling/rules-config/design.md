@@ -21,9 +21,11 @@ graph TD
     DiffScope["DiffScope"]
     DotWebpieces["DotWebpieces"]
     GitCheckout["GitCheckout"]
+    GitProcessApi["GitProcessApi"]
     InstructAiDocSet["InstructAiDocSet"]:::many
     MainSyncFileStore["MainSyncFileStore"]
     MainSyncStatusService["MainSyncStatusService"]
+    NativeProcessApi["NativeProcessApi"]
     PackPolicyFiles["PackPolicyFiles"]
     RepoRootFinder["RepoRootFinder"]
     ReviewJsonService["ReviewJsonService"]
@@ -31,10 +33,15 @@ graph TD
     StaleBinSweeper["StaleBinSweeper"]:::many
     StateDirMigrator["StateDirMigrator"]
     TemplateWriter["TemplateWriter"]
+    TimerApi["TimerApi"]
     WorktreeService["WorktreeService"]
     BranchMutationLog --> DotWebpieces
+    CommandTimeouts --> GitProcessApi
+    CommandTimeouts --> NativeProcessApi
+    CommandTimeouts --> TimerApi
     ConfigLoader --> ConfigFile
     ConfigLoader --> PackPolicyFiles
+    DiffScope --> GitProcessApi
     DotWebpieces --> GitCheckout
     DotWebpieces --> StateDirMigrator
     InstructAiDocSet --> BranchMutationLog
@@ -58,6 +65,7 @@ graph TD
     TemplateWriter --> DotWebpieces
     TemplateWriter --> InstructAiDocSet
     TemplateWriter --> StaleBinSweeper
+    WorktreeService --> CommandTimeouts
     classDef controller fill:#1f6feb,color:#ffffff,stroke:#0d419d
     classDef apiImpl fill:#0d9488,color:#ffffff,stroke:#0f766e
     classDef component fill:#2da44e,color:#ffffff,stroke:#1a7f37

@@ -46,7 +46,7 @@
                     "kind": "class",
                     "scope": "singleton",
                     "file": "packages/tooling/tooling-common/src/atomic-file.ts",
-                    "level": 5
+                    "level": 6
                 },
                 {
                     "id": "AuthorIdentityResolver",
@@ -246,7 +246,7 @@
                     "kind": "class",
                     "scope": "singleton",
                     "file": "packages/tooling/repo-workflow-core/src/command-timeouts.ts",
-                    "level": 5
+                    "level": 7
                 },
                 {
                     "id": "ConfigFile",
@@ -518,7 +518,7 @@
                     "kind": "class",
                     "scope": "singleton",
                     "file": "packages/tooling/repo-workflow-core/src/main-sync-file.ts",
-                    "level": 3
+                    "level": 5
                 },
                 {
                     "id": "MainSyncStatusService",
@@ -526,7 +526,7 @@
                     "kind": "class",
                     "scope": "singleton",
                     "file": "packages/tooling/repo-workflow-core/src/main-sync-status.ts",
-                    "level": 2
+                    "level": 4
                 },
                 {
                     "id": "MergeBodyTempFile",
@@ -582,7 +582,7 @@
                     "kind": "class",
                     "scope": "singleton",
                     "file": "packages/tooling/tooling-common/src/process/native-process-api.ts",
-                    "level": 5
+                    "level": 8
                 },
                 {
                     "id": "OpenPrCheck",
@@ -873,6 +873,14 @@
                     "level": 1
                 },
                 {
+                    "id": "TimerApi",
+                    "className": "TimerApi",
+                    "kind": "class",
+                    "scope": "singleton",
+                    "file": "packages/tooling/tooling-common/src/process/timer-api.ts",
+                    "level": 8
+                },
+                {
                     "id": "TmpScratchSweeper",
                     "className": "TmpScratchSweeper",
                     "kind": "class",
@@ -1090,6 +1098,15 @@
                     "paramType": "StageOutputLog"
                 },
                 {
+                    "from": "BranchArchiver",
+                    "to": "GitProcessApi",
+                    "injection": "type",
+                    "token": "GitProcessApi",
+                    "tokenKey": "class:packages/tooling/tooling-common/src/process/git-process-api.ts#GitProcessApi",
+                    "paramName": "git",
+                    "paramType": "GitProcessApi"
+                },
+                {
                     "from": "BranchMutationLog",
                     "to": "DotWebpieces",
                     "injection": "type",
@@ -1115,6 +1132,15 @@
                     "tokenKey": "class:packages/tooling/repo-workflow-core/src/branch-mutation-log.ts#BranchMutationLog",
                     "paramName": "mutationLog",
                     "paramType": "BranchMutationLog"
+                },
+                {
+                    "from": "BranchReaper",
+                    "to": "GitProcessApi",
+                    "injection": "type",
+                    "token": "GitProcessApi",
+                    "tokenKey": "class:packages/tooling/tooling-common/src/process/git-process-api.ts#GitProcessApi",
+                    "paramName": "git",
+                    "paramType": "GitProcessApi"
                 },
                 {
                     "from": "BranchReaper",
@@ -1504,6 +1530,33 @@
                     "paramType": "WorktreeCleanupSection"
                 },
                 {
+                    "from": "CommandTimeouts",
+                    "to": "GitProcessApi",
+                    "injection": "type",
+                    "token": "GitProcessApi",
+                    "tokenKey": "class:packages/tooling/tooling-common/src/process/git-process-api.ts#GitProcessApi",
+                    "paramName": "git",
+                    "paramType": "GitProcessApi"
+                },
+                {
+                    "from": "CommandTimeouts",
+                    "to": "NativeProcessApi",
+                    "injection": "type",
+                    "token": "NativeProcessApi",
+                    "tokenKey": "class:packages/tooling/tooling-common/src/process/native-process-api.ts#NativeProcessApi",
+                    "paramName": "processes",
+                    "paramType": "NativeProcessApi"
+                },
+                {
+                    "from": "CommandTimeouts",
+                    "to": "TimerApi",
+                    "injection": "type",
+                    "token": "TimerApi",
+                    "tokenKey": "class:packages/tooling/tooling-common/src/process/timer-api.ts#TimerApi",
+                    "paramName": "timer",
+                    "paramType": "TimerApi"
+                },
+                {
                     "from": "DevDeployRefs",
                     "to": "GitExec",
                     "injection": "type",
@@ -1592,6 +1645,15 @@
                     "tokenKey": "class:packages/tooling/rules-config/src/review-json.ts#ReviewJsonService",
                     "paramName": "reviewJsonService",
                     "paramType": "ReviewJsonService"
+                },
+                {
+                    "from": "DiffScope",
+                    "to": "GitProcessApi",
+                    "injection": "type",
+                    "token": "GitProcessApi",
+                    "tokenKey": "class:packages/tooling/tooling-common/src/process/git-process-api.ts#GitProcessApi",
+                    "paramName": "git",
+                    "paramType": "GitProcessApi"
                 },
                 {
                     "from": "DotWebpieces",
@@ -2400,7 +2462,7 @@
                     "injection": "type",
                     "token": "CommandTimeouts",
                     "tokenKey": "class:packages/tooling/repo-workflow-core/src/command-timeouts.ts#CommandTimeouts",
-                    "paramName": "timeouts",
+                    "paramName": "commands",
                     "paramType": "CommandTimeouts"
                 },
                 {
@@ -2474,6 +2536,15 @@
                     "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/git-exec.ts#GitExec",
                     "paramName": "gitExec",
                     "paramType": "GitExec"
+                },
+                {
+                    "from": "MergeEnd",
+                    "to": "MainSyncStatusService",
+                    "injection": "type",
+                    "token": "MainSyncStatusService",
+                    "tokenKey": "class:packages/tooling/repo-workflow-core/src/main-sync-status.ts#MainSyncStatusService",
+                    "paramName": "mainSyncStatus",
+                    "paramType": "MainSyncStatusService"
                 },
                 {
                     "from": "MergeEnd",
@@ -2580,7 +2651,7 @@
                     "injection": "type",
                     "token": "CommandTimeouts",
                     "tokenKey": "class:packages/tooling/repo-workflow-core/src/command-timeouts.ts#CommandTimeouts",
-                    "paramName": "timeouts",
+                    "paramName": "commands",
                     "paramType": "CommandTimeouts"
                 },
                 {
@@ -2627,6 +2698,15 @@
                     "tokenKey": "class:packages/tooling/tooling-common/src/process/native-process-api.ts#NativeProcessApi",
                     "paramName": "processes",
                     "paramType": "NativeProcessApi"
+                },
+                {
+                    "from": "OrphanDirScanner",
+                    "to": "GitProcessApi",
+                    "injection": "type",
+                    "token": "GitProcessApi",
+                    "tokenKey": "class:packages/tooling/tooling-common/src/process/git-process-api.ts#GitProcessApi",
+                    "paramName": "gitProcess",
+                    "paramType": "GitProcessApi"
                 },
                 {
                     "from": "OrphanDirSweeper",
@@ -3854,12 +3934,30 @@
                 },
                 {
                     "from": "WorktreeReaper",
+                    "to": "GitProcessApi",
+                    "injection": "type",
+                    "token": "GitProcessApi",
+                    "tokenKey": "class:packages/tooling/tooling-common/src/process/git-process-api.ts#GitProcessApi",
+                    "paramName": "git",
+                    "paramType": "GitProcessApi"
+                },
+                {
+                    "from": "WorktreeReaper",
                     "to": "WorktreeService",
                     "injection": "type",
                     "token": "WorktreeService",
                     "tokenKey": "class:packages/tooling/repo-workflow-core/src/worktrees.ts#WorktreeService",
                     "paramName": "worktrees",
                     "paramType": "WorktreeService"
+                },
+                {
+                    "from": "WorktreeService",
+                    "to": "CommandTimeouts",
+                    "injection": "type",
+                    "token": "CommandTimeouts",
+                    "tokenKey": "class:packages/tooling/repo-workflow-core/src/command-timeouts.ts#CommandTimeouts",
+                    "paramName": "commands",
+                    "paramType": "CommandTimeouts"
                 },
                 {
                     "from": "WriteReviewCommand",

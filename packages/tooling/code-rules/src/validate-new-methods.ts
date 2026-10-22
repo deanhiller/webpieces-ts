@@ -134,19 +134,19 @@ function findMethodsInFile(filePath: string, workspaceRoot: string): MethodInfo[
 /**
  * Find new methods that exceed the line limit
  */
-function findViolations(
+async function findViolations(
     workspaceRoot: string,
     changedFiles: string[],
     base: string,
     limit: number,
     disableAllowed: boolean,
     head?: string
-): MethodViolation[] {
+): Promise<MethodViolation[]> {
     const violations: MethodViolation[] = [];
 
     for (const file of changedFiles) {
         // Get the diff to find which methods are NEW (not just modified)
-        const diff = getFileDiff(workspaceRoot, file, base, head);
+        const diff = await getFileDiff(workspaceRoot, file, base, head);
         const newMethodNames = findNewMethodSignaturesInDiff(diff);
 
         if (newMethodNames.size === 0) continue;
@@ -241,7 +241,7 @@ export async function runNewMethods(
 
     if (!base) {
         // Try to auto-detect base from git merge-base
-        base = detectBase(workspaceRoot) ?? undefined;
+        base = await detectBase(workspaceRoot) ?? undefined;
 
         if (!base) {
             console.log('\n\u23ed\ufe0f  Skipping new method validation (could not detect base branch)');
@@ -264,7 +264,7 @@ export async function runNewMethods(
     // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
     try {
         // Get changed TypeScript files (base to head, or working tree if head not set)
-        const changedFiles = getChangedFiles(workspaceRoot, base, head);
+        const changedFiles = await getChangedFiles(workspaceRoot, base, head);
 
         if (changedFiles.length === 0) {
             console.log('\u2705 No TypeScript files changed');
@@ -274,7 +274,7 @@ export async function runNewMethods(
         console.log(`\ud83d\udcc2 Checking ${changedFiles.length} changed file(s)...`);
 
         // Find violations
-        const violations = findViolations(workspaceRoot, changedFiles, base, limit, disableAllowed, head);
+        const violations = await findViolations(workspaceRoot, changedFiles, base, limit, disableAllowed, head);
 
         if (violations.length === 0) {
             console.log('\u2705 All new methods are within ' + limit + ' lines');

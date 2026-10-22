@@ -139,16 +139,16 @@ function findImplicitAnyInFile(filePath: string, workspaceRoot: string): Implici
     return violations;
 }
 
-function findViolationsForModifiedCode(
+async function findViolationsForModifiedCode(
     workspaceRoot: string,
     changedFiles: string[],
     base: string,
     head: string | undefined,
     disableAllowed: boolean,
-): ImplicitAnyViolation[] {
+): Promise<ImplicitAnyViolation[]> {
     const results: ImplicitAnyViolation[] = [];
     for (const file of changedFiles) {
-        const diff = getFileDiff(workspaceRoot, file, base, head);
+        const diff = await getFileDiff(workspaceRoot, file, base, head);
         const changedLines = getChangedLineNumbers(diff);
         if (changedLines.size === 0) continue;
 
@@ -221,7 +221,7 @@ async function runInternal(
     const head = process.env['NX_HEAD'];
 
     if (!base) {
-        base = detectBase(workspaceRoot) ?? undefined;
+        base = await detectBase(workspaceRoot) ?? undefined;
         if (!base) {
             console.log('\n\u23ed\ufe0f  Skipping no-implicit-any validation (could not detect base branch)');
             console.log('');
@@ -233,7 +233,7 @@ async function runInternal(
     console.log(`   Head: ${head ?? 'working tree (includes uncommitted changes)'}`);
     console.log('');
 
-    const changedFiles = scan.files(workspaceRoot, mode, base, head);
+    const changedFiles = await scan.files(workspaceRoot, mode, base, head);
     if (changedFiles.length === 0) {
         console.log('\u2705 No TypeScript files changed');
         return { success: true };
@@ -243,7 +243,7 @@ async function runInternal(
 
     let violations: ImplicitAnyViolation[] = [];
     if (mode === 'NEW_AND_MODIFIED_CODE') {
-        violations = findViolationsForModifiedCode(workspaceRoot, changedFiles, base, head, disableAllowed);
+        violations = await findViolationsForModifiedCode(workspaceRoot, changedFiles, base, head, disableAllowed);
     } else {
         // NEW_AND_MODIFIED_FILES and the whole-scope modes (#1027) all judge every site of every file.
         violations = findViolationsForModifiedFiles(workspaceRoot, changedFiles, disableAllowed);

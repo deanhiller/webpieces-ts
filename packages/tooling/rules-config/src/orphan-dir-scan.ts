@@ -1,6 +1,6 @@
 import * as path from 'path';
-import { spawnSync } from 'child_process';
 import { injectable, bindingScopeValues } from 'inversify';
+import { GitProcessApi } from '@webpieces/tooling-common';
 
 /**
  * Finds ORPHAN DIRECTORIES — the package directories an `nx g move` leaves behind on every clone, which
@@ -37,17 +37,19 @@ import { injectable, bindingScopeValues } from 'inversify';
  */
 @injectable(bindingScopeValues.Singleton)
 export class OrphanDirScanner {
+    constructor(private readonly gitProcess: GitProcessApi) {}
+
     /**
      * Every orphan directory under `repoRoot`, as repo-RELATIVE paths with no trailing slash. Empty when
      * the tree is clean, when `repoRoot` is not a git repository, or when git cannot be run at all — a
      * sweeper is never important enough to fail somebody's checkout over.
      */
-    scan(repoRoot: string): OrphanCandidate[] {
-        const reported = this.reportedByGitClean(repoRoot);
+    async scan(repoRoot: string): Promise<OrphanCandidate[]> {
+        const reported = await this.reportedByGitClean(repoRoot);
         const candidates: OrphanCandidate[] = [];
         for (const relative of reported) {
             if (!this.isSweepable(relative)) continue;
-            if (this.isIgnoredItself(repoRoot, relative)) continue;
+            if (await this.isIgnoredItself(repoRoot, relative)) continue;
             candidates.push(new OrphanCandidate(relative, path.join(repoRoot, relative)));
         }
         return candidates.sort((left: OrphanCandidate, right: OrphanCandidate): number =>
@@ -62,8 +64,8 @@ export class OrphanDirScanner {
      * are git telling us it found a nested repo — a linked worktree — which it refuses to descend into,
      * and so do we.
      */
-    private reportedByGitClean(repoRoot: string): string[] {
-        const raw = this.git(repoRoot, ['clean', '-Xdn']);
+    private async reportedByGitClean(repoRoot: string): Promise<string[]> {
+        const raw = await this.git(repoRoot, ['clean', '-Xdn']);
         if (raw === null) return [];
         const paths: string[] = [];
         for (const line of raw.split('\n')) {
@@ -82,8 +84,8 @@ export class OrphanDirScanner {
      * on no match, so a null answer here (any non-zero exit, including a git we could not run) means
      * "cannot confirm", and the directory is SPARED. Every uncertainty in this class resolves that way.
      */
-    private isIgnoredItself(repoRoot: string, relative: string): boolean {
-        return this.git(repoRoot, ['check-ignore', '-q', '--', relative]) !== null;
+    private async isIgnoredItself(repoRoot: string, relative: string): Promise<boolean> {
+        return (await this.git(repoRoot, ['check-ignore', '-q', '--', relative])) !== null;
     }
 
     /**
@@ -107,18 +109,16 @@ export class OrphanDirScanner {
     /**
      * `git <args>` in `repoRoot`, or null when git exits non-zero or could not be run at all.
      *
-     * spawnSync rather than execFileSync because a non-zero exit is ORDINARY here — `check-ignore` says
-     * "not ignored" that way — and a status code is a better answer to that question than an exception.
+     * A non-zero exit is ORDINARY here — `check-ignore` says "not ignored" that way — and the git edge
+     * reports it as a status code, never an exception.
      *
      * An ARGUMENT ARRAY, never a shell string: these paths come from a filesystem scan and may hold
      * spaces, quotes or `$`, and interpolating them into a shell would be building a command injection
      * into the one tool whose entire job is moving directories around.
      */
-    private git(repoRoot: string, args: string[]): string | null {
-        const result = spawnSync('git', ['-C', repoRoot, ...args], {
-            encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], maxBuffer: GIT_OUTPUT_LIMIT,
-        });
-        if (result.error !== undefined || result.status !== 0) return null;
+    private async git(repoRoot: string, args: string[]): Promise<string | null> {
+        const result = await this.gitProcess.run(['-C', repoRoot, ...args]);
+        if (!result.ok) return null;
         return result.stdout;
     }
 }
@@ -139,5 +139,3 @@ export class OrphanCandidate {
 const WOULD_REMOVE = 'Would remove ';
 // `libraries/foo` is depth 2. Anything shallower is a top-level directory — see isSweepable().
 const MIN_DEPTH = 2;
-// `clean -Xdn` on a large monorepo prints a few hundred lines; 16MB is a ceiling no real repo approaches.
-const GIT_OUTPUT_LIMIT = 16 * 1024 * 1024;

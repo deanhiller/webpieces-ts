@@ -161,16 +161,16 @@ describe('whole-scope modes (#1027): a violating file NOT in the diff', () => {
     it('a --projects restriction narrows every mode to those projects, and counts per project', async () => {
         const scan = scanScope(['other-apis']);
         expect(await enumFailures(enumRule('RUN_EVERY_TIME', scan), repo.root)).toEqual(['libs/other/src/Other.ts']);
-        expect(Array.from(scan.countsByProject(repo.root).entries())).toEqual([['other-apis', 1]]);
+        expect(Array.from((await scan.countsByProject(repo.root)).entries())).toEqual([['other-apis', 1]]);
     });
 
-    it('fails loudly with the project.json path when a project identity cannot be parsed', () => {
+    it('fails loudly with the project.json path when a project identity cannot be parsed', async () => {
         repo.write('libs/apis/project.json', '{ not json');
 
-        expect(() => new ProjectCatalog(new DiffScope()).all(repo.root))
-            .toThrow(InformAiError);
-        expect(() => new ProjectCatalog(new DiffScope()).all(repo.root))
-            .toThrow('libs/apis/project.json');
+        await expect(new ProjectCatalog(new DiffScope()).all(repo.root))
+            .rejects.toThrow(InformAiError);
+        await expect(new ProjectCatalog(new DiffScope()).all(repo.root))
+            .rejects.toThrow('libs/apis/project.json');
     });
 });
 

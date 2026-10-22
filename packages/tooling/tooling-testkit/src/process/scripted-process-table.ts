@@ -4,8 +4,10 @@ export class ProcessCallDto {
         readonly program: string,
         readonly args: readonly string[],
         readonly cwd: string | undefined,
-        /** 'run' (captured), 'passThrough' (terminal), or 'shellToFile'. */
+        /** 'run' (captured), 'runSync' (captured, synchronous), 'passThrough' (terminal), or 'shellToFile'. */
         readonly mode: string,
+        /** The kill-after a synchronous run was given; undefined for every other mode. */
+        readonly timeoutMs: number | undefined = undefined,
     ) {}
 
     /** `git -C /repo checkout main` — the call as a person would type it, for readable assertions. */
@@ -14,8 +16,11 @@ export class ProcessCallDto {
     }
 }
 
-/** The answer a scripted call produces: a fixed value, or one computed from the call (for a side effect). */
-export type ScriptedAnswer<R> = R | ((call: ProcessCallDto) => R);
+/**
+ * The answer a scripted call produces: a fixed value, a promise the TEST settles (to hold a call in
+ * flight — a hung command, or two calls resolved out of order), or one computed from the call.
+ */
+export type ScriptedAnswer<R> = R | Promise<R> | ((call: ProcessCallDto) => R | Promise<R>);
 
 class ScriptedEntry<R> {
     constructor(
@@ -60,7 +65,7 @@ export class ScriptedProcessTable<R> {
         this.entries.push(new ScriptedEntry<R>(program, [...args], prefix, [answer]));
     }
 
-    answer(call: ProcessCallDto): R {
+    answer(call: ProcessCallDto): R | Promise<R> {
         this.calls.push(call);
         const entry = this.best(call);
         if (entry === undefined) {
@@ -69,7 +74,16 @@ export class ScriptedProcessTable<R> {
         }
         const next = entry.answers.length > 1 ? entry.answers.shift() : entry.answers[0];
         const scripted = next as ScriptedAnswer<R>;
-        return typeof scripted === 'function' ? (scripted as (c: ProcessCallDto) => R)(call) : scripted;
+        return typeof scripted === 'function' ? (scripted as (c: ProcessCallDto) => R | Promise<R>)(call) : scripted;
+    }
+
+    /** {@link answer} for a SYNCHRONOUS edge method: a promise answer cannot be honoured, so it throws. */
+    answerNow(call: ProcessCallDto): R {
+        const answered = this.answer(call);
+        if (answered instanceof Promise) {
+            throw new Error(`${this.mockName}: \`${call.commandLine}\` is a synchronous call and cannot take a promise answer.`);
+        }
+        return answered;
     }
 
     /** Every call whose argv starts with `prefix` (and, when given, whose program is `program`). */
@@ -84,5 +98,21 @@ export class ScriptedProcessTable<R> {
         return this.entries
             .filter((entry: ScriptedEntry<R>): boolean => entry.prefix && entry.matches(call))
             .sort((a: ScriptedEntry<R>, b: ScriptedEntry<R>): number => b.args.length - a.args.length)[0];
+    }
+}
+
+/**
+ * Settles `answer` — or, when `signal` aborts first, `killed()`: exactly what the production client reports
+ * for a run its deadline killed. A test holds a call in flight with a promise answer and fires the
+ * deadline through `MockTimerApi`.
+ */
+export class AbortableAnswer {
+    static settle<R>(answer: R | Promise<R>, signal: AbortSignal | undefined, killed: () => R): Promise<R> {
+        if (signal === undefined) return Promise.resolve(answer);
+        if (signal.aborted) return Promise.resolve(killed());
+        const aborted = new Promise<R>((resolve: (value: R) => void): void => {
+            signal.addEventListener('abort', (): void => resolve(killed()), { once: true });
+        });
+        return Promise.race([Promise.resolve(answer), aborted]);
     }
 }

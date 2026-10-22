@@ -92,7 +92,7 @@ export class NoStatePathsInTemplatesValidator extends CodeValidator<NoStatePaths
         let base = process.env['NX_BASE'];
         const head = process.env['NX_HEAD'];
         if (base === undefined || base === '') {
-            base = detectBase(workspaceRoot) ?? undefined;
+            base = await detectBase(workspaceRoot) ?? undefined;
             if (base === undefined || base === '') {
                 console.log('\n⏭️  Skipping no-state-paths-in-templates validation (could not detect base branch)\n');
                 return { success: true };
@@ -101,7 +101,7 @@ export class NoStatePathsInTemplatesValidator extends CodeValidator<NoStatePaths
         console.log(`   Base: ${base}`);
         console.log(`   Head: ${head ?? 'working tree (includes uncommitted changes)'}\n`);
 
-        const changedFiles = this.scanScope.files(workspaceRoot, mode, base, head, { tsOnly: false })
+        const changedFiles = (await this.scanScope.files(workspaceRoot, mode, base, head, { tsOnly: false }))
             .filter((file: string): boolean => this.isRelevantFile(file));
         if (changedFiles.length === 0) {
             console.log('✅ No generated-doc templates changed');
@@ -110,7 +110,7 @@ export class NoStatePathsInTemplatesValidator extends CodeValidator<NoStatePaths
         console.log(`📂 Checking ${String(changedFiles.length)} changed template(s)...`);
 
         const violations = this.scanScope.isLineScoped(mode)
-            ? this.violationsForModifiedCode(workspaceRoot, changedFiles, base, head, disableAllowed)
+            ? await this.violationsForModifiedCode(workspaceRoot, changedFiles, base, head, disableAllowed)
             : this.violationsForModifiedFiles(workspaceRoot, changedFiles, disableAllowed);
 
         if (violations.length === 0) {
@@ -203,16 +203,16 @@ export class NoStatePathsInTemplatesValidator extends CodeValidator<NoStatePaths
     }
 
     /** NEW_AND_MODIFIED_CODE: only hits whose line is in the diff hunks. */
-    private violationsForModifiedCode(
+    private async violationsForModifiedCode(
         workspaceRoot: string,
         changedFiles: string[],
         base: string,
         head: string | undefined,
         disableAllowed: boolean,
-    ): StatePathViolation[] {
+    ): Promise<StatePathViolation[]> {
         const violations: StatePathViolation[] = [];
         for (const file of changedFiles) {
-            const changedLines = getChangedLineNumbers(getFileDiff(workspaceRoot, file, base, head));
+            const changedLines = getChangedLineNumbers(await getFileDiff(workspaceRoot, file, base, head));
             if (changedLines.size === 0) continue;
             for (const hit of this.hitsForFile(file, workspaceRoot)) {
                 if (disableAllowed && hit.hasDisableComment) continue;

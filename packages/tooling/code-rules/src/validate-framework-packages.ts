@@ -162,8 +162,8 @@ export class FrameworkPackagesValidator extends CodeValidator<FrameworkPackagesC
         const mode = this.config.mode ?? 'OFF';
         if (mode === 'OFF') return { success: true };
         const allowed = this.config.allowedPaths ?? [];
-        const projects = this.targets
-            .projects(workspaceRoot, mode, "framework-packages")
+        const projects = (await this.targets
+            .projects(workspaceRoot, mode, "framework-packages"))
             .filter((p: ScannedProject) => !matchesAnyGlob(p.dir, allowed));
         const violations = new FrameworkPackagesAudit(this.config.entries).audit(workspaceRoot, projects);
         if (violations.length === 0) return { success: true };

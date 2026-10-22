@@ -1,7 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { MERGE_EXPLANATION_FILE, CliExitError } from '@webpieces/rules-config';
-import { stampCleanMainSyncStatus, MutationVerb, BranchMutationEvent, logBranchMutation } from '@webpieces/repo-workflow-core';
+import { MainSyncStatusService, MutationVerb, BranchMutationEvent, logBranchMutation } from '@webpieces/repo-workflow-core';
 import { injectable, bindingScopeValues } from 'inversify';
 import { BranchNaming } from './branch-naming';
 import { CleanTmp } from './cleanTmp';
@@ -67,6 +67,7 @@ export class MergeEnd {
         private readonly cleanTmpService: CleanTmp,
         private readonly gitExec: GitExec,
         private readonly mergeState: MergeState,
+        private readonly mainSyncStatus: MainSyncStatusService,
     ) {}
 
     /**
@@ -178,7 +179,7 @@ export class MergeEnd {
 
         // Branch now contains origin/main — stamp a clean main-sync status so the feature-branch-guard
         // unblocks edits immediately (no wait for the async refresher).
-        stampCleanMainSyncStatus(repoRoot);
+        await this.mainSyncStatus.stampCleanMainSyncStatus(repoRoot);
 
         // Clean sync → the pre-merge snapshot was never needed; delete it LAST. Conflict sync → keep it.
         // ALSO keep it when we did not push: the squash rewrite then exists ONLY in this working copy, so

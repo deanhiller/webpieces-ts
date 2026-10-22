@@ -1,6 +1,5 @@
-import { specTempDirs } from '@webpieces/tooling-testkit';
+import { CheckoutLayout, specTempDirs } from '@webpieces/tooling-testkit';
 import { describe, it, expect } from 'vitest';
-import { execSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 import { DotWebpieces } from '@webpieces/tooling-common';
@@ -68,16 +67,9 @@ describe('summaryJsonPath in a LINKED worktree', () => {
         const primary = path.join(tmp, 'primary');
         const worktree = path.join(tmp, 'wt-feature');
         fs.mkdirSync(primary, { recursive: true });
-        const git = (cmd: string): void => {
-            execSync(`git -c core.hooksPath=/dev/null ${cmd}`, { cwd: primary, stdio: 'pipe' });
-        };
-        git('init -q -b main');
-        git('config user.email test@example.com');
-        git('config user.name Test');
+        // Laid out on disk exactly as git lays out a primary clone + linked worktree — no git process (#1381).
+        CheckoutLayout.primaryWithWorktree(primary, worktree, 'feature');
         fs.writeFileSync(path.join(primary, 'webpieces.config.json'), '{}\n');
-        git('add -A');
-        git('commit -q -m init');
-        git(`worktree add -q -b feature ${worktree}`);
         const svc = new ReviewJsonService(new DotWebpieces());
         expect(svc.summaryJsonPath(worktree, 'feature')).toBe(path.join(worktree, WEBPIECES_TMP_DIR, PR_REVIEW_DIR, 'feature', 'summary.json'));
         // A verdict file sits beside it, so a reviewer subagent can write its own answer too.

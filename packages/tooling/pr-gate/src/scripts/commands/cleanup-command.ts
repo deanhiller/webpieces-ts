@@ -116,7 +116,7 @@ export class CleanupCommand {
         const repoRoot = this.repoRootFinder.resolveRepoRoot(process.cwd());
         const retention = loadAndValidate(repoRoot).prGate.landPr.branchRetention;
         if (options.report) {
-            this.reportOnly(repoRoot, retention, options);
+            await this.reportOnly(repoRoot, retention, options);
             return;
         }
         await this.cleanUpWorktrees(repoRoot, retention, options);
@@ -130,10 +130,10 @@ export class CleanupCommand {
      * because a run that deletes nothing cannot renumber anything. That is what makes it the honest
      * first half of `--report` → read the numbers → `--delete-branches=1,3`.
      */
-    private reportOnly(repoRoot: string, retention: string, options: CleanupOptions): void {
+    private async reportOnly(repoRoot: string, retention: string, options: CleanupOptions): Promise<void> {
         process.stdout.write('\n' + SEP + '🔎 wp-cleanup --report — nothing will be deleted\n' + SEP);
 
-        const verdicts = this.worktreeSection.verdicts(repoRoot, options.ignoreStaleLocks);
+        const verdicts = await this.worktreeSection.verdicts(repoRoot, options.ignoreStaleLocks);
         const deadTrees = this.worktreeSection.provablyDead(verdicts);
         process.stdout.write(this.wouldReapBlock(
             WORKTREE_KINDS, deadTrees.map((tree: DeletableWorktree): string => `${tree.path} — ${tree.reason}`)));
@@ -152,7 +152,7 @@ export class CleanupCommand {
         // lands in `spared`, nothing is touched. That is exactly what a report needs, and it means
         // the classified block below is computed by the identical code path a real run uses, so the
         // numbering it prints IS the numbering the flag will act on.
-        const branches = this.branchReaper.reap(repoRoot, 'wp-cleanup', null, BRANCH_RETENTION_KEEP).spared;
+        const branches = (await this.branchReaper.reap(repoRoot, 'wp-cleanup', null, BRANCH_RETENTION_KEEP)).spared;
         process.stdout.write(this.wouldReapBlock(BRANCH_KINDS, branches
             .filter((entry: DeletableBranch): boolean =>
                 AUTO_REAPED_CLASSIFICATIONS.includes(entry.classification))
@@ -180,7 +180,7 @@ export class CleanupCommand {
     private async cleanUpBranches(repoRoot: string, retention: string, options: CleanupOptions): Promise<void> {
         // No cache argument: wp-cleanup recomputes the verdicts itself. The file on disk is allowed to
         // go stale, and stale evidence is fine for BLOCKING but never for DELETING.
-        const result = this.branchReaper.reap(repoRoot, 'wp-cleanup', null, retention);
+        const result = await this.branchReaper.reap(repoRoot, 'wp-cleanup', null, retention);
         const first = this.report(repoRoot, result);
         process.stdout.write(first);
 
@@ -196,7 +196,7 @@ export class CleanupCommand {
             process.stdout.write(this.huskBlock(BRANCH_KINDS, husks.map(
                 (entry: DeletableBranch): string => entry.branch)));
             process.stdout.write(this.report(repoRoot,
-                this.branchReaper.reapApproved(repoRoot, 'wp-cleanup', husks, retention)));
+                await this.branchReaper.reapApproved(repoRoot, 'wp-cleanup', husks, retention)));
         }
 
         if (block.length === 0) {
@@ -212,7 +212,7 @@ export class CleanupCommand {
             return;
         }
         process.stdout.write(this.report(repoRoot,
-            this.branchReaper.reapApproved(repoRoot, 'wp-cleanup', approved, retention)));
+            await this.branchReaper.reapApproved(repoRoot, 'wp-cleanup', approved, retention)));
     }
 
     /**
@@ -224,12 +224,12 @@ export class CleanupCommand {
      * cleanup command becomes a data-loss command).
      */
     private async cleanUpWorktrees(repoRoot: string, retention: string, options: CleanupOptions): Promise<void> {
-        const verdicts = this.worktreeSection.verdicts(repoRoot, options.ignoreStaleLocks);
+        const verdicts = await this.worktreeSection.verdicts(repoRoot, options.ignoreStaleLocks);
         const dead = this.worktreeSection.provablyDead(verdicts);
         if (dead.length > 0) {
             process.stdout.write(
                 this.worktreeSection.report(repoRoot,
-                    this.worktreeSection.reap(repoRoot, 'wp-cleanup', dead, retention)));
+                    await this.worktreeSection.reap(repoRoot, 'wp-cleanup', dead, retention)));
         }
         process.stdout.write(this.worktreeSection.sparedBlock(verdicts, dead));
 
@@ -237,7 +237,7 @@ export class CleanupCommand {
         // A zero-commit worktree is a husk ONLY if nobody is holding it. Uncommitted or untracked
         // files are the one thing that says "somebody is", and they are the one thing no archive tag
         // can bring back — so they are checked here rather than left to git's refusal at removal time.
-        const husks = this.worktreeSection.withoutUncommitted(this.husks(promptable));
+        const husks = await this.worktreeSection.withoutUncommitted(this.husks(promptable));
         const block = this.rest(promptable, husks);
 
         options.worktrees.pick(block);
@@ -247,7 +247,7 @@ export class CleanupCommand {
                 (tree: DeletableWorktree): string => `${tree.path} [${tree.branch}]`)));
             process.stdout.write(
                 this.worktreeSection.report(repoRoot,
-                    this.worktreeSection.reap(repoRoot, 'wp-cleanup', husks, retention)));
+                    await this.worktreeSection.reap(repoRoot, 'wp-cleanup', husks, retention)));
         }
 
         if (block.length === 0) return;
@@ -261,7 +261,7 @@ export class CleanupCommand {
         }
         process.stdout.write(
             this.worktreeSection.report(repoRoot,
-                this.worktreeSection.reap(repoRoot, 'wp-cleanup', approved, retention)));
+                await this.worktreeSection.reap(repoRoot, 'wp-cleanup', approved, retention)));
     }
 
     // What a bare run with an empty repo says. It points at --help because the flags are the whole

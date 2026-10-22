@@ -38,8 +38,8 @@ export class OrphanDirSweeper {
      * Scan `repoRoot`, and archive what was found when this machine has opted in. `now` is a parameter
      * so specs pin the sweep id rather than racing the clock.
      */
-    sweep(repoRoot: string, now: Date): OrphanSweepReport {
-        const candidates = this.scanner.scan(repoRoot);
+    async sweep(repoRoot: string, now: Date): Promise<OrphanSweepReport> {
+        const candidates = await this.scanner.scan(repoRoot);
         const enabled = this.homeConfigService.load().orphanDirSweep;
         if (candidates.length === 0) return new OrphanSweepReport(enabled, candidates, null, 0);
         if (!enabled) return new OrphanSweepReport(false, candidates, null, 0);

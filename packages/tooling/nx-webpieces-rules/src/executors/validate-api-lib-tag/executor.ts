@@ -42,7 +42,7 @@ export default async function runExecutor(
     // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
     try {
         const projectInfos = await collectProjectInfo();
-        const scan = new ApiContractEvidence().collect(
+        const scan = await new ApiContractEvidence().collect(
             workspaceRoot,
             projectInfos,
             loadRuntimeConfig(workspaceRoot).externalApiPaths,

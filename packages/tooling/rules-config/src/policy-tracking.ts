@@ -1,7 +1,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { spawnSync } from 'node:child_process';
-import { InformAiError, MIGRATE_DIRS_COMMAND } from '@webpieces/tooling-common';
+import { injectable, bindingScopeValues } from 'inversify';
+import { GitProcessApi, GitProcessClient, InformAiError, MIGRATE_DIRS_COMMAND } from '@webpieces/tooling-common';
 import type { PackPolicyDeclaration } from './pack-policy-files';
 import { ConfigRepairError, EditFileCure, RunCommandCure } from './config-repair-error';
 
@@ -50,16 +50,19 @@ export class UntrackedPolicyError extends ConfigRepairError {
  * it is a commit-time invariant that costs two `git` processes, and config load runs on every guard-hook
  * invocation (#1355). `stage()` is wp-migrate-dirs' cure and is unchanged.
  */
+@injectable(bindingScopeValues.Singleton)
 export class PolicyTracking {
-    check(root: string, declarations: readonly PackPolicyDeclaration[]): void {
+    // Defaulted so the non-DI call sites (ConfigLoader, wp-migrate-dirs) can `new PolicyTracking()`, while
+    // inversify injects the container's git edge — which is what a feature test rebinds.
+    constructor(private readonly git: GitProcessApi = new GitProcessClient()) {}
+
+    async check(root: string, declarations: readonly PackPolicyDeclaration[]): Promise<void> {
         // Standalone non-git schema validation is supported; CI and governed checkouts have .git.
         if (!fs.existsSync(path.join(root, '.git'))) return;
         const files = this.files(root, declarations);
-        const ignored = spawnSync('git', ['check-ignore', '--no-index', '--', ...files], {
-            cwd: root,
-            encoding: 'utf8',
-        });
-        if (ignored.status !== 0 && ignored.status !== 1)
+        // `check-ignore` exits 0 when something IS ignored and 1 when nothing is; anything else is a failure.
+        const ignored = await this.git.run(['check-ignore', '--no-index', '--', ...files], root);
+        if (ignored.code !== 0 && ignored.code !== 1)
             throw new InformAiError(
                 `Cannot verify policy ignore status: ${ignored.stderr}. Repair git access, then retry.`,
             );
@@ -73,24 +76,19 @@ export class PolicyTracking {
                     ),
                 ],
             );
-        const untracked = this.untracked(root, files);
+        const untracked = await this.untracked(root, files);
         if (untracked.length) throw new UntrackedPolicyError(untracked);
     }
 
-    stage(root: string, declarations: readonly PackPolicyDeclaration[]): void {
+    async stage(root: string, declarations: readonly PackPolicyDeclaration[]): Promise<void> {
         // `.webpieces/` is the gitignored state directory, so `git add` refuses its paths. Untrack whatever
         // policy older releases committed there with `rm --cached`, which keeps every file on disk.
-        const retired = spawnSync(
-            'git',
-            ['rm', '-r', '-q', '--cached', '--ignore-unmatch', '--', '.webpieces'],
-            { cwd: root, encoding: 'utf8' },
-        );
-        if (retired.status !== 0)
+        const retired = await this.git.run(['rm', '-r', '-q', '--cached', '--ignore-unmatch', '--', '.webpieces'], root);
+        if (!retired.ok)
             throw new InformAiError(
                 `Cannot untrack retired policy paths in .webpieces/: ${retired.stderr}. Verify git access before retrying.`,
             );
-        const result = spawnSync(
-            'git',
+        const result = await this.git.run(
             [
                 '--literal-pathspecs',
                 'add',
@@ -100,21 +98,18 @@ export class PolicyTracking {
                 '.gitignore',
                 ...this.files(root, declarations),
             ],
-            { cwd: root, encoding: 'utf8' },
+            root,
         );
-        if (result.status !== 0)
+        if (!result.ok)
             throw new InformAiError(
                 `Could not stage Webpieces policy: ${result.stderr}. Remove policy ignore patterns and verify git access before retrying.`,
             );
     }
 
     /** Which of `files` git's index does not hold — each one named, never git's own pathspec advice. */
-    private untracked(root: string, files: readonly string[]): string[] {
-        const listed = spawnSync('git', ['--literal-pathspecs', 'ls-files', '-z', '--', ...files], {
-            cwd: root,
-            encoding: 'utf8',
-        });
-        if (listed.status !== 0)
+    private async untracked(root: string, files: readonly string[]): Promise<string[]> {
+        const listed = await this.git.run(['--literal-pathspecs', 'ls-files', '-z', '--', ...files], root);
+        if (!listed.ok)
             throw new InformAiError(
                 `Cannot verify policy tracking status: ${listed.stderr}. Repair git access, then retry.`,
             );

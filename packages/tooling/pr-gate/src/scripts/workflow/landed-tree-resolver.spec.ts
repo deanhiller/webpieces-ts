@@ -9,21 +9,12 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
  * dir) and `rev-parse <branch>` (the branch ref when no worktree holds it). Nothing here reads state,
  * which is the point — see the class doc on why a `.webpieces/**` receipt was rejected.
  *
- * `rev-parse` is this package's question and is SCRIPTED on the injected GitProcessApi (#1381). The
- * worktree list is asked by `@webpieces/repo-workflow-core`'s WorktreeService, which is not routed
- * through that edge yet (a later slice of #1381), so that one answer still comes from a `child_process`
- * mock.
+ * Both are SCRIPTED on the injected GitProcessApi (#1381) — the worktree list is asked by
+ * `@webpieces/repo-workflow-core`'s WorktreeService through that same edge — so no process is started.
  */
 const world = vi.hoisted(() => ({
     porcelain: '',
     refs: {} as Record<string, string>,
-}));
-
-vi.mock('child_process', () => ({
-    spawnSync: (cmd: string, args: string[]): { status: number; stdout: string } => {
-        if (cmd === 'git' && args[0] === 'worktree' && args[1] === 'list') return { status: 0, stdout: world.porcelain };
-        throw new Error(`unexpected child process: ${cmd} ${args.join(' ')}`);
-    },
 }));
 
 import { GitResultDto } from '@webpieces/tooling-common';
@@ -59,6 +50,7 @@ beforeEach(async () => {
     world.porcelain = `worktree ${PRIMARY}\nHEAD aaaaaaa\nbranch refs/heads/main\n`;
     world.refs = {};
     feature = await PrGateFeature.create();
+    feature.git.respond(['worktree', 'list', '--porcelain'], (): GitResultDto => new GitResultDto(0, world.porcelain, ''));
     // `git rev-parse <ref>` answers from world.refs: the sha, or git's 128 for a ref this repo lacks.
     feature.git.respondToPrefix(['rev-parse'], (call: ProcessCallDto): GitResultDto => {
         const sha = world.refs[String(call.args[1])];

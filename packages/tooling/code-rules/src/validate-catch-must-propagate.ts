@@ -50,17 +50,17 @@ export class CatchMustPropagateValidator extends CodeValidator<CatchMustPropagat
     async run(workspaceRoot: string): Promise<ExecutorResult> {
         const mode: ModifiedCodeMode | undefined = this.config.mode;
         if (mode === undefined || mode === 'OFF') return { success: true };
-        const range = this.diffScope.resolveBase(workspaceRoot);
+        const range = await this.diffScope.resolveBase(workspaceRoot);
         if (range.base === undefined) {
             console.log(`\n⏭️  Skipping ${this.name} validation (could not detect base branch)\n`);
             return { success: true };
         }
         const analyzer = new CatchPropagationAnalyzer(this.forwards());
         const found: LocatedCatchFinding[] = [];
-        for (const relFile of this.scanScope.files(workspaceRoot, mode, range.base, range.head)) {
+        for (const relFile of await this.scanScope.files(workspaceRoot, mode, range.base, range.head)) {
             if (!analyzer.judges(relFile) || !fs.existsSync(path.join(workspaceRoot, relFile))) continue;
             const changed = this.scanScope.isLineScoped(mode)
-                ? this.diffScope.getChangedLineNumbers(this.diffScope.getFileDiff(workspaceRoot, relFile, range.base, range.head))
+                ? this.diffScope.getChangedLineNumbers(await this.diffScope.getFileDiff(workspaceRoot, relFile, range.base, range.head))
                 : undefined;
             if (changed !== undefined && changed.size === 0) continue;
             for (const finding of this.judge(analyzer, workspaceRoot, relFile, changed)) {

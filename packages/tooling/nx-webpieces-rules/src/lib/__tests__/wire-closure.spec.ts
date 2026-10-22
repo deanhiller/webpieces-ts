@@ -80,14 +80,14 @@ function infos(companyCoreRole: string): Map<string, ProjectInfo> {
     return map;
 }
 
-function suffixes(...list: string[]): WireClosureRule {
+async function suffixes(...list: string[]): Promise<WireClosureRule> {
     const entry = new WireSuffixEntry();
     entry.paths = ['libraries/**'];
     entry.suffixes = list;
     entry.exempt = false;
     return new WireClosureRule(
         [entry],
-        new WireSuffixScope(root, 'RUN_EVERY_TIME', new RuleFileExclusions('required-type-suffix', [], []), new DiffScope()),
+        await WireSuffixScope.create(root, 'RUN_EVERY_TIME', new RuleFileExclusions('required-type-suffix', [], []), new DiffScope()),
     );
 }
 
@@ -122,8 +122,8 @@ describe('wire closure (D4)', () => {
         expect(wireDefects('api-lib', WireClosureRule.withoutSuffixes())).toEqual([]);
     });
 
-    it('RED: a reached type missing its required-type-suffix suffix is refused', () => {
-        const found = wireDefects('api-lib', suffixes('Request', 'Response', 'Dto'));
+    it('RED: a reached type missing its required-type-suffix suffix is refused', async () => {
+        const found = wireDefects('api-lib', await suffixes('Request', 'Response', 'Dto'));
         expect(found).toEqual([
             expect.stringContaining(
                 "'AiProvider' goes over the wire from libraries/company-core/src/index.ts but does not end in one of " +
@@ -142,13 +142,13 @@ describe('wire closure (D4)', () => {
         expect(findings.openApi.isEmpty() && findings.mcp.isEmpty()).toBe(true);
     });
 
-    it('uses the first matching explicit exemption without exempting the role check', () => {
-        const broad = suffixes('Request', 'Response', 'Dto');
+    it('uses the first matching explicit exemption without exempting the role check', async () => {
+        const broad = await suffixes('Request', 'Response', 'Dto');
         const exempt = new WireSuffixEntry();
         exempt.paths = ['libraries/company-core/**'];
         exempt.suffixes = ['Dto'];
         exempt.exempt = true;
-        const scope = new WireSuffixScope(root, 'RUN_EVERY_TIME', new RuleFileExclusions('required-type-suffix', [], []), new DiffScope());
+        const scope = await WireSuffixScope.create(root, 'RUN_EVERY_TIME', new RuleFileExclusions('required-type-suffix', [], []), new DiffScope());
         expect(
             wireDefects('api-lib', new WireClosureRule([exempt, ...broad.suffixEntries], scope)),
         ).toEqual([]);

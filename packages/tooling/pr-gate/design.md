@@ -120,6 +120,7 @@ graph TD
     StateDirMigrator["StateDirMigrator"]
     SubagentProvenanceService["SubagentProvenanceService"]
     SyncMainCommand["SyncMainCommand"]
+    TimerApi["TimerApi"]
     TmpScratchSweeper["TmpScratchSweeper"]
     UpsertHotfixPrCommand["UpsertHotfixPrCommand"]
     VerdictProvenanceService["VerdictProvenanceService"]
@@ -145,9 +146,11 @@ graph TD
     AwaitReviewsCommand --> ReviewJsonService
     AwaitReviewsCommand --> ReviewStageReceiptService
     AwaitReviewsCommand --> StageOutputLog
+    BranchArchiver --> GitProcessApi
     BranchMutationLog --> DotWebpieces
     BranchReaper --> BranchArchiver
     BranchReaper --> BranchMutationLog
+    BranchReaper --> GitProcessApi
     BranchReaper --> MergedBranchesService
     BuildAffected --> BranchIdentity
     BuildAffected --> BuildGateLog
@@ -191,6 +194,9 @@ graph TD
     CleanupCommand --> BranchReaper
     CleanupCommand --> RepoRootFinder
     CleanupCommand --> WorktreeCleanupSection
+    CommandTimeouts --> GitProcessApi
+    CommandTimeouts --> NativeProcessApi
+    CommandTimeouts --> TimerApi
     DevDeployRefs --> GitExec
     DevResolveRunner --> DevDeployRefs
     DevResolveRunner --> DevDeployWatchHints
@@ -201,6 +207,7 @@ graph TD
     DiffBasisResolver --> GitStatusParser
     DiffMaterializer --> GitProcessApi
     DiffMaterializer --> ReviewJsonService
+    DiffScope --> GitProcessApi
     DotWebpieces --> GitCheckout
     DotWebpieces --> StateDirMigrator
     FinishPushDevCommand --> DevResolveRunner
@@ -299,6 +306,7 @@ graph TD
     MergeEnd --> BranchNaming
     MergeEnd --> CleanTmp
     MergeEnd --> GitExec
+    MergeEnd --> MainSyncStatusService
     MergeEnd --> MergeState
     MergeInfoIndex --> AtomicFile
     MergeInfoIndex --> MergeState
@@ -316,6 +324,7 @@ graph TD
     MergedBranchesService --> WorktreeService
     OpenPrCheck --> BranchNaming
     OpenPrCheck --> NativeProcessApi
+    OrphanDirScanner --> GitProcessApi
     OrphanDirSweeper --> HomeConfigService
     OrphanDirSweeper --> OrphanDirArchiver
     OrphanDirSweeper --> OrphanDirScanner
@@ -452,7 +461,9 @@ graph TD
     WorktreeLockVerdicts --> WorktreeService
     WorktreeReaper --> BranchArchiver
     WorktreeReaper --> BranchMutationLog
+    WorktreeReaper --> GitProcessApi
     WorktreeReaper --> WorktreeService
+    WorktreeService --> CommandTimeouts
     WriteReviewCommand --> AiBranchName
     WriteReviewCommand --> RepoRootFinder
     WriteReviewCommand --> ReviewJsonService

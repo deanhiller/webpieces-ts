@@ -41,7 +41,7 @@ export class RuleDebugRun {
     }
 
     /** Validate `ask` against the rule's modes and the repo's projects; throws a refusal naming the cure. */
-    plan(workspaceRoot: string, ask: DebugAsk): DebugPlan {
+    async plan(workspaceRoot: string, ask: DebugAsk): Promise<DebugPlan> {
         const mode = ask.mode ?? ask.committedMode;
         if (!ask.modes.includes(mode) || mode === 'OFF') {
             const why =
@@ -52,7 +52,7 @@ export class RuleDebugRun {
                 `${ask.rule} cannot run: ${why}. Pass --mode=<one of ${ask.modes.filter((m: string) => m !== 'OFF').join(', ')}>.`,
             );
         }
-        const known = this.projectNames(workspaceRoot);
+        const known = await this.projectNames(workspaceRoot);
         const unknown = (ask.projects ?? []).filter((name: string) => !known.includes(name));
         if (unknown.length > 0) {
             throw this.refusal(
@@ -91,8 +91,8 @@ export class RuleDebugRun {
     }
 
     /** Print one count per project from the sites recorded in `scan`, and return the total. */
-    printCounts(workspaceRoot: string, plan: DebugPlan, scan: ScanScope, ruleSucceeded: boolean): number {
-        const counts = scan.countsByProject(workspaceRoot);
+    async printCounts(workspaceRoot: string, plan: DebugPlan, scan: ScanScope, ruleSucceeded: boolean): Promise<number> {
+        const counts = await scan.countsByProject(workspaceRoot);
         const names = plan.projects ?? Array.from(counts.keys()).sort();
         const total = Array.from(counts.values()).reduce((sum: number, n: number) => sum + n, 0);
         console.log('');
@@ -105,9 +105,9 @@ export class RuleDebugRun {
         return total;
     }
 
-    private projectNames(workspaceRoot: string): string[] {
-        return new ProjectCatalog(new DiffScope())
-            .all(workspaceRoot)
+    private async projectNames(workspaceRoot: string): Promise<string[]> {
+        return (await new ProjectCatalog(new DiffScope())
+            .all(workspaceRoot))
             .map((p: ProjectEntry) => p.name)
             .sort();
     }

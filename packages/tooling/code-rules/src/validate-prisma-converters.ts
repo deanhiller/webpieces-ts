@@ -488,7 +488,7 @@ function findDtoCreationOnChangedLines(
  * Non-converter files: line-level — only flag new XxxDto() on changed lines.
  */
 // webpieces-disable max-lines-new-methods -- File classification and diff-based violation collection
-function collectViolationsForModifiedMethodAndCode(
+async function collectViolationsForModifiedMethodAndCode(
     changedFiles: string[],
     convertersPaths: string[],
     workspaceRoot: string,
@@ -496,7 +496,7 @@ function collectViolationsForModifiedMethodAndCode(
     disableAllowed: boolean,
     base: string,
     head: string | undefined
-): PrismaConverterViolation[] {
+): Promise<PrismaConverterViolation[]> {
     const converterFiles = changedFiles.filter((f) =>
         convertersPaths.some((cp) => f.startsWith(cp))
     );
@@ -509,7 +509,7 @@ function collectViolationsForModifiedMethodAndCode(
     if (converterFiles.length > 0) {
         console.log(`📂 Checking ${converterFiles.length} converter file(s) (new/modified methods only)...`);
         for (const file of converterFiles) {
-            const diff = getFileDiff(workspaceRoot, file, base, head);
+            const diff = await getFileDiff(workspaceRoot, file, base, head);
             const changedLines = getChangedLineNumbers(diff);
             const newMethodNames = findNewMethodSignaturesInDiff(diff);
             if (changedLines.size === 0 && newMethodNames.size === 0) continue;
@@ -522,7 +522,7 @@ function collectViolationsForModifiedMethodAndCode(
     if (nonConverterFiles.length > 0) {
         console.log(`📂 Checking ${nonConverterFiles.length} non-converter file(s) for Dto creation (changed lines only)...`);
         for (const file of nonConverterFiles) {
-            const diff = getFileDiff(workspaceRoot, file, base, head);
+            const diff = await getFileDiff(workspaceRoot, file, base, head);
             const changedLines = getChangedLineNumbers(diff);
             if (changedLines.size === 0) continue;
             allViolations.push(...findDtoCreationOnChangedLines(
@@ -571,10 +571,10 @@ function reportViolations(violations: PrismaConverterViolation[], mode: PrismaCo
 /**
  * Resolve git base ref from env vars or auto-detection.
  */
-function resolveBase(workspaceRoot: string): string | undefined {
+async function resolveBase(workspaceRoot: string): Promise<string | undefined> {
     const envBase = process.env['NX_BASE'];
     if (envBase) return envBase;
-    return detectBase(workspaceRoot) ?? undefined;
+    return await detectBase(workspaceRoot) ?? undefined;
 }
 
 /**
@@ -616,7 +616,7 @@ function collectAllViolations(
 /**
  * Run validation after early-exit checks have passed.
  */
-function validateChangedFiles(
+async function validateChangedFiles(
     workspaceRoot: string,
     schemaPath: string,
     convertersPaths: string[],
@@ -624,7 +624,7 @@ function validateChangedFiles(
     base: string,
     mode: PrismaConverterMode,
     disableAllowed: boolean
-): ExecutorResult {
+): Promise<ExecutorResult> {
     const head = process.env['NX_HEAD'];
 
     console.log(`   Base: ${base}`);
@@ -642,7 +642,7 @@ function validateChangedFiles(
 
     console.log(`   Found ${prismaModels.size} model(s) in schema.prisma`);
 
-    let changedFiles = getChangedFiles(workspaceRoot, base, head);
+    let changedFiles = await getChangedFiles(workspaceRoot, base, head);
     if (enforcePaths.length > 0) {
         changedFiles = changedFiles.filter((f) =>
             enforcePaths.some((ep) => f.startsWith(ep))
@@ -657,7 +657,7 @@ function validateChangedFiles(
     let allViolations: PrismaConverterViolation[];
 
     if (mode === 'NEW_AND_MODIFIED_METHODS') {
-        allViolations = collectViolationsForModifiedMethodAndCode(
+        allViolations = await collectViolationsForModifiedMethodAndCode(
             changedFiles, convertersPaths, workspaceRoot, prismaModels, disableAllowed, base, head
         );
     } else {
@@ -704,7 +704,7 @@ async function runValidatorImpl(
         console.log(`   Enforce paths: ${enforcePaths.join(', ')}`);
     }
 
-    const base = resolveBase(workspaceRoot);
+    const base = await resolveBase(workspaceRoot);
 
     if (!base) {
         console.log('\n⏭️  Skipping prisma-converter validation (could not detect base branch)');
@@ -713,7 +713,7 @@ async function runValidatorImpl(
     }
 
     const disableAllowed = options.disableAllowed ?? true;
-    return validateChangedFiles(workspaceRoot, schemaPath, convertersPaths, enforcePaths, base, mode, disableAllowed);
+    return await validateChangedFiles(workspaceRoot, schemaPath, convertersPaths, enforcePaths, base, mode, disableAllowed);
 }
 
 @injectable(bindingScopeValues.Singleton)

@@ -1,19 +1,12 @@
-import { specTempDirs } from '@webpieces/tooling-testkit';
+import { CheckoutLayout, specTempDirs } from '@webpieces/tooling-testkit';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { execSync } from 'child_process';
 import * as fs from 'fs';
-import * as os from 'os';
 import * as path from 'path';
+import { DotWebpieces } from '@webpieces/tooling-common';
 
 import { RepoRootFinder } from './repo-root';
 
-
-// core.hooksPath=/dev/null: keep any machine-global git hooks out of the throwaway test repos.
-function git(cwd: string, cmd: string): string {
-    return execSync(`git -c core.hooksPath=/dev/null ${cmd}`, {
-        cwd, encoding: 'utf-8', stdio: ['pipe', 'pipe', 'pipe'],
-    }).trim();
-}
+// Checkouts are laid out on disk exactly as git lays them out (CheckoutLayout) — no git process (#1381).
 
 function writeFile(root: string, relPath: string, content: string): void {
     const full = path.join(root, relPath);
@@ -31,8 +24,8 @@ describe('RepoRootFinder.resolveRepoRoot', () => {
     const finder = new RepoRootFinder();
 
     beforeEach(() => {
-        // realpathSync: macOS os.tmpdir() is a symlink; git rev-parse returns the real path, so we
-        // must compare against the resolved path.
+        // realpathSync: macOS os.tmpdir() is a symlink; the git-dir resolver reports the real path, so
+        // we must compare against the resolved path.
         root = specTempDirs.makeReal('repo-root-');
     });
 
@@ -52,13 +45,13 @@ describe('RepoRootFinder.resolveRepoRoot', () => {
         writeFile(root, 'webpieces.config.json', '{}\n');
         const nested = path.join(root, 'repositories', 'some-clone');
         fs.mkdirSync(nested, { recursive: true });
-        git(nested, 'init -q -b main');
-        expect(git(nested, 'rev-parse --show-toplevel')).toBe(nested); // sanity: git-toplevel IS the nested root
-        expect(finder.resolveRepoRoot(nested)).toBe(root);             // …but resolveRepoRoot climbs past it
+        CheckoutLayout.primary(nested, 'main');
+        expect(new DotWebpieces().treeRoot(nested)).toBe(nested); // sanity: git-toplevel IS the nested root
+        expect(finder.resolveRepoRoot(nested)).toBe(root);        // …but resolveRepoRoot climbs past it
     });
 
     it('falls back to git toplevel when there is no webpieces.config.json anywhere above', () => {
-        git(root, 'init -q -b main');
+        CheckoutLayout.primary(root, 'main');
         const subdir = path.join(root, 'src', 'deep');
         fs.mkdirSync(subdir, { recursive: true });
         expect(finder.resolveRepoRoot(subdir)).toBe(root);

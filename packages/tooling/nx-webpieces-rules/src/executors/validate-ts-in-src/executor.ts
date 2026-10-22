@@ -198,7 +198,7 @@ async function runModifiedFilesMode(
     const head = process.env['NX_HEAD'];
 
     if (!base) {
-        base = detectBase(workspaceRoot) ?? undefined;
+        base = (await detectBase(workspaceRoot)) ?? undefined;
         if (!base) {
             console.log('\n⏭️  Skipping validate-ts-in-src validation (could not detect base branch)\n');
             return { success: true };
@@ -212,7 +212,7 @@ async function runModifiedFilesMode(
     const projectRoots = await getProjectRoots(workspaceRoot);
     // git diff --name-only lists DELETED paths too (renames = delete+add);
     // a file that no longer exists cannot be an orphan - skip it
-    const changedFiles = getChangedFiles(workspaceRoot, base, head)
+    const changedFiles = (await getChangedFiles(workspaceRoot, base, head))
         .filter((relPath: string) => fs.existsSync(path.join(workspaceRoot, relPath)));
 
     if (changedFiles.length === 0) {

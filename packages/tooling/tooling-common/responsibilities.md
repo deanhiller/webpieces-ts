@@ -17,6 +17,13 @@ directly: `GitProcessApi` (git) and `NativeProcessApi` (any other program, and a
 output goes to a log file), each an abstract class taking and returning data classes (`GitResultDto`,
 `ProcessResultDto`, `ShellTerminationDto`), with the production `GitProcessClient` / `NativeProcessClient`
 the only callers of `child_process`, and `ProcessBindings` to register them. A non-zero
-exit, a kill, and a program that could not start are all RESULTS, never throws. The clients' own
-real-process tests (in `@webpieces/tooling-testkit`, which owns reaped scratch directories) are the only
-specs that start processes for them.
+exit, a kill, and a program that could not start are all RESULTS, never throws. A captured run takes an
+`AbortSignal` (a deadline kills it, reported as PROCESS_KILLED); `GitProcessApi.runSync` exists only for a
+PreToolUse guard's synchronous `check()` path. The clients' own real-process tests (in
+`@webpieces/tooling-testkit`, which owns reaped scratch directories) are the only specs that start
+processes for them.
+
+Two more edges sit beside them, for the same reason: the CLOCK — `TimerApi` (`schedule(delayMs, TaskDto)`
+→ `ScheduledTaskDto`, `now()`), production `TimerClient`, also bound by `ProcessBindings`, so a deadline or a
+poll is a task a test fires itself — and the EXIT — `ProcessExitApi` / `ProcessExitClient`, through which
+`runMain` ends a bin, so a feature test runs a bin's top level in process.

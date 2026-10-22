@@ -1,49 +1,120 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { spawnSync } from 'child_process';
-import { chmodSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'fs';
-import { tmpdir } from 'os';
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'fs';
 import { join } from 'path';
+import { GitResultDto, ProcessResultDto } from '@webpieces/tooling-common';
+import { ProcessCallDto, specTempDirs } from '@webpieces/tooling-testkit';
 
-import { AgentWorktreeLockReader } from './agent-worktree-lock';
+import { WorkflowFeature } from './__tests__/workflow-feature';
 import { branchMutationLogPath } from './branch-mutation-log';
 import { DeletableWorktree } from './merged-branch-verdicts';
 import { MergedBranchesService } from './merged-branches';
 import { WorktreeReaper } from './worktree-reaper';
-import { WorktreeService } from './worktrees';
 
 /**
- * Against REAL git and a REAL locked worktree, deliberately.
+ * The verdicts and the reap for a LOCKED worktree, against scripted git (#1381).
  *
- * The whole defect lived in what `git worktree list --porcelain` says about a lock the Claude Code
- * harness takes — so a hand-built porcelain fixture would only ever confirm the author's own model of
- * that output, which is precisely the thing that was wrong. Every lock reason asserted on below comes
- * back out of git, and the one reap that removes a directory removes a real one.
+ * What `git worktree list --porcelain` prints for a harness lock — `locked <reason>`, or a bare `locked`
+ * — is proven against the installed git by `agent-worktree-lock.real-git.spec.ts`; this suite answers
+ * with exactly that shape and holds every decision built on top of it. Each scenario starts no process:
+ * the git and `gh` the program asks are answered from {@link GitWorld}, and the reap is asserted on the
+ * commands it ISSUED (unlock, remove, `branch -D`) — the statement about this program — rather than on
+ * what a scratch repository looks like afterwards.
  *
- * TWO fakes, both for things a temp repo cannot have:
- *  - `gh`, because a temp repo has no GitHub and "merged PR" is the proof the whole verdict turns on.
- *    Faked as an executable on PATH rather than mocked in-process, so the code under test still spawns
- *    a subprocess and parses its stdout exactly as it does in the field.
- *  - `$CLAUDE_CONFIG_DIR`, pointed at a temp tree holding fixture agent transcripts. Reading the real
- *    `~/.claude` would make these assertions depend on whatever agents happened to be running.
+ * `$CLAUDE_CONFIG_DIR` is pointed at a temp tree holding fixture agent transcripts. Reading the real
+ * `~/.claude` would make these assertions depend on whatever agents happened to be running.
  */
-
-let primary = '';
-let worktrees = '';
-let fakeBin = '';
-let configDir = '';
-let subagents = '';
-let originalPath = '';
-let originalConfigDir: string | undefined;
 
 const MERGED_BRANCH = 'dean/landed';
 const MERGED_PR = 999;
 const LIVE_BRANCH = 'dean/still-working';
 
-function git(cwd: string, ...args: string[]): string {
-    const result = spawnSync('git', ['-C', cwd, ...args], { encoding: 'utf8' });
-    if (result.status !== 0) throw new Error(`git ${args.join(' ')} failed: ${result.stderr}`);
-    return result.stdout.trim();
+/** One linked worktree git knows about. Data only. */
+class TreeState {
+    constructor(
+        readonly path: string,
+        readonly branch: string,
+        readonly tip: string,
+        // undefined: not locked. '': locked with no reason. Otherwise the reason verbatim.
+        public lockReason: string | undefined,
+        public dirty = false,
+    ) {}
 }
+
+/** What git and `gh` know about this repo, and the answers the mocked edges give from it. */
+class GitWorld {
+    readonly trees: TreeState[] = [];
+
+    constructor(readonly primary: string) {}
+
+    git(call: ProcessCallDto): GitResultDto {
+        const args = call.args;
+        if (args[0] === 'worktree' && args[1] === 'list') return new GitResultDto(0, this.porcelain(), '');
+        if (args[0] === 'for-each-ref') {
+            return new GitResultDto(0, this.trees.map((tree: TreeState): string => tree.branch).join('\n') + '\n', '');
+        }
+        if (args[0] === 'status') {
+            const tree = this.trees.find((entry: TreeState): boolean => entry.path === call.cwd);
+            return new GitResultDto(0, tree?.dirty === true ? '?? half-finished.txt\n' : '', '');
+        }
+        if (args[0] === 'rev-list') return new GitResultDto(0, '1', '');
+        if (args[0] === 'cherry') return new GitResultDto(0, '+ aaa\n', '');
+        if (args[0] === 'show-ref') return new GitResultDto(1, '', '');
+        if (args[0] === 'rev-parse') return this.revParse(args);
+        if (args[0] === 'tag' || args[0] === 'branch') return new GitResultDto(0, '', '');
+        if (args[0] === 'worktree' && args[1] === 'unlock') {
+            const tree = this.tree(args[2]);
+            if (tree !== undefined) tree.lockReason = undefined;
+            return new GitResultDto(0, '', '');
+        }
+        if (args[0] === 'worktree' && args[1] === 'remove') {
+            const tree = this.tree(args[2]);
+            if (tree?.lockReason !== undefined) {
+                return new GitResultDto(128, '', `fatal: cannot remove a locked working tree, lock reason: ${tree.lockReason}`);
+            }
+            return new GitResultDto(0, '', '');
+        }
+        return new GitResultDto(1, '', `unscripted git ${args.join(' ')}`);
+    }
+
+    // `gh pr list` reports MERGED_BRANCH as merged, and nothing else.
+    gh(call: ProcessCallDto): ProcessResultDto {
+        const all = call.args.includes('all');
+        const row = all
+            ? `[{"number":${String(MERGED_PR)},"headRefName":"${MERGED_BRANCH}","state":"MERGED"}]`
+            : `[{"number":${String(MERGED_PR)},"headRefName":"${MERGED_BRANCH}"}]`;
+        return new ProcessResultDto(0, row, '');
+    }
+
+    private revParse(args: readonly string[]): GitResultDto {
+        // The archiver's tag-collision probe: no archive tag pre-exists in this repo.
+        if (args[1] === '--verify') return new GitResultDto(1, '', '');
+        const ref = args[args.length - 1];
+        const tree = this.trees.find((entry: TreeState): boolean => entry.branch === ref);
+        return tree === undefined ? new GitResultDto(128, '', 'unknown revision') : new GitResultDto(0, tree.tip, '');
+    }
+
+    private tree(treePath: string | undefined): TreeState | undefined {
+        return this.trees.find((entry: TreeState): boolean => entry.path === treePath);
+    }
+
+    private porcelain(): string {
+        let out = `worktree ${this.primary}\nHEAD base\nbranch refs/heads/main\n`;
+        for (const tree of this.trees) {
+            out += `\nworktree ${tree.path}\nHEAD ${tree.tip}\nbranch refs/heads/${tree.branch}\n`;
+            if (tree.lockReason === '') out += 'locked\n';
+            else if (tree.lockReason !== undefined) out += `locked ${tree.lockReason}\n`;
+        }
+        return out;
+    }
+}
+
+let primary = '';
+let worktrees = '';
+let configDir = '';
+let subagents = '';
+let originalConfigDir: string | undefined;
+let world: GitWorld;
+let feature: WorkflowFeature;
 
 // The reason string the Claude Code harness writes, in its exact observed shape. The pid is REAL and
 // alive on purpose: it is the shared session pid in the field, and the point of this change is that
@@ -63,51 +134,47 @@ function writeAgentState(agent: string, worktreePath: string, lastBlock: string)
         `{"type":"assistant","message":{"content":[{"type":"${lastBlock}"}]}}\n`, 'utf8');
 }
 
-/** Add a worktree on a NEW branch, with one commit on it, and lock it with `reason`. */
+/** A worktree on a NEW branch, with one commit on it, locked with `reason` (null: a bare lock). */
 function addLockedWorktree(name: string, branch: string, reason: string | null): string {
     const treePath = join(worktrees, name);
-    git(primary, 'worktree', 'add', '-b', branch, treePath, 'main');
-    writeFileSync(join(treePath, `${name}.txt`), 'work\n', 'utf8');
-    git(treePath, 'add', '-A');
-    git(treePath, '-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-m', `work on ${branch}`);
-    if (reason === null) git(primary, 'worktree', 'lock', treePath);
-    else git(primary, 'worktree', 'lock', '--reason', reason, treePath);
+    mkdirSync(treePath, { recursive: true });
+    world.trees.push(new TreeState(treePath, branch, `tip-of-${name}`, reason === null ? '' : reason));
     return treePath;
 }
 
-function verdictFor(treePath: string, ignoreStaleLocks: boolean = false): DeletableWorktree {
-    const found = new MergedBranchesService().computeMergedBranches(primary, ignoreStaleLocks).worktrees
-        .find((tree: DeletableWorktree): boolean => tree.path === treePath);
+// Uncommitted work in a worktree: what `git status --porcelain` reports there.
+function leaveUncommittedWork(treePath: string): void {
+    const tree = world.trees.find((entry: TreeState): boolean => entry.path === treePath);
+    if (tree !== undefined) tree.dirty = true;
+}
+
+async function verdictFor(treePath: string, ignoreStaleLocks: boolean = false): Promise<DeletableWorktree> {
+    const found = (await feature.container.get(MergedBranchesService).computeMergedBranches(primary, ignoreStaleLocks))
+        .worktrees.find((tree: DeletableWorktree): boolean => tree.path === treePath);
     if (found === undefined) throw new Error(`no verdict recorded for ${treePath}`);
     return found;
 }
 
-beforeEach((): void => {
-    // realpath: macOS hands out /var/... while git reports the /private/var/... it resolves to, and
-    // every assertion here compares paths against git's own output.
-    primary = realpathSync(mkdtempSync(join(tmpdir(), 'agent-lock-repo-')));
-    worktrees = realpathSync(mkdtempSync(join(tmpdir(), 'agent-lock-trees-')));
-    git(primary, 'init', '-q', '-b', 'main');
-    writeFileSync(join(primary, 'base.txt'), 'base\n', 'utf8');
-    git(primary, 'add', '-A');
-    git(primary, '-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-m', 'base');
+// The commands that change a worktree or a branch, in the order the program issued them.
+function mutations(): string[] {
+    return feature.git.commandLines().filter((line: string): boolean =>
+        /^git (worktree (unlock|remove|prune)|branch -D|tag )/.test(line));
+}
 
-    // `gh pr list` reports MERGED_BRANCH as merged, and nothing else.
-    fakeBin = realpathSync(mkdtempSync(join(tmpdir(), 'agent-lock-bin-')));
-    const merged = JSON.stringify([{ number: MERGED_PR, headRefName: MERGED_BRANCH }]);
-    const all = JSON.stringify([{ number: MERGED_PR, headRefName: MERGED_BRANCH, state: 'MERGED' }]);
-    writeFileSync(
-        join(fakeBin, 'gh'),
-        `#!/bin/sh\ncase "$*" in\n  *"--state all"*) echo '${all}' ;;\n  *) echo '${merged}' ;;\nesac\n`,
-        'utf8',
-    );
-    chmodSync(join(fakeBin, 'gh'), 0o755);
-    originalPath = process.env.PATH ?? '';
-    process.env.PATH = `${fakeBin}:${originalPath}`;
+beforeEach(async (): Promise<void> => {
+    primary = specTempDirs.make('agent-lock-repo-');
+    worktrees = specTempDirs.make('agent-lock-trees-');
+    // A primary clone as git lays it out on disk, so the mutation log lands in its `.webpieces/`.
+    mkdirSync(join(primary, '.git', 'objects'), { recursive: true });
+    writeFileSync(join(primary, '.git', 'HEAD'), 'ref: refs/heads/main\n');
+    world = new GitWorld(primary);
+    feature = await WorkflowFeature.create();
+    feature.git.respondToPrefix([], (call: ProcessCallDto): GitResultDto => world.git(call));
+    feature.processes.respondToPrefix('gh', [], (call: ProcessCallDto): ProcessResultDto => world.gh(call));
 
     // An EMPTY harness state tree by default: "the harness knows nothing about that agent", which is
     // the honest default for a temp repo and exercises the fail-safe path.
-    configDir = realpathSync(mkdtempSync(join(tmpdir(), 'agent-lock-claude-')));
+    configDir = specTempDirs.make('agent-lock-claude-');
     subagents = join(configDir, 'projects', '-tmp-repo', 'session-1', 'subagents');
     mkdirSync(subagents, { recursive: true });
     originalConfigDir = process.env['CLAUDE_CONFIG_DIR'];
@@ -115,42 +182,11 @@ beforeEach((): void => {
 });
 
 afterEach((): void => {
-    process.env.PATH = originalPath;
     if (originalConfigDir === undefined) delete process.env['CLAUDE_CONFIG_DIR'];
     else process.env['CLAUDE_CONFIG_DIR'] = originalConfigDir;
     rmSync(primary, { recursive: true, force: true });
     rmSync(worktrees, { recursive: true, force: true });
-    rmSync(fakeBin, { recursive: true, force: true });
     rmSync(configDir, { recursive: true, force: true });
-});
-
-describe('the lock reason comes out of real `git worktree list --porcelain`', (): void => {
-    it('carries the harness reason verbatim, and parses to the agent name and pid', (): void => {
-        const reason = agentReason('agent-a017f6be7c518c68c');
-        const treePath = addLockedWorktree('landed', MERGED_BRANCH, reason);
-
-        const tree = new WorktreeService().listWorktrees(primary)
-            .find((entry): boolean => entry.path === treePath);
-
-        expect(tree?.locked).toBe(true);
-        expect(tree?.lockReason).toBe(reason);
-
-        const lock = new AgentWorktreeLockReader().parse(tree?.lockReason ?? '');
-        expect(lock?.agent).toBe('agent-a017f6be7c518c68c');
-        expect(lock?.pid).toBe(process.pid);
-        expect(lock?.startedAt).toBe('Wed Aug 19 13:11:24 2026');
-    });
-
-    it('reports an EMPTY lock reason as empty, not as a missing lock', (): void => {
-        const treePath = addLockedWorktree('bare', LIVE_BRANCH, null);
-
-        const tree = new WorktreeService().listWorktrees(primary)
-            .find((entry): boolean => entry.path === treePath);
-
-        expect(tree?.locked).toBe(true);
-        expect(tree?.lockReason).toBe('');
-        expect(new AgentWorktreeLockReader().parse('')).toBeNull();
-    });
 });
 
 describe('wp-cleanup verdicts for a locked worktree', (): void => {
@@ -159,11 +195,11 @@ describe('wp-cleanup verdicts for a locked worktree', (): void => {
      * `process.pid` here is exactly what the field sees, and it is ALIVE. The verdict must still be
      * deletable, and the reason must not claim anybody is working anywhere.
      */
-    it('reaps a merged worktree whose agent has RETURNED, whatever the live pid in the lock says', (): void => {
+    it('reaps a merged worktree whose agent has RETURNED, whatever the live pid in the lock says', async (): Promise<void> => {
         const treePath = addLockedWorktree('landed', MERGED_BRANCH, agentReason('agent-done'));
         writeAgentState('agent-done', treePath, 'text');
 
-        const verdict = verdictFor(treePath);
+        const verdict = await verdictFor(treePath);
 
         expect(verdict.deletable).toBe(true);
         expect(verdict.unlockBeforeRemove).toBe(true);
@@ -176,20 +212,20 @@ describe('wp-cleanup verdicts for a locked worktree', (): void => {
     // "The harness has never heard of that agent" is not a veto — an unreadable ~/.claude would
     // otherwise restore the exact accumulation this change exists to end. The branch evidence is what
     // licensed this reap; the harness only ever gets to stop one.
-    it('reaps a merged worktree when the harness knows nothing about its agent', (): void => {
+    it('reaps a merged worktree when the harness knows nothing about its agent', async (): Promise<void> => {
         const treePath = addLockedWorktree('landed', MERGED_BRANCH, agentReason('agent-unknown'));
 
-        const verdict = verdictFor(treePath);
+        const verdict = await verdictFor(treePath);
 
         expect(verdict.deletable).toBe(true);
         expect(verdict.unlockBeforeRemove).toBe(true);
     });
 
-    it('SPARES a merged worktree whose agent is still mid-tool-call', (): void => {
+    it('SPARES a merged worktree whose agent is still mid-tool-call', async (): Promise<void> => {
         const treePath = addLockedWorktree('landed', MERGED_BRANCH, agentReason('agent-live'));
         writeAgentState('agent-live', treePath, 'tool_use');
 
-        const verdict = verdictFor(treePath);
+        const verdict = await verdictFor(treePath);
 
         expect(verdict.deletable).toBe(false);
         expect(verdict.unlockBeforeRemove).toBe(false);
@@ -199,15 +235,18 @@ describe('wp-cleanup verdicts for a locked worktree', (): void => {
 
     // The case the lock exists for. Uncommitted or untracked files are work no archive tag captures,
     // and nothing — not a merged PR, not a returned agent — overrides that.
-    it('SPARES a merged worktree that has uncommitted work in it', (): void => {
+    it('SPARES a merged worktree that has uncommitted work in it', async (): Promise<void> => {
         const treePath = addLockedWorktree('landed', MERGED_BRANCH, agentReason('agent-done'));
         writeAgentState('agent-done', treePath, 'text');
-        writeFileSync(join(treePath, 'half-finished.txt'), 'not committed\n', 'utf8');
+        leaveUncommittedWork(treePath);
 
-        const verdict = verdictFor(treePath);
+        const verdict = await verdictFor(treePath);
 
         expect(verdict.deletable).toBe(false);
         expect(verdict.reason).toContain('uncommitted or untracked files');
+        // The evidence came from `git status --porcelain` run IN that worktree.
+        expect(feature.git.calls.some((call: ProcessCallDto): boolean =>
+            call.commandLine === 'git status --porcelain' && call.cwd === treePath)).toBe(true);
     });
 
     /**
@@ -216,11 +255,11 @@ describe('wp-cleanup verdicts for a locked worktree', (): void => {
      * "pid N still running — that agent is working in here", which was asserted as fact about seven
      * agents that had finished, several with merged PRs.
      */
-    it('SPARES an unmerged worktree and does NOT claim anyone is working in it', (): void => {
+    it('SPARES an unmerged worktree and does NOT claim anyone is working in it', async (): Promise<void> => {
         const treePath = addLockedWorktree('unmerged', LIVE_BRANCH, agentReason('agent-done'));
         writeAgentState('agent-done', treePath, 'text');
 
-        const verdict = verdictFor(treePath);
+        const verdict = await verdictFor(treePath);
 
         expect(verdict.deletable).toBe(false);
         expect(verdict.reason).toContain('agent-done');
@@ -234,10 +273,10 @@ describe('wp-cleanup verdicts for a locked worktree', (): void => {
      * evidence of who locked a worktree, and an unrecognised one identifies nobody. A human may have
      * written it; so may some other tool. Report the string, attribute it to no one.
      */
-    it('SPARES an unrecognised lock reason, quoting it and attributing it to NOBODY', (): void => {
+    it('SPARES an unrecognised lock reason, quoting it and attributing it to NOBODY', async (): Promise<void> => {
         const treePath = addLockedWorktree('debugging', MERGED_BRANCH, 'dean is debugging');
 
-        const verdict = verdictFor(treePath);
+        const verdict = await verdictFor(treePath);
 
         expect(verdict.deletable).toBe(false);
         expect(verdict.unlockBeforeRemove).toBe(false);
@@ -245,10 +284,10 @@ describe('wp-cleanup verdicts for a locked worktree', (): void => {
         expect(verdict.reason).not.toContain('human');
     });
 
-    it('SPARES a lock with no reason at all, and says so rather than guessing', (): void => {
+    it('SPARES a lock with no reason at all, and says so rather than guessing', async (): Promise<void> => {
         const treePath = addLockedWorktree('bare', MERGED_BRANCH, null);
 
-        const verdict = verdictFor(treePath);
+        const verdict = await verdictFor(treePath);
 
         expect(verdict.deletable).toBe(false);
         expect(verdict.unlockBeforeRemove).toBe(false);
@@ -266,12 +305,12 @@ describe('wp-cleanup verdicts for a locked worktree', (): void => {
  * the live-agent veto.
  */
 describe('--ignore-stale-locks', (): void => {
-    it('judges a locked, unmerged worktree on its branch instead of hiding it behind the lock', (): void => {
+    it('judges a locked, unmerged worktree on its branch instead of hiding it behind the lock', async (): Promise<void> => {
         const treePath = addLockedWorktree('unmerged', LIVE_BRANCH, agentReason('agent-done'));
         writeAgentState('agent-done', treePath, 'text');
 
-        const spared = verdictFor(treePath);
-        const judged = verdictFor(treePath, true);
+        const spared = await verdictFor(treePath);
+        const judged = await verdictFor(treePath, true);
 
         expect(spared.classification).toBe('locked-worktree');
         expect(judged.classification).not.toBe('locked-worktree');
@@ -279,23 +318,23 @@ describe('--ignore-stale-locks', (): void => {
         expect(judged.reason).toContain('treated as no evidence, as asked');
     });
 
-    it('still spares a DIRTY worktree', (): void => {
+    it('still spares a DIRTY worktree', async (): Promise<void> => {
         const treePath = addLockedWorktree('unmerged', LIVE_BRANCH, agentReason('agent-done'));
         writeAgentState('agent-done', treePath, 'text');
-        writeFileSync(join(treePath, 'half-finished.txt'), 'not committed\n', 'utf8');
+        leaveUncommittedWork(treePath);
 
-        const verdict = verdictFor(treePath, true);
+        const verdict = await verdictFor(treePath, true);
 
         expect(verdict.deletable).toBe(false);
         expect(verdict.classification).toBe('locked-worktree');
         expect(verdict.reason).toContain('uncommitted or untracked files');
     });
 
-    it('still spares a worktree whose agent is mid-tool-call', (): void => {
+    it('still spares a worktree whose agent is mid-tool-call', async (): Promise<void> => {
         const treePath = addLockedWorktree('unmerged', LIVE_BRANCH, agentReason('agent-live'));
         writeAgentState('agent-live', treePath, 'tool_use');
 
-        const verdict = verdictFor(treePath, true);
+        const verdict = await verdictFor(treePath, true);
 
         expect(verdict.deletable).toBe(false);
         expect(verdict.classification).toBe('locked-worktree');
@@ -304,25 +343,32 @@ describe('--ignore-stale-locks', (): void => {
 });
 
 describe('reaping a returned agent\'s merged worktree', (): void => {
-    it('unlocks it, removes the directory and the branch, and logs the SHA and a recover= command', (): void => {
+    it('unlocks it, removes the directory and the branch, and logs the SHA and a recover= command', async (): Promise<void> => {
         const treePath = addLockedWorktree('landed', MERGED_BRANCH, agentReason('agent-done'));
         writeAgentState('agent-done', treePath, 'text');
-        const tip = git(primary, 'rev-parse', MERGED_BRANCH);
-        const verdict = verdictFor(treePath);
+        const tip = 'tip-of-landed';
+        const verdict = await verdictFor(treePath);
+        const reaper = feature.container.get(WorktreeReaper);
 
-        const result = new WorktreeReaper().reapWorktrees(primary, primary, 'wp-cleanup', [verdict]);
+        const result = await reaper.reapWorktrees(primary, primary, 'wp-cleanup', [verdict]);
 
         expect(result.failed).toEqual([]);
         expect(result.reaped.length).toBe(1);
         expect(result.reaped[0].sha).toBe(tip);
         expect(result.reaped[0].branchDeleted).toBe(true);
 
-        // The directory and the branch are both actually gone from real git.
-        expect(git(primary, 'worktree', 'list', '--porcelain')).not.toContain(treePath);
-        expect(git(primary, 'branch', '--list', MERGED_BRANCH)).toBe('');
+        // Archived first, then the lock cleared, then the directory and the branch removed — in that order.
+        const issued = mutations();
+        expect(issued.length).toBe(4);
+        expect(issued[0]).toMatch(new RegExp(`^git tag archive/\\d{4}-\\d{2}-\\d{2}/${MERGED_BRANCH} ${tip}$`));
+        expect(issued.slice(1)).toEqual([
+            `git worktree unlock ${treePath}`,
+            `git worktree remove ${treePath}`,
+            `git branch -D ${MERGED_BRANCH}`,
+        ]);
 
         // Every removal stays recoverable — that guarantee is unchanged by the unlock.
-        const restore = new WorktreeReaper().restoreCommand(result.reaped[0]);
+        const restore = reaper.restoreCommand(result.reaped[0]);
         expect(restore).toContain(`git worktree add -b ${MERGED_BRANCH} ${treePath}`);
 
         const log = readFileSync(branchMutationLogPath(primary), 'utf8');
@@ -335,32 +381,33 @@ describe('reaping a returned agent\'s merged worktree', (): void => {
     // The reap is the ONLY thing that clears a lock, and only for a verdict that earned it. A lock the
     // verdict never flagged must still stop the removal dead — otherwise `unlockBeforeRemove` would be
     // decoration rather than the gate it is.
-    it('does NOT unlock a worktree whose verdict never asked for it', (): void => {
+    it('does NOT unlock a worktree whose verdict never asked for it', async (): Promise<void> => {
         const treePath = addLockedWorktree('landed', MERGED_BRANCH, 'dean is debugging');
         const forced = new DeletableWorktree(
             treePath, MERGED_BRANCH, `PR #${String(MERGED_PR)} merged`, MERGED_PR, true, 'merged-pr');
 
-        const result = new WorktreeReaper().reapWorktrees(primary, primary, 'wp-cleanup', [forced]);
+        const result = await feature.container.get(WorktreeReaper).reapWorktrees(primary, primary, 'wp-cleanup', [forced]);
 
         expect(result.reaped).toEqual([]);
         expect(result.failed.length).toBe(1);
         expect(result.failed[0].error).toContain('locked');
-        expect(git(primary, 'worktree', 'list', '--porcelain')).toContain(treePath);
+        expect(mutations().some((line: string): boolean => line.startsWith('git worktree unlock'))).toBe(false);
+        expect(mutations().some((line: string): boolean => line.startsWith('git branch -D'))).toBe(false);
     });
 });
 
 // The reaper's own rails are unrelated to locking and must not have moved.
 describe('the standing-in-it rail is untouched', (): void => {
-    it('refuses to reap the worktree the command is running in, lock or no lock', (): void => {
+    it('refuses to reap the worktree the command is running in, lock or no lock', async (): Promise<void> => {
         const treePath = addLockedWorktree('landed', MERGED_BRANCH, agentReason('agent-done'));
         writeAgentState('agent-done', treePath, 'text');
-        const verdict = verdictFor(treePath);
+        const verdict = await verdictFor(treePath);
 
-        const result = new WorktreeReaper().reapWorktrees(primary, treePath, 'wp-cleanup', [verdict]);
+        const result = await feature.container.get(WorktreeReaper).reapWorktrees(primary, treePath, 'wp-cleanup', [verdict]);
 
         expect(result.reaped).toEqual([]);
         expect(result.spared.length).toBe(1);
         expect(result.spared[0].reason).toContain('self-destruct');
-        expect(git(primary, 'worktree', 'list', '--porcelain')).toContain(treePath);
+        expect(mutations()).toEqual([]);
     });
 });

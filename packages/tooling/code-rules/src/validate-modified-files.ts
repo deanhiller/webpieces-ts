@@ -262,7 +262,7 @@ async function runValidatorImpl(
     const head = process.env['NX_HEAD'];
 
     if (!base) {
-        base = detectBase(workspaceRoot) ?? undefined;
+        base = await detectBase(workspaceRoot) ?? undefined;
 
         if (!base) {
             console.log('\n\u23ed\ufe0f  Skipping modified files validation (could not detect base branch)');
@@ -288,7 +288,7 @@ async function runValidatorImpl(
 
     // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
     try {
-        const changedFiles = getChangedFiles(workspaceRoot, base, head);
+        const changedFiles = await getChangedFiles(workspaceRoot, base, head);
 
         if (changedFiles.length === 0) {
             console.log('\u2705 No TypeScript files changed');

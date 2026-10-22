@@ -179,7 +179,7 @@ export class ApiDocRule {
 
     /** `mode: OFF` and the time-box/branch hatches come from RuleGate, so there is ONE reading. */
     // webpieces-disable no-function-outside-class -- static factory of this class
-    static fromConfig(workspaceRoot: string, name: string): ApiDocRule {
+    static async fromConfig(workspaceRoot: string, name: string): Promise<ApiDocRule> {
         if (new RuleGate().isDisabled(workspaceRoot, name, true)) {
             return ApiDocRule.off(name);
         }
@@ -188,7 +188,7 @@ export class ApiDocRule {
         const allowedPaths = Array.isArray(allowed) ? (allowed as string[]) : [];
         const affected =
             rule?.options['mode'] === AFFECTED_PROJECT_MODE
-                ? ApiDocRule.changedPathsOf(workspaceRoot)
+                ? await ApiDocRule.changedPathsOf(workspaceRoot)
                 : null;
         return new ApiDocRule(name, true, allowedPaths, affected);
     }
@@ -200,9 +200,9 @@ export class ApiDocRule {
      * project owns a contract at all.
      */
     // webpieces-disable no-function-outside-class -- private static reader of this class
-    private static changedPathsOf(workspaceRoot: string): readonly string[] | null {
+    private static async changedPathsOf(workspaceRoot: string): Promise<readonly string[] | null> {
         const scope = new DiffScope();
-        const range = scope.resolveBase(workspaceRoot);
+        const range = await scope.resolveBase(workspaceRoot);
         if (range.base === undefined) return null;
         const opts = new ChangedFilesOptions();
         opts.tsOnly = false;

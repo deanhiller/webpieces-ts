@@ -1,9 +1,9 @@
-import { specTempDirs } from '@webpieces/tooling-testkit';
-import { describe, it, expect, vi } from 'vitest';
-import { execSync, execFileSync } from 'child_process';
+import { CheckoutLayout, specTempDirs } from '@webpieces/tooling-testkit';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
-import { AtomicFile, GitProcessClient } from '@webpieces/tooling-common';
+import { AtomicFile } from '@webpieces/tooling-common';
+import { AgentPayload, CodexAdapter } from '@webpieces/hook-runtime';
 import { ChecklistDefinition, ChecklistInstructionsService, DEFAULT_MAX_CONCURRENT_BUILDS, DiffScope, HomeConfig, HomeConfigService, REVIEWER_AGENTS_PLACEHOLDER, RepoRootFinder, ReviewJsonService, ReviewerAgentPolicy, toChecklist } from '@webpieces/rules-config';
 import { ReviewIdentityStamp, ReviewIdentityStampService } from '@webpieces/repo-workflow-core';
 import { ReviewBudgetCheckOptions, WriteReviewCommand, WriteReviewOptions } from './write-review-command';
@@ -13,15 +13,14 @@ import { ChecklistDetector } from '../workflow/checklist-detector';
 import { ChecklistScanOptions, ChecklistScanner } from '../workflow/checklist-scanner';
 import { ChecklistScopeHasher } from '../workflow/checklist-scope-hasher';
 import { DiffBasisResolver } from '../workflow/diff-basis';
-import { DiffMaterializer } from '../workflow/diff-materializer';
-import { ForkPoint } from '../workflow/git-findForkPoint';
-import { GitStatusParser } from '../workflow/git-status';
 import { PrContextWriter } from '../workflow/pr-context-writer';
 import { ReviewStageReceipt, ReviewStageReceiptService } from '../workflow/review-stage-receipt';
 import { ReviewerIdentityResolver } from '../workflow/reviewer-identity';
 import { ReviewerVerdictGate } from '../workflow/reviewer-verdict-gate';
 import { HARNESS_TERMINAL, STANDING_CURRENT, VerdictProvenanceService } from '../workflow/verdict-provenance';
 import { ReviewRoundStateService } from '../workflow/review-round-state';
+import { PrGateFeature } from '../../__tests__/feature-harness';
+import { ScriptedRepo } from '../../__tests__/scripted-repo';
 
 /** The branch is fixed rather than read from the process cwd, which a spec does not own. */
 class FixedBranchName extends AiBranchName {
@@ -34,16 +33,19 @@ class FixedBranchName extends AiBranchName {
     }
 }
 
-// The scan below still reads a REAL repository: ChecklistScanner's changed-file set comes from
-// `@webpieces/rules-config`'s DiffScope, which is not routed through the injected process edge yet (a
-// later slice of #1381). Only the tests that SCAN build one; the rest need no git at all.
-const realGit = new GitProcessClient();
-
 const reviewJson = new ReviewJsonService();
 const stamps = new ReviewIdentityStampService();
 const provenance = new VerdictProvenanceService(reviewJson, new AtomicFile());
 const receipts = new ReviewStageReceiptService(reviewJson);
-const rounds = new ReviewRoundStateService(reviewJson, provenance, new AtomicFile(), realGit);
+// The program, fresh for every test: the shipped container with its process edges mocked (#1381). The tests
+// that SCAN answer its git from a ScriptedRepo; the rest never ask git anything.
+let feature: PrGateFeature;
+let rounds: ReviewRoundStateService;
+
+beforeEach(async () => {
+    feature = await PrGateFeature.create();
+    rounds = feature.container.get(ReviewRoundStateService);
+});
 const RED = JSON.stringify({ id: 'security', status: 'red', agent: 'codex', model: 'gpt-5-codex', output: 'GRANT ALL is too wide' });
 const ORANGE = JSON.stringify({ id: 'security', status: 'orange', agent: 'codex', model: 'gpt-5-codex', output: 'narrow GRANT ALL to SELECT' });
 const CHECKLISTS: ChecklistDefinition[] = [
@@ -51,19 +53,13 @@ const CHECKLISTS: ChecklistDefinition[] = [
 ];
 const GREEN = JSON.stringify({ id: 'security', status: 'green', agent: 'codex', model: 'gpt-5-codex', output: 'no auth surface touched' });
 
-function git(cwd: string, cmd: string): void {
-    execSync(cmd, { cwd, stdio: 'pipe' });
-}
-
 function scanner(): ChecklistScanner {
-    const diffScope = new DiffScope();
+    const c = feature.container;
     const home = new HomeConfigService();
     vi.spyOn(home, 'load').mockReturnValue(new HomeConfig(false, false, DEFAULT_MAX_CONCURRENT_BUILDS, false));
     return new ChecklistScanner(
-        new FixedBranchName(), new ChecklistDetector(diffScope), diffScope,
-        new DiffBasisResolver(new ForkPoint(null as never, null as never, null as never, null as never, realGit), new GitStatusParser(), realGit),
-        new PrContextWriter(diffScope, reviewJson), reviewJson, home,
-        new ChecklistScopeHasher(new DiffMaterializer(reviewJson, realGit)), provenance, receipts, rounds,
+        new FixedBranchName(), c.get(ChecklistDetector), c.get(DiffScope), c.get(DiffBasisResolver),
+        c.get(PrContextWriter), reviewJson, home, c.get(ChecklistScopeHasher), provenance, receipts, rounds,
     );
 }
 
@@ -81,19 +77,18 @@ function briefedDir(maxRounds = 2): string {
     return dir;
 }
 
-/** A REAL repo on a feature branch with one in-scope change, briefed from a real scan — for the tests that scan. */
+/**
+ * A repo on a feature branch with one in-scope change (a ScriptedRepo: no git runs), briefed from a real
+ * scan — for the tests that scan.
+ */
 async function briefedRepo(maxRounds = 2): Promise<string> {
     const dir = specTempDirs.make('wp-write-review-');
-    git(dir, 'git init -q -b main');
-    git(dir, 'git config user.email t@t.co');
-    git(dir, 'git config user.name T');
-    fs.writeFileSync(path.join(dir, 'README.md'), '# base\n');
-    git(dir, 'git add -A');
-    git(dir, 'git commit -qm base');
-    git(dir, 'git checkout -q -b dean/feat');
-    fs.writeFileSync(path.join(dir, 'grant.sql'), 'GRANT ALL;\n');
-    git(dir, 'git add -A');
-    git(dir, 'git commit -qm change');
+    const repo = ScriptedRepo.init(dir, 'main', feature.git);
+    repo.write('README.md', '# base\n');
+    repo.commitAll('base');
+    repo.checkoutNewBranch('dean/feat');
+    repo.write('grant.sql', 'GRANT ALL;\n');
+    repo.commitAll('change');
     const scan = await scanner().scan(dir, CHECKLISTS, new ChecklistScanOptions(1, false, ''));
     const receipt = new ReviewStageReceipt(scan.basis.headSha, true, 'pnpm build', '', ['security']);
     receipt.scopeHashes = scan.scopeHashes;
@@ -285,6 +280,11 @@ describe('wp-write-review fits the color to the round (issue #1053)', () => {
     });
 });
 
+/** The one export of agent-workflow-rules' stamper this spec drives, typed at the computed import. */
+interface StamperModule {
+    ReviewIdentityStamper: new () => { stamp(event: ReturnType<CodexAdapter['toEvent']>, command: string, cwd: string): void };
+}
+
 // Cross-package integration: the hook producer and the CLI writer must select the SAME namespace.
 describe('linked-worktree hook-to-writer routing (#1105)', () => {
     async function worktrees(): Promise<string[]> {
@@ -292,39 +292,33 @@ describe('linked-worktree hook-to-writer routing (#1105)', () => {
         const parent = specTempDirs.makeReal('wp-stamp-trees-');
         const first = path.join(parent, 'first');
         const second = path.join(parent, 'second');
-        git(primary, `git worktree add -q -b review-first "${first}"`);
-        git(primary, `git worktree add -q -b review-second "${second}"`);
+        // What `git worktree add -b review-first|review-second` lays out on disk — all the routing reads.
+        CheckoutLayout.linkedWorktree(primary, first, 'review-first');
+        CheckoutLayout.linkedWorktree(primary, second, 'review-second');
         for (const tree of [first, second]) {
             receipts.write(tree, 'dean-feat', receipts.read(primary, 'dean-feat')!);
         }
         return [primary, first, second];
     }
 
-    function submitHook(primary: string, target: string, agentId = 'reviewer-1105'): void {
+    async function submitHook(primary: string, target: string, agentId = 'reviewer-1105'): Promise<void> {
         const bash = `cd '${target}' && pnpm wp-write-review --checklist security`;
-        // Run the hook producer in a separate process, as in production. A static test import here
+        // The hook producer, run IN PROCESS (#1381) through a COMPUTED import path: a static test import here
         // would falsely add agent-workflow-rules to pr-gate's package dependency graph.
         const producer = path.resolve(__dirname, '../../../../agent-workflow-rules/src/adapters/review-identity-stamper.ts');
         const payload = JSON.stringify({
             tool_name: 'Bash', tool_input: { command: bash }, cwd: primary,
             turn_id: 'fixture-turn', session_id: 'fixture-session', agent_id: agentId, agent_type: 'default',
         });
-        const hookScript = `
-            const { ReviewIdentityStamper } = require(${JSON.stringify(producer)});
-            const { CodexAdapter } = require('@webpieces/hook-runtime');
-            const payload = JSON.parse(process.argv[1]);
-            const event = new CodexAdapter().toEvent(payload, payload.cwd);
-            new ReviewIdentityStamper().stamp(event, payload.tool_input.command, payload.cwd);
-        `;
-        execFileSync(process.execPath, ['-r', '@swc-node/register', '-r', 'tsconfig-paths/register', '-e', hookScript, payload], {
-            env: { ...process.env, TS_NODE_PROJECT: path.resolve(__dirname, '../../../../../../tsconfig.base.json') },
-            stdio: 'pipe',
-        });
+        const stamperModule = (await import(producer)) as StamperModule;
+        const parsed = JSON.parse(payload) as AgentPayload;
+        const event = new CodexAdapter().toEvent(parsed, primary);
+        new stamperModule.ReviewIdentityStamper().stamp(event, bash, primary);
     }
 
     it('writes a legitimate verdict in the target worktree and consumes the hook stamp once', async () => {
         const [primary, target, other] = await worktrees();
-        submitHook(primary, target);
+        await submitHook(primary, target);
         expect(fs.existsSync(stamps.stampPath(primary, 'security'))).toBe(false);
         expect(stamps.take(other, 'security')).toBeNull();
         expect(stamps.take(target, 'other-checklist')).toBeNull();
@@ -351,7 +345,7 @@ describe('linked-worktree hook-to-writer routing (#1105)', () => {
 
     it('still refuses a coordinator routed into a worktree', async () => {
         const [primary, target] = await worktrees();
-        submitHook(primary, target, '');
+        await submitHook(primary, target, '');
         await expect(command().run(new WriteReviewOptions('security', GREEN, target))).rejects.toThrow(
             /COORDINATING agent/,
         );

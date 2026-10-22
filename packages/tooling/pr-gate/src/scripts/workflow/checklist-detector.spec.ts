@@ -1,10 +1,7 @@
-import { specTempDirs } from '@webpieces/tooling-testkit';
 import { describe, it, expect } from 'vitest';
-import { execSync } from 'child_process';
-import * as fs from 'fs';
-import * as path from 'path';
 import { ChecklistDefinition, DiffScope, ReviewerAgentPolicy } from '@webpieces/rules-config';
-import { ChecklistDetector } from './checklist-detector';
+import { PrGateFeature } from '../../__tests__/feature-harness';
+import { ChecklistDetector, TriggeredChecklist } from './checklist-detector';
 
 const detector = new ChecklistDetector(new DiffScope());
 
@@ -108,33 +105,24 @@ describe('ChecklistDetector.roster', () => {
     });
 });
 
-// One end-to-end pass over a real git repo — proves detectForRepo passes tsOnly:false, so a *.sql file is
-// seen at all (the default would silently drop it and report "no checklists matched").
-function git(cwd: string, cmd: string): void {
-    execSync(cmd, { cwd, stdio: 'pipe' });
-}
-
+// One end-to-end pass through the shipped DAG against SCRIPTED git (#1381) — proves detectForRepo passes
+// tsOnly:false, so a *.sql file is seen at all (the default would silently drop it and report "no
+// checklists matched"). The proof is the argv: no `*.ts` pathspec reaches git.
 describe('ChecklistDetector.detectForRepo (git integration)', () => {
-    it('sees non-.ts changes (tsOnly:false) and matches by path', () => {
+    it('sees non-.ts changes (tsOnly:false) and matches by path', async () => {
         delete process.env['NX_BASE'];
         delete process.env['NX_HEAD'];
-        const repo = specTempDirs.make('wp-detect-');
-        git(repo, 'git init -b main -q');
-        git(repo, 'git config core.hooksPath /dev/null');
-        git(repo, 'git config user.email t@t.co');
-        git(repo, 'git config user.name t');
-        fs.writeFileSync(path.join(repo, 'README.md'), 'base\n');
-        git(repo, 'git add -A');
-        git(repo, 'git commit -q -m base');
-        git(repo, 'git checkout -q -b feature');
+        const repo = '/repo';
+        const feature = await PrGateFeature.create();
+        // No origin/main in this repo; local main is the base the feature branch forked from.
+        feature.git.respond(['merge-base', 'HEAD', 'origin/main'], feature.git.fail(128, 'fatal: Not a valid object name origin/main'));
+        feature.git.respond(['merge-base', 'HEAD', 'main'], feature.git.ok('base-sha\n'));
+        feature.git.respond(['diff', '--name-only', '--diff-filter=d', 'base-sha'], feature.git.ok('db/001.sql\n'));
+        feature.git.respond(['ls-files', '--others', '--exclude-standard'], feature.git.ok(''));
 
-        fs.mkdirSync(path.join(repo, 'db'), { recursive: true });
-        fs.writeFileSync(path.join(repo, 'db', '001.sql'), 'CREATE TABLE t (id int);\n');
-        git(repo, 'git add -A');
-        git(repo, 'git commit -q -m feature');
-
-        const triggered = detector.detectForRepo(repo, [def()]);
-        expect(triggered.map((t): string => t.def.id)).toEqual(['migrations-reviewer']);
+        const triggered = await feature.container.get(ChecklistDetector).detectForRepo(repo, [def()]);
+        expect(triggered.map((t: TriggeredChecklist): string => t.def.id)).toEqual(['migrations-reviewer']);
         expect(triggered[0].matchedFiles).toEqual(['db/001.sql']);
+        expect(feature.git.commandLines().some((line: string): boolean => line.includes('*.ts'))).toBe(false);
     });
 });

@@ -363,7 +363,7 @@ export class LandPrCommand {
         let line = '';
         let tag = '';
         if (retention === BRANCH_RETENTION_ARCHIVE_TAG) {
-            const archive = this.archiver.archive(repoRoot, base);
+            const archive = await this.archiver.archive(repoRoot, base);
             tag = archive.tag;
             line = archive.ok
                 ? `   Archived ${base} → ${archive.tag}   (restore: ${this.archiver.restoreCommand(base, archive.tag)})\n`

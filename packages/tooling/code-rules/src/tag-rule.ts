@@ -212,7 +212,7 @@ export async function runTagValidator(
     const head = process.env['NX_HEAD'];
 
     if (!base) {
-        base = detectBase(workspaceRoot) ?? undefined;
+        base = await detectBase(workspaceRoot) ?? undefined;
         if (!base) {
             console.log(`\n⏭️  Skipping ${spec.ruleName} validation (could not detect base branch)`);
             console.log('');
@@ -226,7 +226,7 @@ export async function runTagValidator(
 
     // Project-level rule: ANY changed file (not just .ts) makes its owning
     // project require a tag, so include non-code files too.
-    const changedFiles = getChangedFiles(workspaceRoot, base, head, { tsOnly: false });
+    const changedFiles = await getChangedFiles(workspaceRoot, base, head, { tsOnly: false });
     if (changedFiles.length === 0) {
         console.log('✅ No changed files in any project');
         return { success: true };

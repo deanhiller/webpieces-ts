@@ -17,7 +17,7 @@
     },
     "projects": {
         "agent-workflow-rules": {
-            "level": 4,
+            "level": 5,
             "framework": ["node"],
             "role": "lib",
             "products": ["rules"],
@@ -28,7 +28,7 @@
             ]
         },
         "ai-hook-rules": {
-            "level": 4,
+            "level": 5,
             "framework": ["node"],
             "role": "lib",
             "products": ["rules"],
@@ -206,7 +206,7 @@
             ]
         },
         "code-rules": {
-            "level": 3,
+            "level": 4,
             "framework": ["node"],
             "role": "lib",
             "products": ["rules"],
@@ -280,7 +280,7 @@
             "dependsOn": []
         },
         "eslint-rules": {
-            "level": 3,
+            "level": 4,
             "framework": ["node"],
             "role": "lib",
             "products": ["rules"],
@@ -302,7 +302,7 @@
             ]
         },
         "hook-runtime": {
-            "level": 3,
+            "level": 4,
             "framework": ["node"],
             "role": "lib",
             "products": ["rules"],
@@ -445,7 +445,7 @@
             ]
         },
         "nx-webpieces-rules": {
-            "level": 4,
+            "level": 5,
             "framework": ["node"],
             "role": "lib",
             "products": ["rules"],
@@ -503,18 +503,19 @@
             ]
         },
         "repo-workflow-core": {
-            "level": 1,
+            "level": 2,
             "framework": ["node"],
             "role": "lib",
             "products": ["rules"],
             "shortDescription": "Repository mechanics shared by workflow guards and PR gate: sync state, merged-branch classification, worktree discovery/locks, branch identity and reaping, and identity stamps.",
             "responsibilitiesFile": "packages/tooling/repo-workflow-core/responsibilities.md",
             "dependsOn": [
-                "tooling-common"
+                "tooling-common",
+                "tooling-testkit"
             ]
         },
         "rules-config": {
-            "level": 2,
+            "level": 3,
             "framework": ["node"],
             "role": "designed-lib",
             "products": ["rules"],
@@ -523,8 +524,7 @@
             "designFile": "packages/tooling/rules-config/design.json",
             "dependsOn": [
                 "repo-workflow-core",
-                "rules-sdk",
-                "tooling-testkit"
+                "rules-sdk"
             ]
         },
         "rules-sdk": {

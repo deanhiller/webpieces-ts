@@ -9,7 +9,7 @@ import {
     BuildDebugRuntime,
     BuildPolicyResult,
 } from '@webpieces/rules-sdk';
-import { InformAiError } from '@webpieces/tooling-common';
+import { InformAiError, ProcessBindings } from '@webpieces/tooling-common';
 import { CODE_POLICIES, CodePolicy } from './code-policy-registry';
 import { WorkspaceRoot } from './code-rules-context';
 import { ScanRestriction } from './scan-scope';
@@ -27,6 +27,8 @@ export class CodeRuleRuntime implements BuildRuleRuntime {
         projects: readonly string[] | undefined,
     ): Promise<Container> {
         const container = new Container({ autobind: true });
+        // The process edges (git, every other program, the clock): DiffScope reaches git through them (#1381).
+        new ProcessBindings().bind(container);
         container.bind(WorkspaceRoot).toConstantValue(new WorkspaceRoot(request.workspaceRoot));
         container.bind(ScanRestriction).toConstantValue(new ScanRestriction(projects));
         const global = new GlobalExcludePaths(request.excludePaths);

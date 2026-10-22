@@ -96,13 +96,13 @@ class LocalBuildDebugRuntime implements BuildDebugRuntime {
         const rule = this.pack.ruleFor(request.selection.rule);
         const loaded = loadAndValidate(root);
         const config = new LocalRuleConfigs(loaded.rulesConfig as Record<string, ConfigObject>).configFor(rule);
-        const plan = this.debug.plan(root, new DebugAsk(rule.id, asked.mode, config.mode ?? 'OFF', MODIFIED_CODE_MODES, asked.projects));
+        const plan = await this.debug.plan(root, new DebugAsk(rule.id, asked.mode, config.mode ?? 'OFF', MODIFIED_CODE_MODES, asked.projects));
         this.debug.printBanner(plan);
         const diffScope = new DiffScope();
         const scan = new ScanScope(diffScope, new ProjectCatalog(diffScope), new ScanRestriction(plan.projects));
         const policy = new LocalBuildPolicy(this.debug.overridden(config, plan), rule, loaded.excludePaths.paths, scan);
         const ruleSucceeded = await this.runPrintingFailure(policy, root);
-        const sites = this.debug.printCounts(root, plan, scan, ruleSucceeded);
+        const sites = await this.debug.printCounts(root, plan, scan, ruleSucceeded);
         return new BuildPolicyResult(ruleSucceeded && sites === 0);
     }
 

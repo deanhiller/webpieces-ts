@@ -86,9 +86,9 @@ export class ChecklistDetector {
     }
 
     // Resolve the diff base for the local branch, then detect. Returns [] when there is no base to diff.
-    detectForRepo(repoRoot: string, defs: readonly ChecklistDefinition[]): TriggeredChecklist[] {
+    async detectForRepo(repoRoot: string, defs: readonly ChecklistDefinition[]): Promise<TriggeredChecklist[]> {
         if (defs.length === 0) return [];
-        const range = this.diffScope.resolveBase(repoRoot);
+        const range = await this.diffScope.resolveBase(repoRoot);
         if (!range.base) return [];
         return this.detectForRange(repoRoot, defs, range.base, range.head);
     }
@@ -96,11 +96,11 @@ export class ChecklistDetector {
     // Same detection against an EXPLICIT (base, head) — used by CI, where the useful range is the PR's
     // merge base .. head. tsOnly=false is load-bearing: the default drops every *.sql / Dockerfile / .env*
     // / metadata file a checklist most wants to key on, silently producing "no checklists matched".
-    detectForRange(repoRoot: string, defs: readonly ChecklistDefinition[], base: string, head?: string): TriggeredChecklist[] {
+    async detectForRange(repoRoot: string, defs: readonly ChecklistDefinition[], base: string, head?: string): Promise<TriggeredChecklist[]> {
         if (defs.length === 0 || !base) return [];
         const opts = new ChangedFilesOptions();
         opts.tsOnly = false;
-        const changedFiles = this.diffScope.getChangedFiles(repoRoot, base, head, opts);
+        const changedFiles = await this.diffScope.getChangedFiles(repoRoot, base, head, opts);
         return this.detect(defs, changedFiles);
     }
 

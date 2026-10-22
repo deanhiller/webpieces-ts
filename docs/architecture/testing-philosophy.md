@@ -134,7 +134,8 @@ implementation of the edge.
 ### Mock timers and executors: the test runs the scheduled work
 
 Production code never calls `setTimeout` or `setInterval` directly. It schedules through an injected
-`Timer` (or `Executor`) API:
+`Timer` (or `Executor`) API. In the tooling that API is `TimerApi` (`@webpieces/tooling-common`) with
+`MockTimerApi` (`@webpieces/tooling-testkit`); the shape below is the pattern it follows:
 
 ```typescript
 export abstract class Timer {

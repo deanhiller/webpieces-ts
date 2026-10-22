@@ -1,4 +1,3 @@
-import { spawnSync } from 'child_process';
 import * as fs from 'fs';
 import { injectable, bindingScopeValues } from 'inversify';
 
@@ -125,6 +124,11 @@ class Verdict {
     }
 }
 
+// Internal: one bounded command's verdict and trimmed stdout. Data only.
+class CapturedOutput {
+    constructor(readonly ok: boolean, readonly out: string) {}
+}
+
 // Raw JSON shapes for the cast at the parse boundary.
 interface RawDeletable {
     branch?: string;
@@ -168,12 +172,6 @@ interface RawMergedPr {
     state?: string;
 }
 
-// Result of a captured git/gh invocation: ok=false on spawn failure or non-zero exit.
-interface CmdCapture {
-    ok: boolean;
-    out: string;
-}
-
 @injectable(bindingScopeValues.Singleton)
 export class MergedBranchesService {
     // Defaulted so the non-DI call sites (`new MergedBranchesService()` in the guard and the detached
@@ -183,7 +181,7 @@ export class MergedBranchesService {
         private readonly dotDir: DotWebpieces = dotWebpieces,
         private readonly atomicFile: AtomicFile = new AtomicFile(),
         private readonly locks: WorktreeLockVerdicts = new WorktreeLockVerdicts(),
-        private readonly timeouts: CommandTimeouts = new CommandTimeouts(),
+        private readonly commands: CommandTimeouts = new CommandTimeouts(),
     ) {}
 
     /**
@@ -280,9 +278,11 @@ export class MergedBranchesService {
      * CREATION, so the guard would block the cleanup it just demanded.
      */
     localBranches(repoRoot: string): string[] {
-        const result = this.capture(repoRoot, 'git', ['for-each-ref', '--format=%(refname:short)', 'refs/heads/']);
-        if (!result.ok || result.out === '') return [];
-        return result.out
+        // SYNCHRONOUS: the branch-creation guard counts parked branches on its blocking path.
+        const result = this.commands.localGitNow(['for-each-ref', '--format=%(refname:short)', 'refs/heads/'], repoRoot);
+        const out = result.stdout.trim();
+        if (!result.ok || out === '') return [];
+        return out
             .split('\n')
             .map((line: string): string => line.trim())
             .filter((line: string): boolean => line.length > 0 && line !== 'main');
@@ -292,15 +292,15 @@ export class MergedBranchesService {
      * The SLOW path, run only inside the detached refresher. ONE bulk `gh` call, then a purely local
      * classification. Never run on the hook's blocking path.
      */
-    computeMergedBranches(repoRoot: string, ignoreStaleAgentLocks: boolean): MergedBranchesCache {
-        const merged = this.fetchMergedPrs(repoRoot);
+    async computeMergedBranches(repoRoot: string, ignoreStaleAgentLocks: boolean): Promise<MergedBranchesCache> {
+        const merged = await this.fetchMergedPrs(repoRoot);
         const byBranch = new Map<string, number>();
         for (const entry of merged) byBranch.set(entry.branch, entry.pr);
         let latestMergedPr = 0;
         for (const entry of merged) {
             if (entry.pr > latestMergedPr) latestMergedPr = entry.pr;
         }
-        const prs = new PrLookup(byBranch, this.fetchPrStates(repoRoot), latestMergedPr);
+        const prs = new PrLookup(byBranch, await this.fetchPrStates(repoRoot), latestMergedPr);
 
         const trees = this.worktrees.listWorktrees(repoRoot);
         const holder = new Map<string, string>();
@@ -312,7 +312,7 @@ export class MergedBranchesService {
         const keep: DeletableBranch[] = [];
 
         for (const branch of this.localBranches(repoRoot)) {
-            const verdict = this.classify(repoRoot, branch, prs);
+            const verdict = await this.classify(repoRoot, branch, prs);
 
             // A branch checked out in ANY worktree (including the branch we are standing on right here)
             // cannot be deleted — git refuses, and since the reap is ONE `git branch -D a b c`, a single
@@ -337,7 +337,7 @@ export class MergedBranchesService {
             else keep.push(verdict.entry);
         }
 
-        const worktrees = this.classifyWorktrees(repoRoot, trees, prs, ignoreStaleAgentLocks);
+        const worktrees = await this.classifyWorktrees(repoRoot, trees, prs, ignoreStaleAgentLocks);
         return new MergedBranchesCache(new Date().toISOString(), deletable, keep, worktrees);
     }
 
@@ -360,12 +360,12 @@ export class MergedBranchesService {
      * and that cannot be weighed until it is known. Two extra local git calls per locked worktree, on
      * a path that only ever runs in the detached refresher and in wp-cleanup itself.
      */
-    private classifyWorktrees(
+    private async classifyWorktrees(
         repoRoot: string,
         trees: Worktree[],
         prs: PrLookup,
         ignoreStaleAgentLocks: boolean,
-    ): DeletableWorktree[] {
+    ): Promise<DeletableWorktree[]> {
         const out: DeletableWorktree[] = [];
 
         for (const tree of trees) {
@@ -378,10 +378,10 @@ export class MergedBranchesService {
                 continue;
             }
 
-            const verdict = tree.branch === '' ? null : this.classify(repoRoot, tree.branch, prs);
+            const verdict = tree.branch === '' ? null : await this.classify(repoRoot, tree.branch, prs);
             // An OVERRIDDEN lock leaves the worktree judged on its branch below, exactly like an
             // unlocked one — with `unlockBeforeRemove` set by annotate() so the reap clears the lock.
-            const decision = tree.locked ? this.lockDecision(tree, verdict, ignoreStaleAgentLocks) : null;
+            const decision = tree.locked ? await this.lockDecision(tree, verdict, ignoreStaleAgentLocks) : null;
             if (decision !== null && decision.spare) {
                 out.push(new DeletableWorktree(
                     tree.path, tree.branch, decision.reason, 0, false, CLASSIFICATION_LOCKED));
@@ -413,8 +413,8 @@ export class MergedBranchesService {
 
     // The lock verdict for one worktree. The evidence gathering (and what it deliberately declines to
     // gather) lives in WorktreeLockVerdicts — see `gather` there.
-    private lockDecision(tree: Worktree, verdict: Verdict | null, ignoreStaleAgentLocks: boolean): LockDecision {
-        return this.locks.decide(this.locks.gather(
+    private async lockDecision(tree: Worktree, verdict: Verdict | null, ignoreStaleAgentLocks: boolean): Promise<LockDecision> {
+        return this.locks.decide(await this.locks.gather(
             tree, verdict !== null && verdict.deletable, ignoreStaleAgentLocks));
     }
 
@@ -426,9 +426,9 @@ export class MergedBranchesService {
      * rather than just counted. This runs only in the detached refresher, so the two extra local git
      * calls per branch cost the blocking hook path nothing.
      */
-    private classify(repoRoot: string, branch: string, prs: PrLookup): Verdict {
-        const sha = this.tipSha(repoRoot, branch);
-        const commits = this.commitsAheadOfMain(repoRoot, branch);
+    private async classify(repoRoot: string, branch: string, prs: PrLookup): Promise<Verdict> {
+        const sha = await this.tipSha(repoRoot, branch);
+        const commits = await this.commitsAheadOfMain(repoRoot, branch);
         const known = prs.state.get(branch);
         const prState = known ? known.state : '';
 
@@ -461,7 +461,7 @@ export class MergedBranchesService {
             // every run, so the branch cap fills with copies nobody can be bothered to adjudicate.
             // The proof here is as strong as a merged PR (a live sibling ref holds the content), and
             // the reap archives to an `archive/<date>/<branch>` tag and logs a `recover=` first.
-            if (this.branchExists(repoRoot, base)) {
+            if (await this.branchExists(repoRoot, base)) {
                 const basePrState = prs.state.get(base);
                 const liveness = basePrState
                     ? `PR #${String(basePrState.number)} ${basePrState.state}`
@@ -490,7 +490,7 @@ export class MergedBranchesService {
                 0, sha, 0, prState, CLASSIFICATION_NO_COMMITS));
         }
 
-        return new Verdict(false, this.classifySpared(repoRoot, branch, prs, sha, commits, prState));
+        return new Verdict(false, await this.classifySpared(repoRoot, branch, prs, sha, commits, prState));
     }
 
     /**
@@ -501,9 +501,9 @@ export class MergedBranchesService {
      * that changed is that wp-cleanup can now ask a question whose answer is knowable.
      */
     // eslint-disable-next-line @typescript-eslint/max-params
-    private classifySpared(
+    private async classifySpared(
         repoRoot: string, branch: string, prs: PrLookup, sha: string, commits: number, prState: string,
-    ): DeletableBranch {
+    ): Promise<DeletableBranch> {
         const known = prs.state.get(branch);
 
         // A PR that CLOSED without merging, in a repo that has merged later PRs, is near-certainly the
@@ -519,7 +519,7 @@ export class MergedBranchesService {
 
         // `git cherry` compares by PATCH-ID, so it survives cherry-picks and rebases. It does NOT
         // survive a squash — which is exactly why this is a spared verdict and not a deletable proof.
-        if (this.contentAlreadyInMain(repoRoot, branch)) {
+        if (await this.contentAlreadyInMain(repoRoot, branch)) {
             return new DeletableBranch(
                 branch,
                 `all ${String(commits)} commit(s) already have an equivalent in origin/main ` +
@@ -544,8 +544,8 @@ export class MergedBranchesService {
      * cherry-pick or rebase-merge) even though the SHAs differ. Any failure returns false — "cannot
      * prove the content is in main" must never read as "safe".
      */
-    private contentAlreadyInMain(repoRoot: string, branch: string): boolean {
-        const result = this.capture(repoRoot, 'git', ['cherry', 'origin/main', branch]);
+    private async contentAlreadyInMain(repoRoot: string, branch: string): Promise<boolean> {
+        const result = await this.git(repoRoot, ['cherry', 'origin/main', branch]);
         if (!result.ok || result.out === '') return false;
         const lines = result.out.split('\n')
             .map((line: string): string => line.trim())
@@ -559,13 +559,13 @@ export class MergedBranchesService {
      * base branch being present is that proof. Verifies it is a BRANCH (`refs/heads/`), not just any
      * resolvable rev, so a tag or a stray SHA sharing the name cannot stand in for the base.
      */
-    private branchExists(repoRoot: string, branch: string): boolean {
-        return this.capture(repoRoot, 'git', ['show-ref', '--verify', '--quiet', `refs/heads/${branch}`]).ok;
+    private async branchExists(repoRoot: string, branch: string): Promise<boolean> {
+        return (await this.git(repoRoot, ['show-ref', '--verify', '--quiet', `refs/heads/${branch}`])).ok;
     }
 
     // Short tip SHA — the value that makes any delete of this branch reversible.
-    private tipSha(repoRoot: string, branch: string): string {
-        const result = this.capture(repoRoot, 'git', ['rev-parse', '--short', branch]);
+    private async tipSha(repoRoot: string, branch: string): Promise<string> {
+        const result = await this.git(repoRoot, ['rev-parse', '--short', branch]);
         return result.ok ? result.out : '';
     }
 
@@ -573,8 +573,8 @@ export class MergedBranchesService {
      * Commits on `branch` that are not on origin/main. Returns -1 ("assume it has work") whenever the
      * count cannot be established — an unresolvable origin/main must never read as "empty branch".
      */
-    private commitsAheadOfMain(repoRoot: string, branch: string): number {
-        const result = this.capture(repoRoot, 'git', ['rev-list', '--count', `origin/main..${branch}`]);
+    private async commitsAheadOfMain(repoRoot: string, branch: string): Promise<number> {
+        const result = await this.git(repoRoot, ['rev-list', '--count', `origin/main..${branch}`]);
         if (!result.ok) return -1;
         const count = Number(result.out);
         return Number.isInteger(count) ? count : -1;
@@ -585,8 +585,8 @@ export class MergedBranchesService {
      * lookups. Fails SOFT: if `gh` is missing, unauthenticated, or offline we return [], which makes
      * every branch a `keep`. The guard then deletes nothing rather than guessing.
      */
-    private fetchMergedPrs(repoRoot: string): MergedBranch[] {
-        const result = this.capture(repoRoot, 'gh', [
+    private async fetchMergedPrs(repoRoot: string): Promise<MergedBranch[]> {
+        const result = await this.gh(repoRoot, [
             'pr', 'list',
             '--state', 'merged',
             '--limit', String(MERGED_PR_LOOKUP_LIMIT),
@@ -618,9 +618,9 @@ export class MergedBranchesService {
      * flood of open/closed PRs push older MERGED ones out of the limit and silently stop reaping real
      * dead branches. Fails soft to an empty map: the verdicts do not depend on it.
      */
-    private fetchPrStates(repoRoot: string): Map<string, PrRef> {
+    private async fetchPrStates(repoRoot: string): Promise<Map<string, PrRef>> {
         const out = new Map<string, PrRef>();
-        const result = this.capture(repoRoot, 'gh', [
+        const result = await this.gh(repoRoot, [
             'pr', 'list',
             '--state', 'all',
             '--limit', String(MERGED_PR_LOOKUP_LIMIT),
@@ -676,10 +676,15 @@ export class MergedBranchesService {
         });
     }
 
-    // Run a command capturing trimmed stdout; ok=false on spawn failure or non-zero exit.
-    private capture(repoRoot: string, cmd: string, args: string[]): CmdCapture {
-        const result = spawnSync(cmd, args, { cwd: repoRoot, encoding: 'utf8', timeout: this.timeouts.forCommand(cmd) });
-        if (result.status !== 0 || typeof result.stdout !== 'string') return { ok: false, out: '' };
-        return { ok: true, out: result.stdout.trim() };
+    // Local git, bounded (CommandTimeouts), stdout trimmed; ok=false on a non-zero exit, a kill or a failed start.
+    private async git(repoRoot: string, args: string[]): Promise<CapturedOutput> {
+        const result = await this.commands.localGit(args, repoRoot);
+        return new CapturedOutput(result.ok, result.ok ? result.stdout.trim() : '');
+    }
+
+    // `gh`, bounded by the network ceiling, stdout trimmed.
+    private async gh(repoRoot: string, args: string[]): Promise<CapturedOutput> {
+        const result = await this.commands.gh(args, repoRoot);
+        return new CapturedOutput(result.ok, result.ok ? result.stdout.trim() : '');
     }
 }

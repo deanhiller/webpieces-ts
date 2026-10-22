@@ -5,14 +5,17 @@
  * `@injectable(bindingScopeValues.Singleton)` so it can be injected and appear in the rules-config DI design. Free-function
  * delegators are kept temporarily so the many existing consumers stay green; they migrate to injecting
  * {@link DiffScope} over follow-up PRs, then the delegators are removed.
+ *
+ * Every git call goes through the injected {@link GitProcessApi} (#1381), so a program resolved from a
+ * container whose git edge is rebound to a mock reads its diff from scripted git. The free delegators below
+ * reach the REAL edge — a caller that is feature-tested injects DiffScope instead.
  */
 
-import { execSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 import { injectable, bindingScopeValues } from 'inversify';
 
-import { toError } from '@webpieces/tooling-common/to-error';
+import { GitProcessApi, GitProcessClient, InformAiError } from '@webpieces/tooling-common';
 
 import { RuleFileScope } from './rule-file-scope';
 
@@ -42,30 +45,28 @@ export class DiffScope {
     // Stateless reader of the rule run in progress (an AsyncLocalStorage store), not a dependency.
     private readonly ruleFileScope = new RuleFileScope();
 
+    // Defaulted so the free delegators below can `new DiffScope()`, while inversify injects the container's
+    // git edge — which is what a feature test rebinds.
+    constructor(private readonly git: GitProcessApi = new GitProcessClient()) {}
+
     /** Auto-detect the diff base: merge-base of HEAD with origin/main, falling back to local main. */
-    detectBase(workspaceRoot: string): string | null {
+    async detectBase(workspaceRoot: string): Promise<string | null> {
         for (const ref of ['origin/main', 'main']) {
-            // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
-            try {
-                const merged = execSync(`git merge-base HEAD ${ref}`, {
-                    cwd: workspaceRoot, encoding: 'utf-8', stdio: ['pipe', 'pipe', 'pipe'],
-                }).trim();
-                if (merged) return merged;
-            } catch (err: unknown) {
-                const error = toError(err);
-                void error; // swallow — try the next ref
-            }
+            // A failure (no such ref, not a repo) just tries the next ref.
+            const result = await this.git.run(['merge-base', 'HEAD', ref], workspaceRoot);
+            const merged = result.ok ? result.stdout.trim() : '';
+            if (merged) return merged;
         }
         return null;
     }
 
     /** Resolve the diff range a rule should compare against (honors nx's NX_BASE / NX_HEAD). */
-    resolveBase(workspaceRoot: string): DiffRange {
+    async resolveBase(workspaceRoot: string): Promise<DiffRange> {
         const range = new DiffRange();
         range.base = process.env['NX_BASE'];
         range.head = process.env['NX_HEAD'];
         if (!range.base) {
-            range.base = this.detectBase(workspaceRoot) ?? undefined;
+            range.base = (await this.detectBase(workspaceRoot)) ?? undefined;
         }
         return range;
     }
@@ -78,50 +79,30 @@ export class DiffScope {
      * Inside a rule run, the files that run's path exclusions match are dropped (#1253): this listing is
      * where the framework applies the top-level and per-rule `excludePaths`, so no rule does it itself.
      */
-    getChangedFiles(workspaceRoot: string, base: string, head?: string, opts?: ChangedFilesOptions): string[] {
-        return this.ruleFileScope.filter(this.listChangedFiles(workspaceRoot, base, head, opts));
+    async getChangedFiles(workspaceRoot: string, base: string, head?: string, opts?: ChangedFilesOptions): Promise<string[]> {
+        return this.ruleFileScope.filter(await this.listChangedFiles(workspaceRoot, base, head, opts));
     }
 
-    // webpieces-disable max-lines-new-methods -- git command handling with untracked files needs several code paths
-    private listChangedFiles(workspaceRoot: string, base: string, head?: string, opts?: ChangedFilesOptions): string[] {
+    private async listChangedFiles(workspaceRoot: string, base: string, head?: string, opts?: ChangedFilesOptions): Promise<string[]> {
         const tsOnly = opts?.tsOnly ?? true;
-        const glob = tsOnly ? " -- '*.ts' '*.tsx'" : '';
+        const glob = tsOnly ? ['--', '*.ts', '*.tsx'] : [];
         const keep = (f: string): boolean => f.length > 0 && (!tsOnly || !this.isTestFile(f));
         // Deletions are excluded by default (see ChangedFilesOptions.includeDeletions) — the review flow
         // opts in, every lint validator keeps the historical filter.
-        const filter = opts?.includeDeletions === true ? '' : ' --diff-filter=d';
-        // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
-        try {
-            const diffTarget = head ? `${base} ${head}` : base;
-            const output = execSync(`git diff --name-only${filter} ${diffTarget}${glob}`, {
-                cwd: workspaceRoot,
-                encoding: 'utf-8',
-            });
-            const changedFiles = output.trim().split('\n').filter(keep);
+        const filter = opts?.includeDeletions === true ? [] : ['--diff-filter=d'];
+        const diffTarget = head ? [base, head] : [base];
+        const diff = await this.git.run(['diff', '--name-only', ...filter, ...diffTarget, ...glob], workspaceRoot);
+        // A failed `git diff` returns an empty list.
+        if (!diff.ok) return [];
+        const changedFiles = diff.stdout.trim().split('\n').filter(keep);
 
-            // Working-tree comparison (no head): also include untracked files, as nx affected does.
-            if (!head) {
-                // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
-                try {
-                    const untrackedOutput = execSync(`git ls-files --others --exclude-standard${glob}`, {
-                        cwd: workspaceRoot,
-                        encoding: 'utf-8',
-                    });
-                    const untrackedFiles = untrackedOutput.trim().split('\n').filter(keep);
-                    return Array.from(new Set([...changedFiles, ...untrackedFiles]));
-                } catch (err: unknown) {
-                    const error = toError(err);
-                    void error; // swallow — ls-files failure falls back to the tracked list
-                    return changedFiles;
-                }
-            }
-
-            return changedFiles;
-        } catch (err: unknown) {
-            const error = toError(err);
-            void error; // swallow — git diff failure returns an empty list
-            return [];
-        }
+        // Working-tree comparison (no head): also include untracked files, as nx affected does.
+        if (head) return changedFiles;
+        const untracked = await this.git.run(['ls-files', '--others', '--exclude-standard', ...glob], workspaceRoot);
+        // An `ls-files` failure falls back to the tracked list.
+        if (!untracked.ok) return changedFiles;
+        const untrackedFiles = untracked.stdout.trim().split('\n').filter(keep);
+        return Array.from(new Set([...changedFiles, ...untrackedFiles]));
     }
 
     /**
@@ -137,54 +118,40 @@ export class DiffScope {
      *
      * Inside a rule run, the run's path exclusions are applied exactly as in {@link getChangedFiles}.
      */
-    getAllFiles(workspaceRoot: string, opts?: ChangedFilesOptions): string[] {
-        return this.ruleFileScope.filter(this.listAllFiles(workspaceRoot, opts));
+    async getAllFiles(workspaceRoot: string, opts?: ChangedFilesOptions): Promise<string[]> {
+        return this.ruleFileScope.filter(await this.listAllFiles(workspaceRoot, opts));
     }
 
-    private listAllFiles(workspaceRoot: string, opts?: ChangedFilesOptions): string[] {
+    private async listAllFiles(workspaceRoot: string, opts?: ChangedFilesOptions): Promise<string[]> {
         const tsOnly = opts?.tsOnly ?? true;
-        const glob = tsOnly ? " -- '*.ts' '*.tsx'" : '';
-        const output = execSync(`git ls-files --cached --others --exclude-standard${glob}`, {
-            cwd: workspaceRoot,
-            encoding: 'utf-8',
-            maxBuffer: 256 * 1024 * 1024,
-        });
+        const glob = tsOnly ? ['--', '*.ts', '*.tsx'] : [];
+        const listed = await this.git.run(['ls-files', '--cached', '--others', '--exclude-standard', ...glob], workspaceRoot);
+        if (!listed.ok) {
+            throw new InformAiError(
+                `\`git ls-files\` failed in ${workspaceRoot} (exit ${String(listed.code)}): ${listed.stderr.trim()}. `
+                + 'A whole-scope rule run cannot list the working tree; repair git access there, then retry.');
+        }
+        const output = listed.stdout;
         const keep = (f: string): boolean =>
             f.length > 0 && (!tsOnly || !this.isTestFile(f)) && fs.existsSync(path.join(workspaceRoot, f));
         return Array.from(new Set(output.trim().split('\n').filter(keep)));
     }
 
     /** Diff content for a single file (synthetic all-added diff for an untracked file with no head). */
-    getFileDiff(workspaceRoot: string, file: string, base: string, head?: string): string {
-        // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
-        try {
-            const diffTarget = head ? `${base} ${head}` : base;
-            const diff = execSync(`git diff ${diffTarget} -- "${file}"`, {
-                cwd: workspaceRoot,
-                encoding: 'utf-8',
-            });
+    async getFileDiff(workspaceRoot: string, file: string, base: string, head?: string): Promise<string> {
+        const diffTarget = head ? [base, head] : [base];
+        const result = await this.git.run(['diff', ...diffTarget, '--', file], workspaceRoot);
+        // A failed `git diff` returns no diff.
+        if (!result.ok) return '';
+        const diff = result.stdout;
+        if (diff || head) return diff;
 
-            if (!diff && !head) {
-                const fullPath = path.join(workspaceRoot, file);
-                if (fs.existsSync(fullPath)) {
-                    const isUntracked = execSync(`git ls-files --others --exclude-standard "${file}"`, {
-                        cwd: workspaceRoot,
-                        encoding: 'utf-8',
-                    }).trim();
-
-                    if (isUntracked) {
-                        const content = fs.readFileSync(fullPath, 'utf-8');
-                        return content.split('\n').map((l: string) => `+${l}`).join('\n');
-                    }
-                }
-            }
-
-            return diff;
-        } catch (err: unknown) {
-            const error = toError(err);
-            void error; // swallow — git diff failure returns no diff
-            return '';
-        }
+        const fullPath = path.join(workspaceRoot, file);
+        if (!fs.existsSync(fullPath)) return diff;
+        const untracked = await this.git.run(['ls-files', '--others', '--exclude-standard', '--', file], workspaceRoot);
+        if (!untracked.ok || untracked.stdout.trim() === '') return diff;
+        const content = fs.readFileSync(fullPath, 'utf-8');
+        return content.split('\n').map((l: string) => `+${l}`).join('\n');
     }
 
     /** Added/changed line numbers (the `+` lines per hunk) — basis of NEW_AND_MODIFIED_CODE scoping. */
@@ -276,22 +243,22 @@ export class DiffScope {
 const diffScopeSvc = new DiffScope();
 
 // webpieces-disable no-function-outside-class -- temporary back-compat delegator to DiffScope; removed once consumers inject it
-export function detectBase(workspaceRoot: string): string | null {
+export function detectBase(workspaceRoot: string): Promise<string | null> {
     return diffScopeSvc.detectBase(workspaceRoot);
 }
 
 // webpieces-disable no-function-outside-class -- temporary back-compat delegator to DiffScope; removed once consumers inject it
-export function resolveBase(workspaceRoot: string): DiffRange {
+export function resolveBase(workspaceRoot: string): Promise<DiffRange> {
     return diffScopeSvc.resolveBase(workspaceRoot);
 }
 
 // webpieces-disable no-function-outside-class -- temporary back-compat delegator to DiffScope; removed once consumers inject it
-export function getChangedFiles(workspaceRoot: string, base: string, head?: string, opts?: ChangedFilesOptions): string[] {
+export function getChangedFiles(workspaceRoot: string, base: string, head?: string, opts?: ChangedFilesOptions): Promise<string[]> {
     return diffScopeSvc.getChangedFiles(workspaceRoot, base, head, opts);
 }
 
 // webpieces-disable no-function-outside-class -- temporary back-compat delegator to DiffScope; removed once consumers inject it
-export function getFileDiff(workspaceRoot: string, file: string, base: string, head?: string): string {
+export function getFileDiff(workspaceRoot: string, file: string, base: string, head?: string): Promise<string> {
     return diffScopeSvc.getFileDiff(workspaceRoot, file, base, head);
 }
 

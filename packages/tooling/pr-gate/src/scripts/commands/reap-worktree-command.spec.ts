@@ -2,13 +2,18 @@ import { specTempDirs } from '@webpieces/tooling-testkit';
 import * as fs from 'fs';
 import * as path from 'path';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { GitResultDto } from '@webpieces/tooling-common';
+import { ProcessCallDto } from '@webpieces/tooling-testkit';
+
+import { PrGateFeature } from '../../__tests__/feature-harness';
 
 /**
  * The CHILD half of wp-land-pr's re-exec, end to end through the REAL WorktreeReaper: given a path and
  * a branch, does it archive → `git worktree remove` → `git branch -D`, in that order, refuse everything
  * it should refuse, and leave a `recover=` line that actually restores the branch?
  *
- * Only git is faked. The mutation log is written to a real temp directory on purpose — the `recover=`
+ * Only git is faked — scripted on the injected GitProcessApi (#1381), answering from `world`. The
+ * mutation log is written to a real temp directory on purpose — the `recover=`
  * line is the single thing standing between a removed directory and a lost branch, and asserting it
  * against the bytes that reach disk is the only assertion worth making about it.
  */
@@ -18,28 +23,27 @@ const world = vi.hoisted(() => ({
     calls: [] as string[],
 }));
 
-vi.mock('child_process', () => ({
-    spawnSync: (cmd: string, args: string[]): { status: number; stdout: string; stderr: string } => {
-        if (cmd !== 'git') return { status: 1, stdout: '', stderr: '' };
-        world.calls.push(args.join(' '));
+// The outside world's answer to one command, read from `world`. The mocked process edges (#1381) answer every
+// call through it; no process is started.
+function answer(cmd: string, args: readonly string[]): { status: number; stdout: string; stderr: string } {
+    if (cmd !== 'git') return { status: 1, stdout: '', stderr: '' };
+    world.calls.push(args.join(' '));
 
-        if (args[0] === 'worktree' && args[1] === 'list') {
-            return { status: 0, stdout: world.porcelain, stderr: '' };
-        }
-        if (args[0] === 'worktree' && args[1] === 'remove') {
-            const failure = world.removeFails[String(args[2])];
-            if (failure !== undefined) return { status: 1, stdout: '', stderr: failure };
-            return { status: 0, stdout: '', stderr: '' };
-        }
-        if (args[0] === 'rev-parse') {
-            // No tag pre-exists in this world, so the archiver's collision probe always misses.
-            if (args[1] === '--verify') return { status: 1, stdout: '', stderr: '' };
-            return { status: 0, stdout: `sha-${String(args[1])}`, stderr: '' };
-        }
+    if (args[0] === 'worktree' && args[1] === 'list') {
+        return { status: 0, stdout: world.porcelain, stderr: '' };
+    }
+    if (args[0] === 'worktree' && args[1] === 'remove') {
+        const failure = world.removeFails[String(args[2])];
+        if (failure !== undefined) return { status: 1, stdout: '', stderr: failure };
         return { status: 0, stdout: '', stderr: '' };
-    },
-    execSync: (): string => '',
-}));
+    }
+    if (args[0] === 'rev-parse') {
+        // No tag pre-exists in this world, so the archiver's collision probe always misses.
+        if (args[1] === '--verify') return { status: 1, stdout: '', stderr: '' };
+        return { status: 0, stdout: `sha-${String(args[1])}`, stderr: '' };
+    }
+    return { status: 0, stdout: '', stderr: '' };
+}
 
 import { BranchMutationLog, CLASSIFICATION_CURRENT, CLASSIFICATION_MERGED_PR, CLASSIFICATION_NEVER_PROPOSED, DeletableWorktree, MergedBranchesService, WorktreeReaper, WorktreeService, branchMutationLogPath } from '@webpieces/repo-workflow-core';
 import { RepoRootFinder } from '@webpieces/rules-config';
@@ -67,7 +71,7 @@ let out = '';
 // `verdicts` is the seam: MergedBranchesService's own spec covers how a verdict is reached, and this
 // spec is about what the command DOES with one. The reap below is the real WorktreeReaper.
 class ScriptedSection extends WorktreeCleanupSection {
-    verdicts(): DeletableWorktree[] {
+    override async verdicts(): Promise<DeletableWorktree[]> {
         return verdicts;
     }
 }
@@ -78,12 +82,15 @@ class FakeRepoRootFinder extends RepoRootFinder {
     }
 }
 
+let feature: PrGateFeature;
+
 function build(): ReapWorktreeCommand {
+    const c = feature.container;
     return new ReapWorktreeCommand(
         new FakeRepoRootFinder(),
-        new ScriptedSection(new MergedBranchesService(), new WorktreeReaper(), new WorktreeService(), new BranchMutationLog()),
+        new ScriptedSection(c.get(MergedBranchesService), c.get(WorktreeReaper), c.get(WorktreeService), c.get(BranchMutationLog)),
         new ReapOutcomeSignal(),
-        new WorktreeService());
+        c.get(WorktreeService));
 }
 
 // The outcome token the parent reads — asserted on every exit path, because it is the ONLY thing that
@@ -123,7 +130,12 @@ function destructiveCalls(): string[] {
         call.startsWith('tag ') || call.startsWith('worktree remove') || call.startsWith('branch -D'));
 }
 
-beforeEach(() => {
+beforeEach(async () => {
+    feature = await PrGateFeature.create();
+    feature.git.respondToPrefix([], (call: ProcessCallDto): GitResultDto => {
+        const result = answer('git', call.args);
+        return new GitResultDto(result.status, result.stdout, result.stderr);
+    });
     primary = specTempDirs.make('wpr-');
     linked = path.join(path.dirname(primary), `${path.basename(primary)}-feature`);
     world.porcelain = `worktree ${primary}\nHEAD aaa\nbranch refs/heads/main\n\n`

@@ -142,17 +142,17 @@ function methodHasChanges(method: MethodInfo, changedLines: Set<number>): boolea
  * Find NEW methods without explicit return types (NEW_METHODS mode).
  */
 // webpieces-disable max-lines-new-methods -- File iteration with diff parsing and method matching
-function findViolationsForNewMethods(
+async function findViolationsForNewMethods(
     workspaceRoot: string,
     changedFiles: string[],
     base: string,
     head: string | undefined,
     disableAllowed: boolean
-): MethodViolation[] {
+): Promise<MethodViolation[]> {
     const violations: MethodViolation[] = [];
 
     for (const file of changedFiles) {
-        const diff = getFileDiff(workspaceRoot, file, base, head);
+        const diff = await getFileDiff(workspaceRoot, file, base, head);
         const newMethodNames = findNewMethodSignaturesInDiff(diff);
 
         if (newMethodNames.size === 0) continue;
@@ -179,17 +179,17 @@ function findViolationsForNewMethods(
  * Find NEW methods AND methods with changes (NEW_AND_MODIFIED_METHODS mode).
  */
 // webpieces-disable max-lines-new-methods -- Combines new method detection with change detection
-function findViolationsForModifiedAndNewMethods(
+async function findViolationsForModifiedAndNewMethods(
     workspaceRoot: string,
     changedFiles: string[],
     base: string,
     head: string | undefined,
     disableAllowed: boolean
-): MethodViolation[] {
+): Promise<MethodViolation[]> {
     const violations: MethodViolation[] = [];
 
     for (const file of changedFiles) {
-        const diff = getFileDiff(workspaceRoot, file, base, head);
+        const diff = await getFileDiff(workspaceRoot, file, base, head);
         const newMethodNames = findNewMethodSignaturesInDiff(diff);
         const changedLines = getChangedLineNumbers(diff);
 
@@ -288,7 +288,7 @@ async function runValidatorImpl(
     const head = process.env['NX_HEAD'];
 
     if (!base) {
-        base = detectBase(workspaceRoot) ?? undefined;
+        base = await detectBase(workspaceRoot) ?? undefined;
 
         if (!base) {
             console.log('\n⏭️  Skipping return type validation (could not detect base branch)');
@@ -301,7 +301,7 @@ async function runValidatorImpl(
     console.log(`   Head: ${head ?? 'working tree (includes uncommitted changes)'}`);
     console.log('');
 
-    const changedFiles = getChangedFiles(workspaceRoot, base, head);
+    const changedFiles = await getChangedFiles(workspaceRoot, base, head);
 
     if (changedFiles.length === 0) {
         console.log('✅ No TypeScript files changed');
@@ -313,9 +313,9 @@ async function runValidatorImpl(
     let violations: MethodViolation[] = [];
 
     if (mode === 'NEW_METHODS') {
-        violations = findViolationsForNewMethods(workspaceRoot, changedFiles, base, head, disableAllowed);
+        violations = await findViolationsForNewMethods(workspaceRoot, changedFiles, base, head, disableAllowed);
     } else if (mode === 'NEW_AND_MODIFIED_METHODS') {
-        violations = findViolationsForModifiedAndNewMethods(workspaceRoot, changedFiles, base, head, disableAllowed);
+        violations = await findViolationsForModifiedAndNewMethods(workspaceRoot, changedFiles, base, head, disableAllowed);
     } else if (mode === 'NEW_AND_MODIFIED_FILES') {
         violations = findViolationsForModifiedFiles(workspaceRoot, changedFiles, disableAllowed);
     }

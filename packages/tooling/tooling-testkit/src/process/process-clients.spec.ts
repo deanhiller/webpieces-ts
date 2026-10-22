@@ -1,7 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { GitProcessClient, NativeProcessClient, PROCESS_NOT_STARTED } from '@webpieces/tooling-common';
+import { GitProcessClient, NativeProcessClient, PROCESS_KILLED, PROCESS_NOT_STARTED } from '@webpieces/tooling-common';
 
 import { specTempDirs } from '../spec-temp-dirs';
 
@@ -46,6 +46,29 @@ describe('GitProcessClient', () => {
         const result = await new GitProcessClient().run(['status'], path.join(scratch(), 'gone'));
         expect(result.code).toBe(PROCESS_NOT_STARTED);
         expect(result.stderr).toContain('ENOENT');
+    });
+
+    // The guard's blocking path: same contract, synchronously.
+    it('runSync reports git\'s exit code and output without a promise, and a missing cwd as not started', () => {
+        const dir = scratch();
+        const git = new GitProcessClient();
+        expect(git.runSync(['init', '-q', '-b', 'main'], dir, 30_000).code).toBe(0);
+        expect(git.runSync(['rev-parse', '--is-inside-work-tree'], dir, 30_000).stdout.trim()).toBe('true');
+        expect(git.runSync(['rev-parse', '--verify', 'no-such-ref'], dir, 30_000).code).toBe(128);
+        expect(git.runSync(['status'], path.join(dir, 'gone'), 30_000).code).toBe(PROCESS_NOT_STARTED);
+    });
+});
+
+describe('a deadline kills the run', () => {
+    // What CommandTimeouts relies on: aborting the signal kills the child and the run resolves KILLED.
+    it('reports a run whose signal aborted as PROCESS_KILLED, never as a hang or a throw', async () => {
+        const abort = new AbortController();
+        const running = new NativeProcessClient().run(process.execPath, ['-e', 'setInterval(() => undefined, 1000)'],
+            undefined, abort.signal);
+        abort.abort();
+        const result = await running;
+        expect(result.code).toBe(PROCESS_KILLED);
+        expect(result.ok).toBe(false);
     });
 });
 

@@ -110,17 +110,17 @@ function findTryCatchInFile(filePath: string, workspaceRoot: string, disableAllo
 /**
  * NEW_AND_MODIFIED_CODE mode: Flag violations on changed lines in diff hunks.
  */
-function findViolationsForModifiedCode(
+async function findViolationsForModifiedCode(
     workspaceRoot: string,
     changedFiles: string[],
     base: string,
     head: string | undefined,
     disableAllowed: boolean,
-): TryCatchViolation[] {
+): Promise<TryCatchViolation[]> {
     const violations: TryCatchViolation[] = [];
 
     for (const file of changedFiles) {
-        const diff = getFileDiff(workspaceRoot, file, base, head);
+        const diff = await getFileDiff(workspaceRoot, file, base, head);
         const changedLines = getChangedLineNumbers(diff);
 
         if (changedLines.size === 0) continue;
@@ -215,7 +215,7 @@ async function runValidatorImpl(
     const head = process.env['NX_HEAD'];
 
     if (!base) {
-        base = detectBase(workspaceRoot) ?? undefined;
+        base = await detectBase(workspaceRoot) ?? undefined;
 
         if (!base) {
             console.log('\n\u23ed\ufe0f  Skipping no-unmanaged-exceptions validation (could not detect base branch)');
@@ -228,7 +228,7 @@ async function runValidatorImpl(
     console.log(`   Head: ${head ?? 'working tree (includes uncommitted changes)'}`);
     console.log('');
 
-    const changedFiles = scan.files(workspaceRoot, mode, base, head);
+    const changedFiles = await scan.files(workspaceRoot, mode, base, head);
 
     if (changedFiles.length === 0) {
         console.log('\u2705 No TypeScript files changed');
@@ -240,7 +240,7 @@ async function runValidatorImpl(
     let violations: TryCatchViolation[] = [];
 
     if (mode === 'NEW_AND_MODIFIED_CODE') {
-        violations = findViolationsForModifiedCode(workspaceRoot, changedFiles, base, head, disableAllowed);
+        violations = await findViolationsForModifiedCode(workspaceRoot, changedFiles, base, head, disableAllowed);
     } else {
         // NEW_AND_MODIFIED_FILES and the whole-scope modes (#1027) all judge every site of every file.
         violations = findViolationsForModifiedFiles(workspaceRoot, changedFiles, disableAllowed);

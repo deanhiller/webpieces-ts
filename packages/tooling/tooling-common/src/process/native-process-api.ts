@@ -43,8 +43,11 @@ export class ShellTerminationDto {
  * `@webpieces/tooling-testkit`) before resolving the program.
  */
 export abstract class NativeProcessApi {
-    /** Run `program` with stdout and stderr CAPTURED. */
-    abstract run(program: string, args: string[], cwd?: string): Promise<ProcessResultDto>;
+    /**
+     * Run `program` with stdout and stderr CAPTURED. When `signal` aborts, the program is killed and the
+     * result is {@link PROCESS_KILLED} — the deadline itself is scheduled by the caller through `TimerApi`.
+     */
+    abstract run(program: string, args: string[], cwd?: string, signal?: AbortSignal): Promise<ProcessResultDto>;
 
     /** Run `program` with its output going straight to THIS process's terminal. `stdout`/`stderr` are ''. */
     abstract passThrough(program: string, args: string[], cwd?: string): Promise<ProcessResultDto>;

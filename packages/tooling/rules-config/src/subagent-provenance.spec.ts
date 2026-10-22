@@ -1,6 +1,5 @@
-import { specTempDirs } from '@webpieces/tooling-testkit';
+import { CheckoutLayout, specTempDirs } from '@webpieces/tooling-testkit';
 import { describe, it, expect, afterEach, beforeEach } from 'vitest';
-import { spawnSync } from 'child_process';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
@@ -199,12 +198,10 @@ describe('SubagentProvenanceService.verifyDistinct', () => {
 /**
  * ONE shared primary clone for the whole block, and one linked worktree per case off it.
  *
- * Deliberately shared rather than a fresh clone per test. Each `git init` + config + commit is five
- * process spawns, and this file's cases all need a real repo; building one per test put ~60 git
- * processes on the box and pushed the (already slow, timing-sensitive) main-sync integration specs
- * running alongside it past their 45s timeout — a red build-all caused entirely by test setup cost.
- * Sharing is safe here because no case mutates the clone: every one gets its own worktree on its own
- * branch, which is what `git worktree` is for.
+ * Every checkout is laid out on disk exactly as git lays it out (CheckoutLayout, #1381) — no git process.
+ * The provenance check reads a cwd's branch from those files (GitCheckout), so the layout is the real
+ * input; that the installed git writes this layout is proven by git-checkout.spec.ts. Sharing is safe
+ * because no case mutates the clone: every one gets its own worktree on its own branch.
  */
 let sharedClone = '';
 
@@ -213,16 +210,12 @@ function clone(): string {
     return sharedClone;
 }
 
-// A real git repo (a PRIMARY CLONE) on `branch`. Real rather than mocked because the whole point of the
-// fix is that we ask GIT, not the transcript.
+// A PRIMARY CLONE on `branch`, as git lays it out on disk. The whole point of the fix is that we ask the
+// CHECKOUT (git's own HEAD files), not the transcript.
 function cloneOnBranch(branch: string): string {
     const repo = specTempDirs.make('wp-repo-');
-    git(repo, 'init', '-q', '-b', branch);
-    git(repo, 'config', 'user.email', 't@t.t');
-    git(repo, 'config', 'user.name', 'T');
+    CheckoutLayout.primary(repo, branch);
     fs.writeFileSync(path.join(repo, 'f.txt'), 'x');
-    git(repo, 'add', '.');
-    git(repo, 'commit', '-qm', 'init');
     return repo;
 }
 
@@ -230,13 +223,8 @@ function cloneOnBranch(branch: string): string {
 // in, and the only cwd shape the fix will derive a branch from.
 function worktreeOn(branch: string): string {
     const wt = path.join(specTempDirs.make('wp-wt-'), 'tree');
-    git(clone(), 'worktree', 'add', '-q', '-b', branch, wt);
+    CheckoutLayout.linkedWorktree(clone(), wt, branch);
     return wt;
-}
-
-function git(cwd: string, ...args: string[]): void {
-    const r = spawnSync('git', ['-C', cwd, ...args], { encoding: 'utf8' });
-    if (r.status !== 0) throw new Error(`git ${args.join(' ')} failed: ${r.stderr}`);
 }
 
 // One agent whose record-0 carries an explicit `gitBranch` AND an explicit `cwd` — the two fields the
@@ -273,7 +261,7 @@ describe('SubagentProvenanceService — a PINNED cwd decides when gitBranch cont
         // A primary clone is never pinned, so it is never an oracle: BLOCK. Its own clone (not the shared
         // one) precisely because this case is the one that MUTATES what branch the clone is on.
         const moved = cloneOnBranch('dean/old-work');
-        git(moved, 'checkout', '-q', '-b', 'dean/feat');
+        CheckoutLayout.checkoutBranch(moved, 'dean/feat');
         expect(statusFor('sess-c2', 'checklist-reviewer', 'dean/old-work', moved, 'dean/feat'))
             .toBe(PROVENANCE_MISSING);
     });
@@ -327,7 +315,7 @@ describe('SubagentProvenanceService — a PINNED cwd decides when gitBranch cont
 
     it('does not credit a detached HEAD, which rev-parse prints as the literal "HEAD"', () => {
         const wt = worktreeOn('dean/feat-detached');
-        git(wt, 'checkout', '-q', '--detach', 'HEAD');
+        CheckoutLayout.detach(wt, '0123456789abcdef0123456789abcdef01234567');
         expect(statusFor('sess-c11', 'checklist-reviewer', 'worktree-agent-aaaa', wt, 'HEAD')).toBe(PROVENANCE_MISSING);
     });
 });

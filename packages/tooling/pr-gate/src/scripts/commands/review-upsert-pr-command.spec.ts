@@ -3,7 +3,7 @@ import { specTempDirs } from '@webpieces/tooling-testkit';
 import 'reflect-metadata';
 import * as fs from 'fs';
 import * as path from 'path';
-import { CheckoutLayout } from '../../__tests__/feature-harness';
+import { CheckoutLayout } from '@webpieces/tooling-testkit';
 import { MockGitProcessApi } from '@webpieces/tooling-testkit';
 import { describe, expect, it, vi } from 'vitest';
 import { AtomicFile } from '@webpieces/tooling-common';

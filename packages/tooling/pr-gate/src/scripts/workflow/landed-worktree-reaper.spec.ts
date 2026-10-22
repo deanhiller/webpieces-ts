@@ -17,19 +17,9 @@ const world = vi.hoisted(() => ({
     childStderr: '',
 }));
 
-// The worktree list is asked by `@webpieces/repo-workflow-core`'s WorktreeService, which is not routed
-// through the injected process edge yet (a later slice of #1381); that one answer still comes from here.
-// The CHILD re-exec is this package's own process call and goes through the scripted NativeProcessApi.
-vi.mock('child_process', () => ({
-    spawnSync: (cmd: string, args: string[]): { status: number; stdout: string; stderr: string } => {
-        if (cmd === 'git' && args[0] === 'worktree' && args[1] === 'list') {
-            return { status: 0, stdout: world.porcelain, stderr: '' };
-        }
-        throw new Error(`unexpected child process: ${cmd} ${args.join(' ')}`);
-    },
-}));
-
-import { ProcessResultDto } from '@webpieces/tooling-common';
+// The worktree list (WorktreeService, through the scripted GitProcessApi) answers from `world`, and the
+// CHILD re-exec goes through the scripted NativeProcessApi (#1381). No process is started.
+import { GitResultDto, ProcessResultDto } from '@webpieces/tooling-common';
 import { ProcessCallDto } from '@webpieces/tooling-testkit';
 import { Worktree, WorktreeService } from '@webpieces/repo-workflow-core';
 import { PrGateFeature } from '../../__tests__/feature-harness';
@@ -96,6 +86,7 @@ beforeEach(async () => {
     world.childStdout = '';
     world.childStderr = '';
     feature = await PrGateFeature.create();
+    feature.git.respond(['worktree', 'list', '--porcelain'], (): GitResultDto => new GitResultDto(0, world.porcelain, ''));
     feature.processes.respondToPrefix(process.execPath, [ENTRY], (): ProcessResultDto =>
         new ProcessResultDto(world.childStatus, world.childStdout, world.childStderr));
 });

@@ -254,7 +254,7 @@ export class ImpactScopeResolver {
         private readonly diffScope: DiffScope = new DiffScope(),
     ) {}
 
-    resolve(root: string): ImpactPlan | ImpactUnavailable {
+    async resolve(root: string): Promise<ImpactPlan | ImpactUnavailable> {
         const head = this.git.sha(root, 'HEAD');
         if (head === null) return new ImpactUnavailable('git cannot resolve HEAD (not a git checkout, or git is unavailable)');
         const branch = this.git.branch(root);
@@ -262,7 +262,7 @@ export class ImpactScopeResolver {
         const commit = this.lastCommit(root, dirty);
         // On main the decision is the branch NAME, never merge-base: unpushed commits still mean "last commit".
         if (branch === null || branch === MAIN_BRANCH) return new ImpactPlan([commit], ImpactKind.COMMIT);
-        const fork = this.diffScope.detectBase(root);
+        const fork = await this.diffScope.detectBase(root);
         if (fork === null) {
             const reason = 'no fork point: neither origin/main nor main resolves';
             return new ImpactPlan(
@@ -435,7 +435,7 @@ export class NxImpactScanner {
         const options = new ChangedFilesOptions();
         options.tsOnly = false;
         options.includeDeletions = true;
-        const files = this.diffScope.getChangedFiles(workspaceRoot, base, undefined, options);
+        const files = await this.diffScope.getChangedFiles(workspaceRoot, base, undefined, options);
         const short = base.slice(0, 7);
         const drawn = affectedSet.filter((project: string): boolean => graph[project] !== undefined);
         if (drawn.length === 0)
@@ -617,7 +617,7 @@ export class ImpactRefresh {
         const started = Date.now();
         // eslint-disable-next-line @webpieces/no-unmanaged-exceptions -- impact is optional; any failure becomes a reason, never a failed generation
         try {
-            const plan = this.resolver.resolve(workspaceRoot);
+            const plan = await this.resolver.resolve(workspaceRoot);
             if (plan instanceof ImpactUnavailable) return this.none(architectureDir, plan.reason, started);
             const comparisons = plan.comparisons.filter(
                 (comparison: ImpactComparison): boolean => kinds.includes(comparison.kind),
