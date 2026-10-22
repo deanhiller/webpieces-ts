@@ -6,7 +6,7 @@
             "root": "PrGateApp",
             "rootKind": "controller",
             "file": "packages/tooling/pr-gate/src/scripts/pr-gate-app.ts",
-            "maxLevel": 8,
+            "maxLevel": 10,
             "nodes": [
                 {
                     "id": "ActiveHatchReport",
@@ -318,7 +318,7 @@
                     "kind": "class",
                     "scope": "singleton",
                     "file": "packages/tooling/tooling-common/src/state-dir.ts",
-                    "level": 7
+                    "level": 9
                 },
                 {
                     "id": "FinishBanner",
@@ -406,7 +406,7 @@
                     "kind": "class",
                     "scope": "singleton",
                     "file": "packages/tooling/tooling-common/src/git-checkout.ts",
-                    "level": 8
+                    "level": 10
                 },
                 {
                     "id": "GitExec",
@@ -414,7 +414,15 @@
                     "kind": "class",
                     "scope": "singleton",
                     "file": "packages/tooling/pr-gate/src/scripts/workflow/git-exec.ts",
-                    "level": 5
+                    "level": 7
+                },
+                {
+                    "id": "GitProcessApi",
+                    "className": "GitProcessApi",
+                    "kind": "class",
+                    "scope": "singleton",
+                    "file": "packages/tooling/tooling-common/src/process/git-process-api.ts",
+                    "level": 8
                 },
                 {
                     "id": "GitStatusParser",
@@ -422,7 +430,7 @@
                     "kind": "class",
                     "scope": "singleton",
                     "file": "packages/tooling/pr-gate/src/scripts/workflow/git-status.ts",
-                    "level": 6
+                    "level": 8
                 },
                 {
                     "id": "HarnessAgentActivityReader",
@@ -569,6 +577,14 @@
                     "level": 4
                 },
                 {
+                    "id": "NativeProcessApi",
+                    "className": "NativeProcessApi",
+                    "kind": "class",
+                    "scope": "singleton",
+                    "file": "packages/tooling/tooling-common/src/process/native-process-api.ts",
+                    "level": 5
+                },
+                {
                     "id": "OpenPrCheck",
                     "className": "OpenPrCheck",
                     "kind": "class",
@@ -686,7 +702,7 @@
                     "kind": "class",
                     "scope": "singleton",
                     "file": "packages/tooling/rules-config/src/repo-root.ts",
-                    "level": 6
+                    "level": 8
                 },
                 {
                     "id": "RepoScratchDirs",
@@ -838,7 +854,7 @@
                     "kind": "class",
                     "scope": "singleton",
                     "file": "packages/tooling/tooling-common/src/state-dir-migration.ts",
-                    "level": 8
+                    "level": 10
                 },
                 {
                     "id": "SubagentProvenanceService",
@@ -966,6 +982,15 @@
                     "paramType": "BranchNaming"
                 },
                 {
+                    "from": "AiBranchName",
+                    "to": "GitExec",
+                    "injection": "type",
+                    "token": "GitExec",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/git-exec.ts#GitExec",
+                    "paramName": "gitExec",
+                    "paramType": "GitExec"
+                },
+                {
                     "from": "AwaitChecksCommand",
                     "to": "AwaitLoop",
                     "injection": "type",
@@ -973,6 +998,15 @@
                     "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/await-loop.ts#AwaitLoop",
                     "paramName": "awaitLoop",
                     "paramType": "AwaitLoop"
+                },
+                {
+                    "from": "AwaitChecksCommand",
+                    "to": "NativeProcessApi",
+                    "injection": "type",
+                    "token": "NativeProcessApi",
+                    "tokenKey": "class:packages/tooling/tooling-common/src/process/native-process-api.ts#NativeProcessApi",
+                    "paramName": "processes",
+                    "paramType": "NativeProcessApi"
                 },
                 {
                     "from": "AwaitChecksCommand",
@@ -1201,6 +1235,24 @@
                 },
                 {
                     "from": "BuildGateLog",
+                    "to": "GitProcessApi",
+                    "injection": "type",
+                    "token": "GitProcessApi",
+                    "tokenKey": "class:packages/tooling/tooling-common/src/process/git-process-api.ts#GitProcessApi",
+                    "paramName": "git",
+                    "paramType": "GitProcessApi"
+                },
+                {
+                    "from": "BuildGateLog",
+                    "to": "NativeProcessApi",
+                    "injection": "type",
+                    "token": "NativeProcessApi",
+                    "tokenKey": "class:packages/tooling/tooling-common/src/process/native-process-api.ts#NativeProcessApi",
+                    "paramName": "processes",
+                    "paramType": "NativeProcessApi"
+                },
+                {
+                    "from": "BuildGateLog",
                     "to": "StageOutputLog",
                     "injection": "type",
                     "token": "StageOutputLog",
@@ -1225,6 +1277,15 @@
                     "tokenKey": "class:packages/tooling/rules-config/src/gate-token.ts#GateTokenService",
                     "paramName": "gateTokenService",
                     "paramType": "GateTokenService"
+                },
+                {
+                    "from": "CheckPrCommand",
+                    "to": "NativeProcessApi",
+                    "injection": "type",
+                    "token": "NativeProcessApi",
+                    "tokenKey": "class:packages/tooling/tooling-common/src/process/native-process-api.ts#NativeProcessApi",
+                    "paramName": "processes",
+                    "paramType": "NativeProcessApi"
                 },
                 {
                     "from": "CheckPrCommand",
@@ -1498,12 +1559,30 @@
                 },
                 {
                     "from": "DiffBasisResolver",
+                    "to": "GitProcessApi",
+                    "injection": "type",
+                    "token": "GitProcessApi",
+                    "tokenKey": "class:packages/tooling/tooling-common/src/process/git-process-api.ts#GitProcessApi",
+                    "paramName": "git",
+                    "paramType": "GitProcessApi"
+                },
+                {
+                    "from": "DiffBasisResolver",
                     "to": "GitStatusParser",
                     "injection": "type",
                     "token": "GitStatusParser",
                     "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/git-status.ts#GitStatusParser",
                     "paramName": "statusParser",
                     "paramType": "GitStatusParser"
+                },
+                {
+                    "from": "DiffMaterializer",
+                    "to": "GitProcessApi",
+                    "injection": "type",
+                    "token": "GitProcessApi",
+                    "tokenKey": "class:packages/tooling/tooling-common/src/process/git-process-api.ts#GitProcessApi",
+                    "paramName": "git",
+                    "paramType": "GitProcessApi"
                 },
                 {
                     "from": "DiffMaterializer",
@@ -1705,6 +1784,15 @@
                 },
                 {
                     "from": "FinishUpsertPrCommand",
+                    "to": "GitProcessApi",
+                    "injection": "type",
+                    "token": "GitProcessApi",
+                    "tokenKey": "class:packages/tooling/tooling-common/src/process/git-process-api.ts#GitProcessApi",
+                    "paramName": "git",
+                    "paramType": "GitProcessApi"
+                },
+                {
+                    "from": "FinishUpsertPrCommand",
                     "to": "HotfixRedirect",
                     "injection": "type",
                     "token": "HotfixRedirect",
@@ -1729,6 +1817,15 @@
                     "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/merge-state.ts#MergeState",
                     "paramName": "mergeState",
                     "paramType": "MergeState"
+                },
+                {
+                    "from": "FinishUpsertPrCommand",
+                    "to": "NativeProcessApi",
+                    "injection": "type",
+                    "token": "NativeProcessApi",
+                    "tokenKey": "class:packages/tooling/tooling-common/src/process/native-process-api.ts#NativeProcessApi",
+                    "paramName": "processes",
+                    "paramType": "NativeProcessApi"
                 },
                 {
                     "from": "FinishUpsertPrCommand",
@@ -1831,6 +1928,24 @@
                 },
                 {
                     "from": "ForkPoint",
+                    "to": "GitExec",
+                    "injection": "type",
+                    "token": "GitExec",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/git-exec.ts#GitExec",
+                    "paramName": "gitExec",
+                    "paramType": "GitExec"
+                },
+                {
+                    "from": "ForkPoint",
+                    "to": "GitProcessApi",
+                    "injection": "type",
+                    "token": "GitProcessApi",
+                    "tokenKey": "class:packages/tooling/tooling-common/src/process/git-process-api.ts#GitProcessApi",
+                    "paramName": "git",
+                    "paramType": "GitProcessApi"
+                },
+                {
+                    "from": "ForkPoint",
                     "to": "MergeState",
                     "injection": "type",
                     "token": "MergeState",
@@ -1855,6 +1970,15 @@
                     "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/git-exec.ts#GitExec",
                     "paramName": "gitExec",
                     "paramType": "GitExec"
+                },
+                {
+                    "from": "GatedPrPublisher",
+                    "to": "NativeProcessApi",
+                    "injection": "type",
+                    "token": "NativeProcessApi",
+                    "tokenKey": "class:packages/tooling/tooling-common/src/process/native-process-api.ts#NativeProcessApi",
+                    "paramName": "processes",
+                    "paramType": "NativeProcessApi"
                 },
                 {
                     "from": "GatherInfo",
@@ -1903,12 +2027,30 @@
                 },
                 {
                     "from": "GeneratedArtifactRegistry",
+                    "to": "NativeProcessApi",
+                    "injection": "type",
+                    "token": "NativeProcessApi",
+                    "tokenKey": "class:packages/tooling/tooling-common/src/process/native-process-api.ts#NativeProcessApi",
+                    "paramName": "processes",
+                    "paramType": "NativeProcessApi"
+                },
+                {
+                    "from": "GeneratedArtifactRegistry",
                     "to": "RepoScratchDirs",
                     "injection": "type",
                     "token": "RepoScratchDirs",
                     "tokenKey": "class:packages/tooling/rules-config/src/repo-scratch-dirs.ts#RepoScratchDirs",
                     "paramName": "scratchDirs",
                     "paramType": "RepoScratchDirs"
+                },
+                {
+                    "from": "GitExec",
+                    "to": "GitProcessApi",
+                    "injection": "type",
+                    "token": "GitProcessApi",
+                    "tokenKey": "class:packages/tooling/tooling-common/src/process/git-process-api.ts#GitProcessApi",
+                    "paramName": "git",
+                    "paramType": "GitProcessApi"
                 },
                 {
                     "from": "GitExec",
@@ -1945,6 +2087,15 @@
                     "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/git-exec.ts#GitExec",
                     "paramName": "hotfixGit",
                     "paramType": "GitExec"
+                },
+                {
+                    "from": "HotfixPrPublisher",
+                    "to": "NativeProcessApi",
+                    "injection": "type",
+                    "token": "NativeProcessApi",
+                    "tokenKey": "class:packages/tooling/tooling-common/src/process/native-process-api.ts#NativeProcessApi",
+                    "paramName": "processes",
+                    "paramType": "NativeProcessApi"
                 },
                 {
                     "from": "HotfixRedirect",
@@ -2038,6 +2189,15 @@
                 },
                 {
                     "from": "HumanPostPrCommand",
+                    "to": "NativeProcessApi",
+                    "injection": "type",
+                    "token": "NativeProcessApi",
+                    "tokenKey": "class:packages/tooling/tooling-common/src/process/native-process-api.ts#NativeProcessApi",
+                    "paramName": "processes",
+                    "paramType": "NativeProcessApi"
+                },
+                {
+                    "from": "HumanPostPrCommand",
                     "to": "RepoRootFinder",
                     "injection": "type",
                     "token": "RepoRootFinder",
@@ -2092,6 +2252,15 @@
                 },
                 {
                     "from": "LandPrCommand",
+                    "to": "GitProcessApi",
+                    "injection": "type",
+                    "token": "GitProcessApi",
+                    "tokenKey": "class:packages/tooling/tooling-common/src/process/git-process-api.ts#GitProcessApi",
+                    "paramName": "git",
+                    "paramType": "GitProcessApi"
+                },
+                {
+                    "from": "LandPrCommand",
                     "to": "LandedTreeResolver",
                     "injection": "type",
                     "token": "LandedTreeResolver",
@@ -2128,6 +2297,15 @@
                 },
                 {
                     "from": "LandPrCommand",
+                    "to": "NativeProcessApi",
+                    "injection": "type",
+                    "token": "NativeProcessApi",
+                    "tokenKey": "class:packages/tooling/tooling-common/src/process/native-process-api.ts#NativeProcessApi",
+                    "paramName": "processes",
+                    "paramType": "NativeProcessApi"
+                },
+                {
+                    "from": "LandPrCommand",
                     "to": "PrMerger",
                     "injection": "type",
                     "token": "PrMerger",
@@ -2146,12 +2324,30 @@
                 },
                 {
                     "from": "LandedTreeResolver",
+                    "to": "GitProcessApi",
+                    "injection": "type",
+                    "token": "GitProcessApi",
+                    "tokenKey": "class:packages/tooling/tooling-common/src/process/git-process-api.ts#GitProcessApi",
+                    "paramName": "git",
+                    "paramType": "GitProcessApi"
+                },
+                {
+                    "from": "LandedTreeResolver",
                     "to": "WorktreeService",
                     "injection": "type",
                     "token": "WorktreeService",
                     "tokenKey": "class:packages/tooling/repo-workflow-core/src/worktrees.ts#WorktreeService",
                     "paramName": "worktrees",
                     "paramType": "WorktreeService"
+                },
+                {
+                    "from": "LandedWorktreeReaper",
+                    "to": "NativeProcessApi",
+                    "injection": "type",
+                    "token": "NativeProcessApi",
+                    "tokenKey": "class:packages/tooling/tooling-common/src/process/native-process-api.ts#NativeProcessApi",
+                    "paramName": "processes",
+                    "paramType": "NativeProcessApi"
                 },
                 {
                     "from": "LandedWorktreeReaper",
@@ -2170,6 +2366,15 @@
                     "tokenKey": "class:packages/tooling/repo-workflow-core/src/worktrees.ts#WorktreeService",
                     "paramName": "worktrees",
                     "paramType": "WorktreeService"
+                },
+                {
+                    "from": "MainCheckout",
+                    "to": "GitProcessApi",
+                    "injection": "type",
+                    "token": "GitProcessApi",
+                    "tokenKey": "class:packages/tooling/tooling-common/src/process/git-process-api.ts#GitProcessApi",
+                    "paramName": "git",
+                    "paramType": "GitProcessApi"
                 },
                 {
                     "from": "MainSyncFileStore",
@@ -2326,12 +2531,30 @@
                 },
                 {
                     "from": "MergeStart",
+                    "to": "GitProcessApi",
+                    "injection": "type",
+                    "token": "GitProcessApi",
+                    "tokenKey": "class:packages/tooling/tooling-common/src/process/git-process-api.ts#GitProcessApi",
+                    "paramName": "git",
+                    "paramType": "GitProcessApi"
+                },
+                {
+                    "from": "MergeStart",
                     "to": "MergeState",
                     "injection": "type",
                     "token": "MergeState",
                     "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/merge-state.ts#MergeState",
                     "paramName": "mergeState",
                     "paramType": "MergeState"
+                },
+                {
+                    "from": "MergeStart",
+                    "to": "NativeProcessApi",
+                    "injection": "type",
+                    "token": "NativeProcessApi",
+                    "tokenKey": "class:packages/tooling/tooling-common/src/process/native-process-api.ts#NativeProcessApi",
+                    "paramName": "processes",
+                    "paramType": "NativeProcessApi"
                 },
                 {
                     "from": "MergeState",
@@ -2397,6 +2620,15 @@
                     "paramType": "BranchNaming"
                 },
                 {
+                    "from": "OpenPrCheck",
+                    "to": "NativeProcessApi",
+                    "injection": "type",
+                    "token": "NativeProcessApi",
+                    "tokenKey": "class:packages/tooling/tooling-common/src/process/native-process-api.ts#NativeProcessApi",
+                    "paramName": "processes",
+                    "paramType": "NativeProcessApi"
+                },
+                {
                     "from": "OrphanDirSweeper",
                     "to": "HomeConfigService",
                     "injection": "type",
@@ -2422,6 +2654,15 @@
                     "tokenKey": "class:packages/tooling/rules-config/src/orphan-dir-scan.ts#OrphanDirScanner",
                     "paramName": "scanner",
                     "paramType": "OrphanDirScanner"
+                },
+                {
+                    "from": "PrCommentUpserter",
+                    "to": "NativeProcessApi",
+                    "injection": "type",
+                    "token": "NativeProcessApi",
+                    "tokenKey": "class:packages/tooling/tooling-common/src/process/native-process-api.ts#NativeProcessApi",
+                    "paramName": "processes",
+                    "paramType": "NativeProcessApi"
                 },
                 {
                     "from": "PrContextWriter",
@@ -2631,6 +2872,15 @@
                     "paramType": "WriteReviewFixesCommand"
                 },
                 {
+                    "from": "PrMerger",
+                    "to": "NativeProcessApi",
+                    "injection": "type",
+                    "token": "NativeProcessApi",
+                    "tokenKey": "class:packages/tooling/tooling-common/src/process/native-process-api.ts#NativeProcessApi",
+                    "paramName": "processes",
+                    "paramType": "NativeProcessApi"
+                },
+                {
                     "from": "ProvenanceEnforcer",
                     "to": "AiBranchName",
                     "injection": "type",
@@ -2638,6 +2888,15 @@
                     "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/git-readAiBranchName.ts#AiBranchName",
                     "paramName": "aiBranchName",
                     "paramType": "AiBranchName"
+                },
+                {
+                    "from": "ProvenanceEnforcer",
+                    "to": "GitProcessApi",
+                    "injection": "type",
+                    "token": "GitProcessApi",
+                    "tokenKey": "class:packages/tooling/tooling-common/src/process/git-process-api.ts#GitProcessApi",
+                    "paramName": "git",
+                    "paramType": "GitProcessApi"
                 },
                 {
                     "from": "ProvenanceEnforcer",
@@ -2881,6 +3140,15 @@
                     "tokenKey": "class:packages/tooling/tooling-common/src/atomic-file.ts#AtomicFile",
                     "paramName": "atomicFile",
                     "paramType": "AtomicFile"
+                },
+                {
+                    "from": "ReviewRoundStateService",
+                    "to": "GitProcessApi",
+                    "injection": "type",
+                    "token": "GitProcessApi",
+                    "tokenKey": "class:packages/tooling/tooling-common/src/process/git-process-api.ts#GitProcessApi",
+                    "paramName": "gitProcess",
+                    "paramType": "GitProcessApi"
                 },
                 {
                     "from": "ReviewRoundStateService",
@@ -3162,6 +3430,15 @@
                     "paramType": "MergeState"
                 },
                 {
+                    "from": "SquashSettingsEnforcer",
+                    "to": "NativeProcessApi",
+                    "injection": "type",
+                    "token": "NativeProcessApi",
+                    "tokenKey": "class:packages/tooling/tooling-common/src/process/native-process-api.ts#NativeProcessApi",
+                    "paramName": "processes",
+                    "paramType": "NativeProcessApi"
+                },
+                {
                     "from": "StageOutputLog",
                     "to": "GateLogFile",
                     "injection": "type",
@@ -3424,6 +3701,15 @@
                 },
                 {
                     "from": "UpsertHotfixPrCommand",
+                    "to": "NativeProcessApi",
+                    "injection": "type",
+                    "token": "NativeProcessApi",
+                    "tokenKey": "class:packages/tooling/tooling-common/src/process/native-process-api.ts#NativeProcessApi",
+                    "paramName": "processes",
+                    "paramType": "NativeProcessApi"
+                },
+                {
+                    "from": "UpsertHotfixPrCommand",
                     "to": "PrCommentUpserter",
                     "injection": "type",
                     "token": "PrCommentUpserter",
@@ -3475,6 +3761,15 @@
                     "tokenKey": "class:packages/tooling/rules-config/src/review-json.ts#ReviewJsonService",
                     "paramName": "reviewJsonService",
                     "paramType": "ReviewJsonService"
+                },
+                {
+                    "from": "WorkingTreeGate",
+                    "to": "GitProcessApi",
+                    "injection": "type",
+                    "token": "GitProcessApi",
+                    "tokenKey": "class:packages/tooling/tooling-common/src/process/git-process-api.ts#GitProcessApi",
+                    "paramName": "gitProcess",
+                    "paramType": "GitProcessApi"
                 },
                 {
                     "from": "WorktreeCleanupSection",

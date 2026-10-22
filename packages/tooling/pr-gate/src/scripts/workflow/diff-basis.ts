@@ -1,4 +1,4 @@
-import { spawnSync } from 'child_process';
+import { GitProcessApi } from '@webpieces/tooling-common';
 import { injectable, bindingScopeValues } from 'inversify';
 import { ForkPoint } from './git-findForkPoint';
 import { GitStatusEntry, GitStatusParser } from './git-status';
@@ -82,6 +82,7 @@ export class DiffBasisResolver {
     constructor(
         private readonly forkPoint: ForkPoint,
         private readonly statusParser: GitStatusParser,
+        private readonly git: GitProcessApi,
     ) {}
 
     /**
@@ -93,14 +94,14 @@ export class DiffBasisResolver {
      * Omitting the head on a dirty tree is not a shortcut, it is the only form that shows uncommitted work,
      * and supplying `HEAD` there is precisely the bug this class exists to make unrepresentable.
      */
-    resolve(repoRoot: string): DiffBasis {
-        const base = this.forkPoint.resolveForkPoint(repoRoot);
-        const headSha = this.gitOut(repoRoot, ['rev-parse', 'HEAD']);
+    async resolve(repoRoot: string): Promise<DiffBasis> {
+        const base = await this.forkPoint.resolveForkPoint(repoRoot);
+        const headSha = await this.gitOut(repoRoot, ['rev-parse', 'HEAD']);
         // Point C. Deliberately does NOT fetch — this must work offline, like resolveForkPoint. So it is
         // main as this clone last saw it, which is the honest answer to "has main moved under me?" that a
         // local command can give. '' when origin/main is unknown (no remote yet).
-        const mainHead = this.gitOut(repoRoot, ['rev-parse', 'origin/main']);
-        const dirtyFiles = this.dirtyPaths(repoRoot);
+        const mainHead = await this.gitOut(repoRoot, ['rev-parse', 'origin/main']);
+        const dirtyFiles = await this.dirtyPaths(repoRoot);
         const dirty = dirtyFiles.length > 0;
         if (base === '') return new DiffBasis('', headSha, dirty, dirtyFiles, '', '', mainHead);
         const whole = dirty ? `git diff ${base}` : `git diff ${base} ${headSha}`;
@@ -118,18 +119,18 @@ export class DiffBasisResolver {
      * character off the front of its path. It also left git's quoting on, so `"a b.txt"` was reported
      * with the quotes still attached and matched no checklist glob.
      */
-    private dirtyPaths(repoRoot: string): string[] {
-        const out = this.rawGitOut(repoRoot, ['status', '--porcelain', '--untracked-files=all']);
+    private async dirtyPaths(repoRoot: string): Promise<string[]> {
+        const out = await this.rawGitOut(repoRoot, ['status', '--porcelain', '--untracked-files=all']);
         return this.statusParser.parse(out).map((entry: GitStatusEntry): string => entry.path);
     }
 
-    private gitOut(repoRoot: string, args: string[]): string {
-        return this.rawGitOut(repoRoot, args).trim();
+    private async gitOut(repoRoot: string, args: string[]): Promise<string> {
+        return (await this.rawGitOut(repoRoot, args)).trim();
     }
 
     // Untrimmed — mandatory for `git status --porcelain`, where leading whitespace carries meaning.
-    private rawGitOut(repoRoot: string, args: string[]): string {
-        const result = spawnSync('git', args, { cwd: repoRoot, encoding: 'utf8' });
-        return result.status === 0 ? (result.stdout ?? '') : '';
+    private async rawGitOut(repoRoot: string, args: string[]): Promise<string> {
+        const result = await this.git.run(args, repoRoot);
+        return result.ok ? result.stdout : '';
     }
 }

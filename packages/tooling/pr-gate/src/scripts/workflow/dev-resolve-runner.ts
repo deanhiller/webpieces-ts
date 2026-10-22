@@ -42,13 +42,13 @@ export class DevResolveRunner {
      * `fetchRefs` is passed separately from the queue because `--rebase-resolution` merges a ref that is
      * also its push destination, so "everything to fetch" and "everything to merge" are not the same list.
      */
-    start(repoRoot: string, state: PushDevState, base: string, fetchRefs: string[]): void {
-        this.refs.fetchCopies(repoRoot, fetchRefs);
+    async start(repoRoot: string, state: PushDevState, base: string, fetchRefs: string[]): Promise<void> {
+        await this.refs.fetchCopies(repoRoot, fetchRefs);
         this.store.write(repoRoot, state);
-        this.gitExec.runGitChecked(
+        await this.gitExec.runGitChecked(
             ['-C', repoRoot, 'checkout', '-B', state.tmpBranch, base],
             `Failed to create the throwaway resolve branch ${state.tmpBranch}`);
-        this.drain(repoRoot, state);
+        await this.drain(repoRoot, state);
     }
 
     /**
@@ -58,29 +58,29 @@ export class DevResolveRunner {
      * fetched an hour ago rehearses a composition CI will not build — the one freshness gap the sibling
      * update flow is still known to have (only its stage ① ever fetches).
      */
-    resume(repoRoot: string, state: PushDevState): void {
-        this.assertNoUnmergedPaths(repoRoot, state);
-        this.gitExec.assertNoUntracked(repoRoot);
-        this.gitExec.runGitChecked(['-C', repoRoot, 'add', '-u'], 'Failed to stage the resolved files (git add -u)');
-        this.gitExec.runGitChecked(['-C', repoRoot, 'commit', '--no-edit'],
+    async resume(repoRoot: string, state: PushDevState): Promise<void> {
+        await this.assertNoUnmergedPaths(repoRoot, state);
+        await this.gitExec.assertNoUntracked(repoRoot);
+        await this.gitExec.runGitChecked(['-C', repoRoot, 'add', '-u'], 'Failed to stage the resolved files (git add -u)');
+        await this.gitExec.runGitChecked(['-C', repoRoot, 'commit', '--no-edit'],
             `Failed to commit the resolution of ${state.current}`);
         process.stdout.write(`✅ Committed the resolution of ${state.current}.\n`);
         state.current = '';
-        this.refs.fetchCopies(repoRoot, state.queue);
-        this.drain(repoRoot, state);
+        await this.refs.fetchCopies(repoRoot, state.queue);
+        await this.drain(repoRoot, state);
     }
 
     /**
      * Throw the whole resolve away: undo any halted merge, go back to the original branch, delete the
      * throwaway branch and the state file. Nothing published, nothing on the feature branch.
      */
-    abort(repoRoot: string, state: PushDevState): void {
+    async abort(repoRoot: string, state: PushDevState): Promise<void> {
         // Allowed to fail: there is no merge to abort when the resolve halted between merges, and that is
         // not an error condition — the rest of the teardown must still run.
-        this.gitExec.tryGit(['-C', repoRoot, 'merge', '--abort'], repoRoot);
-        this.gitExec.runGitChecked(['-C', repoRoot, 'checkout', state.originalBranch],
+        await this.gitExec.tryGit(['-C', repoRoot, 'merge', '--abort'], repoRoot);
+        await this.gitExec.runGitChecked(['-C', repoRoot, 'checkout', state.originalBranch],
             `Failed to return to ${state.originalBranch}`);
-        this.gitExec.tryGit(['-C', repoRoot, 'branch', '-D', state.tmpBranch], repoRoot);
+        await this.gitExec.tryGit(['-C', repoRoot, 'branch', '-D', state.tmpBranch], repoRoot);
         this.store.clear(repoRoot);
         process.stdout.write(
             '\n' + SEP + '🛑 Dev-deploy resolve aborted\n' + SEP + '\n'
@@ -94,11 +94,11 @@ export class DevResolveRunner {
      * A LATER ref can conflict too, which is why this is a loop resumed from a state file rather than a
      * single pass: `wp-finish-push-dev` can legitimately stop again on the next ref in the queue.
      */
-    private drain(repoRoot: string, state: PushDevState): void {
+    private async drain(repoRoot: string, state: PushDevState): Promise<void> {
         while (state.queue.length > 0) {
             const ref = state.queue[0];
             state.queue = state.queue.slice(1);
-            const outcome = this.gitExec.tryGit(
+            const outcome = await this.gitExec.tryGit(
                 ['-C', repoRoot, 'merge', '--no-ff', '--no-edit', '-m',
                     `Dev-deploy: merge ${ref} into ${state.targetRef}`, `refs/remotes/origin/${ref}`],
                 repoRoot);
@@ -108,15 +108,15 @@ export class DevResolveRunner {
             }
             state.current = ref;
             this.store.write(repoRoot, state);
-            this.halt(repoRoot, state);
+            await this.halt(repoRoot, state);
             return;
         }
-        this.publish(repoRoot, state);
+        await this.publish(repoRoot, state);
     }
 
     /** Stop with the conflicted files listed and the ONE command that continues. Exit 2 = "your turn". */
-    private halt(repoRoot: string, state: PushDevState): never {
-        const conflicted = this.unmergedPaths(repoRoot);
+    private async halt(repoRoot: string, state: PushDevState): Promise<never> {
+        const conflicted = await this.unmergedPaths(repoRoot);
         const remaining = state.queue.length > 0
             ? `\nStill queued after this one: ${state.queue.join(', ')}\n`
               + `\`${WP_FINISH_PUSH_DEV}\` resumes the queue, so it may stop again on a later ref.\n`
@@ -136,16 +136,16 @@ export class DevResolveRunner {
     }
 
     /** Queue empty: force-push the composed result over the copy, then restore the original checkout. */
-    private publish(repoRoot: string, state: PushDevState): void {
-        this.gitExec.runGitChecked(
+    private async publish(repoRoot: string, state: PushDevState): Promise<void> {
+        await this.gitExec.runGitChecked(
             ['-C', repoRoot, 'push', '--force', 'origin', `${state.tmpBranch}:refs/heads/${state.targetRef}`],
             `Failed to publish the dev copy ${state.targetRef}`);
         // Captured BEFORE the tmp branch is deleted — it is the composed sha the watch hints are about,
         // and after the checkout below HEAD is the feature branch, which is a different commit entirely.
-        const published = this.refs.headSha(repoRoot, state.tmpBranch);
-        this.gitExec.runGitChecked(['-C', repoRoot, 'checkout', state.originalBranch],
+        const published = await this.refs.headSha(repoRoot, state.tmpBranch);
+        await this.gitExec.runGitChecked(['-C', repoRoot, 'checkout', state.originalBranch],
             `Failed to return to ${state.originalBranch}`);
-        this.gitExec.tryGit(['-C', repoRoot, 'branch', '-D', state.tmpBranch], repoRoot);
+        await this.gitExec.tryGit(['-C', repoRoot, 'branch', '-D', state.tmpBranch], repoRoot);
         this.store.clear(repoRoot);
         process.stdout.write(
             '\n' + SEP + `✅ Published ${state.targetRef} with the resolutions\n` + SEP + '\n'
@@ -156,15 +156,15 @@ export class DevResolveRunner {
     }
 
     /** Conflicted (unmerged-in-index) paths. Empty once every one has been resolved and `git add`ed. */
-    private unmergedPaths(repoRoot: string): string[] {
-        const out = this.gitExec.gitQuery(['-C', repoRoot, 'diff', '--name-only', '--diff-filter=U'], repoRoot,
+    private async unmergedPaths(repoRoot: string): Promise<string[]> {
+        const out = await this.gitExec.gitQuery(['-C', repoRoot, 'diff', '--name-only', '--diff-filter=U'], repoRoot,
             'Failed to list the conflicted files (git diff --name-only --diff-filter=U).');
         return out.split('\n').filter((l: string): boolean => l.trim() !== '');
     }
 
     // The gate on `wp-finish-push-dev`: refuse (and re-print the list) while anything is still unmerged.
-    private assertNoUnmergedPaths(repoRoot: string, state: PushDevState): void {
-        const conflicted = this.unmergedPaths(repoRoot);
+    private async assertNoUnmergedPaths(repoRoot: string, state: PushDevState): Promise<void> {
+        const conflicted = await this.unmergedPaths(repoRoot);
         if (conflicted.length === 0) return;
         throw new CliExitError(2,
             '\n' + SEP + '⛔ Conflicts are NOT resolved yet\n' + SEP + '\n'

@@ -1,4 +1,5 @@
 import { CliExitError } from '@webpieces/rules-config';
+import { NativeProcessApi } from '@webpieces/tooling-common';
 import { injectable, bindingScopeValues } from 'inversify';
 import { GatedPrPublisher } from './gated-pr-publisher';
 import { GitExec } from './git-exec';
@@ -17,13 +18,13 @@ import { GitExec } from './git-exec';
  */
 @injectable(bindingScopeValues.Singleton)
 export class HotfixPrPublisher extends GatedPrPublisher {
-    constructor(private readonly hotfixGit: GitExec) {
-        super(hotfixGit);
+    constructor(private readonly hotfixGit: GitExec, processes: NativeProcessApi) {
+        super(hotfixGit, processes);
     }
 
     /** Fast-forward-only push of HEAD to origin/<branch>, run in `cwd`. Throws on any failure. */
-    pushFastForward(cwd: string, branch: string): void {
-        const out = this.hotfixGit.tryGit(['push', '-u', 'origin', `HEAD:${branch}`], cwd);
+    async pushFastForward(cwd: string, branch: string): Promise<void> {
+        const out = await this.hotfixGit.tryGit(['push', '-u', 'origin', `HEAD:${branch}`], cwd);
         if (out.ok) return;
         throw new CliExitError(
             1,
@@ -34,7 +35,7 @@ export class HotfixPrPublisher extends GatedPrPublisher {
         );
     }
 
-    protected override push(baseBranch: string): void {
-        this.pushFastForward(process.cwd(), baseBranch);
+    protected override push(baseBranch: string): Promise<void> {
+        return this.pushFastForward(process.cwd(), baseBranch);
     }
 }

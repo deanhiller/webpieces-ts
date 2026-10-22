@@ -20,7 +20,7 @@ export class FinishUpdateCommand {
 
     async run(): Promise<void> {
         const repoRoot = this.repoRootFinder.resolveRepoRoot(process.cwd());
-        const home = this.mergeState.mergeDirFor(repoRoot, this.aiBranchName.getFeatureName());
+        const home = this.mergeState.mergeDirFor(repoRoot, await this.aiBranchName.getFeatureName());
 
         // The in-progress merge is the `merge-<n>/` run dir holding a marker.
         const activeDir = this.mergeState.findActiveMergeRunDir(home);

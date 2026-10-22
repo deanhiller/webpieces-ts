@@ -591,7 +591,7 @@
             "role": "lib",
             "drawOnGraph": false,
             "products": ["rules"],
-            "shortDescription": "Own shared development fixtures, including scratch directory creation and cleanup. Consumers declare this package through devDependencies.",
+            "shortDescription": "Own shared development fixtures, including scratch directory creation and cleanup and the mocked process edges. Consumers declare this package through devDependencies.",
             "responsibilitiesFile": "packages/tooling/tooling-testkit/responsibilities.md",
             "dependsOn": [
                 "rules-sdk",

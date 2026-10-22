@@ -1,134 +1,128 @@
 import { specTempDirs } from '@webpieces/tooling-testkit';
-import { execFileSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { BranchIdentity } from '@webpieces/repo-workflow-core';
 import { CliExitError, GateTokenService, HOTFIX_BUILD_COMMAND, PrGateConfig, RepoRootFinder, ReviewJsonService } from '@webpieces/rules-config';
-import { InformAiError } from '@webpieces/tooling-common';
+import { GitResultDto, InformAiError, ProcessResultDto } from '@webpieces/tooling-common';
+import { CapturedOutput, PrGateFeature } from '../../__tests__/feature-harness';
 import { AiBranchName } from '../workflow/git-readAiBranchName';
 import { GitExec } from '../workflow/git-exec';
-import { GitStatusParser } from '../workflow/git-status';
 import { BuildAffected } from '../workflow/build-affected';
 import { BuildArtifactGate } from '../workflow/build-artifact-gate';
 import { MergeState } from '../workflow/merge-state';
 import { ChecklistScanner } from '../workflow/checklist-scanner';
 import { HotfixPrPublisher } from '../workflow/hotfix-pr-publisher';
-import { PrCommentRequest, PrCommentResult, PrCommentUpserter } from '../workflow/pr-comment-upserter';
+import { PrCommentUpserter } from '../workflow/pr-comment-upserter';
 import { SquashSettingsEnforcer } from '../workflow/squash-settings-enforcer';
 import { Dashboard } from '../../dashboard/dashboard';
 import { ChecklistCommentRenderer } from '../../dashboard/checklist-comment-renderer';
 import { AuthorIdentityResolver } from '../../dashboard/author-identity';
-import { HotfixPrRef, UpsertHotfixPrCommand } from './upsert-hotfix-pr-command';
+import { UpsertHotfixPrCommand } from './upsert-hotfix-pr-command';
+
+/**
+ * `wp-upsert-hotfix-pr` with git and `gh` SCRIPTED (#1381). The publisher, the gh comment upsert, the
+ * squash-settings check and the dashboard are the production objects from the shipped container; the
+ * build gate, the merge-state read and the config are the only collaborators stood in for, because each
+ * reads a whole repository's configuration rather than an outside system.
+ *
+ * What #1057 cares about is what the command asks git to DO: a fast-forward `push -u` of HEAD and
+ * nothing else — never a merge of main, never a rewrite, never a force. So that is what is asserted, on
+ * the exact commands issued, in the order they reached the outside world.
+ */
 
 const HOTFIX_BRANCH = 'dean/hotfix/fix-timeout';
 const FEATURE = 'dean-hotfix-fix-timeout';
 const SALT = 'spec-salt';
+const PROD_SHA = 'a'.repeat(40);
+const MAIN_SHA = 'c'.repeat(40);
+const FIX_SHA = 'f'.repeat(40);
+const PR_URL = 'https://github.test/o/r/pull/77';
 
 function asType<T>(value: object): T {
     return value as unknown as T;
 }
 
-/** The GitHub side, faked: which PR is open for which head branch, and every gh write that happened. */
-class FakeGitHub {
-    prs = new Map<string, HotfixPrRef>();
-    calls: string[] = [];
-    bodies: string[] = [];
-}
-
-/** The REAL fast-forward push into the spec's bare origin; only the gh seams are faked. */
-class FakeHotfixPublisher extends HotfixPrPublisher {
-    constructor(gitExec: GitExec, private readonly gh: FakeGitHub, private readonly repo: string) {
-        super(gitExec);
-    }
-
-    protected override findOpenPr(baseBranch: string): string {
-        return this.gh.prs.get(baseBranch)?.number ?? '';
-    }
-
-    protected override editPr(prNumber: string, title: string, bodyFile: string): boolean {
-        this.gh.calls.push(`edit #${prNumber}`);
-        this.gh.bodies.push(fs.readFileSync(bodyFile, 'utf8'));
-        return true;
-    }
-
-    protected override createPr(baseBranch: string, title: string, bodyFile: string): boolean {
-        this.gh.calls.push(`create ${baseBranch}`);
-        this.gh.bodies.push(fs.readFileSync(bodyFile, 'utf8'));
-        this.gh.prs.set(baseBranch, new HotfixPrRef('77', 'https://github.test/o/r/pull/77'));
-        return true;
-    }
-
-    protected override push(baseBranch: string): void {
-        this.gh.calls.push(`push ${baseBranch}`);
-        this.pushFastForward(this.repo, baseBranch);
-    }
-}
-
 class TestCommand extends UpsertHotfixPrCommand {
-    constructor(private readonly gh: FakeGitHub, deps: ConstructorParameters<typeof UpsertHotfixPrCommand>) {
-        super(...deps);
-    }
-
     protected override prGateConfig(): PrGateConfig {
         return asType<PrGateConfig>({ gates: [], gateSalt: SALT, checklists: [], checklistComments: false, maxReviewerRounds: 2 });
     }
+}
 
-    protected override prRef(branch: string): HotfixPrRef {
-        return this.gh.prs.get(branch) ?? new HotfixPrRef('', '');
-    }
-
-    protected override editPrBody(prNumber: string, bodyFile: string): boolean {
-        this.gh.calls.push(`backfill #${prNumber}`);
-        this.gh.bodies.push(fs.readFileSync(bodyFile, 'utf8'));
-        return true;
-    }
+/** What the outside world holds and answers, and everything that reached it, in order. */
+class World {
+    head = FIX_SHA;
+    porcelain = '';
+    openPr = '';
+    pushRejected = false;
+    order: string[] = [];
+    bodies: string[] = [];
 }
 
 class Fixture {
-    root = '';
     repo = '';
-    prodSha = '';
     branch = HOTFIX_BRANCH;
     builds = 0;
     redBuild = false;
-    gh = new FakeGitHub();
-    comments: PrCommentRequest[] = [];
+    // Somebody commits while hotfix-ci runs.
+    moveHeadDuringBuild = false;
+    world = new World();
+    feature!: PrGateFeature;
 
-    git(args: string[], cwd: string = this.repo): string {
-        return execFileSync('git', args, { cwd, encoding: 'utf8' }).trim();
+    async setUp(): Promise<void> {
+        this.repo = specTempDirs.makeReal('wp-upsert-hotfix-');
+        this.feature = await PrGateFeature.create();
+        this.scriptGit();
+        this.scriptGitHub();
     }
 
-    commit(file: string, content: string, message: string): string {
-        fs.writeFileSync(path.join(this.repo, file), content);
-        this.git(['add', file]);
-        this.git(['commit', '-qm', message]);
-        return this.git(['rev-parse', 'HEAD']);
+    private scriptGit(): void {
+        const git = this.feature.git;
+        const w = this.world;
+        git.respond(['status', '--porcelain'], (): GitResultDto => git.ok(w.porcelain));
+        git.respond(['fetch', 'origin', 'main'], git.ok());
+        git.respond(['rev-parse', 'HEAD'], (): GitResultDto => git.ok(`${w.head}\n`));
+        git.respond(['rev-parse', 'origin/main'], git.ok(`${MAIN_SHA}\n`));
+        git.respond(['merge-base', 'origin/main', 'HEAD'], git.ok(`${PROD_SHA}\n`));
+        git.respondToPrefix(['diff'], (call): GitResultDto =>
+            git.ok(call.args.includes('--name-only') ? 'app.txt\n' : '--- a/app.txt\n+++ b/app.txt\n-v1\n+v1 + fix\n'));
+        git.respondToPrefix(['push'], (call): GitResultDto => {
+            w.order.push(`git ${call.args.join(' ')}`);
+            return w.pushRejected
+                ? git.fail(1, ` ! [rejected]        HEAD -> ${HOTFIX_BRANCH} (fetch first)`)
+                : git.ok();
+        });
     }
 
-    /**
-     * origin/main = prod → unpromoted; the hotfix branch is cut from PROD (an old sha), not from main.
-     * That is the shape issue #1057 is about: merging main in would ship `unpromoted`.
-     */
-    setUp(): void {
-        this.root = specTempDirs.makeReal('wp-upsert-hotfix-');
-        this.repo = path.join(this.root, 'repo');
-        const origin = path.join(this.root, 'origin.git');
-        execFileSync('git', ['init', '-q', '--bare', '-b', 'main', origin]);
-        fs.mkdirSync(this.repo);
-        this.git(['init', '-q', '-b', 'main']);
-        this.git(['config', 'core.hooksPath', '/dev/null']);
-        this.git(['config', 'user.email', 'spec@example.com']);
-        this.git(['config', 'user.name', 'spec']);
-        fs.writeFileSync(path.join(this.repo, '.gitignore'), '.webpieces/\n');
-        this.git(['add', '.gitignore']);
-        this.prodSha = this.commit('app.txt', 'v1\n', 'prod');
-        this.git(['remote', 'add', 'origin', origin]);
-        this.git(['push', '-q', 'origin', 'main']);
-        this.commit('unpromoted.txt', 'not in prod yet\n', 'unpromoted');
-        this.git(['push', '-q', 'origin', 'main']);
-        this.git(['checkout', '-q', '-b', HOTFIX_BRANCH, this.prodSha]);
-        this.commit('app.txt', 'v1 + fix\n', 'fix');
+    private scriptGitHub(): void {
+        const gh = this.feature.processes;
+        const w = this.world;
+        gh.respondToPrefix('gh', ['pr', 'list', '--head', HOTFIX_BRANCH], (): ProcessResultDto => gh.ok(w.openPr === '' ? '' : `${w.openPr}\n`));
+        gh.respondToPrefix('gh', ['pr', 'view', HOTFIX_BRANCH], (): ProcessResultDto =>
+            w.openPr === '' ? gh.fail(1, 'no pull requests found') : gh.ok(`${w.openPr}\t${PR_URL}\n`));
+        gh.respondToPrefix('gh', ['pr', 'create'], (call): ProcessResultDto => {
+            w.order.push(`gh pr create --head ${call.args[call.args.indexOf('--head') + 1]}`);
+            w.bodies.push(this.bodyOf(call.args));
+            w.openPr = '77';
+            return gh.ok();
+        });
+        gh.respondToPrefix('gh', ['pr', 'edit'], (call): ProcessResultDto => {
+            const hasTitle = call.args.includes('--title');
+            w.order.push(`gh pr edit #${call.args[2]}${hasTitle ? '' : ' (body back-fill)'}`);
+            w.bodies.push(this.bodyOf(call.args));
+            return gh.ok();
+        });
+        // The comment upsert (find, then POST/PATCH) and the squash-settings read — both production code.
+        gh.respondToPrefix('gh', ['api', '--paginate'], gh.ok(''));
+        gh.respondToPrefix('gh', ['api', '--method'], (call): ProcessResultDto => {
+            w.order.push(`gh comment ${call.args[2]}`);
+            return gh.ok();
+        });
+        gh.respondToPrefix('gh', ['api', 'repos/{owner}/{repo}', '--jq'], gh.ok('PR_TITLE\tPR_BODY\ttrue\n'));
+    }
+
+    private bodyOf(args: readonly string[]): string {
+        return fs.readFileSync(args[args.indexOf('--body-file') + 1], 'utf8');
     }
 
     writeSummary(): string {
@@ -149,65 +143,62 @@ class Fixture {
         return file;
     }
 
-    remoteSha(branch: string): string {
-        const out = this.git(['ls-remote', '--heads', 'origin', branch]);
-        return out === '' ? '' : out.split(/\s+/)[0];
+    /** Every command that WROTE to the outside world: pushes, PR edits/creates, comments. */
+    writes(): string[] {
+        return this.world.order;
+    }
+
+    gitCommands(): string[] {
+        return this.feature.git.commandLines();
     }
 
     command(): TestCommand {
-        const gitExec = new GitExec(new RepoRootFinder(), new GitStatusParser());
+        const c = this.feature.container;
         const fixture = this;
-        return new TestCommand(this.gh, [
+        return new TestCommand(
             asType<RepoRootFinder>({ resolveRepoRoot: (): string => fixture.repo }),
             asType<BranchIdentity>({
                 current: (): string => fixture.branch,
                 isHotfix: (name: string): boolean => new BranchIdentity().isHotfix(name),
             }),
-            asType<AiBranchName>({ getFeatureName: (): string => FEATURE }),
-            gitExec,
+            asType<AiBranchName>({ getFeatureName: async (): Promise<string> => FEATURE }),
+            c.get(GitExec),
             new ReviewJsonService(),
             asType<BuildAffected>({
                 runBuildGate: async (): Promise<void> => {
                     fixture.builds += 1;
+                    if (fixture.moveHeadDuringBuild) fixture.world.head = 'e'.repeat(40);
                     if (fixture.redBuild) throw new CliExitError(1, 'hotfix-ci failed');
                 },
                 resolveBuildCommand: (): string => HOTFIX_BUILD_COMMAND,
             }),
-            asType<BuildArtifactGate>({ assertBuildLeftNothingUncommitted: (): void => undefined }),
+            asType<BuildArtifactGate>({ assertBuildLeftNothingUncommitted: async (): Promise<void> => undefined }),
             asType<MergeState>({ mergeDirFor: (): string => '/none', findActiveMergeRunDir: (): null => null }),
             asType<ChecklistScanner>({}),
-            new FakeHotfixPublisher(gitExec, this.gh, this.repo),
-            new Dashboard(),
-            new AuthorIdentityResolver(),
-            new ChecklistCommentRenderer(),
-            asType<PrCommentUpserter>({
-                upsert: (request: PrCommentRequest): PrCommentResult => {
-                    fixture.comments.push(request);
-                    return new PrCommentResult('1', false, true);
-                },
-            }),
-            asType<SquashSettingsEnforcer>({ ensure: (): void => undefined }),
+            c.get(HotfixPrPublisher),
+            c.get(Dashboard),
+            c.get(AuthorIdentityResolver),
+            c.get(ChecklistCommentRenderer),
+            c.get(PrCommentUpserter),
+            c.get(SquashSettingsEnforcer),
             new GateTokenService(),
-        ]);
+            this.feature.processes,
+        );
     }
 }
 
 let fx = new Fixture();
-let stdout: string[] = [];
+let output: CapturedOutput;
 
-beforeEach(() => {
+beforeEach(async () => {
     fx = new Fixture();
-    fx.setUp();
-    stdout = [];
-    vi.spyOn(process.stdout, 'write').mockImplementation((chunk: string | Uint8Array): boolean => {
-        stdout.push(String(chunk));
-        return true;
-    });
+    await fx.setUp();
+    output = CapturedOutput.start();
 });
 
 afterEach(() => {
-    vi.restoreAllMocks();
-    fs.rmSync(fx.root, { recursive: true, force: true });
+    output.stop();
+    fs.rmSync(fx.repo, { recursive: true, force: true });
 });
 
 describe('wp-upsert-hotfix-pr (issue #1057)', () => {
@@ -216,27 +207,25 @@ describe('wp-upsert-hotfix-pr (issue #1057)', () => {
         fx.writeSummary();
         await expect(fx.command().run()).rejects.toThrowError(/only runs on a branch containing the exact, case-sensitive \/hotfix\/ segment/);
         expect(fx.builds).toBe(0);
-        expect(fx.gh.calls).toEqual([]);
-        expect(fx.remoteSha(HOTFIX_BRANCH)).toBe('');
+        expect(fx.writes()).toEqual([]);
+        expect(fx.feature.git.calls).toEqual([]);
     });
 
     it('exits with the summary path and schema when summary.json is missing, before building or pushing', async () => {
         const expectedPath = new ReviewJsonService().summaryJsonPath(fx.repo, FEATURE);
-        const run = fx.command().run();
-        await expect(run).rejects.toBeInstanceOf(InformAiError);
+        await expect(fx.command().run()).rejects.toBeInstanceOf(InformAiError);
         await expect(fx.command().run()).rejects.toThrowError(expectedPath);
         await expect(fx.command().run()).rejects.toThrowError(/Then re-run: pnpm wp-upsert-hotfix-pr/);
         expect(fx.builds).toBe(0);
-        expect(fx.gh.calls).toEqual([]);
-        expect(fx.remoteSha(HOTFIX_BRANCH)).toBe('');
+        expect(fx.writes()).toEqual([]);
     });
 
     it('requires a clean tree', async () => {
         fx.writeSummary();
-        fs.writeFileSync(path.join(fx.repo, 'stray.txt'), 'uncommitted\n');
+        fx.world.porcelain = '?? stray.txt\n';
         await expect(fx.command().run()).rejects.toThrowError(/uncommitted or untracked changes/);
         expect(fx.builds).toBe(0);
-        expect(fx.remoteSha(HOTFIX_BRANCH)).toBe('');
+        expect(fx.writes()).toEqual([]);
     });
 
     it('a red hotfix-ci gate means nothing is pushed and no PR is touched', async () => {
@@ -244,39 +233,51 @@ describe('wp-upsert-hotfix-pr (issue #1057)', () => {
         fx.redBuild = true;
         await expect(fx.command().run()).rejects.toThrowError(/hotfix-ci failed/);
         expect(fx.builds).toBe(1);
-        expect(fx.gh.calls).toEqual([]);
-        expect(fx.remoteSha(HOTFIX_BRANCH)).toBe('');
+        expect(fx.writes()).toEqual([]);
+    });
+
+    it('refuses to push when HEAD moved while the build ran — the build would not cover the pushed commit', async () => {
+        fx.writeSummary();
+        fx.moveHeadDuringBuild = true;
+
+        await expect(fx.command().run()).rejects.toThrowError(/HEAD moved while the hotfix build ran/);
+        expect(fx.writes()).toEqual([]);
     });
 
     it('pushes prod + fix only — no merge from main, no rewrite — and opens the bannered PR without merging it', async () => {
         fx.writeSummary();
-        const headBefore = fx.git(['rev-parse', 'HEAD']);
 
         await fx.command().run();
 
-        // The branch is exactly what was committed: never merged with main, never squashed or rewritten.
-        expect(fx.git(['rev-parse', 'HEAD'])).toBe(headBefore);
-        expect(fx.git(['rev-parse', 'HEAD~1'])).toBe(fx.prodSha);
-        expect(fx.git(['rev-list', '--merges', `${fx.prodSha}..HEAD`])).toBe('');
-        expect(fx.remoteSha(HOTFIX_BRANCH)).toBe(headBefore);
-        // The PR's three-dot diff against main is the fix alone — `unpromoted.txt` does not ship.
-        expect(fx.git(['diff', '--name-only', `origin/main...origin/${HOTFIX_BRANCH}`])).toBe('app.txt');
-        expect(fx.git(['log', '--format=%s', `origin/main..origin/${HOTFIX_BRANCH}`])).toBe('fix');
+        // The only write to the remote is ONE fast-forward push of HEAD: nothing merges main in, nothing
+        // squashes, rebases, resets or forces.
+        expect(fx.writes()).toEqual([
+            `git push -u origin HEAD:${HOTFIX_BRANCH}`,
+            `gh pr create --head ${HOTFIX_BRANCH}`,
+            'gh pr edit #77 (body back-fill)',
+            'gh comment POST',
+        ]);
+        expect(fx.gitCommands().filter((l: string): boolean => /\b(merge|rebase|reset|commit|checkout)\b/.test(l)
+            && !l.includes('merge-base'))).toEqual([]);
+        expect(fx.gitCommands().some((l: string): boolean => l.includes('--force'))).toBe(false);
+        // origin/main is READ for the fork point — fetched, never merged.
+        expect(fx.gitCommands()).toContain('git fetch origin main');
+        expect(fx.feature.processes.callsStartingWith('gh', ['pr', 'merge'])).toEqual([]);
 
         expect(fx.builds).toBe(1);
-        expect(fx.gh.calls).toEqual([`push ${HOTFIX_BRANCH}`, `create ${HOTFIX_BRANCH}`, 'backfill #77']);
-        expect(fx.gh.calls.some((call: string): boolean => call.includes('merge'))).toBe(false);
-        const body = fx.gh.bodies[fx.gh.bodies.length - 1];
+        const body = fx.world.bodies[fx.world.bodies.length - 1];
         expect(body.startsWith('# ⚠️ HOT FIX ⚠️')).toBe(true);
-        expect(body).toContain('https://github.test/o/r/pull/77');
+        expect(body).toContain(PR_URL);
         expect(body).toContain('Generated by webpieces-ts wp-upsert-hotfix-pr');
         // summary.json's addressesIssues reaches the hotfix body exactly as finish renders it (issue #1310).
         expect(body).toContain('\nFixes https://github.com/deanhiller/webpieces-ts/issues/1057\n');
-        expect(new GateTokenService().verifyGateToken(body, SALT, headBefore)).toBe(true);
-        expect(fx.comments.map((c: PrCommentRequest): string => c.label)).toEqual(['full dashboard comment']);
-        expect(fx.comments[0].body.startsWith('# ⚠️ HOT FIX ⚠️')).toBe(true);
+        expect(new GateTokenService().verifyGateToken(body, SALT, FIX_SHA)).toBe(true);
+        // The full-dashboard comment is the 1st comment, and it carries the audit banner first.
+        const comment = fx.feature.processes.callsStartingWith('gh', ['api', '--method'])[0];
+        const payload = JSON.parse(fs.readFileSync(comment.args[comment.args.indexOf('--input') + 1], 'utf8'));
+        expect(payload.body.startsWith('# ⚠️ HOT FIX ⚠️')).toBe(true);
 
-        const printed = stdout.join('');
+        const printed = output.stdout;
         expect(printed).toContain('auto-merge was NOT enabled');
         expect(printed).toContain('⚠ Merging this PR will CLOSE https://github.com/deanhiller/webpieces-ts/issues/1057 (closesIssue: true)');
         expect(printed).not.toMatch(/\bend(?:ing|s)? (?:your|the|its) turn\b/i);
@@ -287,31 +288,26 @@ describe('wp-upsert-hotfix-pr (issue #1057)', () => {
     it('a re-run after another commit pushes again and updates the SAME PR', async () => {
         fx.writeSummary();
         await fx.command().run();
-        const second = fx.commit('app.txt', 'v1 + fix + follow-up\n', 'follow-up fix');
+        const second = 'd'.repeat(40);
+        fx.world.head = second;
         fx.writeSummary();
-        fx.gh.calls = [];
+        fx.world.order = [];
 
         await fx.command().run();
 
-        expect(fx.gh.calls).toEqual(['edit #77', `push ${HOTFIX_BRANCH}`]);
-        expect(fx.remoteSha(HOTFIX_BRANCH)).toBe(second);
-        expect(fx.git(['log', '--format=%s', `origin/main..origin/${HOTFIX_BRANCH}`])).toBe('follow-up fix\nfix');
-        expect(fx.git(['rev-list', '--merges', `${fx.prodSha}..HEAD`])).toBe('');
-        expect(new GateTokenService().verifyGateToken(fx.gh.bodies[fx.gh.bodies.length - 1], SALT, second)).toBe(true);
+        // Body FIRST, then the push — and the existing PR is edited, never a second one created.
+        expect(fx.writes()).toEqual(['gh pr edit #77', `git push -u origin HEAD:${HOTFIX_BRANCH}`, 'gh comment POST']);
+        expect(new GateTokenService().verifyGateToken(fx.world.bodies[fx.world.bodies.length - 1], SALT, second)).toBe(true);
     });
 
     it('never force-pushes: a remote branch that diverged is refused, not overwritten', async () => {
         fx.writeSummary();
-        await fx.command().run();
-        const theirs = path.join(fx.root, 'theirs');
-        execFileSync('git', ['clone', '-q', '-b', HOTFIX_BRANCH, path.join(fx.root, 'origin.git'), theirs]);
-        execFileSync('git', ['-c', 'user.email=o@example.com', '-c', 'user.name=o', 'commit', '-q', '--allow-empty', '-m', 'theirs'], { cwd: theirs });
-        execFileSync('git', ['push', '-q', 'origin', HOTFIX_BRANCH], { cwd: theirs });
-        const theirsSha = fx.remoteSha(HOTFIX_BRANCH);
-        fx.commit('app.txt', 'mine\n', 'mine');
-        fx.writeSummary();
+        fx.world.openPr = '77';
+        fx.world.pushRejected = true;
 
         await expect(fx.command().run()).rejects.toThrowError(/fast-forward only/);
-        expect(fx.remoteSha(HOTFIX_BRANCH)).toBe(theirsSha);
+        // One plain push was attempted and refused; nothing retried it with force.
+        expect(fx.feature.git.callsStartingWith(['push']).map((c): string => c.commandLine))
+            .toEqual([`git push -u origin HEAD:${HOTFIX_BRANCH}`]);
     });
 });

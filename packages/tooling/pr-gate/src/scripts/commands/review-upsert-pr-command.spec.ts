@@ -3,7 +3,8 @@ import { specTempDirs } from '@webpieces/tooling-testkit';
 import 'reflect-metadata';
 import * as fs from 'fs';
 import * as path from 'path';
-import { execFileSync } from 'child_process';
+import { CheckoutLayout } from '../../__tests__/feature-harness';
+import { MockGitProcessApi } from '@webpieces/tooling-testkit';
 import { describe, expect, it, vi } from 'vitest';
 import { AtomicFile } from '@webpieces/tooling-common';
 import { ReviewJsonService, ReviewerInstructionsService } from '@webpieces/rules-config';
@@ -35,7 +36,7 @@ class RecoveryFixture {
     readonly reviewJson = new ReviewJsonService();
     readonly receipts = new ReviewStageReceiptService(this.reviewJson);
     readonly provenance = new VerdictProvenanceService(this.reviewJson, new AtomicFile());
-    readonly rounds = new ReviewRoundStateService(this.reviewJson, this.provenance, new AtomicFile());
+    readonly rounds = new ReviewRoundStateService(this.reviewJson, this.provenance, new AtomicFile(), new MockGitProcessApi());
     readonly instructions = new ReviewerInstructionsService(this.reviewJson);
     readonly summary = this.reviewJson.summaryJsonPath(this.root, this.feature);
     readonly receipt = new ReviewStageReceipt('historical', true, 'build', 'old', ['accepted', 'pending', 'optional']);
@@ -50,7 +51,7 @@ class RecoveryFixture {
     readonly basis = new DiffBasis('new-fork', 'updated-1');
 
     constructor(cap: number) {
-        execFileSync('git', ['init', '-q', '-b', 'main'], { cwd: this.root });
+        CheckoutLayout.primary(this.root, 'main');
         this.receipt.round = 1;
         this.receipt.maxReviewerRounds = cap;
         this.receipt.optionalBriefed = ['optional'];

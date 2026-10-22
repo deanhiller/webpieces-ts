@@ -1,5 +1,5 @@
-import { spawnSync } from 'child_process';
 import { MERGE_MODE_AUTO, MERGE_MODE_NONE } from '@webpieces/rules-config';
+import { NativeProcessApi } from '@webpieces/tooling-common';
 import { injectable, bindingScopeValues } from 'inversify';
 
 /**
@@ -50,7 +50,7 @@ const GH_MERGEABLE_CONFLICTING = 'CONFLICTING';
 
 // What actually happened when we tried to land the squash merge. `message` is printed VERBATIM in the
 // final wp-finish-upsert-pr summary, so a merge that did not happen can never be reported as done —
-// the old code ignored `spawnSync().status` entirely and printed "✅ PR finished" even when `gh pr
+// the old code ignored the gh exit status entirely and printed "✅ PR finished" even when `gh pr
 // merge` had errored out, which is what hid the auto-merge-disabled failure for weeks. `result` is the
 // machine-readable half of the same honesty: the banner picks its HEADER from it, so the frame around
 // the message can no longer say "finished" while the message says "did NOT merge".
@@ -174,13 +174,15 @@ export class MergeIntent {
  */
 @injectable(bindingScopeValues.Singleton)
 export class PrMerger {
+    constructor(private readonly processes: NativeProcessApi) {}
+
     /**
      * @param subject       the squash-commit subject, normally `<PR title> (#N)`
      * @param mergeBodyFile file holding the squash-commit body (risk/flags/PR link)
      * @param intent        the real pr-gate.mergeMode PLUS whether this caller commands the merge
      *                      regardless of it (see MergeIntent).
      */
-    merge(baseBranch: string, subject: string, mergeBodyFile: string, intent: MergeIntent): MergeOutcome {
+    async merge(baseBranch: string, subject: string, mergeBodyFile: string, intent: MergeIntent): Promise<MergeOutcome> {
         // Anything that is not an explicit AUTO leaves the PR alone. The PR itself is already
         // posted/updated by this point, which is the whole job in this mode.
         if (!intent.shouldMerge()) {
@@ -213,7 +215,7 @@ export class PrMerger {
         // forbids a direct merge, and gh's raw `X Pull request #N is not mergeable: …` on the terminal
         // read as a hard failure to every human and agent who saw it. We reprint the reason ourselves,
         // framed as the expected first step of a two-step dance (see announceDirectFailure).
-        const direct = this.ghCapture(['pr', 'merge', baseBranch, '--squash', '--subject', subject, '--body-file', mergeBodyFile]);
+        const direct = await this.ghCapture(['pr', 'merge', baseBranch, '--squash', '--subject', subject, '--body-file', mergeBodyFile]);
         if (direct.status === 0) {
             process.stdout.write(direct.output);
             return new MergeOutcome(true, false, `squash-merged the PR as: "${subject}"`, MERGE_RESULT_MERGED);
@@ -223,7 +225,7 @@ export class PrMerger {
         // say: checks-still-running (BLOCKED) is self-healing once auto-merge is on, while out-of-date
         // (BEHIND) can NEVER land unattended. Ask GitHub itself — one cheap, failure-tolerant call, made
         // only on the failure path, so a run whose direct merge succeeded costs no extra API call.
-        const state = this.prMergeState(baseBranch);
+        const state = await this.prMergeState(baseBranch);
         this.announceDirectFailure(direct.output, state);
         return this.fallBackToAutoMerge(baseBranch, subject, mergeBodyFile, state, intent);
     }
@@ -235,8 +237,8 @@ export class PrMerger {
      * is NOT success either, and reporting it as such is precisely the bug this whole file guards.
      */
     // eslint-disable-next-line @typescript-eslint/max-params
-    private fallBackToAutoMerge(baseBranch: string, subject: string, mergeBodyFile: string, state: PrMergeState, intent: MergeIntent): MergeOutcome {
-        if (!this.autoMergeAllowed()) {
+    private async fallBackToAutoMerge(baseBranch: string, subject: string, mergeBodyFile: string, state: PrMergeState, intent: MergeIntent): Promise<MergeOutcome> {
+        if (!(await this.autoMergeAllowed())) {
             if (state.isBehind()) return this.behindOutcome(state, false);
             return new MergeOutcome(false, false, this.noQueueMessage(intent), MERGE_RESULT_FAILED);
         }
@@ -245,8 +247,8 @@ export class PrMerger {
         // gh records the merge subject/body only at the moment auto-merge is FIRST enabled; a second
         // `--auto` on an already-enabled PR silently keeps the OLD body. Disabling first re-stamps the
         // current subject/body on every re-run (a harmless no-op when auto-merge is not enabled).
-        this.gh(['pr', 'merge', baseBranch, '--disable-auto'], true);
-        const auto = this.gh(['pr', 'merge', baseBranch, '--auto', '--squash', '--subject', subject, '--body-file', mergeBodyFile]);
+        await this.gh(['pr', 'merge', baseBranch, '--disable-auto'], true);
+        const auto = await this.gh(['pr', 'merge', baseBranch, '--auto', '--squash', '--subject', subject, '--body-file', mergeBodyFile]);
         if (auto !== 0) {
             if (state.isBehind()) return this.behindOutcome(state, false);
             return new MergeOutcome(false, false,
@@ -322,15 +324,14 @@ export class PrMerger {
      * purpose: a gh hiccup returns an all-'' state (never BEHIND) so a transient API blip can only cost
      * us the extra diagnosis, never turn a working run into a crash.
      */
-    protected prMergeState(baseBranch: string): PrMergeState {
-        const result = spawnSync(
+    private async prMergeState(baseBranch: string): Promise<PrMergeState> {
+        const result = await this.processes.run(
             'gh',
             ['pr', 'view', baseBranch, '--json', 'mergeable,mergeStateStatus,state',
                 '--jq', '"\\(.mergeable)\\t\\(.mergeStateStatus)\\t\\(.state)"'],
-            { encoding: 'utf8' },
         );
-        if (result.status !== 0) return new PrMergeState('', '', '');
-        const parts = (result.stdout ?? '').trim().split('\t');
+        if (!result.ok) return new PrMergeState('', '', '');
+        const parts = result.stdout.trim().split('\t');
         return new PrMergeState(parts[0] ?? '', parts[1] ?? '', parts[2] ?? '');
     }
 
@@ -339,27 +340,27 @@ export class PrMerger {
     // for this repository`. One API call beats discovering that from an error string. Anything other
     // than a clean `true` counts as NOT allowed: if the setting cannot be read we must not claim the
     // queue is available.
-    protected autoMergeAllowed(): boolean {
-        const result = spawnSync('gh', ['api', 'repos/{owner}/{repo}', '--jq', '.allow_auto_merge'], { encoding: 'utf8' });
-        return result.status === 0 && (result.stdout ?? '').trim() === 'true';
+    private async autoMergeAllowed(): Promise<boolean> {
+        const result = await this.processes.run('gh', ['api', 'repos/{owner}/{repo}', '--jq', '.allow_auto_merge']);
+        return result.ok && result.stdout.trim() === 'true';
     }
 
-    // Runs `gh`, returning its exit status (-1 when gh could not be spawned at all, which must NOT be
-    // mistaken for the 0 that means success).
-    protected gh(args: string[], quiet: boolean = false): number {
-        const result = spawnSync('gh', args, { stdio: quiet ? 'ignore' : 'inherit' });
-        return result.status ?? -1;
+    // Runs `gh`, returning its exit status (non-zero when gh could not be started at all, which must NOT
+    // be mistaken for the 0 that means success). `quiet` discards its output instead of showing it.
+    private async gh(args: string[], quiet: boolean = false): Promise<number> {
+        const result = quiet ? await this.processes.run('gh', args) : await this.processes.passThrough('gh', args);
+        return result.code;
     }
 
     // Runs `gh` CAPTURING both streams instead of inheriting them, so an expected-to-fail attempt can be
     // reported in our own words rather than dumping a raw `X …` line the reader reads as fatal.
-    protected ghCapture(args: string[]): GhResult {
-        const result = spawnSync('gh', args, { encoding: 'utf8' });
-        return new GhResult(result.status ?? -1, (result.stdout ?? '') + (result.stderr ?? ''));
+    private async ghCapture(args: string[]): Promise<GhResult> {
+        const result = await this.processes.run('gh', args);
+        return new GhResult(result.code, result.stdout + result.stderr);
     }
 }
 
-// A captured `gh` invocation: its exit status (-1 when gh could not be spawned) and both streams
+// A captured `gh` invocation: its exit status (non-zero when gh could not be started) and both streams
 // combined, in the order a terminal would have shown them.
 export class GhResult {
     status: number;

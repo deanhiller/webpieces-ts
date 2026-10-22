@@ -1,5 +1,4 @@
-import { execSync, spawnSync } from 'child_process';
-import { InformAiError } from '@webpieces/tooling-common';
+import { GitProcessApi, InformAiError, NativeProcessApi } from '@webpieces/tooling-common';
 import { toError } from '@webpieces/tooling-common/to-error';
 import { RepoRootFinder, MERGE_MODE_AUTO, loadAndValidate } from '@webpieces/rules-config';
 import { BranchArchiver, BRANCH_RETENTION_ARCHIVE_TAG, BRANCH_RETENTION_KEEP } from '@webpieces/repo-workflow-core';
@@ -77,6 +76,8 @@ export class LandPrCommand {
         private readonly landedWorktree: LandedWorktreeReaper,
         private readonly bodyFile: MergeBodyTempFile,
         private readonly landedTree: LandedTreeResolver,
+        private readonly git: GitProcessApi,
+        private readonly processes: NativeProcessApi,
     ) {}
 
     /**
@@ -101,10 +102,9 @@ export class LandPrCommand {
         // operator is really standing in.
         const selector = request.prNumber !== ''
             ? request.prNumber
-            : this.branchNaming.baseBranchName(
-                execSync('git branch --show-current', { cwd, encoding: 'utf8' }).trim());
+            : this.branchNaming.baseBranchName(await this.currentBranch(cwd));
 
-        const ref = this.readPr(selector);
+        const ref = await this.readPr(selector);
         if (ref === null) throw this.noSuchPr(request, selector);
         // The PR's OWN head branch, never the selector: with `--pr <n>` the operator named a number and
         // has said nothing about branches, and even in the zero-arg case GitHub is the authority on which
@@ -127,12 +127,12 @@ export class LandPrCommand {
         // travels alongside it rather than being replaced by a literal AUTO, so PrMerger's diagnostics
         // never assert a config value nobody set — that is exactly what used to print a CONFIG MISMATCH
         // about `mergeMode: AUTO` two lines above this command printing `mergeMode is NONE`.
-        const outcome = this.prMerger.merge(
+        const outcome = await this.prMerger.merge(
             base, `${ref.title} (#${ref.number})`, mergeBodyFile, new MergeIntent(policy ?? '', true),
         );
 
         const bookkeeping = outcome.merged
-            ? this.bookkeeping(repoRoot, base, ref, config.landPr.branchRetention, cwd)
+            ? await this.bookkeeping(repoRoot, base, ref, config.landPr.branchRetention, cwd)
             : '';
         process.stdout.write(
             '\n' + SEP + (outcome.merged ? '✅ Landed\n' : 'ℹ️  Not landed yet\n') + SEP + '\n' +
@@ -292,13 +292,13 @@ export class LandPrCommand {
      * it is more precise in both directions — a second clone sitting on the SAME commit can safely
      * archive it, and a tree that has committed further work since finish ran correctly declines.
      */
-    private bookkeeping(
+    private async bookkeeping(
         repoRoot: string, base: string, ref: PrIdentity, retention: string, cwd: string,
-    ): string {
-        const tree = this.landedTree.resolve(repoRoot, base, ref.headRefOid);
+    ): Promise<string> {
+        const tree = await this.landedTree.resolve(repoRoot, base, ref.headRefOid);
         if (!tree.bookkeepingAllowed) return this.notTheLandedTipNotice(base, tree, ref);
-        return this.archiveAndPromote(repoRoot, base, ref, retention)
-            + this.nextStep(repoRoot, tree, cwd);
+        return await this.archiveAndPromote(repoRoot, base, ref, retention)
+            + await this.nextStep(repoRoot, tree, cwd);
     }
 
     /**
@@ -337,7 +337,7 @@ export class LandPrCommand {
      * hand-off is not safely achievable the #512 notice is printed unchanged, because an honest
      * limitation beats a command that deletes its own working directory mid-run.
      */
-    private nextStep(repoRoot: string, tree: LandedTree, cwd: string): string {
+    private async nextStep(repoRoot: string, tree: LandedTree, cwd: string): Promise<string> {
         const handoff: WorktreeReapHandoff | null
             = this.landedWorktree.plan(repoRoot, tree.worktree, cwd);
         if (handoff === null) return '   Next: `pnpm wp-cleanup` to delete the merged branch.\n';
@@ -357,7 +357,7 @@ export class LandPrCommand {
      * Never throws: the PR is already merged by the time we get here, and failing the command after a
      * successful merge would report a landed PR as a failure. Problems are reported in the recap.
      */
-    private archiveAndPromote(repoRoot: string, base: string, ref: PrIdentity, retention: string): string {
+    private async archiveAndPromote(repoRoot: string, base: string, ref: PrIdentity, retention: string): Promise<string> {
         if (retention === BRANCH_RETENTION_KEEP) return '   Branch retention is "keep" — nothing archived.\n';
 
         let line = '';
@@ -370,9 +370,9 @@ export class LandPrCommand {
                 : `   ⚠️  Could not archive ${base}: ${archive.error} — the branch was left alone.\n`;
         }
 
-        const feature = this.aiBranchName.getFeatureName();
+        const feature = await this.aiBranchName.getFeatureName();
         const record = new ArchiveRecord(
-            tag, this.revParse(repoRoot, base), this.revParse(repoRoot, 'origin/main'),
+            tag, await this.revParse(repoRoot, base), await this.revParse(repoRoot, 'origin/main'),
             Number(ref.number), new Date().toISOString(),
         );
         if (this.mergeInfoIndex.promoteToMerged(repoRoot, feature, record)) {
@@ -382,9 +382,19 @@ export class LandPrCommand {
     }
 
     // Best-effort sha of a ref — '' when it cannot resolve. Recorded in archive.json for provenance.
-    private revParse(repoRoot: string, ref: string): string {
-        const result = spawnSync('git', ['rev-parse', ref], { cwd: repoRoot, encoding: 'utf8' });
-        return result.status === 0 ? (result.stdout ?? '').trim() : '';
+    private async revParse(repoRoot: string, ref: string): Promise<string> {
+        const result = await this.git.run(['rev-parse', ref], repoRoot);
+        return result.ok ? result.stdout.trim() : '';
+    }
+
+    // `git branch --show-current` in the invocation directory. Must succeed: a branch we cannot read is
+    // not a selector to guess at.
+    private async currentBranch(cwd: string): Promise<string> {
+        const result = await this.git.run(['branch', '--show-current'], cwd);
+        if (!result.ok) {
+            throw new InformAiError(`Could not read the current branch in ${cwd} (git branch --show-current): ${result.stderr.trim()}`);
+        }
+        return result.stdout.trim();
     }
 
     /**
@@ -396,13 +406,12 @@ export class LandPrCommand {
      * class doc). `headRefOid` is read BEFORE the merge, because it is what the bookkeeping check
      * compares against and the merge is what makes the branch's fate uninteresting to GitHub.
      */
-    private readPr(selector: string): PrIdentity | null {
-        const result = spawnSync(
+    private async readPr(selector: string): Promise<PrIdentity | null> {
+        const result = await this.processes.run(
             'gh', ['pr', 'view', selector, '--json', 'number,title,url,body,headRefOid,headRefName'],
-            { encoding: 'utf8' },
         );
-        if (result.status !== 0) return null;
-        return this.parsePr(result.stdout ?? '');
+        if (!result.ok) return null;
+        return this.parsePr(result.stdout);
     }
 
     // `gh --json` output → PrIdentity. Malformed/absent JSON reads as "no PR", which the caller turns

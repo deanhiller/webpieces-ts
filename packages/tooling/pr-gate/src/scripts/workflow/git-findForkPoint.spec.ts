@@ -6,7 +6,8 @@ import { BranchNaming } from './branch-naming';
 import { MergeState } from './merge-state';
 
 const mergeStateSvc = new MergeState();
-const forkPoint = new ForkPoint(new RepoRootFinder(), new AiBranchName(new BranchNaming()), mergeStateSvc);
+// forkPointOutputDir is pure path arithmetic: the git edges are never reached.
+const forkPoint = new ForkPoint(new RepoRootFinder(), new AiBranchName(new BranchNaming(), null as never), mergeStateSvc, null as never, null as never);
 const forkPointOutputDir = (r: string, f: string, w: string): string => forkPoint.forkPointOutputDir(r, f, w);
 const mergeDirFor = (r: string, f: string): string => mergeStateSvc.mergeDirFor(r, f);
 

@@ -55,7 +55,7 @@ export class AwaitLoop {
         // describing the wait before asking it would report a state nobody has measured — and an
         // already-finished wait must cost nothing at all.
         for (let first = true; ; first = false) {
-            if (probe.done()) return new WaitOutcome(true, Date.now() - started);
+            if (await probe.done()) return new WaitOutcome(true, Date.now() - started);
             const elapsed = Date.now() - started;
             if (elapsed >= CEILING_MS) return new WaitOutcome(false, elapsed);
             // One heartbeat per HEARTBEAT_MS of ELAPSED time, whatever the poll interval — a probe that
@@ -85,7 +85,7 @@ export interface WaitProbe {
     /** How long to sleep between two `done()` calls. A file read polls fast; a `gh` call does not. */
     readonly pollMs: number;
     /** True once the wait is over. Called before the first sleep, so an already-finished wait is free. */
-    done(): boolean;
+    done(): Promise<boolean>;
     /** The current state, in one short phrase, for the heartbeat: `2 of 4 verdicts in`. */
     describe(): string;
 }

@@ -1,37 +1,104 @@
-import { specTempDirs } from '@webpieces/tooling-testkit';
+import { MockGitProcessApi, ProcessCallDto, specTempDirs } from '@webpieces/tooling-testkit';
 import * as fs from 'fs';
 import * as path from 'path';
-import { execFileSync } from 'child_process';
 import { describe, expect, it } from 'vitest';
-import { AtomicFile } from '@webpieces/tooling-common';
+import { AtomicFile, GitResultDto, PROCESS_NOT_STARTED } from '@webpieces/tooling-common';
 import { REVIEWER_AGENTS_PLACEHOLDER, RequiredChecklist, ReviewJsonService, ReviewerAgentPolicy } from '@webpieces/rules-config';
 import { DiffBasis } from './diff-basis';
 import { ReviewRoundStateService, ROUND_ACTION_FINISH, ROUND_ACTION_RECORD, ROUND_ACTION_RESUME, ROUND_ACTION_REVIEW } from './review-round-state';
 import { ReviewStageReceipt } from './review-stage-receipt';
 import { SubmittedVerdict, VerdictProvenance, VerdictProvenanceService } from './verdict-provenance';
 
-const reviewJson = new ReviewJsonService();
-const provenance = new VerdictProvenanceService(reviewJson, new AtomicFile());
-const rounds = new ReviewRoundStateService(reviewJson, provenance, new AtomicFile());
+/**
+ * The repository the service asks git about, as a commit GRAPH rather than a directory of objects
+ * (#1381). The service asks exactly four things — is the tree clean, what is HEAD, which files differ
+ * between two commits, and is a commit in HEAD's history — and each is answered from this model, so the
+ * history rewrites these flows depend on (a squash update dropping the reviewed commit) are one line each.
+ */
+class CommitGraph {
+    private readonly parents = new Map<string, string | null>();
+    private next = 1;
+    head = '';
+    untracked = false;
 
-function git(dir: string, ...args: string[]): string {
-    return execFileSync('git', args, { cwd: dir, encoding: 'utf8' }).trim();
+    constructor() {
+        this.head = this.commit(null);
+    }
+
+    /** A new commit on top of HEAD (every commit in these flows edits a.ts). */
+    commitOnHead(): string {
+        this.head = this.commit(this.head);
+        return this.head;
+    }
+
+    /** `git reset --hard HEAD~1`. */
+    dropHead(): void {
+        this.head = this.parentOf(this.head);
+    }
+
+    parentOf(sha: string): string {
+        const parent = this.parents.get(sha);
+        if (parent === null || parent === undefined) throw new Error(`${sha} has no parent`);
+        return parent;
+    }
+
+    isAncestorOfHead(sha: string): boolean {
+        for (let at: string | null = this.head; at !== null; at = this.parents.get(at) ?? null) {
+            if (at === sha) return true;
+        }
+        return false;
+    }
+
+    private commit(parent: string | null): string {
+        const sha = String(this.next++).padStart(40, '0');
+        this.parents.set(sha, parent);
+        return sha;
+    }
 }
 
+/** git, answered from `graph` for `dir`; a cwd that does not exist could not even start git. */
+function scriptedGit(dir: string, graph: CommitGraph): MockGitProcessApi {
+    const git = new MockGitProcessApi();
+    git.respondToPrefix([], (call: ProcessCallDto): GitResultDto => {
+        if (call.cwd !== dir) return git.fail(PROCESS_NOT_STARTED, `spawn git ENOENT (cwd ${call.cwd ?? ''})`);
+        const [verb, a, b, c] = call.args;
+        if (verb === 'status') return git.ok(graph.untracked ? '?? untracked.txt\n' : '');
+        if (verb === 'rev-parse') return git.ok(`${graph.head}\n`);
+        if (verb === 'diff') return git.ok(b === c ? '' : 'a.ts\n');
+        if (verb === 'merge-base' && a === '--is-ancestor') {
+            return graph.isAncestorOfHead(b) ? git.ok() : git.fail(1);
+        }
+        throw new Error(`unexpected git ${call.args.join(' ')}`);
+    });
+    return git;
+}
+
+const reviewJson = new ReviewJsonService();
+const provenance = new VerdictProvenanceService(reviewJson, new AtomicFile());
+const graphs = new Map<string, CommitGraph>();
+let rounds = new ReviewRoundStateService(reviewJson, provenance, new AtomicFile(), new MockGitProcessApi());
+
+function graphOf(dir: string): CommitGraph {
+    const graph = graphs.get(dir);
+    if (graph === undefined) throw new Error(`no repository at ${dir}`);
+    return graph;
+}
+
+/** A repository with one commit; the service under test now asks THIS repository's git. */
 function repo(): string {
     const dir = specTempDirs.make('review-rounds-');
-    git(dir, 'init', '-q', '-b', 'main');
-    git(dir, 'config', 'user.email', 'spec@example.com');
-    git(dir, 'config', 'user.name', 'Spec');
-    fs.writeFileSync(path.join(dir, '.gitignore'), '.webpieces/\n');
-    fs.writeFileSync(path.join(dir, 'a.ts'), 'export const a = 1;\n');
-    git(dir, 'add', '.gitignore', 'a.ts');
-    git(dir, 'commit', '-qm', 'base');
+    const graph = new CommitGraph();
+    graphs.set(dir, graph);
+    rounds = new ReviewRoundStateService(reviewJson, provenance, new AtomicFile(), scriptedGit(dir, graph));
     return dir;
 }
 
+function head(dir: string): string {
+    return graphOf(dir).head;
+}
+
 function receiptAt(dir: string, round = 1): ReviewStageReceipt {
-    const receipt = new ReviewStageReceipt(git(dir, 'rev-parse', 'HEAD'), true, 'pnpm build', 'now', ['security']);
+    const receipt = new ReviewStageReceipt(head(dir), true, 'pnpm build', 'now', ['security']);
     receipt.round = round;
     receipt.maxReviewerRounds = 2;
     receipt.scopeHashes = { security: 'scope' };
@@ -50,14 +117,15 @@ function archive(dir: string, receipt: ReviewStageReceipt, status: string, check
 }
 
 function basis(dir: string): DiffBasis {
-    const head = git(dir, 'rev-parse', 'HEAD');
-    return new DiffBasis(git(dir, 'rev-parse', 'HEAD~1'), head, false, [], `git diff HEAD~1 ${head}`, `git diff HEAD~1 ${head} -- <file>`);
+    const graph = graphOf(dir);
+    const tip = graph.head;
+    return new DiffBasis(graph.parentOf(tip), tip, false, [], `git diff HEAD~1 ${tip}`, `git diff HEAD~1 ${tip} -- <file>`);
 }
 
+// Every fix edits a.ts; `value` names the edit for the reader.
 function commitFix(dir: string, value: number): void {
-    fs.writeFileSync(path.join(dir, 'a.ts'), `export const a = ${value};\n`);
-    git(dir, 'add', 'a.ts');
-    git(dir, 'commit', '-qm', `fix ${value}`);
+    void value;
+    graphOf(dir).commitOnHead();
 }
 
 function remediationJson(checklistIds: string[] = ['security']): string {
@@ -67,7 +135,7 @@ function remediationJson(checklistIds: string[] = ['security']): string {
 
 /** A round-1 receipt briefing `security` (required) plus the given OPTIONAL checklists (issue #1062). */
 function receiptWithOptionals(dir: string, required: string[], optional: string[]): ReviewStageReceipt {
-    const receipt = new ReviewStageReceipt(git(dir, 'rev-parse', 'HEAD'), true, 'pnpm build', 'now', [...required, ...optional]);
+    const receipt = new ReviewStageReceipt(head(dir), true, 'pnpm build', 'now', [...required, ...optional]);
     receipt.optionalBriefed = optional.slice();
     receipt.round = 1;
     receipt.maxReviewerRounds = 2;
@@ -77,7 +145,7 @@ function receiptWithOptionals(dir: string, required: string[], optional: string[
 describe('ReviewRoundStateService', () => {
     it.each([1, 2])(
         'retains published summary through a same-PR main update with carried verdicts (cap %i)',
-        (cap: number) => {
+        async (cap: number) => {
             const dir = repo();
             commitFix(dir, 2);
             const receipt = receiptAt(dir);
@@ -106,15 +174,13 @@ describe('ReviewRoundStateService', () => {
             const firstAudit = fs.readFileSync(firstSnapshot, 'utf8');
 
             // The updater squashes onto advancing main; conflict resolution changes generated code only.
-            git(dir, 'checkout', '-q', 'main');
-            git(dir, 'reset', '--hard', 'HEAD~1');
+            graphOf(dir).dropHead();
             commitFix(dir, 3);
-            git(dir, 'checkout', '-q', '-b', 'updated-feature');
             commitFix(dir, 4);
-            expect(rounds.plan(dir, file, receipt, cap, basis(dir)).action).toBe(
+            expect((await rounds.plan(dir, file, receipt, cap, basis(dir))).action).toBe(
                 ROUND_ACTION_FINISH,
             );
-            receipt.buildHeadSha = git(dir, 'rev-parse', 'HEAD');
+            receipt.buildHeadSha = head(dir);
 
             // Finish loads the unchanged active intent and carried verdict, then snapshots publication again.
             expect(reviewJson.loadSummaryJson(file, required)).toEqual(firstSummary);
@@ -128,18 +194,18 @@ describe('ReviewRoundStateService', () => {
         },
     );
 
-    it('resumes an active fixed roster without consuming another round', () => {
+    it('resumes an active fixed roster without consuming another round', async () => {
         const dir = repo();
         commitFix(dir, 2);
         const receipt = receiptAt(dir);
-        const plan = rounds.plan(dir, summary(dir), receipt, 2, basis(dir));
+        const plan = await rounds.plan(dir, summary(dir), receipt, 2, basis(dir));
         expect(plan.action).toBe(ROUND_ACTION_RESUME);
         expect(plan.round).toBe(1);
     });
 
     it.each([1, 2])(
         'resumes a partially completed roster through repeated squash/main updates with cap %i',
-        (cap: number) => {
+        async (cap: number) => {
             const dir = repo();
             commitFix(dir, 2);
             const receipt = receiptAt(dir);
@@ -151,9 +217,9 @@ describe('ReviewRoundStateService', () => {
             for (const value of [3, 4, 5]) {
                 // The sanctioned updater rewrites commits and moves the fork point, so historical HEAD is
                 // deliberately no longer an ancestor. Round accounting must not depend on either hash.
-                git(dir, 'reset', '-q', '--hard', 'HEAD~1');
+                graphOf(dir).dropHead();
                 commitFix(dir, value);
-                const plan = rounds.plan(dir, summary(dir), receipt, cap, basis(dir));
+                const plan = await rounds.plan(dir, summary(dir), receipt, cap, basis(dir));
                 expect(plan.action).toBe(ROUND_ACTION_RESUME);
                 expect(plan.round).toBe(1);
                 expect(rounds.snapshot(summary(dir), receipt).roster).toEqual(
@@ -162,7 +228,7 @@ describe('ReviewRoundStateService', () => {
                 expect(provenance.read(summary(dir), 'security', 1)).toEqual(original);
             }
             archive(dir, receipt, 'green', 'pending');
-            expect(rounds.plan(dir, summary(dir), receipt, cap, basis(dir)).action).toBe(
+            expect((await rounds.plan(dir, summary(dir), receipt, cap, basis(dir))).action).toBe(
                 ROUND_ACTION_FINISH,
             );
             expect(rounds.highestRound(summary(dir))).toBe(1);
@@ -171,83 +237,83 @@ describe('ReviewRoundStateService', () => {
 
     it.each([1, 2])(
         'resumes an entirely pending roster across HEAD movement with cap %i',
-        (cap: number) => {
+        async (cap: number) => {
             const dir = repo();
             commitFix(dir, 2);
             const receipt = receiptAt(dir);
             receipt.maxReviewerRounds = cap;
             for (const value of [3, 4]) {
                 commitFix(dir, value);
-                expect(rounds.plan(dir, summary(dir), receipt, cap, basis(dir)).action).toBe(
+                expect((await rounds.plan(dir, summary(dir), receipt, cap, basis(dir))).action).toBe(
                     ROUND_ACTION_RESUME,
                 );
-                expect(rounds.plan(dir, summary(dir), receipt, cap, basis(dir)).round).toBe(1);
+                expect((await rounds.plan(dir, summary(dir), receipt, cap, basis(dir))).round).toBe(1);
             }
         },
     );
 
-    it('requires a SHA-bound remediation, then starts one focused round over every fix commit', () => {
+    it('requires a SHA-bound remediation, then starts one focused round over every fix commit', async () => {
         const dir = repo();
         commitFix(dir, 2);
         const receipt = receiptAt(dir);
         archive(dir, receipt, 'red');
         commitFix(dir, 3);
         commitFix(dir, 4);
-        expect(rounds.plan(dir, summary(dir), receipt, 2, basis(dir)).action).toBe(ROUND_ACTION_RECORD);
-        rounds.writeRemediation(dir, summary(dir), receipt, remediationJson());
-        const plan = rounds.plan(dir, summary(dir), receipt, 2, basis(dir));
+        expect((await rounds.plan(dir, summary(dir), receipt, 2, basis(dir))).action).toBe(ROUND_ACTION_RECORD);
+        await rounds.writeRemediation(dir, summary(dir), receipt, remediationJson());
+        const plan = await rounds.plan(dir, summary(dir), receipt, 2, basis(dir));
         expect(plan.action).toBe(ROUND_ACTION_REVIEW);
         expect(plan.round).toBe(2);
         expect(plan.basis.base).toBe(receipt.headSha);
         expect(plan.changedFiles).toEqual(['a.ts']);
     });
 
-    it('on the final round an ORANGE is fixed once, stamped "not re-reviewed", and never starts round 3', () => {
+    it('on the final round an ORANGE is fixed once, stamped "not re-reviewed", and never starts round 3', async () => {
         const dir = repo();
         commitFix(dir, 2);
         const receipt = receiptAt(dir, 2);
         archive(dir, receipt, 'orange');
         commitFix(dir, 3);
-        rounds.writeRemediation(dir, summary(dir), receipt, remediationJson());
-        const plan = rounds.plan(dir, summary(dir), receipt, 2, basis(dir));
+        await rounds.writeRemediation(dir, summary(dir), receipt, remediationJson());
+        const plan = await rounds.plan(dir, summary(dir), receipt, 2, basis(dir));
         expect(plan.action).toBe(ROUND_ACTION_FINISH);
         expect(plan.orangeChecklistIds).toEqual(['security']);
         const results = reviewJson.loadChecklistResults(summary(dir), [new RequiredChecklist('security', new ReviewerAgentPolicy('webpieces-reviewer', REVIEWER_AGENTS_PLACEHOLDER), '', [])]);
-        expect(rounds.orangeFixes(dir, summary(dir), results)['security']).toContain('not re-reviewed: restricted the grant');
+        expect((await rounds.orangeFixes(dir, summary(dir), results))['security']).toContain('not re-reviewed: restricted the grant');
     });
 
-    it('a green round never opens another, even with rounds left and HEAD moved', () => {
+    it('a green round never opens another, even with rounds left and HEAD moved', async () => {
         const dir = repo();
         commitFix(dir, 2);
         const receipt = receiptAt(dir, 1);
         archive(dir, receipt, 'green');
         commitFix(dir, 3);
-        expect(rounds.plan(dir, summary(dir), receipt, 2, basis(dir)).action).toBe(ROUND_ACTION_FINISH);
+        expect((await rounds.plan(dir, summary(dir), receipt, 2, basis(dir))).action).toBe(ROUND_ACTION_FINISH);
     });
 
-    it('drops a recorded fix whose toHead is no longer in HEAD\'s history', () => {
+    it('drops a recorded fix whose toHead is no longer in HEAD\'s history', async () => {
         const dir = repo();
         commitFix(dir, 2);
         const receipt = receiptAt(dir, 1);
         archive(dir, receipt, 'red');
         commitFix(dir, 3);
-        rounds.writeRemediation(dir, summary(dir), receipt, remediationJson());
-        git(dir, 'reset', '-q', '--hard', 'HEAD~1');
+        await rounds.writeRemediation(dir, summary(dir), receipt, remediationJson());
+        graphOf(dir).dropHead();
         commitFix(dir, 9);
-        expect(rounds.plan(dir, summary(dir), receipt, 2, basis(dir)).action).toBe(ROUND_ACTION_RECORD);
+        expect((await rounds.plan(dir, summary(dir), receipt, 2, basis(dir))).action).toBe(ROUND_ACTION_RECORD);
     });
 
-    it('refuses dirty remediation state, including untracked files', () => {
+    it('refuses dirty remediation state, including untracked files', async () => {
         const dir = repo();
         commitFix(dir, 2);
         const receipt = receiptAt(dir);
         archive(dir, receipt, 'red');
         commitFix(dir, 3);
-        fs.writeFileSync(path.join(dir, 'untracked.txt'), 'dirty\n');
-        expect((): string => rounds.writeRemediation(dir, summary(dir), receipt, remediationJson())).toThrow(/staged, unstaged, or untracked/);
+        graphOf(dir).untracked = true;
+        await expect(rounds.writeRemediation(dir, summary(dir), receipt, remediationJson())).rejects.toThrow(/staged, unstaged, or untracked/);
     });
 
-    it('refuses an existing malformed durable verdict instead of treating it as absent', () => {
+    it('refuses an existing malformed durable verdict instead of treating it as absent', async () => {
         const dir = repo();
         commitFix(dir, 2);
         const receipt = receiptAt(dir);
@@ -259,14 +325,14 @@ describe('ReviewRoundStateService', () => {
         expect((): string[] => rounds.checklistIdsWithStatus(summary(dir), snap, 'red')).toThrow(`Could not read review state file ${verdictPath}`);
     });
 
-    it('refuses a failed Git command instead of treating its output as empty', () => {
+    it('refuses a failed Git command instead of treating its output as empty', async () => {
         const dir = repo();
         commitFix(dir, 2);
         const receipt = receiptAt(dir);
         archive(dir, receipt, 'red');
 
-        expect((): string => rounds.writeRemediation(path.join(dir, 'missing'), summary(dir), receipt, remediationJson()))
-            .toThrow('Review-round Git command failed: git status --porcelain --untracked-files=all');
+        await expect(rounds.writeRemediation(path.join(dir, 'missing'), summary(dir), receipt, remediationJson()))
+            .rejects.toThrow('Review-round Git command failed: git status --porcelain --untracked-files=all');
     });
 });
 
@@ -276,7 +342,7 @@ describe('ReviewRoundStateService', () => {
  * "not complete" forever: wp-write-review-fixes refused, and the next commit hit "still active".
  */
 describe('optional checklists never block a review round (issue #1062)', () => {
-    it('a required red with unrun optionals completes the round, accepts the fix, and re-briefs only the red', () => {
+    it('a required red with unrun optionals completes the round, accepts the fix, and re-briefs only the red', async () => {
         const dir = repo();
         commitFix(dir, 2);
         const receipt = receiptWithOptionals(dir, ['security'], ['docs', 'style']);
@@ -285,14 +351,14 @@ describe('optional checklists never block a review round (issue #1062)', () => {
         expect(snap.complete).toBe(true);
         expect(snap.roster).toEqual(['security']);
         commitFix(dir, 3);
-        rounds.writeRemediation(dir, summary(dir), receipt, remediationJson());
-        const plan = rounds.plan(dir, summary(dir), receipt, 2, basis(dir));
+        await rounds.writeRemediation(dir, summary(dir), receipt, remediationJson());
+        const plan = await rounds.plan(dir, summary(dir), receipt, 2, basis(dir));
         expect(plan.action).toBe(ROUND_ACTION_REVIEW);
         expect(plan.round).toBe(2);
         expect(plan.redChecklistIds).toEqual(['security']);
     });
 
-    it('an optional checklist that RAN and came back red is on the roster, blocks, and is re-briefed', () => {
+    it('an optional checklist that RAN and came back red is on the roster, blocks, and is re-briefed', async () => {
         const dir = repo();
         commitFix(dir, 2);
         const receipt = receiptWithOptionals(dir, ['security'], ['docs', 'style']);
@@ -303,24 +369,24 @@ describe('optional checklists never block a review round (issue #1062)', () => {
         expect(snap.roster).toEqual(['security', 'docs']);
         expect(rounds.checklistIdsWithStatus(summary(dir), snap, 'red')).toEqual(['docs']);
         commitFix(dir, 3);
-        expect((): string => rounds.writeRemediation(dir, summary(dir), receipt, remediationJson()))
-            .toThrow(/Missing: docs/);
-        rounds.writeRemediation(dir, summary(dir), receipt, remediationJson(['docs']));
-        const plan = rounds.plan(dir, summary(dir), receipt, 2, basis(dir));
+        await expect(rounds.writeRemediation(dir, summary(dir), receipt, remediationJson()))
+            .rejects.toThrow(/Missing: docs/);
+        await rounds.writeRemediation(dir, summary(dir), receipt, remediationJson(['docs']));
+        const plan = await rounds.plan(dir, summary(dir), receipt, 2, basis(dir));
         expect(plan.action).toBe(ROUND_ACTION_REVIEW);
         expect(plan.redChecklistIds).toEqual(['docs']);
     });
 
-    it('a round still waits on a REQUIRED checklist that has no verdict, whatever the optionals did', () => {
+    it('a round still waits on a REQUIRED checklist that has no verdict, whatever the optionals did', async () => {
         const dir = repo();
         commitFix(dir, 2);
         const receipt = receiptWithOptionals(dir, ['security'], ['docs']);
         archive(dir, receipt, 'green', 'docs');
         expect(rounds.snapshot(summary(dir), receipt).complete).toBe(false);
-        expect(rounds.plan(dir, summary(dir), receipt, 2, basis(dir)).action).toBe(ROUND_ACTION_RESUME);
+        expect((await rounds.plan(dir, summary(dir), receipt, 2, basis(dir))).action).toBe(ROUND_ACTION_RESUME);
     });
 
-    it('an all-optional briefing nobody ran does not deadlock the next commit', () => {
+    it('an all-optional briefing nobody ran does not deadlock the next commit', async () => {
         const dir = repo();
         commitFix(dir, 2);
         const receipt = receiptWithOptionals(dir, [], ['docs']);
@@ -328,6 +394,6 @@ describe('optional checklists never block a review round (issue #1062)', () => {
         const snap = rounds.snapshot(summary(dir), receipt);
         expect(snap.complete).toBe(true);
         expect(snap.roster).toEqual([]);
-        expect(rounds.plan(dir, summary(dir), receipt, 2, basis(dir)).action).toBe(ROUND_ACTION_FINISH);
+        expect((await rounds.plan(dir, summary(dir), receipt, 2, basis(dir))).action).toBe(ROUND_ACTION_FINISH);
     });
 });

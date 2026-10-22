@@ -25,7 +25,7 @@ class CountdownProbe implements WaitProbe {
 
     constructor(private readonly finishAfter: number) {}
 
-    done(): boolean {
+    async done(): Promise<boolean> {
         this.calls++;
         return this.calls > this.finishAfter;
     }

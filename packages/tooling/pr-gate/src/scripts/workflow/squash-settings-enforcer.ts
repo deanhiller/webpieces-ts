@@ -1,4 +1,4 @@
-import { spawnSync } from 'child_process';
+import { NativeProcessApi } from '@webpieces/tooling-common';
 import { injectable, bindingScopeValues } from 'inversify';
 
 /** The only correct value for `squash_merge_commit_title`: the PR title becomes the commit subject. */
@@ -62,9 +62,11 @@ export class SquashSettings {
  */
 @injectable(bindingScopeValues.Singleton)
 export class SquashSettingsEnforcer {
+    constructor(private readonly processes: NativeProcessApi) {}
+
     /** Read → repair, or say precisely what is wrong and who can fix it. */
-    ensure(): void {
-        const current = this.read();
+    async ensure(): Promise<void> {
+        const current = await this.read();
         if (!current.readable()) {
             process.stderr.write(
                 '⚠️  Could not read this repo\'s squash-merge settings via gh, so could not verify that a\n' +
@@ -78,7 +80,7 @@ export class SquashSettingsEnforcer {
             process.stderr.write(this.noAdminMessage(current));
             return;
         }
-        if (!this.patch()) {
+        if (!(await this.patch())) {
             process.stderr.write(
                 `⚠️  Could not update this repo's squash-merge settings (${current.describe()}).\n` +
                 `    A UI merge will NOT write the gated body until it is fixed:\n${this.fixCommand()}`);
@@ -114,26 +116,26 @@ export class SquashSettingsEnforcer {
 
     // Both settings AND whether we may change them, in ONE API call. Failure-tolerant: an all-'' result
     // reads as "unknown", never as "wrong", so a gh hiccup cannot trigger a spurious repair or warning.
-    protected read(): SquashSettings {
-        const result = spawnSync('gh', [
+    private async read(): Promise<SquashSettings> {
+        const result = await this.processes.run('gh', [
             'api', 'repos/{owner}/{repo}',
             '--jq', '"\\(.squash_merge_commit_title)\\t\\(.squash_merge_commit_message)\\t\\(.permissions.admin)"',
-        ], { encoding: 'utf8' });
+        ]);
         const settings = new SquashSettings();
-        if (result.status !== 0) return settings;
-        const parts = (result.stdout ?? '').trim().split('\t');
+        if (!result.ok) return settings;
+        const parts = result.stdout.trim().split('\t');
         settings.title = parts[0] ?? '';
         settings.message = parts[1] ?? '';
         settings.admin = (parts[2] ?? '') === 'true';
         return settings;
     }
 
-    protected patch(): boolean {
-        const result = spawnSync('gh', [
+    private async patch(): Promise<boolean> {
+        const result = await this.processes.run('gh', [
             'api', '-X', 'PATCH', 'repos/{owner}/{repo}',
             '-f', `squash_merge_commit_title=${SQUASH_TITLE_REQUIRED}`,
             '-f', `squash_merge_commit_message=${SQUASH_MESSAGE_REQUIRED}`,
-        ], { encoding: 'utf8' });
-        return result.status === 0;
+        ]);
+        return result.ok;
     }
 }

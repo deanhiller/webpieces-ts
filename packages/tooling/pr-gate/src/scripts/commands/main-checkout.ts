@@ -1,6 +1,6 @@
-import { spawnSync } from 'child_process';
 import { injectable, bindingScopeValues } from 'inversify';
 import { CliExitError } from '@webpieces/rules-config';
+import { GitProcessApi } from '@webpieces/tooling-common';
 
 import { UntrackedFiles } from './working-tree-gate';
 
@@ -93,6 +93,8 @@ export class StashedFiles {
  */
 @injectable(bindingScopeValues.Singleton)
 export class MainCheckout {
+    constructor(private readonly git: GitProcessApi) {}
+
     /**
      * Fetch, check out main, fast-forward it. Returns the files that had to be stashed to get there —
      * empty in the ordinary case.
@@ -102,10 +104,10 @@ export class MainCheckout {
      * the whole point of this command is that it is safe to run without thinking. A refusal to
      * fast-forward is a real condition a human should see and decide about.
      */
-    goToMain(repoRoot: string, untracked: UntrackedFiles): StashedFiles {
-        this.passThrough(repoRoot, ['fetch', 'origin', 'main']);
-        const stashed = this.checkoutMain(repoRoot, untracked);
-        if (this.passThrough(repoRoot, ['pull', '--ff-only', 'origin', 'main']) !== 0) {
+    async goToMain(repoRoot: string, untracked: UntrackedFiles): Promise<StashedFiles> {
+        await this.passThrough(repoRoot, ['fetch', 'origin', 'main']);
+        const stashed = await this.checkoutMain(repoRoot, untracked);
+        if (await this.passThrough(repoRoot, ['pull', '--ff-only', 'origin', 'main']) !== 0) {
             throw new CliExitError(1, `${SEP}❌ Local main could not fast-forward\n${SEP}\n`
                 + 'Local main has commits that origin/main does not, so it is not a clean copy of the\n'
                 + 'remote. Nothing was reset — those commits may be the only copy. Inspect them with\n'
@@ -115,12 +117,12 @@ export class MainCheckout {
         return stashed;
     }
 
-    private checkoutMain(repoRoot: string, untracked: UntrackedFiles): StashedFiles {
-        const first = this.captureAndEcho(repoRoot, ['checkout', 'main']);
+    private async checkoutMain(repoRoot: string, untracked: UntrackedFiles): Promise<StashedFiles> {
+        const first = await this.captureAndEcho(repoRoot, ['checkout', 'main']);
         if (first.succeeded()) return new StashedFiles([]);
         if (!this.isCollision(first, untracked)) throw this.checkoutFailed(first);
 
-        const stash = this.captureAndEcho(repoRoot, ['stash', 'push', '-u',
+        const stash = await this.captureAndEcho(repoRoot, ['stash', 'push', '-u',
             '-m', 'wp-sync-main: untracked files that collided with main']);
         if (!stash.succeeded()) {
             throw new CliExitError(1, `${SEP}❌ Could not check out main, and could not stash\n${SEP}\n`
@@ -131,7 +133,7 @@ export class MainCheckout {
                 + this.list(untracked.paths));
         }
 
-        const second = this.captureAndEcho(repoRoot, ['checkout', 'main']);
+        const second = await this.captureAndEcho(repoRoot, ['checkout', 'main']);
         const stashed = new StashedFiles(untracked.paths);
         if (!second.succeeded()) {
             throw new CliExitError(1, `${SEP}❌ Could not check out main even after stashing\n${SEP}\n`
@@ -176,20 +178,15 @@ export class MainCheckout {
     }
 
     /** git piped, then echoed back verbatim — for the one command whose text is decided on. */
-    private captureAndEcho(repoRoot: string, args: string[]): GitRun {
-        const result = spawnSync('git', ['-C', repoRoot, ...args], {
-            encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'],
-        });
-        const stdout = result.stdout ?? '';
-        const stderr = result.stderr ?? '';
-        process.stdout.write(stdout);
-        process.stderr.write(stderr);
-        return new GitRun(result.status === null ? 1 : result.status, `${stdout}${stderr}`);
+    private async captureAndEcho(repoRoot: string, args: string[]): Promise<GitRun> {
+        const result = await this.git.run(['-C', repoRoot, ...args]);
+        process.stdout.write(result.stdout);
+        process.stderr.write(result.stderr);
+        return new GitRun(result.code, `${result.stdout}${result.stderr}`);
     }
 
     /** git with its output going straight to the terminal — for the commands whose progress is the point. */
-    private passThrough(repoRoot: string, args: string[]): number {
-        const result = spawnSync('git', ['-C', repoRoot, ...args], { encoding: 'utf8', stdio: 'inherit' });
-        return result.status === null ? 1 : result.status;
+    private async passThrough(repoRoot: string, args: string[]): Promise<number> {
+        return (await this.git.passThrough(['-C', repoRoot, ...args])).code;
     }
 }

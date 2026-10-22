@@ -1,8 +1,8 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { describe, expect, it, vi } from 'vitest';
-import { specTempDirs } from '@webpieces/tooling-testkit';
-import { AtomicFile } from '@webpieces/tooling-common';
+import { MockGitProcessApi, MockNativeProcessApi, specTempDirs } from '@webpieces/tooling-testkit';
+import { AtomicFile, GitResultDto } from '@webpieces/tooling-common';
 import {
     PrGateConfig,
     RequiredChecklist,
@@ -25,19 +25,23 @@ import { MergeOutcome, MERGE_RESULT_LEFT_TO_HUMAN } from '../workflow/pr-merger'
 import { PublishedPr } from '../workflow/gated-pr-publisher';
 
 const state = vi.hoisted(() => ({ head: 'feature-head', config: {} }));
-vi.mock('child_process', () => ({
-    execSync: vi.fn(() => 'dean/1114-summary'),
-    spawnSync: vi.fn((bin: string, args: string[]) => ({
-        status: 0,
-        stdout:
-            bin === 'gh'
-                ? '77\thttps://github.test/o/r/pull/77'
-                : args[0] === 'rev-parse'
-                  ? state.head
-                  : 'base',
-        stderr: '',
-    })),
-}));
+
+// The outside world, SCRIPTED (#1381): git answers HEAD from `state.head` and 'base' for the rest; gh
+// answers the PR ref. No process is started.
+function scriptedGit(): MockGitProcessApi {
+    const git = new MockGitProcessApi();
+    git.respondToPrefix(['rev-parse'], (): GitResultDto => git.ok(`${state.head}\n`));
+    git.respondToPrefix(['merge-base'], git.ok('base\n'));
+    git.respondToPrefix(['diff'], git.ok('base\n'));
+    return git;
+}
+
+function scriptedGh(): MockNativeProcessApi {
+    const gh = new MockNativeProcessApi();
+    gh.respondToPrefix('gh', ['pr', 'view'], gh.ok('77\thttps://github.test/o/r/pull/77\n'));
+    gh.respondToPrefix('gh', ['pr', 'edit'], gh.ok());
+    return gh;
+}
 vi.mock('@webpieces/rules-config', async (original) => ({
     ...(await original<typeof import('@webpieces/rules-config')>()),
     loadAndValidate: () => ({ prGate: state.config }),
@@ -55,7 +59,9 @@ class Fixture {
     file = this.reviewJson.summaryJsonPath(this.root, 'feature');
     receipts = new ReviewStageReceiptService(this.reviewJson);
     provenance = new VerdictProvenanceService(this.reviewJson, new AtomicFile());
-    rounds = new ReviewRoundStateService(this.reviewJson, this.provenance, new AtomicFile());
+    git = scriptedGit();
+    gh = scriptedGh();
+    rounds = new ReviewRoundStateService(this.reviewJson, this.provenance, new AtomicFile(), this.git);
     required = new RequiredChecklist('ticket', new ReviewerAgentPolicy('reviewer', 1), '', []);
     scan = seam<ChecklistScan>({
         applicable: [this.required],
@@ -79,7 +85,7 @@ class Fixture {
         withCapture: async (_root: string, _name: string, work: () => Promise<void>) => work(),
         say: vi.fn(),
     };
-    branch = { getFeatureName: () => 'feature' };
+    branch = { getFeatureName: async () => 'feature' };
     rootFinder = { resolveRepoRoot: () => this.root };
     mergeState = { mergeDirFor: () => '', findActiveMergeRunDir: () => null };
     buildGate = { runBuildGate: this.build, resolveBuildCommand: () => 'spec-build' };
@@ -131,7 +137,7 @@ class Fixture {
             seam(this.rootFinder),
             seam(this.branch),
             seam({ baseBranchName: () => 'dean/1114-summary' }),
-            seam({ assertCleanTree: vi.fn() }),
+            seam({ assertCleanTree: vi.fn(), currentBranch: async () => 'dean/1114-summary' }),
             seam(this.buildGate),
             seam({ existingLogFor: () => '' }),
             seam(this.mergeState),
@@ -160,6 +166,8 @@ class Fixture {
             seam(this.console),
             seam({ assertNotHotfix: vi.fn() }),
             this.rounds,
+            this.git,
+            this.gh,
         );
     }
 

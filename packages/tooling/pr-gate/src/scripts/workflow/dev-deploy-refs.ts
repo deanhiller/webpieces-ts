@@ -101,8 +101,8 @@ export class DevDeployRefs {
      * composition CI will actually build. A different order can produce a different (still valid) merge
      * result, which would make the local resolution a guess about CI rather than a rehearsal of it.
      */
-    liveCopies(repoRoot: string, cfg: DevDeployConfig): DevCopy[] {
-        const out = this.gitExec.gitQuery(['ls-remote', '--heads', 'origin', cfg.copyRefGlob()], repoRoot,
+    async liveCopies(repoRoot: string, cfg: DevDeployConfig): Promise<DevCopy[]> {
+        const out = await this.gitExec.gitQuery(['ls-remote', '--heads', 'origin', cfg.copyRefGlob()], repoRoot,
             `Failed to list the dev copies (git ls-remote --heads origin '${cfg.copyRefGlob()}').`);
         const copies: DevCopy[] = [];
         for (const line of out.split('\n')) {
@@ -124,14 +124,14 @@ export class DevDeployRefs {
      * REF instead would be a moving target — it advances the next time anybody publishes — and the whole
      * value of the "did my code land in dev" check is that it is a claim about one specific commit.
      */
-    headSha(repoRoot: string, ref = 'HEAD'): string {
+    headSha(repoRoot: string, ref = 'HEAD'): Promise<string> {
         return this.gitExec.gitQuery(['-C', repoRoot, 'rev-parse', ref], repoRoot,
             `Failed to read the sha of ${ref} (git rev-parse).`);
     }
 
     /** The remote sha of one copy, or '' when that copy does not exist yet. */
-    remoteSha(repoRoot: string, ref: string): string {
-        const out = this.gitExec.gitQuery(['ls-remote', '--heads', 'origin', ref], repoRoot,
+    async remoteSha(repoRoot: string, ref: string): Promise<string> {
+        const out = await this.gitExec.gitQuery(['ls-remote', '--heads', 'origin', ref], repoRoot,
             `Failed to look up origin/${ref} (git ls-remote).`);
         const line = out.split('\n').find((l: string): boolean => l.trim() !== '');
         if (line === undefined) return '';
@@ -143,16 +143,16 @@ export class DevDeployRefs {
      * fresh state. A no-op for an empty list, and a hard failure otherwise: a resolve queued against
      * stale refs rehearses a composition CI will not build.
      */
-    fetchCopies(repoRoot: string, refs: string[]): void {
+    async fetchCopies(repoRoot: string, refs: string[]): Promise<void> {
         if (refs.length === 0) return;
         const specs = refs.map((r: string): string => `+refs/heads/${r}:refs/remotes/origin/${r}`);
-        this.gitExec.runGitChecked(['-C', repoRoot, 'fetch', 'origin', ...specs],
+        await this.gitExec.runGitChecked(['-C', repoRoot, 'fetch', 'origin', ...specs],
             'Failed to fetch the dev copy refs from origin');
     }
 
     /** How many commits `origin/<ref>` has that `HEAD` does not — the clobber signal. 0 = safe to publish. */
-    commitsOnlyOnRemote(repoRoot: string, ref: string): number {
-        const out = this.gitExec.gitQuery(['rev-list', '--count', `HEAD..refs/remotes/origin/${ref}`], repoRoot,
+    async commitsOnlyOnRemote(repoRoot: string, ref: string): Promise<number> {
+        const out = await this.gitExec.gitQuery(['rev-list', '--count', `HEAD..refs/remotes/origin/${ref}`], repoRoot,
             `Failed to compare HEAD against origin/${ref} (git rev-list --count).`);
         const count = Number(out);
         return Number.isInteger(count) ? count : 0;

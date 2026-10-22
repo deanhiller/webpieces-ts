@@ -31,10 +31,10 @@ export class ChecklistScopeHasher {
      * capture the materializer uses), then per-file normalization, then one sha256 per checklist.
      * Empty when the basis is unresolved: with no fork point there is no diff to hash.
      */
-    hashes(repoRoot: string, basis: DiffBasis, checklists: readonly RequiredChecklist[]): Record<string, string> {
+    async hashes(repoRoot: string, basis: DiffBasis, checklists: readonly RequiredChecklist[]): Promise<Record<string, string>> {
         const out: Record<string, string> = {};
         if (basis.unresolved || checklists.length === 0) return out;
-        const byFile = this.materializer.diffByFile(repoRoot, basis);
+        const byFile = await this.materializer.diffByFile(repoRoot, basis);
         for (const req of checklists) out[req.id] = this.hashOf(req.matchedFiles, byFile);
         return out;
     }

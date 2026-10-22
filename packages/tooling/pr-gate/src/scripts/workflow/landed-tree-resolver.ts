@@ -1,5 +1,5 @@
-import { spawnSync } from 'child_process';
 import { Worktree, WorktreeService } from '@webpieces/repo-workflow-core';
+import { GitProcessApi } from '@webpieces/tooling-common';
 import { injectable, bindingScopeValues } from 'inversify';
 
 /**
@@ -74,7 +74,10 @@ export class LandedTree {
 
 @injectable(bindingScopeValues.Singleton)
 export class LandedTreeResolver {
-    constructor(private readonly worktrees: WorktreeService) {}
+    constructor(
+        private readonly worktrees: WorktreeService,
+        private readonly git: GitProcessApi,
+    ) {}
 
     /**
      * The four-row table this whole design exists to implement, in order of what it can prove.
@@ -83,11 +86,11 @@ export class LandedTreeResolver {
      * into a mismatch — a fact we do not have is not evidence of disagreement — so the local tip is taken
      * as the landed one, which is exactly what the old `ref.headRefOid !== ''` guard did.
      */
-    resolve(repoRoot: string, branch: string, headRefOid: string): LandedTree {
+    async resolve(repoRoot: string, branch: string, headRefOid: string): Promise<LandedTree> {
         // Only LINKED worktrees are reapable; the primary clone is the thing reaped FROM, never a target.
         const holder = this.worktrees.linkedWorktrees(repoRoot)
             .find((tree: Worktree): boolean => tree.branch === branch) ?? null;
-        const local = holder !== null ? holder.head : this.revParse(repoRoot, branch);
+        const local = holder !== null ? holder.head : await this.revParse(repoRoot, branch);
 
         if (local === '') return new LandedTree(LANDED_TREE_ABSENT, null, '');
         if (headRefOid !== '' && local !== headRefOid) {
@@ -99,8 +102,8 @@ export class LandedTreeResolver {
     }
 
     // Best-effort sha of a ref — '' when it cannot resolve, which reads as "the branch is not here".
-    private revParse(repoRoot: string, ref: string): string {
-        const result = spawnSync('git', ['rev-parse', ref], { cwd: repoRoot, encoding: 'utf8' });
-        return result.status === 0 ? (result.stdout ?? '').trim() : '';
+    private async revParse(repoRoot: string, ref: string): Promise<string> {
+        const result = await this.git.run(['rev-parse', ref], repoRoot);
+        return result.ok ? result.stdout.trim() : '';
     }
 }

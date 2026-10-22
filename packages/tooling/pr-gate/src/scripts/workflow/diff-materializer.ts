@@ -1,7 +1,7 @@
-import { spawnSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 import { isPathExcluded, ReviewJsonService } from '@webpieces/rules-config';
+import { GitProcessApi } from '@webpieces/tooling-common';
 import { toError } from '@webpieces/tooling-common/to-error';
 import { injectable, bindingScopeValues } from 'inversify';
 import { DiffBasis } from './diff-basis';
@@ -99,7 +99,10 @@ export class DiffManifest {
  */
 @injectable(bindingScopeValues.Singleton)
 export class DiffMaterializer {
-    constructor(private readonly reviewJsonService: ReviewJsonService) {}
+    constructor(
+        private readonly reviewJsonService: ReviewJsonService,
+        private readonly git: GitProcessApi,
+    ) {}
 
     /** The dir this writes into: `.webpieces/pr-review/<feature>/diff`. */
     diffDirFor(repoRoot: string, featureName: string): string {
@@ -113,7 +116,7 @@ export class DiffMaterializer {
      * a reviewer reads covers exactly the files its checklist matched on. Recomputing here is how the two
      * would drift apart again.
      */
-    materialize(repoRoot: string, featureName: string, basis: DiffBasis, changedFiles: readonly string[], excludeGlobs: readonly string[]): DiffManifest {
+    async materialize(repoRoot: string, featureName: string, basis: DiffBasis, changedFiles: readonly string[], excludeGlobs: readonly string[]): Promise<DiffManifest> {
         const dir = this.diffDirFor(repoRoot, featureName);
         const filesDir = path.join(dir, 'files');
         fs.rmSync(dir, { recursive: true, force: true }); // a stale diff read as current is worse than none
@@ -121,7 +124,7 @@ export class DiffMaterializer {
         const manifest = new DiffManifest(
             basis.base, basis.headSha, basis.dirty, basis.diffCommand, [], [], [], basis.hashMainHead);
         if (basis.unresolved) return this.writeManifest(dir, manifest);
-        const byFile = this.diffByFile(repoRoot, basis);
+        const byFile = await this.diffByFile(repoRoot, basis);
         const used = new Set<string>();
         for (const file of [...changedFiles].sort()) {
             this.writeOne(repoRoot, filesDir, file, byFile, used, excludeGlobs, manifest);
@@ -135,9 +138,9 @@ export class DiffMaterializer {
      * Untracked files never appear in `git diff`, so they are synthesized as all-added patches — the same
      * treatment DiffScope.getFileDiff already gives them, kept consistent so a reviewer sees one format.
      */
-    diffByFile(repoRoot: string, basis: DiffBasis): Map<string, string> {
+    async diffByFile(repoRoot: string, basis: DiffBasis): Promise<Map<string, string>> {
         const args = basis.dirty ? ['diff', basis.base] : ['diff', basis.base, basis.headSha];
-        const out = this.gitOut(repoRoot, args);
+        const out = await this.gitOut(repoRoot, args);
         const byFile = new Map<string, string>();
         // Split BEFORE each `diff --git` header while keeping the header on its chunk.
         for (const chunk of out.split(/\n(?=diff --git )/)) {
@@ -145,7 +148,7 @@ export class DiffMaterializer {
             const file = this.pathFromHeader(chunk);
             if (file !== '') byFile.set(file, chunk.endsWith('\n') ? chunk : `${chunk}\n`);
         }
-        for (const file of this.untrackedFiles(repoRoot, basis)) {
+        for (const file of await this.untrackedFiles(repoRoot, basis)) {
             if (!byFile.has(file)) byFile.set(file, this.syntheticAddedDiff(repoRoot, file));
         }
         return byFile;
@@ -161,9 +164,9 @@ export class DiffMaterializer {
         return match ? match[2] : '';
     }
 
-    private untrackedFiles(repoRoot: string, basis: DiffBasis): string[] {
+    private async untrackedFiles(repoRoot: string, basis: DiffBasis): Promise<string[]> {
         if (!basis.dirty) return [];
-        const out = this.gitOut(repoRoot, ['ls-files', '--others', '--exclude-standard']);
+        const out = await this.gitOut(repoRoot, ['ls-files', '--others', '--exclude-standard']);
         return out === '' ? [] : out.split('\n').filter((f: string): boolean => f.trim() !== '');
     }
 
@@ -302,10 +305,10 @@ export class DiffMaterializer {
         return manifest;
     }
 
-    private gitOut(repoRoot: string, args: string[]): string {
-        // maxBuffer: a monorepo diff routinely exceeds node's 1MB default, and the failure mode is a
-        // truncated capture that looks like a complete one.
-        const result = spawnSync('git', args, { cwd: repoRoot, encoding: 'utf8', maxBuffer: 256 * 1024 * 1024 });
-        return result.status === 0 ? (result.stdout ?? '') : '';
+    // A monorepo diff routinely exceeds node's 1MB default buffer; the GitProcessApi edge captures up to
+    // 256 MiB and reports a truncated capture as a FAILED command, never as a complete one.
+    private async gitOut(repoRoot: string, args: string[]): Promise<string> {
+        const result = await this.git.run(args, repoRoot);
+        return result.ok ? result.stdout : '';
     }
 }

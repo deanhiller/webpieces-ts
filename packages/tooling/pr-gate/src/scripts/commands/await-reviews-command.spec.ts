@@ -40,18 +40,18 @@ function probe(waitedOn: RequiredChecklist[], applicable: RequiredChecklist[] = 
  * blocks the wasteful one, and leaves the turn-level judgement where it belongs (issue #902).
  */
 describe('ReviewerWaitProbe waits on exactly what finish blocks on', () => {
-    it('is not done while a verdict is missing', () => {
+    it('is not done while a verdict is missing', async () => {
         const p = probe([checklist('a'), checklist('b')]);
         writeVerdict('a', 'green', 'looks fine');
-        expect(p.done()).toBe(false);
+        expect(await p.done()).toBe(false);
         expect(p.describe()).toBe('1 of 2 verdicts in');
     });
 
-    it('is done once every awaited verdict has landed', () => {
+    it('is done once every awaited verdict has landed', async () => {
         const p = probe([checklist('a'), checklist('b')]);
         writeVerdict('a', 'green', 'looks fine');
         writeVerdict('b', 'red', 'shim in Foo.ts line 12');
-        expect(p.done()).toBe(true);
+        expect(await p.done()).toBe(true);
     });
 
     /**
@@ -59,20 +59,20 @@ describe('ReviewerWaitProbe waits on exactly what finish blocks on', () => {
      * `wp-finish-upsert-pr`'s job and stays there — a waiter that kept waiting for a reviewer to change
      * its mind would never return.
      */
-    it('ends on a red verdict rather than waiting for it to turn green', () => {
+    it('ends on a red verdict rather than waiting for it to turn green', async () => {
         const p = probe([checklist('a')]);
         writeVerdict('a', 'red', 'shim in Foo.ts line 12');
-        expect(p.done()).toBe(true);
+        expect(await p.done()).toBe(true);
         const report = p.verdictReport(new WaitOutcome(true, 12_000));
         expect(report).toContain('🔴');
         expect(report).toContain('shim in Foo.ts line 12');
         expect(report).toContain('REFUSED');
     });
 
-    it('prints a green verdict without repeating its output, which is already on the PR', () => {
+    it('prints a green verdict without repeating its output, which is already on the PR', async () => {
         const p = probe([checklist('a')]);
         writeVerdict('a', 'green', 'a very long reviewer essay nobody needs twice');
-        p.done();
+        await p.done();
         const report = p.verdictReport(new WaitOutcome(true, 4_000));
         expect(report).toContain('🟢');
         expect(report).not.toContain('very long reviewer essay');
@@ -84,11 +84,11 @@ describe('ReviewerWaitProbe waits on exactly what finish blocks on', () => {
      * end. It is excluded from the WAIT and still listed in the REPORT — a shorter list would let it
      * read as though everything passed.
      */
-    it('does not wait for an optional checklist nobody ran, but still reports it', () => {
+    it('does not wait for an optional checklist nobody ran, but still reports it', async () => {
         const waited = [checklist('a')];
         const p = probe(waited, [checklist('a'), checklist('opt', false)]);
         writeVerdict('a', 'green', 'fine');
-        expect(p.done()).toBe(true);
+        expect(await p.done()).toBe(true);
         const report = p.verdictReport(new WaitOutcome(true, 1_000));
         expect(report).toContain('opt');
         expect(report).toContain('❓');
@@ -96,10 +96,10 @@ describe('ReviewerWaitProbe waits on exactly what finish blocks on', () => {
 });
 
 describe('ReviewerWaitProbe timeout report', () => {
-    it('names the command to run again and says it is not a failure', () => {
+    it('names the command to run again and says it is not a failure', async () => {
         const p = probe([checklist('a'), checklist('b')]);
         writeVerdict('a', 'green', 'fine');
-        p.done();
+        await p.done();
         const text = p.stillWaitingReport(new WaitOutcome(false, 540_000));
         expect(text).toContain('pnpm wp-await-reviews');
         expect(text).toContain('not a failure');
@@ -112,12 +112,12 @@ describe('ReviewerWaitProbe timeout report', () => {
  * It is not an answer to THIS round, so it must not end the wait.
  */
 describe('ReviewerWaitProbe ignores a verdict from an earlier round than the one stage ② briefed', () => {
-    it('keeps waiting on a round-1 verdict during round 2, and ends on the round-2 one', () => {
+    it('keeps waiting on a round-1 verdict during round 2, and ends on the round-2 one', async () => {
         writeVerdict('a', 'red', 'judged the previous diff', 1);
         const p = new ReviewerWaitProbe(new ReviewJsonService(), summaryPath, [checklist('a')], [checklist('a')], 2);
-        expect(p.done()).toBe(false);
+        expect(await p.done()).toBe(false);
         writeVerdict('a', 'orange', 'judged this diff', 2);
-        expect(p.done()).toBe(true);
+        expect(await p.done()).toBe(true);
         const report = p.verdictReport(new WaitOutcome(true, 1_000));
         expect(report).toContain('🟠');
         expect(report).toContain('wp-write-review-fixes');

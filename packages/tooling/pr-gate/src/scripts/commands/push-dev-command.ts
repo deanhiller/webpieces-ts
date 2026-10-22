@@ -75,8 +75,8 @@ export class PushDevCommand {
         this.assertNoResolveInProgress(repoRoot);
 
         if (opts.list) {
-            this.list(repoRoot, cfg);
-            return Promise.resolve();
+            await this.list(repoRoot, cfg);
+            return;
         }
 
         const branch = this.refs.currentBranch(repoRoot);
@@ -84,24 +84,23 @@ export class PushDevCommand {
         const targetRef = cfg.copyRefFor(branch);
 
         if (opts.remove) {
-            this.remove(repoRoot, cfg, branch, targetRef);
-            return Promise.resolve();
+            await this.remove(repoRoot, cfg, branch, targetRef);
+            return;
         }
         // Every remaining mode commits or merges, so the tree must be the AI's committed work and nothing
         // else. The tooling never commits for you.
-        this.gitExec.assertCleanTree(repoRoot);
+        await this.gitExec.assertCleanTree(repoRoot);
 
         if (opts.resolve) {
-            this.startResolve(repoRoot, cfg, branch, targetRef, opts.resolveTarget);
-            return Promise.resolve();
+            await this.startResolve(repoRoot, cfg, branch, targetRef, opts.resolveTarget);
+            return;
         }
-        this.publish(repoRoot, cfg, branch, targetRef, opts);
-        return Promise.resolve();
+        await this.publish(repoRoot, cfg, branch, targetRef, opts);
     }
 
     /** `--list`: exactly the live copies, straight from the remote — never a cached local view. */
-    private list(repoRoot: string, cfg: DevDeployConfig): void {
-        const copies = this.refs.liveCopies(repoRoot, cfg);
+    private async list(repoRoot: string, cfg: DevDeployConfig): Promise<void> {
+        const copies = await this.refs.liveCopies(repoRoot, cfg);
         if (copies.length === 0) {
             process.stdout.write(
                 `\nNo dev copies published — nothing matches \`${cfg.copyRefGlob()}\` on origin.\n`
@@ -116,14 +115,14 @@ export class PushDevCommand {
     }
 
     /** `--remove`: delete the remote copy. This IS the rollback — nothing else has to be undone. */
-    private remove(repoRoot: string, cfg: DevDeployConfig, branch: string, targetRef: string): void {
-        if (this.refs.remoteSha(repoRoot, targetRef) === '') {
+    private async remove(repoRoot: string, cfg: DevDeployConfig, branch: string, targetRef: string): Promise<void> {
+        if (await this.refs.remoteSha(repoRoot, targetRef) === '') {
             process.stdout.write(
                 `\nNothing to remove — \`${targetRef}\` is not published.\n`
                 + `List what IS published with: ${WP_PUSH_DEV} --list\n`);
             return;
         }
-        this.gitExec.runGitChecked(['-C', repoRoot, 'push', 'origin', '--delete', `refs/heads/${targetRef}`],
+        await this.gitExec.runGitChecked(['-C', repoRoot, 'push', 'origin', '--delete', `refs/heads/${targetRef}`],
             `Failed to delete the dev copy ${targetRef}`);
         process.stdout.write(
             '\n' + SEP + `🗑️  Removed ${targetRef}\n` + SEP + '\n'
@@ -140,23 +139,23 @@ export class PushDevCommand {
      * default is refusal with two named ways forward — never a "use --force" one-liner, which is how a
      * warning becomes a reflex.
      */
-    private publish(repoRoot: string, cfg: DevDeployConfig, branch: string, targetRef: string, opts: PushDevOptions): void {
-        const remoteSha = this.refs.remoteSha(repoRoot, targetRef);
+    private async publish(repoRoot: string, cfg: DevDeployConfig, branch: string, targetRef: string, opts: PushDevOptions): Promise<void> {
+        const remoteSha = await this.refs.remoteSha(repoRoot, targetRef);
         if (remoteSha !== '') {
-            this.refs.fetchCopies(repoRoot, [targetRef]);
-            const ahead = this.refs.commitsOnlyOnRemote(repoRoot, targetRef);
+            await this.refs.fetchCopies(repoRoot, [targetRef]);
+            const ahead = await this.refs.commitsOnlyOnRemote(repoRoot, targetRef);
             if (ahead > 0 && opts.rebaseResolution) {
-                this.rebaseResolution(repoRoot, branch, targetRef);
+                await this.rebaseResolution(repoRoot, branch, targetRef);
                 return;
             }
             if (ahead > 0 && !opts.force) this.refuseClobber(cfg, branch, targetRef, ahead);
         }
-        this.gitExec.runGitChecked(
+        await this.gitExec.runGitChecked(
             ['-C', repoRoot, 'push', ...this.pushSafety(targetRef, remoteSha, opts.force),
                 'origin', `HEAD:refs/heads/${targetRef}`],
             `Failed to publish the dev copy ${targetRef}`);
         // Read AFTER the push, so the sha in the watch hints is provably the one that is now published.
-        const published = this.refs.headSha(repoRoot);
+        const published = await this.refs.headSha(repoRoot);
         process.stdout.write(
             '\n' + SEP + `✅ Published ${targetRef}\n` + SEP + '\n'
             + `\`${branch}\` is now in the pool your CI composes \`${cfg.devBranch}\` from — it will be picked up on\n`
@@ -173,13 +172,13 @@ export class PushDevCommand {
      * replay that conflicts again lands in exactly the same halt/`wp-finish-push-dev` state machine as
      * any other conflict, rather than inventing a second way to be stuck.
      */
-    private rebaseResolution(repoRoot: string, branch: string, targetRef: string): void {
+    private async rebaseResolution(repoRoot: string, branch: string, targetRef: string): Promise<void> {
         const state = new PushDevState(branch, this.runner.tmpBranchFor(branch), targetRef, [targetRef]);
         process.stdout.write(
             '\n' + SEP + `♻️  Replaying the published resolution onto \`${branch}\`\n` + SEP + '\n'
             + `Merging \`${targetRef}\` (which holds the resolution) into your new commits on a throwaway branch.\n`
             + `Your feature branch \`${branch}\` is not touched.\n\n`);
-        this.runner.start(repoRoot, state, 'HEAD', [targetRef]);
+        await this.runner.start(repoRoot, state, 'HEAD', [targetRef]);
     }
 
     /**
@@ -189,14 +188,14 @@ export class PushDevCommand {
      * local resolution is then a rehearsal of the real composition, not a guess at it. With an argument
      * (the branch a CI conflict message names) it is just that one.
      */
-    private startResolve(repoRoot: string, cfg: DevDeployConfig, branch: string, targetRef: string, only: string): void {
-        if (this.refs.remoteSha(repoRoot, targetRef) === '') {
+    private async startResolve(repoRoot: string, cfg: DevDeployConfig, branch: string, targetRef: string, only: string): Promise<void> {
+        if (await this.refs.remoteSha(repoRoot, targetRef) === '') {
             throw new CliExitError(2,
                 '\n' + SEP + `⛔ \`${targetRef}\` is not published yet\n` + SEP + '\n'
                 + 'There is nothing to compose against. Publish your copy first, then resolve:\n'
                 + `  ${WP_PUSH_DEV}\n  ${WP_PUSH_DEV} --resolve\n`);
         }
-        const queue = this.resolveQueue(repoRoot, cfg, targetRef, only);
+        const queue = await this.resolveQueue(repoRoot, cfg, targetRef, only);
         if (queue.length === 0) {
             process.stdout.write(
                 `\nNothing to compose — \`${targetRef}\` is the only copy in \`${cfg.copyRefGlob()}\`.\n`
@@ -205,13 +204,13 @@ export class PushDevCommand {
         }
         const state = new PushDevState(branch, this.runner.tmpBranchFor(branch), targetRef, queue);
         process.stdout.write(this.runner.announce(cfg, state));
-        this.runner.start(repoRoot, state, `refs/remotes/origin/${targetRef}`, [targetRef, ...queue]);
+        await this.runner.start(repoRoot, state, `refs/remotes/origin/${targetRef}`, [targetRef, ...queue]);
     }
 
     // The refs to merge: one named copy, or every copy that is not mine. A named branch is accepted with
     // or without the namespace prefix, because the CI message that names it may print either.
-    private resolveQueue(repoRoot: string, cfg: DevDeployConfig, targetRef: string, only: string): string[] {
-        const copies = this.refs.liveCopies(repoRoot, cfg);
+    private async resolveQueue(repoRoot: string, cfg: DevDeployConfig, targetRef: string, only: string): Promise<string[]> {
+        const copies = await this.refs.liveCopies(repoRoot, cfg);
         if (only === '') {
             return copies.filter((c: DevCopy): boolean => c.ref !== targetRef).map((c: DevCopy): string => c.ref);
         }

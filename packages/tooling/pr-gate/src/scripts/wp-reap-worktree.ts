@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import 'reflect-metadata';
-import { Container } from 'inversify';
+import { PrGateContainer } from './pr-gate-container';
 import { runMain } from '@webpieces/rules-config';
 import { PrGateApp } from './pr-gate-app';
 
@@ -17,6 +17,6 @@ import { PrGateApp } from './pr-gate-app';
  * three values; the sha is what stops a removal being decided by a branch NAME.
  */
 runMain(async (): Promise<void> => {
-    const container = new Container({ autobind: true });
+    const container = new PrGateContainer().create();
     await container.get(PrGateApp).reapWorktree(process.argv.slice(2));
 });

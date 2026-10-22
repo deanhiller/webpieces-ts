@@ -37,7 +37,7 @@ export class RunUpdate {
 
     // eslint-disable-next-line @typescript-eslint/max-params
     private async runUpdate(repoRoot: string, verb: MutationVerb, finishCommand: string, pushRemote: boolean): Promise<UpdateOutcome> {
-        const home = this.mergeState.mergeDirFor(repoRoot, this.aiBranchName.getFeatureName());
+        const home = this.mergeState.mergeDirFor(repoRoot, await this.aiBranchName.getFeatureName());
 
         // Resume path: an in-progress merge is the `merge-<n>/` run dir that holds a marker.
         const activeDir = this.mergeState.findActiveMergeRunDir(home);

@@ -1,9 +1,10 @@
-import { execSync, spawnSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 import { prDirFor, CliExitError, RepoRootFinder } from '@webpieces/rules-config';
+import { GitProcessApi } from '@webpieces/tooling-common';
 import { injectable, bindingScopeValues } from 'inversify';
 import { AiBranchName } from './git-readAiBranchName';
+import { GitExec } from './git-exec';
 import { MergeState } from './merge-state';
 
 const SEP = '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n';
@@ -15,6 +16,8 @@ export class ForkPoint {
         private readonly repoRootFinder: RepoRootFinder,
         private readonly aiBranchName: AiBranchName,
         private readonly mergeState: MergeState,
+        private readonly gitExec: GitExec,
+        private readonly git: GitProcessApi,
     ) {}
 
     // Single source of truth for the per-feature dir fork-point output is written to — the SAME nested
@@ -39,11 +42,11 @@ export class ForkPoint {
      * Also writes no files and runs no merge-commit scan, so it cannot throw: `wp-review-upsert-pr` must always
      * succeed, and a raw merge-from-main is the merge flow's problem to report, not the checklist's.
      */
-    resolveForkPoint(repoRoot: string): string {
+    async resolveForkPoint(repoRoot: string): Promise<string> {
         for (const ref of ['origin/main', 'main']) {
-            const result = spawnSync('git', ['merge-base', ref, 'HEAD'], { cwd: repoRoot, encoding: 'utf8' });
-            const sha = (result.stdout ?? '').trim();
-            if (result.status === 0 && sha !== '') return sha;
+            const result = await this.git.run(['merge-base', ref, 'HEAD'], repoRoot);
+            const sha = result.stdout.trim();
+            if (result.ok && sha !== '') return sha;
         }
         return '';
     }
@@ -57,24 +60,25 @@ export class ForkPoint {
             );
         }
 
-        const featureName = this.aiBranchName.getFeatureName();
-        const currentBranch = execSync('git branch --show-current', { encoding: 'utf8' }).trim();
-        const repoRoot = this.repoRootFinder.resolveRepoRoot(process.cwd());
+        const cwd = process.cwd();
+        const featureName = await this.aiBranchName.getFeatureName();
+        const currentBranch = await this.gitExec.currentBranch(cwd);
+        const repoRoot = this.repoRootFinder.resolveRepoRoot(cwd);
 
         const outputDir = this.forkPointOutputDir(repoRoot, featureName, workflow);
         const prefix = workflow === 'review' ? 'review-' : 'updatemain-';
         fs.mkdirSync(outputDir, { recursive: true });
 
-        spawnSync('git', ['fetch', 'origin', 'main'], { stdio: 'ignore' });
+        await this.git.run(['fetch', 'origin', 'main']);
 
-        const featureHead = execSync('git rev-parse HEAD', { encoding: 'utf8' }).trim();
-        const originMain = execSync('git rev-parse origin/main', { encoding: 'utf8' }).trim();
+        const featureHead = await this.gitExec.gitQuery(['rev-parse', 'HEAD'], cwd, 'Failed to read HEAD (git rev-parse HEAD).');
+        const originMain = await this.gitExec.gitQuery(['rev-parse', 'origin/main'], cwd, 'Failed to read origin/main (git rev-parse origin/main).');
 
         process.stderr.write('Finding fork point using git merge-base...\n');
 
         // ONE implementation of the fork-point computation, shared with ChecklistScanner. The fetch above is
         // what this flow needs beyond it (hash point C = main's current head), not the fork point itself.
-        const forkPoint = this.resolveForkPoint(repoRoot);
+        const forkPoint = await this.resolveForkPoint(repoRoot);
 
         if (!forkPoint) {
             throw new CliExitError(1, 'ERROR: Could not find common ancestor with origin/main');
@@ -83,12 +87,12 @@ export class ForkPoint {
         process.stderr.write(`✅ Fork point found: ${forkPoint.slice(0, 7)}\n`);
         process.stderr.write('Checking for improper merges from main...\n');
 
-        const mergeCommitsResult = spawnSync('git', ['log', `${forkPoint}..HEAD`, '--merges', '--format=%H'], { encoding: 'utf8' });
-        const mergeCommitsRaw = (mergeCommitsResult.stdout ?? '').trim();
+        const mergeCommitsResult = await this.git.run(['log', `${forkPoint}..HEAD`, '--merges', '--format=%H']);
+        const mergeCommitsRaw = mergeCommitsResult.stdout.trim();
         const mergeCommits = mergeCommitsRaw ? mergeCommitsRaw.split('\n') : [];
 
         if (mergeCommits.length > 0) {
-            this.checkMergeCommits(mergeCommits, outputDir, prefix, featureName, currentBranch);
+            await this.checkMergeCommits(mergeCommits, outputDir, prefix, featureName, currentBranch);
         } else {
             process.stderr.write('✅ No merge commits found (clean history)\n');
         }
@@ -104,18 +108,18 @@ export class ForkPoint {
         process.stderr.write(`✅ Hash points written to: ${outputDir}/${prefix}hashes.json\n`);
     }
 
-    private checkMergeCommits(mergeCommits: string[], outputDir: string, prefix: string, featureName: string, currentBranch: string): void {
+    private async checkMergeCommits(mergeCommits: string[], outputDir: string, prefix: string, featureName: string, currentBranch: string): Promise<void> {
         process.stderr.write(`Found ${mergeCommits.length} merge commit(s) to check...\n`);
 
         for (const commit of mergeCommits) {
-            const parentsResult = spawnSync('git', ['rev-list', '--parents', '-n', '1', commit], { encoding: 'utf8' });
-            const parents = (parentsResult.stdout ?? '').trim().split(' ').slice(1);
+            const parentsResult = await this.git.run(['rev-list', '--parents', '-n', '1', commit]);
+            const parents = parentsResult.stdout.trim().split(' ').slice(1);
 
             for (const parent of parents) {
-                const ancestorCheck = spawnSync('git', ['merge-base', '--is-ancestor', parent, 'origin/main']);
-                const reverseCheck = spawnSync('git', ['merge-base', '--is-ancestor', 'origin/main', parent]);
+                const ancestorCheck = await this.git.run(['merge-base', '--is-ancestor', parent, 'origin/main']);
+                const reverseCheck = await this.git.run(['merge-base', '--is-ancestor', 'origin/main', parent]);
 
-                if (ancestorCheck.status === 0 && reverseCheck.status === 0) {
+                if (ancestorCheck.ok && reverseCheck.ok) {
                     const errorJson = JSON.stringify({
                         error: 'Merge from main detected',
                         mergeCommit: commit,

@@ -31,14 +31,13 @@ export class WriteReviewFixesCommand {
         private readonly rounds: ReviewRoundStateService,
     ) {}
 
-    run(opts: WriteReviewFixesOptions): Promise<void> {
+    async run(opts: WriteReviewFixesOptions): Promise<void> {
         const repoRoot = this.repoRootFinder.resolveRepoRoot(opts.cwd);
-        const featureName = this.aiBranchName.getFeatureName();
+        const featureName = await this.aiBranchName.getFeatureName();
         const receipt = this.receipts.read(repoRoot, featureName);
         if (receipt === null) throw new InformAiError('wp-write-review-fixes: no reviewer round has started on this branch.');
-        const written = this.rounds.writeRemediation(repoRoot, summaryJsonPath(repoRoot, featureName), receipt, opts.json);
+        const written = await this.rounds.writeRemediation(repoRoot, summaryJsonPath(repoRoot, featureName), receipt, opts.json);
         process.stdout.write(`✅ SHA-bound fixes recorded → ${written}\n`);
-        return Promise.resolve();
     }
 }
 

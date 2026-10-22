@@ -8,7 +8,7 @@ Each section below is one root's dependency tree: Level 0 is the root
 downward through Levels 1, 2, … A dependency shared by multiple roots
 appears in each root's tree.
 
-## PrGateApp — controller, Level 0…8
+## PrGateApp — controller, Level 0…10
 
 ```mermaid
 graph TD
@@ -63,6 +63,7 @@ graph TD
     GeneratedArtifactRegistry["GeneratedArtifactRegistry"]
     GitCheckout["GitCheckout"]
     GitExec["GitExec"]
+    GitProcessApi["GitProcessApi"]
     GitStatusParser["GitStatusParser"]
     HarnessAgentActivityReader["HarnessAgentActivityReader"]
     HomeConfigService["HomeConfigService"]
@@ -82,6 +83,7 @@ graph TD
     MergeStart["MergeStart"]
     MergeState["MergeState"]
     MergedBranchesService["MergedBranchesService"]
+    NativeProcessApi["NativeProcessApi"]
     OpenPrCheck["OpenPrCheck"]
     OrphanDirArchiver["OrphanDirArchiver"]
     OrphanDirScanner["OrphanDirScanner"]
@@ -131,7 +133,9 @@ graph TD
     ActiveHatchReport --> ConfigFile
     ActiveHatchReport --> PackPolicyFiles
     AiBranchName --> BranchNaming
+    AiBranchName --> GitExec
     AwaitChecksCommand --> AwaitLoop
+    AwaitChecksCommand --> NativeProcessApi
     AwaitChecksCommand --> StageOutputLog
     AwaitLoop --> StageOutputLog
     AwaitReviewsCommand --> AiBranchName
@@ -157,9 +161,12 @@ graph TD
     BuildCommand --> HomeConfigService
     BuildCommand --> RepoRootFinder
     BuildGateLog --> GateLogFile
+    BuildGateLog --> GitProcessApi
+    BuildGateLog --> NativeProcessApi
     BuildGateLog --> StageOutputLog
     BuildsLog --> DotWebpieces
     CheckPrCommand --> GateTokenService
+    CheckPrCommand --> NativeProcessApi
     CheckPrCommand --> RepoRootFinder
     ChecklistDetector --> DiffScope
     ChecklistInstructionsService --> ReviewJsonService
@@ -190,7 +197,9 @@ graph TD
     DevResolveRunner --> GitExec
     DevResolveRunner --> PushDevStateStore
     DiffBasisResolver --> ForkPoint
+    DiffBasisResolver --> GitProcessApi
     DiffBasisResolver --> GitStatusParser
+    DiffMaterializer --> GitProcessApi
     DiffMaterializer --> ReviewJsonService
     DotWebpieces --> GitCheckout
     DotWebpieces --> StateDirMigrator
@@ -213,9 +222,11 @@ graph TD
     FinishUpsertPrCommand --> GateTokenService
     FinishUpsertPrCommand --> GatedPrPublisher
     FinishUpsertPrCommand --> GitExec
+    FinishUpsertPrCommand --> GitProcessApi
     FinishUpsertPrCommand --> HotfixRedirect
     FinishUpsertPrCommand --> MergeBodyTempFile
     FinishUpsertPrCommand --> MergeState
+    FinishUpsertPrCommand --> NativeProcessApi
     FinishUpsertPrCommand --> PrCommentUpserter
     FinishUpsertPrCommand --> PrMerger
     FinishUpsertPrCommand --> ProvenanceEnforcer
@@ -227,19 +238,25 @@ graph TD
     FinishUpsertPrCommand --> SquashSettingsEnforcer
     FinishUpsertPrCommand --> StageOutputLog
     ForkPoint --> AiBranchName
+    ForkPoint --> GitExec
+    ForkPoint --> GitProcessApi
     ForkPoint --> MergeState
     ForkPoint --> RepoRootFinder
     GatedPrPublisher --> GitExec
+    GatedPrPublisher --> NativeProcessApi
     GatherInfo --> AiBranchName
     GatherInfo --> ForkPoint
     GatherInfo --> GitExec
     GatherInfo --> MergeState
     GatherInfo --> RepoRootFinder
+    GeneratedArtifactRegistry --> NativeProcessApi
     GeneratedArtifactRegistry --> RepoScratchDirs
+    GitExec --> GitProcessApi
     GitExec --> GitStatusParser
     GitExec --> RepoRootFinder
     HomeConfigService --> HomeDocKeys
     HotfixPrPublisher --> GitExec
+    HotfixPrPublisher --> NativeProcessApi
     HotfixRedirect --> BranchIdentity
     HumanPostPrCommand --> AiBranchName
     HumanPostPrCommand --> BranchIdentity
@@ -250,21 +267,27 @@ graph TD
     HumanPostPrCommand --> GitExec
     HumanPostPrCommand --> MainSyncStatusService
     HumanPostPrCommand --> MergeState
+    HumanPostPrCommand --> NativeProcessApi
     HumanPostPrCommand --> RepoRootFinder
     HumanPostPrCommand --> ReviewJsonService
     HumanPostPrCommand --> SquashSettingsEnforcer
     LandPrCommand --> AiBranchName
     LandPrCommand --> BranchArchiver
     LandPrCommand --> BranchNaming
+    LandPrCommand --> GitProcessApi
     LandPrCommand --> LandedTreeResolver
     LandPrCommand --> LandedWorktreeReaper
     LandPrCommand --> MergeBodyTempFile
     LandPrCommand --> MergeInfoIndex
+    LandPrCommand --> NativeProcessApi
     LandPrCommand --> PrMerger
     LandPrCommand --> RepoRootFinder
+    LandedTreeResolver --> GitProcessApi
     LandedTreeResolver --> WorktreeService
+    LandedWorktreeReaper --> NativeProcessApi
     LandedWorktreeReaper --> ReapOutcomeSignal
     LandedWorktreeReaper --> WorktreeService
+    MainCheckout --> GitProcessApi
     MainSyncFileStore --> AtomicFile
     MainSyncStatusService --> AtomicFile
     MainSyncStatusService --> CommandTimeouts
@@ -282,7 +305,9 @@ graph TD
     MergeStart --> BranchNaming
     MergeStart --> GatherInfo
     MergeStart --> GitExec
+    MergeStart --> GitProcessApi
     MergeStart --> MergeState
+    MergeStart --> NativeProcessApi
     MergeState --> DotWebpieces
     MergedBranchesService --> AtomicFile
     MergedBranchesService --> CommandTimeouts
@@ -290,9 +315,11 @@ graph TD
     MergedBranchesService --> WorktreeLockVerdicts
     MergedBranchesService --> WorktreeService
     OpenPrCheck --> BranchNaming
+    OpenPrCheck --> NativeProcessApi
     OrphanDirSweeper --> HomeConfigService
     OrphanDirSweeper --> OrphanDirArchiver
     OrphanDirSweeper --> OrphanDirScanner
+    PrCommentUpserter --> NativeProcessApi
     PrContextWriter --> DiffScope
     PrContextWriter --> ReviewJsonService
     PrGateApp --> AwaitChecksCommand
@@ -316,7 +343,9 @@ graph TD
     PrGateApp --> UpsertHotfixPrCommand
     PrGateApp --> WriteReviewCommand
     PrGateApp --> WriteReviewFixesCommand
+    PrMerger --> NativeProcessApi
     ProvenanceEnforcer --> AiBranchName
+    ProvenanceEnforcer --> GitProcessApi
     ProvenanceEnforcer --> ReviewJsonService
     ProvenanceEnforcer --> ReviewProvenanceService
     ProvenanceEnforcer --> ReviewerInstructionsService
@@ -344,6 +373,7 @@ graph TD
     ReviewReport --> ReviewRoundText
     ReviewReport --> ReviewerInstructionsService
     ReviewRoundStateService --> AtomicFile
+    ReviewRoundStateService --> GitProcessApi
     ReviewRoundStateService --> ReviewJsonService
     ReviewRoundStateService --> VerdictProvenanceService
     ReviewStageReceiptService --> ReviewJsonService
@@ -375,6 +405,7 @@ graph TD
     RunUpdate --> MergeEnd
     RunUpdate --> MergeStart
     RunUpdate --> MergeState
+    SquashSettingsEnforcer --> NativeProcessApi
     StageOutputLog --> GateLogFile
     StartUpdateCommand --> OpenPrCheck
     StartUpdateCommand --> RepoRootFinder
@@ -404,12 +435,14 @@ graph TD
     UpsertHotfixPrCommand --> GitExec
     UpsertHotfixPrCommand --> HotfixPrPublisher
     UpsertHotfixPrCommand --> MergeState
+    UpsertHotfixPrCommand --> NativeProcessApi
     UpsertHotfixPrCommand --> PrCommentUpserter
     UpsertHotfixPrCommand --> RepoRootFinder
     UpsertHotfixPrCommand --> ReviewJsonService
     UpsertHotfixPrCommand --> SquashSettingsEnforcer
     VerdictProvenanceService --> AtomicFile
     VerdictProvenanceService --> ReviewJsonService
+    WorkingTreeGate --> GitProcessApi
     WorktreeCleanupSection --> BranchMutationLog
     WorktreeCleanupSection --> MergedBranchesService
     WorktreeCleanupSection --> WorktreeReaper

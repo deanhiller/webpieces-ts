@@ -94,16 +94,16 @@ export class ReviewUpsertPrCommand {
     private async runStage(repoRoot: string): Promise<void> {
         writeTemplate(repoRoot, 'webpieces.git-workflow.md');
         writeTemplate(repoRoot, 'webpieces.review-checklists.md');
-        const featureName = this.aiBranchName.getFeatureName();
+        const featureName = await this.aiBranchName.getFeatureName();
         const config = loadAndValidate(repoRoot).prGate;
 
         const mergeValidated = await this.finalizeAnyInProgressMerge(repoRoot);
-        this.gitExec.assertCleanTree(repoRoot);
+        await this.gitExec.assertCleanTree(repoRoot);
         const buildPassedAt = await this.runBuildGate(repoRoot);
 
-        const scan = this.checklistScanner.scan(repoRoot, config.checklists, new ChecklistScanOptions(config.maxReviewerRounds, false, '')); // '' — THIS command writes the context itself, after materializing
+        const scan = await this.checklistScanner.scan(repoRoot, config.checklists, new ChecklistScanOptions(config.maxReviewerRounds, false, '')); // '' — THIS command writes the context itself, after materializing
         const previousReceipt = this.receipts.read(repoRoot, featureName);
-        const plan = this.rounds.plan(repoRoot, scan.summaryPath, previousReceipt, config.maxReviewerRounds, scan.basis);
+        const plan = await this.rounds.plan(repoRoot, scan.summaryPath, previousReceipt, config.maxReviewerRounds, scan.basis);
         if (plan.action === ROUND_ACTION_RESUME && previousReceipt !== null) {
             this.resumeRound(repoRoot, featureName, scan, previousReceipt, mergeValidated, buildPassedAt);
             this.reportActiveHatches(repoRoot);
@@ -112,7 +112,7 @@ export class ReviewUpsertPrCommand {
         }
         const shouldBrief = plan.action === ROUND_ACTION_REVIEW;
         const briefings = shouldBrief
-            ? this.briefReviewers(repoRoot, featureName, scan, config, plan)
+            ? await this.briefReviewers(repoRoot, featureName, scan, config, plan)
             : [];
         const recordedReviewers = briefings.map((b: ReviewerBriefing): string => b.checklistId);
         if (shouldBrief) {
@@ -203,7 +203,7 @@ export class ReviewUpsertPrCommand {
      * false when validation fails, so the receipt can never record an unvalidated merge as validated.
      */
     private async finalizeAnyInProgressMerge(repoRoot: string): Promise<boolean> {
-        const home = this.mergeState.mergeDirFor(repoRoot, this.aiBranchName.getFeatureName());
+        const home = this.mergeState.mergeDirFor(repoRoot, await this.aiBranchName.getFeatureName());
         const activeDir = this.mergeState.findActiveMergeRunDir(home);
         const marker = activeDir ? this.mergeState.readMergeMarker(activeDir) : null;
         if (!activeDir || !marker || marker.validated) return true;
@@ -224,7 +224,7 @@ export class ReviewUpsertPrCommand {
         // finish, because this is the stage that ran buildCommand and is therefore holding the dirty
         // tree at the exact moment the question is answerable. Replaces the per-project
         // validate-di-graph-unchanged nx target — see BuildArtifactGate for why that one had to go.
-        this.buildArtifactGate.assertBuildLeftNothingUncommitted(repoRoot);
+        await this.buildArtifactGate.assertBuildLeftNothingUncommitted(repoRoot);
         return new Date().toISOString();
     }
 
@@ -234,10 +234,10 @@ export class ReviewUpsertPrCommand {
      * The changed-file set and the basis both come off the SCAN rather than being recomputed, so the diff a
      * reviewer reads covers exactly the files its checklist matched against.
      */
-    private briefReviewers(repoRoot: string, featureName: string, scan: ChecklistScan, config: PrGateConfig, plan: ReviewRoundPlan): ReviewerBriefing[] {
+    private async briefReviewers(repoRoot: string, featureName: string, scan: ChecklistScan, config: PrGateConfig, plan: ReviewRoundPlan): Promise<ReviewerBriefing[]> {
         if (plan.basis.unresolved) return [];
         const changedFiles = plan.round > 1 ? plan.changedFiles : scan.changedFiles;
-        const manifest = this.materializer.materialize(repoRoot, featureName, plan.basis, changedFiles, config.reviewDiffExclude);
+        const manifest = await this.materializer.materialize(repoRoot, featureName, plan.basis, changedFiles, config.reviewDiffExclude);
         const diffDir = this.materializer.diffDirFor(repoRoot, featureName);
         // Write pr-context.json ONCE, here — after materializing, so `diffDir` is populated on the first
         // write. The scan deliberately did not write it (ChecklistScanOptions.contextStage === ''); it used

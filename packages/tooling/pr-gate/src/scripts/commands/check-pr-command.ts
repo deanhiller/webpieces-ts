@@ -1,10 +1,10 @@
-import { spawnSync } from 'child_process';
 import {
     loadAndValidate,
     RepoRootFinder,
     GateTokenService,
     CliExitError,
 } from '@webpieces/rules-config';
+import { NativeProcessApi } from '@webpieces/tooling-common';
 import { injectable, bindingScopeValues } from 'inversify';
 
 // The head sha + body of the PR under check, resolved from `gh`. Data-only.
@@ -46,6 +46,7 @@ export class CheckPrCommand {
     constructor(
         private readonly repoRootFinder: RepoRootFinder,
         private readonly gateTokenService: GateTokenService,
+        private readonly processes: NativeProcessApi,
     ) {}
 
     async run(): Promise<void> {
@@ -59,7 +60,7 @@ export class CheckPrCommand {
             );
         }
 
-        let pr = this.resolvePr();
+        let pr = await this.resolvePr();
         if (pr.headSha === '') {
             throw new CliExitError(
                 1,
@@ -89,7 +90,7 @@ export class CheckPrCommand {
             '… no valid token yet — waiting for the PR body edit to land, then re-checking once…\n',
         );
         await this.delay(15000);
-        const refreshed = this.resolvePr();
+        const refreshed = await this.resolvePr();
         return refreshed.headSha !== '' ? refreshed : pr;
     }
 
@@ -120,7 +121,7 @@ export class CheckPrCommand {
 
     // Resolve the PR (number, head sha, body) from `gh`. Prefers an explicit WP_PR_NUMBER, then the
     // pull_request number in GITHUB_REF (refs/pull/<n>/merge), then `gh`'s current-branch detection.
-    private resolvePr(): PrUnderCheck {
+    private async resolvePr(): Promise<PrUnderCheck> {
         const num = this.prNumber();
         const args =
             num !== ''
@@ -141,10 +142,10 @@ export class CheckPrCommand {
                       '--jq',
                       '"\\(.number)\\t\\(.headRefOid)\\t\\(.body)"',
                   ];
-        const result = spawnSync('gh', args, { encoding: 'utf8', maxBuffer: 1024 * 1024 * 16 });
-        if (result.status !== 0) return new PrUnderCheck(num, '', '');
+        const result = await this.processes.run('gh', args);
+        if (!result.ok) return new PrUnderCheck(num, '', '');
         // jq joins body (which may contain tabs/newlines) last, so split on the FIRST two tabs only.
-        const out = (result.stdout ?? '').trim();
+        const out = result.stdout.trim();
         const firstTab = out.indexOf('\t');
         const secondTab = firstTab >= 0 ? out.indexOf('\t', firstTab + 1) : -1;
         if (firstTab < 0 || secondTab < 0) return new PrUnderCheck(num, '', '');

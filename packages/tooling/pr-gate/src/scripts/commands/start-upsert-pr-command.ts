@@ -1,4 +1,3 @@
-import { execSync } from 'child_process';
 import { writeTemplate, CliExitError, RepoRootFinder, ChecklistReviewContext } from '@webpieces/rules-config';
 import { injectable, bindingScopeValues } from 'inversify';
 import { AiBranchName } from '../workflow/git-readAiBranchName';
@@ -49,7 +48,7 @@ export class StartUpsertPrCommand {
         // Precondition: a fully-committed tree. This flow squash-updates the branch and builds it — the
         // tooling must not commit your work for you, and building a dirty working tree would let an
         // uncommitted change build green over a different commit than the one that ships. Fail if dirty.
-        this.gitExec.assertCleanTree(repoRoot);
+        await this.gitExec.assertCleanTree(repoRoot);
 
         // Nothing here pushes. This command reviews; wp-finish-upsert-pr pushes ONCE, after summary.json,
         // every BLOCK checklist, and the authoritative build gate — so no unreviewed commit reaches the
@@ -58,7 +57,7 @@ export class StartUpsertPrCommand {
 
         // No build gate here — a conflicted merge may still be unresolved, so there is nothing worth
         // building. Stage ② finalizes the merge FIRST, then builds; see the class comment.
-        this.handOffToReview(repoRoot);
+        await this.handOffToReview(repoRoot);
     }
 
     /**
@@ -71,12 +70,12 @@ export class StartUpsertPrCommand {
      * requested here any more: asking for a written PR summary before the branch is known to compile invites
      * one that describes code that does not build.
      */
-    private handOffToReview(repoRoot: string): void {
+    private async handOffToReview(repoRoot: string): Promise<void> {
         // Persist the review-format + process instructions where any failure message can cite them.
         writeTemplate(repoRoot, 'webpieces.review-checklists.md');
         // Persist the PR diff context (base sha + the full changed-file set) so it exists even if the AI
         // stops here. Stage ② rewrites it with the materialized-diff dir once it has one.
-        const context = this.prContextWriter.ensure(repoRoot, this.aiBranchName.getFeatureName(), this.diffBasisResolver.resolve(repoRoot), 'stage1-start');
+        const context = this.prContextWriter.ensure(repoRoot, await this.aiBranchName.getFeatureName(), await this.diffBasisResolver.resolve(repoRoot), 'stage1-start');
         process.stdout.write('\n' + SEP + '② Brief the reviewers and write the PR summary, then finish\n' + SEP + '\n');
         process.stdout.write(
             `Branch is updated (nothing pushed yet — finish does the one push, behind the build gate).\n` +

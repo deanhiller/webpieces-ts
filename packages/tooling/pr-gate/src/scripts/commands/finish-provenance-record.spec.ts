@@ -1,4 +1,4 @@
-import { specTempDirs } from '@webpieces/tooling-testkit';
+import { MockGitProcessApi, specTempDirs } from '@webpieces/tooling-testkit';
 import { describe, it, expect, afterEach, beforeEach } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -54,9 +54,18 @@ function fakeHarness(sessionId: string, agentType: string, branch: string): stri
 }
 
 class FixedBranchName extends AiBranchName {
-    getFeatureName(): string {
+    constructor() {
+        super(null as never, null as never);
+    }
+
+    override async getFeatureName(): Promise<string> {
         return 'dean/feat';
     }
+}
+
+/** The enforcer asks git one thing — HEAD's sha, for the audit record — and gets it from a script (#1381). */
+function scriptedGit(): MockGitProcessApi {
+    return new MockGitProcessApi().respond(['rev-parse', 'HEAD'], new MockGitProcessApi().ok(`${'b'.repeat(40)}\n`));
 }
 
 // Every collaborator is REAL — the class is small enough to build outright, which is the point of the split.
@@ -69,11 +78,12 @@ function enforcerUnderTest(): ProvenanceEnforcer {
         new ReviewerInstructionsService(reviewJsonService),
         reviewJsonService,
         new VerdictProvenanceService(reviewJsonService, new AtomicFile()),
+        scriptedGit(),
     );
 }
 
-function enforce(repoRoot: string, required: RequiredChecklist[]): void {
-    enforcerUnderTest().enforce(required, 'dean/feat', repoRoot, new PrGateConfig());
+async function enforce(repoRoot: string, required: RequiredChecklist[]): Promise<void> {
+    await enforcerUnderTest().enforce(required, 'dean/feat', repoRoot, new PrGateConfig());
 }
 
 function provenanceIn(repoRoot: string): Record<string, unknown> {
@@ -83,13 +93,13 @@ function provenanceIn(repoRoot: string): Record<string, unknown> {
 }
 
 describe('FinishUpsertPrCommand provenance record', () => {
-    it('writes the record BEFORE refusing for a reviewer that never ran', () => {
+    it('writes the record BEFORE refusing for a reviewer that never ran', async () => {
         process.env['HOME'] = fakeHarness('sess-f1', 'envvars-reviewer', 'some/other-branch');
         process.env['CLAUDE_CODE_SESSION_ID'] = 'sess-f1';
         const repoRoot = specTempDirs.make('wp-fin-repo-');
 
-        expect(() => enforce(repoRoot, [new RequiredChecklist('envvars', agent('envvars-reviewer'), '', [])]))
-            .toThrow(/: envvars/);
+        await expect(enforce(repoRoot, [new RequiredChecklist('envvars', agent('envvars-reviewer'), '', [])]))
+            .rejects.toThrow(/: envvars/);
 
         const parsed = provenanceIn(repoRoot);
         expect(parsed['provenanceStatus']).toBe('missing');
@@ -97,13 +107,13 @@ describe('FinishUpsertPrCommand provenance record', () => {
         expect(parsed['mainTranscript']).toMatch(/sess-f1\.jsonl$/);
     });
 
-    it('links each reviewer that DID run to its own transcript', () => {
+    it('links each reviewer that DID run to its own transcript', async () => {
         process.env['HOME'] = fakeHarness('sess-f2', 'envvars-reviewer', 'dean/feat');
         process.env['CLAUDE_CODE_SESSION_ID'] = 'sess-f2';
         const repoRoot = specTempDirs.make('wp-fin-repo-');
 
         writeVerdict(repoRoot, 'envvars-reviewer');
-        enforce(repoRoot, [new RequiredChecklist('envvars-reviewer', agent('envvars-reviewer'), 'docs/env.md', [])]);
+        await enforce(repoRoot, [new RequiredChecklist('envvars-reviewer', agent('envvars-reviewer'), 'docs/env.md', [])]);
 
         const parsed = provenanceIn(repoRoot);
         expect(parsed['provenanceStatus']).toBe('ok');
@@ -117,12 +127,12 @@ describe('FinishUpsertPrCommand provenance record', () => {
         expect(reviewers[0]?.['docPath']).toBe(path.resolve(repoRoot, 'docs/env.md'));
     });
 
-    it('records the session even for a repo with no checklists at all', () => {
+    it('records the session even for a repo with no checklists at all', async () => {
         process.env['HOME'] = fakeHarness('sess-f3', 'unused', 'dean/feat');
         process.env['CLAUDE_CODE_SESSION_ID'] = 'sess-f3';
         const repoRoot = specTempDirs.make('wp-fin-repo-');
 
-        enforce(repoRoot, []);
+        await enforce(repoRoot, []);
 
         const parsed = provenanceIn(repoRoot);
         expect(parsed['reviewers']).toEqual([]);
@@ -143,12 +153,12 @@ describe('ProvenanceEnforcer — one shared reviewer agent type', () => {
         return config;
     };
 
-    it('passes when reviewerAgents lets one run cover both checklists, and records a row per checklist', () => {
+    it('passes when reviewerAgents lets one run cover both checklists, and records a row per checklist', async () => {
         process.env['HOME'] = fakeHarness('sess-g1', 'webpieces-reviewer', 'dean/feat');
         process.env['CLAUDE_CODE_SESSION_ID'] = 'sess-g1';
         const repoRoot = specTempDirs.make('wp-fin-repo-');
 
-        enforcerUnderTest().enforce(shared(1), 'dean/feat', repoRoot, configWith(1));
+        await enforcerUnderTest().enforce(shared(1), 'dean/feat', repoRoot, configWith(1));
 
         // webpieces-disable no-any-unknown -- narrowing the parsed reviewers array
         const reviewers = provenanceIn(repoRoot)['reviewers'] as Record<string, unknown>[];
@@ -161,20 +171,20 @@ describe('ProvenanceEnforcer — one shared reviewer agent type', () => {
     // passes on a single run: the cap is a MAXIMUM, so grouping is permitted at every value of it. This is
     // the behaviour change that came with making `reviewerAgents` required — absent used to demand a
     // DISTINCT run per checklist, and no cap can express that, so the demand went with the key.
-    it('credits one run for every checklist even at a cap that would have allowed one each', () => {
+    it('credits one run for every checklist even at a cap that would have allowed one each', async () => {
         process.env['HOME'] = fakeHarness('sess-g2', 'webpieces-reviewer', 'dean/feat');
         process.env['CLAUDE_CODE_SESSION_ID'] = 'sess-g2';
         const repoRoot = specTempDirs.make('wp-fin-repo-');
 
-        expect(enforcerUnderTest().enforce(shared(2), 'dean/feat', repoRoot, configWith(2)).verified).toBe(true);
+        expect((await enforcerUnderTest().enforce(shared(2), 'dean/feat', repoRoot, configWith(2))).verified).toBe(true);
     });
 
-    it('requires no reviewer provenance when reviewerAgents is zero', () => {
+    it('requires no reviewer provenance when reviewerAgents is zero', async () => {
         process.env['HOME'] = fakeHarness('sess-g3', 'unrelated-agent', 'dean/feat');
         process.env['CLAUDE_CODE_SESSION_ID'] = 'sess-g3';
         const repoRoot = specTempDirs.make('wp-fin-repo-');
 
-        const report = enforcerUnderTest().enforce(shared(0), 'dean/feat', repoRoot, configWith(0));
+        const report = (await enforcerUnderTest().enforce(shared(0), 'dean/feat', repoRoot, configWith(0)));
 
         expect(report.verified).toBe(true);
         expect(report.evidence).toEqual([]);
@@ -205,26 +215,19 @@ function writeVerdict(repoRoot: string, id: string): void {
     fs.writeFileSync(path.join(dir, `review-round1-${id}.json`), JSON.stringify({ verdict: 'green' }));
 }
 
-function refusalFor(repoRoot: string, required: RequiredChecklist[]): string {
-    // webpieces-disable no-unmanaged-exceptions -- the refusal IS the assertion subject
-    // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
-    try {
-        enforce(repoRoot, required);
-        return '';
-    } catch (err: unknown) {
-        const error = toError(err);
-        return error.message;
-    }
+// The refusal IS the assertion subject: '' when the enforcer passed, else its message.
+function refusalFor(repoRoot: string, required: RequiredChecklist[]): Promise<string> {
+    return enforce(repoRoot, required).then((): string => '', (err: unknown): string => toError(err).message);
 }
 
 describe('ProvenanceEnforcer refusal wording', () => {
-    it('never says "spawn each as its OWN subagent" for a checklist whose verdict already exists', () => {
+    it('never says "spawn each as its OWN subagent" for a checklist whose verdict already exists', async () => {
         process.env['HOME'] = unattributableHarness('sess-u1', 'envvars-reviewer');
         process.env['CLAUDE_CODE_SESSION_ID'] = 'sess-u1';
         const repoRoot = specTempDirs.make('wp-fin-repo-');
         writeVerdict(repoRoot, 'envvars');
 
-        const message = refusalFor(repoRoot, [new RequiredChecklist('envvars', agent('envvars-reviewer'), '', [])]);
+        const message = await refusalFor(repoRoot, [new RequiredChecklist('envvars', agent('envvars-reviewer'), '', [])]);
         expect(message).toMatch(/envvars/);
         expect(message).not.toMatch(/spawn each as its OWN subagent/);
         expect(message).toMatch(/Do NOT re-spawn/);
@@ -232,24 +235,24 @@ describe('ProvenanceEnforcer refusal wording', () => {
         expect(message).toMatch(/cwd IS the worktree/);
     });
 
-    it('still says "spawn each as its OWN subagent" when there is no verdict file — that one really did not run', () => {
+    it('still says "spawn each as its OWN subagent" when there is no verdict file — that one really did not run', async () => {
         process.env['HOME'] = unattributableHarness('sess-u2', 'envvars-reviewer');
         process.env['CLAUDE_CODE_SESSION_ID'] = 'sess-u2';
         const repoRoot = specTempDirs.make('wp-fin-repo-');
 
-        const message = refusalFor(repoRoot, [new RequiredChecklist('envvars', agent('envvars-reviewer'), '', [])]);
+        const message = await refusalFor(repoRoot, [new RequiredChecklist('envvars', agent('envvars-reviewer'), '', [])]);
         expect(message).toMatch(/no reviewer subagent ran on this branch/);
         expect(message).not.toMatch(/Do NOT re-spawn/);
     });
 
     // The live output read "1 checklist(s) require …" above a list of SEVEN names, because it counted
     // message paragraphs instead of checklists.
-    it('counts CHECKLISTS at fault, not message paragraphs', () => {
+    it('counts CHECKLISTS at fault, not message paragraphs', async () => {
         process.env['HOME'] = unattributableHarness('sess-u3', 'nobody');
         process.env['CLAUDE_CODE_SESSION_ID'] = 'sess-u3';
         const repoRoot = specTempDirs.make('wp-fin-repo-');
 
-        const message = refusalFor(repoRoot, [
+        const message = await refusalFor(repoRoot, [
             new RequiredChecklist('envvars', agent('envvars-reviewer'), '', []),
             new RequiredChecklist('migrations', agent('migrations-reviewer'), '', []),
             new RequiredChecklist('security', agent('security-reviewer'), '', []),
@@ -258,13 +261,13 @@ describe('ProvenanceEnforcer refusal wording', () => {
     });
 
     // Both failure kinds at once: each checklist gets the instruction that fits IT, in one refusal.
-    it('splits a mixed round so neither checklist gets the other one’s instruction', () => {
+    it('splits a mixed round so neither checklist gets the other one’s instruction', async () => {
         process.env['HOME'] = unattributableHarness('sess-u4', 'envvars-reviewer');
         process.env['CLAUDE_CODE_SESSION_ID'] = 'sess-u4';
         const repoRoot = specTempDirs.make('wp-fin-repo-');
         writeVerdict(repoRoot, 'envvars');
 
-        const message = refusalFor(repoRoot, [
+        const message = await refusalFor(repoRoot, [
             new RequiredChecklist('envvars', agent('envvars-reviewer'), '', []),
             new RequiredChecklist('migrations', agent('migrations-reviewer'), '', []),
         ]);
@@ -282,7 +285,7 @@ describe('ProvenanceEnforcer refusal wording', () => {
      * old message sent two debugging rounds into cwd stamping, worktrees and primary clones, none of
      * which was involved, while the real cause was a relocated `$CLAUDE_CONFIG_DIR`.
      */
-    it('blames the transcript ROOT, not the reviewers, when the session has no transcript anywhere', () => {
+    it('blames the transcript ROOT, not the reviewers, when the session has no transcript anywhere', async () => {
         const home = specTempDirs.make('wp-fin-noroot-');
         process.env['HOME'] = home;
         process.env['CLAUDE_CONFIG_DIR'] = specTempDirs.make('wp-fin-cfg-');
@@ -290,7 +293,7 @@ describe('ProvenanceEnforcer refusal wording', () => {
         const repoRoot = specTempDirs.make('wp-fin-repo-');
         writeVerdict(repoRoot, 'envvars');
 
-        const message = refusalFor(repoRoot, [new RequiredChecklist('envvars', agent('envvars-reviewer'), '', [])]);
+        const message = await refusalFor(repoRoot, [new RequiredChecklist('envvars', agent('envvars-reviewer'), '', [])]);
         expect(message).toMatch(/NO transcripts at all for session sess-noroot/);
         expect(message).toMatch(/CLAUDE_CONFIG_DIR=/);
         expect(message).toMatch(/transcript-LOCATION problem/);
@@ -302,13 +305,13 @@ describe('ProvenanceEnforcer refusal wording', () => {
 
     // The mirror: the session IS found, only these reviewers are not — which is the case the cwd advice
     // was actually written for, so it must still print.
-    it('keeps the cwd advice when the session was found but the reviewers were not', () => {
+    it('keeps the cwd advice when the session was found but the reviewers were not', async () => {
         process.env['HOME'] = unattributableHarness('sess-u5', 'envvars-reviewer');
         process.env['CLAUDE_CODE_SESSION_ID'] = 'sess-u5';
         const repoRoot = specTempDirs.make('wp-fin-repo-');
         writeVerdict(repoRoot, 'envvars');
 
-        const message = refusalFor(repoRoot, [new RequiredChecklist('envvars', agent('envvars-reviewer'), '', [])]);
+        const message = await refusalFor(repoRoot, [new RequiredChecklist('envvars', agent('envvars-reviewer'), '', [])]);
         expect(message).toMatch(/cwd IS the worktree/);
         expect(message).not.toMatch(/transcript-LOCATION problem/);
     });
@@ -323,7 +326,7 @@ describe('ProvenanceEnforcer refusal wording', () => {
  * on the STATUS and falls back to `detail`, which is what this pins.
  */
 describe('ProvenanceEnforcer refuses on the STATUS, not the length of the name list', () => {
-    it('throws for a MISSING verdict that carries no names, using its detail as the reason', () => {
+    it('throws for a MISSING verdict that carries no names, using its detail as the reason', async () => {
         const namelessMissing = new ProvenanceResult(PROVENANCE_MISSING, 'transcripts unreadable this round', {}, []);
         const provenance = new SubagentProvenanceService();
         provenance.verifyReviewers = (): ProvenanceResult => namelessMissing;
@@ -332,16 +335,17 @@ describe('ProvenanceEnforcer refuses on the STATUS, not the length of the name l
             new FixedBranchName(), provenance, new ReviewProvenanceService(),
             new ReviewerInstructionsService(reviewJsonService), reviewJsonService,
             new VerdictProvenanceService(reviewJsonService, new AtomicFile()),
+            scriptedGit(),
         );
         const repoRoot = specTempDirs.make('wp-fin-repo-');
 
-        expect(() => enforcer.enforce(
+        await expect(enforcer.enforce(
             [new RequiredChecklist('envvars', agent('envvars-reviewer'), '', [])], 'dean/feat', repoRoot, new PrGateConfig()))
-            .toThrow(/transcripts unreadable this round/);
+            .rejects.toThrow(/transcripts unreadable this round/);
     });
 
     // …and never announces "0 checklist(s) failed" on the way out.
-    it('never reports a fault count of zero while refusing', () => {
+    it('never reports a fault count of zero while refusing', async () => {
         const namelessMissing = new ProvenanceResult(PROVENANCE_MISSING, 'transcripts unreadable this round', {}, []);
         const provenance = new SubagentProvenanceService();
         provenance.verifyReviewers = (): ProvenanceResult => namelessMissing;
@@ -350,10 +354,11 @@ describe('ProvenanceEnforcer refuses on the STATUS, not the length of the name l
             new FixedBranchName(), provenance, new ReviewProvenanceService(),
             new ReviewerInstructionsService(reviewJsonService), reviewJsonService,
             new VerdictProvenanceService(reviewJsonService, new AtomicFile()),
+            scriptedGit(),
         );
         const repoRoot = specTempDirs.make('wp-fin-repo-');
 
-        expect(() => enforcer.enforce([], 'dean/feat', repoRoot, new PrGateConfig())).toThrow(/^1 checklist\(s\) failed/);
+        await expect(enforcer.enforce([], 'dean/feat', repoRoot, new PrGateConfig())).rejects.toThrow(/^1 checklist\(s\) failed/);
     });
 });
 
@@ -386,22 +391,22 @@ function submitThroughBin(repoRoot: string, id: string, submitter: string): void
 }
 
 describe('ProvenanceEnforcer — issue #1211: a wp-write-review submission is credited to its own submitter', () => {
-    it('passes when the mis-stamped reviewer’s wp-write-review call matches the recorded submitter', () => {
+    it('passes when the mis-stamped reviewer’s wp-write-review call matches the recorded submitter', async () => {
         process.env['HOME'] = writeReviewOnlyHarness('sess-1211a', 'rev', 'envvars');
         process.env['CLAUDE_CODE_SESSION_ID'] = 'sess-1211a';
         const repoRoot = specTempDirs.make('wp-fin-repo-');
         submitThroughBin(repoRoot, 'envvars', 'rev');
 
-        expect(refusalFor(repoRoot, [new RequiredChecklist('envvars', agent('webpieces-reviewer'), '', [])])).toBe('');
+        expect(await refusalFor(repoRoot, [new RequiredChecklist('envvars', agent('webpieces-reviewer'), '', [])])).toBe('');
     });
 
-    it('refuses when the recorded submitter is a DIFFERENT agent, and names every missing proof', () => {
+    it('refuses when the recorded submitter is a DIFFERENT agent, and names every missing proof', async () => {
         process.env['HOME'] = writeReviewOnlyHarness('sess-1211b', 'rev', 'envvars');
         process.env['CLAUDE_CODE_SESSION_ID'] = 'sess-1211b';
         const repoRoot = specTempDirs.make('wp-fin-repo-');
         submitThroughBin(repoRoot, 'envvars', 'someone-else');
 
-        const message = refusalFor(repoRoot, [new RequiredChecklist('envvars', agent('webpieces-reviewer'), '', [])]);
+        const message = await refusalFor(repoRoot, [new RequiredChecklist('envvars', agent('webpieces-reviewer'), '', [])]);
         expect(message).toMatch(/cannot attribute to them: envvars/);
         // The real cause, not "unrecoverable": the three proofs it looked for and did not find.
         expect(message).toMatch(/never named its verdict/);

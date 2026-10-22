@@ -1,17 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { CliExitError, RepoRootFinder } from '@webpieces/rules-config';
+import { CliExitError } from '@webpieces/rules-config';
 
-// Mutable state the child_process mock reads. vi.hoisted so the factory can close over it. `ghStatus`
-// simulates gh's exit code (0 = answered; non-zero = couldn't reach GitHub → must fail fast).
-const state = vi.hoisted(() => ({ branch: 'dean/x', openPrNumber: '', ghStatus: 0, ghStderr: '' }));
+// The current branch comes from the ONE shared resolver (#1355) — a filesystem read, not a process; it
+// answers what this suite dictates.
+const state = vi.hoisted(() => ({ branch: 'dean/x' }));
 
-// spawnSync → the `gh pr list … --state open` lookup (openPrForBranch).
-vi.mock('child_process', () => ({
-    spawnSync: (): { status: number; stdout: string; stderr: string } =>
-        ({ status: state.ghStatus, stdout: `${state.openPrNumber}\n`, stderr: state.ghStderr }),
-}));
-
-// The current branch comes from the ONE shared resolver (#1355); it answers what this suite dictates.
 vi.mock('@webpieces/tooling-common', async (importOriginal: () => Promise<typeof import('@webpieces/tooling-common')>) => {
     const actual = await importOriginal();
     class DictatedCheckout extends actual.GitCheckout {
@@ -22,50 +15,55 @@ vi.mock('@webpieces/tooling-common', async (importOriginal: () => Promise<typeof
     return { ...actual, gitCheckout: new DictatedCheckout() };
 });
 
+import { PrGateFeature } from '../__tests__/feature-harness';
 import { StartUpdateCommand } from './commands/start-update-command';
-import { OpenPrCheck } from './workflow/open-pr-check';
-import { BranchNaming } from './workflow/branch-naming';
-import type { RunUpdate } from './workflow/run-update';
 
-const cmd = new StartUpdateCommand(new RepoRootFinder(), new OpenPrCheck(new BranchNaming()), {} as RunUpdate);
-const assertNoOpenPr = (repoRoot: string): void => cmd.assertNoOpenPr(repoRoot);
+// `gh pr list --head <base> --state open …` — the open-PR lookup, SCRIPTED (#1381).
+const PR_LIST = ['pr', 'list', '--head'];
+
+let feature: PrGateFeature;
+
+function assertNoOpenPr(): Promise<void> {
+    return feature.container.get(StartUpdateCommand).assertNoOpenPr('/repo');
+}
 
 describe('wp-start-update assertNoOpenPr (Bug #4: fail-fast when an open PR exists)', () => {
-    beforeEach(() => {
+    beforeEach(async () => {
         state.branch = 'dean/x';
-        state.openPrNumber = '';
-        state.ghStatus = 0;
-        state.ghStderr = '';
+        feature = await PrGateFeature.create();
     });
 
-    it('does nothing when there is no open PR', () => {
-        state.openPrNumber = '';
-        expect(() => assertNoOpenPr('/repo')).not.toThrow();
+    it('does nothing when there is no open PR', async () => {
+        feature.processes.respondToPrefix('gh', PR_LIST, feature.processes.ok('\n'));
+        await expect(assertNoOpenPr()).resolves.toBeUndefined();
     });
 
-    it('FAILS FAST when gh cannot reach GitHub (never assumes "no PR")', () => {
+    it('FAILS FAST when gh cannot reach GitHub (never assumes "no PR")', async () => {
         // gh exits non-zero (offline / not authenticated). We must NOT treat that as "no open PR" and
         // proceed — that is exactly how a PR gets stranded on the old branch generation.
-        state.ghStatus = 1;
-        state.ghStderr = 'gh: not authenticated';
-        state.openPrNumber = '';
-        expect(() => assertNoOpenPr('/repo')).toThrow(CliExitError);
-        expect(() => assertNoOpenPr('/repo')).toThrow(/Could not ask GitHub/);
+        feature.processes.respondToPrefix('gh', PR_LIST, feature.processes.fail(1, 'gh: not authenticated'));
+        const call = assertNoOpenPr();
+        await expect(call).rejects.toBeInstanceOf(CliExitError);
+        await expect(call).rejects.toThrow(/Could not ask GitHub/);
+        await expect(call).rejects.toThrow(/gh: not authenticated/);
     });
 
-    it('throws a CliExitError steering to the PR flow when an open PR exists', () => {
-        state.openPrNumber = '42';
-        expect(() => assertNoOpenPr('/repo')).toThrow(CliExitError);
+    it('throws a CliExitError steering to the PR flow when an open PR exists', async () => {
+        feature.processes.respondToPrefix('gh', PR_LIST, feature.processes.ok('42\n'));
+        const call = assertNoOpenPr();
+        await expect(call).rejects.toBeInstanceOf(CliExitError);
         // The message names the offending PR and both PR-flow commands.
-        expect(() => assertNoOpenPr('/repo')).toThrow(/#42/);
-        expect(() => assertNoOpenPr('/repo')).toThrow(/wp-start-upsert-pr/);
-        expect(() => assertNoOpenPr('/repo')).toThrow(/wp-finish-upsert-pr/);
+        await expect(call).rejects.toThrow(/#42/);
+        await expect(call).rejects.toThrow(/wp-start-upsert-pr/);
+        await expect(call).rejects.toThrow(/wp-finish-upsert-pr/);
     });
 
-    it('resolves the open PR by the STABLE base name for a numbered generation branch', () => {
+    it('resolves the open PR by the STABLE base name for a numbered generation branch', async () => {
         // On dean/xwp3 the PR still lives on the base `dean/x`; the guard must still fire.
         state.branch = 'dean/xwp3';
-        state.openPrNumber = '7';
-        expect(() => assertNoOpenPr('/repo')).toThrow(CliExitError);
+        feature.processes.respondToPrefix('gh', PR_LIST, feature.processes.ok('7\n'));
+        await expect(assertNoOpenPr()).rejects.toBeInstanceOf(CliExitError);
+        expect(feature.processes.callsStartingWith('gh', PR_LIST)[0].args)
+            .toEqual(['pr', 'list', '--head', 'dean/x', '--state', 'open', '--json', 'number', '--jq', '.[0].number']);
     });
 });

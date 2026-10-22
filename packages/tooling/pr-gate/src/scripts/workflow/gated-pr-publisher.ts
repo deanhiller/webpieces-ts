@@ -1,5 +1,5 @@
-import { spawnSync } from 'child_process';
 import { CliExitError } from '@webpieces/rules-config';
+import { NativeProcessApi } from '@webpieces/tooling-common';
 import { injectable, bindingScopeValues } from 'inversify';
 import { GitExec } from './git-exec';
 
@@ -43,27 +43,30 @@ export class PublishedPr {
  */
 @injectable(bindingScopeValues.Singleton)
 export class GatedPrPublisher {
-    constructor(private readonly gitExec: GitExec) {}
+    constructor(
+        private readonly gitExec: GitExec,
+        private readonly processes: NativeProcessApi,
+    ) {}
 
     /**
      * Land `bodyFile` on the PR for `baseBranch` and push, in the gate-safe order.
      *
      * @param bodyFile the rendered dashboard ALREADY carrying the gate token for the LOCAL head sha
      */
-    publish(
+    async publish(
         baseBranch: string,
         title: string,
         bodyFile: string,
         retryCommand = 'pnpm wp-finish-upsert-pr',
-    ): PublishedPr {
-        const existing = this.findOpenPr(baseBranch);
+    ): Promise<PublishedPr> {
+        const existing = await this.findOpenPr(baseBranch);
 
         // 1. Body FIRST, so a `synchronize` read arriving the instant after the push finds the right token.
         if (existing !== '') {
             process.stdout.write(
                 `Updating PR #${existing} (body before push, so CI cannot read a stale token)...\n`,
             );
-            this.editPrOrAbort(existing, title, bodyFile, retryCommand);
+            await this.editPrOrAbort(existing, title, bodyFile, retryCommand);
             // Say the consequence BEFORE the push can fail: from here the PR advertises a token for the
             // local HEAD, so a failed push leaves the PR pointing at the old commit and the gate check goes
             // RED. That is the deliberate fail-CLOSED direction, and it self-corrects on the next good run.
@@ -75,24 +78,24 @@ export class GatedPrPublisher {
         }
 
         // 2. THEN push. Nothing was pushed above, so an edit failure left the remote wholly untouched.
-        this.push(baseBranch);
+        await this.push(baseBranch);
 
         // 3. Only a brand-new PR is created, and only after the push — `gh pr create` needs the remote ref.
         if (existing !== '') return new PublishedPr(existing, false);
         process.stdout.write('Creating PR...\n');
-        return new PublishedPr('', !this.createPr(baseBranch, title, bodyFile));
+        return new PublishedPr('', !(await this.createPr(baseBranch, title, bodyFile)));
     }
 
     // Edit the PR body/title, aborting BEFORE the push if `gh` failed. Warning-and-continuing here would
     // push code that the PR body does not vouch for; aborting leaves the PR on its previous body, whose
     // token is still valid for the sha the remote still has. Nothing is half-done either way.
-    private editPrOrAbort(
+    private async editPrOrAbort(
         prNumber: string,
         title: string,
         bodyFile: string,
         retryCommand: string,
-    ): void {
-        if (this.editPr(prNumber, title, bodyFile)) return;
+    ): Promise<void> {
+        if (await this.editPr(prNumber, title, bodyFile)) return;
         throw new CliExitError(
             1,
             `❌ gh pr edit failed on PR #${prNumber} — NOTHING was pushed, so the PR and the remote branch are\n` +
@@ -101,30 +104,26 @@ export class GatedPrPublisher {
         );
     }
 
-    // The `gh`/push seams, protected so the spec can drive the ordering with no gh, no network, no repo.
-
     // The open PR whose head is `baseBranch`, or '' when there is none (or `gh` failed — treated the same,
     // so the create path then fails loudly rather than silently editing the wrong PR).
-    protected findOpenPr(baseBranch: string): string {
-        const result = spawnSync(
+    private async findOpenPr(baseBranch: string): Promise<string> {
+        const result = await this.processes.run(
             'gh',
             ['pr', 'list', '--head', baseBranch, '--json', 'number', '--jq', '.[0].number'],
-            { encoding: 'utf8' },
         );
-        return result.status === 0 ? (result.stdout ?? '').trim() : '';
+        return result.ok ? result.stdout.trim() : '';
     }
 
-    protected editPr(prNumber: string, title: string, bodyFile: string): boolean {
-        return (
-            spawnSync('gh', ['pr', 'edit', prNumber, '--title', title, '--body-file', bodyFile], {
-                stdio: 'inherit',
-            }).status === 0
+    private async editPr(prNumber: string, title: string, bodyFile: string): Promise<boolean> {
+        const result = await this.processes.passThrough(
+            'gh', ['pr', 'edit', prNumber, '--title', title, '--body-file', bodyFile],
         );
+        return result.ok;
     }
 
-    protected createPr(baseBranch: string, title: string, bodyFile: string): boolean {
+    private async createPr(baseBranch: string, title: string, bodyFile: string): Promise<boolean> {
         return (
-            spawnSync(
+            await this.processes.passThrough(
                 'gh',
                 [
                     'pr',
@@ -138,14 +137,13 @@ export class GatedPrPublisher {
                     '--body-file',
                     bodyFile,
                 ],
-                { stdio: 'inherit' },
-            ).status === 0
-        );
+            )
+        ).ok;
     }
 
     // Throws (CliExitError, via runGitChecked) when the push fails — deliberately NOT caught here: the
     // consequence is already printed above, and swallowing it would report a PR that was never updated.
-    protected push(baseBranch: string): void {
-        this.gitExec.ensurePushed(baseBranch);
+    protected push(baseBranch: string): Promise<void> {
+        return this.gitExec.ensurePushed(baseBranch);
     }
 }

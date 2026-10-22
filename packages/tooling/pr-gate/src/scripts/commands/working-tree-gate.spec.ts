@@ -1,118 +1,107 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { spawnSync } from 'child_process';
-import { mkdtempSync, rmSync, writeFileSync, mkdirSync } from 'fs';
-import { tmpdir } from 'os';
-import { join } from 'path';
+import { describe, it, expect, beforeEach } from 'vitest';
 import { CliExitError } from '@webpieces/rules-config';
 
+import { PrGateFeature } from '../../__tests__/feature-harness';
 import { WorkingTreeGate, UntrackedFiles } from './working-tree-gate';
 
 /**
- * Against REAL git, deliberately. The whole defect being fixed lived in the difference between what
- * `git status --porcelain` reports and what a branch switch actually carries, so a stubbed git would
- * only ever confirm the author's own model of git — which is the thing that was wrong.
+ * Feature tests for `wp-sync-main`'s clean-tree gate (#1381), against a SCRIPTED git. The decision the
+ * gate makes is pinned by the exact questions it asks git: the TRACKED-only status
+ * (`--untracked-files=no`, so no `??` line is ever parsed to decide) and the NUL-separated untracked list
+ * (`ls-files -z`, so a path is never quoted or split). The answers below are what git prints for each
+ * working-tree state.
  */
 
-let repo = '';
+const REPO = '/repo';
+const TRACKED = ['-C', REPO, 'status', '--porcelain', '--untracked-files=no'];
+const UNTRACKED = ['-C', REPO, 'ls-files', '--others', '--exclude-standard', '-z'];
 
-function git(...args: string[]): void {
-    const result = spawnSync('git', ['-C', repo, ...args], { encoding: 'utf8' });
-    if (result.status !== 0) throw new Error(`git ${args.join(' ')} failed: ${result.stderr}`);
+let feature: PrGateFeature;
+
+function gateCall(): Promise<UntrackedFiles> {
+    return feature.container.get(WorkingTreeGate).assertNoTrackedChanges(REPO);
 }
 
-function write(relative: string, contents: string): void {
-    const full = join(repo, relative);
-    mkdirSync(join(full, '..'), { recursive: true });
-    writeFileSync(full, contents, 'utf8');
+/** What git answers: the tracked-only porcelain, and the untracked paths NUL-joined. */
+function treeIs(trackedPorcelain: string, untracked: string[]): void {
+    feature.git.respond(TRACKED, feature.git.ok(trackedPorcelain));
+    feature.git.respond(UNTRACKED, feature.git.ok(untracked.map((p: string): string => `${p}\0`).join('')));
 }
 
-function commitEverything(): void {
-    git('add', '-A');
-    git('-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-m', 'base');
-}
-
-/** The call under test, as a thunk vitest can assert throwing behaviour on. */
-function gateCall(): UntrackedFiles {
-    return new WorkingTreeGate().assertNoTrackedChanges(repo);
-}
-
-beforeEach((): void => {
-    repo = mkdtempSync(join(tmpdir(), 'working-tree-gate-'));
-    git('init', '-q');
-    write('tracked.txt', 'original\n');
-    write('a tracked file.txt', 'original\n');
-    commitEverything();
-});
-
-afterEach((): void => {
-    rmSync(repo, { recursive: true, force: true });
+beforeEach(async (): Promise<void> => {
+    feature = await PrGateFeature.create();
 });
 
 describe('WorkingTreeGate', (): void => {
-    it('a fully clean tree passes and reports no untracked files', (): void => {
-        const untracked = gateCall();
+    it('a fully clean tree passes and reports no untracked files', async (): Promise<void> => {
+        treeIs('', []);
+        const untracked = await gateCall();
         expect(untracked.isEmpty()).toBe(true);
         expect(untracked.render()).toBe('');
     });
 
-    it('UNTRACKED files ONLY: proceeds, and hands the paths back to be mentioned', (): void => {
-        write('generated/design.html', '<html></html>');
-        const untracked = gateCall();
+    it('UNTRACKED files ONLY: proceeds, and hands the paths back to be mentioned', async (): Promise<void> => {
+        treeIs('', ['generated/design.html']);
+        const untracked = await gateCall();
         expect(untracked.paths).toEqual(['generated/design.html']);
         expect(untracked.render()).toContain('generated/design.html');
         expect(untracked.render()).toContain('leaves them exactly where');
     });
 
-    it('an untracked path containing a SPACE comes back whole, not quoted or split', (): void => {
-        write('some dir/a file.html', 'x');
-        const untracked = gateCall();
+    it('an untracked path containing a SPACE comes back whole, not quoted or split', async (): Promise<void> => {
+        treeIs('', ['some dir/a file.html']);
+        const untracked = await gateCall();
         expect(untracked.paths).toEqual(['some dir/a file.html']);
         expect(untracked.render()).toContain('  some dir/a file.html\n');
     });
 
-    it('a MODIFIED tracked file refuses', (): void => {
-        write('tracked.txt', 'changed\n');
-        expect(gateCall).toThrowError(CliExitError);
+    it('a MODIFIED tracked file refuses', async (): Promise<void> => {
+        treeIs(' M tracked.txt\n', []);
+        await expect(gateCall()).rejects.toBeInstanceOf(CliExitError);
     });
 
-    it('a STAGED change refuses too — index changes ride along just as working-tree ones do', (): void => {
-        write('staged.txt', 'new\n');
-        git('add', 'staged.txt');
-        expect(gateCall).toThrowError(CliExitError);
+    it('a STAGED change refuses too — index changes ride along just as working-tree ones do', async (): Promise<void> => {
+        treeIs('A  staged.txt\n', []);
+        await expect(gateCall()).rejects.toBeInstanceOf(CliExitError);
     });
 
-    it('BOTH tracked and untracked: still refuses, and names only the tracked one', (): void => {
-        write('tracked.txt', 'changed\n');
-        write('generated/design.html', '<html></html>');
-        expect(gateCall).toThrowError(/tracked\.txt/);
+    it('BOTH tracked and untracked: still refuses, and names only the tracked one', async (): Promise<void> => {
+        treeIs(' M tracked.txt\n', ['generated/design.html']);
+        const call = gateCall();
+        await expect(call).rejects.toThrowError(/tracked\.txt/);
         // The untracked file is not the reason for the refusal, so listing it would send the reader
         // chasing a file that has nothing to do with it.
-        expect(gateCall).not.toThrowError(/design\.html/);
+        await expect(call).rejects.not.toThrowError(/design\.html/);
     });
 
     /**
-     * The point of the whole change: the printed cure must resolve the state it is printed for. A plain
-     * `git stash` does NOT take untracked files, so the old message ("stash them", printed for an
-     * untracked file) sent the user round the loop unchanged.
+     * The printed cure must resolve the state it is printed for. A plain `git stash` takes exactly the
+     * TRACKED changes this gate refuses on, so once it has run git reports a clean tracked status and the
+     * second call passes.
      */
-    it('the refusal prescribes `git stash`, and `git stash` actually clears it', (): void => {
-        write('tracked.txt', 'changed\n');
-        expect(gateCall).toThrowError(/git stash/);
+    it('the refusal prescribes `git stash`, and once the tracked change is stashed the gate passes', async (): Promise<void> => {
+        feature.git.respond(TRACKED, feature.git.ok(' M tracked.txt\n'));
+        feature.git.respond(TRACKED, feature.git.ok(''));
+        feature.git.respond(UNTRACKED, feature.git.ok(''));
 
-        // Run the cure it just prescribed, verbatim — the second call must now pass.
-        git('-c', 'user.email=t@t', '-c', 'user.name=t', 'stash');
-        expect(gateCall().isEmpty()).toBe(true);
+        await expect(gateCall()).rejects.toThrowError(/git stash/);
+        expect((await gateCall()).isEmpty()).toBe(true);
     });
 
-    it('a tracked file whose PATH contains a space is still seen as tracked-dirty', (): void => {
-        write('a tracked file.txt', 'changed\n');
-        expect(gateCall).toThrowError(CliExitError);
+    it('a tracked file whose PATH contains a space is still seen as tracked-dirty', async (): Promise<void> => {
+        treeIs(' M "a tracked file.txt"\n', []);
+        await expect(gateCall()).rejects.toBeInstanceOf(CliExitError);
     });
 
-    it('an IGNORED file is not untracked work — .gitignore excludes it from the report', (): void => {
-        write('.gitignore', 'noise/\n');
-        commitEverything();
-        write('noise/whatever.log', 'x');
-        expect(gateCall().isEmpty()).toBe(true);
+    it('an IGNORED file is not untracked work — the gate asks git to exclude .gitignore matches', async (): Promise<void> => {
+        treeIs('', []);
+        expect((await gateCall()).isEmpty()).toBe(true);
+        expect(feature.git.callsStartingWith(UNTRACKED)).toHaveLength(1);
+    });
+
+    it('a git that cannot answer is treated as nothing to report, never as a refusal', async (): Promise<void> => {
+        feature.git.respond(TRACKED, feature.git.fail(128, 'fatal: not a git repository'));
+        feature.git.respond(UNTRACKED, feature.git.fail(128, 'fatal: not a git repository'));
+        expect((await gateCall()).isEmpty()).toBe(true);
     });
 });
