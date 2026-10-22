@@ -64,6 +64,158 @@ about to install a tripwire that fires on the good kind of change. Write the fea
 
 ---
 
+## The same pattern for EVERY program: servers, command-line tools, hooks
+
+`createApiClient(...)` is the server's spelling of a pattern that is not specific to servers. A
+`wp-*` command, a PreToolUse hook, a worker and a server are all the same shape: a DAG of objects
+with a few **edges** where the program touches the outside world. A feature test builds the **whole
+real DAG**, swaps only the edges for mocks, runs the program the way its user does, and asserts on
+what crossed an edge.
+
+```typescript
+// 1. Override ONLY the edges, and bind the mocks into the container.
+const mockGit = createMock<GitApi>('GitApi');
+const mockTimer = new MockTimer();
+(await container.rebind(GitApi)).toConstantValue(mockGit);   // inversify 7: rebind is async
+(await container.rebind(Timer)).toConstantValue(mockTimer);
+
+// 2. Build the ENTIRE real DAG — every internal class is the production one.
+const app = container.get(ReviewCommand);
+
+// 3. Script what the outside world will answer.
+mockGit.mock.addValueToReturn('revParse', 'abc123');
+
+// 4. Run it exactly the way its user does.
+const exitCode = await app.run(['--base', 'main']);
+
+// 5. Assert on what LEFT the program — never on an internal.
+expect(exitCode).toBe(0);
+const pushes = mockGit.mock.getSingleRequestList<PushRequest>('push');
+expect(pushes[0].branch).toBe('dean/my-feature');
+```
+
+`createMock` and its prime/assert vocabulary (`addValueToReturn`, `addExceptionToThrow`,
+`getSingleRequestList`) are `@webpieces/core-mock`.
+
+**What counts as an edge** — and is therefore reached through an injected API, never called directly:
+
+| edge | why it must be mockable |
+|---|---|
+| git, and any other child process (`execSync`, `spawn`) | a process costs milliseconds and hundreds of `fork`s; see the measurement below |
+| the filesystem outside a temp dir | a test must not depend on, or change, the machine it runs on |
+| the clock: timers, timeouts, `setInterval`, retries, polling | a test must never wait for real time to pass |
+| an executor / thread pool / queue | the test, not the scheduler, decides when queued work runs |
+| a remote API: HTTP, GitHub, GCP, an LLM | the test scripts its answers and reads what was sent |
+| stdin / stdout / the hook's JSON payload | this is the program's own input and output: feed it and read it |
+
+Everything else — parsing, the rule engine, the decision tables, the error rendering — is the real
+code, because that is exactly what the test is there to hold steady through a refactor.
+
+### Never start a real process in a feature test
+
+A spec that runs `git init`, clones, commits and pushes is testing git, not your program, and it is
+the slowest thing a test can do. Measured on 2026-10-22: `pr-gate`'s `main-checkout.spec.ts` ran
+**9 tests in 15.5s and started 4,323 processes** — about 480 processes and 1.7 seconds per test. A run
+of the `pr-gate` suite under `wp-review-upsert-pr` was seen starting 1,292 git processes in a single
+minute, and 95 of the 386 tooling spec files start real processes. Every one of those processes
+competes for the same CPU as every other agent's build on the machine (see
+[`.claude/rules/build-verification.md`](../../.claude/rules/build-verification.md) — contention, not
+scope, is what makes builds slow). The same test against a mocked `GitApi` runs in milliseconds and
+cannot flake on a stale lock file.
+
+What it asserts is also better: "the command asked git to push `dean/my-feature` with
+`--force-with-lease`" is a statement about YOUR program. "A bare repo now has a commit" is a statement
+about git, reached through every internal on the way, and it fails for reasons that are not yours.
+
+A test whose whole purpose is the real git integration — that the `GitApi` implementation itself
+speaks git correctly — is the one exception. Keep those few, and keep them in one place, next to the
+implementation of the edge.
+
+### Mock timers and executors: the test runs the scheduled work
+
+Production code never calls `setTimeout` or `setInterval` directly. It schedules through an injected
+`Timer` (or `Executor`) API:
+
+```typescript
+export abstract class Timer {
+    abstract schedule(delayMs: number, task: Task): ScheduledTask;
+}
+
+// production: the real implementation wraps setTimeout
+// test: the mock CACHES the task and runs nothing
+export class MockTimer extends Timer {
+    private readonly tasks: MockScheduledTask[] = [];
+
+    schedule(delayMs: number, task: Task): ScheduledTask {
+        const scheduled = new MockScheduledTask(delayMs, task);
+        this.tasks.push(scheduled);
+        return scheduled;
+    }
+
+    getScheduledTasks(): MockScheduledTask[] {
+        return this.tasks.filter((t) => !t.isCancelled());
+    }
+}
+```
+
+The test then decides what time it is:
+
+```typescript
+await app.run(['--wait-for-checks']);
+
+const [poll] = mockTimer.getScheduledTasks();
+expect(poll.delayMs).toBe(30_000);          // the backoff is a visible, assertable fact
+await poll.run();                            // fire the 30s timer NOW — no waiting
+```
+
+A retry with backoff, a timeout that cancels a call, a poll loop, a debounce — each is tested by
+running exactly the task the test wants, in the order it wants, with zero real time passing. The test
+can assert the DELAY that was requested, fire the timeout BEFORE the response to prove the timeout
+path, or fire it AFTER to prove it was cancelled. An `Executor` works the same way:
+`execute(task)` caches the task, and the test runs it when the scenario calls for it.
+
+Prefer this over `vi.useFakeTimers()`. Fake timers patch globals for the whole process, interact
+badly with real promises and libraries that read the clock, and hide WHAT was scheduled; an injected
+`Timer` makes scheduling part of the program's visible behaviour.
+
+### Controlled promises: prove the race by resolving out of order
+
+The same idea applies to concurrency. When the program makes two async calls that are in flight at
+once, the mock returns a promise the TEST holds and resolves:
+
+```typescript
+const first = new Deferred<StatusResponse>();
+const second = new Deferred<StatusResponse>();
+mockGitHub.mock.addCalculateRetValue('fetchStatus', () => first.promise);
+mockGitHub.mock.addCalculateRetValue('fetchStatus', () => second.promise);
+
+const running = app.run(['--watch']);       // both calls are now in flight
+
+second.resolve(new StatusResponse('green'));  // resolve them in REVERSE order
+first.resolve(new StatusResponse('red'));
+
+await running;
+// assert the program kept the NEWER answer, not the one that happened to arrive last
+```
+
+Real I/O almost always resolves in call order on a developer machine and in some other order in
+production. Resolving in reverse order on purpose is how the test proves the code does not depend on
+luck.
+
+### What NOT to write
+
+- A test of one internal class with its collaborators mocked. It is coupled to the class boundary,
+  and the next refactor that moves a responsibility across that boundary rewrites it.
+- A test that asserts a private field, an internal call count, or the order of internal calls.
+- A test that sleeps (`await new Promise(r => setTimeout(r, 100))`) to let something happen.
+- A test that builds a real git repository, or starts any child process, to exercise logic that is
+  not the git integration itself.
+
+Each of these goes red on a refactor that changed no behaviour — the exact moment the suite was
+supposed to stay green.
+
+---
+
 ## Why this is not the way the market tests
 
 Feature testing the way this project does it is a notch above what the typical staff engineer

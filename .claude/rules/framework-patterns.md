@@ -50,14 +50,12 @@ export class FilterRoutes implements Routes {
 
 ### 7. Testing
 
-**Unit tests:**
-- Test filter matching logic in isolation
-- Mock dependencies using classes
-- Verify priority ordering
+Write FEATURE tests, not unit tests of internals — the rule and its checklist are
+`.claude/rules/feature-testing.md`.
 
-**Integration tests:**
 - Use `WebpiecesServer.createApiClient()` for testing without HTTP
-- Test full filter chain execution
+- Test full filter chain execution (filter matching and priority ordering are covered through it)
+- Mock only the edges (remote APIs, clock, executors) with `createMock<T>()`, never an internal class
 - Verify end-to-end behavior
 
 ### 8. Documentation
