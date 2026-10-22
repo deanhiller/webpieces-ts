@@ -25,7 +25,7 @@ export class StartUpdateCommand {
 
         // An open PR means the PR flow must be used — a 3-point update would strand the PR on the old
         // branch generation. Fails fast if GitHub can't be reached (never guesses "no PR").
-        this.assertNoOpenPr(repoRoot);
+        await this.assertNoOpenPr(repoRoot);
 
         // pushRemote=true: this is the END of the update-only flow — no later command pushes, so not
         // pushing here would silently strand the squash rewrite locally. (The PR flow passes false.)
@@ -48,9 +48,9 @@ export class StartUpdateCommand {
     // re-squashes your branch onto main and force-pushes it to origin/<feature> — the PR head — but it
     // does NOT refresh the PR body/review or run the authoritative build gate. Fail fast and steer to
     // the PR flow, which re-merges main AND updates the PR.
-    assertNoOpenPr(repoRoot: string): void {
+    async assertNoOpenPr(repoRoot: string): Promise<void> {
         const branch = gitCheckout.requireBranch(repoRoot);
-        const openPr = this.openPrCheck.openPrForBranch(repoRoot, branch);
+        const openPr = await this.openPrCheck.openPrForBranch(repoRoot, branch);
         if (openPr === '') return;
         throw new CliExitError(2,
             '\n' + SEP + `⛔ An open PR (#${openPr}) already tracks this branch\n` + SEP + '\n' +

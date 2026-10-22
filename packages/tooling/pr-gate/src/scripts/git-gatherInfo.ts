@@ -1,4 +1,3 @@
-import { execSync, spawnSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 import { CliExitError, RepoRootFinder } from '@webpieces/rules-config';
@@ -43,13 +42,13 @@ export class GatherInfo {
     // Gather the 3-point merge context for the current feature branch and RETURN whether the branch is
     // already even with main. NEVER calls process.exit: it is called as a library (from merge-start).
     async gatherInfo(): Promise<GatherInfoResult> {
-        const currentBranch = execSync('git branch --show-current', { encoding: 'utf8' }).trim();
-        const featureName = this.aiBranchName.getFeatureName();
+        const currentBranch = await this.gitExec.currentBranch(process.cwd());
+        const featureName = await this.aiBranchName.getFeatureName();
         const repoRoot = this.repoRootFinder.resolveRepoRoot(process.cwd());
         const mergeDir = this.mergeState.mergeDirFor(repoRoot, featureName);
         fs.mkdirSync(mergeDir, { recursive: true });
 
-        this.validateCleanTree(currentBranch, repoRoot);
+        await this.validateCleanTree(currentBranch, repoRoot);
 
         process.stderr.write('\n');
         process.stderr.write(SEP);
@@ -57,7 +56,7 @@ export class GatherInfo {
         process.stderr.write(SEP);
         process.stderr.write('\n');
         process.stderr.write('Fetching latest changes from origin/main...\n');
-        spawnSync('git', ['fetch', 'origin', 'main'], { stdio: 'inherit' });
+        await this.gitExec.passThrough(['fetch', 'origin', 'main']);
 
         await this.forkPoint.findForkPoint('merge');
 
@@ -85,14 +84,14 @@ export class GatherInfo {
         return new GatherInfoResult(false, hashes);
     }
 
-    private validateCleanTree(currentBranch: string, repoRoot: string): void {
+    private async validateCleanTree(currentBranch: string, repoRoot: string): Promise<void> {
         if (currentBranch === 'main') {
             throw new CliExitError(1, '❌ Error: Already on main branch. No need to update from main.');
         }
         process.stderr.write(`Current branch: ${currentBranch}\n`);
         // Require a fully-committed tree (tracked AND untracked). assertCleanTree uses
         // `git status --porcelain` (untracked-aware, gitignore-respecting) and aborts with instructions.
-        this.gitExec.assertCleanTree(repoRoot);
+        await this.gitExec.assertCleanTree(repoRoot);
     }
 
     private printHashPoints(hashes: HashPoints, currentBranch: string, mergeDir: string): void {

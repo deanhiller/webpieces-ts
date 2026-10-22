@@ -4,10 +4,12 @@ import { execFileSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { BranchArchiver, WorktreeService } from '@webpieces/repo-workflow-core';
-import { InformAiError } from '@webpieces/tooling-common';
+import { BranchArchiver } from '@webpieces/repo-workflow-core';
+import { GitProcessApi, InformAiError, NativeProcessApi, ProcessResultDto } from '@webpieces/tooling-common';
 import { toError } from '@webpieces/tooling-common/to-error';
-import { RepoRootFinder, RepoScratchDirs } from '@webpieces/rules-config';
+import { RepoRootFinder } from '@webpieces/rules-config';
+import { MockNativeProcessApi, ProcessCallDto } from '@webpieces/tooling-testkit';
+import { Container } from 'inversify';
 
 import { LandPrCommand, LandPrRequest } from './land-pr-command';
 import { RepoConfigFixture } from '../workflow/repo-config-testkit';
@@ -17,17 +19,20 @@ import { LandedTreeResolver } from '../workflow/landed-tree-resolver';
 import { LandedWorktreeReaper } from '../workflow/landed-worktree-reaper';
 import { MergeBodyTempFile } from '../workflow/merge-body-temp-file';
 import { MergeInfoIndex } from '../workflow/merge-info-index';
-import { MergeState } from '../workflow/merge-state';
 import { PrMerger } from '../workflow/pr-merger';
-import { ReapOutcomeSignal } from '../workflow/reap-outcome';
+import { PrGateContainer } from '../pr-gate-container';
 
 /**
  * The READ half of the finish→land contract, end to end through the real PrMerger.
  *
- * `gh` is a REAL executable on PATH — a shell script that logs every invocation and, for
- * `pr merge --body-file <f>`, copies the file's BYTES aside. That is the only assertion worth making
+ * `gh` is SCRIPTED on the injected NativeProcessApi (#1381): every call it receives is recorded and, for
+ * `pr merge --body-file <f>`, the file's BYTES are copied aside. That is the only assertion worth making
  * about this command: what exactly reached main's history. Nothing here touches the network, and no
  * merge is ever performed.
+ *
+ * git is still REAL here: the bookkeeping half (archive tags, worktree lookup) is
+ * `@webpieces/repo-workflow-core`'s, which is not routed through the injected process edge yet — a later
+ * slice of #1381 — so its answers have to come from a real repository.
  *
  * ─── What changed, and why the old scenarios are gone ──────────────────────────────────────────────
  * The gated body used to be a file on THIS MACHINE (`~/.webpieces/prs/<host>/<owner>/<repo>/<n>/`), so
@@ -46,12 +51,13 @@ const PR_DESCRIPTION = 'https://github.com/acme/widgets/pull/604\n\nRisk: green\
 
 let tmp = '';
 let primary = '';
-let ghLog = '';
-let ghBodyCapture = '';
+let landed = '';
 let savedCwd = '';
 let prBody = PR_DESCRIPTION;
 let prHeadOid = '';
-const savedPath = process.env['PATH'];
+let prJson: string | null = null;
+let container: Container;
+let gh: MockNativeProcessApi;
 const savedInitCwd = process.env['INIT_CWD'];
 
 function git(cwd: string, ...args: string[]): string {
@@ -89,43 +95,31 @@ function makeClone(name: string): string {
 }
 
 /**
- * A real `gh` on PATH. It answers `pr view --json ...` from a JSON file this spec rewrites per test —
- * so "what GitHub says" is a first-class knob — and for `pr merge` it copies `--body-file`'s CONTENT to
- * a capture file, so the spec asserts the exact bytes that would have reached main.
+ * What GitHub answers. `pr view --json ...headRefOid...` comes from `prJson` (null = no open PR, and gh
+ * exits non-zero exactly as it does in real life), so "what GitHub says" is a first-class knob; for
+ * `pr merge` the `--body-file`'s CONTENT is captured, so the spec asserts the exact bytes that would
+ * have reached main.
  */
-function installFakeGh(): void {
-    const bin = path.join(tmp, 'bin');
-    fs.mkdirSync(bin, { recursive: true });
-    const gh = path.join(bin, 'gh');
-    fs.writeFileSync(gh, [
-        '#!/bin/sh',
-        `echo "$@" >> "${ghLog}"`,
-        'if [ "$1 $2" = "pr view" ]; then',
-        '  case "$*" in',
-        `    *headRefOid*) cat "${path.join(tmp, 'pr.json')}" ;;`,
-        "    *mergeable*) printf 'MERGEABLE\\tCLEAN\\tOPEN\\n' ;;",
-        "    *) printf '{}\\n' ;;",
-        '  esac',
-        '  exit 0',
-        'fi',
-        'if [ "$1 $2" = "pr merge" ]; then',
-        '  prev=""',
-        '  for a in "$@"; do',
-        `    if [ "$prev" = "--body-file" ]; then cp "$a" "${ghBodyCapture}"; fi`,
-        '    prev="$a"',
-        '  done',
-        '  echo merged',
-        '  exit 0',
-        'fi',
-        'exit 0',
-    ].join('\n'));
-    fs.chmodSync(gh, 0o755);
-    process.env['PATH'] = `${bin}${path.delimiter}${savedPath ?? ''}`;
+function scriptGitHub(): void {
+    gh.respondToPrefix('gh', ['pr', 'view'], (call: ProcessCallDto): ProcessResultDto => {
+        if (call.args.join(' ').includes('mergeable')) return gh.ok('MERGEABLE\tCLEAN\tOPEN\n');
+        return prJson === null ? gh.fail(1, 'no pull requests found') : gh.ok(prJson);
+    });
+    gh.respondToPrefix('gh', ['pr', 'merge'], (call: ProcessCallDto): ProcessResultDto => {
+        const at = call.args.indexOf('--body-file');
+        if (at >= 0) landed = fs.readFileSync(call.args[at + 1], 'utf8');
+        return gh.ok('merged\n');
+    });
+}
+
+/** Every `gh` command line the program issued, the way the old on-PATH script logged them. */
+function ghLog(): string {
+    return gh.calls.map((c: ProcessCallDto): string => c.args.join(' ')).join('\n');
 }
 
 // Publish what `gh pr view --json number,title,url,body,headRefOid` should answer.
 function ghPrSays(body: string, headRefOid: string): void {
-    fs.writeFileSync(path.join(tmp, 'pr.json'), JSON.stringify({
+    prJson = JSON.stringify({
         number: 604,
         title: 'Land the thing',
         url: 'https://github.com/acme/widgets/pull/604',
@@ -134,15 +128,12 @@ function ghPrSays(body: string, headRefOid: string): void {
         // The other half of the pair that identifies the PR's tree locally. GitHub is the authority on
         // which branch the PR merges — the command never infers it from the directory it is in.
         headRefName: BRANCH,
-    }));
+    });
 }
 
 // No open PR for this head branch: `gh` exits non-zero, exactly as it does in real life.
 function ghHasNoPr(): void {
-    fs.rmSync(path.join(tmp, 'pr.json'), { force: true });
-    const gh = path.join(tmp, 'bin', 'gh');
-    fs.writeFileSync(gh, ['#!/bin/sh', `echo "$@" >> "${ghLog}"`, 'exit 1'].join('\n'));
-    fs.chmodSync(gh, 0o755);
+    prJson = null;
 }
 
 /**
@@ -156,20 +147,21 @@ class CwdRepoRootFinder extends RepoRootFinder {
     }
 }
 
-// The command with every collaborator REAL. Only repo-root resolution is pinned, because the temp clone
-// has no enclosing workspace to discover.
+// The command with every collaborator from the shipped container. Only repo-root resolution is pinned,
+// because the temp clone has no enclosing workspace to discover, and `gh` is the scripted edge.
 function build(): LandPrCommand {
-    const naming = new BranchNaming();
     return new LandPrCommand(
         new CwdRepoRootFinder(),
-        new AiBranchName(naming),
-        naming,
-        new PrMerger(),
-        new BranchArchiver(),
-        new MergeInfoIndex(new MergeState()),
-        new LandedWorktreeReaper(new WorktreeService(), new ReapOutcomeSignal()),
-        new MergeBodyTempFile(new RepoRootFinder(), new RepoScratchDirs()),
-        new LandedTreeResolver(new WorktreeService()),
+        container.get(AiBranchName),
+        container.get(BranchNaming),
+        container.get(PrMerger),
+        container.get(BranchArchiver),
+        container.get(MergeInfoIndex),
+        container.get(LandedWorktreeReaper),
+        container.get(MergeBodyTempFile),
+        container.get(LandedTreeResolver),
+        container.get(GitProcessApi),
+        container.get(NativeProcessApi),
     );
 }
 
@@ -217,15 +209,17 @@ async function refusalMessage(treeRoot: string): Promise<string> {
 }
 
 function landedBody(): string {
-    return fs.existsSync(ghBodyCapture) ? fs.readFileSync(ghBodyCapture, 'utf8') : '';
+    return landed;
 }
 
-beforeEach((): void => {
+beforeEach(async (): Promise<void> => {
     savedCwd = process.cwd();
     tmp = policyFixture.makeRepo('wp-land-pr-');
-    ghLog = path.join(tmp, 'gh.log');
-    ghBodyCapture = path.join(tmp, 'landed-body.md');
-    installFakeGh();
+    landed = '';
+    container = new PrGateContainer().create();
+    gh = new MockNativeProcessApi();
+    (await container.rebind(NativeProcessApi)).toConstantValue(gh);
+    scriptGitHub();
     primary = makeClone('primary');
     prBody = PR_DESCRIPTION;
     prHeadOid = git(primary, 'rev-parse', BRANCH);
@@ -234,8 +228,6 @@ beforeEach((): void => {
 
 afterEach((): void => {
     process.chdir(savedCwd);
-    if (savedPath === undefined) delete process.env['PATH'];
-    else process.env['PATH'] = savedPath;
     if (savedInitCwd === undefined) delete process.env['INIT_CWD'];
     else process.env['INIT_CWD'] = savedInitCwd;
     fs.rmSync(tmp, { recursive: true, force: true });
@@ -348,8 +340,8 @@ describe('wp-land-pr — the invocation directory, not pnpm\'s hoisted one', () 
         // Typed in the agent worktree; pnpm hoisted the process into the primary clone, which is on main.
         const out = await landFrom(agent, primary, new LandPrRequest(false, ''));
 
-        expect(fs.readFileSync(ghLog, 'utf8')).toContain(`pr view ${BRANCH}`);
-        expect(fs.readFileSync(ghLog, 'utf8')).not.toContain('pr view main');
+        expect(ghLog()).toContain(`pr view ${BRANCH}`);
+        expect(ghLog()).not.toContain('pr view main');
         expect(landedBody()).toBe(PR_DESCRIPTION);
         expect(out).toContain('Landing PR #604');
         expect(out).not.toContain('SKIPPED');
@@ -372,7 +364,7 @@ describe('wp-land-pr — the invocation directory, not pnpm\'s hoisted one', () 
 
         const out = await landFrom(primary, primary, new LandPrRequest(true, '604'));
 
-        expect(fs.readFileSync(ghLog, 'utf8')).toContain('pr view 604');
+        expect(ghLog()).toContain('pr view 604');
         expect(landedBody()).toBe(PR_DESCRIPTION);
         expect(out).not.toContain('SKIPPED');
         // The reap names the AGENT's directory, not the clone the coordinator is standing in.
@@ -389,7 +381,7 @@ describe('wp-land-pr — the invocation directory, not pnpm\'s hoisted one', () 
         expect(thrown).toBeInstanceOf(InformAiError);
         expect(thrown?.message ?? '').toContain('--pr needs a PR NUMBER');
         // It refused BEFORE touching gh at all — no PR was looked up, and nothing was merged.
-        expect(fs.existsSync(ghLog)).toBe(false);
+        expect(gh.calls).toEqual([]);
         expect(landedBody()).toBe('');
     });
 });
@@ -402,7 +394,7 @@ describe('wp-land-pr — refusals', () => {
 
         expect(message).toContain('No open PR found for this branch');
         expect(message).toContain('wp-finish-upsert-pr');
-        expect(fs.readFileSync(ghLog, 'utf8')).not.toContain('pr merge');
+        expect(ghLog()).not.toContain('pr merge');
         expect(landedBody()).toBe('');
     });
 
@@ -413,7 +405,7 @@ describe('wp-land-pr — refusals', () => {
 
         expect(message).toContain('has an EMPTY description');
         expect(message).toContain('pnpm wp-finish-upsert-pr');
-        expect(fs.readFileSync(ghLog, 'utf8')).not.toContain('pr merge');
+        expect(ghLog()).not.toContain('pr merge');
         expect(landedBody()).toBe('');
     });
 
@@ -438,7 +430,7 @@ describe('wp-land-pr — refusals', () => {
         expect(message).toContain('is not a git-log commit body');
         expect(message).toContain('markdown heading');
         expect(message).toContain('pnpm wp-finish-upsert-pr');
-        expect(fs.readFileSync(ghLog, 'utf8')).not.toContain('pr merge');
+        expect(ghLog()).not.toContain('pr merge');
         expect(landedBody()).toBe('');
     });
 

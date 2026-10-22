@@ -1,8 +1,7 @@
-import { spawnSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 import { prDirFor, summaryJsonPath, RequiredChecklist, PrGateConfig, ReviewJsonService, SubagentProvenanceService, PROVENANCE_OK, PROVENANCE_MISSING, PROVENANCE_SKIPPED, ProvenanceResult, ReviewerEvidence, ReviewerContext, ExpectedReviewer, ReviewProvenanceService, ProvenanceWriteRequest, ReviewerTranscript, ReviewerPaths, OfferedContext, ReviewerInstructionsService } from '@webpieces/rules-config';
-import { InformAiError, claudeConfigDir, CLAUDE_CONFIG_DIR_ENV } from '@webpieces/tooling-common';
+import { InformAiError, claudeConfigDir, CLAUDE_CONFIG_DIR_ENV, GitProcessApi } from '@webpieces/tooling-common';
 import { injectable, bindingScopeValues } from 'inversify';
 import { AiBranchName } from './git-readAiBranchName';
 import { VerdictProvenanceService } from './verdict-provenance';
@@ -42,6 +41,7 @@ export class ProvenanceEnforcer {
         private readonly reviewerInstructions: ReviewerInstructionsService,
         private readonly reviewJsonService: ReviewJsonService,
         private readonly verdictProvenance: VerdictProvenanceService,
+        private readonly git: GitProcessApi,
     ) {}
 
     /**
@@ -58,9 +58,9 @@ export class ProvenanceEnforcer {
 
     // HEAD sha for the audit record. Failure-tolerant ('' rather than a throw): a missing sha degrades
     // the audit trail, and refusing a PR over it would be the wrong trade — see writeProvenanceRecord.
-    private gitOut(args: string[]): string {
-        const result = spawnSync('git', args, { encoding: 'utf8' });
-        return result.status === 0 ? (result.stdout ?? '').trim() : '';
+    private async gitOut(args: string[]): Promise<string> {
+        const result = await this.git.run(args);
+        return result.ok ? result.stdout.trim() : '';
     }
 
     // Enforce that EACH matched checklist was reviewed by a real reviewer SUBAGENT — the coding agent may
@@ -73,7 +73,7 @@ export class ProvenanceEnforcer {
     // not write for a reviewer subagent. What is skipped is only the transcript evidence, and the audit
     // record is filled from the bin's provenance instead — so a Codex reviewer's identity is recorded too.
     // eslint-disable-next-line @typescript-eslint/max-params
-    enforce(required: readonly RequiredChecklist[], branch: string, repoRoot: string, config: PrGateConfig): ProvenanceReport {
+    async enforce(required: readonly RequiredChecklist[], branch: string, repoRoot: string, config: PrGateConfig): Promise<ProvenanceReport> {
         const report = new ProvenanceReport(true, []); // no reviewers to verify ⇒ vacuously verified
         // Defense in depth: the scanner normally hands finish an empty set under this project policy, but
         // provenance must never resurrect a reviewer requirement if a caller still passes matched checklists.
@@ -81,7 +81,7 @@ export class ProvenanceEnforcer {
         const expected = enforced
             .filter((r: RequiredChecklist): boolean => r.reviewer.agentName.trim() !== '')
             .map((r: RequiredChecklist): ExpectedReviewer => new ExpectedReviewer(r.id, r.reviewer.agentName.trim()));
-        const context = this.contextFor(repoRoot, enforced, branch);
+        const context = await this.contextFor(repoRoot, enforced, branch);
         // verifyReviewers short-circuits to OK on an empty set, so this runs unconditionally: a repo with no
         // checklists still gets a provenance record naming the session and the main agent's own transcript.
         const result = this.provenance.verifyReviewers(expected, context);
@@ -89,13 +89,13 @@ export class ProvenanceEnforcer {
         if (result.status === PROVENANCE_SKIPPED) process.stderr.write(`⚠️  ${result.detail}\n`);
         const skipped = result.status === PROVENANCE_SKIPPED;
         report.evidence = skipped
-            ? this.binEvidence(repoRoot, expected)
+            ? await this.binEvidence(repoRoot, expected)
             : this.provenance.evidenceFor(context, expected, result.agentIds);
         // Bin evidence says WHO submitted, not what they read, so it cannot be judged blind.
         const blind = skipped ? [] : this.blindReviewers(report.evidence, config);
         // BEFORE the throw below, deliberately. A refused round is the one most worth auditing, and a record
         // that only ever appeared on success could not answer what the reviewers did the time it was refused.
-        this.writeProvenanceRecord(repoRoot, enforced, result, report.evidence);
+        await this.writeProvenanceRecord(repoRoot, enforced, result, report.evidence);
         this.refuse(result, blind, context);
         return report;
     }
@@ -104,8 +104,8 @@ export class ProvenanceEnforcer {
      * Evidence from `review-round<N>-<id>.provenance.json` when there are no Claude transcripts to read: the harness,
      * session and agent `wp-write-review` recorded. Read-counters stay at zero — the bin cannot know them.
      */
-    private binEvidence(repoRoot: string, expected: readonly ExpectedReviewer[]): ReviewerEvidence[] {
-        const summaryPath = summaryJsonPath(repoRoot, this.aiBranchName.getFeatureName());
+    private async binEvidence(repoRoot: string, expected: readonly ExpectedReviewer[]): Promise<ReviewerEvidence[]> {
+        const summaryPath = summaryJsonPath(repoRoot, await this.aiBranchName.getFeatureName());
         const out: ReviewerEvidence[] = [];
         for (const want of expected) {
             const record = this.verdictProvenance.read(summaryPath, want.checklistId, this.reviewJsonService.latestVerdictRound(summaryPath, want.checklistId));
@@ -221,8 +221,8 @@ export class ProvenanceEnforcer {
      * One object for crediting and for evidence: they ask different questions of the same files, and
      * building the paths twice is how the two could drift apart.
      */
-    private contextFor(repoRoot: string, required: readonly RequiredChecklist[], branch: string): ReviewerContext {
-        const featureName = this.aiBranchName.getFeatureName();
+    private async contextFor(repoRoot: string, required: readonly RequiredChecklist[], branch: string): Promise<ReviewerContext> {
+        const featureName = await this.aiBranchName.getFeatureName();
         const summaryPath = summaryJsonPath(repoRoot, featureName);
         const docPaths: Record<string, string> = {};
         const verdictPaths: Record<string, string> = {};
@@ -256,10 +256,10 @@ export class ProvenanceEnforcer {
      * Never fatal: an unwritable record is a lost audit trail, not a reason to refuse a PR.
      */
     // eslint-disable-next-line @typescript-eslint/max-params
-    private writeProvenanceRecord(repoRoot: string, required: readonly RequiredChecklist[], result: ProvenanceResult, evidence: readonly ReviewerEvidence[]): void {
-        const featureName = this.aiBranchName.getFeatureName();
+    private async writeProvenanceRecord(repoRoot: string, required: readonly RequiredChecklist[], result: ProvenanceResult, evidence: readonly ReviewerEvidence[]): Promise<void> {
+        const featureName = await this.aiBranchName.getFeatureName();
         const prDir = prDirFor(repoRoot, featureName);
-        const request = new ProvenanceWriteRequest(prDir, featureName, this.gitOut(['rev-parse', 'HEAD']), result.status);
+        const request = new ProvenanceWriteRequest(prDir, featureName, await this.gitOut(['rev-parse', 'HEAD']), result.status);
         request.offered = new OfferedContext(
             path.join(prDir, 'diff'), this.reviewerInstructions.instructionsDirFor(repoRoot, featureName));
         request.reviewers = evidence.map((e: ReviewerEvidence): ReviewerTranscript =>

@@ -3,7 +3,7 @@ import { CheckPrCommand, PrUnderCheck } from './check-pr-command';
 
 class TestCheckPrCommand extends CheckPrCommand {
     constructor() {
-        super(null!, null!);
+        super(null!, null!, null!);
     }
 
     success(pr: PrUnderCheck): string {

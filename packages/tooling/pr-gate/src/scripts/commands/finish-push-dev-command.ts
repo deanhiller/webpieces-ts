@@ -42,12 +42,11 @@ export class FinishPushDevCommand {
         const state = this.store.require(repoRoot);
 
         if (opts.abort) {
-            this.runner.abort(repoRoot, state);
-            return Promise.resolve();
+            await this.runner.abort(repoRoot, state);
+            return;
         }
         // Refuses (and re-prints the unresolved files) before committing anything, then resumes the
         // queue — a LATER ref can conflict too, so this may legitimately stop again.
-        this.runner.resume(repoRoot, state);
-        return Promise.resolve();
+        await this.runner.resume(repoRoot, state);
     }
 }

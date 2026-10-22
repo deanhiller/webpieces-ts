@@ -4,6 +4,7 @@ import * as path from 'path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { BranchIdentity, MainSyncStatus, MainSyncStatusService } from '@webpieces/repo-workflow-core';
 import { CliExitError, GateTokenService, RepoRootFinder, ReviewJsonService } from '@webpieces/rules-config';
+import { NativeProcessApi } from '@webpieces/tooling-common';
 import { AiBranchName } from '../workflow/git-readAiBranchName';
 import { BranchNaming } from '../workflow/branch-naming';
 import { GatedPrPublisher, PublishedPr } from '../workflow/gated-pr-publisher';
@@ -55,19 +56,19 @@ class TestCommand extends HumanPostPrCommand {
         this.onQuestion?.(question);
         return Promise.resolve(this.answers.shift() ?? '');
     }
-    protected override fetchMain(): void {
+    protected override async fetchMain(): Promise<void> {
         this.fetches++;
     }
     protected override gateSalt(): string {
         return 'salt';
     }
-    protected override git(args: string[]): string {
+    protected override async git(args: string[]): Promise<string> {
         return args[0] === 'merge-base' ? FORK : HEAD;
     }
-    protected override resolvePr(): HumanPostedPr {
+    protected override async resolvePr(): Promise<HumanPostedPr> {
         return this.refs.shift() ?? new HumanPostedPr('42', 'https://example.test/pr/42');
     }
-    protected override editPrBody(): number {
+    protected override async editPrBody(): Promise<number> {
         this.backfills++;
         return this.editStatus;
     }
@@ -134,6 +135,8 @@ class Fixture {
                     return Promise.resolve();
                 },
             }),
+            // Every gh call this command makes goes through the seams overridden above.
+            asType<NativeProcessApi>({}),
         ];
     }
 

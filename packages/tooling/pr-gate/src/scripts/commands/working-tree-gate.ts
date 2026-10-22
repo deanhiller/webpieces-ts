@@ -1,6 +1,6 @@
-import { spawnSync } from 'child_process';
 import { injectable, bindingScopeValues } from 'inversify';
 import { CliExitError } from '@webpieces/rules-config';
+import { GitProcessApi } from '@webpieces/tooling-common';
 
 const SEP = '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n';
 
@@ -60,12 +60,14 @@ export class UntrackedFiles {
  */
 @injectable(bindingScopeValues.Singleton)
 export class WorkingTreeGate {
+    constructor(private readonly gitProcess: GitProcessApi) {}
+
     /**
      * Throw when tracked files are modified or staged; otherwise hand back the untracked files that were
      * deliberately allowed through, for the caller to mention.
      */
-    assertNoTrackedChanges(repoRoot: string): UntrackedFiles {
-        const tracked = this.git(repoRoot, ['status', '--porcelain', '--untracked-files=no']);
+    async assertNoTrackedChanges(repoRoot: string): Promise<UntrackedFiles> {
+        const tracked = await this.git(repoRoot, ['status', '--porcelain', '--untracked-files=no']);
         if (tracked !== null && tracked.trim() !== '') {
             throw new CliExitError(1,
                 `${SEP}❌ Uncommitted changes to tracked files\n${SEP}\n`
@@ -77,18 +79,16 @@ export class WorkingTreeGate {
         return this.untrackedFiles(repoRoot);
     }
 
-    private untrackedFiles(repoRoot: string): UntrackedFiles {
-        const output = this.git(repoRoot, ['ls-files', '--others', '--exclude-standard', '-z']);
+    private async untrackedFiles(repoRoot: string): Promise<UntrackedFiles> {
+        const output = await this.git(repoRoot, ['ls-files', '--others', '--exclude-standard', '-z']);
         if (output === null) return new UntrackedFiles([]);
         return new UntrackedFiles(output.split('\0').filter((path: string): boolean => path !== ''));
     }
 
     /** Captured git output, or null when git could not be run or exited non-zero. */
-    private git(repoRoot: string, args: string[]): string | null {
-        const result = spawnSync('git', ['-C', repoRoot, ...args], {
-            encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'],
-        });
-        if (result.error !== undefined || result.status !== 0) return null;
+    private async git(repoRoot: string, args: string[]): Promise<string | null> {
+        const result = await this.gitProcess.run(['-C', repoRoot, ...args]);
+        if (!result.ok) return null;
         return result.stdout;
     }
 }

@@ -1,9 +1,8 @@
-import { specTempDirs } from '@webpieces/tooling-testkit';
-import { describe, it, expect, afterEach } from 'vitest';
-import { execFileSync } from 'child_process';
+import { ScriptedShellRun, specTempDirs } from '@webpieces/tooling-testkit';
+import { describe, it, expect, afterEach, beforeEach } from 'vitest';
 import * as fs from 'fs';
-import * as os from 'os';
 import * as path from 'path';
+import { PrGateFeature } from '../../__tests__/feature-harness';
 import { BranchIdentity } from '@webpieces/repo-workflow-core';
 import { BuildsLog, BuildTicket, BuildTermination, CliExitError } from '@webpieces/rules-config';
 import { DotWebpieces } from '@webpieces/tooling-common';
@@ -16,6 +15,13 @@ import { RepoConfigFixture } from './repo-config-testkit';
 
 const dirs: string[] = [];
 let written = '';
+let feature: PrGateFeature;
+
+beforeEach(async () => {
+    feature = await PrGateFeature.create();
+    // The REAL ledger code, writing to a throwaway HOME (see TempHomeBuildsLog below).
+    (await feature.container.rebind(BuildsLog)).toConstantValue(builds());
+});
 
 afterEach(() => {
     for (const d of dirs.splice(0)) fs.rmSync(d, { recursive: true, force: true });
@@ -29,16 +35,13 @@ function tempHome(): string {
     return dir;
 }
 
-function git(cwd: string, ...args: string[]): string {
-    return execFileSync('git', args, { cwd, encoding: 'utf8' }).trim();
-}
-
 /**
- * A git repo carrying THIS repo's own webpieces.config.json (see RepoConfigFixture), with
+ * A checkout on `dean/gate` carrying THIS repo's own webpieces.config.json (see RepoConfigFixture), with
  * `buildCommand` swapped for `command`. Using the real config means the spec faces the same validator
- * the tool really faces.
+ * the tool really faces. The branch is read from `.git/HEAD` on disk; git's short sha and the build
+ * command itself are SCRIPTED (#1381) — `run` is what the build writes into its log and how it ends.
  */
-function repoWithBuild(command: string): string {
+function repoWithBuild(command: string, run: ScriptedShellRun = feature.processes.exited(0)): string {
     const dir = specTempDirs.makeReal('wp-buildgate-');
     dirs.push(dir);
     const fixture = new RepoConfigFixture();
@@ -47,13 +50,10 @@ function repoWithBuild(command: string): string {
     const commands = config['commands'] as Record<string, Record<string, unknown>>;
     commands['pr-gate']['buildCommand'] = command;
     fixture.writeTo(dir, config);
-    git(dir, 'init', '-q', '-b', 'main');
-    git(dir, 'config', 'core.hooksPath', '/dev/null');
-    git(dir, 'config', 'user.email', 'spec@example.com');
-    git(dir, 'config', 'user.name', 'spec');
-    git(dir, 'add', '.');
-    git(dir, 'commit', '-qm', 'init');
-    git(dir, 'checkout', '-q', '-b', 'dean/gate');
+    fs.mkdirSync(path.join(dir, '.git'), { recursive: true });
+    fs.writeFileSync(path.join(dir, '.git', 'HEAD'), 'ref: refs/heads/dean/gate\n');
+    feature.git.respond(['-C', dir, 'rev-parse', '--short', 'HEAD'], feature.git.ok('abc1234\n'));
+    feature.processes.respondToShell(command, run);
     return dir;
 }
 
@@ -82,14 +82,11 @@ function builds(): TempHomeBuildsLog {
 }
 
 function buildLog(): BuildGateLog {
-    const files = new GateLogFile();
-    return new BuildGateLog(files, new StageOutputLog(files));
+    return feature.container.get(BuildGateLog);
 }
 
 function gate(): BuildAffected {
-    const files = new GateLogFile();
-    const stageConsole = new StageOutputLog(files);
-    return new BuildAffected(new BuildGateLog(files, stageConsole), builds(), stageConsole, new BranchIdentity());
+    return feature.container.get(BuildAffected);
 }
 
 function opts(): BuildGateOptions {
@@ -144,11 +141,11 @@ async function runExpectingFailure(affected: BuildAffected, dir: string): Promis
  */
 describe('the build gate always captures, whatever is on the machine', () => {
     it('on FAILURE hands back the pointer at the log, and the log holds the real output', async () => {
-        const dir = repoWithBuild('echo TS2554-somewhere 1>&2; exit 4');
+        const dir = repoWithBuild('echo TS2554-somewhere 1>&2; exit 4', feature.processes.exited(4, 'TS2554-somewhere\n'));
         const err = await runExpectingFailure(gate(), dir);
         expect(err.exitCode).toBe(4);
 
-        const logPath = buildLog().existingLogFor(dir, REVIEW_STAGE);
+        const logPath = await buildLog().existingLogFor(dir, REVIEW_STAGE);
         expect(logPath).not.toBe('');
         expect(fs.readFileSync(logPath, 'utf8')).toContain('TS2554-somewhere');
 
@@ -161,58 +158,56 @@ describe('the build gate always captures, whatever is on the machine', () => {
     });
 
     it('names the command to re-run AFTER the fix, which is the stage rather than the build', async () => {
-        const dir = repoWithBuild('exit 4');
+        const dir = repoWithBuild('exit 4', feature.processes.exited(4));
         const err = await runExpectingFailure(gate(), dir);
         expect(err.message).toContain('re-run pnpm wp-review-upsert-pr');
     });
 
     it('keeps a termination signal in the failure output instead of only reporting generic exit 1', async () => {
-        const dir = repoWithBuild('kill -TERM $$');
+        const dir = repoWithBuild('kill -TERM $$', feature.processes.killed('SIGTERM'));
         const err = await runExpectingFailure(gate(), dir);
         expect(err.exitCode).toBe(1);
         expect(err.message).toContain('Build process termination: exit code null; signal SIGTERM.');
-        expect(fs.readFileSync(buildLog().existingLogFor(dir, REVIEW_STAGE), 'utf8')).toContain('Build process termination: exit code null; signal SIGTERM.');
+        expect(fs.readFileSync((await buildLog().existingLogFor(dir, REVIEW_STAGE)), 'utf8')).toContain('Build process termination: exit code null; signal SIGTERM.');
     });
 
     it('on SUCCESS says so and names the log, rather than reprinting the build', async () => {
-        const dir = repoWithBuild('echo compiling');
+        const dir = repoWithBuild('echo compiling', feature.processes.exited(0, 'compiling\n'));
         await captureStdout(async (): Promise<void> => {
             await gate().runBuildGate(dir, opts());
         });
         expect(written).toContain('🛠️  Build gate: echo compiling');
         expect(written).toContain('Build success');
-        expect(written).toContain(`FullLog : ${buildLog().existingLogFor(dir, REVIEW_STAGE)}`);
+        expect(written).toContain(`FullLog : ${(await buildLog().existingLogFor(dir, REVIEW_STAGE))}`);
         // Streaming the build to the console is exactly what made an agent re-run it; it must not happen.
         // The command is ANNOUNCED (`…: echo compiling`), so the test is that no line IS the build's output.
         expect(written.split('\n')).not.toContain('compiling');
-        expect(fs.readFileSync(buildLog().existingLogFor(dir, REVIEW_STAGE), 'utf8')).toContain('compiling');
+        expect(fs.readFileSync((await buildLog().existingLogFor(dir, REVIEW_STAGE)), 'utf8')).toContain('compiling');
     });
 
     // There is no `alwaysCapture` flag to pass any more, and no home-config key to read: a repo with no
     // `~/.webpieces` anywhere still gets a log. Asserted through the FILE rather than through a getter,
     // because the file is the contract.
     it('writes the log for a repo whose machine has no ~/.webpieces/config.json', async () => {
-        const dir = repoWithBuild('echo compiling');
+        const dir = repoWithBuild('echo compiling', feature.processes.exited(0, 'compiling\n'));
         await captureStdout(async (): Promise<void> => {
             await gate().runBuildGate(dir, opts());
         });
-        expect(buildLog().existingLogFor(dir, REVIEW_STAGE)).not.toBe('');
+        expect((await buildLog().existingLogFor(dir, REVIEW_STAGE))).not.toBe('');
     });
 });
 
 describe('BuildGateOptions', () => {
     // No default for `stage`: a default would silently let two stages share one log file.
-    it('requires a stage', () => {
+    it('requires a stage', async () => {
         expect(opts().stage).toBe(REVIEW_STAGE);
     });
 });
 
 describe('hotfix build selection', () => {
-    it('replaces the configured full gate with affected hotfix-ci', () => {
+    it('replaces the configured full gate with affected hotfix-ci', async () => {
         const dir = repoWithBuild('pnpm nx affected --target=ci --base=origin/main');
-        const files = new GateLogFile();
-        const stageConsole = new StageOutputLog(files);
-        const affected = new BuildAffected(new BuildGateLog(files, stageConsole), builds(), stageConsole, new BranchIdentity());
+        const affected = gate();
         const previousOverride = process.env['WEBPIECES_BRANCH'];
         const previousPrBranch = process.env['GITHUB_HEAD_REF'];
         process.env['WEBPIECES_BRANCH'] = 'dean/hotfix/urgent';

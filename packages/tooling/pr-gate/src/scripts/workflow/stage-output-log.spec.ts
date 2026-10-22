@@ -1,9 +1,10 @@
 import { specTempDirs } from '@webpieces/tooling-testkit';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { execSync, spawnSync } from 'child_process';
+import { spawnSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 import { GateLogFile } from './gate-log-file';
+import { CheckoutLayout } from '../../__tests__/feature-harness';
 import { StageOutputLog, REVIEW_CONSOLE_LOG, FINISH_CONSOLE_LOG } from './stage-output-log';
 
 
@@ -15,9 +16,6 @@ let stage: StageOutputLog;
 let terminal = '';
 let restoreTerminal: (() => void) | null = null;
 
-function git(cwd: string, args: string): void {
-    execSync(`git ${args}`, { cwd, stdio: 'ignore' });
-}
 
 /**
  * Stand in for the TERMINAL. Installed BEFORE `withCapture`, so what this collects is exactly what
@@ -36,14 +34,9 @@ beforeEach(() => {
     primary = path.join(tmp, 'primary');
     worktree = path.join(tmp, 'wt-feature');
     fs.mkdirSync(primary, { recursive: true });
-    git(primary, 'init -q -b main');
-    git(primary, 'config core.hooksPath /dev/null');
-    git(primary, 'config user.email test@example.com');
-    git(primary, 'config user.name Test');
-    fs.writeFileSync(path.join(primary, 'README.md'), '# spec\n');
-    git(primary, 'add -A');
-    git(primary, 'commit -q -m init');
-    git(primary, `worktree add -q -b feature ${worktree}`);
+    // The layout git leaves, written directly (#1381): placement is decided by reading these files, so no
+    // git process is needed to prove it.
+    CheckoutLayout.primaryWithWorktree(primary, worktree, 'feature');
     files = new GateLogFile();
     stage = new StageOutputLog(files);
     terminal = '';

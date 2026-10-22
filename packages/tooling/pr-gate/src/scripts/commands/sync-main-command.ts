@@ -71,8 +71,8 @@ export class SyncMainCommand {
             await this.sweepOnly(repoRoot);
             return;
         }
-        const untracked = this.workingTreeGate.assertNoTrackedChanges(repoRoot);
-        const stashed = this.mainCheckout.goToMain(repoRoot, untracked);
+        const untracked = await this.workingTreeGate.assertNoTrackedChanges(repoRoot);
+        const stashed = await this.mainCheckout.goToMain(repoRoot, untracked);
         this.reportUntracked(untracked, stashed);
         // No flags: this is the "go to main and take out the trash" path, so cleanup behaves exactly as a
         // bare `pnpm wp-cleanup` does here — reap what is provably dead and every zero-commit husk, ask

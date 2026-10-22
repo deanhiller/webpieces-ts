@@ -88,7 +88,7 @@ export class BuildAffected {
         // command being run and the result of running it are exactly what a caller watching a long build
         // needs to see live.
         this.stageConsole.say(`\n${opts.label}: ${buildCommand}\n`);
-        const logPath = this.buildLog.pathFor(repoRoot, opts.stage);
+        const logPath = await this.buildLog.pathFor(repoRoot, opts.stage);
         const ticket = this.buildsLog.start(opts.stage, repoRoot);
         let termination = new BuildTermination(1, null);
         // webpieces-disable no-unmanaged-exceptions -- chokepoint: the DONE row must be written whether the

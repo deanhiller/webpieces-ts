@@ -256,12 +256,12 @@ export class ChecklistScanner {
      * reviewer-agent file exists), both callers already run it for other fields, and keeping the read out of
      * here leaves this a function of its inputs rather than of the filesystem.
      */
-    scan(repoRoot: string, defined: ChecklistDefinition[], opts: ChecklistScanOptions): ChecklistScan {
-        const featureName = this.aiBranchName.getFeatureName();
+    async scan(repoRoot: string, defined: ChecklistDefinition[], opts: ChecklistScanOptions): Promise<ChecklistScan> {
+        const featureName = await this.aiBranchName.getFeatureName();
         const summaryPath = summaryJsonPath(repoRoot, featureName);
         // ONE basis for the file set, the reproduce command and any downstream materialization. The fork
         // point still comes from ForkPoint (never DiffScope.resolveBase) — DiffBasisResolver injects it.
-        const basis = this.diffBasisResolver.resolve(repoRoot);
+        const basis = await this.diffBasisResolver.resolve(repoRoot);
         const base = basis.base;
         // ONE changed-file computation feeds both the roster (all X) and the applicable set (N). `detect` is
         // pure and defined as the roster minus its empty entries, so the two cannot disagree about a match.
@@ -286,11 +286,11 @@ export class ChecklistScanner {
                 defined, [], [], [], context, summaryPath, base, roster, [], true, matched, basis,
                 changedFiles, [], []);
         }
-        const judged = this.judgedScope(repoRoot, summaryPath, roster, matched);
+        const judged = this.judgedScope(repoRoot, featureName, summaryPath, roster, matched);
         const applicable = judged.applicable;
-        const scopeHashes = this.scopeHasher.hashes(repoRoot, basis, applicable);
+        const scopeHashes = await this.scopeHasher.hashes(repoRoot, basis, applicable);
         const loaded = this.reviewJsonService.loadChecklistResults(summaryPath, applicable);
-        const orangeFixes = this.rounds.orangeFixes(repoRoot, summaryPath, loaded);
+        const orangeFixes = await this.rounds.orangeFixes(repoRoot, summaryPath, loaded);
         for (const result of loaded) result.remediation = orangeFixes[result.id] ?? '';
         const standings = this.standingsOf(summaryPath, loaded, scopeHashes)
             .map((s: VerdictStanding): VerdictStanding => this.carried(s, loaded, opts.maxReviewerRounds));
@@ -334,8 +334,8 @@ export class ChecklistScanner {
      * Before any round starts, the set is simply what the diff matches.
      */
     // eslint-disable-next-line @typescript-eslint/max-params
-    private judgedScope(repoRoot: string, summaryPath: string, roster: ChecklistRoster, matched: RequiredChecklist[]): JudgedScope {
-        const receipt = this.receipts.read(repoRoot, this.aiBranchName.getFeatureName());
+    private judgedScope(repoRoot: string, featureName: string, summaryPath: string, roster: ChecklistRoster, matched: RequiredChecklist[]): JudgedScope {
+        const receipt = this.receipts.read(repoRoot, featureName);
         if (!this.rounds.roundStarted(summaryPath, receipt)) return new JudgedScope(matched, []);
         const briefedIds = new Set(this.rounds.briefedChecklistIds(summaryPath, receipt));
         const briefed = roster.entries.filter((t: TriggeredChecklist): boolean => briefedIds.has(t.def.id));

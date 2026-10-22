@@ -1,69 +1,73 @@
 import { specTempDirs } from '@webpieces/tooling-testkit';
-import { describe, it, expect, afterAll, afterEach, beforeAll } from 'vitest';
-import { execSync } from 'child_process';
+import { describe, it, expect, afterEach, beforeEach } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
-import { ReviewJsonService } from '@webpieces/rules-config';
-import { DiffBasis, DiffBasisResolver } from './diff-basis';
+import { PrGateFeature } from '../../__tests__/feature-harness';
+import { DiffBasis } from './diff-basis';
 import { DiffManifestEntry, DiffMaterializer, FILE_DIFF_MAX_BYTES } from './diff-materializer';
-import { ForkPoint } from './git-findForkPoint';
-import { GitStatusParser } from './git-status';
 
+/**
+ * DiffMaterializer from the shipped container, with git SCRIPTED (#1381). The materializer asks git for
+ * ONE whole-branch `git diff` (plus the untracked list on a dirty tree) and splits it into per-file
+ * patches; the scripted output below is what git prints for each change, so what is under test is the
+ * split, the synthesis, the stubbing and the truncation — never git.
+ */
+
+const BASE = 'b'.repeat(40);
+const HEAD = 'h'.repeat(40);
 const dirs: string[] = [];
+let feature: PrGateFeature;
+
+beforeEach(async () => {
+    feature = await PrGateFeature.create();
+});
 
 afterEach(() => {
     for (const d of dirs.splice(0)) fs.rmSync(d, { recursive: true, force: true });
 });
 
-function git(cwd: string, cmd: string): void {
-    execSync(cmd, { cwd, stdio: 'pipe' });
-}
-
-/**
- * Built ONCE and copied per test. MEASURED, interleaved against the per-test-`git init` version to
- * cancel this machine's load drift: 30.5s -> 14.2s mean, a consistent 2.1x over three rounds.
- *
- * Two costs are being removed, and both matter for the same reason. `core.hooksPath=/dev/null`: this
- * developer has a GLOBAL hooksPath, so every commit in a throwaway repo fires their real hooks — 460ms
- * vs 13ms. And copying the finished tree replaces 4 spawns with one filesystem copy, which matters far
- * more than it looks: a spawn from inside a vitest worker costs ~195ms even for `echo` (vs 2.6ms in
- * bare node), so spawns here are ~75x their normal price.
- *
- * Why a test-speed comment belongs in a spec: every one of those spawns is `execSync`, which BLOCKS
- * the worker's event loop, and a blocked worker cannot process vitest's `onTaskUpdate` acks. Enough
- * blocking in one file and an in-flight ack passes birpc's hardcoded 60s timeout — at which point the
- * whole run is reported FAILED with every test passing. Spawn count here is the flake budget.
- */
-let template = '';
-
-beforeAll(() => {
-    template = specTempDirs.make('wp-mat-tpl-');
-    git(template, 'git init -q -b main');
-    git(template, 'git config core.hooksPath /dev/null');
-    git(template, 'git config user.email t@t.t && git config user.name t');
-    fs.mkdirSync(path.join(template, 'src'), { recursive: true });
-    fs.writeFileSync(path.join(template, 'src', 'keep.ts'), 'keep\n');
-    git(template, 'git add -A && git commit -q -m base');
-    git(template, 'git checkout -q -b feat');
-});
-
-afterAll(() => {
-    if (template !== '') fs.rmSync(template, { recursive: true, force: true });
-});
-
-function repoOnFeatureBranch(): string {
+function repo(): string {
     const dir = specTempDirs.make('wp-mat-');
     dirs.push(dir);
-    fs.cpSync(template, dir, { recursive: true });
+    fs.mkdirSync(path.join(dir, 'src'), { recursive: true });
+    fs.writeFileSync(path.join(dir, 'src', 'keep.ts'), 'keep\n');
     return dir;
 }
 
-function materializerFor(): DiffMaterializer {
-    return new DiffMaterializer(new ReviewJsonService());
+/** What `git diff` prints for one modified file. */
+function modified(file: string, before: string[], after: string[]): string {
+    return `diff --git a/${file} b/${file}\nindex 1111111..2222222 100644\n--- a/${file}\n+++ b/${file}\n`
+        + `@@ -1,${before.length} +1,${after.length} @@\n`
+        + before.map((l: string): string => `-${l}\n`).join('') + after.map((l: string): string => `+${l}\n`).join('');
 }
 
-function basisFor(dir: string): DiffBasis {
-    return new DiffBasisResolver(new ForkPoint(null as never, null as never, null as never), new GitStatusParser()).resolve(dir);
+/** What `git diff` prints for one added file. */
+function added(file: string, lines: string[]): string {
+    return `diff --git a/${file} b/${file}\nnew file mode 100644\nindex 0000000..3333333\n--- /dev/null\n+++ b/${file}\n`
+        + `@@ -0,0 +1,${lines.length} @@\n` + lines.map((l: string): string => `+${l}\n`).join('');
+}
+
+/** What `git diff` prints for one deleted file. */
+function deleted(file: string, lines: string[]): string {
+    return `diff --git a/${file} b/${file}\ndeleted file mode 100644\nindex 4444444..0000000\n--- a/${file}\n+++ /dev/null\n`
+        + `@@ -1,${lines.length} +0,0 @@\n` + lines.map((l: string): string => `-${l}\n`).join('');
+}
+
+/** A clean branch whose commits since BASE print `diff`. */
+function committed(dir: string, diff: string): DiffBasis {
+    feature.git.respond(['diff', BASE, HEAD], feature.git.ok(diff));
+    return new DiffBasis(BASE, HEAD, false, [], `git diff ${BASE} ${HEAD}`, `git diff ${BASE} ${HEAD} -- <file>`);
+}
+
+/** A DIRTY tree: `git diff BASE` prints `diff`, and `untracked` are the files git does not track yet. */
+function dirty(diff: string, untracked: string[]): DiffBasis {
+    feature.git.respond(['diff', BASE], feature.git.ok(diff));
+    feature.git.respond(['ls-files', '--others', '--exclude-standard'], feature.git.ok(untracked.map((f: string): string => `${f}\n`).join('')));
+    return new DiffBasis(BASE, HEAD, true, untracked, `git diff ${BASE}`, `git diff ${BASE} -- <file>`);
+}
+
+function materializer(): DiffMaterializer {
+    return feature.container.get(DiffMaterializer);
 }
 
 function entryFor(entries: readonly DiffManifestEntry[], file: string): DiffManifestEntry {
@@ -73,45 +77,48 @@ function entryFor(entries: readonly DiffManifestEntry[], file: string): DiffMani
 }
 
 describe('DiffMaterializer — one extraction, many readers', () => {
-    it('writes a per-file diff, a combined ALL.diff, and a manifest', () => {
-        const dir = repoOnFeatureBranch();
+    it('writes a per-file diff, a combined ALL.diff, and a manifest', async () => {
+        const dir = repo();
         fs.mkdirSync(path.join(dir, 'src', 'nested'), { recursive: true });
         fs.writeFileSync(path.join(dir, 'src', 'nested', 'deep.ts'), 'NEW_CONTENT\n');
-        fs.writeFileSync(path.join(dir, 'src', 'keep.ts'), 'keep\nCHANGED\n');
-        git(dir, 'git add -A && git commit -q -m work');
+        const basis = committed(dir, modified('src/keep.ts', ['keep'], ['keep', 'CHANGED']) + added('src/nested/deep.ts', ['NEW_CONTENT']));
 
         const files = ['src/keep.ts', 'src/nested/deep.ts'];
-        const manifest = materializerFor().materialize(dir, 'feat', basisFor(dir), files, []);
-        const diffDir = materializerFor().diffDirFor(dir, 'feat');
+        const manifest = await materializer().materialize(dir, 'feat', basis, files, []);
+        const diffDir = materializer().diffDirFor(dir, 'feat');
 
         expect(manifest.entries).toHaveLength(2);
         // The '/' -> '__' convention is REUSED from MergeState.perFileContextDir — one mangling scheme in
         // the repo, not two.
         expect(fs.existsSync(path.join(diffDir, 'files', 'src__nested__deep.ts.diff'))).toBe(true);
+        expect(entryFor(manifest.entries, 'src/nested/deep.ts').status).toBe('A');
         const all = fs.readFileSync(path.join(diffDir, 'ALL.diff'), 'utf8');
         expect(all).toContain('NEW_CONTENT');
         expect(all).toContain('CHANGED');
         expect(fs.existsSync(path.join(diffDir, 'manifest.json'))).toBe(true);
+        // ONE git call for the whole branch, never one per file.
+        expect(feature.git.commandLines()).toEqual([`git diff ${BASE} ${HEAD}`]);
     });
 
     // The whole point of materializing: the reviewer opens a file instead of shelling out per file.
-    it('each per-file diff really contains that file\'s change', () => {
-        const dir = repoOnFeatureBranch();
-        fs.writeFileSync(path.join(dir, 'src', 'keep.ts'), 'keep\nONLY_IN_KEEP\n');
-        git(dir, 'git add -A && git commit -q -m work');
+    it('each per-file diff really contains that file\'s change', async () => {
+        const dir = repo();
+        const basis = committed(dir, modified('src/keep.ts', ['keep'], ['keep', 'ONLY_IN_KEEP']) + added('src/other.ts', ['OTHER']));
 
-        const manifest = materializerFor().materialize(dir, 'feat', basisFor(dir), ['src/keep.ts'], []);
-        const entry = entryFor(manifest.entries, 'src/keep.ts');
-        expect(fs.readFileSync(path.join(dir, entry.diffFile), 'utf8')).toContain('ONLY_IN_KEEP');
+        const manifest = await materializer().materialize(dir, 'feat', basis, ['src/keep.ts'], []);
+        const body = fs.readFileSync(path.join(dir, entryFor(manifest.entries, 'src/keep.ts').diffFile), 'utf8');
+        expect(body).toContain('ONLY_IN_KEEP');
+        expect(body).not.toContain('OTHER');
     });
 
     // An UNTRACKED file never appears in `git diff`, so it is synthesized as an all-added patch. Without
     // this, brand-new files — the ones a checklist most wants to see — would materialize as empty.
-    it('synthesizes an all-added diff for an untracked file', () => {
-        const dir = repoOnFeatureBranch();
+    it('synthesizes an all-added diff for an untracked file', async () => {
+        const dir = repo();
         fs.writeFileSync(path.join(dir, 'src', 'brand-new.ts'), 'BRAND_NEW_LINE\n');
+        const basis = dirty('', ['src/brand-new.ts']);
 
-        const manifest = materializerFor().materialize(dir, 'feat', basisFor(dir), ['src/brand-new.ts'], []);
+        const manifest = await materializer().materialize(dir, 'feat', basis, ['src/brand-new.ts'], []);
         const entry = entryFor(manifest.entries, 'src/brand-new.ts');
         expect(entry.status).toBe('U');
         expect(fs.readFileSync(path.join(dir, entry.diffFile), 'utf8')).toContain('+BRAND_NEW_LINE');
@@ -119,12 +126,12 @@ describe('DiffMaterializer — one extraction, many readers', () => {
 
     // A DELETED file must materialize as a real removal patch — a reviewer judging a deleted auth check
     // needs to see what was in it.
-    it('materializes a deletion as a removal patch', () => {
-        const dir = repoOnFeatureBranch();
-        git(dir, 'git rm -q src/keep.ts');
-        git(dir, 'git commit -q -m delete');
+    it('materializes a deletion as a removal patch', async () => {
+        const dir = repo();
+        fs.rmSync(path.join(dir, 'src', 'keep.ts'));
+        const basis = committed(dir, deleted('src/keep.ts', ['keep']));
 
-        const manifest = materializerFor().materialize(dir, 'feat', basisFor(dir), ['src/keep.ts'], []);
+        const manifest = await materializer().materialize(dir, 'feat', basis, ['src/keep.ts'], []);
         const entry = entryFor(manifest.entries, 'src/keep.ts');
         expect(entry.status).toBe('D');
         // No source path: a deleted file has no after-state to open, and a path that cannot resolve turns
@@ -132,7 +139,6 @@ describe('DiffMaterializer — one extraction, many readers', () => {
         expect(entry.fileAbs).toBe('');
         expect(fs.readFileSync(path.join(dir, entry.diffFile), 'utf8')).toContain('-keep');
     });
-
 });
 
 // Split out to keep each describe under the method-length limit.
@@ -142,13 +148,11 @@ describe('DiffMaterializer — nothing is ever dropped silently', () => {
      * change" — a different and false claim — and they still match checklists, so the manifest must
      * account for them.
      */
-    it('stubs an excluded file instead of dropping it, and still lists it', () => {
-        const dir = repoOnFeatureBranch();
-        fs.writeFileSync(path.join(dir, 'generated.json'), '{"regenerated": true}\n');
-        git(dir, 'git add -A && git commit -q -m gen');
+    it('stubs an excluded file instead of dropping it, and still lists it', async () => {
+        const dir = repo();
+        const basis = committed(dir, added('generated.json', ['{"regenerated": true}']));
 
-        const manifest = materializerFor().materialize(
-            dir, 'feat', basisFor(dir), ['generated.json'], ['**/generated.json']);
+        const manifest = await materializer().materialize(dir, 'feat', basis, ['generated.json'], ['**/generated.json']);
         expect(manifest.excluded).toEqual(['generated.json']);
         const entry = entryFor(manifest.entries, 'generated.json');
         expect(entry.status).toBe('X');
@@ -162,13 +166,12 @@ describe('DiffMaterializer — nothing is ever dropped silently', () => {
      * Truncation is NEVER silent. A truncated diff that looks whole is how a reviewer reports "reviewed"
      * having seen a tenth of a change — the same trap formatFileList states its dropped count for.
      */
-    it('states truncation in the file AND in the manifest', () => {
-        const dir = repoOnFeatureBranch();
-        const huge = 'x'.repeat(FILE_DIFF_MAX_BYTES + 5000).split('').join('\n');
-        fs.writeFileSync(path.join(dir, 'src', 'huge.ts'), huge);
-        git(dir, 'git add -A && git commit -q -m huge');
+    it('states truncation in the file AND in the manifest', async () => {
+        const dir = repo();
+        const huge = 'x'.repeat(FILE_DIFF_MAX_BYTES + 5000).split('');
+        const basis = committed(dir, added('src/huge.ts', huge));
 
-        const manifest = materializerFor().materialize(dir, 'feat', basisFor(dir), ['src/huge.ts'], []);
+        const manifest = await materializer().materialize(dir, 'feat', basis, ['src/huge.ts'], []);
         const entry = entryFor(manifest.entries, 'src/huge.ts');
         expect(entry.truncated).toBe(true);
         const body = fs.readFileSync(path.join(dir, entry.diffFile), 'utf8');
@@ -181,26 +184,24 @@ describe('DiffMaterializer — nothing is ever dropped silently', () => {
      * it mattered: the cap is 2 MB (~30-50k lines) and a Read truncates at ~2000, so on the one PR where
      * files were dropped the reviewer got the first ~5% and the notice sat in the 95% it never reached.
      */
-    it('puts the incompleteness notice at the TOP of ALL.diff, where a truncated Read still sees it', () => {
-        const dir = repoOnFeatureBranch();
-        const huge = 'x'.repeat(FILE_DIFF_MAX_BYTES + 5000).split('').join('\n');
-        fs.writeFileSync(path.join(dir, 'src', 'huge.ts'), huge);
-        git(dir, 'git add -A && git commit -q -m huge');
+    it('puts the incompleteness notice at the TOP of ALL.diff, where a truncated Read still sees it', async () => {
+        const dir = repo();
+        const huge = 'x'.repeat(FILE_DIFF_MAX_BYTES + 5000).split('');
+        const basis = committed(dir, added('src/huge.ts', huge));
 
-        materializerFor().materialize(dir, 'feat', basisFor(dir), ['src/huge.ts'], []);
-        const all = fs.readFileSync(path.join(materializerFor().diffDirFor(dir, 'feat'), 'ALL.diff'), 'utf8');
+        await materializer().materialize(dir, 'feat', basis, ['src/huge.ts'], []);
+        const all = fs.readFileSync(path.join(materializer().diffDirFor(dir, 'feat'), 'ALL.diff'), 'utf8');
         expect(all.split('\n')[0]).toContain('THIS COMBINED VIEW IS INCOMPLETE');
         expect(all).toContain('src/huge.ts');
     });
 
     // A complete view gets NO header: a notice on every diff trains a reader to skip the notice.
-    it('emits no header when nothing was truncated or omitted, and measures the view once', () => {
-        const dir = repoOnFeatureBranch();
-        fs.writeFileSync(path.join(dir, 'src', 'keep.ts'), 'keep\nCHANGED\n');
-        git(dir, 'git add -A && git commit -q -m work');
+    it('emits no header when nothing was truncated or omitted, and measures the view once', async () => {
+        const dir = repo();
+        const basis = committed(dir, modified('src/keep.ts', ['keep'], ['keep', 'CHANGED']));
 
-        const manifest = materializerFor().materialize(dir, 'feat', basisFor(dir), ['src/keep.ts'], []);
-        const all = fs.readFileSync(path.join(materializerFor().diffDirFor(dir, 'feat'), 'ALL.diff'), 'utf8');
+        const manifest = await materializer().materialize(dir, 'feat', basis, ['src/keep.ts'], []);
+        const all = fs.readFileSync(path.join(materializer().diffDirFor(dir, 'feat'), 'ALL.diff'), 'utf8');
         expect(all).not.toContain('INCOMPLETE');
         // Measured HERE so the instructions renderer reads one number instead of running its own `wc -l`.
         expect(manifest.allDiffBytes).toBe(all.length);
@@ -212,12 +213,11 @@ describe('DiffMaterializer — nothing is ever dropped silently', () => {
      * only form a reviewer subagent can open, since its cwd is not guaranteed to be the repo root. A deleted
      * file gets no source path at all — it has no after-state to open.
      */
-    it('records an absolute path for the source and the diff', () => {
-        const dir = repoOnFeatureBranch();
-        fs.writeFileSync(path.join(dir, 'src', 'keep.ts'), 'keep\nCHANGED\n');
-        git(dir, 'git add -A && git commit -q -m work');
+    it('records an absolute path for the source and the diff', async () => {
+        const dir = repo();
+        const basis = committed(dir, modified('src/keep.ts', ['keep'], ['keep', 'CHANGED']));
 
-        const manifest = materializerFor().materialize(dir, 'feat', basisFor(dir), ['src/keep.ts'], []);
+        const manifest = await materializer().materialize(dir, 'feat', basis, ['src/keep.ts'], []);
         const entry = entryFor(manifest.entries, 'src/keep.ts');
         expect(entry.fileAbs).toBe(path.join(dir, 'src', 'keep.ts'));
         expect(path.isAbsolute(entry.diffAbs)).toBe(true);
@@ -225,31 +225,26 @@ describe('DiffMaterializer — nothing is ever dropped silently', () => {
     });
 
     // A stale diff read as current is worse than none, so a re-run must not leave last run's files behind.
-    it('clears a previous run rather than merging into it', () => {
-        const dir = repoOnFeatureBranch();
-        fs.writeFileSync(path.join(dir, 'src', 'keep.ts'), 'keep\nfirst\n');
-        git(dir, 'git add -A && git commit -q -m first');
-        materializerFor().materialize(dir, 'feat', basisFor(dir), ['src/keep.ts'], []);
+    it('clears a previous run rather than merging into it', async () => {
+        const dir = repo();
+        const basis = committed(dir, modified('src/keep.ts', ['keep'], ['keep', 'first']));
+        await materializer().materialize(dir, 'feat', basis, ['src/keep.ts'], []);
 
-        const stale = path.join(materializerFor().diffDirFor(dir, 'feat'), 'files', 'src__gone.ts.diff');
+        const stale = path.join(materializer().diffDirFor(dir, 'feat'), 'files', 'src__gone.ts.diff');
         fs.writeFileSync(stale, 'STALE\n');
-        materializerFor().materialize(dir, 'feat', basisFor(dir), ['src/keep.ts'], []);
+        await materializer().materialize(dir, 'feat', basis, ['src/keep.ts'], []);
         expect(fs.existsSync(stale)).toBe(false);
     });
 
     // No fork point ⇒ nothing to extract, but a manifest is still written so a reader can tell the
     // difference between "never run" and "run, found nothing".
-    it('writes an empty manifest rather than nothing when the base is unresolvable', () => {
-        const dir = specTempDirs.make('wp-mat-nomain-');
-        dirs.push(dir);
-        git(dir, 'git init -q -b solo');
-        git(dir, 'git config core.hooksPath /dev/null');
-        git(dir, 'git config user.email t@t.t && git config user.name t');
-        fs.writeFileSync(path.join(dir, 'a.txt'), 'a\n');
-        git(dir, 'git add -A && git commit -q -m only');
+    it('writes an empty manifest rather than nothing when the base is unresolvable', async () => {
+        const dir = repo();
 
-        const manifest = materializerFor().materialize(dir, 'feat', basisFor(dir), ['a.txt'], []);
+        const manifest = await materializer().materialize(dir, 'feat', new DiffBasis('', HEAD), ['a.txt'], []);
         expect(manifest.entries).toEqual([]);
-        expect(fs.existsSync(path.join(materializerFor().diffDirFor(dir, 'feat'), 'manifest.json'))).toBe(true);
+        expect(fs.existsSync(path.join(materializer().diffDirFor(dir, 'feat'), 'manifest.json'))).toBe(true);
+        // With no base there is nothing to ask git.
+        expect(feature.git.calls).toEqual([]);
     });
 });

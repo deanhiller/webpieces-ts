@@ -1,24 +1,25 @@
-import { specTempDirs } from '@webpieces/tooling-testkit';
+import { ProcessCallDto, specTempDirs } from '@webpieces/tooling-testkit';
 import * as fs from 'fs';
 import * as path from 'path';
 
 import { describe, it, expect, beforeEach } from 'vitest';
 import { CliExitError, DevDeployConfig, RepoRootFinder } from '@webpieces/rules-config';
-import { DotWebpieces } from '@webpieces/tooling-common';
+import { DotWebpieces, GitResultDto } from '@webpieces/tooling-common';
+import { PrGateFeature } from '../../__tests__/feature-harness';
 
 import { PushDevCommand, PushDevOptions } from './push-dev-command';
 import { DevCopy, DevDeployRefs } from '../workflow/dev-deploy-refs';
 import { PushDevState, PushDevStateStore } from '../workflow/push-dev-state';
 import { DevResolveRunner } from '../workflow/dev-resolve-runner';
 import { DevDeployWatchHints } from '../workflow/dev-deploy-watch-hints';
-import { GitExec, GitOutcome } from '../workflow/git-exec';
-import { GitStatusParser } from '../workflow/git-status';
+import { GitExec } from '../workflow/git-exec';
 
 /**
  * The behaviour under test is the DECISIONS wp-push-dev makes — which branches it refuses, when it
- * refuses to clobber a published resolution, and what it hands the resolve runner. The git calls are
- * recorded rather than executed; dev-resolve-runner.spec.ts covers the merge/publish sequencing, and a
- * real remote round-trip is not something a unit test should be inventing.
+ * refuses to clobber a published resolution, and what it hands the resolve runner. git is SCRIPTED on the
+ * injected GitProcessApi (#1381) from the harness below — the remote's copies, their shas, how far ahead
+ * the remote is — and every command the program issued is recorded; dev-resolve-runner.spec.ts covers the
+ * merge/publish sequencing.
  */
 
 // A real (empty) directory, because every wp-* command opens by refreshing the AI-facing workflow doc
@@ -32,64 +33,50 @@ class Harness {
     remoteShas: Map<string, string> = new Map<string, string>();
     aheadCount = 0;
     resolveInProgress: PushDevState | null = null;
-    cleanTreeCalls = 0;
-    gitRuns: string[][] = [];
     startedBase = '';
     startedState: PushDevState | null = null;
     out = '';
+    feature!: PrGateFeature;
+
+    /** The commands that must succeed (pushes, fetches): run with their output on the terminal. */
+    get gitRuns(): string[][] {
+        return this.feature.git.calls.filter((c: ProcessCallDto): boolean => c.mode === 'passThrough' && !c.args.includes('fetch'))
+            .map((c: ProcessCallDto): string[] => [...c.args]);
+    }
+
+    /** How many times the clean-tree precondition asked git. */
+    get cleanTreeCalls(): number {
+        return this.feature.git.callsStartingWith(['status', '--porcelain']).length;
+    }
 }
 
 const harness = new Harness();
 
-class FakeGitExec extends GitExec {
-    constructor() {
-        super(new RepoRootFinder(), new GitStatusParser());
-    }
-
-    override assertCleanTree(): void {
-        harness.cleanTreeCalls += 1;
-    }
-
-    override runGitChecked(args: string[]): void {
-        harness.gitRuns.push(args);
-    }
-
-    override tryGit(): GitOutcome {
-        return new GitOutcome(0, '', '');
-    }
+/** git, answered from the harness: the remote's copies and shas, the ahead count, a clean tree. */
+function scriptGit(): void {
+    const git = harness.feature.git;
+    git.respond(['status', '--porcelain'], git.ok(''));
+    git.respondToPrefix(['ls-remote', '--heads', 'origin'], (call: ProcessCallDto): GitResultDto => {
+        const asked = call.args[3];
+        if (asked.endsWith('*')) {
+            return git.ok(harness.copies.map((c: DevCopy): string => `${c.sha}\trefs/heads/${c.ref}\n`).join(''));
+        }
+        const sha = harness.remoteShas.get(asked);
+        return git.ok(sha === undefined ? '' : `${sha}\trefs/heads/${asked}\n`);
+    });
+    git.respondToPrefix(['rev-list', '--count'], (): GitResultDto => git.ok(`${harness.aheadCount}\n`));
+    git.respondToPrefix(['-C', REPO, 'rev-parse'], git.ok('deadbeefdeadbeefdeadbeefdeadbeefdeadbeef\n'));
+    git.respondToPrefix(['-C', REPO], git.ok());
 }
 
+// Only what is not an outside system is stood in for: the config read and the checked-out branch name.
 class FakeRefs extends DevDeployRefs {
-    constructor() {
-        super(new FakeGitExec());
-    }
-
     override config(): DevDeployConfig {
         return new DevDeployConfig('dev-include', 'dev');
     }
 
     override currentBranch(): string {
         return harness.branch;
-    }
-
-    override liveCopies(): DevCopy[] {
-        return harness.copies;
-    }
-
-    override remoteSha(_repoRoot: string, ref: string): string {
-        return harness.remoteShas.get(ref) ?? '';
-    }
-
-    override fetchCopies(): void {
-        // Recorded nowhere on purpose: which refs got fetched is dev-resolve-runner.spec.ts's business.
-    }
-
-    override commitsOnlyOnRemote(): number {
-        return harness.aheadCount;
-    }
-
-    override headSha(): string {
-        return 'deadbeefdeadbeefdeadbeefdeadbeefdeadbeef';
     }
 }
 
@@ -103,12 +90,10 @@ class FakeStore extends PushDevStateStore {
     }
 }
 
+// What the command HANDS the runner is the decision under test; the runner's own sequencing is
+// dev-resolve-runner.spec.ts's.
 class FakeRunner extends DevResolveRunner {
-    constructor() {
-        super(new FakeGitExec(), new FakeRefs(), new FakeStore());
-    }
-
-    override start(_repoRoot: string, state: PushDevState, base: string): void {
+    override async start(_repoRoot: string, state: PushDevState, base: string): Promise<void> {
         harness.startedState = state;
         harness.startedBase = base;
     }
@@ -125,8 +110,11 @@ class FakeRootFinder extends RepoRootFinder {
 }
 
 function command(): PushDevCommand {
+    const gitExec = harness.feature.container.get(GitExec);
+    const refs = new FakeRefs(gitExec);
+    const store = new FakeStore();
     return new PushDevCommand(
-        new FakeRootFinder(), new FakeGitExec(), new FakeRefs(), new FakeStore(), new FakeRunner(),
+        new FakeRootFinder(), gitExec, refs, store, new FakeRunner(gitExec, refs, store, new DevDeployWatchHints()),
         new DevDeployWatchHints());
 }
 
@@ -164,14 +152,14 @@ async function refusalMessage(opts: PushDevOptions): Promise<string> {
 const pushArgs = (): string[] | undefined =>
     harness.gitRuns.find((args: string[]): boolean => args.includes('push'));
 
-beforeEach((): void => {
+beforeEach(async (): Promise<void> => {
     harness.branch = 'dean/ONE-2275';
     harness.copies = [];
     harness.remoteShas = new Map<string, string>();
     harness.aheadCount = 0;
     harness.resolveInProgress = null;
-    harness.cleanTreeCalls = 0;
-    harness.gitRuns = [];
+    harness.feature = await PrGateFeature.create();
+    scriptGit();
     harness.startedBase = '';
     harness.startedState = null;
     harness.out = '';

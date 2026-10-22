@@ -1,7 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import { spawnSync } from 'child_process';
-import { AtomicFile, InformAiError } from '@webpieces/tooling-common';
+import { AtomicFile, GitProcessApi, InformAiError } from '@webpieces/tooling-common';
 import { toError } from '@webpieces/tooling-common/to-error';
 import { ChecklistResult, ReviewJsonService, VERDICT_ORANGE, VERDICT_RED } from '@webpieces/rules-config';
 import { injectable, bindingScopeValues } from 'inversify';
@@ -120,6 +119,7 @@ export class ReviewRoundStateService {
         private readonly reviewJson: ReviewJsonService,
         private readonly provenance: VerdictProvenanceService,
         private readonly atomicFile: AtomicFile,
+        private readonly gitProcess: GitProcessApi,
     ) {}
 
     /** The author's recorded fixes for one round: `review-round<N>-fixes.json`, beside summary.json. */
@@ -207,7 +207,7 @@ export class ReviewRoundStateService {
     }
 
     /** What stage ② does next. See the class comment for the three rules it holds. */
-    plan(repoRoot: string, summaryPath: string, receipt: ReviewStageReceipt | null, maxRounds: number, fullBasis: DiffBasis): ReviewRoundPlan {
+    async plan(repoRoot: string, summaryPath: string, receipt: ReviewStageReceipt | null, maxRounds: number, fullBasis: DiffBasis): Promise<ReviewRoundPlan> {
         const snap = this.snapshot(summaryPath, receipt);
         if (snap.round < 1) return new ReviewRoundPlan(ROUND_ACTION_REVIEW, 1, maxRounds, fullBasis);
         if (!snap.complete) {
@@ -224,14 +224,14 @@ export class ReviewRoundStateService {
         if (snap.headSha === fullBasis.headSha) {
             return new ReviewRoundPlan(ROUND_ACTION_FIX, snap.round, maxRounds, fullBasis, [], reds, oranges);
         }
-        if (this.validFixes(repoRoot, summaryPath, snap) === null) {
+        if (await this.validFixes(repoRoot, summaryPath, snap) === null) {
             return new ReviewRoundPlan(ROUND_ACTION_RECORD, snap.round, maxRounds, fullBasis, [], reds, oranges);
         }
         const basis = new DiffBasis(
             snap.headSha, fullBasis.headSha, false, [],
             `git diff ${snap.headSha} ${fullBasis.headSha}`,
             `git diff ${snap.headSha} ${fullBasis.headSha} -- <file>`, fullBasis.hashMainHead);
-        const changed = this.git(repoRoot, ['diff', '--name-only', snap.headSha, fullBasis.headSha])
+        const changed = (await this.git(repoRoot, ['diff', '--name-only', snap.headSha, fullBasis.headSha]))
             .split('\n').filter((f: string): boolean => f.trim() !== '');
         return new ReviewRoundPlan(ROUND_ACTION_REVIEW, snap.round + 1, maxRounds, basis, changed, reds, oranges);
     }
@@ -245,7 +245,7 @@ export class ReviewRoundStateService {
      * `review-round<N>-fixes.json.superseded-<k>` and a fresh record is written, so re-recording is always
      * the way past a stale record and nothing is ever lost.
      */
-    writeRemediation(repoRoot: string, summaryPath: string, receipt: ReviewStageReceipt, json: string): string {
+    async writeRemediation(repoRoot: string, summaryPath: string, receipt: ReviewStageReceipt, json: string): Promise<string> {
         const snap = this.snapshot(summaryPath, receipt);
         if (!snap.complete) {
             throw new InformAiError('wp-write-review-fixes: the active reviewer round is not complete yet.');
@@ -255,15 +255,15 @@ export class ReviewRoundStateService {
             throw new InformAiError(`wp-write-review-fixes: round ${snap.round} has no red or orange verdict to fix.`);
         }
         const out = this.fixesPath(summaryPath, snap.round);
-        const holding = this.validFixes(repoRoot, summaryPath, snap);
+        const holding = await this.validFixes(repoRoot, summaryPath, snap);
         if (holding !== null) {
             throw new InformAiError(`wp-write-review-fixes: the fixes for round ${snap.round} are already recorded in ${out}, and `
                 + `that record still holds (its fixed commit ${holding.toHead.slice(0, 8)} is in HEAD's history), so it is not `
                 + 'overwritten. Nothing more to record: re-run pnpm wp-review-upsert-pr, or pnpm wp-finish-upsert-pr after the last round.');
         }
-        this.assertClean(repoRoot);
-        const currentHead = this.git(repoRoot, ['rev-parse', 'HEAD']);
-        if (currentHead === snap.headSha || this.git(repoRoot, ['diff', '--name-only', snap.headSha, currentHead]) === '') {
+        await this.assertClean(repoRoot);
+        const currentHead = await this.git(repoRoot, ['rev-parse', 'HEAD']);
+        if (currentHead === snap.headSha || await this.git(repoRoot, ['diff', '--name-only', snap.headSha, currentHead]) === '') {
             throw new InformAiError('wp-write-review-fixes: remediation must contain a committed, non-empty delta after the reviewed HEAD.');
         }
         const raw = this.parseObject(json, 'wp-write-review-fixes: input must be one JSON object.');
@@ -297,8 +297,8 @@ export class ReviewRoundStateService {
      * The round's recorded fixes, or null when there are none that still hold: written from the reviewed
      * HEAD, to a later commit that is still in HEAD's history, covering exactly the round's red/orange set.
      */
-    validFixes(repoRoot: string, summaryPath: string, snap: RoundSnapshot): ReviewRemediation | null {
-        const record = this.readFixes(repoRoot, summaryPath, snap.round);
+    async validFixes(repoRoot: string, summaryPath: string, snap: RoundSnapshot): Promise<ReviewRemediation | null> {
+        const record = await this.readFixes(repoRoot, summaryPath, snap.round);
         if (record === null || record.fromHead !== snap.headSha) return null;
         const blocking = this.blockingIds(summaryPath, snap);
         const ids = record.responses.map((r: RemediationResponse): string => r.checklistId);
@@ -311,11 +311,11 @@ export class ReviewRoundStateService {
      * "orange at <fromHead>, author-fixed in <toHead>, not re-reviewed: <resolution>". An orange with no
      * valid record is absent, and so still blocks.
      */
-    orangeFixes(repoRoot: string, summaryPath: string, results: readonly ChecklistResult[]): Record<string, string> {
+    async orangeFixes(repoRoot: string, summaryPath: string, results: readonly ChecklistResult[]): Promise<Record<string, string>> {
         const out: Record<string, string> = {};
         for (const result of results) {
             if (result.status !== VERDICT_ORANGE || result.problem !== '') continue;
-            const record = this.readFixes(repoRoot, summaryPath, result.round);
+            const record = await this.readFixes(repoRoot, summaryPath, result.round);
             const response = record?.responses.find((r: RemediationResponse): boolean => r.checklistId === result.id);
             if (record === null || response === undefined) continue;
             out[result.id] = `orange at ${record.fromHead.slice(0, 8)}, author-fixed in ${record.toHead.slice(0, 8)}, `
@@ -359,14 +359,14 @@ export class ReviewRoundStateService {
     }
 
     /** A round's fix record, provided its `toHead` is still in HEAD's history; else null. */
-    private readFixes(repoRoot: string, summaryPath: string, round: number): ReviewRemediation | null {
+    private async readFixes(repoRoot: string, summaryPath: string, round: number): Promise<ReviewRemediation | null> {
         const raw = this.readObject(this.fixesPath(summaryPath, round));
         if (raw === null) return null;
         const responses = this.responsesOrEmpty(raw['responses']);
         const fromHead = this.text(raw['fromHead']);
         const toHead = this.text(raw['toHead']);
         if (this.text(raw['agent']) === '' || this.text(raw['model']) === '' || responses.length === 0
-            || fromHead === '' || toHead === '' || fromHead === toHead || !this.isAncestorOfHead(repoRoot, toHead)) return null;
+            || fromHead === '' || toHead === '' || fromHead === toHead || !(await this.isAncestorOfHead(repoRoot, toHead))) return null;
         return new ReviewRemediation(this.text(raw['agent']), this.text(raw['model']), fromHead, toHead, responses);
     }
 
@@ -449,8 +449,8 @@ export class ReviewRoundStateService {
         }
     }
 
-    private assertClean(repoRoot: string): void {
-        const status = this.git(repoRoot, ['status', '--porcelain', '--untracked-files=all']);
+    private async assertClean(repoRoot: string): Promise<void> {
+        const status = await this.git(repoRoot, ['status', '--porcelain', '--untracked-files=all']);
         if (status !== '') throw new InformAiError('wp-write-review-fixes: commit every remediation and leave no staged, unstaged, or untracked files first.');
     }
 
@@ -459,23 +459,18 @@ export class ReviewRoundStateService {
      * "Not a valid commit name") is also no — the commit is gone from this clone, so it is not in HEAD's
      * history. Anything else is a real failure and refuses.
      */
-    private isAncestorOfHead(repoRoot: string, sha: string): boolean {
-        const result = spawnSync('git', ['merge-base', '--is-ancestor', sha, 'HEAD'], { cwd: repoRoot, encoding: 'utf8' });
-        if (result.status === 0) return true;
-        if (result.status === 1 || /not a valid (commit|object) name/i.test(result.stderr ?? '')) return false;
-        const detail = (result.stderr ?? '').trim() || result.error?.message || `exit ${result.status ?? 'unknown'}`;
-        const message = `Review-round Git command failed: git merge-base --is-ancestor ${sha} HEAD\n${detail}`;
-        if (result.error !== undefined) throw new InformAiError(message, { cause: result.error });
-        throw new InformAiError(message);
+    private async isAncestorOfHead(repoRoot: string, sha: string): Promise<boolean> {
+        const result = await this.gitProcess.run(['merge-base', '--is-ancestor', sha, 'HEAD'], repoRoot);
+        if (result.code === 0) return true;
+        if (result.code === 1 || /not a valid (commit|object) name/i.test(result.stderr)) return false;
+        const detail = result.stderr.trim() || `exit ${result.code}`;
+        throw new InformAiError(`Review-round Git command failed: git merge-base --is-ancestor ${sha} HEAD\n${detail}`);
     }
 
-    private git(repoRoot: string, args: string[]): string {
-        const result = spawnSync('git', args, { cwd: repoRoot, encoding: 'utf8' });
-        if (result.status === 0) return (result.stdout ?? '').trim();
-        const command = `git ${args.join(' ')}`;
-        const detail = (result.stderr ?? '').trim() || result.error?.message || `exit ${result.status ?? 'unknown'}`;
-        const message = `Review-round Git command failed: ${command}\n${detail}`;
-        if (result.error !== undefined) throw new InformAiError(message, { cause: result.error });
-        throw new InformAiError(message);
+    private async git(repoRoot: string, args: string[]): Promise<string> {
+        const result = await this.gitProcess.run(args, repoRoot);
+        if (result.ok) return result.stdout.trim();
+        const detail = result.stderr.trim() || `exit ${result.code}`;
+        throw new InformAiError(`Review-round Git command failed: git ${args.join(' ')}\n${detail}`);
     }
 }

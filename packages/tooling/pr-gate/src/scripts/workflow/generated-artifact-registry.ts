@@ -1,7 +1,7 @@
-import { spawnSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 import { RepoScratchDirs } from '@webpieces/rules-config';
+import { NativeProcessApi } from '@webpieces/tooling-common';
 import { toError } from '@webpieces/tooling-common/to-error';
 import { injectable, bindingScopeValues } from 'inversify';
 
@@ -65,12 +65,15 @@ export class GeneratedArtifactRegistry {
     // Resolved once per process: the graph does not change while one PR-gate command runs.
     private cached: GeneratedArtifacts | null = null;
 
-    constructor(private readonly scratchDirs: RepoScratchDirs) {}
+    constructor(
+        private readonly scratchDirs: RepoScratchDirs,
+        private readonly processes: NativeProcessApi,
+    ) {}
 
     /** The declared build outputs for this repo, from nx when readable and the fallback table otherwise. */
-    resolve(repoRoot: string): GeneratedArtifacts {
+    async resolve(repoRoot: string): Promise<GeneratedArtifacts> {
         if (this.cached !== null) return this.cached;
-        const fromNx = this.readNxOutputs(repoRoot);
+        const fromNx = await this.readNxOutputs(repoRoot);
         this.cached = fromNx !== null
             ? new GeneratedArtifacts(fromNx, ARTIFACT_SOURCE_NX)
             : new GeneratedArtifacts(FALLBACK_GENERATED_PATHS.slice(), ARTIFACT_SOURCE_FALLBACK);
@@ -87,12 +90,12 @@ export class GeneratedArtifactRegistry {
      * an empty list) when nx is unavailable or unreadable, so the caller can tell "no nx" apart from
      * "nx says this workspace declares nothing".
      */
-    private readNxOutputs(repoRoot: string): string[] | null {
+    private async readNxOutputs(repoRoot: string): Promise<string[] | null> {
         const nxBin = path.join(repoRoot, 'node_modules', '.bin', 'nx');
         if (!fs.existsSync(nxBin)) return null;
         const outFile = path.join(this.scratchDirs.make(repoRoot, 'wp-nxgraph-'), 'graph.json');
-        const run = spawnSync(nxBin, ['graph', '--file', outFile], { cwd: repoRoot, encoding: 'utf8', stdio: 'pipe' });
-        if (run.status !== 0 || !fs.existsSync(outFile)) return null;
+        const run = await this.processes.run(nxBin, ['graph', '--file', outFile], repoRoot);
+        if (!run.ok || !fs.existsSync(outFile)) return null;
         return this.parseGraph(outFile);
     }
 

@@ -1,7 +1,6 @@
-import { spawn, spawnSync, ChildProcess } from 'child_process';
 import * as fs from 'fs';
 import { BuildTermination } from '@webpieces/rules-config';
-import { gitCheckout } from '@webpieces/tooling-common';
+import { gitCheckout, GitProcessApi, NativeProcessApi, ShellTerminationDto } from '@webpieces/tooling-common';
 import { injectable, bindingScopeValues } from 'inversify';
 
 import { GateLogFile } from './gate-log-file';
@@ -25,8 +24,8 @@ import { BuildLogFollower } from './build-log-follower';
 // pipeline the shell reports TEE's status, which is 0 whether the build passed or failed, so the status
 // had to be smuggled out through a side file. With no pipe, the child's own exit code IS the answer.
 //
-// ─── Why async (`spawn`, not `spawnSync`) ──────────────────────────────────────────────────────────────
-// `spawnSync` blocks the event loop for the length of the build, so NOTHING can print while it runs — and
+// ─── Why async (a child that does not block, not a synchronous spawn) ──────────────────────────────────────────────────────────────
+// A synchronous spawn blocks the event loop for the length of the build, so NOTHING can print while it runs — and
 // a silent terminal for 3–7 minutes is indistinguishable from a hang. The heartbeat is the reason this is
 // async, and it is why `run` returns a Promise and `BuildAffected.runBuildGate` is async with it.
 //
@@ -106,24 +105,26 @@ export class BuildGateLog {
     constructor(
         private readonly files: GateLogFile,
         private readonly stageConsole: StageOutputLog,
+        private readonly git: GitProcessApi,
+        private readonly processes: NativeProcessApi,
     ) {}
 
     /** Absolute path of the log for `stage` at the current HEAD, creating its directory. */
-    pathFor(repoRoot: string, stage: string): string {
+    pathFor(repoRoot: string, stage: string): Promise<string> {
         return this.resolvePath(repoRoot, stage);
     }
 
     /** The same path, and '' when no log has been WRITTEN there yet. Used by finish's skip path. */
-    existingLogFor(repoRoot: string, stage: string): string {
-        const file = this.resolvePath(repoRoot, stage);
+    async existingLogFor(repoRoot: string, stage: string): Promise<string> {
+        const file = await this.resolvePath(repoRoot, stage);
         return fs.existsSync(file) ? file : '';
     }
 
     /** `build.log` for `wp-build`; `build-gate-<stage>-<branch>-<shortSha>.log` for the PR-flow stages. */
-    fileNameFor(repoRoot: string, stage: string): string {
+    async fileNameFor(repoRoot: string, stage: string): Promise<string> {
         if (stage === BUILD_STAGE) return BUILD_LOG_NAME;
         const branch = this.slug(gitCheckout.branch(repoRoot) ?? '');
-        const sha = this.slug(this.git(repoRoot, ['rev-parse', '--short', 'HEAD']));
+        const sha = this.slug(await this.gitOut(repoRoot, ['rev-parse', '--short', 'HEAD']));
         return `build-gate-${this.slug(stage)}-${branch === '' ? 'nobranch' : branch}-${sha === '' ? 'nosha' : sha}.log`;
     }
 
@@ -149,10 +150,7 @@ export class BuildGateLog {
         // the one CliExitError.
         // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
         try {
-            return await this.awaitExit(
-                spawn(buildCommand, { cwd: repoRoot, shell: true, stdio: ['ignore', fd, fd] }),
-                fd,
-            );
+            return this.recordTermination(await this.processes.runShellToFile(buildCommand, repoRoot, fd), fd);
         } finally {
             clearInterval(timer);
             fs.closeSync(fd);
@@ -199,30 +197,19 @@ export class BuildGateLog {
         );
     }
 
-    // Resolve, and wait for, the child's close code AND signal. A spawn that never starts (a shell that is
-    // missing, a cwd that vanished) fails CLOSED to 1 — calling a build that never ran green is the one
-    // outcome that must be impossible — and the reason is APPENDED TO THE LOG, so the failure message's
-    // pointer still leads to it rather than to an empty file.
-    private awaitExit(child: ChildProcess, fd: number): Promise<BuildTermination> {
-        return new Promise<BuildTermination>(
-            (resolve: (termination: BuildTermination) => void): void => {
-                let settled = false;
-                child.on('error', (err: Error): void => {
-                    if (settled) return;
-                    settled = true;
-                    fs.writeSync(fd, `\nThe build command could not be started: ${err.message}\n`);
-                    resolve(new BuildTermination(1, null));
-                });
-                child.on('close', (code: number | null, signal: NodeJS.Signals | null): void => {
-                    if (settled) return;
-                    settled = true;
-                    const termination = new BuildTermination(code, signal);
-                    if (code === null || signal !== null)
-                        fs.writeSync(fd, `\n${this.terminationRecord(termination)}\n`);
-                    resolve(termination);
-                });
-            },
-        );
+    // The child's close code AND signal. A command that never starts (a shell that is missing, a cwd that
+    // vanished) fails CLOSED to 1 — calling a build that never ran green is the one outcome that must be
+    // impossible — and the reason is APPENDED TO THE LOG, so the failure message's pointer still leads to
+    // it rather than to an empty file.
+    private recordTermination(ended: ShellTerminationDto, fd: number): BuildTermination {
+        if (ended.startError !== null) {
+            fs.writeSync(fd, `\nThe build command could not be started: ${ended.startError}\n`);
+            return new BuildTermination(1, null);
+        }
+        const termination = new BuildTermination(ended.code, ended.signal);
+        if (ended.code === null || ended.signal !== null)
+            fs.writeSync(fd, `\n${this.terminationRecord(termination)}\n`);
+        return termination;
     }
 
     /** One stable, human-readable spelling shared by the FullLog and the immediate failure output. */
@@ -232,8 +219,8 @@ export class BuildGateLog {
         return `Build process termination: exit code ${code}; signal ${signal}.`;
     }
 
-    private resolvePath(repoRoot: string, stage: string): string {
-        const name = this.fileNameFor(repoRoot, stage);
+    private async resolvePath(repoRoot: string, stage: string): Promise<string> {
+        const name = await this.fileNameFor(repoRoot, stage);
         // `wp-build`'s log sits at the ROOT of the state dir, not under `logs/`, because it is the one log
         // path a person types from memory. Everything else keeps the per-commit names in `logs/`.
         return stage === BUILD_STAGE
@@ -248,9 +235,9 @@ export class BuildGateLog {
 
     // One local git read. Fails SOFT to '' — a missing branch/sha degrades the FILENAME, and degrading a
     // filename may never be the reason a build gate does not run.
-    private git(repoRoot: string, args: string[]): string {
-        const result = spawnSync('git', ['-C', repoRoot, ...args], { encoding: 'utf8' });
-        if (result.status !== 0) return '';
-        return (result.stdout ?? '').trim();
+    private async gitOut(repoRoot: string, args: string[]): Promise<string> {
+        const result = await this.git.run(['-C', repoRoot, ...args]);
+        if (!result.ok) return '';
+        return result.stdout.trim();
     }
 }

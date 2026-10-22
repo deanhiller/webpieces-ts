@@ -1,5 +1,5 @@
-import { spawnSync } from 'child_process';
 import { CliExitError, RepoRootFinder } from '@webpieces/rules-config';
+import { GitProcessApi } from '@webpieces/tooling-common';
 import { injectable, bindingScopeValues } from 'inversify';
 import { GitStatusEntry, GitStatusParser } from './git-status';
 
@@ -28,12 +28,17 @@ export class GitOutcome {
     }
 }
 
-/** Shared git precondition checks + push logic for the PR/merge workflow. */
+/**
+ * Shared git precondition checks + push logic for the PR/merge workflow. Every git it runs goes through
+ * the injected {@link GitProcessApi} edge (#1381), so a feature test scripts git's answers instead of
+ * building a repository.
+ */
 @injectable(bindingScopeValues.Singleton)
 export class GitExec {
     constructor(
         private readonly repoRootFinder: RepoRootFinder,
         private readonly statusParser: GitStatusParser,
+        private readonly git: GitProcessApi,
     ) {}
 
     /**
@@ -49,21 +54,22 @@ export class GitExec {
      * Tracked changes (staged + unstaged) AND untracked files, EXCLUDING gitignored paths — so
      * `.webpieces/` tooling artifacts never count. Empty string = fully committed.
      */
-    porcelainStatus(cwd: string): string {
-        return this.rawGitQuery(['status', '--porcelain'], cwd,
-            'Failed to run `git status --porcelain` to check the working tree.').replace(/\n+$/, '');
+    async porcelainStatus(cwd: string): Promise<string> {
+        const raw = await this.rawGitQuery(['status', '--porcelain'], cwd,
+            'Failed to run `git status --porcelain` to check the working tree.');
+        return raw.replace(/\n+$/, '');
     }
 
     /**
      * The same status, PARSED: two status columns, an unquoted path, and explicit
      * `isStaged()`/`isUnstaged()`/`isUntracked()` answers. Use this for every semantic question.
      */
-    statusEntries(cwd: string): GitStatusEntry[] {
-        return this.statusParser.parse(this.porcelainStatus(cwd));
+    async statusEntries(cwd: string): Promise<GitStatusEntry[]> {
+        return this.statusParser.parse(await this.porcelainStatus(cwd));
     }
 
     // Untracked files only (respects .gitignore). Empty string = none.
-    untrackedFiles(cwd: string): string {
+    untrackedFiles(cwd: string): Promise<string> {
         return this.gitQuery(['ls-files', '--others', '--exclude-standard'], cwd, 'Failed to list untracked files (git ls-files --others).');
     }
 
@@ -72,8 +78,8 @@ export class GitExec {
      * webpieces tooling deliberately does NOT `git add`/`commit` the developer's work for them. Aborts
      * with instructions if anything is uncommitted (tracked or untracked, excluding gitignored).
      */
-    assertCleanTree(cwd: string): void {
-        const dirty = this.porcelainStatus(cwd);
+    async assertCleanTree(cwd: string): Promise<void> {
+        const dirty = await this.porcelainStatus(cwd);
         if (dirty === '') return;
         throw new CliExitError(1,
             '\n' + SEP +
@@ -93,8 +99,8 @@ export class GitExec {
      * the tree but untracked files must NOT be swept into the squash commit. Lists any untracked files
      * and aborts so the AI commits or deletes them explicitly.
      */
-    assertNoUntracked(cwd: string): void {
-        const untracked = this.untrackedFiles(cwd);
+    async assertNoUntracked(cwd: string): Promise<void> {
+        const untracked = await this.untrackedFiles(cwd);
         if (untracked === '') return;
         throw new CliExitError(1,
             '\n' + SEP +
@@ -111,25 +117,30 @@ export class GitExec {
     /**
      * Run a git command that is expected to succeed; abort the process with a clear message if it
      * fails. Used for fetch/pull/checkout/commit where silently continuing on failure would operate on
-     * stale or wrong state.
+     * stale or wrong state. Its output goes straight to the terminal.
      */
-    runGitChecked(args: string[], errMsg: string): void {
-        const result = spawnSync('git', args, { stdio: 'inherit' });
-        if (result.status !== 0) {
-            throw new CliExitError(1, `❌ ${errMsg} (git ${args.join(' ')} exited ${String(result.status)})`);
+    async runGitChecked(args: string[], errMsg: string): Promise<void> {
+        const result = await this.git.passThrough(args);
+        if (!result.ok) {
+            throw new CliExitError(1, `❌ ${errMsg} (git ${args.join(' ')} exited ${String(result.code)})`);
         }
+    }
+
+    /** Run git with its output on the terminal and return its exit code — for a caller that decides itself. */
+    async passThrough(args: string[], cwd?: string): Promise<number> {
+        return (await this.git.passThrough(args, cwd)).code;
     }
 
     /**
      * Push HEAD to origin/<currentBranch>. Uses --force-with-lease for an existing remote branch (the
      * 3-point squash rewrites history) and -u for a brand-new branch.
      */
-    ensurePushed(currentBranch: string): void {
-        const remoteExists = spawnSync('git', ['ls-remote', '--exit-code', '--heads', 'origin', currentBranch]).status === 0;
+    async ensurePushed(currentBranch: string): Promise<void> {
+        const remoteExists = (await this.git.run(['ls-remote', '--exit-code', '--heads', 'origin', currentBranch])).ok;
         if (remoteExists) {
-            this.runGitChecked(['push', '--force-with-lease', 'origin', `HEAD:${currentBranch}`], 'Failed to push branch');
+            await this.runGitChecked(['push', '--force-with-lease', 'origin', `HEAD:${currentBranch}`], 'Failed to push branch');
         } else {
-            this.runGitChecked(['push', '-u', 'origin', `HEAD:${currentBranch}`], 'Failed to push new branch');
+            await this.runGitChecked(['push', '-u', 'origin', `HEAD:${currentBranch}`], 'Failed to push new branch');
         }
     }
 
@@ -139,20 +150,25 @@ export class GitExec {
      * conflict?). Distinct from {@link runGitChecked}, which exists for the commands where continuing on
      * failure would operate on wrong state.
      */
-    tryGit(args: string[], cwd: string): GitOutcome {
-        const out = spawnSync('git', args, { encoding: 'utf8', cwd });
-        return new GitOutcome(out.status ?? 1, (out.stdout ?? '').trim(), (out.stderr ?? '').trim());
+    async tryGit(args: string[], cwd: string): Promise<GitOutcome> {
+        const out = await this.git.run(args, cwd);
+        return new GitOutcome(out.code, out.stdout.trim(), out.stderr.trim());
+    }
+
+    /** `git branch --show-current` in `cwd` — '' on a detached HEAD. Must succeed. */
+    currentBranch(cwd: string): Promise<string> {
+        return this.gitQuery(['branch', '--show-current'], cwd, 'Failed to read the current branch (git branch --show-current).');
     }
 
     /** Read-only git query that MUST succeed, trimmed. Public sibling of the private raw form. */
-    gitQuery(args: string[], cwd: string, failMsg: string): string {
-        return this.rawGitQuery(args, cwd, failMsg).trim();
+    async gitQuery(args: string[], cwd: string, failMsg: string): Promise<string> {
+        return (await this.rawGitQuery(args, cwd, failMsg)).trim();
     }
 
     // The untrimmed sibling — see porcelainStatus for why trimming is not always safe.
-    private rawGitQuery(args: string[], cwd: string, failMsg: string): string {
-        const out = spawnSync('git', args, { encoding: 'utf8', cwd });
-        if (out.status !== 0) {
+    private async rawGitQuery(args: string[], cwd: string, failMsg: string): Promise<string> {
+        const out = await this.git.run(args, cwd);
+        if (!out.ok) {
             throw new CliExitError(1, `❌ ${failMsg}`);
         }
         return out.stdout;

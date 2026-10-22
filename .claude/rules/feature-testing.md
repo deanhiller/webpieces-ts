@@ -43,7 +43,14 @@ git (or the shell) correctly. Keep them beside that implementation, and keep the
 
 ## When the seam does not exist yet
 
-Much of `packages/tooling/**` still calls git and the shell directly. If the code you are testing has
-no injected `GitApi` / `ProcessRunner` / `Timer`, the cure is to ADD the seam — an abstract API,
-its production implementation, and a mock — not to write another process-spawning spec. Converting
-the existing process-spawning specs is tracked separately from #1379.
+The process edges exist (#1381): `GitProcessApi` (git) and `NativeProcessApi` (every other program,
+including a build command run into a log file) in `@webpieces/tooling-common`, bound by
+`new ProcessBindings().bind(container)`, with `MockGitProcessApi` / `MockNativeProcessApi` in
+`@webpieces/tooling-testkit` — scripted answers by argv, every call recorded, and an unscripted call
+THROWS naming the argv. `@webpieces/pr-gate` reaches every process through them; its feature tests build
+the shipped container and rebind only these two (`src/__tests__/feature-harness.ts`).
+
+Other `packages/tooling/**` packages (`rules-config`'s DiffScope, `repo-workflow-core`, the hooks) still
+call git and the shell directly. If the code you are testing does, the cure is to route it through those
+edges — or add a `Timer` the same way — not to write another process-spawning spec. Converting the rest
+is tracked on #1381.

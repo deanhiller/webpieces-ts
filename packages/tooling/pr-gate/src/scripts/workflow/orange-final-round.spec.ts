@@ -3,7 +3,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { execSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
-import { AtomicFile } from '@webpieces/tooling-common';
+import { AtomicFile, GitProcessClient } from '@webpieces/tooling-common';
 import { toError } from '@webpieces/tooling-common/to-error';
 import { CK_ORANGE_FIXED, CK_OVERRIDDEN, ChecklistDefinition, ChecklistInstructionsService, DEFAULT_MAX_CONCURRENT_BUILDS, DiffScope, HomeConfig, HomeConfigService, REVIEWER_AGENTS_PLACEHOLDER, RepoRootFinder, RequiredChecklist, ReviewJsonService, ReviewerAgentPolicy, toChecklist } from '@webpieces/rules-config';
 import { AiBranchName } from './git-readAiBranchName';
@@ -34,15 +34,23 @@ import { WriteReviewFixesCommand, WriteReviewFixesOptions } from '../commands/wr
 const FEATURE = 'dean-feat';
 
 class FixedBranchName extends AiBranchName {
-    getFeatureName(): string {
+    constructor() {
+        super(new BranchNaming(), null as never);
+    }
+
+    override async getFeatureName(): Promise<string> {
         return FEATURE;
     }
 }
 
+// Still a REAL git: the scan's changed-file set comes from `@webpieces/rules-config`'s DiffScope, which is
+// not routed through the injected process edge yet (a later slice of #1381).
+const realGit = new GitProcessClient();
+
 const reviewJson = new ReviewJsonService();
 const provenance = new VerdictProvenanceService(reviewJson, new AtomicFile());
 const receipts = new ReviewStageReceiptService(reviewJson);
-const rounds = new ReviewRoundStateService(reviewJson, provenance, new AtomicFile());
+const rounds = new ReviewRoundStateService(reviewJson, provenance, new AtomicFile(), realGit);
 const gate = new ReviewerVerdictGate(reviewJson, new ChecklistInstructionsService(reviewJson));
 const POLICY = new ReviewerAgentPolicy('webpieces-reviewer', REVIEWER_AGENTS_PLACEHOLDER);
 
@@ -66,10 +74,10 @@ function scanner(): ChecklistScanner {
     const home = new HomeConfigService();
     vi.spyOn(home, 'load').mockReturnValue(new HomeConfig(false, false, DEFAULT_MAX_CONCURRENT_BUILDS, false));
     return new ChecklistScanner(
-        new FixedBranchName(new BranchNaming()), new ChecklistDetector(diffScope), diffScope,
-        new DiffBasisResolver(new ForkPoint(null as never, null as never, null as never), new GitStatusParser()),
+        new FixedBranchName(), new ChecklistDetector(diffScope), diffScope,
+        new DiffBasisResolver(new ForkPoint(null as never, null as never, null as never, null as never, realGit), new GitStatusParser(), realGit),
         new PrContextWriter(diffScope, reviewJson), reviewJson, home,
-        new ChecklistScopeHasher(new DiffMaterializer(reviewJson)), provenance, receipts, rounds,
+        new ChecklistScopeHasher(new DiffMaterializer(reviewJson, realGit)), provenance, receipts, rounds,
     );
 }
 
@@ -96,8 +104,8 @@ function repo(): string {
 }
 
 /** Stage ② briefing `ids` for `round` of `maxRounds` at the current HEAD — the receipt it writes. */
-function brief(dir: string, round: number, maxRounds: number, ids: string[]): ReviewStageReceipt {
-    const scan = scanner().scan(dir, CHECKLISTS, new ChecklistScanOptions(maxRounds, false, ''));
+async function brief(dir: string, round: number, maxRounds: number, ids: string[]): Promise<ReviewStageReceipt> {
+    const scan = await scanner().scan(dir, CHECKLISTS, new ChecklistScanOptions(maxRounds, false, ''));
     const receipt = new ReviewStageReceipt(scan.basis.headSha, true, 'pnpm build', 'now', ids);
     receipt.scopeHashes = scan.scopeHashes;
     receipt.round = round;
@@ -126,7 +134,7 @@ async function record(dir: string, ids: string[]): Promise<void> {
         agent: 'claude', model: 'opus',
         responses: ids.map((id: string): Record<string, unknown> => ({ checklistId: id, resolution: `fixed ${id}: corrupt JSON now throws`, files: ['store.ts'] })),
     });
-    const cmd = new WriteReviewFixesCommand(new RepoRootFinder(), new FixedBranchName(new BranchNaming()), receipts, rounds);
+    const cmd = new WriteReviewFixesCommand(new RepoRootFinder(), new FixedBranchName(), receipts, rounds);
     const out = vi.spyOn(process.stdout, 'write').mockImplementation((): boolean => true);
     // webpieces-disable no-unmanaged-exceptions -- restore stdout whatever the command does; the caller asserts on the outcome
     // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
@@ -138,13 +146,13 @@ async function record(dir: string, ids: string[]): Promise<void> {
 }
 
 /** The scan exactly as `wp-finish-upsert-pr` hands it to its gate. */
-function finishScan(dir: string, maxRounds: number): ChecklistScan {
+function finishScan(dir: string, maxRounds: number): Promise<ChecklistScan> {
     return scanner().scan(dir, CHECKLISTS, new ChecklistScanOptions(maxRounds, true, ''));
 }
 
-function planOf(dir: string, maxRounds: number): string {
-    const scan = finishScan(dir, maxRounds);
-    return rounds.plan(dir, scan.summaryPath, receipts.read(dir, FEATURE), maxRounds, scan.basis).action;
+async function planOf(dir: string, maxRounds: number): Promise<string> {
+    const scan = await finishScan(dir, maxRounds);
+    return (await rounds.plan(dir, scan.summaryPath, receipts.read(dir, FEATURE), maxRounds, scan.basis)).action;
 }
 
 function ids(list: readonly RequiredChecklist[]): string[] {
@@ -171,19 +179,19 @@ function refusal(scan: ChecklistScan): string {
 describe('maxReviewerRounds: 1 — round 1 is the final round, and it ends orange → fix → finish', () => {
     it('refuses the orange once, then passes after the fix is recorded — with no second reviewer spawn', async () => {
         const dir = repo();
-        const receipt = brief(dir, 1, 1, [ISSUE, ERRORS]);
+        const receipt = await brief(dir, 1, 1, [ISSUE, ERRORS]);
         submit(dir, receipt, ISSUE, 'yellow', 'ticket asks for a doc note too');
         submit(dir, receipt, ERRORS, 'orange', 'the catch-all treats a corrupt JSON file as absent');
 
-        const before = refusal(finishScan(dir, 1));
+        const before = refusal(await finishScan(dir, 1));
         expect(before).toContain('1 ORANGE');
         expect(before).toContain('pnpm wp-write-review-fixes');
         expect(before).not.toContain('You MUST run these');
-        expect(planOf(dir, 1)).toBe(ROUND_ACTION_FINISH);
+        expect(await planOf(dir, 1)).toBe(ROUND_ACTION_FINISH);
 
         await fixAndRecord(dir, [ERRORS], 'export function load(): string { return read(); }\n');
 
-        const after = finishScan(dir, 1);
+        const after = await finishScan(dir, 1);
         expect(after.outstanding).toEqual([]);
         expect(refusal(after)).toBe('');
         const verdict = reviewJson.resolveVerdict(new RequiredChecklist(ERRORS, POLICY, '', []), after.results);
@@ -191,28 +199,28 @@ describe('maxReviewerRounds: 1 — round 1 is the final round, and it ends orang
         expect(verdict.detail).toMatch(/^orange at [0-9a-f]{8}, author-fixed in [0-9a-f]{8}, not re-reviewed: fixed error-handling-reviewer/);
         expect(after.orangeFixes[ERRORS]).toBe(verdict.detail);
         // …and stage ② agrees: no further round, ever.
-        expect(planOf(dir, 1)).toBe(ROUND_ACTION_FINISH);
+        expect(await planOf(dir, 1)).toBe(ROUND_ACTION_FINISH);
     });
 
     it('the recorded fix keeps holding after later commits — staleness never re-opens the review', async () => {
         const dir = repo();
-        const receipt = brief(dir, 1, 1, [ISSUE, ERRORS]);
+        const receipt = await brief(dir, 1, 1, [ISSUE, ERRORS]);
         submit(dir, receipt, ISSUE, 'green', 'ok');
         submit(dir, receipt, ERRORS, 'orange', 'throw on corrupt JSON');
         await fixAndRecord(dir, [ERRORS], 'export function load(): string { return read(); }\n');
         commit(dir, 'store.ts', 'export function load(): string { return read().trim(); }\n');
         commit(dir, 'NOTES.md', 'follow-up\n');
 
-        const scan = finishScan(dir, 1);
+        const scan = await finishScan(dir, 1);
         expect(standingOf(scan, ISSUE)?.standing).toBe(STANDING_CARRIED);
         expect(scan.outstanding).toEqual([]);
         expect(refusal(scan)).toBe('');
-        expect(planOf(dir, 1)).toBe(ROUND_ACTION_FINISH);
+        expect(await planOf(dir, 1)).toBe(ROUND_ACTION_FINISH);
     });
 
     it('never overwrites a record that still holds: a second wp-write-review-fixes is refused', async () => {
         const dir = repo();
-        const receipt = brief(dir, 1, 1, [ERRORS]);
+        const receipt = await brief(dir, 1, 1, [ERRORS]);
         submit(dir, receipt, ERRORS, 'orange', 'throw on corrupt JSON');
         await fixAndRecord(dir, [ERRORS], 'export function load(): string { return read(); }\n');
         await expect(fixAndRecord(dir, [ERRORS], 'export function load(): string { return read() ?? ""; }\n'))
@@ -223,95 +231,95 @@ describe('maxReviewerRounds: 1 — round 1 is the final round, and it ends orang
     // so the recorded fix commit leaves HEAD's history. Re-recording must be the way past it, never a loop.
     it('after a squash-update, the stale record stops counting, re-recording is accepted, and the old one is kept', async () => {
         const dir = repo();
-        const receipt = brief(dir, 1, 1, [ISSUE, ERRORS]);
+        const receipt = await brief(dir, 1, 1, [ISSUE, ERRORS]);
         submit(dir, receipt, ISSUE, 'green', 'ok');
         submit(dir, receipt, ERRORS, 'orange', 'throw on corrupt JSON');
         await fixAndRecord(dir, [ERRORS], 'export function load(): string { return read(); }\n');
         git(dir, 'git reset -q --soft main');
         git(dir, 'git commit -qm "Squash merge of dean/feat"');
 
-        expect(refusal(finishScan(dir, 1))).toContain('1 ORANGE');
+        expect(refusal(await finishScan(dir, 1))).toContain('1 ORANGE');
         await record(dir, [ERRORS]);
-        expect(refusal(finishScan(dir, 1))).toBe('');
+        expect(refusal(await finishScan(dir, 1))).toBe('');
         const fixes = rounds.fixesPath(summaryPath(dir), 1);
         expect(fs.existsSync(`${fixes}.superseded-1`)).toBe(true);
         expect(rounds.highestRound(summaryPath(dir))).toBe(1);
-        expect(planOf(dir, 1)).toBe(ROUND_ACTION_FINISH);
+        expect(await planOf(dir, 1)).toBe(ROUND_ACTION_FINISH);
     });
 });
 
 describe('maxReviewerRounds: 2 — round 1 red → fix → round 2 (final) is orange-only', () => {
     it('re-briefs ONLY the red, keeps round 1 on disk, and the final orange ships once its fix is recorded', async () => {
         const dir = repo();
-        const round1 = brief(dir, 1, 2, [ISSUE, ERRORS]);
+        const round1 = await brief(dir, 1, 2, [ISSUE, ERRORS]);
         submit(dir, round1, ISSUE, 'green', 'ok');
         submit(dir, round1, ERRORS, 'red', 'the catch-all hides corrupt JSON');
         await fixAndRecord(dir, [ERRORS], 'export function load(): string { try { return read(); } catch (e) { throw e; } }\n');
 
-        const scan = finishScan(dir, 2);
-        const plan = rounds.plan(dir, scan.summaryPath, receipts.read(dir, FEATURE), 2, scan.basis);
+        const scan = await finishScan(dir, 2);
+        const plan = await rounds.plan(dir, scan.summaryPath, receipts.read(dir, FEATURE), 2, scan.basis);
         expect(plan.action).toBe(ROUND_ACTION_REVIEW);
         expect(plan.round).toBe(2);
         expect(plan.redChecklistIds).toEqual([ERRORS]);
 
-        const round2 = brief(dir, 2, 2, [ERRORS]);
+        const round2 = await brief(dir, 2, 2, [ERRORS]);
         submit(dir, round2, ERRORS, 'orange', 'rethrowing loses the file path; wrap it');
-        expect(planOf(dir, 2)).toBe(ROUND_ACTION_FINISH);
-        expect(refusal(finishScan(dir, 2))).toContain('1 ORANGE');
+        expect(await planOf(dir, 2)).toBe(ROUND_ACTION_FINISH);
+        expect(refusal(await finishScan(dir, 2))).toContain('1 ORANGE');
 
         await fixAndRecord(dir, [ERRORS], 'export function load(): string { return read(); }\n');
-        const done = finishScan(dir, 2);
+        const done = await finishScan(dir, 2);
         expect(refusal(done)).toBe('');
         expect(fs.existsSync(reviewJson.checklistResultPath(summaryPath(dir), ERRORS, 1))).toBe(true);
         expect(fs.existsSync(rounds.fixesPath(summaryPath(dir), 1))).toBe(true);
         expect(fs.existsSync(rounds.fixesPath(summaryPath(dir), 2))).toBe(true);
-        expect(planOf(dir, 2)).toBe(ROUND_ACTION_FINISH);
+        expect(await planOf(dir, 2)).toBe(ROUND_ACTION_FINISH);
     });
 
-    it('round 1 all green + a later commit → no round 2 is ever demanded (staleness never re-reviews)', () => {
+    it('round 1 all green + a later commit → no round 2 is ever demanded (staleness never re-reviews)', async () => {
         const dir = repo();
-        const receipt = brief(dir, 1, 2, [ISSUE, ERRORS]);
+        const receipt = await brief(dir, 1, 2, [ISSUE, ERRORS]);
         submit(dir, receipt, ISSUE, 'green', 'ok');
         submit(dir, receipt, ERRORS, 'yellow', 'consider a typed error');
         commit(dir, 'store.ts', 'export function load(): string { return read(); }\n');
 
-        const scan = finishScan(dir, 2);
+        const scan = await finishScan(dir, 2);
         expect(standingOf(scan, ERRORS)?.standing).toBe(STANDING_CARRIED);
         expect(scan.outstanding).toEqual([]);
         expect(refusal(scan)).toBe('');
-        expect(planOf(dir, 2)).toBe(ROUND_ACTION_FINISH);
+        expect(await planOf(dir, 2)).toBe(ROUND_ACTION_FINISH);
     });
 });
 
 describe('the checklist set is FROZEN at the briefing', () => {
-    it('a checklist first triggered after the briefing is "not reviewed", never owed, and does not block', () => {
+    it('a checklist first triggered after the briefing is "not reviewed", never owed, and does not block', async () => {
         const dir = repo();
-        const receipt = brief(dir, 1, 1, [ISSUE, ERRORS]);
+        const receipt = await brief(dir, 1, 1, [ISSUE, ERRORS]);
         submit(dir, receipt, ISSUE, 'green', 'ok');
         submit(dir, receipt, ERRORS, 'green', 'ok');
         commit(dir, 'deploy.env', 'API_KEY=placeholder\n');
 
-        const scan = finishScan(dir, 1);
+        const scan = await finishScan(dir, 1);
         expect(ids(scan.notBriefed)).toEqual([SECRETS]);
         expect(ids(scan.applicable)).not.toContain(SECRETS);
         expect(scan.outstanding).toEqual([]);
         expect(refusal(scan)).toBe('');
-        expect(planOf(dir, 1)).toBe(ROUND_ACTION_FINISH);
+        expect(await planOf(dir, 1)).toBe(ROUND_ACTION_FINISH);
     });
 
-    it('before any round starts the set is NOT frozen: the scan still matches the diff', () => {
+    it('before any round starts the set is NOT frozen: the scan still matches the diff', async () => {
         const dir = repo();
         commit(dir, 'deploy.env', 'API_KEY=placeholder\n');
-        const scan = finishScan(dir, 1);
+        const scan = await finishScan(dir, 1);
         expect(ids(scan.applicable)).toContain(SECRETS);
         expect(scan.notBriefed).toEqual([]);
     });
 });
 
 describe('the round is derived from the files — there is no separate counter to reset', () => {
-    it('with the receipt gone, the round, roster and reviewed HEAD come back from the round files', () => {
+    it('with the receipt gone, the round, roster and reviewed HEAD come back from the round files', async () => {
         const dir = repo();
-        const receipt = brief(dir, 1, 1, [ISSUE, ERRORS]);
+        const receipt = await brief(dir, 1, 1, [ISSUE, ERRORS]);
         submit(dir, receipt, ISSUE, 'green', 'ok');
         submit(dir, receipt, ERRORS, 'orange', 'throw on corrupt JSON');
         fs.rmSync(receipts.receiptPath(dir, FEATURE));
@@ -326,9 +334,9 @@ describe('the round is derived from the files — there is no separate counter t
 
 /** Issue #1053 section E (shipped in #1052): a human override is honoured even when staleness is judged first. */
 describe('an in-session human override wins over staleness (regression)', () => {
-    it('a STALE red whose checklist carries a human override counts', () => {
+    it('a STALE red whose checklist carries a human override counts', async () => {
         const dir = repo();
-        const receipt = brief(dir, 1, 2, [ISSUE, ERRORS]);
+        const receipt = await brief(dir, 1, 2, [ISSUE, ERRORS]);
         submit(dir, receipt, ISSUE, 'green', 'ok');
         submit(dir, receipt, ERRORS, 'red', 'the catch-all hides corrupt JSON');
         commit(dir, 'store.ts', 'export function load(): string { return read(); }\n');
@@ -337,7 +345,7 @@ describe('an in-session human override wins over staleness (regression)', () => 
             reason: 'Dean: ship it, tracked in a follow-up',
         }));
 
-        const scan = finishScan(dir, 2);
+        const scan = await finishScan(dir, 2);
         expect(standingOf(scan, ERRORS)?.standing).toBe(STANDING_CARRIED);
         expect(standingOf(scan, ERRORS)?.reason).toContain('human override');
         expect(reviewJson.resolveVerdict(new RequiredChecklist(ERRORS, POLICY, '', []), scan.results).status).toBe(CK_OVERRIDDEN);

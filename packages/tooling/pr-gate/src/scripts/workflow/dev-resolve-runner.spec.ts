@@ -3,22 +3,24 @@ import * as fs from 'fs';
 import * as path from 'path';
 
 import { describe, it, expect, beforeEach } from 'vitest';
-import { CliExitError, DevDeployConfig, RepoRootFinder } from '@webpieces/rules-config';
-import { DotWebpieces } from '@webpieces/tooling-common';
+import { CliExitError, DevDeployConfig } from '@webpieces/rules-config';
+import { DotWebpieces, GitResultDto } from '@webpieces/tooling-common';
 import { toError } from '@webpieces/tooling-common/to-error';
+import { ProcessCallDto } from '@webpieces/tooling-testkit';
+import { PrGateFeature } from '../../__tests__/feature-harness';
 
 import { DevResolveRunner } from './dev-resolve-runner';
 import { DevDeployRefs } from './dev-deploy-refs';
 import { PushDevState, PushDevStateStore } from './push-dev-state';
 import { DevDeployWatchHints } from './dev-deploy-watch-hints';
-import { GitExec, GitOutcome } from './git-exec';
-import { GitStatusParser } from './git-status';
+import { GitExec } from './git-exec';
 
 /**
  * The state machine: merge until something conflicts, hand the tree over, be resumed, publish.
  *
- * Every git command is recorded rather than run, and the point of several assertions is what is NOT in
- * that recording — nothing ever writes to the feature branch. That is the acceptance criterion the whole
+ * Every git command is recorded rather than run — git is SCRIPTED on the injected GitProcessApi (#1381) —
+ * and the point of several assertions is what is NOT in that recording — nothing ever writes to the
+ * feature branch. That is the acceptance criterion the whole
  * feature exists to satisfy: if the feature branch acquired another developer's commits, landing its PR
  * would ship unreviewed work to production.
  */
@@ -33,55 +35,45 @@ class Harness {
     conflicting: Set<string> = new Set<string>();
     // Paths git reports as unmerged on `git diff --diff-filter=U`.
     unmerged: string[] = [];
-    runs: string[][] = [];
-    tries: string[][] = [];
     stateOnDisk: PushDevState | null = null;
     cleared = 0;
     out = '';
+    feature!: PrGateFeature;
+
+    /** The commands that must succeed (runGitChecked): their output goes straight to the terminal. */
+    get runs(): string[][] {
+        return this.feature.git.calls.filter((c: ProcessCallDto): boolean => c.mode === 'passThrough')
+            .map((c: ProcessCallDto): string[] => [...c.args]);
+    }
+
+    /** The commands allowed to fail (tryGit) and the read-only queries, captured. */
+    get tries(): string[][] {
+        return this.feature.git.calls.filter((c: ProcessCallDto): boolean => c.mode === 'run')
+            .map((c: ProcessCallDto): string[] => [...c.args]);
+    }
 }
 
 const harness = new Harness();
 
-class FakeGitExec extends GitExec {
-    constructor() {
-        super(new RepoRootFinder(), new GitStatusParser());
-    }
-
-    override runGitChecked(args: string[]): void {
-        harness.runs.push(args);
-    }
-
-    override assertNoUntracked(): void {
-        // The real check needs a real tree; git-exec owns it.
-    }
-
-    override tryGit(args: string[]): GitOutcome {
-        harness.tries.push(args);
+/** What git answers: a merge of a `conflicting` ref fails; the unmerged list; a sha; everything else succeeds. */
+function scriptGit(): void {
+    const git = harness.feature.git;
+    git.respondToPrefix(['-C', REPO], (call: ProcessCallDto): GitResultDto => {
+        const args = call.args;
         if (args.includes('merge') && !args.includes('--abort')) {
             const ref = args[args.length - 1].replace('refs/remotes/origin/', '');
-            if (harness.conflicting.has(ref)) return new GitOutcome(1, '', 'CONFLICT');
+            if (harness.conflicting.has(ref)) return git.fail(1, '', 'CONFLICT (content): Merge conflict');
         }
-        return new GitOutcome(0, '', '');
-    }
-
-    override gitQuery(args: string[]): string {
-        return args.includes('--diff-filter=U') ? harness.unmerged.join('\n') : '';
-    }
+        if (args.includes('--diff-filter=U')) return git.ok(harness.unmerged.join('\n'));
+        if (args.includes('rev-parse')) return git.ok('deadbeefdeadbeefdeadbeefdeadbeefdeadbeef\n');
+        return git.ok();
+    });
+    // The resolution is committed only from a tree with no untracked files.
+    git.respond(['ls-files', '--others', '--exclude-standard'], git.ok(''));
 }
 
+// Only the config read is stood in for — it reads webpieces.config.json, not an outside system.
 class FakeRefs extends DevDeployRefs {
-    constructor() {
-        super(new FakeGitExec());
-    }
-
-    override fetchCopies(): void {
-        // Which refs get fetched is DevDeployRefs' business; the sequencing under test is unaffected.
-    }
-
-    override headSha(): string {
-        return 'deadbeefdeadbeefdeadbeefdeadbeefdeadbeef';
-    }
-
     override config(): DevDeployConfig {
         return new DevDeployConfig('dev-include', 'dev');
     }
@@ -105,7 +97,8 @@ class FakeStore extends PushDevStateStore {
 }
 
 function runner(): DevResolveRunner {
-    return new DevResolveRunner(new FakeGitExec(), new FakeRefs(), new FakeStore(), new DevDeployWatchHints());
+    const gitExec = harness.feature.container.get(GitExec);
+    return new DevResolveRunner(gitExec, new FakeRefs(gitExec), new FakeStore(), new DevDeployWatchHints());
 }
 
 function state(queue: string[]): PushDevState {
@@ -113,7 +106,7 @@ function state(queue: string[]): PushDevState {
 }
 
 // Invoke `fn` with stdout captured; returns the CliExitError it threw, or null when it completed.
-function capture(fn: () => void): CliExitError | null {
+async function capture(fn: () => Promise<void>): Promise<CliExitError | null> {
     const original = process.stdout.write.bind(process.stdout);
     // webpieces-disable no-any-unknown -- stubbing node's write signature for the duration of one call
     (process.stdout as unknown as { write: (chunk: string) => boolean }).write = (chunk: string): boolean => {
@@ -122,7 +115,7 @@ function capture(fn: () => void): CliExitError | null {
     };
     // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
     try {
-        fn();
+        await fn();
         return null;
     } catch (err: unknown) {
         const error = toError(err);
@@ -140,19 +133,19 @@ const writesToFeatureBranch = (): boolean =>
     [...harness.runs, ...harness.tries].some(
         (args: string[]): boolean => args.includes(FEATURE) && !args.includes('checkout'));
 
-beforeEach((): void => {
+beforeEach(async (): Promise<void> => {
     harness.conflicting = new Set<string>();
     harness.unmerged = [];
-    harness.runs = [];
-    harness.tries = [];
+    harness.feature = await PrGateFeature.create();
+    scriptGit();
     harness.stateOnDisk = null;
     harness.cleared = 0;
     harness.out = '';
 });
 
 describe('DevResolveRunner — the clean path needs no stage ②', () => {
-    it('merges every queued ref, publishes the copy, and restores the original checkout', (): void => {
-        const thrown = capture((): void => runner().start(REPO, state(['dev-include/amy/ONE-9']), 'base', []));
+    it('merges every queued ref, publishes the copy, and restores the original checkout', async (): Promise<void> => {
+        const thrown = await capture((): Promise<void> => runner().start(REPO, state(['dev-include/amy/ONE-9']), 'base', []));
         expect(thrown).toBeNull();
         expect(harness.runs).toContainEqual(
             ['-C', REPO, 'push', '--force', 'origin', `${TMP}:refs/heads/${MINE}`]);
@@ -164,8 +157,8 @@ describe('DevResolveRunner — the clean path needs no stage ②', () => {
         expect(harness.out).toContain('gh run list --branch dev --limit 5');
     });
 
-    it('parks on the throwaway branch, and never writes to the feature branch', (): void => {
-        capture((): void => runner().start(REPO, state([]), `refs/remotes/origin/${MINE}`, []));
+    it('parks on the throwaway branch, and never writes to the feature branch', async (): Promise<void> => {
+        await capture((): Promise<void> => runner().start(REPO, state([]), `refs/remotes/origin/${MINE}`, []));
         expect(harness.runs).toContainEqual(
             ['-C', REPO, 'checkout', '-B', TMP, `refs/remotes/origin/${MINE}`]);
         expect(writesToFeatureBranch()).toBe(false);
@@ -178,8 +171,8 @@ describe('DevResolveRunner — the conflict path', () => {
         harness.unmerged = ['src/a.ts', 'src/b.ts'];
     });
 
-    it('stops, lists the conflicted files, and leaves the state file behind', (): void => {
-        const thrown = capture((): void => runner().start(REPO, state(['dev-include/amy/ONE-9']), 'base', []));
+    it('stops, lists the conflicted files, and leaves the state file behind', async (): Promise<void> => {
+        const thrown = await capture((): Promise<void> => runner().start(REPO, state(['dev-include/amy/ONE-9']), 'base', []));
         expect(thrown?.exitCode).toBe(2);
         expect(thrown?.message).toContain('src/a.ts');
         expect(thrown?.message).toContain('src/b.ts');
@@ -189,21 +182,21 @@ describe('DevResolveRunner — the conflict path', () => {
         expect(writesToFeatureBranch()).toBe(false);
     });
 
-    it('refuses to finish while anything is still unmerged, and re-prints the list', (): void => {
+    it('refuses to finish while anything is still unmerged, and re-prints the list', async (): Promise<void> => {
         const halted = state([]);
         halted.current = 'dev-include/amy/ONE-9';
-        const thrown = capture((): void => runner().resume(REPO, halted));
+        const thrown = await capture((): Promise<void> => runner().resume(REPO, halted));
         expect(thrown?.exitCode).toBe(2);
         expect(thrown?.message).toContain('Conflicts are NOT resolved yet');
         expect(thrown?.message).toContain('src/a.ts');
         expect(harness.runs.some((args: string[]): boolean => args.includes('commit'))).toBe(false);
     });
 
-    it('commits, resumes the queue, and publishes once the files are resolved', (): void => {
+    it('commits, resumes the queue, and publishes once the files are resolved', async (): Promise<void> => {
         harness.unmerged = [];
         const halted = state(['dev-include/zoe/ONE-1']);
         halted.current = 'dev-include/amy/ONE-9';
-        const thrown = capture((): void => runner().resume(REPO, halted));
+        const thrown = await capture((): Promise<void> => runner().resume(REPO, halted));
         expect(thrown).toBeNull();
         expect(harness.runs).toContainEqual(['-C', REPO, 'add', '-u']);
         expect(harness.runs).toContainEqual(['-C', REPO, 'commit', '--no-edit']);
@@ -211,12 +204,12 @@ describe('DevResolveRunner — the conflict path', () => {
         expect(harness.cleared).toBe(1);
     });
 
-    it('can stop AGAIN on a later ref — the queue is resumed, not replayed', (): void => {
+    it('can stop AGAIN on a later ref — the queue is resumed, not replayed', async (): Promise<void> => {
         harness.unmerged = [];
         harness.conflicting = new Set<string>(['dev-include/zoe/ONE-1']);
         const halted = state(['dev-include/zoe/ONE-1']);
         halted.current = 'dev-include/amy/ONE-9';
-        const thrown = capture((): void => runner().resume(REPO, halted));
+        const thrown = await capture((): Promise<void> => runner().resume(REPO, halted));
         expect(thrown?.message).toContain('CONFLICT merging dev-include/zoe/ONE-1');
         expect(harness.stateOnDisk?.current).toBe('dev-include/zoe/ONE-1');
         // The ref that was already resolved is NOT merged a second time.
@@ -226,10 +219,10 @@ describe('DevResolveRunner — the conflict path', () => {
 });
 
 describe('DevResolveRunner — --abort', () => {
-    it('restores the original branch and leaves no tmp branch and no state file', (): void => {
+    it('restores the original branch and leaves no tmp branch and no state file', async (): Promise<void> => {
         const halted = state(['dev-include/zoe/ONE-1']);
         halted.current = 'dev-include/amy/ONE-9';
-        capture((): void => runner().abort(REPO, halted));
+        await capture((): Promise<void> => runner().abort(REPO, halted));
         expect(harness.tries).toContainEqual(['-C', REPO, 'merge', '--abort']);
         expect(harness.runs).toContainEqual(['-C', REPO, 'checkout', FEATURE]);
         expect(harness.tries).toContainEqual(['-C', REPO, 'branch', '-D', TMP]);

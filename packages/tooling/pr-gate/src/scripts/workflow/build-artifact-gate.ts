@@ -64,11 +64,11 @@ export class BuildArtifactGate {
      * Run the check and throw CliExitError when the build left the tree dirty. Called immediately after
      * the build gate passes, while the tree still holds exactly what the build produced.
      */
-    assertBuildLeftNothingUncommitted(repoRoot: string): void {
-        const artifacts = this.registry.resolve(repoRoot);
+    async assertBuildLeftNothingUncommitted(repoRoot: string): Promise<void> {
+        const artifacts = await this.registry.resolve(repoRoot);
         // statusEntries, never a raw/trimmed string: the staged-vs-unstaged answer arrives as a boolean
         // so no caller can re-derive it from column positions and get it backwards.
-        const verdict = this.classify(this.gitExec.statusEntries(repoRoot), artifacts);
+        const verdict = this.classify(await this.gitExec.statusEntries(repoRoot), artifacts);
         if (verdict.isClean()) {
             process.stdout.write('\n✅ Build left the tree committed — no uncommitted build artifacts.\n');
             return;

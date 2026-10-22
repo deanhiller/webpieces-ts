@@ -1,9 +1,9 @@
-import { spawnSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as readline from 'readline';
 import { BranchIdentity, MainSyncStatus, MainSyncStatusService } from '@webpieces/repo-workflow-core';
 import { CliExitError, GateTokenService, PrSummary, RepoRootFinder, ReviewJsonService, loadAndValidate } from '@webpieces/rules-config';
+import { NativeProcessApi } from '@webpieces/tooling-common';
 import { bindingScopeValues, injectable } from 'inversify';
 import { AiBranchName } from '../workflow/git-readAiBranchName';
 import { BranchNaming } from '../workflow/branch-naming';
@@ -49,6 +49,7 @@ export class HumanPostPrCommand {
         private readonly publisher: GatedPrPublisher,
         private readonly squashSettings: SquashSettingsEnforcer,
         private readonly buildCommand: BuildCommand,
+        private readonly processes: NativeProcessApi,
     ) {}
 
     async run(): Promise<void> {
@@ -77,18 +78,18 @@ export class HumanPostPrCommand {
             );
         }
         const baseBranch = this.branchNaming.baseBranchName(currentBranch);
-        this.gitExec.assertCleanTree(repoRoot);
-        this.assertNoUnvalidatedMerge(repoRoot);
-        this.fetchMain(repoRoot);
+        await this.gitExec.assertCleanTree(repoRoot);
+        await this.assertNoUnvalidatedMerge(repoRoot);
+        await this.fetchMain(repoRoot);
 
-        const forkPoint = this.git(
+        const forkPoint = await this.git(
             ['merge-base', 'origin/main', 'HEAD'],
             repoRoot,
             'Could not resolve the pure-main fork point against freshly fetched origin/main.',
         );
         const summaryPath = this.reviewJsonService.summaryJsonPath(
             repoRoot,
-            this.aiBranchName.getFeatureName(),
+            await this.aiBranchName.getFeatureName(),
         );
         await this.ensureSummary(summaryPath, forkPoint);
         const summary = this.reviewJsonService.loadSummaryJson(summaryPath, [], '', {}, RETRY_COMMAND);
@@ -98,36 +99,36 @@ export class HumanPostPrCommand {
         const status = this.mainSyncStatus.computeMainSyncStatus(repoRoot);
         this.assertCurrentMain(status);
         const buildRan = await this.askToBuild();
-        if (buildRan) this.gitExec.assertCleanTree(repoRoot);
+        if (buildRan) await this.gitExec.assertCleanTree(repoRoot);
 
-        this.post(repoRoot, baseBranch, summaryPath, summary, buildRan);
+        await this.post(repoRoot, baseBranch, summaryPath, summary, buildRan);
     }
 
     /** The safe body-before-push publication shared with the automated flow via GatedPrPublisher. */
-    private post(
+    private async post(
         repoRoot: string,
         baseBranch: string,
         summaryPath: string,
         summary: PrSummary,
         buildRan: boolean,
-    ): void {
-        const headSha = this.git(
+    ): Promise<void> {
+        const headSha = await this.git(
             ['rev-parse', 'HEAD'],
             repoRoot,
             'Could not resolve feature HEAD.',
         );
         const gateSalt = this.gateSalt(repoRoot);
-        const initialRef = this.resolvePr(baseBranch);
+        const initialRef = await this.resolvePr(baseBranch);
         const initialBody = this.renderBody(summary, initialRef.url, gateSalt, headSha, buildRan);
         for (const warning of new IssueReferences().closeWarnings(summary.addressesIssues)) process.stdout.write(`${warning}\n`);
         const bodyFile = path.join(
-            this.reviewJsonService.prDirFor(repoRoot, this.aiBranchName.getFeatureName()),
+            this.reviewJsonService.prDirFor(repoRoot, await this.aiBranchName.getFeatureName()),
             'pr-body.md',
         );
         fs.mkdirSync(path.dirname(bodyFile), { recursive: true });
         fs.writeFileSync(bodyFile, initialBody + '\n');
 
-        const published = this.publisher.publish(
+        const published = await this.publisher.publish(
             baseBranch,
             this.titleFrom(summary, baseBranch),
             bodyFile,
@@ -140,7 +141,7 @@ export class HumanPostPrCommand {
             );
         }
 
-        const finalRef = this.resolvePr(baseBranch);
+        const finalRef = await this.resolvePr(baseBranch);
         if (finalRef.number === '') {
             throw new CliExitError(
                 1,
@@ -148,8 +149,8 @@ export class HumanPostPrCommand {
             );
         }
         const finalBody = this.renderBody(summary, finalRef.url, gateSalt, headSha, buildRan);
-        if (finalBody !== initialBody) this.backfillBody(finalRef.number, bodyFile, finalBody);
-        this.squashSettings.ensure();
+        if (finalBody !== initialBody) await this.backfillBody(finalRef.number, bodyFile, finalBody);
+        await this.squashSettings.ensure();
         const archive = this.reviewJsonService.archiveSummaryJson(summaryPath);
         if (archive !== '')
             process.stdout.write(`Archived this run's summary.json → ${archive} (audit only) ✓\n`);
@@ -172,8 +173,8 @@ export class HumanPostPrCommand {
         return true;
     }
 
-    private assertNoUnvalidatedMerge(repoRoot: string): void {
-        const home = this.mergeState.mergeDirFor(repoRoot, this.aiBranchName.getFeatureName());
+    private async assertNoUnvalidatedMerge(repoRoot: string): Promise<void> {
+        const home = this.mergeState.mergeDirFor(repoRoot, await this.aiBranchName.getFeatureName());
         const active = this.mergeState.findActiveMergeRunDir(home);
         const marker = active === null ? null : this.mergeState.readMergeMarker(active);
         if (marker === null || marker.validated) return;
@@ -184,8 +185,8 @@ export class HumanPostPrCommand {
         );
     }
 
-    protected fetchMain(repoRoot: string): void {
-        this.gitExec.runGitChecked(
+    protected fetchMain(repoRoot: string): Promise<void> {
+        return this.gitExec.runGitChecked(
             ['fetch', 'origin', 'main'],
             'Could not refresh origin/main; wp-human-post-pr will not evaluate or publish against a stale ref',
         );
@@ -288,20 +289,19 @@ export class HumanPostPrCommand {
         return summary.title === '' ? branch.replace(/[-/]+/g, ' ').trim() : summary.title;
     }
 
-    protected resolvePr(branch: string): HumanPostedPr {
-        const result = spawnSync(
+    protected async resolvePr(branch: string): Promise<HumanPostedPr> {
+        const result = await this.processes.run(
             'gh',
             ['pr', 'view', branch, '--json', 'number,url', '--jq', '"\\(.number)\\t\\(.url)"'],
-            { encoding: 'utf8' },
         );
-        if (result.status !== 0) return new HumanPostedPr('', '');
-        const parts = (result.stdout ?? '').trim().split('\t');
+        if (!result.ok) return new HumanPostedPr('', '');
+        const parts = result.stdout.trim().split('\t');
         return new HumanPostedPr(parts[0] ?? '', parts[1] ?? '');
     }
 
-    protected backfillBody(prNumber: string, bodyFile: string, body: string): void {
+    protected async backfillBody(prNumber: string, bodyFile: string, body: string): Promise<void> {
         fs.writeFileSync(bodyFile, body + '\n');
-        if (this.editPrBody(prNumber, bodyFile) !== 0) {
+        if (await this.editPrBody(prNumber, bodyFile) !== 0) {
             throw new CliExitError(
                 1,
                 `Could not update PR #${prNumber} with its final human-bypass body. The validated body remains at ${bodyFile}. ` +
@@ -310,13 +310,11 @@ export class HumanPostPrCommand {
         }
     }
 
-    protected editPrBody(prNumber: string, bodyFile: string): number | null {
-        return spawnSync('gh', ['pr', 'edit', prNumber, '--body-file', bodyFile], {
-            stdio: 'inherit',
-        }).status;
+    protected async editPrBody(prNumber: string, bodyFile: string): Promise<number> {
+        return (await this.processes.passThrough('gh', ['pr', 'edit', prNumber, '--body-file', bodyFile])).code;
     }
 
-    protected git(args: string[], cwd: string, failure: string): string {
+    protected git(args: string[], cwd: string, failure: string): Promise<string> {
         return this.gitExec.gitQuery(args, cwd, failure);
     }
 

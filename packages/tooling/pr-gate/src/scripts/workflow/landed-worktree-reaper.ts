@@ -1,8 +1,8 @@
-import { spawnSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 import { Worktree, WorktreeService } from '@webpieces/repo-workflow-core';
 import { atRoot } from '@webpieces/rules-config';
+import { NativeProcessApi } from '@webpieces/tooling-common';
 import { injectable, bindingScopeValues } from 'inversify';
 
 import { ReapOutcomeReport, ReapOutcomeSignal, REAP_OUTCOME_MISSING } from './reap-outcome';
@@ -98,6 +98,7 @@ export class LandedWorktreeReaper {
     constructor(
         private readonly worktrees: WorktreeService,
         private readonly signal: ReapOutcomeSignal,
+        private readonly processes: NativeProcessApi,
     ) {}
 
     /**
@@ -163,20 +164,20 @@ export class LandedWorktreeReaper {
      * only means "the child ran"; whether the DIRECTORY is gone is a separate statement it makes through
      * ReapOutcomeSignal, and that is the one that gates the "your cwd no longer exists" notice.
      */
-    handOff(handoff: WorktreeReapHandoff): string {
-        const result = spawnSync(
+    async handOff(handoff: WorktreeReapHandoff): Promise<string> {
+        const result = await this.processes.run(
             process.execPath, [handoff.entryScript, handoff.worktreePath, handoff.branch, handoff.head],
-            { cwd: handoff.primaryPath, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+            handoff.primaryPath);
 
-        const report = this.signal.read(`${result.stdout ?? ''}${result.stderr ?? ''}`);
+        const report = this.signal.read(`${result.stdout}${result.stderr}`);
         const output = report.text.trimEnd();
         const head = '\n' + SEP + `🌲 Reaping ${handoff.worktreePath} from ${handoff.primaryPath}\n` + SEP + '\n'
             + `   The branch just landed, so that directory is dead. The reap runs in a child process\n`
             + `   whose cwd is the primary clone — nothing deletes the directory it is standing in.\n\n`;
         const body = head + (output !== '' ? output + '\n' : '');
 
-        if (result.status !== 0 || !report.removed) {
-            return body + this.notRemoved(result.status, report) + this.manualNotice(handoff);
+        if (result.code !== 0 || !report.removed) {
+            return body + this.notRemoved(result.code, report) + this.manualNotice(handoff);
         }
         return body + this.afterReap(handoff);
     }
@@ -187,9 +188,9 @@ export class LandedWorktreeReaper {
      * `--force` is absent from both, and from every path below them: git refusing to remove a worktree
      * holding untracked files is work no archive tag captured.
      */
-    private notRemoved(status: number | null, report: ReapOutcomeReport): string {
+    private notRemoved(status: number, report: ReapOutcomeReport): string {
         if (status !== 0) {
-            return `\n   ⚠️  The reap did not complete (exit ${String(status ?? -1)}). Nothing was forced.\n`;
+            return `\n   ⚠️  The reap did not complete (exit ${String(status)}). Nothing was forced.\n`;
         }
         const why = report.outcome === REAP_OUTCOME_MISSING
             ? 'the child ended without reporting an outcome'

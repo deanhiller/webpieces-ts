@@ -2,8 +2,10 @@ import { describe, it, expect } from 'vitest';
 import { ReviewJsonService } from '@webpieces/rules-config';
 import { ChecklistScopeHasher } from './checklist-scope-hasher';
 import { DiffMaterializer } from './diff-materializer';
+import { MockGitProcessApi } from '@webpieces/tooling-testkit';
 
-const hasher = new ChecklistScopeHasher(new DiffMaterializer(new ReviewJsonService()));
+// hashOf is handed an already-captured diff, so no git question is ever asked here.
+const hasher = new ChecklistScopeHasher(new DiffMaterializer(new ReviewJsonService(), new MockGitProcessApi()));
 
 function patch(index: string, hunk: string, body: string): string {
     return `diff --git a/a.sql b/a.sql\nindex ${index} 100644\n--- a/a.sql\n+++ b/a.sql\n${hunk}\n${body}\n`;

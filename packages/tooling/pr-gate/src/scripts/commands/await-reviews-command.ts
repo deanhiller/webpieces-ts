@@ -54,7 +54,7 @@ export class AwaitReviewsCommand {
         // contextStage '' — a WAIT must not write pr-context.json. That file records the diff a review
         // was briefed against, and rewriting it mid-review would restate the briefing under the
         // reviewers currently reading it.
-        const scan = this.checklistScanner.scan(repoRoot, config.checklists, new ChecklistScanOptions(config.maxReviewerRounds, true, ''));
+        const scan = await this.checklistScanner.scan(repoRoot, config.checklists, new ChecklistScanOptions(config.maxReviewerRounds, true, ''));
         if (scan.reviewersDisabled) return this.reportDisabled(scan.suppressed);
         if (scan.applicable.length === 0) return this.reportNothingOwed();
         // WAIT on the set finish blocks on (`outstanding`), REPORT on everything that applies. The two
@@ -64,7 +64,7 @@ export class AwaitReviewsCommand {
         // the PREDICATE is not — see `done()` for why a wait ends on arrival and finish does not.)
         // A verdict from an EARLIER round than the one stage ② last briefed is NOT an arrival: it is the red
         // that round re-briefed (issue #1053), and counting it would end the wait on the spot.
-        const round = this.receipts.read(repoRoot, this.aiBranchName.getFeatureName())?.round ?? 0;
+        const round = this.receipts.read(repoRoot, await this.aiBranchName.getFeatureName())?.round ?? 0;
         const probe = new ReviewerWaitProbe(
             this.reviewJsonService, scan.summaryPath, scan.outstanding, scan.applicable, round);
         const outcome = await this.awaitLoop.run(probe);
@@ -126,7 +126,7 @@ export class ReviewerWaitProbe implements WaitProbe {
      * `CK_BAD_FORMAT` counts as arrived too: the file is there and unreadable, which is a thing to FIX
      * (four characters of JSON), not a thing to wait longer for.
      */
-    done(): boolean {
+    async done(): Promise<boolean> {
         this.reload();
         return this.pending().length === 0;
     }

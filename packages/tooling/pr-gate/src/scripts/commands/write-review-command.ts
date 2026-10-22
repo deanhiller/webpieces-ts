@@ -76,11 +76,11 @@ export class WriteReviewCommand {
         private readonly reviewJsonService: ReviewJsonService,
     ) {}
 
-    run(opts: WriteReviewOptions): Promise<void> {
+    async run(opts: WriteReviewOptions): Promise<void> {
         const id = opts.checklistId.trim();
         const cwd = opts.cwd;
         const repoRoot = this.repoRootFinder.resolveRepoRoot(cwd);
-        const featureName = this.aiBranchName.getFeatureName();
+        const featureName = await this.aiBranchName.getFeatureName();
         const receipt = this.briefedReceipt(repoRoot, featureName, id);
         // Identity BEFORE parsing: a coordinator is refused whatever it submitted, and the stamp it
         // consumes must not survive to lend itself to a later call.
@@ -95,17 +95,16 @@ export class WriteReviewCommand {
             `✅ ${verdict.status.toUpperCase()} verdict for "${id}" submitted → ${written}\n`
             + `   provenance: ${who.harness}${who.agentId === '' ? '' : ` agent ${who.agentId}`}, `
             + `briefed at ${receipt.headSha.slice(0, 8)}, global round ${receipt.round} of ${receipt.maxReviewerRounds}\n`);
-        return Promise.resolve();
     }
 
     /**
      * `wp-write-review --check`: the reviewer's FIRST step. Refuses exactly when {@link run} would refuse
      * on the budget, so a reviewer past the budget learns it before it reviews rather than after.
      */
-    check(opts: ReviewBudgetCheckOptions): Promise<void> {
+    async check(opts: ReviewBudgetCheckOptions): Promise<void> {
         const id = opts.checklistId.trim();
         const repoRoot = this.repoRootFinder.resolveRepoRoot(opts.cwd);
-        const featureName = this.aiBranchName.getFeatureName();
+        const featureName = await this.aiBranchName.getFeatureName();
         const receipt = this.briefedReceipt(repoRoot, featureName, id);
         this.assertWithinBudget(summaryJsonPath(repoRoot, featureName), receipt, id);
         const final = this.isFinalRound(receipt)
@@ -114,7 +113,6 @@ export class WriteReviewCommand {
         process.stdout.write(
             `✅ "${id}" may be reviewed: this is review round ${receipt.round} of at most ${receipt.maxReviewerRounds}.${final} `
             + `Review it, then submit with pnpm ${WRITE_REVIEW_BIN} --checklist ${id}.\n`);
-        return Promise.resolve();
     }
 
     /** The last round `maxReviewerRounds` allows — the one with no red (issue #1053). */

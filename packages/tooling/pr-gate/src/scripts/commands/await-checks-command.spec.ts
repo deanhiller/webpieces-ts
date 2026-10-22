@@ -1,3 +1,4 @@
+import { MockNativeProcessApi } from '@webpieces/tooling-testkit';
 import { describe, it, expect } from 'vitest';
 import { CliExitError } from '@webpieces/rules-config';
 
@@ -38,18 +39,18 @@ describe('ChecksState decides when the checks have stopped running', () => {
 
 describe('ChecksWaitProbe reports where the checks landed', () => {
     it('names the PR and the command to re-run when it times out', () => {
-        const text = new ChecksWaitProbe('874').stillWaitingReport(new WaitOutcome(false, 540_000));
+        const text = new ChecksWaitProbe('874', new MockNativeProcessApi()).stillWaitingReport(new WaitOutcome(false, 540_000));
         expect(text).toContain('run me again');
         expect(text).toContain('--pr 874');
     });
 
     it('says a timeout is not a failure, so nobody goes hunting for a broken job', () => {
-        const text = new ChecksWaitProbe('874').stillWaitingReport(new WaitOutcome(false, 540_000));
+        const text = new ChecksWaitProbe('874', new MockNativeProcessApi()).stillWaitingReport(new WaitOutcome(false, 540_000));
         expect(text).toContain('not a failure');
     });
 
     it('polls slowly enough that a full wait is tens of API calls, not thousands', () => {
-        expect(new ChecksWaitProbe('874').pollMs).toBeGreaterThanOrEqual(10_000);
+        expect(new ChecksWaitProbe('874', new MockNativeProcessApi()).pollMs).toBeGreaterThanOrEqual(10_000);
     });
 });
 

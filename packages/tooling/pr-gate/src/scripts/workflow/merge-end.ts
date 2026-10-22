@@ -1,4 +1,3 @@
-import { execSync, spawnSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 import { MERGE_EXPLANATION_FILE, CliExitError } from '@webpieces/rules-config';
@@ -80,16 +79,16 @@ export class MergeEnd {
         const conflictedFiles = options.conflictedFiles;
         if (conflictedFiles !== null) {
             process.stdout.write('\n' + SEP + '🔎 Validating Merge Resolution\n' + SEP + '\n');
-            this.validateResolution(repoRoot, verb, mergeDir, conflictedFiles);
+            await this.validateResolution(repoRoot, verb, mergeDir, conflictedFiles);
             // Stage the AI's resolved conflicts, but NEVER sweep untracked files into the squash commit.
             // Fail on untracked so the AI commits or deletes them explicitly; then `git add -u` stages
             // tracked resolutions only.
-            this.gitExec.assertNoUntracked(repoRoot);
-            this.gitExec.runGitChecked(['add', '-u'], 'Failed to stage resolved files');
+            await this.gitExec.assertNoUntracked(repoRoot);
+            await this.gitExec.runGitChecked(['add', '-u'], 'Failed to stage resolved files');
 
-            const nothingStaged = spawnSync('git', ['diff-index', '--quiet', '--cached', 'HEAD', '--']).status === 0;
+            const nothingStaged = (await this.gitExec.tryGit(['diff-index', '--quiet', '--cached', 'HEAD', '--'], process.cwd())).ok;
             if (!nothingStaged) {
-                this.gitExec.runGitChecked(
+                await this.gitExec.runGitChecked(
                     ['commit', '-m', `Squash merge of ${ctx.currentBranch} (conflicts resolved)`],
                     'Failed to commit resolved merge',
                 );
@@ -101,7 +100,7 @@ export class MergeEnd {
         // A marker in THIS run dir means the sync hit conflicts (marker is written only on hand-back).
         // Read it BEFORE clearMergeMarker so finalize knows whether to keep the pre-merge snapshot.
         const hadConflict = this.mergeState.readMergeMarker(mergeDir) !== null;
-        this.finalizeBranch(repoRoot, verb, ctx, hadConflict, options.pushRemote);
+        await this.finalizeBranch(repoRoot, verb, ctx, hadConflict, options.pushRemote);
         this.mergeState.clearMergeMarker(mergeDir);
         await this.cleanTmpService.cleanTmp();
     }
@@ -111,7 +110,7 @@ export class MergeEnd {
     // `verb` is the bin the AI actually ran (wp-finish-update or wp-finish-upsert-pr) — every "re-run"
     // instruction below is rendered from it. It used to be hardcoded to wp-finish-upsert-pr, which told
     // someone in the update-only flow to finish with the PR command: a pairing that does not exist.
-    private validateResolution(repoRoot: string, verb: MutationVerb, mergeDir: string, conflictedFiles: string[]): void {
+    private async validateResolution(repoRoot: string, verb: MutationVerb, mergeDir: string, conflictedFiles: string[]): Promise<void> {
         const reRun = `pnpm ${verb}`;
         // 1. Scoped conflict-marker scan (only the conflicted files — O(conflicts), not O(repo)).
         const scan = this.mergeState.scanConflictMarkers(repoRoot, conflictedFiles);
@@ -124,7 +123,7 @@ export class MergeEnd {
         }
 
         // 2. Ensure git itself has no remaining unmerged entries.
-        const unmerged = execSync('git diff --name-only --diff-filter=U', { encoding: 'utf8' }).trim();
+        const unmerged = await this.gitExec.gitQuery(['diff', '--name-only', '--diff-filter=U'], process.cwd(), 'Failed to list unmerged files (git diff --diff-filter=U).');
         if (unmerged !== '') {
             throw new CliExitError(1,
                 '❌ Git still reports unmerged files:\n' + unmerged +
@@ -150,9 +149,8 @@ export class MergeEnd {
         process.stdout.write('✅ Merge explanations present for all resolved files.\n');
     }
 
-    // Seam: overridden in the spec so the push/backup decisions are testable with no git and no repo.
-    protected localBranchExists(name: string): boolean {
-        return spawnSync('git', ['show-ref', '--verify', '--quiet', `refs/heads/${name}`]).status === 0;
+    private async localBranchExists(name: string): Promise<boolean> {
+        return (await this.gitExec.tryGit(['show-ref', '--verify', '--quiet', `refs/heads/${name}`], process.cwd())).ok;
     }
 
     // Force-push the squash branch to the stable feature branch (where the single PR lives) — unless the
@@ -160,19 +158,19 @@ export class MergeEnd {
     // that SAME feature name. On a CLEAN sync the pre-merge snapshot is disposable, so it's deleted at the
     // very end; a CONFLICT sync — or a sync we did not push — keeps it.
     // eslint-disable-next-line @typescript-eslint/max-params
-    private finalizeBranch(repoRoot: string, verb: MutationVerb, ctx: MergeContext, hadConflict: boolean, pushRemote: boolean): void {
+    private async finalizeBranch(repoRoot: string, verb: MutationVerb, ctx: MergeContext, hadConflict: boolean, pushRemote: boolean): Promise<void> {
         process.stdout.write('\n' + SEP + '🗑️  Finalizing\n' + SEP + '\n');
         const base = this.branchNaming.baseBranchName(ctx.currentBranch);
-        this.gitExec.runGitChecked(['branch', '-D', ctx.currentBranch], 'Failed to delete old feature branch');
+        await this.gitExec.runGitChecked(['branch', '-D', ctx.currentBranch], 'Failed to delete old feature branch');
 
-        const pushed = pushRemote ? this.pushFinalized(ctx, base) : this.explainNoPush();
-        this.gitExec.runGitChecked(['checkout', ctx.squashBranch], 'Failed to checkout squash branch');
+        const pushed = pushRemote ? await this.pushFinalized(ctx, base) : this.explainNoPush();
+        await this.gitExec.runGitChecked(['checkout', ctx.squashBranch], 'Failed to checkout squash branch');
         // Free the rename target: `base` is normally the branch we just deleted, but a backward-compat
         // sync from a leftover `…wpN` can leave a separate stale `base` lingering — drop it too.
-        if (base !== ctx.currentBranch && this.localBranchExists(base)) {
-            this.gitExec.runGitChecked(['branch', '-D', base], 'Failed to delete stale base branch');
+        if (base !== ctx.currentBranch && await this.localBranchExists(base)) {
+            await this.gitExec.runGitChecked(['branch', '-D', base], 'Failed to delete stale base branch');
         }
-        this.gitExec.runGitChecked(['branch', '-m', base], 'Failed to rename squash branch to the feature name');
+        await this.gitExec.runGitChecked(['branch', '-m', base], 'Failed to rename squash branch to the feature name');
         const renameEvent = new BranchMutationEvent(verb, 'RENAME');
         renameEvent.fromBranch = ctx.currentBranch;
         renameEvent.toBranch = base;
@@ -187,8 +185,8 @@ export class MergeEnd {
         // deleting the snapshot would leave a history rewrite with no copy anywhere. It is disposable only
         // once origin has the result, and in the PR flow that does not happen until wp-finish-upsert-pr.
         const backupKept = hadConflict || !pushed;
-        if (!backupKept && this.localBranchExists(ctx.backupBranch)) {
-            this.gitExec.runGitChecked(['branch', '-D', ctx.backupBranch], 'Failed to delete clean-merge backup');
+        if (!backupKept && await this.localBranchExists(ctx.backupBranch)) {
+            await this.gitExec.runGitChecked(['branch', '-D', ctx.backupBranch], 'Failed to delete clean-merge backup');
         }
 
         const finalizeEvent = new BranchMutationEvent(verb, 'FINALIZE');
@@ -215,14 +213,14 @@ export class MergeEnd {
     // Push the finalized squash branch to the stable feature branch. Returns whether a push actually
     // happened — false when there is no remote branch yet (a brand-new branch is local until something
     // creates it, which in the PR flow is `gh pr create` after GatedPrPublisher's push).
-    protected pushFinalized(ctx: MergeContext, base: string): boolean {
-        const remoteExists = spawnSync('git', ['ls-remote', '--exit-code', '--heads', 'origin', base]).status === 0;
+    private async pushFinalized(ctx: MergeContext, base: string): Promise<boolean> {
+        const remoteExists = (await this.gitExec.tryGit(['ls-remote', '--exit-code', '--heads', 'origin', base], process.cwd())).ok;
         if (!remoteExists) {
             process.stdout.write('No remote branch — local only.\n');
             return false;
         }
         process.stdout.write(ctx.prNumber ? `Updating PR #${ctx.prNumber} (force-with-lease)...\n` : 'Updating remote branch (force-with-lease)...\n');
-        this.gitExec.runGitChecked(['push', '-u', '--force-with-lease', 'origin', `${ctx.squashBranch}:${base}`], 'Failed to push to origin');
+        await this.gitExec.runGitChecked(['push', '-u', '--force-with-lease', 'origin', `${ctx.squashBranch}:${base}`], 'Failed to push to origin');
         return true;
     }
 

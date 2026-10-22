@@ -1,5 +1,5 @@
-import { spawnSync } from 'child_process';
 import { CliExitError } from '@webpieces/rules-config';
+import { NativeProcessApi } from '@webpieces/tooling-common';
 import { injectable, bindingScopeValues } from 'inversify';
 import { BranchNaming } from './branch-naming';
 
@@ -8,20 +8,23 @@ const SEP = '━━━━━━━━━━━━━━━━━━━━━━�
 /** Hard gate: whether an OPEN PR already tracks a feature branch (by its stable base name). */
 @injectable(bindingScopeValues.Singleton)
 export class OpenPrCheck {
-    constructor(private readonly branchNaming: BranchNaming) {}
+    constructor(
+        private readonly branchNaming: BranchNaming,
+        private readonly processes: NativeProcessApi,
+    ) {}
 
     // The open PR (if any) tracking a feature branch, looked up by its STABLE base name. Returns '' ONLY
     // when GitHub answered and there is genuinely no open PR. HARD GATE: FAILS FAST if `gh` cannot
     // answer — we must NOT degrade "couldn't ask GitHub" into "no PR" (a 3-point update makes a new
     // branch generation and the existing PR would be stranded on the OLD branch). Refuse rather than guess.
-    openPrForBranch(repoRoot: string, currentBranch: string): string {
+    async openPrForBranch(repoRoot: string, currentBranch: string): Promise<string> {
         const base = this.branchNaming.baseBranchName(currentBranch);
-        const result = spawnSync(
+        const result = await this.processes.run(
             'gh', ['pr', 'list', '--head', base, '--state', 'open', '--json', 'number', '--jq', '.[0].number'],
-            { cwd: repoRoot, encoding: 'utf8' },
+            repoRoot,
         );
-        if (result.status !== 0) {
-            const detail = (result.stderr ?? '').trim() || (result.error ? result.error.message : 'gh exited non-zero');
+        if (!result.ok) {
+            const detail = result.stderr.trim() || 'gh exited non-zero';
             throw new CliExitError(2,
                 '\n' + SEP + '❌ Could not ask GitHub whether an open PR exists for this branch\n' + SEP + '\n' +
                 `gh failed for base branch "${base}": ${detail}\n\n` +
@@ -32,6 +35,6 @@ export class OpenPrCheck {
                 'pnpm wp-review-upsert-pr → write summary.json → pnpm wp-finish-upsert-pr\n',
             );
         }
-        return (result.stdout ?? '').trim();
+        return result.stdout.trim();
     }
 }

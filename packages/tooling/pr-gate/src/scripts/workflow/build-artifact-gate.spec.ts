@@ -1,19 +1,8 @@
-import { specTempDirs } from '@webpieces/tooling-testkit';
-import { execSync } from 'child_process';
-import * as fs from 'fs';
-import * as path from 'path';
-import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
-import { BranchIdentity } from '@webpieces/repo-workflow-core';
-import { BuildsLog, RepoRootFinder, RepoScratchDirs } from '@webpieces/rules-config';
-import { DotWebpieces } from '@webpieces/tooling-common';
+import { describe, it, expect, beforeEach } from 'vitest';
 import { toError } from '@webpieces/tooling-common/to-error';
-import { BuildAffected } from './build-affected';
-import { BuildGateLog } from './build-gate-log';
-import { GateLogFile } from './gate-log-file';
-import { StageOutputLog } from './stage-output-log';
+import { PrGateFeature } from '../../__tests__/feature-harness';
 import { BuildArtifactGate, BuildArtifactVerdict } from './build-artifact-gate';
 import { GeneratedArtifactRegistry, GeneratedArtifacts, ARTIFACT_SOURCE_NX } from './generated-artifact-registry';
-import { GitExec } from './git-exec';
 import { GitStatusEntry, GitStatusParser } from './git-status';
 
 // The "known generated" set a real nx graph would hand us for this monorepo.
@@ -22,30 +11,19 @@ const KNOWN = new GeneratedArtifacts(
     ARTIFACT_SOURCE_NX,
 );
 
-function newGate(): BuildArtifactGate {
-    const registry = new GeneratedArtifactRegistry(new RepoScratchDirs());
-    registry.seed(KNOWN);
-    return new BuildArtifactGate(
-        new GitExec(new RepoRootFinder(), new GitStatusParser()), registry, buildAffected());
-}
+let feature: PrGateFeature;
+
+beforeEach(async (): Promise<void> => {
+    feature = await PrGateFeature.create();
+});
 
 /**
- * A real BuildAffected, constructed with its CURRENT dependencies.
- *
- * This call was once stale — it passed `HomeConfigService` and a zero-arg `BuildGateLog`, neither of
- * which BuildAffected had taken for some time — and it stayed silent because `tsconfig.lib.json`
- * excludes specs and vitest strips types with esbuild, so a spec is not type-checked by the build.
- * That is why it is written out in full against the CURRENT constructor rather than hidden behind a
- * helper: the only thing keeping it honest is a reader, so it has to be legible to one.
+ * The production gate from the shipped container, with the registry seeded to KNOWN (its own spec covers
+ * reading the nx graph) and git SCRIPTED (#1381): the gate asks one question, `git status --porcelain`.
  */
-function buildAffected(): BuildAffected {
-    const files = new GateLogFile();
-    const stageConsole = new StageOutputLog(files);
-    return new BuildAffected(
-        new BuildGateLog(files, stageConsole),
-        new BuildsLog(new DotWebpieces()),
-        stageConsole,
-        new BranchIdentity());
+function newGate(): BuildArtifactGate {
+    feature.container.get(GeneratedArtifactRegistry).seed(KNOWN);
+    return feature.container.get(BuildArtifactGate);
 }
 
 // The gate takes PARSED entries, so the specs still drive it with literal porcelain text — they just
@@ -54,46 +32,12 @@ const classify = (porcelain: string): BuildArtifactVerdict =>
     newGate().classify(new GitStatusParser().parse(porcelain), KNOWN);
 const paths = (entries: readonly GitStatusEntry[]): string[] => entries.map((d: GitStatusEntry): string => d.path);
 
-/**
- * Run the gate and hand back the failure message ('' when it passed), so each case costs ONE git
- * invocation instead of one per assertion. Spawning git is by far the slowest thing in this file.
- */
-function gateMessage(dir: string): string {
-    // webpieces-disable no-unmanaged-exceptions -- chokepoint: a spec helper whose whole job is to
-    // capture the CliExitError message the gate throws so the assertions can read it
-    // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
-    try {
-        newGate().assertBuildLeftNothingUncommitted(dir);
-    } catch (err: unknown) {
-        const error = toError(err);
-        return error.message;
-    }
-    return '';
-}
-
-// ONE throwaway repo for the whole real-git block, restored between cases: `git init` + config +
-// initial commit is 8 subprocesses, and paying that per test is what made this file slow enough to
-// starve vitest's reporter under a parallel full-suite run.
-let repo = '';
-
-function initRepo(): string {
-    const dir = specTempDirs.make('wp-artifactgate-');
-    const run = (args: string): void => { execSync(`git ${args}`, { cwd: dir, stdio: 'ignore' }); };
-    run('init -q');
-    run('config core.hooksPath /dev/null');
-    run('config user.email test@example.com');
-    run('config user.name test');
-    run('config commit.gpgsign false');
-    fs.mkdirSync(path.join(dir, 'architecture'), { recursive: true });
-    fs.writeFileSync(path.join(dir, 'architecture', 'dependencies.json'), '{}\n');
-    fs.writeFileSync(path.join(dir, 'src.ts'), 'export const a = 1;\n');
-    run('add -A');
-    run('commit -q -m initial');
-    return dir;
-}
-
-function resetRepo(): void {
-    execSync('git reset -q --hard HEAD && git clean -qfd', { cwd: repo, stdio: 'ignore' });
+/** Run the gate over a tree whose `git status --porcelain` prints `porcelain`; its failure message, or ''. */
+function gateMessage(porcelain: string): Promise<string> {
+    feature.git.respond(['status', '--porcelain'], feature.git.ok(porcelain));
+    return newGate().assertBuildLeftNothingUncommitted('/repo').then(
+        (): string => '',
+        (err: unknown): string => toError(err).message);
 }
 
 describe('classify — the "committed OR staged" predicate', () => {
@@ -154,43 +98,32 @@ describe('classify — the "committed OR staged" predicate', () => {
     });
 });
 
-describe('assertBuildLeftNothingUncommitted — against a real git repo', () => {
-    beforeAll((): void => { repo = initRepo(); });
-    beforeEach((): void => { resetRepo(); });
-
-    const dirty = (rel: string): void => { fs.writeFileSync(path.join(repo, rel), `${Date.now()}\n`); };
-
-    it('passes on a clean tree', () => {
-        expect(gateMessage(repo)).toBe('');
+describe('assertBuildLeftNothingUncommitted — what git says the build left behind', () => {
+    it('passes on a clean tree', async () => {
+        expect(await gateMessage('')).toBe('');
     });
 
-    it('passes when the regenerated file is STAGED but not yet committed', () => {
-        dirty('architecture/dependencies.json');
-        execSync('git add architecture/dependencies.json', { cwd: repo, stdio: 'ignore' });
-        expect(gateMessage(repo)).toBe('');
+    it('passes when the regenerated file is STAGED but not yet committed', async () => {
+        expect(await gateMessage('M  architecture/dependencies.json\n')).toBe('');
     });
 
-    it('fails with the "run the build and commit" message when a known generated file is dirty', () => {
-        dirty('architecture/dependencies.json');
-        const message = gateMessage(repo);
+    it('fails with the "run the build and commit" message when a known generated file is dirty', async () => {
+        const message = await gateMessage(' M architecture/dependencies.json\n');
         expect(message).toContain('and commit the regenerated design files');
         expect(message).toContain('architecture/dependencies.json');
         expect(message).not.toContain('generating uncommitted git artifacts');
     });
 
-    it('fails with the "generating uncommitted git artifacts" message for an undeclared path', () => {
-        dirty('surprise.out');
-        const message = gateMessage(repo);
+    it('fails with the "generating uncommitted git artifacts" message for an undeclared path', async () => {
+        const message = await gateMessage('?? surprise.out\n');
         expect(message).toContain('generating uncommitted git artifacts');
         expect(message).toContain('.gitignore');
         expect(message).toContain('surprise.out');
         expect(message).not.toContain('and commit the regenerated design files');
     });
 
-    it('reports BOTH sections when a generated file and a stray file are dirty together', () => {
-        dirty('architecture/dependencies.json');
-        dirty('surprise.out');
-        const message = gateMessage(repo);
+    it('reports BOTH sections when a generated file and a stray file are dirty together', async () => {
+        const message = await gateMessage(' M architecture/dependencies.json\n?? surprise.out\n');
         expect(message).toContain('and commit the regenerated design files');
         expect(message).toContain('generating uncommitted git artifacts');
     });

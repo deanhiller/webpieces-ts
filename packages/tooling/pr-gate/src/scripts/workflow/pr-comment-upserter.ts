@@ -1,6 +1,6 @@
-import { spawnSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
+import { NativeProcessApi } from '@webpieces/tooling-common';
 import { injectable, bindingScopeValues } from 'inversify';
 
 /** One marker-keyed PR comment to upsert. Data-only, per CLAUDE.md. */
@@ -54,18 +54,20 @@ export class PrCommentResult {
  */
 @injectable(bindingScopeValues.Singleton)
 export class PrCommentUpserter {
-    upsert(request: PrCommentRequest): PrCommentResult {
+    constructor(private readonly processes: NativeProcessApi) {}
+
+    async upsert(request: PrCommentRequest): Promise<PrCommentResult> {
         if (request.prNumber === '') return new PrCommentResult('', false, false);
 
         fs.mkdirSync(request.payloadDir, { recursive: true });
         const payload = path.join(request.payloadDir, request.payloadName);
         fs.writeFileSync(payload, JSON.stringify({ body: request.body }));
 
-        const existing = this.findCommentId(request.prNumber, request.marker);
+        const existing = await this.findCommentId(request.prNumber, request.marker);
         const args = existing !== ''
             ? ['api', '--method', 'PATCH', `repos/{owner}/{repo}/issues/comments/${existing}`, '--input', payload]
             : ['api', '--method', 'POST', `repos/{owner}/{repo}/issues/${request.prNumber}/comments`, '--input', payload];
-        if (this.gh(args) !== 0) {
+        if (!(await this.processes.run('gh', args)).ok) {
             process.stderr.write(`⚠️  Could not post the ${request.label} (non-fatal here — see the caller).\n`);
             return new PrCommentResult(existing, existing !== '', false);
         }
@@ -80,17 +82,12 @@ export class PrCommentUpserter {
      * consistently patching the earliest keeps the comment in a stable position in the thread — which is
      * what the PR body's "1st comment / 2nd comment" pointer relies on.
      */
-    protected findCommentId(prNumber: string, marker: string): string {
-        const res = spawnSync('gh', [
+    private async findCommentId(prNumber: string, marker: string): Promise<string> {
+        const res = await this.processes.run('gh', [
             'api', '--paginate', `repos/{owner}/{repo}/issues/${prNumber}/comments`,
             '--jq', `.[] | select(.body | contains("${marker}")) | .id`,
-        ], { encoding: 'utf8' });
-        if (res.status !== 0) return '';
-        return (res.stdout ?? '').trim().split('\n')[0] ?? '';
-    }
-
-    // The gh seam, protected so specs can drive the upsert with no gh, no network and no PR.
-    protected gh(args: string[]): number {
-        return spawnSync('gh', args, { encoding: 'utf8' }).status ?? -1;
+        ]);
+        if (!res.ok) return '';
+        return res.stdout.trim().split('\n')[0] ?? '';
     }
 }

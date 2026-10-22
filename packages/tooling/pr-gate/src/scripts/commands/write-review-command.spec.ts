@@ -3,7 +3,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { execSync, execFileSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
-import { AtomicFile } from '@webpieces/tooling-common';
+import { AtomicFile, GitProcessClient } from '@webpieces/tooling-common';
 import { ChecklistDefinition, ChecklistInstructionsService, DEFAULT_MAX_CONCURRENT_BUILDS, DiffScope, HomeConfig, HomeConfigService, REVIEWER_AGENTS_PLACEHOLDER, RepoRootFinder, ReviewJsonService, ReviewerAgentPolicy, toChecklist } from '@webpieces/rules-config';
 import { ReviewIdentityStamp, ReviewIdentityStampService } from '@webpieces/repo-workflow-core';
 import { ReviewBudgetCheckOptions, WriteReviewCommand, WriteReviewOptions } from './write-review-command';
@@ -25,16 +25,25 @@ import { ReviewRoundStateService } from '../workflow/review-round-state';
 
 /** The branch is fixed rather than read from the process cwd, which a spec does not own. */
 class FixedBranchName extends AiBranchName {
-    getFeatureName(): string {
+    constructor() {
+        super(new BranchNaming(), null as never);
+    }
+
+    override async getFeatureName(): Promise<string> {
         return 'dean-feat';
     }
 }
+
+// The scan below still reads a REAL repository: ChecklistScanner's changed-file set comes from
+// `@webpieces/rules-config`'s DiffScope, which is not routed through the injected process edge yet (a
+// later slice of #1381). Only the tests that SCAN build one; the rest need no git at all.
+const realGit = new GitProcessClient();
 
 const reviewJson = new ReviewJsonService();
 const stamps = new ReviewIdentityStampService();
 const provenance = new VerdictProvenanceService(reviewJson, new AtomicFile());
 const receipts = new ReviewStageReceiptService(reviewJson);
-const rounds = new ReviewRoundStateService(reviewJson, provenance, new AtomicFile());
+const rounds = new ReviewRoundStateService(reviewJson, provenance, new AtomicFile(), realGit);
 const RED = JSON.stringify({ id: 'security', status: 'red', agent: 'codex', model: 'gpt-5-codex', output: 'GRANT ALL is too wide' });
 const ORANGE = JSON.stringify({ id: 'security', status: 'orange', agent: 'codex', model: 'gpt-5-codex', output: 'narrow GRANT ALL to SELECT' });
 const CHECKLISTS: ChecklistDefinition[] = [
@@ -51,15 +60,29 @@ function scanner(): ChecklistScanner {
     const home = new HomeConfigService();
     vi.spyOn(home, 'load').mockReturnValue(new HomeConfig(false, false, DEFAULT_MAX_CONCURRENT_BUILDS, false));
     return new ChecklistScanner(
-        new FixedBranchName(new BranchNaming()), new ChecklistDetector(diffScope), diffScope,
-        new DiffBasisResolver(new ForkPoint(null as never, null as never, null as never), new GitStatusParser()),
+        new FixedBranchName(), new ChecklistDetector(diffScope), diffScope,
+        new DiffBasisResolver(new ForkPoint(null as never, null as never, null as never, null as never, realGit), new GitStatusParser(), realGit),
         new PrContextWriter(diffScope, reviewJson), reviewJson, home,
-        new ChecklistScopeHasher(new DiffMaterializer(reviewJson)), provenance, receipts, rounds,
+        new ChecklistScopeHasher(new DiffMaterializer(reviewJson, realGit)), provenance, receipts, rounds,
     );
 }
 
-/** A repo on a feature branch with one in-scope change, and stage ② having briefed `security` on it. */
-function briefedRepo(maxRounds = 2): string {
+/**
+ * Stage ② having briefed `security` — the receipt the command reads, and nothing else. The command under
+ * test never asks git anything (the feature name is fixed above), so no repository is built.
+ */
+function briefedDir(maxRounds = 2): string {
+    const dir = specTempDirs.make('wp-write-review-');
+    const receipt = new ReviewStageReceipt('c0ffee', true, 'pnpm build', '', ['security']);
+    receipt.scopeHashes = { security: 'scope-of-security' };
+    receipt.round = 1;
+    receipt.maxReviewerRounds = maxRounds;
+    receipts.write(dir, 'dean-feat', receipt);
+    return dir;
+}
+
+/** A REAL repo on a feature branch with one in-scope change, briefed from a real scan — for the tests that scan. */
+async function briefedRepo(maxRounds = 2): Promise<string> {
     const dir = specTempDirs.make('wp-write-review-');
     git(dir, 'git init -q -b main');
     git(dir, 'git config user.email t@t.co');
@@ -71,7 +94,7 @@ function briefedRepo(maxRounds = 2): string {
     fs.writeFileSync(path.join(dir, 'grant.sql'), 'GRANT ALL;\n');
     git(dir, 'git add -A');
     git(dir, 'git commit -qm change');
-    const scan = scanner().scan(dir, CHECKLISTS, new ChecklistScanOptions(1, false, ''));
+    const scan = await scanner().scan(dir, CHECKLISTS, new ChecklistScanOptions(1, false, ''));
     const receipt = new ReviewStageReceipt(scan.basis.headSha, true, 'pnpm build', '', ['security']);
     receipt.scopeHashes = scan.scopeHashes;
     receipt.round = 1;
@@ -82,7 +105,7 @@ function briefedRepo(maxRounds = 2): string {
 
 function command(): WriteReviewCommand {
     return new WriteReviewCommand(
-        new RepoRootFinder(), new FixedBranchName(new BranchNaming()), receipts,
+        new RepoRootFinder(), new FixedBranchName(), receipts,
         new ReviewerIdentityResolver(stamps), provenance, reviewJson);
 }
 
@@ -93,7 +116,7 @@ function hookStamp(dir: string, aiType: string, agentId: string): void {
 
 describe('wp-write-review — the one way a reviewer submits a verdict (issue #863)', () => {
     it('lets a CODEX SUBAGENT submit, and records who it was, where, and which scope', async () => {
-        const dir = briefedRepo();
+        const dir = await briefedRepo();
         hookStamp(dir, 'codex', 'agent-9');
         await command().run(new WriteReviewOptions('security', GREEN, dir));
 
@@ -103,53 +126,53 @@ describe('wp-write-review — the one way a reviewer submits a verdict (issue #8
         expect(record?.agentId).toBe('agent-9');
         expect(record?.scopeHash).toBe(receipts.read(dir, 'dean-feat')?.scopeHashes['security']);
         // …and the gate's own scan counts it: a carried-forward, current verdict.
-        const scan = scanner().scan(dir, CHECKLISTS, new ChecklistScanOptions(1, true, ''));
+        const scan = await scanner().scan(dir, CHECKLISTS, new ChecklistScanOptions(1, true, ''));
         expect(scan.standings[0].standing).toBe(STANDING_CURRENT);
         expect(scan.outstanding).toEqual([]);
     });
 
-    it('REFUSES the coordinating agent, and writes nothing', () => {
-        const dir = briefedRepo();
+    it('REFUSES the coordinating agent, and writes nothing', async () => {
+        const dir = briefedDir();
         hookStamp(dir, 'codex', '');
-        expect(() => command().run(new WriteReviewOptions('security', GREEN, dir))).toThrow(/COORDINATING agent/);
+        await expect(command().run(new WriteReviewOptions('security', GREEN, dir))).rejects.toThrow(/COORDINATING agent/);
         expect(fs.existsSync(reviewJson.checklistResultPath(reviewJson.summaryJsonPath(dir, 'dean-feat'), 'security', 1))).toBe(false);
     });
 
-    it('refuses a checklist stage ② did not brief — a carried verdict cannot be overwritten', () => {
-        const dir = briefedRepo();
+    it('refuses a checklist stage ② did not brief — a carried verdict cannot be overwritten', async () => {
+        const dir = briefedDir();
         stamps.write(dir, new ReviewIdentityStamp('other', 'codex', 'sess-1', 'agent-9', 'default', dir, new Date().toISOString()));
-        expect(() => command().run(new WriteReviewOptions('other', GREEN.replace('security', 'other'), dir))).toThrow(/was not briefed/);
+        await expect(command().run(new WriteReviewOptions('other', GREEN.replace('security', 'other'), dir))).rejects.toThrow(/was not briefed/);
     });
 
-    it('refuses a verdict with a field outside the schema, naming it', () => {
-        const dir = briefedRepo();
+    it('refuses a verdict with a field outside the schema, naming it', async () => {
+        const dir = briefedDir();
         hookStamp(dir, 'claude-code', 'agent-3');
         const withOverride = JSON.stringify({ id: 'security', status: 'red', agent: 'claude', model: 'opus', output: 'x', override: 'ok' });
-        expect(() => command().run(new WriteReviewOptions('security', withOverride, dir))).toThrow(/"override" is not a verdict field/);
+        await expect(command().run(new WriteReviewOptions('security', withOverride, dir))).rejects.toThrow(/"override" is not a verdict field/);
     });
 });
 
 describe('ReviewerIdentityResolver — who is calling', () => {
-    it('is a HUMAN at a terminal when there is no harness env and no stamp', () => {
-        const dir = briefedRepo();
+    it('is a HUMAN at a terminal when there is no harness env and no stamp', async () => {
+        const dir = briefedDir();
         expect(new ReviewerIdentityResolver(stamps).resolve(dir, 'security', {}).harness).toBe(HARNESS_TERMINAL);
     });
 
-    it('refuses a harness-launched call the hook did not stamp — it cannot say who is calling', () => {
-        const dir = briefedRepo();
+    it('refuses a harness-launched call the hook did not stamp — it cannot say who is calling', async () => {
+        const dir = briefedDir();
         expect(() => new ReviewerIdentityResolver(stamps).resolve(dir, 'security', { CODEX_THREAD_ID: 't-1' }))
             .toThrow(/no usable identity stamp/);
     });
 });
 
 describe('wp-finish-upsert-pr rejects a hand-written verdict (issue #863)', () => {
-    it('refuses the PR, names the file as NOT COUNTED, and says who may submit one', () => {
-        const dir = briefedRepo();
+    it('refuses the PR, names the file as NOT COUNTED, and says who may submit one', async () => {
+        const dir = await briefedRepo();
         const summaryPath = reviewJson.summaryJsonPath(dir, 'dean-feat');
         fs.mkdirSync(path.dirname(summaryPath), { recursive: true });
         // Exactly what the Codex coordinator did on #1093 and #1095: the right shape, at the right path.
         fs.writeFileSync(reviewJson.checklistResultPath(summaryPath, 'security', 1), GREEN);
-        const scan = scanner().scan(dir, CHECKLISTS, new ChecklistScanOptions(1, true, ''));
+        const scan = await scanner().scan(dir, CHECKLISTS, new ChecklistScanOptions(1, true, ''));
         const gate = new ReviewerVerdictGate(reviewJson, new ChecklistInstructionsService(reviewJson));
         expect(() => gate.assertEveryReviewerRan(scan)).toThrow(/NOT COUNTED/);
         expect(() => gate.assertEveryReviewerRan(scan)).toThrow(/not submitted through pnpm wp-write-review/);
@@ -176,7 +199,7 @@ describe('wp-write-review holds the reviewer-round budget (issues #1051, #1053)'
     }
 
     it('an IN-cap run proceeds: --check says so (and that it is the FINAL round), and the verdict is recorded', async () => {
-        const dir = briefedRepo(1);
+        const dir = briefedDir(1);
         const out = vi.spyOn(process.stdout, 'write').mockImplementation((): boolean => true);
         await command().check(new ReviewBudgetCheckOptions('security', dir));
         expect(String(out.mock.calls[0]?.[0])).toContain('may be reviewed: this is review round 1 of at most 1');
@@ -188,32 +211,32 @@ describe('wp-write-review holds the reviewer-round budget (issues #1051, #1053)'
     });
 
     it('a second verdict for the same round is refused — by --check and by the submission — and overwrites nothing', async () => {
-        const dir = briefedRepo(1);
+        const dir = briefedDir(1);
         hookStamp(dir, 'claude-code', 'agent-1');
         await quietly((): Promise<void> => command().run(new WriteReviewOptions('security', GREEN, dir)));
         const verdictPath = reviewJson.checklistResultPath(reviewJson.summaryJsonPath(dir, 'dean-feat'), 'security', 1);
         const before = fs.readFileSync(verdictPath, 'utf8');
 
         const refusal = 'I am not allowed to review security: it already has a verdict for review round 1';
-        expect(() => command().check(new ReviewBudgetCheckOptions('security', dir))).toThrow(refusal);
+        await expect(command().check(new ReviewBudgetCheckOptions('security', dir))).rejects.toThrow(refusal);
         hookStamp(dir, 'claude-code', 'agent-2');
-        expect(() => command().run(new WriteReviewOptions('security', YELLOW, dir))).toThrow(refusal);
-        expect(() => command().check(new ReviewBudgetCheckOptions('security', dir))).toThrow(/report this refusal, verbatim/);
-        expect(() => command().check(new ReviewBudgetCheckOptions('security', dir))).not.toThrow(/end (your|the) turn/i);
+        await expect(command().run(new WriteReviewOptions('security', YELLOW, dir))).rejects.toThrow(refusal);
+        await expect(command().check(new ReviewBudgetCheckOptions('security', dir))).rejects.toThrow(/report this refusal, verbatim/);
+        await expect(command().check(new ReviewBudgetCheckOptions('security', dir))).rejects.not.toThrow(/end (your|the) turn/i);
         expect(fs.readFileSync(verdictPath, 'utf8')).toBe(before);
     });
 
-    it('refuses a round above maxReviewerRounds and records nothing', () => {
-        const dir = briefedRepo(1);
+    it('refuses a round above maxReviewerRounds and records nothing', async () => {
+        const dir = briefedDir(1);
         atRound(dir, 2);
         hookStamp(dir, 'claude-code', 'agent-1');
-        expect(() => command().run(new WriteReviewOptions('security', GREEN, dir)))
-            .toThrow('this briefing is for review round 2, above maxReviewerRounds (1)');
+        await expect(command().run(new WriteReviewOptions('security', GREEN, dir)))
+            .rejects.toThrow('this briefing is for review round 2, above maxReviewerRounds (1)');
         expect(reviewJson.latestVerdictRound(reviewJson.summaryJsonPath(dir, 'dean-feat'), 'security')).toBe(0);
     });
 
     it('round 2 of 2 records a NEW file beside round 1 — every round is kept', async () => {
-        const dir = briefedRepo(2);
+        const dir = briefedDir(2);
         hookStamp(dir, 'claude-code', 'agent-1');
         await quietly((): Promise<void> => command().run(new WriteReviewOptions('security', RED, dir)));
         atRound(dir, 2);
@@ -234,17 +257,17 @@ describe('wp-write-review fits the color to the round (issue #1053)', () => {
         return fn().finally((): void => out.mockRestore());
     }
 
-    it('with maxReviewerRounds: 1, refuses RED and names ORANGE — and records nothing', () => {
-        const dir = briefedRepo(1);
+    it('with maxReviewerRounds: 1, refuses RED and names ORANGE — and records nothing', async () => {
+        const dir = briefedDir(1);
         hookStamp(dir, 'claude-code', 'agent-1');
-        expect(() => command().run(new WriteReviewOptions('security', RED, dir))).toThrow(/"status": "red" is not allowed: review round 1 of 1 is the FINAL round/);
+        await expect(command().run(new WriteReviewOptions('security', RED, dir))).rejects.toThrow(/"status": "red" is not allowed: review round 1 of 1 is the FINAL round/);
         hookStamp(dir, 'claude-code', 'agent-1');
-        expect(() => command().run(new WriteReviewOptions('security', RED, dir))).toThrow(/Mark anything that must be fixed "orange"/);
+        await expect(command().run(new WriteReviewOptions('security', RED, dir))).rejects.toThrow(/Mark anything that must be fixed "orange"/);
         expect(reviewJson.latestVerdictRound(reviewJson.summaryJsonPath(dir, 'dean-feat'), 'security')).toBe(0);
     });
 
     it('with maxReviewerRounds: 1, accepts ORANGE', async () => {
-        const dir = briefedRepo(1);
+        const dir = briefedDir(1);
         hookStamp(dir, 'claude-code', 'agent-1');
         await quietly((): Promise<void> => command().run(new WriteReviewOptions('security', ORANGE, dir)));
         const verdictPath = reviewJson.checklistResultPath(reviewJson.summaryJsonPath(dir, 'dean-feat'), 'security', 1);
@@ -252,9 +275,9 @@ describe('wp-write-review fits the color to the round (issue #1053)', () => {
     });
 
     it('before the final round, refuses ORANGE and names RED — a re-review is still paid for', async () => {
-        const dir = briefedRepo(2);
+        const dir = briefedDir(2);
         hookStamp(dir, 'claude-code', 'agent-1');
-        expect(() => command().run(new WriteReviewOptions('security', ORANGE, dir))).toThrow(/"status": "orange" is only for the FINAL review round/);
+        await expect(command().run(new WriteReviewOptions('security', ORANGE, dir))).rejects.toThrow(/"status": "orange" is only for the FINAL review round/);
         hookStamp(dir, 'claude-code', 'agent-1');
         await quietly((): Promise<void> => command().run(new WriteReviewOptions('security', RED, dir)));
         const verdictPath = reviewJson.checklistResultPath(reviewJson.summaryJsonPath(dir, 'dean-feat'), 'security', 1);
@@ -264,8 +287,8 @@ describe('wp-write-review fits the color to the round (issue #1053)', () => {
 
 // Cross-package integration: the hook producer and the CLI writer must select the SAME namespace.
 describe('linked-worktree hook-to-writer routing (#1105)', () => {
-    function worktrees(): string[] {
-        const primary = briefedRepo();
+    async function worktrees(): Promise<string[]> {
+        const primary = await briefedRepo();
         const parent = specTempDirs.makeReal('wp-stamp-trees-');
         const first = path.join(parent, 'first');
         const second = path.join(parent, 'second');
@@ -300,7 +323,7 @@ describe('linked-worktree hook-to-writer routing (#1105)', () => {
     }
 
     it('writes a legitimate verdict in the target worktree and consumes the hook stamp once', async () => {
-        const [primary, target, other] = worktrees();
+        const [primary, target, other] = await worktrees();
         submitHook(primary, target);
         expect(fs.existsSync(stamps.stampPath(primary, 'security'))).toBe(false);
         expect(stamps.take(other, 'security')).toBeNull();
@@ -326,17 +349,17 @@ describe('linked-worktree hook-to-writer routing (#1105)', () => {
         ).toBeNull();
     });
 
-    it('still refuses a coordinator routed into a worktree', () => {
-        const [primary, target] = worktrees();
+    it('still refuses a coordinator routed into a worktree', async () => {
+        const [primary, target] = await worktrees();
         submitHook(primary, target, '');
-        expect(() => command().run(new WriteReviewOptions('security', GREEN, target))).toThrow(
+        await expect(command().run(new WriteReviewOptions('security', GREEN, target))).rejects.toThrow(
             /COORDINATING agent/,
         );
         expect(stamps.take(target, 'security')).toBeNull();
     });
 
-    it('reports the expected namespace when an old hook stamped the session tree', () => {
-        const [primary, target] = worktrees();
+    it('reports the expected namespace when an old hook stamped the session tree', async () => {
+        const [primary, target] = await worktrees();
         hookStamp(primary, 'codex', 'reviewer-1105');
         const resolve = (): void => {
             new ReviewerIdentityResolver(stamps).resolve(target, 'security', {

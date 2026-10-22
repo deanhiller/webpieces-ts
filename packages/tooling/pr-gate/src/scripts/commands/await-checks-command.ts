@@ -1,5 +1,5 @@
-import { spawnSync } from 'child_process';
 import { CliExitError } from '@webpieces/rules-config';
+import { NativeProcessApi } from '@webpieces/tooling-common';
 import { injectable, bindingScopeValues } from 'inversify';
 
 import { AwaitLoop, WaitOutcome, WaitProbe } from '../workflow/await-loop';
@@ -56,10 +56,11 @@ export class AwaitChecksCommand {
     constructor(
         private readonly awaitLoop: AwaitLoop,
         private readonly stageConsole: StageOutputLog,
+        private readonly processes: NativeProcessApi,
     ) {}
 
     async run(opts: AwaitChecksOptions): Promise<void> {
-        const probe = new ChecksWaitProbe(opts.prNumber);
+        const probe = new ChecksWaitProbe(opts.prNumber, this.processes);
         const outcome = await this.awaitLoop.run(probe);
         this.stageConsole.say(outcome.done ? probe.settledReport(outcome) : probe.stillWaitingReport(outcome));
     }
@@ -118,10 +119,13 @@ export class ChecksWaitProbe implements WaitProbe {
 
     private state: ChecksState = new ChecksState(0, 0, 0, true);
 
-    constructor(private readonly prNumber: string) {}
+    constructor(
+        private readonly prNumber: string,
+        private readonly processes: NativeProcessApi,
+    ) {}
 
-    done(): boolean {
-        this.state = this.read();
+    async done(): Promise<boolean> {
+        this.state = await this.read();
         return this.state.settled;
     }
 
@@ -148,14 +152,13 @@ export class ChecksWaitProbe implements WaitProbe {
      * must never be able to end the wait, because the only thing worse than waiting too long is
      * announcing an outcome nobody observed.
      */
-    private read(): ChecksState {
-        const result = spawnSync(
+    private async read(): Promise<ChecksState> {
+        const result = await this.processes.run(
             'gh',
             ['pr', 'view', this.prNumber, '--json', 'statusCheckRollup',
-                '--jq', '[.statusCheckRollup[] | (.status // .state)] | @tsv'],
-            { encoding: 'utf8' });
-        if (result.status !== 0) return new ChecksState(0, 0, 0, true);
-        return this.classify((result.stdout ?? '').trim());
+                '--jq', '[.statusCheckRollup[] | (.status // .state)] | @tsv']);
+        if (!result.ok) return new ChecksState(0, 0, 0, true);
+        return this.classify(result.stdout.trim());
     }
 
     // `status` is COMPLETED / IN_PROGRESS / QUEUED for a check run; a plain commit status has no
