@@ -1,8 +1,13 @@
 {
     "$schema": "http://json-schema.org/schema",
     "title": "Visualize Runtime Executor",
-    "description": "View the saved runtime snapshot as DOT + HTML without refreshing. Refresh: pnpm nx run architecture:generate.",
+    "description": "View the saved runtime snapshot as DOT + HTML without refreshing, with Goal vs Current when architecture/runtime-dependencies-goal.json exists. Refresh: pnpm nx run architecture:generate. Viewing never writes; --prepare-goal explicitly recomputes the goal's derived levels first.",
     "type": "object",
-    "properties": {},
+    "properties": {
+        "prepareGoal": {
+            "type": "boolean",
+            "description": "Recompute and save architecture/runtime-dependencies-goal.json's derived levels, self-queue flags, contract queues and maxLevel before viewing."
+        }
+    },
     "required": []
 }

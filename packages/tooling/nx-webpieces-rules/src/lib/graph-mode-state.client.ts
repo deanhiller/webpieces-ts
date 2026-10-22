@@ -16,11 +16,14 @@ class WpModeState {
     /**
      * @param hasProducts some box belongs to a product, so the Product mode has something to show
      * @param goalUnavailable '' when Goal vs Current can be shown, else why not (#1239)
+     * @param goalNote the line shown under the dimmed Goal vs Current item, e.g.
+     *        "runtime-dependencies-goal.json does not exist" (#1373); '' when it can be shown
      */
     constructor(
         private readonly hasProducts: boolean,
         private readonly viewer: string,
         private readonly goalUnavailable: string,
+        private readonly goalNote: string = goalUnavailable,
     ) {
         this.kind = this.initialKind();
         this.mode = this.initial();
@@ -40,6 +43,11 @@ class WpModeState {
     /** '' when Goal vs Current can be shown, else why not (a missing or unusable input, never "no differences"). */
     goalReason(): string {
         return this.goalUnavailable;
+    }
+
+    /** The Goal vs Current item's second line: its subtitle, or the short reason it is dimmed (#1373). */
+    goalSubtitle(): string {
+        return this.goalUnavailable === '' ? this.subtitle('goal') : this.goalNote;
     }
 
     /** The active scan; null when the page has no Impact data. */

@@ -23,7 +23,7 @@ import { toError } from '../toError';
 
 export const DEFAULT_RUNTIME_GOAL_PATH = 'architecture/runtime-dependencies-goal.json';
 export const RUNTIME_GOAL_RULE_NAME = 'runtime-architecture-goal';
-export const RUNTIME_GOAL_PREPARE_COMMAND = 'pnpm nx run architecture:visualize-runtime-goal --prepare';
+export const RUNTIME_GOAL_PREPARE_COMMAND = 'pnpm nx run architecture:visualize-runtime --prepare-goal';
 export const RUNTIME_GOAL_INIT_COMMAND = `cp ${DEFAULT_RUNTIME_GRAPH_PATH} ${DEFAULT_RUNTIME_GOAL_PATH}`;
 
 /** The derived fields `--prepare` rewrote, as `field: before → after` lines; empty when none moved. */
@@ -182,26 +182,5 @@ export class RuntimeGoalFile {
 
     private failure(message: string, options: Option[], cause?: Error): RuleFailError {
         return new RuleFailError(RUNTIME_GOAL_RULE_NAME, message, undefined, undefined, options, undefined, cause);
-    }
-}
-
-/** What a goal page says it is: a hand-authored proposal, not a generated snapshot (#1239). */
-export class RuntimeGoalProvenance {
-    message(): string {
-        return (
-            `Goal / Proposed runtime architecture from ${DEFAULT_RUNTIME_GOAL_PATH}. Hand-authored; not generated from source, ` +
-            'and never written by architecture:generate. Viewing changes no file. ' +
-            `After editing relationships, recompute derived levels explicitly: ${RUNTIME_GOAL_PREPARE_COMMAND}`
-        );
-    }
-
-    html(): string {
-        return (
-            `<p class="hint"><strong>Goal / Proposed runtime architecture.</strong> Hand-authored proposal read from ` +
-            `<code>${DEFAULT_RUNTIME_GOAL_PATH}</code>; not generated from source and never written by ` +
-            `<code>architecture:generate</code>. Viewing changes no file. After editing relationships, recompute derived ` +
-            `levels explicitly: <code>${RUNTIME_GOAL_PREPARE_COMMAND}</code>. Compare with the saved current graph ` +
-            `(<code>${DEFAULT_RUNTIME_GRAPH_PATH}</code>) in Color by → Goal vs Current.</p>`
-        );
     }
 }

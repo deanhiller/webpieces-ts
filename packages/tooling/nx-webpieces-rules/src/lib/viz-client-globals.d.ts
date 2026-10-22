@@ -117,6 +117,7 @@ interface ProductTemplateJson {
 interface RuntimeComparisonJson {
     available: boolean;
     reason: string;
+    menuNote: string;
     direction: string;
     summary: string;
     model: RenderModelJson | null;

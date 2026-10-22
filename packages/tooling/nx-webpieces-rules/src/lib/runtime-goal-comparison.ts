@@ -162,6 +162,7 @@ export class RuntimeGoalComparison {
         return new RuntimeComparisonView(
             true,
             '',
+            '',
             'Current → Goal',
             this.summary(diff),
             model,

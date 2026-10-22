@@ -107,14 +107,14 @@ their existing checks independently of visualization.
 
 ### Runtime goals (proposals)
 
-`pnpm nx run architecture:visualize-runtime-goal` draws the hand-authored
-`architecture/runtime-dependencies-goal.json` into
-`tmp/webpieces/runtime-architecture-goal.{dot,html}`; it never generates, never writes
-either JSON file, and fails a missing goal with its path and
-`cp architecture/runtime-dependencies.json architecture/runtime-dependencies-goal.json`.
-`--prepare` explicitly recomputes the goal's derived levels first. Both runtime pages
-offer Color by → **Goal vs Current**, a semantic diff of the two saved files. Details,
-comparison policy and the edit workflow: `docs/architecture/runtime-goal.md`.
+When the hand-authored `architecture/runtime-dependencies-goal.json` exists,
+`pnpm nx run architecture:visualize-runtime` adds Color by → **Goal vs Current**, a
+semantic diff of the two saved files. Without one, that menu item is dimmed and reads
+"runtime-dependencies-goal.json does not exist" (its tooltip says how to start one:
+`cp architecture/runtime-dependencies.json architecture/runtime-dependencies-goal.json`).
+Viewing never writes either JSON file; `--prepare-goal` explicitly recomputes and saves
+the goal's derived levels first. Details, comparison policy and the edit workflow:
+`docs/architecture/runtime-goal.md`.
 
 ### Color modes and the page shell
 

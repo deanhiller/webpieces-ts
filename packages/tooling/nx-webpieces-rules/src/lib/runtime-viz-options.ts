@@ -1,15 +1,13 @@
 import type { EnhancedGraph } from './graph-sorter';
 
 /**
- * Which saved runtime file a page draws (#1239). It decides the output file names, the provenance
- * the page states, and the source named under the graph's title.
+ * Which saved runtime file(s) a drawing reads (#1239): the current graph, or the Goal vs Current
+ * overlay the runtime page carries. It decides the source named under the graph's title.
  */
 export enum RuntimePageKind {
     /** architecture/runtime-dependencies.json — generated from source. */
     CURRENT = 'current',
-    /** architecture/runtime-dependencies-goal.json — a hand-authored proposal. */
-    GOAL = 'goal',
-    /** The Goal vs Current overlay carried inside either page. */
+    /** The Goal vs Current overlay carried inside the runtime page. */
     COMPARISON = 'comparison',
 }
 
@@ -34,7 +32,6 @@ export class RuntimeVizOptions {
 
     /** The saved file(s) this page draws, named under the title. */
     source(): string {
-        if (this.page === RuntimePageKind.GOAL) return 'architecture/runtime-dependencies-goal.json';
         if (this.page === RuntimePageKind.COMPARISON)
             return 'Current → Goal: architecture/runtime-dependencies.json → architecture/runtime-dependencies-goal.json';
         return 'architecture/runtime-dependencies.json';

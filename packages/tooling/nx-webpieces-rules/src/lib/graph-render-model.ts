@@ -147,6 +147,11 @@ export class RuntimeComparisonView {
         public readonly available: boolean,
         /** Why the mode is unavailable; '' when available. */
         public readonly reason: string,
+        /**
+         * The short line the Color-by menu shows under the DIMMED Goal vs Current item (#1373) — e.g.
+         * "runtime-dependencies-goal.json does not exist"; '' when available.
+         */
+        public readonly menuNote: string,
         /** Always "Current → Goal": the direction every added/removed word is read in. */
         public readonly direction: string,
         /** One line: counts per status, or the explicit no-differences result. */

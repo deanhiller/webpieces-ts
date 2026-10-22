@@ -60,6 +60,18 @@ export class ModeInfo {
     ) {}
 }
 
+/**
+ * A mode the page must render DIMMED and unselectable (#1373): `reason` is the item's tooltip and
+ * `note` replaces its grey subtitle, e.g. "runtime-dependencies-goal.json does not exist".
+ */
+export class ModeUnavailable {
+    constructor(
+        public readonly mode: GraphMode,
+        public readonly reason: string,
+        public readonly note: string,
+    ) {}
+}
+
 /** In key order: `1` selects the first, `2` the second, `3` the third, `4` the fourth. */
 export const GRAPH_MODES: readonly ModeInfo[] = [
     new ModeInfo(GraphMode.RUNTIME, 'Runtime', 'where the code can run'),

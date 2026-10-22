@@ -82,7 +82,7 @@ const APIS_PER_LABEL_LINE = 3;
 /** Separator for the (service, external-library) grouping key; illegal in both project names. */
 const PAIR_SEP = '|';
 
-import { RuntimeVizOptions, RuntimePageKind } from './runtime-viz-options';
+import { RuntimeVizOptions } from './runtime-viz-options';
 import type { RuntimeComparisonView } from './graph-render-model';
 export { RuntimeVizOptions, RuntimePageKind } from './runtime-viz-options';
 
@@ -676,9 +676,8 @@ export interface RuntimeVisualizationPaths {
 }
 
 /**
- * Write the DOT + HTML renderings to tmp/webpieces/: `runtime-architecture.*` for the current graph,
- * `runtime-architecture-goal.*` for the goal (#1239), so neither page ever overwrites the other.
- * `comparison` is the Goal vs Current overlay the page carries (or why it is unavailable).
+ * Write the DOT + HTML renderings to tmp/webpieces/runtime-architecture.*. `comparison` is the
+ * Goal vs Current overlay the page carries (or why it is unavailable, #1239).
  */
 export function writeRuntimeVisualization(
     graph: RuntimeGraph,
@@ -693,7 +692,7 @@ export function writeRuntimeVisualization(
     const model = generateRuntimeRenderModel(graph, title, options);
     model.comparison = comparison;
     const dot = model.fullDot;
-    const base = options.page === RuntimePageKind.GOAL ? 'runtime-architecture-goal' : 'runtime-architecture';
+    const base = 'runtime-architecture';
     const dotPath = path.join(outputDir, `${base}.dot`);
     fs.writeFileSync(dotPath, dot, 'utf-8');
 

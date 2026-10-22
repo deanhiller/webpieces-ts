@@ -32,7 +32,6 @@ import type {
 } from '@nx/devkit';
 import {
     createVisualizeRuntimeTarget,
-    createVisualizeRuntimeGoalTarget,
     createValidateRuntimeArchitectureTarget,
 } from './runtime-targets';
 import { BRANCH_IDENTITY_INPUTS } from './branch-identity-inputs';
@@ -421,7 +420,6 @@ function createWorkspaceTargetsWithoutPrefix(
     }
     if (opts.workspace.features!.visualizeRuntime) {
         targets['visualize-runtime'] = createVisualizeRuntimeTarget();
-        targets['visualize-runtime-goal'] = createVisualizeRuntimeGoalTarget();
     }
     if (validations.noCycles) {
         targets['validate-no-architecture-cycles'] = targetFactory.noCycles();
