@@ -27,6 +27,11 @@ export class IssueReferences {
         return issues.map((issue: AddressedIssue): string => `${issue.closesIssue ? 'Fixes' : 'Part of'} ${issue.url}`);
     }
 
+    /** Generated review commentary must not act as a GitHub issue-closing directive (#1368). */
+    asCommentary(text: string): string {
+        return text.replace(IssueReferences.CLOSING_REFERENCE, '$1 issue $2');
+    }
+
     /**
      * The summary text with every line that IS one of the block's lines removed, so the rendered body carries
      * exactly one block even when an author pasted a previous body's ticket lines into `summary`.

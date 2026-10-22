@@ -309,13 +309,15 @@ export class Dashboard {
         lines.push(new ReviewIdentityRenderer().renderAuthor(input.author.harness, input.author.model, false));
         lines.push('');
         const flags = this.nonGreenFlags(input);
+        const issues = new IssueReferences();
         if (flags.length > 0) lines.push('Non-green Flags (full list in first comment to avoid large git logs)');
-        for (const flag of flags) lines.push(`- ${flag}`);
+        // Review prose is evidence, not an instruction to close a ticket. The verbatim audit remains
+        // in the comments; only generated flags are neutralized, never the author's summary or ticket block.
+        for (const flag of flags) lines.push(`- ${issues.asCommentary(flag)}`);
         // ALWAYS the last bullet, green case included. Without it the compact body reads as the whole
         // record, and the reader never learns that every green row, the full summary and each reviewer's
         // output are one click away.
         lines.push(`- ${DETAIL_POINTER}`);
-        const issues = new IssueReferences();
         const summary = this.firstSentences(issues.withoutBlockLines(input.review.summary.trim(), input.review.addressesIssues), 4);
         if (summary !== '') {
             lines.push('');
