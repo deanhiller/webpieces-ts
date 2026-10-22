@@ -107,7 +107,7 @@ export class ScriptedProcessTable<R> {
  * deadline through `MockTimerApi`.
  */
 export class AbortableAnswer {
-    static settle<R>(answer: R | Promise<R>, signal: AbortSignal | undefined, killed: () => R): Promise<R> {
+    settle<R>(answer: R | Promise<R>, signal: AbortSignal | undefined, killed: () => R): Promise<R> {
         if (signal === undefined) return Promise.resolve(answer);
         if (signal.aborted) return Promise.resolve(killed());
         const aborted = new Promise<R>((resolve: (value: R) => void): void => {

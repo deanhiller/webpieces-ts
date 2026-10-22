@@ -487,7 +487,7 @@ function findDtoCreationOnChangedLines(
  * Converter files: method-level — only check new/modified methods.
  * Non-converter files: line-level — only flag new XxxDto() on changed lines.
  */
-// webpieces-disable max-lines-new-methods -- File classification and diff-based violation collection
+// webpieces-disable max-lines-new-methods, no-function-outside-class -- File classification and diff-based violation collection
 async function collectViolationsForModifiedMethodAndCode(
     changedFiles: string[],
     convertersPaths: string[],
@@ -571,6 +571,7 @@ function reportViolations(violations: PrismaConverterViolation[], mode: PrismaCo
 /**
  * Resolve git base ref from env vars or auto-detection.
  */
+// webpieces-disable no-function-outside-class -- pre-existing module helper, made async only because DiffScope now reaches git through the injected process edge (#1381)
 async function resolveBase(workspaceRoot: string): Promise<string | undefined> {
     const envBase = process.env['NX_BASE'];
     if (envBase) return envBase;
@@ -616,6 +617,7 @@ function collectAllViolations(
 /**
  * Run validation after early-exit checks have passed.
  */
+// webpieces-disable no-function-outside-class -- pre-existing module helper, made async only because DiffScope now reaches git through the injected process edge (#1381)
 async function validateChangedFiles(
     workspaceRoot: string,
     schemaPath: string,

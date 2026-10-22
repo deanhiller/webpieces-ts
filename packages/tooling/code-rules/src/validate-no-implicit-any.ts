@@ -139,6 +139,7 @@ function findImplicitAnyInFile(filePath: string, workspaceRoot: string): Implici
     return violations;
 }
 
+// webpieces-disable no-function-outside-class -- pre-existing module helper, made async only because DiffScope now reaches git through the injected process edge (#1381)
 async function findViolationsForModifiedCode(
     workspaceRoot: string,
     changedFiles: string[],

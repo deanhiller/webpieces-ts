@@ -141,7 +141,7 @@ function methodHasChanges(method: MethodInfo, changedLines: Set<number>): boolea
 /**
  * Find NEW methods without explicit return types (NEW_METHODS mode).
  */
-// webpieces-disable max-lines-new-methods -- File iteration with diff parsing and method matching
+// webpieces-disable max-lines-new-methods, no-function-outside-class -- File iteration with diff parsing and method matching
 async function findViolationsForNewMethods(
     workspaceRoot: string,
     changedFiles: string[],
@@ -178,7 +178,7 @@ async function findViolationsForNewMethods(
 /**
  * Find NEW methods AND methods with changes (NEW_AND_MODIFIED_METHODS mode).
  */
-// webpieces-disable max-lines-new-methods -- Combines new method detection with change detection
+// webpieces-disable max-lines-new-methods, no-function-outside-class -- Combines new method detection with change detection
 async function findViolationsForModifiedAndNewMethods(
     workspaceRoot: string,
     changedFiles: string[],

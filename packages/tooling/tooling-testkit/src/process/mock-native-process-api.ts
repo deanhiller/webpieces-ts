@@ -25,6 +25,7 @@ export class ScriptedShellRun {
 export class MockNativeProcessApi extends NativeProcessApi {
     private readonly table = new ScriptedProcessTable<ProcessResultDto>('MockNativeProcessApi');
     private readonly shells = new ScriptedProcessTable<ScriptedShellRun>('MockNativeProcessApi (shell)');
+    private readonly abortable = new AbortableAnswer();
 
     get calls(): ProcessCallDto[] {
         return this.table.calls;
@@ -83,7 +84,7 @@ export class MockNativeProcessApi extends NativeProcessApi {
 
     override run(program: string, args: string[], cwd?: string, signal?: AbortSignal): Promise<ProcessResultDto> {
         const answer = this.table.answer(new ProcessCallDto(program, [...args], cwd, 'run'));
-        return AbortableAnswer.settle(answer, signal, (): ProcessResultDto => new ProcessResultDto(PROCESS_KILLED, '', 'aborted'));
+        return this.abortable.settle(answer, signal, (): ProcessResultDto => new ProcessResultDto(PROCESS_KILLED, '', 'aborted'));
     }
 
     override async passThrough(program: string, args: string[], cwd?: string): Promise<ProcessResultDto> {

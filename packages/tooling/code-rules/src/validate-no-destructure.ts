@@ -265,7 +265,7 @@ function getDestructureContext(node: ts.Node): string {
 /**
  * NEW_AND_MODIFIED_CODE mode: Flag violations on changed lines in diff hunks.
  */
-// webpieces-disable max-lines-new-methods -- File iteration with diff parsing and line filtering
+// webpieces-disable max-lines-new-methods, no-function-outside-class -- File iteration with diff parsing and line filtering
 async function findViolationsForModifiedCode(
     workspaceRoot: string,
     changedFiles: string[],

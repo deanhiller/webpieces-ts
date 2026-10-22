@@ -1,4 +1,4 @@
-import { CheckoutLayout, specTempDirs } from '@webpieces/tooling-testkit';
+import { checkoutLayout, specTempDirs } from '@webpieces/tooling-testkit';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -293,8 +293,8 @@ describe('linked-worktree hook-to-writer routing (#1105)', () => {
         const first = path.join(parent, 'first');
         const second = path.join(parent, 'second');
         // What `git worktree add -b review-first|review-second` lays out on disk — all the routing reads.
-        CheckoutLayout.linkedWorktree(primary, first, 'review-first');
-        CheckoutLayout.linkedWorktree(primary, second, 'review-second');
+        checkoutLayout.linkedWorktree(primary, first, 'review-first');
+        checkoutLayout.linkedWorktree(primary, second, 'review-second');
         for (const tree of [first, second]) {
             receipts.write(tree, 'dean-feat', receipts.read(primary, 'dean-feat')!);
         }

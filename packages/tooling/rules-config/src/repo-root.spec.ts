@@ -1,4 +1,4 @@
-import { CheckoutLayout, specTempDirs } from '@webpieces/tooling-testkit';
+import { checkoutLayout, specTempDirs } from '@webpieces/tooling-testkit';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -6,7 +6,7 @@ import { DotWebpieces } from '@webpieces/tooling-common';
 
 import { RepoRootFinder } from './repo-root';
 
-// Checkouts are laid out on disk exactly as git lays them out (CheckoutLayout) — no git process (#1381).
+// Checkouts are laid out on disk exactly as git lays them out (checkoutLayout) — no git process (#1381).
 
 function writeFile(root: string, relPath: string, content: string): void {
     const full = path.join(root, relPath);
@@ -45,13 +45,13 @@ describe('RepoRootFinder.resolveRepoRoot', () => {
         writeFile(root, 'webpieces.config.json', '{}\n');
         const nested = path.join(root, 'repositories', 'some-clone');
         fs.mkdirSync(nested, { recursive: true });
-        CheckoutLayout.primary(nested, 'main');
+        checkoutLayout.primary(nested, 'main');
         expect(new DotWebpieces().treeRoot(nested)).toBe(nested); // sanity: git-toplevel IS the nested root
         expect(finder.resolveRepoRoot(nested)).toBe(root);        // …but resolveRepoRoot climbs past it
     });
 
     it('falls back to git toplevel when there is no webpieces.config.json anywhere above', () => {
-        CheckoutLayout.primary(root, 'main');
+        checkoutLayout.primary(root, 'main');
         const subdir = path.join(root, 'src', 'deep');
         fs.mkdirSync(subdir, { recursive: true });
         expect(finder.resolveRepoRoot(subdir)).toBe(root);

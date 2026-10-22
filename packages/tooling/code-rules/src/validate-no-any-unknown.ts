@@ -232,7 +232,7 @@ function findAnyUnknownInFile(filePath: string, workspaceRoot: string): AnyUnkno
  * NEW_AND_MODIFIED_CODE mode: Flag violations on changed lines in diff hunks.
  * This is LINE-BASED detection.
  */
-// webpieces-disable max-lines-new-methods -- File iteration with diff parsing and line filtering
+// webpieces-disable max-lines-new-methods, no-function-outside-class -- File iteration with diff parsing and line filtering
 async function findViolationsForModifiedCode(
     workspaceRoot: string,
     changedFiles: string[],

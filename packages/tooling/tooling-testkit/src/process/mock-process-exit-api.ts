@@ -6,7 +6,7 @@ import { ProcessExitApi } from '@webpieces/tooling-common';
  */
 export class MockProcessExited extends Error {
     constructor(readonly code: number) {
-        super(`process.exit(${String(code)})`);
+        super(`the program asked to end with exit code ${String(code)}`);
         this.name = 'MockProcessExited';
     }
 }

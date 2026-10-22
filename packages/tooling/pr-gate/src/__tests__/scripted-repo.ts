@@ -2,7 +2,7 @@ import * as crypto from 'crypto';
 import * as fs from 'fs';
 import * as path from 'path';
 import { GitResultDto } from '@webpieces/tooling-common';
-import { CheckoutLayout, MockGitProcessApi, ProcessCallDto } from '@webpieces/tooling-testkit';
+import { checkoutLayout, MockGitProcessApi, ProcessCallDto } from '@webpieces/tooling-testkit';
 
 /** One commit of a {@link ScriptedRepo}: its parent and the full tree it records. Data only. */
 export class RepoCommit {
@@ -36,7 +36,7 @@ export class ScriptedRepo {
 
     /** `git init -b <branch>` in `root`, answering every git call `git` receives. */
     static init(root: string, branch: string, git: MockGitProcessApi): ScriptedRepo {
-        CheckoutLayout.primary(root, branch);
+        checkoutLayout.primary(root, branch);
         const repo = new ScriptedRepo(root, branch);
         git.respondToPrefix([], (call: ProcessCallDto): GitResultDto => repo.answer(call));
         return repo;
@@ -79,7 +79,7 @@ export class ScriptedRepo {
     checkoutNewBranch(name: string): void {
         this.branches.set(name, this.headSha());
         this.current = name;
-        CheckoutLayout.checkoutBranch(this.root, name);
+        checkoutLayout.checkoutBranch(this.root, name);
     }
 
     /** `git reset --soft <branch>`: the current branch moves; the index and working tree do not. */

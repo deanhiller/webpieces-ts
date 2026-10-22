@@ -376,6 +376,7 @@ function isDtoTouched(dto: DtoInfo, changedLines: Set<number>): boolean {
 /**
  * Filter Dtos to only those that have changed lines in the diff (MODIFIED_CLASS mode).
  */
+// webpieces-disable no-function-outside-class -- pre-existing module helper, made async only because DiffScope now reaches git through the injected process edge (#1381)
 async function filterTouchedDtos(
     dtos: DtoInfo[],
     workspaceRoot: string,
@@ -391,7 +392,8 @@ async function filterTouchedDtos(
     }
 
     const touched: DtoInfo[] = [];
-    for (const [file, fileDtos] of byFile) {
+    for (const file of byFile.keys()) {
+        const fileDtos = byFile.get(file) ?? [];
         const diff = await getFileDiff(workspaceRoot, file, base, head);
         const changedLines = getChangedLineNumbers(diff);
         for (const dto of fileDtos) {
@@ -406,6 +408,7 @@ async function filterTouchedDtos(
 /**
  * Resolve git base ref from env vars or auto-detection.
  */
+// webpieces-disable no-function-outside-class -- pre-existing module helper, made async only because DiffScope now reaches git through the injected process edge (#1381)
 async function resolveBase(workspaceRoot: string): Promise<string | undefined> {
     const envBase = process.env['NX_BASE'];
     if (envBase) return envBase;
@@ -415,7 +418,7 @@ async function resolveBase(workspaceRoot: string): Promise<string | undefined> {
 /**
  * Run the core validation after early-exit checks have passed.
  */
-// webpieces-disable max-lines-new-methods -- Core validation orchestration with multiple early-exit checks
+// webpieces-disable max-lines-new-methods, no-function-outside-class -- Core validation orchestration with multiple early-exit checks
 async function validateDtoFiles(
     workspaceRoot: string,
     prismaSchemaPath: string,

@@ -394,7 +394,7 @@ function findInlineTypesInFile(filePath: string, workspaceRoot: string): InlineT
 /**
  * Find violations in new methods only (NEW_METHODS mode).
  */
-// webpieces-disable max-lines-new-methods -- File iteration with diff parsing and method matching
+// webpieces-disable max-lines-new-methods, no-function-outside-class -- File iteration with diff parsing and method matching
 async function findViolationsForNewMethods(
     workspaceRoot: string,
     changedFiles: string[],
@@ -432,7 +432,7 @@ async function findViolationsForNewMethods(
 /**
  * Find violations in new and modified methods (NEW_AND_MODIFIED_METHODS mode).
  */
-// webpieces-disable max-lines-new-methods -- Combines new method detection with change detection
+// webpieces-disable max-lines-new-methods, no-function-outside-class -- Combines new method detection with change detection
 async function findViolationsForModifiedAndNewMethods(
     workspaceRoot: string,
     changedFiles: string[],

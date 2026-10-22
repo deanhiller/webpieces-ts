@@ -1,4 +1,4 @@
-import { CheckoutLayout, specTempDirs } from '@webpieces/tooling-testkit';
+import { checkoutLayout, specTempDirs } from '@webpieces/tooling-testkit';
 import { describe, it, expect, afterEach, beforeEach } from 'vitest';
 import * as fs from 'fs';
 import * as os from 'os';
@@ -198,7 +198,7 @@ describe('SubagentProvenanceService.verifyDistinct', () => {
 /**
  * ONE shared primary clone for the whole block, and one linked worktree per case off it.
  *
- * Every checkout is laid out on disk exactly as git lays it out (CheckoutLayout, #1381) — no git process.
+ * Every checkout is laid out on disk exactly as git lays it out (checkoutLayout, #1381) — no git process.
  * The provenance check reads a cwd's branch from those files (GitCheckout), so the layout is the real
  * input; that the installed git writes this layout is proven by git-checkout.spec.ts. Sharing is safe
  * because no case mutates the clone: every one gets its own worktree on its own branch.
@@ -214,7 +214,7 @@ function clone(): string {
 // CHECKOUT (git's own HEAD files), not the transcript.
 function cloneOnBranch(branch: string): string {
     const repo = specTempDirs.make('wp-repo-');
-    CheckoutLayout.primary(repo, branch);
+    checkoutLayout.primary(repo, branch);
     fs.writeFileSync(path.join(repo, 'f.txt'), 'x');
     return repo;
 }
@@ -223,7 +223,7 @@ function cloneOnBranch(branch: string): string {
 // in, and the only cwd shape the fix will derive a branch from.
 function worktreeOn(branch: string): string {
     const wt = path.join(specTempDirs.make('wp-wt-'), 'tree');
-    CheckoutLayout.linkedWorktree(clone(), wt, branch);
+    checkoutLayout.linkedWorktree(clone(), wt, branch);
     return wt;
 }
 
@@ -261,7 +261,7 @@ describe('SubagentProvenanceService — a PINNED cwd decides when gitBranch cont
         // A primary clone is never pinned, so it is never an oracle: BLOCK. Its own clone (not the shared
         // one) precisely because this case is the one that MUTATES what branch the clone is on.
         const moved = cloneOnBranch('dean/old-work');
-        CheckoutLayout.checkoutBranch(moved, 'dean/feat');
+        checkoutLayout.checkoutBranch(moved, 'dean/feat');
         expect(statusFor('sess-c2', 'checklist-reviewer', 'dean/old-work', moved, 'dean/feat'))
             .toBe(PROVENANCE_MISSING);
     });
@@ -315,7 +315,7 @@ describe('SubagentProvenanceService — a PINNED cwd decides when gitBranch cont
 
     it('does not credit a detached HEAD, which rev-parse prints as the literal "HEAD"', () => {
         const wt = worktreeOn('dean/feat-detached');
-        CheckoutLayout.detach(wt, '0123456789abcdef0123456789abcdef01234567');
+        checkoutLayout.detach(wt, '0123456789abcdef0123456789abcdef01234567');
         expect(statusFor('sess-c11', 'checklist-reviewer', 'worktree-agent-aaaa', wt, 'HEAD')).toBe(PROVENANCE_MISSING);
     });
 });

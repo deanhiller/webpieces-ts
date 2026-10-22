@@ -1,4 +1,4 @@
-import { CheckoutLayout, policyFixture, ProcessCallDto } from '@webpieces/tooling-testkit';
+import { checkoutLayout, policyFixture, ProcessCallDto } from '@webpieces/tooling-testkit';
 import { specTempDirs } from '@webpieces/tooling-testkit';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import * as fs from 'fs';
@@ -125,7 +125,7 @@ let feature: RulesConfigFeature;
 beforeEach(async () => {
     // The checkout's HEAD names `feature` on disk — where the status reads the branch label from.
     work = specTempDirs.make('mss-work-');
-    CheckoutLayout.primary(work, 'feature');
+    checkoutLayout.primary(work, 'feature');
     repo = new RepoState();
     feature = await RulesConfigFeature.create();
     feature.git.respondToPrefix([], (call: ProcessCallDto): GitResultDto => repo.answer(call));

@@ -1,4 +1,4 @@
-import { CheckoutLayout, specTempDirs } from '@webpieces/tooling-testkit';
+import { checkoutLayout, specTempDirs } from '@webpieces/tooling-testkit';
 import { describe, it, expect } from 'vitest';
 import * as fs from 'fs';
 
@@ -7,7 +7,7 @@ import { ReviewIdentityStamp, ReviewIdentityStampService, REVIEW_STAMP_MAX_AGE_M
 // A primary clone laid out on disk as `git init` leaves it — no git process (#1381).
 function gitRepo(): string {
     const root = specTempDirs.makeReal('wp-review-stamp-');
-    CheckoutLayout.primary(root, 'main');
+    checkoutLayout.primary(root, 'main');
     return root;
 }
 

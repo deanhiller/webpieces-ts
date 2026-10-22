@@ -20,8 +20,9 @@ import { RuleFailError, renderRuleFailForHuman } from './rule-fail-error';
  * node's `process.exit`; a feature test passes `MockProcessExitApi` and runs a bin's whole top level in
  * process, awaiting the returned promise instead of starting a node child to read an exit status.
  */
+// webpieces-disable no-function-outside-class -- the one sanctioned entry every bin calls as runMain(main); it changed only to take the exit edge (#1381)
 export function runMain(main: () => Promise<void>, exit: ProcessExitApi = new ProcessExitClient()): Promise<void> {
-    // webpieces-disable no-any-unknown -- a promise rejection is genuinely of unknown type; narrowed below.
+    // webpieces-disable no-any-unknown, catch-must-propagate -- a rejection is genuinely of unknown type (narrowed below), and this IS the top-level handler: it renders the error for its audience and ends the process with its code
     return main().catch((err: unknown) => {
         if (err instanceof CliExitError) {
             // A 0 exit is a success message (e.g. `--help`) → stdout; a non-zero abort → stderr.

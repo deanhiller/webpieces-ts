@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { GitResultDto, RepositoryLayout } from '@webpieces/tooling-common';
-import { CheckoutLayout, ProcessCallDto, specTempDirs } from '@webpieces/tooling-testkit';
+import { checkoutLayout, ProcessCallDto, specTempDirs } from '@webpieces/tooling-testkit';
 import { RulesConfigFeature } from './__tests__/rules-config-feature';
 import { PolicyTracking, UntrackedPolicyError } from './policy-tracking';
 import { PackPolicyDeclaration } from './pack-policy-files';
@@ -59,7 +59,7 @@ class TrackingFixture {
     ];
 
     private constructor(readonly feature: RulesConfigFeature, readonly tracking: PolicyTracking) {
-        CheckoutLayout.primary(this.root, 'main');
+        checkoutLayout.primary(this.root, 'main');
         fs.mkdirSync(path.join(this.root, '.webpieces-config/rules'), { recursive: true });
         fs.writeFileSync(path.join(this.root, '.webpieces-config/rules/client.json'), '{}');
         fs.writeFileSync(path.join(this.root, 'webpieces.config.json'), '{}');

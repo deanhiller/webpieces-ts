@@ -9,13 +9,13 @@ import { specTempDirs } from '@webpieces/tooling-testkit';
  * the truth from the one file whose job is to prove every deletion is recoverable.
  *
  * The checkout is laid out on disk EXACTLY as git lays out a primary clone with a linked worktree
- * (CheckoutLayout, #1381): the question "am I in a linked worktree, and where is the primary clone?" is
+ * (checkoutLayout, #1381): the question "am I in a linked worktree, and where is the primary clone?" is
  * answered from those files (GitCheckout reads them; no process), so the layout is the real input.
  */
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
-import { CheckoutLayout } from '@webpieces/tooling-testkit';
+import { checkoutLayout } from '@webpieces/tooling-testkit';
 
 import { BranchMutationLog } from '@webpieces/repo-workflow-core';
 import { GIT_WORKFLOW_DOC } from './instruct-ai-docs';
@@ -32,7 +32,7 @@ describe('webpieces.git-workflow.md — the branch-mutation log path it delivers
         primary = path.join(tmp, 'primary');
         worktree = path.join(tmp, 'wt-a');
         fs.mkdirSync(primary, { recursive: true });
-        CheckoutLayout.primaryWithWorktree(primary, worktree, 'feature');
+        checkoutLayout.primaryWithWorktree(primary, worktree, 'feature');
         fs.writeFileSync(path.join(primary, '.gitignore'), '.webpieces/\n');
     });
 

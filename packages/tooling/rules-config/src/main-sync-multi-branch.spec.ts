@@ -1,4 +1,4 @@
-import { CheckoutLayout, ProcessCallDto, specTempDirs } from '@webpieces/tooling-testkit';
+import { checkoutLayout, ProcessCallDto, specTempDirs } from '@webpieces/tooling-testkit';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -65,8 +65,8 @@ async function makeRepo(): Promise<void> {
     tmp = specTempDirs.makeReal('msmb-');
     primary = path.join(tmp, 'primary');
     treeB = path.join(tmp, 'tree-b');
-    CheckoutLayout.primaryWithWorktree(primary, treeB, 'deanhiller/b');
-    CheckoutLayout.checkoutBranch(primary, 'deanhiller/a');
+    checkoutLayout.primaryWithWorktree(primary, treeB, 'deanhiller/b');
+    checkoutLayout.checkoutBranch(primary, 'deanhiller/a');
     world = new RepoWorld();
     world.trees.push(new TreeRow(primary, 'sha-a', 'deanhiller/a'), new TreeRow(treeB, 'sha-b', 'deanhiller/b'));
     feature = await RulesConfigFeature.create();

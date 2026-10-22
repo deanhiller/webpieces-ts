@@ -1,4 +1,4 @@
-import { CheckoutLayout, specTempDirs } from '@webpieces/tooling-testkit';
+import { checkoutLayout, specTempDirs } from '@webpieces/tooling-testkit';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -17,7 +17,7 @@ function writeFile(root: string, relPath: string, content: string): void {
 
 /**
  * The migration is the part that can destroy real work, so it is tested against a linked worktree laid
- * out on disk exactly as git lays one out (CheckoutLayout — no git process, #1381) holding a real in-flight
+ * out on disk exactly as git lays one out (checkoutLayout — no git process, #1381) holding a real in-flight
  * merge — the exact situation that existed in a sibling worktree when this change was written.
  */
 // Shared fixture: a primary clone with one linked worktree, plus that worktree's namespace path.
@@ -31,7 +31,7 @@ function makeMigrationRepo(): void {
     primary = path.join(tmp, 'primary');
     worktree = path.join(tmp, 'wt-inflight');
     fs.mkdirSync(primary, { recursive: true });
-    CheckoutLayout.primaryWithWorktree(primary, worktree, 'feature');
+    checkoutLayout.primaryWithWorktree(primary, worktree, 'feature');
     writeFile(primary, 'webpieces.config.json', '{}\n');
     namespace = path.join(primary, '.webpieces', WORKTREE_STATE_DIR, 'wt-inflight');
 }
@@ -157,9 +157,9 @@ function makeTwoWorktreeRepo(): void {
     worktreeA = path.join(tmp, 'wt-a');
     worktreeB = path.join(tmp, 'wt-b');
     fs.mkdirSync(primary, { recursive: true });
-    CheckoutLayout.primary(primary, 'main');
-    CheckoutLayout.linkedWorktree(primary, worktreeA, 'a');
-    CheckoutLayout.linkedWorktree(primary, worktreeB, 'b');
+    checkoutLayout.primary(primary, 'main');
+    checkoutLayout.linkedWorktree(primary, worktreeA, 'a');
+    checkoutLayout.linkedWorktree(primary, worktreeB, 'b');
     writeFile(primary, 'webpieces.config.json', '{}\n');
     service = new MainSyncStatusService(new DotWebpieces());
     locks = new MainSyncLockService(new DotWebpieces(), undefined, service);

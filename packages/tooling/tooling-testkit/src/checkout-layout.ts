@@ -15,7 +15,7 @@ import * as path from 'path';
  */
 export class CheckoutLayout {
     /** A primary clone on `branch` — what `git init -b <branch>` leaves. */
-    static primary(primary: string, branch: string): void {
+    primary(primary: string, branch: string): void {
         const gitDir = path.join(primary, '.git');
         fs.mkdirSync(path.join(gitDir, 'objects'), { recursive: true });
         fs.mkdirSync(path.join(gitDir, 'refs', 'heads'), { recursive: true });
@@ -23,14 +23,14 @@ export class CheckoutLayout {
     }
 
     /** A primary clone on `main` with ONE linked worktree on `branch`. */
-    static primaryWithWorktree(primary: string, worktree: string, branch: string): void {
-        CheckoutLayout.primary(primary, 'main');
-        CheckoutLayout.linkedWorktree(primary, worktree, branch);
+    primaryWithWorktree(primary: string, worktree: string, branch: string): void {
+        this.primary(primary, 'main');
+        this.linkedWorktree(primary, worktree, branch);
     }
 
     /** One more linked worktree of an existing primary clone — what `git worktree add` records. */
-    static linkedWorktree(primary: string, worktree: string, branch: string): void {
-        const record = CheckoutLayout.record(primary, worktree);
+    linkedWorktree(primary: string, worktree: string, branch: string): void {
+        const record = this.record(primary, worktree);
         fs.mkdirSync(record, { recursive: true });
         fs.writeFileSync(path.join(record, 'HEAD'), `ref: refs/heads/${branch}\n`);
         fs.writeFileSync(path.join(record, 'commondir'), '../..\n');
@@ -40,8 +40,8 @@ export class CheckoutLayout {
     }
 
     /** What `git worktree remove --force` leaves: neither the directory nor git's record of it. */
-    static removeLinkedWorktree(primary: string, worktree: string): void {
-        fs.rmSync(CheckoutLayout.record(primary, worktree), { recursive: true, force: true });
+    removeLinkedWorktree(primary: string, worktree: string): void {
+        fs.rmSync(this.record(primary, worktree), { recursive: true, force: true });
         fs.rmSync(worktree, { recursive: true, force: true });
     }
 
@@ -49,24 +49,27 @@ export class CheckoutLayout {
      * Point a checkout's HEAD at `branch` (what `git checkout -b <branch>` leaves) — `checkout` is the
      * primary clone or a linked worktree; either way its HEAD file is the one git would rewrite.
      */
-    static checkoutBranch(checkout: string, branch: string): void {
-        fs.writeFileSync(CheckoutLayout.headFile(checkout), `ref: refs/heads/${branch}\n`);
+    checkoutBranch(checkout: string, branch: string): void {
+        fs.writeFileSync(this.headFile(checkout), `ref: refs/heads/${branch}\n`);
     }
 
     /** Detach a checkout's HEAD at `sha` — what `git checkout --detach` leaves. */
-    static detach(checkout: string, sha: string): void {
-        fs.writeFileSync(CheckoutLayout.headFile(checkout), `${sha}\n`);
+    detach(checkout: string, sha: string): void {
+        fs.writeFileSync(this.headFile(checkout), `${sha}\n`);
     }
 
     // The HEAD file of a primary clone (`.git/HEAD`) or of a linked worktree (its record's HEAD).
-    private static headFile(checkout: string): string {
+    private headFile(checkout: string): string {
         const dotGit = path.join(checkout, '.git');
         if (fs.statSync(dotGit).isDirectory()) return path.join(dotGit, 'HEAD');
         const pointer = fs.readFileSync(dotGit, 'utf8').trim().replace(/^gitdir:\s*/, '');
         return path.join(pointer, 'HEAD');
     }
 
-    private static record(primary: string, worktree: string): string {
+    private record(primary: string, worktree: string): string {
         return path.join(primary, '.git', 'worktrees', path.basename(worktree));
     }
 }
+
+/** The one instance every spec lays checkouts out with. */
+export const checkoutLayout = new CheckoutLayout();

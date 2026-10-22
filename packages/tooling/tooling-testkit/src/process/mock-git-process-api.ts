@@ -22,6 +22,7 @@ const GIT = 'git';
  */
 export class MockGitProcessApi extends GitProcessApi {
     private readonly table = new ScriptedProcessTable<GitResultDto>('MockGitProcessApi');
+    private readonly abortable = new AbortableAnswer();
 
     /** Every call the program made, in order — captured, synchronous and pass-through alike. */
     get calls(): ProcessCallDto[] {
@@ -62,7 +63,7 @@ export class MockGitProcessApi extends GitProcessApi {
 
     override run(args: string[], cwd?: string, signal?: AbortSignal): Promise<GitResultDto> {
         const answer = this.table.answer(new ProcessCallDto(GIT, [...args], cwd, 'run'));
-        return AbortableAnswer.settle(answer, signal, (): GitResultDto => new GitResultDto(PROCESS_KILLED, '', 'aborted'));
+        return this.abortable.settle(answer, signal, (): GitResultDto => new GitResultDto(PROCESS_KILLED, '', 'aborted'));
     }
 
     override runSync(args: string[], cwd: string, timeoutMs: number): GitResultDto {

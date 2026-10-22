@@ -1,4 +1,4 @@
-import { CheckoutLayout, specTempDirs } from '@webpieces/tooling-testkit';
+import { checkoutLayout, specTempDirs } from '@webpieces/tooling-testkit';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -18,7 +18,7 @@ function writeFile(root: string, relPath: string, content: string): void {
 }
 
 /**
- * Linked worktrees laid out on disk EXACTLY as git lays them out (CheckoutLayout, #1381). The question
+ * Linked worktrees laid out on disk EXACTLY as git lays them out (checkoutLayout, #1381). The question
  * this resolver answers ("am I in a linked worktree, and where is the primary clone?") is answered from
  * those files — GitCheckout reads them and starts no process — so the layout IS the real input. That
  * the installed git writes this layout is proven once, against real git, by git-checkout.spec.ts and
@@ -40,7 +40,7 @@ function makeRepoWithWorktree(prefix: string, worktreeDirName: string): void {
     worktree = path.join(tmp, worktreeDirName);
     fs.mkdirSync(primary, { recursive: true });
 
-    CheckoutLayout.primaryWithWorktree(primary, worktree, 'feature');
+    checkoutLayout.primaryWithWorktree(primary, worktree, 'feature');
     writeFile(primary, 'webpieces.config.json', '{}\n');
     writeFile(primary, '.gitignore', '.webpieces/\n');
 
@@ -94,7 +94,7 @@ describe('DotWebpieces resolution edge cases', () => {
 
     it('two worktrees get DISJOINT local() dirs and the SAME shared() dir', () => {
         const second = path.join(tmp, 'wt-other');
-        CheckoutLayout.linkedWorktree(primary, second, 'other');
+        checkoutLayout.linkedWorktree(primary, second, 'other');
         expect(dot.local(worktree)).not.toBe(dot.local(second));
         expect(dot.shared(worktree)).toBe(dot.shared(second));
     });
@@ -141,7 +141,7 @@ describe('DotWebpieces.aiWritable() — the scope an isolated agent can actually
 
     it('two worktrees get DISJOINT aiWritable() dirs — one review per tree, never shared', () => {
         const second = path.join(tmp, 'wt-other');
-        CheckoutLayout.linkedWorktree(primary, second, 'other');
+        checkoutLayout.linkedWorktree(primary, second, 'other');
         expect(dot.aiWritable(worktree)).not.toBe(dot.aiWritable(second));
     });
 
@@ -208,7 +208,7 @@ describe('scope assignment from inside a linked worktree', () => {
 
         // The recovery record lives in the PRIMARY clone, so removing the worktree cannot destroy it —
         // which was the only real argument for making the log shared, and it is answered by the layout.
-        CheckoutLayout.removeLinkedWorktree(primary, worktree);
+        checkoutLayout.removeLinkedWorktree(primary, worktree);
         expect(fs.existsSync(worktree)).toBe(false);
         expect(fs.readFileSync(logPath, 'utf8')).toContain('recover=git branch feature abc1234');
     });

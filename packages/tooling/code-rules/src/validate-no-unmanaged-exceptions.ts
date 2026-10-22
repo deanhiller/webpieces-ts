@@ -110,6 +110,7 @@ function findTryCatchInFile(filePath: string, workspaceRoot: string, disableAllo
 /**
  * NEW_AND_MODIFIED_CODE mode: Flag violations on changed lines in diff hunks.
  */
+// webpieces-disable no-function-outside-class -- pre-existing module helper, made async only because DiffScope now reaches git through the injected process edge (#1381)
 async function findViolationsForModifiedCode(
     workspaceRoot: string,
     changedFiles: string[],

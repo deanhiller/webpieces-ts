@@ -10,7 +10,7 @@ import { PrGateContainer } from '../scripts/pr-gate-container';
  * resolves from) with only the edges rebound to mocks. Everything a test resolves from `container` is the
  * production DAG; `git`, `processes` and `timer` are what the outside world answers (and the clock).
  *
- * A checkout's on-disk layout without git is `CheckoutLayout` in `@webpieces/tooling-testkit`.
+ * A checkout's on-disk layout without git is `checkoutLayout` in `@webpieces/tooling-testkit`.
  */
 export class PrGateFeature {
     constructor(

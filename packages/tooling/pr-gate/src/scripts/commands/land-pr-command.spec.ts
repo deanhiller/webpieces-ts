@@ -1,4 +1,4 @@
-import { CheckoutLayout, policyFixture } from '@webpieces/tooling-testkit';
+import { checkoutLayout, policyFixture } from '@webpieces/tooling-testkit';
 import * as fs from 'fs';
 import * as path from 'path';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
@@ -31,7 +31,7 @@ import { PrGateFeature } from '../../__tests__/feature-harness';
  * `@webpieces/repo-workflow-core`'s, and it now reaches git through the same injected edge. Each clone is a
  * {@link ScriptedClone} — its branch tips, which worktree holds which branch at which commit, the tags the
  * program created — answering every command exactly as git would. The `.git` layout of each tree is laid
- * out on disk by CheckoutLayout (no git), because the state readers (DotWebpieces) read it from files.
+ * out on disk by checkoutLayout (no git), because the state readers (DotWebpieces) read it from files.
  *
  * ─── What changed, and why the old scenarios are gone ──────────────────────────────────────────────
  * The gated body used to be a file on THIS MACHINE (`~/.webpieces/prs/<host>/<owner>/<repo>/<n>/`), so
@@ -147,7 +147,7 @@ function makeClone(name: string): ScriptedClone {
     writeConfig(dir);
     fs.writeFileSync(path.join(dir, 'README.md'), `# ${name}\n`);
     fs.writeFileSync(path.join(dir, 'feature.txt'), 'work\n');
-    CheckoutLayout.primary(dir, BRANCH);
+    checkoutLayout.primary(dir, BRANCH);
     const clone = new ScriptedClone(dir);
     clone.branches.set('main', `main-of-${name}`);
     // Every clone commits its OWN feature work, so the same branch name is a different commit in each.
@@ -170,8 +170,8 @@ function addWorktreeHoldingBranch(worktree: string): void {
         fs.cpSync(path.join(primary, entry), path.join(worktree, entry), { recursive: true });
     }
     writeConfig(worktree);
-    CheckoutLayout.linkedWorktree(primary, worktree, BRANCH);
-    CheckoutLayout.checkoutBranch(primary, 'main');
+    checkoutLayout.linkedWorktree(primary, worktree, BRANCH);
+    checkoutLayout.checkoutBranch(primary, 'main');
     primaryClone.trees[0].branch = 'main';
     primaryClone.trees.push(new TreeState(worktree, BRANCH));
 }

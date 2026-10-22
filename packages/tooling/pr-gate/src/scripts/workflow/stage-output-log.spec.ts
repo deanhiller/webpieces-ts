@@ -3,7 +3,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
 import { GateLogFile } from './gate-log-file';
-import { CheckoutLayout, MockProcessExitApi, MockProcessExited } from '@webpieces/tooling-testkit';
+import { checkoutLayout, MockProcessExitApi, MockProcessExited } from '@webpieces/tooling-testkit';
 import { CliExitError, Option, RuleFailError, runMain } from '@webpieces/rules-config';
 import { toError } from '@webpieces/tooling-common/to-error';
 import { StageOutputLog, REVIEW_CONSOLE_LOG, FINISH_CONSOLE_LOG } from './stage-output-log';
@@ -37,7 +37,7 @@ beforeEach(() => {
     fs.mkdirSync(primary, { recursive: true });
     // The layout git leaves, written directly (#1381): placement is decided by reading these files, so no
     // git process is needed to prove it.
-    CheckoutLayout.primaryWithWorktree(primary, worktree, 'feature');
+    checkoutLayout.primaryWithWorktree(primary, worktree, 'feature');
     files = new GateLogFile();
     stage = new StageOutputLog(files);
     terminal = '';

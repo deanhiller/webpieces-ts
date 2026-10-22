@@ -304,6 +304,7 @@ function checkModifiedMethodViolation(file: string, method: MethodInfo, disableA
  * Find methods that exceed the limit.
  * Checks NEW methods with escape hatches and MODIFIED methods.
  */
+// webpieces-disable no-function-outside-class -- pre-existing module helper, made async only because DiffScope now reaches git through the injected process edge (#1381)
 async function findViolations(
     workspaceRoot: string,
     changedFiles: string[],

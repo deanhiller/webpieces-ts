@@ -195,7 +195,7 @@ function findViolationsInFile(filePath: string, workspaceRoot: string, disableAl
 /**
  * NEW_AND_MODIFIED_CODE mode: Flag violations on changed lines in diff hunks.
  */
-// webpieces-disable max-lines-new-methods -- File iteration with diff parsing and line filtering
+// webpieces-disable max-lines-new-methods, no-function-outside-class -- File iteration with diff parsing and line filtering
 async function findViolationsForModifiedCode(
     workspaceRoot: string,
     changedFiles: string[],
@@ -361,7 +361,7 @@ function findMethodRanges(filePath: string, workspaceRoot: string): RangeInfo[] 
  * - For *.routes.ts: If any line in a route object is changed, flag all inject(XxxApi) violations in that route
  * - For *.component.ts: If a method is new/modified, flag all snapshot.data violations in that method
  */
-// webpieces-disable max-lines-new-methods -- Method-scoped validation with route objects and component methods
+// webpieces-disable max-lines-new-methods, no-function-outside-class -- Method-scoped validation with route objects and component methods
 async function findViolationsForModifiedMethods(
     workspaceRoot: string,
     changedFiles: string[],
