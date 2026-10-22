@@ -37,7 +37,7 @@ function guardSource(file: string): string {
  */
 function reasonLiteralsIn(source: string): readonly string[] {
     const out = new Set<string>();
-    const call = /this\.(?:allow|failOpen|block)\(\s*ctx\s*,\s*[^,]+,\s*(?:'([^']*)'|`([^`$]*)(?:\$\{|`))/g;
+    const call = /this\.(?:allow|failOpen|block|exempt)\(\s*ctx\s*,\s*[^,]+,\s*(?:'([^']*)'|`([^`$]*)(?:\$\{|`))/g;
     let match = call.exec(source);
     while (match !== null) {
         out.add(match[1] ?? match[2]);
@@ -47,14 +47,15 @@ function reasonLiteralsIn(source: string): readonly string[] {
 }
 
 describe('L2 rows — the table itself', () => {
-    it('has thirteen rows with unique numbers, in first-match order', () => {
-        expect(L2_ROWS).toHaveLength(13);
-        // The design's 1-5, then the cache divider, then the two composition rows, then 6-10. The
-        // divider is numbered 11 and the composition rows 12/13, all PRINTED in position, because row
+    it('has fourteen rows with unique numbers, in first-match order', () => {
+        expect(L2_ROWS).toHaveLength(14);
+        // The design's 1-5, then the name-only hotfix exemption (14), then the cache divider, then the
+        // two composition rows, then 6-10. The divider is numbered 11, the composition rows 12/13 and
+        // the hotfix row 14, all PRINTED in position, because row
         // numbers are identity: they are logged as `row=` and cited in the doc, so renumbering to slot
         // them in would silently re-point every reference.
-        expect(L2_ROWS.map((r: L2Row): number => r.num)).toEqual([1, 2, 3, 4, 5, 11, 12, 13, 6, 7, 8, 9, 10]);
-        expect(new Set(L2_ROWS.map((r: L2Row): number => r.num)).size).toBe(13);
+        expect(L2_ROWS.map((r: L2Row): number => r.num)).toEqual([1, 2, 3, 4, 5, 14, 11, 12, 13, 6, 7, 8, 9, 10]);
+        expect(new Set(L2_ROWS.map((r: L2Row): number => r.num)).size).toBe(14);
     });
 
     it('puts the on-main block ABOVE the cache divider — the most load-bearing order in the table', () => {

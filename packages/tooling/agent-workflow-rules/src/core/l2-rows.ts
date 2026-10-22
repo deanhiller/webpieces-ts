@@ -2,7 +2,7 @@
 // L2 — the BRANCH-STATE layer, as data.
 //
 // L2 answers one question: *may I work here, and is what I read current?* Drawn as a decision matrix
-// that is TWELVE ordered rows plus one terminal fail-open row, first match wins.
+// that is THIRTEEN ordered rows plus one terminal fail-open row, first match wins.
 //
 // This module holds those rows, l2-doc.ts renders them into guards/L2-branch-state.md, and a unit test
 // (l2-matrix.spec.ts) locks that file byte-identical to the renderer — the same mechanism that already
@@ -41,7 +41,7 @@ export {
 } from './l2-row';
 
 /**
- * THE THIRTEEN L2 ROWS, in first-match-wins order.
+ * THE FOURTEEN L2 ROWS, in first-match-wins order.
  *
  * Rows 1-5 need NO cache and fire on call #1: rows 1, 2 and 4 are text matches, row 3 is a marker-file
  * scan, row 5 is one `git rev-parse`. Row 11 is the cache divider. Rows 6-10 all read the cache.
@@ -134,6 +134,17 @@ export const L2_ROWS: readonly L2Row[] = [
             'BLOCK anyway: row 5 is ABOVE the cache divider and reads only `git rev-parse`, so it is armed on call #1. This is why the row is `E` only and must never be gated on the cache',
             '`git checkout -b <new> origin/main`',
             'on-main'),
+    ]),
+    // ROW 14 sits right after row 5 and ABOVE the cache divider: it is decided from the branch NAME alone,
+    // so it holds on the first call of a session, and a `/hotfix/` branch is never `main`, so row 5 above
+    // it cannot match the same call. Numbered 14 for the reason 11-13 are — numbers are identity.
+    new L2Row(14, ['B', 'R', 'E'], 'on a `/hotfix/` branch — its name carries the exact, case-sensitive `/hotfix/` segment', L2_EXEMPT, '—', [
+        new L2UseCase(32,
+            'An Edit on `prod/dean/hotfix/2026-10-22/ONE-3461-test-log-line` after `origin/main` changed the same file (issue #1371)',
+            'a branch cut from the PRODUCTION sha — main is always ahead of it, and must never be merged in: that would ship unpromoted main to production',
+            'EXEMPT: no L2 row applies — not stale `main`, not merged, not the fork-point or collision rows — because every one of their cures merges or branches off main. The audit trail of `pnpm wp-upsert-hotfix-pr` (`hotfix-ci`, the bannered PR) is the control here, not this layer',
+            'None needed — publish with `pnpm wp-upsert-hotfix-pr`',
+            'hotfix-branch (cut from production; main is never merged in)'),
     ]),
     new L2Row(L2_FAIL_OPEN_ROW, ['B', 'R', 'E'], '**the state could not be established** — branch undeterminable, no cache yet, the cache holds another branch, `origin/main` unknown, or the forge unreachable', L2_FAIL_OPEN, '— (nothing to fix; the refresher populates the cache for the next call)', [
         new L2UseCase(11,
@@ -310,6 +321,8 @@ const EXACT_REASON_ROWS: Record<string, number> = {
     'not-a-content-read (cure/build/metadata)': 4,
     // Row 5 — never WRITE on main, at any freshness. `E` only; the Bash half is rows 6/7.
     'on-main': 5,
+    // Row 14 — a `/hotfix/` branch, judged by its NAME (BranchIdentity) before any cache is read.
+    'hotfix-branch (cut from production; main is never merged in)': 14,
     // Row 6/7 — freshness, for `B` and `R` alike. Both guards log these two literals: read-stale-guard
     // for the Read tool, stale-main-bash-guard for Bash. Same cache, same ancestry test, one verdict.
     'on-stale-main': 6,

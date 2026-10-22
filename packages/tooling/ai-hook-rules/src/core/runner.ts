@@ -1,3 +1,5 @@
+import * as path from 'path';
+
 import { SourceRuleRuntime } from '../rule-runtime';
 import {
     loadAndValidate,
@@ -9,6 +11,7 @@ import {
     RepoRootFinder,
     writeGuardMatrixDoc,
     guardMatrixPointer,
+    HotfixCheckout,
 } from '@webpieces/rules-config';
 import {
     Rule,
@@ -20,6 +23,7 @@ import {
     NormalizedToolInput,
     HookMode,
     BlockedResult,
+    TargetTreeResolver,
 } from '@webpieces/hook-runtime';
 import { loadMatchRules } from './load-rules';
 
@@ -66,6 +70,10 @@ export function run(
                 guardMatrixPointer(writeGuardMatrixDoc(new RepoRootFinder().resolveRepoRoot(cwd))),
             L0_FAULT_CONFIG_MISSING,
         );
+    // A file checked out on a `/hotfix/` branch runs no edit-time code rule, matching `hotfix-ci` (compile +
+    // tests only; issue #1371). The branch is the one in the tree that OWNS the file, never the session's.
+    const owner = new TargetTreeResolver().resolve(input.filePath, path.dirname(loaded.configPath));
+    if (new HotfixCheckout().isHotfix(owner.root)) return null;
     return new HookFileEvaluation().evaluate(
         toolKind,
         input,

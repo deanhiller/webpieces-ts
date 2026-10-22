@@ -194,6 +194,7 @@ export { schemaFieldNames } from './rule-schemas';
 export { isHookGuard, sectionForRule } from './sections';
 export { shouldSkipRule, HOTFIX_BUILD_COMMAND, HOTFIX_AUDIT_BANNER } from './skip-rule';
 export { SkipRuleResult } from './skip-rule';
+export { HotfixCheckout } from './hotfix-checkout';
 export {
     detectBase,
     resolveBase,

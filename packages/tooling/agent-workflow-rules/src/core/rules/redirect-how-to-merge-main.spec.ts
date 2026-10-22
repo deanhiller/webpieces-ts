@@ -333,3 +333,53 @@ describe('redirect-how-to-merge-main — inside a linked worktree', () => {
         expect(rule.check(ctx('git checkout main && git pull origin main', repo)).length).toBe(0);
     });
 });
+
+/**
+ * Issue #1371. The merge/rebase/pull block STAYS on a `/hotfix/` branch — a raw merge is even more wrong
+ * there — but the message must never steer a hotfix to the gated flows, which bring main in. It names
+ * `pnpm wp-upsert-hotfix-pr` instead. The predicate is BranchIdentity's exact, case-sensitive segment, so
+ * a branch that only mentions hotfix keeps the feature-branch cure.
+ */
+describe('redirect-how-to-merge-main — on a /hotfix/ branch', () => {
+    let repo: string;
+
+    function git(...args: string[]): void {
+        execFileSync('git', args, { cwd: repo, stdio: 'pipe' });
+    }
+
+    beforeAll(() => {
+        repo = policyFixture.makeRepo('wp-merge-hotfix-');
+        git('init', '-b', 'main');
+        git('config', 'core.hooksPath', '/dev/null');
+        git('config', 'user.email', 'test@example.com');
+        git('config', 'user.name', 'test');
+        fs.writeFileSync(path.join(repo, 'f.txt'), 'x');
+        git('add', '-A');
+        git('commit', '-m', 'init');
+    });
+
+    afterAll(() => {
+        fs.rmSync(repo, { recursive: true, force: true });
+    });
+
+    it('still blocks merge, rebase and pull of main, and names the hotfix route instead of the merge flows', () => {
+        git('checkout', '-q', '-b', 'prod/dean/hotfix/2026-10-22/ONE-3461-test-log-line');
+        for (const command of ['git merge origin/main', 'git rebase main', 'git pull origin main']) {
+            const violations = rule.check(ctx(command, repo));
+            expect(violations, command).toHaveLength(1);
+            expect(violations[0].message, command).toContain('is a /hotfix/ branch, cut from the production sha');
+            expect(violations[0].message, command).toContain('pnpm wp-upsert-hotfix-pr');
+            expect(violations[0].message, command).not.toContain("Use the gated 3-point flow instead");
+        }
+    });
+
+    for (const branch of ['feature/hotfix-thing', 'x/HotFix/y']) {
+        it(`CONTROL — '${branch}' keeps the feature-branch cure`, () => {
+            git('checkout', '-q', '-B', branch, 'main');
+            const violations = rule.check(ctx('git merge origin/main', repo));
+            expect(violations).toHaveLength(1);
+            expect(violations[0].message).toContain('Use the gated 3-point flow instead');
+            expect(violations[0].message).not.toContain('/hotfix/ branch');
+        });
+    }
+});

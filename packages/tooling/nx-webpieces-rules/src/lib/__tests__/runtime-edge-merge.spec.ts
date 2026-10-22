@@ -1,6 +1,5 @@
 import * as fs from 'fs';
-import * as os from 'os';
-import * as path from 'path';
+import { specTempDirs } from '@webpieces/tooling-testkit';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { GraphRenderModel, RenderEdge } from '../graph-render-model';
 import type { RuntimeEdge, RuntimeGraph } from '../runtime-graph-model';
@@ -37,7 +36,7 @@ const roots: string[] = [];
 
 // webpieces-disable no-function-outside-class -- spec helper
 function loadedGoal(goal: RuntimeGraph): RuntimeGraph {
-    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'wp-edge-merge-'));
+    const root = specTempDirs.make('wp-edge-merge-');
     roots.push(root);
     saveRuntimeGraph(goal, root, DEFAULT_RUNTIME_GOAL_PATH);
     return new RuntimeGoalFile().load(root);

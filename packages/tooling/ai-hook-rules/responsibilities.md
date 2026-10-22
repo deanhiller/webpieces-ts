@@ -7,6 +7,7 @@ Source edit validation for AI coding agents, contributed independently to the sh
 - The thirteen source rule implementations, including the three source-only rules and ten edit contributions shared in concept with code-rules.
 - Source rule registration, custom source rules and match rules.
 - `wp-ai-rules-hook`, its source pipeline, and source fixtures and golden tests.
+- Standing down on a file checked out on a `/hotfix/` branch (BranchIdentity's predicate), matching `hotfix-ci`.
 
 ## Out of Scope
 
