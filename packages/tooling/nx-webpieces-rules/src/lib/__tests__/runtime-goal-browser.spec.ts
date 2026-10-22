@@ -7,6 +7,7 @@ import { RuntimeGoalFixture } from './runtime-goal-fixture';
 import { RuntimeHtmlPage } from '../runtime-html-page';
 import { generateRuntimeRenderModel, RuntimeVizOptions, RuntimePageKind } from '../runtime-visualizer';
 import { RuntimeGoalComparison } from '../runtime-goal-comparison';
+import { MISSING_GOAL_MENU_NOTE, RuntimeComparisonGap, RuntimeComparisonInputs } from '../runtime-goal-view';
 import type { GraphRenderModel, RenderEdge } from '../graph-render-model';
 import type { LevelBand } from '../graph-level-bands';
 
@@ -18,7 +19,7 @@ import type { LevelBand } from '../graph-level-bands';
 describe.skipIf(!process.env.WP_GRAPH_VIZ_JS)('Goal vs Current in file:// Chromium', () => {
     const browser = new BrowserFixture(path.resolve('.webpieces/1239-browser-evidence'));
     const fixture = new RuntimeGoalFixture();
-    const options = new RuntimeVizOptions(true, null, '', RuntimePageKind.GOAL);
+    const options = new RuntimeVizOptions(true, null, '', RuntimePageKind.CURRENT);
     const model = generateRuntimeRenderModel(fixture.goal, 'Goal', options);
     model.comparison = new RuntimeGoalComparison().build(fixture.current, fixture.goal, options);
     const overlay = model.comparison.model!;
@@ -30,7 +31,7 @@ describe.skipIf(!process.env.WP_GRAPH_VIZ_JS)('Goal vs Current in file:// Chromi
             () => FilterFixture.client('runtime-visualizer.client.ts'),
             () => FilterFixture.client('graph-filter.client.ts'),
             () => FilterFixture.client('graph-visualizer.client.ts'),
-        ).render(drawn, 'Goal / Proposed Runtime Architecture', fixture.goal, options);
+        ).render(drawn, 'WebPieces Runtime Architecture', fixture.goal, options);
     }
 
     /** Actual rendered rows: every higher level strictly above every lower one. */
@@ -111,7 +112,18 @@ describe.skipIf(!process.env.WP_GRAPH_VIZ_JS)('Goal vs Current in file:// Chromi
         const page = await browser.open('runtime-goal-unavailable', html(bare));
         const item = page.locator('#wp-mode-menu .wp-mode[data-wp-mode="goal"]');
         expect(await item.isDisabled()).toBe(true);
-        expect(await item.textContent()).toContain('Unavailable:');
+        expect(await item.textContent()).toContain('This page carries no Goal vs Current data');
+        await page.close();
+    });
+
+    it('dims Goal vs Current and says the goal file does not exist when there is none (#1373)', async () => {
+        const missing = generateRuntimeRenderModel(fixture.goal, 'Goal', options);
+        missing.comparison = new RuntimeComparisonInputs().unavailable(new RuntimeComparisonGap('No runtime goal here.', MISSING_GOAL_MENU_NOTE));
+        const page = await browser.open('runtime-goal-missing', html(missing));
+        const item = page.locator('#wp-mode-menu .wp-mode[data-wp-mode="goal"]');
+        expect(await item.isDisabled()).toBe(true);
+        expect(await item.locator('.wp-mode-sub').textContent()).toBe('runtime-dependencies-goal.json does not exist');
+        expect(Number(await item.evaluate((el: Element) => getComputedStyle(el).opacity))).toBeLessThan(1);
         await page.close();
     });
 });

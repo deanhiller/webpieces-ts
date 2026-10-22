@@ -19,7 +19,7 @@ describe('RuntimeGoalValidator — hand-authored goal shape and references (#123
         expect(validator.structural({ services: {} })).toEqual(expect.arrayContaining([`${GOAL}: "runtimeEdges" must be an array.`]));
     });
 
-    it('separates broken references (edit the file) from missing derived facts (--prepare computes them)', () => {
+    it('separates broken references (edit the file) from missing derived facts (--prepare-goal computes them)', () => {
         const goal = RuntimeGoalFixture.copy(new RuntimeGoalFixture().goal);
         goal.runtimeEdges.push({ from: 'billing', to: 'ledger', via: ['LedgerApi'], type: 'rpc' });
         goal.runtimeEdges.push({ from: 'billing', to: 'ai-chat', via: ['ChatApi'], type: 'pubsub', queue: 'ChatApi.send' });
@@ -41,7 +41,7 @@ describe('RuntimeGoalValidator — hand-authored goal shape and references (#123
         expect(derived).toContain(`${GOAL}: services["billing"] needs an integer "level" >= 0`);
     });
 
-    it('reports derived-fact drift, and a cycle separately with an edit (never --prepare) cure', () => {
+    it('reports derived-fact drift, and a cycle separately with an edit (never --prepare-goal) cure', () => {
         const goal = RuntimeGoalFixture.copy(new RuntimeGoalFixture().goal);
         goal.services['billing'].level = 7;
         const file = new RuntimeGoalFile();
@@ -52,6 +52,6 @@ describe('RuntimeGoalValidator — hand-authored goal shape and references (#123
         expect(drift.cycle).toContain(`${GOAL} describes a runtime graph the level machinery cannot order`);
         expect(drift.differences).toEqual([]);
         expect(file.cycleOption().text).toContain('runtimeEdges');
-        expect(file.cycleOption().text).not.toContain('--prepare');
+        expect(file.cycleOption().text).not.toContain('--prepare-goal');
     });
 });

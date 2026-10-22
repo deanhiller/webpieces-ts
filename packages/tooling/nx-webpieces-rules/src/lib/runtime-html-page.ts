@@ -4,8 +4,7 @@ import { DesignLink } from './graph-visualizer';
 import { GraphRenderModel, GraphFilterAssets } from './graph-render-model';
 import { RuntimeDetails } from './runtime-details';
 import type { RuntimeGraph } from './runtime-graph-model';
-import { RuntimeVizOptions, RuntimePageKind } from './runtime-viz-options';
-import { RuntimeGoalProvenance } from './runtime-goal-file';
+import { RuntimeVizOptions } from './runtime-viz-options';
 import { RuntimeGoalDetails } from './runtime-goal-details';
 import { DIFF_STYLES } from './runtime-goal-styles';
 import { RuntimeDiffStatus } from './runtime-graph-diff';
@@ -21,7 +20,7 @@ import { GraphPageShell, ShellParts } from './graph-page-shell';
 import { GraphPageStyles } from './graph-page-styles';
 import { GraphLegend } from './graph-legend';
 import { ProductColor } from './graph-products';
-import { FRAMEWORK_STYLES, ROLE_STYLES } from './graph-color-modes';
+import { FRAMEWORK_STYLES, GraphMode, ModeUnavailable, ROLE_STYLES } from './graph-color-modes';
 import { IMPACT_SIDECAR_SRC } from './graph-impact';
 import { ResponsibilitiesRenderer } from './graph-responsibilities';
 import { htmlLabelText } from './dot-syntax';
@@ -62,13 +61,14 @@ export class RuntimeHtmlPage {
             this.legend(model),
             this.edgeKey(),
             this.assets.html() + '<span id="wp-context-count"></span>',
-            options.page === RuntimePageKind.GOAL ? new RuntimeGoalProvenance().html() : new SavedSnapshot().html(),
+            new SavedSnapshot().html(),
             this.responsibilities(graph, options),
             products,
             true,
             frameworks,
             roles,
             '<div class="wp-empty" id="wp-empty" hidden>No matching services. Open Filter and Clear all, or turn off Hide unconnected.</div>',
+            this.unavailableModes(model),
         );
         const shared = this.sharedJs()
             .split(CLIENT_MODEL_PLACEHOLDER)
@@ -90,6 +90,13 @@ export class RuntimeHtmlPage {
 <script>${new RuntimeDetails(graph, options.showExternalNodes, model).script()}</script>
 <script>${new RuntimeGoalDetails(model.comparison).script()}</script>
 <script>${this.clientJs()}</script><script>${shared}</script></body></html>`;
+    }
+
+    /** Goal vs Current is dimmed in the markup itself when its comparison is unavailable (#1373). */
+    private unavailableModes(model: GraphRenderModel): ModeUnavailable[] {
+        const comparison = model.comparison;
+        if (comparison === undefined || comparison === null || comparison.available) return [];
+        return [new ModeUnavailable(GraphMode.GOAL, comparison.reason, comparison.menuNote)];
     }
 
     private designLinks(graph: RuntimeGraph, options: RuntimeVizOptions): DesignLink[] {

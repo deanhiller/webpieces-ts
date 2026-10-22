@@ -12,11 +12,10 @@ goal file and no goal comparison.
 | `architecture/runtime-dependencies.json` | the saved CURRENT runtime graph, generated from source |
 | `architecture/runtime-dependencies-goal.json` | the editable GOAL, owned by your repository |
 | `architecture:visualize-runtime` | draws current → `tmp/webpieces/runtime-architecture.{dot,html}` |
-| `architecture:visualize-runtime-goal` | draws the goal → `tmp/webpieces/runtime-architecture-goal.{dot,html}` |
-| Color by → **Goal vs Current** | on both pages: compares the two saved files, Current → Goal |
+| Color by → **Goal vs Current** | on that page: compares the two saved files, Current → Goal |
 
-Both targets are inferred by `@webpieces/nx-webpieces-rules` wherever `visualize-runtime` is; nothing
-is hand-wired.
+The target is inferred by `@webpieces/nx-webpieces-rules`; nothing is hand-wired. There is one runtime
+page: the goal is never drawn on a page of its own, only as the Goal vs Current overlay (#1373).
 
 ## Start a proposal
 
@@ -33,30 +32,30 @@ have to exist in source: add it under `services` (with `implements`, `uses`, `de
 when empty) and draw its relationships in `runtimeEdges`. Saved project metadata, when present, only
 enriches matching boxes; it never rejects or overwrites a proposed one.
 
-## Keep derived facts consistent: `--prepare`
+## Keep derived facts consistent: `--prepare-goal`
 
 Levels, self-queue flags, `contractQueues` and `maxLevel` are DERIVED from relationships. After
 editing relationships, recompute them with the generator's own level machinery (`RuntimeNodeLevels`)
 in one explicit, writing step:
 
 ```sh
-pnpm nx run architecture:visualize-runtime-goal --prepare
+pnpm nx run architecture:visualize-runtime --prepare-goal
 ```
 
-It prints every field it changed and then views the goal. Plain viewing is read-only: when the saved
-derived facts disagree with the relationships it warns, names each difference, and renders the goal
-as saved. A method queue's `producedBy` / `consumedBy` lists are yours to keep in step with the
+It prints every field it changed and then views the page with the prepared goal. Plain viewing is
+read-only: when the saved derived facts disagree with the relationships it warns, names each
+difference, and compares the goal as saved. A method queue's `producedBy` / `consumedBy` lists are yours to keep in step with the
 pubsub edges that name that queue; contract-level pubsub edges need no queue entry beyond what
-`--prepare` writes.
+`--prepare-goal` writes.
 
 The goal is validated against itself, never against source. A broken reference (an edge to a service
 the goal does not declare, a queue edge naming a missing queue) fails with the goal path, the element
-and the edit that fixes it. A cycle in the goal is reported by `--prepare` with the shared cycle
+and the edit that fixes it. A cycle in the goal is reported by `--prepare-goal` with the shared cycle
 verdict; the CURRENT generation and its unchanged-check are untouched by anything in the goal file.
 
 ## Goal vs Current
 
-Both runtime pages carry the comparison, computed from the two SAVED files — never from Git status,
+The runtime page carries the comparison, computed from the two SAVED files — never from Git status,
 changed source files, timestamps or the Impact sidecar. A clean tree with both files committed still
 shows every difference. The existing Impact mode keeps its meaning (what changed in Git).
 
@@ -74,10 +73,10 @@ whose outgoing calls changed is itself changed, and its details list the calls b
 Filter, Lock, hover chains and the product filter work on the overlay; switching to another mode
 restores that page's own graph.
 
-Missing inputs are explicit, never "no differences": with no goal, the current page's Goal vs Current
-item is disabled and says how to start one; with no current snapshot the goal page still renders and
-says the comparison needs `architecture/runtime-dependencies.json`. Identical files say
-"No differences" over the normal graph.
+Missing inputs are explicit, never "no differences": with no goal, the Goal vs Current item is
+dimmed, cannot be selected, and its subtitle reads "runtime-dependencies-goal.json does not exist"
+(the tooltip says how to start one); an unusable goal dims it the same way with the goal path and the
+broken element. Identical files say "No differences" over the normal graph.
 
 ### Comparison policy
 

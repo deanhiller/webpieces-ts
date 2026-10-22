@@ -1,7 +1,6 @@
+import * as path from 'path';
 import { RuleFailError, renderRuleFailForHuman } from '@webpieces/rules-config';
 import type { RuntimeGraph } from './runtime-graph-model';
-import { DEFAULT_RUNTIME_GRAPH_PATH } from './runtime-graph-io';
-import { SavedSnapshot } from './saved-snapshot';
 import { DEFAULT_RUNTIME_GOAL_PATH, RUNTIME_GOAL_INIT_COMMAND, RuntimeGoalFile } from './runtime-goal-file';
 import { RuntimeComparisonView } from './graph-render-model';
 import { RuntimeGoalComparison } from './runtime-goal-comparison';
@@ -9,48 +8,50 @@ import type { RuntimeVizOptions } from './runtime-viz-options';
 import { toError } from '../toError';
 
 /**
- * Loads either saved runtime file for the OTHER page's comparison, turning a missing or unusable file
- * into the reason Goal vs Current is unavailable — never into "no differences".
+ * Why Goal vs Current cannot be drawn (#1239, #1373): the full `reason` (console, tooltip, legend —
+ * with its path and repair) and the short `menuNote` the Color-by menu shows under the dimmed item.
+ */
+export class RuntimeComparisonGap {
+    constructor(
+        public readonly reason: string,
+        public readonly menuNote: string = reason,
+    ) {}
+}
+
+/** The menu line under the dimmed Goal vs Current item when the goal file is absent (#1373). */
+export const MISSING_GOAL_MENU_NOTE = `${path.posix.basename(DEFAULT_RUNTIME_GOAL_PATH)} does not exist`;
+
+/**
+ * Loads the saved goal for the runtime page's comparison, turning a missing or unusable file into
+ * the reason Goal vs Current is unavailable — never into "no differences".
  */
 export class RuntimeComparisonInputs {
-    constructor(
-        private readonly snapshot: SavedSnapshot = new SavedSnapshot(),
-        private readonly goalFile: RuntimeGoalFile = new RuntimeGoalFile(),
-    ) {}
-
-    /** The saved current graph, or why it cannot be compared. */
-    current(workspaceRoot: string): RuntimeGraph | string {
-        // eslint-disable-next-line @webpieces/no-unmanaged-exceptions -- an unusable comparison input becomes the mode's stated reason; the page itself still renders
-        try {
-            return this.snapshot.loadRuntime(workspaceRoot);
-        } catch (err: unknown) {
-            const error = toError(err);
-            return `No usable saved current runtime graph at ${DEFAULT_RUNTIME_GRAPH_PATH}: ${this.text(error)}`;
-        }
-    }
+    constructor(private readonly goalFile: RuntimeGoalFile = new RuntimeGoalFile()) {}
 
     /** The saved goal, or why it cannot be compared (missing: how to start one). */
-    goal(workspaceRoot: string): RuntimeGraph | string {
+    goal(workspaceRoot: string): RuntimeGraph | RuntimeComparisonGap {
         if (!this.goalFile.exists(workspaceRoot))
-            return `No runtime goal at ${DEFAULT_RUNTIME_GOAL_PATH}. Start a proposal with: ${RUNTIME_GOAL_INIT_COMMAND}`;
+            return new RuntimeComparisonGap(
+                `No runtime goal at ${DEFAULT_RUNTIME_GOAL_PATH}. Start a proposal with: ${RUNTIME_GOAL_INIT_COMMAND}`,
+                MISSING_GOAL_MENU_NOTE,
+            );
         // eslint-disable-next-line @webpieces/no-unmanaged-exceptions -- an unusable comparison input becomes the mode's stated reason; the page itself still renders
         try {
             return this.goalFile.load(workspaceRoot);
         } catch (err: unknown) {
             const error = toError(err);
-            return this.text(error);
+            return new RuntimeComparisonGap(this.text(error));
         }
     }
 
-    view(current: RuntimeGraph | string, goal: RuntimeGraph | string, options: RuntimeVizOptions): RuntimeComparisonView {
-        if (typeof current === 'string') return this.unavailable(current);
-        if (typeof goal === 'string') return this.unavailable(goal);
+    view(current: RuntimeGraph, goal: RuntimeGraph | RuntimeComparisonGap, options: RuntimeVizOptions): RuntimeComparisonView {
+        if (goal instanceof RuntimeComparisonGap) return this.unavailable(goal);
         return new RuntimeGoalComparison().build(current, goal, options);
     }
 
-    /** Goal vs Current with no overlay: the mode is disabled and says `reason` instead. */
-    unavailable(reason: string): RuntimeComparisonView {
-        return new RuntimeComparisonView(false, reason, 'Current → Goal', '', null, {}, {}, []);
+    /** Goal vs Current with no overlay: the mode is dimmed and says `gap` instead. */
+    unavailable(gap: RuntimeComparisonGap): RuntimeComparisonView {
+        return new RuntimeComparisonView(false, gap.reason, gap.menuNote, 'Current → Goal', '', null, {}, {}, []);
     }
 
     private text(error: Error): string {

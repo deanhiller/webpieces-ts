@@ -11,7 +11,8 @@
  * carries a `style=` attribute — every look is a class.
  */
 
-import { FRAMEWORK_ORDER, GRAPH_MODES, GraphMode, ModeInfo, ROLE_STYLES, RoleStyle, RUNTIME_GRAPH_MODES } from './graph-color-modes';
+import { FRAMEWORK_ORDER, GRAPH_MODES, GraphMode, ModeInfo, ModeUnavailable, ROLE_STYLES, RoleStyle, RUNTIME_GRAPH_MODES } from './graph-color-modes';
+import { htmlLabelText } from './dot-syntax';
 import { ProductColor } from './graph-products';
 
 /**
@@ -75,6 +76,8 @@ export class ShellParts {
         public readonly frameworks: readonly string[] = FRAMEWORK_ORDER,
         public readonly roles: readonly string[] = ROLE_STYLES.map((style: RoleStyle): string => style.role),
         public readonly emptyState: string = '',
+        /** Modes rendered dimmed and unselectable from the first paint, each saying why (#1373). */
+        public readonly unavailable: readonly ModeUnavailable[] = [],
     ) {}
 }
 
@@ -95,7 +98,7 @@ export class GraphPageShell {
         <div class="wp-brand">${this.brandIcon()}<span>${parts.title}</span></div>
         <div class="wp-group" role="group" aria-label="Color mode">
             <div class="wp-label">Color by</div>
-            ${this.modePulldown(parts.runtime ? RUNTIME_GRAPH_MODES : GRAPH_MODES)}
+            ${this.modePulldown(parts.runtime ? RUNTIME_GRAPH_MODES : GRAPH_MODES, parts.unavailable)}
             <p class="wp-mode-reason" id="wp-impact-reason" hidden></p>
             ${this.impactKinds('drawer')}
         </div>
@@ -128,22 +131,29 @@ export class GraphPageShell {
      * menu of the four. Keys 1/2/3/4 and the #runtime / #architecture / #impact / #product links still
      * switch.
      */
-    private modePulldown(modes: readonly ModeInfo[]): string {
+    private modePulldown(modes: readonly ModeInfo[], unavailable: readonly ModeUnavailable[]): string {
         const first = modes[0];
         return `<div class="wp-pulldown">
                 <button type="button" class="wp-pill-trigger" id="wp-mode-trigger" aria-haspopup="menu" aria-controls="wp-mode-menu" aria-expanded="false">
                     <span class="wp-pill-text"><span class="wp-mode-name" id="wp-mode-current">${first.name}</span><span class="wp-mode-sub" id="wp-mode-current-sub">${first.subtitle}</span></span><span class="wp-caret" aria-hidden="true">▾</span>
                 </button>
-                <div class="wp-menu" id="wp-mode-menu" role="menu" aria-label="Color by" hidden>${modes.map((info: ModeInfo, index: number): string => this.modeItem(info, index)).join('')}</div>
+                <div class="wp-menu" id="wp-mode-menu" role="menu" aria-label="Color by" hidden>${modes.map((info: ModeInfo, index: number): string => this.modeItem(info, index, unavailable)).join('')}</div>
             </div>`;
     }
 
-    /** One menu option, two lines: the mode's name, then its grey subtitle. */
-    private modeItem(info: ModeInfo, index: number): string {
+    /**
+     * One menu option, two lines: the mode's name, then its grey subtitle. An unavailable mode is
+     * disabled (dimmed by `.wp-mode:disabled`) and its subtitle says why instead (#1373).
+     */
+    private modeItem(info: ModeInfo, index: number, unavailable: readonly ModeUnavailable[]): string {
         const checked = info.mode === GraphMode.RUNTIME ? 'true' : 'false';
+        const gap = unavailable.find((entry: ModeUnavailable): boolean => entry.mode === info.mode);
+        const title = gap === undefined ? `Key ${index + 1}` : htmlLabelText(gap.reason);
+        const subtitle = gap === undefined ? info.subtitle : htmlLabelText(gap.note);
+        const disabled = gap === undefined ? '' : ' disabled aria-disabled="true"';
         return (
-            `<button type="button" class="wp-mode" role="menuitemradio" data-wp-mode="${info.mode}" aria-checked="${checked}" title="Key ${index + 1}">` +
-            `<span class="wp-mode-name">${info.name}</span><span class="wp-mode-sub">${info.subtitle}</span></button>`
+            `<button type="button" class="wp-mode" role="menuitemradio" data-wp-mode="${info.mode}" aria-checked="${checked}" title="${title}"${disabled}>` +
+            `<span class="wp-mode-name">${info.name}</span><span class="wp-mode-sub">${subtitle}</span></button>`
         );
     }
 

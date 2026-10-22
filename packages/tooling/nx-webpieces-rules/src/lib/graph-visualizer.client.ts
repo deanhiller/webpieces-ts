@@ -496,7 +496,7 @@ class GraphDrawer {
                 // Unavailable is said in the menu itself, never shown as "no differences" (#1239).
                 button.title = modes.goalReason() === '' ? 'Key 5' : modes.goalReason();
                 const sub = button.querySelector('.wp-mode-sub');
-                if (sub !== null) sub.textContent = modes.goalReason() === '' ? modes.subtitle(mode) : `Unavailable: ${modes.goalReason()}`;
+                if (sub !== null) sub.textContent = modes.goalSubtitle();
             }
         });
         this.text('wp-mode-current', modes.name(modes.mode));
@@ -642,6 +642,7 @@ class GraphPage extends WpFilterPage {
         this.model.nodes.some((node: RenderNodeJson): boolean => node.products.length > 0),
         this.model.viewer ?? 'architecture',
         this.goalUnavailable(),
+        this.model.comparison?.menuNote || this.goalUnavailable(),
     );
     private projects = new WpProjectFilter(this.model, this.modes);
     private applied = new WpFilterChoice();

@@ -13,12 +13,7 @@
         "visualize-runtime": {
             "implementation": "./src/executors/visualize-runtime/executor",
             "schema": "./src/executors/visualize-runtime/schema.json",
-            "description": "View saved runtime architecture without refreshing; refresh: pnpm nx run architecture:generate"
-        },
-        "visualize-runtime-goal": {
-            "implementation": "./src/executors/visualize-runtime-goal/executor",
-            "schema": "./src/executors/visualize-runtime-goal/schema.json",
-            "description": "View the hand-authored runtime goal (architecture/runtime-dependencies-goal.json) with Goal vs Current; --prepare recomputes its derived levels"
+            "description": "View saved runtime architecture (with Goal vs Current when architecture/runtime-dependencies-goal.json exists) without refreshing; refresh: pnpm nx run architecture:generate. --prepare-goal recomputes and saves the goal's derived levels first"
         },
         "validate-runtime-architecture": {
             "implementation": "./src/executors/validate-runtime-architecture/executor",

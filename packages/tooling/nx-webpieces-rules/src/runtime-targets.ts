@@ -12,25 +12,8 @@ export function createVisualizeRuntimeTarget(): TargetConfiguration {
         cache: false,
         metadata: {
             technologies: ['nx'],
-            description: 'View saved runtime architecture without refreshing; refresh: pnpm nx run architecture:generate',
-        },
-    };
-}
-
-/**
- * `architecture:visualize-runtime-goal` (#1239) — render the hand-authored runtime goal. Inferred with
- * visualize-runtime, so every repo with the runtime viewer gets it without hand-wiring a target. No
- * dependsOn: it reads saved files only and never generates first.
- */
-// webpieces-disable no-function-outside-class -- inferred-target factory, matching its siblings in this file
-export function createVisualizeRuntimeGoalTarget(): TargetConfiguration {
-    return {
-        executor: '@webpieces/nx-webpieces-rules:visualize-runtime-goal',
-        cache: false,
-        metadata: {
-            technologies: ['nx'],
             description:
-                'View the runtime goal (architecture/runtime-dependencies-goal.json) with Goal vs Current; never generates. --prepare recomputes its levels',
+                'View saved runtime architecture (Goal vs Current when a runtime goal exists) without refreshing; refresh: pnpm nx run architecture:generate. --prepare-goal recomputes the goal levels',
         },
     };
 }

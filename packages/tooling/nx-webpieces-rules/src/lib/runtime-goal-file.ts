@@ -4,7 +4,7 @@
  * A proposal, not a fact. `architecture/runtime-dependencies.json` is GENERATED from source and its
  * unchanged-validator rightly treats any hand edit as drift, so a proposal needs its own durable,
  * reviewable file in the same RuntimeGraph shape. Nothing in the generator reads, writes or deletes
- * this file: only a person (or an AI) edits it, and only the explicit `--prepare` step below rewrites
+ * this file: only a person (or an AI) edits it, and only the explicit `--prepare-goal` step below rewrites
  * its derived fields.
  *
  * Errors here never tell anyone to regenerate from source — a goal has no source. They name the goal
@@ -23,10 +23,10 @@ import { toError } from '../toError';
 
 export const DEFAULT_RUNTIME_GOAL_PATH = 'architecture/runtime-dependencies-goal.json';
 export const RUNTIME_GOAL_RULE_NAME = 'runtime-architecture-goal';
-export const RUNTIME_GOAL_PREPARE_COMMAND = 'pnpm nx run architecture:visualize-runtime-goal --prepare';
+export const RUNTIME_GOAL_PREPARE_COMMAND = 'pnpm nx run architecture:visualize-runtime --prepare-goal';
 export const RUNTIME_GOAL_INIT_COMMAND = `cp ${DEFAULT_RUNTIME_GRAPH_PATH} ${DEFAULT_RUNTIME_GOAL_PATH}`;
 
-/** The derived fields `--prepare` rewrote, as `field: before → after` lines; empty when none moved. */
+/** The derived fields `--prepare-goal` rewrote, as `field: before → after` lines; empty when none moved. */
 export class RuntimeGoalPreparation {
     constructor(
         public readonly graph: RuntimeGraph,
@@ -38,7 +38,7 @@ export class RuntimeGoalPreparation {
 
 /**
  * What viewing found about the goal's derived facts: a CYCLE (only an edit of runtimeEdges fixes it,
- * `--prepare` refuses it too) or field DIFFERENCES that `--prepare` would rewrite.
+ * `--prepare-goal` refuses it too) or field DIFFERENCES that `--prepare-goal` would rewrite.
  */
 export class RuntimeGoalDrift {
     constructor(
@@ -74,7 +74,7 @@ export class RuntimeGoalFile {
     /**
      * Where the saved derived facts disagree with what the existing runtime level machinery
      * (RuntimeNodeLevels — the generator's own) computes from the goal's relationships. Reported, not
-     * fixed: viewing is read-only, and `--prepare` is the explicit step that rewrites them.
+     * fixed: viewing is read-only, and `--prepare-goal` is the explicit step that rewrites them.
      */
     drift(graph: RuntimeGraph): RuntimeGoalDrift {
         const recomputed = this.recompute(graph);
@@ -96,7 +96,7 @@ export class RuntimeGoalFile {
         return new RuntimeGoalPreparation(recomputed, changes, written);
     }
 
-    /** The edit that clears a cycle verdict — `--prepare` cannot. */
+    /** The edit that clears a cycle verdict — `--prepare-goal` cannot. */
     cycleOption(): Option {
         return new Option(`Break the cycle by editing "runtimeEdges" (or the queues it flows through) in ${this.goalPath}.`, true);
     }
@@ -182,26 +182,5 @@ export class RuntimeGoalFile {
 
     private failure(message: string, options: Option[], cause?: Error): RuleFailError {
         return new RuleFailError(RUNTIME_GOAL_RULE_NAME, message, undefined, undefined, options, undefined, cause);
-    }
-}
-
-/** What a goal page says it is: a hand-authored proposal, not a generated snapshot (#1239). */
-export class RuntimeGoalProvenance {
-    message(): string {
-        return (
-            `Goal / Proposed runtime architecture from ${DEFAULT_RUNTIME_GOAL_PATH}. Hand-authored; not generated from source, ` +
-            'and never written by architecture:generate. Viewing changes no file. ' +
-            `After editing relationships, recompute derived levels explicitly: ${RUNTIME_GOAL_PREPARE_COMMAND}`
-        );
-    }
-
-    html(): string {
-        return (
-            `<p class="hint"><strong>Goal / Proposed runtime architecture.</strong> Hand-authored proposal read from ` +
-            `<code>${DEFAULT_RUNTIME_GOAL_PATH}</code>; not generated from source and never written by ` +
-            `<code>architecture:generate</code>. Viewing changes no file. After editing relationships, recompute derived ` +
-            `levels explicitly: <code>${RUNTIME_GOAL_PREPARE_COMMAND}</code>. Compare with the saved current graph ` +
-            `(<code>${DEFAULT_RUNTIME_GRAPH_PATH}</code>) in Color by → Goal vs Current.</p>`
-        );
     }
 }
