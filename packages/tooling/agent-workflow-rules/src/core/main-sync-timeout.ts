@@ -3,6 +3,7 @@ import { BRANCH_STATE_GUARD_KEY } from '../policy-keys';
 import { BranchStateGuardConfig } from "../configs/main-sync-guard-configs";
 import { DEFAULT_HANG_TIMEOUT_MINUTES } from '@webpieces/repo-workflow-core';
 
+import { gitCheckout } from '@webpieces/tooling-common';
 import { toError } from '@webpieces/tooling-common/to-error';
 import { triggerMainSyncRefresh } from './main-sync-refresh';
 import type { Rule } from '@webpieces/hook-runtime';
@@ -90,6 +91,9 @@ export function resetHangTimeoutCacheForTest(): void {
 export function maybeRefreshMainSync(rules: readonly Rule[], workspaceRoot: string, hangTimeoutMinutes: number): void {
     const guard = rules.find((r: Rule): boolean => r.name === 'feature-branch-guard');
     if (guard && guard.shouldRun()) {
-        triggerMainSyncRefresh(workspaceRoot, hangTimeoutMinutes);
+        // The JUDGED branch (#1377), read from the tree's HEAD file the way the guards read it: no git
+        // process. No branch means no repository here, so there is no cache entry to warm.
+        const branch = gitCheckout.branch(workspaceRoot);
+        if (branch !== null) triggerMainSyncRefresh(workspaceRoot, branch, hangTimeoutMinutes);
     }
 }

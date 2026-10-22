@@ -76,6 +76,14 @@ its holder killed. Every command the refresher runs is bounded by a timeout. Com
 `main` (`pnpm wp-sync-main`, the `wp-*` PR flow) fetch for themselves, so the interval never makes
 a gate decision stale.
 
+**A branch the cache has never seen skips the interval, not the lock** (#1377). The interval
+applies only while the judged branch already has an entry in the status file. A branch created
+after the last refresh goes straight to the exclusive create, so the next refresh covers it
+instead of its guards failing open (`no-sync-cache`) for up to 10 minutes. Still one refresher at
+a time per clone, and one extra refresh per NEW branch, not per call: a refresh records every
+worktree's branch. A detached HEAD (never recorded) and any branch after a FAILED refresh keep
+the interval, so neither can launch a refresh on every call.
+
 ## Table — one table, ordered, first match wins
 
 **Tools:** `B` Bash · `R` Read · `E` Write/Edit

@@ -81,7 +81,7 @@ describe('sync-main single-flight', () => {
     });
 
     it('on success: adopts its spawner`s lock, stamps the status file FIRST, deletes the lock LAST', () => {
-        const claim = locks.claimRefresh(root, 5).lock;
+        const claim = locks.claimRefresh(root, 5, 'main').lock;
         expect(claim).not.toBeNull();
         const started = claim?.startedMs ?? 0;
         const seen = stampAtRelease();
@@ -102,7 +102,7 @@ describe('sync-main single-flight', () => {
         vi.spyOn(MainSyncStatusService.prototype, 'computeAllMainSyncStatuses').mockImplementation((): never => {
             throw new Error('offline');
         });
-        const claim = locks.claimRefresh(root, 5).lock;
+        const claim = locks.claimRefresh(root, 5, 'main').lock;
         const started = claim?.startedMs ?? 0;
         const seen = stampAtRelease();
 

@@ -18,7 +18,8 @@ const locks = new MainSyncLockService(undefined, undefined, status);
  *
  * Concurrency: `.webpieces/main-sync.lock.json` is a mutex whose EXISTENCE is the lock (it holds only
  * the holder's pid and start epoch). The SPAWNER creates it exclusively (main-sync-refresh.ts →
- * claimRefresh), only once MIN_REFRESH_INTERVAL_MINUTES have passed since the last start, and passes
+ * claimRefresh), only once MIN_REFRESH_INTERVAL_MINUTES have passed since the last start (at once for a
+ * branch the status file has never seen, #1377), and passes
  * its `startedMs` on argv. This child ADOPTS that lock (rewriting the pid to its own) and never creates
  * one itself, so it cannot race its spawner. A lock that is no longer on disk (reclaimed while this
  * child booted) means another refresher owns the run, and we exit.

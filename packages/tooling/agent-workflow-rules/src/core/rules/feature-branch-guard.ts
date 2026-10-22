@@ -132,7 +132,7 @@ export class FeatureBranchGuardRule extends FileRuleBase<BranchStateGuardConfig>
 
         // Keep the cache warm for the next call. Detached; never blocks this edit. Rooted at the JUDGED
         // tree, so the refresher recomputes the entry this guard is about to read rather than a sibling's.
-        triggerMainSyncRefresh(judgedRoot, hangTimeoutOf(this.config));
+        triggerMainSyncRefresh(judgedRoot, branch, hangTimeoutOf(this.config));
 
         const status = readMainSyncStatus(judgedRoot, branch);
         // No cache yet (first edit of the session) → allow; the refresh we just spawned populates it
