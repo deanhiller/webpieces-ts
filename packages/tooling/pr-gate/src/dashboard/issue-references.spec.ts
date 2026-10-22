@@ -1,7 +1,9 @@
 import { describe, it, expect } from 'vitest';
-import { AddressedIssue, PrSummary } from '@webpieces/rules-config';
+import { AddressedIssue, PrSummary, CK_ORANGE_FIXED, CK_OVERRIDDEN } from '@webpieces/rules-config';
 import { InformAiError } from '@webpieces/tooling-common';
-import { Dashboard, DashboardInput } from './dashboard';
+import { Dashboard, DashboardInput, ChecklistRow } from './dashboard';
+import { ChecklistCommentRenderer } from './checklist-comment-renderer';
+import { ChecklistCommentRow } from './checklist-comment-row';
 import { AuthorIdentity } from './author-identity';
 import { IssueReferences } from './issue-references';
 
@@ -20,6 +22,32 @@ function body(summary: string, issues: AddressedIssue[]): string {
 }
 
 describe('addressesIssues in the PR body = the squash-commit body (issue #1310)', () => {
+    it.each([CK_ORANGE_FIXED, CK_OVERRIDDEN])('keeps %s commentary from closing the delivery issue (#1368)', (status: string) => {
+        const prose = 'Deploy after merge, then close #955 only when verification succeeds.';
+        const value = input('Add startup diagnostics.', [new AddressedIssue(GITHUB, false)]);
+        value.checklists = [new ChecklistRow('issue-reviewer', status, prose)];
+        const rendered = dash.renderPrBody(value, PR_URL);
+        expect(rendered).toContain('close issue #955 only when verification succeeds');
+        expect(rendered).toContain(`Part of ${GITHUB}`);
+        expect(rendered).not.toContain('close #955');
+        const comment = new ChecklistCommentRenderer().render([
+            new ChecklistCommentRow('codex', 'unknown', 'issue-reviewer', status, prose, true, [], [], ['src/a.ts'], 1),
+        ], true, true, 0, false);
+        expect(comment).toContain(prose);
+        value.review.summary = 'Close #955 after deploying.';
+        expect((): string => dash.renderPrBody(value, PR_URL)).toThrowError(InformAiError);
+    });
+
+    it('neutralizes every closing keyword and reference shape only in generated commentary (#1368)', () => {
+        const issues = new IssueReferences();
+        for (const prose of ['closes #1', 'CLOSED #1', 'fix #1', 'Fixed: #1', 'resolve #1', 'Resolves #1', 'resolved #1', `fixes ${LINEAR}`, 'Closes other/repo#3']) {
+            const safe = issues.asCommentary(prose);
+            expect((): void => issues.assertNoStrayClosingReferences(safe, [], 'retry')).not.toThrow();
+            expect(issues.asCommentary(safe)).toBe(safe);
+            expect((): void => issues.assertNoStrayClosingReferences(prose, [], 'retry')).toThrowError(InformAiError);
+        }
+    });
+
     it('renders a GitHub issue with closesIssue:true as "Fixes <url>"', () => {
         expect(body('Does the thing.', [new AddressedIssue(GITHUB, true)])).toContain(`\nFixes ${GITHUB}\n`);
     });
