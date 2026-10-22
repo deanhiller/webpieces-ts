@@ -36,7 +36,18 @@ function lockExists(): boolean {
     return fs.existsSync(locks.mainSyncLockPath(root));
 }
 
+// The branch every throttle test judges, and the one the stamped refresh RECORDED: a branch the cache
+// has never seen skips the interval (#1377), so a throttle test must judge one it has.
+const KNOWN = 'dean/known';
+const UNKNOWN = 'dean/created-after-the-last-refresh';
+
+function cachedEntry(branch: string): MainSyncStatus {
+    return new MainSyncStatus(branch, false, '', true, 'a', 'b', 'c', false, [], 'ts');
+}
+
+// A successful refresh that started at `startedMs` and recorded KNOWN, as the refresher writes it.
 function stampRefresh(startedMs: number): void {
+    status.writeMainSyncStatus(root, cachedEntry(KNOWN));
     status.recordRefreshOutcome(root, startedMs, RefreshOutcome.OK);
 }
 
@@ -142,7 +153,7 @@ describe('reclaiming a crashed or hung holder', () => {
 describe('claimRefresh — at most one refresh START per interval', () => {
     it('is due when no refresh was ever recorded', () => {
         const now = Date.now();
-        const claim = locks.claimRefresh(root, HANG, now);
+        const claim = locks.claimRefresh(root, HANG, KNOWN, now);
         expect(claim.outcome).toBe(RefreshClaimOutcome.CLAIMED);
         expect(locks.readMainSyncLock(root)).toEqual(new MainSyncLock(SPAWNER_CLAIM_PID, now));
     });
@@ -150,21 +161,21 @@ describe('claimRefresh — at most one refresh START per interval', () => {
     it('skips inside the interval without touching the lock', () => {
         const now = Date.now();
         stampRefresh(now - (MIN_REFRESH_INTERVAL_MINUTES - 1) * MINUTE);
-        expect(locks.claimRefresh(root, HANG, now).outcome).toBe(RefreshClaimOutcome.RECENT);
+        expect(locks.claimRefresh(root, HANG, KNOWN, now).outcome).toBe(RefreshClaimOutcome.RECENT);
         expect(lockExists()).toBe(false);
     });
 
     it('a FAILED run is throttled exactly like a successful one', () => {
         const now = Date.now();
         status.recordRefreshOutcome(root, now - MINUTE, RefreshOutcome.ERROR);
-        expect(locks.claimRefresh(root, HANG, now).outcome).toBe(RefreshClaimOutcome.RECENT);
+        expect(locks.claimRefresh(root, HANG, KNOWN, now).outcome).toBe(RefreshClaimOutcome.RECENT);
     });
 
     it('proceeds once the interval has elapsed', () => {
         const now = Date.now();
         const last = now - (MIN_REFRESH_INTERVAL_MINUTES + 1) * MINUTE;
         stampRefresh(last);
-        const claim = locks.claimRefresh(root, HANG, now);
+        const claim = locks.claimRefresh(root, HANG, KNOWN, now);
         expect(claim.outcome).toBe(RefreshClaimOutcome.CLAIMED);
         expect(claim.lastRefreshStartedMs).toBe(last);
     });
@@ -173,21 +184,69 @@ describe('claimRefresh — at most one refresh START per interval', () => {
         const now = Date.now();
         stampRefresh(now - 60 * MINUTE);
         locks.writeMainSyncLock(root, new MainSyncLock(process.pid, now - MINUTE));
-        expect(locks.claimRefresh(root, HANG, now).outcome).toBe(RefreshClaimOutcome.HELD);
+        expect(locks.claimRefresh(root, HANG, KNOWN, now).outcome).toBe(RefreshClaimOutcome.HELD);
+    });
+});
+
+// #1377: the interval used to be judged on ONE repo-wide stamp, so a branch created minutes after a
+// refresh had no cache entry until the interval ran out, and every branch-state guard failed open on it
+// (`no-sync-cache`). A branch the status file has never seen now skips the INTERVAL, never the LOCK.
+describe('claimRefresh — a branch the cache has never seen skips the interval, not the lock', () => {
+    it('an unknown branch with a fresh stamp is CLAIMED, not RECENT', () => {
+        const now = Date.now();
+        stampRefresh(now - MINUTE);
+        const claim = locks.claimRefresh(root, HANG, UNKNOWN, now);
+        expect(claim.outcome).toBe(RefreshClaimOutcome.CLAIMED);
+        expect(locks.readMainSyncLock(root)).toEqual(new MainSyncLock(SPAWNER_CLAIM_PID, now));
+    });
+
+    it('a known branch with the same fresh stamp is RECENT, and the lock is untouched', () => {
+        const now = Date.now();
+        stampRefresh(now - MINUTE);
+        expect(locks.claimRefresh(root, HANG, KNOWN, now).outcome).toBe(RefreshClaimOutcome.RECENT);
+        expect(lockExists()).toBe(false);
+    });
+
+    it('a held lock is HELD for an unknown branch too: still single-flight', () => {
+        const now = Date.now();
+        stampRefresh(now - MINUTE);
+        locks.writeMainSyncLock(root, new MainSyncLock(process.pid, now - MINUTE));
+        expect(locks.claimRefresh(root, HANG, UNKNOWN, now).outcome).toBe(RefreshClaimOutcome.HELD);
+        expect(locks.claimRefresh(root, HANG, KNOWN, now).outcome).toBe(RefreshClaimOutcome.RECENT);
+    });
+
+    it('a second unknown-branch caller after the first claimed is HELD: one refresher per clone', () => {
+        const now = Date.now();
+        stampRefresh(now - MINUTE);
+        expect(locks.claimRefresh(root, HANG, UNKNOWN, now).outcome).toBe(RefreshClaimOutcome.CLAIMED);
+        expect(locks.claimRefresh(root, HANG, 'dean/another-new-branch', now).outcome).toBe(RefreshClaimOutcome.HELD);
+    });
+
+    it('a detached HEAD keeps the interval: no refresh can ever record it', () => {
+        const now = Date.now();
+        stampRefresh(now - MINUTE);
+        expect(locks.claimRefresh(root, HANG, 'HEAD', now).outcome).toBe(RefreshClaimOutcome.RECENT);
+    });
+
+    it('after a FAILED refresh an unknown branch keeps the interval: a failing refresh is never hammered', () => {
+        const now = Date.now();
+        status.writeMainSyncStatus(root, cachedEntry(KNOWN));
+        status.recordRefreshOutcome(root, now - MINUTE, RefreshOutcome.ERROR);
+        expect(locks.claimRefresh(root, HANG, UNKNOWN, now).outcome).toBe(RefreshClaimOutcome.RECENT);
     });
 });
 
 describe('the child adopts its spawner`s lock', () => {
     it('takes over the pid of the lock it was handed', () => {
         const now = Date.now();
-        locks.claimRefresh(root, HANG, now);
+        locks.claimRefresh(root, HANG, KNOWN, now);
         expect(locks.adoptMainSyncLock(root, now, 4242)).toEqual(new MainSyncLock(4242, now));
         expect(locks.readMainSyncLock(root)?.pid).toBe(4242);
     });
 
     it('refuses a lock that is not the one it was handed', () => {
         const now = Date.now();
-        locks.claimRefresh(root, HANG, now);
+        locks.claimRefresh(root, HANG, KNOWN, now);
         expect(locks.adoptMainSyncLock(root, now - 1, 4242)).toBeNull();
         expect(locks.adoptMainSyncLock(root, Number.NaN, 4242)).toBeNull();
     });

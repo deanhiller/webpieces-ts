@@ -8,7 +8,7 @@ import { triggerMainSyncRefresh } from '../core/main-sync-refresh';
 import { CONFIG_FILENAME } from '@webpieces/rules-config';
 import { RepoRootFinder, renderRuleFailForAi } from '@webpieces/rules-config';
 import { NormalizedToolInput, HookMode, BlockedResult } from '@webpieces/hook-runtime';
-import { InformAiError } from '@webpieces/tooling-common';
+import { InformAiError, gitCheckout } from '@webpieces/tooling-common';
 import { RuleFailError } from '@webpieces/rules-config';
 import { AgentHookEvent, AiType, FileOperation } from '@webpieces/hook-runtime';
 import { toError } from '@webpieces/tooling-common/to-error';
@@ -129,7 +129,11 @@ function handleReadFastPath(event: AgentHookEvent, cwd: string, mode: HookMode):
         invocationLog.begin(cwd, event.rawToolName, readPath);
         // Reads vastly outnumber edits, so refreshing here is what actually keeps the shared
         // main-sync cache warm for feature-branch-guard. Detached; never slows the read.
-        triggerMainSyncRefresh(cwd, branchStateHangTimeoutFor(cwd));
+        // Judged on the session cwd's branch, read from its HEAD file (no git process, #1361).
+        // read-stale-guard then claims again for the tree that owns the FILE, which may be another
+        // worktree on a branch the cache has never seen; the latch is per branch, so that is heard.
+        const branch = gitCheckout.branch(cwd);
+        if (branch !== null) triggerMainSyncRefresh(cwd, branch, branchStateHangTimeoutFor(cwd));
     }
     handleRead(event, readPath, cwd, mode);
     emitAllow();
@@ -179,7 +183,8 @@ function handleOneFile(event: AgentHookEvent, file: FileOperation, cwd: string, 
             // The guard's own refresh trigger lives inside its check(), which we skip here — so warm
             // the cache directly, otherwise a session that only edits webpieces.config.json never
             // refreshes the sync status. Fire-and-forget; never blocks the edit.
-            triggerMainSyncRefresh(root, branchStateHangTimeoutFor(cwd));
+            const branch = gitCheckout.branch(root);
+            if (branch !== null) triggerMainSyncRefresh(root, branch, branchStateHangTimeoutFor(cwd));
         }
         return;
     }

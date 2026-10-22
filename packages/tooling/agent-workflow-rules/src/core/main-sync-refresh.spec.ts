@@ -6,7 +6,7 @@ import * as path from 'path';
 
 import { triggerMainSyncRefresh, resetMainSyncRefreshLatchForTest, refresherArgv } from './main-sync-refresh';
 import { claimStartedFromArgv, spawnerIdentity } from './sync-main';
-import { DEFAULT_HANG_TIMEOUT_MINUTES, MIN_REFRESH_INTERVAL_MINUTES, MainSyncLock, MainSyncLockService, MainSyncStatusService, RefreshOutcome } from '@webpieces/repo-workflow-core';
+import { DEFAULT_HANG_TIMEOUT_MINUTES, MIN_REFRESH_INTERVAL_MINUTES, MainSyncLock, MainSyncLockService, MainSyncStatus, MainSyncStatusService, RefreshOutcome } from '@webpieces/repo-workflow-core';
 
 
 // Log FILENAMES carry the stream prefix (see LogStream). Specs resolve the name exactly as
@@ -21,6 +21,10 @@ function streamName(stream: string, suffix: string = '.log'): string {
 
 
 const LOG_REL = `.webpieces/logs/${streamName(ASYNC_REFRESH_STREAM)}`;
+
+// The judged branch every call passes (#1377). Throttle tests record an entry for it, because a branch
+// the cache has never seen skips the interval.
+const BRANCH = 'dean/judged';
 
 function spawnAttempts(root: string): number {
     const logPath = path.join(root, LOG_REL);
@@ -44,17 +48,31 @@ describe('triggerMainSyncRefresh — at most one refresher per hook process', ()
     });
 
     it('spawns once no matter how many call sites fire on the same tool call', () => {
-        triggerMainSyncRefresh(root, DEFAULT_HANG_TIMEOUT_MINUTES);
-        triggerMainSyncRefresh(root, DEFAULT_HANG_TIMEOUT_MINUTES);
-        triggerMainSyncRefresh(root, DEFAULT_HANG_TIMEOUT_MINUTES);
+        triggerMainSyncRefresh(root, BRANCH, DEFAULT_HANG_TIMEOUT_MINUTES);
+        triggerMainSyncRefresh(root, BRANCH, DEFAULT_HANG_TIMEOUT_MINUTES);
+        triggerMainSyncRefresh(root, BRANCH, DEFAULT_HANG_TIMEOUT_MINUTES);
         expect(spawnAttempts(root)).toBe(1);
     });
 
     it('the latch is per-process: the NEXT hook process decides afresh, and is throttled here', () => {
-        triggerMainSyncRefresh(root, DEFAULT_HANG_TIMEOUT_MINUTES);
+        triggerMainSyncRefresh(root, BRANCH, DEFAULT_HANG_TIMEOUT_MINUTES);
         resetMainSyncRefreshLatchForTest();  // stands in for a fresh hook process
-        triggerMainSyncRefresh(root, DEFAULT_HANG_TIMEOUT_MINUTES);
+        triggerMainSyncRefresh(root, BRANCH, DEFAULT_HANG_TIMEOUT_MINUTES);
         // The second process got past the latch and was stopped by the repo-wide interval instead.
+        expect(spawnAttempts(root)).toBe(1);
+    });
+
+    // #1377: the Read fast path judges the session cwd's branch, read-stale-guard the tree owning the
+    // file. A one-boolean latch let the first (cached, throttled) call swallow the second (uncached).
+    it('a throttled call on a cached branch does not swallow a later call on an uncached one', () => {
+        status.writeMainSyncStatus(root, cachedEntry(BRANCH));
+        status.recordRefreshOutcome(root, Date.now() - MINUTE, RefreshOutcome.OK);
+        triggerMainSyncRefresh(root, BRANCH, DEFAULT_HANG_TIMEOUT_MINUTES);
+        expect(spawnAttempts(root)).toBe(0);
+        triggerMainSyncRefresh(root, 'dean/created-after-the-last-refresh', DEFAULT_HANG_TIMEOUT_MINUTES);
+        expect(spawnAttempts(root)).toBe(1);
+        // Once this process has spawned, nothing more is claimed, whatever the branch.
+        triggerMainSyncRefresh(root, 'dean/a-third-branch', DEFAULT_HANG_TIMEOUT_MINUTES);
         expect(spawnAttempts(root)).toBe(1);
     });
 });
@@ -62,6 +80,10 @@ describe('triggerMainSyncRefresh — at most one refresher per hook process', ()
 const MINUTE = 60 * 1000;
 const status = new MainSyncStatusService();
 const locks = new MainSyncLockService(undefined, undefined, status);
+
+function cachedEntry(branch: string): MainSyncStatus {
+    return new MainSyncStatus(branch, false, '', true, 'a', 'b', 'c', false, [], 'ts');
+}
 
 // #1342: the throttle is the SPAWNER's. A throttled tool call launches no node child and runs no git;
 // the async-refresh stream used to show a SPAWN_ATTEMPT (and a node boot) on every guard fire.
@@ -74,8 +96,9 @@ describe('triggerMainSyncRefresh — at most one refresher START per interval pe
     });
 
     it('launches nothing, and logs nothing, when the last refresh started inside the interval', () => {
+        status.writeMainSyncStatus(root, cachedEntry(BRANCH));
         status.recordRefreshOutcome(root, Date.now() - (MIN_REFRESH_INTERVAL_MINUTES - 1) * MINUTE, RefreshOutcome.OK);
-        triggerMainSyncRefresh(root, DEFAULT_HANG_TIMEOUT_MINUTES);
+        triggerMainSyncRefresh(root, BRANCH, DEFAULT_HANG_TIMEOUT_MINUTES);
         expect(spawnAttempts(root)).toBe(0);
         expect(fs.existsSync(path.join(root, LOG_REL))).toBe(false);
         expect(fs.existsSync(locks.mainSyncLockPath(root))).toBe(false);
@@ -84,7 +107,7 @@ describe('triggerMainSyncRefresh — at most one refresher START per interval pe
     it('launches once the interval has elapsed, and creates the lock for the child to adopt', () => {
         status.recordRefreshOutcome(root, Date.now() - (MIN_REFRESH_INTERVAL_MINUTES + 1) * MINUTE, RefreshOutcome.ERROR);
         const before = Date.now();
-        triggerMainSyncRefresh(root, DEFAULT_HANG_TIMEOUT_MINUTES);
+        triggerMainSyncRefresh(root, BRANCH, DEFAULT_HANG_TIMEOUT_MINUTES);
         expect(spawnAttempts(root)).toBe(1);
 
         const claimed = locks.readMainSyncLock(root);
@@ -94,13 +117,13 @@ describe('triggerMainSyncRefresh — at most one refresher START per interval pe
 
     it('launches nothing while a live refresher holds the lock past the interval but inside its hang window', () => {
         locks.writeMainSyncLock(root, new MainSyncLock(process.pid, Date.now() - (MIN_REFRESH_INTERVAL_MINUTES + 1) * MINUTE));
-        triggerMainSyncRefresh(root, 30);
+        triggerMainSyncRefresh(root, BRANCH, 30);
         expect(spawnAttempts(root)).toBe(0);
     });
 
     it('takes over a stale holder (past interval and hang window) and launches', () => {
         locks.writeMainSyncLock(root, new MainSyncLock(2147483646, Date.now() - 60 * MINUTE));
-        triggerMainSyncRefresh(root, DEFAULT_HANG_TIMEOUT_MINUTES);
+        triggerMainSyncRefresh(root, BRANCH, DEFAULT_HANG_TIMEOUT_MINUTES);
         expect(spawnAttempts(root)).toBe(1);
     });
 });

@@ -99,7 +99,8 @@ export class MainSyncStatusFile {
     /**
      * Epoch ms the last detached refresh STARTED: the throttle's stamp (#1342). The spawner reads it
      * before launching anything and launches nothing while it is under MIN_REFRESH_INTERVAL_MINUTES
-     * old. It is the START, not the finish, so a failing run is retried after the interval rather than
+     * old, unless the judged branch has no entry in `branches` yet (#1377; see
+     * MainSyncLockService.claimRefresh). It is the START, not the finish, so a failing run is retried after the interval rather than
      * on every tool call. Null (an older file, or one pr-gate wrote before any refresh) means "due".
      *
      * The refresher writes it BEFORE it deletes main-sync.lock.json, so no process can win the next

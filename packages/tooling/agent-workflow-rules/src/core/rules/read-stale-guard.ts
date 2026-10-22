@@ -135,7 +135,7 @@ export class ReadStaleGuardRule extends FileRuleBase<BranchStateGuardConfig> {
         // Keep the shared cache warm for the next call. Detached; never blocks this read. Fired for
         // BOTH states — the merged-branch signal comes out of that same cache. Rooted at the JUDGED
         // tree so the entry refreshed is the one this guard reads.
-        triggerMainSyncRefresh(judgedRoot, hangTimeoutOf(this.config));
+        triggerMainSyncRefresh(judgedRoot, branch, hangTimeoutOf(this.config));
 
         // Escape valve 3 — the read half of the config escape hatch. Ahead of BOTH states' blocks so
         // the agent can always read-then-edit the file that turns this guard off.

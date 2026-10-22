@@ -176,7 +176,7 @@ export class StaleMainBashGuardRule extends BashRuleBase<BranchStateGuardConfig>
         if (branch === null) return this.failOpen(ctx, branch, 'branch-undeterminable');
 
         // Keep the shared cache warm for the next call. Detached; never blocks this command.
-        triggerMainSyncRefresh(ctx.workspaceRoot, hangTimeoutOf(this.config));
+        triggerMainSyncRefresh(ctx.workspaceRoot, branch, hangTimeoutOf(this.config));
 
         // State A is on `main` only. A merged feature branch is merged-branch-bash-guard's job.
         if (branch !== 'main') return this.allow(ctx, branch, 'not-on-main (state B is another guard)');

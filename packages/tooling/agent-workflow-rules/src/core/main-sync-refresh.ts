@@ -7,9 +7,14 @@ import { MainSyncLock, MainSyncLockService, MainSyncStatusService, RefreshClaimO
 import { logSyncEvent, SyncLogEvent, refresherChildStdioPath } from './main-sync-log';
 import { logStream, StreamIdentity } from './log-stream';
 
-// Per-process latch for the spawn below. A hook process handles exactly one tool call, so this makes
-// the refresher at-most-once per tool call. Exported reset is test-only.
-let alreadyTriggered = false;
+// Per-process latch for the claim below, keyed by (root, judged branch). A hook process handles exactly
+// one tool call, so this makes each claim at-most-once per tool call. KEYED, not one boolean (#1377):
+// several call sites fire on one tool call, and they can judge DIFFERENT branches (the Read fast path
+// judges the session's cwd, read-stale-guard the tree that owns the file). A single boolean let the
+// first call, on a branch already cached and so throttled, swallow a later call on a branch the cache
+// has never seen, which is exactly the call that must skip the throttle. Exported reset is test-only.
+const alreadyClaimed = new Set<string>();
+let spawnedThisProcess = false;
 
 // The services the spawner throttles and claims through. Module scope, like the latch: this path must
 // stay callable from a tree too broken to build a DI container.
@@ -18,7 +23,8 @@ const mainSyncLocks = new MainSyncLockService(undefined, undefined, mainSyncStat
 
 // webpieces-disable no-function-outside-class -- test-only latch reset, matching this module's function shape
 export function resetMainSyncRefreshLatchForTest(): void {
-    alreadyTriggered = false;
+    alreadyClaimed.clear();
+    spawnedThisProcess = false;
 }
 
 /**
@@ -43,11 +49,17 @@ export function refresherArgv(refresher: string, workspaceRoot: string, claimSta
  * the NEXT call. This is the first detached spawn in the codebase — every existing hook is synchronous.
  *
  * THROTTLED AND SINGLE-FLIGHT IN THE SPAWNER (#1342): at most one refresher START per
- * MIN_REFRESH_INTERVAL_MINUTES per repo, decided here by one read of `lastRefreshStartedMs` in
+ * MIN_REFRESH_INTERVAL_MINUTES per repo for branches already cached, decided here by one read of `lastRefreshStartedMs` in
  * `main-sync-status.json` before any process is launched. Past the interval the spawner creates
  * `main-sync.lock.json` exclusively, so of several hook processes firing at once exactly one launches.
  * The child ADOPTS that lock (it never creates one itself), stamps the status file, and deletes the
  * lock last.
+ *
+ * `judgedBranch` IS REQUIRED (#1377): the branch whose cache entry the caller is about to read. The
+ * interval applies only to a branch the status file already has an entry for; a branch it has never
+ * seen (created after the last refresh) skips the interval and goes straight to the lock, so it is
+ * covered by the very next refresh instead of failing open for up to the whole interval. Every caller
+ * resolves it from the tree's HEAD file (`gitCheckout.branch`), never with a git process.
  *
  * Observability: we log SPAWN_ATTEMPT here and the child logs START/FINISH/ERROR, all to
  * `.webpieces/logs/async-refresh/<writer>.log` (LogStream names every writer). The child's
@@ -72,14 +84,19 @@ export function refresherArgv(refresher: string, workspaceRoot: string, claimSta
  * takes) puts the whole cycle back in ONE file.
  */
 // webpieces-disable no-function-outside-class -- the module's one entry point, beside refresherArgv; a detached fire-and-forget spawn has no state to inject and must stay callable from a tree too broken to build a DI container
-export function triggerMainSyncRefresh(workspaceRoot: string, hangTimeoutMinutes: number): void {
+export function triggerMainSyncRefresh(workspaceRoot: string, judgedBranch: string, hangTimeoutMinutes: number): void {
     // ONE refresher per hook process. Several call sites fire this on a single tool call — the Read
     // fast path in hook-core AND read-stale-guard's own check(), for one — which is why the log showed
     // two SPAWN_ATTEMPTs ~20ms apart from the same pid on every cycle. The loser only ever reached the
     // lock and exited, so the second child was pure waste (and one more `git fetch` racing the
-    // agent's). The claim below guards against refreshers from OTHER hook processes.
-    if (alreadyTriggered) return;
-    alreadyTriggered = true;
+    // agent's). Once this process has spawned, nothing more is claimed; until then each (root, branch)
+    // is claimed at most once, so a later call judging an UNCACHED branch is still heard (#1377). The
+    // claim's lock guards against refreshers from OTHER hook processes, and against a second spawn
+    // here: after a CLAIMED, every further claim answers HELD.
+    if (spawnedThisProcess) return;
+    const key = `${workspaceRoot}\u0000${judgedBranch}`;
+    if (alreadyClaimed.has(key)) return;
+    alreadyClaimed.add(key);
 
     // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
     try {
@@ -92,8 +109,10 @@ export function triggerMainSyncRefresh(workspaceRoot: string, hangTimeoutMinutes
         // A skip writes NO log line. It is the outcome of nearly every tool call, so logging it would
         // trade the SPAWN_ATTEMPT flood for a SKIP flood. The throttle is visible instead as
         // SPAWN_ATTEMPTs at least MIN_REFRESH_INTERVAL_MINUTES apart, each naming the run it follows.
-        const claim = mainSyncLocks.claimRefresh(workspaceRoot, hangTimeoutMinutes);
+        // A branch the cache has never seen skips the interval (not the lock): see claimRefresh.
+        const claim = mainSyncLocks.claimRefresh(workspaceRoot, hangTimeoutMinutes, judgedBranch);
         if (claim.outcome !== RefreshClaimOutcome.CLAIMED || claim.lock === null) return;
+        spawnedThisProcess = true;
         spawnRefresher(workspaceRoot, claim.lock, claim.lastRefreshStartedMs);
     } catch (err: unknown) { // webpieces-disable catch-must-propagate -- warming a background cache must never block or fail the agent's tool call; there is no caller to propagate to, so the failure is recorded in the async-refresh log instead
         const error = toError(err);

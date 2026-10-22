@@ -2,8 +2,9 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { injectable, bindingScopeValues } from 'inversify';
 
-import { AtomicFile, DotWebpieces, dotWebpieces } from '@webpieces/tooling-common';
+import { AtomicFile, DETACHED_HEAD, DotWebpieces, dotWebpieces } from '@webpieces/tooling-common';
 import { toError } from '@webpieces/tooling-common/to-error';
+import { MainSyncStatusFile, RefreshOutcome } from './main-sync-file';
 import { MainSyncStatusService } from './main-sync-status';
 
 /**
@@ -56,7 +57,7 @@ export class MainSyncLock {
 export enum RefreshClaimOutcome {
     /** This caller created the lock and must launch the refresher (which adopts it). */
     CLAIMED = 'claimed',
-    /** The last refresh STARTED less than MIN_REFRESH_INTERVAL_MINUTES ago. Nothing to do. */
+    /** The last refresh STARTED less than MIN_REFRESH_INTERVAL_MINUTES ago and already covers the judged branch. Nothing to do. */
     RECENT = 'recent',
     /** The lock exists and its holder is running, or another caller won the create first. */
     HELD = 'held',
@@ -115,19 +116,47 @@ export class MainSyncLockService {
      * THE SPAWNER'S WHOLE DECISION: may this hook process launch a refresher? Called BEFORE anything
      * is spawned, so a throttled tool call costs one read of the status file: no node child, no git.
      *
+     * `judgedBranch` is REQUIRED: the branch whose cache entry the caller is about to read (#1377). The
+     * MIN_REFRESH_INTERVAL_MINUTES throttle applies only while that branch already HAS an entry in
+     * `main-sync-status.json`. A branch the file has never seen (one created after the last refresh)
+     * skips the interval and goes straight to the single-flight lock, so the next refresh covers it
+     * instead of its guards failing open for up to the whole interval. It is still single-flight (at
+     * most one refresher at a time, per clone), and it costs one extra refresh per NEW branch, not per
+     * call: a refresh records every worktree's branch, so from then on the branch is throttled like any
+     * other.
+     *
+     * Two kinds of unknown branch keep the throttle, because bypassing would launch a refresh on every
+     * call: a detached HEAD (DETACHED_HEAD; the refresher keys entries by branch name, so it never has
+     * one), and any branch while the last refresh FAILED (that run recorded no new branch, and a failing
+     * refresh is retried after the interval, never on every call).
+     *
      * The stamp is the last run's START, and a failed run records one too, so a failing refresh
      * (offline, gh auth expired) is retried after the interval: never hammered on every call, never
      * blocked forever. A run that crashes before recording anything leaves its lock behind, and that
      * lock is reclaimed once older than `hangTimeoutMinutes`.
      */
-    claimRefresh(repoRoot: string, hangTimeoutMinutes: number, now: number = Date.now()): RefreshClaim {
+    claimRefresh(repoRoot: string, hangTimeoutMinutes: number, judgedBranch: string, now: number = Date.now()): RefreshClaim {
         const file = this.status.readMainSyncStatusFile(repoRoot);
         const stamp = file === null ? null : file.lastRefreshStartedMs;
-        if (stamp !== null && this.withinInterval(stamp, now)) {
+        if (stamp !== null && this.withinInterval(stamp, now) && !this.isUncoveredBranch(file, judgedBranch)) {
             return new RefreshClaim(RefreshClaimOutcome.RECENT, null, stamp);
         }
         const lock = this.tryAcquireMainSyncLock(repoRoot, hangTimeoutMinutes, now, SPAWNER_CLAIM_PID);
         return new RefreshClaim(lock === null ? RefreshClaimOutcome.HELD : RefreshClaimOutcome.CLAIMED, lock, stamp);
+    }
+
+    /**
+     * True when `branch` has no entry yet and a refresh would add one: the one case that skips the
+     * interval (see claimRefresh). Never for a detached HEAD, and never after a failed refresh, so
+     * neither can turn the throttle into a refresh per call.
+     */
+    private isUncoveredBranch(file: MainSyncStatusFile | null, branch: string): boolean {
+        if (branch === DETACHED_HEAD) return false;
+        if (file === null) return true;
+        if (file.lastRefreshOutcome === RefreshOutcome.ERROR) return false;
+        const branches = file.branches;
+        if (branches === null || branches === undefined) return true;
+        return !Object.prototype.hasOwnProperty.call(branches, branch);
     }
 
     /**
