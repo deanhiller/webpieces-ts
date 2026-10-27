@@ -6,7 +6,10 @@ on:
 
 jobs:
     build-and-test:
-        runs-on: ubuntu-latest
+        # Pinned, not ubuntu-latest: ubuntu-latest moved to 26.04, where Playwright 1.57 refuses to
+        # install Chromium ("Playwright does not support chromium on ubuntu26.04-x64"), and the browser
+        # specs below need it (issue #1387). Unpin together with a Playwright bump that supports 26.04.
+        runs-on: ubuntu-24.04
         # A wedged job is worse than a failed one: it reports "pending" forever while holding a
         # runner, and whoever is waiting cannot tell it apart from a slow build. Run 35722585020
         # stopped producing output 10 seconds into the CI step and sat there for 95 minutes before a
@@ -68,7 +71,7 @@ jobs:
               run: bash scripts/ci-nx-cache.sh adopt-db
 
             - name: Run branch-appropriate CI checks
-              # --parallel=4 matches the 4 vCPUs on ubuntu-latest (nx defaults to 3). A core-package
+              # --parallel=4 matches the 4 vCPUs on the ubuntu-24.04 runner (nx defaults to 3). A core-package
               # change makes nearly every project "affected", so this overlaps the independent branches
               # of the task graph; the win is bounded by the serial dependency chain (core-util builds
               # before its dependents).
