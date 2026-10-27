@@ -120,8 +120,9 @@ the goal's derived levels first. Details, comparison policy and the edit workflo
 
 `architecture/dependencies.html` opens with the graph filling the viewport and every control
 in a collapsible charcoal drawer on the left (violet accent): the **Color by** pulldown, the
-**Filter** button, a type-to-search **Focus** field (`/` focuses it, `Esc` unlocks), a separate **Lock** switch, a **Hide
-unconnected** toggle, the legend (with a pop-out button) and the edge key. Help is the **?**
+**Filter** button, two multi-select pulldowns with search, **Keep connected to** and **Focus**
+(`/` opens Focus's search; `Esc` closes an open pulldown, else clears Focus), the legend (with a
+pop-out button) and the edge key. Help is the **?**
 popover, zoom floats bottom-right, and **Responsibilities** opens a right-hand panel from the
 drawer footer.
 
@@ -222,20 +223,30 @@ validator checks.
 
 ### Compact graph filtering
 
-Architecture and runtime node menus offer **Filter Unconnected** alongside
-Lock/Unlock. Filtering retains the selected node and its separate transitive
-incoming and outgoing chains, then reruns Graphviz. Architecture L-number rows keep
-their original identities; runtime chains include rendered queues, clocks, external
-APIs and systems. The anchor indicator and all surviving node menus offer **Turn off
-Filter**, restoring the full layout and independent Lock state. Responsibilities
-follow the retained set intersected with architecture Lock. Both viewers’ Lock pins
-its chain in the foreground; hover adds a temporary chain without dimming locked
-nodes or edges, and leaving restores the Lock chain. The locked anchor keeps a violet outline,
-and hover never changes responsibilities. A filtered-out Lock is suspended until
-the full graph returns. Hover and menu dismissal
-do not clear filtering, and no filter is persisted across reloads. Saved graph facts
+Both viewers' drawers hold two independent multi-select pulldowns (#1385), one shared client
+component (`graph-multi-select.client.ts`): checkbox rows in alphabetical order, a search box that
+matches anywhere in a name (case-insensitive, the match highlighted), ↑/↓ and Enter (Space while
+the query is empty) to toggle with the query kept for the next pick, the picks as removable chips
+on the closed field (`None (off)` when empty), and an `N selected` footer with **Clear all**.
+
+The page applies them in order, each working on what the previous stage left:
+
+1. **Filter** (change scope, runtime, role, product).
+2. **Keep connected to** keeps the UNION of every picked box plus its complete transitive incoming
+   and outgoing chains, then reruns Graphviz. Adding a pick only ever grows the graph. Architecture
+   L-number rows keep their original identities; runtime chains include rendered queues, clocks,
+   external APIs and systems. Node menus offer **Keep connected** / **Stop keeping connected** for
+   that one box; the top-bar indicator names the picks and clears them all.
+3. **Focus** pins the union of every picked box's chains in the foreground and dims the rest,
+   without a relayout. Every focused box keeps the violet outline, and hover adds a temporary chain.
+   Focus offers only the boxes drawn after stages 1–2; a focused box a later stage hides stays as a
+   chip marked "hidden" and relights when drawn again. Node menus offer **Add to Focus** /
+   **Remove from Focus**. Responsibilities follow the drawn set narrowed to the focused chains.
+
+Clear all in a pulldown turns that stage off; Clear all in Filter leaves both alone. Hover and
+menu dismissal change neither, and nothing is persisted across reloads. Saved graph facts
 and visibility options remain untouched. See
-[dependency graphs](../../../docs/architecture/dependency-graphs.md#filter-unconnected)
+[dependency graphs](../../../docs/architecture/dependency-graphs.md#keep-connected-to-and-focus)
 for traversal examples and browser verification.
 
 The runtime viewer uses the same drawer, staged Filter popover, legend pop-out, help,
@@ -247,7 +258,7 @@ are explicitly unknown. Missing project facts disable Impact, leaving the runtim
 
 Filters combine OR within Runtime/Role/Product groups and AND between groups and change scope.
 Draft changes apply only with **Show N services**; closing cancels them. Clear all resets facets,
-leaving Lock and Hide unconnected alone. Counts describe services, with contextual nodes reported
+leaving Keep connected to and Focus alone. Counts describe services, with contextual nodes reported
 separately. Products preserve saved runtime closure across calls and queues. Attached queues,
 clocks and external systems remain as context without resurrecting excluded services.
 
@@ -264,11 +275,11 @@ light grey for only-OFF membership, white for no product, neutral only while eve
 and the node carries them all. Runtime services use the
 established nested/striped framework palette and Architecture uses declared roles.
 
-Lock from Focus, the sidebar switch, or a box menu pins separate complete incoming/outgoing
-chains; hover temporarily adds its own chain. Lock does not change layout. Hide unconnected
-removes unrelated nodes and compacts the graph while preserving original runtime L-identities.
-Switching Lock off retains the explicit Focus selection so it can be pinned again; menu Unlock
-or clearing Focus clears that selection. A filtered-out lock is suspended and restored when visible.
+Focus (the pulldown or a box menu's **Add to Focus**) pins each picked box's complete
+incoming/outgoing chains; hover temporarily adds its own chain. Focus does not change layout.
+Keep connected to removes every node off its picks' chains and compacts the graph while preserving
+original runtime L-identities. Clear all in either pulldown turns it off. A focused box that is
+not drawn is suspended, shown as a "hidden" chip, and restored when visible.
 
 **API details are click-only.** Every service shows plain **Implements (N)** summary text.
 Click anywhere in the box for its menu, then **Implements** for full contracts/provenance and

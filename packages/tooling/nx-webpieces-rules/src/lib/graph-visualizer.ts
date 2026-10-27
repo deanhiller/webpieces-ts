@@ -28,7 +28,7 @@ import { NodeFacts, NodeModeStyler } from './graph-color-modes';
 import { ProductBoundary, ProductPalette } from './graph-products';
 import { ProductDependencyMatrix } from './product-dependencies';
 import { GraphLegend } from './graph-legend';
-import { GraphPageShell, ShellParts } from './graph-page-shell';
+import { GraphPageShell, GraphPickOption, ShellParts } from './graph-page-shell';
 import { GraphPageStyles } from './graph-page-styles';
 import { IMPACT_SIDECAR_SRC } from './graph-impact';
 import { toError } from '../toError';
@@ -93,7 +93,7 @@ export function readCompiledClient(name: string): string {
     }
     const source = fs.readFileSync(file, 'utf-8');
     if (name !== 'graph-visualizer.client.js') return source;
-    return readCompiledClient('graph-mode-state.client.js') + readCompiledClient('graph-product-paint.client.js') + source;
+    return readCompiledClient('graph-mode-state.client.js') + readCompiledClient('graph-product-paint.client.js') + readCompiledClient('graph-multi-select.client.js') + source;
 }
 
 export class GraphVisualizer {
@@ -127,7 +127,7 @@ export class GraphVisualizer {
 
     /**
      * A project tagged `drawOnGraph:false` is hidden from the rendered graph —
-     * its node, its rank placement, its lock-search option, its responsibilities
+     * its node, its rank placement, its Keep/Focus pulldown option, its responsibilities
      * card, and every edge touching it are all omitted. It stays in the JSON.
      */
     private isHidden(entry: EnhancedGraph[string]): boolean {
@@ -361,12 +361,12 @@ export class GraphVisualizer {
         model: GraphRenderModel,
         links: DesignLink[],
         title: string = 'Monorepo Dependency Architecture',
-        lockControl: string = '',
+        pickOptions: readonly GraphPickOption[] = [],
         responsibilitiesHtml: string = '',
     ): string {
         const parts = new ShellParts(
             title,
-            lockControl,
+            pickOptions,
             this.legend.sections(model.legend),
             this.legend.edgeKey(),
             this.filterAssets.html(),
@@ -406,37 +406,17 @@ export class GraphVisualizer {
     }
 
     /**
-     * The drawer's type-to-search lock field, replacing a `<select>` that listed every project and
-     * was unusable at hundreds of options. Picking a project LOCKS the graph into that box's hover
-     * view — its full ancestor + descendant chain stays lit while everything else dims — and narrows
-     * the responsibilities panel to that chain. Clearing the field, or Esc, unlocks.
-     *
-     * Each option's VALUE is the node id the SVG is keyed on; its label is the level and short name.
-     * Options are ordered by level DESCENDING to match the responsibilities cards.
+     * The boxes the drawer's "Keep connected to" and "Focus" pulldowns offer (#1385): one per drawn
+     * project, its VALUE the node id the SVG is keyed on, its grey label the level. The shell sorts them
+     * alphabetically and renders the same rows into both pulldowns.
      */
-    lockControl(graph: EnhancedGraph): string {
-        const projects = Object.keys(graph);
-        projects.sort((a: string, b: string): number => {
-            const levelDiff = graph[b].level - graph[a].level;
-            if (levelDiff !== 0) return levelDiff;
-            return a.localeCompare(b);
-        });
-        let options = '';
-        for (const project of projects) {
+    pickOptions(graph: EnhancedGraph): GraphPickOption[] {
+        const options: GraphPickOption[] = [];
+        for (const project of Object.keys(graph)) {
             if (this.isHidden(graph[project])) continue;
-            const nodeId = this.escapeHtml(this.names.getNodeId(project));
-            const shortName = this.escapeHtml(this.names.getShortName(project));
-            options += `<option value="${nodeId}">L${graph[project].level} · ${shortName}</option>`;
+            options.push(new GraphPickOption(this.names.getNodeId(project), `L${graph[project].level}`));
         }
-        return (
-            '<input type="search" id="wp-lock" list="wp-lock-options" placeholder="Lock a project…  ( / )" ' +
-            'autocomplete="off" spellcheck="false">' +
-            `<datalist id="wp-lock-options">${options}</datalist>`
-        );
-    }
-
-    private escapeHtml(text: string): string {
-        return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+        return options;
     }
 
     /**
@@ -481,7 +461,7 @@ export class GraphVisualizer {
             fs.mkdirSync(outputDir, { recursive: true });
         }
 
-        const lockControl = this.lockControl(graph);
+        const pickOptions = this.pickOptions(graph);
         const responsibilities = this.responsibilities.generateSection(graph, workspaceRoot);
         const model = this.generateRenderModel(graph, title);
         model.legend.productDependencies = productDependencies === null ? null : [...productDependencies.entries];
@@ -489,7 +469,7 @@ export class GraphVisualizer {
             model,
             this.designLinks(graph),
             title,
-            lockControl,
+            pickOptions,
             responsibilities,
         );
         const htmlPath = path.join(outputDir, 'dependencies.html');

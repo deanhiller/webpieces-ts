@@ -129,11 +129,17 @@ class WpFilteredDot {
     }
 }
 
-/** Page-owned state survives replacements; rendering failures leave the usable SVG intact. */
+/**
+ * Page-owned state survives replacements; rendering failures leave the usable SVG intact.
+ *
+ * Two independent multi-selects (#1385): `keep` ("Keep connected to") decides which boxes are DRAWN —
+ * the union of each pick's complete incoming and outgoing chains, so adding a pick never shrinks the
+ * graph — and `focused` ("Focus") decides which drawn boxes are LIT, without a relayout.
+ */
 abstract class WpFilterPage {
     protected chain: WpGraphChain;
-    protected locked: string | null = null;
-    protected anchor: string | null = null;
+    protected readonly focused = new Set<string>();
+    protected keep: ReadonlySet<string> = new Set<string>();
     protected retained: Set<string>;
     private viz: VizInstance | null = null;
 
@@ -145,26 +151,27 @@ abstract class WpFilterPage {
     /**
      * Swap the drawn topology — the runtime page's Goal vs Current overlay and its own graph (#1239) —
      * so a mode switch genuinely changes which boxes and arrows exist, and switching back leaves none of
-     * the overlay's removed-only boxes behind. A Hide-unconnected anchor the new topology lacks is
-     * dropped rather than filtering everything away; a Lock survives and relights when its box exists.
+     * the overlay's removed-only boxes behind. A Keep-connected pick the new topology lacks is dropped
+     * rather than filtering everything away; a Focus pick survives and relights when its box exists.
      */
     protected useModel(model: RenderModelJson): void {
         if (model === this.model) return;
         this.model = model;
         this.chain = new WpGraphChain(model);
-        this.retained = new Set(model.nodes.map((node: RenderNodeJson): string => node.id));
-        if (this.anchor !== null && !model.nodes.some((node: RenderNodeJson): boolean => node.id === this.anchor)) this.anchor = null;
+        const ids = new Set(model.nodes.map((node: RenderNodeJson): string => node.id));
+        this.retained = new Set(ids);
+        this.keep = new Set([...this.keep].filter((id: string): boolean => ids.has(id)));
     }
 
     render(): void {
         document
             .getElementById('wp-filter-off')
-            ?.addEventListener('click', () => this.filter(null));
+            ?.addEventListener('click', () => this.draw(new Set<string>()));
         this.wireControls();
         Viz.instance()
             .then((viz) => {
                 this.viz = viz;
-                this.filter(null);
+                this.draw(new Set<string>());
             })
             // webpieces-disable no-any-unknown -- promise rejections may carry any JavaScript value
             .catch((err: unknown): void =>
@@ -191,7 +198,7 @@ abstract class WpFilterPage {
         return true;
     }
     /**
-     * The page's own filter on top of "Hide unconnected": the architecture page intersects the set
+     * The page's own filter on top of "Keep connected to": the architecture page intersects the set
      * with its Filter popover (changes, runtime, role). Everything, by default.
      */
     protected narrow(retained: Set<string>): Set<string> {
@@ -202,35 +209,60 @@ abstract class WpFilterPage {
         return false;
     }
 
-    /**
-     * Draw again with the current filter — after a color-mode switch. A control outside the graph
-     * (a drawer button) keeps keyboard focus; the redraw would otherwise move it into the graph.
-     */
+    /** What "Keep connected to" keeps: the UNION of every pick's complete chains; everything when empty. */
+    protected kept(keep: ReadonlySet<string>): Set<string> {
+        if (keep.size === 0) return new Set(this.model.nodes.map((node: RenderNodeJson): string => node.id));
+        const kept = new Set<string>();
+        for (const id of keep) {
+            for (const node of this.chain.nodes(id)) kept.add(node);
+        }
+        return kept;
+    }
+
+    /** Draw again with the current picks — after a color-mode or filter change. */
     redraw(): void {
+        this.drawKeeping(this.keep);
+    }
+
+    /**
+     * Draw with a "Keep connected to" set. A control outside the graph (a drawer button, a pulldown's
+     * search box) keeps keyboard focus; the redraw would otherwise move it into the graph.
+     */
+    protected drawKeeping(keep: ReadonlySet<string>): void {
         const active = document.activeElement;
         const host = document.getElementById('graph');
         const outside = active instanceof HTMLElement && host !== null && !host.contains(active);
-        this.filter(this.anchor);
+        this.draw(keep);
         if (outside && active.isConnected) active.focus({ preventScroll: true });
     }
 
-    filterItem(name: string): WpNodeMenuItem {
-        return new WpNodeMenuItem(
-            this.anchor === null ? 'Filter Unconnected' : 'Turn off Filter',
-            () => this.filter(this.anchor === null ? name : null),
-        );
+    keepSelection(): ReadonlySet<string> {
+        return this.keep;
     }
 
-    filter(anchor: string | null): void {
+    /** A box's menu item: "Keep connected" adds the box to Keep connected to; the other removes it. */
+    keepItem(name: string): WpNodeMenuItem {
+        const kept = this.keep.has(name);
+        return new WpNodeMenuItem(kept ? 'Stop keeping connected' : 'Keep connected', () => this.toggleKeep(name));
+    }
+
+    toggleKeep(id: string): void {
+        const next = new Set(this.keep);
+        if (next.has(id)) next.delete(id);
+        else next.add(id);
+        this.drawKeeping(next);
+    }
+
+    clearKeep(): void {
+        if (this.keep.size > 0) this.drawKeeping(new Set<string>());
+    }
+
+    draw(keep: ReadonlySet<string>): void {
         if (this.viz === null) return;
         const host = document.getElementById('graph');
         if (host === null) return;
-        const retained = this.narrow(
-            anchor === null
-                ? new Set(this.model.nodes.map((node: RenderNodeJson): string => node.id))
-                : this.chain.nodes(anchor),
-        );
-        const previousAnchor = this.anchor;
+        const retained = this.narrow(this.kept(keep));
+        const previousKeep = this.keep;
         const previousRetained = this.retained;
         const previousSvg = host.querySelector('svg');
         const focusName = WpNodeMenu.focusedName(previousSvg);
@@ -238,7 +270,7 @@ abstract class WpFilterPage {
         // eslint-disable-next-line @webpieces/no-unmanaged-exceptions -- browser transaction restores the previous usable graph on failure
         try {
             const dot =
-                anchor === null && this.usesFullDot()
+                keep.size === 0 && this.usesFullDot()
                     ? this.model.fullDot
                     : new WpFilteredDot(this.model).render(
                           retained,
@@ -249,7 +281,7 @@ abstract class WpFilterPage {
             const svg = this.viz.renderSVGElement(dot);
             this.prepareSvg(svg);
             WpNodeMenu.close();
-            this.anchor = anchor;
+            this.keep = keep;
             this.retained = retained;
             host.replaceChildren(svg);
             this.wireSvg(svg);
@@ -259,7 +291,7 @@ abstract class WpFilterPage {
             // webpieces-disable no-any-unknown -- JavaScript may throw any value at this browser boundary
         } catch (err: unknown) {
             //const error = toError(err);
-            this.anchor = previousAnchor;
+            this.keep = previousKeep;
             this.retained = previousRetained;
             if (previousSvg !== null) host.replaceChildren(previousSvg);
             else host.replaceChildren();
@@ -272,9 +304,9 @@ abstract class WpFilterPage {
     private indicator(): void {
         const status = document.getElementById('wp-filter-status');
         const label = document.getElementById('wp-filter-anchor');
-        if (status !== null) status.hidden = this.anchor === null;
-        if (label !== null) label.textContent = this.anchor;
-        if (this.anchor !== null) document.getElementById('wp-filter-off')?.focus();
+        if (status !== null) status.hidden = this.keep.size === 0;
+        if (label !== null) label.textContent = [...this.keep].sort((a: string, b: string): number => a.toLowerCase().localeCompare(b.toLowerCase())).join(', ');
+        if (this.keep.size > 0) document.getElementById('wp-filter-off')?.focus();
         else document.querySelector<SVGGElement>('#graph g.wp-node-clickable')?.focus();
     }
 
@@ -285,6 +317,6 @@ abstract class WpFilterPage {
         el.textContent =
             err === null
                 ? ''
-                : `Graph rendering failed: ${err.message}. Try Turn off Filter or reload the page.`;
+                : `Graph rendering failed: ${err.message}. Try Clear all in Keep connected to, or reload the page.`;
     }
 }

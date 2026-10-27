@@ -57,11 +57,24 @@ export const SCOPE_OPTIONS: readonly ScopeOption[] = [
     new ScopeOption(ChangeScope.EDGES, 'Edge changes only', 'projects that gained or lost a dependency or call since the fork point'),
 ];
 
+/**
+ * One box the "Keep connected to" and "Focus" pulldowns offer (#1385): the node id the SVG is keyed on
+ * (what the search matches and what a pick stores), and a short grey label beside it — the level on the
+ * architecture page, the role on the runtime page.
+ */
+export class GraphPickOption {
+    constructor(
+        public readonly id: string,
+        public readonly label: string,
+    ) {}
+}
+
 /** Everything the shell frames, already rendered by its owner. */
 export class ShellParts {
     constructor(
         public readonly title: string,
-        public readonly lockControl: string,
+        /** Every box either pulldown may offer; the shell sorts them alphabetically. */
+        public readonly pickOptions: readonly GraphPickOption[],
         public readonly legend: string,
         public readonly edgeKey: string,
         public readonly filterStatus: string,
@@ -106,10 +119,10 @@ export class GraphPageShell {
             <button type="button" class="wp-filter-btn" id="wp-filter-open" aria-controls="wp-filter-pop" aria-expanded="false"><span>Filter</span><span class="wp-badge" id="wp-filter-badge" hidden>0</span></button>
         </div>
         <div class="wp-group">
-            <label class="wp-label" for="wp-lock">Focus</label>
-            ${parts.lockControl}
-            <button type="button" class="wp-toggle" id="wp-lock-toggle" aria-pressed="false">Lock <span class="wp-sw" aria-hidden="true"></span></button>
-            <button type="button" class="wp-toggle" id="wp-filter-toggle" aria-pressed="false">Hide unconnected <span class="wp-sw" aria-hidden="true"></span></button>
+            <div class="wp-label" id="wp-keep-label">Keep connected to</div>
+            ${this.multiSelect('keep', 'Keep connected to', parts.pickOptions)}
+            <div class="wp-label" id="wp-focus-label">Focus</div>
+            ${this.multiSelect('focus', 'Focus', parts.pickOptions)}
         </div>
         <div class="wp-group">
             <div class="wp-label wp-label-row">Legend <button type="button" class="wp-icon wp-icon-mini wp-icon-dark" id="wp-legend-pop" title="Pop the legend out over the graph" aria-label="Pop the legend out over the graph">⇱</button></div>
@@ -124,6 +137,42 @@ export class GraphPageShell {
             <button type="button" class="wp-link" id="wp-snapshot-open" aria-expanded="false">Saved snapshot</button>
         </div>
     </aside>`;
+    }
+
+    /**
+     * One multi-select pulldown (#1385), the same markup for "Keep connected to" and "Focus": a closed
+     * field showing the picks as removable chips (or "None (off)"), and a popover holding a search box,
+     * one checkbox row per box in ALPHABETICAL order, and a footer with "N selected" and Clear all.
+     * Behaviour is WpMultiSelect in graph-visualizer.client.ts; the rows here are the only copy of the
+     * options, and the page hides the ones a search or (for Focus) the current graph excludes.
+     */
+    private multiSelect(key: string, name: string, options: readonly GraphPickOption[]): string {
+        const sorted = [...options].sort((a: GraphPickOption, b: GraphPickOption): number => {
+            const folded = a.id.toLowerCase().localeCompare(b.id.toLowerCase());
+            return folded !== 0 ? folded : a.id.localeCompare(b.id);
+        });
+        const rows = sorted
+            .map((option: GraphPickOption): string => {
+                const id = htmlLabelText(option.id);
+                return (
+                    `<div class="wp-multi-option" role="option" aria-selected="false" data-wp-option="${id}">` +
+                    '<input type="checkbox" tabindex="-1" aria-hidden="true">' +
+                    `<span class="wp-multi-name">${id}</span><span class="wp-multi-sub">${htmlLabelText(option.label)}</span></div>`
+                );
+            })
+            .join('');
+        return `<div class="wp-multi" id="wp-${key}" data-wp-multi="${key}">
+                <div class="wp-multi-field" id="wp-${key}-field">
+                    <span class="wp-multi-chips" id="wp-${key}-chips"><span class="wp-multi-none">None (off)</span></span>
+                    <button type="button" class="wp-multi-trigger" id="wp-${key}-trigger" aria-haspopup="listbox" aria-controls="wp-${key}-pop" aria-expanded="false" aria-label="Choose ${name}"><span class="wp-caret" aria-hidden="true">▾</span></button>
+                </div>
+                <div class="wp-multi-pop" id="wp-${key}-pop" hidden>
+                    <input type="search" class="wp-multi-search" id="wp-${key}-search" placeholder="Search…" autocomplete="off" spellcheck="false" aria-label="Search ${name}" aria-controls="wp-${key}-list">
+                    <div class="wp-multi-list" id="wp-${key}-list" role="listbox" aria-multiselectable="true" aria-label="${name}">${rows}</div>
+                    <p class="wp-multi-empty" id="wp-${key}-empty" hidden>No match</p>
+                    <footer><span id="wp-${key}-count">0 selected</span><button type="button" class="wp-text-btn" id="wp-${key}-clear">Clear all</button></footer>
+                </div>
+            </div>`;
     }
 
     /**
@@ -248,21 +297,22 @@ export class GraphPageShell {
         if (runtime) return `<div class="wp-pop wp-help" id="wp-help" role="dialog" aria-label="How to read this graph" hidden>
             <header><span>Reading the runtime graph</span><button type="button" class="wp-icon wp-icon-mini" id="wp-help-close" aria-label="Close help">✕</button></header>
             <p>Rows preserve saved runtime call-depth levels. Boxes are services; horizontal cylinders are queues, upright cylinders datastores, and clocks scheduled triggers. Solid arrows are RPC calls, dashed arrows queued events; red arrows admit legacy cycles.</p>
-            <p>Click a box for Lock, Filter Unconnected, or Implements. Implements in the box is a plain summary. Click Uses on a relationship line for its complete details. Hover traces chains without opening details.</p>
-            <p>Lock pins separate incoming and outgoing chains; hover adds another chain temporarily. Hide unconnected removes unrelated boxes independently. Clear all clears facets, leaving Lock and chain filtering intact.</p>
+            <p>Click a box for Add to Focus, Keep connected, or Implements. Implements in the box is a plain summary. Click Uses on a relationship line for its complete details. Hover traces chains without opening details.</p>
+            <p><strong>Keep connected to</strong> keeps only the picked boxes and every box on their complete incoming and outgoing chains (several picks are the union) and redraws. <strong>Focus</strong> pins the picked boxes' chains in the foreground and dims the rest without moving anything; hover adds another chain temporarily. Clear all in Filter leaves both alone.</p>
             <p>Filters intersect declared runtime, role, product closure and Nx build scope. Counts describe services; attached contextual nodes are counted separately. Impact uses compile-project sets, never runtime reachability. Queues and vendors are context, never source owners or CI projects.</p>
             <p>Runtime uses declared framework colors, Architecture declared roles; contextual nodes keep their kind colors. Product colors come from each project's declared product: tags, painted for the products toggled ON in the legend (the first two on every load); contextual nodes inherit adjacent memberships. Unknown metadata is neutral. Missing saved metadata requires explicit architecture:generate.</p>
             <p><strong>Goal vs Current</strong> compares the saved goal (architecture/runtime-dependencies-goal.json) with the saved current graph, Current → Goal: green added, red dashed removed (still drawn), amber changed, grey unchanged. Click a box for its before/after details, or click an arrow.</p>
-            <p><kbd>/</kbd> Focus search · <kbd>1</kbd>–<kbd>5</kbd> modes · <kbd>Esc</kbd> dismiss or unlock</p>
+            <p><kbd>/</kbd> Focus search · <kbd>1</kbd>–<kbd>5</kbd> modes · <kbd>Esc</kbd> close a pulldown, else clear Focus</p>
         </div>`;
         return `<div class="wp-pop wp-help" id="wp-help" role="dialog" aria-label="How to read this graph" hidden>
             <header><span>Reading the graph</span><button type="button" class="wp-icon wp-icon-mini" id="wp-help-close" aria-label="Close help">✕</button></header>
             <p>Every row is one dependency level: the HIGHEST level is the top row and L0, the foundation libraries, is always the bottom row. Servers, clients and apps always form the top row (a bundle sits above the apps it aggregates). Transitive dependencies are allowed but not drawn.</p>
-            <p>💡 <strong>Click any box</strong> for its menu: <strong>View Design</strong> (only where the project has a generated <strong>design.html</strong>, i.e. what the AI sees inside it), <strong>Lock/Unlock</strong> (the same lock as the Focus field), <strong>Filter Unconnected</strong> (removes unrelated boxes, keeping each L-number row).</p>
+            <p>💡 <strong>Click any box</strong> for its menu: <strong>View Design</strong> (only where the project has a generated <strong>design.html</strong>, i.e. what the AI sees inside it), <strong>Add to Focus</strong> / <strong>Remove from Focus</strong> (the same picks as the Focus pulldown), <strong>Keep connected</strong> / <strong>Stop keeping connected</strong> (the same picks as Keep connected to).</p>
+            <p><strong>Keep connected to</strong> keeps only the picked boxes plus every ancestor and dependency of each (several picks are the UNION, so adding one never shrinks the graph), keeping each L-number row. <strong>Focus</strong> then pins the chains of the picked boxes in the foreground and dims the rest, without moving anything. Both pulldowns search anywhere in a name; Clear all turns each off.</p>
             <p><strong>Filter</strong> narrows the graph by what changed on this branch or in the last commit, by runtime, by role and by product; the groups combine. A product keeps its servers, clients and apps plus everything they depend on, so <strong>Product</strong> + <strong>Changed + dependents + dependencies</strong> is exactly what this branch builds that can affect that product. Every box keeps its own L-row, and a level left empty shows as a thin labeled band.</p>
             <p>🔦 <strong>Hover any box</strong> to trace its <em>entire</em> dependency chain — every ancestor above it and every dependency below it, with the lines between — while the rest of the graph dims.</p>
             <p><strong>Runtime</strong>: a box may depend on a box carrying every color it has. <strong>Architecture</strong>: what each box is in the system. <strong>Impact</strong>: what changed on this branch or in the last commit (amber), its dependents (amber outline), and what nx marked for another reason: an input glob (violet hatch) or a root file (teal). Click an affected box for why; with both available, a toggle picks which. <strong>Product</strong>: which products each box belongs to. Toggle products in the legend (the first two are ON on every load): one ON product is its color, several ON are stripes, only OFF products are light grey, neutral means every product while all are ON, and a dashed white box belongs to none.</p>
-            <p><kbd>/</kbd> focus the lock search · <kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd> <kbd>4</kbd> switch mode · <kbd>Esc</kbd> unlock</p>
+            <p><kbd>/</kbd> open the Focus search · <kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd> <kbd>4</kbd> switch mode · <kbd>Esc</kbd> close a pulldown, else clear Focus</p>
         </div>`;
     }
 

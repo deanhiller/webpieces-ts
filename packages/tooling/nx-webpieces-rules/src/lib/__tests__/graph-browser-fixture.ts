@@ -107,7 +107,7 @@ Viz.instance = async () => {
             this.viz.generateRenderModel(graph),
             this.viz.designLinks(graph),
             'Architecture',
-            this.viz.lockControl(graph),
+            this.viz.pickOptions(graph),
             new ResponsibilitiesRenderer().generateSection(graph, process.cwd()),
         );
     }
@@ -120,9 +120,35 @@ Viz.instance = async () => {
         });
     }
 
-    /** Lock through the drawer's type-to-search field ('' unlocks), exactly as a viewer types it. */
-    async lock(page: Page, id: string): Promise<void> {
-        await page.locator('#wp-lock').fill(id);
+    /**
+     * Toggle `id` in a drawer pulldown (#1385) exactly as a viewer does: open it, type the id into its
+     * search, click the row, and close it with Esc.
+     */
+    async pick(page: Page, key: 'focus' | 'keep', id: string): Promise<void> {
+        if (!(await page.locator(`#wp-${key}-pop`).isVisible())) await page.locator(`#wp-${key}-trigger`).click();
+        await page.locator(`#wp-${key}-search`).fill(id);
+        await page.locator(`#wp-${key}-list .wp-multi-option[data-wp-option="${id}"]`).click();
+        await page.keyboard.press('Escape');
+    }
+
+    /** Clear all in a drawer pulldown, then close it. */
+    async clearPicks(page: Page, key: 'focus' | 'keep'): Promise<void> {
+        if (!(await page.locator(`#wp-${key}-pop`).isVisible())) await page.locator(`#wp-${key}-trigger`).click();
+        await page.locator(`#wp-${key}-clear`).click();
+        await page.keyboard.press('Escape');
+    }
+
+    /** Focus on exactly `id` ('' clears Focus): Clear all, then pick it. */
+    async focusOnly(page: Page, id: string): Promise<void> {
+        await this.clearPicks(page, 'focus');
+        if (id !== '') await this.pick(page, 'focus', id);
+    }
+
+    /** The ids a pulldown holds, read from its chips (alphabetical, as drawn). */
+    async picks(page: Page, key: 'focus' | 'keep'): Promise<string[]> {
+        return page
+            .locator(`#wp-${key}-chips .wp-multi-chip`)
+            .evaluateAll((chips: Element[]) => chips.map((chip: Element) => (chip as HTMLElement).dataset['wpPick'] ?? ''));
     }
 
     /**
@@ -150,11 +176,12 @@ Viz.instance = async () => {
         return (await page.locator(`${selector} > title`).allTextContents()).sort();
     }
 
+    /** "Keep connected" from the box's own menu: adds `id` to Keep connected to. */
     async filter(page: Page, id: string): Promise<void> {
         await this.node(page, id).locator('text').first().click();
         await page
             .locator('#wp-node-menu')
-            .getByRole('button', { name: 'Filter Unconnected', exact: true })
+            .getByRole('button', { name: 'Keep connected', exact: true })
             .click();
         await page.mouse.move(0, 0);
     }

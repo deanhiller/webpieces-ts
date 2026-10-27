@@ -118,7 +118,8 @@ export class GraphFocusBrowser {
         await first.press('Enter');
         await page
             .locator('#wp-node-menu')
-            .getByRole('button', { name: 'Lock', exact: true })
+            // The two viewers' Focus item; a design page keeps its own single click-lock (#1385).
+            .getByRole('button', { name: /^(Add to Focus|Lock)$/ })
             .press('Enter');
         expect(await first.evaluate((el) => el === document.activeElement)).toBe(true);
         await first.press('Enter');
@@ -160,7 +161,7 @@ export class GraphFocusBrowser {
         await page.evaluate(() => {
             const open = WpNodeMenu.open;
             WpNodeMenu.open = (node, name, items) => {
-                const action = items.find((item) => item.label === 'Filter Unconnected')!;
+                const action = items.find((item) => item.label === 'Keep connected')!;
                 const button = document.createElement('button');
                 button.id = 'redraw';
                 button.addEventListener('click', () => action.onSelect());

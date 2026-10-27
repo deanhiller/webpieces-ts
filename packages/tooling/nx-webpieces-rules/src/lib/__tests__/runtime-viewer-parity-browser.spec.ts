@@ -148,10 +148,10 @@ describe.skipIf(!process.env.WP_GRAPH_VIZ_JS)('runtime viewer parity in file:// 
     beforeAll(() => fixture.browser.start());
     afterAll(async () => fixture.browser.browser?.close());
 
-    it('shares the shell and pins complete queue chains; Lock and Hide unconnected stay independent', async () => {
+    it('shares the shell and pins complete queue chains; Focus and Keep connected to stay independent', async () => {
         const page = await fixture.browser.open('1185-runtime-shell', fixture.html());
-        expect(await page.locator('#wp-lock-toggle').getAttribute('aria-pressed')).toBe('false');
-        await fixture.browser.lock(page, 'producer');
+        expect(await page.locator('#wp-focus-chips').textContent()).toBe('None (off)');
+        await fixture.browser.focusOnly(page, 'producer');
         await page.mouse.move(1400, 900);
         expect(await fixture.browser.names(page, 'g.node.wp-neighbor')).toEqual([
             'consumer',
@@ -163,15 +163,18 @@ describe.skipIf(!process.env.WP_GRAPH_VIZ_JS)('runtime viewer parity in file:// 
         ]);
         await fixture.browser.node(page, 'unrelated').hover();
         expect(await fixture.browser.names(page, 'g.node.wp-neighbor')).toContain('unrelated');
-        expect(await page.locator('#wp-lock').inputValue()).toBe('producer');
+        expect(await fixture.browser.picks(page, 'focus')).toEqual(['producer']);
         await page.mouse.move(1400, 900);
         expect(await fixture.browser.names(page, 'g.node.wp-neighbor')).not.toContain('unrelated');
-        await page.locator('#wp-filter-toggle').click();
-        await page.locator('#wp-lock-toggle').click();
-        expect(await page.locator('#wp-filter-toggle').getAttribute('aria-pressed')).toBe('true');
-        expect(await page.locator('#wp-lock-toggle').getAttribute('aria-pressed')).toBe('false');
-        await page.locator('#wp-lock-toggle').click();
-        expect(await page.locator('#wp-lock-toggle').getAttribute('aria-pressed')).toBe('true');
+        // Keep connected to a box off producer's chain: producer is hidden but stays focused.
+        await fixture.browser.pick(page, 'keep', 'unrelated');
+        expect(await fixture.browser.names(page)).toEqual(['unrelated']);
+        expect(await fixture.browser.picks(page, 'focus')).toEqual(['producer']);
+        expect(await page.locator('#wp-focus-chips .wp-multi-chip-hidden').count()).toBe(1);
+        await fixture.browser.clearPicks(page, 'keep');
+        expect(await fixture.browser.names(page, 'g.node.wp-locked')).toEqual(['producer']);
+        await fixture.browser.clearPicks(page, 'focus');
+        expect(await fixture.browser.names(page, 'g.node.wp-locked')).toEqual([]);
         await fixture.browser.snapshot(page, '1185-runtime-shell');
         await fixture.panels(page, '1185-runtime');
         await page.close();
@@ -179,11 +182,10 @@ describe.skipIf(!process.env.WP_GRAPH_VIZ_JS)('runtime viewer parity in file:// 
             '1185-architecture-shell',
             fixture.browser.architecture(FilterFixture.wide()),
         );
-        await fixture.browser.lock(architecture, 'pr-gate');
-        await architecture.locator('#wp-lock-toggle').click();
-        expect(await architecture.locator('#wp-lock-toggle').getAttribute('aria-pressed')).toBe(
-            'false',
-        );
+        await fixture.browser.focusOnly(architecture, 'pr-gate');
+        await fixture.browser.pick(architecture, 'keep', 'hook-runtime');
+        expect(await fixture.browser.picks(architecture, 'keep')).toEqual(['hook-runtime']);
+        expect(await fixture.browser.names(architecture, 'g.node.wp-locked')).toEqual(['pr-gate']);
         await fixture.browser.snapshot(architecture, '1185-architecture-shell');
         await fixture.panels(architecture, '1185-architecture');
         await architecture.close();
@@ -377,9 +379,10 @@ describe.skipIf(!process.env.WP_GRAPH_VIZ_JS)('runtime viewer parity in file:// 
         await page.keyboard.press('/');
         // Expanding restores access to Focus in a narrow window.
         await page.keyboard.press('/');
-        expect(await page.locator('#wp-lock').evaluate((el) => el === document.activeElement)).toBe(
-            true,
-        );
+        expect(
+            await page.locator('#wp-focus-search').evaluate((el: Element): boolean => el === document.activeElement),
+        ).toBe(true);
+        await page.keyboard.press('Escape');
         await page.locator('#wp-help-btn').click();
         expect(await page.locator('#wp-help').isVisible()).toBe(true);
         await page.screenshot({

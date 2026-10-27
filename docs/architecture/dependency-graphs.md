@@ -182,32 +182,42 @@ afterward does not establish that refresh succeeded. Browser-open failures print
 the HTML path for manual opening. Architecture/API validation and CI still run
 their existing checks independently of visualization.
 
-## Filter Unconnected
+## Keep connected to and Focus
 
-Both saved architecture pages offer **Filter Unconnected** in a node's floating
-menu. It retains that node, all transitive incoming ancestors, and all transitive
-outgoing dependencies, walking each direction separately. For `A → shared ← B`,
-filtering A keeps A and shared; filtering shared keeps all three. Runtime filtering
-follows the rendered topology, including queues, triggers, datastores and external
-systems. Hidden nodes never act as bridges.
+Both saved architecture pages carry two independent multi-select pulldowns in the drawer
+(#1385), with the same options offered by a node's floating menu.
+
+**Keep connected to** (menu: **Keep connected** / **Stop keeping connected**) retains each
+picked node, all its transitive incoming ancestors, and all its transitive outgoing dependencies,
+walking each direction separately, and draws the UNION over every pick. For `A → shared ← B`,
+keeping A keeps A and shared; keeping shared keeps all three; keeping A and B keeps all three.
+Adding a pick never shrinks the graph — there is no intersection mode. Runtime keeping follows
+the rendered topology, including queues, triggers, datastores and external systems. Hidden nodes
+never act as bridges.
 
 The page reruns Graphviz on the retained nodes and their original edges. Architecture
 projects keep their original L-number rows, highest first and L0 last; empty bands
 and unnecessary spacers disappear. The filter changes presentation only and never
 rewrites saved JSON or runtime visibility settings.
 
-A page has one active filter. Every surviving node menu and the visible indicator
-naming the anchor offer **Turn off Filter**. Turn it off before choosing another
-anchor. Hover, Escape and outside clicks leave filtering active. Lock is independent:
-both viewers’ Lock pins its full chain in the foreground. Hover adds its own chain
-temporarily without dimming any locked node or edge; leaving removes only that
-temporary highlight. The locked box keeps a violet outline while hovering another box.
-Lock filters responsibilities to
-the intersection with the retained nodes. Both drawers expose separate Lock and Hide unconnected switches; disabling Lock retains the selected Focus anchor for reuse, while menu Unlock clears it. A
-locked node hidden by filtering keeps its selection without dimming the whole graph.
-Clearing the filter restores the original full layout and Lock. Reloading clears
-both controls. Rendering failures leave the previous graph usable and show a recovery
-message.
+The visible indicator names every pick and clears them all; **Clear all** in the pulldown
+does the same, and a chip's ✕ removes one. Hover, Escape and outside clicks leave keeping active.
+
+**Focus** (menu: **Add to Focus** / **Remove from Focus**) is independent of keeping: it pins
+the union of every picked node's full chains in the foreground and dims the rest, without a
+relayout. Hover adds its own chain temporarily without dimming any focused node or edge; leaving
+removes only that temporary highlight. Every focused box keeps a violet outline. Focus filters
+responsibilities to the intersection with the retained nodes. Focus offers only the nodes drawn
+after Filter and Keep connected to; a focused node hidden later keeps its pick as a chip marked
+"hidden", without dimming the whole graph, and relights once drawn again. `Esc` closes an open
+pulldown, else clears Focus; **Clear all** in Focus clears it too. Reloading clears both
+pulldowns. Rendering failures leave the previous graph usable and show a recovery message.
+
+Both pulldowns list their options alphabetically with a checkbox each. The search box matches
+anywhere in a name, case-insensitively, and highlights the match (`inbound` finds
+`delivery-partner-inbound`); ↑/↓ move, Enter toggles (Space too while the query is empty), and
+the query stays after a toggle so several matches can be picked in a row. `/` opens Focus with
+the cursor in its search.
 
 The optional browser regression suite uses the pages' pinned Viz UMD renderer and
 installed Playwright Chromium. Set `WP_GRAPH_VIZ_JS` to that renderer's local path
@@ -220,7 +230,7 @@ with focus on its first action. Escape returns keyboard focus to the invoking no
 keyboard actions retain that node by name across a filter redraw, or focus the first
 surviving node when it is removed. Outside clicks keep focus on their clicked target.
 Keyboard focus uses a thin dashed violet outline that stays dim with an unrelated
-node. It is separate from blue hover, amber Lock, and the filter anchor. Pointer menu
+node. It is separate from blue hover, the Focus outline, and the Keep connected anchor. Pointer menu
 opening and dismissal do not leave a node focus outline.
 
 

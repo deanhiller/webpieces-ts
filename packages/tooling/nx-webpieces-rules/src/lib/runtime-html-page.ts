@@ -16,7 +16,7 @@ import {
     readCompiledClient,
 } from './graph-visualizer';
 import { GraphNodeMenu } from './graph-node-menu';
-import { GraphPageShell, ShellParts } from './graph-page-shell';
+import { GraphPageShell, GraphPickOption, ShellParts } from './graph-page-shell';
 import { GraphPageStyles } from './graph-page-styles';
 import { GraphLegend } from './graph-legend';
 import { ProductColor } from './graph-products';
@@ -57,7 +57,7 @@ export class RuntimeHtmlPage {
         const products = this.shownProducts(model);
         const parts = new ShellParts(
             title,
-            this.lockControl(model),
+            this.pickOptions(model),
             this.legend(model),
             this.edgeKey(),
             this.assets.html() + '<span id="wp-context-count"></span>',
@@ -67,7 +67,7 @@ export class RuntimeHtmlPage {
             true,
             frameworks,
             roles,
-            '<div class="wp-empty" id="wp-empty" hidden>No matching services. Open Filter and Clear all, or turn off Hide unconnected.</div>',
+            '<div class="wp-empty" id="wp-empty" hidden>No matching services. Open Filter and Clear all, or Clear all in Keep connected to.</div>',
             this.unavailableModes(model),
         );
         const shared = this.sharedJs()
@@ -118,14 +118,17 @@ export class RuntimeHtmlPage {
         return links;
     }
 
-    private lockControl(model: GraphRenderModel): string {
-        const entries = model.nodes
-            .map(
-                (node) =>
-                    `<option value="${htmlLabelText(node.id)}">${htmlLabelText(node.id)} · ${node.tags?.role ?? 'context'}</option>`,
-            )
-            .join('');
-        return `<input type="search" id="wp-lock" list="wp-lock-options" placeholder="Lock a node… ( / )" autocomplete="off" spellcheck="false"><datalist id="wp-lock-options">${entries}</datalist>`;
+    /**
+     * Every node either topology can draw — the page's own graph and the Goal vs Current overlay, whose
+     * removed-only boxes exist only there — offered by the Keep connected to and Focus pulldowns with
+     * its role (#1385). The page hides the rows the graph on screen does not draw.
+     */
+    private pickOptions(model: GraphRenderModel): GraphPickOption[] {
+        const options = new Map<string, GraphPickOption>();
+        for (const node of [...model.nodes, ...(model.comparison?.model?.nodes ?? [])]) {
+            if (!options.has(node.id)) options.set(node.id, new GraphPickOption(node.id, node.tags?.role ?? 'context'));
+        }
+        return [...options.values()];
     }
 
     private legend(model: GraphRenderModel): string {

@@ -16,6 +16,7 @@ import * as path from 'path';
 import * as ts from 'typescript';
 import type { EnhancedGraph } from '../graph-sorter';
 import { GraphVisualizer } from '../graph-visualizer';
+import type { GraphPickOption } from '../graph-page-shell';
 import { GraphNames, NodeIdCollisionError, NodeIdOwner } from '../graph-names';
 import { ResponsibilitiesRenderer } from '../graph-responsibilities';
 import type { RuntimeGraph } from '../runtime-graph-model';
@@ -135,13 +136,11 @@ describe('generateDot node identity', () => {
     });
 });
 
-describe('lockControl', () => {
-    it('uses the node id as the option VALUE and the short name as its text', () => {
-        const html = viz.lockControl(SCOPED_GRAPH);
-        expect(html).toContain(
-            '<option value="@mealco-internal/public-api">L0 · public-api</option>',
-        );
-        expect(html).toContain('<option value="public-api">L2 · public-api</option>');
+describe('pickOptions', () => {
+    it('keys each Keep/Focus option by its node id, so two same-short-named projects stay two', () => {
+        const options = viz.pickOptions(SCOPED_GRAPH).map((option: GraphPickOption): string => `${option.id} ${option.label}`);
+        expect(options).toContain('@mealco-internal/public-api L0');
+        expect(options).toContain('public-api L2');
     });
 });
 
