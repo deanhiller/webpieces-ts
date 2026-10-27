@@ -38,11 +38,13 @@ import { RuntimeLayout } from './runtime-layout';
  *
  * EVERY node on the rendered page is clickable and opens the SHARED floating menu
  * (graph-node-menu.ts — one implementation, also used by architecture/dependencies.html
- * and every project's design.html). Lock/Unlock pins separate complete incoming/outgoing chains, with hover adding a temporary chain. There is no "View Design"
+ * and every project's design.html). Add to Focus / Remove from Focus pins each picked box's complete
+ * incoming/outgoing chains (the union), with hover adding a temporary chain. There is no "View Design"
  * item here — a node is a running service, queue, datastore or third-party system, not
  * an nx project, so no design.html exists to point at and the item is absent rather than
- * dead. Filter Unconnected follows separate incoming/outgoing chains and compacts the rendered
- * topology; Turn off Filter restores the full picture. Lock remains independent of Filter.
+ * dead. Keep connected keeps the union of each picked box's incoming/outgoing chains and compacts the
+ * rendered topology; Clear all in "Keep connected to" restores the full picture. Focus and Keep
+ * connected to are independent multi-select pulldowns shared with the architecture page (#1385).
  */
 
 import * as fs from 'fs';

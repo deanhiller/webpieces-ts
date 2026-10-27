@@ -16,7 +16,7 @@
  * ambient globals — see viz-client-globals.d.ts.
  *
  * What the menu does NOT own is the LOCK BEHAVIOUR, because the pages genuinely differ:
- *  - the architecture page already has a `#wp-lock` search field backed by GraphHighlighter (chain
+ *  - the architecture page already has a multi-select Focus pulldown backed by GraphHighlighter (chain
  *    highlight + responsibilities filter), and its menu item drives that, so the two stay in sync;
  *  - a design page and the runtime page have neither lock field nor responsibilities, so they use
  *    `WpNodeLock` below — dim every other box in that graph, light the locked one.

@@ -10,6 +10,7 @@ import * as path from 'path';
 import * as ts from 'typescript';
 import type { EnhancedGraph } from '../graph-sorter';
 import { GraphVisualizer } from '../graph-visualizer';
+import type { GraphPickOption } from '../graph-page-shell';
 import type { RenderNode } from '../graph-render-model';
 
 const GRAPH: EnhancedGraph = {
@@ -24,7 +25,7 @@ const GRAPH: EnhancedGraph = {
 // then run against the very source that ships, not against a stand-in.
 const CLIENT_TS = path.join(__dirname, '..', 'graph-visualizer.client.ts');
 const clientJs = (): string => ts.transpileModule(
-    fs.readFileSync(path.join(__dirname, '..', 'graph-mode-state.client.ts'), 'utf-8') + fs.readFileSync(CLIENT_TS, 'utf-8'), { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
+    fs.readFileSync(path.join(__dirname, '..', 'graph-mode-state.client.ts'), 'utf-8') + fs.readFileSync(path.join(__dirname, '..', 'graph-multi-select.client.ts'), 'utf-8') + fs.readFileSync(CLIENT_TS, 'utf-8'), { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
 const filterJs = (): string => ts.transpileModule(fs.readFileSync(path.join(__dirname, '..', 'graph-filter.client.ts'), 'utf-8'), { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
 const viz = new GraphVisualizer(clientJs, filterJs);
 
@@ -376,11 +377,11 @@ describe('generateDot drawOnGraph:false hiding', () => {
         'core-util': { level: 0, dependsOn: [], framework: ['node'], role: 'lib' },
     };
 
-    it('omits the hidden node, its rank placement, and its lock option', () => {
+    it('omits the hidden node, its rank placement, and its Keep/Focus option', () => {
         const dot = viz.generateDot(HIDDEN_GRAPH);
         expect(dot).not.toContain('"secret" [');
         expect(dot).not.toContain('rank=same; "secret"');
-        expect(viz.lockControl(HIDDEN_GRAPH)).not.toContain('>secret<');
+        expect(viz.pickOptions(HIDDEN_GRAPH).map((option: GraphPickOption): string => option.id)).toEqual(['visible', 'core-util']);
     });
 
     it('drops every edge touching a hidden node but keeps edges between visible nodes', () => {
@@ -454,7 +455,7 @@ describe('generateHTML', () => {
         expect(html).toContain('mouseleave');
         expect(html).toContain('this.hovered = name');
         expect(html).toContain('this.hovered = null');
-        expect(html).toContain('[locked, this.hovered]');
+        expect(html).toContain('[...focused, this.hovered]');
         // The hover-highlight CSS classes the script toggles.
         expect(html).toContain('wp-hl');
         expect(html).toContain('wp-neighbor');
@@ -488,7 +489,7 @@ describe('generateHTML node menu', () => {
     };
 
     const htmlFor = (graph: EnhancedGraph): string =>
-        viz.generateHTML(viz.generateRenderModel(graph), viz.designLinks(graph), 'T', viz.lockControl(graph));
+        viz.generateHTML(viz.generateRenderModel(graph), viz.designLinks(graph), 'T', viz.pickOptions(graph));
 
     it('inlines the shared menu implementation and wires every node to open it', () => {
         const html = htmlFor(DESIGNED);
@@ -519,20 +520,42 @@ describe('generateHTML node menu', () => {
         expect(html).not.toContain('"nodeId"');
     });
 
-    it('makes the bottom item Lock or Unlock by the box the page is locked on right now', () => {
+    it('makes the menu item Add to Focus or Remove from Focus by the page\'s Focus picks (#1385)', () => {
         const html = htmlFor(DESIGNED);
-        expect(html).toContain("locked ? 'Unlock' : 'Lock'");
-        expect(html).toContain('isLocked');
+        expect(html).toContain("focused ? 'Remove from Focus' : 'Add to Focus'");
+        expect(html).toContain("kept ? 'Stop keeping connected' : 'Keep connected'");
     });
 
-    it('routes menu and lock search through ONE lock, so each reflects the other', () => {
+    it('routes the menu and both pulldowns through the page\'s ONE pair of pick sets (#1385)', () => {
         const html = htmlFor(DESIGNED);
-        // setLock applies the highlight + card filter and repaints the search field; the field's own
-        // input handler calls the same setLock, so the two can never disagree.
-        expect(html).toContain('setLock');
+        // The menu item and the Focus pulldown both call toggleFocus, which relights and repaints the
+        // pulldowns, so the two can never disagree; the same holds for toggleKeep.
+        expect(html).toContain('this.page.toggleFocus(name)');
+        expect(html).toContain('this.page.toggleFocus(id)');
+        expect(html).toContain('this.page.toggleKeep(id)');
         expect(html).toContain('this.highlighter?.relight()');
-        expect(html).toContain("input.value = this.page.focusSelection() ?? ''");
-        expect(html).toContain('<input type="search" id="wp-lock" list="wp-lock-options"');
+        expect(html).toContain('class WpMultiSelect');
+        expect(html).toContain('id="wp-focus-search"');
+        expect(html).toContain('id="wp-keep-search"');
+        // The single-box lock field and both switches are gone, not kept beside the pulldowns.
+        expect(html).not.toContain('id="wp-lock"');
+        expect(html).not.toContain('wp-lock-toggle');
+        expect(html).not.toContain('wp-filter-toggle');
+        expect(html).not.toContain('Hide unconnected');
+    });
+
+    it('lists every drawn project once per pulldown, alphabetically, ignoring case (#1385)', () => {
+        const html = htmlFor({
+            beta: { level: 0, dependsOn: [] },
+            Alpha: { level: 1, dependsOn: ['beta'] },
+            gamma: { level: 2, dependsOn: [] },
+        });
+        for (const key of ['keep', 'focus']) {
+            const list = html.slice(html.indexOf(`id="wp-${key}-list"`), html.indexOf(`id="wp-${key}-empty"`));
+            expect([...list.matchAll(/data-wp-option="([^"]+)"/g)].map((m: RegExpMatchArray) => m[1])).toEqual(['Alpha', 'beta', 'gamma']);
+        }
+        expect(html).toContain('<span class="wp-multi-name">Alpha</span><span class="wp-multi-sub">L1</span>');
+        expect(html).toContain('None (off)');
     });
 
     it('has no Mode submenu: the drawer is the one place to switch modes', () => {

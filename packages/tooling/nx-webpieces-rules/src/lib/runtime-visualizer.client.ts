@@ -12,7 +12,9 @@
  *      renderSVGElement is then SYNCHRONOUS — v2's returned a promise);
  *   2. upgrade every queue node into a TRUE horizontal cylinder;
  *   3. make every node clickable, opening the SHARED floating menu (graph-node-menu.ts — the same one
- *      architecture/dependencies.html and every design.html use) with independent Lock/Unlock and chain filtering.
+ *      architecture/dependencies.html and every design.html use) with Add to Focus and Keep connected,
+ *      the same two multi-select picks the drawer's Focus and Keep connected to pulldowns hold — both
+ *      inherited from WpFilterPage / GraphPage, never re-implemented here (#1385).
  *
  * Why (2) is post-processing rather than a shape:
  *

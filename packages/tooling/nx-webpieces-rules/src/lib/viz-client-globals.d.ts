@@ -48,8 +48,8 @@ declare class WpNodeMenu {
 /**
  * The field-less lock, also from graph-node-menu.ts: dim every other box in one rendered graph and
  * light the locked one. Used by design.html;
- * the two architecture viewers do NOT use it — its lock is GraphHighlighter.setLock(), which also has a
- * lock search field and a responsibilities list to keep in step.
+ * the two architecture viewers do NOT use it — they have the multi-select Focus pulldown instead
+ * (GraphPage.toggleFocus, #1385), which also keeps a responsibilities list in step.
  */
 declare class WpNodeLock {
     constructor(svg: SVGSVGElement);

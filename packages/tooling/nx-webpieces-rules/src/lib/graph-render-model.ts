@@ -175,8 +175,8 @@ export class GraphFilterAssets {
 
     html(): string {
         return (
-            '<p id="wp-filter-status" hidden>Filtering: <strong id="wp-filter-anchor"></strong> ' +
-            '<button id="wp-filter-off" type="button">Turn off Filter</button></p>' +
+            '<p id="wp-filter-status" hidden>Keep connected to: <strong id="wp-filter-anchor"></strong> ' +
+            '<button id="wp-filter-off" type="button">Clear Keep connected</button></p>' +
             '<p id="wp-graph-error" role="alert" hidden></p>'
         );
     }

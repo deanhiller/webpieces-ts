@@ -11,6 +11,7 @@ export class GraphPageStyles {
             this.base() +
             this.drawer() +
             this.controls() +
+            this.multiSelect() +
             this.main() +
             this.overlays() +
             this.filterPopover() +
@@ -94,15 +95,6 @@ export class GraphPageStyles {
         return `
         .wp-side input[type="search"] { width: 100%; box-sizing: border-box; background: var(--wp-side-control); color: var(--wp-side-fg);
             border: 1px solid var(--wp-side-line); border-radius: 8px; padding: 7px 10px; font: inherit; font-size: 13px; }
-        .wp-toggle { all: unset; box-sizing: border-box; cursor: pointer; display: flex; justify-content: space-between;
-            align-items: center; padding: 6px 10px; border-radius: 8px; font-size: 13px; }
-        .wp-toggle:hover { background: var(--wp-side-hover); }
-        .wp-toggle:disabled { cursor: not-allowed; opacity: 0.45; }
-        .wp-sw { width: 30px; height: 18px; border-radius: 9px; background: #3a3d4a; position: relative; transition: background 0.15s; }
-        .wp-sw::after { content: ""; position: absolute; top: 2px; left: 2px; width: 14px; height: 14px; border-radius: 50%;
-            background: #fff; transition: transform 0.15s; }
-        .wp-toggle[aria-pressed="true"] .wp-sw { background: var(--wp-accent); }
-        .wp-toggle[aria-pressed="true"] .wp-sw::after { transform: translateX(12px); }
         .wp-link { all: unset; cursor: pointer; color: var(--wp-side-muted); font-size: 12px; text-decoration: underline; }
         .wp-link:hover { color: var(--wp-side-fg); }
         .wp-icon { all: unset; box-sizing: border-box; cursor: pointer; display: inline-grid; place-items: center; flex: none;
@@ -112,8 +104,45 @@ export class GraphPageStyles {
         .wp-icon-mini { width: 24px; height: 24px; font-size: 12px; }
         .wp-icon-dark { background: transparent; border-color: var(--wp-side-line); color: var(--wp-side-fg); }
         .wp-mode:focus-visible, .wp-pill-trigger:focus-visible, .wp-filter-btn:focus-visible, .wp-chip:focus-visible,
-        .wp-primary:focus-visible, .wp-pill button:focus-visible, .wp-toggle:focus-visible, .wp-side input:focus-visible, .wp-icon:focus-visible,
+        .wp-primary:focus-visible, .wp-pill button:focus-visible, .wp-multi-trigger:focus-visible, .wp-multi-chip button:focus-visible, .wp-side input:focus-visible, .wp-icon:focus-visible,
         .wp-link:focus-visible { outline: 2px solid var(--wp-accent-hover); outline-offset: 2px; }`;
+    }
+
+    /**
+     * The "Keep connected to" and "Focus" pulldowns (#1385): a closed field of removable chips, and a
+     * popover holding the search box, the checkbox rows (the match in a <mark>, the keyboard's row
+     * outlined) and the "N selected · Clear all" footer. A chip whose box is not drawn is dashed.
+     */
+    private multiSelect(): string {
+        return `
+        .wp-multi { position: relative; margin-bottom: 6px; }
+        .wp-multi-field { box-sizing: border-box; cursor: pointer; display: flex; align-items: center; gap: 6px; min-height: 34px;
+            padding: 4px 4px 4px 8px; border-radius: 8px; border: 1px solid var(--wp-side-line); background: var(--wp-side-control); }
+        .wp-multi-field:hover { border-color: var(--wp-accent-hover); }
+        .wp-multi-chips { flex: 1 1 auto; min-width: 0; display: flex; flex-wrap: wrap; gap: 4px; }
+        .wp-multi-none { color: var(--wp-side-muted); font-size: 12.5px; padding: 2px 0; }
+        .wp-multi-chip { display: inline-flex; align-items: center; gap: 3px; max-width: 100%; padding: 1px 2px 1px 8px; border-radius: 999px;
+            background: #2a2333; border: 1px solid var(--wp-accent); font-size: 12px; overflow-wrap: anywhere; }
+        .wp-multi-chip small { color: var(--wp-side-muted); font-size: 10.5px; }
+        .wp-multi-chip-hidden { border-style: dashed; opacity: 0.7; }
+        .wp-multi-chip button { all: unset; cursor: pointer; flex: none; width: 16px; height: 16px; display: inline-grid; place-items: center;
+            border-radius: 50%; font-size: 10px; }
+        .wp-multi-chip button:hover { background: var(--wp-side-hover); }
+        .wp-multi-trigger { all: unset; cursor: pointer; flex: none; padding: 2px 6px; border-radius: 6px; }
+        .wp-multi-pop { position: absolute; z-index: 36; left: 0; right: 0; top: calc(100% + 4px); display: grid; gap: 6px; padding: 8px;
+            background: var(--wp-side-control); border: 1px solid var(--wp-side-line); border-radius: 10px; box-shadow: 0 10px 28px #0008; }
+        .wp-multi-list { max-height: 260px; overflow-y: auto; display: grid; gap: 1px; }
+        .wp-multi-option { display: flex; align-items: center; gap: 8px; padding: 4px 6px; border-radius: 6px; cursor: pointer; }
+        .wp-multi-option:hover { background: var(--wp-side-hover); }
+        .wp-multi-option.wp-multi-active { background: var(--wp-side-hover); box-shadow: inset 0 0 0 1px var(--wp-accent-hover); }
+        .wp-multi-option input { flex: none; margin: 0; accent-color: var(--wp-accent); pointer-events: none; }
+        .wp-multi-name { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
+        .wp-multi-name mark { background: #5b3a91; color: #fff; border-radius: 2px; }
+        .wp-multi-sub { flex: none; color: var(--wp-side-muted); font-size: 11.5px; }
+        .wp-multi-empty { margin: 0; color: var(--wp-side-muted); font-size: 12px; }
+        .wp-multi-pop footer { display: flex; justify-content: space-between; align-items: center; padding-top: 6px;
+            border-top: 1px solid var(--wp-side-line); color: var(--wp-side-muted); font-size: 12px; }
+        .wp-multi-pop .wp-text-btn { color: var(--wp-side-fg); }`;
     }
 
     private main(): string {

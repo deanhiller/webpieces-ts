@@ -88,7 +88,7 @@ class WpProjectFilter {
     }
 }
 
-/** Architecture interactions bind to each new SVG; logical Lock/Filter state belongs to the page. */
+/** Architecture interactions bind to each new SVG; logical Focus/Keep state belongs to the page. */
 class GraphHighlighter {
     private readonly nodeByName = new Map<string, SVGGElement>();
     private hovered: string | null = null;
@@ -118,14 +118,15 @@ class GraphHighlighter {
         });
     }
 
+    /**
+     * Light the UNION of every focused box's chains, plus the hovered box's. A focused box that is not
+     * drawn right now is suspended, its otherwise visible relatives included, until it is drawn again.
+     */
     relight(): void {
         this.clear();
-        const locked = this.page.lockSelection();
-        if (locked !== null) this.nodeByName.get(locked)?.classList.add('wp-locked');
-        // A filtered-out Lock is suspended, including its otherwise visible relatives.
-        const anchors = [locked, this.hovered].filter(
-            (name: string | null): name is string => name !== null && this.nodeByName.has(name),
-        );
+        const focused = [...this.page.focusSelection()].filter((name: string): boolean => this.nodeByName.has(name));
+        for (const name of focused) this.nodeByName.get(name)?.classList.add('wp-locked');
+        const anchors = this.hovered !== null && this.nodeByName.has(this.hovered) ? [...focused, this.hovered] : focused;
         if (anchors.length === 0) return;
         const lit = new Set<string>();
         for (const name of anchors) {
@@ -164,13 +165,9 @@ class GraphHighlighter {
             const href = designs.get(name);
             if (href !== undefined)
                 items.push(new WpNodeMenuItem('View Design', () => window.open(href, '_blank')));
-            const locked = this.page.lockSelection() === name;
-            items.push(
-                new WpNodeMenuItem(locked ? 'Unlock' : 'Lock', () =>
-                    locked ? this.page.clearSelection() : this.page.setLock(name),
-                ),
-            );
-            items.push(this.page.filterItem(name));
+            const focused = this.page.focusSelection().has(name);
+            items.push(new WpNodeMenuItem(focused ? 'Remove from Focus' : 'Add to Focus', () => this.page.toggleFocus(name)));
+            items.push(this.page.keepItem(name));
             items.unshift(...this.page.impactItems(name, node));
             const implemented = window.__WP_RUNTIME__?.implementsItem(name, node);
             if (implemented) items.push(implemented);
@@ -287,18 +284,22 @@ class GraphFilterPopover {
 class GraphDrawer {
     readonly popover: GraphFilterPopover;
     private readonly openers = new Map<string, HTMLElement>();
+    /** The two multi-selects (#1385): one implementation, two instances. */
+    private readonly keep: WpMultiSelect;
+    private readonly focus: WpMultiSelect;
 
     constructor(private readonly page: GraphPage) {
         this.popover = new GraphFilterPopover(page);
+        this.keep = new WpMultiSelect('keep', new WpKeepSource(page));
+        this.focus = new WpMultiSelect('focus', new WpFocusSource(page));
     }
 
     wire(): void {
         this.wireModeMenu();
         this.popover.wire();
         this.wireImpactKinds();
-        this.wireLock();
-        this.byId('wp-lock-toggle')?.addEventListener('click', () => this.page.toggleLock());
-        this.byId('wp-filter-toggle')?.addEventListener('click', () => this.page.toggleFilter());
+        this.keep.wire();
+        this.focus.wire();
         this.toggles('wp-collapse', 'wp-shell', true);
         this.toggles('wp-help-btn', 'wp-help', false);
         this.toggles('wp-help-close', 'wp-help', false);
@@ -310,6 +311,9 @@ class GraphDrawer {
         window.addEventListener('keydown', (ev: KeyboardEvent) => this.onKey(ev), true);
         window.addEventListener('hashchange', () => this.page.setMode(location.hash.slice(1)));
         document.addEventListener('click', (ev: MouseEvent) => {
+            for (const multi of [this.keep, this.focus]) {
+                if (multi.isOpen() && !multi.clicked(ev)) multi.close(false);
+            }
             const target = ev.target;
             if (target instanceof Node && this.byId('wp-mode-menu')?.parentElement?.contains(target)) return;
             this.closeModeMenu(false);
@@ -377,33 +381,11 @@ class GraphDrawer {
         if (returnFocus) trigger?.focus({ preventScroll: true });
     }
 
-    /** Type-to-search lock: an exact project id (or a unique short name) locks, empty or Esc unlocks. */
-    private wireLock(): void {
-        const input = this.lockInput();
-        if (input === null) return;
-        input.addEventListener('input', () => {
-            const value = input.value.trim();
-            if (value === '') this.page.clearSelection();
-            else if (this.page.hasNode(value)) this.page.setLock(value);
-        });
-        input.addEventListener('change', () => {
-            const match = this.page.resolveName(input.value.trim());
-            if (match !== null) this.page.setLock(match);
-            else input.value = this.page.lockSelection() ?? '';
-        });
-        input.addEventListener('keydown', (ev: KeyboardEvent) => {
-            if (ev.key !== 'Escape') return;
-            ev.preventDefault();
-            input.value = '';
-            this.page.clearSelection();
-            input.blur();
-        });
-    }
-
     /**
      * Page keys, in the CAPTURE phase so the open/closed state of the node menu is read before the
      * menu's own Escape handler closes it: Esc with a menu open only closes the menu. Esc closes an
-     * open Color-by menu or Filter popover first, too.
+     * open Color-by menu, Filter popover or Keep/Focus pulldown first, too; with nothing open it clears
+     * Focus. `/` opens Focus with the cursor in its search.
      */
     private onKey(ev: KeyboardEvent): void {
         if (ev.altKey || ev.ctrlKey || ev.metaKey) return;
@@ -415,6 +397,12 @@ class GraphDrawer {
             this.popover.close();
             return;
         }
+        const pulldown = [this.keep, this.focus].find((multi: WpMultiSelect): boolean => multi.isOpen());
+        if (ev.key === 'Escape' && pulldown !== undefined) {
+            ev.preventDefault();
+            pulldown.close(true);
+            return;
+        }
         if (ev.key === 'Escape' && this.dismissOverlay()) return;
         const target = ev.target;
         if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) return;
@@ -423,7 +411,8 @@ class GraphDrawer {
             this.byId('wp-shell')?.classList.remove('wp-collapsed');
             this.byId('wp-collapse')?.setAttribute('aria-expanded', 'true');
             ev.preventDefault();
-            this.lockInput()?.focus();
+            this.keep.close(false);
+            this.focus.open();
             return;
         }
         const index = ['1', '2', '3', '4', '5'].indexOf(ev.key);
@@ -431,7 +420,7 @@ class GraphDrawer {
             this.page.setMode(WpModeState.MODES[index]);
             return;
         }
-        if (ev.key === 'Escape' && !menuOpen && this.page.lockSelection() !== null) this.page.setLock(null);
+        if (ev.key === 'Escape' && !menuOpen && this.page.focusSelection().size > 0) this.page.clearFocus();
     }
 
     /** `button` shows/hides `target`; for the drawer itself it toggles the collapsed class instead. */
@@ -484,7 +473,7 @@ class GraphDrawer {
     }
 
     /** Repaint every control from the page's state. */
-    sync(modes: WpModeState, locked: string | null, filtering: boolean, filter: WpFilterChoice): void {
+    sync(modes: WpModeState, filter: WpFilterChoice): void {
         const reason = modes.impactReason();
         document.querySelectorAll<HTMLButtonElement>('.wp-mode[data-wp-mode]').forEach((button: HTMLButtonElement) => {
             const mode = button.dataset['wpMode'] ?? '';
@@ -519,25 +508,10 @@ class GraphDrawer {
         this.syncImpactKinds(modes);
         const title = this.byId('wp-legend-pop-title');
         if (title !== null) title.textContent = `Legend · ${modes.name(modes.mode)}`;
-        const input = this.lockInput();
-        if (input !== null && document.activeElement !== input) input.value = this.page.focusSelection() ?? '';
-        const lockToggle = this.byId('wp-lock-toggle') as HTMLButtonElement | null;
-        if (lockToggle !== null) {
-            lockToggle.setAttribute('aria-pressed', String(locked !== null));
-            lockToggle.disabled = locked === null && this.page.focusSelection() === null;
-            lockToggle.title = lockToggle.disabled ? 'Select a node in Focus first' : '';
-        }
-        this.syncFilterToggle(locked, filtering);
+        this.keep.sync();
+        this.focus.sync();
         this.syncFilter(filter);
-        this.crumb(modes.name(modes.mode), locked);
-    }
-
-    private syncFilterToggle(locked: string | null, filtering: boolean): void {
-        const toggle = this.byId('wp-filter-toggle') as HTMLButtonElement | null;
-        if (toggle === null) return;
-        toggle.setAttribute('aria-pressed', String(filtering));
-        toggle.disabled = !filtering && locked === null;
-        toggle.title = toggle.disabled ? 'Lock a project first' : '';
+        this.crumb(modes.name(modes.mode), this.page.focusSelection());
     }
 
     /** The drawer button's count badge, and one removable pill per active filter in the top bar. */
@@ -605,8 +579,8 @@ class GraphDrawer {
         return `${who}: ${named} changed (workspace-global input${files.length > 1 ? 's' : ''})`;
     }
 
-    /** "Mode: <b>Runtime</b> · Locked: <b>x</b>", built with text nodes so no name is parsed as HTML. */
-    private crumb(mode: string, locked: string | null): void {
+    /** "Mode: <b>Runtime</b> · Focus: <b>a</b>, <b>b</b> +N", built with text nodes so no name is parsed as HTML. */
+    private crumb(mode: string, focused: ReadonlySet<string>): void {
         const crumb = this.byId('wp-crumb');
         if (crumb === null) return;
         const bold = (text: string): HTMLElement => {
@@ -615,7 +589,12 @@ class GraphDrawer {
             return b;
         };
         const parts: (string | Node)[] = ['Mode: ', bold(mode)];
-        if (locked !== null) parts.push(' · Locked: ', bold(locked));
+        const names = [...focused].sort((a: string, b: string): number => a.toLowerCase().localeCompare(b.toLowerCase()));
+        if (names.length > 0) parts.push(' · Focus: ');
+        names.slice(0, 2).forEach((name: string, index: number): void => {
+            parts.push(...(index === 0 ? [] : [', ']), bold(name));
+        });
+        if (names.length > 2) parts.push(` +${names.length - 2}`);
         crumb.replaceChildren(...parts);
     }
 
@@ -624,18 +603,31 @@ class GraphDrawer {
         if (el !== null) el.textContent = value;
     }
 
-    private lockInput(): HTMLInputElement | null {
-        return document.getElementById('wp-lock') as HTMLInputElement | null;
-    }
-
     private byId(id: string): HTMLElement | null {
         return document.getElementById(id);
     }
 }
 
+/** "Focus": lights the picks' chains; offers only the boxes drawn after Filter and Keep connected to. */
+class WpFocusSource implements WpMultiSource {
+    constructor(private readonly page: GraphPage) {}
+    selected(): ReadonlySet<string> { return this.page.focusSelection(); }
+    available(id: string): boolean { return this.page.isDrawn(id); }
+    toggle(id: string): void { this.page.toggleFocus(id); }
+    clear(): void { this.page.clearFocus(); }
+}
+
+/** "Keep connected to": redraws with the union of the picks' chains; offers every box of the graph. */
+class WpKeepSource implements WpMultiSource {
+    constructor(private readonly page: GraphPage) {}
+    selected(): ReadonlySet<string> { return this.page.keepSelection(); }
+    available(id: string): boolean { return this.page.hasNode(id); }
+    toggle(id: string): void { this.page.toggleKeep(id); }
+    clear(): void { this.page.clearKeep(); }
+}
+
 class GraphPage extends WpFilterPage {
     private highlighter: GraphHighlighter | null = null;
-    private selected: string | null = null;
     /** The page's own graph; Goal vs Current swaps in its overlay and back (#1239). */
     private readonly base: RenderModelJson = this.model;
     private readonly modes = new WpModeState(
@@ -746,13 +738,28 @@ class GraphPage extends WpFilterPage {
         this.filterCards();
         this.syncControls();
         svg.querySelectorAll<SVGGElement>('g.node').forEach((node: SVGGElement) => {
-            if (node.querySelector('title')?.textContent === this.anchor)
-                node.classList.add('wp-filter-anchor');
+            if (this.keep.has(node.querySelector('title')?.textContent ?? '')) node.classList.add('wp-filter-anchor');
         });
     }
 
-    lockSelection(): string | null {
-        return this.locked;
+    focusSelection(): ReadonlySet<string> {
+        return this.focused;
+    }
+
+    /** Whether `id` is drawn right now: what Focus may offer, and a focused box's chip is not "hidden". */
+    isDrawn(id: string): boolean {
+        return this.retained.has(id) && this.hasNode(id);
+    }
+
+    toggleFocus(id: string): void {
+        if (this.focused.has(id)) this.focused.delete(id);
+        else this.focused.add(id);
+        this.refocus();
+    }
+
+    clearFocus(): void {
+        this.focused.clear();
+        this.refocus();
     }
 
     hasNode(id: string): boolean {
@@ -763,32 +770,13 @@ class GraphPage extends WpFilterPage {
 
     projectCount(): number { return this.model.nodes.filter(node => this.projects.isService(node)).length; }
 
-    focusSelection(): string | null { return this.selected; }
 
-    toggleLock(): void {
-        if (this.locked !== null) this.setLock(null);
-        else if (this.selected !== null) this.setLock(this.selected);
-    }
-
-    /** An exact id, else the one id whose short name (after any scope) is `text`; null if none or several. */
-    resolveName(text: string): string | null {
-        if (text === '') return null;
-        if (this.hasNode(text)) return text;
-        const matches = this.model.nodes.filter(
-            (node: RenderNodeJson): boolean => node.id.split('/').pop() === text,
-        );
-        return matches.length === 1 ? matches[0].id : null;
-    }
-
-    setLock(name: string | null): void {
-        this.locked = name;
-        if (name !== null) this.selected = name;
+    /** Focus changed: relight, refilter the cards, and repaint the drawer — no relayout. */
+    private refocus(): void {
         this.highlighter?.relight();
         this.filterCards();
         this.syncControls();
     }
-
-    clearSelection(): void { this.selected = null; this.setLock(null); }
 
     setMode(mode: string): void {
         if (mode === this.modes.mode || !this.modes.set(mode)) return;
@@ -813,12 +801,6 @@ class GraphPage extends WpFilterPage {
         this.redraw();
     }
 
-    /** The drawer's "Hide unconnected": filter to the locked box's chain, or turn the filter off. */
-    toggleFilter(): void {
-        if (this.anchor !== null) this.filter(null);
-        else if (this.locked !== null) this.filter(this.locked);
-    }
-
     appliedFilter(): WpFilterChoice {
         return this.applied;
     }
@@ -834,13 +816,9 @@ class GraphPage extends WpFilterPage {
         return this.preview(choice);
     }
 
-    /** How many boxes `choice` would show, with the current Hide-unconnected chain. */
+    /** How many boxes `choice` would show, with the current "Keep connected to" picks. */
     preview(choice: WpFilterChoice): number {
-        const base =
-            this.anchor === null
-                ? new Set(this.model.nodes.map((node: RenderNodeJson): string => node.id))
-                : this.chain.nodes(this.anchor);
-        const kept = this.projects.apply(base, choice);
+        const kept = this.projects.apply(this.kept(this.keep), choice);
         return this.model.nodes.filter(node => kept.has(node.id) && this.projects.isService(node)).length;
     }
 
@@ -861,7 +839,7 @@ class GraphPage extends WpFilterPage {
 
     private syncControls(): void {
         document.body.dataset['wpMode'] = this.modes.mode;
-        this.drawer.sync(this.modes, this.locked, this.anchor !== null, this.applied);
+        this.drawer.sync(this.modes, this.applied);
         this.toggles.sync(this.productsOn);
         const count = this.model.nodes.filter(node => this.retained.has(node.id) && this.projects.isService(node)).length;
         const empty = document.getElementById('wp-empty');
@@ -880,8 +858,9 @@ class GraphPage extends WpFilterPage {
         });
     }
 
+    /** The cards of the drawn boxes, narrowed by Focus to the union of the focused boxes' chains. */
     private filterCards(): void {
-        const lit = this.locked === null ? this.retained : this.chain.nodes(this.locked);
+        const lit = this.focused.size === 0 ? this.retained : this.kept(this.focused);
         document.querySelectorAll('.wp-resp-card').forEach((card: Element) => {
             const name = card.getAttribute('data-node');
             card.classList.toggle(

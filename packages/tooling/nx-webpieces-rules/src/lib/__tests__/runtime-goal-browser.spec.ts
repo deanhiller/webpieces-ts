@@ -14,7 +14,7 @@ import type { LevelBand } from '../graph-level-bands';
 /**
  * Goal vs Current in the shipped WASM engine, opened from file:// (#1239): the existing Color-by
  * dropdown switches to the overlay topology, removals stay drawn, details open from boxes and arrows,
- * Filter and Lock work on the overlay, and switching back restores the page's own graph.
+ * Filter, Keep connected to and Focus work on the overlay, and switching back restores the page's own graph.
  */
 describe.skipIf(!process.env.WP_GRAPH_VIZ_JS)('Goal vs Current in file:// Chromium', () => {
     const browser = new BrowserFixture(path.resolve('.webpieces/1239-browser-evidence'));
@@ -87,12 +87,12 @@ describe.skipIf(!process.env.WP_GRAPH_VIZ_JS)('Goal vs Current in file:// Chromi
         await page.close();
     });
 
-    it('filters and locks overlay additions and removals, then restores the overlay', async () => {
+    it('keeps connected and focuses overlay additions and removals, then restores the overlay', async () => {
         const page = await browser.open('runtime-goal-filter', html(model));
         await browser.mode(page, 'goal');
-        await browser.lock(page, 'stores-manager');
+        await browser.focusOnly(page, 'stores-manager');
         expect(await browser.names(page, '#graph g.node.wp-locked')).toEqual(['stores-manager']);
-        await browser.lock(page, '');
+        await browser.focusOnly(page, '');
         // ai-chat's chain reaches the ADDED orders-manager enqueue, never the removed stores-manager.
         await browser.filter(page, 'ai-chat');
         const kept = await browser.names(page);

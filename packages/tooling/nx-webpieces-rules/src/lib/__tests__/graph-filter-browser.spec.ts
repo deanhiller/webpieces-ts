@@ -14,6 +14,21 @@ import type { RenderNode } from '../graph-render-model';
 import { ImpactKind, ImpactSidecarData } from '../graph-impact';
 
 const fixture = new BrowserFixture();
+
+/**
+ * The Keep connected to / Focus pulldown graph (#1385): two "inbound" boxes on separate chains (one
+ * capitalised, for the case-insensitive search), a third box sharing one of their chains, and a loner.
+ */
+const PICK_GRAPH: EnhancedGraph = {
+    'delivery-partner-inbound': { level: 2, dependsOn: ['orders-core'] },
+    'Billing-Inbound': { level: 2, dependsOn: ['billing-core'] },
+    'admin-portal': { level: 2, dependsOn: ['orders-core'] },
+    'orders-core': { level: 1, dependsOn: ['model'] },
+    'billing-core': { level: 1, dependsOn: ['model'] },
+    model: { level: 0, dependsOn: [] },
+    loner: { level: 0, dependsOn: [] },
+};
+
 describe.skipIf(!process.env.WP_GRAPH_VIZ_JS)('real Viz local-file filtering', () => {
     beforeAll(() => fixture.start());
     afterAll(async () => fixture.browser?.close());
@@ -57,7 +72,7 @@ describe.skipIf(!process.env.WP_GRAPH_VIZ_JS)('real Viz local-file filtering', (
             const old = await node.elementHandle();
             await page
                 .locator('#wp-node-menu')
-                .getByRole('button', { name: 'Filter Unconnected', exact: true })
+                .getByRole('button', { name: 'Keep connected', exact: true })
                 .press('Enter');
             expect(await old!.evaluate((el) => el.isConnected)).toBe(false);
             expect(
@@ -66,7 +81,7 @@ describe.skipIf(!process.env.WP_GRAPH_VIZ_JS)('real Viz local-file filtering', (
             await node.press('Space');
             await page
                 .locator('#wp-node-menu')
-                .getByRole('button', { name: 'Turn off Filter', exact: true })
+                .getByRole('button', { name: 'Stop keeping connected', exact: true })
                 .press('Enter');
             expect(
                 await node.evaluate((el) => el === document.activeElement && el.isConnected),
@@ -87,7 +102,7 @@ describe.skipIf(!process.env.WP_GRAPH_VIZ_JS)('real Viz local-file filtering', (
         await node.press('Enter');
         await page
             .locator('#wp-node-menu')
-            .getByRole('button', { name: 'Filter Unconnected', exact: true })
+            .getByRole('button', { name: 'Keep connected', exact: true })
             .press('Enter');
         expect(await node.evaluate((el) => el === document.activeElement && el.isConnected)).toBe(
             true,
@@ -105,7 +120,7 @@ describe.skipIf(!process.env.WP_GRAPH_VIZ_JS)('real Viz local-file filtering', (
         const chain = FilterFixture.api().chain(model);
         const locked = chain.nodes('code-rules');
         const page = await fixture.open('1127-lock-hover', fixture.architecture(graph));
-        await fixture.lock(page, 'code-rules');
+        await fixture.focusOnly(page, 'code-rules');
         await fixture.foreground(page, model, locked);
         const cards = await fixture.cards(page);
         await fixture.snapshot(page, '1127-lock-before');
@@ -115,7 +130,7 @@ describe.skipIf(!process.env.WP_GRAPH_VIZ_JS)('real Viz local-file filtering', (
             expect(await fixture.names(page, '#graph g.node.wp-focus')).toEqual(
                 ['code-rules', hovered].sort(),
             );
-            expect(await page.locator('#wp-lock').inputValue()).toBe('code-rules');
+            expect(await fixture.picks(page, 'focus')).toEqual(['code-rules']);
             expect(await fixture.names(page, '#graph g.node.wp-locked')).toEqual(['code-rules']);
             expect(
                 await fixture
@@ -134,39 +149,49 @@ describe.skipIf(!process.env.WP_GRAPH_VIZ_JS)('real Viz local-file filtering', (
         await page.close();
     });
 
-    it('recomposes Lock changes and unlock while the pointer stays over a node', async () => {
+    it('recomposes Focus picks and Esc-clear while the pointer stays over a node', async () => {
         const graph = loadBlessedGraph(process.cwd())!.projects;
         const model = fixture.viz.generateRenderModel(graph);
         const chain = FilterFixture.api().chain(model);
         const page = await fixture.open('1127-lock-changes', fixture.architecture(graph));
         await fixture.node(page, 'api-doc-model').hover();
-        for (const locked of ['code-rules', 'nx-webpieces-rules', '']) {
-            // Typing into the lock search changes it without moving the pointer off the hovered box.
-            await fixture.lock(page, locked);
+        // The keyboard changes Focus without moving the pointer off the hovered box: / opens the
+        // search, Enter picks the first match, Esc closes the pulldown.
+        const picked: string[] = [];
+        for (const id of ['code-rules', 'nx-webpieces-rules']) {
+            await page.keyboard.press('/');
+            await page.keyboard.type(id);
+            await page.keyboard.press('Enter');
+            await page.keyboard.press('Escape');
+            picked.push(id);
             await fixture.foreground(
                 page,
                 model,
-                new Set([...chain.nodes('api-doc-model'), ...chain.nodes(locked)]),
+                new Set([...chain.nodes('api-doc-model'), ...picked.flatMap((p: string) => [...chain.nodes(p)])]),
             );
-            expect(await fixture.names(page, '#graph g.node.wp-focus')).toEqual(
-                (locked === '' ? ['api-doc-model'] : ['api-doc-model', locked]).sort(),
-            );
+            expect(await fixture.names(page, '#graph g.node.wp-focus')).toEqual(['api-doc-model', ...picked].sort());
+            expect(await fixture.names(page, '#graph g.node.wp-locked')).toEqual([...picked].sort());
         }
+        // Esc with no pulldown open clears Focus; the hover chain stays.
+        await page.keyboard.press('Escape');
+        await fixture.foreground(page, model, chain.nodes('api-doc-model'));
+        expect(await fixture.names(page, '#graph g.node.wp-focus')).toEqual(['api-doc-model']);
+        expect(await fixture.picks(page, 'focus')).toEqual([]);
         await page.mouse.move(0, 0);
         expect(await page.locator('#graph svg').getAttribute('class')).not.toContain('wp-dim');
         await fixture.node(page, 'code-rules').locator('text').first().click();
         await page
             .locator('#wp-node-menu')
-            .getByRole('button', { name: 'Lock', exact: true })
+            .getByRole('button', { name: 'Add to Focus', exact: true })
             .click();
         await page.mouse.move(0, 0);
-        expect(await page.locator('#wp-lock').inputValue()).toBe('code-rules');
+        expect(await fixture.picks(page, 'focus')).toEqual(['code-rules']);
         await fixture.node(page, 'code-rules').locator('text').first().click();
         await page
             .locator('#wp-node-menu')
-            .getByRole('button', { name: 'Unlock', exact: true })
+            .getByRole('button', { name: 'Remove from Focus', exact: true })
             .click();
-        expect(await page.locator('#wp-lock').inputValue()).toBe('');
+        expect(await fixture.picks(page, 'focus')).toEqual([]);
         expect(await fixture.names(page, '#graph g.node.wp-locked')).toEqual([]);
         await page.close();
     });
@@ -176,7 +201,7 @@ describe.skipIf(!process.env.WP_GRAPH_VIZ_JS)('real Viz local-file filtering', (
         const model = fixture.viz.generateRenderModel(graph);
         const chain = FilterFixture.api().chain(model);
         const page = await fixture.open('1127-filter-hover', fixture.architecture(graph));
-        await fixture.lock(page, 'code-rules');
+        await fixture.focusOnly(page, 'code-rules');
         for (let round = 0; round < 2; round++) {
             await fixture.filter(page, 'hook-runtime');
             const retained = await fixture.names(page);
@@ -195,7 +220,7 @@ describe.skipIf(!process.env.WP_GRAPH_VIZ_JS)('real Viz local-file filtering', (
             await fixture.foreground(page, model, chain.nodes('code-rules'));
             expect(await fixture.names(page, '#graph g.node.wp-focus')).toEqual(['code-rules']);
         }
-        await fixture.lock(page, 'pr-gate');
+        await fixture.focusOnly(page, 'pr-gate');
         await fixture.filter(page, 'hook-runtime');
         const retained = await fixture.names(page);
         const rows = await Promise.all(retained.map((id: string) => fixture.row(page, id)));
@@ -231,15 +256,15 @@ describe.skipIf(!process.env.WP_GRAPH_VIZ_JS)('real Viz local-file filtering', (
         );
         const fullNames = await fixture.names(page);
         await fixture.snapshot(page, 'architecture-before');
-        await fixture.lock(page, 'hook-runtime');
+        await fixture.focusOnly(page, 'hook-runtime');
         const lockNames = await fixture.names(page, '#graph g.node.wp-neighbor');
-        await fixture.lock(page, 'nx-webpieces-rules');
+        await fixture.focusOnly(page, 'nx-webpieces-rules');
         await fixture.filter(page, 'hook-runtime');
         expect(await fixture.names(page)).toEqual(lockNames);
         expect(
             parseFloat((await page.locator('#graph svg').getAttribute('width')) ?? '0'),
         ).toBeLessThan(fullWidth / 2);
-        expect(await page.locator('#wp-lock').inputValue()).toBe('nx-webpieces-rules');
+        expect(await fixture.picks(page, 'focus')).toEqual(['nx-webpieces-rules']);
         expect((await page.locator('#graph svg').getAttribute('class')) ?? '').not.toContain(
             'wp-dim',
         );
@@ -263,11 +288,11 @@ describe.skipIf(!process.env.WP_GRAPH_VIZ_JS)('real Viz local-file filtering', (
         await fixture.node(page, 'pr-gate').hover();
         expect(await fixture.names(page)).toEqual(lockNames);
         expect(await page.locator('.wp-resp-card:not(.wp-hidden)').count()).toBe(1);
-        await fixture.node(page, 'pr-gate').press('Enter');
+        await fixture.node(page, 'hook-runtime').press('Enter');
         expect(
             await page
                 .locator('#wp-node-menu')
-                .getByRole('button', { name: 'Turn off Filter', exact: true })
+                .getByRole('button', { name: 'Stop keeping connected', exact: true })
                 .count(),
         ).toBe(1);
         await page.keyboard.press('Escape');
@@ -275,15 +300,15 @@ describe.skipIf(!process.env.WP_GRAPH_VIZ_JS)('real Viz local-file filtering', (
         await page.locator('#wp-filter-off').click();
         expect(await fixture.names(page)).toEqual(fullNames);
         expect(await page.locator('#graph svg').getAttribute('class')).toContain('wp-dim');
-        await fixture.lock(page, '');
+        await fixture.focusOnly(page, '');
         expect(await fixture.markup(page)).toBe(original);
         await fixture.snapshot(page, 'architecture-restored');
         for (let round = 0; round < 3; round++) {
             await fixture.filter(page, 'hook-runtime');
-            await fixture.node(page, 'pr-gate').click();
+            await fixture.node(page, 'hook-runtime').click();
             await page
                 .locator('#wp-node-menu')
-                .getByRole('button', { name: 'Turn off Filter', exact: true })
+                .getByRole('button', { name: 'Stop keeping connected', exact: true })
                 .click();
             expect(await fixture.names(page)).toEqual(fullNames);
             expect(await page.locator('#wp-node-menu').count()).toBe(0);
@@ -351,7 +376,7 @@ describe.skipIf(!process.env.WP_GRAPH_VIZ_JS)('real Viz local-file filtering', (
             'binding-failure',
             fixture.architecture(FilterFixture.wide()),
         );
-        await fixture.lock(page, 'hook-runtime');
+        await fixture.focusOnly(page, 'hook-runtime');
         await fixture.filter(page, 'hook-runtime');
         const original = await fixture.markup(page);
         await page.evaluate(() => {
@@ -366,7 +391,7 @@ describe.skipIf(!process.env.WP_GRAPH_VIZ_JS)('real Viz local-file filtering', (
         await page.locator('#wp-filter-off').click();
         expect(await fixture.markup(page)).toBe(original);
         expect(await page.locator('#wp-filter-status').isVisible()).toBe(true);
-        expect(await page.locator('#wp-lock').inputValue()).toBe('hook-runtime');
+        expect(await fixture.picks(page, 'focus')).toEqual(['hook-runtime']);
         await page.evaluate(() => {
             delete document.documentElement.dataset.failBinding;
         });
@@ -375,7 +400,7 @@ describe.skipIf(!process.env.WP_GRAPH_VIZ_JS)('real Viz local-file filtering', (
         expect(
             await page
                 .locator('#wp-node-menu')
-                .getByRole('button', { name: 'Unlock', exact: true })
+                .getByRole('button', { name: 'Remove from Focus', exact: true })
                 .count(),
         ).toBe(1);
         await page.close();
@@ -495,25 +520,139 @@ describe.skipIf(!process.env.WP_GRAPH_VIZ_JS)('real Viz local-file filtering', (
         await page.close();
     });
 
-    it('locks from the search field, hides unconnected from the drawer, and unlocks on Esc', async () => {
-        const graph = FilterFixture.wide();
-        const page = await fixture.open('1155-drawer-lock', fixture.architecture(graph));
+    it('keeps the UNION of every Keep-connected pick, never shrinking, until Clear all (#1385)', async () => {
+        const page = await fixture.open('1385-keep', fixture.architecture(PICK_GRAPH));
         const full = await fixture.names(page);
-        expect(await page.locator('#wp-filter-toggle').isDisabled()).toBe(true);
+        expect(await page.locator('#wp-keep-chips').textContent()).toBe('None (off)');
+        await fixture.pick(page, 'keep', 'delivery-partner-inbound');
+        const one = await fixture.names(page);
+        expect(one).toEqual(['delivery-partner-inbound', 'model', 'orders-core']);
+        await fixture.pick(page, 'keep', 'Billing-Inbound');
+        const two = await fixture.names(page);
+        expect(two).toEqual(['Billing-Inbound', 'billing-core', 'delivery-partner-inbound', 'model', 'orders-core']);
+        // Adding a pick only ever grows the graph.
+        expect(one.every((id: string): boolean => two.includes(id))).toBe(true);
+        expect(await fixture.picks(page, 'keep')).toEqual(['Billing-Inbound', 'delivery-partner-inbound']);
+        expect(await page.locator('#wp-keep-count').textContent()).toBe('2 selected');
+        expect(await page.locator('#wp-filter-status').isVisible()).toBe(true);
+        expect(await page.locator('#wp-filter-anchor').textContent()).toBe('Billing-Inbound, delivery-partner-inbound');
+        expect(await fixture.names(page, '#graph g.node.wp-filter-anchor')).toEqual(['Billing-Inbound', 'delivery-partner-inbound']);
+        // The box menu removes just that one pick.
+        await fixture.node(page, 'delivery-partner-inbound').locator('text').first().click();
+        await page.locator('#wp-node-menu').getByRole('button', { name: 'Stop keeping connected', exact: true }).click();
+        expect(await fixture.names(page)).toEqual(['Billing-Inbound', 'billing-core', 'model']);
+        await fixture.pick(page, 'keep', 'admin-portal');
+        await fixture.clearPicks(page, 'keep');
+        expect(await fixture.names(page)).toEqual(full);
+        expect(await page.locator('#wp-keep-chips').textContent()).toBe('None (off)');
+        expect(await page.locator('#wp-filter-status').isVisible()).toBe(false);
+        await page.close();
+    });
+
+    it('lights the union of every Focus pick, outlines each, and suspends a hidden one (#1385)', async () => {
+        const model = fixture.viz.generateRenderModel(PICK_GRAPH);
+        const chain = FilterFixture.api().chain(model);
+        const page = await fixture.open('1385-focus', fixture.architecture(PICK_GRAPH));
+        // A clicked pick keeps the pulldown open with its query, ready for the next pick.
+        await page.locator('#wp-focus-trigger').click();
+        await page.locator('#wp-focus-search').fill('inbound');
+        await page.locator('#wp-focus-list .wp-multi-option[data-wp-option="delivery-partner-inbound"]').click();
+        expect(await page.locator('#wp-focus-pop').isVisible()).toBe(true);
+        expect(await page.locator('#wp-focus-search').inputValue()).toBe('inbound');
+        await page.locator('#wp-focus-list .wp-multi-option[data-wp-option="Billing-Inbound"]').click();
+        await page.keyboard.press('Escape');
+        await fixture.foreground(page, model, new Set([...chain.nodes('delivery-partner-inbound'), ...chain.nodes('Billing-Inbound')]));
+        expect(await fixture.names(page, '#graph g.node.wp-locked')).toEqual(['Billing-Inbound', 'delivery-partner-inbound']);
+        expect(await page.locator('#wp-crumb').textContent()).toContain('Focus: Billing-Inbound, delivery-partner-inbound');
+        const rows = await fixture.names(page);
+        // Keep connected to hides both focused boxes: no relit chain, both chips say "hidden".
+        await fixture.pick(page, 'keep', 'admin-portal');
+        expect(await fixture.names(page)).toEqual(['admin-portal', 'model', 'orders-core']);
+        expect(await fixture.names(page, '#graph g.node.wp-locked')).toEqual([]);
+        expect((await page.locator('#graph svg').getAttribute('class')) ?? '').not.toContain('wp-dim');
+        expect(await fixture.picks(page, 'focus')).toEqual(['Billing-Inbound', 'delivery-partner-inbound']);
+        expect(await page.locator('#wp-focus-chips .wp-multi-chip-hidden').count()).toBe(2);
+        expect(await page.locator('#wp-focus-chips').textContent()).toContain('hidden');
+        // Focus offers only the boxes drawn after Filter and Keep connected to.
+        await page.locator('#wp-focus-trigger').click();
+        expect(await page.locator('#wp-focus-list .wp-multi-option:visible').evaluateAll((els: Element[]) => els.map((el: Element) => (el as HTMLElement).dataset['wpOption']))).toEqual(['admin-portal', 'model', 'orders-core']);
+        await page.keyboard.press('Escape');
+        // Visible again: both relight, at their old rows.
+        await fixture.clearPicks(page, 'keep');
+        expect(await fixture.names(page)).toEqual(rows);
+        expect(await fixture.names(page, '#graph g.node.wp-locked')).toEqual(['Billing-Inbound', 'delivery-partner-inbound']);
+        expect(await page.locator('#wp-focus-chips .wp-multi-chip-hidden').count()).toBe(0);
+        await fixture.clearPicks(page, 'focus');
+        expect(await fixture.names(page, '#graph g.node.wp-locked')).toEqual([]);
+        expect(await page.locator('#wp-focus-chips').textContent()).toBe('None (off)');
+        await page.close();
+    });
+
+    it('searches anywhere in a name, picks with the keyboard, and closes or clears on Esc (#1385)', async () => {
+        const page = await fixture.open('1385-search', fixture.architecture(PICK_GRAPH));
+        const order = await page.locator('#wp-focus-list .wp-multi-option').evaluateAll((els: Element[]) => els.map((el: Element) => (el as HTMLElement).dataset['wpOption']));
+        expect(order).toEqual(['admin-portal', 'billing-core', 'Billing-Inbound', 'delivery-partner-inbound', 'loner', 'model', 'orders-core']);
         await page.evaluate((): void => (document.activeElement as HTMLElement | null)?.blur());
         await page.keyboard.press('/');
-        expect(await page.locator('#wp-lock').evaluate((el: Element): boolean => el === document.activeElement)).toBe(true);
-        await page.keyboard.type('hook-runtime');
-        expect(await fixture.names(page, '#graph g.node.wp-locked')).toEqual(['hook-runtime']);
-        await page.locator('#wp-filter-toggle').click();
-        expect((await fixture.names(page)).length).toBeLessThan(full.length);
-        expect(await page.locator('#wp-filter-toggle').getAttribute('aria-pressed')).toBe('true');
-        await page.locator('#wp-filter-toggle').click();
-        expect(await fixture.names(page)).toEqual(full);
-        await page.locator('#wp-lock').press('Escape');
-        expect(await page.locator('#wp-lock').inputValue()).toBe('');
-        expect(await fixture.names(page, '#graph g.node.wp-locked')).toEqual([]);
+        expect(await page.locator('#wp-focus-pop').isVisible()).toBe(true);
+        expect(await page.locator('#wp-focus-search').evaluate((el: Element): boolean => el === document.activeElement)).toBe(true);
+        const shown = (): Promise<(string | undefined)[]> =>
+            page.locator('#wp-focus-list .wp-multi-option:visible').evaluateAll((els: Element[]) => els.map((el: Element) => (el as HTMLElement).dataset['wpOption']));
+        // Case-insensitive substring: "INBOUND" finds both inbound boxes, with the match marked.
+        await page.keyboard.type('INBOUND');
+        expect(await shown()).toEqual(['Billing-Inbound', 'delivery-partner-inbound']);
+        expect(await page.locator('#wp-focus-list .wp-multi-option:visible mark').allTextContents()).toEqual(['Inbound', 'inbound']);
+        await page.keyboard.press('ArrowDown');
+        await page.keyboard.press('ArrowDown');
+        await page.keyboard.press('Enter');
+        expect(await fixture.picks(page, 'focus')).toEqual(['delivery-partner-inbound']);
+        // The query stays after a toggle, so the next match is one keystroke away.
+        expect(await page.locator('#wp-focus-search').inputValue()).toBe('INBOUND');
+        expect(await shown()).toEqual(['Billing-Inbound', 'delivery-partner-inbound']);
+        await page.keyboard.press('ArrowUp');
+        await page.keyboard.press('Enter');
+        expect(await fixture.picks(page, 'focus')).toEqual(['Billing-Inbound', 'delivery-partner-inbound']);
+        expect(await page.locator('#wp-focus-count').textContent()).toBe('2 selected');
+        // Space toggles only while the query is empty.
+        await page.locator('#wp-focus-search').fill('');
+        await page.keyboard.press('ArrowDown');
+        await page.keyboard.press('Space');
+        expect(await fixture.picks(page, 'focus')).toEqual(['admin-portal', 'Billing-Inbound', 'delivery-partner-inbound']);
+        expect(await fixture.names(page, '#graph g.node.wp-locked')).toEqual(['Billing-Inbound', 'admin-portal', 'delivery-partner-inbound']);
+        expect(await page.locator('#wp-crumb').textContent()).toContain('Focus: admin-portal, Billing-Inbound +1');
+        // A chip's ✕ removes that one pick.
+        await page.locator('#wp-focus-chips [data-wp-pick="admin-portal"] button').click();
+        expect(await fixture.picks(page, 'focus')).toEqual(['Billing-Inbound', 'delivery-partner-inbound']);
+        // Esc closes the open pulldown and keeps Focus; Esc again clears it.
+        await page.locator('#wp-focus-search').focus();
+        await page.keyboard.press('Escape');
+        expect(await page.locator('#wp-focus-pop').isVisible()).toBe(false);
+        expect(await fixture.picks(page, 'focus')).toEqual(['Billing-Inbound', 'delivery-partner-inbound']);
+        await page.keyboard.press('Escape');
+        expect(await fixture.picks(page, 'focus')).toEqual([]);
+        expect(await page.locator('#wp-focus-chips').textContent()).toBe('None (off)');
         await page.close();
+    });
+
+    it('ships no Lock switch, Hide unconnected switch or Lock menu item in either viewer (#1385)', async () => {
+        const runtime = new RuntimeHtmlPage(
+            () => FilterFixture.client('runtime-visualizer.client.ts'),
+            () => FilterFixture.client('graph-filter.client.ts'),
+            () => FilterFixture.client('graph-visualizer.client.ts'),
+        ).render(generateRuntimeRenderModel(FilterFixture.runtime()), 'Runtime', FilterFixture.runtime());
+        for (const [name, html, box] of [
+            ['1385-none-architecture', fixture.architecture(PICK_GRAPH), 'model'],
+            ['1385-none-runtime', runtime, 'producer'],
+        ]) {
+            const page = await fixture.open(name, html);
+            expect(await page.locator('#wp-lock, #wp-lock-toggle, #wp-filter-toggle').count()).toBe(0);
+            expect(await page.locator('#wp-side').innerText()).not.toMatch(/\bLock\b|Hide unconnected/);
+            await fixture.node(page, box).locator('text').first().click();
+            const labels = await page.locator('#wp-node-menu button').allTextContents();
+            expect(labels).toEqual(expect.arrayContaining(['Add to Focus', 'Keep connected']));
+            expect(labels.join(' ')).not.toMatch(/\bLock\b|Unlock|Filter Unconnected|Turn off Filter/);
+            await page.close();
+        }
     });
 
     it('enables Impact from the sidecar: touched, affected, build input and untouched shades', async () => {
@@ -637,7 +776,7 @@ describe.skipIf(!process.env.WP_GRAPH_VIZ_JS)('real Viz local-file filtering', (
         await fixture.node(page, 'model').hover();
         await expect.poll(() => strokes('model')).toEqual(['0.5px', '0.5px', '5px']);
         await page.mouse.move(0, 0);
-        await fixture.lock(page, 'portal-web');
+        await fixture.focusOnly(page, 'portal-web');
         await expect.poll(async () => (await strokes('portal-web'))[0]).toBe('3px');
         expect((await strokes('portal-web')).slice(1).every((w: string): boolean => w !== '3px')).toBe(true);
         await page.close();
@@ -673,7 +812,7 @@ describe.skipIf(!process.env.WP_GRAPH_VIZ_JS)('real Viz local-file filtering', (
         await page.close();
     });
 
-    it('filters runtime chains through queues/externals and keeps its single-box Lock after every redraw', async () => {
+    it('keeps runtime chains through queues/externals and keeps every Focus pick after every redraw', async () => {
         const model = generateRuntimeRenderModel(FilterFixture.runtime());
         const html = new RuntimeHtmlPage(
             () => FilterFixture.client('runtime-visualizer.client.ts'),
@@ -686,7 +825,7 @@ describe.skipIf(!process.env.WP_GRAPH_VIZ_JS)('real Viz local-file filtering', (
         await fixture.node(page, 'unrelated').locator('text').first().click();
         await page
             .locator('#wp-node-menu')
-            .getByRole('button', { name: 'Lock', exact: true })
+            .getByRole('button', { name: 'Add to Focus', exact: true })
             .click();
         await fixture.filter(page, 'queue__TaskApi_send');
         expect(await fixture.names(page)).toEqual([
@@ -714,11 +853,13 @@ describe.skipIf(!process.env.WP_GRAPH_VIZ_JS)('real Viz local-file filtering', (
         await fixture.node(page, 'consumer').locator('text').first().click();
         await page
             .locator('#wp-node-menu')
-            .getByRole('button', { name: 'Lock', exact: true })
+            .getByRole('button', { name: 'Add to Focus', exact: true })
             .click();
+        // "unrelated" is still focused but not drawn, so only consumer lights.
         expect(await fixture.names(page, '#graph g.node.wp-focus')).toEqual(['consumer']);
+        expect(await fixture.picks(page, 'focus')).toEqual(['consumer', 'unrelated']);
         await page.locator('#wp-filter-off').click();
-        expect(await fixture.names(page, '#graph g.node.wp-focus')).toEqual(['consumer']);
+        expect(await fixture.names(page, '#graph g.node.wp-focus')).toEqual(['consumer', 'unrelated']);
         await page.close();
     });
 });
