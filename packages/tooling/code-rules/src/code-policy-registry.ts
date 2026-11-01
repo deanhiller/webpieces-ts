@@ -31,6 +31,12 @@ import { NoUtilityTypesInApiLibConfig } from './configs/no-utility-types-config'
 import { RequiredTypeSuffixConfig } from './configs/required-type-suffix-config';
 import { FrameworkTsconfigConfig, FrameworkPackagesConfig } from './configs/tag-truth-configs';
 import { CatchMustPropagateConfig } from './configs/catch-must-propagate-config';
+import {
+    IpcBoundaryConfig,
+    IpcContractShapeConfig,
+    IpcPairingConfig,
+    IpcProtocolFingerprintConfig,
+} from './configs/ipc-configs';
 
 /** The owner entry declares both its schema token and executable validator. */
 export type ConfigCtor = new () => BaseRuleConfig;
@@ -238,5 +244,29 @@ export const CODE_POLICIES: readonly CodePolicy[] = [
         'framework-packages',
         async () => (await import('./validate-framework-packages')).FrameworkPackagesValidator,
         FrameworkPackagesConfig.SCHEMA,
+    ),
+    new CodePolicy(
+        IpcBoundaryConfig,
+        'ipc-boundary',
+        async () => (await import('./validate-ipc-boundary')).IpcBoundaryValidator,
+        IpcBoundaryConfig.SCHEMA,
+    ),
+    new CodePolicy(
+        IpcContractShapeConfig,
+        'ipc-contract-shape',
+        async () => (await import('./validate-ipc-contract-shape')).IpcContractShapeValidator,
+        IpcContractShapeConfig.SCHEMA,
+    ),
+    new CodePolicy(
+        IpcPairingConfig,
+        'ipc-pairing',
+        async () => (await import('./validate-ipc-pairing')).IpcPairingValidator,
+        IpcPairingConfig.SCHEMA,
+    ),
+    new CodePolicy(
+        IpcProtocolFingerprintConfig,
+        'ipc-protocol-fingerprint',
+        async () => (await import('./validate-ipc-protocol-fingerprint')).IpcProtocolFingerprintValidator,
+        IpcProtocolFingerprintConfig.SCHEMA,
     ),
 ];

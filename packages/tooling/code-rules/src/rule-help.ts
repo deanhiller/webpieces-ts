@@ -118,4 +118,20 @@ export const ruleHelp: Readonly<Record<string, RuleHelp>> = {
         'Align framework packages with the configured project requirements.',
         'Apply this policy in source, or review its explicit settings in {configFile}. An intentional opt-out requires complete OFF settings.',
     ),
+    'ipc-boundary': new RuleHelp(
+        'Keep raw IPC, the ipc-bridge factories and WebView delivery inside the configured transport/composition/bootstrap modules.',
+        'Apply this policy in source, or review its explicit settings in {configFile}. An intentional opt-out requires complete OFF settings.',
+    ),
+    'ipc-contract-shape': new RuleHelp(
+        'Require every shared IPC API to carry @WpInternal, @WpIpcEndpoint and @MaskLog with one named DTO and a Promise reply.',
+        'Apply this policy in source, or review its explicit settings in {configFile}. An intentional opt-out requires complete OFF settings.',
+    ),
+    'ipc-pairing': new RuleHelp(
+        'Require a generated client at every IPC sender and exactly one receiver registration of a subclass of the same API.',
+        'Apply this policy in source, or review its explicit settings in {configFile}. An intentional opt-out requires complete OFF settings.',
+    ),
+    'ipc-protocol-fingerprint': new RuleHelp(
+        'Require the recorded IPC protocol fingerprint to match the contract and a version increment for every wire change.',
+        'Apply this policy in source, or review its explicit settings in {configFile}. An intentional opt-out requires complete OFF settings.',
+    ),
 };

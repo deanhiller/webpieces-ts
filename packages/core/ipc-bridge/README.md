@@ -54,3 +54,23 @@ One connection has one dispatcher containing multiple APIs. Duplicate registrati
 `createScoped(Api, scope)` accepts an `IpcControllerScope<T>` whose `create(context)` supplies the implementation for that invocation. Inject a `clients.withContext(context)` proxy into this controller when it calls back or invokes another API. Concurrent calls have separate context objects and do not overwrite a global async context.
 
 A host may register receivers and create client proxies on both ends of the same connection. `IpcConnection` owns transport parse/send failures and disposal; see the connection and logging contracts above for the transport and logging contracts, error ownership, security responsibilities and downstream native lifecycle tests.
+
+## Build-time guard rules (`@webpieces/code-rules`)
+
+Four code rules keep an application's bridge honest at the build gate (issue #1389). They ship in
+`@webpieces/code-rules` (delivered by `@webpieces/webpieces-tooling`) and are configured in the code-rules
+owner file (`.webpieces-config/rules/code-rules.json` or wherever `rulePacks` points). Every path, module
+and refusal list is required config — no rule supplies a value of its own.
+
+| Rule | Scope | Checks |
+| --- | --- | --- |
+| `ipc-boundary` | per file (`NEW_AND_MODIFIED_FILES` / `MODIFIED_PROJECTS` / `RUN_EVERY_TIME`) | `@webpieces/ipc-bridge` and its factories only in `compositionFiles`; raw `IpcConnection`/`IpcRequest`/… and WebView delivery only in `transportFiles` (and `bootstrapFiles` for discovery); retired modules/identifiers, handwritten wire-client class names and `.spec-support` imports refused everywhere |
+| `ipc-contract-shape` | per file, `contractPaths` only | `@WpInternal` on every directional API, `@WpIpcEndpoint` + `@MaskLog` on every method, one required named DTO, a `Promise` return, unique ids, no host/endpoint imports, the contract project's `requiredProjectTags` |
+| `ipc-pairing` | the IPC project set (`MODIFIED_PROJECTS` / `RUN_EVERY_TIME`) | a generated `createClient(Api)` at every sender, exactly one `create`/`createScoped(Api, …)` at the receiver whose controller extends the same API, no handwritten dispatch map, and the optional wire table agrees with the decorators |
+| `ipc-protocol-fingerprint` | the IPC project set | the committed `{ protocol, fingerprint }` manifest matches the contract (ids, kinds, wire rows, resolved DTO shapes, normalized decorator/mask/validator source), and a wire change raises the version constant relative to the branch base. Re-record with `pnpm wp-ipc-record-protocol` |
+
+None of them builds a TypeScript program over the repository. The two per-file rules parse one file at a
+time; the only type-checked program (`ipc-pairing`, `ipc-protocol-fingerprint`) is rooted at the
+`contractPaths` files alone, so memory follows the contract library, not the repo. The field-by-field
+reference is the doc comment on each config class in
+`packages/tooling/code-rules/src/configs/ipc-configs.ts`.

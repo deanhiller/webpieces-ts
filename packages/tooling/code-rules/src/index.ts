@@ -84,3 +84,10 @@ export { CatchMustPropagateConfig } from './configs/catch-must-propagate-config'
 export { CatchMustPropagateValidator, LocatedCatchFinding } from './validate-catch-must-propagate';
 export { PROJECT_SCAN_MODES, FrameworkTsconfigConfig, FrameworkPackagesEntry, FrameworkPackagesConfig } from './configs/tag-truth-configs';
 export type { ProjectScanMode } from './configs/tag-truth-configs';
+export { IPC_FILE_MODES, IPC_PROJECT_MODES, IPC_WITHOUT_BASELINE, IpcBoundaryConfig, IpcContractShapeConfig, IpcDirectionEntry, IpcPairingConfig, IpcProtocolFingerprintConfig } from './configs/ipc-configs';
+export type { IpcFileMode, IpcProjectMode, IpcWithoutBaseline } from './configs/ipc-configs';
+export { IpcBoundaryValidator } from './validate-ipc-boundary';
+export { IpcContractShapeValidator } from './validate-ipc-contract-shape';
+export { IpcPairingValidator } from './validate-ipc-pairing';
+export { IpcProtocolFingerprintValidator } from './validate-ipc-protocol-fingerprint';
+export { IpcProtocolSnapshot } from './ipc/ipc-protocol-fingerprint';
