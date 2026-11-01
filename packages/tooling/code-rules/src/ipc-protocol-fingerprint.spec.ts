@@ -97,6 +97,14 @@ describe('ipc-protocol-fingerprint', () => {
         expect(JSON.parse(await ws.recordManifest()).fingerprint).toBe(first.fingerprint);
     });
 
+    it('refuses to fingerprint a wire table that is not a literal array, and a row naming no contract method', async () => {
+        const ws = workspace({ 'libraries/apis/internal/shell-api/demo/wire-methods.ts': 'export const WIRE_METHODS = build();' });
+        await expect(ws.recordManifest()).rejects.toThrow(/WIRE_METHODS in .* must be a literal array/);
+        ws.write('libraries/apis/internal/shell-api/demo/wire-methods.ts',
+            "export const WIRE_METHODS=[{api:'AudioToNativeApi',method:'ghost',wire:'audio.ghost',direction:'native',kind:'request',since:3}];");
+        await expect(ws.recordManifest()).rejects.toThrow(/every wire table row must name an existing contract class/);
+    });
+
     it('a missing manifest names the record command', async () => {
         const ws = workspace();
         await expect(ws.fingerprint().run(ws.root)).rejects.toThrow(/does not exist\. Run pnpm wp-ipc-record-protocol/);

@@ -114,7 +114,7 @@ export class IpcProtocolFingerprinter {
                 if (contract === undefined || method === undefined) {
                     throw new InformAiError(
                         `ipc-protocol-fingerprint: cannot fingerprint unbound IPC method ${String(row.api)}.${String(row.method)} — ` +
-                            'fix the wire table row (ipc-pairing names the cause).',
+                            'every wire table row must name an existing contract class and one of its methods; fix that row and retry.',
                     );
                 }
                 const signature = checker.getSignatureFromDeclaration(method.declaration);

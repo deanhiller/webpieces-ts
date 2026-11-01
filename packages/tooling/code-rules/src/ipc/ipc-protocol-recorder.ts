@@ -45,6 +45,12 @@ export class IpcProtocolRecorder {
         }
         const options = new IpcCompilerOptionsReader().read(workspaceRoot, config.tsconfigPath);
         const inventory = new IpcContractInventoryReader().read(workspaceRoot, options, contractFiles, config.apiClassSuffixes, wireTable);
+        if (inventory.errors.length > 0) {
+            throw new InformAiError(
+                `${IPC_FINGERPRINT_RULE}: cannot fingerprint the contract until its wire table is readable — ` +
+                    `${inventory.errors.join(' ')} Fix ${config.wireTableFile ?? 'the wire table'} and retry.`,
+            );
+        }
         return new IpcProtocolFingerprinter().snapshot(
             new IpcFingerprintInputs(workspaceRoot, inventory, normalized, config.versionFile, config.versionConstant),
         );
