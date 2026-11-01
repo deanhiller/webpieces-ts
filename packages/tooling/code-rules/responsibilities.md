@@ -36,6 +36,12 @@ Build-time code validation gate. Standalone (no Nx dependency) CLI that validate
   and `fs` in a universal one; `framework-packages` refuses a production import of a configured framework
   package (`@angular/*`, `react`, `express`, `firebase-admin`, …) in a project any of whose framework tags
   its entry does not allow. Both THROW one `RuleFailError`; every behavioural field is required.
+- The four `@webpieces/ipc-bridge` guard rules (#1389), under `src/ipc/` with validators beside the others:
+  `ipc-boundary` and `ipc-contract-shape` judge one file at a time from its syntax tree (the scope modes
+  pick the files); `ipc-pairing` and `ipc-protocol-fingerprint` judge the configured IPC file set when a
+  project owning one is touched, reading the contract through a `ts.Program` rooted at `contractPaths`
+  ONLY and the endpoint files syntactically. The `wp-ipc-record-protocol` bin re-records the fingerprint
+  manifest exactly as the rule computes it. Every path, module and refusal list is required config.
 - CLI entry points and orchestration: `wp-validate-code` and the `wp-ci` gate runner, reporting (`rule-reporter`), mode resolution.
 - Standalone `CodeValidator` executor consumable without the Nx toolchain.
 

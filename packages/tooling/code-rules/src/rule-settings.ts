@@ -58,7 +58,11 @@ export const optionalTuning: Readonly<Record<string, ConfigObject>> = {
     "no-utility-types-in-api-lib": {},
     "required-type-suffix": {},
     "framework-tsconfig": {},
-    "framework-packages": {}
+    "framework-packages": {},
+    "ipc-boundary": {},
+    "ipc-contract-shape": {},
+    "ipc-pairing": {},
+    "ipc-protocol-fingerprint": {}
 };
 
 /** Written for review by setup/sync; never used as a loader fallback. */
@@ -282,5 +286,119 @@ export const recommendedSeeds: Readonly<Record<string, ConfigObject>> = {
                 ]
             }
         ]
+    },
+    "ipc-boundary": {
+        "mode": "NEW_AND_MODIFIED_FILES",
+        "turnOffRuleUntilEpoch": 0,
+        "turnOffRuleWhileOnBranch": null,
+        "tsconfigPath": "tsconfig.base.json",
+        "transportFiles": [
+            "apps/website/src/app/native/shell-transport.ts",
+            "apps/shell/src/bridge/shell-transport.ts"
+        ],
+        "compositionFiles": [
+            "apps/website/src/app/native/provide-native.ts",
+            "apps/website/src/app/native/website-endpoints.ts",
+            "apps/shell/src/bridge/native-endpoints.ts"
+        ],
+        "bootstrapFiles": [
+            "apps/website/src/app/native/shell-bootstrap.ts",
+            "apps/shell/src/bridge/native-bootstrap.ts"
+        ],
+        "testOnlyModuleSuffixes": [
+            ".spec-support"
+        ],
+        "retiredModules": [],
+        "retiredIdentifiers": [],
+        "forbiddenClassNamePatterns": [
+            "To(Native|Website)Impl$"
+        ],
+        "legacyWireFile": null,
+        "bootstrapAllowedLegacyNames": [],
+        "legacyWireCommandPrefixes": []
+    },
+    "ipc-contract-shape": {
+        "mode": "NEW_AND_MODIFIED_FILES",
+        "turnOffRuleUntilEpoch": 0,
+        "turnOffRuleWhileOnBranch": null,
+        "tsconfigPath": "tsconfig.base.json",
+        "contractPaths": [
+            "libraries/apis/shell-api/src/**"
+        ],
+        "apiClassSuffixes": [
+            "ToNativeApi",
+            "ToWebsiteApi"
+        ],
+        "requiredProjectTags": [
+            "api:ipc-contract",
+            "framework:browser",
+            "framework:node"
+        ],
+        "forbiddenImportModules": [
+            "@angular/*",
+            "react",
+            "react-native",
+            "expo*",
+            "@webpieces/ipc-bridge"
+        ],
+        "forbiddenImportPaths": [
+            "apps/**"
+        ]
+    },
+    "ipc-pairing": {
+        "mode": "MODIFIED_PROJECTS",
+        "turnOffRuleUntilEpoch": 0,
+        "turnOffRuleWhileOnBranch": null,
+        "tsconfigPath": "tsconfig.base.json",
+        "contractPaths": [
+            "libraries/apis/shell-api/src/**"
+        ],
+        "directions": [
+            {
+                "apiSuffix": "ToNativeApi",
+                "wireDirection": "native",
+                "senderFiles": [
+                    "apps/website/src/app/native/**"
+                ],
+                "receiverFiles": [
+                    "apps/shell/src/bridge/native-endpoints.ts"
+                ]
+            },
+            {
+                "apiSuffix": "ToWebsiteApi",
+                "wireDirection": "website",
+                "senderFiles": [
+                    "apps/shell/src/bridge/**"
+                ],
+                "receiverFiles": [
+                    "apps/website/src/app/native/website-endpoints.ts"
+                ]
+            }
+        ],
+        "wireTableFile": null,
+        "wireTableExport": null,
+        "forbiddenDispatchVariables": []
+    },
+    "ipc-protocol-fingerprint": {
+        "mode": "MODIFIED_PROJECTS",
+        "turnOffRuleUntilEpoch": 0,
+        "turnOffRuleWhileOnBranch": null,
+        "tsconfigPath": "tsconfig.base.json",
+        "contractPaths": [
+            "libraries/apis/shell-api/src/**"
+        ],
+        "apiClassSuffixes": [
+            "ToNativeApi",
+            "ToWebsiteApi"
+        ],
+        "wireTableFile": null,
+        "wireTableExport": null,
+        "normalizedSourceFiles": [
+            "libraries/apis/shell-api/src/*Api.ts"
+        ],
+        "manifestPath": "libraries/apis/shell-api/protocol-manifest.json",
+        "versionFile": "libraries/apis/shell-api/src/bridge-protocol.ts",
+        "versionConstant": "BRIDGE_PROTOCOL_VERSION",
+        "withoutBaseline": "FAIL"
     }
 };

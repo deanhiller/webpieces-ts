@@ -1237,6 +1237,296 @@
           }
         }
       }
+    },
+    "ipc-boundary": {
+      "mode": {
+        "type": "string",
+        "enumValues": [
+          "OFF",
+          "NEW_AND_MODIFIED_FILES",
+          "MODIFIED_PROJECTS",
+          "RUN_EVERY_TIME"
+        ],
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "tsconfigPath": {
+        "type": "string",
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "transportFiles": {
+        "type": "string[]",
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": true,
+        "emptyInstruction": "Name the module(s) that own raw IPC delivery."
+      },
+      "compositionFiles": {
+        "type": "string[]",
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": true,
+        "emptyInstruction": "Name the module(s) that create IPC clients and register receivers."
+      },
+      "bootstrapFiles": {
+        "type": "string[]",
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "testOnlyModuleSuffixes": {
+        "type": "string[]",
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "retiredModules": {
+        "type": "string[]",
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "retiredIdentifiers": {
+        "type": "string[]",
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "forbiddenClassNamePatterns": {
+        "type": "string[]",
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "legacyWireFile": {
+        "type": "string",
+        "optional": false,
+        "nullable": true,
+        "nonEmpty": false
+      },
+      "bootstrapAllowedLegacyNames": {
+        "type": "string[]",
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "legacyWireCommandPrefixes": {
+        "type": "string[]",
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      }
+    },
+    "ipc-contract-shape": {
+      "mode": {
+        "type": "string",
+        "enumValues": [
+          "OFF",
+          "NEW_AND_MODIFIED_FILES",
+          "MODIFIED_PROJECTS",
+          "RUN_EVERY_TIME"
+        ],
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "tsconfigPath": {
+        "type": "string",
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "contractPaths": {
+        "type": "string[]",
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": true,
+        "emptyInstruction": "Name the contract library source globs."
+      },
+      "apiClassSuffixes": {
+        "type": "string[]",
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": true,
+        "emptyInstruction": "Name the class suffixes of directional APIs, e.g. ToNativeApi."
+      },
+      "requiredProjectTags": {
+        "type": "string[]",
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "forbiddenImportModules": {
+        "type": "string[]",
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "forbiddenImportPaths": {
+        "type": "string[]",
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      }
+    },
+    "ipc-pairing": {
+      "mode": {
+        "type": "string",
+        "enumValues": [
+          "OFF",
+          "MODIFIED_PROJECTS",
+          "RUN_EVERY_TIME"
+        ],
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "tsconfigPath": {
+        "type": "string",
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "contractPaths": {
+        "type": "string[]",
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": true,
+        "emptyInstruction": "Name the contract library source globs."
+      },
+      "directions": {
+        "type": "object[]",
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": true,
+        "elementSchema": {
+          "apiSuffix": {
+            "type": "string",
+            "optional": false,
+            "nullable": false,
+            "nonEmpty": false
+          },
+          "wireDirection": {
+            "type": "string",
+            "optional": false,
+            "nullable": false,
+            "nonEmpty": false
+          },
+          "senderFiles": {
+            "type": "string[]",
+            "optional": false,
+            "nullable": false,
+            "nonEmpty": true
+          },
+          "receiverFiles": {
+            "type": "string[]",
+            "optional": false,
+            "nullable": false,
+            "nonEmpty": true
+          }
+        }
+      },
+      "wireTableFile": {
+        "type": "string",
+        "optional": false,
+        "nullable": true,
+        "nonEmpty": false
+      },
+      "wireTableExport": {
+        "type": "string",
+        "optional": false,
+        "nullable": true,
+        "nonEmpty": false
+      },
+      "forbiddenDispatchVariables": {
+        "type": "string[]",
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      }
+    },
+    "ipc-protocol-fingerprint": {
+      "mode": {
+        "type": "string",
+        "enumValues": [
+          "OFF",
+          "MODIFIED_PROJECTS",
+          "RUN_EVERY_TIME"
+        ],
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "tsconfigPath": {
+        "type": "string",
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "contractPaths": {
+        "type": "string[]",
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": true,
+        "emptyInstruction": "Name the contract library source globs."
+      },
+      "apiClassSuffixes": {
+        "type": "string[]",
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": true,
+        "emptyInstruction": "Name the class suffixes of directional APIs, e.g. ToNativeApi."
+      },
+      "wireTableFile": {
+        "type": "string",
+        "optional": false,
+        "nullable": true,
+        "nonEmpty": false
+      },
+      "wireTableExport": {
+        "type": "string",
+        "optional": false,
+        "nullable": true,
+        "nonEmpty": false
+      },
+      "normalizedSourceFiles": {
+        "type": "string[]",
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": true,
+        "emptyInstruction": "Name the contract/mask/validator sources to hash."
+      },
+      "manifestPath": {
+        "type": "string",
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "versionFile": {
+        "type": "string",
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "versionConstant": {
+        "type": "string",
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      },
+      "withoutBaseline": {
+        "type": "string",
+        "enumValues": [
+          "FAIL",
+          "VERIFY_COMMITTED"
+        ],
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      }
     }
   },
   "tuning": {
@@ -1321,7 +1611,11 @@
     "framework-packages": {},
     "branch-creation-guard": {},
     "pr-lifecycle-guard": {},
-    "branch-state-guard": {}
+    "branch-state-guard": {},
+    "ipc-boundary": {},
+    "ipc-contract-shape": {},
+    "ipc-pairing": {},
+    "ipc-protocol-fingerprint": {}
   },
   "seeds": {
     "max-method-lines": {
@@ -1771,6 +2065,120 @@
       "productDependencies": [],
       "turnOffRuleUntilEpoch": 0,
       "turnOffRuleWhileOnBranch": null
+    },
+    "ipc-boundary": {
+      "mode": "NEW_AND_MODIFIED_FILES",
+      "turnOffRuleUntilEpoch": 0,
+      "turnOffRuleWhileOnBranch": null,
+      "tsconfigPath": "tsconfig.base.json",
+      "transportFiles": [
+        "apps/website/src/app/native/shell-transport.ts",
+        "apps/shell/src/bridge/shell-transport.ts"
+      ],
+      "compositionFiles": [
+        "apps/website/src/app/native/provide-native.ts",
+        "apps/website/src/app/native/website-endpoints.ts",
+        "apps/shell/src/bridge/native-endpoints.ts"
+      ],
+      "bootstrapFiles": [
+        "apps/website/src/app/native/shell-bootstrap.ts",
+        "apps/shell/src/bridge/native-bootstrap.ts"
+      ],
+      "testOnlyModuleSuffixes": [
+        ".spec-support"
+      ],
+      "retiredModules": [],
+      "retiredIdentifiers": [],
+      "forbiddenClassNamePatterns": [
+        "To(Native|Website)Impl$"
+      ],
+      "legacyWireFile": null,
+      "bootstrapAllowedLegacyNames": [],
+      "legacyWireCommandPrefixes": []
+    },
+    "ipc-contract-shape": {
+      "mode": "NEW_AND_MODIFIED_FILES",
+      "turnOffRuleUntilEpoch": 0,
+      "turnOffRuleWhileOnBranch": null,
+      "tsconfigPath": "tsconfig.base.json",
+      "contractPaths": [
+        "libraries/apis/shell-api/src/**"
+      ],
+      "apiClassSuffixes": [
+        "ToNativeApi",
+        "ToWebsiteApi"
+      ],
+      "requiredProjectTags": [
+        "api:ipc-contract",
+        "framework:browser",
+        "framework:node"
+      ],
+      "forbiddenImportModules": [
+        "@angular/*",
+        "react",
+        "react-native",
+        "expo*",
+        "@webpieces/ipc-bridge"
+      ],
+      "forbiddenImportPaths": [
+        "apps/**"
+      ]
+    },
+    "ipc-pairing": {
+      "mode": "MODIFIED_PROJECTS",
+      "turnOffRuleUntilEpoch": 0,
+      "turnOffRuleWhileOnBranch": null,
+      "tsconfigPath": "tsconfig.base.json",
+      "contractPaths": [
+        "libraries/apis/shell-api/src/**"
+      ],
+      "directions": [
+        {
+          "apiSuffix": "ToNativeApi",
+          "wireDirection": "native",
+          "senderFiles": [
+            "apps/website/src/app/native/**"
+          ],
+          "receiverFiles": [
+            "apps/shell/src/bridge/native-endpoints.ts"
+          ]
+        },
+        {
+          "apiSuffix": "ToWebsiteApi",
+          "wireDirection": "website",
+          "senderFiles": [
+            "apps/shell/src/bridge/**"
+          ],
+          "receiverFiles": [
+            "apps/website/src/app/native/website-endpoints.ts"
+          ]
+        }
+      ],
+      "wireTableFile": null,
+      "wireTableExport": null,
+      "forbiddenDispatchVariables": []
+    },
+    "ipc-protocol-fingerprint": {
+      "mode": "MODIFIED_PROJECTS",
+      "turnOffRuleUntilEpoch": 0,
+      "turnOffRuleWhileOnBranch": null,
+      "tsconfigPath": "tsconfig.base.json",
+      "contractPaths": [
+        "libraries/apis/shell-api/src/**"
+      ],
+      "apiClassSuffixes": [
+        "ToNativeApi",
+        "ToWebsiteApi"
+      ],
+      "wireTableFile": null,
+      "wireTableExport": null,
+      "normalizedSourceFiles": [
+        "libraries/apis/shell-api/src/*Api.ts"
+      ],
+      "manifestPath": "libraries/apis/shell-api/protocol-manifest.json",
+      "versionFile": "libraries/apis/shell-api/src/bridge-protocol.ts",
+      "versionConstant": "BRIDGE_PROTOCOL_VERSION",
+      "withoutBaseline": "FAIL"
     }
   },
   "migrations": [
@@ -1973,7 +2381,11 @@
       "no-utility-types-in-api-lib",
       "required-type-suffix",
       "framework-tsconfig",
-      "framework-packages"
+      "framework-packages",
+      "ipc-boundary",
+      "ipc-contract-shape",
+      "ipc-pairing",
+      "ipc-protocol-fingerprint"
     ],
     "@webpieces/ai-hook-rules": [
       "throw-cause-required",
