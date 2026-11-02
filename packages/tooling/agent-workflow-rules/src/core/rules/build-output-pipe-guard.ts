@@ -77,7 +77,8 @@ export class BuildOutputPipeGuardRule extends BashRuleBase<EmptyRuleConfig> {
                 // one place that knows it.
                 new Option(
                     'Re-run the command named above with nothing after it — no pipe, no redirect.\n' +
-                    'The console stays short — a size heartbeat, then the result and a "FullLog : <path>" line.',
+                    'The console stays short: its FIRST line is "FullLog : <path>", then a size heartbeat,\n' +
+                    'then the result and the same "FullLog : <path>" line again.',
                     true),
                 new Option(
                     'Then read as much or as little of that log as you like, as many times as you like:\n' +
@@ -85,6 +86,11 @@ export class BuildOutputPipeGuardRule extends BashRuleBase<EmptyRuleConfig> {
                     '    tail -50 "<the FullLog path it printed>"\n' +
                     'Use the path from THIS run, never one typed from memory — a stale relative path ' +
                     'greps nothing, which reads exactly like a clean build.'),
+                // Backgrounding is a legitimate choice (issue #1393) and is NOT blocked: the log path is
+                // the first line printed, so the caller never needs its harness's own capture file.
+                new Option(
+                    'Running it in the background is fine. If you do, read the "FullLog : <path>" it\n' +
+                    'prints FIRST, and grep that file — not your harness\'s captured output.'),
                 new Option(
                     'The previous run is still on disk as "<that path>.bak", so comparing two runs ' +
                     'needs no third one.'),
@@ -118,7 +124,8 @@ export class BuildOutputPipeGuardRule extends BashRuleBase<EmptyRuleConfig> {
             + 'until the command exits, so the harness sees a silent command and KILLS it at 600s, after '
             + 'the whole build has run.\n\n'
             + `    pnpm ${hit.command}\n\n`
-            + 'Then grep the "FullLog : <path>" it prints. The previous run is kept beside it as `.bak`.';
+            + 'Then grep the "FullLog : <path>" it prints — it is the FIRST line, so if you background the '
+            + 'command, read that path first. The previous run is kept beside it as `.bak`.';
     }
 
     private what(hit: BoundedOutputHit): string {

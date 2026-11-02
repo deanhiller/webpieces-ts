@@ -1,6 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import { dotWebpieces } from '@webpieces/tooling-common';
+import { dotWebpieces, LOGS_STATE_DIR } from '@webpieces/tooling-common';
 import { toError } from '@webpieces/tooling-common/to-error';
 import { injectable, bindingScopeValues } from 'inversify';
 
@@ -16,12 +16,15 @@ import { injectable, bindingScopeValues } from 'inversify';
 // can `grep` it without first working out which subsystem wrote it.
 //
 // ─── WHERE the files land, and why that shape ──────────────────────────────────────────────────────────
-// Through `dotWebpieces` — never `path.join(repoRoot, '.webpieces')`. In a LINKED WORKTREE `local()`
-// resolves to `<primary>/.webpieces/worktrees/<git worktree name>/`, so:
+// Through `dotWebpieces.aiFacing()` — never `path.join(repoRoot, '.webpieces')` — into ONE directory,
+// `<tree>/.webpieces/logs/`, where `<tree>` is the checkout the command ran in: the primary clone, or a
+// LINKED WORKTREE's own root (issue #1393). So:
 //   • N agents in N worktrees never write one another's log, by construction rather than by naming;
-//   • the history OUTLIVES the worktree — `wp-cleanup` reaps a tree's directory and the logs it wrote are
-//     still there under the primary clone, which is exactly when you want them;
-//   • it self-limits, because `.webpieces/worktrees/**` is already swept once a namespace goes stale.
+//   • the path a command prints is INSIDE the tree the agent is working in. An agent whose reads are
+//     scoped to its worktree (auto mode's classifier, a sandbox, Codex's workspace-write) can always
+//     read it. These logs used to live under `<primary>/.webpieces/worktrees/<name>/`, outside the
+//     worktree, and three unattended runs died at a refused read of exactly that path;
+//   • it self-limits: the logs die with the worktree, and `cleanTmp` already prunes the AI-facing root.
 //     Nothing here needs a retention policy of its own.
 
 /** The suffix of the ONE previous generation kept beside a log. */
@@ -37,20 +40,11 @@ const BACKUP_SUFFIX = '.bak';
 @injectable(bindingScopeValues.Singleton)
 export class GateLogFile {
     /**
-     * `<local()>/logs/<name>` — the ONE log directory, per worktree namespace. Creates the directory.
-     * Use for anything a MESSAGE points at; nobody types these names.
+     * `<tree>/.webpieces/logs/<name>` — the ONE directory every log a command points its caller at
+     * lives in, inside the checkout the command ran in. Creates the directory.
      */
     logsPath(repoRoot: string, name: string): string {
-        return this.ensureDir(dotWebpieces.logsFile(repoRoot, name));
-    }
-
-    /**
-     * `<local()>/<name>` — the ROOT of the state dir, for the one log a PERSON types from memory
-     * (`.webpieces/build.log`). Creates the directory. Reach for `logsPath` unless the path itself has
-     * to be memorable.
-     */
-    localPath(repoRoot: string, name: string): string {
-        return this.ensureDir(dotWebpieces.localFile(repoRoot, name));
+        return this.ensureDir(dotWebpieces.aiFacingFile(repoRoot, LOGS_STATE_DIR, name));
     }
 
     /** Where the PREVIOUS run of `logPath` is kept — always `<logPath>.bak`. */
@@ -73,6 +67,16 @@ export class GateLogFile {
     }
 
     /**
+     * The line a command prints BEFORE it does any work: the same `FullLog : <path>` the closing pointer
+     * repeats (issue #1393). A caller that backgrounds the command, or whose harness captures its console
+     * into a file of its own, then knows where to read from the first line on — it never has to reach
+     * for the harness's capture file, which an unattended agent may be refused.
+     */
+    startLine(logPath: string): string {
+        return `FullLog : ${logPath}\n`;
+    }
+
+    /**
      * The two lines that name a log — identical on success and on failure, so there is exactly one shape
      * to recognise.
      *
@@ -88,8 +92,8 @@ export class GateLogFile {
     }
 
     /**
-     * The path as a progress line should show it: relative to the repo when it sits inside it (a linked
-     * worktree's state lives under the PRIMARY clone, so it usually does not), absolute otherwise.
+     * The path as a progress line should show it: relative to the repo when it sits inside it (it always
+     * does now that logs live in the tree's own `.webpieces/logs/`), absolute otherwise.
      */
     displayPath(repoRoot: string, logPath: string): string {
         const relative = path.relative(repoRoot, logPath);

@@ -34,10 +34,11 @@ export class StateMigrationReport {
  * merge under `merge-info/staged/<branch>/`. The first invocation under the new scheme must not orphan
  * them; a merge an agent is standing in the middle of is not recoverable by re-running anything.
  *
- * WHAT IT MUST NOT TOUCH: the `keepInPlace` leaves — `pr-review/` today. Those are not legacy at all;
- * `DotWebpieces.aiWritable()` resolves them to the worktree root ON PURPOSE, because that is the only
- * directory a worktree-isolated coding agent is permitted to write into. Draining one would delete the
- * live review directory out from under the agent writing it.
+ * WHAT IT MUST NOT TOUCH: the `keepInPlace` leaves — `pr-review/` and `logs/` today
+ * (AI_FACING_STATE_DIRS). Those are not legacy at all; `DotWebpieces.aiFacing()` resolves them to the
+ * worktree root ON PURPOSE, because that is the only directory a worktree-isolated coding agent is
+ * permitted to write into, or reliably read from. Draining one would delete the live review directory
+ * out from under the agent writing it, or a build log out from under the `FullLog :` path just printed.
  *
  * WHY a plain move suffices: the destination namespace is created FOR this worktree, so it is empty in
  * the ordinary case and the whole tree moves in one `rename`. Where something is already there (a
@@ -63,10 +64,10 @@ export class StateDirMigrator {
      * dir does not exist / is not a real directory (a symlink means migration already happened).
      *
      * `keepInPlace` names the TOP-LEVEL leaves of `legacyDir` that are NOT legacy — the ones
-     * `DotWebpieces.aiWritable()` deliberately resolves to the worktree's own root because a
-     * worktree-isolated coding agent cannot write anywhere else (today: `pr-review/`). Sweeping those
-     * into the namespace would move a live directory out from under the agent that is mid-way through
-     * writing it, so they are skipped and NOT reported as kept — nothing about them is unresolved.
+     * `DotWebpieces.aiFacing()` deliberately resolves to the worktree's own root because a
+     * worktree-isolated coding agent cannot write anywhere else (`pr-review/`) and may be refused a read
+     * anywhere else (`logs/`, the logs a command prints a `FullLog :` path to). Sweeping those into the
+     * namespace would move a live directory out from under the agent using it, so they are skipped and NOT reported as kept — nothing about them is unresolved.
      */
     migrate(legacyDir: string, targetDir: string, keepInPlace: readonly string[]): StateMigrationReport {
         const report = new StateMigrationReport();
@@ -97,7 +98,7 @@ export class StateDirMigrator {
      * its children individually.
      *
      * `keepInPlace` is consulted at the TOP LEVEL only (`relative === ''`), because that is the scope
-     * `DotWebpieces.aiWritable()` assigns: a whole leaf of `.webpieces/` either lives in the worktree or
+     * `DotWebpieces.aiFacing()` assigns: a whole leaf of `.webpieces/` either lives in the worktree or
      * it does not. A nested `pr-review/` under some other home is ordinary legacy state.
      */
     private drain(

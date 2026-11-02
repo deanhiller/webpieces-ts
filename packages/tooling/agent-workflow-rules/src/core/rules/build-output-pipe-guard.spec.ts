@@ -134,6 +134,18 @@ describe('build-output-pipe-guard message', () => {
     });
 
     /**
+     * Issue #1393: backgrounding one of these commands is a legitimate choice and is never refused. The
+     * guard only says where to read — the FullLog path is the command's FIRST line — so an agent never
+     * reaches for its harness's capture file, which an unattended run may be refused.
+     */
+    it('says a backgrounded run reads the FullLog path printed first, and never blocks backgrounding', () => {
+        expect(check('pnpm wp-review-upsert-pr &')).toEqual([]);
+        expect(message('pnpm wp-review-upsert-pr | tail -5')).toContain('if you background the command, read that path first');
+        const background = guard().fixHint.fixOptions.find((o): boolean => o.text.includes('background'));
+        expect(background?.text).toContain('"FullLog : <path>" it\nprints FIRST');
+    });
+
+    /**
      * `fixHint` is static per-rule and cannot see WHICH command was piped, so any command it spelled
      * would be wrong for two of the three. It named `wp-build` at a caller who piped
      * `wp-review-upsert-pr` — a cure that does not match the block, which is the "message teaches a

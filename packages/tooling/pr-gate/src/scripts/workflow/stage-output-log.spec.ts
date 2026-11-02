@@ -141,14 +141,21 @@ describe('StageOutputLog outside a capture', () => {
 
 describe('StageOutputLog file placement', () => {
     /**
-     * Same rule as every other gate log: a linked worktree's file lands under the PRIMARY clone,
-     * namespaced by git's worktree name, so it survives the worktree being reaped and cannot collide
-     * with another agent's.
+     * Same rule as every other gate log (issue #1393): a linked worktree's file lands INSIDE that worktree,
+     * in its own gitignored `.webpieces/logs/`, so an agent confined to the worktree can read the path it
+     * is handed — and the FIRST terminal line names that path while the file already exists.
      */
-    it('namespaces a linked worktree under the primary clone', async () => {
-        await stage.withCapture(worktree, REVIEW_CONSOLE_LOG, (): Promise<void> => Promise.resolve());
-        const expected = path.join(primary, '.webpieces', 'worktrees', 'wt-feature', 'logs', REVIEW_CONSOLE_LOG);
-        expect(fs.existsSync(expected)).toBe(true);
+    it('writes a linked worktree\'s log inside the worktree and names it on the FIRST line', async () => {
+        const expected = path.join(worktree, '.webpieces', 'logs', REVIEW_CONSOLE_LOG);
+        let existedDuringStage = false;
+        await stage.withCapture(worktree, REVIEW_CONSOLE_LOG, (): Promise<void> => {
+            existedDuringStage = fs.existsSync(expected);
+            return Promise.resolve();
+        });
+        expect(existedDuringStage).toBe(true);
+        expect(terminal.split('\n')[0]).toBe(`FullLog : ${expected}`);
+        expect(fs.existsSync(path.join(primary, '.webpieces', 'worktrees', 'wt-feature', 'logs', REVIEW_CONSOLE_LOG)))
+            .toBe(false);
     });
 
     it('gives the two stages separate files', async () => {

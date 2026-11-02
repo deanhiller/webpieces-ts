@@ -61,11 +61,11 @@ describe('legacy per-worktree .webpieces migration', () => {
     /**
      * The regression this exists to prevent: `pr-review/` is where a coding agent WRITES summary.json and
      * where reviewer subagents write their verdicts, and a worktree-isolated agent may only write inside
-     * its own worktree. `aiWritable()` puts it there deliberately, so a migrator that swept it into the
+     * its own worktree. `aiFacing()` puts it there deliberately, so a migrator that swept it into the
      * primary clone's namespace would delete the live directory out from under the agent — and put the
      * only writable copy back out of reach.
      */
-    it('LEAVES pr-review/ in the worktree — it is aiWritable() state, not legacy', () => {
+    it('LEAVES pr-review/ in the worktree — it is aiFacing() state, not legacy', () => {
         writeFile(worktree, '.webpieces/pr-review/feature/summary.json', '{"title":"wip"}');
         writeFile(worktree, '.webpieces/merge-info/staged/feature/merge-in-progress.json', '{"a":1}');
 
@@ -75,10 +75,25 @@ describe('legacy per-worktree .webpieces migration', () => {
         expect(fs.readFileSync(path.join(worktree, '.webpieces/pr-review/feature/summary.json'), 'utf8'))
             .toBe('{"title":"wip"}');
         expect(fs.existsSync(path.join(namespace, 'pr-review'))).toBe(false);
-        // …and it is exactly where aiWritable() says to look for it.
-        expect(dot.aiWritable(worktree)).toBe(path.join(worktree, '.webpieces'));
+        // …and it is exactly where aiFacing() says to look for it.
+        expect(dot.aiFacing(worktree)).toBe(path.join(worktree, '.webpieces'));
         // The genuinely-legacy sibling still migrated, so this is a skip and not a disabled migrator.
         expect(fs.existsSync(path.join(namespace, 'merge-info/staged/feature/merge-in-progress.json'))).toBe(true);
+    });
+
+    /**
+     * Issue #1393: a build or stage log whose path a command just PRINTED lives in the worktree's own
+     * `.webpieces/logs/`. Another process's first state resolution must not sweep it into the namespace,
+     * or the printed `FullLog :` path would point at nothing mid-build.
+     */
+    it('LEAVES logs/ in the worktree — a printed FullLog path must keep pointing at the file', () => {
+        writeFile(worktree, '.webpieces/logs/build.log', 'building…\n');
+
+        const dot = new DotWebpieces();
+        expect(dot.local(worktree)).toBe(namespace);
+
+        expect(fs.readFileSync(path.join(worktree, '.webpieces/logs/build.log'), 'utf8')).toBe('building…\n');
+        expect(fs.existsSync(path.join(namespace, 'logs', 'build.log'))).toBe(false);
     });
 
     it('NEVER destroys or overwrites: an occupied destination leaves the legacy copy in place', () => {
@@ -226,7 +241,7 @@ describe('declared repository policy inputs survive linked-worktree state migrat
         }));
         const policyFiles = ['custom/client.json', 'rules/workflow.json', 'notes.md'];
         for (const filename of policyFiles) writeFile(worktree, `.webpieces-config/${filename}`, `original:${filename}`);
-        writeFile(worktree, '.webpieces/logs/hook.log', 'runtime state');
+        writeFile(worktree, '.webpieces/merge-info/staged/feature/state.json', 'runtime state');
 
         new DotWebpieces().local(worktree);
 
@@ -234,7 +249,7 @@ describe('declared repository policy inputs survive linked-worktree state migrat
             expect(fs.readFileSync(path.join(worktree, '.webpieces-config', filename), 'utf8')).toBe(`original:${filename}`);
             expect(fs.existsSync(path.join(namespace, filename))).toBe(false);
         }
-        expect(fs.readFileSync(path.join(namespace, 'logs/hook.log'), 'utf8')).toBe('runtime state');
+        expect(fs.readFileSync(path.join(namespace, 'merge-info/staged/feature/state.json'), 'utf8')).toBe('runtime state');
     });
 
     it('keeps policy outside runtime state even when the root declaration is malformed', () => {

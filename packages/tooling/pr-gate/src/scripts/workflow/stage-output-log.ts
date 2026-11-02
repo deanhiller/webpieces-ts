@@ -80,6 +80,11 @@ export class StageOutputLog {
         this.logPath = this.files.logsPath(repoRoot, fileName);
         this.files.rotate(this.logPath);
         this.fd = fs.openSync(this.logPath, 'w');
+        // The FIRST line the stage prints, before any work (issue #1393): the file now exists, and a
+        // caller that backgrounds the stage — or whose harness captures its console into a file the caller
+        // may not be allowed to read — knows where everything below is going. The same pointer closes
+        // the stage in release().
+        this.say(this.files.startLine(this.logPath));
         // The REFERENCE, not a bound copy: `release` puts this exact function back, so a caller that
         // installed its own stdout before us (a spec, a wrapping bin) gets ITS function back rather than
         // a wrapper around it, and repeated captures cannot stack bound layers.

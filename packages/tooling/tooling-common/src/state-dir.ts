@@ -11,10 +11,16 @@ import { GitCheckout, gitCheckout } from './git-checkout';
 // `<primary>/.webpieces/` directly, exactly as it always has.
 export const WORKTREE_STATE_DIR = 'worktrees';
 
-// The ONE and ONLY directory webpieces writes observability state into — `<state>/logs/`, for the
-// primary clone and for each worktree namespace alike. There is no second state directory and no
-// split: the L1 binary's logs, the L0 sh shim's log, and the rejection DETAIL files (which are not
-// `.log`s but belong to the log that indexes them) are all here.
+// The directory NAME every log lives under — `<state>/logs/`. There are exactly two scopes of it, and
+// each has one rule (issue #1393):
+//   • `dotWebpieces.logs()` — `<local()>/logs`: what the TOOLING logs for its own audit trail. The L1
+//     binary's logs, the L0 sh shim's log, and the rejection DETAIL files (which are not `.log`s but
+//     belong to the log that indexes them). Nobody is handed these paths mid-task; they outlive a
+//     reaped worktree under the primary clone, which is when an audit wants them.
+//   • `dotWebpieces.aiFacingFile(root, LOGS_STATE_DIR, …)` — `<worktree>/.webpieces/logs`: a log a
+//     COMMAND PRINTS a `FullLog :` path to, for the agent that ran it to read (the build gate and the
+//     stage console logs). See `aiFacing()` for why that one must sit inside the worktree.
+// In the primary clone the two are the same directory.
 //
 // It used to be two directories — `hooks/`, holding the binary's logs mixed in with dated
 // `hooks/<YYYY-MM-DD>/writeInfo-*.md` rejection details, and `logs/`, where the sh shim wrote — so
@@ -28,12 +34,13 @@ export const WORKTREE_STATE_DIR = 'worktrees';
 // hooks IN PARALLEL and subagents/windows share a tree, so writers must never share a file.
 export const LOGS_STATE_DIR = 'logs';
 
-// The leaves of `.webpieces/` that resolve through `aiWritable()` and therefore live in the WORKTREE's
+// The leaves of `.webpieces/` that resolve through `aiFacing()` and therefore live in the WORKTREE's
 // own root rather than in the primary clone's namespace. Named here because TWO things must agree about
-// them: `aiWritable()`, which puts them there, and `StateDirMigrator`, which must NOT sweep them out
+// them: `aiFacing()`, which puts them there, and `StateDirMigrator`, which must NOT sweep them out
 // again (its whole job is draining `<worktree>/.webpieces` into the namespace, and these are the one
-// part of that directory that is live rather than legacy).
-export const AI_WRITABLE_STATE_DIRS: readonly string[] = [PR_REVIEW_DIR];
+// part of that directory that is live rather than legacy). `logs/` is here because a migration that
+// renamed it away mid-build would leave the printed `FullLog :` path pointing at nothing.
+export const AI_FACING_STATE_DIRS: readonly string[] = [PR_REVIEW_DIR, LOGS_STATE_DIR];
 
 
 // git prints the shared git dir as `<primary>/.git` for a conventional clone. Anything else (a bare
@@ -69,7 +76,7 @@ export class GitDirs {
  *   dotWebpieces.shared(dir)     → <primary>/.webpieces                    (repo-wide facts)
  *   dotWebpieces.local(dir)      → <primary>/.webpieces/worktrees/<name>   (this worktree only, tooling-written)
  *                                → <primary>/.webpieces                    (…in the primary clone)
- *   dotWebpieces.aiWritable(dir) → <worktree>/.webpieces                   (this worktree only, AI-WRITTEN)
+ *   dotWebpieces.aiFacing(dir)   → <worktree>/.webpieces                   (this worktree only, AI-WRITTEN or AI-READ)
  *                                → <primary>/.webpieces                    (…in the primary clone)
  *
  * ─── The bug ───────────────────────────────────────────────────────────────────────────────────────
@@ -97,7 +104,7 @@ export class GitDirs {
  *   • main-sync-status.json AND main-sync.lock.json — there is one `main` and one `.git`, so there is
  *     one refresher. A lock inside a per-worktree directory locks nothing.
  * local():
- *   • logs/*.log, INCLUDING branch-mutations.log. A shared append-only log genuinely corrupts:
+ *   • logs/*.log the tooling keeps for its own audit trail, INCLUDING branch-mutations.log. A shared append-only log genuinely corrupts:
  *     `O_APPEND` writes are indivisible only under PIPE_BUF, which is 512 bytes on macOS, and a
  *     `recover=git worktree add -b <branch> <abs-path> <tag>` line with real paths exceeds that. A
  *     per-worktree log has exactly ONE writer and cannot tear, and under this layout it already
@@ -105,10 +112,12 @@ export class GitDirs {
  *     `<primary>/.webpieces/worktrees/＊/logs/branch-mutations.log`.
  *   • merge-info/staged|merged/<branch>/ and its index.json, instruct-ai/, and every other per-tree
  *     scratch file that the TOOLING writes.
- * aiWritable():
- *   • pr-review/<branch>/ — and ONLY that, today. See the section below.
+ * aiFacing():
+ *   • pr-review/<branch>/ — what an agent WRITES. See the section below.
+ *   • logs/ — the logs a command prints a `FullLog :` path to for its caller to READ: `build.log`, the
+ *     build gate's per-commit logs and the stage console logs (issue #1393). See the section below.
  *
- * ─── Why aiWritable() is a third scope and not a spelling of local() ──────────────────────────────
+ * ─── Why aiFacing() is a third scope and not a spelling of local() ──────────────────────────────
  * `pr-review/<branch>/` is the one state directory a CODING AGENT writes into with its own file-write
  * tool: `summary.json` is authored by the agent running the flow, and `review-round<N>-<id>.json` by each reviewer
  * subagent. A worktree-isolated agent may write ONLY inside its own worktree — its harness refuses any
@@ -124,13 +133,22 @@ export class GitDirs {
  * `wp-finish-upsert-pr` REFUSES the PR while a required checklist has no verdict — so this was a
  * correctness bug, not an ergonomics one.
  *
- * The invariant, stated once: ANY `.webpieces/` path an AI AGENT is instructed to WRITE must resolve
- * inside that agent's own working tree. `aiWritable()` is that rule, made greppable. Do not add a
- * fourth scope; do not route a tooling-written file through this one.
+ * The invariant, stated once: ANY `.webpieces/` path an AI AGENT is instructed to WRITE — or handed to
+ * READ — must resolve inside that agent's own working tree. `aiFacing()` is that rule, made greppable.
+ * Do not add a fourth scope; do not route a tooling-written file through this one unless a command
+ * prints its path at an agent.
  *
- * What it costs is what `local()` bought: a `pr-review/` under the worktree dies with the worktree.
- * That is the right trade for THIS directory and only this one — a review is spent the moment the PR is
- * posted, and `pnpm wp-review-upsert-pr` regenerates the whole directory from git in one run. An
+ * ─── Why the printed logs are AI-facing too (issue #1393) ──────────────────────────────────────────
+ * READING has the same boundary as writing. An unattended agent in auto mode, a sandbox, or Codex's
+ * workspace-write may be refused a read outside its worktree — and `pnpm wp-review-upsert-pr` used to
+ * print `FullLog : <primary>/.webpieces/worktrees/<name>/logs/…`, i.e. exactly such a path. Three
+ * Bugfixer runs died at that read after their code was written and tested. So a log whose path a
+ * command PRINTS lives under `<worktree>/.webpieces/logs/`, and the path printed is that one.
+ *
+ * What it costs is what `local()` bought: a `pr-review/` or a build log under the worktree dies with the
+ * worktree. That is the right trade for THESE directories — a review is spent the moment the PR is
+ * posted, `pnpm wp-review-upsert-pr` regenerates the whole directory from git in one run, and a build
+ * log is evidence for the agent working in that tree, which is gone with it. An
  * in-flight `merge-info/staged/<branch>/` is not regenerable, which is exactly why it stays on local().
  *
  * ─── The boundary that must not be blurred ─────────────────────────────────────────────────────────
@@ -211,23 +229,25 @@ export class DotWebpieces {
     }
 
     /**
-     * State an AI AGENT writes with its own file-write tool: `<worktree>/.webpieces` — the worktree's
+     * State an AI AGENT writes with its own file-write tool, or reads at a path a command printed:
+     * `<worktree>/.webpieces` — the worktree's
      * OWN root, which is the only place a worktree-isolated agent is permitted to write. Identical to
      * `shared()`/`local()` in the primary clone, so nothing changes for a repo without worktrees.
      *
-     * See the "Why aiWritable() is a third scope" section above before adding a call site: this is for
-     * files the flow ASKS AN AGENT TO WRITE, not for tooling output that an agent merely reads.
+     * See the "Why aiFacing() is a third scope" section above before adding a call site: this is for
+     * files the flow ASKS AN AGENT TO WRITE, and for logs whose path a command PRINTS for an agent to
+     * read — not for tooling state no agent is ever pointed at.
      */
-    aiWritable(startDir: string): string {
+    aiFacing(startDir: string): string {
         const toplevel = this.treeRoot(startDir);
         // Fails CLOSED to shared() when git cannot answer, on the same terms as every other path here.
         if (toplevel === null) return this.shared(startDir);
         return path.join(toplevel, WEBPIECES_TMP_DIR);
     }
 
-    /** A path beneath the AI-writable state dir. */
-    aiWritableFile(startDir: string, ...segments: string[]): string {
-        return path.join(this.aiWritable(startDir), ...segments);
+    /** A path beneath the AI-facing state dir. */
+    aiFacingFile(startDir: string, ...segments: string[]): string {
+        return path.join(this.aiFacing(startDir), ...segments);
     }
 
     /**
@@ -320,7 +340,7 @@ export class DotWebpieces {
         this.migrated.add(startDir);
         const toplevel = this.treeRoot(startDir);
         if (toplevel === null) return;
-        this.migrator.migrate(this.legacyDir(toplevel), target, AI_WRITABLE_STATE_DIRS);
+        this.migrator.migrate(this.legacyDir(toplevel), target, AI_FACING_STATE_DIRS);
     }
 }
 

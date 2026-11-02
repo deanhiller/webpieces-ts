@@ -58,7 +58,7 @@ describe('summaryJsonPath', () => {
 /**
  * The one that matters in a worktree: summary.json and every review-<id>.json are AUTHORED BY AN AGENT,
  * and a worktree-isolated agent's write tool refuses any path under the shared checkout. So this dir
- * rides on `aiWritable()` (the worktree's own root) rather than `local()` (the primary clone's
+ * rides on `aiFacing()` (the worktree's own root) rather than `local()` (the primary clone's
  * per-worktree namespace) — otherwise the flow prints a path and then blocks the write to it.
  */
 describe('summaryJsonPath in a LINKED worktree', () => {

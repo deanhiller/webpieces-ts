@@ -86,19 +86,20 @@ export class BuildLogHeartbeat {
  * WHERE the file goes, how the previous run is kept, and what the pointer reads like are `GateLogFile`'s
  * — one mechanism, shared with the stage console log, so there is a single answer to "where is it?".
  *
- * ─── Two naming schemes, one rule each ─────────────────────────────────────────────────────────────────
- *   • `wp-build` (BUILD_STAGE) writes ONE fixed path, `.webpieces/build.log`. It is fixed because a HUMAN
- *     OR AN AGENT TYPES IT — `grep -n error .webpieces/build.log` has to be writable from memory, and a
- *     name carrying a branch and a sha is not. History comes from the rotation instead.
- *   • stage ② and stage ③ write `logs/build-gate-<stage>-<branch>-<shortSha>.log`, because those two
- *     gates CAN run against one commit and a failure message from one must not be pointing at a file the
- *     other overwrote. Nobody types those names; the failure message prints them.
+ * ─── One directory, two naming schemes, one rule each ──────────────────────────────────────────────────
+ * Every build log sits in `<tree>/.webpieces/logs/` (GateLogFile.logsPath — inside the checkout the
+ * command ran in, a linked worktree's own root included; issue #1393).
+ *   • `wp-build` (BUILD_STAGE) writes ONE fixed name, `build.log`. History comes from the rotation.
+ *   • stage ② and stage ③ write `build-gate-<stage>-<branch>-<shortSha>.log`, because those two gates CAN
+ *     run against one commit and a failure message from one must not be pointing at a file the other
+ *     overwrote.
+ * Nobody needs to type either name: the absolute path is printed as the FIRST line of the build, before
+ * it starts, and again in the closing pointer.
  *
  * ─── Concurrency ───────────────────────────────────────────────────────────────────────────────────────
- * The DIRECTORY is `dotWebpieces.local()`-scoped — `<primary>/.webpieces/worktrees/<git worktree name>/`
- * in a linked worktree — so "N agents in N worktrees" is safe by construction rather than by naming. The
- * residual case is two builds in the SAME worktree at once, which is already unsupported: both would be
- * driving one git index.
+ * The DIRECTORY is per checkout — a linked worktree writes under its own root — so "N agents in N
+ * worktrees" is safe by construction rather than by naming. The residual case is two builds in the SAME
+ * worktree at once, which is already unsupported: both would be driving one git index.
  */
 @injectable(bindingScopeValues.Singleton)
 export class BuildGateLog {
@@ -171,6 +172,11 @@ export class BuildGateLog {
         return completion.finally((): void => follower.stop());
     }
 
+    /** The `FullLog : <path>` line printed before the build starts — see GateLogFile.startLine. */
+    startLine(logPath: string): string {
+        return this.files.startLine(logPath);
+    }
+
     /**
      * The success summary: the caller is told WHERE the full output is, not handed the output.
      */
@@ -220,12 +226,7 @@ export class BuildGateLog {
     }
 
     private async resolvePath(repoRoot: string, stage: string): Promise<string> {
-        const name = await this.fileNameFor(repoRoot, stage);
-        // `wp-build`'s log sits at the ROOT of the state dir, not under `logs/`, because it is the one log
-        // path a person types from memory. Everything else keeps the per-commit names in `logs/`.
-        return stage === BUILD_STAGE
-            ? this.files.localPath(repoRoot, name)
-            : this.files.logsPath(repoRoot, name);
+        return this.files.logsPath(repoRoot, await this.fileNameFor(repoRoot, stage));
     }
 
     // Anything that is not a filename-safe character becomes '-', so `dean/feat` cannot create directories.

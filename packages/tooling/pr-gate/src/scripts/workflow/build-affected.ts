@@ -87,8 +87,13 @@ export class BuildAffected {
         // `say`, so it survives a stage that is capturing its own console (see StageOutputLog): the
         // command being run and the result of running it are exactly what a caller watching a long build
         // needs to see live.
-        this.stageConsole.say(`\n${opts.label}: ${buildCommand}\n`);
+        //
+        // The log's path goes out FIRST, before the command line and before any work (issue #1393): for
+        // `wp-build` it is the very first line on stdout, so a caller that backgrounds the build, or whose
+        // harness captures the console into a file of its own, already knows which file to read.
         const logPath = await this.buildLog.pathFor(repoRoot, opts.stage);
+        this.stageConsole.say(this.buildLog.startLine(logPath));
+        this.stageConsole.say(`\n${opts.label}: ${buildCommand}\n`);
         const ticket = this.buildsLog.start(opts.stage, repoRoot);
         let termination = new BuildTermination(1, null);
         // webpieces-disable no-unmanaged-exceptions -- chokepoint: the DONE row must be written whether the
