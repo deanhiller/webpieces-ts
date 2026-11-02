@@ -14,8 +14,9 @@ let files: GateLogFile;
 
 /**
  * A primary clone with ONE linked worktree, because that is the case the placement rule exists for: the
- * point of routing through `dotWebpieces` rather than `path.join(repoRoot, '.webpieces')` is that N
- * agents in N worktrees never write one another's log, and that a reaped worktree's history survives.
+ * point of routing through `dotWebpieces.aiFacing()` rather than `path.join(repoRoot, '.webpieces')` is
+ * that N agents in N worktrees never write one another's log, and that the path a command prints is one
+ * the agent confined to that worktree can read (issue #1393).
  */
 beforeEach(() => {
     tmp = specTempDirs.makeReal('wp-gatelog-');
@@ -37,19 +38,15 @@ describe('GateLogFile placement', () => {
         expect(files.logsPath(primary, 'stage.log')).toBe(path.join(primary, '.webpieces', 'logs', 'stage.log'));
     });
 
-    it('puts a root file at the top of the state dir — the one path a person types from memory', () => {
-        expect(files.localPath(primary, 'build.log')).toBe(path.join(primary, '.webpieces', 'build.log'));
-    });
-
     /**
-     * THE placement rule. A linked worktree's log lands under the PRIMARY clone, namespaced by git's own
-     * worktree name — never inside the worktree. That is what makes the history outlive `wp-cleanup`
-     * reaping the directory, and what makes concurrent agents safe by construction rather than by naming.
+     * THE placement rule (issue #1393). A linked worktree's log lands in the WORKTREE's own gitignored
+     * `.webpieces/logs/` — never under the primary clone's namespace, which an agent whose reads are
+     * scoped to its worktree may be refused. Three unattended runs died at exactly that refused read.
      */
-    it('namespaces a linked worktree under the PRIMARY clone, not inside the worktree', () => {
+    it('puts a linked worktree\'s log INSIDE the worktree, never under the primary clone', () => {
         const log = files.logsPath(worktree, 'stage.log');
-        expect(log).toBe(path.join(primary, '.webpieces', 'worktrees', 'wt-feature', 'logs', 'stage.log'));
-        expect(log.startsWith(worktree + path.sep)).toBe(false);
+        expect(log).toBe(path.join(worktree, '.webpieces', 'logs', 'stage.log'));
+        expect(log.startsWith(path.join(primary, '.webpieces'))).toBe(false);
     });
 
     it('resolves the same path from a SUBDIRECTORY of the worktree', () => {

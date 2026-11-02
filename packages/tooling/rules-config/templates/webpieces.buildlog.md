@@ -11,12 +11,24 @@ by running the build again.
 
 **Read the log at the absolute path the `FullLog :` line of THIS run printed.**
 
-Every run — success or failure — ends with two lines:
+Every run prints that line FIRST, before it does any work:
+
+```
+FullLog : /abs/path/to/build.log
+```
+
+and — success or failure — ends with it again:
 
 ```
 FullLog : /abs/path/to/build.log
 (a second line, naming that log's `.bak` — the previous run is rotated aside on every build)
 ```
+
+`pnpm wp-review-upsert-pr` and `pnpm wp-finish-upsert-pr` open the same way, with the path of the log
+their own console goes to, and print the build's `FullLog :` line again when their build starts.
+
+Running one of these commands in the background is fine. If you do, read the path from that first line
+and grep that file — never your harness's own captured output, which you may not be allowed to read.
 
 Copy that path. `grep -n error "<the FullLog path>"` always works. A path typed from memory does not:
 it either greps a file from some other tree or greps nothing at all and reports "no matches", which
@@ -24,20 +36,20 @@ reads exactly like a clean build.
 
 ## WHY A REMEMBERED PATH IS WRONG MORE OFTEN THAN IT IS RIGHT
 
-webpieces state is worktree-namespaced **inside the primary clone**, not duplicated per worktree:
+The logs land inside the checkout the command ran in, in its own gitignored state directory:
 
 | where you are standing | where `wp-build` writes |
 |---|---|
-| the primary clone | `build.log` in the primary clone's state directory |
-| a linked worktree (the normal case for a subagent) | `build.log` in that worktree's namespace inside the PRIMARY clone's state directory |
+| the primary clone | `logs/build.log` in the primary clone's state directory |
+| a linked worktree (the normal case for a subagent) | `logs/build.log` in that WORKTREE's own state directory — inside the worktree, so an agent confined to it can read it |
 
-A `build.log` relative to a linked worktree's own root **does not exist at all**. Those two rows are
-an illustration of why you read the printed path — they are not a lookup table to memorise, and the
-namespacing scheme is webpieces' to change.
+A path remembered from another tree, or from an older release, points at somebody else's build or at
+nothing. Those two rows are an illustration of why you read the printed path — they are not a lookup
+table to memorise, and the layout is webpieces' to change.
 
-The PR gate's own build stages use a different name again — `logs/build-gate-<stage>-<branch>-<sha>.log`
-— precisely because two stages can build the same commit and neither may overwrite the other's evidence.
-Nobody types those names either. The failure message prints them.
+The PR gate's own build stages use a different name again — `build-gate-<stage>-<branch>-<sha>.log`,
+beside it — precisely because two stages can build the same commit and neither may overwrite the other's
+evidence. Nobody types those names either. Each run prints its own.
 
 ## WHAT THE CONSOLE GIVES YOU WHILE IT RUNS
 

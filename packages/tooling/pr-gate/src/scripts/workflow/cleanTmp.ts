@@ -16,9 +16,9 @@ const SEP = '━━━━━━━━━━━━━━━━━━━━━━�
  * the active logs, the *-status.json state files), and every writer `mkdirSync(..., { recursive: true })`s
  * its target first — so pruning a stale home dir is harmless; the next write recreates it.
  *
- * The roots are the two PER-WORKTREE scopes — `DotWebpieces.local()` and `DotWebpieces.aiWritable()` —
+ * The roots are the two PER-WORKTREE scopes — `DotWebpieces.local()` and `DotWebpieces.aiFacing()` —
  * which are one and the same directory in the primary clone and two in a linked worktree (see
- * `aiWritable()` for why `pr-review/` has to sit in the worktree). The repo-wide `shared()` dir is never
+ * `aiFacing()` for why `pr-review/` and the printed logs have to sit in the worktree). The repo-wide `shared()` dir is never
  * swept: its entries belong to every worktree at once.
  * This used to sweep a second, machine-global root (`~/.webpieces/prs/...`, which survived `rm -rf <clone>`
  * and so had no other owner). That store is gone — the gated merge body is the PR's own description now.
@@ -49,8 +49,8 @@ export class CleanTmp {
         // The two per-worktree scopes, and only those. It must never sweep the repo-wide dir, whose
         // entries (merged-branches.json, the main-sync status and its lock) belong to every worktree at
         // once. In the primary clone these collapse to the same path and it is swept once.
-        //   local()      — merge-info/, instruct-ai/, logs/ in <primary>/.webpieces/worktrees/<name>
-        //   aiWritable() — pr-review/ in <worktree>/.webpieces, where the agent can actually write it
+        //   local()    — merge-info/, instruct-ai/, the tooling's own logs/ in <primary>/.webpieces/worktrees/<name>
+        //   aiFacing() — pr-review/ and the printed build/stage logs/ in <worktree>/.webpieces, where the agent can reach them
         const bases = this.sweepBases(repoRoot);
         if (bases.length === 0) return;
 
@@ -81,13 +81,13 @@ export class CleanTmp {
     }
 
     /**
-     * The per-worktree roots that exist, de-duplicated. `local()` and `aiWritable()` are the SAME path
+     * The per-worktree roots that exist, de-duplicated. `local()` and `aiFacing()` are the SAME path
      * in the primary clone — sweeping it twice would double-count and print every removal twice — and
      * two different paths in a linked worktree, where BOTH need reaping or `pr-review/` accumulates in
      * the worktree forever.
      */
     private sweepBases(repoRoot: string): string[] {
-        const candidates = [this.dotDir.local(repoRoot), this.dotDir.aiWritable(repoRoot)];
+        const candidates = [this.dotDir.local(repoRoot), this.dotDir.aiFacing(repoRoot)];
         const seen = new Set<string>();
         return candidates.filter((base: string): boolean => {
             if (seen.has(base) || !fs.existsSync(base)) return false;

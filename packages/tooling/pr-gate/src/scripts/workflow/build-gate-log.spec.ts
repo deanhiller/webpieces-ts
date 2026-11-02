@@ -69,13 +69,12 @@ describe('BuildGateLog paths', () => {
     });
 
     /**
-     * `wp-build`'s log is the ONE path a person or an agent types from memory — `grep -n error
-     * .webpieces/build.log` — so it is fixed, and history comes from the `.bak` rotation instead of from
-     * the filename.
+     * `wp-build`'s log has a fixed name, so history comes from the `.bak` rotation instead of from the
+     * filename. It sits beside the gate logs in `.webpieces/logs/` — the one log directory (issue #1393).
      */
-    it('gives wp-build the fixed .webpieces/build.log, with no branch or sha in it', async () => {
+    it('gives wp-build the fixed .webpieces/logs/build.log, with no branch or sha in it', async () => {
         const dir = repo('dean/my-feature');
-        expect((await newLog().pathFor(dir, BUILD_STAGE))).toBe(path.join(dir, '.webpieces', 'build.log'));
+        expect((await newLog().pathFor(dir, BUILD_STAGE))).toBe(path.join(dir, '.webpieces', 'logs', 'build.log'));
     });
 
     /**

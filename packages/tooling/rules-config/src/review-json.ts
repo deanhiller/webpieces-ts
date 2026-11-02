@@ -90,9 +90,9 @@ export class ReviewJsonService {
     // not local() — an agent AUTHORS summary.json here, and each reviewer subagent authors its own
     // review-round<N>-<id>.json beside it. A worktree-isolated agent's Write is refused for any path under the
     // shared checkout, which is where local() puts this, so local() made both files unwritable by the
-    // very agents the flow instructs to write them. See DotWebpieces.aiWritable() for the full account.
+    // very agents the flow instructs to write them. See DotWebpieces.aiFacing() for the full account.
     prDirFor(repoRoot: string, featureName: string): string {
-        return this.dotDir.aiWritableFile(repoRoot, PR_REVIEW_DIR, featureName);
+        return this.dotDir.aiFacingFile(repoRoot, PR_REVIEW_DIR, featureName);
     }
 
     // Absolute path of the summary.json for a feature — beside pr-body.md, keyed by branch name.

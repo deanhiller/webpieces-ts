@@ -25,7 +25,7 @@ export const SCRATCH_DIR_NAME = 'scratch';
 /**
  * Creates short-lived scratch directories under this worktree's `.webpieces/` scope.
  *
- * `local()` (not `aiWritable()`) is the right scope: these files are written by the TOOLING, never by an
+ * `local()` (not `aiFacing()`) is the right scope: these files are written by the TOOLING, never by an
  * agent, and `local()` keeps them under the primary clone so they outlive a reaped worktree exactly like
  * the gate logs beside them.
  */
