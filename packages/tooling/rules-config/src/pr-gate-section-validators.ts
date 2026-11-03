@@ -333,24 +333,28 @@ const REF_COMPONENT = /^[A-Za-z0-9][A-Za-z0-9._/-]*$/;
 
 /**
  * Validate the optional `pr-gate.devDeploy` block — where `wp-push-dev` publishes the disposable copy of
- * a feature branch, and which ref is the shared dev branch itself. Absent ⇒ `dev-include` / `dev`.
+ * a feature branch, which ref is the shared dev branch itself, and where `--remove` pushes its marker.
+ * Absent ⇒ `dev-include` / `dev` / `dev-remove`.
  *
  * `devBranch` must NOT contain a slash and must not sit inside `branchNamespace`: the whole point of the
  * namespace is that the composed dev branch is written by CI and the copies are written by developers, so
  * a config where one contains the other makes `--list` enumerate the deploy branch and makes the
- * "refused as a source branch" check ambiguous.
+ * "refused as a source branch" check ambiguous. `removeNamespace` must overlap neither, for the same
+ * reason from the other side: a marker inside the copy namespace would be listed (and composed!) as a copy,
+ * and the consumer's workflow deletes every marker it is triggered by.
  */
 // webpieces-disable no-any-unknown -- `value` is the opaque consumer devDeploy value until narrowed here
 // webpieces-disable no-function-outside-class -- module-level config validator, matches the rest of this file
 export function validateDevDeploySection(value: unknown): string[] {
     if (typeof value !== 'object' || value === null || Array.isArray(value)) {
-        return ['[pr-gate] "devDeploy" must be an object, e.g. { "branchNamespace": "dev-include", "devBranch": "dev" }.'];
+        return ['[pr-gate] "devDeploy" must be an object, e.g. { "branchNamespace": "dev-include", "devBranch": "dev", "removeNamespace": "dev-remove" }.'];
     }
     // webpieces-disable no-any-unknown -- narrowing the opaque devDeploy object from consumer JSON
     const s = value as Record<string, unknown>;
     const errors: string[] = [];
     errors.push(...validateRefComponent(s, 'branchNamespace', 'dev-include'));
     errors.push(...validateRefComponent(s, 'devBranch', 'dev'));
+    errors.push(...validateRefComponent(s, 'removeNamespace', 'dev-remove'));
     if (errors.length > 0) return errors;
 
     const namespace = typeof s['branchNamespace'] === 'string' ? s['branchNamespace'].trim() : 'dev-include';
@@ -367,7 +371,23 @@ export function validateDevDeploySection(value: unknown): string[] {
             `devBranch is the COMPOSED branch your CI rebuilds from origin/main. Overlapping them makes wp-push-dev ` +
             `--list enumerate the deploy branch and makes "refused as a source branch" ambiguous.`);
     }
+    const removeNamespace = typeof s['removeNamespace'] === 'string' ? s['removeNamespace'].trim() : 'dev-remove';
+    errors.push(...removeNamespaceOverlap(removeNamespace, 'branchNamespace', namespace));
+    errors.push(...removeNamespaceOverlap(removeNamespace, 'devBranch', devBranch));
     return errors;
+}
+
+// `removeNamespace` must neither equal nor path-nest with `otherKey`'s value.
+// webpieces-disable no-function-outside-class -- module-level config validator helper, matches the rest of this file
+function removeNamespaceOverlap(removeNamespace: string, otherKey: string, other: string): string[] {
+    const overlaps = removeNamespace === other || removeNamespace.startsWith(`${other}/`) || other.startsWith(`${removeNamespace}/`);
+    if (!overlaps) return [];
+    return [
+        `[pr-gate] "devDeploy.removeNamespace" ("${removeNamespace}") and "devDeploy.${otherKey}" ("${other}") must ` +
+        `not contain one another. The remove namespace holds the content-free MARKER refs wp-push-dev --remove ` +
+        `pushes, which your dev workflow triggers on and then deletes; overlapping it with the copies or the ` +
+        `deploy branch makes the workflow delete — or compose — the wrong refs.`,
+    ];
 }
 
 // One `devDeploy` string field: present ⇒ must be a non-empty, ref-safe string. Absent ⇒ the default.

@@ -26,9 +26,11 @@ import { GitExec } from '../workflow/git-exec';
 // into `<repoRoot>/.webpieces/instruct-ai/` — a fictional path would fail before any decision is made.
 const REPO = specTempDirs.make('wp-push-dev-spec-');
 const MY_COPY = 'dev-include/dean/ONE-2275';
+const MAIN_TIP = 'deadbeefdeadbeefdeadbeefdeadbeefdeadbeef';
 
 class Harness {
     branch = 'dean/ONE-2275';
+    config = new DevDeployConfig('dev-include', 'dev', 'dev-remove');
     copies: DevCopy[] = [];
     remoteShas: Map<string, string> = new Map<string, string>();
     aheadCount = 0;
@@ -41,6 +43,12 @@ class Harness {
     /** The commands that must succeed (pushes, fetches): run with their output on the terminal. */
     get gitRuns(): string[][] {
         return this.feature.git.calls.filter((c: ProcessCallDto): boolean => c.mode === 'passThrough' && !c.args.includes('fetch'))
+            .map((c: ProcessCallDto): string[] => [...c.args]);
+    }
+
+    /** Every push, in the order issued — the run-mode marker push included. */
+    get pushes(): string[][] {
+        return this.feature.git.calls.filter((c: ProcessCallDto): boolean => c.args.includes('push'))
             .map((c: ProcessCallDto): string[] => [...c.args]);
     }
 
@@ -72,7 +80,7 @@ function scriptGit(): void {
 // Only what is not an outside system is stood in for: the config read and the checked-out branch name.
 class FakeRefs extends DevDeployRefs {
     override config(): DevDeployConfig {
-        return new DevDeployConfig('dev-include', 'dev');
+        return harness.config;
     }
 
     override currentBranch(): string {
@@ -154,6 +162,7 @@ const pushArgs = (): string[] | undefined =>
 
 beforeEach(async (): Promise<void> => {
     harness.branch = 'dean/ONE-2275';
+    harness.config = new DevDeployConfig('dev-include', 'dev', 'dev-remove');
     harness.copies = [];
     harness.remoteShas = new Map<string, string>();
     harness.aheadCount = 0;
@@ -250,12 +259,59 @@ describe('PushDevCommand — refusals', () => {
 });
 
 describe('PushDevCommand — --remove and --list', () => {
-    it('--remove deletes exactly the copy ref', async (): Promise<void> => {
+    it('--remove deletes the copy ref, then pushes the dev-remove marker at the fresh origin/main tip', async (): Promise<void> => {
         harness.remoteShas.set(MY_COPY, 'abc123');
         const opts = options();
         opts.remove = true;
         await run(opts);
-        expect(harness.gitRuns).toEqual([['-C', REPO, 'push', 'origin', '--delete', `refs/heads/${MY_COPY}`]]);
+        // origin/main is fetched BEFORE anything is deleted, so a fetch failure leaves the pool untouched.
+        const fetchAt = harness.feature.git.calls.findIndex((c: ProcessCallDto): boolean =>
+            c.args.join(' ') === `-C ${REPO} fetch origin +refs/heads/main:refs/remotes/origin/main`);
+        const deleteAt = harness.feature.git.calls.findIndex((c: ProcessCallDto): boolean => c.args.includes('--delete'));
+        expect(fetchAt).toBeGreaterThanOrEqual(0);
+        expect(fetchAt).toBeLessThan(deleteAt);
+        // The deletion is unchanged (old consumers on `on: delete:` keep working); the marker is additive.
+        expect(harness.pushes).toEqual([
+            ['-C', REPO, 'push', 'origin', '--delete', `refs/heads/${MY_COPY}`],
+            ['-C', REPO, 'push', '--force', 'origin', `${MAIN_TIP}:refs/heads/dev-remove/dean/ONE-2275`],
+        ]);
+        expect(harness.out).toContain('Pushed the marker `dev-remove/dean/ONE-2275`');
+    });
+
+    it('--remove pushes the marker under the CONFIGURED removeNamespace', async (): Promise<void> => {
+        harness.config = new DevDeployConfig('staging-include', 'staging', 'staging-remove');
+        harness.remoteShas.set('staging-include/dean/ONE-2275', 'abc123');
+        const opts = options();
+        opts.remove = true;
+        await run(opts);
+        expect(harness.pushes).toEqual([
+            ['-C', REPO, 'push', 'origin', '--delete', 'refs/heads/staging-include/dean/ONE-2275'],
+            ['-C', REPO, 'push', '--force', 'origin', `${MAIN_TIP}:refs/heads/staging-remove/dean/ONE-2275`],
+        ]);
+    });
+
+    it('a failed marker push says the copy is gone but dev was NOT rebuilt, and how to force a rebuild', async (): Promise<void> => {
+        harness.remoteShas.set(MY_COPY, 'abc123');
+        harness.feature.git.respondToPrefix(['-C', REPO, 'push', '--force'],
+            harness.feature.git.fail(1, 'remote: Permission to push to dev-remove/dean/ONE-2275 denied'));
+        const opts = options();
+        opts.remove = true;
+        const message = await refusalMessage(opts);
+        expect(message).toContain(`Removed \`${MY_COPY}\`, but pushing the rebuild marker \`dev-remove/dean/ONE-2275\` FAILED`);
+        expect(message).toContain('Your copy is already GONE from origin, but `dev` was NOT rebuilt');
+        expect(message).toContain('remote: Permission to push to dev-remove/dean/ONE-2275 denied');
+        expect(message).toContain('pnpm wp-push-dev\n  pnpm wp-push-dev --remove');
+        // The deletion did happen — the message is describing real state, not a hypothetical.
+        expect(harness.pushes[0]).toEqual(['-C', REPO, 'push', 'origin', '--delete', `refs/heads/${MY_COPY}`]);
+    });
+
+    it('a failed origin/main fetch removes nothing', async (): Promise<void> => {
+        harness.remoteShas.set(MY_COPY, 'abc123');
+        harness.feature.git.respondToPrefix(['-C', REPO, 'fetch'], harness.feature.git.fail(128, 'fatal: unable to access'));
+        const opts = options();
+        opts.remove = true;
+        expect(await refusalMessage(opts)).toContain('Nothing was removed');
+        expect(harness.pushes).toEqual([]);
     });
 
     it('--remove on an unpublished branch says so instead of failing', async (): Promise<void> => {
@@ -277,6 +333,7 @@ describe('PushDevCommand — --remove and --list', () => {
         expect(harness.out).toContain('dev-include/amy/ONE-9');
         expect(harness.out).toContain(MY_COPY);
         expect(harness.out).toContain('2 dev copies');
+        expect(harness.out).toContain('`dev-remove/<your-branch>` marker');
     });
 });
 

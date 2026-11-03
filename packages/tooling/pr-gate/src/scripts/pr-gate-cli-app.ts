@@ -361,7 +361,11 @@ export class PrGateCliApp {
             'Publish a disposable copy of this branch for shared dev.',
             [
                 new CliFlag(LIST, 'List published dev copies.'),
-                new CliFlag(REMOVE, "Delete this branch's dev copy."),
+                new CliFlag(
+                    REMOVE,
+                    "Delete this branch's dev copy, then push the <removeNamespace>/<branch> marker"
+                        + ' (default dev-remove) that triggers the dev rebuild.',
+                ),
                 new CliFlag(
                     RESOLVE,
                     'Compose other published copies, optionally one named branch.',

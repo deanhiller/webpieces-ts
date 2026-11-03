@@ -243,6 +243,7 @@ export {
     DevDeployConfig,
     DEFAULT_DEV_BRANCH_NAMESPACE,
     DEFAULT_DEV_BRANCH,
+    DEFAULT_DEV_REMOVE_NAMESPACE,
     ReviewContextEntry,
     defaultGates,
     defaultPrGateConfig,

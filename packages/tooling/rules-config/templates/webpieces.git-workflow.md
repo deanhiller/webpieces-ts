@@ -320,6 +320,30 @@ pnpm wp-push-dev --list     # what is currently in the pool
 pnpm wp-push-dev --remove   # take your branch back out (this is the rollback)
 ```
 
+`--remove` deletes `dev-include/<your-branch>` **and then** pushes a content-free marker
+`dev-remove/<your-branch>` at the `origin/main` tip. The marker push is the rebuild signal: a deletion
+alone can only be heard by a workflow's `on: delete:`, which GitHub cannot filter by branch, so every
+branch deletion in the repo would start a dev-deploy run. If the marker push fails, the command stops
+and says so — your copy is already gone, but `dev` was **not** rebuilt; follow what it prints.
+
+The three names come from `pr-gate.devDeploy` in `webpieces.config.json` — `branchNamespace`
+(default `dev-include`), `devBranch` (default `dev`) and `removeNamespace` (default `dev-remove`) —
+substitute them below if the repo overrides any.
+
+**The contract the repo's dev workflow implements** (this is the consumer's CI, not webpieces):
+
+```yaml
+on:
+  push:
+    branches: ['main', 'dev-include/**', 'dev-remove/**']
+  # no `delete:` trigger — it cannot be filtered by branch, so every deletion in the repo would start a run
+```
+
+On a `dev-remove/**` push the workflow deletes that marker ref, then runs the ordinary rebuild: reset
+`dev` to `origin/main`, merge every remaining `dev-include/*` copy, build, force-push. A workflow still
+listening on `on: delete:` keeps working too, because `--remove` still deletes the copy — add the
+`dev-remove/**` trigger first, upgrade webpieces, then drop `delete:`.
+
 **The cardinal rule, and the reason a COPY exists at all:** your feature branch is the PR head, so it
 must **never** acquire another developer's commits — landing that PR would ship their unreviewed work to
 production. Conflict resolutions therefore live on the throwaway copy, never on your branch. After any

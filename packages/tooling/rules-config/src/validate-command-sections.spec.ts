@@ -509,6 +509,32 @@ describe('validatePrGateSection — devDeploy', () => {
         expect(bad[0]).toContain('must not contain one another');
     });
 
+    it('accepts an explicit removeNamespace for the --remove marker', () => {
+        expect(
+            validatePrGateSection({ ...base, devDeploy: { removeNamespace: 'staging-remove' } }),
+        ).toEqual([]);
+    });
+
+    it('rejects a removeNamespace that cannot be a ref name', () => {
+        expect(
+            validatePrGateSection({ ...base, devDeploy: { removeNamespace: '-x' } })[0],
+        ).toContain('"devDeploy.removeNamespace" = "-x" is not a usable git ref name');
+    });
+
+    it('rejects a removeNamespace overlapping the copy namespace, which would list markers as copies', () => {
+        const bad = validatePrGateSection({
+            ...base,
+            devDeploy: { branchNamespace: 'dev-include', removeNamespace: 'dev-include/remove' },
+        });
+        expect(bad.length).toBe(1);
+        expect(bad[0]).toContain('"devDeploy.removeNamespace" ("dev-include/remove") and "devDeploy.branchNamespace"');
+    });
+
+    it('rejects a removeNamespace equal to the deploy branch', () => {
+        const bad = validatePrGateSection({ ...base, devDeploy: { removeNamespace: 'dev' } });
+        expect(bad[0]).toContain('"devDeploy.devBranch" ("dev") must not contain one another');
+    });
+
     it('rejects a non-object', () => {
         expect(validatePrGateSection({ ...base, devDeploy: 'dev-include' })[0]).toContain(
             'must be an object',
