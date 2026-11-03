@@ -372,23 +372,22 @@ export function validateDevDeploySection(value: unknown): string[] {
             `--list enumerate the deploy branch and makes "refused as a source branch" ambiguous.`);
     }
     const removeNamespace = typeof s['removeNamespace'] === 'string' ? s['removeNamespace'].trim() : 'dev-remove';
-    const others: Array<[string, string]> = [['branchNamespace', namespace], ['devBranch', devBranch]];
-    for (const [otherKey, other] of others) {
-        if (refsOverlap(removeNamespace, other)) {
-            errors.push(
-                `[pr-gate] "devDeploy.removeNamespace" ("${removeNamespace}") and "devDeploy.${otherKey}" ("${other}") must ` +
-                `not contain one another. The remove namespace holds the content-free MARKER refs wp-push-dev --remove ` +
-                `pushes, which your dev workflow triggers on and then deletes; overlapping it with the copies or the ` +
-                `deploy branch makes the workflow delete — or compose — the wrong refs.`);
-        }
-    }
+    errors.push(...removeNamespaceOverlap(removeNamespace, 'branchNamespace', namespace));
+    errors.push(...removeNamespaceOverlap(removeNamespace, 'devBranch', devBranch));
     return errors;
 }
 
-// Two ref names "overlap" when they are equal or one is a path prefix of the other.
+// `removeNamespace` must neither equal nor path-nest with `otherKey`'s value.
 // webpieces-disable no-function-outside-class -- module-level config validator helper, matches the rest of this file
-function refsOverlap(a: string, b: string): boolean {
-    return a === b || a.startsWith(`${b}/`) || b.startsWith(`${a}/`);
+function removeNamespaceOverlap(removeNamespace: string, otherKey: string, other: string): string[] {
+    const overlaps = removeNamespace === other || removeNamespace.startsWith(`${other}/`) || other.startsWith(`${removeNamespace}/`);
+    if (!overlaps) return [];
+    return [
+        `[pr-gate] "devDeploy.removeNamespace" ("${removeNamespace}") and "devDeploy.${otherKey}" ("${other}") must ` +
+        `not contain one another. The remove namespace holds the content-free MARKER refs wp-push-dev --remove ` +
+        `pushes, which your dev workflow triggers on and then deletes; overlapping it with the copies or the ` +
+        `deploy branch makes the workflow delete — or compose — the wrong refs.`,
+    ];
 }
 
 // One `devDeploy` string field: present ⇒ must be a non-empty, ref-safe string. Absent ⇒ the default.
