@@ -93,11 +93,12 @@ export function defaultLandPrConfig(): LandPrConfig {
     return new LandPrConfig(BRANCH_RETENTION_ARCHIVE_TAG);
 }
 
-// The two literal ref names the dev-deploy flow derives everything else from. Defaults, not policy —
-// `pr-gate.devDeploy` overrides both, because a consumer whose shared environment is called `staging`
+// The literal ref names the dev-deploy flow derives everything else from. Defaults, not policy —
+// `pr-gate.devDeploy` overrides each, because a consumer whose shared environment is called `staging`
 // must not be forced onto webpieces' vocabulary.
 export const DEFAULT_DEV_BRANCH_NAMESPACE = 'dev-include';
 export const DEFAULT_DEV_BRANCH = 'dev';
+export const DEFAULT_DEV_REMOVE_NAMESPACE = 'dev-remove';
 
 /**
  * `pr-gate.devDeploy` — where `wp-push-dev` publishes the throwaway copy of a feature branch, and which
@@ -111,6 +112,11 @@ export const DEFAULT_DEV_BRANCH = 'dev';
  *
  * `devBranch` is REFUSED as a source branch (you never push the composed branch back into itself); it is
  * written by the consumer's CI only, which recomputes it from `origin/main` on every run.
+ *
+ * `removeNamespace` holds the `--remove` MARKER (#1395): `wp-push-dev --remove` deletes the copy AND
+ * pushes `<removeNamespace>/<feature>` at the `origin/main` tip. A deletion alone can only be heard by a
+ * workflow's `on: delete:`, which GitHub cannot filter by branch, so every branch deletion in the repo
+ * started a dev-deploy run; a PUSH to the marker is filterable (`on: push: branches: ['dev-remove/**']`).
  */
 export class DevDeployConfig {
     // Literal prefix on the feature branch name: `dev-include/dean/ONE-2275`. Git refs allow slashes, and
@@ -118,13 +124,18 @@ export class DevDeployConfig {
     branchNamespace: string;
     // The composed, CI-owned branch that actually deploys. Never a source, never pushed to by this flow.
     devBranch: string;
+    // Prefix of the `--remove` marker ref: `dev-remove/dean/ONE-2275`. Carries no content — its PUSH is
+    // the signal the consumer's dev workflow triggers on, and that workflow deletes it again.
+    removeNamespace: string;
 
     constructor(
         branchNamespace: string = DEFAULT_DEV_BRANCH_NAMESPACE,
         devBranch: string = DEFAULT_DEV_BRANCH,
+        removeNamespace: string = DEFAULT_DEV_REMOVE_NAMESPACE,
     ) {
         this.branchNamespace = branchNamespace;
         this.devBranch = devBranch;
+        this.removeNamespace = removeNamespace;
     }
 
     /** `<branchNamespace>/<branch>` — the remote ref holding the disposable copy of `branch`. */
@@ -136,11 +147,16 @@ export class DevDeployConfig {
     copyRefGlob(): string {
         return `${this.branchNamespace}/*`;
     }
+
+    /** `<removeNamespace>/<branch>` — the marker ref `--remove` pushes so the dev workflow rebuilds without `branch`. */
+    removeMarkerRefFor(branch: string): string {
+        return `${this.removeNamespace}/${branch}`;
+    }
 }
 
 // webpieces-disable no-function-outside-class -- module-level config default, matches defaultGates/defaultPrGateConfig in this file
 export function defaultDevDeployConfig(): DevDeployConfig {
-    return new DevDeployConfig(DEFAULT_DEV_BRANCH_NAMESPACE, DEFAULT_DEV_BRANCH);
+    return new DevDeployConfig(DEFAULT_DEV_BRANCH_NAMESPACE, DEFAULT_DEV_BRANCH, DEFAULT_DEV_REMOVE_NAMESPACE);
 }
 
 export class PrGateConfig {
@@ -250,7 +266,7 @@ export class PrGateConfig {
      */
     requireDiffEvidence = false;
     /**
-     * Where `wp-push-dev` publishes the disposable copy. Omitted ⇒ `dev-include` / `dev`, which is what
+     * Where `wp-push-dev` publishes the disposable copy. Omitted ⇒ `dev-include` / `dev` / `dev-remove`, which is what
      * makes the whole flow work with NO config edit at all.
      */
     devDeploy: DevDeployConfig = defaultDevDeployConfig();
@@ -334,6 +350,7 @@ interface RawPrGateSection {
 interface RawDevDeploy {
     branchNamespace?: string;
     devBranch?: string;
+    removeNamespace?: string;
 }
 
 interface RawLandPr {
@@ -429,7 +446,7 @@ export function buildPrGateConfig(section: unknown): PrGateConfig {
 
 /**
  * Build the `pr-gate.devDeploy` block. Omitted (the state of every consumer config today) ⇒ the
- * `dev-include` / `dev` defaults. An invalid value cannot reach here — validateDevDeploySection has
+ * `dev-include` / `dev` / `dev-remove` defaults. An invalid value cannot reach here — validateDevDeploySection has
  * already failed the load.
  */
 // webpieces-disable no-function-outside-class -- module-level config transform, matches buildPrGateConfig above
@@ -444,7 +461,11 @@ export function buildDevDeployConfig(raw: RawDevDeploy | undefined): DevDeployCo
         typeof raw.devBranch === 'string' && raw.devBranch.trim() !== ''
             ? raw.devBranch.trim()
             : defaults.devBranch;
-    return new DevDeployConfig(namespace, devBranch);
+    const removeNamespace =
+        typeof raw.removeNamespace === 'string' && raw.removeNamespace.trim() !== ''
+            ? raw.removeNamespace.trim()
+            : defaults.removeNamespace;
+    return new DevDeployConfig(namespace, devBranch, removeNamespace);
 }
 
 /**

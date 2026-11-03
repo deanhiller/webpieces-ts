@@ -110,11 +110,25 @@ export class PushDevCommand {
         let out = '\n' + SEP + `📋 ${String(copies.length)} dev cop${copies.length === 1 ? 'y' : 'ies'} on origin\n` + SEP + '\n';
         for (const copy of copies) out += `  ${copy.sha.slice(0, 8)}  ${copy.ref}\n`;
         out += `\nYour CI composes \`${cfg.devBranch}\` from origin/main plus every ref above, on every run.\n`
-            + `Remove yours with: ${WP_PUSH_DEV} --remove\n`;
+            + `Remove yours with: ${WP_PUSH_DEV} --remove  (deletes your copy, then pushes the content-free\n`
+            + `\`${cfg.removeMarkerRefFor('<your-branch>')}\` marker your dev workflow triggers on and deletes)\n`;
         process.stdout.write(out);
     }
 
-    /** `--remove`: delete the remote copy. This IS the rollback — nothing else has to be undone. */
+    /**
+     * `--remove`: delete the remote copy, then push the `<removeNamespace>/<branch>` marker (#1395). This
+     * IS the rollback — nothing else has to be undone.
+     *
+     * WHY A MARKER AS WELL AS THE DELETION: a deletion can only be heard by a workflow's `on: delete:`,
+     * which GitHub cannot filter by branch, so every branch deletion in the repo started a dev-deploy run.
+     * A PUSH to `<removeNamespace>/**` is filterable. The deletion stays, unchanged, so a consumer whose
+     * workflow still listens on `delete:` keeps working through the rollout window; the marker is purely
+     * additive at the transport level.
+     *
+     * ORDER: `origin/main` is fetched BEFORE anything is deleted, so a network failure there leaves the
+     * pool exactly as it was. The marker push is the last step, and the only one that can fail with the
+     * copy already gone — that is the state {@link markerPushFailed} names.
+     */
     private async remove(repoRoot: string, cfg: DevDeployConfig, branch: string, targetRef: string): Promise<void> {
         if (await this.refs.remoteSha(repoRoot, targetRef) === '') {
             process.stdout.write(
@@ -122,12 +136,38 @@ export class PushDevCommand {
                 + `List what IS published with: ${WP_PUSH_DEV} --list\n`);
             return;
         }
+        const markerRef = cfg.removeMarkerRefFor(branch);
+        const mainTip = await this.refs.freshMainTip(repoRoot);
         await this.gitExec.runGitChecked(['-C', repoRoot, 'push', 'origin', '--delete', `refs/heads/${targetRef}`],
             `Failed to delete the dev copy ${targetRef}`);
+        // --force: the marker carries no content, so whatever an earlier, never-deleted marker pointed at
+        // is worthless — and refusing a non-fast-forward here would strand the rollback half-done.
+        const pushed = await this.gitExec.tryGit(
+            ['-C', repoRoot, 'push', '--force', 'origin', `${mainTip}:refs/heads/${markerRef}`], repoRoot);
+        if (!pushed.ok) this.markerPushFailed(cfg, branch, targetRef, markerRef, pushed.stderr);
         process.stdout.write(
             '\n' + SEP + `🗑️  Removed ${targetRef}\n` + SEP + '\n'
-            + `\`${branch}\` will drop out of \`${cfg.devBranch}\` on its next composition run. Your branch and any\n`
-            + 'PR on it are untouched.\n');
+            + `Pushed the marker \`${markerRef}\` (at origin/main ${mainTip.slice(0, 8)}) — your dev workflow triggers\n`
+            + `on it, deletes it, and rebuilds \`${cfg.devBranch}\` without \`${branch}\`. Your branch and any PR on it\n`
+            + 'are untouched.\n');
+    }
+
+    /**
+     * The one half-done state `--remove` can leave: the copy is deleted, the rebuild signal is not sent.
+     * Said out loud because it is invisible otherwise — `--list` already looks right, while the deployed
+     * `dev` still runs the removed branch until something else triggers a composition.
+     */
+    private markerPushFailed(cfg: DevDeployConfig, branch: string, targetRef: string, markerRef: string, stderr: string): never {
+        throw new CliExitError(1,
+            '\n' + SEP + `⛔ Removed \`${targetRef}\`, but pushing the rebuild marker \`${markerRef}\` FAILED\n` + SEP + '\n'
+            + `Your copy is already GONE from origin, but \`${cfg.devBranch}\` was NOT rebuilt: the deployed dev server\n`
+            + `still runs \`${branch}\` until the next composition run.\n\n`
+            + 'git said:\n' + (stderr === '' ? '  (no output)' : stderr.split('\n').map((l: string): string => `  ${l}`).join('\n')) + '\n\n'
+            + 'Any later composition run drops your branch on its own, because the copy no longer exists — the next\n'
+            + `\`${WP_PUSH_DEV}\` by anyone, or a push to main if your workflow composes on that. To force one now,\n`
+            + 'once the cause above is fixed (network, auth, a branch-protection rule on the marker namespace),\n'
+            + 're-publish and remove again; the second remove pushes the marker:\n\n'
+            + `  ${WP_PUSH_DEV}\n  ${WP_PUSH_DEV} --remove\n`);
     }
 
     /**

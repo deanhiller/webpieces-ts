@@ -42,7 +42,7 @@ export class DevCopy {
 export class DevDeployRefs {
     constructor(private readonly gitExec: GitExec) {}
 
-    /** The `pr-gate.devDeploy` block — `dev-include` / `dev` unless the consumer overrode it. */
+    /** The `pr-gate.devDeploy` block — `dev-include` / `dev` / `dev-remove` unless the consumer overrode it. */
     config(repoRoot: string): DevDeployConfig {
         return loadAndValidate(repoRoot).prGate.devDeploy;
     }
@@ -127,6 +127,20 @@ export class DevDeployRefs {
     headSha(repoRoot: string, ref = 'HEAD'): Promise<string> {
         return this.gitExec.gitQuery(['-C', repoRoot, 'rev-parse', ref], repoRoot,
             `Failed to read the sha of ${ref} (git rev-parse).`);
+    }
+
+    /**
+     * Fetch `origin/main` and return its sha — what the `--remove` marker points at (#1395).
+     *
+     * The marker carries no content, so any sha the remote already has would do; `main`'s tip is chosen
+     * because it is guaranteed to exist on origin (the push sends no objects) and it is what the
+     * consumer's workflow composes from anyway. Fetched rather than read from the local tracking ref, so a
+     * clone that has not fetched in weeks does not point the marker at an arbitrarily old commit.
+     */
+    async freshMainTip(repoRoot: string): Promise<string> {
+        await this.gitExec.runGitChecked(['-C', repoRoot, 'fetch', 'origin', `+refs/heads/${MAIN}:refs/remotes/origin/${MAIN}`],
+            `Failed to fetch origin/${MAIN}, which the --remove marker points at. Nothing was removed`);
+        return this.headSha(repoRoot, `refs/remotes/origin/${MAIN}`);
     }
 
     /** The remote sha of one copy, or '' when that copy does not exist yet. */
