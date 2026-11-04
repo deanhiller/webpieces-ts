@@ -12,6 +12,7 @@ import { CheckPrCommand } from './commands/check-pr-command';
 import { ReviewUpsertPrCommand } from './commands/review-upsert-pr-command';
 import { ReapWorktreeCommand } from './commands/reap-worktree-command';
 import { BuildCommand, BuildOptions } from './commands/build-command';
+import { BuildDevCommand } from './commands/build-dev-command';
 import { AwaitReviewsCommand } from './commands/await-reviews-command';
 import { ReviewBudgetCheckOptions, WriteReviewCommand, WriteReviewOptions } from './commands/write-review-command';
 import { WriteReviewFixesCommand, WriteReviewFixesOptions } from './commands/write-review-fixes-command';
@@ -44,6 +45,7 @@ export class PrGateApp {
         private readonly reviewUpsertPrCommand: ReviewUpsertPrCommand,
         private readonly reapWorktreeCommand: ReapWorktreeCommand,
         private readonly buildCommand: BuildCommand,
+        private readonly buildDevCommand: BuildDevCommand,
         private readonly awaitReviewsCommand: AwaitReviewsCommand,
         private readonly writeReviewCommand: WriteReviewCommand,
         private readonly writeReviewFixesCommand: WriteReviewFixesCommand,
@@ -72,7 +74,7 @@ export class PrGateApp {
         );
     }
 
-    /** `wp-push-dev`: publish a DISPOSABLE copy of this branch for the shared dev environment. No PR, no build. */
+    /** `wp-push-dev`: check this branch against dev, build it, and publish a DISPOSABLE copy of it. No PR. */
     pushDev(opts: PushDevOptions = new PushDevOptions()): Promise<void> {
         return this.pushDevCommand.run(opts);
     }
@@ -98,6 +100,16 @@ export class PrGateApp {
      */
     build(opts: BuildOptions): Promise<void> {
         return this.buildCommand.run(opts);
+    }
+
+    /**
+     * `wp-build-dev`: merge `origin/<devBranch>` into a throwaway, run `commands.push-dev.buildCommand` on
+     * it, and go back — the check `wp-push-dev` runs before publishing, without the publish (#1397).
+     * Blocked during a resolve: it parks the checkout on a throwaway of its own.
+     */
+    buildDev(): Promise<void> {
+        this.assertNoResolveInProgress('wp-build-dev');
+        return this.buildDevCommand.run();
     }
 
     /**

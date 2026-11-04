@@ -12,8 +12,28 @@ import { PrGateConfig, buildPrGateConfig } from './pr-gate-config';
 export const DEFAULT_UPSERT_PR_COMMAND = 'pnpm wp-start-upsert-pr';
 export const DEFAULT_MERGE_COMPLETE_COMMAND = 'pnpm wp-finish-upsert-pr';
 
+/**
+ * `commands.push-dev` — what `wp-push-dev` and `wp-build-dev` run before a dev copy is published (#1397).
+ *
+ * `buildCommand` has NO default, deliberately (`.claude/rules/no-rule-defaults.md`): which build vouches
+ * for a dev publish is the consumer's decision, and a default would run a build nobody chose. Absent ⇒
+ * `undefined`, and the two commands that need it refuse, naming the key and printing the entry to paste.
+ * The section itself is optional at LOAD time because a repo that never publishes to a shared dev server
+ * has nothing to configure here.
+ */
+export class PushDevConfig {
+    /** The dev-scoped build, e.g. `pnpm nx affected --target=ci --base=origin/dev --head=HEAD`. */
+    buildCommand: string | undefined;
+
+    constructor(buildCommand: string | undefined) {
+        this.buildCommand = buildCommand;
+    }
+}
+
 export class CommandsConfig {
     prGate: PrGateConfig;
+    // `commands.push-dev` — the dev-scoped pre-publish build. See PushDevConfig.
+    pushDev: PushDevConfig;
     // Command the pr-creation-or-push-guard tells agents to run instead of `gh pr create` or a manual push.
     // Sourced from commands.guardHints.prCreationOrPush.
     upsertPr: string;
@@ -21,8 +41,9 @@ export class CommandsConfig {
     // Sourced from commands.guardHints.mergeInProgress.
     mergeComplete: string;
 
-    constructor(prGate: PrGateConfig, upsertPr: string, mergeComplete: string) {
+    constructor(prGate: PrGateConfig, pushDev: PushDevConfig, upsertPr: string, mergeComplete: string) {
         this.prGate = prGate;
+        this.pushDev = pushDev;
         this.upsertPr = upsertPr;
         this.mergeComplete = mergeComplete;
     }
@@ -40,6 +61,7 @@ interface RawGuardHints {
 interface RawCommandsSection {
     // webpieces-disable no-any-unknown -- opaque pr-gate JSON, validated by validatePrGateSection
     'pr-gate'?: unknown;
+    'push-dev'?: { buildCommand?: unknown };
     guardHints?: RawGuardHints;
 }
 
@@ -67,5 +89,10 @@ export function buildCommandsConfig(section: unknown): CommandsConfig {
     const mergeComplete = typeof hints.mergeInProgress === 'string' && hints.mergeInProgress.trim() !== ''
         ? hints.mergeInProgress
         : DEFAULT_MERGE_COMPLETE_COMMAND;
-    return new CommandsConfig(buildPrGateConfig(raw['pr-gate']), upsertPr, mergeComplete);
+    const pushDevRaw = raw['push-dev'];
+    const devBuild = typeof pushDevRaw === 'object' && pushDevRaw !== null
+        && typeof pushDevRaw.buildCommand === 'string' && pushDevRaw.buildCommand.trim() !== ''
+        ? pushDevRaw.buildCommand
+        : undefined;
+    return new CommandsConfig(buildPrGateConfig(raw['pr-gate']), new PushDevConfig(devBuild), upsertPr, mergeComplete);
 }

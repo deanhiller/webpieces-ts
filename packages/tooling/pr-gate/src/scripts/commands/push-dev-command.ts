@@ -10,9 +10,10 @@ import { injectable, bindingScopeValues } from 'inversify';
 
 import { GitExec } from '../workflow/git-exec';
 import { DevCopy, DevDeployRefs } from '../workflow/dev-deploy-refs';
-import { PushDevState, PushDevStateStore } from '../workflow/push-dev-state';
-import { DevResolveRunner } from '../workflow/dev-resolve-runner';
+import { DevResolveMode, PushDevState, PushDevStateStore } from '../workflow/push-dev-state';
+import { DevResolveRunner, RESOLUTION_SUBJECT } from '../workflow/dev-resolve-runner';
 import { DevDeployWatchHints } from '../workflow/dev-deploy-watch-hints';
+import { DevBuild } from '../workflow/dev-build';
 
 const SEP = '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n';
 
@@ -45,10 +46,17 @@ export class PushDevOptions {
  * a gated command there is simply no legal way for an AI to get a branch onto a dev server, so the
  * feature was undoable rather than merely awkward.
  *
- * WHY THERE IS NO BUILD, deliberately unlike `wp-start-upsert-pr`: the shared environment's CI builds the
- * COMPOSED tree (main + every listed branch). A local build here proves the branch compiles against
- * `main` alone, which is not the question — it would be both slower and reassuring about the wrong thing.
- * The gate that matters runs on the composition, in CI, where it belongs.
+ * WHY IT CHECKS AGAINST `dev` FIRST (#1397): 61 of 73 failed dev publishes on one consumer failed on a git
+ * conflict, which the developer only learned about after the server-side composition failed. So a plain
+ * publish now does locally what CI is about to do: merge `origin/<devBranch>` into a THROWAWAY branch,
+ * resolve any conflict there (the same halt / `wp-finish-push-dev` state machine `--resolve` uses), and run
+ * `commands.push-dev.buildCommand` on the merged tree. A build against `main` alone would prove the wrong
+ * thing; a build of only what differs from `dev` proves the right one, quickly.
+ *
+ * WHAT IS PUBLISHED IS NEVER THAT MERGE: the copy is the feature head plus, when something conflicted, one
+ * commit recording the resolved files (DevResolveRunner.recordResolution). A copy that contained `dev`
+ * would carry every other copy's history, and a later `--remove` of one of them would leave it on dev
+ * through this one.
  *
  * WHAT IT NEVER DOES: touch the feature branch. See DevDeployRefs for the invariant and why the copy
  * exists to hold conflict resolutions that must not reach the PR.
@@ -62,6 +70,7 @@ export class PushDevCommand {
         private readonly store: PushDevStateStore,
         private readonly runner: DevResolveRunner,
         private readonly watchHints: DevDeployWatchHints,
+        private readonly devBuild: DevBuild,
     ) {}
 
     async run(opts: PushDevOptions): Promise<void> {
@@ -171,35 +180,61 @@ export class PushDevCommand {
     }
 
     /**
-     * The ordinary path: publish HEAD as `<namespace>/<branch>`.
+     * The ordinary path: check the copy against `origin/<devBranch>`, build it, then publish it as
+     * `<namespace>/<branch>` (#1397). The merge, the conflict halt and the build all happen on a throwaway
+     * branch through DevResolveRunner, in DevResolveMode.PREBUILD — so a conflict stops in exactly the
+     * same `wp-finish-push-dev` state machine `--resolve` uses, rather than inventing a second way to be
+     * stuck.
      *
-     * THE CLOBBER GUARD is the whole of the interesting logic here. If the remote copy holds commits the
-     * local branch does not, somebody (quite possibly this developer, days ago) resolved a real conflict
-     * over there. A silent force-push destroys work that cost a human a genuine merge resolution, so the
-     * default is refusal with two named ways forward — never a "use --force" one-liner, which is how a
-     * warning becomes a reflex.
+     * THE CLOBBER GUARD runs first. If the remote copy holds commits the local branch does not, somebody
+     * (quite possibly this developer, days ago) put real work there, and a silent force-push destroys it,
+     * so the default is refusal with two named ways forward — never a "use --force" one-liner, which is how
+     * a warning becomes a reflex. The one exception is a commit this flow wrote itself
+     * ({@link RESOLUTION_SUBJECT}): the check below re-derives it against today's dev, so replacing it
+     * loses nothing.
      */
     private async publish(repoRoot: string, cfg: DevDeployConfig, branch: string, targetRef: string, opts: PushDevOptions): Promise<void> {
         const remoteSha = await this.refs.remoteSha(repoRoot, targetRef);
         if (remoteSha !== '') {
             await this.refs.fetchCopies(repoRoot, [targetRef]);
-            const ahead = await this.refs.commitsOnlyOnRemote(repoRoot, targetRef);
+            const subjects = await this.refs.subjectsOnlyOnRemote(repoRoot, targetRef);
+            const ahead = subjects.filter((s: string): boolean => !s.startsWith(RESOLUTION_SUBJECT)).length;
             if (ahead > 0 && opts.rebaseResolution) {
                 await this.rebaseResolution(repoRoot, branch, targetRef);
                 return;
             }
             if (ahead > 0 && !opts.force) this.refuseClobber(cfg, branch, targetRef, ahead);
         }
-        await this.gitExec.runGitChecked(
-            ['-C', repoRoot, 'push', ...this.pushSafety(targetRef, remoteSha, opts.force),
-                'origin', `HEAD:refs/heads/${targetRef}`],
+        // Before any git write: an unconfigured dev build refuses here, with nothing merged or published.
+        this.devBuild.command(repoRoot);
+        if (await this.refs.remoteSha(repoRoot, cfg.devBranch) === '') {
+            await this.publishWithoutDev(repoRoot, cfg, branch, targetRef, remoteSha, opts.force);
+            return;
+        }
+        const state = new PushDevState(branch, this.runner.tmpBranchFor(branch), targetRef, [cfg.devBranch]);
+        state.mode = DevResolveMode.PREBUILD;
+        state.leaseSha = remoteSha;
+        state.force = opts.force;
+        process.stdout.write(this.runner.announcePrebuild(cfg, state));
+        await this.runner.start(repoRoot, state, 'HEAD', [cfg.devBranch]);
+    }
+
+    /**
+     * `origin/<devBranch>` does not exist yet — the very first publish in a repo whose CI has never
+     * composed. There is nothing to conflict with and no base for a dev-scoped build, so the copy is
+     * published as it is; refusing here would make the first dev composition impossible to start.
+     */
+    private async publishWithoutDev(
+        repoRoot: string, cfg: DevDeployConfig, branch: string, targetRef: string, remoteSha: string, force: boolean,
+    ): Promise<void> {
+        const lease = remoteSha === '' ? [] : force ? ['--force'] : [`--force-with-lease=refs/heads/${targetRef}:${remoteSha}`];
+        await this.gitExec.runGitChecked(['-C', repoRoot, 'push', ...lease, 'origin', `HEAD:refs/heads/${targetRef}`],
             `Failed to publish the dev copy ${targetRef}`);
-        // Read AFTER the push, so the sha in the watch hints is provably the one that is now published.
         const published = await this.refs.headSha(repoRoot);
         process.stdout.write(
             '\n' + SEP + `✅ Published ${targetRef}\n` + SEP + '\n'
-            + `\`${branch}\` is now in the pool your CI composes \`${cfg.devBranch}\` from — it will be picked up on\n`
-            + 'the next composition run. No PR was opened and nothing landed on main.\n\n'
+            + `\`origin/${cfg.devBranch}\` does not exist yet, so there was nothing to check the copy against and no\n`
+            + `dev build ran. \`${branch}\` is now in the pool your CI composes \`${cfg.devBranch}\` from.\n\n`
             + `  ${WP_PUSH_DEV} --list      ← what else is in the pool\n`
             + `  ${WP_PUSH_DEV} --remove    ← take this branch back out\n`
             + this.watchHints.render(cfg, targetRef, published));
@@ -214,6 +249,7 @@ export class PushDevCommand {
      */
     private async rebaseResolution(repoRoot: string, branch: string, targetRef: string): Promise<void> {
         const state = new PushDevState(branch, this.runner.tmpBranchFor(branch), targetRef, [targetRef]);
+        state.mode = DevResolveMode.REPLAY;
         process.stdout.write(
             '\n' + SEP + `♻️  Replaying the published resolution onto \`${branch}\`\n` + SEP + '\n'
             + `Merging \`${targetRef}\` (which holds the resolution) into your new commits on a throwaway branch.\n`
@@ -243,6 +279,7 @@ export class PushDevCommand {
             return;
         }
         const state = new PushDevState(branch, this.runner.tmpBranchFor(branch), targetRef, queue);
+        state.mode = DevResolveMode.COMPOSE;
         process.stdout.write(this.runner.announce(cfg, state));
         await this.runner.start(repoRoot, state, `refs/remotes/origin/${targetRef}`, [targetRef, ...queue]);
     }
@@ -265,17 +302,6 @@ export class PushDevCommand {
                 + copies.map((c: DevCopy): string => `  ${c.ref}`).join('\n') + '\n');
         }
         return [wanted];
-    }
-
-    /**
-     * `--force-with-lease` pinned to the sha we just inspected, so the clobber guard's verdict cannot go
-     * stale between the check and the push. Plain `--force` only when the caller explicitly asked to
-     * discard, and no force at all for a brand-new copy.
-     */
-    private pushSafety(targetRef: string, remoteSha: string, force: boolean): string[] {
-        if (remoteSha === '') return [];
-        if (force) return ['--force'];
-        return [`--force-with-lease=refs/heads/${targetRef}:${remoteSha}`];
     }
 
     private refuseClobber(cfg: DevDeployConfig, branch: string, targetRef: string, ahead: number): never {

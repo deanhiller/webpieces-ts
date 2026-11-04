@@ -303,10 +303,12 @@ snapshots are never loaded as active summaries; a new PR requires its own author
    The numbers in a `--delete-*` flag are the numbers printed on the SAME run — wp-cleanup renumbers
    from a fresh scan every time, and a number past the end of the block stops the run rather than
    deleting the wrong ref. An explicit flag always beats the terminal sniff.
-8. **`pnpm wp-push-dev`** — publish a **disposable copy** of this branch so a shared dev environment can
-   build it. No PR, no build gate, and your feature branch is never moved. See below.
-9. **`pnpm wp-finish-push-dev`** — finalize a dev composition after you resolved its conflicts. Only
-   needed on the conflict path; a clean `pnpm wp-push-dev --resolve` finalizes itself.
+8. **`pnpm wp-push-dev`** — check this branch against `origin/dev`, build it, then publish a **disposable
+   copy** of it so a shared dev environment can build it. No PR, and your feature branch is never moved.
+   See below.
+9. **`pnpm wp-finish-push-dev`** — finish after you resolved the conflicts `wp-push-dev` stopped on. Only
+   needed on the conflict path; a clean run finalizes itself.
+10. **`pnpm wp-build-dev`** — the same check against `origin/dev` and the same build, WITHOUT publishing.
 
 ## Publishing to the shared dev server (no PR, nothing lands on main)
 
@@ -315,10 +317,32 @@ to `origin/main`, merges every published copy, builds the composed tree, and for
 Nobody ever checks it out, so the wipe is a non-event, and it can never be stale.
 
 ```bash
-pnpm wp-push-dev            # publish this branch as dev-include/<your-branch>
+pnpm wp-push-dev            # check against origin/dev, build, publish this branch as dev-include/<your-branch>
+pnpm wp-build-dev           # the same check and build, publishing nothing
 pnpm wp-push-dev --list     # what is currently in the pool
 pnpm wp-push-dev --remove   # take your branch back out (this is the rollback)
 ```
+
+**What `wp-push-dev` does before it publishes.** It fetches `origin/dev`, merges it into a THROWAWAY
+branch (`<your-branch>DevResolve`, never your branch), and runs `commands.push-dev.buildCommand` on the
+merged tree. Only when the merge is clean (or you resolved it) and that build is green does it publish.
+So a conflict or a broken build is found on your machine, in a minute, instead of after the shared
+composition fails. The build output goes to `.webpieces/logs/build-dev.log`; read the `FullLog :` path it
+prints rather than re-running it.
+
+**What it publishes is never that merge.** The copy is your branch exactly as it is, plus — only when
+something conflicted — ONE commit holding the files you resolved. A copy that contained `dev` would carry
+every other copy's history, and a later `--remove` of one of them would leave it on dev through yours.
+
+**`commands.push-dev.buildCommand` has no default.** Configure the dev-scoped build in
+`webpieces.config.json` (it should build only what differs from `origin/dev`, so it stays fast):
+
+```json
+"commands": { "push-dev": { "buildCommand": "pnpm nx affected --target=ci --base=origin/dev --head=HEAD" } }
+```
+
+Without it, `wp-push-dev` and `wp-build-dev` refuse before touching anything and print that entry. When
+`origin/dev` does not exist yet (the very first composition), `wp-push-dev` publishes unchecked.
 
 `--remove` deletes `dev-include/<your-branch>` **and then** pushes a content-free marker
 `dev-remove/<your-branch>` at the `origin/main` tip. The marker push is the rebuild signal: a deletion
@@ -375,6 +399,15 @@ in. Nothing here is blocked: they are read-only git queries plus `gh run list|wa
 composition may have excluded yours. Question 1 is the one that answers for *your* code; question 2 only
 tells you the machinery finished. Answer them in that order, and report both.
 
+### When `wp-push-dev` stops on a conflict
+
+It stops on the THROWAWAY branch and lists the files. Resolve them, `git add` each one, then:
+
+```bash
+pnpm wp-finish-push-dev                    # commits, runs the dev build, publishes
+pnpm wp-finish-push-dev --abort            # or throw it all away
+```
+
 ### When two branches conflict in the composition
 
 CI will name the branch you conflict with. Compose locally, so what you resolve is what CI will build:
@@ -382,12 +415,15 @@ CI will name the branch you conflict with. Compose locally, so what you resolve 
 ```bash
 pnpm wp-push-dev --resolve                 # merge every OTHER copy, in CI's order
 pnpm wp-push-dev --resolve <their-branch>  # or just the one CI named
-# clean  → it publishes the copy itself; you are done
+# clean  → nothing to publish: CI already composes your copy as it is
 # CONFLICT → it stops on a THROWAWAY branch and lists the files
 #   resolve them, `git add` each one, then:
 pnpm wp-finish-push-dev                    # commits, resumes the queue, publishes
 pnpm wp-finish-push-dev --abort            # or throw it all away
 ```
+
+Either way, what is published is your copy plus ONE commit holding the resolved files — never a merge of
+the other copies.
 
 While a resolve is half-finished the other `wp-*` commands refuse (you are parked on a throwaway branch,
 not your feature branch). The block message lists exactly which ones and how to get out.
@@ -399,7 +435,9 @@ them; neither is blocked.
 ### If your copy already holds a resolution
 
 `wp-push-dev` **refuses** rather than force-pushing over commits the copy has and your branch does not —
-that is somebody's real conflict resolution, and it exists only there, by design. Two ways forward:
+that is somebody's real work, and it exists only there, by design. (A resolution commit `wp-push-dev`
+recorded itself is the exception: the next publish re-checks against dev and records it again, so it is
+replaced without asking.) Two ways forward:
 
 - `pnpm wp-push-dev --rebase-resolution` — replay it on top of your new commits (keeps the work)
 - `pnpm wp-push-dev --force` — discard it (somebody re-resolves the composition afterwards)

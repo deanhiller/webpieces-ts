@@ -99,6 +99,13 @@ describe('PrGateCliApp — published command boundary', () => {
         },
     );
 
+    it('routes wp-build-dev to PrGateApp.buildDev, with no flags', async (): Promise<void> => {
+        const call = vi.spyOn(PrGateApp.prototype, 'buildDev').mockResolvedValue(undefined);
+        const result = await driver.run('wp-build-dev');
+        expect(call).toHaveBeenCalledOnce();
+        expect(result.exit.code).toBeNull();
+    });
+
     it('parses wp-build --force', async (): Promise<void> => {
         const call = vi.spyOn(PrGateApp.prototype, 'build').mockResolvedValue(undefined);
         await driver.run('wp-build', ['--force']);

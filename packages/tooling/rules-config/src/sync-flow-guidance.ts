@@ -16,6 +16,7 @@ export const WP_FINISH_UPSERT_PR = 'pnpm wp-finish-upsert-pr';
 // shared dev environment can build it, and never touches the feature branch or any PR.
 export const WP_PUSH_DEV = 'pnpm wp-push-dev';
 export const WP_FINISH_PUSH_DEV = 'pnpm wp-finish-push-dev';
+export const WP_BUILD_DEV = 'pnpm wp-build-dev';
 
 /**
  * Renders the canonical guidance blocks. Methods return string[] (not a joined string) so callers can
@@ -72,9 +73,11 @@ export class SyncFlowGuidance {
     devDeployFlow(): string[] {
         return [
             '  C. You just want it on the SHARED DEV SERVER — no PR, not landing on main:',
-            `     1. ${WP_PUSH_DEV}            ← publish a DISPOSABLE copy of this branch for dev CI`,
+            `     1. ${WP_PUSH_DEV}            ← check the copy against origin/dev on a throwaway merge,`,
+            '                                     run commands.push-dev.buildCommand, then publish it',
             '     2. resolve conflicts in the files it lists (ONLY if it reported any)',
-            `     3. ${WP_FINISH_PUSH_DEV}     ← finalize (ONLY on the conflict path)`,
+            `     3. ${WP_FINISH_PUSH_DEV}     ← finalize: build, then publish (ONLY on the conflict path)`,
+            `     (${WP_BUILD_DEV} runs the same dev check and build WITHOUT publishing.)`,
             '     Your feature branch is NEVER moved and never acquires another dev\'s commits — that is',
             '     the whole reason the copy exists.',
         ];

@@ -75,6 +75,20 @@ Inline `*Why` keys, including `upgradePolicyWhy`, are rejected at every config s
 Remove them from JSON. Keep repository-specific decisions in tracked Markdown in the repository;
 put reusable config instructions in this guide's source template. Generated files are overwritten.
 
+## The dev-deploy build: `commands.push-dev.buildCommand`
+
+`wp-push-dev` merges `origin/dev` into a throwaway branch and runs this command on the merged tree before
+it publishes a dev copy; `wp-build-dev` runs the same check without publishing. It has NO default — which
+build vouches for a dev publish is this repo's decision. The section is optional (a repo that never
+publishes to a shared dev server needs none), but those two commands refuse without it, and a present
+`push-dev` section must carry a non-empty `buildCommand`:
+
+```json
+"commands": { "push-dev": { "buildCommand": "pnpm nx affected --target=ci --base=origin/dev --head=HEAD" } }
+```
+
+Choose a command that builds only what differs from `origin/dev`, so it finishes in a minute or two.
+
 ## Merge automation and existing authorization
 
 `commands.pr-gate.mergeMode` controls only what `wp-finish-upsert-pr` does:

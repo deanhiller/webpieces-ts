@@ -11,9 +11,11 @@ import { PrGateFeature } from '../../__tests__/feature-harness';
 
 import { DevResolveRunner } from './dev-resolve-runner';
 import { DevDeployRefs } from './dev-deploy-refs';
-import { PushDevState, PushDevStateStore } from './push-dev-state';
+import { DevResolveMode, PushDevState, PushDevStateStore } from './push-dev-state';
 import { DevDeployWatchHints } from './dev-deploy-watch-hints';
 import { GitExec } from './git-exec';
+import { DevBuild } from './dev-build';
+import { BuildAffected } from './build-affected';
 
 /**
  * The state machine: merge until something conflicts, hand the tree over, be resumed, publish.
@@ -98,11 +100,15 @@ class FakeStore extends PushDevStateStore {
 
 function runner(): DevResolveRunner {
     const gitExec = harness.feature.container.get(GitExec);
-    return new DevResolveRunner(gitExec, new FakeRefs(gitExec), new FakeStore(), new DevDeployWatchHints());
+    const refs = new FakeRefs(gitExec);
+    return new DevResolveRunner(gitExec, refs, new FakeStore(), new DevDeployWatchHints(),
+        new DevBuild(harness.feature.container.get(BuildAffected), refs));
 }
 
-function state(queue: string[]): PushDevState {
-    return new PushDevState(FEATURE, TMP, MINE, queue);
+function state(queue: string[], mode: DevResolveMode = DevResolveMode.COMPOSE): PushDevState {
+    const built = new PushDevState(FEATURE, TMP, MINE, queue);
+    built.mode = mode;
+    return built;
 }
 
 // Invoke `fn` with stdout captured; returns the CliExitError it threw, or null when it completed.
@@ -144,8 +150,18 @@ beforeEach(async (): Promise<void> => {
 });
 
 describe('DevResolveRunner — the clean path needs no stage ②', () => {
-    it('merges every queued ref, publishes the copy, and restores the original checkout', async (): Promise<void> => {
+    it('--resolve: every ref merges cleanly, so nothing is published and the checkout is restored', async (): Promise<void> => {
         const thrown = await capture((): Promise<void> => runner().start(REPO, state(['dev-include/amy/ONE-9']), 'base', []));
+        expect(thrown).toBeNull();
+        expect(harness.runs.some((args: string[]): boolean => args.includes('push'))).toBe(false);
+        expect(harness.runs).toContainEqual(['-C', REPO, 'checkout', FEATURE]);
+        expect(harness.cleared).toBe(1);
+        expect(harness.out).toContain('composes cleanly — nothing to publish');
+    });
+
+    it('--rebase-resolution: merges every queued ref, publishes the merge, and restores the original checkout', async (): Promise<void> => {
+        const thrown = await capture((): Promise<void> =>
+            runner().start(REPO, state(['dev-include/amy/ONE-9'], DevResolveMode.REPLAY), 'base', []));
         expect(thrown).toBeNull();
         expect(harness.runs).toContainEqual(
             ['-C', REPO, 'push', '--force', 'origin', `${TMP}:refs/heads/${MINE}`]);

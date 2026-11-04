@@ -45,7 +45,7 @@ destination; the loader hands the resolved strings to the two rules at construct
 
 - **upsert-pr**: `wp-start-upsert-pr` ① → `wp-review-upsert-pr` ② → `wp-finish-upsert-pr` ③
 - **update**: `wp-start-update` ① → `wp-finish-update` ② (② only needed on conflict)
-- **dev-deploy**: `wp-push-dev` ① → `wp-finish-push-dev` ② (② only needed on conflict)
+- **dev-deploy**: `wp-push-dev` ① → `wp-finish-push-dev` ② (② only needed on conflict); `wp-build-dev` is ①'s check and build without the publish
 - **human post**: interactive `wp-human-post-pr` (human attestation, clean/current branch + summary,
   optional local `pnpm wp-build` with live `build.log` output or explicit deferral to cloud CI,
   visible automated-gate bypass, post only; never an AI cure and never an automatic merge)

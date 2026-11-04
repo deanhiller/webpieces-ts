@@ -49,9 +49,13 @@ export const REVIEW_STAGE = 'review';
 export const FINISH_STAGE = 'finish';
 // `wp-build`, which is not a stage of the PR flow but runs the SAME gate (BuildAffected.runBuildGate).
 export const BUILD_STAGE = 'build';
+// `wp-build-dev` and the pre-publish build of `wp-push-dev` / `wp-finish-push-dev` (#1397): the SAME gate,
+// running `commands.push-dev.buildCommand` instead.
+export const DEV_BUILD_STAGE = 'build-dev';
 
-/** The one fixed log name — see BuildGateLog.fileNameFor for why only `wp-build` gets one. */
+/** The fixed log names — see BuildGateLog.fileNameFor for why only the two ad-hoc builds get one. */
 export const BUILD_LOG_NAME = 'build.log';
+export const DEV_BUILD_LOG_NAME = 'build-dev.log';
 
 /**
  * The heartbeat's state: the line count reported on the PREVIOUS tick, so a tick that has not moved can
@@ -121,9 +125,12 @@ export class BuildGateLog {
         return fs.existsSync(file) ? file : '';
     }
 
-    /** `build.log` for `wp-build`; `build-gate-<stage>-<branch>-<shortSha>.log` for the PR-flow stages. */
+    /** `build.log` for `wp-build`; `build-dev.log` for the dev build; `build-gate-<stage>-<branch>-<shortSha>.log` for the PR-flow stages. */
     async fileNameFor(repoRoot: string, stage: string): Promise<string> {
         if (stage === BUILD_STAGE) return BUILD_LOG_NAME;
+        // Fixed, like build.log: the dev build runs on a THROWAWAY branch whose name and sha say nothing
+        // to the reader, and history comes from the same rotation.
+        if (stage === DEV_BUILD_STAGE) return DEV_BUILD_LOG_NAME;
         const branch = this.slug(gitCheckout.branch(repoRoot) ?? '');
         const sha = this.slug(await this.gitOut(repoRoot, ['rev-parse', '--short', 'HEAD']));
         return `build-gate-${this.slug(stage)}-${branch === '' ? 'nobranch' : branch}-${sha === '' ? 'nosha' : sha}.log`;

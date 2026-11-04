@@ -9,14 +9,18 @@ import { PrGateFeature } from '../../__tests__/feature-harness';
 
 import { PushDevCommand, PushDevOptions } from './push-dev-command';
 import { DevCopy, DevDeployRefs } from '../workflow/dev-deploy-refs';
-import { PushDevState, PushDevStateStore } from '../workflow/push-dev-state';
+import { DevResolveMode, PushDevState, PushDevStateStore } from '../workflow/push-dev-state';
 import { DevResolveRunner } from '../workflow/dev-resolve-runner';
 import { DevDeployWatchHints } from '../workflow/dev-deploy-watch-hints';
 import { GitExec } from '../workflow/git-exec';
+import { DevBuild } from '../workflow/dev-build';
+import { BuildAffected } from '../workflow/build-affected';
 
 /**
  * The behaviour under test is the DECISIONS wp-push-dev makes — which branches it refuses, when it
- * refuses to clobber a published resolution, and what it hands the resolve runner. git is SCRIPTED on the
+ * refuses to clobber a published resolution, and what it hands the resolve runner. The plain publish's
+ * check against dev, its build and what it finally pushes are push-dev-prebuild.spec.ts's, which runs the
+ * whole container. git is SCRIPTED on the
  * injected GitProcessApi (#1381) from the harness below — the remote's copies, their shas, how far ahead
  * the remote is — and every command the program issued is recorded; dev-resolve-runner.spec.ts covers the
  * merge/publish sequencing.
@@ -34,6 +38,7 @@ class Harness {
     copies: DevCopy[] = [];
     remoteShas: Map<string, string> = new Map<string, string>();
     aheadCount = 0;
+    devBuildCommand: string | undefined = 'pnpm nx affected --target=ci --base=origin/dev --head=HEAD';
     resolveInProgress: PushDevState | null = null;
     startedBase = '';
     startedState: PushDevState | null = null;
@@ -72,7 +77,9 @@ function scriptGit(): void {
         const sha = harness.remoteShas.get(asked);
         return git.ok(sha === undefined ? '' : `${sha}\trefs/heads/${asked}\n`);
     });
-    git.respondToPrefix(['rev-list', '--count'], (): GitResultDto => git.ok(`${harness.aheadCount}\n`));
+    // Remote-only commits that are somebody's work (not a recorded resolution), one subject per commit.
+    git.respondToPrefix(['log', '--format=%s'], (): GitResultDto =>
+        git.ok(Array.from({ length: harness.aheadCount }, (_v: unknown, i: number): string => `work ${String(i)}`).join('\n')));
     git.respondToPrefix(['-C', REPO, 'rev-parse'], git.ok('deadbeefdeadbeefdeadbeefdeadbeefdeadbeef\n'));
     git.respondToPrefix(['-C', REPO], git.ok());
 }
@@ -85,6 +92,10 @@ class FakeRefs extends DevDeployRefs {
 
     override currentBranch(): string {
         return harness.branch;
+    }
+
+    override devBuildCommand(): string | undefined {
+        return harness.devBuildCommand;
     }
 }
 
@@ -109,6 +120,10 @@ class FakeRunner extends DevResolveRunner {
     override announce(): string {
         return '';
     }
+
+    override announcePrebuild(): string {
+        return '';
+    }
 }
 
 class FakeRootFinder extends RepoRootFinder {
@@ -121,9 +136,10 @@ function command(): PushDevCommand {
     const gitExec = harness.feature.container.get(GitExec);
     const refs = new FakeRefs(gitExec);
     const store = new FakeStore();
+    const devBuild = new DevBuild(harness.feature.container.get(BuildAffected), refs);
     return new PushDevCommand(
-        new FakeRootFinder(), gitExec, refs, store, new FakeRunner(gitExec, refs, store, new DevDeployWatchHints()),
-        new DevDeployWatchHints());
+        new FakeRootFinder(), gitExec, refs, store, new FakeRunner(gitExec, refs, store, new DevDeployWatchHints(), devBuild),
+        new DevDeployWatchHints(), devBuild);
 }
 
 function options(): PushDevOptions {
@@ -164,8 +180,9 @@ beforeEach(async (): Promise<void> => {
     harness.branch = 'dean/ONE-2275';
     harness.config = new DevDeployConfig('dev-include', 'dev', 'dev-remove');
     harness.copies = [];
-    harness.remoteShas = new Map<string, string>();
+    harness.remoteShas = new Map<string, string>([['dev', 'devdevdev']]);
     harness.aheadCount = 0;
+    harness.devBuildCommand = 'pnpm nx affected --target=ci --base=origin/dev --head=HEAD';
     harness.resolveInProgress = null;
     harness.feature = await PrGateFeature.create();
     scriptGit();
@@ -175,24 +192,29 @@ beforeEach(async (): Promise<void> => {
 });
 
 describe('PushDevCommand — publishing', () => {
-    it('pushes HEAD to <namespace>/<branch>, never to the branch itself', async (): Promise<void> => {
+    it('hands the runner a PREBUILD check of the LOCAL head against dev, and pushes nothing itself', async (): Promise<void> => {
         await run(options());
-        expect(pushArgs()).toEqual(['-C', REPO, 'push', 'origin', `HEAD:refs/heads/${MY_COPY}`]);
+        expect(harness.startedBase).toBe('HEAD');
+        expect(harness.startedState?.mode).toBe(DevResolveMode.PREBUILD);
+        expect(harness.startedState?.queue).toEqual(['dev']);
+        expect(harness.startedState?.targetRef).toBe(MY_COPY);
+        expect(harness.startedState?.originalBranch).toBe('dean/ONE-2275');
+        expect(pushArgs()).toBeUndefined();
         expect(harness.cleanTreeCalls).toBe(1);
     });
 
-    it('tells the AI how to watch it reach the dev server, fully substituted', async (): Promise<void> => {
-        await run(options());
-        // Both questions, in the order that keeps the answer honest: ancestry first (provably about YOUR
-        // code), run status second (about the machinery).
-        expect(harness.out).toContain('git merge-base --is-ancestor deadbeefdeadbeefdeadbeefdeadbeefdeadbeef origin/dev');
-        expect(harness.out).toContain(`gh run list --branch ${MY_COPY} --limit 5`);
-    });
-
-    it('force-with-leases against the sha it inspected when the copy already exists', async (): Promise<void> => {
+    it('records the sha it inspected as the lease the eventual push uses', async (): Promise<void> => {
         harness.remoteShas.set(MY_COPY, 'abc123');
         await run(options());
-        expect(pushArgs()).toContain(`--force-with-lease=refs/heads/${MY_COPY}:abc123`);
+        expect(harness.startedState?.leaseSha).toBe('abc123');
+        expect(harness.startedState?.force).toBe(false);
+    });
+
+    it('refuses, naming the key, before handing anything to the runner when the dev build is not configured', async (): Promise<void> => {
+        harness.devBuildCommand = undefined;
+        const message = await refusalMessage(options());
+        expect(message).toContain('`commands.push-dev.buildCommand` is not configured');
+        expect(harness.startedState).toBeNull();
     });
 });
 
@@ -214,7 +236,8 @@ describe('PushDevCommand — the clobber guard', () => {
         const opts = options();
         opts.force = true;
         await run(opts);
-        expect(pushArgs()).toContain('--force');
+        expect(harness.startedState?.force).toBe(true);
+        expect(harness.startedState?.mode).toBe(DevResolveMode.PREBUILD);
     });
 
     it('--rebase-resolution replays the resolution onto the LOCAL head instead of discarding it', async (): Promise<void> => {
@@ -225,6 +248,7 @@ describe('PushDevCommand — the clobber guard', () => {
         expect(harness.startedState?.queue).toEqual([MY_COPY]);
         // The whole point: the feature branch is the return address, never a merge target.
         expect(harness.startedState?.originalBranch).toBe('dean/ONE-2275');
+        expect(harness.startedState?.mode).toBe(DevResolveMode.REPLAY);
         expect(pushArgs()).toBeUndefined();
     });
 });
@@ -353,6 +377,7 @@ describe('PushDevCommand — --resolve', () => {
         await run(opts);
         expect(harness.startedState?.queue).toEqual(['dev-include/amy/ONE-9', 'dev-include/zoe/ONE-1']);
         expect(harness.startedBase).toBe(`refs/remotes/origin/${MY_COPY}`);
+        expect(harness.startedState?.mode).toBe(DevResolveMode.COMPOSE);
     });
 
     it('queues only the named branch, with or without the namespace prefix', async (): Promise<void> => {
@@ -373,7 +398,7 @@ describe('PushDevCommand — --resolve', () => {
     });
 
     it('refuses to resolve before the branch has ever been published', async (): Promise<void> => {
-        harness.remoteShas = new Map<string, string>();
+        harness.remoteShas = new Map<string, string>([['dev', 'devdevdev']]);
         const opts = options();
         opts.resolve = true;
         expect(await refusalMessage(opts)).toContain('is not published yet');
