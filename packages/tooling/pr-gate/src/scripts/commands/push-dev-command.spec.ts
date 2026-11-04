@@ -14,6 +14,7 @@ import { DevResolveRunner } from '../workflow/dev-resolve-runner';
 import { DevDeployWatchHints } from '../workflow/dev-deploy-watch-hints';
 import { GitExec } from '../workflow/git-exec';
 import { DevBuild } from '../workflow/dev-build';
+import { DevCopyOnMain } from '../workflow/dev-copy-on-main';
 import { BuildAffected } from '../workflow/build-affected';
 
 /**
@@ -38,6 +39,10 @@ class Harness {
     copies: DevCopy[] = [];
     remoteShas: Map<string, string> = new Map<string, string>();
     aheadCount = 0;
+    /** What the copy changes since its merge-base with origin/main (`git diff main...copy`). */
+    copyChanged: string[] = ['services/a/src/a.ts'];
+    /** Where origin/main and the copy still differ (`git diff main copy`). Containing every copyChanged file ⇒ nothing landed. */
+    stillDiffer: string[] = ['services/a/src/a.ts', 'services/z/other-work-on-main.ts'];
     devBuildCommand: string | undefined = 'pnpm nx affected --target=ci --base=origin/dev --head=HEAD';
     resolveInProgress: PushDevState | null = null;
     startedBase = '';
@@ -80,6 +85,10 @@ function scriptGit(): void {
     // Remote-only commits that are somebody's work (not a recorded resolution), one subject per commit.
     git.respondToPrefix(['log', '--format=%s'], (): GitResultDto =>
         git.ok(Array.from({ length: harness.aheadCount }, (_v: unknown, i: number): string => `work ${String(i)}`).join('\n')));
+    // The --remove "already on main?" content check (#1401): the three-dot diff is what the copy changes, the
+    // two-dot one is what still differs from main.
+    git.respondToPrefix(['-C', REPO, 'diff', '--name-only', '--no-renames'], (call: ProcessCallDto): GitResultDto =>
+        git.ok((call.args.some((a: string): boolean => a.includes('...')) ? harness.copyChanged : harness.stillDiffer).join('\n')));
     git.respondToPrefix(['-C', REPO, 'rev-parse'], git.ok('deadbeefdeadbeefdeadbeefdeadbeefdeadbeef\n'));
     git.respondToPrefix(['-C', REPO], git.ok());
 }
@@ -139,7 +148,7 @@ function command(): PushDevCommand {
     const devBuild = new DevBuild(harness.feature.container.get(BuildAffected), refs);
     return new PushDevCommand(
         new FakeRootFinder(), gitExec, refs, store, new FakeRunner(gitExec, refs, store, new DevDeployWatchHints(), devBuild),
-        new DevDeployWatchHints(), devBuild);
+        new DevDeployWatchHints(), devBuild, harness.feature.container.get(DevCopyOnMain));
 }
 
 function options(): PushDevOptions {
@@ -182,6 +191,8 @@ beforeEach(async (): Promise<void> => {
     harness.copies = [];
     harness.remoteShas = new Map<string, string>([['dev', 'devdevdev']]);
     harness.aheadCount = 0;
+    harness.copyChanged = ['services/a/src/a.ts'];
+    harness.stillDiffer = ['services/a/src/a.ts', 'services/z/other-work-on-main.ts'];
     harness.devBuildCommand = 'pnpm nx affected --target=ci --base=origin/dev --head=HEAD';
     harness.resolveInProgress = null;
     harness.feature = await PrGateFeature.create();
@@ -336,6 +347,71 @@ describe('PushDevCommand — --remove and --list', () => {
         opts.remove = true;
         expect(await refusalMessage(opts)).toContain('Nothing was removed');
         expect(harness.pushes).toEqual([]);
+    });
+
+    it('--remove of a copy NOT on main checks it against main before deleting, warns nothing, and asks GitHub nothing', async (): Promise<void> => {
+        harness.remoteShas.set(MY_COPY, 'abc123');
+        const opts = options();
+        opts.remove = true;
+        await run(opts);
+        const fetchCopyAt = harness.feature.git.calls.findIndex((c: ProcessCallDto): boolean =>
+            c.args.join(' ') === `-C ${REPO} fetch origin +refs/heads/${MY_COPY}:refs/remotes/origin/${MY_COPY}`);
+        const diffAt = harness.feature.git.calls.findIndex((c: ProcessCallDto): boolean =>
+            c.args.join(' ') === `-C ${REPO} diff --name-only --no-renames refs/remotes/origin/main...refs/remotes/origin/${MY_COPY}`);
+        const deleteAt = harness.feature.git.calls.findIndex((c: ProcessCallDto): boolean => c.args.includes('--delete'));
+        expect(fetchCopyAt).toBeGreaterThanOrEqual(0);
+        expect(fetchCopyAt).toBeLessThan(diffAt);
+        expect(diffAt).toBeLessThan(deleteAt);
+        expect(harness.pushes).toHaveLength(2);
+        expect(harness.out).not.toContain('already on origin/main');
+        expect(harness.feature.processes.calls).toEqual([]);
+    });
+
+    it('--remove of a copy whose PR already landed on main REFUSES, names the PR, deletes nothing and pushes no marker', async (): Promise<void> => {
+        harness.remoteShas.set(MY_COPY, 'abc123');
+        harness.copyChanged = ['services/a/src/a.ts', 'services/a/src/b.ts'];
+        harness.stillDiffer = ['services/z/other-work-on-main.ts'];
+        harness.feature.processes.respondToPrefix('gh', ['pr', 'list', '--head', 'dean/ONE-2275', '--state', 'merged'],
+            harness.feature.processes.ok('1934 2026-11-04T12:22:00Z\n'));
+        const opts = options();
+        opts.remove = true;
+        const message = await refusalMessage(opts);
+        expect(message).toContain(`\`${MY_COPY}\` is already on origin/main (PR #1934 landed 2026-11-04T12:22:00Z), so removing the copy`);
+        expect(message).toContain('would not take anything off dev');
+        expect(message).toContain('The nightly reset deletes the copy.');
+        expect(message).toContain('Nothing was removed');
+        expect(message).toContain('revert PR');
+        expect(harness.pushes).toEqual([]);
+    });
+
+    it('a landed copy is refused even when gh cannot answer — the PR is only named when GitHub says so', async (): Promise<void> => {
+        harness.remoteShas.set(MY_COPY, 'abc123');
+        harness.stillDiffer = [];
+        harness.feature.processes.respondToPrefix('gh', ['pr', 'list'], harness.feature.processes.fail(4, 'gh: not logged in'));
+        const opts = options();
+        opts.remove = true;
+        const message = await refusalMessage(opts);
+        expect(message).toContain(`\`${MY_COPY}\` is already on origin/main, so removing the copy`);
+        expect(message).not.toContain('PR #');
+        expect(harness.pushes).toEqual([]);
+    });
+
+    it('--remove of a PARTLY landed copy warns, naming the landed files, then removes', async (): Promise<void> => {
+        harness.remoteShas.set(MY_COPY, 'abc123');
+        harness.copyChanged = ['services/a/src/a.ts', 'services/a/src/b.ts', 'services/a/src/c.ts'];
+        harness.stillDiffer = ['services/a/src/c.ts', 'services/z/other-work-on-main.ts'];
+        const opts = options();
+        opts.remove = true;
+        await run(opts);
+        expect(harness.out).toContain(`Part of \`${MY_COPY}\` is already on origin/main`);
+        expect(harness.out).toContain('2 of the 3 files');
+        expect(harness.out).toContain('  services/a/src/a.ts\n  services/a/src/b.ts\n');
+        expect(harness.out).not.toContain('  services/a/src/c.ts');
+        expect(harness.out.indexOf('Part of')).toBeLessThan(harness.out.indexOf('Removed'));
+        expect(harness.pushes).toEqual([
+            ['-C', REPO, 'push', 'origin', '--delete', `refs/heads/${MY_COPY}`],
+            ['-C', REPO, 'push', '--force', 'origin', `${MAIN_TIP}:refs/heads/dev-remove/dean/ONE-2275`],
+        ]);
     });
 
     it('--remove on an unpublished branch says so instead of failing', async (): Promise<void> => {

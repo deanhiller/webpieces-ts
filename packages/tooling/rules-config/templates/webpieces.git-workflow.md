@@ -323,6 +323,10 @@ pnpm wp-push-dev --list     # what is currently in the pool
 pnpm wp-push-dev --remove   # take your branch back out (this is the rollback)
 ```
 
+`--remove` is for rolling back a copy that broke dev. When you are done testing, or after your PR lands,
+leave the copy alone: the business-day reset removes it. Re-publishing replaces your own copy, so you
+don't need to remove it first.
+
 **What `wp-push-dev` does before it publishes.** It fetches `origin/dev`, merges it into a THROWAWAY
 branch (`<your-branch>DevResolve`, never your branch), and runs `commands.push-dev.buildCommand` on the
 merged tree. Only when the merge is clean (or you resolved it) and that build is green does it publish.
@@ -349,6 +353,12 @@ Without it, `wp-push-dev` and `wp-build-dev` refuse before touching anything and
 alone can only be heard by a workflow's `on: delete:`, which GitHub cannot filter by branch, so every
 branch deletion in the repo would start a dev-deploy run. If the marker push fails, the command stops
 and says so — your copy is already gone, but `dev` was **not** rebuilt; follow what it prints.
+
+`--remove` **refuses** when the copy is already on `origin/main` — every file it changes (relative to its
+merge-base with `origin/main`) already has the copy's content there. Removing it would take nothing off
+dev, because main keeps it there, and would only force a full recompose; nothing is deleted and no marker
+is pushed. If that code is what broke dev, the fix is a revert PR against main. When only SOME of those
+files are on main, `--remove` warns, naming them, and removes the rest.
 
 The three names come from `pr-gate.devDeploy` in `webpieces.config.json` — `branchNamespace`
 (default `dev-include`), `devBranch` (default `dev`) and `removeNamespace` (default `dev-remove`) —

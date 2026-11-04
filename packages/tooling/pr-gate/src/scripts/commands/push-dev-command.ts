@@ -14,6 +14,7 @@ import { DevResolveMode, PushDevState, PushDevStateStore } from '../workflow/pus
 import { DevResolveRunner, RESOLUTION_SUBJECT } from '../workflow/dev-resolve-runner';
 import { DevDeployWatchHints } from '../workflow/dev-deploy-watch-hints';
 import { DevBuild } from '../workflow/dev-build';
+import { DevCopyLanding, DevCopyOnMain, MergedPr } from '../workflow/dev-copy-on-main';
 
 const SEP = '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n';
 
@@ -71,6 +72,7 @@ export class PushDevCommand {
         private readonly runner: DevResolveRunner,
         private readonly watchHints: DevDeployWatchHints,
         private readonly devBuild: DevBuild,
+        private readonly copyOnMain: DevCopyOnMain,
     ) {}
 
     async run(opts: PushDevOptions): Promise<void> {
@@ -134,8 +136,14 @@ export class PushDevCommand {
      * workflow still listens on `delete:` keeps working through the rollout window; the marker is purely
      * additive at the transport level.
      *
-     * ORDER: `origin/main` is fetched BEFORE anything is deleted, so a network failure there leaves the
-     * pool exactly as it was. The marker push is the last step, and the only one that can fail with the
+     * ALREADY ON MAIN (#1401): before anything is deleted, the copy is compared with `origin/main`. When
+     * every file it changes already has the copy's content on main, removing it takes nothing off dev —
+     * main keeps the change there — and would only force a pointless full recompose, so it is REFUSED
+     * ({@link refuseLanded}). When only some files are, the rest is still a real rollback: it warns, naming
+     * the landed files, and removes.
+     *
+     * ORDER: `origin/main` and the copy are fetched BEFORE anything is deleted, so a network failure there
+     * leaves the pool exactly as it was. The marker push is the last step, and the only one that can fail with the
      * copy already gone — that is the state {@link markerPushFailed} names.
      */
     private async remove(repoRoot: string, cfg: DevDeployConfig, branch: string, targetRef: string): Promise<void> {
@@ -147,6 +155,12 @@ export class PushDevCommand {
         }
         const markerRef = cfg.removeMarkerRefFor(branch);
         const mainTip = await this.refs.freshMainTip(repoRoot);
+        await this.refs.fetchCopies(repoRoot, [targetRef]);
+        const landing = await this.copyOnMain.landing(repoRoot, targetRef);
+        if (landing.fullyOnMain()) {
+            this.refuseLanded(targetRef, await this.copyOnMain.mergedPr(repoRoot, branch));
+        }
+        if (landing.partlyOnMain()) process.stdout.write(this.partlyLandedWarning(targetRef, landing));
         await this.gitExec.runGitChecked(['-C', repoRoot, 'push', 'origin', '--delete', `refs/heads/${targetRef}`],
             `Failed to delete the dev copy ${targetRef}`);
         // --force: the marker carries no content, so whatever an earlier, never-deleted marker pointed at
@@ -159,6 +173,30 @@ export class PushDevCommand {
             + `Pushed the marker \`${markerRef}\` (at origin/main ${mainTip.slice(0, 8)}) — your dev workflow triggers\n`
             + `on it, deletes it, and rebuilds \`${cfg.devBranch}\` without \`${branch}\`. Your branch and any PR on it\n`
             + 'are untouched.\n');
+    }
+
+    /**
+     * `--remove` of a copy whose every change is already on `origin/main`. Nothing was deleted and no marker
+     * was pushed. There is deliberately no override: a remove cannot take back what main already holds, so
+     * refusing never blocks a real rollback — that is a revert PR.
+     */
+    private refuseLanded(targetRef: string, pr: MergedPr | null): never {
+        const landedVia = pr === null ? '' : ` (PR #${pr.num} landed ${pr.mergedAt})`;
+        throw new CliExitError(2,
+            '\n' + SEP + `⛔ \`${targetRef}\` is already on origin/main — nothing was removed\n` + SEP + '\n'
+            + `\`${targetRef}\` is already on origin/main${landedVia}, so removing the copy\n`
+            + 'would not take anything off dev — main keeps it there. The nightly reset deletes the copy.\n'
+            + 'Nothing was removed, and no rebuild marker was pushed.\n\n'
+            + 'If that code is what broke dev, it is on main now: the fix is a revert PR against main, not a remove.\n');
+    }
+
+    /** Some of the copy's files are already on main: the remove proceeds, and says what it does NOT take off. */
+    private partlyLandedWarning(targetRef: string, landing: DevCopyLanding): string {
+        return '\n' + SEP + `⚠️  Part of \`${targetRef}\` is already on origin/main\n` + SEP + '\n'
+            + `${String(landing.landed.length)} of the ${String(landing.changed.length)} files this copy changes already have the copy's content on\n`
+            + 'origin/main. Removing the copy does NOT take these off dev — main keeps them there:\n'
+            + landing.landed.map((f: string): string => `  ${f}`).join('\n') + '\n'
+            + 'Only the rest of the copy is being removed. If one of the files above broke dev, the fix is a revert PR.\n';
     }
 
     /**
