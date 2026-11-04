@@ -327,8 +327,8 @@ pnpm wp-push-dev --remove   # take your branch back out (this is the rollback)
 branch (`<your-branch>DevResolve`, never your branch), and runs `commands.push-dev.buildCommand` on the
 merged tree. Only when the merge is clean (or you resolved it) and that build is green does it publish.
 So a conflict or a broken build is found on your machine, in a minute, instead of after the shared
-composition fails. The build output goes to `.webpieces/logs/build-dev.log`; read the `FullLog :` path it
-prints rather than re-running it.
+composition fails. The build output goes to a log file; read the `FullLog :` path it prints rather than
+re-running it.
 
 **What it publishes is never that merge.** The copy is your branch exactly as it is, plus — only when
 something conflicted — ONE commit holding the files you resolved. A copy that contained `dev` would carry
