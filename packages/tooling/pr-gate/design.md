@@ -46,6 +46,7 @@ graph TD
     ConfigFile["ConfigFile"]
     Dashboard["Dashboard"]
     DevBuild["DevBuild"]
+    DevCopyOnMain["DevCopyOnMain"]
     DevDeployRefs["DevDeployRefs"]
     DevDeployWatchHints["DevDeployWatchHints"]
     DevResolveRunner["DevResolveRunner"]
@@ -205,6 +206,8 @@ graph TD
     CommandTimeouts --> TimerApi
     DevBuild --> BuildAffected
     DevBuild --> DevDeployRefs
+    DevCopyOnMain --> GitExec
+    DevCopyOnMain --> NativeProcessApi
     DevDeployRefs --> GitExec
     DevResolveRunner --> DevBuild
     DevResolveRunner --> DevDeployRefs
@@ -371,6 +374,7 @@ graph TD
     ProvenanceEnforcer --> SubagentProvenanceService
     ProvenanceEnforcer --> VerdictProvenanceService
     PushDevCommand --> DevBuild
+    PushDevCommand --> DevCopyOnMain
     PushDevCommand --> DevDeployRefs
     PushDevCommand --> DevDeployWatchHints
     PushDevCommand --> DevResolveRunner

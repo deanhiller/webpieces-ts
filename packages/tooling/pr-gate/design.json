@@ -281,6 +281,14 @@
                     "level": 3
                 },
                 {
+                    "id": "DevCopyOnMain",
+                    "className": "DevCopyOnMain",
+                    "kind": "class",
+                    "scope": "singleton",
+                    "file": "packages/tooling/pr-gate/src/scripts/workflow/dev-copy-on-main.ts",
+                    "level": 2
+                },
+                {
                     "id": "DevDeployRefs",
                     "className": "DevDeployRefs",
                     "kind": "class",
@@ -1625,6 +1633,24 @@
                     "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/dev-deploy-refs.ts#DevDeployRefs",
                     "paramName": "refs",
                     "paramType": "DevDeployRefs"
+                },
+                {
+                    "from": "DevCopyOnMain",
+                    "to": "GitExec",
+                    "injection": "type",
+                    "token": "GitExec",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/git-exec.ts#GitExec",
+                    "paramName": "gitExec",
+                    "paramType": "GitExec"
+                },
+                {
+                    "from": "DevCopyOnMain",
+                    "to": "NativeProcessApi",
+                    "injection": "type",
+                    "token": "NativeProcessApi",
+                    "tokenKey": "class:packages/tooling/tooling-common/src/process/native-process-api.ts#NativeProcessApi",
+                    "paramName": "processes",
+                    "paramType": "NativeProcessApi"
                 },
                 {
                     "from": "DevDeployRefs",
@@ -3119,6 +3145,15 @@
                     "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/dev-build.ts#DevBuild",
                     "paramName": "devBuild",
                     "paramType": "DevBuild"
+                },
+                {
+                    "from": "PushDevCommand",
+                    "to": "DevCopyOnMain",
+                    "injection": "type",
+                    "token": "DevCopyOnMain",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/dev-copy-on-main.ts#DevCopyOnMain",
+                    "paramName": "copyOnMain",
+                    "paramType": "DevCopyOnMain"
                 },
                 {
                     "from": "PushDevCommand",
