@@ -94,7 +94,7 @@
                     "kind": "class",
                     "scope": "singleton",
                     "file": "packages/tooling/repo-workflow-core/src/branch-identity.ts",
-                    "level": 4
+                    "level": 5
                 },
                 {
                     "id": "BranchMutationLog",
@@ -126,7 +126,7 @@
                     "kind": "class",
                     "scope": "singleton",
                     "file": "packages/tooling/pr-gate/src/scripts/workflow/build-affected.ts",
-                    "level": 3
+                    "level": 4
                 },
                 {
                     "id": "BuildArtifactGate",
@@ -145,12 +145,20 @@
                     "level": 2
                 },
                 {
+                    "id": "BuildDevCommand",
+                    "className": "BuildDevCommand",
+                    "kind": "class",
+                    "scope": "singleton",
+                    "file": "packages/tooling/pr-gate/src/scripts/commands/build-dev-command.ts",
+                    "level": 1
+                },
+                {
                     "id": "BuildGateLog",
                     "className": "BuildGateLog",
                     "kind": "class",
                     "scope": "singleton",
                     "file": "packages/tooling/pr-gate/src/scripts/workflow/build-gate-log.ts",
-                    "level": 4
+                    "level": 5
                 },
                 {
                     "id": "BuildsLog",
@@ -158,7 +166,7 @@
                     "kind": "class",
                     "scope": "singleton",
                     "file": "packages/tooling/rules-config/src/builds-log.ts",
-                    "level": 4
+                    "level": 5
                 },
                 {
                     "id": "CheckPrCommand",
@@ -265,12 +273,20 @@
                     "level": 2
                 },
                 {
+                    "id": "DevBuild",
+                    "className": "DevBuild",
+                    "kind": "class",
+                    "scope": "singleton",
+                    "file": "packages/tooling/pr-gate/src/scripts/workflow/dev-build.ts",
+                    "level": 3
+                },
+                {
                     "id": "DevDeployRefs",
                     "className": "DevDeployRefs",
                     "kind": "class",
                     "scope": "singleton",
                     "file": "packages/tooling/pr-gate/src/scripts/workflow/dev-deploy-refs.ts",
-                    "level": 3
+                    "level": 4
                 },
                 {
                     "id": "DevDeployWatchHints",
@@ -366,7 +382,7 @@
                     "kind": "class",
                     "scope": "singleton",
                     "file": "packages/tooling/pr-gate/src/scripts/workflow/gate-log-file.ts",
-                    "level": 6
+                    "level": 7
                 },
                 {
                     "id": "GateTokenService",
@@ -830,7 +846,7 @@
                     "kind": "class",
                     "scope": "singleton",
                     "file": "packages/tooling/pr-gate/src/scripts/workflow/stage-output-log.ts",
-                    "level": 5
+                    "level": 6
                 },
                 {
                     "id": "StartUpdateCommand",
@@ -1251,6 +1267,42 @@
                     "paramType": "RepoRootFinder"
                 },
                 {
+                    "from": "BuildDevCommand",
+                    "to": "DevBuild",
+                    "injection": "type",
+                    "token": "DevBuild",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/dev-build.ts#DevBuild",
+                    "paramName": "devBuild",
+                    "paramType": "DevBuild"
+                },
+                {
+                    "from": "BuildDevCommand",
+                    "to": "DevDeployRefs",
+                    "injection": "type",
+                    "token": "DevDeployRefs",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/dev-deploy-refs.ts#DevDeployRefs",
+                    "paramName": "refs",
+                    "paramType": "DevDeployRefs"
+                },
+                {
+                    "from": "BuildDevCommand",
+                    "to": "GitExec",
+                    "injection": "type",
+                    "token": "GitExec",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/git-exec.ts#GitExec",
+                    "paramName": "gitExec",
+                    "paramType": "GitExec"
+                },
+                {
+                    "from": "BuildDevCommand",
+                    "to": "RepoRootFinder",
+                    "injection": "type",
+                    "token": "RepoRootFinder",
+                    "tokenKey": "class:packages/tooling/rules-config/src/repo-root.ts#RepoRootFinder",
+                    "paramName": "repoRootFinder",
+                    "paramType": "RepoRootFinder"
+                },
+                {
                     "from": "BuildGateLog",
                     "to": "GateLogFile",
                     "injection": "type",
@@ -1557,6 +1609,24 @@
                     "paramType": "TimerApi"
                 },
                 {
+                    "from": "DevBuild",
+                    "to": "BuildAffected",
+                    "injection": "type",
+                    "token": "BuildAffected",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/build-affected.ts#BuildAffected",
+                    "paramName": "buildAffected",
+                    "paramType": "BuildAffected"
+                },
+                {
+                    "from": "DevBuild",
+                    "to": "DevDeployRefs",
+                    "injection": "type",
+                    "token": "DevDeployRefs",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/dev-deploy-refs.ts#DevDeployRefs",
+                    "paramName": "refs",
+                    "paramType": "DevDeployRefs"
+                },
+                {
                     "from": "DevDeployRefs",
                     "to": "GitExec",
                     "injection": "type",
@@ -1564,6 +1634,15 @@
                     "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/git-exec.ts#GitExec",
                     "paramName": "gitExec",
                     "paramType": "GitExec"
+                },
+                {
+                    "from": "DevResolveRunner",
+                    "to": "DevBuild",
+                    "injection": "type",
+                    "token": "DevBuild",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/dev-build.ts#DevBuild",
+                    "paramName": "devBuild",
+                    "paramType": "DevBuild"
                 },
                 {
                     "from": "DevResolveRunner",
@@ -2791,6 +2870,15 @@
                 },
                 {
                     "from": "PrGateApp",
+                    "to": "BuildDevCommand",
+                    "injection": "type",
+                    "token": "BuildDevCommand",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/commands/build-dev-command.ts#BuildDevCommand",
+                    "paramName": "buildDevCommand",
+                    "paramType": "BuildDevCommand"
+                },
+                {
+                    "from": "PrGateApp",
                     "to": "CheckPrCommand",
                     "injection": "type",
                     "token": "CheckPrCommand",
@@ -3022,6 +3110,15 @@
                     "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/verdict-provenance.ts#VerdictProvenanceService",
                     "paramName": "verdictProvenance",
                     "paramType": "VerdictProvenanceService"
+                },
+                {
+                    "from": "PushDevCommand",
+                    "to": "DevBuild",
+                    "injection": "type",
+                    "token": "DevBuild",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/dev-build.ts#DevBuild",
+                    "paramName": "devBuild",
+                    "paramType": "DevBuild"
                 },
                 {
                     "from": "PushDevCommand",

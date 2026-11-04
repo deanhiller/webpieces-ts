@@ -228,6 +228,7 @@ export {
     WP_FINISH_UPSERT_PR,
     WP_PUSH_DEV,
     WP_FINISH_PUSH_DEV,
+    WP_BUILD_DEV,
 } from './sync-flow-guidance';
 
 // Mode unions + their value arrays — the single source of truth shared with code-rules.
@@ -336,6 +337,7 @@ export {
 
 export {
     CommandsConfig,
+    PushDevConfig,
     buildCommandsConfig,
     DEFAULT_UPSERT_PR_COMMAND,
     DEFAULT_MERGE_COMPLETE_COMMAND,

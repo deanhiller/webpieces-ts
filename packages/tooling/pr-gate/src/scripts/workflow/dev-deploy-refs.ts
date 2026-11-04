@@ -47,6 +47,15 @@ export class DevDeployRefs {
         return loadAndValidate(repoRoot).prGate.devDeploy;
     }
 
+    /**
+     * `commands.push-dev.buildCommand`, or `undefined` when the consumer has not configured it. There is
+     * no default (#1397, `.claude/rules/no-rule-defaults.md`); DevBuild turns `undefined` into the refusal
+     * that names the key.
+     */
+    devBuildCommand(repoRoot: string): string | undefined {
+        return loadAndValidate(repoRoot).commands.pushDev.buildCommand;
+    }
+
     /** The checked-out branch name, or `'HEAD'` on a detached HEAD (which {@link assertPushable} refuses). */
     currentBranch(repoRoot: string): string {
         return gitCheckout.requireBranch(repoRoot);
@@ -164,12 +173,16 @@ export class DevDeployRefs {
             'Failed to fetch the dev copy refs from origin');
     }
 
-    /** How many commits `origin/<ref>` has that `HEAD` does not — the clobber signal. 0 = safe to publish. */
-    async commitsOnlyOnRemote(repoRoot: string, ref: string): Promise<number> {
-        const out = await this.gitExec.gitQuery(['rev-list', '--count', `HEAD..refs/remotes/origin/${ref}`], repoRoot,
-            `Failed to compare HEAD against origin/${ref} (git rev-list --count).`);
-        const count = Number(out);
-        return Number.isInteger(count) ? count : 0;
+    /**
+     * The subject of every commit `origin/<ref>` has that `HEAD` does not — the clobber signal. Empty =
+     * safe to publish. Subjects rather than a count, because a commit this flow wrote itself (a recorded
+     * conflict resolution, see DevResolveRunner) is re-derived by the next publish's check against dev and
+     * is therefore safe to replace, while anything else on the copy is somebody's work.
+     */
+    async subjectsOnlyOnRemote(repoRoot: string, ref: string): Promise<string[]> {
+        const out = await this.gitExec.gitQuery(['log', '--format=%s', `HEAD..refs/remotes/origin/${ref}`], repoRoot,
+            `Failed to compare HEAD against origin/${ref} (git log HEAD..origin/${ref}).`);
+        return out.split('\n').filter((l: string): boolean => l.trim() !== '');
     }
 
     private refusal(headline: string, body: string): string {

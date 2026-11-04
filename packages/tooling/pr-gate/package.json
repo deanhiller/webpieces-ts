@@ -26,6 +26,7 @@
     "publishConfig": {
         "bin": {
             "wp-build": "./src/scripts/wp-build.js",
+            "wp-build-dev": "./src/scripts/wp-build-dev.js",
             "wp-finish-upsert-pr": "./src/scripts/git-finishUpsertPr.js",
             "wp-human-post-pr": "./src/scripts/wp-human-post-pr.js",
             "wp-upsert-hotfix-pr": "./src/scripts/wp-upsert-hotfix-pr.js",

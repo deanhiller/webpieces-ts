@@ -1,5 +1,6 @@
 import { RETIRED_TOP_LEVEL_MARKER } from './config-error-banner';
 import { unknownKeyErrors } from './config-key-rules';
+import { CONFIG_DOCUMENTATION_PATH } from './config-documentation';
 import { retiredKeyErrorsIn } from './retired-config-keys';
 import { validatePrGateSection } from './validate-config';
 
@@ -10,7 +11,8 @@ import { validatePrGateSection } from './validate-config';
 
 // Every key the `commands` section defines. Anything else is rejected — see unknownKeyErrors for why a
 // tolerated unknown key is the mechanism by which a stale config shape survives upgrades forever.
-const COMMANDS_KEYS: readonly string[] = ['pr-gate', 'guardHints'];
+const COMMANDS_KEYS: readonly string[] = ['pr-gate', 'push-dev', 'guardHints'];
+const PUSH_DEV_FIELDS: readonly string[] = ['buildCommand'];
 const GUARD_HINT_FIELDS: readonly string[] = ['prCreationOrPush', 'mergeInProgress'];
 
 /**
@@ -50,7 +52,35 @@ export function validateCommandsSection(commands: unknown, legacyPrGate: unknown
     // pr-gate is required (set mode OFF to opt out).
     errors.push(...validatePrGateSection(c['pr-gate'], repoRoot));
     errors.push(...validateGuardHints(c['guardHints']));
+    errors.push(...validatePushDev(c['push-dev']));
 
+    return errors;
+}
+
+/**
+ * The optional `commands.push-dev` block (#1397). Absent is valid — a repo that never publishes to a
+ * shared dev server configures nothing — but once present it must carry a non-empty `buildCommand`: a
+ * half-written block is a decision somebody started and did not finish, and there is no default to fill
+ * the gap (`.claude/rules/no-rule-defaults.md`).
+ */
+// webpieces-disable no-any-unknown -- `section` is opaque consumer JSON until narrowed here
+// webpieces-disable no-function-outside-class -- module-level config validator, matches the rest of this file
+function validatePushDev(section: unknown): string[] {
+    if (section === undefined) return [];
+    if (typeof section !== 'object' || section === null || Array.isArray(section)) {
+        return [`[commands] "push-dev" must be an object { "buildCommand": "..." }.`];
+    }
+    // webpieces-disable no-any-unknown -- narrowing the opaque push-dev object from consumer JSON
+    const p = section as Record<string, unknown>;
+    const errors: string[] = unknownKeyErrors(p, PUSH_DEV_FIELDS, '[commands.push-dev]');
+    const cmd = p['buildCommand'];
+    if (typeof cmd !== 'string' || cmd.trim() === '') {
+        errors.push(
+            `[commands.push-dev] "buildCommand" is required and must be a non-empty string: the dev-scoped build ` +
+            `wp-push-dev runs before it publishes, e.g. "pnpm nx affected --target=ci --base=origin/dev --head=HEAD". ` +
+            `There is no default. Config instructions: ${CONFIG_DOCUMENTATION_PATH}.`,
+        );
+    }
     return errors;
 }
 

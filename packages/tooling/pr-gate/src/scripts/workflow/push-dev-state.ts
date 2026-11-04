@@ -8,6 +8,24 @@ import { injectable, bindingScopeValues } from 'inversify';
 const SEP = '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n';
 
 /**
+ * WHICH flow a resolve is part of — it decides what the finish publishes (#1397).
+ *
+ * - `PREBUILD` — plain `wp-push-dev`: `origin/<devBranch>` is merged into a throwaway, the dev build runs
+ *   on the merged tree, and what is published is the feature head PLUS one commit recording the resolved
+ *   files. The merge itself is never published.
+ * - `COMPOSE` — `wp-push-dev --resolve`: the other copies are merged into a throwaway, and what is
+ *   published is the existing copy PLUS one commit recording the resolved files — never a merge parent,
+ *   so no other copy becomes an ancestor of this one and a later `--remove` of it really takes it off dev.
+ * - `REPLAY` — `wp-push-dev --rebase-resolution`: the published copy is merged into the new local head
+ *   and that merge IS what is published, so the copy's own resolution survives the new commits.
+ */
+export enum DevResolveMode {
+    PREBUILD = 'prebuild',
+    COMPOSE = 'compose',
+    REPLAY = 'replay',
+}
+
+/**
  * The persisted half of the `wp-push-dev --resolve` state machine.
  *
  * A single-shot wrapper is IMPOSSIBLE here and that is why this file exists: `git merge` halts on
@@ -28,6 +46,16 @@ export class PushDevState {
     queue: string[];
     /** The ref currently mid-merge (conflicted), or '' when nothing is halted. */
     current: string;
+    /** What the finish publishes — see DevResolveMode. */
+    mode: DevResolveMode = DevResolveMode.COMPOSE;
+    /** The sha the published copy is built ON: the feature head (PREBUILD) or the published copy (COMPOSE). */
+    baseSha = '';
+    /** Every path that conflicted and was resolved; the recorded resolution carries exactly these. */
+    resolvedPaths: string[] = [];
+    /** The remote copy's sha when the flow started ('' = not published yet) — the push's lease. */
+    leaseSha = '';
+    /** `--force` was given: overwrite the copy without a lease. */
+    force = false;
 
     // eslint-disable-next-line @typescript-eslint/max-params
     constructor(
@@ -51,9 +79,11 @@ export class PushDevState {
 // survives every edit to the actual enforcement and ends up forbidding things the flow requires.
 //
 // Why these and not everything: each one either rewrites the current branch (the two starts), pushes it
-// (the finishes), or deletes branches (cleanup) — and during a resolve the checkout is a throwaway
+// (the finishes), deletes branches (cleanup), or parks the checkout on a throwaway of its own
+// (wp-build-dev) — and during a resolve the checkout is a throwaway
 // branch, not the feature branch any of them think they are acting on.
 const BLOCKED_DURING_RESOLVE: readonly string[] = [
+    'wp-build-dev',
     'wp-start-update',
     'wp-finish-update',
     'wp-start-upsert-pr',
@@ -96,13 +126,21 @@ export class PushDevStateStore {
             const raw = JSON.parse(fs.readFileSync(file, 'utf8')) as Partial<PushDevState>;
             if (typeof raw.originalBranch !== 'string' || typeof raw.tmpBranch !== 'string')
                 return null;
-            return new PushDevState(
+            const state = new PushDevState(
                 raw.originalBranch,
                 raw.tmpBranch,
                 raw.targetRef ?? '',
                 Array.isArray(raw.queue) ? raw.queue : [],
                 raw.current ?? '',
             );
+            state.mode = Object.values(DevResolveMode).includes(raw.mode as DevResolveMode)
+                ? (raw.mode as DevResolveMode)
+                : DevResolveMode.COMPOSE;
+            state.baseSha = typeof raw.baseSha === 'string' ? raw.baseSha : '';
+            state.resolvedPaths = Array.isArray(raw.resolvedPaths) ? raw.resolvedPaths : [];
+            state.leaseSha = typeof raw.leaseSha === 'string' ? raw.leaseSha : '';
+            state.force = raw.force === true;
+            return state;
             // The parse error carries nothing a caller could act on: the ONLY meaningful reading of an
             // unparseable state file is "no resolve in progress", which --abort and a fresh --resolve both
             // recover from.

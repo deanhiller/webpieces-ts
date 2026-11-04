@@ -29,6 +29,7 @@ graph TD
     BuildAffected["BuildAffected"]
     BuildArtifactGate["BuildArtifactGate"]
     BuildCommand["BuildCommand"]
+    BuildDevCommand["BuildDevCommand"]
     BuildGateLog["BuildGateLog"]
     BuildsLog["BuildsLog"]
     CheckPrCommand["CheckPrCommand"]
@@ -44,6 +45,7 @@ graph TD
     CommandTimeouts["CommandTimeouts"]
     ConfigFile["ConfigFile"]
     Dashboard["Dashboard"]
+    DevBuild["DevBuild"]
     DevDeployRefs["DevDeployRefs"]
     DevDeployWatchHints["DevDeployWatchHints"]
     DevResolveRunner["DevResolveRunner"]
@@ -163,6 +165,10 @@ graph TD
     BuildCommand --> BuildsLog
     BuildCommand --> HomeConfigService
     BuildCommand --> RepoRootFinder
+    BuildDevCommand --> DevBuild
+    BuildDevCommand --> DevDeployRefs
+    BuildDevCommand --> GitExec
+    BuildDevCommand --> RepoRootFinder
     BuildGateLog --> GateLogFile
     BuildGateLog --> GitProcessApi
     BuildGateLog --> NativeProcessApi
@@ -197,7 +203,10 @@ graph TD
     CommandTimeouts --> GitProcessApi
     CommandTimeouts --> NativeProcessApi
     CommandTimeouts --> TimerApi
+    DevBuild --> BuildAffected
+    DevBuild --> DevDeployRefs
     DevDeployRefs --> GitExec
+    DevResolveRunner --> DevBuild
     DevResolveRunner --> DevDeployRefs
     DevResolveRunner --> DevDeployWatchHints
     DevResolveRunner --> GitExec
@@ -334,6 +343,7 @@ graph TD
     PrGateApp --> AwaitChecksCommand
     PrGateApp --> AwaitReviewsCommand
     PrGateApp --> BuildCommand
+    PrGateApp --> BuildDevCommand
     PrGateApp --> CheckPrCommand
     PrGateApp --> CleanupCommand
     PrGateApp --> FinishPushDevCommand
@@ -360,6 +370,7 @@ graph TD
     ProvenanceEnforcer --> ReviewerInstructionsService
     ProvenanceEnforcer --> SubagentProvenanceService
     ProvenanceEnforcer --> VerdictProvenanceService
+    PushDevCommand --> DevBuild
     PushDevCommand --> DevDeployRefs
     PushDevCommand --> DevDeployWatchHints
     PushDevCommand --> DevResolveRunner

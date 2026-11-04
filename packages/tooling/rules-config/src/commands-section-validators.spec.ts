@@ -106,6 +106,38 @@ describe('validateCommandsSection', () => {
     });
 });
 
+// `commands.push-dev` (#1397): optional as a SECTION — a repo that never publishes to a shared dev server
+// configures nothing — but a present section must carry its buildCommand, because nothing defaults it.
+describe('validateCommandsSection — commands.push-dev', () => {
+    const DEV = 'pnpm nx affected --target=ci --base=origin/dev --head=HEAD';
+
+    it('accepts an absent push-dev section, and a complete one', () => {
+        expect(validateCommandsSection({ 'pr-gate': { mode: 'OFF' } }, undefined)).toEqual([]);
+        expect(
+            validateCommandsSection({ 'pr-gate': { mode: 'OFF' }, 'push-dev': { buildCommand: DEV } }, undefined),
+        ).toEqual([]);
+    });
+
+    it('rejects a push-dev section without a buildCommand, saying there is no default', () => {
+        const errors = validateCommandsSection({ 'pr-gate': { mode: 'OFF' }, 'push-dev': {} }, undefined);
+        expect(errors.some((e) => e.includes('[commands.push-dev] "buildCommand" is required') && e.includes('There is no default'))).toBe(true);
+    });
+
+    it('rejects an empty buildCommand and an unknown push-dev key', () => {
+        const errors = validateCommandsSection(
+            { 'pr-gate': { mode: 'OFF' }, 'push-dev': { buildCommand: '  ', base: 'origin/dev' } },
+            undefined,
+        );
+        expect(errors.some((e) => e.includes('"buildCommand" is required'))).toBe(true);
+        expect(errors.some((e) => e.includes('[commands.push-dev] Unknown key "base"'))).toBe(true);
+    });
+
+    it('rejects a push-dev that is not an object', () => {
+        const errors = validateCommandsSection({ 'pr-gate': { mode: 'OFF' }, 'push-dev': DEV }, undefined);
+        expect(errors.some((e) => e.includes('[commands] "push-dev" must be an object'))).toBe(true);
+    });
+});
+
 /**
  * Top-level strict rejection. Without it, a key retired at the top level — or simply misspelled — is
  * silently ignored: the config LOOKS configured while behaving as if it were not, and the dead key survives

@@ -70,16 +70,25 @@ export class BuildAffected {
      * because a log file was busy.
      */
     async runBuildGate(repoRoot: string, opts: BuildGateOptions): Promise<void> {
-        return this.run(repoRoot, opts, false);
+        return this.run(repoRoot, this.resolveBuildCommand(repoRoot), opts, false);
     }
 
     /** The human escape hatch uses the same gate but follows build.log on the terminal while it runs. */
     async runBuildGateStreaming(repoRoot: string, opts: BuildGateOptions): Promise<void> {
-        return this.run(repoRoot, opts, true);
+        return this.run(repoRoot, this.resolveBuildCommand(repoRoot), opts, true);
     }
 
-    private async run(repoRoot: string, opts: BuildGateOptions, stream: boolean): Promise<void> {
-        const buildCommand = this.resolveBuildCommand(repoRoot);
+    /**
+     * The same gate — log file, heartbeat, ledger rows, failure rendering — for a command the CALLER
+     * resolved. Used only by the dev build (#1397), whose command is `commands.push-dev.buildCommand` and
+     * has no default (DevBuild owns that read and its refusal). Everything after the command is shared,
+     * so a dev build fails exactly the way `wp-build` does.
+     */
+    async runBuildGateWith(repoRoot: string, buildCommand: string, opts: BuildGateOptions): Promise<void> {
+        return this.run(repoRoot, buildCommand, opts, false);
+    }
+
+    private async run(repoRoot: string, buildCommand: string, opts: BuildGateOptions, stream: boolean): Promise<void> {
         // TWO lines on the happy path — the command, then the result. The old framing spent a banner and a
         // paragraph explaining how to reproduce a build that was about to pass anyway; that explanation is
         // only useful when the build FAILS, so it now lives solely on the failure path below.

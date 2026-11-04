@@ -185,6 +185,10 @@ export class PrGateCliApp {
             await this.app.build(new BuildOptions(args.has(FORCE)));
             return true;
         }
+        if (binName === 'wp-build-dev') {
+            await this.noArgs(invocation, this.buildDevUsage(), (): Promise<void> => this.app.buildDev());
+            return true;
+        }
         if (binName === 'wp-cleanup') {
             const args = this.parse(invocation, this.cleanupUsage.declare());
             await this.app.cleanup(
@@ -289,6 +293,13 @@ export class PrGateCliApp {
         );
     }
 
+    private buildDevUsage(): CliUsage {
+        return new CliUsage(
+            'wp-build-dev',
+            'Merge origin/dev into a throwaway branch and run commands.push-dev.buildCommand on it — wp-push-dev`s pre-publish check, without publishing.',
+        );
+    }
+
     private finishUpsertUsage(): CliUsage {
         return new CliUsage(
             'wp-finish-upsert-pr',
@@ -358,7 +369,7 @@ export class PrGateCliApp {
     private pushDevUsage(): CliUsage {
         return new CliUsage(
             'wp-push-dev',
-            'Publish a disposable copy of this branch for shared dev.',
+            'Check this branch against origin/dev (throwaway merge + commands.push-dev.buildCommand), then publish a disposable copy of it for shared dev.',
             [
                 new CliFlag(LIST, 'List published dev copies.'),
                 new CliFlag(
@@ -380,7 +391,7 @@ export class PrGateCliApp {
     private finishPushDevUsage(): CliUsage {
         return new CliUsage(
             'wp-finish-push-dev',
-            'Commit a resolved dev composition and publish it.',
+            'Commit a resolved dev merge, run the dev build when publishing, and publish the copy.',
             [new CliFlag(ABORT, 'Throw the resolve away without publishing.')],
         );
     }
