@@ -52,6 +52,10 @@ export const BUILD_STAGE = 'build';
 // `wp-build-push-dev`'s build of the merge with dev (#1397, #1403): the SAME gate, running
 // `commands.push-dev.buildCommand` instead.
 export const DEV_BUILD_STAGE = 'build-dev';
+// `wp-build-push-dev`'s FIRST build (#1405): `commands.pr-gate.buildCommand` on the feature branch alone,
+// so the code rules judge exactly what will land on main. Named per branch + sha like the PR-flow stages,
+// because it builds the feature branch, not a throwaway.
+export const PUSH_DEV_MAIN_BUILD_STAGE = 'push-dev-main';
 
 /** The fixed log names — see BuildGateLog.fileNameFor for why only the two ad-hoc builds get one. */
 export const BUILD_LOG_NAME = 'build.log';

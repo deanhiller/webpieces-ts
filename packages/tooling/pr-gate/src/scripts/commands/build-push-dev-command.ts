@@ -2,6 +2,7 @@ import {
     CliExitError,
     DevDeployConfig,
     RepoRootFinder,
+    WP_BUILD_PUSH_DEV,
     WP_FINISH_PUSH_DEV,
     WP_START_PUSH_DEV,
     writeTemplate,
@@ -19,6 +20,8 @@ import { AiBranchName } from '../workflow/git-readAiBranchName';
 import { MergeState } from '../workflow/merge-state';
 import { MergeEnd, MergeEndOptions } from '../workflow/merge-end';
 import { MergeContext } from '../workflow/merge-start';
+import { BuildAffected, BuildGateOptions } from '../workflow/build-affected';
+import { PUSH_DEV_MAIN_BUILD_STAGE } from '../workflow/build-gate-log';
 
 const SEP = '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n';
 
@@ -35,9 +38,19 @@ export class BuildPushDevOptions {
 /**
  * `wp-build-push-dev` — stage ② of the dev-deploy flow, the gate (#1403). The twin of
  * `wp-review-upsert-pr`: it validates any 3-point merge stage ① left for `/wp-merge`, refuses a branch that
- * is behind `origin/main`, then checks the branch against `origin/<devBranch>` on a THROWAWAY merge, runs
- * `pnpm install` on the merged tree and `commands.push-dev.buildCommand` on it. Green ⇒ it records the
- * copy for `wp-finish-push-dev` (stage ③) and goes back to the feature branch. It publishes NOTHING.
+ * is behind `origin/main`, and then builds TWO trees, each answering one question (#1405):
+ *
+ * 1. the feature branch ALONE (it already contains the latest main) with `commands.pr-gate.buildCommand` —
+ *    the code rules ON, affected vs main. Exactly what the PR gate will judge, so the developer learns early
+ *    what would block landing, and the rules only ever judge what will actually land on main.
+ * 2. a THROWAWAY merge with `origin/<devBranch>`: `pnpm install`, then `commands.push-dev.buildCommand` —
+ *    compile + tests only, affected vs dev. It answers only "does everyone's code still compile and pass
+ *    together?". The rules must NOT run here: that tree holds every other developer's copy, and diffed
+ *    against main their code would be judged as the publisher's change — one copy's 385-line method failed
+ *    every other developer's publish (#1405).
+ *
+ * Green ⇒ it records the copy for `wp-finish-push-dev` (stage ③) and goes back to the feature branch. It
+ * publishes NOTHING.
  *
  * A conflict with dev stops on the throwaway, and RE-RUNNING this command is how the check continues once
  * the files are resolved and `git add`-ed (`--abort` throws it away) — one command per stage, the same way
@@ -62,6 +75,7 @@ export class BuildPushDevCommand {
         private readonly aiBranchName: AiBranchName,
         private readonly mergeState: MergeState,
         private readonly mergeEnd: MergeEnd,
+        private readonly buildAffected: BuildAffected,
     ) {}
 
     async run(opts: BuildPushDevOptions): Promise<void> {
@@ -95,6 +109,7 @@ export class BuildPushDevCommand {
 
         // A previous verification is stale the moment a new check starts.
         this.verified.clear(repoRoot);
+        await this.buildAgainstMain(repoRoot);
         const targetRef = cfg.copyRefFor(branch);
         const leaseSha = await this.refs.remoteSha(repoRoot, targetRef);
         if (await this.refs.remoteSha(repoRoot, cfg.devBranch) === '') {
@@ -104,7 +119,21 @@ export class BuildPushDevCommand {
         const state = new PushDevState(branch, this.runner.tmpBranchFor(branch), targetRef, cfg.devBranch);
         state.leaseSha = leaseSha;
         process.stdout.write(this.runner.announce(cfg, state));
-        await this.runner.start(repoRoot, state);
+        await this.runner.start(repoRoot, cfg, state);
+    }
+
+    /**
+     * Build 1 of 2: the PR gate's own build on the feature branch, before dev is fetched or merged. Red stops
+     * here with the `FullLog :` pointer — nothing merged with dev, nothing recorded.
+     */
+    private async buildAgainstMain(repoRoot: string): Promise<void> {
+        process.stdout.write('\n' + SEP + '② Building your branch against main — the code rules judge what will land\n' + SEP + '\n');
+        await this.buildAffected.runBuildGate(repoRoot, new BuildGateOptions(
+            '🛠️  build against main (commands.pr-gate.buildCommand)',
+            WP_BUILD_PUSH_DEV,
+            'Build against main failed — nothing was merged with dev, recorded or published.',
+            PUSH_DEV_MAIN_BUILD_STAGE,
+        ));
     }
 
     /**
@@ -137,7 +166,8 @@ export class BuildPushDevCommand {
     /**
      * `origin/<devBranch>` does not exist yet — the very first publish in a repo whose CI has never
      * composed. There is nothing to conflict with and no base for a dev-scoped build, so the branch is
-     * recorded as it is; refusing here would make the first dev composition impossible to start.
+     * recorded as it is (the build against main above has still run); refusing here would make the first
+     * dev composition impossible to start.
      */
     private async verifyWithoutDev(
         repoRoot: string, cfg: DevDeployConfig, branch: string, targetRef: string, leaseSha: string,
@@ -149,7 +179,7 @@ export class BuildPushDevCommand {
         process.stdout.write(
             '\n' + SEP + `✅ ${targetRef} is ready to publish — unchecked\n` + SEP + '\n'
             + `\`origin/${cfg.devBranch}\` does not exist yet, so there was nothing to check the copy against and no\n`
-            + 'dev build ran. The copy is your branch exactly as it is.\n\n'
+            + 'dev build ran (the build against main did). The copy is your branch exactly as it is.\n\n'
             + `▶ NEXT run:  ${WP_FINISH_PUSH_DEV}\n`);
     }
 }

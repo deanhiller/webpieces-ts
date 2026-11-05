@@ -77,7 +77,7 @@ function validatePushDev(section: unknown): string[] {
     if (typeof cmd !== 'string' || cmd.trim() === '') {
         errors.push(
             `[commands.push-dev] "buildCommand" is required and must be a non-empty string: the dev-scoped build ` +
-            `wp-build-push-dev runs before wp-finish-push-dev publishes, e.g. "pnpm nx affected --target=ci --base=origin/dev --head=HEAD". ` +
+            `wp-build-push-dev runs on the merge with origin/dev before wp-finish-push-dev publishes — compile + tests only, no code rules — e.g. "pnpm nx affected -t build test --base=origin/dev --head=HEAD". ` +
             `There is no default. Config instructions: ${CONFIG_DOCUMENTATION_PATH}.`,
         );
     }

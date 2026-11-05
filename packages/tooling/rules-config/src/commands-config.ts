@@ -22,7 +22,7 @@ export const DEFAULT_MERGE_COMPLETE_COMMAND = 'pnpm wp-finish-upsert-pr';
  * has nothing to configure here.
  */
 export class PushDevConfig {
-    /** The dev-scoped build, e.g. `pnpm nx affected --target=ci --base=origin/dev --head=HEAD`. */
+    /** The dev-scoped build, e.g. `pnpm nx affected -t build test --base=origin/dev --head=HEAD`. */
     buildCommand: string | undefined;
 
     constructor(buildCommand: string | undefined) {

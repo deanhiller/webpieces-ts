@@ -25,7 +25,9 @@ import { FinishPushDevOptions } from './finish-push-dev-command';
  * Feature tests for the three-stage dev-deploy flow (#1403):
  *
  *   ① `wp-start-push-dev`  — the 3-point merge from main, ONLY when the branch is behind it;
- *   ② `wp-build-push-dev`  — merge origin/dev into a THROWAWAY, `pnpm install`, the dev build, record the copy;
+ *   ② `wp-build-push-dev`  — the PR gate's build on the branch alone (code rules vs main, #1405), then merge
+ *                            origin/dev into a THROWAWAY (conflicts caused only by copies already on main take
+ *                            the publisher's side, #1405), `pnpm install`, the dev build, record the copy;
  *   ③ `wp-finish-push-dev` — publish exactly the copy ② recorded (plus `--list` and `--remove`).
  *
  * The whole shipped container runs (`PrGateApp` from `PrGateContainer`), over a temp checkout carrying this
@@ -49,7 +51,10 @@ const MERGED_SHA = '2222222222222222222222222222222222222222';
 const RESOLVED_SHA = '3333333333333333333333333333333333333333';
 const DEV_SHA = '4444444444444444444444444444444444444444';
 const MAIN_TIP = '6666666666666666666666666666666666666666';
-const DEV_BUILD = 'pnpm nx affected --target=ci --base=origin/dev --head=HEAD';
+const DEV_BUILD = 'pnpm nx affected -t build test --base=origin/dev --head=HEAD';
+const MAIN_BUILD = 'pnpm wp-ci --base=$(git merge-base origin/main HEAD)';
+const LANDED = 'dev-include/amy/ONE-4073';
+const LIVE = 'dev-include/bob/ONE-5000';
 
 const dirs: string[] = [];
 
@@ -122,6 +127,17 @@ class World {
     copies: string[] = [];
     /** Builds that had run when `pnpm install` was called — must be 0, install comes first. */
     buildsAtInstall: number[] = [];
+    mainBuildExit = 0;
+    /** How many git commands had been issued when the build against main ran. */
+    gitCallsAtMainBuild: number[] = [];
+    /** Per copy ref: the files it changes since its merge-base with main (else `copyChanged`). */
+    copyChangedBy = new Map<string, string[]>();
+    /** Per copy ref: the files where main and the copy still differ (else `stillDiffer`). */
+    stillDifferBy = new Map<string, string[]>();
+    /** Files the publisher's branch (HEAD of the throwaway) does not have. */
+    deletedInHead: string[] = [];
+    /** Per copy's source branch: its merged PR number ('' = none). */
+    mergedPrs = new Map<string, string>();
 }
 
 let feature: PrGateFeature;
@@ -136,6 +152,8 @@ function makeRepo(withDevBuild: boolean): string {
     const config = fixture.load();
     // webpieces-disable no-any-unknown -- narrowing one nested section
     const commands = config['commands'] as Record<string, unknown>;
+    // webpieces-disable no-any-unknown -- narrowing one nested section
+    (commands['pr-gate'] as Record<string, unknown>)['buildCommand'] = MAIN_BUILD;
     if (withDevBuild) commands['push-dev'] = { buildCommand: DEV_BUILD };
     else delete commands['push-dev'];
     fixture.writeTo(dir, config);
@@ -165,7 +183,15 @@ function scriptGit(): void {
         }
         if (args.includes('--diff-filter=U')) return git.ok(world.unmerged.join('\n'));
         if (args[2] === 'diff' && args.includes('--no-renames')) {
-            return git.ok((args.some((a: string): boolean => a.includes('...')) ? world.copyChanged : world.stillDiffer).join('\n'));
+            const threeDot = args.find((a: string): boolean => a.includes('...'));
+            const copy = (threeDot ?? args[args.length - 1]).split('refs/remotes/origin/').pop() ?? '';
+            const files = threeDot !== undefined
+                ? world.copyChangedBy.get(copy) ?? world.copyChanged
+                : world.stillDifferBy.get(copy) ?? world.stillDiffer;
+            return git.ok(files.join('\n'));
+        }
+        if (args[2] === 'cat-file' && args[4].startsWith('HEAD:')) {
+            return world.deletedInHead.includes(args[4].slice('HEAD:'.length)) ? git.fail(1) : git.ok();
         }
         if (args[2] === 'diff' && args.includes('--cached')) return world.resolutionChangesBase ? git.fail(1) : git.ok();
         if (args[2] === 'rev-parse') return git.ok(`${shaOf(args[3])}\n`);
@@ -225,7 +251,8 @@ function gitLines(): string[] {
 
 const indexOf = (prefix: string): number => gitLines().findIndex((l: string): boolean => l.startsWith(prefix));
 const pushes = (): string[] => gitLines().filter((l: string): boolean => l.startsWith('push'));
-const builds = (): number => feature.processes.shellCalls.length;
+const builds = (): number => feature.processes.shellCalls.filter((c: ProcessCallDto): boolean => c.args[0] === DEV_BUILD).length;
+const mainBuilds = (): number => feature.processes.shellCalls.filter((c: ProcessCallDto): boolean => c.args[0] === MAIN_BUILD).length;
 const installs = (): number => feature.processes.callsStartingWith('pnpm', ['install']).length;
 const verifiedRecord = (): ReturnType<VerifiedDevCopyStore['read']> => feature.container.get(VerifiedDevCopyStore).read(repo);
 // The cardinal rule: no WRITE ever names the feature branch; going back to it is the one legitimate mention.
@@ -251,7 +278,20 @@ beforeEach(async (): Promise<void> => {
     feature.processes.respondToPrefix('gh', ['pr', 'list', '--head', BRANCH, '--state', 'open'],
         (): ProcessResultDto => feature.processes.ok(world.openPr));
     feature.processes.respondToShell(DEV_BUILD, (): ScriptedShellRun => feature.processes.exited(world.buildExit, world.buildOutput));
+    feature.processes.respondToPrefix('gh', ['pr', 'list', '--head'], (call: ProcessCallDto): ProcessResultDto => {
+        const pr = world.mergedPrs.get(call.args[3]) ?? '';
+        return feature.processes.ok(pr === '' ? 'null null\n' : `${pr} 2026-11-04T12:22:00Z\n`);
+    });
+    feature.processes.respondToShell(MAIN_BUILD, (): ScriptedShellRun => {
+        world.gitCallsAtMainBuild.push(feature.git.calls.length);
+        return feature.processes.exited(world.mainBuildExit, world.mainBuildExit === 0 ? 'rules green\n' : 'max-method-lines: 385 > 80\n');
+    });
 });
+
+/** `gh pr list --head <branch> --state merged` for a copy's branch: `pr` = '' means no merged PR. */
+function mergedPrOf(branch: string, pr: string): void {
+    world.mergedPrs.set(branch, pr);
+}
 
 afterEach((): void => {
     for (const d of dirs.splice(0)) fs.rmSync(d, { recursive: true, force: true });
@@ -316,6 +356,9 @@ describe('② wp-build-push-dev — the check against dev', () => {
         expect(installs()).toBe(1);
         expect(world.buildsAtInstall).toEqual([0]);
         expect(builds()).toBe(1);
+        // The PR gate's build ran on the feature branch, before dev was even fetched (#1405).
+        expect(mainBuilds()).toBe(1);
+        expect(world.gitCallsAtMainBuild[0]).toBeLessThanOrEqual(fetchDev);
         expect(pushes()).toEqual([]);
         expect(gitLines()).toContain(`update-ref ${KEEP_REF} ${FEATURE_SHA}`);
         expect(gitLines()).toContain(`checkout ${BRANCH}`);
@@ -335,7 +378,21 @@ describe('② wp-build-push-dev — the check against dev', () => {
         expect(r.thrown?.message).toContain('pnpm wp-start-push-dev');
         expect(indexOf('merge --no-ff')).toBe(-1);
         expect(builds()).toBe(0);
+        expect(mainBuilds()).toBe(0);
         expect(verifiedRecord()).toBeNull();
+    });
+
+    it('a red build against main (the code rules) stops before dev is fetched, merged or built', async (): Promise<void> => {
+        world.mainBuildExit = 1;
+        const r = await build();
+        expect(r.thrown?.message).toContain(`Build Failed: ${MAIN_BUILD}`);
+        expect(r.thrown?.message).toContain('Fix what that log shows, then re-run pnpm wp-build-push-dev.');
+        expect(indexOf('fetch origin +refs/heads/dev:refs/remotes/origin/dev')).toBe(-1);
+        expect(indexOf('merge --no-ff')).toBe(-1);
+        expect(installs()).toBe(0);
+        expect(builds()).toBe(0);
+        expect(verifiedRecord()).toBeNull();
+        expect(feature.container.get(PushDevStateStore).read(repo)).toBeNull();
     });
 
     it('a failed pnpm install builds nothing, records nothing, and puts the checkout back', async (): Promise<void> => {
@@ -382,6 +439,7 @@ describe('② wp-build-push-dev — the check against dev', () => {
         const r = await build();
         expect(r.thrown).toBeNull();
         expect(builds()).toBe(0);
+        expect(mainBuilds()).toBe(1);
         expect(pushes()).toEqual([]);
         expect(verifiedRecord()).toMatchObject({ copySha: FEATURE_SHA, devSha: '' });
         expect(r.out).toContain('`origin/dev` does not exist yet');
@@ -415,6 +473,8 @@ describe('② wp-build-push-dev — a conflict with dev', () => {
         expect(r.thrown).toBeNull();
         expect(installs()).toBe(1);
         expect(builds()).toBe(1);
+        // The resume continues the dev check; the build against main already passed before the merge.
+        expect(mainBuilds()).toBe(1);
         const lines = gitLines();
         const steps = [
             lines.indexOf('commit --no-edit'),
@@ -454,6 +514,109 @@ describe('② wp-build-push-dev — a conflict with dev', () => {
         await build();
         expect((await start()).thrown?.message).toContain('`pnpm wp-start-push-dev` is blocked');
         expect((await finish()).thrown?.message).toContain('`pnpm wp-finish-push-dev` is blocked');
+    });
+});
+
+describe('② wp-build-push-dev — conflicts caused only by copies already on main (#1405)', () => {
+    const FILE_A = 'services/orders/src/OrdersController.ts';
+    const FILE_B = 'services/menus/src/MenuService.ts';
+
+    beforeEach((): void => {
+        world.conflicting = new Set<string>(['refs/remotes/origin/dev']);
+        world.copies = [LANDED, LIVE];
+        world.copyChangedBy.set(LANDED, [FILE_A]);
+        world.copyChangedBy.set(LIVE, [FILE_B]);
+        // Landed with DIFFERENT content (review commits, then a squash): main and the copy still differ.
+        world.stillDifferBy.set(LANDED, [FILE_A]);
+        world.stillDifferBy.set(LIVE, [FILE_B]);
+        mergedPrOf('amy/ONE-4073', '1934');
+        mergedPrOf('bob/ONE-5000', '');
+    });
+
+    it('takes the publisher\'s side when the dev side is only a landed copy, names it, and carries on', async (): Promise<void> => {
+        world.unmerged = [FILE_A];
+        const r = await build();
+        expect(r.thrown).toBeNull();
+        const lines = gitLines();
+        const steps = [
+            lines.indexOf(`fetch origin +refs/heads/${LANDED}:refs/remotes/origin/${LANDED} +refs/heads/${LIVE}:refs/remotes/origin/${LIVE}`),
+            lines.indexOf(`checkout --ours -- ${FILE_A}`),
+            lines.indexOf(`add -- ${FILE_A}`),
+            lines.indexOf('commit --no-edit'),
+            lines.indexOf(`checkout -B ${TMP} ${FEATURE_SHA}`),
+        ];
+        expect(steps.every((i: number): boolean => i >= 0)).toBe(true);
+        expect(steps).toEqual([...steps].sort((a: number, b: number): number => a - b));
+        expect(installs()).toBe(1);
+        expect(builds()).toBe(1);
+        // Nothing the developer resolved, so the copy is the branch exactly as it is: no resolution commit.
+        expect(verifiedRecord()).toMatchObject({ headSha: FEATURE_SHA, copySha: FEATURE_SHA });
+        expect(lines.some((l: string): boolean => l.startsWith('commit -m Dev-deploy: conflict resolution'))).toBe(false);
+        expect(r.out).toContain(`${FILE_A}   ← overrode ${LANDED}`);
+        expect(writesToFeatureBranch()).toBe(false);
+    });
+
+    it('also takes the publisher\'s side when main already holds the copy\'s content of the file, with no merged PR', async (): Promise<void> => {
+        mergedPrOf('amy/ONE-4073', '');
+        world.stillDifferBy.set(LANDED, []);
+        world.unmerged = [FILE_A];
+        const r = await build();
+        expect(r.thrown).toBeNull();
+        expect(gitLines()).toContain(`checkout --ours -- ${FILE_A}`);
+        expect(r.out).toContain(`overrode ${LANDED}`);
+    });
+
+    it('keeps a file the publisher deleted deleted', async (): Promise<void> => {
+        world.unmerged = [FILE_A];
+        world.deletedInHead = [FILE_A];
+        const r = await build();
+        expect(r.thrown).toBeNull();
+        expect(gitLines()).toContain(`rm -q --ignore-unmatch -- ${FILE_A}`);
+        expect(gitLines()).not.toContain(`checkout --ours -- ${FILE_A}`);
+    });
+
+    it('halts on what a LIVE copy caused, listing only that, after resolving the landed one', async (): Promise<void> => {
+        world.unmerged = [FILE_A, FILE_B];
+        const r = await build();
+        expect(r.thrown?.exitCode).toBe(2);
+        expect(r.thrown?.message).toContain('CONFLICT merging origin/dev');
+        expect(r.thrown?.message).toContain(`  ${FILE_B}\n`);
+        expect(r.thrown?.message).toContain(`${FILE_A}   ← overrode ${LANDED}`);
+        expect(gitLines()).toContain(`checkout --ours -- ${FILE_A}`);
+        expect(gitLines()).not.toContain(`checkout --ours -- ${FILE_B}`);
+        expect(gitLines()).not.toContain('commit --no-edit');
+        expect(builds()).toBe(0);
+        expect(feature.container.get(PushDevStateStore).read(repo)?.resolvedPaths).toEqual([FILE_B]);
+    });
+
+    it('leaves a file for the developer when a live copy ALSO changes it', async (): Promise<void> => {
+        world.copyChangedBy.set(LIVE, [FILE_A]);
+        world.stillDifferBy.set(LIVE, [FILE_A]);
+        world.unmerged = [FILE_A];
+        const r = await build();
+        expect(r.thrown?.exitCode).toBe(2);
+        expect(r.thrown?.message).not.toContain('overrode');
+        expect(gitLines()).not.toContain(`checkout --ours -- ${FILE_A}`);
+    });
+
+    it('a merge that fails with nothing conflicted says so in git\'s words and puts the checkout back', async (): Promise<void> => {
+        world.unmerged = [];
+        const r = await build();
+        expect(r.thrown?.exitCode).toBe(1);
+        expect(r.thrown?.message).toContain('failed — and nothing conflicted');
+        expect(r.thrown?.message).toContain('CONFLICT (content): Merge conflict');
+        expect(gitLines()).toContain(`checkout ${BRANCH}`);
+        expect(gitLines()).not.toContain('commit --no-edit');
+        expect(feature.container.get(PushDevStateStore).read(repo)).toBeNull();
+        expect(builds()).toBe(0);
+    });
+
+    it('leaves a file for the developer when no copy explains the dev side', async (): Promise<void> => {
+        world.unmerged = ['services/unowned/x.ts'];
+        const r = await build();
+        expect(r.thrown?.exitCode).toBe(2);
+        expect(r.thrown?.message).toContain('services/unowned/x.ts');
+        expect(gitLines().some((l: string): boolean => l.startsWith('checkout --ours'))).toBe(false);
     });
 });
 

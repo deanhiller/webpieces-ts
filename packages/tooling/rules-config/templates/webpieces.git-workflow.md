@@ -306,8 +306,9 @@ snapshots are never loaded as active summaries; a new PR requires its own author
 8. **`pnpm wp-start-push-dev`** — stage ① of publishing to the shared dev server: bring this branch up to
    date with `origin/main` (the same 3-point merge as `wp-start-update`), ONLY if it is behind. No PR is
    opened. See below.
-9. **`pnpm wp-build-push-dev`** — stage ②: check this branch against `origin/dev` on a throwaway merge,
-   `pnpm install`, and run `commands.push-dev.buildCommand`. Publishes nothing.
+9. **`pnpm wp-build-push-dev`** — stage ②: build this branch alone against main
+   (`commands.pr-gate.buildCommand`, code rules ON), then check it against `origin/dev` on a throwaway merge,
+   `pnpm install`, and run `commands.push-dev.buildCommand` (compile + tests only). Publishes nothing.
 10. **`pnpm wp-finish-push-dev`** — stage ③: publish the copy stage ② verified as `dev-include/<branch>`.
     Also `--list` (what is in the pool) and `--remove` (the rollback).
 
@@ -321,7 +322,8 @@ Publishing is three stages, the same shape as the PR flow:
 ```bash
 pnpm wp-start-push-dev     # ① 3-point merge from origin/main — ONLY if your branch is behind it
                            #   conflict → resolve with /wp-merge, then go on to ②
-pnpm wp-build-push-dev     # ② merge origin/dev into a throwaway, pnpm install, run the dev build
+pnpm wp-build-push-dev     # ② build your branch vs main (rules ON), then merge origin/dev into a
+                           #   throwaway, pnpm install, run the dev build (compile + tests only)
                            #   conflict → resolve on the throwaway, `git add`, re-run ②
 pnpm wp-finish-push-dev    # ③ publish the copy ② verified as dev-include/<your-branch>
 
@@ -344,12 +346,25 @@ conflict is resolved with `/wp-merge` on your own branch; `wp-build-push-dev` th
 finalizes that merge before anything else. `wp-build-push-dev` refuses a branch that is still behind
 `origin/main`, naming `wp-start-push-dev`.
 
-**② What `wp-build-push-dev` checks.** It fetches `origin/dev`, merges it into a THROWAWAY branch
-(`<your-branch>DevResolve`, never your branch), runs `pnpm install` — other copies on dev can add
-workspace packages main does not have yet — and runs `commands.push-dev.buildCommand` on the merged tree.
-So a conflict or a broken build is found on your machine, in a minute, instead of after the shared
-composition fails. The build output goes to a log file; read the `FullLog :` path it prints rather than
-re-running it. When it is green it records the copy it verified and puts you back on your branch.
+**② What `wp-build-push-dev` checks — two builds, two questions.**
+
+| build | tree | runs | answers |
+|---|---|---|---|
+| 1 | your branch alone (it contains the latest main) | `commands.pr-gate.buildCommand` — code rules ON, affected vs main | would the PR gate let this land? |
+| 2 | your branch merged with `origin/dev`, on a throwaway | `commands.push-dev.buildCommand` — compile + tests ONLY, affected vs `origin/dev` | does everyone's code still compile and pass together? |
+
+Build 1 is the same thing the PR gate will judge, so you learn early what would block landing, and the
+rules only ever judge what will actually land on main. Build 2 must NOT run the code rules: the merged tree
+holds every other developer's copy, and diffed against main their code would be judged as yours — one
+copy's oversized method would fail everybody else's publish. Its compile/test is mostly nx cache hits from
+build 1.
+
+For build 2 it fetches `origin/dev`, merges it into a THROWAWAY branch (`<your-branch>DevResolve`, never
+your branch), runs `pnpm install` — other copies on dev can add workspace packages main does not have yet —
+and runs `commands.push-dev.buildCommand` on the merged tree. So a conflict or a broken build is found on
+your machine instead of after the shared composition fails. Each build's output goes to a log file; read
+the `FullLog :` path it prints rather than re-running it. When both are green it records the copy it
+verified and puts you back on your branch.
 
 **What ③ publishes is never that merge.** The copy is your branch exactly as it is, plus — only when
 something conflicted — ONE commit holding the files you resolved. A copy that contained `dev` would carry
@@ -358,10 +373,11 @@ every other copy's history, and a later `--remove` of one of them would leave it
 copy (leased against the sha ② saw), so the push event carries the previous copy's sha.
 
 **`commands.push-dev.buildCommand` has no default.** Configure the dev-scoped build in
-`webpieces.config.json` (it should build only what differs from `origin/dev`, so it stays fast):
+`webpieces.config.json` — compile and test only what differs from `origin/dev`, with NO code rules (not an
+nx `ci` target, which runs `architecture:validate-code`):
 
 ```json
-"commands": { "push-dev": { "buildCommand": "pnpm nx affected --target=ci --base=origin/dev --head=HEAD" } }
+"commands": { "push-dev": { "buildCommand": "pnpm nx affected -t build test --base=origin/dev --head=HEAD" } }
 ```
 
 Without it, `wp-build-push-dev` refuses before touching anything and prints that entry. When `origin/dev`
@@ -432,7 +448,14 @@ tells you the machinery finished. Answer them in that order, and report both.
 
 ### When `wp-build-push-dev` stops on a conflict with dev
 
-It stops on the THROWAWAY branch and lists the files. Resolve them, `git add` each one, then:
+First it resolves, by itself, every conflicted file whose dev side comes ONLY from copies already on
+`origin/main` — a copy whose branch has a merged PR, or whose content of that file main already holds. That
+is the copy that was published, then landed on main with different content (review commits, a squash):
+`dev` still holds its old version, and your branch carries its final one, so your side is taken and the
+landed copy it overrode is named in the output. Nothing is lost and nothing is redeployed. Any file another
+LIVE copy also changes is left for you.
+
+It stops on the THROWAWAY branch and lists the files that remain. Resolve them, `git add` each one, then:
 
 ```bash
 pnpm wp-build-push-dev                     # commits the resolution, pnpm install, runs the dev build

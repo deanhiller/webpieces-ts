@@ -109,7 +109,7 @@ describe('validateCommandsSection', () => {
 // `commands.push-dev` (#1397): optional as a SECTION — a repo that never publishes to a shared dev server
 // configures nothing — but a present section must carry its buildCommand, because nothing defaults it.
 describe('validateCommandsSection — commands.push-dev', () => {
-    const DEV = 'pnpm nx affected --target=ci --base=origin/dev --head=HEAD';
+    const DEV = 'pnpm nx affected -t build test --base=origin/dev --head=HEAD';
 
     it('accepts an absent push-dev section, and a complete one', () => {
         expect(validateCommandsSection({ 'pr-gate': { mode: 'OFF' } }, undefined)).toEqual([]);

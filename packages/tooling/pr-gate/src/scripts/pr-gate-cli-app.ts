@@ -363,7 +363,7 @@ export class PrGateCliApp {
     private buildPushDevUsage(): CliUsage {
         return new CliUsage(
             'wp-build-push-dev',
-            'Dev-deploy stage 2: merge origin/dev into a throwaway branch, pnpm install, run commands.push-dev.buildCommand, and record the copy to publish. Re-run it to continue after resolving a conflict.',
+            'Dev-deploy stage 2: build the branch against main (commands.pr-gate.buildCommand, code rules ON), then merge origin/dev into a throwaway branch, pnpm install, run commands.push-dev.buildCommand (compile + tests only), and record the copy to publish. Conflicts caused only by copies already on main take your side automatically; re-run it to continue after resolving any other conflict.',
             [new CliFlag(ABORT, 'Throw a conflict resolution in progress away.')],
         );
     }

@@ -3,11 +3,12 @@ import { NativeProcessApi } from '@webpieces/tooling-common';
 import { toError } from '@webpieces/tooling-common/to-error';
 import { injectable, bindingScopeValues } from 'inversify';
 
-import { GitExec } from './git-exec';
+import { GitExec, GitOutcome } from './git-exec';
 import { DevDeployRefs } from './dev-deploy-refs';
 import { PushDevState, PushDevStateStore } from './push-dev-state';
 import { DevBuild } from './dev-build';
 import { VerifiedDevCopy, VerifiedDevCopyStore } from './verified-dev-copy';
+import { LandedCopyResolver, LandedResolution } from './landed-copy-resolver';
 
 const SEP = '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n';
 
@@ -17,8 +18,10 @@ const SEP = '━━━━━━━━━━━━━━━━━━━━━━�
 export const RESOLUTION_SUBJECT = 'Dev-deploy: conflict resolution for';
 
 /**
- * The engine behind `wp-build-push-dev` (#1403): merge `origin/<devBranch>` into a THROWAWAY branch, stop
- * on a conflict, `pnpm install`, run the dev build, and record the copy `wp-finish-push-dev` publishes.
+ * The engine behind `wp-build-push-dev`'s check against dev (#1403): merge `origin/<devBranch>` into a
+ * THROWAWAY branch, take the publisher's side on conflicts caused only by copies already on main (#1405),
+ * stop on any other conflict, `pnpm install`, run the dev build (compile + tests, no code rules), and record
+ * the copy `wp-finish-push-dev` publishes.
  *
  * ONE class owns every git WRITE of the check, and that is a hard requirement rather than tidiness:
  * `redirect-how-to-merge-main` blocks `git merge` in every form INCLUDING `--continue`, and
@@ -39,13 +42,14 @@ export class DevResolveRunner {
         private readonly verified: VerifiedDevCopyStore,
         private readonly devBuild: DevBuild,
         private readonly processes: NativeProcessApi,
+        private readonly landedCopies: LandedCopyResolver,
     ) {}
 
     /**
      * Start the check: park on a throwaway branch at the feature head, merge `origin/<devBranch>` into it,
      * and either halt on a conflict or go straight on to install, build and record.
      */
-    async start(repoRoot: string, state: PushDevState): Promise<void> {
+    async start(repoRoot: string, cfg: DevDeployConfig, state: PushDevState): Promise<void> {
         await this.refs.fetchCopies(repoRoot, [state.devBranch]);
         // Pinned to a SHA: the resolution is recorded on top of exactly what was merged, and stage ③
         // refuses to publish when the feature branch has moved since.
@@ -58,9 +62,41 @@ export class DevResolveRunner {
             ['-C', repoRoot, 'merge', '--no-ff', '--no-edit', '-m',
                 `Dev-deploy: merge ${state.devBranch} into ${state.targetRef}`, `refs/remotes/origin/${state.devBranch}`],
             repoRoot);
-        if (!merged.ok) await this.halt(repoRoot, state);
+        if (!merged.ok) await this.resolveLandedOrHalt(repoRoot, cfg, state, merged);
         process.stdout.write(`  ✓ merged origin/${state.devBranch}\n`);
         await this.finish(repoRoot, state);
+    }
+
+    /**
+     * The merge conflicted. First take the publisher's side on every file whose dev side comes ONLY from
+     * copies already on main (#1405, LandedCopyResolver); when that was every conflicted file, commit the
+     * merge and carry on. Otherwise halt on what is left — the developer's job, as before.
+     */
+    private async resolveLandedOrHalt(
+        repoRoot: string, cfg: DevDeployConfig, state: PushDevState, merged: GitOutcome,
+    ): Promise<void> {
+        const conflicted = await this.unmergedPaths(repoRoot);
+        if (conflicted.length === 0) await this.mergeFailed(repoRoot, state, merged);
+        const resolution = await this.landedCopies.resolve(repoRoot, cfg, conflicted);
+        if (resolution.remaining.length > 0) await this.halt(repoRoot, state, resolution);
+        process.stdout.write(this.landedCopies.describe(resolution));
+        await this.gitExec.runGitChecked(['-C', repoRoot, 'commit', '--no-edit'],
+            `Failed to commit the merge with origin/${state.devBranch} after resolving the landed copies' conflicts`);
+    }
+
+    /**
+     * The merge failed WITHOUT leaving a conflicted file (an untracked file in the way, a broken ref, …).
+     * There is nothing to resolve, so the checkout goes back to the feature branch and git's own words say why.
+     */
+    private async mergeFailed(repoRoot: string, state: PushDevState, merged: GitOutcome): Promise<never> {
+        await this.restore(repoRoot, state);
+        throw new CliExitError(1,
+            '\n' + SEP + `⛔ Merging origin/${state.devBranch} failed — and nothing conflicted\n` + SEP + '\n'
+            + `git merge exited ${String(merged.status)} without leaving a conflicted file, so there is nothing to resolve.\n`
+            + 'What git said:\n'
+            + `${(merged.stderr + merged.stdout).trim()}\n\n`
+            + `Nothing was built, recorded or published; you are back on \`${state.originalBranch}\`. Fix what git\n`
+            + `reported, then re-run:  ${WP_BUILD_PUSH_DEV}\n`);
     }
 
     /** Resume after the conflicted files were resolved and `git add`-ed: commit the merge, then finish. */
@@ -87,10 +123,11 @@ export class DevResolveRunner {
     }
 
     /** Stop with the conflicted files listed and the ONE command that continues. Exit 2 = "your turn". */
-    private async halt(repoRoot: string, state: PushDevState): Promise<never> {
-        const conflicted = await this.unmergedPaths(repoRoot);
+    private async halt(repoRoot: string, state: PushDevState, landed: LandedResolution): Promise<never> {
+        const conflicted = landed.remaining;
         // Remembered so the finish records EXACTLY these files as the resolution — and nothing else the
-        // merge brought in, which is other developers' work.
+        // merge brought in, which is other developers' work. Files resolved to the publisher's side
+        // automatically are not among them: they hold what the base already has, so there is nothing to record.
         state.resolvedPaths = conflicted;
         this.store.write(repoRoot, state);
         throw new CliExitError(2,
@@ -99,6 +136,7 @@ export class DevResolveRunner {
             + 'can reach your feature branch or your PR, which is exactly why the resolution happens over here.\n\n'
             + 'Resolve these files (edit until no conflict markers remain, then `git add` each one):\n'
             + conflicted.map((f: string): string => `  ${f}`).join('\n') + '\n'
+            + this.landedCopies.describe(landed)
             + '\nThen run ONE of:\n'
             + `  ${WP_BUILD_PUSH_DEV}            ← commit the resolution, pnpm install, run the dev build\n`
             + `  ${WP_BUILD_PUSH_DEV} --abort    ← throw it away and go back to \`${state.originalBranch}\`\n\n`
@@ -255,9 +293,11 @@ export class DevResolveRunner {
     announce(cfg: DevDeployConfig, state: PushDevState): string {
         return '\n' + SEP + `🔎 Checking ${state.targetRef} against origin/${cfg.devBranch}\n` + SEP + '\n'
             + `Merging origin/${cfg.devBranch} into the throwaway branch \`${state.tmpBranch}\`, then running \`pnpm install\`\n`
-            + 'and `commands.push-dev.buildCommand` on the merged tree. Nothing is published here — when both pass,\n'
-            + `${WP_FINISH_PUSH_DEV} publishes your branch, plus ONE commit holding any resolved files. The merge\n`
-            + 'itself is never published.\n'
+            + 'and `commands.push-dev.buildCommand` (compile + tests only — the code rules already judged your branch\n'
+            + 'against main, and must never judge the other copies on dev) on the merged tree. A conflict whose dev\n'
+            + 'side comes only from copies already on origin/main takes your side automatically.\n'
+            + `Nothing is published here — when both pass, ${WP_FINISH_PUSH_DEV} publishes your branch, plus ONE\n`
+            + 'commit holding any resolved files. The merge itself is never published.\n'
             + `Your feature branch \`${state.originalBranch}\` is not touched by any of this.\n\n`;
     }
 }

@@ -75,6 +75,7 @@ graph TD
     HotfixRedirect["HotfixRedirect"]
     HumanPostPrCommand["HumanPostPrCommand"]
     LandPrCommand["LandPrCommand"]
+    LandedCopyResolver["LandedCopyResolver"]
     LandedTreeResolver["LandedTreeResolver"]
     LandedWorktreeReaper["LandedWorktreeReaper"]
     MainCheckout["MainCheckout"]
@@ -173,6 +174,7 @@ graph TD
     BuildGateLog --> NativeProcessApi
     BuildGateLog --> StageOutputLog
     BuildPushDevCommand --> AiBranchName
+    BuildPushDevCommand --> BuildAffected
     BuildPushDevCommand --> DevBuild
     BuildPushDevCommand --> DevDeployRefs
     BuildPushDevCommand --> DevResolveRunner
@@ -221,6 +223,7 @@ graph TD
     DevResolveRunner --> DevBuild
     DevResolveRunner --> DevDeployRefs
     DevResolveRunner --> GitExec
+    DevResolveRunner --> LandedCopyResolver
     DevResolveRunner --> NativeProcessApi
     DevResolveRunner --> PushDevStateStore
     DevResolveRunner --> VerifiedDevCopyStore
@@ -314,6 +317,9 @@ graph TD
     LandPrCommand --> NativeProcessApi
     LandPrCommand --> PrMerger
     LandPrCommand --> RepoRootFinder
+    LandedCopyResolver --> DevCopyOnMain
+    LandedCopyResolver --> DevDeployRefs
+    LandedCopyResolver --> GitExec
     LandedTreeResolver --> GitProcessApi
     LandedTreeResolver --> WorktreeService
     LandedWorktreeReaper --> NativeProcessApi
