@@ -47,13 +47,17 @@ beforeEach((): void => {
 describe('PushDevStateStore', () => {
     it('round-trips a resolve and clears it', (): void => {
         expect(store.exists(repo)).toBe(false);
-        store.write(repo, new PushDevState('dean/ONE-2275', 'tmp', 'dev-include/dean/ONE-2275', ['a', 'b'], 'a'));
+        const state = new PushDevState('dean/ONE-2275', 'tmp', 'dev-include/dean/ONE-2275', 'dev');
+        state.resolvedPaths = ['a.ts'];
+        state.baseSha = 'abc';
+        store.write(repo, state);
         expect(store.exists(repo)).toBe(true);
 
         const read = store.read(repo);
         expect(read?.originalBranch).toBe('dean/ONE-2275');
-        expect(read?.queue).toEqual(['a', 'b']);
-        expect(read?.current).toBe('a');
+        expect(read?.devBranch).toBe('dev');
+        expect(read?.resolvedPaths).toEqual(['a.ts']);
+        expect(read?.baseSha).toBe('abc');
 
         store.clear(repo);
         expect(store.read(repo)).toBeNull();
@@ -65,20 +69,20 @@ describe('PushDevStateStore', () => {
     });
 
     it('treats a well-formed but incomplete file as no resolve', (): void => {
-        fs.writeFileSync(stateFile(), JSON.stringify({ queue: ['a'] }), 'utf8');
+        fs.writeFileSync(stateFile(), JSON.stringify({ devBranch: 'dev' }), 'utf8');
         expect(store.read(repo)).toBeNull();
     });
 });
 
 describe('PushDevStateStore — refusing other wp-* commands mid-resolve', () => {
     beforeEach((): void => {
-        store.write(repo, new PushDevState('dean/ONE-2275', 'dean/ONE-2275DevResolve', 'dev-include/dean/ONE-2275', []));
+        store.write(repo, new PushDevState('dean/ONE-2275', 'dean/ONE-2275DevResolve', 'dev-include/dean/ONE-2275', 'dev'));
     });
 
     it('names every blocked command, and says that is the whole list', (): void => {
         const message = refusal((): void => { store.assertIdle(repo, 'wp-start-upsert-pr'); });
-        for (const command of ['wp-start-update', 'wp-finish-update', 'wp-start-upsert-pr',
-            'wp-review-upsert-pr', 'wp-finish-upsert-pr', 'wp-land-pr', 'wp-cleanup']) {
+        for (const command of ['wp-start-push-dev', 'wp-finish-push-dev', 'wp-start-update', 'wp-finish-update',
+            'wp-start-upsert-pr', 'wp-review-upsert-pr', 'wp-finish-upsert-pr', 'wp-land-pr', 'wp-cleanup']) {
             expect(store.isBlockedDuringResolve(command)).toBe(true);
             expect(message).toContain(`\`pnpm ${command}\``);
         }
@@ -88,8 +92,8 @@ describe('PushDevStateStore — refusing other wp-* commands mid-resolve', () =>
     it('offers both ways out and names the branch you are really on', (): void => {
         const message = refusal((): void => { store.assertIdle(repo, 'wp-cleanup'); });
         expect(message).toContain('dean/ONE-2275DevResolve');
-        expect(message).toContain('pnpm wp-finish-push-dev');
-        expect(message).toContain('--abort');
+        expect(message).toContain('pnpm wp-build-push-dev ');
+        expect(message).toContain('pnpm wp-build-push-dev --abort');
     });
 
     it('blocks nothing once the resolve is finished', (): void => {
@@ -97,15 +101,14 @@ describe('PushDevStateStore — refusing other wp-* commands mid-resolve', () =>
         expect(refusal((): void => { store.assertIdle(repo, 'wp-cleanup'); })).toBe('');
     });
 
-    it('does not block the dev-deploy commands themselves — they are how you get unstuck', (): void => {
-        expect(store.isBlockedDuringResolve('wp-push-dev')).toBe(false);
-        expect(store.isBlockedDuringResolve('wp-finish-push-dev')).toBe(false);
+    it('does not block wp-build-push-dev — re-running it is how you get unstuck', (): void => {
+        expect(store.isBlockedDuringResolve('wp-build-push-dev')).toBe(false);
     });
 
-    it('require() points at the one-command publish form when nothing is in flight', (): void => {
+    it('require() says there is nothing to abort when nothing is in flight', (): void => {
         store.clear(repo);
         const message = refusal((): void => { store.require(repo); });
         expect(message).toContain('No dev-deploy resolve is in progress');
-        expect(message).toContain('pnpm wp-push-dev');
+        expect(message).toContain('There is nothing to abort.');
     });
 });

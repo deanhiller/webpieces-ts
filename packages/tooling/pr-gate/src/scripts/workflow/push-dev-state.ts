@@ -1,6 +1,6 @@
 import * as fs from 'fs';
 
-import { CliExitError, PUSH_DEV_STATE_FILE, WP_FINISH_PUSH_DEV, WP_PUSH_DEV } from '@webpieces/rules-config';
+import { CliExitError, PUSH_DEV_STATE_FILE, WP_BUILD_PUSH_DEV } from '@webpieces/rules-config';
 import { DotWebpieces } from '@webpieces/tooling-common';
 import { toError } from '@webpieces/tooling-common/to-error';
 import { injectable, bindingScopeValues } from 'inversify';
@@ -8,82 +8,51 @@ import { injectable, bindingScopeValues } from 'inversify';
 const SEP = '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n';
 
 /**
- * WHICH flow a resolve is part of — it decides what the finish publishes (#1397).
+ * The persisted half of `wp-build-push-dev`'s conflict halt (#1403).
  *
- * - `PREBUILD` — plain `wp-push-dev`: `origin/<devBranch>` is merged into a throwaway, the dev build runs
- *   on the merged tree, and what is published is the feature head PLUS one commit recording the resolved
- *   files. The merge itself is never published.
- * - `COMPOSE` — `wp-push-dev --resolve`: the other copies are merged into a throwaway, and what is
- *   published is the existing copy PLUS one commit recording the resolved files — never a merge parent,
- *   so no other copy becomes an ancestor of this one and a later `--remove` of it really takes it off dev.
- * - `REPLAY` — `wp-push-dev --rebase-resolution`: the published copy is merged into the new local head
- *   and that merge IS what is published, so the copy's own resolution survives the new commits.
- */
-export enum DevResolveMode {
-    PREBUILD = 'prebuild',
-    COMPOSE = 'compose',
-    REPLAY = 'replay',
-}
-
-/**
- * The persisted half of the `wp-push-dev --resolve` state machine.
- *
- * A single-shot wrapper is IMPOSSIBLE here and that is why this file exists: `git merge` halts on
+ * A single-shot command is IMPOSSIBLE here and that is why this file exists: `git merge` halts on
  * conflict with markers in the working tree and a non-zero exit, and a human or an AI has to edit files
  * before anything can be committed. So the command must be able to stop, hand the tree over, and be
- * resumed by a second command that knows exactly where it left off.
+ * resumed — by a re-run of itself — knowing exactly where it left off.
  *
  * Data-only (per CLAUDE.md) — the behaviour lives in {@link PushDevStateStore}.
  */
 export class PushDevState {
-    /** The branch to return to when the resolve finishes or aborts. NEVER written to by this flow. */
+    /** The branch to return to when the check finishes or aborts. NEVER written to by this flow. */
     originalBranch: string;
-    /** The local throwaway branch the merges happen on. Deleted on finish and on abort. */
+    /** The local throwaway branch the dev merge happens on. Deleted on finish and on abort. */
     tmpBranch: string;
-    /** `<namespace>/<originalBranch>` — the remote copy this resolve republishes. */
+    /** `<namespace>/<originalBranch>` — the remote copy `wp-finish-push-dev` will publish. */
     targetRef: string;
-    /** The copy refs still to merge, in the order CI composes them. */
-    queue: string[];
-    /** The ref currently mid-merge (conflicted), or '' when nothing is halted. */
-    current: string;
-    /** What the finish publishes — see DevResolveMode. */
-    mode: DevResolveMode = DevResolveMode.COMPOSE;
-    /** The sha the published copy is built ON: the feature head (PREBUILD) or the published copy (COMPOSE). */
+    /** The composed dev branch merged into the throwaway, e.g. `dev`. */
+    devBranch: string;
+    /** The feature head the copy is built ON, pinned when the check started. */
     baseSha = '';
     /** Every path that conflicted and was resolved; the recorded resolution carries exactly these. */
     resolvedPaths: string[] = [];
-    /** The remote copy's sha when the flow started ('' = not published yet) — the push's lease. */
+    /** The remote copy's sha when the check started ('' = not published yet) — the publish's lease. */
     leaseSha = '';
-    /** `--force` was given: overwrite the copy without a lease. */
-    force = false;
 
-    // eslint-disable-next-line @typescript-eslint/max-params
-    constructor(
-        originalBranch: string,
-        tmpBranch: string,
-        targetRef: string,
-        queue: string[],
-        current = '',
-    ) {
+    constructor(originalBranch: string, tmpBranch: string, targetRef: string, devBranch: string) {
         this.originalBranch = originalBranch;
         this.tmpBranch = tmpBranch;
         this.targetRef = targetRef;
-        this.queue = queue;
-        this.current = current;
+        this.devBranch = devBranch;
     }
 }
 
-// The wp-* commands that must REFUSE while a resolve is half-finished, and the ONE place that list is
-// written. The blocked-list sentence below RENDERS ITSELF from this array — the same lesson
+// The wp-* commands that must REFUSE while a dev conflict is half-resolved, and the ONE place that list
+// is written. The blocked-list sentence below RENDERS ITSELF from this array — the same lesson
 // merge-in-progress-guard already learned the hard way: a hand-written "don't run other commands"
 // survives every edit to the actual enforcement and ends up forbidding things the flow requires.
 //
-// Why these and not everything: each one either rewrites the current branch (the two starts), pushes it
-// (the finishes), deletes branches (cleanup), or parks the checkout on a throwaway of its own
-// (wp-build-dev) — and during a resolve the checkout is a throwaway
-// branch, not the feature branch any of them think they are acting on.
+// Why these and not everything: each one either rewrites the current branch (the starts), pushes it or a
+// copy of it (the finishes), or deletes branches (cleanup) — and during a resolve the checkout is a
+// throwaway branch, not the feature branch any of them think they are acting on. `wp-build-push-dev`
+// itself is NOT here: re-running it is how the resolve continues.
 const BLOCKED_DURING_RESOLVE: readonly string[] = [
-    'wp-build-dev',
+    'wp-start-push-dev',
+    'wp-finish-push-dev',
     'wp-start-update',
     'wp-finish-update',
     'wp-start-upsert-pr',
@@ -119,7 +88,7 @@ export class PushDevStateStore {
     read(repoRoot: string): PushDevState | null {
         const file = this.path(repoRoot);
         if (!fs.existsSync(file)) return null;
-        // webpieces-disable no-unmanaged-exceptions -- a truncated/hand-edited state file must degrade to "no resolve in progress" (recoverable via --abort or a fresh --resolve), never crash every wp-* command in the tree
+        // webpieces-disable no-unmanaged-exceptions -- a truncated/hand-edited state file must degrade to "no resolve in progress", never crash every wp-* command in the tree
         // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
         try {
             // webpieces-disable no-any-unknown -- JSON.parse is untyped until narrowed on the next line
@@ -129,21 +98,16 @@ export class PushDevStateStore {
             const state = new PushDevState(
                 raw.originalBranch,
                 raw.tmpBranch,
-                raw.targetRef ?? '',
-                Array.isArray(raw.queue) ? raw.queue : [],
-                raw.current ?? '',
+                typeof raw.targetRef === 'string' ? raw.targetRef : '',
+                typeof raw.devBranch === 'string' ? raw.devBranch : '',
             );
-            state.mode = Object.values(DevResolveMode).includes(raw.mode as DevResolveMode)
-                ? (raw.mode as DevResolveMode)
-                : DevResolveMode.COMPOSE;
             state.baseSha = typeof raw.baseSha === 'string' ? raw.baseSha : '';
             state.resolvedPaths = Array.isArray(raw.resolvedPaths) ? raw.resolvedPaths : [];
             state.leaseSha = typeof raw.leaseSha === 'string' ? raw.leaseSha : '';
-            state.force = raw.force === true;
             return state;
             // The parse error carries nothing a caller could act on: the ONLY meaningful reading of an
-            // unparseable state file is "no resolve in progress", which --abort and a fresh --resolve both
-            // recover from.
+            // unparseable state file is "no resolve in progress".
+            // webpieces-disable catch-must-propagate -- an unparseable state file means no resolve is in progress; the parse error carries nothing a caller could act on
         } catch (err: unknown) {
             const error = toError(err);
             void error;
@@ -161,7 +125,7 @@ export class PushDevStateStore {
         if (fs.existsSync(file)) fs.rmSync(file);
     }
 
-    /** The read that MUST find a resolve — used by `wp-finish-push-dev`, whose whole job is resuming one. */
+    /** The read that MUST find a resolve — used by `wp-build-push-dev --abort`, whose whole job is ending one. */
     require(repoRoot: string): PushDevState {
         const state = this.read(repoRoot);
         if (state !== null) return state;
@@ -172,10 +136,8 @@ export class PushDevStateStore {
                 '⛔ No dev-deploy resolve is in progress\n' +
                 SEP +
                 '\n' +
-                `${WP_FINISH_PUSH_DEV} resumes a resolve that \`${WP_PUSH_DEV} --resolve\` started, and there is no\n` +
-                `state file at:\n  ${this.path(repoRoot)}\n\n` +
-                'If you meant to publish your branch to the shared dev server, that is the one-command form:\n' +
-                `  ${WP_PUSH_DEV}\n`,
+                `\`${WP_BUILD_PUSH_DEV} --abort\` throws away a conflict resolution that \`${WP_BUILD_PUSH_DEV}\` stopped on,\n` +
+                `and there is no state file at:\n  ${this.path(repoRoot)}\n\nThere is nothing to abort.\n`,
         );
     }
 
@@ -197,9 +159,9 @@ export class PushDevStateStore {
                 `so ${this.blockedCommandList()} would all act on the wrong branch.\n` +
                 'That is the whole list; nothing else is blocked.\n\n' +
                 'EXPECTED of you right now, and NOT blocked: read the conflicted files and edit them until every\n' +
-                'conflict marker is gone. Then finish or bail out:\n' +
-                `  ${WP_FINISH_PUSH_DEV}            ← commit the resolution, resume the queue, publish the copy\n` +
-                `  ${WP_FINISH_PUSH_DEV} --abort    ← throw the resolution away and go back to \`${state.originalBranch}\`\n\n` +
+                'conflict marker is gone, and `git add` each one. Then continue or bail out:\n' +
+                `  ${WP_BUILD_PUSH_DEV}            ← commit the resolution, pnpm install, run the dev build\n` +
+                `  ${WP_BUILD_PUSH_DEV} --abort    ← throw the resolution away and go back to \`${state.originalBranch}\`\n\n` +
                 `State file: ${this.path(repoRoot)}\n`,
         );
     }

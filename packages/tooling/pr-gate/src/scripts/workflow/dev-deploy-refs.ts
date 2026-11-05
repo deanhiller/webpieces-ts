@@ -1,4 +1,4 @@
-import { CliExitError, DevDeployConfig, loadAndValidate, WP_PUSH_DEV } from '@webpieces/rules-config';
+import { CliExitError, DevDeployConfig, loadAndValidate } from '@webpieces/rules-config';
 import { injectable, bindingScopeValues } from 'inversify';
 import { gitCheckout } from '@webpieces/tooling-common';
 
@@ -10,8 +10,7 @@ const DETACHED = 'HEAD';
 
 /**
  * One live copy in the dev namespace: the remote ref and the sha it points at. Data-only per CLAUDE.md —
- * `--list` prints it and the clobber guard compares against `sha`, and neither should be re-parsing
- * `ls-remote` output.
+ * `--list` prints it, and should not be re-parsing `ls-remote` output.
  */
 export class DevCopy {
     /** The full ref name WITHOUT `refs/heads/`, e.g. `dev-include/dean/ONE-2275`. */
@@ -28,8 +27,8 @@ export class DevCopy {
 }
 
 /**
- * Ref derivation and preconditions for the dev-deploy flow — the half of `wp-push-dev` that decides WHICH
- * refs are in play, kept out of the commands so both `wp-push-dev` and `wp-finish-push-dev` answer those
+ * Ref derivation and preconditions for the dev-deploy flow — the half that decides WHICH refs are in play,
+ * kept out of the commands so `wp-start-push-dev`, `wp-build-push-dev` and `wp-finish-push-dev` answer those
  * questions identically.
  *
  * THE INVARIANT THIS FILE EXISTS TO PROTECT: the feature branch is the PR head, so it must never acquire
@@ -103,12 +102,7 @@ export class DevDeployRefs {
     }
 
     /**
-     * Every live copy in the namespace, sorted by ref name.
-     *
-     * The sort is not cosmetic: `--resolve` with no argument queues these in exactly this order, and the
-     * consumer's CI composes `dev` in the same order, so what a developer resolves locally is the
-     * composition CI will actually build. A different order can produce a different (still valid) merge
-     * result, which would make the local resolution a guess about CI rather than a rehearsal of it.
+     * Every live copy in the namespace, sorted by ref name — what `wp-finish-push-dev --list` prints.
      */
     async liveCopies(repoRoot: string, cfg: DevDeployConfig): Promise<DevCopy[]> {
         const out = await this.gitExec.gitQuery(['ls-remote', '--heads', 'origin', cfg.copyRefGlob()], repoRoot,
@@ -173,19 +167,7 @@ export class DevDeployRefs {
             'Failed to fetch the dev copy refs from origin');
     }
 
-    /**
-     * The subject of every commit `origin/<ref>` has that `HEAD` does not — the clobber signal. Empty =
-     * safe to publish. Subjects rather than a count, because a commit this flow wrote itself (a recorded
-     * conflict resolution, see DevResolveRunner) is re-derived by the next publish's check against dev and
-     * is therefore safe to replace, while anything else on the copy is somebody's work.
-     */
-    async subjectsOnlyOnRemote(repoRoot: string, ref: string): Promise<string[]> {
-        const out = await this.gitExec.gitQuery(['log', '--format=%s', `HEAD..refs/remotes/origin/${ref}`], repoRoot,
-            `Failed to compare HEAD against origin/${ref} (git log HEAD..origin/${ref}).`);
-        return out.split('\n').filter((l: string): boolean => l.trim() !== '');
-    }
-
     private refusal(headline: string, body: string): string {
-        return '\n' + SEP + `⛔ ${headline}\n` + SEP + '\n' + body + `\nRun \`${WP_PUSH_DEV} --help\` for the full command.\n`;
+        return '\n' + SEP + `⛔ ${headline}\n` + SEP + '\n' + body + '\nRun `pnpm wp-finish-push-dev --help` for the full command.\n';
     }
 }

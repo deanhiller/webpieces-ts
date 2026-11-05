@@ -450,7 +450,7 @@ describe('seedEntryForRule', () => {
 });
 
 /**
- * `pr-gate.devDeploy` — where wp-push-dev publishes the disposable copy. Optional with defaults, so
+ * `pr-gate.devDeploy` — where wp-finish-push-dev publishes the disposable copy. Optional with defaults, so
  * every existing consumer config keeps validating untouched; present, it has to be usable as a git ref,
  * because these two values are concatenated into a ref that a command then force-pushes.
  */

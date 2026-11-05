@@ -332,7 +332,7 @@ export function validateLandPrSection(value: unknown): string[] {
 const REF_COMPONENT = /^[A-Za-z0-9][A-Za-z0-9._/-]*$/;
 
 /**
- * Validate the optional `pr-gate.devDeploy` block — where `wp-push-dev` publishes the disposable copy of
+ * Validate the optional `pr-gate.devDeploy` block — where `wp-finish-push-dev` publishes the disposable copy of
  * a feature branch, which ref is the shared dev branch itself, and where `--remove` pushes its marker.
  * Absent ⇒ `dev-include` / `dev` / `dev-remove`.
  *
@@ -367,8 +367,8 @@ export function validateDevDeploySection(value: unknown): string[] {
     if (devBranch === namespace || devBranch.startsWith(`${namespace}/`) || namespace.startsWith(`${devBranch}/`)) {
         errors.push(
             `[pr-gate] "devDeploy.devBranch" ("${devBranch}") and "devDeploy.branchNamespace" ("${namespace}") must not ` +
-            `contain one another. The namespace holds the DISPOSABLE per-developer copies (written by wp-push-dev); ` +
-            `devBranch is the COMPOSED branch your CI rebuilds from origin/main. Overlapping them makes wp-push-dev ` +
+            `contain one another. The namespace holds the DISPOSABLE per-developer copies (written by wp-finish-push-dev); ` +
+            `devBranch is the COMPOSED branch your CI rebuilds from origin/main. Overlapping them makes wp-finish-push-dev ` +
             `--list enumerate the deploy branch and makes "refused as a source branch" ambiguous.`);
     }
     const removeNamespace = typeof s['removeNamespace'] === 'string' ? s['removeNamespace'].trim() : 'dev-remove';
@@ -384,7 +384,7 @@ function removeNamespaceOverlap(removeNamespace: string, otherKey: string, other
     if (!overlaps) return [];
     return [
         `[pr-gate] "devDeploy.removeNamespace" ("${removeNamespace}") and "devDeploy.${otherKey}" ("${other}") must ` +
-        `not contain one another. The remove namespace holds the content-free MARKER refs wp-push-dev --remove ` +
+        `not contain one another. The remove namespace holds the content-free MARKER refs wp-finish-push-dev --remove ` +
         `pushes, which your dev workflow triggers on and then deletes; overlapping it with the copies or the ` +
         `deploy branch makes the workflow delete — or compose — the wrong refs.`,
     ];

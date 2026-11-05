@@ -1,4 +1,4 @@
-import { CliExitError, WP_BUILD_DEV, WP_PUSH_DEV } from '@webpieces/rules-config';
+import { CliExitError, WP_BUILD_PUSH_DEV } from '@webpieces/rules-config';
 import { injectable, bindingScopeValues } from 'inversify';
 
 import { BuildAffected, BuildGateOptions } from './build-affected';
@@ -37,8 +37,8 @@ export class DevBuild {
         if (configured !== undefined && configured.trim() !== '') return configured;
         throw new CliExitError(2,
             '\n' + SEP + '⛔ `commands.push-dev.buildCommand` is not configured\n' + SEP + '\n'
-            + `${WP_PUSH_DEV} builds your copy merged with origin/dev before it publishes, and ${WP_BUILD_DEV}\n`
-            + 'runs that build on its own. WHICH build is this repo\'s decision, so there is no default.\n'
+            + `${WP_BUILD_PUSH_DEV} builds your copy merged with origin/dev before wp-finish-push-dev publishes it.\n`
+            + 'WHICH build is this repo\'s decision, so there is no default.\n'
             + 'Nothing was merged, built or published.\n\n'
             + 'Add this to webpieces.config.json, inside "commands", choosing a command that builds only what\n'
             + 'differs from origin/dev in this repo:\n\n'

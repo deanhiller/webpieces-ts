@@ -9,12 +9,11 @@ export class CliFlag {
     name: string;        // including the leading dashes, e.g. '--dry-run'
     description: string;
     /**
-     * The flag MAY carry a value: `--resolve dean/ONE-2275` or `--resolve=dean/ONE-2275`.
+     * The flag MAY carry a value: `--pr 123` or `--pr=123`.
      *
-     * "May", not "must". The one flag that needs this (`wp-push-dev --resolve`) is meaningful both bare
-     * (queue every other copy) and with an argument (queue just that one), and a `valueRequired` variant
-     * would be a second concept for a case nothing has. A following token is consumed as the value only
-     * when it does not itself start with `-`, so `--resolve --force` still reads as two flags.
+     * "May", not "must": a command that needs the value checks for it itself, and a `valueRequired`
+     * variant would be a second concept for a case nothing has. A following token is consumed as the value
+     * only when it does not itself start with `-`, so `--pr --force` still reads as two flags.
      */
     takesValue: boolean;
 

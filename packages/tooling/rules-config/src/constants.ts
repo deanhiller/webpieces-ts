@@ -35,8 +35,8 @@ export const MERGE_INFO_DIR = 'merge-info';
 // cleanTmp's legacy `pr-` sweep.
 export const MERGE_IN_PROGRESS_FILE = 'merge-in-progress.json';
 
-// The dev-deploy resolve state file, written by `wp-push-dev --resolve` and cleared by
-// `wp-finish-push-dev` (or `--abort`). Named here for the same reason MERGE_IN_PROGRESS_FILE is: the
+// The dev-deploy resolve state file, written when `wp-build-push-dev` stops on a conflict with origin/dev
+// and cleared when a re-run of it finishes (or `wp-build-push-dev --abort`). Named here for the same reason MERGE_IN_PROGRESS_FILE is: the
 // pr-gate commands WRITE it and things outside pr-gate READ it to decide whether a resolve is
 // half-finished, and neither side may depend on the other.
 //

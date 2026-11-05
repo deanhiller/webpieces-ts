@@ -1,32 +1,34 @@
-import { CliExitError, DevDeployConfig, WP_FINISH_PUSH_DEV, WP_PUSH_DEV } from '@webpieces/rules-config';
+import { CliExitError, DevDeployConfig, WP_BUILD_PUSH_DEV, WP_FINISH_PUSH_DEV } from '@webpieces/rules-config';
+import { NativeProcessApi } from '@webpieces/tooling-common';
 import { toError } from '@webpieces/tooling-common/to-error';
 import { injectable, bindingScopeValues } from 'inversify';
 
 import { GitExec } from './git-exec';
 import { DevDeployRefs } from './dev-deploy-refs';
-import { DevResolveMode, PushDevState, PushDevStateStore } from './push-dev-state';
-import { DevDeployWatchHints } from './dev-deploy-watch-hints';
+import { PushDevState, PushDevStateStore } from './push-dev-state';
 import { DevBuild } from './dev-build';
+import { VerifiedDevCopy, VerifiedDevCopyStore } from './verified-dev-copy';
 
 const SEP = '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n';
 
 /**
  * The subject prefix of the ONE commit this flow writes onto a copy: the recorded conflict resolution.
- * The clobber guard reads it — a remote-only commit with this subject is re-derived by the next publish's
- * check against dev, so replacing it destroys nothing; any other remote-only commit is somebody's work.
  */
 export const RESOLUTION_SUBJECT = 'Dev-deploy: conflict resolution for';
 
 /**
- * The queue-draining engine behind `wp-push-dev` (its pre-publish check against dev, #1397),
- * `wp-push-dev --resolve`, `--rebase-resolution`, and `wp-finish-push-dev`.
+ * The engine behind `wp-build-push-dev` (#1403): merge `origin/<devBranch>` into a THROWAWAY branch, stop
+ * on a conflict, `pnpm install`, run the dev build, and record the copy `wp-finish-push-dev` publishes.
  *
- * ONE class owns every git WRITE in the resolve flow, and that is a hard requirement rather than tidiness:
+ * ONE class owns every git WRITE of the check, and that is a hard requirement rather than tidiness:
  * `redirect-how-to-merge-main` blocks `git merge` in every form INCLUDING `--continue`, and
- * `pr-creation-or-push-guard` blocks every `git push`. So an AI cannot be told "now run `git commit`" or
+ * `merge-in-progress-guard` blocks `git commit`. So an AI cannot be told "now run `git commit`" or
  * "`git merge --continue`" — those instructions are unrunnable by the only party reading them. The command
- * owns the merges, the commit and the push (as child processes the hooks never see); the AI's entire job is
- * editing the conflicted files and `git add`-ing them, neither of which is blocked.
+ * owns the merge and the commits (as child processes the hooks never see); the AI's entire job is editing
+ * the conflicted files and `git add`-ing them, neither of which is blocked.
+ *
+ * It NEVER writes to the feature branch: every merge lands on a throwaway that is deleted at the end, so no
+ * other developer's commits can reach the PR head even if the check is abandoned halfway.
  */
 @injectable(bindingScopeValues.Singleton)
 export class DevResolveRunner {
@@ -34,96 +36,54 @@ export class DevResolveRunner {
         private readonly gitExec: GitExec,
         private readonly refs: DevDeployRefs,
         private readonly store: PushDevStateStore,
-        private readonly watchHints: DevDeployWatchHints,
+        private readonly verified: VerifiedDevCopyStore,
         private readonly devBuild: DevBuild,
+        private readonly processes: NativeProcessApi,
     ) {}
 
     /**
-     * Start a resolve: park on a throwaway branch at the current copy, then drain the queue.
-     *
-     * The checkout is `-B <tmp> <base>` and NEVER the feature branch, which is the cardinal constraint made
-     * mechanical — every merge below lands on a branch that is deleted at the end, so no other developer's
-     * commits can reach the PR head even if the resolve is abandoned halfway.
-     *
-     * `base` differs between the callers and the difference IS the semantics. A plain publish starts at the
-     * LOCAL HEAD and merges `origin/<devBranch>` in (does this copy merge and build against what is already
-     * on dev?). `--resolve` starts at the published copy and merges the other copies in (compose what CI
-     * will build). `--rebase-resolution` starts at the LOCAL HEAD and merges the published copy in (replay
-     * an existing resolution on top of the new commits, instead of force-pushing over it). What is finally
-     * PUBLISHED is the state's DevResolveMode's decision — see finalize.
-     *
-     * `fetchRefs` is passed separately from the queue because `--rebase-resolution` merges a ref that is
-     * also its push destination, so "everything to fetch" and "everything to merge" are not the same list.
+     * Start the check: park on a throwaway branch at the feature head, merge `origin/<devBranch>` into it,
+     * and either halt on a conflict or go straight on to install, build and record.
      */
-    async start(repoRoot: string, state: PushDevState, base: string, fetchRefs: string[]): Promise<void> {
-        await this.refs.fetchCopies(repoRoot, fetchRefs);
-        // Pinned to a SHA after the fetch: the resolution is recorded on top of exactly what was merged,
-        // even if the copy (or the feature branch) moves while a conflict is being resolved.
-        state.baseSha = await this.refs.headSha(repoRoot, base);
+    async start(repoRoot: string, state: PushDevState): Promise<void> {
+        await this.refs.fetchCopies(repoRoot, [state.devBranch]);
+        // Pinned to a SHA: the resolution is recorded on top of exactly what was merged, and stage ③
+        // refuses to publish when the feature branch has moved since.
+        state.baseSha = await this.refs.headSha(repoRoot, 'HEAD');
         this.store.write(repoRoot, state);
         await this.gitExec.runGitChecked(
-            ['-C', repoRoot, 'checkout', '-B', state.tmpBranch, base],
-            `Failed to create the throwaway resolve branch ${state.tmpBranch}`);
-        await this.drain(repoRoot, state);
+            ['-C', repoRoot, 'checkout', '-B', state.tmpBranch, 'HEAD'],
+            `Failed to create the throwaway branch ${state.tmpBranch}`);
+        const merged = await this.gitExec.tryGit(
+            ['-C', repoRoot, 'merge', '--no-ff', '--no-edit', '-m',
+                `Dev-deploy: merge ${state.devBranch} into ${state.targetRef}`, `refs/remotes/origin/${state.devBranch}`],
+            repoRoot);
+        if (!merged.ok) await this.halt(repoRoot, state);
+        process.stdout.write(`  ✓ merged origin/${state.devBranch}\n`);
+        await this.finish(repoRoot, state);
     }
 
-    /**
-     * Resume after the human/AI has resolved the halted merge: commit it, then keep draining.
-     *
-     * REFETCHES the remaining queue first. A resolution session can run long, and queuing against refs
-     * fetched an hour ago rehearses a composition CI will not build — the one freshness gap the sibling
-     * update flow is still known to have (only its stage ① ever fetches).
-     */
+    /** Resume after the conflicted files were resolved and `git add`-ed: commit the merge, then finish. */
     async resume(repoRoot: string, state: PushDevState): Promise<void> {
-        await this.assertNoUnmergedPaths(repoRoot, state);
+        await this.assertNoUnmergedPaths(repoRoot);
         await this.gitExec.assertNoUntracked(repoRoot);
         await this.gitExec.runGitChecked(['-C', repoRoot, 'add', '-u'], 'Failed to stage the resolved files (git add -u)');
         await this.gitExec.runGitChecked(['-C', repoRoot, 'commit', '--no-edit'],
-            `Failed to commit the resolution of ${state.current}`);
-        process.stdout.write(`✅ Committed the resolution of ${state.current}.\n`);
-        state.current = '';
-        await this.refs.fetchCopies(repoRoot, state.queue);
-        await this.drain(repoRoot, state);
+            `Failed to commit the resolution of the merge with origin/${state.devBranch}`);
+        process.stdout.write(`✅ Committed the resolution of the merge with origin/${state.devBranch}.\n`);
+        await this.finish(repoRoot, state);
     }
 
     /**
-     * Throw the whole resolve away: undo any halted merge, go back to the original branch, delete the
-     * throwaway branch and the state file. Nothing published, nothing on the feature branch.
+     * Throw the whole check away: undo any halted merge, go back to the original branch, delete the
+     * throwaway branch and the state file. Nothing verified, nothing on the feature branch.
      */
     async abort(repoRoot: string, state: PushDevState): Promise<void> {
-        // Allowed to fail: there is no merge to abort when the resolve halted between merges, and that is
-        // not an error condition — the rest of the teardown must still run.
-        await this.gitExec.tryGit(['-C', repoRoot, 'merge', '--abort'], repoRoot);
         await this.restore(repoRoot, state);
         process.stdout.write(
-            '\n' + SEP + '🛑 Dev-deploy resolve aborted\n' + SEP + '\n'
+            '\n' + SEP + '🛑 Dev-deploy check aborted\n' + SEP + '\n'
             + `You are back on \`${state.originalBranch}\`; \`${state.tmpBranch}\` and the state file are gone.\n`
-            + `The remote copy \`${state.targetRef}\` is untouched, and so is your feature branch.\n`);
-    }
-
-    /**
-     * Merge queued refs until one conflicts (HALT, hand the tree over) or the queue empties (PUBLISH).
-     *
-     * A LATER ref can conflict too, which is why this is a loop resumed from a state file rather than a
-     * single pass: `wp-finish-push-dev` can legitimately stop again on the next ref in the queue.
-     */
-    private async drain(repoRoot: string, state: PushDevState): Promise<void> {
-        while (state.queue.length > 0) {
-            const ref = state.queue[0];
-            state.queue = state.queue.slice(1);
-            const outcome = await this.gitExec.tryGit(
-                ['-C', repoRoot, 'merge', '--no-ff', '--no-edit', '-m',
-                    `Dev-deploy: merge ${ref} into ${state.targetRef}`, `refs/remotes/origin/${ref}`],
-                repoRoot);
-            if (outcome.ok) {
-                process.stdout.write(`  ✓ merged ${ref}\n`);
-                continue;
-            }
-            state.current = ref;
-            await this.halt(repoRoot, state);
-            return;
-        }
-        await this.finalize(repoRoot, state);
+            + `Nothing was published, and your feature branch is untouched.\n`);
     }
 
     /** Stop with the conflicted files listed and the ONE command that continues. Exit 2 = "your turn". */
@@ -131,68 +91,69 @@ export class DevResolveRunner {
         const conflicted = await this.unmergedPaths(repoRoot);
         // Remembered so the finish records EXACTLY these files as the resolution — and nothing else the
         // merge brought in, which is other developers' work.
-        for (const file of conflicted) if (!state.resolvedPaths.includes(file)) state.resolvedPaths.push(file);
+        state.resolvedPaths = conflicted;
         this.store.write(repoRoot, state);
-        const remaining = state.queue.length > 0
-            ? `\nStill queued after this one: ${state.queue.join(', ')}\n`
-              + `\`${WP_FINISH_PUSH_DEV}\` resumes the queue, so it may stop again on a later ref.\n`
-            : '';
         throw new CliExitError(2,
-            '\n' + SEP + `⚠️  CONFLICT merging ${state.current}\n` + SEP + '\n'
+            '\n' + SEP + `⚠️  CONFLICT merging origin/${state.devBranch}\n` + SEP + '\n'
             + `You are on the throwaway branch \`${state.tmpBranch}\` — NOT \`${state.originalBranch}\`. Nothing here\n`
             + 'can reach your feature branch or your PR, which is exactly why the resolution happens over here.\n\n'
             + 'Resolve these files (edit until no conflict markers remain, then `git add` each one):\n'
             + conflicted.map((f: string): string => `  ${f}`).join('\n') + '\n'
-            + remaining
             + '\nThen run ONE of:\n'
-            + `  ${WP_FINISH_PUSH_DEV}            ← commit, resume the queue, ${this.buildStep(state)}publish the copy\n`
-            + `  ${WP_FINISH_PUSH_DEV} --abort    ← throw it away and go back to \`${state.originalBranch}\`\n\n`
+            + `  ${WP_BUILD_PUSH_DEV}            ← commit the resolution, pnpm install, run the dev build\n`
+            + `  ${WP_BUILD_PUSH_DEV} --abort    ← throw it away and go back to \`${state.originalBranch}\`\n\n`
             + 'Do NOT run `git merge --continue`, `git commit` or `git push` yourself — they are blocked, and\n'
-            + 'the finish command above does all three for you.\n');
+            + 'the commands above do them for you.\n');
     }
 
     /**
-     * Queue empty. What happens next is the mode's (see DevResolveMode):
+     * The merge is complete. Install and build the MERGED tree, then turn the throwaway into the copy and
+     * record it for `wp-finish-push-dev`.
      *
-     * - PREBUILD runs the dev build on the MERGED tree first, so a red build stops before anything is
-     *   published.
-     * - PREBUILD and COMPOSE then publish the BASE plus the recorded resolution — never the merge. REPLAY
-     *   publishes the merge, as it always has.
+     * `pnpm install` runs AFTER the merge, never before: other copies already on dev can add workspace
+     * packages main does not have yet, so the feature branch's `node_modules` does not link the merged
+     * tree (#1403 — a 30-commits-behind branch failed six minutes into its build on exactly that).
      */
-    private async finalize(repoRoot: string, state: PushDevState): Promise<void> {
-        if (state.mode === DevResolveMode.PREBUILD) await this.buildOrRestore(repoRoot, state);
-        if (state.mode !== DevResolveMode.REPLAY) await this.recordResolution(repoRoot, state);
-        // Captured BEFORE the tmp branch is deleted — it is the sha the watch hints are about, and after
-        // the restore HEAD is the feature branch, which may be a different commit.
-        const published = await this.refs.headSha(repoRoot, state.tmpBranch);
-        if (state.mode === DevResolveMode.COMPOSE && published === state.baseSha) {
-            await this.restore(repoRoot, state);
-            process.stdout.write(
-                '\n' + SEP + `✅ ${state.targetRef} composes cleanly — nothing to publish\n` + SEP + '\n'
-                + 'Every other copy merged onto it without a conflict, so your CI composes it as it is. The copy\n'
-                + `is unchanged, and you are back on \`${state.originalBranch}\`.\n`);
-            return;
-        }
+    private async finish(repoRoot: string, state: PushDevState): Promise<void> {
+        await this.onThrowaway(repoRoot, state, (): Promise<void> => this.install(repoRoot, state));
+        await this.onThrowaway(repoRoot, state, (): Promise<void> => this.devBuild.run(repoRoot, WP_BUILD_PUSH_DEV));
+        // The install may rewrite the lockfile on the throwaway; drop that before the throwaway moves.
+        await this.gitExec.runGitChecked(['-C', repoRoot, 'reset', '--hard', 'HEAD'],
+            `Failed to discard what pnpm install changed on ${state.tmpBranch}`);
+        await this.recordResolution(repoRoot, state);
+        const copySha = await this.refs.headSha(repoRoot, state.tmpBranch);
         await this.gitExec.runGitChecked(
-            ['-C', repoRoot, 'push', ...this.pushSafety(state), 'origin', `${state.tmpBranch}:refs/heads/${state.targetRef}`],
-            `Failed to publish the dev copy ${state.targetRef}`);
+            ['-C', repoRoot, 'update-ref', this.verified.keepRef(state.originalBranch), copySha],
+            `Failed to keep the verified copy ${copySha.slice(0, 8)} reachable`);
+        const devSha = await this.refs.headSha(repoRoot, `refs/remotes/origin/${state.devBranch}`);
+        this.verified.write(repoRoot, new VerifiedDevCopy(
+            state.originalBranch, state.baseSha, copySha, state.targetRef, state.leaseSha, devSha));
         await this.restore(repoRoot, state);
-        process.stdout.write(this.publishedBanner(state)
-            + this.watchHints.render(this.refs.config(repoRoot), state.targetRef, published));
+        process.stdout.write(this.verifiedBanner(state, devSha));
+    }
+
+    private async install(repoRoot: string, state: PushDevState): Promise<void> {
+        process.stdout.write(`\nRunning pnpm install on the merged throwaway \`${state.tmpBranch}\`.\n`);
+        const result = await this.processes.passThrough('pnpm', ['install'], repoRoot);
+        if (result.ok) return;
+        throw new CliExitError(1,
+            '\n' + SEP + `⛔ pnpm install failed on the merge with origin/${state.devBranch}\n` + SEP + '\n'
+            + `\`pnpm install\` exited ${String(result.code)} on the merged tree (its output is above). No build ran and\n`
+            + `nothing was verified; you are back on \`${state.originalBranch}\`. Fix what it reported, then re-run:\n`
+            + `  ${WP_BUILD_PUSH_DEV}\n`);
     }
 
     /**
-     * Run the dev build on the merged throwaway. On a red build, put the checkout back first — the fix
-     * belongs on the feature branch, and a developer left parked on a throwaway would make the next
-     * `wp-*` command act on the wrong branch — then let the build's own failure (with its `FullLog :`
-     * pointer) reach the top-level handler unchanged.
+     * Run one step on the throwaway. On a failure, put the checkout back first — the fix belongs on the
+     * feature branch, and a developer left parked on a throwaway would make the next `wp-*` command act on
+     * the wrong branch — then let the step's own failure (a build's carries its `FullLog :` pointer) reach
+     * the top-level handler unchanged.
      */
-    private async buildOrRestore(repoRoot: string, state: PushDevState): Promise<void> {
-        process.stdout.write(`\nBuilding the merged throwaway \`${state.tmpBranch}\` before publishing.\n`);
-        // webpieces-disable no-unmanaged-exceptions -- chokepoint: the checkout must be restored whether or not the build passed; the build's own CliExitError is re-thrown unchanged
+    private async onThrowaway(repoRoot: string, state: PushDevState, step: () => Promise<void>): Promise<void> {
+        // webpieces-disable no-unmanaged-exceptions -- chokepoint: the checkout must be restored whether or not the step passed; the step's own error is re-thrown unchanged
         // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
         try {
-            await this.devBuild.run(repoRoot, WP_PUSH_DEV);
+            await step();
         } catch (err: unknown) {
             const error = toError(err);
             await this.restore(repoRoot, state);
@@ -201,14 +162,14 @@ export class DevResolveRunner {
     }
 
     /**
-     * Turn the throwaway into what gets PUBLISHED: the base sha plus, when anything conflicted, ONE commit
-     * that sets each resolved file to its resolved content.
+     * Turn the throwaway into the copy: the base sha plus, when anything conflicted, ONE commit that sets
+     * each resolved file to its resolved content.
      *
-     * This is issue #1397's option (a): the merge is used for the conflict check and the build only, and
-     * is never published. Publishing it would make every other copy an ancestor of this one, so a later
-     * `--remove` of that copy would leave its commits on dev through ours. The resolution commit has
-     * exactly one parent, the base, so the only thing it can carry of anybody else's work is the text of
-     * the hunks that were resolved — content, never history.
+     * The merge is used for the conflict check and the build only, and is never published. Publishing it
+     * would make every other copy an ancestor of this one, so a later `--remove` of that copy would leave
+     * its commits on dev through ours. The resolution commit has exactly one parent, the base, so the only
+     * thing it can carry of anybody else's work is the text of the hunks that were resolved — content,
+     * never history.
      */
     private async recordResolution(repoRoot: string, state: PushDevState): Promise<void> {
         const merged = await this.refs.headSha(repoRoot, state.tmpBranch);
@@ -233,42 +194,32 @@ export class DevResolveRunner {
         `Failed to commit the recorded resolution for ${state.targetRef}`);
     }
 
-    /** Back to the original branch; the throwaway and the state file are gone. */
+    /** Back to the original branch; any halted merge, the throwaway and the state file are gone. */
     private async restore(repoRoot: string, state: PushDevState): Promise<void> {
+        // Only ever on the throwaway: a reset anywhere else could destroy somebody's uncommitted work.
+        // Both allowed to fail: there is no merge to abort once it completed, and nothing to reset on a
+        // clean tree. Neither is an error — the rest of the teardown must still run.
+        if (await this.gitExec.currentBranch(repoRoot) === state.tmpBranch) {
+            await this.gitExec.tryGit(['-C', repoRoot, 'merge', '--abort'], repoRoot);
+            await this.gitExec.tryGit(['-C', repoRoot, 'reset', '--hard', 'HEAD'], repoRoot);
+        }
         await this.gitExec.runGitChecked(['-C', repoRoot, 'checkout', state.originalBranch],
             `Failed to return to ${state.originalBranch}`);
         await this.gitExec.tryGit(['-C', repoRoot, 'branch', '-D', state.tmpBranch], repoRoot);
         this.store.clear(repoRoot);
     }
 
-    /**
-     * PREBUILD leases against the sha the clobber guard inspected (plain `--force` only when asked); the
-     * other two modes overwrite the copy they themselves started from, as they always have.
-     */
-    private pushSafety(state: PushDevState): string[] {
-        if (state.mode !== DevResolveMode.PREBUILD || state.force) return ['--force'];
-        if (state.leaseSha === '') return [];
-        return [`--force-with-lease=refs/heads/${state.targetRef}:${state.leaseSha}`];
-    }
-
-    // The halt message names the build only where the finish will actually run one.
-    private buildStep(state: PushDevState): string {
-        return state.mode === DevResolveMode.PREBUILD ? 'run the dev build, ' : '';
-    }
-
-    private publishedBanner(state: PushDevState): string {
-        const what = state.mode === DevResolveMode.REPLAY
-            ? 'your new commits merged with the copy\'s earlier resolution'
-            : state.resolvedPaths.length === 0
-                ? 'your branch exactly as it is'
-                : `your branch plus ONE commit recording the resolution of ${String(state.resolvedPaths.length)} file(s) — no merge, so no other copy became part of its history`;
-        return '\n' + SEP + `✅ Published ${state.targetRef}\n` + SEP + '\n'
-            + `The copy is ${what}.\n`
-            + `You are back on \`${state.originalBranch}\`, which was never modified — verify with:\n`
-            + `  git log --oneline ${state.originalBranch}\n`
-            + 'Your CI will pick the copy up on its next composition run.\n'
-            + `  ${WP_PUSH_DEV} --list      ← what else is in the pool\n`
-            + `  ${WP_PUSH_DEV} --remove    ← take this branch back out\n`;
+    private verifiedBanner(state: PushDevState, devSha: string): string {
+        const what = state.resolvedPaths.length === 0
+            ? 'your branch exactly as it is'
+            : `your branch plus ONE commit recording the resolution of ${String(state.resolvedPaths.length)} file(s) — no merge, so no other copy becomes part of its history`;
+        return '\n' + SEP + `✅ ${state.targetRef} is verified against origin/${state.devBranch}\n` + SEP + '\n'
+            + `It merges with origin/${state.devBranch} (${devSha.slice(0, 8)}), pnpm install ran on the merged tree, and the dev\n`
+            + `build is green. The copy to publish is ${what}.\n`
+            + `You are back on \`${state.originalBranch}\`, which this check never modified.\n\n`
+            + `▶ NEXT run:  ${WP_FINISH_PUSH_DEV}\n`
+            + `   It publishes the verified copy as \`${state.targetRef}\`. It refuses if \`${state.originalBranch}\`\n`
+            + '   moves before then — a new commit means a new check.\n';
     }
 
     /** Conflicted (unmerged-in-index) paths. Empty once every one has been resolved and `git add`ed. */
@@ -278,21 +229,20 @@ export class DevResolveRunner {
         return out.split('\n').filter((l: string): boolean => l.trim() !== '');
     }
 
-    // The gate on `wp-finish-push-dev`: refuse (and re-print the list) while anything is still unmerged.
-    private async assertNoUnmergedPaths(repoRoot: string, state: PushDevState): Promise<void> {
+    // The gate on resuming: refuse (and re-print the list) while anything is still unmerged.
+    private async assertNoUnmergedPaths(repoRoot: string): Promise<void> {
         const conflicted = await this.unmergedPaths(repoRoot);
         if (conflicted.length === 0) return;
         throw new CliExitError(2,
             '\n' + SEP + '⛔ Conflicts are NOT resolved yet\n' + SEP + '\n'
-            + `${WP_FINISH_PUSH_DEV} commits the resolution — it cannot write one for you. These files are still\n`
+            + `${WP_BUILD_PUSH_DEV} commits the resolution — it cannot write one for you. These files are still\n`
             + 'unmerged (edit until no conflict markers remain, then `git add` each one):\n'
             + conflicted.map((f: string): string => `  ${f}`).join('\n') + '\n\n'
-            + `Merging: ${state.current === '' ? '(none)' : state.current}\n`
-            + `Give up instead with: ${WP_FINISH_PUSH_DEV} --abort\n`);
+            + `Give up instead with: ${WP_BUILD_PUSH_DEV} --abort\n`);
     }
 
     /**
-     * The name of the throwaway branch for a resolve of `branch`.
+     * The name of the throwaway branch for a check of `branch`.
      *
      * Suffixed rather than prefixed, matching the existing `<feature>Squash` / `<feature>PreMerge<n>`
      * convention — and deliberately NOT inside the dev namespace, which holds REMOTE copies only.
@@ -301,26 +251,13 @@ export class DevResolveRunner {
         return `${branch}DevResolve`;
     }
 
-    /** The banner `--resolve` prints before the first merge, so the queue is visible before it halts. */
+    /** The banner `wp-build-push-dev` prints before its check against dev. */
     announce(cfg: DevDeployConfig, state: PushDevState): string {
-        return '\n' + SEP + `🔀 Resolving the dev composition for ${state.targetRef}\n` + SEP + '\n'
-            + `Merging ${String(state.queue.length)} other cop${state.queue.length === 1 ? 'y' : 'ies'} from `
-            + `\`${cfg.copyRefGlob()}\`, in the order your CI composes\n\`${cfg.devBranch}\`, onto the throwaway branch `
-            + `\`${state.tmpBranch}\`:\n`
-            + state.queue.map((r: string): string => `  ${r}`).join('\n') + '\n\n'
-            + `Your feature branch \`${state.originalBranch}\` is not touched by any of this.\n`
-            + 'A clean run publishes nothing (CI already composes it). A resolved conflict is published as your copy\n'
-            + 'plus ONE commit holding the resolved files — never a merge, so no other copy enters its history.\n'
-            + `${WP_FINISH_PUSH_DEV} is only needed if a merge stops.\n\n`;
-    }
-
-    /** The banner plain `wp-push-dev` prints before its check against dev (#1397). */
-    announcePrebuild(cfg: DevDeployConfig, state: PushDevState): string {
-        return '\n' + SEP + `🔎 Checking ${state.targetRef} against origin/${cfg.devBranch} before publishing\n` + SEP + '\n'
-            + `Merging origin/${cfg.devBranch} into the throwaway branch \`${state.tmpBranch}\`, then running\n`
-            + '`commands.push-dev.buildCommand` on the merged tree. Only if both pass is the copy published — as\n'
-            + 'your branch, plus ONE commit holding any resolved files. The merge itself is never published, so a\n'
-            + `later \`${WP_PUSH_DEV} --remove\` of somebody else's copy cannot leave it on dev through yours.\n`
+        return '\n' + SEP + `🔎 Checking ${state.targetRef} against origin/${cfg.devBranch}\n` + SEP + '\n'
+            + `Merging origin/${cfg.devBranch} into the throwaway branch \`${state.tmpBranch}\`, then running \`pnpm install\`\n`
+            + 'and `commands.push-dev.buildCommand` on the merged tree. Nothing is published here — when both pass,\n'
+            + `${WP_FINISH_PUSH_DEV} publishes your branch, plus ONE commit holding any resolved files. The merge\n`
+            + 'itself is never published.\n'
             + `Your feature branch \`${state.originalBranch}\` is not touched by any of this.\n\n`;
     }
 }

@@ -1,4 +1,4 @@
-import { DEFAULT_DEV_BRANCH, DEFAULT_DEV_BRANCH_NAMESPACE, RepoRootFinder, WP_PUSH_DEV, loadAndValidate, writeTemplate } from '@webpieces/rules-config';
+import { DEFAULT_DEV_BRANCH, DEFAULT_DEV_BRANCH_NAMESPACE, RepoRootFinder, WP_BUILD_PUSH_DEV, WP_FINISH_PUSH_DEV, WP_START_PUSH_DEV, loadAndValidate, writeTemplate } from '@webpieces/rules-config';
 import { PR_LIFECYCLE_GUARD_KEY } from '../../policy-keys';
 import { PrLifecycleGuardConfig } from "../../configs/rule-configs";
 
@@ -31,10 +31,11 @@ function fixHintFor(upsertPrCommand: string): FixHint {
             '  instructs you to write summary.json and run `pnpm wp-finish-upsert-pr`, which assembles the\n' +
             '  dashboard and creates/updates the PR — and pushes for you. A failing build = no push, no PR.\n\n' +
             'JUST WANT IT ON THE SHARED DEV SERVER (no PR, not landing on main):\n' +
-            `  ${WP_PUSH_DEV}\n` +
-            '  It publishes a DISPOSABLE copy of your branch that the dev environment composes and rebuilds.\n' +
-            "  Your feature branch is never moved and never acquires another developer's commits, which is\n" +
-            '  the whole reason the copy exists. Do NOT open a PR to main just to test something in dev.\n\n' +
+            `  ${WP_START_PUSH_DEV}  →  ${WP_BUILD_PUSH_DEV}  →  ${WP_FINISH_PUSH_DEV}\n` +
+            '  Brings your branch up to date with main, checks and builds it against dev on a throwaway merge,\n' +
+            '  then publishes a DISPOSABLE copy of it that the dev environment composes and deploys. Your\n' +
+            "  feature branch never acquires another developer's commits, which is the whole reason the copy\n" +
+            '  exists. Do NOT open a PR to main just to test something in dev.\n\n' +
             'ON A /hotfix/ BRANCH (cut from the production sha, so it must NOT take main):\n' +
             '  pnpm wp-upsert-hotfix-pr\n' +
             '  One command: hotfix-ci (build + test), no merge from main, one fast-forward push, then it\n' +
@@ -93,7 +94,7 @@ function truncate(s: string): string {
  *
  * The refspec is the one place the AI already stated its intent unambiguously, so reading it is strictly
  * better than making the AI choose between two hints it has no way to disambiguate. A push whose
- * destination is the dev namespace or the dev branch itself gets the `wp-push-dev` remedy on the `→`
+ * destination is the dev namespace or the dev branch itself gets the dev-deploy (`wp-start-push-dev`) remedy on the `→`
  * line; everything else keeps the PR-flow remedy it has always had.
  */
 // webpieces-disable no-function-outside-class -- module-level guard helper, matches the rest of this file
@@ -144,8 +145,8 @@ export class PrCreationOrPushGuardRule extends BashRuleBase<PrLifecycleGuardConf
                     1,
                     truncate(ctx.command),
                     'Manual push is blocked — but this one is aimed at the shared DEV environment, which has its own\n' +
-                        `gated command. Use \`${WP_PUSH_DEV}\` (publishes a disposable copy; never moves your branch, never\n` +
-                        `opens a PR). Do NOT use ${this.upsertPrCommand} for this — that lands on main. Full flow: READ ${docPath}.`,
+                        `gated flow: \`${WP_START_PUSH_DEV}\` → \`${WP_BUILD_PUSH_DEV}\` → \`${WP_FINISH_PUSH_DEV}\` (publishes a\n` +
+                        `disposable copy; never opens a PR). Do NOT use ${this.upsertPrCommand} for this — that lands on main. Full flow: READ ${docPath}.`,
                 ),
             ];
         }

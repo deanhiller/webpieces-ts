@@ -26,7 +26,6 @@
     "publishConfig": {
         "bin": {
             "wp-build": "./src/scripts/wp-build.js",
-            "wp-build-dev": "./src/scripts/wp-build-dev.js",
             "wp-finish-upsert-pr": "./src/scripts/git-finishUpsertPr.js",
             "wp-human-post-pr": "./src/scripts/wp-human-post-pr.js",
             "wp-upsert-hotfix-pr": "./src/scripts/wp-upsert-hotfix-pr.js",
@@ -38,7 +37,8 @@
             "wp-land-pr": "./src/scripts/wp-land-pr.js",
             "wp-check-pr": "./src/scripts/wp-check-pr.js",
             "wp-review-upsert-pr": "./src/scripts/wp-review-upsert-pr.js",
-            "wp-push-dev": "./src/scripts/wp-push-dev.js",
+            "wp-start-push-dev": "./src/scripts/wp-start-push-dev.js",
+            "wp-build-push-dev": "./src/scripts/wp-build-push-dev.js",
             "wp-finish-push-dev": "./src/scripts/wp-finish-push-dev.js",
             "wp-await-reviews": "./src/scripts/wp-await-reviews.js",
             "wp-write-review": "./src/scripts/wp-write-review.js",

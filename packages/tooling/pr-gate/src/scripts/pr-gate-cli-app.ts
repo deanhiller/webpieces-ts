@@ -16,9 +16,9 @@ import {
     FLAG_INTERACTIVE,
     FLAG_REPORT,
 } from './commands/cleanup-options';
+import { BuildPushDevOptions } from './commands/build-push-dev-command';
 import { FinishPushDevOptions } from './commands/finish-push-dev-command';
 import { LandPrRequest } from './commands/land-pr-command';
-import { PushDevOptions } from './commands/push-dev-command';
 import {
     ReviewBudgetCheckOptions,
     WriteReviewInput,
@@ -38,9 +38,7 @@ const FILE = '--file';
 const FORCE = '--force';
 const LIST = '--list';
 const PR = '--pr';
-const REBASE_RESOLUTION = '--rebase-resolution';
 const REMOVE = '--remove';
-const RESOLVE = '--resolve';
 
 /** Stable application boundary for every published `wp-*` command. */
 @injectable(bindingScopeValues.Singleton)
@@ -185,10 +183,6 @@ export class PrGateCliApp {
             await this.app.build(new BuildOptions(args.has(FORCE)));
             return true;
         }
-        if (binName === 'wp-build-dev') {
-            await this.noArgs(invocation, this.buildDevUsage(), (): Promise<void> => this.app.buildDev());
-            return true;
-        }
         if (binName === 'wp-cleanup') {
             const args = this.parse(invocation, this.cleanupUsage.declare());
             await this.app.cleanup(
@@ -215,21 +209,21 @@ export class PrGateCliApp {
             await this.app.landPr(new LandPrRequest(args.has(PR), args.value(PR)));
             return true;
         }
-        if (binName === 'wp-push-dev') {
-            const args = this.parse(invocation, this.pushDevUsage());
-            const opts = new PushDevOptions();
-            opts.list = args.has(LIST);
-            opts.remove = args.has(REMOVE);
-            opts.force = args.has(FORCE);
-            opts.rebaseResolution = args.has(REBASE_RESOLUTION);
-            opts.resolve = args.has(RESOLVE);
-            opts.resolveTarget = args.value(RESOLVE);
-            await this.app.pushDev(opts);
+        if (binName === 'wp-start-push-dev') {
+            await this.noArgs(invocation, this.startPushDevUsage(), (): Promise<void> => this.app.startPushDev());
+            return true;
+        }
+        if (binName === 'wp-build-push-dev') {
+            const args = this.parse(invocation, this.buildPushDevUsage());
+            await this.app.buildPushDev(new BuildPushDevOptions(args.has(ABORT)));
             return true;
         }
         if (binName === 'wp-finish-push-dev') {
             const args = this.parse(invocation, this.finishPushDevUsage());
-            await this.app.finishPushDev(new FinishPushDevOptions(args.has(ABORT)));
+            const opts = new FinishPushDevOptions();
+            opts.list = args.has(LIST);
+            opts.remove = args.has(REMOVE);
+            await this.app.finishPushDev(opts);
             return true;
         }
         if (binName === 'wp-await-checks') {
@@ -290,13 +284,6 @@ export class PrGateCliApp {
                     'Build even though this machine is already at its concurrent-build limit.',
                 ),
             ],
-        );
-    }
-
-    private buildDevUsage(): CliUsage {
-        return new CliUsage(
-            'wp-build-dev',
-            'Merge origin/dev into a throwaway branch and run commands.push-dev.buildCommand on it — wp-push-dev`s pre-publish check, without publishing.',
         );
     }
 
@@ -366,10 +353,25 @@ export class PrGateCliApp {
         );
     }
 
-    private pushDevUsage(): CliUsage {
+    private startPushDevUsage(): CliUsage {
         return new CliUsage(
-            'wp-push-dev',
-            'Check this branch against origin/dev (throwaway merge + commands.push-dev.buildCommand), then publish a disposable copy of it for shared dev.',
+            'wp-start-push-dev',
+            'Dev-deploy stage 1: 3-point merge this branch from origin/main, only if it is behind it.',
+        );
+    }
+
+    private buildPushDevUsage(): CliUsage {
+        return new CliUsage(
+            'wp-build-push-dev',
+            'Dev-deploy stage 2: merge origin/dev into a throwaway branch, pnpm install, run commands.push-dev.buildCommand, and record the copy to publish. Re-run it to continue after resolving a conflict.',
+            [new CliFlag(ABORT, 'Throw a conflict resolution in progress away.')],
+        );
+    }
+
+    private finishPushDevUsage(): CliUsage {
+        return new CliUsage(
+            'wp-finish-push-dev',
+            'Dev-deploy stage 3: publish the copy wp-build-push-dev verified as a disposable dev copy.',
             [
                 new CliFlag(LIST, 'List published dev copies.'),
                 new CliFlag(
@@ -377,22 +379,7 @@ export class PrGateCliApp {
                     "Delete this branch's dev copy, then push the <removeNamespace>/<branch> marker"
                         + ' (default dev-remove) that triggers the dev rebuild.',
                 ),
-                new CliFlag(
-                    RESOLVE,
-                    'Compose other published copies, optionally one named branch.',
-                    true,
-                ),
-                new CliFlag(REBASE_RESOLUTION, 'Replay an existing resolution onto new commits.'),
-                new CliFlag(FORCE, 'Discard the published resolution and overwrite it.'),
             ],
-        );
-    }
-
-    private finishPushDevUsage(): CliUsage {
-        return new CliUsage(
-            'wp-finish-push-dev',
-            'Commit a resolved dev merge, run the dev build when publishing, and publish the copy.',
-            [new CliFlag(ABORT, 'Throw the resolve away without publishing.')],
         );
     }
 

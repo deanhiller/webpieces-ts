@@ -127,20 +127,20 @@ describe('CliArgs with declared flags', () => {
 });
 
 /**
- * A value-taking flag: `wp-push-dev --resolve [<branch>]`. The value is OPTIONAL — bare means "every
- * other copy", with an argument means "just that one" — so the parser has to distinguish a following
- * BRANCH NAME from a following FLAG, and neither may be mistaken for an unknown token.
+ * A value-taking flag: `wp-example --resolve [<branch>]`. The value is OPTIONAL — the flag may be given
+ * bare or with an argument — so the parser has to distinguish a following BRANCH NAME from a following
+ * FLAG, and neither may be mistaken for an unknown token.
  */
-const valueUsage = new CliUsage('wp-push-dev', 'Publish a disposable dev copy.', [
-    new CliFlag('--resolve', 'Compose the other copies onto this one.', true),
-    new CliFlag('--force', 'Discard a published resolution.'),
+const valueUsage = new CliUsage('wp-example', 'An example command with a value-taking flag.', [
+    new CliFlag('--resolve', 'Optionally names one branch.', true),
+    new CliFlag('--force', 'A plain flag.'),
 ]);
 
 function parseArgv(...args: string[]): ReturnType<CliArgs['parse']> {
     const argv = process.argv;
     // webpieces-disable no-unmanaged-exceptions -- test fixture: argv is restored in the finally
     try {
-        process.argv = ['node', 'wp-push-dev', ...args];
+        process.argv = ['node', 'wp-example', ...args];
         return cliArgs.parse(valueUsage);
     } finally {
         process.argv = argv;

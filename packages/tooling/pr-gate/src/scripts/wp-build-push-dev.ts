@@ -10,5 +10,5 @@ runMain(
     (): Promise<void> =>
         container
             .get(PrGateCliApp)
-            .run(container.get(PrGateCliInvocationFactory).fromProcess('wp-push-dev')),
+            .run(container.get(PrGateCliInvocationFactory).fromProcess('wp-build-push-dev')),
 );

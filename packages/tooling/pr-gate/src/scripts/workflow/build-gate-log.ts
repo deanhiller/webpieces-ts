@@ -49,8 +49,8 @@ export const REVIEW_STAGE = 'review';
 export const FINISH_STAGE = 'finish';
 // `wp-build`, which is not a stage of the PR flow but runs the SAME gate (BuildAffected.runBuildGate).
 export const BUILD_STAGE = 'build';
-// `wp-build-dev` and the pre-publish build of `wp-push-dev` / `wp-finish-push-dev` (#1397): the SAME gate,
-// running `commands.push-dev.buildCommand` instead.
+// `wp-build-push-dev`'s build of the merge with dev (#1397, #1403): the SAME gate, running
+// `commands.push-dev.buildCommand` instead.
 export const DEV_BUILD_STAGE = 'build-dev';
 
 /** The fixed log names — see BuildGateLog.fileNameFor for why only the two ad-hoc builds get one. */
