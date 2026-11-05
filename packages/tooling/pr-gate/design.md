@@ -29,8 +29,8 @@ graph TD
     BuildAffected["BuildAffected"]
     BuildArtifactGate["BuildArtifactGate"]
     BuildCommand["BuildCommand"]
-    BuildDevCommand["BuildDevCommand"]
     BuildGateLog["BuildGateLog"]
+    BuildPushDevCommand["BuildPushDevCommand"]
     BuildsLog["BuildsLog"]
     CheckPrCommand["CheckPrCommand"]
     ChecklistCommentRenderer["ChecklistCommentRenderer"]
@@ -78,6 +78,7 @@ graph TD
     LandedTreeResolver["LandedTreeResolver"]
     LandedWorktreeReaper["LandedWorktreeReaper"]
     MainCheckout["MainCheckout"]
+    MainFreshness["MainFreshness"]
     MainSyncFileStore["MainSyncFileStore"]
     MainSyncStatusService["MainSyncStatusService"]
     MergeBodyTempFile["MergeBodyTempFile"]
@@ -97,7 +98,6 @@ graph TD
     PrGateApp["PrGateApp"]:::controller
     PrMerger["PrMerger"]
     ProvenanceEnforcer["ProvenanceEnforcer"]
-    PushDevCommand["PushDevCommand"]
     PushDevStateStore["PushDevStateStore"]
     ReapOutcomeSignal["ReapOutcomeSignal"]
     ReapWorktreeCommand["ReapWorktreeCommand"]
@@ -118,6 +118,7 @@ graph TD
     RunUpdate["RunUpdate"]
     SquashSettingsEnforcer["SquashSettingsEnforcer"]
     StageOutputLog["StageOutputLog"]
+    StartPushDevCommand["StartPushDevCommand"]
     StartUpdateCommand["StartUpdateCommand"]
     StartUpsertPrCommand["StartUpsertPrCommand"]
     StateDirMigrator["StateDirMigrator"]
@@ -127,6 +128,7 @@ graph TD
     TmpScratchSweeper["TmpScratchSweeper"]
     UpsertHotfixPrCommand["UpsertHotfixPrCommand"]
     VerdictProvenanceService["VerdictProvenanceService"]
+    VerifiedDevCopyStore["VerifiedDevCopyStore"]
     WorkingTreeGate["WorkingTreeGate"]
     WorktreeCleanupSection["WorktreeCleanupSection"]
     WorktreeLockVerdicts["WorktreeLockVerdicts"]
@@ -166,14 +168,21 @@ graph TD
     BuildCommand --> BuildsLog
     BuildCommand --> HomeConfigService
     BuildCommand --> RepoRootFinder
-    BuildDevCommand --> DevBuild
-    BuildDevCommand --> DevDeployRefs
-    BuildDevCommand --> GitExec
-    BuildDevCommand --> RepoRootFinder
     BuildGateLog --> GateLogFile
     BuildGateLog --> GitProcessApi
     BuildGateLog --> NativeProcessApi
     BuildGateLog --> StageOutputLog
+    BuildPushDevCommand --> AiBranchName
+    BuildPushDevCommand --> DevBuild
+    BuildPushDevCommand --> DevDeployRefs
+    BuildPushDevCommand --> DevResolveRunner
+    BuildPushDevCommand --> GitExec
+    BuildPushDevCommand --> MainFreshness
+    BuildPushDevCommand --> MergeEnd
+    BuildPushDevCommand --> MergeState
+    BuildPushDevCommand --> PushDevStateStore
+    BuildPushDevCommand --> RepoRootFinder
+    BuildPushDevCommand --> VerifiedDevCopyStore
     BuildsLog --> DotWebpieces
     CheckPrCommand --> GateTokenService
     CheckPrCommand --> NativeProcessApi
@@ -211,9 +220,10 @@ graph TD
     DevDeployRefs --> GitExec
     DevResolveRunner --> DevBuild
     DevResolveRunner --> DevDeployRefs
-    DevResolveRunner --> DevDeployWatchHints
     DevResolveRunner --> GitExec
+    DevResolveRunner --> NativeProcessApi
     DevResolveRunner --> PushDevStateStore
+    DevResolveRunner --> VerifiedDevCopyStore
     DiffBasisResolver --> ForkPoint
     DiffBasisResolver --> GitProcessApi
     DiffBasisResolver --> GitStatusParser
@@ -222,9 +232,12 @@ graph TD
     DiffScope --> GitProcessApi
     DotWebpieces --> GitCheckout
     DotWebpieces --> StateDirMigrator
-    FinishPushDevCommand --> DevResolveRunner
-    FinishPushDevCommand --> PushDevStateStore
+    FinishPushDevCommand --> DevCopyOnMain
+    FinishPushDevCommand --> DevDeployRefs
+    FinishPushDevCommand --> DevDeployWatchHints
+    FinishPushDevCommand --> GitExec
     FinishPushDevCommand --> RepoRootFinder
+    FinishPushDevCommand --> VerifiedDevCopyStore
     FinishUpdateCommand --> AiBranchName
     FinishUpdateCommand --> MergeEnd
     FinishUpdateCommand --> MergeState
@@ -307,6 +320,7 @@ graph TD
     LandedWorktreeReaper --> ReapOutcomeSignal
     LandedWorktreeReaper --> WorktreeService
     MainCheckout --> GitProcessApi
+    MainFreshness --> GitExec
     MainSyncFileStore --> AtomicFile
     MainSyncStatusService --> AtomicFile
     MainSyncStatusService --> CommandTimeouts
@@ -346,7 +360,7 @@ graph TD
     PrGateApp --> AwaitChecksCommand
     PrGateApp --> AwaitReviewsCommand
     PrGateApp --> BuildCommand
-    PrGateApp --> BuildDevCommand
+    PrGateApp --> BuildPushDevCommand
     PrGateApp --> CheckPrCommand
     PrGateApp --> CleanupCommand
     PrGateApp --> FinishPushDevCommand
@@ -354,11 +368,11 @@ graph TD
     PrGateApp --> FinishUpsertPrCommand
     PrGateApp --> HumanPostPrCommand
     PrGateApp --> LandPrCommand
-    PrGateApp --> PushDevCommand
     PrGateApp --> PushDevStateStore
     PrGateApp --> ReapWorktreeCommand
     PrGateApp --> RepoRootFinder
     PrGateApp --> ReviewUpsertPrCommand
+    PrGateApp --> StartPushDevCommand
     PrGateApp --> StartUpdateCommand
     PrGateApp --> StartUpsertPrCommand
     PrGateApp --> SyncMainCommand
@@ -373,14 +387,6 @@ graph TD
     ProvenanceEnforcer --> ReviewerInstructionsService
     ProvenanceEnforcer --> SubagentProvenanceService
     ProvenanceEnforcer --> VerdictProvenanceService
-    PushDevCommand --> DevBuild
-    PushDevCommand --> DevCopyOnMain
-    PushDevCommand --> DevDeployRefs
-    PushDevCommand --> DevDeployWatchHints
-    PushDevCommand --> DevResolveRunner
-    PushDevCommand --> GitExec
-    PushDevCommand --> PushDevStateStore
-    PushDevCommand --> RepoRootFinder
     PushDevStateStore --> DotWebpieces
     ReapWorktreeCommand --> ReapOutcomeSignal
     ReapWorktreeCommand --> RepoRootFinder
@@ -431,6 +437,14 @@ graph TD
     RunUpdate --> MergeState
     SquashSettingsEnforcer --> NativeProcessApi
     StageOutputLog --> GateLogFile
+    StartPushDevCommand --> AiBranchName
+    StartPushDevCommand --> DevDeployRefs
+    StartPushDevCommand --> HotfixRedirect
+    StartPushDevCommand --> MainFreshness
+    StartPushDevCommand --> MergeState
+    StartPushDevCommand --> OpenPrCheck
+    StartPushDevCommand --> RepoRootFinder
+    StartPushDevCommand --> RunUpdate
     StartUpdateCommand --> OpenPrCheck
     StartUpdateCommand --> RepoRootFinder
     StartUpdateCommand --> RunUpdate
@@ -466,6 +480,7 @@ graph TD
     UpsertHotfixPrCommand --> SquashSettingsEnforcer
     VerdictProvenanceService --> AtomicFile
     VerdictProvenanceService --> ReviewJsonService
+    VerifiedDevCopyStore --> DotWebpieces
     WorkingTreeGate --> GitProcessApi
     WorktreeCleanupSection --> BranchMutationLog
     WorktreeCleanupSection --> MergedBranchesService

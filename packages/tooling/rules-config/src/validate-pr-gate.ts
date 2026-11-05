@@ -152,7 +152,7 @@ export function validatePrGateSection(section: unknown, repoRoot?: string): stri
     // Optional: what happens to the LOCAL branch once its PR lands. Absent ⇒ "archive-tag".
     if ('landPr' in s) errors.push(...validateLandPrSection(s['landPr']));
 
-    // Optional: where wp-push-dev publishes the disposable copy. Absent ⇒ "dev-include" / "dev".
+    // Optional: where wp-finish-push-dev publishes the disposable copy. Absent ⇒ "dev-include" / "dev".
     if ('devDeploy' in s) errors.push(...validateDevDeploySection(s['devDeploy']));
 
     errors.push(...validateNoGateSaltRationale(s));

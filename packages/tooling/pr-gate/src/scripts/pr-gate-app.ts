@@ -12,12 +12,12 @@ import { CheckPrCommand } from './commands/check-pr-command';
 import { ReviewUpsertPrCommand } from './commands/review-upsert-pr-command';
 import { ReapWorktreeCommand } from './commands/reap-worktree-command';
 import { BuildCommand, BuildOptions } from './commands/build-command';
-import { BuildDevCommand } from './commands/build-dev-command';
 import { AwaitReviewsCommand } from './commands/await-reviews-command';
 import { ReviewBudgetCheckOptions, WriteReviewCommand, WriteReviewOptions } from './commands/write-review-command';
 import { WriteReviewFixesCommand, WriteReviewFixesOptions } from './commands/write-review-fixes-command';
 import { AwaitChecksCommand, AwaitChecksOptions } from './commands/await-checks-command';
-import { PushDevCommand, PushDevOptions } from './commands/push-dev-command';
+import { StartPushDevCommand } from './commands/start-push-dev-command';
+import { BuildPushDevCommand, BuildPushDevOptions } from './commands/build-push-dev-command';
 import { FinishPushDevCommand, FinishPushDevOptions } from './commands/finish-push-dev-command';
 import { HumanPostPrCommand } from './commands/human-post-pr-command';
 import { UpsertHotfixPrCommand } from './commands/upsert-hotfix-pr-command';
@@ -45,12 +45,12 @@ export class PrGateApp {
         private readonly reviewUpsertPrCommand: ReviewUpsertPrCommand,
         private readonly reapWorktreeCommand: ReapWorktreeCommand,
         private readonly buildCommand: BuildCommand,
-        private readonly buildDevCommand: BuildDevCommand,
         private readonly awaitReviewsCommand: AwaitReviewsCommand,
         private readonly writeReviewCommand: WriteReviewCommand,
         private readonly writeReviewFixesCommand: WriteReviewFixesCommand,
         private readonly awaitChecksCommand: AwaitChecksCommand,
-        private readonly pushDevCommand: PushDevCommand,
+        private readonly startPushDevCommand: StartPushDevCommand,
+        private readonly buildPushDevCommand: BuildPushDevCommand,
         private readonly finishPushDevCommand: FinishPushDevCommand,
         private readonly humanPostPrCommand: HumanPostPrCommand,
         private readonly upsertHotfixPrCommand: UpsertHotfixPrCommand,
@@ -59,7 +59,7 @@ export class PrGateApp {
     ) {}
 
     /**
-     * Refuse `command` while a `wp-push-dev --resolve` is half-finished.
+     * Refuse `command` while a `wp-build-push-dev` conflict resolution is half-finished.
      *
      * Enforced HERE, at the one place every bin funnels through, rather than in each command: a resolve
      * parks the checkout on a throwaway branch, so every command below would act on a branch that is not
@@ -74,13 +74,24 @@ export class PrGateApp {
         );
     }
 
-    /** `wp-push-dev`: check this branch against dev, build it, and publish a DISPOSABLE copy of it. No PR. */
-    pushDev(opts: PushDevOptions = new PushDevOptions()): Promise<void> {
-        return this.pushDevCommand.run(opts);
+    /** `wp-start-push-dev`: dev-deploy stage ① — 3-point merge from main, ONLY if the branch is behind it. */
+    startPushDev(): Promise<void> {
+        this.assertNoResolveInProgress('wp-start-push-dev');
+        return this.startPushDevCommand.run();
     }
 
-    /** `wp-finish-push-dev`: commit a resolved dev composition and publish it (conflict path only). */
+    /**
+     * `wp-build-push-dev`: dev-deploy stage ② — check the branch against dev on a throwaway merge,
+     * `pnpm install`, run the dev build, record the copy. NOT blocked during a resolve: re-running it is
+     * how a resolve continues, and `--abort` is how it ends.
+     */
+    buildPushDev(opts: BuildPushDevOptions = new BuildPushDevOptions()): Promise<void> {
+        return this.buildPushDevCommand.run(opts);
+    }
+
+    /** `wp-finish-push-dev`: dev-deploy stage ③ — publish the verified DISPOSABLE copy; `--list`, `--remove`. No PR. */
     finishPushDev(opts: FinishPushDevOptions = new FinishPushDevOptions()): Promise<void> {
+        this.assertNoResolveInProgress('wp-finish-push-dev');
         return this.finishPushDevCommand.run(opts);
     }
 
@@ -96,25 +107,15 @@ export class PrGateApp {
     /**
      * `wp-build`: run this repo's ONE configured build (`commands.pr-gate.buildCommand`) — the same
      * command, resolved by the same resolver, that the PR gate's build stage runs. Not blocked during a
-     * `wp-push-dev --resolve`: it mutates nothing and reads no branch state.
+     * dev-deploy resolve: it mutates nothing and reads no branch state.
      */
     build(opts: BuildOptions): Promise<void> {
         return this.buildCommand.run(opts);
     }
 
     /**
-     * `wp-build-dev`: merge `origin/<devBranch>` into a throwaway, run `commands.push-dev.buildCommand` on
-     * it, and go back — the check `wp-push-dev` runs before publishing, without the publish (#1397).
-     * Blocked during a resolve: it parks the checkout on a throwaway of its own.
-     */
-    buildDev(): Promise<void> {
-        this.assertNoResolveInProgress('wp-build-dev');
-        return this.buildDevCommand.run();
-    }
-
-    /**
      * `wp-await-reviews`: BLOCK until every reviewer verdict this branch owes has landed, then print
-     * them. Not blocked during a `wp-push-dev --resolve`: it reads verdict files and mutates nothing.
+     * them. Not blocked during a dev-deploy resolve: it reads verdict files and mutates nothing.
      */
     awaitReviews(): Promise<void> {
         return this.awaitReviewsCommand.run();
@@ -122,7 +123,7 @@ export class PrGateApp {
 
     /**
      * `wp-write-review`: a reviewer subagent submits ONE checklist verdict, with provenance (issue #863).
-     * Not blocked during a `wp-push-dev --resolve`: it writes only this branch's review state.
+     * Not blocked during a dev-deploy resolve: it writes only this branch's review state.
      */
     writeReview(opts: WriteReviewOptions): Promise<void> {
         return this.writeReviewCommand.run(opts);

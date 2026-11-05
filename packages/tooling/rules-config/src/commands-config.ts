@@ -13,11 +13,11 @@ export const DEFAULT_UPSERT_PR_COMMAND = 'pnpm wp-start-upsert-pr';
 export const DEFAULT_MERGE_COMPLETE_COMMAND = 'pnpm wp-finish-upsert-pr';
 
 /**
- * `commands.push-dev` — what `wp-push-dev` and `wp-build-dev` run before a dev copy is published (#1397).
+ * `commands.push-dev` — what `wp-build-push-dev` runs before `wp-finish-push-dev` publishes a dev copy (#1397, #1403).
  *
  * `buildCommand` has NO default, deliberately (`.claude/rules/no-rule-defaults.md`): which build vouches
  * for a dev publish is the consumer's decision, and a default would run a build nobody chose. Absent ⇒
- * `undefined`, and the two commands that need it refuse, naming the key and printing the entry to paste.
+ * `undefined`, and the command that needs it refuses, naming the key and printing the entry to paste.
  * The section itself is optional at LOAD time because a repo that never publishes to a shared dev server
  * has nothing to configure here.
  */

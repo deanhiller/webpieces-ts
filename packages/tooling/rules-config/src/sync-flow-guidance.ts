@@ -12,11 +12,13 @@ export const WP_FINISH_UPDATE = 'pnpm wp-finish-update';
 export const WP_START_UPSERT_PR = 'pnpm wp-start-upsert-pr';
 export const WP_FINISH_UPSERT_PR = 'pnpm wp-finish-upsert-pr';
 
-// The dev-deploy pair. NOT a way to land anything — it publishes a DISPOSABLE copy of the branch so a
-// shared dev environment can build it, and never touches the feature branch or any PR.
-export const WP_PUSH_DEV = 'pnpm wp-push-dev';
+// The dev-deploy trio (#1403), staged like the upsert-pr flow. NOT a way to land anything — it publishes a
+// DISPOSABLE copy of the branch so a shared dev environment can build it, and never opens a PR. Stage ①
+// brings the branch up to date with main (the same 3-point merge as the other two flows); ② checks the
+// branch against origin/dev on a throwaway merge and builds it; ③ publishes the copy ② verified.
+export const WP_START_PUSH_DEV = 'pnpm wp-start-push-dev';
+export const WP_BUILD_PUSH_DEV = 'pnpm wp-build-push-dev';
 export const WP_FINISH_PUSH_DEV = 'pnpm wp-finish-push-dev';
-export const WP_BUILD_DEV = 'pnpm wp-build-dev';
 
 /**
  * Renders the canonical guidance blocks. Methods return string[] (not a joined string) so callers can
@@ -73,13 +75,14 @@ export class SyncFlowGuidance {
     devDeployFlow(): string[] {
         return [
             '  C. You just want it on the SHARED DEV SERVER — no PR, not landing on main:',
-            `     1. ${WP_PUSH_DEV}            ← check the copy against origin/dev on a throwaway merge,`,
-            '                                     run commands.push-dev.buildCommand, then publish it',
-            '     2. resolve conflicts in the files it lists (ONLY if it reported any)',
-            `     3. ${WP_FINISH_PUSH_DEV}     ← finalize: build, then publish (ONLY on the conflict path)`,
-            `     (${WP_BUILD_DEV} runs the same dev check and build WITHOUT publishing.)`,
-            '     Your feature branch is NEVER moved and never acquires another dev\'s commits — that is',
-            '     the whole reason the copy exists.',
+            `     1. ${WP_START_PUSH_DEV}     ← 3-point merge from main, ONLY if the branch is behind it`,
+            '        /wp-merge                 ← resolve main conflicts (ONLY if step 1 reported any)',
+            `     2. ${WP_BUILD_PUSH_DEV}     ← merge origin/dev into a throwaway, pnpm install, then`,
+            '                                     run commands.push-dev.buildCommand on it',
+            '        resolve dev conflicts in the files it lists, then re-run it (ONLY if it reported any)',
+            `     3. ${WP_FINISH_PUSH_DEV}    ← publish the copy step 2 verified`,
+            '     Your branch never acquires another dev\'s commits — the dev merge happens on a throwaway,',
+            '     which is the whole reason the copy exists.',
         ];
     }
 

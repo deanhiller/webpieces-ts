@@ -77,10 +77,10 @@ put reusable config instructions in this guide's source template. Generated file
 
 ## The dev-deploy build: `commands.push-dev.buildCommand`
 
-`wp-push-dev` merges `origin/dev` into a throwaway branch and runs this command on the merged tree before
-it publishes a dev copy; `wp-build-dev` runs the same check without publishing. It has NO default — which
+`wp-build-push-dev` merges `origin/dev` into a throwaway branch, runs `pnpm install`, and runs this command
+on the merged tree; `wp-finish-push-dev` publishes only the copy it verified. It has NO default — which
 build vouches for a dev publish is this repo's decision. The section is optional (a repo that never
-publishes to a shared dev server needs none), but those two commands refuse without it, and a present
+publishes to a shared dev server needs none), but `wp-build-push-dev` refuses without it, and a present
 `push-dev` section must carry a non-empty `buildCommand`:
 
 ```json

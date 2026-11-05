@@ -101,7 +101,7 @@ export const DEFAULT_DEV_BRANCH = 'dev';
 export const DEFAULT_DEV_REMOVE_NAMESPACE = 'dev-remove';
 
 /**
- * `pr-gate.devDeploy` — where `wp-push-dev` publishes the throwaway copy of a feature branch, and which
+ * `pr-gate.devDeploy` — where `wp-finish-push-dev` publishes the throwaway copy of a feature branch, and which
  * ref is the shared dev branch itself.
  *
  * WHY A NAMESPACE AT ALL, i.e. why the copy is not just the feature branch: the feature branch is the PR
@@ -113,7 +113,7 @@ export const DEFAULT_DEV_REMOVE_NAMESPACE = 'dev-remove';
  * `devBranch` is REFUSED as a source branch (you never push the composed branch back into itself); it is
  * written by the consumer's CI only, which recomputes it from `origin/main` on every run.
  *
- * `removeNamespace` holds the `--remove` MARKER (#1395): `wp-push-dev --remove` deletes the copy AND
+ * `removeNamespace` holds the `--remove` MARKER (#1395): `wp-finish-push-dev --remove` deletes the copy AND
  * pushes `<removeNamespace>/<feature>` at the `origin/main` tip. A deletion alone can only be heard by a
  * workflow's `on: delete:`, which GitHub cannot filter by branch, so every branch deletion in the repo
  * started a dev-deploy run; a PUSH to the marker is filterable (`on: push: branches: ['dev-remove/**']`).
@@ -266,7 +266,7 @@ export class PrGateConfig {
      */
     requireDiffEvidence = false;
     /**
-     * Where `wp-push-dev` publishes the disposable copy. Omitted ⇒ `dev-include` / `dev` / `dev-remove`, which is what
+     * Where `wp-finish-push-dev` publishes the disposable copy. Omitted ⇒ `dev-include` / `dev` / `dev-remove`, which is what
      * makes the whole flow work with NO config edit at all.
      */
     devDeploy: DevDeployConfig = defaultDevDeployConfig();

@@ -99,9 +99,9 @@ describe('PrGateCliApp — published command boundary', () => {
         },
     );
 
-    it('routes wp-build-dev to PrGateApp.buildDev, with no flags', async (): Promise<void> => {
-        const call = vi.spyOn(PrGateApp.prototype, 'buildDev').mockResolvedValue(undefined);
-        const result = await driver.run('wp-build-dev');
+    it('routes wp-start-push-dev to PrGateApp.startPushDev, with no flags', async (): Promise<void> => {
+        const call = vi.spyOn(PrGateApp.prototype, 'startPushDev').mockResolvedValue(undefined);
+        const result = await driver.run('wp-start-push-dev');
         expect(call).toHaveBeenCalledOnce();
         expect(result.exit.code).toBeNull();
     });
@@ -148,30 +148,28 @@ describe('PrGateCliApp — published command boundary', () => {
         expect(call.mock.calls[0][0].prNumber).toBe('123');
     });
 
-    it('parses every wp-push-dev flag', async (): Promise<void> => {
-        const call = vi.spyOn(PrGateApp.prototype, 'pushDev').mockResolvedValue(undefined);
-        await driver.run('wp-push-dev', [
-            '--list',
-            '--remove',
-            '--force',
-            '--rebase-resolution',
-            '--resolve',
-            'dean/x',
-        ]);
-        expect(call.mock.calls[0][0]).toMatchObject({
-            list: true,
-            remove: true,
-            force: true,
-            rebaseResolution: true,
-            resolve: true,
-            resolveTarget: 'dean/x',
-        });
+    it('parses every wp-finish-push-dev flag', async (): Promise<void> => {
+        const call = vi.spyOn(PrGateApp.prototype, 'finishPushDev').mockResolvedValue(undefined);
+        await driver.run('wp-finish-push-dev', ['--list', '--remove']);
+        expect(call.mock.calls[0][0]).toMatchObject({ list: true, remove: true });
     });
 
-    it('parses wp-finish-push-dev --abort', async (): Promise<void> => {
+    it('parses wp-build-push-dev --abort', async (): Promise<void> => {
+        const call = vi.spyOn(PrGateApp.prototype, 'buildPushDev').mockResolvedValue(undefined);
+        await driver.run('wp-build-push-dev', ['--abort']);
+        expect(call.mock.calls[0][0]?.abort).toBe(true);
+    });
+
+    it('rejects the flags the old single-command publish had, rather than ignoring them', async (): Promise<void> => {
         const call = vi.spyOn(PrGateApp.prototype, 'finishPushDev').mockResolvedValue(undefined);
-        await driver.run('wp-finish-push-dev', ['--abort']);
-        expect(call.mock.calls[0][0].abort).toBe(true);
+        const result = await driver.run('wp-finish-push-dev', ['--resolve']);
+        expect(call).not.toHaveBeenCalled();
+        expect(result.exit.code).toBe(2);
+    });
+
+    it('no longer knows the deleted wp-push-dev / wp-build-dev bins', async (): Promise<void> => {
+        expect((await driver.run('wp-push-dev')).stderr.bytes).toContain('Unknown PR-gate command: wp-push-dev');
+        expect((await driver.run('wp-build-dev')).stderr.bytes).toContain('Unknown PR-gate command: wp-build-dev');
     });
 
     it('parses wp-await-checks --pr', async (): Promise<void> => {

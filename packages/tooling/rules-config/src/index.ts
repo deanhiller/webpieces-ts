@@ -226,9 +226,9 @@ export {
     WP_FINISH_UPDATE,
     WP_START_UPSERT_PR,
     WP_FINISH_UPSERT_PR,
-    WP_PUSH_DEV,
+    WP_START_PUSH_DEV,
+    WP_BUILD_PUSH_DEV,
     WP_FINISH_PUSH_DEV,
-    WP_BUILD_DEV,
 } from './sync-flow-guidance';
 
 // Mode unions + their value arrays — the single source of truth shared with code-rules.

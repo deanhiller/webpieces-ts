@@ -45,7 +45,7 @@ destination; the loader hands the resolved strings to the two rules at construct
 
 - **upsert-pr**: `wp-start-upsert-pr` ① → `wp-review-upsert-pr` ② → `wp-finish-upsert-pr` ③
 - **update**: `wp-start-update` ① → `wp-finish-update` ② (② only needed on conflict)
-- **dev-deploy**: `wp-push-dev` ① → `wp-finish-push-dev` ② (② only needed on conflict); `wp-build-dev` is ①'s check and build without the publish
+- **dev-deploy**: `wp-start-push-dev` ① → `wp-build-push-dev` ② → `wp-finish-push-dev` ③ (#1403) — ① is the 3-point merge from main, only when behind; ② checks against dev on a throwaway, `pnpm install`, builds, and records the copy (re-run it after resolving a dev conflict); ③ publishes only what ② recorded
 - **human post**: interactive `wp-human-post-pr` (human attestation, clean/current branch + summary,
   optional local `pnpm wp-build` with live `build.log` output or explicit deferral to cloud CI,
   visible automated-gate bypass, post only; never an AI cure and never an automatic merge)
@@ -64,14 +64,15 @@ rewritten to prevent.
 
 Two consequences worth stating, because they look like omissions:
 
-- **No build gate, deliberately.** The consumer's CI builds the *composed* tree (main + every published
-  copy). A local build here would prove the branch compiles against `main` alone, which is not the
-  question the shared environment is asking.
-- **It does NOT invalidate an upsert-pr receipt.** It never touches the feature branch or the PR head,
-  so nothing the receipt attests to has changed. (Contrast the known gap below: it is switching between
+- **Its build is not the PR gate's build.** Stage ② builds the branch MERGED with `origin/dev`
+  (`commands.push-dev.buildCommand`), because that is the question the shared environment asks; the PR
+  gate's build proves the branch against `main` alone.
+- **Only stage ① touches the feature branch**, and only as the ordinary 3-point merge from main the other
+  two flows run. The dev merge and its resolution live on a throwaway and on the copy, never on the PR head. (Contrast the known gap below: it is switching between
   the *other two* flows that silently loses verification, because both rewrite the branch.)
 
-The state file is `.webpieces/push-dev-in-progress.json` (LOCAL scope). It is deliberately NOT under
+The conflict state file is `.webpieces/push-dev-in-progress.json` (LOCAL scope); stage ②'s verified copy is
+recorded in `.webpieces/push-dev-verified.json` beside it. It is deliberately NOT under
 `merge-info/`, so `merge-in-progress-guard`'s marker scan does not pick it up and send the AI at
 `wp-finish-upsert-pr` — the wrong command, which would strand the throwaway branch. `PushDevStateStore`
 does the blocking for it, and — per the lesson below — renders its hint from the blocked list.
@@ -92,15 +93,12 @@ writing exactly the files L2 would otherwise call stale. L4 owns that state; L2 
   through that gap: it tells the AI to re-run ① then ③, skipping ②, so the re-squashed merge is never
   validated and the reviewers' verdicts describe a pre-re-sync tree — yet a PR is still produced.
 - **Only stage ① ever fetches `origin/main`.** ② and ③ never do; that is the freshness window the BEHIND
-  verdict falls into. (The dev-deploy flow does not repeat this: `wp-finish-push-dev` refetches the
-  remaining queue before resuming, because a long resolution session would otherwise rehearse a
-  composition CI is not going to build.)
+  verdict falls into. (The dev-deploy flow does not repeat this: `wp-build-push-dev` re-fetches `origin/main` and
+  refuses a branch that is behind it.)
 - **The two flows share no state.** The update flow writes no receipt, so switching flows mid-branch
   silently loses the verification the upsert-pr flow depends on.
 - `git-validateUpToDate.ts` is a fully-written "behind → exit 1" hard gate with **zero call sites** —
-  dead code and an attractive nuisance. Wire it in deliberately or delete it. It was considered and
-  deliberately NOT wired into dev-deploy: staleness is structurally impossible there, since CI rebuilds
-  the dev branch from `origin/main` on every run.
+  dead code and an attractive nuisance. Wire it in deliberately or delete it. Dev-deploy does not use it either: its staleness check is `MainFreshness` (#1403).
 
 ## Code anchors
 
@@ -110,7 +108,7 @@ writing exactly the files L2 would otherwise call stale. L4 owns that state; L2 
 | push/PR-create block | `ai-hook-rules/src/core/rules/pr-creation-or-push-guard.ts` | — |
 | PR merge block | `ai-hook-rules/src/core/rules/pr-merge-guard.ts` | — |
 | unvalidated-merge block | `ai-hook-rules/src/core/rules/merge-in-progress-guard.ts` | `blockedCommandList` |
-| dev-deploy commands | `pr-gate/src/scripts/commands/{push-dev,finish-push-dev}-command.ts` | — |
+| dev-deploy commands | `pr-gate/src/scripts/commands/{start,build,finish}-push-dev-command.ts` | — |
 | dev-deploy refs + invariant | `pr-gate/src/scripts/workflow/dev-deploy-refs.ts` | `assertPushable` |
-| dev-deploy resolve machine | `pr-gate/src/scripts/workflow/dev-resolve-runner.ts` | `drain` |
+| dev-deploy resolve machine | `pr-gate/src/scripts/workflow/dev-resolve-runner.ts` | `start` / `resume` |
 | dev-deploy block list | `pr-gate/src/scripts/workflow/push-dev-state.ts` | `BLOCKED_DURING_RESOLVE` |

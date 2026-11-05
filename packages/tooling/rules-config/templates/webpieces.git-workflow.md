@@ -189,11 +189,11 @@ There are **two destinations**, and they are opposites. Answer this first:
 | You want… | Use | It touches |
 |---|---|---|
 | the change **landed on `main`** (prod-quality, reviewed) | the PR flow below | your branch, a PR, eventually `main` |
-| the change **running on the shared dev server**, no PR | `pnpm wp-push-dev` | a disposable copy, and nothing else |
+| the change **running on the shared dev server**, no PR | `pnpm wp-start-push-dev` → `wp-build-push-dev` → `wp-finish-push-dev` | your branch (brought up to date with main), then a disposable copy |
 
 **Do NOT open a PR to `main` just to test something in a shared dev environment.** That is the single
 most expensive mistake available here: it ships unreviewed work toward production to answer a question
-the dev environment exists to answer. `pnpm wp-push-dev` is the answer to "get my branch onto dev", and
+the dev environment exists to answer. That three-stage flow is the answer to "get my branch onto dev", and
 the push guard's block message will say so when your `git push` targets the dev refs.
 
 See "Publishing to the shared dev server" below. Everything from here to that section is the **main**
@@ -303,40 +303,59 @@ snapshots are never loaded as active summaries; a new PR requires its own author
    The numbers in a `--delete-*` flag are the numbers printed on the SAME run — wp-cleanup renumbers
    from a fresh scan every time, and a number past the end of the block stops the run rather than
    deleting the wrong ref. An explicit flag always beats the terminal sniff.
-8. **`pnpm wp-push-dev`** — check this branch against `origin/dev`, build it, then publish a **disposable
-   copy** of it so a shared dev environment can build it. No PR, and your feature branch is never moved.
-   See below.
-9. **`pnpm wp-finish-push-dev`** — finish after you resolved the conflicts `wp-push-dev` stopped on. Only
-   needed on the conflict path; a clean run finalizes itself.
-10. **`pnpm wp-build-dev`** — the same check against `origin/dev` and the same build, WITHOUT publishing.
+8. **`pnpm wp-start-push-dev`** — stage ① of publishing to the shared dev server: bring this branch up to
+   date with `origin/main` (the same 3-point merge as `wp-start-update`), ONLY if it is behind. No PR is
+   opened. See below.
+9. **`pnpm wp-build-push-dev`** — stage ②: check this branch against `origin/dev` on a throwaway merge,
+   `pnpm install`, and run `commands.push-dev.buildCommand`. Publishes nothing.
+10. **`pnpm wp-finish-push-dev`** — stage ③: publish the copy stage ② verified as `dev-include/<branch>`.
+    Also `--list` (what is in the pool) and `--remove` (the rollback).
 
 ## Publishing to the shared dev server (no PR, nothing lands on main)
 
-Some repos deploy a shared `dev` branch that is a **build artifact, not a source of truth**: CI resets it
-to `origin/main`, merges every published copy, builds the composed tree, and force-pushes — every run.
-Nobody ever checks it out, so the wipe is a non-event, and it can never be stale.
+Some repos deploy a shared `dev` branch that is a **build artifact, not a source of truth**: CI composes
+it from `origin/main` plus every published copy and deploys it. Nobody ever checks it out.
+
+Publishing is three stages, the same shape as the PR flow:
 
 ```bash
-pnpm wp-push-dev            # check against origin/dev, build, publish this branch as dev-include/<your-branch>
-pnpm wp-build-dev           # the same check and build, publishing nothing
-pnpm wp-push-dev --list     # what is currently in the pool
-pnpm wp-push-dev --remove   # take your branch back out (this is the rollback)
+pnpm wp-start-push-dev     # ① 3-point merge from origin/main — ONLY if your branch is behind it
+                           #   conflict → resolve with /wp-merge, then go on to ②
+pnpm wp-build-push-dev     # ② merge origin/dev into a throwaway, pnpm install, run the dev build
+                           #   conflict → resolve on the throwaway, `git add`, re-run ②
+pnpm wp-finish-push-dev    # ③ publish the copy ② verified as dev-include/<your-branch>
+
+pnpm wp-finish-push-dev --list     # what is currently in the pool
+pnpm wp-finish-push-dev --remove   # take your branch back out (this is the rollback)
 ```
 
 `--remove` is for rolling back a copy that broke dev. When you are done testing, or after your PR lands,
 leave the copy alone: the business-day reset removes it. Re-publishing replaces your own copy, so you
 don't need to remove it first.
 
-**What `wp-push-dev` does before it publishes.** It fetches `origin/dev`, merges it into a THROWAWAY
-branch (`<your-branch>DevResolve`, never your branch), and runs `commands.push-dev.buildCommand` on the
-merged tree. Only when the merge is clean (or you resolved it) and that build is green does it publish.
+**① Why every copy starts from the latest main.** A branch forked from an old main builds against a
+`node_modules` that is missing whatever main added since, and dev already contains it — so the dev build
+fails for reasons that have nothing to do with your change. `wp-start-push-dev` runs the SAME 3-point
+merge as `wp-start-update` / `wp-start-upsert-pr`, and does nothing when the branch already contains
+`origin/main`. It REWRITES your branch (that is expected). With no open PR it pushes the rewrite to
+`origin/<your-branch>` like `wp-start-update`; with an open PR it keeps it local like
+`wp-start-upsert-pr`, and the PR is updated by your next `wp-start-upsert-pr` → `wp-finish-upsert-pr`. A
+conflict is resolved with `/wp-merge` on your own branch; `wp-build-push-dev` then validates and
+finalizes that merge before anything else. `wp-build-push-dev` refuses a branch that is still behind
+`origin/main`, naming `wp-start-push-dev`.
+
+**② What `wp-build-push-dev` checks.** It fetches `origin/dev`, merges it into a THROWAWAY branch
+(`<your-branch>DevResolve`, never your branch), runs `pnpm install` — other copies on dev can add
+workspace packages main does not have yet — and runs `commands.push-dev.buildCommand` on the merged tree.
 So a conflict or a broken build is found on your machine, in a minute, instead of after the shared
 composition fails. The build output goes to a log file; read the `FullLog :` path it prints rather than
-re-running it.
+re-running it. When it is green it records the copy it verified and puts you back on your branch.
 
-**What it publishes is never that merge.** The copy is your branch exactly as it is, plus — only when
+**What ③ publishes is never that merge.** The copy is your branch exactly as it is, plus — only when
 something conflicted — ONE commit holding the files you resolved. A copy that contained `dev` would carry
 every other copy's history, and a later `--remove` of one of them would leave it on dev through yours.
+`wp-finish-push-dev` refuses when your branch moved after ② verified it (re-run ②), and force-pushes the
+copy (leased against the sha ② saw), so the push event carries the previous copy's sha.
 
 **`commands.push-dev.buildCommand` has no default.** Configure the dev-scoped build in
 `webpieces.config.json` (it should build only what differs from `origin/dev`, so it stays fast):
@@ -345,8 +364,9 @@ every other copy's history, and a later `--remove` of one of them would leave it
 "commands": { "push-dev": { "buildCommand": "pnpm nx affected --target=ci --base=origin/dev --head=HEAD" } }
 ```
 
-Without it, `wp-push-dev` and `wp-build-dev` refuse before touching anything and print that entry. When
-`origin/dev` does not exist yet (the very first composition), `wp-push-dev` publishes unchecked.
+Without it, `wp-build-push-dev` refuses before touching anything and prints that entry. When `origin/dev`
+does not exist yet (the very first composition), ② has nothing to check against and verifies the branch
+as it is.
 
 `--remove` deletes `dev-include/<your-branch>` **and then** pushes a content-free marker
 `dev-remove/<your-branch>` at the `origin/main` tip. The marker push is the rebuild signal: a deletion
@@ -373,25 +393,26 @@ on:
   # no `delete:` trigger — it cannot be filtered by branch, so every deletion in the repo would start a run
 ```
 
-On a `dev-remove/**` push the workflow deletes that marker ref, then runs the ordinary rebuild: reset
-`dev` to `origin/main`, merge every remaining `dev-include/*` copy, build, force-push. A workflow still
-listening on `on: delete:` keeps working too, because `--remove` still deletes the copy — add the
-`dev-remove/**` trigger first, upgrade webpieces, then drop `delete:`.
+On a `dev-remove/**` push the workflow deletes that marker ref and takes the copy back out of `dev`. A
+workflow still listening on `on: delete:` keeps working too, because `--remove` still deletes the copy —
+add the `dev-remove/**` trigger first, upgrade webpieces, then drop `delete:`. Because ① rewrites the
+branch, a re-published copy is usually a rewrite of the previous one; the push event's `before` sha is
+that previous copy, which is what a workflow needs to apply only the difference.
 
 **The cardinal rule, and the reason a COPY exists at all:** your feature branch is the PR head, so it
 must **never** acquire another developer's commits — landing that PR would ship their unreviewed work to
-production. Conflict resolutions therefore live on the throwaway copy, never on your branch. After any
-command here, `git log <your-branch>` shows it did not move.
+production. The dev merge and any resolution of it therefore happen on the throwaway, never on your
+branch. (① merges `origin/main` into your branch, which is exactly what the PR flow does anyway.)
 
 ### Is it deployed yet? — two questions, in this order
 
-`wp-push-dev` prints both, **fully substituted with your sha and refs**, so you can paste them straight
+`wp-finish-push-dev` prints both, **fully substituted with your sha and refs**, so you can paste them straight
 in. Nothing here is blocked: they are read-only git queries plus `gh run list|watch|view`.
 
 1. **Did YOUR code land in the composed branch?** Pure git, works whatever the CI is:
    ```bash
    git fetch origin dev
-   git merge-base --is-ancestor <the sha wp-push-dev printed> origin/dev && echo IN || echo "not yet"
+   git merge-base --is-ancestor <the sha wp-finish-push-dev printed> origin/dev && echo IN || echo "not yet"
    ```
    `dev` is rebuilt from `origin/main` plus every copy on each run, so **ancestry is inclusion**. If it
    says "not yet", the composition simply has not run since you published — re-check, do not re-push.
@@ -409,48 +430,24 @@ in. Nothing here is blocked: they are read-only git queries plus `gh run list|wa
 composition may have excluded yours. Question 1 is the one that answers for *your* code; question 2 only
 tells you the machinery finished. Answer them in that order, and report both.
 
-### When `wp-push-dev` stops on a conflict
+### When `wp-build-push-dev` stops on a conflict with dev
 
 It stops on the THROWAWAY branch and lists the files. Resolve them, `git add` each one, then:
 
 ```bash
-pnpm wp-finish-push-dev                    # commits, runs the dev build, publishes
-pnpm wp-finish-push-dev --abort            # or throw it all away
+pnpm wp-build-push-dev                     # commits the resolution, pnpm install, runs the dev build
+pnpm wp-build-push-dev --abort             # or throw it all away
 ```
-
-### When two branches conflict in the composition
-
-CI will name the branch you conflict with. Compose locally, so what you resolve is what CI will build:
-
-```bash
-pnpm wp-push-dev --resolve                 # merge every OTHER copy, in CI's order
-pnpm wp-push-dev --resolve <their-branch>  # or just the one CI named
-# clean  → nothing to publish: CI already composes your copy as it is
-# CONFLICT → it stops on a THROWAWAY branch and lists the files
-#   resolve them, `git add` each one, then:
-pnpm wp-finish-push-dev                    # commits, resumes the queue, publishes
-pnpm wp-finish-push-dev --abort            # or throw it all away
-```
-
-Either way, what is published is your copy plus ONE commit holding the resolved files — never a merge of
-the other copies.
 
 While a resolve is half-finished the other `wp-*` commands refuse (you are parked on a throwaway branch,
 not your feature branch). The block message lists exactly which ones and how to get out.
 
 **Do not run `git merge --continue`, `git commit` or `git push` yourself** — they are blocked, and
-`wp-finish-push-dev` does all three. Your only job is editing the conflicted files and `git add`-ing
-them; neither is blocked.
+`wp-build-push-dev` / `wp-finish-push-dev` do them for you. Your only job is editing the conflicted files
+and `git add`-ing them; neither is blocked.
 
-### If your copy already holds a resolution
-
-`wp-push-dev` **refuses** rather than force-pushing over commits the copy has and your branch does not —
-that is somebody's real work, and it exists only there, by design. (A resolution commit `wp-push-dev`
-recorded itself is the exception: the next publish re-checks against dev and records it again, so it is
-replaced without asking.) Two ways forward:
-
-- `pnpm wp-push-dev --rebase-resolution` — replay it on top of your new commits (keeps the work)
-- `pnpm wp-push-dev --force` — discard it (somebody re-resolves the composition afterwards)
+Conflicts between two developers' published copies are not resolved here: ② merges `origin/dev`, which
+already holds the other copies, so what you resolve is what the composition will meet.
 
 ## Worktrees (works the same as a primary clone)
 

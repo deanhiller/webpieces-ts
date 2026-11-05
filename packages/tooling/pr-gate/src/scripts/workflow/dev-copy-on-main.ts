@@ -40,7 +40,7 @@ export class MergedPr {
 const PR_LINE = /^(\d+) (\S+)$/;
 
 /**
- * Answers "is this dev copy already on `origin/main`?" for `wp-push-dev --remove` (#1401).
+ * Answers "is this dev copy already on `origin/main`?" for `wp-finish-push-dev --remove` (#1401).
  *
  * WHY: developers ran `--remove` after their PR landed, as a "done, clean up" habit. On a repo that composes
  * `dev` = `origin/main` + every copy, that remove takes nothing off dev (main keeps the change there) and
