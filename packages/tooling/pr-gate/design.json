@@ -286,7 +286,7 @@
                     "kind": "class",
                     "scope": "singleton",
                     "file": "packages/tooling/pr-gate/src/scripts/workflow/dev-copy-on-main.ts",
-                    "level": 2
+                    "level": 4
                 },
                 {
                     "id": "DevDeployRefs",
@@ -511,6 +511,14 @@
                     "scope": "singleton",
                     "file": "packages/tooling/pr-gate/src/scripts/commands/land-pr-command.ts",
                     "level": 1
+                },
+                {
+                    "id": "LandedCopyResolver",
+                    "className": "LandedCopyResolver",
+                    "kind": "class",
+                    "scope": "singleton",
+                    "file": "packages/tooling/pr-gate/src/scripts/workflow/landed-copy-resolver.ts",
+                    "level": 3
                 },
                 {
                     "id": "LandedTreeResolver",
@@ -1337,6 +1345,15 @@
                 },
                 {
                     "from": "BuildPushDevCommand",
+                    "to": "BuildAffected",
+                    "injection": "type",
+                    "token": "BuildAffected",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/build-affected.ts#BuildAffected",
+                    "paramName": "buildAffected",
+                    "paramType": "BuildAffected"
+                },
+                {
+                    "from": "BuildPushDevCommand",
                     "to": "DevBuild",
                     "injection": "type",
                     "token": "DevBuild",
@@ -1766,6 +1783,15 @@
                     "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/git-exec.ts#GitExec",
                     "paramName": "gitExec",
                     "paramType": "GitExec"
+                },
+                {
+                    "from": "DevResolveRunner",
+                    "to": "LandedCopyResolver",
+                    "injection": "type",
+                    "token": "LandedCopyResolver",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/landed-copy-resolver.ts#LandedCopyResolver",
+                    "paramName": "landedCopies",
+                    "paramType": "LandedCopyResolver"
                 },
                 {
                     "from": "DevResolveRunner",
@@ -2603,6 +2629,33 @@
                     "tokenKey": "class:packages/tooling/rules-config/src/repo-root.ts#RepoRootFinder",
                     "paramName": "repoRootFinder",
                     "paramType": "RepoRootFinder"
+                },
+                {
+                    "from": "LandedCopyResolver",
+                    "to": "DevCopyOnMain",
+                    "injection": "type",
+                    "token": "DevCopyOnMain",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/dev-copy-on-main.ts#DevCopyOnMain",
+                    "paramName": "onMain",
+                    "paramType": "DevCopyOnMain"
+                },
+                {
+                    "from": "LandedCopyResolver",
+                    "to": "DevDeployRefs",
+                    "injection": "type",
+                    "token": "DevDeployRefs",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/dev-deploy-refs.ts#DevDeployRefs",
+                    "paramName": "refs",
+                    "paramType": "DevDeployRefs"
+                },
+                {
+                    "from": "LandedCopyResolver",
+                    "to": "GitExec",
+                    "injection": "type",
+                    "token": "GitExec",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/git-exec.ts#GitExec",
+                    "paramName": "gitExec",
+                    "paramType": "GitExec"
                 },
                 {
                     "from": "LandedTreeResolver",

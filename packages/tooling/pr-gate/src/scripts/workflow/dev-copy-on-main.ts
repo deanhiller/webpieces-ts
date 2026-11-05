@@ -40,7 +40,8 @@ export class MergedPr {
 const PR_LINE = /^(\d+) (\S+)$/;
 
 /**
- * Answers "is this dev copy already on `origin/main`?" for `wp-finish-push-dev --remove` (#1401).
+ * Answers "is this dev copy already on `origin/main`?" for `wp-finish-push-dev --remove` (#1401), and for
+ * `wp-build-push-dev`'s automatic resolution of conflicts caused only by landed copies (#1405).
  *
  * WHY: developers ran `--remove` after their PR landed, as a "done, clean up" habit. On a repo that composes
  * `dev` = `origin/main` + every copy, that remove takes nothing off dev (main keeps the change there) and
@@ -62,17 +63,18 @@ export class DevCopyOnMain {
     async landing(repoRoot: string, copyRef: string): Promise<DevCopyLanding> {
         const copy = `refs/remotes/origin/${copyRef}`;
         const changed = await this.names(repoRoot, [`${MAIN_REF}...${copy}`],
-            `Failed to list the files ${copyRef} changes since its merge-base with origin/main (git diff ${MAIN_REF}...${copy}). Nothing was removed.`);
+            `Failed to list the files ${copyRef} changes since its merge-base with origin/main (git diff ${MAIN_REF}...${copy}).`);
         const stillDiffer = new Set(await this.names(repoRoot, [MAIN_REF, copy],
-            `Failed to compare ${copyRef} with origin/main (git diff ${MAIN_REF} ${copy}). Nothing was removed.`));
+            `Failed to compare ${copyRef} with origin/main (git diff ${MAIN_REF} ${copy}).`));
         const landed = changed.filter((f: string): boolean => !stillDiffer.has(f));
         return new DevCopyLanding(changed, landed);
     }
 
     /**
-     * The merged PR whose head was `branch`, or null. It only decorates the refusal message, so a `gh` that
-     * is missing, unauthenticated or offline yields null rather than an error: the content check above has
-     * already decided.
+     * The merged PR whose head was `branch`, or null. A `gh` that is missing, unauthenticated or offline
+     * yields null rather than an error, and null is always the SAFE answer: for `--remove` it only drops a
+     * decoration from the refusal (the content check above has already decided), and for the landed-copy
+     * resolution (#1405) it means "not proven landed", so the conflict is left for the developer.
      */
     async mergedPr(repoRoot: string, branch: string): Promise<MergedPr | null> {
         const result = await this.processes.run('gh', [

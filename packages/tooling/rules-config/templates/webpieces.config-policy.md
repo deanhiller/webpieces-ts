@@ -77,17 +77,23 @@ put reusable config instructions in this guide's source template. Generated file
 
 ## The dev-deploy build: `commands.push-dev.buildCommand`
 
-`wp-build-push-dev` merges `origin/dev` into a throwaway branch, runs `pnpm install`, and runs this command
-on the merged tree; `wp-finish-push-dev` publishes only the copy it verified. It has NO default — which
+`wp-build-push-dev` first runs `commands.pr-gate.buildCommand` on your branch alone (the code rules judge it
+against main, exactly as the PR gate will), then merges `origin/dev` into a throwaway branch, runs
+`pnpm install`, and runs this command on the merged tree; `wp-finish-push-dev` publishes only the copy it
+verified. It has NO default — which
 build vouches for a dev publish is this repo's decision. The section is optional (a repo that never
 publishes to a shared dev server needs none), but `wp-build-push-dev` refuses without it, and a present
 `push-dev` section must carry a non-empty `buildCommand`:
 
 ```json
-"commands": { "push-dev": { "buildCommand": "pnpm nx affected --target=ci --base=origin/dev --head=HEAD" } }
+"commands": { "push-dev": { "buildCommand": "pnpm nx affected -t build test --base=origin/dev --head=HEAD" } }
 ```
 
-Choose a command that builds only what differs from `origin/dev`, so it finishes in a minute or two.
+Choose a command that **compiles and tests only** what differs from `origin/dev`, so it finishes in a minute
+or two — and that runs **no code rules** (not an nx `ci` target, which runs `architecture:validate-code`).
+The merged tree holds every other developer's published copy, so rules run there judge their code as your
+change: one copy's oversized method would fail everybody else's publish. The rules already ran against main
+in the first build.
 
 ## Merge automation and existing authorization
 
