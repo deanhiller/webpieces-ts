@@ -165,3 +165,6 @@ export { AuthorizedApiDocument } from './AuthorizedApiDocument';
 export type { ApiDocumentObject, ApiDocumentValue } from './AuthorizedApiDocument';
 
 export { WiringPolicy } from '@webpieces/http-client-core';
+
+export { RuntimeStartupPhase, RuntimeStartupOperation } from './RuntimeStartupTiming';
+export type { RuntimeStartupObserver, RuntimeStartupSpan } from './RuntimeStartupTiming';

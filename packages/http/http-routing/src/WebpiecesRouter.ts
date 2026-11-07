@@ -14,6 +14,11 @@ import { ApiClient } from './ApiClient';
 import { LogApiFilter } from './filters/LogApiFilter';
 import { AuthFilter } from './filters/AuthFilter';
 import { AuthorizationFilter } from './filters/AuthorizationFilter';
+import {
+    RuntimeStartupObserver,
+    RuntimeStartupPhase,
+    RuntimeStartupTiming,
+} from './RuntimeStartupTiming';
 
 /**
  * Options for {@link WebpiecesRouterFactory.create} — one object (config lives inside it).
@@ -28,6 +33,8 @@ export interface WebpiecesRouterOptions {
     appBindings: ContainerModule[];
     appOverrides?: ContainerModule;
     config?: WebpiecesConfig;
+    /** Optional startup spans; no observer means no clock or timing-output work. */
+    startupObserver?: RuntimeStartupObserver;
 }
 
 /**
@@ -66,6 +73,7 @@ export interface WebpiecesRouterOptions {
 export class WebpiecesRouter implements ApiFactory {
     private webpiecesContainer!: Container;
     private appContainer!: Container;
+    private startupTiming = new RuntimeStartupTiming();
 
     constructor(
         @inject(RouteBuilderImpl) private readonly routeBuilder: RouteBuilderImpl,
@@ -82,6 +90,8 @@ export class WebpiecesRouter implements ApiFactory {
         options: WebpiecesRouterOptions,
     ): Promise<void> {
         this.webpiecesContainer = webpiecesContainer;
+        this.startupTiming = new RuntimeStartupTiming(options.startupObserver);
+        this.routeBuilder.setStartupObserver(options.startupObserver);
 
         // App container is a child so app bindings see framework bindings while staying separate.
         // autobind:true lets a concrete @injectable(Singleton) app class self-bind on first resolve
@@ -91,7 +101,9 @@ export class WebpiecesRouter implements ApiFactory {
         this.routeBuilder.setContainer(this.appContainer);
 
         await this.loadDIModules(options);
-        this.installFixedFilters();
+        this.startupTiming.run(RuntimeStartupPhase.FIXED_FILTERS, 'fixed-filters', () =>
+            this.installFixedFilters(),
+        );
     }
 
     /**
@@ -112,30 +124,49 @@ export class WebpiecesRouter implements ApiFactory {
         // Load BOTH registries: framework classes (provideFrameworkSingleton) + the client's
         // own @provideSingleton classes (binding-decorators global). A client's
         // buildProviderModule() only ever contains the client's classes — never framework internals.
-        await this.appContainer.load(buildFrameworkModule());
-        await this.appContainer.load(buildProviderModule());
+        await this.startupTiming.runAsync(
+            RuntimeStartupPhase.FRAMEWORK_DI,
+            'application-framework-bindings',
+            () => this.appContainer.load(buildFrameworkModule()),
+        );
+        await this.startupTiming.runAsync(
+            RuntimeStartupPhase.APPLICATION_DI,
+            'provider-bindings',
+            () => this.appContainer.load(buildProviderModule()),
+        );
 
         // Load all app modules into application container
         // (webpiecesContainer is currently empty, reserved for future framework bindings)
-        for (const module of options.appBindings) {
-            await this.appContainer.load(module);
+        for (const [index, module] of options.appBindings.entries()) {
+            await this.startupTiming.runAsync(
+                RuntimeStartupPhase.APPLICATION_DI,
+                `app-binding-${index}`,
+                () => this.appContainer.load(module),
+            );
         }
 
         // Load appOverrides LAST so they can override existing bindings
         if (options.appOverrides) {
-            await this.appContainer.load(options.appOverrides);
+            const overrides = options.appOverrides;
+            await this.startupTiming.runAsync(
+                RuntimeStartupPhase.APPLICATION_DI,
+                'app-overrides',
+                () => this.appContainer.load(overrides),
+            );
         }
     }
 
     /**
      * Wire an API prototype (with @ApiPath/@Endpoint decorators) to its controller.
-     * The controller is resolved from the container at request time.
+     * Route registration resolves the controller and its dependency graph eagerly, before requests.
      */
     addRoutes<TApi, TController extends TApi>(
         api: ClassType<TApi>,
         controller: ClassType<TController>,
     ): this {
-        new ApiRoutingFactory(api, controller).configure(this.routeBuilder);
+        this.startupTiming.run(RuntimeStartupPhase.ROUTES, `${api.name}:${controller.name}`, () =>
+            new ApiRoutingFactory(api, controller).configure(this.routeBuilder),
+        );
         return this;
     }
 
@@ -195,14 +226,19 @@ export class WebpiecesRouterFactory {
         // Platform (framework) container — build via buildFrameworkModule so framework
         // singletons (WebpiecesRouter, RouteBuilderImpl) come from the webpieces registry,
         // NOT the client's global one.
+        const timing = new RuntimeStartupTiming(options.startupObserver);
         const webpiecesContainer = new Container();
         webpiecesContainer
             .bind(WEBPIECES_CONFIG_TOKEN)
             .toConstantValue(options.config ?? new WebpiecesConfig());
-        await webpiecesContainer.load(buildFrameworkModule());
+        await timing.runAsync(RuntimeStartupPhase.FRAMEWORK_DI, 'platform-framework-bindings', () =>
+            webpiecesContainer.load(buildFrameworkModule()),
+        );
 
         // Resolve the router from the container (NOT new'd) so @DocumentDesign + DI hold.
-        const router = webpiecesContainer.get(WebpiecesRouter);
+        const router = timing.run(RuntimeStartupPhase.FRAMEWORK_DI, 'router-resolution', () =>
+            webpiecesContainer.get(WebpiecesRouter),
+        );
         await router.initialize(webpiecesContainer, options);
         return router;
     }

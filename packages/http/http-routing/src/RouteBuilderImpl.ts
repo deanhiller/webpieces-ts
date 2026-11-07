@@ -10,6 +10,11 @@ import { FilterMatcher, HttpFilter } from './FilterMatcher';
 import { LogManager } from '@webpieces/core-util';
 import { AuthorizationService } from './AuthorizationHook';
 import { AuthFilter } from './filters/AuthFilter';
+import {
+    RuntimeStartupObserver,
+    RuntimeStartupPhase,
+    RuntimeStartupTiming,
+} from './RuntimeStartupTiming';
 
 const log = LogManager.getLogger('RouteBuilder');
 
@@ -81,6 +86,12 @@ export class RouteBuilderImpl implements RouteBuilder {
     private routes: RouteHandlerWithMeta[] = [];
     private filterRegistry: Array<FilterWithMeta> = [];
     private container?: Container;
+    private startupTiming = new RuntimeStartupTiming();
+
+    /** Installed by the router factory; request dispatch does not resolve controllers again. */
+    setStartupObserver(observer?: RuntimeStartupObserver): void {
+        this.startupTiming = new RuntimeStartupTiming(observer);
+    }
 
     /**
      * Map for O(1) route lookup by method:path.
@@ -120,8 +131,12 @@ export class RouteBuilderImpl implements RouteBuilder {
      */
     addRoute(route: RouteDefinition): void {
         const policy = route.routeMeta.authorization;
-        if (!route.routeMeta.authMeta || !policy) throw new Error(`Endpoint ${route.routeMeta.path} requires @WpAuth/@WpAuthPublic and @WpAuthorization.`);
-        if (!this.container) throw new Error('Set the route container before registering endpoints.');
+        if (!route.routeMeta.authMeta || !policy)
+            throw new Error(
+                `Endpoint ${route.routeMeta.path} requires @WpAuth/@WpAuthPublic and @WpAuthorization.`,
+            );
+        if (!this.container)
+            throw new Error('Set the route container before registering endpoints.');
         this.container.get(AuthorizationService).validate(policy);
         this.installedAuthFilter()?.assertRouteVerifiable(route.routeMeta);
         const routeWithMeta = this.createRouteHandlerWithMeta(route);
@@ -169,7 +184,16 @@ export class RouteBuilderImpl implements RouteBuilder {
         const routeMeta = route.routeMeta;
 
         // Resolve controller instance from DI container ONCE (not on every request!)
-        const controller = this.container.get(route.controllerClass) as Record<string, unknown>;
+        const container = this.container;
+        const controller = this.startupTiming.run(
+            RuntimeStartupPhase.CONTROLLER,
+            route.controllerClass.name,
+            () => container.get(route.controllerClass),
+        ) as Record<
+            string,
+            // webpieces-disable no-any-unknown -- heterogeneous route handlers erase API-specific result and argument shapes
+            unknown
+        >;
 
         // Get the controller method
         const method = controller[routeMeta.methodName];
@@ -205,7 +229,12 @@ export class RouteBuilderImpl implements RouteBuilder {
         }
 
         // Resolve filter instance from DI container
-        const filter = this.container.get<HttpFilter>(filterDef.filterClass);
+        const container = this.container;
+        const filter = this.startupTiming.run(
+            RuntimeStartupPhase.FILTER,
+            filterDef.filterClass.name,
+            () => container.get<HttpFilter>(filterDef.filterClass),
+        );
 
         // Store filter with its definition
         const filterWithMeta = new FilterWithMeta(filter, filterDef);
