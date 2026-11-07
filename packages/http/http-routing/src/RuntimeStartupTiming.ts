@@ -78,6 +78,7 @@ export class RuntimeStartupTiming {
     private begin(phase: RuntimeStartupPhase, name: string): RuntimeStartupSpan | undefined {
         if (!this.observer || this.disabled) return undefined;
         // webpieces-disable no-unmanaged-exceptions -- an optional observer must not replace startup's result/error; disable it with a bounded bootstrap diagnostic
+        // eslint-disable-next-line @webpieces/no-unmanaged-exceptions -- diagnostic callback boundary preserves the application result and original error
         try {
             return this.observer.start(new RuntimeStartupOperation(phase, name));
         } catch (err: unknown) {
@@ -92,6 +93,7 @@ export class RuntimeStartupTiming {
     private finish(span: RuntimeStartupSpan | undefined, succeeded: boolean): void {
         if (!span || this.disabled) return;
         // webpieces-disable no-unmanaged-exceptions -- preserve the application's original exception even if diagnostic output fails
+        // eslint-disable-next-line @webpieces/no-unmanaged-exceptions -- diagnostic callback failure must not replace the original startup exception
         try {
             if (succeeded) span.success();
             else span.failure();
