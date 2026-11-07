@@ -52,7 +52,7 @@ import { McpApiDispatcher } from './McpApiDispatcher';
 import { VerifiedMcpCredential, WpMcpServerConfig } from './McpAuth';
 import { McpBindOptions } from './McpBindOptions';
 import { McpDeployment } from './McpDeployment';
-import { McpInvocationContext } from './McpInvocationContext';
+import { McpInvocationContext } from '@webpieces/core-util';
 import { McpToolRegistry, RegisteredMcpTool } from './McpToolRegistry';
 import { WpMcpServer } from './WpMcpServer';
 import { TestServers } from './__tests__/McpHttpTestHarness';
@@ -377,7 +377,9 @@ describe('McpApiBinding.remote generated Node client integration', () => {
         );
         expect(minter.audiences).toEqual([baseUrl]);
         expect(verifier.tokens).toEqual([OIDC_TOKEN]);
-        expect(verifier.methods).toEqual([{ kind: 'oidc', callerScope: 'services', callers: ['mcp-gateway'] }]);
+        expect(verifier.methods).toEqual([
+            { kind: 'oidc', callerScope: 'services', callers: ['mcp-gateway'] },
+        ]);
         expect(controller.authorization).toBe(`Bearer ${OIDC_TOKEN}`);
         expect(controller.authorization).not.toContain(EXTERNAL_MCP_BEARER);
         expect(controller.authorization).not.toContain(LOCAL_ENDPOINT_JWT);

@@ -164,3 +164,11 @@ title is the method's `@summary` JSDoc tag (#1296), and a name must be 1-64 char
 independent of `@WpAuthorization` roles and never grants account permissions. Identifiers match
 `[a-z][a-z0-9-]{0,63}`; empty lists, duplicates and malformed options are rejected.
 See `@webpieces/mcp-server` for independent endpoint/resource configuration and union selection.
+
+### MCP invocation metadata
+
+`MCP_INVOCATION_CONTEXT`, `McpInvocationContext` and the `McpProgressReporter` type live in
+`@webpieces/core-util` so shared filters and error reporters can read verified MCP facts without
+importing the MCP server or SDK. The trusted key has no HTTP header, is not logged and is not
+propagated between services. Dispatchers publish its value in the existing `RequestContext`;
+application code reads it with `RequestContext.getTrusted(MCP_INVOCATION_CONTEXT)`.

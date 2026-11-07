@@ -218,6 +218,10 @@ request-scoped SSE responses, backpressure, cancellation, keepalives, and subscr
 owns the Express path, root `RequestContext`, authentication boundary, schema-derived tool registry,
 and dispatch through the normal API proxy.
 
+Import `MCP_INVOCATION_CONTEXT`, `McpInvocationContext` and the `McpProgressReporter` type from
+`@webpieces/core-util`; these lightweight contracts are no longer exported by `@webpieces/mcp-server`.
+They use the existing `RequestContext`, with no additional context scope or MCP SDK dependency.
+
 During a tool invocation, `RequestContext.getTrusted(MCP_INVOCATION_CONTEXT)` exposes the verified
 JSON-RPC ID, tool/user/role facts, the official SDK cancellation `AbortSignal`, and (when the client
 supplied `_meta.progressToken`) a `reportProgress(...)` callback. Progress remains related to that
