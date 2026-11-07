@@ -189,7 +189,11 @@ export class RouteBuilderImpl implements RouteBuilder {
             RuntimeStartupPhase.CONTROLLER,
             route.controllerClass.name,
             () => container.get(route.controllerClass),
-        ) as Record<string, unknown>;
+        ) as Record<
+            string,
+            // webpieces-disable no-any-unknown -- heterogeneous route handlers erase API-specific result and argument shapes
+            unknown
+        >;
 
         // Get the controller method
         const method = controller[routeMeta.methodName];

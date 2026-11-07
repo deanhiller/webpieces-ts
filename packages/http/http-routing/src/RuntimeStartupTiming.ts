@@ -48,6 +48,7 @@ export class RuntimeStartupTiming {
     run<T>(phase: RuntimeStartupPhase, name: string, operation: () => T): T {
         const span = this.begin(phase, name);
         let succeeded = false;
+        // webpieces-disable no-unmanaged-exceptions -- finally only closes diagnostics; the original application error propagates unchanged
         try {
             const result = operation();
             succeeded = true;
@@ -64,6 +65,7 @@ export class RuntimeStartupTiming {
     ): Promise<T> {
         const span = this.begin(phase, name);
         let succeeded = false;
+        // webpieces-disable no-unmanaged-exceptions -- finally only closes diagnostics; the original application error propagates unchanged
         try {
             const result = await operation();
             succeeded = true;
@@ -80,7 +82,9 @@ export class RuntimeStartupTiming {
             return this.observer.start(new RuntimeStartupOperation(phase, name));
         } catch (err: unknown) {
             const error = toError(err);
-            this.disable(error);
+            this.disabled = true;
+            // Headers/logging may not exist yet; use one bootstrap diagnostic for this boundary.
+            console.warn('[startup] timing observer disabled after failure', error);
             return undefined;
         }
     }
@@ -93,13 +97,9 @@ export class RuntimeStartupTiming {
             else span.failure();
         } catch (err: unknown) {
             const error = toError(err);
-            this.disable(error);
+            this.disabled = true;
+            // Headers/logging may not exist yet; use one bootstrap diagnostic for this boundary.
+            console.warn('[startup] timing observer disabled after failure', error);
         }
-    }
-
-    private disable(error: Error): void {
-        this.disabled = true;
-        // Headers/logging may not exist yet. Never initialize a logger/SDK to report its observer.
-        console.warn('[startup] timing observer disabled after failure', error);
     }
 }
