@@ -12,6 +12,11 @@ import { WebpiecesRouterFactory } from './WebpiecesRouter';
 import { AppWiring, BindModule, NodeWiringModules } from './Wiring';
 import { ContainerBinder } from './Binder';
 import { ApiFactory } from './ApiFactory';
+import {
+    RuntimeStartupObserver,
+    RuntimeStartupPhase,
+    RuntimeStartupTiming,
+} from './RuntimeStartupTiming';
 
 /**
  * RuntimeSetupOptions - the environment/wiring inputs to {@link setupRuntime} (everything NOT
@@ -49,6 +54,8 @@ export class RuntimeSetupOptions {
         public readonly platformHeaders: boolean = true,
         /** Optional WebpiecesConfig (e.g. recording flags); defaults to a fresh one. */
         public readonly config?: WebpiecesConfig,
+        /** Optional startup span observer; the host owns its clock and bounded output. */
+        public readonly startupObserver?: RuntimeStartupObserver,
     ) {}
 }
 
@@ -79,6 +86,7 @@ export async function setupRuntime(
     // that cannot say which build emitted them. Reads of ServiceInfo elsewhere never throw (a missing
     // log field must never 500 live traffic); the "say which build you are" guarantee lives HERE, the
     // one startup every server runs.
+    const timing = new RuntimeStartupTiming(options.startupObserver);
     ServiceInfo.setInfo(options.svcName, options.svcVersion);
 
     // 0b. Declare WHERE we run, before any route is built: ApiRoutingFactory reads it in step 4 to
@@ -87,24 +95,44 @@ export async function setupRuntime(
     RuntimeLocality.declare(options.locality);
 
     // 1. Register the global HeaderRegistry FIRST (this service's own keys come from AppWiring).
-    HeaderRegistry.configure(appModules.getHeaders(), options.platformHeaders);
+    timing.run(RuntimeStartupPhase.HEADERS, 'HeaderRegistry', () =>
+        HeaderRegistry.configure(appModules.getHeaders(), options.platformHeaders),
+    );
 
     // 2. Install the logging backend ONCE, before anything else logs.
-    LogManager.setFactory(options.loggerFactory);
+    timing.run(RuntimeStartupPhase.LOGGING, 'LogManager', () =>
+        LogManager.setFactory(options.loggerFactory),
+    );
 
     // 3. Build the node-only router + DI container.
-    const modules = new NodeWiringModules(appModules);
-    const router = await WebpiecesRouterFactory.create({
-        appBindings: modules.bindModules.map(
-            (module: BindModule) => new ContainerModule((load: ContainerModuleLoadOptions) => module.configure(new ContainerBinder(load))),
-        ),
-        appOverrides: appOverrides,
-        config: options.config ?? new WebpiecesConfig(),
-    });
+    const modules = timing.run(
+        RuntimeStartupPhase.WIRING,
+        appModules.constructor.name,
+        () => new NodeWiringModules(appModules),
+    );
+    const router = await timing.runAsync(RuntimeStartupPhase.CONTAINER, 'WebpiecesRouter', () =>
+        WebpiecesRouterFactory.create({
+            appBindings: modules.bindModules.map(
+                (module: BindModule) =>
+                    new ContainerModule((load: ContainerModuleLoadOptions) =>
+                        timing.runAsync(
+                            RuntimeStartupPhase.BIND_MODULE,
+                            module.constructor.name,
+                            () => module.configure(new ContainerBinder(load)),
+                        ),
+                    ),
+            ),
+            appOverrides: appOverrides,
+            config: options.config ?? new WebpiecesConfig(),
+            startupObserver: options.startupObserver,
+        }),
+    );
 
     // 4. Let each route group declare its routes + filters, then hand back the consumer surface.
     for (const routeModule of modules.routeModules) {
-        routeModule.configure(router);
+        timing.run(RuntimeStartupPhase.ROUTE_MODULE, routeModule.constructor.name, () =>
+            routeModule.configure(router),
+        );
     }
     return router;
 }
