@@ -14,8 +14,6 @@ export { McpIcon } from './McpIcon';
 export { McpToolRegistry, RegisteredMcpTool } from './McpToolRegistry';
 export { McpApiBinding } from './McpApiBinding';
 export type { McpBindingTopology } from './McpApiBinding';
-export { MCP_INVOCATION_CONTEXT, McpInvocationContext } from './McpInvocationContext';
-export type { McpProgressReporter } from './McpInvocationContext';
 export { McpBindOptions } from './McpBindOptions';
 export { McpToolCatalog } from './McpToolCatalog';
 export { McpDeployment } from './McpDeployment';

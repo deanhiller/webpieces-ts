@@ -4,7 +4,7 @@ import { InvocationAuthentication, AuthorizationService } from '@webpieces/http-
 import { McpToolPolicy } from './McpToolPolicy';
 import { RegisteredMcpTool } from './McpToolRegistry';
 import { VerifiedMcpCredential } from './McpAuth';
-import { MCP_INVOCATION_CONTEXT, McpInvocationContext } from './McpInvocationContext';
+import { MCP_INVOCATION_CONTEXT, McpInvocationContext } from '@webpieces/core-util';
 
 /** Authorize, validate, then issue a local credential and invoke the ordinary filters. No scope or catch. */
 export class McpApiDispatcher {
@@ -17,10 +17,7 @@ export class McpApiDispatcher {
         invocation: McpInvocationContext,
         policy: AuthorizationService,
     ): Promise<DtoValue> {
-        await new McpToolPolicy(policy).require(
-            tool.authorization,
-            tool.name,
-        );
+        await new McpToolPolicy(policy).require(tool.authorization, tool.name);
         const inputFailure = this.schemas.validate(tool.inputSchema, requestDto);
         if (inputFailure) {
             throw new ApiBadRequestError(

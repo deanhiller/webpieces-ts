@@ -49,7 +49,7 @@ import {
 } from './McpAuth';
 import { McpApiDispatcher } from './McpApiDispatcher';
 import { McpBindOptions } from './McpBindOptions';
-import { McpInvocationContext, McpProgressReporter } from './McpInvocationContext';
+import { McpInvocationContext, McpProgressReporter } from '@webpieces/core-util';
 import { AuthorizedMcpTools, McpToolRegistry, RegisteredMcpTool } from './McpToolRegistry';
 import { McpCorrelation } from './McpToolCallRendering';
 import { McpProtocol } from './McpProtocol';

@@ -22,6 +22,7 @@ Lowest-level, zero-dependency utilities shared across webpieces (browser and Nod
 - `RuntimeLocality` — the startup-declared `'local' | 'deployed'` token that `@WpLocalOnly` enforcement reads. A SEAM, not a detector: the framework never reads `process.env` and never names a cloud provider's variable; undeclared reads as `'deployed'` so the answer fails safe.
 - `CallMode` / `CallModeMarker` (#1293) — whether the user waits on ONE api client call (FOREGROUND / BACKGROUND), parked on the call's failure as a non-enumerable `err.callMode` (typed on `ApiError`) without changing the error's class, and `RouteMetadata.withCallMode`, which gives a BACKGROUND call `hideProgress`. Per call, not per endpoint: the same method is foreground behind a button and background behind a poll timer.
 - `RetryStrategy` — THE stock retry for every client (browser, node, React Native, Cloud Tasks enqueue): transient failures only (`ApiConnectionError`, `ApiCallTimeoutError`, …), never a `WRITE`. There is deliberately no second "retry-safe operations" strategy (#1293).
+- `MCP_INVOCATION_CONTEXT`, `McpInvocationContext` and `McpProgressReporter` — trusted context-only invocation metadata. The MCP dispatcher stamps the existing RequestContext; lower shared readers need no MCP server or SDK dependency. No HTTP header, serialization or second storage scope.
 - Small, dependency-free helpers usable in both browser and Node.
 
 ## Out of Scope

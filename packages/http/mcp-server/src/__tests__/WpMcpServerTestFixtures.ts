@@ -6,7 +6,7 @@ import { ApiBadRequestError, ApiBadGatewayError, ApiConnectionError, ApiDependen
 import { RequestContext } from '@webpieces/core-context';
 import { AuthenticatedCaller, JwtHook, MintedJwt } from '@webpieces/http-routing';
 import { McpAccessTokenAuthority, VerifiedMcpCredential } from '../McpAuth';
-import { MCP_INVOCATION_CONTEXT } from '../McpInvocationContext';
+import { MCP_INVOCATION_CONTEXT } from '@webpieces/core-util';
 import { McpToolCatalog } from '../McpToolCatalog';
 
 export const USER_ID = ContextKey.trusted<string>(

@@ -475,3 +475,6 @@ export type { PublishedKind, PublishedApiError } from './http/ApiErrorHttpStatus
 
 export { Mcp, McpToolProfilesOptions } from './mcp/Mcp';
 export type { McpToolProfiles } from './mcp/Mcp';
+
+export { MCP_INVOCATION_CONTEXT, McpInvocationContext } from './mcp/McpInvocationContext';
+export type { McpProgressReporter } from './mcp/McpInvocationContext';
