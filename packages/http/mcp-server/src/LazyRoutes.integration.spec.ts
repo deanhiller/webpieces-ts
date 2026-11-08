@@ -13,6 +13,7 @@ import {
     JWT_HOOK,
     LazyController,
     LazyImplementation,
+    ApplicationImplementation,
     WebpiecesRouterFactory,
 } from '@webpieces/http-routing';
 import { McpApiBinding } from './McpApiBinding';
@@ -32,6 +33,7 @@ import {
 } from './__tests__/WpMcpServerTestFixtures';
 
 class LazyMcpApp {
+    constructor(private readonly mode: 'isolated' | 'application') {}
     bridge?: WpMcpServer<string>;
     server?: Server;
     harness!: McpHttpTestHarness;
@@ -51,7 +53,9 @@ class LazyMcpApp {
             SearchApi,
             new LazyController('SearchController', '**/SearchController.ts', 1000, async () => {
                 this.imports++;
-                return new LazyImplementation(SearchController, [], [], []);
+                return this.mode === 'application'
+                    ? new ApplicationImplementation(SearchController)
+                    : new LazyImplementation(SearchController, [], [], []);
             }),
         );
         this.bridge = new WpMcpServer(
@@ -86,35 +90,44 @@ class LazyMcpApp {
     }
 }
 
-describe('first-use controller through real MCP dispatch', () => {
-    const app = new LazyMcpApp();
-    afterEach(async () => app.close());
-    it('discovers tools without loading, rejects a denied call, then preserves each permitted principal', async () => {
-        await app.boot();
-        const list = await app.harness.post(app.harness.request('tools/list'), 'mcp-admin');
-        expect(JSON.stringify(list.payload)).toContain('admin_search');
-        expect(app.imports).toBe(0);
-        const denied = await app.harness.callTool('admin_search', { query: 'denied' }, 'mcp-user');
-        expect(denied.error).toMatchObject({ code: -32602, message: 'Unknown tool: admin_search' });
-        expect(app.imports).toBe(0);
-        const admin = await app.harness.callTool(
-            'admin_search',
-            { query: 'first-admin' },
-            'mcp-admin',
-        );
-        expect(app.harness.structuredOf(admin)).toMatchObject({
-            userId: 'admin-7',
-            result: 'first-admin',
+for (const mode of ['isolated', 'application'] as const) {
+    describe(`first-use controller through real MCP dispatch (${mode})`, () => {
+        const app = new LazyMcpApp(mode);
+        afterEach(async () => app.close());
+        it('discovers tools without loading, rejects a denied call, then preserves each permitted principal', async () => {
+            await app.boot();
+            const list = await app.harness.post(app.harness.request('tools/list'), 'mcp-admin');
+            expect(JSON.stringify(list.payload)).toContain('admin_search');
+            expect(app.imports).toBe(0);
+            const denied = await app.harness.callTool(
+                'admin_search',
+                { query: 'denied' },
+                'mcp-user',
+            );
+            expect(denied.error).toMatchObject({
+                code: -32602,
+                message: 'Unknown tool: admin_search',
+            });
+            expect(app.imports).toBe(0);
+            const admin = await app.harness.callTool(
+                'admin_search',
+                { query: 'first-admin' },
+                'mcp-admin',
+            );
+            expect(app.harness.structuredOf(admin)).toMatchObject({
+                userId: 'admin-7',
+                result: 'first-admin',
+            });
+            const learner = await app.harness.callTool(
+                'account_search',
+                { query: 'later-user' },
+                'mcp-user',
+            );
+            expect(app.harness.structuredOf(learner)).toMatchObject({
+                userId: 'user-7',
+                result: 'later-user',
+            });
+            expect(app.imports).toBe(1);
         });
-        const learner = await app.harness.callTool(
-            'account_search',
-            { query: 'later-user' },
-            'mcp-user',
-        );
-        expect(app.harness.structuredOf(learner)).toMatchObject({
-            userId: 'user-7',
-            result: 'later-user',
-        });
-        expect(app.imports).toBe(1);
     });
-});
+}

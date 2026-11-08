@@ -56,3 +56,6 @@ export abstract class CriticalApi {
         throw new Error('contract');
     }
 }
+
+@ApiPath('/other-lazy-admin')
+export abstract class OtherDeferredAdminApi extends DeferredAdminApi {}

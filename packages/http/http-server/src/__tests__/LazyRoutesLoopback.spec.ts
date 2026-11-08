@@ -24,6 +24,7 @@ import {
     MintedJwt,
     LazyController,
     LazyImplementation,
+    ApplicationImplementation,
     WebpiecesRouterFactory,
 } from '@webpieces/http-routing';
 import { WebpiecesExpressRouter } from '../WebpiecesExpressRouter';
@@ -68,6 +69,7 @@ class TestCredentials extends JwtHook<never> {
     }
 }
 class LoopbackApp {
+    constructor(private readonly mode: 'isolated' | 'application') {}
     server?: Server;
     url = '';
     imports = 0;
@@ -84,7 +86,9 @@ class LoopbackApp {
             AdminApi,
             new LazyController('AdminController', '**/AdminController.ts', 1000, async () => {
                 this.imports++;
-                return new LazyImplementation(AdminController, [], [], []);
+                return this.mode === 'application'
+                    ? new ApplicationImplementation(AdminController)
+                    : new LazyImplementation(AdminController, [], [], []);
             }),
         );
         const app = express();
@@ -109,21 +113,23 @@ class LoopbackApp {
     }
 }
 
-describe('lazy implementation through the actual Express transport', () => {
-    const app = new LoopbackApp();
-    afterEach(async () => app.close());
-    it('binds the route before import and initializes only after successful HTTP authorization', async () => {
-        await app.boot();
-        expect(app.imports).toBe(0);
-        expect((await app.request()).status).toBe(401);
-        expect((await app.request('reader')).status).toBe(403);
-        expect(app.imports).toBe(0);
-        const first = await app.request('admin-one');
-        expect(first.status).toBe(200);
-        expect(await first.json()).toEqual(new ResponseDto('real HTTP', 'admin-one', 1));
-        const second = await app.request('admin-two');
-        expect(second.status).toBe(200);
-        expect(await second.json()).toEqual(new ResponseDto('real HTTP', 'admin-two', 2));
-        expect(app.imports).toBe(1);
+for (const mode of ['isolated', 'application'] as const) {
+    describe(`lazy implementation through the actual Express transport (${mode})`, () => {
+        const app = new LoopbackApp(mode);
+        afterEach(async () => app.close());
+        it('binds the route before import and initializes only after successful HTTP authorization', async () => {
+            await app.boot();
+            expect(app.imports).toBe(0);
+            expect((await app.request()).status).toBe(401);
+            expect((await app.request('reader')).status).toBe(403);
+            expect(app.imports).toBe(0);
+            const first = await app.request('admin-one');
+            expect(first.status).toBe(200);
+            expect(await first.json()).toEqual(new ResponseDto('real HTTP', 'admin-one', 1));
+            const second = await app.request('admin-two');
+            expect(second.status).toBe(200);
+            expect(await second.json()).toEqual(new ResponseDto('real HTTP', 'admin-two', 2));
+            expect(app.imports).toBe(1);
+        });
     });
-});
+}

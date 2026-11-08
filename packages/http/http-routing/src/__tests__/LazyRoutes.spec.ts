@@ -19,12 +19,14 @@ import {
     LazyFeatureTimer,
     LazyFeatureDeadline,
     LazyImplementation,
+    ApplicationImplementation,
 } from '../LazyController';
 import {
     AdminRequest,
     DeferredAdminApi,
     SharedCounter,
     CriticalApi,
+    OtherDeferredAdminApi,
 } from './fixtures/lazy/contracts';
 
 /** Controlled clock edge; keep this runtime package's existing dependency graph unchanged. */
@@ -117,7 +119,7 @@ class Harness {
             () => imported.load(),
         );
     }
-    async boot(auth = true): Promise<void> {
+    async boot(auth = true, registerDeferred = true): Promise<void> {
         ServiceInfo.setInfo('lazy-test', 'test');
         HeaderRegistry.configure([], true);
         LogManager.setFactory(new ConsoleLoggerFactory());
@@ -137,8 +139,10 @@ class Harness {
         });
         this.router.addRoutes(CriticalApi, CriticalController);
         this.critical = this.router.createApiClient(CriticalApi);
-        this.router.addRoutes(DeferredAdminApi, this.descriptor);
-        this.api = this.router.createApiClient(DeferredAdminApi);
+        if (registerDeferred) {
+            this.router.addRoutes(DeferredAdminApi, this.descriptor);
+            this.api = this.router.createApiClient(DeferredAdminApi);
+        }
     }
     call(user = 'alice', roles = ['admin'], method: 'read' | 'other' = 'read'): Promise<unknown> {
         return RequestContext.run(() => {
@@ -268,4 +272,69 @@ it('offers explicit build validation without making it part of startup or bypass
         initializedAs: undefined,
     });
     expect(harness.timer.cancelled).toBe(1);
+});
+
+it('preserves a concrete app singleton across independently deferred APIs without retaining the first user', async () => {
+    const harness = new Harness();
+    await harness.boot(true, false);
+    let firstLoads = 0,
+        otherLoads = 0;
+    const firstDescriptor = new LazyController<DeferredAdminApi>(
+        'ApplicationAdminController',
+        '**/ApplicationAdminController.ts',
+        1000,
+        async () => {
+            firstLoads++;
+            const feature = await import('./fixtures/lazy/implementation');
+            return new ApplicationImplementation(feature.ApplicationAdminController);
+        },
+    );
+    const otherDescriptor = new LazyController<OtherDeferredAdminApi>(
+        'OtherApplicationAdminController',
+        '**/OtherApplicationAdminController.ts',
+        1000,
+        async () => {
+            otherLoads++;
+            const feature = await import('./fixtures/lazy/implementation');
+            return new ApplicationImplementation(feature.OtherApplicationAdminController);
+        },
+    );
+    harness.router.addRoutes(DeferredAdminApi, firstDescriptor);
+    harness.router.addRoutes(OtherDeferredAdminApi, otherDescriptor);
+    harness.api = harness.router.createApiClient(DeferredAdminApi);
+    const other = harness.router.createApiClient(OtherDeferredAdminApi);
+    await expect(harness.call('reader', [])).rejects.toThrow(ApiForbiddenError);
+    expect(firstLoads + otherLoads).toBe(0);
+    await expect(harness.call('alice')).resolves.toMatchObject({
+        user: 'alice',
+        initializedAs: undefined,
+        counter: 1,
+    });
+    await expect(
+        RequestContext.run(() => {
+            RequestContext.setRequest(
+                new HttpRequest(
+                    'POST',
+                    '/',
+                    new Map([
+                        [
+                            'authorization',
+                            [
+                                'Bearer ' +
+                                    sign({ sub: 'bob', roles: ['admin'] }, 'lazy-test-secret'),
+                            ],
+                        ],
+                    ]),
+                ),
+            );
+            return other.read(new AdminRequest('bob'));
+        }),
+    ).resolves.toMatchObject({ user: 'bob', initializedAs: undefined, counter: 2 });
+    await expect(harness.call('carol', ['admin'], 'other')).resolves.toMatchObject({
+        user: 'carol',
+        initializedAs: undefined,
+        counter: 3,
+    });
+    expect(firstLoads).toBe(1);
+    expect(otherLoads).toBe(1);
 });

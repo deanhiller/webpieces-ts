@@ -97,9 +97,18 @@ same final handler. Denied calls do not import the implementation. A mixed API i
 feature: its first permitted method loads that controller, rather than independently loading each
 method's JavaScript.
 
-`LazyImplementation` declares four things: the concrete controller, binding modules, private concrete
+Use `new ApplicationImplementation(feature.AdminController)` when the implementation uses the
+application's existing bindings and shared concrete singleton graph. This is an import-only boundary:
+first authorized use imports the class and resolves it in the original application container, in the
+same detached initialization context. Different deferred APIs continue to share their application
+singletons. It accepts no late binding modules and performs no rebinding; binding declarations remain
+at startup. As with existing eager DI, constructing a legitimate shared collaborator before a later
+constructor fails is not an atomic transaction and is not rolled back. Remaining eager binding-barrel
+imports must be measured separately; this mode alone does not remove them.
+
+Use `LazyImplementation` for an isolated feature with private bindings. It declares four things: the concrete controller, binding modules, private concrete
 singletons (excluding the controller, which is implicit), and explicitly shared application dependencies.
-Private bindings live in an isolated container with autobinding disabled. Each shared dependency must
+In isolated mode, private bindings live in an isolated container with autobinding disabled. Each shared dependency must
 already be explicitly bound in the application; the bridge returns the application's instance and
 preserves its scope instead of creating a second singleton. Bind shared services explicitly at startup
 when no essential route would otherwise resolve them. Merely importing a class does not bind it.
