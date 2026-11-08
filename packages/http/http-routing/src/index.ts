@@ -171,4 +171,4 @@ export { WiringPolicy } from '@webpieces/http-client-core';
 export { RuntimeStartupPhase, RuntimeStartupOperation } from './RuntimeStartupTiming';
 export type { RuntimeStartupObserver, RuntimeStartupSpan } from './RuntimeStartupTiming';
 
-export { LazyController, LazyImplementation, LazyFeatureTimer, LazyFeatureDeadline } from './LazyController';
+export { LazyController, LazyImplementation, ApplicationImplementation, LazyFeatureTimer, LazyFeatureDeadline } from './LazyController';

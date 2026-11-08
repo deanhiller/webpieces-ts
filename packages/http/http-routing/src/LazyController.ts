@@ -44,6 +44,11 @@ export class LazyImplementation<T extends object> {
     ) {}
 }
 
+/** Import-only boundary: resolve in the existing app container and preserve its singleton graph. */
+export class ApplicationImplementation<T extends object> {
+    constructor(public readonly controller: Newable<T>) {}
+}
+
 /**
  * Eager identity/security metadata, deferred implementation. The loader imports one feature and
  * returns declarative bindings; it must not open resources or perform request work. A failure is
@@ -54,7 +59,7 @@ export class LazyController<T extends object> {
         public readonly name: string,
         public readonly filepath: string,
         public readonly timeoutMillis: number,
-        public readonly load: () => Promise<LazyImplementation<T>>,
+        public readonly load: () => Promise<LazyImplementation<T> | ApplicationImplementation<T>>,
     ) {
         if (!name.trim() || !filepath.trim())
             throw new Error('LazyController requires a stable name and filter filepath.');
@@ -190,6 +195,8 @@ export class LazyControllerState<T extends object> {
                     `Lazy controller ${this.definition.name} must implement ${this.api.name}.${method}.`,
                 );
         }
+        if (implementation instanceof ApplicationImplementation) return this.parent.get(controller);
+
         for (const token of implementation.shared) {
             if (
                 !this.parent.isCurrentBound(token) &&

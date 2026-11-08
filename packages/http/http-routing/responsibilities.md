@@ -16,7 +16,8 @@ Server-side routing layer: `@Controller`/DI decorators, `WebAppMeta`/`Routes`/`R
 - Request-scoped context reading and server config types (`RequestContextReader`, `WebpiecesConfig`)
 
 - First-use `LazyController` registration through the same `addRoutes`/filter/dispatch path: eager
-  security metadata, isolated private bindings, explicit shared dependencies, detached initialization,
+  security metadata, explicit application-container or isolated-private-binding implementation results,
+  shared singleton preservation, detached initialization,
   one retained per-router outcome, bounded asynchronous initialization and explicit separate-process
   build validation (`validateLazyRoutesForBuild`). It owns no new process signal hook or unary
   disconnect-cancellation protocol.
