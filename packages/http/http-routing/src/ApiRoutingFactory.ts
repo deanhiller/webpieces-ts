@@ -1,3 +1,5 @@
+import type { ClassType } from './ClassType';
+import { LazyController } from './LazyController';
 import { Routes, RouteBuilder, RouteDefinition } from './WebAppMeta';
 import {
     isApiPath,
@@ -19,12 +21,6 @@ import { ROUTING_METADATA_KEYS } from './decorators';
 const log = LogManager.getLogger('ApiRoutingFactory');
 
 /**
- * Type representing a class constructor (abstract or concrete).
- */
-// webpieces-disable no-any-unknown -- generic type alias requires unconstrained default
-export type ClassType<T = unknown> = Function & { prototype: T };
-
-/**
  * ApiRoutingFactory - Automatically wire API interfaces to controllers.
  * Reads @ApiPath/@Endpoint decorators from an API prototype class and
  * registers POST routes for each endpoint.
@@ -42,15 +38,20 @@ export type ClassType<T = unknown> = Function & { prototype: T };
  * ```
  */
 // webpieces-disable no-any-unknown -- generic class requires unconstrained default type params
-export class ApiRoutingFactory<TApi = unknown, TController extends TApi = TApi> implements Routes {
+export class ApiRoutingFactory<TApi extends object = object, TController extends TApi = TApi>
+    implements Routes
+{
     private apiMetaClass: ClassType<TApi>;
-    private controllerClass: ClassType<TController>;
+    private controllerClass: ClassType<TController> | LazyController<TController>;
 
     /**
      * @param apiMetaClass - The API prototype class with @ApiPath/@Endpoint decorators
      * @param controllerClass - The controller class that implements the API
      */
-    constructor(apiMetaClass: ClassType<TApi>, controllerClass: ClassType<TController>) {
+    constructor(
+        apiMetaClass: ClassType<TApi>,
+        controllerClass: ClassType<TController> | LazyController<TController>,
+    ) {
         assertNotInternalApi(apiMetaClass, 'ApiRoutingFactory');
         this.apiMetaClass = apiMetaClass;
         this.controllerClass = controllerClass;
@@ -69,6 +70,7 @@ export class ApiRoutingFactory<TApi = unknown, TController extends TApi = TApi> 
         const apiName = apiMetaClass.name || 'Unknown';
         const controllerName = controllerClass.name || 'Unknown';
         if (
+            !(controllerClass instanceof LazyController) &&
             !(apiMetaClass.prototype as object).isPrototypeOf(controllerClass.prototype as object)
         ) {
             throw new Error(
@@ -105,12 +107,7 @@ export class ApiRoutingFactory<TApi = unknown, TController extends TApi = TApi> 
         const controllerName = this.controllerClass.name || 'Unknown';
 
         for (const methodName of Object.keys(endpoints)) {
-            // Validate controller implements this method
-            if (typeof this.controllerClass.prototype[methodName] !== 'function') {
-                throw new Error(
-                    `Controller ${controllerName} must implement method ${methodName} from API ${apiName}`,
-                );
-            }
+            this.assertControllerMethod(methodName);
 
             // Validate auth decorator exists (class-level or method-level)
             const authMeta = getAuthMeta(this.apiMetaClass, methodName);
@@ -126,7 +123,10 @@ export class ApiRoutingFactory<TApi = unknown, TController extends TApi = TApi> 
             // the backstop for routes added by hand through RouteBuilder. One decorator drives both
             // — the point of moving this into the framework was that apps were hand-syncing exactly
             // these two halves across two files with a comment.
-            if (isLocalOnly(this.apiMetaClass, methodName) && !RuntimeLocality.isLocalDevelopment()) {
+            if (
+                isLocalOnly(this.apiMetaClass, methodName) &&
+                !RuntimeLocality.isLocalDevelopment()
+            ) {
                 log.info(
                     `Skipping @WpLocalOnly endpoint ${apiName}.${methodName} — this process is not ` +
                         `a local developer machine, so the route is not registered at all.`,
@@ -151,11 +151,22 @@ export class ApiRoutingFactory<TApi = unknown, TController extends TApi = TApi> 
         }
     }
 
+    private assertControllerMethod(methodName: string): void {
+        if (
+            !(this.controllerClass instanceof LazyController) &&
+            typeof this.controllerClass.prototype[methodName] !== 'function'
+        )
+            throw new Error(
+                `Controller ${this.controllerClass.name} must implement method ${methodName} from API ${this.apiMetaClass.name}`,
+            );
+    }
+
     /**
      * Get the filepath of the controller source file.
      * Uses a heuristic based on the controller class name.
      */
     private getControllerFilepath(): string | undefined {
+        if (this.controllerClass instanceof LazyController) return this.controllerClass.filepath;
         // Check for explicit @SourceFile decorator metadata
         const filepath = Reflect.getMetadata(
             ROUTING_METADATA_KEYS.SOURCE_FILEPATH,
@@ -187,7 +198,7 @@ export class ApiRoutingFactory<TApi = unknown, TController extends TApi = TApi> 
     /**
      * Get the controller class.
      */
-    getControllerClass(): ClassType<TController> {
+    getControllerImplementation(): ClassType<TController> | LazyController<TController> {
         return this.controllerClass;
     }
 }

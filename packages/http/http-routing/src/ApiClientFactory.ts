@@ -25,7 +25,8 @@ import { Service } from '@webpieces/core-util';
 import { WpResponse } from './WpResponse';
 import { RouteBuilderImpl } from './RouteBuilderImpl';
 import { ApiClient, ApiClientProxy } from './ApiClient';
-import { ClassType } from './ApiRoutingFactory';
+
+import type { ClassType } from './ClassType';
 import { InProcessStreamExchange } from './InProcessStreamExchange';
 
 /**

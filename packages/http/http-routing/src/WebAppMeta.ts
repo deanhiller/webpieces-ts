@@ -1,4 +1,6 @@
-import {RouteMetadata} from "@webpieces/core-util";
+import type { ClassType } from './ClassType';
+import type { LazyController } from './LazyController';
+import { RouteMetadata } from '@webpieces/core-util';
 
 /**
  * Represents a route configuration that can be registered with the router.
@@ -29,11 +31,10 @@ export interface RouteBuilder {
 export class RouteDefinition {
     constructor(
         public routeMeta: RouteMetadata,
-        // webpieces-disable no-any-unknown -- arbitrary DI controller class used as a container token
-        public controllerClass: any,
+        public implementation: ClassType<object> | LazyController<object>,
         public controllerFilepath?: string,
         // The @ApiPath prototype this route belongs to; surfaced on ApiFactory.apiClients().
-        public apiClass?: unknown,
+        public apiClass?: ClassType<object>,
     ) {}
 }
 
@@ -72,7 +73,6 @@ export class FilterDefinition {
         this.filter = undefined; // Set later by RouteBuilder
     }
 }
-
 
 // The old WebAppMeta interface + WEBAPP_META_TOKEN were removed with the WebpiecesServer/
 // WebpiecesFactory flip. Apps now configure routes/filters imperatively on WebpiecesRouter

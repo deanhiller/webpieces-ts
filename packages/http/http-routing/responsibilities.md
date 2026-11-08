@@ -15,6 +15,12 @@ Server-side routing layer: `@Controller`/DI decorators, `WebAppMeta`/`Routes`/`R
 - Matching filters to routes by controller filepath glob (`FilterMatcher`, `minimatch`)
 - Request-scoped context reading and server config types (`RequestContextReader`, `WebpiecesConfig`)
 
+- First-use `LazyController` registration through the same `addRoutes`/filter/dispatch path: eager
+  security metadata, isolated private bindings, explicit shared dependencies, detached initialization,
+  one retained per-router outcome, bounded asynchronous initialization and explicit separate-process
+  build validation (`validateLazyRoutesForBuild`). It owns no new process signal hook or unary
+  disconnect-cancellation protocol.
+
 ## Out of Scope
 
 - The `Filter` / `Service` / `FilterChain` abstraction itself → `core-util`. This package owns the INBOUND chain built on it — `WpResponse`, `FilterMatcher`, `FilterDefinition`, and the framework filters — while the client's outbound chain (`http-client-core`) is the same abstraction pointed the other way

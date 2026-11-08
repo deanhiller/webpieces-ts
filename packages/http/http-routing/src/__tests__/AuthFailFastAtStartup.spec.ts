@@ -32,7 +32,7 @@ import { AuthConfig, AUTH_CONFIG, SharedSecrets } from '../AuthConfig';
 import { ApiKeyHook, API_KEY_HOOK, JwtHook, JWT_HOOK, MintedJwt } from '../AuthHooks';
 import { UnverifiableAuthModeError } from '../UnverifiableAuthModeError';
 import { WebpiecesRouterFactory } from '../WebpiecesRouter';
-import { ClassType } from '../ApiRoutingFactory';
+import type { ClassType } from '../ClassType';
 
 /**
  * #1362 — a SERVED route whose declared auth mode has no binding fails at STARTUP, through the real
@@ -170,13 +170,13 @@ class OtherKeyAuthConfig extends AuthConfig {
 type Bindings = (options: ContainerModuleLoadOptions) => void;
 
 /** Boot the REAL router with `bindings`, then register `api` — exactly what an app's RouteModule does. */
-async function boot<T>(bindings: Bindings, api: ClassType<T>, controller: ClassType<T>): Promise<void> {
+async function boot<T extends object>(bindings: Bindings, api: ClassType<T>, controller: ClassType<T>): Promise<void> {
     const router = await WebpiecesRouterFactory.create({ appBindings: [new ContainerModule(bindings)] });
     router.addRoutes(api, controller);
 }
 
 /** The refusal `boot` threw, so its typed fields can be asserted. */
-async function refusalOf<T>(bindings: Bindings, api: ClassType<T>, controller: ClassType<T>): Promise<UnverifiableAuthModeError> {
+async function refusalOf<T extends object>(bindings: Bindings, api: ClassType<T>, controller: ClassType<T>): Promise<UnverifiableAuthModeError> {
     // eslint-disable-next-line @webpieces/no-unmanaged-exceptions -- capture the startup refusal to assert its fields
     try {
         await boot(bindings, api, controller);

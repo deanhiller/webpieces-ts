@@ -76,7 +76,8 @@ export {
     buildFrameworkModule,
 } from '@webpieces/core-context';
 
-export { ApiRoutingFactory, ClassType } from './ApiRoutingFactory';
+export { ApiRoutingFactory } from './ApiRoutingFactory';
+export type { ClassType } from './ClassType';
 
 // Core routing types
 export { Routes, RouteBuilder, RouteDefinition, FilterDefinition } from './WebAppMeta';
@@ -105,7 +106,8 @@ export { LogApiFilter } from './filters/LogApiFilter';
 export { FilterMatcher, HttpFilter } from './FilterMatcher';
 
 // The app's server-surface declaration: DI bind modules + route groups + headers.
-export type { Wiring, AppWiring, BindModule, RouteModule } from './Wiring';
+export type { Wiring, AppWiring, RouteModule } from './Wiring';
+export type { BindModule } from './BindModule';
 export { NodeWiringModules } from './Wiring';
 // The Node binder every BindModule.configure receives.
 export type { Binder } from './Binder';
@@ -168,3 +170,5 @@ export { WiringPolicy } from '@webpieces/http-client-core';
 
 export { RuntimeStartupPhase, RuntimeStartupOperation } from './RuntimeStartupTiming';
 export type { RuntimeStartupObserver, RuntimeStartupSpan } from './RuntimeStartupTiming';
+
+export { LazyController, LazyImplementation, LazyFeatureTimer, LazyFeatureDeadline } from './LazyController';
