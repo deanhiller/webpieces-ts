@@ -1,4 +1,5 @@
-import { ClassType } from './ApiRoutingFactory';
+
+import type { ClassType } from './ClassType';
 import { RouteMetadata } from '@webpieces/core-util';
 
 /**

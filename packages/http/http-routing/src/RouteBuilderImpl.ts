@@ -1,3 +1,5 @@
+import { LazyController, LazyControllerState, LazyFeatureTimer } from './LazyController';
+import { getEndpoints } from '@webpieces/core-util';
 import { Container } from 'inversify';
 import { RouteBuilder, RouteDefinition, FilterDefinition } from './WebAppMeta';
 import { provideFrameworkSingleton } from '@webpieces/core-context';
@@ -87,6 +89,10 @@ export class RouteBuilderImpl implements RouteBuilder {
     private filterRegistry: Array<FilterWithMeta> = [];
     private container?: Container;
     private startupTiming = new RuntimeStartupTiming();
+    private readonly lazyControllers = new Map<
+        LazyController<object>,
+        LazyControllerState<object>
+    >();
 
     /** Installed by the router factory; request dispatch does not resolve controllers again. */
     setStartupObserver(observer?: RuntimeStartupObserver): void {
@@ -183,12 +189,16 @@ export class RouteBuilderImpl implements RouteBuilder {
 
         const routeMeta = route.routeMeta;
 
+        const implementation = route.implementation;
+        if (implementation instanceof LazyController)
+            return this.createLazyRouteHandler(route, implementation);
+
         // Resolve controller instance from DI container ONCE (not on every request!)
         const container = this.container;
         const controller = this.startupTiming.run(
             RuntimeStartupPhase.CONTROLLER,
-            route.controllerClass.name,
-            () => container.get(route.controllerClass),
+            implementation.name,
+            () => container.get(implementation),
         ) as Record<
             string,
             // webpieces-disable no-any-unknown -- heterogeneous route handlers erase API-specific result and argument shapes
@@ -198,7 +208,7 @@ export class RouteBuilderImpl implements RouteBuilder {
         // Get the controller method
         const method = controller[routeMeta.methodName];
         if (typeof method !== 'function') {
-            const controllerName = (route.controllerClass as NamedClass).name || 'Unknown';
+            const controllerName = (implementation as NamedClass).name || 'Unknown';
             throw new Error(
                 `Method ${routeMeta.methodName} not found on controller ${controllerName}`,
             );
@@ -213,6 +223,36 @@ export class RouteBuilderImpl implements RouteBuilder {
         // Return handler with route definition
         // webpieces-disable no-any-unknown -- heterogeneous handlers share one registration collection
         return new RouteHandlerWithMeta(handler as RouteHandler<unknown>, route);
+    }
+
+    private createLazyRouteHandler(
+        route: RouteDefinition,
+        implementation: LazyController<object>,
+    ): RouteHandlerWithMeta {
+        const api = route.apiClass;
+        if (typeof api !== 'function' || !('prototype' in api))
+            throw new Error('Lazy routes require their API contract.');
+        let state = this.lazyControllers.get(implementation);
+        if (!state) {
+            state = new LazyControllerState(
+                this.container!,
+                api,
+                implementation,
+                this.container!.get(LazyFeatureTimer),
+                Object.keys(getEndpoints(api) ?? {}),
+            );
+            this.lazyControllers.set(implementation, state);
+        }
+        if (!state.matchesApi(api))
+            throw new Error(
+                'A LazyController descriptor belongs to exactly one API contract per router.',
+            );
+        return new RouteHandlerWithMeta(new LazyRouteHandler(state), route);
+    }
+
+    /** Explicit build/integration validation only; never called by startup or transports. */
+    async validateLazyRoutesForBuild(): Promise<void> {
+        for (const state of this.lazyControllers.values()) await state.resolve();
     }
 
     /**
@@ -377,5 +417,18 @@ export class RouteBuilderImpl implements RouteBuilder {
     getRouteMeta(method: string, path: string): RouteMetadata | undefined {
         const key = this.createRouteKey(method, path);
         return this.routeMap.get(key)?.definition.routeMeta;
+    }
+}
+
+/** This is the final invocation handler: authentication, authorization and app filters ran first. */
+// webpieces-disable no-any-unknown -- heterogeneous registered API handlers erase their result type
+class LazyRouteHandler implements RouteHandler<unknown> {
+    constructor(private readonly state: LazyControllerState<object>) {}
+
+    // webpieces-disable no-any-unknown -- shared final dispatcher preserves arbitrary API results
+    async execute(meta: MethodMeta): Promise<unknown> {
+        const controller = await this.state.resolve();
+        const method = Reflect.get(controller, meta.methodName);
+        return Reflect.apply(method, controller, [...meta.requestArgs]);
     }
 }

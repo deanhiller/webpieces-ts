@@ -1,11 +1,17 @@
+import { LazyController } from './LazyController';
 import { AuthorizationService } from './AuthorizationHook';
 import { InvocationAuthentication } from './InvocationAuthentication';
 import { Container, ContainerModule, inject } from 'inversify';
 import { buildProviderModule } from '@inversifyjs/binding-decorators';
 import { DocumentDesign } from '@webpieces/core-util';
-import { provideFrameworkSingleton, buildFrameworkModule } from '@webpieces/core-context';
+import {
+    provideFrameworkSingleton,
+    buildFrameworkModule,
+    RequestContext,
+} from '@webpieces/core-context';
 import { RouteBuilderImpl } from './RouteBuilderImpl';
-import { ApiRoutingFactory, ClassType } from './ApiRoutingFactory';
+import { ApiRoutingFactory } from './ApiRoutingFactory';
+import type { ClassType } from './ClassType';
 import { FilterDefinition } from './WebAppMeta';
 import { WebpiecesConfig, WEBPIECES_CONFIG_TOKEN } from './WebpiecesConfig';
 import { ApiClientFactory } from './ApiClientFactory';
@@ -158,11 +164,12 @@ export class WebpiecesRouter implements ApiFactory {
 
     /**
      * Wire an API prototype (with @ApiPath/@Endpoint decorators) to its controller.
-     * Route registration resolves the controller and its dependency graph eagerly, before requests.
+     * A class resolves eagerly. A LazyController retains metadata now and imports its implementation
+     * only after the ordinary filter chain permits an invocation.
      */
-    addRoutes<TApi, TController extends TApi>(
+    addRoutes<TApi extends object, TController extends TApi>(
         api: ClassType<TApi>,
-        controller: ClassType<TController>,
+        controller: ClassType<TController> | LazyController<TController>,
     ): this {
         this.startupTiming.run(RuntimeStartupPhase.ROUTES, `${api.name}:${controller.name}`, () =>
             new ApiRoutingFactory(api, controller).configure(this.routeBuilder),
@@ -208,6 +215,16 @@ export class WebpiecesRouter implements ApiFactory {
 
     authorizationService(): AuthorizationService {
         return this.appContainer.get(AuthorizationService);
+    }
+
+    /**
+     * Warm and validate every optional implementation in a SEPARATE build/integration process with
+     * fake external providers. Never invoke this in the production entry point or from a request.
+     */
+    async validateLazyRoutesForBuild(): Promise<void> {
+        if (RequestContext.isActive())
+            throw new Error('Lazy implementation build validation cannot run inside a request.');
+        await this.routeBuilder.validateLazyRoutesForBuild();
     }
 
     /** The application DI container (child of the framework container). */

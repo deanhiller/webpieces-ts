@@ -3,7 +3,8 @@ import { describe, expect, it, vi } from 'vitest';
 import { Container, ContainerModule, ContainerModuleLoadOptions } from 'inversify';
 import { AnyContextKey, ConsoleLoggerFactory } from '@webpieces/core-util';
 import { WebpiecesRouter, WebpiecesRouterFactory, WebpiecesRouterOptions } from '../WebpiecesRouter';
-import { AppWiring, Wiring, BindModule, RouteModule } from '../Wiring';
+import { AppWiring, Wiring, RouteModule } from '../Wiring';
+import type { BindModule } from '../BindModule';
 import { Binder } from '../Binder';
 import { setupRuntime, RuntimeSetupOptions } from '../setupRuntime';
 

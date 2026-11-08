@@ -1,4 +1,5 @@
-import type { AppWiring, BindModule, RouteModule, Wiring } from './Wiring';
+import type { AppWiring, RouteModule, Wiring } from './Wiring';
+import type { BindModule } from './BindModule';
 import type { Binder } from './Binder';
 import { ClientBindOptions, PubSubBindOptions } from './Binder';
 

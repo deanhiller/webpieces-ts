@@ -17,7 +17,8 @@ import {
     WpAuthorization,
 } from '@webpieces/core-util';
 import { Binder } from '../Binder';
-import { AppWiring, BindModule, RouteModule, Wiring } from '../Wiring';
+import { AppWiring, RouteModule, Wiring } from '../Wiring';
+import type { BindModule } from '../BindModule';
 import { WebpiecesRouter } from '../WebpiecesRouter';
 import { RuntimeSetupOptions, setupRuntime } from '../setupRuntime';
 import {

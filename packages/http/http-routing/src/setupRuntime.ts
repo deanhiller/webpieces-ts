@@ -9,7 +9,8 @@ import {
 } from '@webpieces/core-util';
 import { WebpiecesConfig } from './WebpiecesConfig';
 import { WebpiecesRouterFactory } from './WebpiecesRouter';
-import { AppWiring, BindModule, NodeWiringModules } from './Wiring';
+import { AppWiring, NodeWiringModules } from './Wiring';
+import type { BindModule } from './BindModule';
 import { ContainerBinder } from './Binder';
 import { ApiFactory } from './ApiFactory';
 import {
