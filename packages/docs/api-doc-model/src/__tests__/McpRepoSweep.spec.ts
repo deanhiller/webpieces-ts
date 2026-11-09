@@ -265,6 +265,10 @@ const SWEPT_TOOLS: readonly string[] = [
     'OidcFailRemoteApi/oidc_fail_remote',
     'LocalThrowApi/local_throw',
     'RemoteThrowApi/remote_throw',
+    'StoreApi/stores_list',
+    'StoreApi/stores_pause',
+    'StoreApi/stores_purge',
+    'ServiceOnlyToolApi/service_only',
     'SearchApi/account_search',
     'SearchApi/admin_search',
     'RemoteSearchApi/remote_search',
@@ -302,6 +306,7 @@ describe('every @WpMcpTool in this repo, read by the compiler', () => {
             'packages/docs/openapi-generator/src/__tests__/fixtures/summary/UnsummarizedApi.ts',
             'packages/http/mcp-server/src/__tests__/McpProfileFixtures.ts',
             'packages/http/mcp-server/src/__tests__/McpRemoteFixtures.ts',
+            'packages/http/mcp-server/src/__tests__/McpTransportFixtures.ts',
             'packages/http/mcp-server/src/__tests__/WpMcpServerTestFixtures.ts',
         ]);
     });
