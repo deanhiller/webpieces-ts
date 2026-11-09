@@ -60,8 +60,10 @@ export class PrNumberPredictor {
             '--jq',
             PREDICT_JQ,
         ]);
-        const [latest, repoUrl] = result.ok ? result.stdout.trim().split('\t') : ['', ''];
-        if (!/^\d+$/.test(latest ?? '') || !(repoUrl ?? '').startsWith('http')) {
+        const parts = result.ok ? result.stdout.trim().split('\t') : [];
+        const latest = parts[0] ?? '';
+        const repoUrl = parts[1] ?? '';
+        if (!/^\d+$/.test(latest) || !repoUrl.startsWith('http')) {
             const why = result.ok ? `unexpected answer '${result.stdout.trim()}'` : (result.stderr.trim() || `exit ${String(result.code)}`);
             process.stderr.write(
                 `⚠️  Could not predict the new PR's number (${why}). Creating it without its own link and\n` +
