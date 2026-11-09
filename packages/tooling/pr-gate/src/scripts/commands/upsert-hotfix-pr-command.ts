@@ -13,6 +13,7 @@ import { MergeState } from '../workflow/merge-state';
 import { ChecklistScanOptions, ChecklistScanner } from '../workflow/checklist-scanner';
 import { TriggeredChecklist } from '../workflow/checklist-detector';
 import { HotfixPrPublisher } from '../workflow/hotfix-pr-publisher';
+import { PrBodyDraft } from '../workflow/gated-pr-publisher';
 import { UPSERT_HOTFIX_PR_COMMAND } from '../workflow/hotfix-redirect';
 import { PrCommentRequest, PrCommentUpserter } from '../workflow/pr-comment-upserter';
 import { SquashSettingsEnforcer } from '../workflow/squash-settings-enforcer';
@@ -143,22 +144,24 @@ export class UpsertHotfixPrCommand {
         const input = await this.dashboardInput(repoRoot, summary, config);
         const tokenSuffix = this.tokenSuffix(config.gateSalt, headSha);
         const initial = await this.prRef(branch);
-        const body = this.dashboard.renderPrBody(input, initial.url) + tokenSuffix;
+        const render = (prUrl: string): string => this.dashboard.renderPrBody(input, prUrl) + tokenSuffix;
+        const body = render(initial.url);
         for (const warning of new IssueReferences().closeWarnings(summary.addressesIssues)) process.stdout.write(`${warning}\n`);
         const bodyFile = path.join(this.reviewJsonService.prDirFor(repoRoot, await this.aiBranchName.getFeatureName()), 'pr-body.md');
         fs.mkdirSync(path.dirname(bodyFile), { recursive: true });
         fs.writeFileSync(bodyFile, body + '\n');
 
         process.stdout.write('\n' + SEP + '📋 Hotfix PR (bannered audit, never auto-merged)\n' + SEP + '\n');
-        const published = await this.publisher.publish(branch, this.titleFrom(summary, branch), bodyFile, UPSERT_HOTFIX_PR_COMMAND);
+        const published = await this.publisher.publish(branch, this.titleFrom(summary, branch), new PrBodyDraft(bodyFile, body, render), UPSERT_HOTFIX_PR_COMMAND);
         if (published.createFailed) {
             throw new CliExitError(1, `❌ gh pr create failed after the push. The rendered body is in ${bodyFile}; summary.json was kept. Re-run ${UPSERT_HOTFIX_PR_COMMAND}.`);
         }
         const ref = await this.prRef(branch);
         const resolved = new HotfixPrRef(ref.number !== '' ? ref.number : published.number, ref.url);
-        // A brand-new PR had no URL to self-link until `gh pr create` returned one.
-        const finalBody = this.dashboard.renderPrBody(input, resolved.url) + tokenSuffix;
-        if (finalBody !== body && resolved.number !== '') {
+        // A brand-new PR went up with its PREDICTED link (#1418); back-fill only a wrong or missing guess.
+        this.publisher.reportPredictedLink(published, resolved.number);
+        const finalBody = render(resolved.url);
+        if (finalBody !== published.body && resolved.number !== '') {
             fs.writeFileSync(bodyFile, finalBody + '\n');
             if (!(await this.editPrBody(resolved.number, bodyFile))) {
                 process.stderr.write(`⚠️  Could not add the PR's own link to its description (non-fatal — the PR and the gate token are up).\n`);

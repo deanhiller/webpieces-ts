@@ -18,7 +18,7 @@ import { StageOutputLog, FINISH_CONSOLE_LOG } from '../workflow/stage-output-log
 import { PrMerger, MergeIntent, MergeOutcome, MERGE_RESULT_FAILED } from '../workflow/pr-merger';
 import { FinishBanner, FinishBannerInput } from '../workflow/finish-banner';
 import { MergeBodyTempFile } from '../workflow/merge-body-temp-file';
-import { GatedPrPublisher } from '../workflow/gated-pr-publisher';
+import { GatedPrPublisher, PrBodyDraft } from '../workflow/gated-pr-publisher';
 import { ProvenanceEnforcer, ProvenanceReport } from '../workflow/provenance-enforcer';
 import { PrCommentRequest, PrCommentUpserter } from '../workflow/pr-comment-upserter';
 import { SquashSettingsEnforcer } from '../workflow/squash-settings-enforcer';
@@ -521,7 +521,8 @@ export class FinishUpsertPrCommand {
         const bodyFile = path.join(prDir, 'pr-body.md');
         fs.writeFileSync(bodyFile, request.body + '\n');
 
-        const published = await this.publisher.publish(baseBranch, title, bodyFile);
+        const render = (prUrl: string): string => this.dashboard.renderPrBody(input, prUrl) + request.tokenSuffix;
+        const published = await this.publisher.publish(baseBranch, title, new PrBodyDraft(bodyFile, request.body, render));
         if (published.createFailed) {
             process.stderr.write('⚠️  gh pr create failed — create the PR manually with the body in:\n  ' + bodyFile + '\n');
             return new UpsertResult('', '', new MergeOutcome(false, false, '⚠️  did NOT merge — there is no PR to merge (gh pr create failed above)', MERGE_RESULT_FAILED));
@@ -545,13 +546,15 @@ export class FinishUpsertPrCommand {
          * exists to remove. `pr-body-is-merge-body.spec.ts` pins it.
          *
          * The one wrinkle is the self-link. A brand-new PR has no URL until `gh pr create` returns, so the
-         * body published a moment ago was rendered with `prUrl: ''`. Re-render now that the URL is known
-         * and push the corrected description back, so the two strings match and the commit carries its own
-         * link. Only the CREATE path pays that extra edit: on every later run the URL was already known
-         * before publishing, `finalBody` matches what went up, and nothing is re-sent.
+         * publisher rendered it with the PREDICTED URL (issue #1418) — or with `prUrl: ''` when the
+         * prediction failed. Re-render with the REAL URL; when that differs from what went up (a wrong
+         * guess, or no guess), push the corrected description back, so the two strings match and the
+         * commit carries its own link. A correct guess needs no edit, so creating the PR fires one event.
+         * On every later run the URL was already known before publishing and nothing is re-sent.
          */
-        const finalBody = this.dashboard.renderPrBody(input, ref.url) + request.tokenSuffix;
-        if (finalBody !== request.body) await this.backfillPrBody(ref.number, bodyFile, finalBody);
+        this.publisher.reportPredictedLink(published, ref.number);
+        const finalBody = render(ref.url);
+        if (finalBody !== published.body) await this.backfillPrBody(ref.number, bodyFile, finalBody);
 
         // The DURABLE copy of these bytes is the PR description published above; this is a throwaway
         // file because `--body-file` takes a path. `wp-land-pr` reads the description back from GitHub,
@@ -592,8 +595,8 @@ export class FinishUpsertPrCommand {
         upsert.baseBranch = base;
         upsert.title = input.title;
         upsert.tokenSuffix = this.gateTokenBody(gateSalt, headSha);
-        // `existingPrUrl` is '' only for a brand-new PR — there is no URL to self-link to until
-        // `gh pr create` returns one, and upsertPr back-fills it the moment it does.
+        // `existingPrUrl` is '' only for a brand-new PR — the publisher then re-renders the body with the
+        // PREDICTED URL just before `gh pr create`, and upsertPr back-fills the real one on a miss.
         upsert.body = this.dashboard.renderPrBody(input, await this.existingPrUrl(base)) + upsert.tokenSuffix;
         // Rendering above already refused a stray closing reference; say out loud what merging WILL close.
         // `say`: a wrong closesIssue must be noticed BEFORE landing, so this may not end up only in the log.
@@ -615,7 +618,8 @@ export class FinishUpsertPrCommand {
     }
 
     /**
-     * Re-publish the description now that the PR's own URL is known (create path only).
+     * Re-publish the description now that the PR's own URL is known (create path only, and only when the
+     * predicted URL was wrong or could not be predicted).
      *
      * Non-fatal on purpose. The PR exists, its body already carries a valid gate token for the pushed
      * head, and the code is up — the ONLY thing missing is the self-link on the first line. Aborting a
@@ -636,8 +640,8 @@ export class FinishUpsertPrCommand {
 
     /**
      * The PR's web URL if one is already open for this branch, else '' — read BEFORE publishing so the
-     * description can carry its own link on the first render. Only a brand-new PR gets '' (and then
-     * {@link backfillPrBody} fixes it up after `gh pr create` returns a URL).
+     * description can carry its own link on the first render. Only a brand-new PR gets '' (the publisher
+     * then predicts its URL, and {@link backfillPrBody} fixes a wrong or missing prediction afterwards).
      */
     private async existingPrUrl(baseBranch: string): Promise<string> {
         return (await this.prRef(baseBranch)).url;

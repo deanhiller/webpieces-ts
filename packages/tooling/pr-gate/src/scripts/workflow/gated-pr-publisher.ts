@@ -1,7 +1,27 @@
 import { CliExitError } from '@webpieces/rules-config';
 import { NativeProcessApi } from '@webpieces/tooling-common';
+import * as fs from 'fs';
 import { injectable, bindingScopeValues } from 'inversify';
 import { GitExec } from './git-exec';
+import { PredictedPr, PrNumberPredictor } from './pr-number-predictor';
+
+/**
+ * The description a caller hands the publisher. `body` is ALREADY written to `bodyFile`, rendered with
+ * whatever URL was known before publishing ('' for a brand-new PR); `render` renders the same
+ * description for a given self-link URL, so the create path can re-render it with the PREDICTED URL just
+ * before `gh pr create` (issue #1418). Data-only.
+ */
+export class PrBodyDraft {
+    bodyFile: string;
+    body: string;
+    render: (prUrl: string) => string;
+
+    constructor(bodyFile: string, body: string, render: (prUrl: string) => string) {
+        this.bodyFile = bodyFile;
+        this.body = body;
+        this.render = render;
+    }
+}
 
 // Which PR the gated body landed on. Data-only.
 export class PublishedPr {
@@ -9,10 +29,19 @@ export class PublishedPr {
     number: string;
     // True only on the create path, when `gh pr create` itself failed — there is no PR to merge.
     createFailed: boolean;
+    /**
+     * The description exactly as it went up (without the file's trailing newline). A caller compares its
+     * final render — with the REAL URL — against this, and back-fills only when they differ.
+     */
+    body: string;
+    // The number the create path predicted ('' on the update path, or when the prediction failed).
+    predictedNumber: string;
 
-    constructor(number: string, createFailed: boolean) {
+    constructor(number: string, createFailed: boolean, body: string, predictedNumber: string) {
         this.number = number;
         this.createFailed = createFailed;
+        this.body = body;
+        this.predictedNumber = predictedNumber;
     }
 }
 
@@ -32,6 +61,11 @@ export class PublishedPr {
  * right token. A brand-new PR is unaffected either way — `gh pr create` composes the body after the push,
  * so the `opened` event already sees the final body.
  *
+ * A brand-new PR's description also wants its OWN link, which does not exist until GitHub assigns a
+ * number. Right before `gh pr create` (after the push, to keep the race window small) the publisher
+ * PREDICTS that number and renders the body with the predicted URL (issue #1418), so a correct guess
+ * creates the PR with its final description and fires one `opened` event instead of `opened` + `edited`.
+ *
  * THIS IS THE ONLY PUSH IN THE PR FLOW. `wp-start-upsert-pr` used to push twice (its own `ensurePushed`,
  * and the force-push inside the 3-point merge finalize), which put code on the remote before summary.json
  * and the checklists had even run, and fired `synchronize` against a PR body still carrying the previous
@@ -46,19 +80,21 @@ export class GatedPrPublisher {
     constructor(
         private readonly gitExec: GitExec,
         private readonly processes: NativeProcessApi,
+        private readonly predictor: PrNumberPredictor,
     ) {}
 
     /**
-     * Land `bodyFile` on the PR for `baseBranch` and push, in the gate-safe order.
+     * Land the draft's body on the PR for `baseBranch` and push, in the gate-safe order.
      *
-     * @param bodyFile the rendered dashboard ALREADY carrying the gate token for the LOCAL head sha
+     * @param draft the rendered dashboard ALREADY carrying the gate token for the LOCAL head sha
      */
     async publish(
         baseBranch: string,
         title: string,
-        bodyFile: string,
+        draft: PrBodyDraft,
         retryCommand = 'pnpm wp-finish-upsert-pr',
     ): Promise<PublishedPr> {
+        const bodyFile = draft.bodyFile;
         const existing = await this.findOpenPr(baseBranch);
 
         // 1. Body FIRST, so a `synchronize` read arriving the instant after the push finds the right token.
@@ -81,9 +117,37 @@ export class GatedPrPublisher {
         await this.push(baseBranch);
 
         // 3. Only a brand-new PR is created, and only after the push — `gh pr create` needs the remote ref.
-        if (existing !== '') return new PublishedPr(existing, false);
-        process.stdout.write('Creating PR...\n');
-        return new PublishedPr('', !(await this.createPr(baseBranch, title, bodyFile)));
+        if (existing !== '') return new PublishedPr(existing, false, draft.body, '');
+
+        // 4. Predict the new PR's number and render its self-link into the body BEFORE creating it, so a
+        //    correct guess needs no follow-up `gh pr edit` (one `opened` event, no cancelled CI run).
+        const predicted = await this.predictor.predict();
+        const body = this.bodyFor(draft, predicted);
+        process.stdout.write(predicted.number === '' ? 'Creating PR...\n' : `Creating PR (predicted #${predicted.number})...\n`);
+        return new PublishedPr('', !(await this.createPr(baseBranch, title, bodyFile)), body, predicted.number);
+    }
+
+    /**
+     * Say how the create path's predicted self-link turned out, given the number GitHub REALLY assigned.
+     * Silent on the update path and when there was no prediction (the predictor already warned). A miss
+     * costs exactly what every create cost before #1418: the caller back-fills the real link.
+     */
+    reportPredictedLink(published: PublishedPr, realNumber: string): void {
+        if (published.predictedNumber === '' || realNumber === '') return;
+        if (published.predictedNumber === realNumber) {
+            process.stdout.write(`   PR link predicted #${realNumber} ✓\n`);
+            return;
+        }
+        process.stdout.write(`   PR link predicted #${published.predictedNumber}, got #${realNumber}: back-filling the real link\n`);
+    }
+
+    // The body to create the PR with: re-rendered with the predicted URL when there is one, else the
+    // draft as the caller wrote it. Rewrites `bodyFile` only when the bytes change.
+    private bodyFor(draft: PrBodyDraft, predicted: PredictedPr): string {
+        if (predicted.url === '') return draft.body;
+        const body = draft.render(predicted.url);
+        if (body !== draft.body) fs.writeFileSync(draft.bodyFile, body + '\n');
+        return body;
     }
 
     // Edit the PR body/title, aborting BEFORE the push if `gh` failed. Warning-and-continuing here would

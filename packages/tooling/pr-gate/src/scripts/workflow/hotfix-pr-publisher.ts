@@ -3,6 +3,7 @@ import { NativeProcessApi } from '@webpieces/tooling-common';
 import { injectable, bindingScopeValues } from 'inversify';
 import { GatedPrPublisher } from './gated-pr-publisher';
 import { GitExec } from './git-exec';
+import { PrNumberPredictor } from './pr-number-predictor';
 
 /**
  * The gated publisher for a `/hotfix/` branch: the same body-before-push ordering, with a push that can
@@ -18,8 +19,8 @@ import { GitExec } from './git-exec';
  */
 @injectable(bindingScopeValues.Singleton)
 export class HotfixPrPublisher extends GatedPrPublisher {
-    constructor(private readonly hotfixGit: GitExec, processes: NativeProcessApi) {
-        super(hotfixGit, processes);
+    constructor(private readonly hotfixGit: GitExec, processes: NativeProcessApi, predictor: PrNumberPredictor) {
+        super(hotfixGit, processes, predictor);
     }
 
     /** Fast-forward-only push of HEAD to origin/<branch>, run in `cwd`. Throws on any failure. */
