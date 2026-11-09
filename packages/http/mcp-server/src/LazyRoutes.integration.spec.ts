@@ -4,6 +4,7 @@ import express from 'express';
 import { type Server } from 'node:http';
 import { ContainerModule, type ContainerModuleLoadOptions } from 'inversify';
 import {
+    Mcp,
     HeaderRegistry,
     ServiceInfo,
     LogManager,
@@ -17,8 +18,9 @@ import {
     WebpiecesRouterFactory,
 } from '@webpieces/http-routing';
 import { McpApiBinding } from './McpApiBinding';
-import { WpMcpServerConfig } from './McpAuth';
+import { WpMcpServerConfig, McpAccessTokenFormat, mcpOAuth } from './McpAuth';
 import { McpBindOptions } from './McpBindOptions';
+import { McpToolset } from './McpToolset';
 import { McpDeployment } from './McpDeployment';
 import { WpMcpServer } from './WpMcpServer';
 import { McpHttpTestHarness, TestServers } from './__tests__/McpHttpTestHarness';
@@ -34,7 +36,7 @@ import {
 
 class LazyMcpApp {
     constructor(private readonly mode: 'isolated' | 'application') {}
-    bridge?: WpMcpServer<string>;
+    bridge?: WpMcpServer;
     server?: Server;
     harness!: McpHttpTestHarness;
     imports = 0;
@@ -59,28 +61,30 @@ class LazyMcpApp {
             }),
         );
         this.bridge = new WpMcpServer(
-            new WpMcpServerConfig<string>()
+            new WpMcpServerConfig()
                 .setName('lazy-mcp-spec')
                 .setTitle('Lazy MCP test')
                 .setDescription('First-use routing through verified MCP dispatch')
                 .setWebsiteUrl('https://docs.example.test/mcp')
                 .setVersion('1.0.0')
                 .setResource('https://api.example.test/app-owned/mcp')
-                .setAccessTokenAuthority(new TestTokenAuthority())
-                .setAuthorizationService(router.authorizationService())
-                .setAuthorizationServers(['https://login.example.test'])
-                .setRequiredScopes(['tools']),
-        );
-        const app = express();
-        this.bridge.bind(
-            app,
-            new McpBindOptions(
-                ENDPOINT_PATH,
+                .setAuth([
+                    mcpOAuth(
+                        new TestTokenAuthority(),
+                        ['https://login.example.test'],
+                        ['tools'],
+                        McpAccessTokenFormat.everyBearer(),
+                    ),
+                ]),
+            new McpToolset(
                 [McpApiBinding.local(SearchApi, router)],
                 [SEARCH_API_CATALOG],
-                McpDeployment.singleProcess(),
+                router.authorizationService(),
+                [Mcp.DEFAULT],
             ),
         );
+        const app = express();
+        this.bridge.bind(app, new McpBindOptions(ENDPOINT_PATH, McpDeployment.singleProcess()));
         this.server = await TestServers.listen(app);
         this.harness = new McpHttpTestHarness(TestServers.urlOf(this.server), ENDPOINT_PATH);
     }

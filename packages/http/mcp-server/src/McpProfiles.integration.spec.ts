@@ -3,11 +3,23 @@ import { Server } from 'node:http';
 import express from 'express';
 import { ContainerModule, ContainerModuleLoadOptions } from 'inversify';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { HeaderRegistry, Mcp, McpToolProfiles, McpToolCatalogFile, McpToolDefinition } from '@webpieces/core-util';
+import {
+    HeaderRegistry,
+    Mcp,
+    McpToolProfiles,
+    McpToolCatalogFile,
+    McpToolDefinition,
+} from '@webpieces/core-util';
 import { JWT_HOOK, WebpiecesRouterFactory, WebpiecesRouter } from '@webpieces/http-routing';
 import { McpApiBinding } from './McpApiBinding';
-import { WpMcpServerConfig, VerifiedMcpCredential } from './McpAuth';
+import {
+    WpMcpServerConfig,
+    VerifiedMcpCredential,
+    McpAccessTokenFormat,
+    mcpOAuth,
+} from './McpAuth';
 import { McpBindOptions } from './McpBindOptions';
+import { McpToolset } from './McpToolset';
 import { McpDeployment } from './McpDeployment';
 import { WpMcpServer } from './WpMcpServer';
 import { McpToolCatalog } from './McpToolCatalog';
@@ -31,7 +43,7 @@ class ProfileMount {
         readonly path: string,
         readonly profiles: McpToolProfiles,
     ) {}
-    bridge!: WpMcpServer<string>;
+    bridge!: WpMcpServer;
     client!: McpHttpTestHarness;
     token(admin: boolean): string {
         return `${admin ? 'mcp-admin' : 'mcp-user'}:${this.path}`;
@@ -69,30 +81,31 @@ describe('bound MCP profile and resource isolation', () => {
         const app = express();
         for (const mount of mounts) {
             const profiles: [string, ...string[]] = [mount.profiles[0], ...mount.profiles.slice(1)];
-            const config = new WpMcpServerConfig<string>()
+            const config = new WpMcpServerConfig()
                 .setName('profiles')
                 .setTitle('Webpieces Test Server')
                 .setDescription('Exercises the webpieces MCP bridge in the mcp-server test suite.')
                 .setWebsiteUrl('https://docs.example.test/mcp')
                 .setVersion('1')
                 .setResource(`https://api.example.test${mount.path}`)
-                .setAccessTokenAuthority(new ResourceAuthority())
-                .setAuthorizationService(router.authorizationService())
-                .setAuthorizationServers(['https://login.example.test'])
-                .setRequiredScopes(['tools']);
-            if (mount.path !== '/mcp') config.setToolProfiles(profiles);
-            mount.bridge = new WpMcpServer(config);
-            mount.bridge.bind(
-                app,
-                new McpBindOptions(
-                    mount.path,
-                    [McpApiBinding.local(ProfileApi, router)],
-                    [PROFILE_CATALOG],
-                    McpDeployment.singleProcess(),
-                ),
+                .setAuth([
+                    mcpOAuth(
+                        new ResourceAuthority(),
+                        ['https://login.example.test'],
+                        ['tools'],
+                        McpAccessTokenFormat.everyBearer(),
+                    ),
+                ]);
+            const toolset = new McpToolset(
+                [McpApiBinding.local(ProfileApi, router)],
+                [PROFILE_CATALOG],
+                router.authorizationService(),
+                profiles,
             );
+            mount.bridge = new WpMcpServer(config, toolset);
+            mount.bridge.bind(app, new McpBindOptions(mount.path, McpDeployment.singleProcess()));
+            // The toolset snapshots its profiles: mutating the caller's array changes nothing served.
             profiles.push('unselected');
-            config.setToolProfiles(['course-authoring']);
         }
         http = await TestServers.listen(app);
         for (const mount of mounts)
@@ -217,27 +230,31 @@ describe('bound MCP profile and resource isolation', () => {
             '(stale)',
         );
         for (const catalog of [missing, stale]) {
-            const config = new WpMcpServerConfig<string>()
+            const config = new WpMcpServerConfig()
                 .setName('invalid')
                 .setTitle('Webpieces Test Server')
                 .setDescription('Exercises the webpieces MCP bridge in the mcp-server test suite.')
                 .setWebsiteUrl('https://docs.example.test/mcp')
                 .setVersion('1')
                 .setResource('https://api.example.test/mcp')
-                .setAccessTokenAuthority(new ResourceAuthority())
-                .setAuthorizationService(router.authorizationService())
-                .setAuthorizationServers(['https://login.example.test'])
-                .setRequiredScopes(['tools']);
+                .setAuth([
+                    mcpOAuth(
+                        new ResourceAuthority(),
+                        ['https://login.example.test'],
+                        ['tools'],
+                        McpAccessTokenFormat.everyBearer(),
+                    ),
+                ]);
             expect(() =>
-                new WpMcpServer(config).bind(
-                    express(),
-                    new McpBindOptions(
-                        '/mcp',
+                new WpMcpServer(
+                    config,
+                    new McpToolset(
                         [McpApiBinding.local(ProfileApi, router)],
                         [catalog],
-                        McpDeployment.singleProcess(),
+                        router.authorizationService(),
+                        [Mcp.DEFAULT],
                     ),
-                ),
+                ).bind(express(), new McpBindOptions('/mcp', McpDeployment.singleProcess())),
             ).toThrow(/catalog|rebuild/i);
         }
     });

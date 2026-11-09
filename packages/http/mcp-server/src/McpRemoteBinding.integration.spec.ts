@@ -10,6 +10,7 @@ import express, { Express } from 'express';
 import { ContainerModule, ContainerModuleLoadOptions, injectable } from 'inversify';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import {
+    Mcp,
     ClientRegistry,
     ContextTuple,
     Filter,
@@ -49,8 +50,14 @@ import {
 import { WebpiecesExpressRouter } from '@webpieces/http-server';
 import { McpApiBinding } from './McpApiBinding';
 import { McpApiDispatcher } from './McpApiDispatcher';
-import { VerifiedMcpCredential, WpMcpServerConfig } from './McpAuth';
+import {
+    VerifiedMcpCredential,
+    WpMcpServerConfig,
+    McpAccessTokenFormat,
+    mcpOAuth,
+} from './McpAuth';
 import { McpBindOptions } from './McpBindOptions';
+import { McpToolset } from './McpToolset';
 import { McpDeployment } from './McpDeployment';
 import { McpInvocationContext } from '@webpieces/core-util';
 import { McpToolRegistry, RegisteredMcpTool } from './McpToolRegistry';
@@ -122,7 +129,7 @@ describe('McpApiBinding.remote generated Node client integration', () => {
     let server: Server;
     let garbageServer: Server;
     let gatewayServer: Server;
-    let gateway: WpMcpServer<string>;
+    let gateway: WpMcpServer;
     let router: WebpiecesRouter;
     let controller: RemoteMcpController;
     let verifier: RecordingOidcVerifier;
@@ -211,23 +218,22 @@ describe('McpApiBinding.remote generated Node client integration', () => {
             new RecordingOidcMinter(new Error('SECRET-oidc-metadata-server-down')),
         );
         gateway = new WpMcpServer(
-            new WpMcpServerConfig<string>()
+            new WpMcpServerConfig()
                 .setName('gateway')
                 .setTitle('Webpieces Test Server')
                 .setDescription('Exercises the webpieces MCP bridge in the mcp-server test suite.')
                 .setWebsiteUrl('https://docs.example.test/mcp')
                 .setVersion('1.0.0')
                 .setResource('https://gateway.example.test/gateway/mcp')
-                .setAccessTokenAuthority(new TestTokenAuthority())
-                .setAuthorizationService(router.authorizationService())
-                .setAuthorizationServers(['https://login.example.test'])
-                .setRequiredScopes(['tools']),
-        );
-        const gatewayApp: Express = express();
-        gateway.bind(
-            gatewayApp,
-            new McpBindOptions(
-                GATEWAY_PATH,
+                .setAuth([
+                    mcpOAuth(
+                        new TestTokenAuthority(),
+                        ['https://login.example.test'],
+                        ['tools'],
+                        McpAccessTokenFormat.everyBearer(),
+                    ),
+                ]),
+            new McpToolset(
                 [
                     McpApiBinding.local(LocalThrowApi, router),
                     McpApiBinding.remote(RemoteThrowApi, () =>
@@ -257,9 +263,12 @@ describe('McpApiBinding.remote generated Node client integration', () => {
                     ),
                 ],
                 GATEWAY_CATALOGS,
-                McpDeployment.singleProcess(),
+                router.authorizationService(),
+                [Mcp.DEFAULT],
             ),
         );
+        const gatewayApp: Express = express();
+        gateway.bind(gatewayApp, new McpBindOptions(GATEWAY_PATH, McpDeployment.singleProcess()));
         gatewayServer = await TestServers.listen(gatewayApp);
         gatewayUrl = TestServers.urlOf(gatewayServer);
     }
@@ -366,7 +375,6 @@ describe('McpApiBinding.remote generated Node client integration', () => {
             return new McpApiDispatcher().call(
                 tool,
                 new RemoteRequest('hello'),
-                credential,
                 invocation,
                 new AuthorizationService(),
             );

@@ -319,7 +319,7 @@ describe('McpToolRegistry pairs each binding with ITS contract’s catalog', () 
 
     it('refuses an empty catalog list, saying so', () => {
         expect(() => new McpToolRegistry([search()], [], factory.authorizationService())).toThrow(
-            /\(none — toolCatalogs is empty\)/,
+            /\(none — the catalogs passed to new McpToolset\(\.\.\.\) are empty\)/,
         );
     });
 

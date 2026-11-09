@@ -1,5 +1,11 @@
 import { AuthorizationService } from '@webpieces/http-routing';
-import { WpAuthorization, AuthorizationType, WpAuth, jwt as jwtAuth } from '@webpieces/core-util';
+import {
+    Mcp,
+    WpAuthorization,
+    AuthorizationType,
+    WpAuth,
+    jwt as jwtAuth,
+} from '@webpieces/core-util';
 import 'reflect-metadata';
 import { createServer, request as nodeRequest, Server } from 'node:http';
 import {
@@ -13,11 +19,28 @@ import {
 import express, { Express } from 'express';
 import { ContainerModule, ContainerModuleLoadOptions } from 'inversify';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { ApiPath, ApiType, Endpoint, HeaderRegistry, WpMcpTool, MCP, POST, RPC, SVC_TO_SVC, WRITE } from '@webpieces/core-util';
+import {
+    ApiPath,
+    ApiType,
+    Endpoint,
+    HeaderRegistry,
+    WpMcpTool,
+    MCP,
+    POST,
+    RPC,
+    SVC_TO_SVC,
+    WRITE,
+} from '@webpieces/core-util';
 import { JWT_HOOK, WebpiecesRouter, WebpiecesRouterFactory } from '@webpieces/http-routing';
 import { McpApiBinding } from './McpApiBinding';
-import { VerifiedMcpCredential, WpMcpServerConfig } from './McpAuth';
+import {
+    VerifiedMcpCredential,
+    WpMcpServerConfig,
+    McpAccessTokenFormat,
+    mcpOAuth,
+} from './McpAuth';
 import { McpBindOptions } from './McpBindOptions';
+import { McpToolset } from './McpToolset';
 import { McpDeployment } from './McpDeployment';
 import { McpToolCatalog } from './McpToolCatalog';
 import { WpMcpServer } from './WpMcpServer';
@@ -54,13 +77,13 @@ class SharedTestEventBus implements ServerEventBus {
 }
 
 interface BoundTestBridge {
-    bridge: WpMcpServer<string>;
+    bridge: WpMcpServer;
     server: Server;
     url: string;
 }
 
 describe('WpMcpServer HTTP bridge', () => {
-    let bridge: WpMcpServer<string>;
+    let bridge: WpMcpServer;
     let controller: SearchController;
     let authority: TestTokenAuthority;
     let jwtHook: TestJwtHook;
@@ -82,20 +105,24 @@ describe('WpMcpServer HTTP bridge', () => {
         controller = router.getContainer().get(SearchController);
         authority = new TestTokenAuthority();
         remote = new RemoteSearchClient();
-        bridge = new WpMcpServer(serverConfig());
-        const app: Express = express();
-        bridge.bind(
-            app,
-            new McpBindOptions(
-                ENDPOINT_PATH,
+        bridge = new WpMcpServer(
+            serverConfig(),
+            new McpToolset(
                 [
                     McpApiBinding.local(SearchApi, router),
                     McpApiBinding.remote(RemoteSearchApi, () => remote),
                 ],
                 [SEARCH_API_CATALOG, REMOTE_SEARCH_API_CATALOG],
-                McpDeployment.singleProcess(1_234),
-                ['https://trusted.example.test'],
+                router.authorizationService(),
+                [Mcp.DEFAULT],
             ),
+        );
+        const app: Express = express();
+        bridge.bind(
+            app,
+            new McpBindOptions(ENDPOINT_PATH, McpDeployment.singleProcess(1_234), [
+                'https://trusted.example.test',
+            ]),
         );
         httpServer = createServer(app);
         await new Promise<void>((resolve: () => void, reject: (error: Error) => void) => {
@@ -115,18 +142,22 @@ describe('WpMcpServer HTTP bridge', () => {
         });
     });
 
-    function serverConfig(): WpMcpServerConfig<string> {
-        return new WpMcpServerConfig<string>()
+    function serverConfig(): WpMcpServerConfig {
+        return new WpMcpServerConfig()
             .setName('test-server')
             .setTitle('Webpieces Test Server')
             .setDescription('Exercises the webpieces MCP bridge in the mcp-server test suite.')
             .setWebsiteUrl('https://docs.example.test/mcp')
             .setVersion('1.0.0')
             .setResource('https://api.example.test/app-owned/mcp')
-            .setAccessTokenAuthority(authority)
-            .setAuthorizationService(router.authorizationService())
-            .setAuthorizationServers(['https://login.example.test'])
-            .setRequiredScopes(['tools']);
+            .setAuth([
+                mcpOAuth(
+                    authority,
+                    ['https://login.example.test'],
+                    ['tools'],
+                    McpAccessTokenFormat.everyBearer(),
+                ),
+            ]);
     }
 
     async function bindTestBridge(
@@ -140,9 +171,12 @@ describe('WpMcpServer HTTP bridge', () => {
                     (binding: McpApiBinding) => binding.api.name === catalog.contractName,
                 ),
         );
-        const instance = new WpMcpServer<string>(serverConfig());
+        const instance = new WpMcpServer(
+            serverConfig(),
+            new McpToolset(bindings, catalogs, router.authorizationService(), [Mcp.DEFAULT]),
+        );
         const app: Express = express();
-        instance.bind(app, new McpBindOptions(ENDPOINT_PATH, bindings, catalogs, deployment));
+        instance.bind(app, new McpBindOptions(ENDPOINT_PATH, deployment));
         const server = createServer(app);
         await new Promise<void>((resolve: () => void, reject: (error: Error) => void) => {
             server.once('error', reject);
@@ -570,29 +604,23 @@ describe('WpMcpServer HTTP bridge', () => {
                 throw new Error('contract only');
             }
         }
-        const missing = new WpMcpServer(serverConfig());
-        expect(() =>
-            missing.bind(
-                express(),
-                new McpBindOptions(
-                    ENDPOINT_PATH,
+        expect(
+            () =>
+                new McpToolset(
                     [McpApiBinding.local(MissingMcpAuthApi, router)],
                     [],
-                    McpDeployment.singleProcess(),
+                    router.authorizationService(),
+                    [Mcp.DEFAULT],
                 ),
-            ),
         ).toThrow(/WpAuthorization/);
-        const mismatch = new WpMcpServer(serverConfig());
-        expect(() =>
-            mismatch.bind(
-                express(),
-                new McpBindOptions(
-                    ENDPOINT_PATH,
+        expect(
+            () =>
+                new McpToolset(
                     [McpApiBinding.remote(SearchApi, () => new SearchController())],
                     [SEARCH_API_CATALOG],
-                    McpDeployment.singleProcess(),
+                    router.authorizationService(),
+                    [Mcp.DEFAULT],
                 ),
-            ),
         ).toThrow(/oidc.*sharedSecret/);
     });
 
@@ -604,7 +632,10 @@ describe('WpMcpServer HTTP bridge', () => {
         });
         expect(() => bridge.toolsChanged()).not.toThrow();
         jwtHook.failWith = new Error('JWT authority must not be called by MCP');
-        expect(structuredOf(await callTool('account_search', {query:'mine'}))).toEqual({userId:'user-7',result:'mine'});
+        expect(structuredOf(await callTool('account_search', { query: 'mine' }))).toEqual({
+            userId: 'user-7',
+            result: 'mine',
+        });
         expect(jwtHook.mintedTokens).toEqual([]);
         jwtHook.failWith = undefined;
     });
@@ -626,16 +657,19 @@ describe('WpMcpServer HTTP bridge', () => {
     });
 
     it('refuses to bind when the resource path and the endpointPath disagree', () => {
-        const mismatched = new WpMcpServer<string>(serverConfig());
+        const mismatched = new WpMcpServer(
+            serverConfig(),
+            new McpToolset(
+                [McpApiBinding.local(SearchApi, router)],
+                [SEARCH_API_CATALOG],
+                router.authorizationService(),
+                [Mcp.DEFAULT],
+            ),
+        );
         expect(() =>
             mismatched.bind(
                 express(),
-                new McpBindOptions(
-                    '/some-other-path',
-                    [McpApiBinding.local(SearchApi, router)],
-                    [SEARCH_API_CATALOG],
-                    McpDeployment.singleProcess(),
-                ),
+                new McpBindOptions('/some-other-path', McpDeployment.singleProcess()),
             ),
         ).toThrow(/resource path '\/app-owned\/mcp' must equal endpointPath '\/some-other-path'/);
     });
@@ -645,12 +679,7 @@ describe('WpMcpServer HTTP bridge', () => {
         expect(() =>
             bound.bridge.bind(
                 express(),
-                new McpBindOptions(
-                    ENDPOINT_PATH,
-                    [McpApiBinding.local(SearchApi, router)],
-                    [SEARCH_API_CATALOG],
-                    McpDeployment.singleProcess(),
-                ),
+                new McpBindOptions(ENDPOINT_PATH, McpDeployment.singleProcess()),
             ),
         ).toThrow(/exactly one canonical URI/);
         await bound.bridge.close();

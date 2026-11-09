@@ -21,7 +21,7 @@ type ProjectJson = { readonly name?: string; readonly targets?: LayoutTargets };
  * ONE contract's MCP tools as a server boots them: the generated `mcp-<ContractClass>-tools.json`, and
  * the directory it was read from, so a boot refusal can name every directory it searched.
  *
- * `WpMcpServer` is handed a LIST of these (`McpBindOptions.toolCatalogs`), and `McpToolRegistry` checks
+ * `McpToolset` is handed a LIST of these (its `catalogs` constructor argument), and `McpToolRegistry` checks
  * each `McpApiBinding` against the catalog of exactly its own contract (#1021).
  *
  * Build them with {@link McpToolCatalog.fromPackages}, the one call that works in every environment a

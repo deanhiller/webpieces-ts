@@ -3,17 +3,19 @@ import { RequestContext } from '@webpieces/core-context';
 import { InvocationAuthentication, AuthorizationService } from '@webpieces/http-routing';
 import { McpToolPolicy } from './McpToolPolicy';
 import { RegisteredMcpTool } from './McpToolRegistry';
-import { VerifiedMcpCredential } from './McpAuth';
 import { MCP_INVOCATION_CONTEXT, McpInvocationContext } from '@webpieces/core-util';
 
-/** Authorize, validate, then issue a local credential and invoke the ordinary filters. No scope or catch. */
+/**
+ * Authorize, validate, then issue a local credential and invoke the ordinary filters. No scope or
+ * catch. The caller is whoever is trusted in the CURRENT RequestContext — the transport established
+ * it — so the dispatcher takes no credential of its own.
+ */
 export class McpApiDispatcher {
     private readonly schemas = new ApiJsonSchemaValidator();
 
     async call(
         tool: RegisteredMcpTool,
         requestDto: DtoValue,
-        credential: VerifiedMcpCredential,
         invocation: McpInvocationContext,
         policy: AuthorizationService,
     ): Promise<DtoValue> {

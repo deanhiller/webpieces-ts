@@ -7,8 +7,18 @@ export {
     QueryString,
     QueryParams,
     WpAuthPublic,
-    WpAuth, WpLocalOnly, isLocalOnly, jwt, oidcSameProject, oidcSvcs, sharedSecret, vendorAuth, apiKey,
-    WpAuthorization, AuthorizationType, getAuthorization,
+    WpAuth,
+    WpLocalOnly,
+    isLocalOnly,
+    jwt,
+    oidcSameProject,
+    oidcSvcs,
+    sharedSecret,
+    vendorAuth,
+    apiKey,
+    WpAuthorization,
+    AuthorizationType,
+    getAuthorization,
     Rpc,
     PubSub,
     Queue,
@@ -146,6 +156,8 @@ export {
 export { VendorAuthVerifier, VENDOR_AUTH_VERIFIER } from '@webpieces/core-context';
 export { UnverifiableAuthModeError } from './UnverifiableAuthModeError';
 export { DefaultOidcVerifier } from './DefaultOidcVerifier';
+// The same verifiers AuthFilter holds, for a door that is not a route (the MCP HTTP endpoint).
+export { CredentialVerifiers, SharedSecretComparison } from './CredentialVerifiers';
 // DefaultJwtHook: batteries-included HS256 JwtHook — `new DefaultJwtHook(secret)` and go.
 export { DefaultJwtHook, DefaultJwtMintRequest } from './DefaultJwtHook';
 
@@ -161,8 +173,14 @@ export { setupRuntime, RuntimeSetupOptions } from './setupRuntime';
 // Server configuration
 export { WebpiecesConfig, WEBPIECES_CONFIG_TOKEN } from './WebpiecesConfig';
 
-
-export { AuthorizationHook, AuthorizationService, CanonicalUserRoles, AUTHORIZATION_HOOK, VERIFIED_MACHINE_CALLER, VerifiedMachineCaller } from './AuthorizationHook';
+export {
+    AuthorizationHook,
+    AuthorizationService,
+    CanonicalUserRoles,
+    AUTHORIZATION_HOOK,
+    VERIFIED_MACHINE_CALLER,
+    VerifiedMachineCaller,
+} from './AuthorizationHook';
 export { AuthorizedApiDocument } from './AuthorizedApiDocument';
 export type { ApiDocumentObject, ApiDocumentValue } from './AuthorizedApiDocument';
 
@@ -171,4 +189,10 @@ export { WiringPolicy } from '@webpieces/http-client-core';
 export { RuntimeStartupPhase, RuntimeStartupOperation } from './RuntimeStartupTiming';
 export type { RuntimeStartupObserver, RuntimeStartupSpan } from './RuntimeStartupTiming';
 
-export { LazyController, LazyImplementation, ApplicationImplementation, LazyFeatureTimer, LazyFeatureDeadline } from './LazyController';
+export {
+    LazyController,
+    LazyImplementation,
+    ApplicationImplementation,
+    LazyFeatureTimer,
+    LazyFeatureDeadline,
+} from './LazyController';

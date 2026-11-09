@@ -1,196 +1,113 @@
-import { McpToolDeniedError } from './McpToolPolicy';
-import { createHash } from 'node:crypto';
 import {
     AuthInfo,
-    CallToolRequest,
-    CallToolResult,
     createMcpHandler,
-    ListToolsResult,
     McpHttpHandler,
     McpRequestContext,
     McpServer,
-    ProgressToken,
-    ProtocolError,
-    ServerContext,
-    ServerOptions,
-    Tool,
-    Implementation,
     Icon,
 } from '@modelcontextprotocol/server';
 import { NodeMcpRequestHandler, toNodeHandler } from '@modelcontextprotocol/node';
 import { Express, json, NextFunction, Request, Response } from 'express';
 import {
     ApiBadRequestError,
-    ApiErrorBoundary,
     ApiForbiddenError,
     ApiImplementationError,
-    ApiJsonSchemaValidator,
-    ApiMethodInfo,
-    ApiUnauthorizedError,
     DtoValue,
-    LogApiCallImpl,
     LogManager,
     toError,
     WebpiecesCoreHeaders,
 } from '@webpieces/core-util';
-import {
-    HttpRequest,
-    RequestContext,
-    RequestContextApiCallContext,
-    RequestContextHeaders,
-} from '@webpieces/core-context';
+import { HttpRequest, RequestContext, RequestContextHeaders } from '@webpieces/core-context';
 import { ExpressResponseWriter } from '@webpieces/http-server';
 import { AuthenticatedCallerContext } from '@webpieces/http-routing';
 import {
-    MAX_MCP_ACCESS_TOKEN_LIFETIME_SECONDS,
+    McpHttpAuth,
     McpProtectedResourceMetadata,
-    VerifiedMcpCredential,
     WpMcpServerConfig,
+    McpOAuthMode,
 } from './McpAuth';
-import { McpApiDispatcher } from './McpApiDispatcher';
 import { McpBindOptions } from './McpBindOptions';
-import { McpInvocationContext, McpProgressReporter } from '@webpieces/core-util';
-import { AuthorizedMcpTools, McpToolRegistry, RegisteredMcpTool } from './McpToolRegistry';
+import { McpDoorAuthenticator, McpDoorPass, McpDoorRequest } from './McpDoorAuth';
 import { McpCorrelation } from './McpToolCallRendering';
 import { McpProtocol } from './McpProtocol';
+import { AuthorizedMcpTools, RegisteredMcpTool } from './McpToolRegistry';
+import { McpToolRequest, McpToolset } from './McpToolset';
 import { WpMcpErrorTranslator } from './WpMcpErrorTranslator';
 
 const log = LogManager.getLogger('WpMcpServer');
 
 type AuthenticatedExpressRequest = Request & { auth?: AuthInfo };
 
-/**
- * The request DTO the edge `LogApiCall` lines report. These boundaries run BEFORE (or outside) any
- * API dispatch, so there is no contract DTO to log; the step name is the fact worth having.
- */
-class McpSdkOperation {
-    toolStage = false;
-    constructor(public readonly name: string) {}
-}
-
-class McpEdgeRequest {
-    constructor(public readonly step: string) {}
-}
-
-/**
- * `Tool.annotations` exactly as tools/list publishes it: the four hints PLUS the human-readable
- * `title` (#1180). The Claude Connectors Directory checks `annotations.title`; clients on the
- * 2025-06-18+ spec render the top-level `Tool.title`, so both carry the one title — the method's
- * `@summary` JSDoc tag, read from the generated catalog (#1296).
- */
-class McpPublishedToolAnnotations {
-    readonly title: string;
-    readonly readOnlyHint: boolean;
-    readonly destructiveHint: boolean;
-    readonly idempotentHint: boolean;
-    readonly openWorldHint: boolean;
-
-    constructor(tool: RegisteredMcpTool) {
-        this.title = tool.title;
-        this.readOnlyHint = tool.annotations.readOnlyHint;
-        this.destructiveHint = tool.annotations.destructiveHint;
-        this.idempotentHint = tool.annotations.idempotentHint;
-        this.openWorldHint = tool.annotations.openWorldHint;
-    }
-}
-
 /** Body of the 405 answered for every non-POST method at the bound MCP endpoint path. */
 class McpMethodNotAllowedBody {
     readonly error = 'method_not_allowed';
 }
 
+/** Per-POST state the response-owning ingress needs after `work` failed. */
+class McpPostState {
+    /** Whether a 401 on this POST carries the `mcpOAuth(...)` discovery challenge. */
+    challenge = false;
+}
+
 /** Facts established once per POST at the bind boundary and handed to the SDK handlers. */
 class McpPostAuthentication {
     constructor(
-        public readonly accessToken: string,
-        public readonly credential: VerifiedMcpCredential,
-        public readonly disconnectSignal: AbortSignal,
-        public readonly tools: AuthorizedMcpTools,
+        public readonly pass: McpDoorPass,
+        public readonly request: McpToolRequest,
     ) {}
 }
 
 /**
- * The official SDK server with Webpieces-owned tools/list and tools/call handlers. It answers
- * `toolInputSchemaJson` from the request-authorized view so the SDK's pre-dispatch SEP-2243
- * `Mcp-Param-*` header validation still runs without registering SDK-side tool callbacks.
- */
-class WpSdkMcpServer extends McpServer {
-    constructor(
-        info: Implementation,
-        options: ServerOptions,
-        private readonly registry: AuthorizedMcpTools,
-    ) {
-        super(info, options);
-    }
-
-    // webpieces-disable no-any-unknown -- signature is fixed by the SDK's JSON Schema record type
-    override toolInputSchemaJson(name: string): Record<string, unknown> | undefined {
-        return this.registry.find(name)?.inputSchema as Record<string, DtoValue> | undefined;
-    }
-}
-
-/**
- * MCP adapter around the official SDK's request-scoped HTTP handler, serving BOTH wire eras from
- * one tool registry: modern (2026-07-28, per-request `_meta` envelope) and legacy (the 2025-11-25
- * family, negotiated by `initialize`). The SDK routes each request to the leg its shape selects and
- * negotiates the revision; only a revision no era knows is refused. Pinning one era instead made
- * every shipping client unreachable (issue #969), and the MCP lifecycle spec is explicit that a
- * server answers with a revision it supports rather than erroring.
+ * The HTTP transport over an {@link McpToolset}: one server = one path = one toolset. `/mcp/user` and
+ * `/mcp/admin` are two servers over two toolsets with two profile sets — paths split by WHICH TOOLS,
+ * never by HOW THE CALLER AUTHENTICATES.
  *
- * Error boundaries: HTTP ingress owns pre-SDK replies; one shared SDK callback wrapper owns
+ * HOW the caller authenticates is `WpMcpServerConfig.setAuth([...])`: an OR-set of the same `@WpAuth`
+ * builders endpoints use plus `mcpOAuth(...)`, classified from unverified surface facts and verified by
+ * exactly ONE verifier ({@link McpDoorAuthenticator}). That establishes the trusted `RequestContext` —
+ * the caller, surface `llm`, and (only from an OIDC / shared-secret hop) the forwarded trusted context —
+ * and the toolset does the rest exactly as it does for the in-memory transport.
+ *
+ * Serves BOTH wire eras from one registry: modern (2026-07-28, per-request `_meta` envelope) and legacy
+ * (the 2025-11-25 family, negotiated by `initialize`). The SDK routes each request to the leg its shape
+ * selects and negotiates the revision; only a revision no era knows is refused. Pinning one era
+ * instead made every shipping client unreachable (issue #969).
+ *
+ * Error boundaries: HTTP ingress owns pre-SDK replies; the toolset's one SDK callback wrapper owns
  * protocol/list/name-resolution errors and authorized tool-result errors. The SDK writes callback
- * replies, so it cannot safely delegate those failures back to HTTP ingress.
- * `subscriptions/listen` is served entirely by the SDK's listen router, so Webpieces has no handler
- * (and no catch) there. The external bearer is verified exactly once per POST, at the HTTP
- * boundary, before the SDK is involved.
- *
- * Before tools/list and tools/call hand an IMPLEMENTATION-kind failure to the translator, they
- * `log.error` it with its stack and the requestId ({@link logImplementationFailure}, #1055). The
- * translator reduces such a failure to "Internal Error" for the caller, so that line is the only place
- * its cause exists.
+ * replies, so it cannot safely delegate those failures back to HTTP ingress. `subscriptions/listen` is
+ * served entirely by the SDK's listen router. The credential is verified exactly once per POST, at the
+ * HTTP boundary, before the SDK is involved.
  */
-export class WpMcpServer<TGrant> {
+export class WpMcpServer {
     private readonly callerContext = new AuthenticatedCallerContext();
-    private readonly dispatcher = new McpApiDispatcher();
-    /** Classifies a failure exactly as the translator will render it, so the two cannot disagree. */
-    private readonly boundary = new ApiErrorBoundary();
-    private readonly outputSchemas = new ApiJsonSchemaValidator();
-    /**
-     * These edges have NO filter chain above them — `LogApiFilter` never sees a rejected bearer, a
-     * bad `Origin`, a body express could not parse, or a `tools/list` the SDK renders itself.
-     * Wrapping each in `LogApiCall` is this repo's one line on logging, and it is why
-     * `ApiErrorBoundary` no longer writes a second, barer line of its own.
-     */
-    private readonly logApiCall = new LogApiCallImpl(new RequestContextApiCallContext());
     private readonly responseWriter = new ExpressResponseWriter();
-    /** tools/call reads `McpRegistry`; every other reply stays framework-owned. See McpErrorTranslator. */
-    private readonly translator: WpMcpErrorTranslator;
-    private registry?: McpToolRegistry;
-    private toolProfiles: readonly string[] = [];
+    private readonly translator: WpMcpErrorTranslator = new WpMcpErrorTranslator();
+    private door?: McpDoorAuthenticator;
     private handler?: McpHttpHandler;
     private streamingHandler?: McpHttpHandler;
     private nodeHandler?: NodeMcpRequestHandler;
     private streamingNodeHandler?: NodeMcpRequestHandler;
-    private revision?: string;
     private icons?: readonly Icon[];
 
-    constructor(private readonly config: WpMcpServerConfig<TGrant>) {
-        this.translator = new WpMcpErrorTranslator((): string => this.challenge());
-    }
+    constructor(
+        private readonly config: WpMcpServerConfig,
+        private readonly toolset: McpToolset,
+    ) {}
 
     /**
      * Mounts this MCP endpoint on `app`: POST at `options.endpointPath`, plus a 405 (`Allow: POST`)
      * for every other method there.
      *
-     * SINGLE CANONICAL ORIGIN: one server serves exactly one protected resource, so this may be
-     * called only once and `WpMcpServerConfig.setResource(...)`'s path must equal `endpointPath`.
-     * That resource URI is fixed for the lifetime of the process and is never derived from the
-     * request `Host` — a host-derived audience would make the boundary's own audience check compare
-     * two caller-controlled values, which is the confused deputy this check exists to prevent.
-     * Serving a second hostname is a second deployment, not a second audience.
+     * SINGLE CANONICAL ORIGIN: one server serves exactly one resource, so this may be called only once
+     * and `WpMcpServerConfig.setResource(...)`'s path must equal `endpointPath`. That resource URI is
+     * fixed for the lifetime of the process and is never derived from the request `Host` — a
+     * host-derived audience would make the boundary's own audience check compare two caller-controlled
+     * values, which is the confused deputy this check exists to prevent.
      *
-     * The OAuth/discovery half stays app-owned: publish `protectedResourceMetadata()` at
-     * `WpMcpServerConfig.resourceMetadataUrl`, which is where the 401 challenge sends clients.
+     * With `mcpOAuth(...)` in the set, the discovery half stays app-owned: publish
+     * {@link protectedResourceMetadata} at `WpMcpServerConfig.resourceMetadataUrl`, which is where the
+     * 401 challenge sends clients.
      */
     bind(app: Express, options: McpBindOptions): void {
         if (this.handler) {
@@ -199,8 +116,7 @@ export class WpMcpServer<TGrant> {
                     'canonical URI, fixed for the lifetime of the process.',
             );
         }
-        // Fail at boot naming the forgotten setter, never on the first request with a 401 the client
-        // answers by re-authenticating (see WpMcpServerConfig).
+        // Fail at boot naming the forgotten setter, never on the first request with a 401.
         this.config.validate();
         const resourcePath = new URL(this.config.resource).pathname;
         if (resourcePath !== options.endpointPath) {
@@ -210,14 +126,12 @@ export class WpMcpServer<TGrant> {
                     `'${this.config.resource}' and the bound route are the same endpoint.`,
             );
         }
-        this.toolProfiles = this.config.toolProfiles;
-        this.icons = this.config.icons;
-        this.registry = new McpToolRegistry(
-            options.bindings,
-            options.toolCatalogs,
-            this.config.authorizationService,
+        this.door = McpDoorAuthenticator.create(
+            this.config.auth,
+            this.config.resource,
+            this.config.credentialVerifiers,
         );
-        this.revision = this.calculateRegistryRevision(this.registry);
+        this.icons = this.config.icons;
         this.handler = this.createHandler(options, 'auto');
         this.streamingHandler = this.createHandler(options, 'sse');
         this.nodeHandler = toNodeHandler(this.handler, {
@@ -247,8 +161,21 @@ export class WpMcpServer<TGrant> {
         });
     }
 
+    /**
+     * RFC 9728 metadata for this resource. Only an `mcpOAuth(...)` server has any: it is what a
+     * connector reads at `WpMcpServerConfig.resourceMetadataUrl` to find the authorization server.
+     */
     protectedResourceMetadata(): McpProtectedResourceMetadata {
-        return this.config.protectedResourceMetadata();
+        const oauth = this.config.auth.find(
+            (mode: McpHttpAuth): mode is McpOAuthMode => mode instanceof McpOAuthMode,
+        );
+        if (oauth === undefined) {
+            throw new Error(
+                'WpMcpServer.protectedResourceMetadata() requires mcpOAuth(...) in WpMcpServerConfig.setAuth([...]); ' +
+                    'a server without it publishes no OAuth discovery.',
+            );
+        }
+        return oauth.protectedResourceMetadata(this.config.resource);
     }
 
     /** Gracefully closes active listen/request streams; clients must reconnect and refresh lists. */
@@ -262,7 +189,7 @@ export class WpMcpServer<TGrant> {
     }
 
     get registryRevision(): string | undefined {
-        return this.revision;
+        return this.handler ? this.toolset.revision : undefined;
     }
 
     private createHandler(options: McpBindOptions, responseMode: 'auto' | 'sse'): McpHttpHandler {
@@ -284,17 +211,21 @@ export class WpMcpServer<TGrant> {
     /** Each HTTP entry uses the same full-request scope and ingress translation seam. */
     private async handleHttp(req: Request, res: Response, options: McpBindOptions): Promise<void> {
         res.setHeader('X-Accel-Buffering', 'no');
-        await this.ingress(req, res, 'serve', () => this.serveExpress(req, res, options));
+        const post = new McpPostState();
+        await this.ingress(req, res, 'serve', post, () =>
+            this.serveExpress(req, res, options, post),
+        );
     }
 
     private async handleBodyFailure(cause: Error, req: Request, res: Response): Promise<void> {
-        await this.ingress(req, res, 'body', () => this.rejectBody(cause));
+        await this.ingress(req, res, 'body', new McpPostState(), () => this.rejectBody(cause));
     }
 
     private async ingress(
         req: Request,
         res: Response,
         step: string,
+        post: McpPostState,
         work: () => Promise<void>,
     ): Promise<void> {
         await RequestContext.run(async () => {
@@ -302,10 +233,11 @@ export class WpMcpServer<TGrant> {
             try {
                 new RequestContextHeaders().fillFromRequest(this.toHttpRequest(req));
                 McpCorrelation.stamp(this.correlationOf(req));
-                await this.logEdge(step, work);
+                await this.toolset.logEdge(step, work);
+                // webpieces-disable catch-must-propagate -- the response-owning ingress hands the error WHOLE to the translator, which writes it as this POST's reply; LogApiCall already logged it
             } catch (err: unknown) {
                 const error = toError(err);
-                this.writeBoundaryError(res, error);
+                this.writeBoundaryError(res, error, post);
             }
         });
     }
@@ -325,33 +257,26 @@ export class WpMcpServer<TGrant> {
      * express writer `ExpressWrapper` uses. A failure after headers were sent can only end the
      * stream.
      */
-    private writeBoundaryError(res: Response, error: Error): void {
+    private writeBoundaryError(res: Response, error: Error, post: McpPostState): void {
         if (res.headersSent) {
             res.end();
             return;
         }
-        this.responseWriter.write(res, this.translator.toBearerBoundaryResponse(error));
-    }
-
-    /** Run one un-filtered edge step under `LogApiCall`, so its failure gets exactly one log line. */
-    private async logEdge<R>(step: string, work: () => Promise<R>): Promise<R> {
-        return this.logApiCall.execute(
-            new ApiMethodInfo('server', 'McpEndpoint', step, McpProtocol),
-            new McpEdgeRequest(step),
-            work,
-        );
+        const challenge = post.challenge ? this.challenge() : undefined;
+        this.responseWriter.write(res, this.translator.toBearerBoundaryResponse(error, challenge));
     }
 
     private async serveExpress(
         req: Request,
         res: Response,
         options: McpBindOptions,
+        post: McpPostState,
     ): Promise<void> {
         const origin = req.header('origin');
         if (origin && !options.allowedOrigins.includes(origin)) {
             throw new ApiForbiddenError(`MCP request Origin '${origin}' is not allowed.`);
         }
-        const authentication = await this.authenticate(req);
+        const authentication = await this.authenticate(req, post);
         const request = req as AuthenticatedExpressRequest;
         request.auth = this.authInfo(authentication);
         const serve = this.hasProgressToken(req.body)
@@ -361,25 +286,28 @@ export class WpMcpServer<TGrant> {
         await serve(request, res, req.body);
     }
 
-    /** Verifies the external bearer once for this POST. Handlers never re-verify it. */
-    private async authenticate(req: Request): Promise<McpPostAuthentication> {
-        const match = req.header('authorization')?.match(/^Bearer ([^\s]+)$/i);
-        const token = match?.[1];
-        if (!token) throw new ApiUnauthorizedError('MCP request has no bearer access token.');
-        const credential = await this.config.accessTokenAuthority.verifyAccessToken(
-            token,
-            this.config.resource,
-        );
-        this.validateCredential(credential);
-        this.callerContext.publish(credential.caller);
+    /**
+     * Verifies the caller's credential once for this POST — classify, then exactly ONE verifier — and
+     * establishes the trusted context the toolset reads. Handlers never re-verify it.
+     *
+     * Surface `llm` is stamped BEFORE reconciliation, so on a caller-NOT-verified mode (jwt, apiKey,
+     * mcpOAuth) a client that also SENDS `x-wp-surface` must say `llm` or be refused; and again AFTER,
+     * because an OIDC / shared-secret hop admits its forwarded context wholesale, and the model on the
+     * other end of an MCP door is always the surface.
+     */
+    private async authenticate(req: Request, post: McpPostState): Promise<McpPostAuthentication> {
+        const door = this.requireDoor();
+        const doorRequest = new McpDoorRequest(this.toHttpRequest(req));
+        post.challenge = door.challengeApplies(doorRequest);
+        const pass = await door.authenticate(doorRequest);
         RequestContext.putTrusted(WebpiecesCoreHeaders.SURFACE, 'llm');
-        this.callerContext.reconcileWireTrust(false);
-        const tools = await AuthorizedMcpTools.create(
-            this.requireRegistry(),
-            this.config.authorizationService,
-            this.toolProfiles,
+        this.callerContext.reconcileWireTrust(pass.callerVerified);
+        RequestContext.putTrusted(WebpiecesCoreHeaders.SURFACE, 'llm');
+        const tools = await this.toolset.authorizedTools();
+        return new McpPostAuthentication(
+            pass,
+            new McpToolRequest(tools, this.disconnectSignal(req)),
         );
-        return new McpPostAuthentication(token, credential, this.disconnectSignal(req), tools);
     }
 
     private disconnectSignal(req: Request): AbortSignal {
@@ -399,21 +327,22 @@ export class WpMcpServer<TGrant> {
 
     private buildSdkServer(context: McpRequestContext, options: McpBindOptions): McpServer {
         // The era is the SDK's to decide and BOTH are served; what is not negotiable is that the
-        // request came through `bind`'s HTTP boundary, which is where the external bearer is
-        // verified. A factory call without it is a wiring mistake, never a client's doing.
+        // request came through `bind`'s HTTP boundary, which is where the credential is verified. A
+        // factory call without it is a wiring mistake, never a client's doing.
         const authentication = context.authInfo?.extra?.['webpiecesAuthentication'];
         if (!(authentication instanceof McpPostAuthentication)) {
             throw new ApiImplementationError(
                 'WpMcpServer serves only MCP requests authenticated by its bind boundary.',
             );
         }
-        const server = new WpSdkMcpServer(
+        const view: AuthorizedMcpTools = authentication.request.tools;
+        return this.toolset.createSdkServer(
             {
                 name: this.config.name,
                 title: this.config.title,
                 description: this.config.description,
                 websiteUrl: this.config.websiteUrl,
-                version: `${this.config.version}+${this.revision}`,
+                version: `${this.config.version}+${this.toolset.revision}`,
                 ...(this.icons === undefined ? {} : { icons: [...this.icons] }),
             },
             {
@@ -423,215 +352,21 @@ export class WpMcpServer<TGrant> {
                     'server/discover': { ttlMs: options.deployment.ttlMs, cacheScope: 'private' },
                 },
             },
-            authentication.tools,
+            async (): Promise<McpToolRequest> => authentication.request,
+            (name: string): RegisteredMcpTool | undefined => view.find(name),
         );
-        server.server.removeRequestHandler('tools/list');
-        server.server.removeRequestHandler('tools/call');
-        server.server.setRequestHandler(
-            'tools/list',
-            async (_request: object): Promise<ListToolsResult> =>
-                this.sdkBoundary(new McpSdkOperation('tools/list'), () =>
-                    this.logEdge('tools/list', async () => this.listTools(authentication.tools)),
-                ) as Promise<ListToolsResult>,
-        );
-        server.server.setRequestHandler(
-            'tools/call',
-            async (request: CallToolRequest, sdkContext: ServerContext): Promise<CallToolResult> =>
-                this.handleCallTool(server, request, authentication, sdkContext),
-        );
-        return server;
-    }
-
-    /** ONE SDK callback catch implementation; the SDK intercepts foreign throws itself. */
-    private async sdkBoundary<R>(
-        operation: McpSdkOperation,
-        work: () => Promise<R>,
-    ): Promise<R | CallToolResult> {
-        // eslint-disable-next-line @webpieces/no-unmanaged-exceptions -- shared SDK response boundary, preserving protocol versus tool envelopes
-        try {
-            return await work();
-        } catch (err: unknown) {
-            const error = toError(err);
-            if (error instanceof McpToolDeniedError)
-                throw this.translator.unknownTool(error.toolName);
-            if (!operation.toolStage && error instanceof ProtocolError) throw error;
-            this.logImplementationFailure(operation.name, error);
-            if (operation.toolStage) return this.translator.toToolCallResult(error);
-            this.translator.toListError(error);
-        }
-    }
-
-    private listTools(view: AuthorizedMcpTools): ListToolsResult {
-        const tools: Tool[] = view.tools.map((tool) => this.toolDefinition(tool));
-        return { tools };
-    }
-
-    private toolDefinition(tool: RegisteredMcpTool): Tool {
-        return {
-            name: tool.name,
-            title: tool.title,
-            description: tool.description,
-            inputSchema: tool.inputSchema as Tool['inputSchema'],
-            outputSchema: tool.outputSchema as Tool['outputSchema'],
-            annotations: new McpPublishedToolAnnotations(tool),
-            _meta: { webpiecesRegistryRevision: this.revision },
-        };
-    }
-
-    /**
-     * SDK tool callback: an unknown or hidden tool is a JSON-RPC -32602; every failure after the tool is found
-     * is an `isError: true` result, identically for local and remote bindings.
-     */
-    private async handleCallTool(
-        server: WpSdkMcpServer,
-        request: CallToolRequest,
-        authentication: McpPostAuthentication,
-        sdkContext: ServerContext,
-    ): Promise<CallToolResult> {
-        const name = request.params.name;
-        const operation = new McpSdkOperation(`tools/call ${name}`);
-        return this.sdkBoundary(operation, async () => {
-            McpCorrelation.stamp(new McpCorrelation(sdkContext.mcpReq.id, McpProtocol, name));
-            const tool = authentication.tools.find(name);
-            if (!tool) throw this.translator.unknownTool(name);
-            McpCorrelation.stamp(
-                new McpCorrelation(sdkContext.mcpReq.id, tool.apiClass, name, tool.operation),
-            );
-            operation.toolStage = true;
-            const result = await this.callTool(tool, request, authentication, sdkContext);
-            result._meta = this.translator.resultMeta(McpCorrelation.requestId());
-            return server.server.projectCallToolResult(
-                result,
-                tool.outputSchema as Record<string, DtoValue>,
-            );
-        }) as Promise<CallToolResult>;
-    }
-
-    /**
-     * ONE `log.error` line, with the stack and the requestId, for a failure that is THIS server's bug
-     * — the `implementation` kind, which the translator reduces to "Internal Error" and a requestId
-     * for the caller (#1055).
-     *
-     * `LogApiCall` does not cover this. An MCP output-schema violation is raised AFTER the controller
-     * returned, so the only `LogApiCall` line for that call reads `resp-SUCCESS`; before this line
-     * existed, the requestId support was handed led to a log with no error in it. Where a
-     * `[API-*-resp-FAIL]` line does exist it carries the error's message, not its stack. So this line
-     * is not the bare duplicate `ApiErrorBoundary` stopped writing: it is the one that says WHERE.
-     *
-     * Every other kind (bad-request, end-user, dependency, ...) is a caller's or a downstream's
-     * failure, published to the caller with its own text, and `LogApiCall` already records it.
-     */
-    private logImplementationFailure(entryPoint: string, error: Error): void {
-        if (this.boundary.encode(error).kind !== 'implementation') return;
-        log.error(
-            `MCP ${entryPoint} failed with an implementation error requestId=${McpCorrelation.requestId()}`,
-            error,
-        );
-    }
-
-    /** Everything a tool call does. No catch in here: failures propagate to handleCallTool. */
-    private async callTool(
-        tool: RegisteredMcpTool,
-        request: CallToolRequest,
-        authentication: McpPostAuthentication,
-        sdkContext: ServerContext,
-    ): Promise<CallToolResult> {
-        const credential = authentication.credential;
-        const invocation = new McpInvocationContext(
-            sdkContext.mcpReq.id,
-            tool.name,
-            credential.subject,
-            credential.principalRoles,
-            AbortSignal.any([sdkContext.mcpReq.signal, authentication.disconnectSignal]),
-            this.progressReporter(sdkContext),
-        );
-        const args = (request.params.arguments ?? {}) as DtoValue;
-        const value = await this.dispatcher.call(
-            tool,
-            args,
-            credential,
-            invocation,
-            this.config.authorizationService,
-        );
-        const outputFailure = this.outputSchemas.validate(tool.outputSchema, value);
-        if (outputFailure) {
-            throw new ApiImplementationError(
-                `MCP output schema violation for ${tool.apiClass.name}.${tool.methodName}: ${outputFailure.message}`,
-            );
-        }
-        const structured = this.record(value);
-        return {
-            content: [{ type: 'text', text: JSON.stringify(structured) }],
-            structuredContent: structured,
-        };
-    }
-
-    private validateCredential(credential: VerifiedMcpCredential): void {
-        const now = Math.floor(Date.now() / 1000);
-        const reject = (reason: string): never => {
-            throw new ApiUnauthorizedError(`MCP access token rejected: ${reason}`);
-        };
-        if (credential.subject.trim() === '') reject('no subject');
-        const stamps = [
-            credential.issuedAtEpochSeconds,
-            credential.expiresAtEpochSeconds,
-            credential.accountValidatedAtEpochSeconds,
-        ];
-        if (!stamps.every(Number.isFinite)) reject('security timestamps must be finite');
-        if (credential.resource !== this.config.resource) reject('resource mismatch');
-        if (!this.config.authorizationServers.includes(credential.issuer)) {
-            reject('issuer is not trusted');
-        }
-        if (credential.issuedAtEpochSeconds > now || credential.expiresAtEpochSeconds <= now) {
-            reject('outside its valid time window');
-        }
-        const lifetime = credential.expiresAtEpochSeconds - credential.issuedAtEpochSeconds;
-        if (lifetime > MAX_MCP_ACCESS_TOKEN_LIFETIME_SECONDS) reject('lifetime exceeds 30 days');
-        for (const scope of this.config.requiredScopes) {
-            if (!credential.scopes.includes(scope)) reject(`missing required scope '${scope}'`);
-        }
-        const validatedAge = now - credential.accountValidatedAtEpochSeconds;
-        if (
-            credential.accountValidatedAtEpochSeconds > now ||
-            validatedAge > this.config.maxAccountValidationAgeSeconds
-        ) {
-            reject('account authorization state is not fresh enough for dispatch');
-        }
     }
 
     private authInfo(authentication: McpPostAuthentication): AuthInfo {
-        const credential = authentication.credential;
+        const pass = authentication.pass;
         return {
-            token: authentication.accessToken,
-            clientId: credential.subject,
-            scopes: [...credential.scopes],
-            expiresAt: credential.expiresAtEpochSeconds,
-            resource: new URL(credential.resource),
+            token: pass.token,
+            clientId: pass.subject,
+            scopes: [...pass.scopes],
+            expiresAt: pass.expiresAtEpochSeconds,
+            resource: new URL(this.config.resource),
             extra: { webpiecesAuthentication: authentication },
         };
-    }
-
-    private progressReporter(context: ServerContext): McpProgressReporter | undefined {
-        const token = context.mcpReq._meta?.progressToken;
-        if (token === undefined) return undefined;
-        return async (progress: number, total?: number, message?: string): Promise<void> => {
-            await context.mcpReq.notify({
-                method: 'notifications/progress',
-                params: this.progressParams(token, progress, total, message),
-            });
-        };
-    }
-
-    private progressParams(
-        progressToken: ProgressToken,
-        progress: number,
-        total?: number,
-        message?: string,
-    ): Record<string, DtoValue> {
-        const params: Record<string, DtoValue> = { progressToken, progress };
-        if (total !== undefined) params['total'] = total;
-        if (message !== undefined) params['message'] = message;
-        return params;
     }
 
     /** What the raw POST body tells us before the SDK has parsed anything: the id, and the tool. */
@@ -670,36 +405,8 @@ export class WpMcpServer<TGrant> {
         return new HttpRequest(req.method, req.originalUrl || req.path, headers);
     }
 
-    private calculateRegistryRevision(registry: McpToolRegistry): string {
-        const surface = registry.tools.map((tool: RegisteredMcpTool) => [
-            tool.name,
-            tool.title,
-            tool.description,
-            tool.inputSchema,
-            tool.outputSchema,
-            tool.annotations,
-            tool.profiles,
-        ]);
-        return createHash('sha256')
-            .update(JSON.stringify([this.toolProfiles, surface]))
-            .digest('hex')
-            .slice(0, 12);
-    }
-
-    private requireRegistry(): McpToolRegistry {
-        if (!this.registry) throw new Error('Call WpMcpServer.bind(...) before serving requests.');
-        return this.registry;
-    }
-
-    private record(value: DtoValue): Record<string, DtoValue> {
-        const jsonValue = JSON.stringify(value);
-        if (jsonValue === undefined) {
-            throw new ApiImplementationError('MCP structured content is not JSON serializable.');
-        }
-        const parsed = JSON.parse(jsonValue) as DtoValue;
-        if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
-            return { value: parsed };
-        }
-        return parsed as Record<string, DtoValue>;
+    private requireDoor(): McpDoorAuthenticator {
+        if (!this.door) throw new Error('Call WpMcpServer.bind(...) before serving requests.');
+        return this.door;
     }
 }

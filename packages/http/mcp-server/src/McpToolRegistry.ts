@@ -11,6 +11,7 @@ import {
     getWpMcpTools,
     getAuthorization,
     AuthorizationRequirement,
+    AuthorizationType,
     EndpointOperation,
     McpToolCatalogError,
     McpToolCatalogFile,
@@ -161,6 +162,14 @@ export class McpToolRegistry {
                 `@WpMcpTool ${apiClass.name}.${metadata.methodName} must declare @WpAuthorization(...).`,
             );
         }
+        if (authorization.authType === AuthorizationType.SERVICE_ONLY) {
+            throw new Error(
+                `@WpMcpTool ${apiClass.name}.${metadata.methodName} declares @WpAuthorization SERVICE_ONLY. An MCP ` +
+                    'tool is always called on behalf of a model, so a policy that admits a bare service hop would ' +
+                    'admit every model behind it (and deny it everywhere else): SERVICE_ONLY can never be an MCP ' +
+                    'tool. Use USERS_OR_SERVICES, ALL_USERS or ROLES, or remove @WpMcpTool.',
+            );
+        }
         this.authorizationService.validate(authorization);
         binding.validateMethod(metadata.methodName, this.authorizationService);
         if (catalog === undefined) return undefined;
@@ -265,7 +274,7 @@ class McpCatalogPairing {
             this.problem(
                 `${catalog.file.fileName} (${catalog.directory}) is the catalog of ${catalog.contractName}, ` +
                     `which the server does not bind. Bind it with McpApiBinding.local(${catalog.contractName}, ...) ` +
-                    'or .remote(...), or leave it out of toolCatalogs, e.g. ' +
+                    'or .remote(...), or leave it out of the catalogs passed to new McpToolset(...), e.g. ' +
                     `catalogs.filter((catalog: McpToolCatalog) => catalog.contractName !== '${catalog.contractName}').`,
             );
         }
@@ -278,7 +287,7 @@ class McpCatalogPairing {
                 this.problems.map((text: string) => `  - ${text}`).join('\n') +
                 '\nDirectories searched for mcp-<ContractClass>-tools.json:\n' +
                 (directories.length === 0
-                    ? '  (none — toolCatalogs is empty)'
+                    ? '  (none — the catalogs passed to new McpToolset(...) are empty)'
                     : directories.map((dir: string) => `  ${dir}`).join('\n')) +
                 '\n',
             'Each bound contract needs exactly the one catalog its api library build writes, and nothing else.',

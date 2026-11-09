@@ -6,7 +6,7 @@ describe('MCP icon configuration', () => {
         const sizes = ['128x128'];
         const icon: Icon = { src: 'https://api.example.test/icon.png', sizes };
         const icons = [icon];
-        const config = new WpMcpServerConfig<string>();
+        const config = new WpMcpServerConfig();
         expect(config.icons).toBeUndefined();
         expect(config.setIcons(icons)).toBe(config);
         icon.src = 'https://other.example/icon.png';
@@ -37,11 +37,11 @@ describe('MCP icon configuration', () => {
         'data:image/png;base64,!!!',
         'data:image/png,plain',
     ])('rejects unsafe or malformed source %s without fetching it', (src: string) => {
-        expect(() => new WpMcpServerConfig<string>().setIcons([{ src }])).toThrow('setIcons');
+        expect(() => new WpMcpServerConfig().setIcons([{ src }])).toThrow('setIcons');
     });
 
     it('validates descriptor fields and keeps the last valid snapshot on failure', () => {
-        const config = new WpMcpServerConfig<string>().setIcons([
+        const config = new WpMcpServerConfig().setIcons([
             new McpIcon('https://example.test/icon.png'),
         ]);
         expect(() =>

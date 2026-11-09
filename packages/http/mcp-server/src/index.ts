@@ -8,10 +8,23 @@ export {
     VerifiedMcpCredential,
     WpMcpServerConfig,
 } from './McpAuth';
-export type { McpAccessTokenAuthority } from './McpAuth';
+export { mcpOAuth, McpAccessTokenFormat, McpOAuthMode } from './McpAuth';
+export type {
+    McpAccessTokenAuthority,
+    McpAccessTokenFormatKind,
+    McpAuthorizationServers,
+    McpHttpAuth,
+    McpHttpAuths,
+} from './McpAuth';
+export { McpToolset, McpToolRequest } from './McpToolset';
+export { WpMcpInMemory } from './WpMcpInMemory';
+export { WpMcpRemote } from './WpMcpRemote';
+export type { McpIdTokenMinter } from './WpMcpRemote';
+export { McpClientSet, McpDuplicateToolError, McpUnknownToolError } from './McpClientSet';
+export type { McpClientSetCall } from './McpClientSet';
 export type { Icon } from '@modelcontextprotocol/server';
 export { McpIcon } from './McpIcon';
-export { McpToolRegistry, RegisteredMcpTool } from './McpToolRegistry';
+export { AuthorizedMcpTools, McpToolRegistry, RegisteredMcpTool } from './McpToolRegistry';
 export { McpApiBinding } from './McpApiBinding';
 export type { McpBindingTopology } from './McpApiBinding';
 export { McpBindOptions } from './McpBindOptions';

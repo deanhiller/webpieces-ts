@@ -1,5 +1,5 @@
-import { Mcp, McpToolProfiles } from '@webpieces/core-util';
-import { AuthenticatedCaller, AuthorizationService } from '@webpieces/http-routing';
+import { AuthMethod } from '@webpieces/core-util';
+import { AuthenticatedCaller, CredentialVerifiers } from '@webpieces/http-routing';
 import { Icon } from '@modelcontextprotocol/server';
 import { McpIcon } from './McpIcon';
 
@@ -61,8 +61,8 @@ export class VerifiedMcpCredential {
 }
 
 /**
- * Application-owned paired mint/verify authority for resource-bound MCP access tokens.
- * `verifyAccessToken` must throw `ApiUnauthorizedError` for a token it rejects (the bind boundary
+ * Application-owned paired mint/verify authority for resource-bound MCP access tokens, handed to
+ * `mcpOAuth(...)`. `verifyAccessToken` must throw `ApiUnauthorizedError` for a token it rejects (the bind boundary
  * answers 401 + `WWW-Authenticate`); any other throw is treated as an implementation failure (500).
  */
 export interface McpAccessTokenAuthority<TGrant> {
@@ -92,41 +92,53 @@ export class McpProtectedResourceMetadata {
 }
 
 /**
- * Node MCP server configuration, built with fluent setters: every name sits next to its own value, so
- * no two settings can be swapped, and a future setting is an additive setter rather than a breaking
- * signature change. The access-token authority verifies MCP credentials; the authorization service
- * is shared with receiving endpoints and document projection.
+ * One member of a server's `setAuth([...])` set: an `@WpAuth` builder (`oidcSameProject()`,
+ * `oidcSvcs([...])`, `jwt()`, `apiKey(...)`, `sharedSecret(...)`) or `mcpOAuth(...)`.
+ */
+export type McpHttpAuth = AuthMethod | McpOAuthMode;
+
+/** A server's `setAuth([...])` set: at least one mode. */
+export type McpHttpAuths = readonly [McpHttpAuth, ...McpHttpAuth[]];
+
+/**
+ * Node MCP HTTP server configuration, built with fluent setters: every name sits next to its own
+ * value, so no two settings can be swapped, and a future setting is an additive setter rather than a
+ * breaking signature change.
  *
- * SINGLE CANONICAL ORIGIN: one server serves exactly one protected resource. {@link setResource} is
- * fixed for the lifetime of the process, is the audience of every access token, and is never derived
- * from the request `Host` — see that setter for why a host-derived audience is a confused deputy.
+ * WHICH tools the server serves is not here: that is the `McpToolset` handed to
+ * `new WpMcpServer(config, toolset)`. This config says only who the server is and HOW A CALLER GETS
+ * IN — {@link setAuth}, an OR-set of the same `@WpAuth` builders an endpoint uses plus `mcpOAuth(...)`.
+ *
+ * SINGLE CANONICAL ORIGIN: one server serves exactly one resource. {@link setResource} is fixed for
+ * the lifetime of the process, is the audience of every `mcpOAuth(...)` access token, and is never
+ * derived from the request `Host` — see that setter for why a host-derived audience is a confused
+ * deputy.
  *
  * Each setter validates its own value immediately and names itself in the failure. Setters cannot
  * make a field impossible to forget the way a positional constructor could, so
  * {@link WpMcpServerConfig.validate} runs from `WpMcpServer.bind(...)` and fails at startup listing
  * EVERY missing required setter at once. A misconfiguration is therefore a boot failure naming the
- * setter, instead of a first-request 401 + `WWW-Authenticate` — which is the OAuth discovery signal,
- * so the client's correct response is to re-authenticate and fail again, forever.
+ * setter, instead of a first-request 401 — which, with `mcpOAuth(...)`, is the OAuth discovery
+ * signal, so the client's correct response is to re-authenticate and fail again, forever.
  *
  * ```ts
- * const config = new WpMcpServerConfig<MyGrant>()
+ * const config = new WpMcpServerConfig()
  *     .setName('my-server')
  *     .setTitle('My Product')
  *     .setDescription('Search and manage My Product accounts from any MCP client.')
  *     .setWebsiteUrl('https://www.example.com/my-product')
  *     .setVersion('1.0.0')
- *     .setResource('https://api.example.com/mcp')
- *     .setAccessTokenAuthority(authority)
- *     .setAuthorizationService(router.authorizationService())
- *     .setAuthorizationServers(['https://login.example.com'])
- *     .setRequiredScopes(['tools']);
+ *     .setResource('https://api.example.com/mcp/user')
+ *     .setAuth([oidcSameProject()])                       // internal svc-to-svc MCP
+ *     .setCredentialVerifiers(router.credentialVerifiers());
+ * //  .setAuth([oidcSameProject(), jwt(), apiKey('partner', creds),
+ * //            mcpOAuth(authority, ['https://login.example.com'], ['tools'], McpAccessTokenFormat.opaquePrefix('wpmcp_'))])
  *
  * // the tools/call error translator is a PROCESS-GLOBAL, not a member of this config:
  * McpRegistry.setErrorTranslator(new MyMcpErrorTranslator());
  * ```
  */
-export class WpMcpServerConfig<TGrant> {
-    private toolProfilesValue: readonly string[] = Object.freeze([Mcp.DEFAULT]);
+export class WpMcpServerConfig {
     private nameValue?: string;
     private titleValue?: string;
     private descriptionValue?: string;
@@ -134,21 +146,8 @@ export class WpMcpServerConfig<TGrant> {
     private versionValue?: string;
     private iconsValue?: readonly McpIcon[];
     private resourceValue?: string;
-    private accessTokenAuthorityValue?: McpAccessTokenAuthority<TGrant>;
-    private authorizationServiceValue?: AuthorizationService;
-    private authorizationServersValue?: readonly string[];
-    private requiredScopesValue?: readonly string[];
-    private maxAccountValidationAgeSecondsValue = MAX_MCP_ACCOUNT_VALIDATION_AGE_SECONDS;
-
-    /** OPTIONAL. Union of groups exposed by this instance; defaults to [Mcp.DEFAULT]. */
-    setToolProfiles(profiles: McpToolProfiles): this {
-        this.toolProfilesValue = Mcp.profiles(profiles, 'WpMcpServerConfig.setToolProfiles');
-        return this;
-    }
-
-    get toolProfiles(): readonly string[] {
-        return this.toolProfilesValue;
-    }
+    private authValue?: McpHttpAuths;
+    private credentialVerifiersValue?: CredentialVerifiers;
 
     /** REQUIRED. The MCP server name reported by `initialize`. */
     setName(name: string): this {
@@ -224,9 +223,9 @@ export class WpMcpServerConfig<TGrant> {
     }
 
     /**
-     * REQUIRED. The ONE canonical protected-resource URI, which must be an absolute URL: it is the
-     * exact audience every access token is checked against, and {@link resourceMetadataUrl} is
-     * derived from it for the 401 challenge, so a non-URL here is always a mistake — including a
+     * REQUIRED. The ONE canonical resource URI, which must be an absolute URL: it is the exact
+     * audience every `mcpOAuth(...)` access token is checked against, and {@link resourceMetadataUrl}
+     * is derived from it for the 401 challenge, so a non-URL here is always a mistake — including a
      * name or version landed on it.
      *
      * It is fixed for the lifetime of the process and must NEVER be derived from the request `Host`
@@ -241,53 +240,36 @@ export class WpMcpServerConfig<TGrant> {
         return this;
     }
 
-    /** REQUIRED. Application-owned paired mint/verify authority for MCP access tokens. */
-    setAccessTokenAuthority(authority: McpAccessTokenAuthority<TGrant>): this {
-        this.accessTokenAuthorityValue = this.requirePresent(authority, 'setAccessTokenAuthority');
-        return this;
-    }
-
-    /** REQUIRED. The common authorization service for tool projection and invocation. */
-    setAuthorizationService(authority: AuthorizationService): this {
-        this.authorizationServiceValue = this.requirePresent(authority, 'setAuthorizationService');
+    /**
+     * REQUIRED. HOW a caller gets in: an OR-set of the `@WpAuth` builders endpoints already use —
+     * `oidcSameProject()`, `oidcSvcs([...])`, `jwt()`, `apiKey(regime, creds)`, `sharedSecret(key)` —
+     * plus `mcpOAuth(...)` for off-the-shelf connectors. Each request is CLASSIFIED from unverified
+     * surface facts (which header; a JWT's unverified `iss`) and handed to exactly ONE verifier, whose
+     * rejection is the answer — it never falls through to another mode.
+     *
+     * `vendorAuth(...)` and `@WpAuthPublic` identify no caller to authorize tools against, so they are
+     * refused at bind; so is a set whose modes could both claim one request.
+     */
+    setAuth(auth: McpHttpAuths): this {
+        if (!Array.isArray(auth) || auth.length === 0) {
+            throw new Error('WpMcpServerConfig.setAuth(...) requires at least one auth mode.');
+        }
+        this.authValue = Object.freeze([...auth]) as McpHttpAuths;
         return this;
     }
 
     /**
-     * REQUIRED. The trusted token issuers. Every entry must be an absolute URL, because each is
-     * compared against a token's `issuer` claim and published as an `authorization_servers` entry —
-     * which is what makes a scope list landed here fail at boot rather than on the first request.
+     * REQUIRED when {@link setAuth} holds any `@WpAuth` mode (everything but `mcpOAuth(...)`): the
+     * verifiers this app bound, from `router.credentialVerifiers()` — the SAME JwtHook, OidcHook /
+     * DefaultOidcVerifier, AuthConfig and ApiKeyHook the endpoint `AuthFilter` uses.
      */
-    setAuthorizationServers(authorizationServers: readonly string[]): this {
-        const servers = this.requireArray(authorizationServers, 'setAuthorizationServers');
-        if (servers.length === 0) {
+    setCredentialVerifiers(verifiers: CredentialVerifiers): this {
+        if (!verifiers || typeof verifiers.verifyOidc !== 'function') {
             throw new Error(
-                'WpMcpServerConfig.setAuthorizationServers(...) requires at least one issuer URL.',
+                'WpMcpServerConfig.setCredentialVerifiers(...) requires router.credentialVerifiers().',
             );
         }
-        for (const server of servers) this.requireUrl(server, 'setAuthorizationServers');
-        this.authorizationServersValue = servers;
-        return this;
-    }
-
-    /**
-     * REQUIRED, and empty only by saying so explicitly. Scopes every access token must carry before
-     * any tool is dispatched.
-     */
-    setRequiredScopes(requiredScopes: readonly string[]): this {
-        const scopes = this.requireArray(requiredScopes, 'setRequiredScopes');
-        for (const scope of scopes) this.requireText(scope, 'setRequiredScopes');
-        this.requiredScopesValue = scopes;
-        return this;
-    }
-
-    /** OPTIONAL ceiling, 1 second to 1 hour. Defaults to 1 hour. */
-    setMaxAccountValidationAgeSeconds(seconds: number): this {
-        this.maxAccountValidationAgeSecondsValue = this.requireSeconds(
-            seconds,
-            MAX_MCP_ACCOUNT_VALIDATION_AGE_SECONDS,
-            'setMaxAccountValidationAgeSeconds',
-        );
+        this.credentialVerifiersValue = verifiers;
         return this;
     }
 
@@ -303,16 +285,13 @@ export class WpMcpServerConfig<TGrant> {
         if (this.websiteUrlValue === undefined) missing.push('setWebsiteUrl(...)');
         if (this.versionValue === undefined) missing.push('setVersion(...)');
         if (this.resourceValue === undefined) missing.push('setResource(...)');
-        if (this.accessTokenAuthorityValue === undefined) {
-            missing.push('setAccessTokenAuthority(...)');
+        if (this.authValue === undefined) missing.push('setAuth([...])');
+        const needsVerifiers = (this.authValue ?? []).some(
+            (mode: McpHttpAuth) => mode.kind !== 'mcp-oauth',
+        );
+        if (needsVerifiers && this.credentialVerifiersValue === undefined) {
+            missing.push('setCredentialVerifiers(router.credentialVerifiers())');
         }
-        if (this.authorizationServiceValue === undefined) {
-            missing.push('setAuthorizationService(...)');
-        }
-        if (this.authorizationServersValue === undefined) {
-            missing.push('setAuthorizationServers(...)');
-        }
-        if (this.requiredScopesValue === undefined) missing.push('setRequiredScopes(...)');
         if (missing.length > 0) {
             throw new Error(`WpMcpServerConfig is missing ${missing.join(', ')}`);
         }
@@ -350,24 +329,13 @@ export class WpMcpServerConfig<TGrant> {
         return this.read(this.resourceValue, 'setResource');
     }
 
-    get accessTokenAuthority(): McpAccessTokenAuthority<TGrant> {
-        return this.read(this.accessTokenAuthorityValue, 'setAccessTokenAuthority');
+    get auth(): McpHttpAuths {
+        return this.read(this.authValue, 'setAuth');
     }
 
-    get authorizationService(): AuthorizationService {
-        return this.read(this.authorizationServiceValue, 'setAuthorizationService');
-    }
-
-    get authorizationServers(): readonly string[] {
-        return this.read(this.authorizationServersValue, 'setAuthorizationServers');
-    }
-
-    get requiredScopes(): readonly string[] {
-        return this.read(this.requiredScopesValue, 'setRequiredScopes');
-    }
-
-    get maxAccountValidationAgeSeconds(): number {
-        return this.maxAccountValidationAgeSecondsValue;
+    /** The bound verifiers, or `undefined` for an `mcpOAuth(...)`-only server, which needs none. */
+    get credentialVerifiers(): CredentialVerifiers | undefined {
+        return this.credentialVerifiersValue;
     }
 
     /**
@@ -376,21 +344,14 @@ export class WpMcpServerConfig<TGrant> {
      * (`https://host/mcp` → `https://host/.well-known/oauth-protected-resource/mcp`).
      *
      * This — never the resource identifier itself — is what RFC 9728 §5.1 defines `resource_metadata`
-     * to be, so it is the value webpieces puts in the 401 `WWW-Authenticate` challenge. webpieces
-     * mounts no `.well-known` route; publish {@link protectedResourceMetadata} at this URL.
+     * to be, so it is the value webpieces puts in the `mcpOAuth(...)` 401 `WWW-Authenticate`
+     * challenge. webpieces mounts no `.well-known` route; publish
+     * `WpMcpServer.protectedResourceMetadata()` at this URL.
      */
     get resourceMetadataUrl(): string {
         const url = new URL(this.resource);
         const path = url.pathname === '/' ? '' : url.pathname;
         return `${url.origin}/.well-known/oauth-protected-resource${path}`;
-    }
-
-    protectedResourceMetadata(): McpProtectedResourceMetadata {
-        return new McpProtectedResourceMetadata(
-            this.resource,
-            this.authorizationServers,
-            this.requiredScopes,
-        );
     }
 
     /** Copies caller-owned descriptors and nested size arrays before freezing the snapshot. */
@@ -436,33 +397,174 @@ export class WpMcpServerConfig<TGrant> {
         return value;
     }
 
-    private requireArray(value: readonly string[], setter: string): readonly string[] {
-        if (!Array.isArray(value)) {
-            throw new Error(`WpMcpServerConfig.${setter}(...) requires an array of strings.`);
-        }
-        return value;
-    }
-
-    private requireSeconds(value: number, ceiling: number, setter: string): number {
-        if (!Number.isFinite(value) || value <= 0 || value > ceiling) {
-            throw new Error(
-                `WpMcpServerConfig.${setter}(...) requires 1..${ceiling} seconds, got ${String(value)}.`,
-            );
-        }
-        return value;
-    }
-
-    private requirePresent<T>(value: T, setter: string): T {
-        if (value === undefined || value === null) {
-            throw new Error(`WpMcpServerConfig.${setter}(...) requires a value.`);
-        }
-        return value;
-    }
-
     private read<T>(value: T | undefined, setter: string): T {
         if (value === undefined) {
             throw new Error(`WpMcpServerConfig is missing ${setter}(...)`);
         }
         return value;
     }
+}
+
+/** Google's OIDC issuers. An `mcpOAuth(...)` issuer may never be one: it would claim Google tokens. */
+export const GOOGLE_OIDC_ISSUERS: readonly string[] = Object.freeze([
+    'https://accounts.google.com',
+    'accounts.google.com',
+]);
+
+/** The unsigned off-GCP OIDC token prefix `@webpieces/gcp-identity` mints and verifies. */
+export const DEV_OIDC_TOKEN_PREFIX = 'dev-oidc.';
+
+/** Every JWT starts with the base64url of `{"`. An opaque prefix starting so would claim JWTs. */
+export const JWT_PREFIX = 'eyJ';
+
+export type McpAccessTokenFormatKind = 'opaque-prefix' | 'jwt-issuer' | 'every-bearer';
+
+/** The trusted token issuers of an `mcpOAuth(...)` mode: at least one absolute URL. */
+export type McpAuthorizationServers = readonly [string, ...string[]];
+
+/**
+ * How an `mcpOAuth(...)` access token LOOKS, decided by the authority that mints it. The MCP door
+ * classifies every request from unverified surface facts before handing it to exactly ONE verifier, so
+ * the OAuth mode must say which bearers are its kind without any crypto or I/O:
+ *
+ * - {@link opaquePrefix} — the authority mints opaque tokens that all start with `prefix`
+ *   (e.g. `'wpmcp_'`). Disjoint from every JWT and from off-GCP OIDC tokens by construction.
+ * - {@link jwtIssuer} — the authority mints JWTs whose `iss` is one of the mode's
+ *   `authorizationServers`. A JWT with any other issuer is not this mode's.
+ * - {@link everyBearer} — every `Authorization: Bearer` credential is this mode's. Legal ONLY when no
+ *   other bearer mode (`oidcSameProject()`, `oidcSvcs(...)`, `jwt()`, a bearer `apiKey(...)`) is in the
+ *   same `setAuth([...])`; startup refuses the combination, because two modes claiming one token is
+ *   exactly the overlap classify-then-verify forbids.
+ */
+export class McpAccessTokenFormat {
+    private constructor(
+        public readonly kind: McpAccessTokenFormatKind,
+        public readonly prefix: string,
+    ) {}
+
+    // webpieces-disable no-function-outside-class -- explicit public factory of a closed set of formats
+    static opaquePrefix(prefix: string): McpAccessTokenFormat {
+        if (typeof prefix !== 'string' || prefix.trim() === '' || /\s/.test(prefix)) {
+            throw new Error(
+                'McpAccessTokenFormat.opaquePrefix(...) requires a nonblank prefix with no whitespace.',
+            );
+        }
+        for (const reserved of [JWT_PREFIX, DEV_OIDC_TOKEN_PREFIX]) {
+            if (reserved.startsWith(prefix) || prefix.startsWith(reserved)) {
+                throw new Error(
+                    `McpAccessTokenFormat.opaquePrefix('${prefix}') overlaps '${reserved}', which ` +
+                        (reserved === JWT_PREFIX
+                            ? 'every JWT starts with'
+                            : 'every off-GCP OIDC token starts with') +
+                        "; pick a prefix the authority alone mints, e.g. 'wpmcp_'.",
+                );
+            }
+        }
+        return new McpAccessTokenFormat('opaque-prefix', prefix);
+    }
+
+    // webpieces-disable no-function-outside-class -- explicit public factory of a closed set of formats
+    static jwtIssuer(): McpAccessTokenFormat {
+        return new McpAccessTokenFormat('jwt-issuer', '');
+    }
+
+    // webpieces-disable no-function-outside-class -- explicit public factory of a closed set of formats
+    static everyBearer(): McpAccessTokenFormat {
+        return new McpAccessTokenFormat('every-bearer', '');
+    }
+}
+
+/**
+ * The MCP OAuth mode: today's connector behavior (Claude / ChatGPT) as ONE member of a server's
+ * `setAuth([...])` set. It is the only mode that publishes RFC 9728 protected-resource metadata and
+ * answers a request carrying no credential with the `401 WWW-Authenticate` discovery challenge, and
+ * its access tokens are audience-bound to the server's canonical resource. Build it with
+ * {@link mcpOAuth}.
+ */
+export class McpOAuthMode {
+    readonly kind = 'mcp-oauth';
+
+    constructor(
+        public readonly authority: McpAccessTokenAuthority<never>,
+        public readonly authorizationServers: McpAuthorizationServers,
+        public readonly requiredScopes: readonly string[],
+        public readonly tokenFormat: McpAccessTokenFormat,
+        public readonly maxAccountValidationAgeSeconds: number,
+    ) {
+        if (!authority || typeof authority.verifyAccessToken !== 'function') {
+            throw new Error('mcpOAuth(...) requires an McpAccessTokenAuthority.');
+        }
+        if (!Array.isArray(authorizationServers) || authorizationServers.length === 0) {
+            throw new Error('mcpOAuth(...) requires at least one authorization server issuer URL.');
+        }
+        for (const server of authorizationServers) {
+            if (typeof server !== 'string' || !URL.canParse(server)) {
+                throw new Error(
+                    `mcpOAuth(...) authorization servers must be absolute URLs, got '${String(server)}'.`,
+                );
+            }
+        }
+        if (
+            !Array.isArray(requiredScopes) ||
+            !requiredScopes.every(
+                (scope: string) => typeof scope === 'string' && scope.trim() !== '',
+            )
+        ) {
+            throw new Error(
+                'mcpOAuth(...) requires an array of nonblank required scopes (empty only by saying so: []).',
+            );
+        }
+        if (!(tokenFormat instanceof McpAccessTokenFormat)) {
+            throw new Error(
+                'mcpOAuth(...) requires an McpAccessTokenFormat describing the tokens the authority mints.',
+            );
+        }
+        if (
+            !Number.isFinite(maxAccountValidationAgeSeconds) ||
+            maxAccountValidationAgeSeconds <= 0 ||
+            maxAccountValidationAgeSeconds > MAX_MCP_ACCOUNT_VALIDATION_AGE_SECONDS
+        ) {
+            throw new Error(
+                `mcpOAuth(...) maxAccountValidationAgeSeconds must be 1..${MAX_MCP_ACCOUNT_VALIDATION_AGE_SECONDS}, ` +
+                    `got ${String(maxAccountValidationAgeSeconds)}.`,
+            );
+        }
+        Object.freeze(this);
+    }
+
+    /** RFC 9728 metadata for `resource`, published by the app at the server's `resourceMetadataUrl`. */
+    protectedResourceMetadata(resource: string): McpProtectedResourceMetadata {
+        return new McpProtectedResourceMetadata(
+            resource,
+            this.authorizationServers,
+            this.requiredScopes,
+        );
+    }
+}
+
+/**
+ * The MCP OAuth door mode, for off-the-shelf connectors. Everything OAuth-only lives here and is
+ * required only when this mode is in the server's `setAuth([...])`:
+ *
+ * @param authority            the application-owned paired mint/verify authority
+ * @param authorizationServers the trusted token issuers, published as `authorization_servers`
+ * @param requiredScopes       scopes every access token must carry before any tool is dispatched
+ * @param tokenFormat          how the authority's tokens look, so the door can classify them
+ * @param maxAccountValidationAgeSeconds how fresh the account facts must be, 1 second to 1 hour
+ */
+// webpieces-disable no-function-outside-class -- canonical credential descriptor factory, the twin of jwt()/oidcSameProject()
+export function mcpOAuth<TGrant>(
+    authority: McpAccessTokenAuthority<TGrant>,
+    authorizationServers: McpAuthorizationServers,
+    requiredScopes: readonly string[],
+    tokenFormat: McpAccessTokenFormat,
+    maxAccountValidationAgeSeconds: number = MAX_MCP_ACCOUNT_VALIDATION_AGE_SECONDS,
+): McpOAuthMode {
+    return new McpOAuthMode(
+        authority as McpAccessTokenAuthority<never>,
+        authorizationServers,
+        requiredScopes,
+        tokenFormat,
+        maxAccountValidationAgeSeconds,
+    );
 }

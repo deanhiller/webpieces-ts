@@ -3,11 +3,18 @@ import 'reflect-metadata';
 import express, { Express } from 'express';
 import { ContainerModule, ContainerModuleLoadOptions } from 'inversify';
 import { beforeAll, describe, expect, it } from 'vitest';
-import { HeaderRegistry } from '@webpieces/core-util';
+import { Mcp, HeaderRegistry, oidcSameProject } from '@webpieces/core-util';
 import { JWT_HOOK, WebpiecesRouterFactory, WebpiecesRouter } from '@webpieces/http-routing';
 import { McpApiBinding } from './McpApiBinding';
-import { VerifiedMcpCredential, WpMcpServerConfig } from './McpAuth';
+import {
+    VerifiedMcpCredential,
+    WpMcpServerConfig,
+    McpAccessTokenFormat,
+    mcpOAuth,
+    McpOAuthMode,
+} from './McpAuth';
 import { McpBindOptions } from './McpBindOptions';
+import { McpToolset } from './McpToolset';
 import { McpDeployment } from './McpDeployment';
 import { WpMcpServer } from './WpMcpServer';
 import {
@@ -48,69 +55,103 @@ describe('WpMcpServerConfig fluent setters', () => {
         router.addRoutes(SearchApi, SearchController);
     });
 
-    function complete(): WpMcpServerConfig<string> {
-        return new WpMcpServerConfig<string>()
+    function oauth(maxAccountValidationAgeSeconds?: number): McpOAuthMode {
+        return mcpOAuth(
+            new TestTokenAuthority(),
+            [ISSUER],
+            ['tools'],
+            McpAccessTokenFormat.everyBearer(),
+            maxAccountValidationAgeSeconds,
+        );
+    }
+
+    function complete(): WpMcpServerConfig {
+        return new WpMcpServerConfig()
             .setName('config-spec')
             .setTitle(TITLE)
             .setDescription(DESCRIPTION)
             .setWebsiteUrl(WEBSITE)
             .setVersion('1.0.0')
             .setResource(RESOURCE)
-            .setAccessTokenAuthority(new TestTokenAuthority())
-            .setAuthorizationService(router.authorizationService())
-            .setAuthorizationServers([ISSUER])
-            .setRequiredScopes(['tools']);
+            .setAuth([
+                mcpOAuth(
+                    new TestTokenAuthority(),
+                    [ISSUER],
+                    ['tools'],
+                    McpAccessTokenFormat.everyBearer(),
+                ),
+            ]);
     }
 
-    function bind(config: WpMcpServerConfig<string>): void {
+    function bind(config: WpMcpServerConfig): void {
         const app: Express = express();
-        new WpMcpServer(config).bind(
-            app,
-            new McpBindOptions(
-                ENDPOINT_PATH,
+        new WpMcpServer(
+            config,
+            new McpToolset(
                 [McpApiBinding.local(SearchApi, router)],
                 [SEARCH_API_CATALOG],
-                McpDeployment.singleProcess(),
+                router.authorizationService(),
+                [Mcp.DEFAULT],
             ),
-        );
+        ).bind(app, new McpBindOptions(ENDPOINT_PATH, McpDeployment.singleProcess()));
     }
 
     it('chains every setter and exposes the values it was given', () => {
-        const config = complete().setMaxAccountValidationAgeSeconds(900);
+        const mode = oauth(900);
+        const config = complete().setAuth([mode]);
         expect(config.name).toBe('config-spec');
         expect(config.title).toBe(TITLE);
         expect(config.description).toBe(DESCRIPTION);
         expect(config.websiteUrl).toBe(WEBSITE);
         expect(config.version).toBe('1.0.0');
         expect(config.resource).toBe(RESOURCE);
-        expect(config.authorizationServers).toEqual([ISSUER]);
-        expect(config.requiredScopes).toEqual(['tools']);
-        expect(config.maxAccountValidationAgeSeconds).toBe(900);
-        expect(config.errorTranslator).toBeUndefined();
-        expect(config.protectedResourceMetadata().authorization_servers).toEqual([ISSUER]);
+        expect(config.auth).toEqual([mode]);
+        expect(mode.authorizationServers).toEqual([ISSUER]);
+        expect(mode.requiredScopes).toEqual(['tools']);
+        expect(mode.maxAccountValidationAgeSeconds).toBe(900);
+        expect(mode.protectedResourceMetadata(config.resource).authorization_servers).toEqual([
+            ISSUER,
+        ]);
+        expect(config.credentialVerifiers).toBeUndefined();
     });
 
     it('bind() lists EVERY missing required setter in one startup failure', () => {
-        const config = new WpMcpServerConfig<string>().setName('half-built').setVersion('1.0.0');
+        const config = new WpMcpServerConfig().setName('half-built').setVersion('1.0.0');
         expect(() => bind(config)).toThrow(
             'WpMcpServerConfig is missing setTitle(...), setDescription(...), setWebsiteUrl(...), ' +
-                'setResource(...), setAccessTokenAuthority(...), ' +
-                'setAuthorizationService(...), ' +
-                'setAuthorizationServers(...), setRequiredScopes(...)',
+                'setResource(...), setAuth([...])',
         );
     });
 
+    it('bind() demands the credential verifiers once an @WpAuth mode is in the set', () => {
+        const config = complete().setAuth([oidcSameProject()]);
+        expect(() => bind(config)).toThrow(
+            'WpMcpServerConfig is missing setCredentialVerifiers(router.credentialVerifiers())',
+        );
+        expect(() =>
+            bind(
+                complete()
+                    .setAuth([oidcSameProject()])
+                    .setCredentialVerifiers(router.credentialVerifiers()),
+            ),
+        ).not.toThrow();
+    });
+
     it('bind() names the one forgotten setter', () => {
-        const config = new WpMcpServerConfig<string>()
+        const config = new WpMcpServerConfig()
             .setName('no-resource')
             .setTitle(TITLE)
             .setDescription(DESCRIPTION)
             .setWebsiteUrl(WEBSITE)
             .setVersion('1.0.0')
-            .setAccessTokenAuthority(new TestTokenAuthority())
-            .setAuthorizationService(router.authorizationService())
-            .setAuthorizationServers([ISSUER])
-            .setRequiredScopes(['tools']);
+            .setAuth([
+                mcpOAuth(
+                    new TestTokenAuthority(),
+                    [ISSUER],
+                    ['tools'],
+                    McpAccessTokenFormat.everyBearer(),
+                ),
+            ]);
         expect(() => bind(config)).toThrow('WpMcpServerConfig is missing setResource(...)');
     });
 
@@ -119,14 +160,11 @@ describe('WpMcpServerConfig fluent setters', () => {
         (setter: string) => {
             const config = complete();
             // Rebuild without the one setter under test: every other required value is present.
-            const partial = new WpMcpServerConfig<string>()
+            const partial = new WpMcpServerConfig()
                 .setName(config.name)
                 .setVersion(config.version)
                 .setResource(config.resource)
-                .setAccessTokenAuthority(config.accessTokenAuthority)
-                .setAuthorizationService(config.authorizationService)
-                .setAuthorizationServers(config.authorizationServers)
-                .setRequiredScopes(config.requiredScopes);
+                .setAuth(config.auth);
             if (setter !== 'setTitle') partial.setTitle(TITLE);
             if (setter !== 'setDescription') partial.setDescription(DESCRIPTION);
             if (setter !== 'setWebsiteUrl') partial.setWebsiteUrl(WEBSITE);
@@ -135,7 +173,7 @@ describe('WpMcpServerConfig fluent setters', () => {
     );
 
     it('setTitle requires one non-empty line of at most 100 characters', () => {
-        const config = new WpMcpServerConfig<string>();
+        const config = new WpMcpServerConfig();
         expect(() => config.setTitle(' ')).toThrow(
             'WpMcpServerConfig.setTitle(...) requires a non-empty string.',
         );
@@ -149,7 +187,7 @@ describe('WpMcpServerConfig fluent setters', () => {
     });
 
     it('setDescription requires non-empty text of at most 2000 characters', () => {
-        const config = new WpMcpServerConfig<string>();
+        const config = new WpMcpServerConfig();
         expect(() => config.setDescription('')).toThrow(
             'WpMcpServerConfig.setDescription(...) requires a non-empty string.',
         );
@@ -162,7 +200,7 @@ describe('WpMcpServerConfig fluent setters', () => {
     });
 
     it('setWebsiteUrl requires an absolute https URL', () => {
-        const config = new WpMcpServerConfig<string>();
+        const config = new WpMcpServerConfig();
         expect(() => config.setWebsiteUrl('')).toThrow(
             'WpMcpServerConfig.setWebsiteUrl(...) requires a non-empty string.',
         );
@@ -180,20 +218,25 @@ describe('WpMcpServerConfig fluent setters', () => {
     });
 
     it('each text setter rejects an empty value naming itself', () => {
-        const config = new WpMcpServerConfig<string>();
+        const config = new WpMcpServerConfig();
         expect(() => config.setName('  ')).toThrow(
             'WpMcpServerConfig.setName(...) requires a non-empty string.',
         );
         expect(() => config.setVersion('')).toThrow(
             'WpMcpServerConfig.setVersion(...) requires a non-empty string.',
         );
-        expect(() => config.setRequiredScopes(['tools', ''])).toThrow(
-            'WpMcpServerConfig.setRequiredScopes(...) requires a non-empty string.',
-        );
+        expect(() =>
+            mcpOAuth(
+                new TestTokenAuthority(),
+                [ISSUER],
+                ['tools', ''],
+                McpAccessTokenFormat.everyBearer(),
+            ),
+        ).toThrow('mcpOAuth(...) requires an array of nonblank required scopes');
     });
 
     it('setResource rejects a name or version landed on it', () => {
-        const config = new WpMcpServerConfig<string>();
+        const config = new WpMcpServerConfig();
         expect(() => config.setResource('lang-learning')).toThrow(
             "WpMcpServerConfig.setResource(...) requires an absolute URL, got 'lang-learning'.",
         );
@@ -202,18 +245,29 @@ describe('WpMcpServerConfig fluent setters', () => {
         );
     });
 
-    it('setAuthorizationServers rejects a scope list landed on it', () => {
-        const config = new WpMcpServerConfig<string>();
-        expect(() => config.setAuthorizationServers(['tools'])).toThrow(
-            "WpMcpServerConfig.setAuthorizationServers(...) requires an absolute URL, got 'tools'.",
-        );
-        expect(() => config.setAuthorizationServers([])).toThrow(
-            'WpMcpServerConfig.setAuthorizationServers(...) requires at least one issuer URL.',
-        );
+    it('mcpOAuth(...) rejects a scope list landed on its authorization servers', () => {
+        expect(() =>
+            mcpOAuth(
+                new TestTokenAuthority(),
+                ['tools'],
+                ['tools'],
+                McpAccessTokenFormat.everyBearer(),
+            ),
+        ).toThrow("mcpOAuth(...) authorization servers must be absolute URLs, got 'tools'.");
+        expect(() =>
+            mcpOAuth(
+                new TestTokenAuthority(),
+                [] as unknown as [string],
+                ['tools'],
+                McpAccessTokenFormat.everyBearer(),
+            ),
+        ).toThrow('mcpOAuth(...) requires at least one authorization server issuer URL.');
     });
 
-    it('setRequiredScopes accepts an explicitly empty list', () => {
-        expect(() => complete().setRequiredScopes([])).not.toThrow();
+    it('mcpOAuth(...) accepts an explicitly empty required-scope list', () => {
+        expect(() =>
+            mcpOAuth(new TestTokenAuthority(), [ISSUER], [], McpAccessTokenFormat.everyBearer()),
+        ).not.toThrow();
     });
 
     it('validates icon origins at bind, regardless of setter order', () => {
@@ -227,18 +281,21 @@ describe('WpMcpServerConfig fluent setters', () => {
     });
 
     it('the ceilings keep their range validation', () => {
-        const config = new WpMcpServerConfig<string>();
-        expect(() => config.setMaxAccountValidationAgeSeconds(0)).toThrow(
-            'WpMcpServerConfig.setMaxAccountValidationAgeSeconds(...) requires 1..3600 seconds, got 0.',
+        expect(() => oauth(0)).toThrow(
+            'mcpOAuth(...) maxAccountValidationAgeSeconds must be 1..3600, got 0.',
         );
-        expect(() => config.setMaxAccountValidationAgeSeconds(3601)).toThrow(
-            'requires 1..3600 seconds, got 3601.',
-        );
+        expect(() => oauth(3601)).toThrow('must be 1..3600, got 3601.');
+    });
+
+    it('an opaque token prefix may not overlap a JWT or an off-GCP OIDC token', () => {
+        expect(() => McpAccessTokenFormat.opaquePrefix('eyJ')).toThrow(/every JWT starts with/);
+        expect(() => McpAccessTokenFormat.opaquePrefix('dev')).toThrow(/off-GCP OIDC token/);
+        expect(McpAccessTokenFormat.opaquePrefix('wpmcp_').prefix).toBe('wpmcp_');
     });
 
     it('derives the RFC 9728 metadata URL by path insertion, for every resource shape', () => {
         const metadataUrlOf = (resource: string): string =>
-            new WpMcpServerConfig<string>().setResource(resource).resourceMetadataUrl;
+            new WpMcpServerConfig().setResource(resource).resourceMetadataUrl;
         expect(metadataUrlOf(RESOURCE)).toBe(
             'https://api.example.test/.well-known/oauth-protected-resource/app-owned/mcp',
         );
@@ -267,7 +324,7 @@ describe('WpMcpServerConfig fluent setters', () => {
     });
 
     it('reading an unset required value names the setter that fills it', () => {
-        expect(() => new WpMcpServerConfig<string>().resource).toThrow(
+        expect(() => new WpMcpServerConfig().resource).toThrow(
             'WpMcpServerConfig is missing setResource(...)',
         );
     });

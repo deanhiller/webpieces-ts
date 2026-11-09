@@ -9,11 +9,17 @@ import {
 import express, { Express } from 'express';
 import { ContainerModule, ContainerModuleLoadOptions } from 'inversify';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { HeaderRegistry } from '@webpieces/core-util';
+import { Mcp, HeaderRegistry } from '@webpieces/core-util';
 import { JWT_HOOK, WebpiecesRouter, WebpiecesRouterFactory } from '@webpieces/http-routing';
 import { McpApiBinding } from './McpApiBinding';
-import { VerifiedMcpCredential, WpMcpServerConfig } from './McpAuth';
+import {
+    VerifiedMcpCredential,
+    WpMcpServerConfig,
+    McpAccessTokenFormat,
+    mcpOAuth,
+} from './McpAuth';
 import { McpBindOptions } from './McpBindOptions';
+import { McpToolset } from './McpToolset';
 import { McpDeployment } from './McpDeployment';
 import { WpMcpServer } from './WpMcpServer';
 import { McpIcon } from './McpIcon';
@@ -56,7 +62,7 @@ const WEBSITE_URL = 'https://docs.example.test/negotiation';
 describe.each([false, true])(
     'WpMcpServer protocol negotiation (icons: %s)',
     (withIcons: boolean) => {
-        let bridge: WpMcpServer<string>;
+        let bridge: WpMcpServer;
         let httpServer: Server;
         let baseUrl: string;
         let legacy: LegacyMcpHttpTestHarness;
@@ -72,29 +78,33 @@ describe.each([false, true])(
                 appBindings: [module],
             });
             router.addRoutes(SearchApi, SearchController);
-            const config = new WpMcpServerConfig<string>()
+            const config = new WpMcpServerConfig()
                 .setName('test-server')
                 .setTitle(TITLE)
                 .setDescription(DESCRIPTION)
                 .setWebsiteUrl(WEBSITE_URL)
                 .setVersion('1.0.0')
                 .setResource('https://api.example.test/app-owned/mcp')
-                .setAccessTokenAuthority(new TestTokenAuthority())
-                .setAuthorizationService(router.authorizationService())
-                .setAuthorizationServers(['https://login.example.test'])
-                .setRequiredScopes(['tools']);
+                .setAuth([
+                    mcpOAuth(
+                        new TestTokenAuthority(),
+                        ['https://login.example.test'],
+                        ['tools'],
+                        McpAccessTokenFormat.everyBearer(),
+                    ),
+                ]);
             if (withIcons) config.setIcons(ICONS);
-            bridge = new WpMcpServer(config);
-            const app: Express = express();
-            bridge.bind(
-                app,
-                new McpBindOptions(
-                    ENDPOINT_PATH,
+            bridge = new WpMcpServer(
+                config,
+                new McpToolset(
                     [McpApiBinding.local(SearchApi, router)],
                     [SEARCH_API_CATALOG],
-                    McpDeployment.singleProcess(),
+                    router.authorizationService(),
+                    [Mcp.DEFAULT],
                 ),
             );
+            const app: Express = express();
+            bridge.bind(app, new McpBindOptions(ENDPOINT_PATH, McpDeployment.singleProcess()));
             // A later setter must not change the identity of the already-bound bridge.
             config.setIcons([new McpIcon('https://api.example.test/replacement.png')]);
             httpServer = createServer(app);

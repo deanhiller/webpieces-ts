@@ -7,11 +7,35 @@ import express, { Express } from 'express';
 import { CallToolResult } from '@modelcontextprotocol/server';
 import { ContainerModule, ContainerModuleLoadOptions, injectable } from 'inversify';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { ApiJsonSchema, ApiPath, ApiType, Endpoint, HeaderRegistry, LoggerFactory, LogManager, McpToolCatalogFile, McpToolDefinition, ObjectSchemaBuilder, WpMcpTool, WpMcpToolHints, MCP, POST, RPC, SVC_TO_SVC, WRITE_IDEMPOTENT } from '@webpieces/core-util';
+import {
+    ApiJsonSchema,
+    ApiPath,
+    ApiType,
+    Endpoint,
+    HeaderRegistry,
+    LoggerFactory,
+    LogManager,
+    McpToolCatalogFile,
+    McpToolDefinition,
+    ObjectSchemaBuilder,
+    WpMcpTool,
+    WpMcpToolHints,
+    MCP,
+    POST,
+    RPC,
+    SVC_TO_SVC,
+    WRITE_IDEMPOTENT,
+} from '@webpieces/core-util';
 import { JWT_HOOK, WebpiecesRouterFactory } from '@webpieces/http-routing';
 import { McpApiBinding } from './McpApiBinding';
-import { VerifiedMcpCredential, WpMcpServerConfig } from './McpAuth';
+import {
+    VerifiedMcpCredential,
+    WpMcpServerConfig,
+    McpAccessTokenFormat,
+    mcpOAuth,
+} from './McpAuth';
 import { McpBindOptions } from './McpBindOptions';
+import { McpToolset } from './McpToolset';
 import { McpDeployment } from './McpDeployment';
 import { McpToolCatalog } from './McpToolCatalog';
 import { WpMcpServer } from './WpMcpServer';
@@ -86,7 +110,8 @@ const LOCK_CATALOG = new McpToolCatalog(
                 .build(),
             new ObjectSchemaBuilder()
                 .required('open', described('boolean', 'Whether the passage is open'))
-                .build(), [Mcp.DEFAULT],
+                .build(),
+            [Mcp.DEFAULT],
         ),
     ]),
     IN_MEMORY,
@@ -127,7 +152,7 @@ class LockErrorTranslator implements McpErrorTranslator {
 }
 
 describe('application-owned tools/call error translation', () => {
-    let bridge: WpMcpServer<string>;
+    let bridge: WpMcpServer;
     let httpServer: Server;
     let harness: McpHttpTestHarness;
     let translators: LockErrorTranslator;
@@ -150,31 +175,33 @@ describe('application-owned tools/call error translation', () => {
         authority = new TestTokenAuthority();
         translators = new LockErrorTranslator();
         bridge = new WpMcpServer(
-            new WpMcpServerConfig<string>()
+            new WpMcpServerConfig()
                 .setName('translator-server')
                 .setTitle('Webpieces Test Server')
                 .setDescription('Exercises the webpieces MCP bridge in the mcp-server test suite.')
                 .setWebsiteUrl('https://docs.example.test/mcp')
                 .setVersion('1.0.0')
                 .setResource('https://api.example.test/app-owned/mcp')
-                .setAccessTokenAuthority(authority)
-                .setAuthorizationService(router.authorizationService())
-                .setAuthorizationServers(['https://login.example.test'])
-                .setRequiredScopes(['tools']),
+                .setAuth([
+                    mcpOAuth(
+                        authority,
+                        ['https://login.example.test'],
+                        ['tools'],
+                        McpAccessTokenFormat.everyBearer(),
+                    ),
+                ]),
+            new McpToolset(
+                [McpApiBinding.local(LockApi, router), McpApiBinding.local(SearchApi, router)],
+                [LOCK_CATALOG, SEARCH_API_CATALOG],
+                router.authorizationService(),
+                [Mcp.DEFAULT],
+            ),
         );
         // The translator is a PROCESS-GLOBAL now (issue #968 R4), mirroring ApiRegistry and
         // IpcRegistry, not a member of WpMcpServerConfig.
         McpRegistry.setErrorTranslator(translators);
         const app: Express = express();
-        bridge.bind(
-            app,
-            new McpBindOptions(
-                ENDPOINT_PATH,
-                [McpApiBinding.local(LockApi, router), McpApiBinding.local(SearchApi, router)],
-                [LOCK_CATALOG, SEARCH_API_CATALOG],
-                McpDeployment.singleProcess(),
-            ),
-        );
+        bridge.bind(app, new McpBindOptions(ENDPOINT_PATH, McpDeployment.singleProcess()));
         httpServer = await TestServers.listen(app);
         harness = new McpHttpTestHarness(TestServers.urlOf(httpServer), ENDPOINT_PATH);
     });
@@ -244,7 +271,7 @@ describe('application-owned tools/call error translation', () => {
         expect(failures[0]?.level).toBe('error');
         // #1055: plus ONE line from the MCP boundary carrying the stack and the requestId, because
         // the LogApiCall line has the message only. Nothing else writes it.
-        const boundary = logs.fromLogger('WpMcpServer', 'passage locked is locked');
+        const boundary = logs.fromLogger('McpToolset', 'passage locked is locked');
         expect(boundary).toHaveLength(1);
         expect(boundary[0]?.level).toBe('error');
         expect(boundary[0]?.message).toMatch(/requestId=\S+/);
@@ -261,7 +288,7 @@ describe('application-owned tools/call error translation', () => {
         // ...and the original failure is still reported exactly once by the filter above, plus the
         // MCP boundary's one stack-and-requestId line (#1055).
         expect(logs.fromLogger('LogApiCall', 'passage translator-bug is locked')).toHaveLength(1);
-        expect(logs.fromLogger('WpMcpServer', 'passage translator-bug is locked')).toHaveLength(1);
+        expect(logs.fromLogger('McpToolset', 'passage translator-bug is locked')).toHaveLength(1);
         expect(allLines('passage translator-bug is locked')).toHaveLength(2);
     });
 
@@ -297,7 +324,7 @@ describe('application-owned tools/call error translation', () => {
 });
 
 describe('no application translator registered', () => {
-    let bridge: WpMcpServer<string>;
+    let bridge: WpMcpServer;
     let httpServer: Server;
     let harness: McpHttpTestHarness;
 
@@ -310,28 +337,30 @@ describe('no application translator registered', () => {
         const router = await WebpiecesRouterFactory.create({ appBindings: [module] });
         router.addRoutes(LockApi, LockController);
         bridge = new WpMcpServer(
-            new WpMcpServerConfig<string>()
+            new WpMcpServerConfig()
                 .setName('plain-server')
                 .setTitle('Webpieces Test Server')
                 .setDescription('Exercises the webpieces MCP bridge in the mcp-server test suite.')
                 .setWebsiteUrl('https://docs.example.test/mcp')
                 .setVersion('1.0.0')
                 .setResource('https://api.example.test/app-owned/mcp')
-                .setAccessTokenAuthority(new TestTokenAuthority())
-                .setAuthorizationService(router.authorizationService())
-                .setAuthorizationServers(['https://login.example.test'])
-                .setRequiredScopes(['tools']),
-        );
-        const app: Express = express();
-        bridge.bind(
-            app,
-            new McpBindOptions(
-                ENDPOINT_PATH,
+                .setAuth([
+                    mcpOAuth(
+                        new TestTokenAuthority(),
+                        ['https://login.example.test'],
+                        ['tools'],
+                        McpAccessTokenFormat.everyBearer(),
+                    ),
+                ]),
+            new McpToolset(
                 [McpApiBinding.local(LockApi, router)],
                 [LOCK_CATALOG],
-                McpDeployment.singleProcess(),
+                router.authorizationService(),
+                [Mcp.DEFAULT],
             ),
         );
+        const app: Express = express();
+        bridge.bind(app, new McpBindOptions(ENDPOINT_PATH, McpDeployment.singleProcess()));
         httpServer = await TestServers.listen(app);
         harness = new McpHttpTestHarness(TestServers.urlOf(httpServer), ENDPOINT_PATH);
     });

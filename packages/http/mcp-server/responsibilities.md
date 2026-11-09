@@ -6,8 +6,20 @@ normal endpoint filter chain, DTO validation, and safe error boundary.
 ## In scope
 
 - Load the build's generated MCP tool catalogs — ONE `mcp-<ContractClass>-tools.json` per contract — with `McpToolCatalog.fromPackages([...], __dirname)`, from a built/published package (files beside its `package.json`) or a workspace source directory (its `project.json` → the outputPath of the target `openapi-generate` dependsOn, via core-util's `GeneratedApiDocsLayout`).
-- Resolve `@WpMcpTool` API metadata against the catalog of each bound contract (`McpBindOptions.toolCatalogs`) into registered MCP tools, FAILING FAST at boot — naming every directory searched — when a bound contract has no catalog, a catalog's contract is not bound, a tool name is duplicated, a registered tool is absent from its catalog, its catalog method/profiles differ from the declaration, or a catalog contains an extra stale tool. The title is NOT compared: it is the method's `@summary` JSDoc tag, which the contract carries no runtime trace of, so the catalog is its one runtime source (#1296). Validate the complete catalogs before projecting each bound instance's fixed profile groups; discovery, schema lookup and calls share that restricted authorized view. The schemas, the description and the title are read from the catalog, never rebuilt here — see the README. `McpToolRegistry` also calls `assertApiTypeMatchesMcpTools`, so `@ApiType(..., MCP)` and `@WpMcpTool` presence cannot disagree at runtime.
-- Validate resource-bound access tokens through an application verifier.
+- Resolve `@WpMcpTool` API metadata against the catalog of each bound contract (the `McpToolset` catalogs) into registered MCP tools, FAILING FAST at boot — naming every directory searched — when a bound contract has no catalog, a catalog's contract is not bound, a tool name is duplicated, a registered tool is absent from its catalog, its catalog method/profiles differ from the declaration, or a catalog contains an extra stale tool. The title is NOT compared: it is the method's `@summary` JSDoc tag, which the contract carries no runtime trace of, so the catalog is its one runtime source (#1296). Validate the complete catalogs before projecting each bound instance's fixed profile groups; discovery, schema lookup and calls share that restricted authorized view. The schemas, the description and the title are read from the catalog, never rebuilt here — see the README. `McpToolRegistry` also calls `assertApiTypeMatchesMcpTools`, so `@ApiType(..., MCP)` and `@WpMcpTool` presence cannot disagree at runtime.
+- Own the shared `McpToolset`: registry, per-caller `AuthorizedMcpTools` projection, schema validation,
+  dispatch and error translation, reading the caller ONLY from the current `RequestContext`.
+- Serve a toolset over two transports: `WpMcpInMemory.connect(toolset)` (an SDK `Client` over the linked
+  in-memory pair, the caller read per request from the calling code's `RequestContext`) and `WpMcpServer`
+  (HTTP, one path per toolset).
+- Authenticate the HTTP door with an OR-set of the existing `@WpAuth` modes plus `mcpOAuth(...)`:
+  classify from unverified surface facts, verify with exactly ONE verifier (`router.credentialVerifiers()`,
+  the same hooks `AuthFilter` uses), refuse overlapping / unverifiable / caller-less modes at bind, and
+  emit `WWW-Authenticate` discovery only for `mcpOAuth(...)`.
+- Validate resource-bound `mcpOAuth(...)` access tokens through an application verifier.
+- Provide the MCP CLIENTS webpieces itself needs: `WpMcpRemote.connect(url, oidcSameProject(), minter)`
+  (per-POST OIDC minting and trusted-context propagation) and `McpClientSet.merge([...])` (one flat tool
+  namespace across clients, duplicates refused).
 - Use the receiving router's common `AuthorizationService` for tool/schema visibility and invocation policy.
 - Bind the application-selected MCP path through the official MCP v2 HTTP/JSON-RPC implementation,
   serving both the 2026-07-28 and the 2025-era wire from one registry (the revision is negotiated).
@@ -22,8 +34,9 @@ normal endpoint filter chain, DTO validation, and safe error boundary.
   own the reply for `tools/list` and the pre-SDK HTTP boundary outright. The registry is never empty,
   so `toToolCallResult` makes ONE unconditional call — the same shape `ApiRegistry` gives HTTP and
   `IpcRegistry` gives IPC.
-- Have `toWire` and NO `fromWire`: webpieces is never the MCP client, so there is no return path to
-  translate. Documented on `McpErrorTranslator` so it does not read as an oversight.
+- Have `toWire` and NO `fromWire`: the MCP clients here (`WpMcpInMemory`, `WpMcpRemote`) are the SDK's
+  own `Client`, which hands the agent the tool result as-is, so there is no return path to translate.
+  Documented on `McpErrorTranslator` so it does not read as an oversight.
 - Keep the pre-SDK boundary OFF the HTTP `ErrorTranslator` even though both return `HttpResponseDto`:
   its body must stay JSON-RPC shaped or the `401 + WWW-Authenticate` OAuth discovery signal breaks.
 - Wrap the edges with no filter chain above them — bearer, `Origin`, body, `tools/list` — in
@@ -42,4 +55,5 @@ normal endpoint filter chain, DTO validation, and safe error boundary.
 - Issuing OAuth tokens: applications may use any authorization server, while this package describes
   the protected resource and verifies tokens at the resource boundary.
 - Forwarding external MCP bearer tokens or browser JWTs to application endpoints.
+- Approval UX for write tools (app-owned; `destructiveHint` / `readOnlyHint` and surface `llm` are there to key off).
 - Durable/replayable event delivery; MCP list/resource notifications are cache invalidations.

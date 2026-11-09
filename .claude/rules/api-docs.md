@@ -281,7 +281,7 @@ project, because it is emptied on every run.
 
 ```ts
 const catalogs = McpToolCatalog.fromPackages(['@myorg/my-apis'], __dirname);
-new McpBindOptions(MCP_PATH, bindings, catalogs, McpDeployment.singleProcess(), []);
+new McpToolset(bindings, catalogs, router.authorizationService(), [Mcp.DEFAULT]);
 ```
 
 It resolves `<pkg>/package.json` the way node does, starting from the CALLER's `__dirname` (in a pnpm
