@@ -7,7 +7,7 @@ import { NativeProcessApi } from '@webpieces/tooling-common';
 import { bindingScopeValues, injectable } from 'inversify';
 import { AiBranchName } from '../workflow/git-readAiBranchName';
 import { BranchNaming } from '../workflow/branch-naming';
-import { GatedPrPublisher } from '../workflow/gated-pr-publisher';
+import { GatedPrPublisher, PrBodyDraft } from '../workflow/gated-pr-publisher';
 import { GitExec } from '../workflow/git-exec';
 import { MergeState } from '../workflow/merge-state';
 import { SquashSettingsEnforcer } from '../workflow/squash-settings-enforcer';
@@ -128,10 +128,11 @@ export class HumanPostPrCommand {
         fs.mkdirSync(path.dirname(bodyFile), { recursive: true });
         fs.writeFileSync(bodyFile, initialBody + '\n');
 
+        const render = (prUrl: string): string => this.renderBody(summary, prUrl, gateSalt, headSha, buildRan);
         const published = await this.publisher.publish(
             baseBranch,
             this.titleFrom(summary, baseBranch),
-            bodyFile,
+            new PrBodyDraft(bodyFile, initialBody, render),
             RETRY_COMMAND,
         );
         if (published.createFailed) {
@@ -148,8 +149,9 @@ export class HumanPostPrCommand {
                 'The branch was pushed but GitHub did not return its open PR; summary.json was not consumed.',
             );
         }
-        const finalBody = this.renderBody(summary, finalRef.url, gateSalt, headSha, buildRan);
-        if (finalBody !== initialBody) await this.backfillBody(finalRef.number, bodyFile, finalBody);
+        this.publisher.reportPredictedLink(published, finalRef.number);
+        const finalBody = render(finalRef.url);
+        if (finalBody !== published.body) await this.backfillBody(finalRef.number, bodyFile, finalBody);
         await this.squashSettings.ensure();
         const archive = this.reviewJsonService.archiveSummaryJson(summaryPath);
         if (archive !== '')

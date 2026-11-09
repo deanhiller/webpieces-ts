@@ -22,7 +22,7 @@ import {
 } from '../workflow/verdict-provenance';
 import { DiffBasis } from '../workflow/diff-basis';
 import { MergeOutcome, MERGE_RESULT_LEFT_TO_HUMAN } from '../workflow/pr-merger';
-import { PublishedPr } from '../workflow/gated-pr-publisher';
+import { PrBodyDraft, PublishedPr } from '../workflow/gated-pr-publisher';
 
 const state = vi.hoisted(() => ({ head: 'feature-head', config: {} }));
 
@@ -79,7 +79,8 @@ class Fixture {
         basis: new DiffBasis('base', state.head, false, [], '', ''),
         changedFiles: [],
     });
-    publish = vi.fn(() => new PublishedPr('77', false));
+    publish = vi.fn((_base: string, _title: string, draft: PrBodyDraft) => new PublishedPr('77', false, draft.body, ''));
+    reportPredictedLink = vi.fn();
     build = vi.fn(async () => {});
     console = {
         withCapture: async (_root: string, _name: string, work: () => Promise<void>) => work(),
@@ -144,11 +145,11 @@ class Fixture {
             seam({
                 merge: () => new MergeOutcome(false, false, 'open', MERGE_RESULT_LEFT_TO_HUMAN),
             }),
-            seam({ publish: this.publish }),
+            seam({ publish: this.publish, reportPredictedLink: this.reportPredictedLink }),
             seam({
                 computeGateResults: () => [],
                 countAddedDisables: () => [],
-                renderPrBody: () => 'Fixes #1114',
+                renderPrBody: (_input: unknown, prUrl: string) => `Fixes #1114\n${prUrl}`,
                 renderDetailComment: () => 'detail',
             }),
             seam({ resolve: () => null }),
@@ -221,5 +222,54 @@ describe('finish → same-PR update → review → finish (#1114)', () => {
         expect(fs.readFileSync(verdict, 'utf8')).toBe(originalVerdict);
         expect(fs.readdirSync(audits)).toHaveLength(2);
         expect(fs.readFileSync(path.join(audits, first), 'utf8')).toBe(firstAudit);
+    });
+});
+
+/**
+ * The CREATE path with the PR-number prediction (#1418). The publisher predicted `predicted` and created
+ * the PR with that self-link in its body ('' = the prediction failed, so the body went up without one);
+ * GitHub then really assigned `real`. Only a body that differs from the final, real-URL render is re-sent.
+ */
+describe('create path — the predicted self-link (#1418)', () => {
+    const urlOf = (n: string): string => `https://github.test/o/r/pull/${n}`;
+
+    async function createPr(f: Fixture, predicted: string, real: string): Promise<string[]> {
+        const edits: string[] = [];
+        const gh = new MockNativeProcessApi();
+        // No PR when finish renders its first body; the one GitHub assigned once the publisher returns.
+        gh.respondToPrefix('gh', ['pr', 'view'], gh.fail(1, 'no pull requests found'));
+        gh.respondToPrefix('gh', ['pr', 'view'], gh.ok(`${real}\t${urlOf(real)}\n`));
+        gh.respondToPrefix('gh', ['pr', 'edit'], (call) => {
+            edits.push(fs.readFileSync(call.args[call.args.indexOf('--body-file') + 1], 'utf8'));
+            return gh.ok();
+        });
+        f.gh = gh;
+        f.publish.mockImplementation((_base: string, _title: string, draft: PrBodyDraft) =>
+            new PublishedPr('', false, predicted === '' ? draft.body : draft.render(urlOf(predicted)), predicted));
+        f.setup();
+        await f.finish().run();
+        return edits;
+    }
+
+    it('a correct guess publishes once — no gh pr edit, so creating the PR fires one event', async () => {
+        const f = new Fixture();
+        expect(await createPr(f, '77', '77')).toEqual([]);
+        expect(f.reportPredictedLink).toHaveBeenCalledWith(expect.objectContaining({ predictedNumber: '77' }), '77');
+    });
+
+    it('a wrong guess (predicted N, GitHub assigned N+1) back-fills the REAL link with gh pr edit', async () => {
+        const f = new Fixture();
+        const edits = await createPr(f, '77', '78');
+        expect(edits).toHaveLength(1);
+        expect(edits[0]).toContain(urlOf('78'));
+        expect(edits[0]).not.toContain(urlOf('77'));
+        expect(f.reportPredictedLink).toHaveBeenCalledWith(expect.objectContaining({ predictedNumber: '77' }), '78');
+    });
+
+    it('a failed prediction falls back to the back-fill, exactly as before #1418', async () => {
+        const f = new Fixture();
+        const edits = await createPr(f, '', '78');
+        expect(edits).toHaveLength(1);
+        expect(edits[0]).toContain(urlOf('78'));
     });
 });

@@ -121,8 +121,9 @@ class Fixture {
             asType<GatedPrPublisher>({
                 publish: (): PublishedPr => {
                     this.publishCalls++;
-                    return new PublishedPr('', false);
+                    return new PublishedPr('', false, '', '');
                 },
+                reportPredictedLink: (): void => undefined,
             }),
             asType<SquashSettingsEnforcer>({
                 ensure: (): void => {

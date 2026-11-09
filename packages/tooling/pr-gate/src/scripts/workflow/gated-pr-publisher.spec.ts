@@ -3,8 +3,9 @@ import * as path from 'path';
 import { afterEach, beforeEach, describe, it, expect } from 'vitest';
 import { GateTokenService } from '@webpieces/rules-config';
 import { specTempDirs } from '@webpieces/tooling-testkit';
+import { ProcessResultDto } from '@webpieces/tooling-common';
 import { CapturedOutput, PrGateFeature } from '../../__tests__/feature-harness';
-import { GatedPrPublisher, PublishedPr } from './gated-pr-publisher';
+import { GatedPrPublisher, PrBodyDraft, PublishedPr } from './gated-pr-publisher';
 
 /**
  * The production publisher from the shipped container (#1381), with `gh` and git SCRIPTED. `order` is
@@ -22,12 +23,22 @@ let output: CapturedOutput;
 let dir = '';
 let order: string[] = [];
 let bodyAtEdit = '';
+// What the PR-number prediction query answers: the newest issue/PR/discussion number and the repo URL.
+let predictAnswer = new ProcessResultDto(0, '41\thttps://github.com/o/r\n', '');
 
-// The body wp-finish-upsert-pr hands the publisher: the dashboard plus the token for the LOCAL head sha.
-function gatedBodyFile(headSha: string): string {
+let bodyAtCreate = '';
+
+// The body wp-finish-upsert-pr hands the publisher: the dashboard (with its self-link, '' when unknown)
+// plus the token for the LOCAL head sha.
+function renderBody(headSha: string, prUrl: string): string {
+    return `# dashboard\n${prUrl}\n\n${new GateTokenService().gateTokenMarker(SALT, headSha)}`;
+}
+
+function gatedDraft(headSha: string, knownUrl = ''): PrBodyDraft {
     const file = path.join(dir, 'pr-body.md');
-    fs.writeFileSync(file, `# dashboard\n\n${new GateTokenService().gateTokenMarker(SALT, headSha)}\n`);
-    return file;
+    const body = renderBody(headSha, knownUrl);
+    fs.writeFileSync(file, body + '\n');
+    return new PrBodyDraft(file, body, (prUrl: string): string => renderBody(headSha, prUrl));
 }
 
 /** Script GitHub and the remote: whether a PR is open, and whether the edit, push and create succeed. */
@@ -41,9 +52,14 @@ function world(existingPr: string, editOk = true, pushOk = true, createOk = true
         bodyAtEdit = fs.readFileSync(call.args[call.args.indexOf('--body-file') + 1], 'utf8');
         return editOk ? feature.processes.ok() : feature.processes.fail(1, 'HTTP 401');
     });
-    feature.processes.respondToPrefix('gh', ['pr', 'create'], (): ReturnType<typeof feature.processes.ok> => {
+    feature.processes.respondToPrefix('gh', ['pr', 'create'], (call): ReturnType<typeof feature.processes.ok> => {
         order.push('createPr');
+        bodyAtCreate = fs.readFileSync(call.args[call.args.indexOf('--body-file') + 1], 'utf8');
         return createOk ? feature.processes.ok() : feature.processes.fail(1, 'HTTP 422');
+    });
+    feature.processes.respondToPrefix('gh', ['api', 'graphql'], (): ReturnType<typeof feature.processes.ok> => {
+        order.push('predict');
+        return predictAnswer;
     });
     feature.git.respond(['ls-remote', '--exit-code', '--heads', 'origin', BRANCH],
         existingPr === '' ? feature.git.fail(2) : feature.git.ok());
@@ -53,8 +69,8 @@ function world(existingPr: string, editOk = true, pushOk = true, createOk = true
     });
 }
 
-function publish(headSha: string = NEW_HEAD_SHA, retry?: string): Promise<PublishedPr> {
-    return feature.container.get(GatedPrPublisher).publish(BRANCH, 'My PR title', gatedBodyFile(headSha), retry);
+function publish(headSha: string = NEW_HEAD_SHA, retry?: string, knownUrl = ''): Promise<PublishedPr> {
+    return feature.container.get(GatedPrPublisher).publish(BRANCH, 'My PR title', gatedDraft(headSha, knownUrl), retry);
 }
 
 beforeEach(async (): Promise<void> => {
@@ -63,6 +79,8 @@ beforeEach(async (): Promise<void> => {
     dir = specTempDirs.make('wp-gated-publisher-');
     order = [];
     bodyAtEdit = '';
+    bodyAtCreate = '';
+    predictAnswer = new ProcessResultDto(0, '41\thttps://github.com/o/r\n', '');
 });
 
 afterEach((): void => {
@@ -136,7 +154,7 @@ describe('no existing PR — create path', () => {
         world('');
         const result = await publish();
 
-        expect(order).toEqual(['findOpenPr', 'push', 'createPr']);
+        expect(order).toEqual(['findOpenPr', 'push', 'predict', 'createPr']);
         expect(order).not.toContain('editPr');
         expect(result.number).toBe('');
         expect(result.createFailed).toBe(false);
@@ -153,5 +171,83 @@ describe('no existing PR — create path', () => {
         world('', true, false);
         await expect(publish()).rejects.toThrowError(/Failed to push new branch/);
         expect(order).toEqual(['findOpenPr', 'push']);
+    });
+});
+
+describe('create path — the new PR number is PREDICTED so the body carries its own link (#1418)', () => {
+    it('predicts newest+1 AFTER the push and creates the PR with the predicted link already in the body', async () => {
+        world('');
+        const result = await publish();
+
+        // After the push (the race window is the few seconds between predict and create), never before.
+        expect(order).toEqual(['findOpenPr', 'push', 'predict', 'createPr']);
+        expect(result.predictedNumber).toBe('42');
+        expect(bodyAtCreate).toBe(renderBody(NEW_HEAD_SHA, 'https://github.com/o/r/pull/42') + '\n');
+        // What went up is reported back byte for byte, so the caller's final render can be compared to it.
+        expect(result.body + '\n').toBe(bodyAtCreate);
+        // The gate token is still the one for the local head — the prediction only touches the self-link.
+        expect(new GateTokenService().verifyGateToken(bodyAtCreate, SALT, NEW_HEAD_SHA)).toBe(true);
+    });
+
+    it('queries the shared issue/PR/discussion counter of the current repo', async () => {
+        world('');
+        await publish();
+        const call = feature.processes.callsStartingWith('gh', ['api', 'graphql'])[0];
+        expect(call.args).toContain('owner={owner}');
+        expect(call.args).toContain('name={repo}');
+        const query = call.args.find((a: string): boolean => a.startsWith('query=')) ?? '';
+        expect(query).toMatch(/issues\(first: 1/);
+        expect(query).toMatch(/pullRequests\(first: 1/);
+        expect(query).toMatch(/discussions\(first: 1/);
+    });
+
+    it('a correct guess: reportPredictedLink says so', async () => {
+        world('');
+        const result = await publish();
+        feature.container.get(GatedPrPublisher).reportPredictedLink(result, '42');
+        expect(output.stdout).toContain('PR link predicted #42 ✓');
+    });
+
+    it('a wrong guess (predicted N, GitHub assigned N+1): reportPredictedLink names both and the back-fill', async () => {
+        world('');
+        const result = await publish();
+        feature.container.get(GatedPrPublisher).reportPredictedLink(result, '43');
+        expect(output.stdout).toContain('PR link predicted #42, got #43: back-filling the real link');
+    });
+
+    it('a failed prediction warns, creates with the body as drafted, and never fails the run', async () => {
+        world('');
+        predictAnswer = new ProcessResultDto(1, '', 'GraphQL: Field discussions does not exist');
+        const result = await publish();
+
+        expect(result.createFailed).toBe(false);
+        expect(result.predictedNumber).toBe('');
+        expect(bodyAtCreate).toBe(renderBody(NEW_HEAD_SHA, '') + '\n');
+        expect(output.stderr).toContain("Could not predict the new PR's number (GraphQL: Field discussions does not exist)");
+        feature.container.get(GatedPrPublisher).reportPredictedLink(result, '42');
+        expect(output.stdout).not.toContain('PR link predicted');
+    });
+
+    it('an unparseable answer is treated as no prediction', async () => {
+        world('');
+        predictAnswer = new ProcessResultDto(0, 'null\t\n', '');
+        const result = await publish();
+        expect(result.predictedNumber).toBe('');
+        expect(output.stderr).toContain("unexpected answer 'null'");
+    });
+
+    it('an empty repo (no issue, PR or discussion yet) predicts #1', async () => {
+        world('');
+        predictAnswer = new ProcessResultDto(0, '0\thttps://github.com/o/r\n', '');
+        expect((await publish()).predictedNumber).toBe('1');
+        expect(bodyAtCreate).toContain('https://github.com/o/r/pull/1\n');
+    });
+
+    it('the UPDATE path never predicts — the URL is already known', async () => {
+        world('42');
+        const result = await publish(NEW_HEAD_SHA, undefined, 'https://github.com/o/r/pull/42');
+        expect(order).not.toContain('predict');
+        expect(result.predictedNumber).toBe('');
+        expect(result.body).toBe(renderBody(NEW_HEAD_SHA, 'https://github.com/o/r/pull/42'));
     });
 });

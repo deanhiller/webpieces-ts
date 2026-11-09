@@ -112,6 +112,8 @@ class Fixture {
             w.bodies.push(this.bodyOf(call.args));
             return gh.ok();
         });
+        // The PR-number prediction (#1418): the newest issue/PR/discussion is #76, so the PR is predicted #77.
+        gh.respondToPrefix('gh', ['api', 'graphql'], gh.ok('76\thttps://github.test/o/r\n'));
         // The comment upsert (find, then POST/PATCH) and the squash-settings read — both production code.
         gh.respondToPrefix('gh', ['api', '--paginate'], gh.ok(''));
         gh.respondToPrefix('gh', ['api', '--method'], (call): ProcessResultDto => {
@@ -254,7 +256,7 @@ describe('wp-upsert-hotfix-pr (issue #1057)', () => {
         expect(fx.writes()).toEqual([
             `git push -u origin HEAD:${HOTFIX_BRANCH}`,
             `gh pr create --head ${HOTFIX_BRANCH}`,
-            'gh pr edit #77 (body back-fill)',
+            // The predicted link (#77) was right, so the PR went up with its own link: no back-fill edit.
             'gh comment POST',
         ]);
         expect(fx.gitCommands().filter((l: string): boolean => /\b(merge|rebase|reset|commit|checkout)\b/.test(l)
