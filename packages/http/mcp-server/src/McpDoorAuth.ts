@@ -443,10 +443,12 @@ export class McpDoorAuthenticator {
 
     // webpieces-disable no-function-outside-class -- bind-time validation helper of the private constructor
     private static refuseNonCallers(auth: readonly McpHttpAuth[]): void {
+        // A public mode does not compile here (McpHttpAuth excludes it); one smuggled past the type is
+        // refused by the AuthMeta declaration check that follows.
         for (const method of auth) {
-            if (method.kind === 'vendorAuth' || method.kind === 'public') {
+            if (method.kind === 'vendorAuth') {
                 throw new Error(
-                    `WpMcpServerConfig.setAuth([...]) refuses ${method.kind === 'public' ? 'a public mode' : 'vendorAuth(...)'}: ` +
+                    'WpMcpServerConfig.setAuth([...]) refuses vendorAuth(...): ' +
                         'it identifies no caller to authorize tools against. Use oidcSameProject(), oidcSvcs([...]), ' +
                         'jwt(), apiKey(...), sharedSecret(...) or mcpOAuth(...).',
                 );

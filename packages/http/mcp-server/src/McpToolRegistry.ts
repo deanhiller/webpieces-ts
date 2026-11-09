@@ -274,7 +274,7 @@ class McpCatalogPairing {
             this.problem(
                 `${catalog.file.fileName} (${catalog.directory}) is the catalog of ${catalog.contractName}, ` +
                     `which the server does not bind. Bind it with McpApiBinding.local(${catalog.contractName}, ...) ` +
-                    'or .remote(...), or leave it out of toolCatalogs, e.g. ' +
+                    'or .remote(...), or leave it out of the catalogs passed to new McpToolset(...), e.g. ' +
                     `catalogs.filter((catalog: McpToolCatalog) => catalog.contractName !== '${catalog.contractName}').`,
             );
         }
@@ -287,7 +287,7 @@ class McpCatalogPairing {
                 this.problems.map((text: string) => `  - ${text}`).join('\n') +
                 '\nDirectories searched for mcp-<ContractClass>-tools.json:\n' +
                 (directories.length === 0
-                    ? '  (none — toolCatalogs is empty)'
+                    ? '  (none — the catalogs passed to new McpToolset(...) are empty)'
                     : directories.map((dir: string) => `  ${dir}`).join('\n')) +
                 '\n',
             'Each bound contract needs exactly the one catalog its api library build writes, and nothing else.',

@@ -96,6 +96,11 @@ export class McpServerConfigCompileAssertions {
         config.setMaxAccountValidationAgeSeconds(60);
     }
 
+    noPublicDoor(config: WpMcpServerConfig): void {
+        // @ts-expect-error a public mode identifies no caller to authorize tools against
+        config.setAuth([{ kind: 'public' }]);
+    }
+
     removedToolsetSetters(config: WpMcpServerConfig, policy: AuthorizationService): void {
         // @ts-expect-error profiles are the McpToolset's: new McpToolset(bindings, catalogs, policy, profiles)
         config.setToolProfiles(['default']);

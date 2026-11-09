@@ -159,7 +159,7 @@ new WpMcpServerConfig()
 | `apiKey(regime, creds)` | its own declared header(s) | a customer's custom agent |
 | `sharedSecret(key)` | `Authorization: Webpieces <secret>` | internal deployments that chose it |
 | `mcpOAuth(...)` **(new)** | `Bearer` of the shape its `McpAccessTokenFormat` declares | off-the-shelf connectors (Claude / ChatGPT): RFC 9728 metadata, 401 `WWW-Authenticate` discovery, audience = canonical resource |
-| `vendorAuth(...)` / public | — | refused at startup: no caller identity to authorize tools against |
+| `vendorAuth(...)` / public | — | refused: public does not compile in `setAuth([...])`, `vendorAuth(...)` is refused at startup — neither identifies a caller to authorize tools against |
 
 `mcpOAuth(authority, authorizationServers, requiredScopes, tokenFormat, maxAccountValidationAgeSeconds?)`
 holds everything OAuth-only — the former `setAccessTokenAuthority`, `setAuthorizationServers`,

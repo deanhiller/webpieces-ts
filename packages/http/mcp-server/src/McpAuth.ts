@@ -1,4 +1,4 @@
-import { AuthMode } from '@webpieces/core-util';
+import { AuthMethod } from '@webpieces/core-util';
 import { AuthenticatedCaller, CredentialVerifiers } from '@webpieces/http-routing';
 import { Icon } from '@modelcontextprotocol/server';
 import { McpIcon } from './McpIcon';
@@ -95,7 +95,7 @@ export class McpProtectedResourceMetadata {
  * One member of a server's `setAuth([...])` set: an `@WpAuth` builder (`oidcSameProject()`,
  * `oidcSvcs([...])`, `jwt()`, `apiKey(...)`, `sharedSecret(...)`) or `mcpOAuth(...)`.
  */
-export type McpHttpAuth = AuthMode | McpOAuthMode;
+export type McpHttpAuth = AuthMethod | McpOAuthMode;
 
 /** A server's `setAuth([...])` set: at least one mode. */
 export type McpHttpAuths = readonly [McpHttpAuth, ...McpHttpAuth[]];
