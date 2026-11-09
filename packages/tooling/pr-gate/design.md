@@ -98,6 +98,7 @@ graph TD
     PrContextWriter["PrContextWriter"]
     PrGateApp["PrGateApp"]:::controller
     PrMerger["PrMerger"]
+    PrNumberPredictor["PrNumberPredictor"]
     ProvenanceEnforcer["ProvenanceEnforcer"]
     PushDevStateStore["PushDevStateStore"]
     ReapOutcomeSignal["ReapOutcomeSignal"]
@@ -279,6 +280,7 @@ graph TD
     ForkPoint --> RepoRootFinder
     GatedPrPublisher --> GitExec
     GatedPrPublisher --> NativeProcessApi
+    GatedPrPublisher --> PrNumberPredictor
     GatherInfo --> AiBranchName
     GatherInfo --> ForkPoint
     GatherInfo --> GitExec
@@ -292,6 +294,7 @@ graph TD
     HomeConfigService --> HomeDocKeys
     HotfixPrPublisher --> GitExec
     HotfixPrPublisher --> NativeProcessApi
+    HotfixPrPublisher --> PrNumberPredictor
     HotfixRedirect --> BranchIdentity
     HumanPostPrCommand --> AiBranchName
     HumanPostPrCommand --> BranchIdentity
@@ -386,6 +389,7 @@ graph TD
     PrGateApp --> WriteReviewCommand
     PrGateApp --> WriteReviewFixesCommand
     PrMerger --> NativeProcessApi
+    PrNumberPredictor --> NativeProcessApi
     ProvenanceEnforcer --> AiBranchName
     ProvenanceEnforcer --> GitProcessApi
     ProvenanceEnforcer --> ReviewJsonService

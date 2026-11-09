@@ -697,6 +697,14 @@
                     "level": 2
                 },
                 {
+                    "id": "PrNumberPredictor",
+                    "className": "PrNumberPredictor",
+                    "kind": "class",
+                    "scope": "singleton",
+                    "file": "packages/tooling/pr-gate/src/scripts/workflow/pr-number-predictor.ts",
+                    "level": 3
+                },
+                {
                     "id": "ProvenanceEnforcer",
                     "className": "ProvenanceEnforcer",
                     "kind": "class",
@@ -2289,6 +2297,15 @@
                     "paramType": "NativeProcessApi"
                 },
                 {
+                    "from": "GatedPrPublisher",
+                    "to": "PrNumberPredictor",
+                    "injection": "type",
+                    "token": "PrNumberPredictor",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/pr-number-predictor.ts#PrNumberPredictor",
+                    "paramName": "predictor",
+                    "paramType": "PrNumberPredictor"
+                },
+                {
                     "from": "GatherInfo",
                     "to": "AiBranchName",
                     "injection": "type",
@@ -2404,6 +2421,15 @@
                     "tokenKey": "class:packages/tooling/tooling-common/src/process/native-process-api.ts#NativeProcessApi",
                     "paramName": "processes",
                     "paramType": "NativeProcessApi"
+                },
+                {
+                    "from": "HotfixPrPublisher",
+                    "to": "PrNumberPredictor",
+                    "injection": "type",
+                    "token": "PrNumberPredictor",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/pr-number-predictor.ts#PrNumberPredictor",
+                    "paramName": "predictor",
+                    "paramType": "PrNumberPredictor"
                 },
                 {
                     "from": "HotfixRedirect",
@@ -3244,6 +3270,15 @@
                 },
                 {
                     "from": "PrMerger",
+                    "to": "NativeProcessApi",
+                    "injection": "type",
+                    "token": "NativeProcessApi",
+                    "tokenKey": "class:packages/tooling/tooling-common/src/process/native-process-api.ts#NativeProcessApi",
+                    "paramName": "processes",
+                    "paramType": "NativeProcessApi"
+                },
+                {
+                    "from": "PrNumberPredictor",
                     "to": "NativeProcessApi",
                     "injection": "type",
                     "token": "NativeProcessApi",
