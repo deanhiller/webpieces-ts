@@ -1,5 +1,4 @@
 import { inject, optional } from 'inversify';
-import { timingSafeEqual } from 'crypto';
 import {
     provideFrameworkSingleton,
     HttpRequest,
@@ -26,17 +25,11 @@ import { Filter, Service } from '@webpieces/core-util';
 import { WpResponse } from '../WpResponse';
 import { MethodMeta } from '../MethodMeta';
 import { AuthConfig, AUTH_CONFIG, SharedSecrets } from '../AuthConfig';
-import {
-    ApiKeyHook,
-    API_KEY_HOOK,
-    JwtHook,
-    JWT_HOOK,
-    OidcHook,
-    OIDC_HOOK,
-} from '../AuthHooks';
+import { ApiKeyHook, API_KEY_HOOK, JwtHook, JWT_HOOK, OidcHook, OIDC_HOOK } from '../AuthHooks';
 import { AuthenticatedCallerContext } from '../AuthenticatedCallerContext';
 import { VERIFIED_MACHINE_CALLER, VerifiedMachineCaller } from '../AuthorizationHook';
 import { DefaultOidcVerifier } from '../DefaultOidcVerifier';
+import { SharedSecretComparison } from '../CredentialVerifiers';
 import { UnverifiableAuthModeError } from '../UnverifiableAuthModeError';
 
 const log = LogManager.getLogger('AuthFilter');
@@ -143,13 +136,26 @@ export class AuthFilter extends Filter<MethodMeta, WpResponse<unknown>> {
      */
     assertRouteVerifiable(routeMeta: RouteMetadata): void {
         const auth = routeMeta.authMeta;
-        if (!auth) throw new ApiImplementationError('Every endpoint requires @WpAuth or @WpAuthPublic.');
+        if (!auth)
+            throw new ApiImplementationError('Every endpoint requires @WpAuth or @WpAuthPublic.');
         for (const method of auth.methods) {
             switch (method.kind) {
-                case 'jwt': this.requireJwtHook(routeMeta); break;
-                case 'shared-secret': this.requireSharedSecrets(method.secretKey, routeMeta); break;
-                case 'vendorAuth': this.assertVendorDeclared(this.requireVendorVerifier(method.name, routeMeta), method.name, routeMeta); break;
-                case 'apikey': this.requireApiKeyHook(method.regime, routeMeta); break;
+                case 'jwt':
+                    this.requireJwtHook(routeMeta);
+                    break;
+                case 'shared-secret':
+                    this.requireSharedSecrets(method.secretKey, routeMeta);
+                    break;
+                case 'vendorAuth':
+                    this.assertVendorDeclared(
+                        this.requireVendorVerifier(method.name, routeMeta),
+                        method.name,
+                        routeMeta,
+                    );
+                    break;
+                case 'apikey':
+                    this.requireApiKeyHook(method.regime, routeMeta);
+                    break;
                 case 'oidc':
                 case 'public':
                     break;
@@ -162,7 +168,12 @@ export class AuthFilter extends Filter<MethodMeta, WpResponse<unknown>> {
         return `${routeMeta.apiName ?? routeMeta.controllerClassName ?? 'UnknownApi'}.${routeMeta.methodName} (${routeMeta.httpMethod} ${routeMeta.path})`;
     }
 
-    private unverifiable(routeMeta: RouteMetadata, mode: string, problem: string, bindLine: string): UnverifiableAuthModeError {
+    private unverifiable(
+        routeMeta: RouteMetadata,
+        mode: string,
+        problem: string,
+        bindLine: string,
+    ): UnverifiableAuthModeError {
         const endpoint = AuthFilter.endpointOf(routeMeta);
         return new UnverifiableAuthModeError(
             `Endpoint ${endpoint} declares ${mode}, but ${problem}, so this server cannot verify it and ` +
@@ -175,50 +186,75 @@ export class AuthFilter extends Filter<MethodMeta, WpResponse<unknown>> {
 
     private requireJwtHook(routeMeta: RouteMetadata): JwtHook<never> {
         if (this.jwtHook) return this.jwtHook;
-        throw this.unverifiable(routeMeta, 'jwt()', 'no JwtHook is bound',
-            'binder.bind(JWT_HOOK).to(YourJwtHook).inSingletonScope();');
+        throw this.unverifiable(
+            routeMeta,
+            'jwt()',
+            'no JwtHook is bound',
+            'binder.bind(JWT_HOOK).to(YourJwtHook).inSingletonScope();',
+        );
     }
 
     private requireSharedSecrets(secretKey: string, routeMeta: RouteMetadata): SharedSecrets {
         const config = this.authConfig;
         const mode = `sharedSecret('${secretKey}')`;
         if (!config) {
-            throw this.unverifiable(routeMeta, mode, 'no AuthConfig is bound',
-                `binder.bind(AUTH_CONFIG).to(YourAuthConfig).inSingletonScope();   // YourAuthConfig extends AuthConfig and passes { '${secretKey}': new SharedSecrets(secret1, secret2) }`);
+            throw this.unverifiable(
+                routeMeta,
+                mode,
+                'no AuthConfig is bound',
+                `binder.bind(AUTH_CONFIG).to(YourAuthConfig).inSingletonScope();   // YourAuthConfig extends AuthConfig and passes { '${secretKey}': new SharedSecrets(secret1, secret2) }`,
+            );
         }
         const accepted = config.sharedSecrets[secretKey];
         if (accepted) return accepted;
-        throw this.unverifiable(routeMeta, mode,
+        throw this.unverifiable(
+            routeMeta,
+            mode,
             `the bound AuthConfig (${config.constructor.name}) holds no SharedSecrets for '${secretKey}'`,
-            `'${secretKey}': new SharedSecrets(secret1, secret2),   // add to the sharedSecrets ${config.constructor.name} passes to AuthConfig, which AUTH_CONFIG is bound to`);
+            `'${secretKey}': new SharedSecrets(secret1, secret2),   // add to the sharedSecrets ${config.constructor.name} passes to AuthConfig, which AUTH_CONFIG is bound to`,
+        );
     }
 
     private requireVendorVerifier(name: string, routeMeta: RouteMetadata): VendorAuthVerifier {
         const verifier = this.vendorAuthVerifier;
         const mode = `vendorAuth('${name}')`;
         if (!verifier) {
-            throw this.unverifiable(routeMeta, mode,
+            throw this.unverifiable(
+                routeMeta,
+                mode,
                 'no VendorAuthVerifier is bound (a VENDOR_AUTH_MINTER binding only signs OUTBOUND calls)',
-                'binder.bind(VENDOR_AUTH_VERIFIER).to(YourVendorAuthVerifier).inSingletonScope();');
+                'binder.bind(VENDOR_AUTH_VERIFIER).to(YourVendorAuthVerifier).inSingletonScope();',
+            );
         }
         return verifier;
     }
 
     /** Boot only: the bound verifier must DECLARE the route's vendor (#1362). Never calls verify. */
-    private assertVendorDeclared(verifier: VendorAuthVerifier, name: string, routeMeta: RouteMetadata): void {
+    private assertVendorDeclared(
+        verifier: VendorAuthVerifier,
+        name: string,
+        routeMeta: RouteMetadata,
+    ): void {
         const supported = verifier.supportedVendorNames();
         if (supported.includes(name)) return;
         const mode = `vendorAuth('${name}')`;
         const declared = supported.map((n: string) => `'${n}'`).join(', ');
-        throw this.unverifiable(routeMeta, mode,
+        throw this.unverifiable(
+            routeMeta,
+            mode,
             `the bound VendorAuthVerifier (${verifier.constructor.name}) returns [${declared}] from supportedVendorNames(), which does not include '${name}'`,
-            `'${name}' to ${verifier.constructor.name}.supportedVendorNames() (return [${declared}, '${name}']) AND handle '${name}' in its verify()`);
+            `'${name}' to ${verifier.constructor.name}.supportedVendorNames() (return [${declared}, '${name}']) AND handle '${name}' in its verify()`,
+        );
     }
 
     private requireApiKeyHook(regime: string, routeMeta: RouteMetadata): ApiKeyHook {
         if (this.apiKeyHook) return this.apiKeyHook;
-        throw this.unverifiable(routeMeta, `apiKey('${regime}', credentials)`, 'no ApiKeyHook is bound',
-            'binder.bind(API_KEY_HOOK).to(YourApiKeyHook).inSingletonScope();');
+        throw this.unverifiable(
+            routeMeta,
+            `apiKey('${regime}', credentials)`,
+            'no ApiKeyHook is bound',
+            'binder.bind(API_KEY_HOOK).to(YourApiKeyHook).inSingletonScope();',
+        );
     }
 
     // webpieces-disable no-any-unknown -- Filter generic params use unknown for response flexibility
@@ -227,7 +263,8 @@ export class AuthFilter extends Filter<MethodMeta, WpResponse<unknown>> {
         nextFilter: Service<MethodMeta, WpResponse<unknown>>,
     ): Promise<WpResponse<unknown>> {
         const auth = meta.routeMeta.authMeta;
-        if (!auth) throw new ApiImplementationError('Every endpoint requires @WpAuth or @WpAuthPublic.');
+        if (!auth)
+            throw new ApiImplementationError('Every endpoint requires @WpAuth or @WpAuthPublic.');
         if (meta.routeMeta.localOnly) this.enforceLocalOnly(meta);
         if (meta.invocationAuthentication) {
             meta.invocationAuthentication.assertTarget(meta.routeMeta);
@@ -250,41 +287,74 @@ export class AuthFilter extends Filter<MethodMeta, WpResponse<unknown>> {
      * one `oidcSvcs([...])` may pair) are ONE bearer credential, so they are ONE alternative, tried at
      * the position of the first: the token is verified once against all of them.
      */
-    private async authenticateAlternatives(methods: readonly AuthMode[], header: string | undefined, meta: MethodMeta): Promise<AuthMode> {
+    private async authenticateAlternatives(
+        methods: readonly AuthMode[],
+        header: string | undefined,
+        meta: MethodMeta,
+    ): Promise<AuthMode> {
         const oidc = AuthFilter.oidcMethodsOf(methods);
-        const alternatives = methods.filter((method: AuthMode) => method.kind !== 'oidc' || method === oidc?.[0]);
+        const alternatives = methods.filter(
+            (method: AuthMode) => method.kind !== 'oidc' || method === oidc?.[0],
+        );
         for (const method of alternatives) {
             // eslint-disable-next-line @webpieces/no-unmanaged-exceptions -- failed credentials may try another declared authenticator; invariants propagate
             try {
                 await this.authenticateMethod(method, header, meta, oidc);
                 return method;
-            } catch (err: unknown) { // webpieces-disable no-any-unknown -- structured credential rejection at the boundary
+            } catch (err: unknown) {
+                // webpieces-disable no-any-unknown -- structured credential rejection at the boundary
                 const error = toError(err);
-                if (!(error instanceof ApiUnauthorizedError) || alternatives.length === 1) throw error;
+                if (!(error instanceof ApiUnauthorizedError) || alternatives.length === 1)
+                    throw error;
             }
         }
-        throw new ApiUnauthorizedError('No declared credential mechanism authenticated this request.');
+        throw new ApiUnauthorizedError(
+            'No declared credential mechanism authenticated this request.',
+        );
     }
 
     /** The endpoint's OIDC methods in declaration order, or undefined when it declares none. */
     // webpieces-disable no-function-outside-class -- static pure reader of the AuthMode list, kept beside its only caller
     private static oidcMethodsOf(methods: readonly AuthMode[]): OidcAuthMethods | undefined {
-        const oidc = methods.filter((method: AuthMode): method is OidcAuthMethod => method.kind === 'oidc');
+        const oidc = methods.filter(
+            (method: AuthMode): method is OidcAuthMethod => method.kind === 'oidc',
+        );
         const first = oidc[0];
         return first === undefined ? undefined : [first, ...oidc.slice(1)];
     }
 
-    private async authenticateMethod(mode: AuthMode, header: string | undefined, meta: MethodMeta, oidc: OidcAuthMethods | undefined): Promise<void> {
+    private async authenticateMethod(
+        mode: AuthMode,
+        header: string | undefined,
+        meta: MethodMeta,
+        oidc: OidcAuthMethods | undefined,
+    ): Promise<void> {
         switch (mode.kind) {
-            case 'jwt': await this.enforceJwt(header, meta.routeMeta); return;
-            case 'oidc': await this.enforceOidc(header, oidc ?? [mode]); return;
-            case 'shared-secret':
-                this.enforceSharedSecret(this.credential(header, SHARED_SECRET_SCHEME), mode.secretKey, meta.routeMeta);
-                RequestContext.putTrusted(VERIFIED_MACHINE_CALLER, new VerifiedMachineCaller('shared-secret', mode.secretKey));
+            case 'jwt':
+                await this.enforceJwt(header, meta.routeMeta);
                 return;
-            case 'vendorAuth': await this.enforceVendorAuth(mode.name, meta); return;
-            case 'apikey': await this.enforceApiKey(mode.regime, meta); return;
-            case 'public': throw new ApiImplementationError('Public is not a protected auth alternative.');
+            case 'oidc':
+                await this.enforceOidc(header, oidc ?? [mode]);
+                return;
+            case 'shared-secret':
+                this.enforceSharedSecret(
+                    this.credential(header, SHARED_SECRET_SCHEME),
+                    mode.secretKey,
+                    meta.routeMeta,
+                );
+                RequestContext.putTrusted(
+                    VERIFIED_MACHINE_CALLER,
+                    new VerifiedMachineCaller('shared-secret', mode.secretKey),
+                );
+                return;
+            case 'vendorAuth':
+                await this.enforceVendorAuth(mode.name, meta);
+                return;
+            case 'apikey':
+                await this.enforceApiKey(mode.regime, meta);
+                return;
+            case 'public':
+                throw new ApiImplementationError('Public is not a protected auth alternative.');
         }
     }
 
@@ -515,26 +585,26 @@ export class AuthFilter extends Filter<MethodMeta, WpResponse<unknown>> {
         const identity = this.oidcHook
             ? await this.oidcHook.verifyOidc(token, methods)
             : await this.oidcVerifier.verify(token, methods);
-        if (!identity) throw new ApiImplementationError('OIDC verifier must return its verified machine identity.');
-        RequestContext.putTrusted(VERIFIED_MACHINE_CALLER, new VerifiedMachineCaller(identity.mechanism, identity.identity));
+        if (!identity)
+            throw new ApiImplementationError(
+                'OIDC verifier must return its verified machine identity.',
+            );
+        RequestContext.putTrusted(
+            VERIFIED_MACHINE_CALLER,
+            new VerifiedMachineCaller(identity.mechanism, identity.identity),
+        );
     }
 
     /** `provided` is the Authorization bearer value — the secret itself, same header as a JWT. */
-    private enforceSharedSecret(provided: string | undefined, secretKey: string, routeMeta: RouteMetadata): void {
+    private enforceSharedSecret(
+        provided: string | undefined,
+        secretKey: string,
+        routeMeta: RouteMetadata,
+    ): void {
         const accepted = this.requireSharedSecrets(secretKey, routeMeta);
-        if (!provided || !this.matchesEither(provided, accepted)) {
-            throw new ApiUnauthorizedError(
-                'Invalid shared secret for sharedSecret(...) endpoint',
-            );
+        if (!provided || !SharedSecretComparison.matchesEither(provided, accepted)) {
+            throw new ApiUnauthorizedError('Invalid shared secret for sharedSecret(...) endpoint');
         }
-    }
-
-    /** EITHER secret1 or secret2 passes — the rotation window. Constant-time on each non-empty slot. */
-    private matchesEither(provided: string, accepted: SharedSecrets): boolean {
-        return (
-            (accepted.secret1 !== '' && this.constantTimeEquals(provided, accepted.secret1)) ||
-            (accepted.secret2 !== '' && this.constantTimeEquals(provided, accepted.secret2))
-        );
     }
 
     /** Parse a JWT if one is present, else do nothing — used on public routes; never throws. */
@@ -568,14 +638,5 @@ export class AuthFilter extends Filter<MethodMeta, WpResponse<unknown>> {
         }
         const prefix = `${scheme} `;
         return header.startsWith(prefix) ? header.substring(prefix.length) : undefined;
-    }
-
-    private constantTimeEquals(a: string, b: string): boolean {
-        const bufA = Buffer.from(a, 'utf8');
-        const bufB = Buffer.from(b, 'utf8');
-        if (bufA.length !== bufB.length) {
-            return false;
-        }
-        return timingSafeEqual(bufA, bufB);
     }
 }

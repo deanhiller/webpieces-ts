@@ -80,15 +80,163 @@ tool receives exactly one input object, so `McpToolRegistry` refuses `@WpMcpTool
 at boot. A tool therefore cannot claim to be
 read-only while its endpoint declares `WRITE` — the contradiction is unrepresentable.
 
-## Booting: the server is constructed with the generated catalogs
+## One toolset, two transports
+
+The TOOLS and their POLICY are the same for every caller; only the way in differs. So the package is
+split in two layers:
+
+- **`McpToolset`** — the shared core: WHICH tools are served (bindings, catalogs, profiles), the
+  per-caller `AuthorizedMcpTools` projection, input/output schema validation, dispatch through
+  `binding.invoke`, and error translation. Its ONLY input about the caller is the CURRENT
+  `RequestContext` — the trusted USER_ID / USER_ROLES / ORG_ID and a `VerifiedMachineCaller`, exactly what
+  `AuthorizationService.authorize` reads. `@WpAuthorization` on the contract is the single policy everywhere.
+- **a transport** — whose only job is to establish that context.
+
+```ts
+const toolset = new McpToolset(
+    [McpApiBinding.local(StoresApi, router)],               // McpApiBinding.local / .remote, unchanged
+    McpToolCatalog.fromPackages(['@myorg/my-apis'], __dirname),
+    router.authorizationService(),
+    ['user'],                                               // #1187 profiles: WHICH tools this toolset serves
+);
+```
+
+| transport | the caller is | use |
+|---|---|---|
+| `WpMcpInMemory.connect(toolset)` | whoever is trusted in the `RequestContext` of the code calling the client | an in-process agent that runs its own model loop (ai-chat) |
+| `new WpMcpServer(config, toolset).bind(app, options)` | whoever ONE of `config.setAuth([...])`'s modes verified | a service-to-service hop, a customer's AI, an off-the-shelf connector |
+
+### In-memory
+
+```ts
+const client: Client = await WpMcpInMemory.connect(toolset);   // MCP SDK Client, InMemoryTransport pair
+// inside a request whose caller the endpoint's AuthFilter already verified:
+const { tools } = await client.listTools();
+await client.callTool({ name: 'stores_pause', arguments: { storeId } });
+```
+
+There is no credential. The caller is READ PER REQUEST from the `RequestContext` of the code calling
+`listTools()` / `callTool()`, and NEVER captured at connect: apps cache one client per process, so a
+connect-time capture would run user B's call as user A. The SDK delivers each in-memory message
+synchronously inside the caller's own `send` (as a JSON copy, exactly what the wire would carry), so the
+toolset's handlers run in the caller's async context. A call made outside any `RequestContext` is refused,
+never run as nobody. The tool runs in the caller's own scope, so a local binding's
+`InvocationAuthentication` finds the verified ingress the endpoint's `AuthFilter` completed there. No
+tools/list cache hint is sent, so the shared client never serves one caller's list to another.
+
+### HTTP
+
+One server = one path = one toolset (one profile set). `/mcp/user` and `/mcp/admin` are two servers over
+two toolsets — paths split by WHICH TOOLS, never by HOW THE CALLER AUTHENTICATES.
+
+### Several clients: `McpClientSet`
+
+An agent may hold several clients — its in-memory toolset plus another service's remote endpoint. Tool
+names are flat across servers, so `McpClientSet.merge([...])` refuses a name two clients publish
+(`McpDuplicateToolError`, at connect time and again on every `listTools()`, because each server projects
+per caller) and routes `callTool` by name.
+
+## HTTP authentication: an OR-set of the existing `@WpAuth` modes, plus `mcpOAuth(...)`
+
+There is no second auth vocabulary. The server takes the same builders endpoints use, verified by the
+same hooks the endpoint `AuthFilter` uses (`router.credentialVerifiers()`):
+
+```ts
+new WpMcpServerConfig()
+    .setName(...).setTitle(...).setDescription(...).setWebsiteUrl(...).setVersion(...)
+    .setResource('https://api.example.com/mcp/user')
+    .setAuth([oidcSameProject()])                                         // now: internal only
+    .setCredentialVerifiers(router.credentialVerifiers());
+//  .setAuth([oidcSameProject(), jwt(), apiKey('partner', creds),         // later: customers' AI
+//            mcpOAuth(authority, ['https://login.example.com'], ['tools'],
+//                     McpAccessTokenFormat.opaquePrefix('wpmcp_'))])
+```
+
+| mode | claims a request carrying | use |
+|---|---|---|
+| `oidcSameProject()` / `oidcSvcs([...])` | `Bearer` with a Google `iss` (or an off-GCP `dev-oidc.` token) | internal svc-to-svc MCP; the only modes (with `sharedSecret`) whose forwarded trusted context is believed |
+| `jwt()` | every other `Bearer` no other configured mode claims | the app's `JwtHook` — our own user token, or a customer agent holding it |
+| `apiKey(regime, creds)` | its own declared header(s) | a customer's custom agent |
+| `sharedSecret(key)` | `Authorization: Webpieces <secret>` | internal deployments that chose it |
+| `mcpOAuth(...)` **(new)** | `Bearer` of the shape its `McpAccessTokenFormat` declares | off-the-shelf connectors (Claude / ChatGPT): RFC 9728 metadata, 401 `WWW-Authenticate` discovery, audience = canonical resource |
+| `vendorAuth(...)` / public | — | refused at startup: no caller identity to authorize tools against |
+
+`mcpOAuth(authority, authorizationServers, requiredScopes, tokenFormat, maxAccountValidationAgeSeconds?)`
+holds everything OAuth-only — the former `setAccessTokenAuthority`, `setAuthorizationServers`,
+`setRequiredScopes` and `setMaxAccountValidationAgeSeconds` setters, which are DELETED. They are
+required only when the mode is in the set. `tokenFormat` says how the authority's tokens look:
+`McpAccessTokenFormat.opaquePrefix('wpmcp_')`, `.jwtIssuer()` (a JWT whose `iss` is one of
+`authorizationServers`), or `.everyBearer()` (legal only when no other bearer mode is in the set).
+`WpMcpServer.protectedResourceMetadata()` exists only on a server with `mcpOAuth(...)`.
+
+### Classify, then verify with exactly ONE verifier
+
+Credentials are self-describing, so one path serves every mode. The request is classified from
+UNVERIFIED surface facts — which header; a JWT's unverified `iss` — and handed to exactly ONE verifier.
+Classifying on unverified data is safe because the chosen verifier fully verifies: a token that merely
+claims `iss: accounts.google.com` fails Google's verification and the request is a 401. It never falls
+through to another mode.
+
+- No claimant: an `mcpOAuth(...)` server answers with the discovery challenge; any other server a plain 401.
+- Two claimants (an api-key header AND a bearer): ambiguous, refused — never "pick the one that works".
+- One claimant: its rejection IS the answer. An authenticated caller lacking a role gets the normal
+  authorization refusal (a hidden tool), never a retry as another mode.
+- Only `mcpOAuth(...)` emits `WWW-Authenticate` discovery; every other rejection is a plain 401 with no
+  hint of which mode came closest.
+- `claims()` sets are disjoint BY CONSTRUCTION, and `bind(...)` refuses a set that could overlap
+  (`mcpOAuth(..., everyBearer())` or a bearer `apiKey(...)` beside another bearer mode, an
+  `mcpOAuth(..., jwtIssuer())` trusting a Google issuer beside an OIDC mode), a mode whose verifier is
+  not bound (naming the binding line), and `vendorAuth` / public.
+- Trusted context and surface (`llm`) come from the mode that authenticated. Inbound trusted headers are
+  reconciled exactly as on ordinary routes: believed only from a verified OIDC / shared-secret hop, and on
+  every other mode admitted only when the credential itself vouched for the same value.
+
+### `WpMcpRemote`: the client for the internal door
+
+```ts
+const client = await WpMcpRemote.connect('https://svc-b.example.com/mcp/user', oidcSameProject(), gcpOidc);
+```
+
+An MCP SDK `Client` whose transport, PER POST, mints an OIDC ID token for the callee origin (as
+`http-client-node` does — `gcpOidc` is `GcpOidc` from `@webpieces/gcp-identity`) and forwards the current
+`RequestContext`'s transferable keys, trusted ones included, so the callee's `@WpAuthorization` judges the
+user on whose behalf THIS call is made. Per POST for the same cached-client reason as in-memory; it
+caches no response either.
+
+## Endpoints need NO new auth for MCP
+
+The MCP credential never becomes a downstream credential: a local binding passes a token-free
+`InvocationAuthentication` through the ordinary filter chain, and a remote binding uses the contract's
+own `oidcSameProject()` / `oidcSvcs(...)` / `sharedSecret(...)`. So ONE method serves an in-process agent
+(in-memory) and a customer's LLM (HTTP `jwt()` / OAuth) unchanged — add `jwt()` to `@WpAuth` only if a
+GUI also calls the endpoint directly:
+
+```ts
+@WpAuth([oidcSameProject()])
+@WpAuthorization({ authType: AuthorizationType.ROLES, roles: ['OPERATOR', 'MEALCO_OPS'] })
+@Endpoint(POST, '/pause-store', WRITE, RPC)
+@WpMcpTool('stores_pause', { profiles: ['user'] })
+```
+
+### `SERVICE_ONLY` can never be an MCP tool
+
+`AuthorizationType.SERVICE_ONLY` admits a bare service hop — current-hop machine evidence and nothing
+about a user. An MCP call is always made on behalf of a MODEL, so such a policy is wrong in both
+directions: behind an HTTP door with a user-token mode every model call is denied, and behind an OIDC door
+or an in-memory client running in an OIDC-ingressed request the service hop itself would satisfy it —
+admitting every model behind that service. So `McpToolset` REFUSES to build when a `@WpMcpTool` declares
+`SERVICE_ONLY`, naming the method. Use `USERS_OR_SERVICES`, `ALL_USERS` or `ROLES` on anything you mark
+`@WpMcpTool`.
+
+## Booting: the toolset is constructed with the generated catalogs
 
 The api library's build (its `openapi-generate` target — tag the library `generate:openapi`) writes one
 `mcp-<ContractClass>-tools.json` per MCP contract into its build output, beside the OpenAPI documents.
-Hand them to `McpBindOptions` with ONE call that works in every environment:
+Hand them to `McpToolset` with ONE call that works in every environment:
 
 ```ts
 const catalogs = McpToolCatalog.fromPackages(['@myorg/my-apis'], __dirname);
-server.bind(app, new McpBindOptions(path, bindings, catalogs, McpDeployment.singleProcess()));
+const toolset = new McpToolset(bindings, catalogs, router.authorizationService(), [Mcp.DEFAULT]);
 ```
 
 `fromPackages` resolves each package from `__dirname` the way node does. A BUILT or published package
@@ -98,7 +246,7 @@ vitest) holds a `project.json`, and the files are read from the outputPath of th
 `openapi-generate` dependsOn (its `build`) — which is why nx.json's targetDefaults for a server's `test`
 (and `build`) must dependsOn `^openapi-generate`; `validate-nx-wiring` prints the exact line.
 
-`McpToolRegistry` FAILS FAST at boot, naming every directory the catalogs were read from, when a bound
+`McpToolRegistry` (built by the `McpToolset` constructor) FAILS FAST at boot, naming every directory the catalogs were read from, when a bound
 contract has no catalog, a catalog's contract is not bound, or a tool name is declared twice — and when
 a registered `@WpMcpTool` is absent from its contract's catalog: a tool the build never saw is a tool
 whose schema nobody checked. Tool arguments and structured output are
@@ -127,29 +275,30 @@ The two are kept apart.
 
 `WpMcpServerConfig` is built with fluent setters — every name sits next to its own value, so no two
 settings can be swapped, and a future setting is an additive setter rather than a breaking signature
-change. Expect to supply the type arguments explicitly:
+change. WHICH tools are served is the `McpToolset`, not the config:
 
 ```ts
-const config = new WpMcpServerConfig<MyGrant>()
+const config = new WpMcpServerConfig()
     .setName('my-server')
     .setTitle('My Product')
     .setDescription('Search and manage My Product accounts from any MCP client.')
     .setWebsiteUrl('https://www.example.com/my-product')
     .setVersion('1.0.0')
     .setResource('https://api.example.com/mcp')
-    .setAccessTokenAuthority(authority)
-    .setAuthorizationService(router.authorizationService())
-    .setAuthorizationServers(['https://login.example.com'])
-    .setRequiredScopes(['tools'])
-    .setMaxAccountValidationAgeSeconds(15 * 60);
+    .setAuth([
+        mcpOAuth(authority, ['https://login.example.com'], ['tools'],
+                 McpAccessTokenFormat.opaquePrefix('wpmcp_'), 15 * 60),
+    ]);
 
 // The tools/call error translator is a PROCESS-GLOBAL, not a member of this config:
 McpRegistry.setErrorTranslator(new MyMcpErrorTranslator());
 ```
 
 Each setter validates its own value immediately and names itself in the failure: `setResource(...)`
-and every entry of `setAuthorizationServers(...)` must be an absolute URL, because they are compared
-against a token's audience and issuer. `setMaxAccountValidationAgeSeconds` defaults to one hour and is capped there.
+and every `mcpOAuth(...)` authorization server must be an absolute URL, because they are compared
+against a token's audience and issuer. `mcpOAuth(...)`'s `maxAccountValidationAgeSeconds` defaults to one
+hour and is capped there. `setCredentialVerifiers(router.credentialVerifiers())` is required once
+`setAuth([...])` holds any `@WpAuth` mode.
 
 `setTitle`, `setDescription` and `setWebsiteUrl` are REQUIRED and are sent on `initialize`'s
 `serverInfo` (and on every modern-era result's `io.modelcontextprotocol/serverInfo` meta) as
@@ -167,26 +316,28 @@ server may bind contracts from several api libraries. `websiteUrl` is a page a h
 homepage or docs site), so it is never derived from `setResource` — that is the MCP endpoint, not a
 website. There are no defaults; a missing one fails `bind(...)` naming the setter, like `setName`.
 
-`setIcons(...)` and `setToolProfiles(...)` are the only optional non-ceiling settings (the error
+`setIcons(...)` is the only optional setting (the error
 translator is process-global, on `McpRegistry`); everything else is required and
 `WpMcpServer.bind(...)` fails at startup listing **every** missing setter
-(`WpMcpServerConfig is missing setResource(...)`). That is deliberate: a misconfigured audience or
-issuer otherwise surfaces as a first-request `401 + WWW-Authenticate`, which is the OAuth discovery
-signal, so a client answers it by re-authenticating and failing again — forever.
+(`WpMcpServerConfig is missing setResource(...)`). That is deliberate: with `mcpOAuth(...)`, a
+misconfigured audience or issuer otherwise surfaces as a first-request `401 + WWW-Authenticate`, which is
+the OAuth discovery signal, so a client answers it by re-authenticating and failing again — forever.
 
-Applications supply the endpoint path, explicit bindings, and deployment topology. There is no
+Applications supply the toolset, the endpoint path, and deployment topology. There is no
 framework-owned `/mcp` path:
 
 ```ts
-const mcp = new WpMcpServer(config);
-mcp.bind(expressApp, new McpBindOptions(
-    connectorConfig.endpointPath,
+const toolset = new McpToolset(
     [
         McpApiBinding.local(OrdersApi, apiFactory),
         McpApiBinding.remote(RemoteOrdersApi, () => remoteOrdersClient),
     ],
-    McpDeployment.singleProcess(),
-));
+    catalogs,
+    apiFactory.authorizationService(),
+    [Mcp.DEFAULT],
+);
+const mcp = new WpMcpServer(config, toolset);
+mcp.bind(expressApp, new McpBindOptions(connectorConfig.endpointPath, McpDeployment.singleProcess()));
 ```
 
 `bind(...)` registers POST at that path plus a 405 (`Allow: POST`) for every other method there —
@@ -210,8 +361,8 @@ happened when this bridge was modern-only and every shipping client (all still o
 generation) got `-32022 Unsupported protocol version` at `initialize`. Only a revision NO era knows is
 refused, which is what the MCP lifecycle spec asks of a server.
 
-The external bearer is verified identically on both legs, at the `bind(...)` HTTP boundary, before the
-SDK is involved — the era is the SDK's decision, the authentication is not.
+The caller's credential is verified identically on both legs, at the `bind(...)` HTTP boundary, before
+the SDK is involved — the era is the SDK's decision, the authentication is not.
 
 The official MCP v2 server and Node adapter own JSON-RPC validation for both eras, JSON versus
 request-scoped SSE responses, backpressure, cancellation, keepalives, and subscriptions. Webpieces
@@ -242,11 +393,12 @@ TTL, registry metadata contains a surface-derived revision, `toolsChanged()` pub
 level-triggered invalidation, and `close()` drains active response streams. A reconnecting client must
 re-listen and refresh its authoritative lists; notifications are not a durable or replayable event log.
 
-The authority verifies issuer, signature/token state, expiry, scopes, the exact resource URI, and
-current account state. Neither served era keeps a session here, so the bearer is verified once per POST
-at the `bind(...)` HTTP boundary, before the SDK is involved; tool handlers never re-verify it. A
-rejected token must be thrown as `ApiUnauthorizedError` (answered 401 + `WWW-Authenticate`); any
-other throw from the authority is an implementation failure (500). MCP access tokens are capped at 30 days.
+With `mcpOAuth(...)`, the authority verifies issuer, signature/token state, expiry, scopes, the exact
+resource URI, and current account state. Neither served era keeps a session here, so the credential is
+verified once per POST at the `bind(...)` HTTP boundary, before the SDK is involved; tool handlers never
+re-verify it. A rejected token must be thrown as `ApiUnauthorizedError` (answered 401 +
+`WWW-Authenticate`); any other throw from the authority is an implementation failure (500). MCP access
+tokens are capped at 30 days.
 
 ## Principal, policy and request context
 
@@ -398,8 +550,10 @@ the caller service's `ApiImplementationError`; other 5xx remains generic `ApiDep
 ### Why there is no `fromWire` on `McpErrorTranslator`
 
 The HTTP and IPC translators have two halves because webpieces sits on both ends of those wires.
-**webpieces is never the MCP client** — Claude is — so there is no return path for webpieces to
-translate. The pair is one-directional by nature, not by omission.
+An MCP tool result is read by a MODEL, never decoded back into an exception — even through
+`WpMcpInMemory` / `WpMcpRemote`, which are the SDK's own `Client` handing the agent the `CallToolResult`
+as-is — so there is no return path for webpieces to translate. The pair is one-directional by nature,
+not by omission.
 
 The verifier's `accountValidatedAtEpochSeconds` must represent an authoritative enabled/revoked and
 role/scope read. The bridge enforces a maximum one-hour decision age; per-request reads are preferred so
@@ -465,22 +619,25 @@ Identifiers match `[a-z][a-z0-9-]{0,63}` (1–64 lowercase ASCII letters, digits
 with a letter). `Mcp.DEFAULT` reserves `default` for the base group. Empty lists, duplicates, unknown
 option keys, whitespace, paths, and invalid identifiers are rejected. Lists are snapshotted and sorted.
 
-Configure one independent `WpMcpServer` per mount with the same bindings, complete catalogs, and
-receiving router's `AuthorizationService`. Start from the required fluent configuration shown above:
+Configure one independent `WpMcpServer` per mount, each over its own `McpToolset` with the same
+bindings, complete catalogs, and receiving router's `AuthorizationService` — the profiles are the
+toolset's REQUIRED fourth argument:
 
 ```ts
-baseConfig.setResource('https://api.example.com/mcp').setToolProfiles([Mcp.DEFAULT]);
-adminConfig.setResource('https://api.example.com/mcp/admin').setToolProfiles(['admin']);
-bothConfig.setResource('https://api.example.com/mcp/both').setToolProfiles([Mcp.DEFAULT, 'admin']);
+const toolsetFor = (profiles: McpToolProfiles): McpToolset =>
+    new McpToolset(bindings, catalogs, router.authorizationService(), profiles);
+new WpMcpServer(baseConfig.setResource('https://api.example.com/mcp'), toolsetFor([Mcp.DEFAULT]));
+new WpMcpServer(adminConfig.setResource('https://api.example.com/mcp/admin'), toolsetFor(['admin']));
+new WpMcpServer(bothConfig.setResource('https://api.example.com/mcp/both'), toolsetFor([Mcp.DEFAULT, 'admin']));
 ```
 
 Bind each instance with `McpBindOptions.endpointPath` equal to its resource path: `/mcp`,
-`/mcp/admin`, or `/mcp/both`. Omitting `setToolProfiles` selects `[Mcp.DEFAULT]`.
+`/mcp/admin`, or `/mcp/both`.
 A combined selection is the union, with shared tools listed once in stable name order. Further groups
 such as `course-authoring` work identically. No caller-controlled profile route or hint exists.
-Configure instances before binding; the selected groups are fixed when bound.
+The toolset snapshots its groups at construction; they are fixed for its lifetime.
 
-Publish each instance's `protectedResourceMetadata()` at its configuration's `resourceMetadataUrl`,
+With `mcpOAuth(...)`, publish each instance's `protectedResourceMetadata()` at its configuration's `resourceMetadataUrl`,
 e.g. `/.well-known/oauth-protected-resource/mcp/admin`. Token authorities must verify the fixed exact
 resource, trusted issuer, expiry, scopes, and fresh account state. A `/mcp` token is rejected on
 `/mcp/admin`. Never derive audiences from Host headers. OAuth consent, grants, and connector setup
@@ -498,7 +655,7 @@ Configure optional standard MCP implementation icons through the fluent config:
 ```ts
 import { McpIcon, WpMcpServerConfig } from '@webpieces/mcp-server';
 
-const config = new WpMcpServerConfig<MyGrant>()
+const config = new WpMcpServerConfig()
     .setName('my-product')
     .setTitle('My Product')
     .setDescription('Search and manage My Product accounts from any MCP client.')
@@ -513,7 +670,7 @@ const config = new WpMcpServerConfig<MyGrant>()
             'light',
         ),
     ]);
-// Supply the remaining required authority, authorization and scope setters as usual.
+// Supply the required setAuth([...]) as usual.
 ```
 
 `setIcons` accepts standard SDK `Icon` descriptors (`src`, optional `mimeType`, `sizes`,

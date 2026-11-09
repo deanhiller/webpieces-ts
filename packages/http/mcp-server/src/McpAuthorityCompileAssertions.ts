@@ -1,5 +1,17 @@
-import { AuthenticatedCaller, JwtHook, MintedJwt } from '@webpieces/http-routing';
-import { McpAccessTokenAuthority, MintedMcpAccessToken, VerifiedMcpCredential, WpMcpServerConfig } from './McpAuth';
+import {
+    AuthenticatedCaller,
+    AuthorizationService,
+    JwtHook,
+    MintedJwt,
+} from '@webpieces/http-routing';
+import {
+    McpAccessTokenAuthority,
+    MintedMcpAccessToken,
+    VerifiedMcpCredential,
+    WpMcpServerConfig,
+} from './McpAuth';
+import { McpApiBinding } from './McpApiBinding';
+import { McpToolset } from './McpToolset';
 
 class ExampleJwtMintRequest {
     constructor(public readonly subject: string) {}
@@ -59,8 +71,35 @@ export class McpPrincipalCompileAssertions {
 
 /** Profile-selection arity is checked by tsc, not only by runtime specs. */
 export class McpProfilesCompileAssertions {
-    empty(config: WpMcpServerConfig<string>): void {
-        // @ts-expect-error an explicit server selection must include at least one group
-        config.setToolProfiles([]);
+    empty(bindings: readonly McpApiBinding[], policy: AuthorizationService): void {
+        // @ts-expect-error a toolset must serve at least one profile group
+        new McpToolset(bindings, [], policy, []);
+    }
+}
+
+/**
+ * The OAuth-only setters moved into `mcpOAuth(...)` (#1416) and the toolset owns WHICH tools: none of
+ * the old spellings compiles, so an agent upgrading is told by tsc, not by a deprecation it never sees.
+ */
+export class McpServerConfigCompileAssertions {
+    removedOAuthSetters(
+        config: WpMcpServerConfig,
+        authority: McpAccessTokenAuthority<string>,
+    ): void {
+        // @ts-expect-error moved to mcpOAuth(authority, authorizationServers, requiredScopes, tokenFormat)
+        config.setAccessTokenAuthority(authority);
+        // @ts-expect-error moved to mcpOAuth(authority, authorizationServers, ...)
+        config.setAuthorizationServers(['https://login.example.test']);
+        // @ts-expect-error moved to mcpOAuth(authority, authorizationServers, requiredScopes, ...)
+        config.setRequiredScopes(['tools']);
+        // @ts-expect-error moved to mcpOAuth(..., maxAccountValidationAgeSeconds)
+        config.setMaxAccountValidationAgeSeconds(60);
+    }
+
+    removedToolsetSetters(config: WpMcpServerConfig, policy: AuthorizationService): void {
+        // @ts-expect-error profiles are the McpToolset's: new McpToolset(bindings, catalogs, policy, profiles)
+        config.setToolProfiles(['default']);
+        // @ts-expect-error the policy is the McpToolset's: new McpToolset(bindings, catalogs, policy, profiles)
+        config.setAuthorizationService(policy);
     }
 }

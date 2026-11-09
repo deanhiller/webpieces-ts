@@ -1,5 +1,6 @@
 import { LazyController } from './LazyController';
 import { AuthorizationService } from './AuthorizationHook';
+import { CredentialVerifiers } from './CredentialVerifiers';
 import { InvocationAuthentication } from './InvocationAuthentication';
 import { Container, ContainerModule, inject } from 'inversify';
 import { buildProviderModule } from '@inversifyjs/binding-decorators';
@@ -215,6 +216,15 @@ export class WebpiecesRouter implements ApiFactory {
 
     authorizationService(): AuthorizationService {
         return this.appContainer.get(AuthorizationService);
+    }
+
+    /**
+     * The credential verifiers this app bound (JwtHook, OidcHook / DefaultOidcVerifier, AuthConfig,
+     * ApiKeyHook), for a door that is not a route — the MCP HTTP endpoint's `setAuth([...])` verifies
+     * its `@WpAuth` modes with exactly these, so it cannot drift from {@link AuthFilter}.
+     */
+    credentialVerifiers(): CredentialVerifiers {
+        return this.appContainer.get(CredentialVerifiers);
     }
 
     /**

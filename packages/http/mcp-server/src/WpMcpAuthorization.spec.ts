@@ -4,7 +4,13 @@ import { Server } from 'node:http';
 import express from 'express';
 import { ContainerModule, ContainerModuleLoadOptions } from 'inversify';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { ApiForbiddenError, AuthorizationRequirement, HeaderRegistry, WebpiecesCoreHeaders } from '@webpieces/core-util';
+import {
+    Mcp,
+    ApiForbiddenError,
+    AuthorizationRequirement,
+    HeaderRegistry,
+    WebpiecesCoreHeaders,
+} from '@webpieces/core-util';
 import { RequestContext } from '@webpieces/core-context';
 import {
     AuthenticatedCaller,
@@ -13,8 +19,14 @@ import {
     WebpiecesRouterFactory,
 } from '@webpieces/http-routing';
 import { McpApiBinding } from './McpApiBinding';
-import { VerifiedMcpCredential, WpMcpServerConfig } from './McpAuth';
+import {
+    VerifiedMcpCredential,
+    WpMcpServerConfig,
+    McpAccessTokenFormat,
+    mcpOAuth,
+} from './McpAuth';
 import { McpBindOptions } from './McpBindOptions';
+import { McpToolset } from './McpToolset';
 import { McpDeployment } from './McpDeployment';
 import { WpMcpServer } from './WpMcpServer';
 import {
@@ -49,7 +61,7 @@ class ObservedAuthorizationService extends AuthorizationService {
 }
 
 describe('MCP principal authorization and one transport context', () => {
-    let bridge: WpMcpServer<string>;
+    let bridge: WpMcpServer;
     let httpServer: Server;
     let controller: SearchController;
     let jwtHook: TestJwtHook;
@@ -65,40 +77,44 @@ describe('MCP principal authorization and one transport context', () => {
         policy = new ObservedAuthorizationService();
         const bindings = new ContainerModule((options: ContainerModuleLoadOptions) => {
             options.bind(JWT_HOOK).toConstantValue(jwtHook);
-
         });
         const overrides = new ContainerModule((options: ContainerModuleLoadOptions) => {
             options.rebindSync(AuthorizationService).toConstantValue(policy);
         });
-        const router = await WebpiecesRouterFactory.create({ appBindings: [bindings], appOverrides: overrides });
+        const router = await WebpiecesRouterFactory.create({
+            appBindings: [bindings],
+            appOverrides: overrides,
+        });
         router.addRoutes(SearchApi, SearchController);
         controller = router.getContainer().get(SearchController);
         bridge = new WpMcpServer(
-            new WpMcpServerConfig<string>()
+            new WpMcpServerConfig()
                 .setName('authorization-spec')
                 .setTitle('Webpieces Test Server')
                 .setDescription('Exercises the webpieces MCP bridge in the mcp-server test suite.')
                 .setWebsiteUrl('https://docs.example.test/mcp')
                 .setVersion('1.0.0')
                 .setResource('https://api.example.test/app-owned/mcp')
-                .setAccessTokenAuthority(authority)
-                .setAuthorizationService(policy)
-                .setAuthorizationServers(['https://login.example.test'])
-                .setRequiredScopes(['tools']),
-        );
-        const app = express();
-        bridge.bind(
-            app,
-            new McpBindOptions(
-                ENDPOINT_PATH,
+                .setAuth([
+                    mcpOAuth(
+                        authority,
+                        ['https://login.example.test'],
+                        ['tools'],
+                        McpAccessTokenFormat.everyBearer(),
+                    ),
+                ]),
+            new McpToolset(
                 [
                     McpApiBinding.local(SearchApi, router),
                     McpApiBinding.remote(RemoteSearchApi, () => new RemoteSearchClient()),
                 ],
                 [SEARCH_API_CATALOG, REMOTE_SEARCH_API_CATALOG],
-                McpDeployment.singleProcess(),
+                policy,
+                [Mcp.DEFAULT],
             ),
         );
+        const app = express();
+        bridge.bind(app, new McpBindOptions(ENDPOINT_PATH, McpDeployment.singleProcess()));
         httpServer = await TestServers.listen(app);
         baseUrl = TestServers.urlOf(httpServer);
         harness = new McpHttpTestHarness(baseUrl, ENDPOINT_PATH);
@@ -198,13 +214,19 @@ describe('MCP principal authorization and one transport context', () => {
             evaluations += 1;
         };
         try {
-            const reply = await post(request('tools/call', {name:'account_search',arguments:{query:'same'}}), 'mcp-user', {'x-request-id':'scope-1134'});
-            expect(structuredOf(reply.payload)).toMatchObject({userId:'user-7',result:'same'});
+            const reply = await post(
+                request('tools/call', { name: 'account_search', arguments: { query: 'same' } }),
+                'mcp-user',
+                { 'x-request-id': 'scope-1134' },
+            );
+            expect(structuredOf(reply.payload)).toMatchObject({ userId: 'user-7', result: 'same' });
             // Three projection checks, one dispatch check, one receiving endpoint check.
             expect(evaluations).toBe(5);
             expect(jwtHook.mintedTokens).toEqual([]);
             expect(RequestContext.isActive()).toBe(false);
-        } finally { policy.observer = undefined; }
+        } finally {
+            policy.observer = undefined;
+        }
     });
 
     it('rechecks dispatch before argument validation and hides a permission change', async () => {
@@ -215,11 +237,16 @@ describe('MCP principal authorization and one transport context', () => {
         };
         try {
             const reply = await callTool('account_search', {});
-            expect(reply.error).toMatchObject({code:-32602,message:'Unknown tool: account_search'});
+            expect(reply.error).toMatchObject({
+                code: -32602,
+                message: 'Unknown tool: account_search',
+            });
             expect(JSON.stringify(reply)).not.toContain('SECRET');
             expect(JSON.stringify(reply)).not.toContain('$.query');
             expect(jwtHook.mintedTokens).toEqual([]);
-        } finally { policy.observer = undefined; }
+        } finally {
+            policy.observer = undefined;
+        }
     });
 
     it('rechecks receiving endpoint policy after visible dispatch', async () => {
@@ -229,16 +256,24 @@ describe('MCP principal authorization and one transport context', () => {
             if (checks === 5) throw new ApiForbiddenError('resource-specific denial');
         };
         try {
-            expect(modelErrorOf(await callTool('account_search', {query:'blocked'}))).toMatchObject({kind:'forbidden'});
+            expect(
+                modelErrorOf(await callTool('account_search', { query: 'blocked' })),
+            ).toMatchObject({ kind: 'forbidden' });
             expect(checks).toBe(5);
-        } finally { policy.observer = undefined; }
+        } finally {
+            policy.observer = undefined;
+        }
     });
 
     it('credential authority cannot widen a standard role policy through a JWT hook', async () => {
-        jwtHook.parseJwt = async () => { throw new Error('MCP must never parse endpoint JWTs'); };
+        jwtHook.parseJwt = async () => {
+            throw new Error('MCP must never parse endpoint JWTs');
+        };
         const tools = resultOf((await post(request('tools/list'))).payload)['tools'];
         expect(JSON.stringify(tools)).not.toContain('admin_search');
-        expect(structuredOf(await callTool('account_search', {query:'permitted'}))).toMatchObject({userId:'user-7'});
+        expect(
+            structuredOf(await callTool('account_search', { query: 'permitted' })),
+        ).toMatchObject({ userId: 'user-7' });
         expect(jwtHook.mintedTokens).toEqual([]);
     });
 

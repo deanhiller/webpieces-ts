@@ -15,10 +15,10 @@ Replace the standalone credential decorators with descriptors inside `WpAuth`. R
 
 Verified user results publish canonical `USER_ID` and `USER_ROLES` automatically. Roles are encoded as a JSON string array, including `[]` for a verified user with no roles. Conflicting canonical entries are rejected. An external machine authenticator returns `AuthenticatedMachineIdentity` without fabricating a user. `SERVICE_ONLY` requires current-hop machine verification; a delegated user or an LLM surface alone does not satisfy it. API keys and webhooks do not license trusted-header delegation.
 
-MCP keeps access-token verification, issuer/resource/scope/lifetime checks and fresh account validation. Remove endpoint JWT mint configuration and `WpMcpAuthJwt`. Supply the same `AuthorizationService` used by the receiving router:
+MCP keeps access-token verification, issuer/resource/scope/lifetime checks and fresh account validation. Remove endpoint JWT mint configuration and `WpMcpAuthJwt`. Supply the same `AuthorizationService` used by the receiving router to the `McpToolset`:
 
 ```ts
-config.setAuthorizationService(router.authorizationService());
+new McpToolset(bindings, catalogs, router.authorizationService(), [Mcp.DEFAULT]);
 ```
 
 Local MCP bindings pass an explicit token-free invocation proof through the ordinary filter chain. That proof is bound to the actual endpoint and active verified ingress scope. Capturing or restoring context cannot reuse it. A local MCP server does not need a GUI `JWT_HOOK`.

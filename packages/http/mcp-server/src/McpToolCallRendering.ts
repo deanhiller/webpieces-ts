@@ -124,10 +124,11 @@ export class McpHttpErrorDetail {
  * # There is NO `fromWire`, and that is the protocol, not an oversight
  *
  * The HTTP and IPC translators have two halves because webpieces sits on BOTH ends of those wires: it
- * writes the response AND, in another process, reads one. **webpieces is never the MCP client.** The
- * client is Claude (or another model host); there is no return path for webpieces to translate, so
- * the pair is one-directional by nature. Do not "restore the symmetry" by adding a half with nothing
- * to call it.
+ * writes the response AND, in another process, reads one. An MCP tool result is read by a MODEL, not
+ * decoded back into an exception: the model host (Claude, or an agent holding `WpMcpInMemory` /
+ * `WpMcpRemote`, which are the SDK's own `Client`) hands the `CallToolResult` to the model as-is. There
+ * is no return path for webpieces to translate, so the pair is one-directional by nature. Do not
+ * "restore the symmetry" by adding a half with nothing to call it.
  *
  * # The pre-SDK boundary does NOT share the HTTP `ErrorTranslator`, despite the identical type
  *

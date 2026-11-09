@@ -11,6 +11,7 @@ import {
     getWpMcpTools,
     getAuthorization,
     AuthorizationRequirement,
+    AuthorizationType,
     EndpointOperation,
     McpToolCatalogError,
     McpToolCatalogFile,
@@ -159,6 +160,14 @@ export class McpToolRegistry {
         if (!authorization) {
             throw new Error(
                 `@WpMcpTool ${apiClass.name}.${metadata.methodName} must declare @WpAuthorization(...).`,
+            );
+        }
+        if (authorization.authType === AuthorizationType.SERVICE_ONLY) {
+            throw new Error(
+                `@WpMcpTool ${apiClass.name}.${metadata.methodName} declares @WpAuthorization SERVICE_ONLY. An MCP ` +
+                    'tool is always called on behalf of a model, so a policy that admits a bare service hop would ' +
+                    'admit every model behind it (and deny it everywhere else): SERVICE_ONLY can never be an MCP ' +
+                    'tool. Use USERS_OR_SERVICES, ALL_USERS or ROLES, or remove @WpMcpTool.',
             );
         }
         this.authorizationService.validate(authorization);

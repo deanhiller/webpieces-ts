@@ -47,34 +47,36 @@ export class WpMcpErrorTranslator {
     private readonly defaultToolCall = new McpDefaultToolCallRenderer();
 
     /**
-     * @param challenge - the `WWW-Authenticate` value for a 401, read lazily because
-     *   `WpMcpServerConfig` is only fully validated at `bind(...)` time.
-     */
-    constructor(private readonly challenge: () => string) {}
-
-    /**
      * Boundary #1: everything webpieces itself rejects before the SDK is involved — bearer
      * verification, `Origin`, a malformed body. This is 401/403/400/500 today and any status
      * tomorrow, so it produces a VALUE like every other API in the framework and `WpMcpServer` hands
      * it to the shared express writer. The BODY stays JSON-RPC shaped because an MCP client expects
      * that — except for an {@link OAuthProtocolError}, which is answered in the RFC 6749/6750 shape; `HttpResponseDto` is generic, and its header LIST carries `WWW-Authenticate`.
+     *
+     * `challenge` is the `mcpOAuth(...)` discovery value, or `undefined` when this request is not an
+     * OAuth one: ONLY the OAuth mode emits `WWW-Authenticate`, so a rejected `jwt()`, OIDC or api-key
+     * credential is a plain 401 with no hint of which mode came closest.
      */
     toBearerBoundaryResponse(
         error: Error,
+        challenge: string | undefined,
     ): HttpResponseDto<McpHttpErrorBody> | HttpResponseDto<OAuthErrorBody> {
         // An authorization service that refuses the bearer with an RFC 6750 code (invalid_token,
         // insufficient_scope) is answered in the RFC shape, and a 401 without its own challenge
         // gets this server's, so the client still finds `resource_metadata` (#1176).
         if (error instanceof OAuthProtocolError) {
-            return OAuthErrorResponse.toResponse(error, this.challenge());
+            return OAuthErrorResponse.toResponse(error, challenge);
         }
         const payload = this.boundary.encode(error);
         const generic = payload.message;
         switch (payload.kind) {
             case 'unauthorized':
-                return this.httpError(401, -32_000, generic, [
-                    new HttpHeader('WWW-Authenticate', this.challenge()),
-                ]);
+                return this.httpError(
+                    401,
+                    -32_000,
+                    generic,
+                    challenge === undefined ? [] : [new HttpHeader('WWW-Authenticate', challenge)],
+                );
             case 'forbidden':
                 return this.httpError(403, -32_000, generic, []);
             case 'bad-request':

@@ -27,8 +27,9 @@ import {
 } from '@webpieces/core-util';
 import { JWT_HOOK, WebpiecesRouterFactory } from '@webpieces/http-routing';
 import { McpApiBinding } from './McpApiBinding';
-import { WpMcpServerConfig } from './McpAuth';
+import { WpMcpServerConfig, McpAccessTokenFormat, mcpOAuth } from './McpAuth';
 import { McpBindOptions } from './McpBindOptions';
+import { McpToolset } from './McpToolset';
 import { McpDeployment } from './McpDeployment';
 import { McpToolCatalog } from './McpToolCatalog';
 import { WpMcpServer } from './WpMcpServer';
@@ -137,7 +138,7 @@ function catalogOf(nullInEnum: boolean): McpToolCatalog {
 }
 
 class Mount {
-    bridge!: WpMcpServer<string>;
+    bridge!: WpMcpServer;
     client!: McpHttpTestHarness;
     constructor(
         readonly path: string,
@@ -163,27 +164,31 @@ describe('a NULLABLE string enum in an MCP tool output (#1197)', () => {
         const app = express();
         for (const mount of [fixed, preFix]) {
             mount.bridge = new WpMcpServer(
-                new WpMcpServerConfig<string>()
+                new WpMcpServerConfig()
                     .setName('nullable-enum')
                     .setTitle('Webpieces Test Server')
-                    .setDescription('Exercises the webpieces MCP bridge in the mcp-server test suite.')
+                    .setDescription(
+                        'Exercises the webpieces MCP bridge in the mcp-server test suite.',
+                    )
                     .setWebsiteUrl('https://docs.example.test/mcp')
                     .setVersion('1')
                     .setResource(`https://api.example.test${mount.path}`)
-                    .setAccessTokenAuthority(new TestTokenAuthority())
-                    .setAuthorizationService(router.authorizationService())
-                    .setAuthorizationServers(['https://login.example.test'])
-                    .setRequiredScopes(['tools']),
-            );
-            mount.bridge.bind(
-                app,
-                new McpBindOptions(
-                    mount.path,
+                    .setAuth([
+                        mcpOAuth(
+                            new TestTokenAuthority(),
+                            ['https://login.example.test'],
+                            ['tools'],
+                            McpAccessTokenFormat.everyBearer(),
+                        ),
+                    ]),
+                new McpToolset(
                     [McpApiBinding.local(NullableEnumApi, router)],
                     [catalogOf(mount.nullInEnum)],
-                    McpDeployment.singleProcess(),
+                    router.authorizationService(),
+                    [Mcp.DEFAULT],
                 ),
             );
+            mount.bridge.bind(app, new McpBindOptions(mount.path, McpDeployment.singleProcess()));
         }
         http = await TestServers.listen(app);
         for (const mount of [fixed, preFix]) {
@@ -198,7 +203,9 @@ describe('a NULLABLE string enum in an MCP tool output (#1197)', () => {
 
     it('publishes null in BOTH type and enum, and the catalog parser keeps it', async () => {
         const reply = await fixed.client.post(fixed.client.request('tools/list'), 'mcp-user');
-        const tools = fixed.client.resultOf(reply.payload)['tools'] as Array<Record<string, unknown>>;
+        const tools = fixed.client.resultOf(reply.payload)['tools'] as Array<
+            Record<string, unknown>
+        >;
         const output = tools[0]['outputSchema'] as Record<string, Record<string, unknown>>;
         const property = output['properties']['resumeFormat'] as Record<string, unknown>;
         expect(property['type']).toEqual(['string', 'null']);

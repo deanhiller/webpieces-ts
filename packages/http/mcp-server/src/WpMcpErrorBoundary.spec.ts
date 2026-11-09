@@ -6,11 +6,35 @@ import { Server } from 'node:http';
 import express, { Express } from 'express';
 import { ContainerModule, ContainerModuleLoadOptions, injectable } from 'inversify';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { ApiJsonSchema, ApiPath, ApiType, Endpoint, HeaderRegistry, LoggerFactory, LogManager, McpToolCatalogFile, McpToolDefinition, ObjectSchemaBuilder, WpMcpTool, WpMcpToolHints, MCP, POST, READ, RPC, SVC_TO_SVC } from '@webpieces/core-util';
+import {
+    ApiJsonSchema,
+    ApiPath,
+    ApiType,
+    Endpoint,
+    HeaderRegistry,
+    LoggerFactory,
+    LogManager,
+    McpToolCatalogFile,
+    McpToolDefinition,
+    ObjectSchemaBuilder,
+    WpMcpTool,
+    WpMcpToolHints,
+    MCP,
+    POST,
+    READ,
+    RPC,
+    SVC_TO_SVC,
+} from '@webpieces/core-util';
 import { JWT_HOOK, WebpiecesRouterFactory } from '@webpieces/http-routing';
 import { McpApiBinding } from './McpApiBinding';
-import { VerifiedMcpCredential, WpMcpServerConfig } from './McpAuth';
+import {
+    VerifiedMcpCredential,
+    WpMcpServerConfig,
+    McpAccessTokenFormat,
+    mcpOAuth,
+} from './McpAuth';
 import { McpBindOptions } from './McpBindOptions';
+import { McpToolset } from './McpToolset';
 import { McpDeployment } from './McpDeployment';
 import { McpToolCatalog } from './McpToolCatalog';
 import { WpMcpServer } from './WpMcpServer';
@@ -105,7 +129,8 @@ const PASSAGE_CATALOG = new McpToolCatalog(
                 .build(),
             new ObjectSchemaBuilder()
                 .required('sentencesByLocale', typedMap('Sentences by locale', sentenceSchema()))
-                .build(), [Mcp.DEFAULT],
+                .build(),
+            [Mcp.DEFAULT],
         ),
     ]),
     IN_MEMORY,
@@ -131,7 +156,8 @@ class PassageController extends PassageApi {
 }
 
 describe('WpMcpServer error boundary (WpMcpErrorTranslator)', () => {
-    let bridge: WpMcpServer<string>;
+    let bridge: WpMcpServer;
+    let toolset: McpToolset;
     let authority: TestTokenAuthority;
     let jwtHook: TestJwtHook;
     let httpServer: Server;
@@ -152,29 +178,32 @@ describe('WpMcpServer error boundary (WpMcpErrorTranslator)', () => {
         router.addRoutes(SearchApi, SearchController);
         router.addRoutes(PassageApi, PassageController);
         authority = new TestTokenAuthority();
+        toolset = new McpToolset(
+            [McpApiBinding.local(SearchApi, router), McpApiBinding.local(PassageApi, router)],
+            [PASSAGE_CATALOG, SEARCH_API_CATALOG],
+            router.authorizationService(),
+            [Mcp.DEFAULT],
+        );
         bridge = new WpMcpServer(
-            new WpMcpServerConfig<string>()
+            new WpMcpServerConfig()
                 .setName('boundary-server')
                 .setTitle('Webpieces Test Server')
                 .setDescription('Exercises the webpieces MCP bridge in the mcp-server test suite.')
                 .setWebsiteUrl('https://docs.example.test/mcp')
                 .setVersion('1.0.0')
                 .setResource('https://api.example.test/app-owned/mcp')
-                .setAccessTokenAuthority(authority)
-                .setAuthorizationService(router.authorizationService())
-                .setAuthorizationServers(['https://login.example.test'])
-                .setRequiredScopes(['tools']),
+                .setAuth([
+                    mcpOAuth(
+                        authority,
+                        ['https://login.example.test'],
+                        ['tools'],
+                        McpAccessTokenFormat.everyBearer(),
+                    ),
+                ]),
+            toolset,
         );
         const app: Express = express();
-        bridge.bind(
-            app,
-            new McpBindOptions(
-                ENDPOINT_PATH,
-                [McpApiBinding.local(SearchApi, router), McpApiBinding.local(PassageApi, router)],
-                [PASSAGE_CATALOG, SEARCH_API_CATALOG],
-                McpDeployment.singleProcess(),
-            ),
-        );
+        bridge.bind(app, new McpBindOptions(ENDPOINT_PATH, McpDeployment.singleProcess()));
         httpServer = await TestServers.listen(app);
         harness = new McpHttpTestHarness(TestServers.urlOf(httpServer), ENDPOINT_PATH);
     });
@@ -269,7 +298,7 @@ describe('WpMcpServer error boundary (WpMcpErrorTranslator)', () => {
         expect(lines).toHaveLength(1);
         expect(lines[0].level).toBe('error');
         expect(lines[0].message).toContain('errorType=ApiConnectionError');
-        const boundary = logs.fromLogger('WpMcpServer', 'ECONNREFUSED private-host:8443');
+        const boundary = logs.fromLogger('McpToolset', 'ECONNREFUSED private-host:8443');
         expect(boundary).toHaveLength(1);
         expect(boundary[0].level).toBe('error');
         expect(logs.containing('ECONNREFUSED private-host:8443')).toHaveLength(2);
@@ -454,8 +483,8 @@ describe('WpMcpServer error boundary (WpMcpErrorTranslator)', () => {
     });
 
     it('the shared SDK callback catch safely translates list failures within the ingress context', async () => {
-        const original = Reflect.get(bridge, 'listTools');
-        Reflect.set(bridge, 'listTools', () => {
+        const original = Reflect.get(toolset, 'listTools');
+        Reflect.set(toolset, 'listTools', () => {
             throw new Error('SECRET-sdk-list-failure');
         });
         try {
@@ -465,7 +494,7 @@ describe('WpMcpServer error boundary (WpMcpErrorTranslator)', () => {
             expect(reply.payload.error?.data?.['requestId']).toEqual(expect.stringMatching(/\S+/));
             expect(JSON.stringify(reply.payload)).not.toContain('SECRET');
         } finally {
-            Reflect.set(bridge, 'listTools', original);
+            Reflect.set(toolset, 'listTools', original);
         }
     });
 
@@ -495,7 +524,7 @@ describe('WpMcpServer error boundary (WpMcpErrorTranslator)', () => {
         expect(lines[0].message).toContain('[API-server-resp-FAIL] SearchApi.search');
         // #1055: the MCP boundary adds exactly one error line with the stack and the SAME requestId
         // the model was told to hand to support. Counted across ALL loggers.
-        const boundary = logs.fromLogger('WpMcpServer', 'database password appeared here');
+        const boundary = logs.fromLogger('McpToolset', 'database password appeared here');
         expect(boundary).toHaveLength(1);
         expect(boundary[0].level).toBe('error');
         expect(boundary[0].message).toContain(
@@ -518,7 +547,7 @@ describe('WpMcpServer error boundary (WpMcpErrorTranslator)', () => {
         const visible = modelErrorOf(reply);
         expect(visible).toMatchObject({ kind: 'implementation' });
         expect(logs.containing('[API-server-resp-FAIL]')).toHaveLength(0);
-        const boundary = logs.fromLogger('WpMcpServer', 'MCP output schema violation');
+        const boundary = logs.fromLogger('McpToolset', 'MCP output schema violation');
         expect(boundary).toHaveLength(1);
         expect(boundary[0].level).toBe('error');
         expect(boundary[0].message).toContain(`requestId=${String(visible['requestId'])}`);
@@ -533,7 +562,7 @@ describe('WpMcpServer error boundary (WpMcpErrorTranslator)', () => {
         await callTool('account_search', { query: 'malformed' });
         await callTool('account_search', { query: 'human' });
 
-        expect(logs.lines.filter((line: RecordedLogLine) => line.logger === 'WpMcpServer')).toEqual(
+        expect(logs.lines.filter((line: RecordedLogLine) => line.logger === 'McpToolset')).toEqual(
             [],
         );
     });
@@ -543,13 +572,13 @@ describe('WpMcpServer error boundary (WpMcpErrorTranslator)', () => {
         const reply = await post(request('tools/list'), null);
 
         expect(reply.response.status).toBe(401);
-        const lines = logs.containing('MCP request has no bearer access token.');
+        const lines = logs.containing('MCP request has no credential this server accepts.');
         expect(lines).toHaveLength(1);
         expect(lines[0].level).toBe('warn');
         expect(lines[0].logger).toBe('LogApiCall');
         expect(lines[0].message).toContain('[API-server-resp-OTHER] McpEndpoint.serve');
         // ...and the operator message is not on the wire.
-        expect(JSON.stringify(reply.payload)).not.toContain('bearer access token');
+        expect(JSON.stringify(reply.payload)).not.toContain('credential this server accepts');
     });
 
     it('a malformed body is logged once at the body edge, which has no filter above it either', async () => {

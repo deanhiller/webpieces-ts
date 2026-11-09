@@ -6,6 +6,7 @@ import express from 'express';
 import { ContainerModule, ContainerModuleLoadOptions, injectable } from 'inversify';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import {
+    Mcp,
     ApiPath,
     ApiType,
     AuthorizationType,
@@ -24,8 +25,9 @@ import {
 } from '@webpieces/core-util';
 import { JWT_HOOK, WebpiecesRouterFactory } from '@webpieces/http-routing';
 import { McpApiBinding } from './McpApiBinding';
-import { WpMcpServerConfig } from './McpAuth';
+import { WpMcpServerConfig, McpAccessTokenFormat, mcpOAuth } from './McpAuth';
 import { McpBindOptions } from './McpBindOptions';
+import { McpToolset } from './McpToolset';
 import { McpDeployment } from './McpDeployment';
 import { McpToolCatalog } from './McpToolCatalog';
 import { WpMcpServer } from './WpMcpServer';
@@ -53,7 +55,17 @@ import { TestJwtHook, TestTokenAuthority, USER_ID } from './__tests__/WpMcpServe
  * every JSDoc link reaches the client as the target's PUBLISHED name — never a `Dto` source name and
  * never a `Contract.` prefix (#1284).
  */
-const PARTNER_SRC = path.resolve(__dirname, '..', '..', '..', '..', 'apps', 'app-example', 'partner-api', 'src');
+const PARTNER_SRC = path.resolve(
+    __dirname,
+    '..',
+    '..',
+    '..',
+    '..',
+    'apps',
+    'app-example',
+    'partner-api',
+    'src',
+);
 
 const GOLDEN = path.join(
     PARTNER_SRC,
@@ -112,7 +124,7 @@ class PartnerOrdersController extends PartnerOrdersApi {
 
 describe('the descriptions an MCP client is served from a GENERATED catalog (#1292)', () => {
     const mountPath = '/mcp/described';
-    let bridge: WpMcpServer<string>;
+    let bridge: WpMcpServer;
     let client: McpHttpTestHarness;
     let http: Server;
 
@@ -132,27 +144,29 @@ describe('the descriptions an MCP client is served from a GENERATED catalog (#12
         );
         const app = express();
         bridge = new WpMcpServer(
-            new WpMcpServerConfig<string>()
+            new WpMcpServerConfig()
                 .setName('described')
                 .setTitle('Webpieces Test Server')
                 .setDescription('Exercises the webpieces MCP bridge in the mcp-server test suite.')
                 .setWebsiteUrl('https://docs.example.test/mcp')
                 .setVersion('1')
                 .setResource(`https://api.example.test${mountPath}`)
-                .setAccessTokenAuthority(new TestTokenAuthority())
-                .setAuthorizationService(router.authorizationService())
-                .setAuthorizationServers(['https://login.example.test'])
-                .setRequiredScopes(['tools']),
-        );
-        bridge.bind(
-            app,
-            new McpBindOptions(
-                mountPath,
+                .setAuth([
+                    mcpOAuth(
+                        new TestTokenAuthority(),
+                        ['https://login.example.test'],
+                        ['tools'],
+                        McpAccessTokenFormat.everyBearer(),
+                    ),
+                ]),
+            new McpToolset(
                 [McpApiBinding.local(PartnerOrdersApi, router)],
                 [catalog],
-                McpDeployment.singleProcess(),
+                router.authorizationService(),
+                [Mcp.DEFAULT],
             ),
         );
+        bridge.bind(app, new McpBindOptions(mountPath, McpDeployment.singleProcess()));
         http = await TestServers.listen(app);
         client = new McpHttpTestHarness(TestServers.urlOf(http), mountPath);
     });
@@ -220,6 +234,8 @@ describe('the descriptions an MCP client is served from a GENERATED catalog (#12
 
     it('serves the agent-facing @mcp text as the tool description, without the private note', async () => {
         const tool = await listedTool();
-        expect(tool['description']).toContain('Call this before answering any question about recent orders');
+        expect(tool['description']).toContain(
+            'Call this before answering any question about recent orders',
+        );
     });
 });
