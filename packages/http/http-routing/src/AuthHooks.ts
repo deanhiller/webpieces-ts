@@ -43,6 +43,19 @@ export const JWT_HOOK = Symbol.for('JwtHook');
  */
 export abstract class OidcHook {
     abstract verifyOidc(token: string, methods: OidcAuthMethods): Promise<AuthenticatedMachineIdentity>;
+
+    /**
+     * The roles a verified service account holds when it ORIGINATES a call — a cron job, a worker, an
+     * AI agent's own service account — so one `@WpAuthorization ROLES` endpoint can admit both users
+     * and that service (#1420). A service is a caller with roles and no user id: the roles are
+     * published under the SAME `USER_ROLES` key a user's are, and propagate down the stack with it.
+     *
+     * Asked ONLY when the hop carries no forwarded USER_ID / USER_ROLES. A service RELAYING a user's
+     * (or an upstream caller's) identity contributes nothing of its own, so a user with no roles behind
+     * a role-bearing service is still denied. Return `[]` for an account the app grants no role — and
+     * with no OidcHook bound, no service has any role.
+     */
+    abstract originatingServiceRoles(identity: AuthenticatedMachineIdentity): Promise<readonly string[]>;
 }
 
 /**

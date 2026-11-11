@@ -90,6 +90,10 @@ split in two layers:
   `binding.invoke`, and error translation. Its ONLY input about the caller is the CURRENT
   `RequestContext` — the trusted USER_ID / USER_ROLES / ORG_ID and a `VerifiedMachineCaller`, exactly what
   `AuthorizationService.authorize` reads. `@WpAuthorization` on the contract is the single policy everywhere.
+  An AI agent with no user is a caller with roles and no user id (#1420): an `mcpOAuth` authority returns
+  `new AuthenticatedCaller(undefined, ['order-bot'], [], {}, new AuthenticatedMachineIdentity(...))`, a
+  `ROLES ['admin', 'order-bot']` tool is listed and callable for it, and `McpInvocationContext.roles`
+  reports its roles. `ALL_USERS` still requires a user.
 - **a transport** — whose only job is to establish that context.
 
 ```ts

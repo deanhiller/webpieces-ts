@@ -5,9 +5,11 @@ import { ContextTuple } from '@webpieces/core-util';
  * that authenticates resolves to this: {@link JwtHook.parseJwt}, {@link ApiKeyHook.verifyApiKey} and
  * {@link VendorAuthVerifier.verify}. Four fields, three jobs:
  *
- *  - `userId`          — WHO the caller is, as the credential proved it.
+ *  - `userId`          — WHO the caller is, as the credential proved it. `undefined` for a service /
+ *                        AI agent, which then carries `machine` instead (#1420).
  *  - `roles` / `claims` — the AUTHORIZATION inputs: `roles` is what the framework's own any-of check
- *                        reads, `claims` carries credential facts for the authenticator to validate and publish
+ *                        (`ROLES`) reads — a user's OR a machine's: a service is a caller with roles and
+ *                        no user id, published under the same USER_ROLES key, `claims` carries credential facts for the authenticator to validate and publish
  *                        as trusted application context before AuthorizationHook evaluates policy.
  *  - `entries`         — the TRUSTED CONTEXT to seed. The framework writes each one with
  *                        {@link RequestContext.putTrusted}, so return only what THIS authenticator

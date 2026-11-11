@@ -239,6 +239,10 @@ export class ProjectOidcHook extends OidcHook {
         }
         return new AuthenticatedMachineIdentity('oidc', claims['email']);
     }
+
+    override async originatingServiceRoles(_identity: AuthenticatedMachineIdentity): Promise<readonly string[]> {
+        return [];
+    }
 }
 
 /** The app's own user JWT: `jwt-alice` is an OPERATOR, `jwt-bob` has no role. Records every token. */

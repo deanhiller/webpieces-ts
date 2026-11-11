@@ -18,7 +18,11 @@ invocation before it reaches `AuthFilter`; the framework then checks the caller 
 `oidcSameProject()` admits any service account of this service's GCP project (open off GCP, where
 there is no project), and `oidcSvcs([...])` only the listed accounts, which may belong to other
 projects; an endpoint may pair the two, and the token is then verified once against both. A bound
-`OidcHook` receives all of the endpoint's OIDC methods (`OidcAuthMethods`). Local tokens exercise
+`OidcHook` receives all of the endpoint's OIDC methods (`OidcAuthMethods`), and its
+`originatingServiceRoles(identity)` grants a service account roles when it ORIGINATES a call: a
+service is a caller with roles and no user id, so a `ROLES` endpoint admits it beside users (#1420).
+It is asked only when no caller was forwarded — a hop relaying a user never adds its own roles.
+Local tokens exercise
 the filter chain without proving deployed IAM or Google signature validation.
 See [the Cloud Run OIDC security boundary](../../../docs/architecture/cloud-run-oidc.md) for the
 current verifier behavior and the assumptions required for that deployment model.

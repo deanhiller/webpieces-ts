@@ -24,10 +24,9 @@ import {
 import { Filter, Service } from '@webpieces/core-util';
 import { WpResponse } from '../WpResponse';
 import { MethodMeta } from '../MethodMeta';
-import { AuthConfig, AUTH_CONFIG, SharedSecrets } from '../AuthConfig';
+import { AuthConfig, AUTH_CONFIG, AuthenticatedMachineIdentity, SharedSecrets } from '../AuthConfig';
 import { ApiKeyHook, API_KEY_HOOK, JwtHook, JWT_HOOK, OidcHook, OIDC_HOOK } from '../AuthHooks';
 import { AuthenticatedCallerContext } from '../AuthenticatedCallerContext';
-import { VERIFIED_MACHINE_CALLER, VerifiedMachineCaller } from '../AuthorizationHook';
 import { DefaultOidcVerifier } from '../DefaultOidcVerifier';
 import { SharedSecretComparison } from '../CredentialVerifiers';
 import { UnverifiableAuthModeError } from '../UnverifiableAuthModeError';
@@ -342,9 +341,10 @@ export class AuthFilter extends Filter<MethodMeta, WpResponse<unknown>> {
                     mode.secretKey,
                     meta.routeMeta,
                 );
-                RequestContext.putTrusted(
-                    VERIFIED_MACHINE_CALLER,
-                    new VerifiedMachineCaller('shared-secret', mode.secretKey),
+                // A shared secret grants no role: an originating holder is a role-less service caller.
+                await this.callerContext.publishVerifiedService(
+                    new AuthenticatedMachineIdentity('shared-secret', mode.secretKey),
+                    () => Promise.resolve([]),
                 );
                 return;
             case 'vendorAuth':
@@ -589,9 +589,10 @@ export class AuthFilter extends Filter<MethodMeta, WpResponse<unknown>> {
             throw new ApiImplementationError(
                 'OIDC verifier must return its verified machine identity.',
             );
-        RequestContext.putTrusted(
-            VERIFIED_MACHINE_CALLER,
-            new VerifiedMachineCaller(identity.mechanism, identity.identity),
+        await this.callerContext.publishVerifiedService(
+            identity,
+            (verified: AuthenticatedMachineIdentity) =>
+                this.oidcHook ? this.oidcHook.originatingServiceRoles(verified) : Promise.resolve([]),
         );
     }
 

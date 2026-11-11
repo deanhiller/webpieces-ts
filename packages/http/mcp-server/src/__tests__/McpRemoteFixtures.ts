@@ -394,6 +394,10 @@ export class RecordingOidcVerifier extends OidcHook {
         if (token !== OIDC_TOKEN) throw new Error(`unexpected OIDC token '${token}'`);
         return Promise.resolve(new AuthenticatedMachineIdentity('oidc','test-service@example.test'));
     }
+
+    override async originatingServiceRoles(_identity: AuthenticatedMachineIdentity): Promise<readonly string[]> {
+        return [];
+    }
 }
 
 @injectable()

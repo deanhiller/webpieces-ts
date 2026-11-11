@@ -343,15 +343,19 @@ export class McpToolset {
         };
     }
 
-    /** The trusted caller of the CURRENT RequestContext: a verified user, else a verified machine. */
+    /** The trusted caller of the CURRENT RequestContext: a verified user, else a verified machine (with its roles). */
     private currentCaller(): McpCallerFacts {
         const userId = RequestContext.getTrusted(WebpiecesCoreHeaders.USER_ID);
         if (typeof userId === 'string' && userId.trim() !== '') {
             return new McpCallerFacts(userId, CanonicalUserRoles.read());
         }
         const machine = RequestContext.getTrusted(VERIFIED_MACHINE_CALLER);
-        if (machine instanceof VerifiedMachineCaller)
-            return new McpCallerFacts(machine.identity, []);
+        if (machine instanceof VerifiedMachineCaller) {
+            // A machine (a service / AI agent with no user id, #1420) reports its roles: `[]` when it was
+            // granted none, and none at all when no USER_ROLES reached this hop.
+            const granted = RequestContext.getTrusted(WebpiecesCoreHeaders.USER_ROLES) !== undefined;
+            return new McpCallerFacts(machine.identity, granted ? CanonicalUserRoles.read() : []);
+        }
         throw new ApiUnauthorizedError(
             'MCP tool call has no trusted caller in its RequestContext.',
         );

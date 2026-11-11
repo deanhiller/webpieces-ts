@@ -79,6 +79,15 @@ class PendingWireTrustImpl {
     }
 
     /**
+     * Does this request carry a not-yet-reconciled wire value for `key`? A read-only peek: it admits
+     * nothing. An OIDC hop asks it to tell an ORIGINATING service (nothing forwarded) from one relaying
+     * somebody else's identity, whose forwarded roles must win over any role of the relaying service.
+     */
+    holds(key: AnyTrustedContextKey): boolean {
+        return this.current()?.has(key.name) ?? false;
+    }
+
+    /**
      * Everything stashed for this request, and CLEAR the pen in the same step — so reconciliation
      * cannot run twice and a value cannot be re-admitted later by anything else.
      */

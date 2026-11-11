@@ -126,6 +126,15 @@ export class CredentialVerifiers {
         return identity;
     }
 
+    /**
+     * The roles the bound {@link OidcHook} grants an ORIGINATING service account, or none when no hook
+     * is bound (the framework {@link DefaultOidcVerifier} grants no service a role). Pass it to
+     * `AuthenticatedCallerContext.publishVerifiedService`, which asks only when nothing was forwarded.
+     */
+    async oidcOriginatingServiceRoles(identity: AuthenticatedMachineIdentity): Promise<readonly string[]> {
+        return this.oidcHook ? this.oidcHook.originatingServiceRoles(identity) : [];
+    }
+
     /** `sharedSecret(key)`: the `Webpieces <secret>` value against the bound secrets for `key`. */
     verifySharedSecret(provided: string, secretKey: string): void {
         const accepted = this.authConfig?.sharedSecrets[secretKey];
