@@ -55,6 +55,10 @@ class PassingOidcHook extends OidcHook {
     override async verifyOidc(_token: string, _methods: OidcAuthMethods): Promise<AuthenticatedMachineIdentity> {
         return new AuthenticatedMachineIdentity('oidc','caller@example.test');
     }
+
+    override async originatingServiceRoles(_identity: AuthenticatedMachineIdentity): Promise<readonly string[]> {
+        return [];
+    }
 }
 
 class OrgApiKeyHook extends ApiKeyHook {

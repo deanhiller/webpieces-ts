@@ -1,7 +1,7 @@
 import { PendingWireTrust, PendingTrustedValue, RequestContext } from '@webpieces/core-context';
 import { ApiUnauthorizedError, ApiImplementationError, LogManager, WebpiecesCoreHeaders } from '@webpieces/core-util';
 import { VERIFIED_MACHINE_CALLER, VerifiedMachineCaller } from './AuthorizationHook';
-import { AuthenticatedCaller, AUTHENTICATED_CALLER_KEY } from './AuthConfig';
+import { AuthenticatedCaller, AuthenticatedMachineIdentity, AUTHENTICATED_CALLER_KEY } from './AuthConfig';
 
 const log = LogManager.getLogger('AuthenticatedCallerContext');
 
@@ -33,8 +33,12 @@ export class AuthenticatedCallerContext {
         RequestContext.putTrusted(AUTHENTICATED_CALLER_KEY, caller);
         if (caller.userId !== undefined) {
             RequestContext.putTrusted(WebpiecesCoreHeaders.USER_ID, caller.userId);
-            RequestContext.putTrusted(WebpiecesCoreHeaders.USER_ROLES, JSON.stringify(caller.roles));
         }
+        // A service / AI agent is a caller with roles and NO user id (#1420): the SAME USER_ROLES key
+        // carries its roles, so ROLES authorizes it and the roles propagate on OIDC / shared-secret hops.
+        // EVERY published caller gets it, `[]` included: a forwarded USER_ROLES is how a downstream hop
+        // knows the service calling it is RELAYING an established caller, and so contributes no role.
+        RequestContext.putTrusted(WebpiecesCoreHeaders.USER_ROLES, JSON.stringify(caller.roles));
         if (caller.machine) {
             RequestContext.putTrusted(VERIFIED_MACHINE_CALLER, new VerifiedMachineCaller(caller.machine.mechanism, caller.machine.identity));
         }
@@ -46,9 +50,10 @@ export class AuthenticatedCallerContext {
             (caller.userId === undefined && !caller.machine)) {
             throw new ApiImplementationError('Verified caller must contain a nonempty user ID or verified machine identity.');
         }
-        if (!Array.isArray(caller.roles) || !caller.roles.every((role: string) => typeof role === 'string' && role.trim().length > 0) ||
-            (caller.userId === undefined && caller.roles.length > 0)) {
-            throw new ApiImplementationError('Verified caller roles must be nonempty strings belonging to a verified user.');
+        // Roles belong to a verified CALLER: a user, or a machine (a service / AI agent with no user id).
+        // The first check above already guarantees one of the two is present.
+        if (!Array.isArray(caller.roles) || !caller.roles.every((role: string) => typeof role === 'string' && role.trim().length > 0)) {
+            throw new ApiImplementationError('Verified caller roles must be nonempty strings.');
         }
         for (const entry of caller.entries) {
             if ((entry.key.name === WebpiecesCoreHeaders.USER_ID.name && entry.value !== caller.userId) ||
@@ -56,6 +61,31 @@ export class AuthenticatedCallerContext {
                 throw new ApiImplementationError('Canonical user ID/roles entries disagree with the verified caller.');
             }
         }
+    }
+
+    /**
+     * The internal-hop twin of {@link publish}, for a caller-VERIFIED service credential (OIDC, shared
+     * secret): stamp the current-hop machine proof and, when this service ORIGINATED the call, publish
+     * it as a caller with the roles its account was granted (`OidcHook.originatingServiceRoles`) and no
+     * user id — `[]` when it was granted none.
+     *
+     * A service RELAYING an established caller — a forwarded USER_ID or USER_ROLES is pending on this
+     * hop, which every published caller upstream carries — contributes nothing of its own: its hop is
+     * admitted by its machine identity, the forwarded caller is admitted by {@link reconcileWireTrust},
+     * and a user (or a role-less service) behind it is still denied a ROLES endpoint. `rolesOf` is
+     * therefore asked only for an originating service.
+     */
+    async publishVerifiedService(
+        identity: AuthenticatedMachineIdentity,
+        rolesOf: (identity: AuthenticatedMachineIdentity) => Promise<readonly string[]>,
+    ): Promise<void> {
+        const relaying = PendingWireTrust.holds(WebpiecesCoreHeaders.USER_ID) ||
+            PendingWireTrust.holds(WebpiecesCoreHeaders.USER_ROLES);
+        if (relaying) {
+            RequestContext.putTrusted(VERIFIED_MACHINE_CALLER, new VerifiedMachineCaller(identity.mechanism, identity.identity));
+            return;
+        }
+        this.publish(new AuthenticatedCaller(undefined, [...await rolesOf(identity)], [], {}, identity));
     }
 
     reconcileWireTrust(callerVerified: boolean): void {

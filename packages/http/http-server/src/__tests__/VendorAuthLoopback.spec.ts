@@ -157,6 +157,10 @@ class AcceptApiServerOidc extends OidcHook {
         if (token !== OIDC_TOKEN) throw new ApiUnauthorizedError('not the API server identity');
         return new AuthenticatedMachineIdentity('oidc', 'bugfixer-api@project.iam.gserviceaccount.com');
     }
+
+    override async originatingServiceRoles(_identity: AuthenticatedMachineIdentity): Promise<readonly string[]> {
+        return [];
+    }
 }
 
 /** fsdb serves no vendorAuth endpoint; a verifier bound here must never be consulted. */

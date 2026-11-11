@@ -46,7 +46,7 @@ on a spoofable value — or share an `httpHeader` under different names. `get()`
 | `ACTION_ID` | `actionId` | `x-webpieces-actionid` | App-minted, **one per user action**; sits *above* `requestId`. Framework must **not** auto-mint one. |
 | `USER_ID` | `userId` | `x-user-id` | |
 | `ORG_ID` | `orgId` | `x-org-id` | The tenant / org key. |
-| `USER_ROLES` | `roles` | `x-webpieces-roles` | |
+| `USER_ROLES` | `roles` | `x-webpieces-roles` | The CALLER's roles — a user's, or a service / AI agent's (a caller with roles and no `userId`, #1420). Written for every published caller, `[]` included; a relaying OIDC hop adds none of its own. |
 | `RECORDING` | `recording` | `x-webpieces-recording` | Transferred so recording follows the request. |
 | `API_CALL_INFO` | `api` | *(context-only, object-valued)* | The structured `jsonPayload.api.*` tag. Per-hop only. |
 | `HTTP_METHOD` / `REQUEST_PATH` | `httpMethod` / `requestPath` | *(context-only)* | Stamped by `fillFromRequest`. |

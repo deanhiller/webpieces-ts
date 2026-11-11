@@ -1,4 +1,4 @@
-import { HttpRequest, RequestContext } from '@webpieces/core-context';
+import { HttpRequest } from '@webpieces/core-context';
 import {
     ApiImplementationError,
     ApiKeyCredential,
@@ -13,9 +13,8 @@ import {
 } from '@webpieces/core-util';
 import {
     AuthenticatedCallerContext,
+    AuthenticatedMachineIdentity,
     CredentialVerifiers,
-    VERIFIED_MACHINE_CALLER,
-    VerifiedMachineCaller,
 } from '@webpieces/http-routing';
 import {
     MAX_MCP_ACCESS_TOKEN_LIFETIME_SECONDS,
@@ -128,6 +127,7 @@ interface McpDoorMode {
 class OidcDoorMode implements McpDoorMode {
     readonly name: string;
     readonly bearerFamily = true;
+    private readonly callerContext = new AuthenticatedCallerContext();
 
     constructor(
         private readonly methods: OidcAuthMethods,
@@ -151,9 +151,9 @@ class OidcDoorMode implements McpDoorMode {
     async authenticate(req: McpDoorRequest): Promise<McpDoorPass> {
         const token = req.bearer()!;
         const identity = await this.verifiers.verifyOidc(token, this.methods);
-        RequestContext.putTrusted(
-            VERIFIED_MACHINE_CALLER,
-            new VerifiedMachineCaller(identity.mechanism, identity.identity),
+        await this.callerContext.publishVerifiedService(
+            identity,
+            (verified: AuthenticatedMachineIdentity) => this.verifiers.oidcOriginatingServiceRoles(verified),
         );
         return new McpDoorPass(this.name, true, token, identity.identity, []);
     }
@@ -163,6 +163,7 @@ class OidcDoorMode implements McpDoorMode {
 class SharedSecretDoorMode implements McpDoorMode {
     readonly name: string;
     readonly bearerFamily = false;
+    private readonly callerContext = new AuthenticatedCallerContext();
 
     constructor(
         private readonly secretKey: string,
@@ -178,9 +179,10 @@ class SharedSecretDoorMode implements McpDoorMode {
     async authenticate(req: McpDoorRequest): Promise<McpDoorPass> {
         const secret = req.sharedSecret()!;
         this.verifiers.verifySharedSecret(secret, this.secretKey);
-        RequestContext.putTrusted(
-            VERIFIED_MACHINE_CALLER,
-            new VerifiedMachineCaller('shared-secret', this.secretKey),
+        // A shared secret grants no role: an originating holder is a role-less service caller.
+        await this.callerContext.publishVerifiedService(
+            new AuthenticatedMachineIdentity('shared-secret', this.secretKey),
+            () => Promise.resolve([]),
         );
         return new McpDoorPass(this.name, true, secret, `shared-secret:${this.secretKey}`, []);
     }

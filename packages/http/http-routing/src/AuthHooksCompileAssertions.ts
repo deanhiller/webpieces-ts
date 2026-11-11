@@ -123,17 +123,26 @@ export class AuthHooksCompileAssertions {
                 const named = first.callerScope === 'services' ? first.callers[0] : 'same-project';
                 return new AuthenticatedMachineIdentity('oidc', named);
             }
+            override async originatingServiceRoles(_identity: AuthenticatedMachineIdentity): Promise<readonly string[]> {
+                return [];
+            }
         };
         void class extends OidcHook {
             // @ts-expect-error verifyOidc takes the endpoint's OidcAuthMethods; the deleted caller-list override must not compile
             override async verifyOidc(_token: string, _callers: string[]): Promise<AuthenticatedMachineIdentity> {
                 return new AuthenticatedMachineIdentity('oidc', 'caller@example.test');
             }
+            override async originatingServiceRoles(_identity: AuthenticatedMachineIdentity): Promise<readonly string[]> {
+                return [];
+            }
         };
         void class extends OidcHook {
             // @ts-expect-error verifyOidc takes every OIDC method of the endpoint, not one, so a pair is verified once
             override async verifyOidc(_token: string, _method: OidcAuthMethod): Promise<AuthenticatedMachineIdentity> {
                 return new AuthenticatedMachineIdentity('oidc', 'caller@example.test');
+            }
+            override async originatingServiceRoles(_identity: AuthenticatedMachineIdentity): Promise<readonly string[]> {
+                return [];
             }
         };
     }

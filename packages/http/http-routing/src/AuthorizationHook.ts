@@ -78,7 +78,9 @@ export class AuthorizationService {
                 if (isUser || isMachine) return;
                 break;
             case AuthorizationType.ROLES:
-                if (isUser && requirement.roles.some((role: string) => CanonicalUserRoles.read().includes(role))) return;
+                // USER_ROLES alone (#1420): a service / AI agent is a caller with roles and no user id.
+                // An intermediate OIDC hop never contributes roles, so a user with none is still denied.
+                if (requirement.roles.some((role: string) => CanonicalUserRoles.read().includes(role))) return;
                 break;
             case AuthorizationType.CUSTOM: {
                 const policy = this.compiled.get(requirement);
@@ -91,16 +93,21 @@ export class AuthorizationService {
     }
 }
 
-/** Canonical roles use a JSON string array, including [] for a verified user with no roles. */
+/**
+ * The caller's canonical roles: a JSON string array under USER_ROLES — `[]` for a verified user with no
+ * roles, and the granted roles of a role-bearing machine caller (a service / AI agent with no user id).
+ * A machine granted no role carries `[]` (or no USER_ROLES at all, on a hop whose upstream forwarded
+ * none), which every ROLES requirement denies.
+ */
 export class CanonicalUserRoles {
     // webpieces-disable no-function-outside-class -- stateless contract validation or scope metadata reader used before DI registration
     static read(): readonly string[] {
         const encoded = RequestContext.getTrusted(WebpiecesCoreHeaders.USER_ROLES);
-        if (encoded === undefined) throw new ApiForbiddenError('Verified user roles are missing.');
+        if (encoded === undefined) throw new ApiForbiddenError('Verified caller roles are missing.');
         // webpieces-disable no-any-unknown -- JSON is validated before it becomes canonical roles
         const value: unknown = JSON.parse(encoded);
         if (!Array.isArray(value) || !value.every((role: unknown) => typeof role === 'string' && role.trim().length > 0)) {
-            throw new ApiForbiddenError('Canonical user roles must be a JSON string array.');
+            throw new ApiForbiddenError('Canonical caller roles must be a JSON string array.');
         }
         return value as string[];
     }
