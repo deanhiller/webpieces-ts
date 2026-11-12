@@ -325,10 +325,7 @@ export class DocumentedEndpoint {
         readonly hidden: boolean,
         /** `{ openWorld: true }` — this operation may touch systems outside this service. */
         readonly openWorld: boolean,
-        /**
-         * `{ additive: true }` — this WRITE / WRITE_IDEMPOTENT only ever adds, so its MCP
-         * `destructiveHint` is false (#1422). Always false on a READ, which cannot state it.
-         */
+        /** `{ additive: true }` — a write that only adds: MCP `destructiveHint: false` (#1422). */
         readonly additive: boolean,
         readonly options: DocumentedEndpointOptions,
         readonly auth: DocumentedAuth | undefined,
