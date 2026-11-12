@@ -42,6 +42,7 @@ import {
     ApiContracts,
     ApiRef,
     ApiRelation,
+    AdditiveReadEndpoint,
     EmptiedApiContract,
     EndpointKind,
     NonLiteralDecoratorArg,
@@ -58,6 +59,7 @@ import {
 import {
     ApiRulesForMcpError,
     ApiRulesForOpenApiError,
+    AdditiveReadEndpointError,
     EmptiedApiContractError,
     MissingBasePathError,
     RootUnionApiTypeError,
@@ -134,6 +136,8 @@ export interface ApiScanResult {
     undeclaredEndpointOperations: UndeclaredEndpointOperation[];
     /** Endpoints whose response-body declaration disagrees with their kind or signature. Fatal. */
     voidResponseMismatches: VoidResponseMismatch[];
+    /** READ endpoints declaring `{ additive }` (#1423). Fatal. */
+    additiveReads: AdditiveReadEndpoint[];
     /** `no-root-union-api-type`'s findings. Fatal in buildApiContracts — see root-union-scan.ts. */
     rootUnions: RootUnionFindings;
     /**
@@ -363,6 +367,7 @@ export class ApiUsageScanner {
             undeclaredEndpointOperations:
                 this.decoratorArgDiagnostics.undeclaredEndpointOperations(),
             voidResponseMismatches: this.decoratorArgDiagnostics.voidResponseMismatches(),
+            additiveReads: this.decoratorArgDiagnostics.additiveReads(),
             rootUnions: new RootUnionScan(
                 this.workspaceRoot,
                 this.projectInfos,
@@ -574,7 +579,8 @@ export async function scanAndAttachApiRelations(
  *      the URL a consumer computes, and the cause of most emptied contracts;
  *   2. a class that declared endpoints and kept none (EmptiedApiContractError), which would otherwise
  *      leave silently through the zero-method skip above;
- *   3. a method without an explicit operation (UndeclaredEndpointOperationError);
+ *   3. a method without an explicit operation (UndeclaredEndpointOperationError), or a READ one
+ *      declaring `{ additive }` (AdditiveReadEndpointError);
  *   4. an `external` method that never said WHO calls it (UndeclaredExternalCallerError);
  *   5. a routed contract with no basePath (MissingBasePathError).
  * All are worse than an absent entry: a consumer joining `basePath + path` computes a
@@ -595,6 +601,7 @@ export function buildApiContracts(scan: ApiScanResult): ApiContracts {
     if ((scan.voidResponseMismatches ?? []).length > 0) {
         throw new VoidResponseMismatchError(scan.voidResponseMismatches);
     }
+    if (scan.additiveReads.length > 0) throw new AdditiveReadEndpointError(scan.additiveReads);
     // A shape no function-calling API will accept, read perfectly well — unlike the four above, which
     // are contracts the scan could not READ at all.
     if (!scan.rootUnions.isEmpty()) throw new RootUnionApiTypeError(scan.rootUnions);

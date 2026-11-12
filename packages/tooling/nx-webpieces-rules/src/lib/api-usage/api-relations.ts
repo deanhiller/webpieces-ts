@@ -395,6 +395,22 @@ export class VoidResponseMismatch {
     ) {}
 }
 
+/**
+ * ONE `@Endpoint` declaring operation READ with `{ additive }` (#1423) — a contradiction, since a read
+ * changes nothing to be additive about. `@Endpoint`'s overloads refuse it at compile time; this catches
+ * the source the type could not see (a JS caller, an `as` cast, a widened operation variable).
+ */
+export class AdditiveReadEndpoint {
+    constructor(
+        /** The contract class the method is declared on. */
+        public readonly api: string,
+        /** The method name. */
+        public readonly method: string,
+        /** `path/to/file.ts:LINE`, workspace-relative. */
+        public readonly at: string,
+    ) {}
+}
+
 /** ONE `@Endpoint` whose required side-effect declaration could not be read from source. */
 export class UndeclaredEndpointOperation {
     constructor(

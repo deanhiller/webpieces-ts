@@ -12,6 +12,7 @@
  */
 
 import {
+    AdditiveReadEndpoint,
     EmptiedApiContract,
     UndeclaredEndpointOperation,
     UndeclaredExternalCaller,
@@ -337,6 +338,22 @@ export class UndeclaredEndpointOperationError extends Error {
                 `   Do not infer operation semantics from the HTTP verb.`,
         );
         this.name = 'UndeclaredEndpointOperationError';
+    }
+}
+
+/** READ endpoints declaring `{ additive }` (#1423): a read changes nothing to be additive about. */
+export class AdditiveReadEndpointError extends Error {
+    constructor(public readonly endpoints: readonly AdditiveReadEndpoint[]) {
+        super(
+            `${endpoints.length} READ @Endpoint(s) declare { additive }:\n` +
+                endpoints
+                    .map((e: AdditiveReadEndpoint) => `     • ${e.api}.${e.method} at ${e.at}`)
+                    .join('\n') +
+                `\n   A read changes nothing, so it has nothing to be additive about, and @Endpoint's\n` +
+                `   types already refuse it. Remove \`additive\` from the READ endpoint, or declare the\n` +
+                `   operation WRITE / WRITE_IDEMPOTENT if the endpoint really adds state.`,
+        );
+        this.name = 'AdditiveReadEndpointError';
     }
 }
 

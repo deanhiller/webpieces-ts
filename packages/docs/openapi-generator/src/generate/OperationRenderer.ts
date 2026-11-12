@@ -206,6 +206,12 @@ export class OperationRenderer {
                 parts.push(this.triggerSentence(endpoint));
             }
         }
+        if (endpoint.additive) {
+            parts.push(
+                'Additive: it only adds new state; it does not delete, replace or irreversibly ' +
+                    'change anything that already exists.',
+            );
+        }
         if (endpoint.openWorld) {
             parts.push(
                 'Reaches beyond this service: it may act on an external system, so its effects ' +

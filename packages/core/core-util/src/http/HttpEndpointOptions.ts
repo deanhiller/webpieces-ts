@@ -170,7 +170,8 @@ export interface EndpointOptions {
      * This WRITE / WRITE_IDEMPOTENT operation performs ONLY additive updates — it adds a note, creates
      * a draft, appends an event — and never overwrites, deletes or irreversibly changes what is there.
      * It feeds MCP's `destructiveHint`: `additive: true` publishes `destructiveHint: false`, so a host
-     * can warn less hard than it does for "delete store" (#1422).
+     * can warn less hard than it does for "delete store" (#1422). It is also rendered as an
+     * "Additive: ..." sentence in the operation's OpenAPI description, as `openWorld` is (#1423).
      *
      * Absent means `destructiveHint: true`, the MCP specification's own safe default — every write
      * published before this option existed keeps exactly the hints it had. `true` is the only value:

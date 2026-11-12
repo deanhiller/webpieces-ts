@@ -232,6 +232,11 @@ const SWEPT_TOOLS: readonly string[] = [
     // Inherited fields through `extends`, across files and packages, and readonly arrays (#1055).
     'InheritanceApi/render_lesson',
     'InheritanceApi/lookup_learner',
+    // `@Endpoint`'s `additive` option in the OpenAPI documents (#1423).
+    'NotesApi/add_note',
+    'NotesApi/save_draft',
+    'NotesApi/replace_notes',
+    'NotesApi/read_note',
     // The webhook retry fixture (#1302): a webhook answers with no body, which a tool cannot.
     "RetryEventsApi/crate_packed: an MCP tool's response is not a named DTO (RetryEventsApi.cratePacked)",
     'WidgetsApi/list_widgets',
@@ -298,6 +303,7 @@ describe('every @WpMcpTool in this repo, read by the compiler', () => {
             'packages/docs/api-doc-model/src/__tests__/fixtures/McpEquivalenceApi.ts',
             'packages/docs/api-doc-model/src/__tests__/fixtures/McpUnionApi.ts',
             'packages/docs/api-doc-model/src/__tests__/fixtures/inheritance/InheritanceApi.ts',
+            'packages/docs/openapi-generator/src/__tests__/fixtures/NotesApi.ts',
             'packages/docs/openapi-generator/src/__tests__/fixtures/RetryEventsApi.ts',
             'packages/docs/openapi-generator/src/__tests__/fixtures/WidgetsApi.ts',
             'packages/docs/openapi-generator/src/__tests__/fixtures/chain/libs/agent-api/src/AgentApi.ts',
