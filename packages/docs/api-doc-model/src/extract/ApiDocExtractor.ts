@@ -456,6 +456,7 @@ export class ApiDocExtractor {
             kind,
             ApiDocExtractor.booleanProperty(literal, 'hidden'),
             ApiDocExtractor.booleanProperty(literal, 'openWorld'),
+            ApiDocExtractor.booleanProperty(literal, 'additive'),
             new DocumentedEndpointOptions(
                 ApiDocExtractor.booleanProperty(literal, 'formPost'),
                 ApiDocExtractor.stringProperty(literal, 'calledBy', folder),

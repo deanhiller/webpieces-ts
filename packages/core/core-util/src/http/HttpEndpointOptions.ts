@@ -166,7 +166,30 @@ export interface EndpointOptions {
      * genuinely do.
      */
     openWorld?: boolean;
+    /**
+     * This WRITE / WRITE_IDEMPOTENT operation performs ONLY additive updates — it adds a note, creates
+     * a draft, appends an event — and never overwrites, deletes or irreversibly changes what is there.
+     * It feeds MCP's `destructiveHint`: `additive: true` publishes `destructiveHint: false`, so a host
+     * can warn less hard than it does for "delete store" (#1422).
+     *
+     * Absent means `destructiveHint: true`, the MCP specification's own safe default — every write
+     * published before this option existed keeps exactly the hints it had. `true` is the only value:
+     * `additive: false` would be a second spelling of the default.
+     *
+     * A READ cannot state it: `@Endpoint(POST, '/x', READ, RPC, { additive: true })` does not
+     * compile (see {@link OperationEffectOptions}), because a read changes nothing to be additive about.
+     * `grep -rn "additive: true"` lists every write a host is told is safe to warn about lightly.
+     */
+    additive?: true;
 }
+
+/**
+ * The per-operation half of `@Endpoint`'s options: `additive` exists only on a write. Intersected
+ * with the kind's options type by every `@Endpoint` overload, so `additive: true` on a READ is a
+ * COMPILE error rather than a startup throw (`EndpointCompileAssertions.ts` pins it).
+ */
+export type OperationEffectOptions<TOperation extends EndpointOperation> =
+    TOperation extends typeof READ ? { additive?: never } : { additive?: true };
 
 /** An EXTERNAL_INBOUND endpoint must also identify the outside system that calls it. */
 export interface ExternalEndpointOptions extends EndpointOptions {

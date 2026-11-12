@@ -167,6 +167,7 @@ export type {
     EndpointOptions,
     ExternalEndpointOptions,
     NoResponseBodyOptionEndpointOptions,
+    OperationEffectOptions,
 } from './http/decorators';
 export {
     RPC,
@@ -194,8 +195,10 @@ export {
     getInvalidEndpointsForMcp,
     getWpMcpTools,
     mcpHintsForOperation,
+    operationForMcpHints,
+    UNKNOWN_OPERATION,
 } from './mcp/McpMetadata';
-export type { WpMcpMethodDecorator } from './mcp/McpMetadata';
+export type { McpOperationHints, McpToolOperation, WpMcpMethodDecorator } from './mcp/McpMetadata';
 export { McpToolName } from './mcp/McpToolName';
 export {
     ApiJsonSchema,

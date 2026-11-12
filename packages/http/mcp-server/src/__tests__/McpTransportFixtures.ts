@@ -178,7 +178,7 @@ export const STORE_CATALOG = new McpToolCatalog(
                     `Store ${tool.name}`,
                     tool.methodName,
                     'Store fixture',
-                    mcpHintsForOperation(READ, false),
+                    mcpHintsForOperation(READ, false, false),
                     SCHEMA.inputSchema,
                     SCHEMA.outputSchema,
                     tool.profiles,

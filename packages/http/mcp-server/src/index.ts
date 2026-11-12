@@ -18,7 +18,20 @@ export type {
 } from './McpAuth';
 export { McpToolset, McpToolRequest } from './McpToolset';
 export { WpMcpInMemory } from './WpMcpInMemory';
-export { WpMcpRemote } from './WpMcpRemote';
+export { WpMcpRemote, WpMcpRemoteOptions } from './WpMcpRemote';
+export { WpMcpClient } from './WpMcpClient';
+export {
+    MCP_APPROVAL_REQUIRED_META_KEY,
+    McpApprovalDecision,
+    McpApprovalDecisionKind,
+    McpApprovalDeniedContent,
+    McpApprovalHooks,
+    McpApprovalPendingContent,
+    McpApprovalRequired,
+    McpRemoteToolCall,
+    McpRemoteToolInfo,
+} from './McpApproval';
+export type { McpApprovalHook, McpToolArguments } from './McpApproval';
 export type { McpIdTokenMinter } from './WpMcpRemote';
 export { McpClientSet, McpDuplicateToolError, McpUnknownToolError } from './McpClientSet';
 export type { McpClientSetCall } from './McpClientSet';

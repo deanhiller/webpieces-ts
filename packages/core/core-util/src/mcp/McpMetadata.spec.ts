@@ -1,6 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import { READ, WRITE_IDEMPOTENT, WRITE } from '../http/HttpEndpointOptions';
-import { getWpMcpTools, mcpHintsForOperation, WpMcpTool } from './McpMetadata';
+import {
+    getWpMcpTools,
+    mcpHintsForOperation,
+    operationForMcpHints,
+    UNKNOWN_OPERATION,
+    WpMcpTool,
+    WpMcpToolHints,
+} from './McpMetadata';
+import { EndpointOperation } from '../http/HttpEndpointOptions';
 import { WpMcpToolMetadata } from './McpMetadata';
 import { Mcp, McpToolProfilesOptions } from './Mcp';
 
@@ -54,24 +62,73 @@ describe('MCP profile declarations', () => {
 
 describe('MCP hints derived from endpoint operation', () => {
     it('maps read, idempotent write, and non-idempotent write without a second declaration', () => {
-        expect(mcpHintsForOperation(READ, false)).toMatchObject({
+        expect(mcpHintsForOperation(READ, false, false)).toMatchObject({
             readOnlyHint: true,
             idempotentHint: true,
             destructiveHint: false,
             openWorldHint: false,
         });
-        expect(mcpHintsForOperation(WRITE_IDEMPOTENT, true)).toMatchObject({
+        expect(mcpHintsForOperation(WRITE_IDEMPOTENT, true, false)).toMatchObject({
             readOnlyHint: false,
             idempotentHint: true,
             destructiveHint: true,
             openWorldHint: true,
         });
-        expect(mcpHintsForOperation(WRITE, false)).toMatchObject({
+        expect(mcpHintsForOperation(WRITE, false, false)).toMatchObject({
             readOnlyHint: false,
             idempotentHint: false,
             destructiveHint: true,
             openWorldHint: false,
         });
+    });
+});
+
+describe('additive writes and the reverse mapping (#1422)', () => {
+    it('lowers destructiveHint for an additive WRITE / WRITE_IDEMPOTENT and changes nothing else', () => {
+        for (const operation of [WRITE, WRITE_IDEMPOTENT]) {
+            for (const openWorld of [false, true]) {
+                const destructive = mcpHintsForOperation(operation, openWorld, false);
+                const additive = mcpHintsForOperation(operation, openWorld, true);
+                expect(destructive.destructiveHint).toBe(true);
+                expect(additive).toEqual(
+                    new WpMcpToolHints(
+                        destructive.readOnlyHint,
+                        false,
+                        destructive.idempotentHint,
+                        destructive.openWorldHint,
+                    ),
+                );
+            }
+        }
+    });
+
+    it('rejects additive on a READ, which changes nothing', () => {
+        expect(() => mcpHintsForOperation(READ, false, true)).toThrow(
+            /only on a WRITE or WRITE_IDEMPOTENT/,
+        );
+    });
+
+    it('reverses every combination mcpHintsForOperation can produce', () => {
+        const cases: Array<[EndpointOperation, boolean]> = [
+            [READ, false],
+            [WRITE_IDEMPOTENT, false],
+            [WRITE_IDEMPOTENT, true],
+            [WRITE, false],
+            [WRITE, true],
+        ];
+        for (const [operation, additive] of cases) {
+            for (const openWorld of [false, true]) {
+                const hints = mcpHintsForOperation(operation, openWorld, additive);
+                expect(operationForMcpHints(hints)).toBe(operation);
+            }
+        }
+    });
+
+    it('answers UNKNOWN when a server sent no annotations, or no readOnlyHint', () => {
+        expect(operationForMcpHints(undefined)).toBe(UNKNOWN_OPERATION);
+        expect(operationForMcpHints({})).toBe(UNKNOWN_OPERATION);
+        expect(operationForMcpHints({ idempotentHint: true })).toBe(UNKNOWN_OPERATION);
+        expect(operationForMcpHints({ readOnlyHint: false })).toBe(WRITE);
     });
 });
 

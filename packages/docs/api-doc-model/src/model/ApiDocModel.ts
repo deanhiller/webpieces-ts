@@ -325,6 +325,8 @@ export class DocumentedEndpoint {
         readonly hidden: boolean,
         /** `{ openWorld: true }` — this operation may touch systems outside this service. */
         readonly openWorld: boolean,
+        /** `{ additive: true }` — a write that only adds: MCP `destructiveHint: false` (#1422). */
+        readonly additive: boolean,
         readonly options: DocumentedEndpointOptions,
         readonly auth: DocumentedAuth | undefined,
         readonly mcpTool: DocumentedMcpTool | undefined,

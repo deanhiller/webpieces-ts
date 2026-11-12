@@ -11,7 +11,8 @@ import { WpMcpServerConfig } from './McpAuth';
 import { McpBindOptions } from './McpBindOptions';
 import { McpDeployment } from './McpDeployment';
 import { McpToolset } from './McpToolset';
-import { WpMcpRemote, McpIdTokenMinter } from './WpMcpRemote';
+import { McpApprovalHooks } from './McpApproval';
+import { WpMcpRemote, McpIdTokenMinter, WpMcpRemoteOptions } from './WpMcpRemote';
 import { WpMcpServer } from './WpMcpServer';
 import { TestServers } from './__tests__/McpHttpTestHarness';
 import {
@@ -84,7 +85,12 @@ describe('WpMcpRemote over an oidcSameProject() MCP door, end to end', () => {
         http = await TestServers.listen(app);
         url = `${TestServers.urlOf(http)}/mcp/user`;
         minter = new RecordingMinter();
-        client = await WpMcpRemote.connect(url, oidcSameProject(), minter);
+        client = await WpMcpRemote.connect(
+            url,
+            oidcSameProject(),
+            minter,
+            new WpMcpRemoteOptions(McpApprovalHooks.ALLOW_ALL),
+        );
     });
 
     afterAll(async () => {

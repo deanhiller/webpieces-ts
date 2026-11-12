@@ -252,6 +252,7 @@ function endpoint(summary: string | undefined, name: string): DocumentedEndpoint
         'rpc',
         false,
         false,
+        false,
         new DocumentedEndpointOptions(false, undefined, undefined),
         undefined,
         new DocumentedMcpTool(name, [Mcp.DEFAULT]),

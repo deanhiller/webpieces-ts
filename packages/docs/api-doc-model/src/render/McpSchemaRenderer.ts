@@ -289,6 +289,7 @@ export class McpSchemaRenderer {
             mcpHintsForOperation(
                 McpSchemaRenderer.operationOf(endpoint, where),
                 endpoint.openWorld,
+                endpoint.additive,
             ),
             this.rootSchema(endpoint.request, where, 'request', undefined),
             this.rootSchema(endpoint.response, where, 'response', endpoint.returnsDescription),

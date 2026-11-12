@@ -212,6 +212,9 @@ const SWEPT_TOOLS: readonly string[] = [
     // `{@link}` resolved to published names (#1284).
     'LinksApi/fetch_menu',
     'LinksApi/publish_menu',
+    'McpAdditiveApi/notes_add',
+    'McpAdditiveApi/notes_save_draft',
+    'McpAdditiveApi/notes_replace',
     // String enums in every position, and discriminators spelled with enum members and with a
     // union of values on one branch (#1023).
     'McpEnumApi/write_story',
@@ -254,6 +257,9 @@ const SWEPT_TOOLS: readonly string[] = [
     "LongToolNameApi/barrels.tap: the MCP tool name 'barrels.tap' uses a character outside A-Z a-z 0-9 _ - (LongToolNameApi.tap)",
     'ShelvesApi/read_shelf',
     'UnsummarizedApi/open_crate: an MCP tool has no @summary, so it has no title (UnsummarizedApi.open)',
+    'NotesApi/notes_list',
+    'NotesApi/notes_add',
+    'NotesApi/notes_put',
     'ProfileApi/learner',
     'ProfileApi/admin',
     'ProfileApi/shared',
@@ -287,6 +293,7 @@ describe('every @WpMcpTool in this repo, read by the compiler', () => {
             'packages/docs/api-doc-model/src/__tests__/fixtures/BrokenLinksApi.ts',
             'packages/docs/api-doc-model/src/__tests__/fixtures/ExampleApi.ts',
             'packages/docs/api-doc-model/src/__tests__/fixtures/LinksApi.ts',
+            'packages/docs/api-doc-model/src/__tests__/fixtures/McpAdditiveApi.ts',
             'packages/docs/api-doc-model/src/__tests__/fixtures/McpEnumApi.ts',
             'packages/docs/api-doc-model/src/__tests__/fixtures/McpEquivalenceApi.ts',
             'packages/docs/api-doc-model/src/__tests__/fixtures/McpUnionApi.ts',
@@ -304,6 +311,7 @@ describe('every @WpMcpTool in this repo, read by the compiler', () => {
             'packages/docs/openapi-generator/src/__tests__/fixtures/summary/LongToolNameApi.ts',
             'packages/docs/openapi-generator/src/__tests__/fixtures/summary/ShelvesApi.ts',
             'packages/docs/openapi-generator/src/__tests__/fixtures/summary/UnsummarizedApi.ts',
+            'packages/http/mcp-server/src/__tests__/McpApprovalFixtures.ts',
             'packages/http/mcp-server/src/__tests__/McpProfileFixtures.ts',
             'packages/http/mcp-server/src/__tests__/McpRemoteFixtures.ts',
             'packages/http/mcp-server/src/__tests__/McpTransportFixtures.ts',
