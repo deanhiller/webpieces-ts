@@ -309,7 +309,9 @@ compile error. `readOnlyHint`, `destructiveHint` and
 `idempotentHint` are computed from the endpoint's declared `operation`; `openWorldHint` comes from
 `{ openWorld: true }` on the endpoint. Every write is `destructiveHint: true` (MCP's safe default)
 unless it declares `{ additive: true }` — it only ever adds, never overwrites or deletes — which
-publishes `destructiveHint: false` (#1422). A READ cannot state `additive`; it does not compile.
+publishes `destructiveHint: false` (#1422), and adds an "Additive: ..." sentence to the operation's
+description in every document so a human integrator sees it too (#1423). A READ cannot state
+`additive`; it does not compile, and the architecture scan refuses it in source the type cannot see.
 
 The catalog carries the same descriptions the OpenAPI documents do (#1292): the method's `@returns`
 is `outputSchema.description`, the request DTO's JSDoc is `inputSchema.description`, every field's

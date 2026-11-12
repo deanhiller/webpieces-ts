@@ -1,0 +1,14 @@
+{
+    "title": "Notes API",
+    "summary": "Add, save, replace and read notes.",
+    "operationIds": "contract_method",
+    "version": "1.0.0",
+    "apisWhy": "One contract with additive writes beside the defaulted shapes (#1423).",
+    "apis": [
+        {
+            "entry": "NotesApi.ts",
+            "tag": "Notes"
+        }
+    ],
+    "securitySchemeNames": []
+}

@@ -11,6 +11,7 @@ import {
     CONTRACT_HTTP_METHODS,
     ContractHttpMethod,
     contractVerbCarriesBody,
+    AdditiveReadEndpoint,
     ApiTransport,
     EmptiedApiContract,
     EndpointKind,
@@ -155,6 +156,7 @@ export class DecoratorArgDiagnostics {
     private readonly undeclaredCallers: UndeclaredExternalCaller[] = [];
     private readonly undeclaredOperations: UndeclaredEndpointOperation[] = [];
     private readonly voidMismatches: VoidResponseMismatch[] = [];
+    private readonly additiveReadList: AdditiveReadEndpoint[] = [];
 
     constructor(private readonly workspaceRoot: string) {}
 
@@ -206,6 +208,15 @@ export class DecoratorArgDiagnostics {
         node: ts.Node,
     ): void {
         this.voidMismatches.push(new VoidResponseMismatch(api, method, problem, kind, this.locate(node)));
+    }
+
+    /** Record a READ `@Endpoint` declaring `{ additive }` — fatal, see AdditiveReadEndpointError. */
+    recordAdditiveRead(api: string, method: string, node: ts.Node): void {
+        this.additiveReadList.push(new AdditiveReadEndpoint(api, method, this.locate(node)));
+    }
+
+    additiveReads(): AdditiveReadEndpoint[] {
+        return this.additiveReadList;
     }
 
     voidResponseMismatches(): VoidResponseMismatch[] {
@@ -332,6 +343,9 @@ export function endpointMethodsOf(
         const parameters = httpParametersOf(member, httpMethod as ContractHttpMethod, constants, diagnostics, api, name);
         if (parameters.length > 0) method.parameters = parameters;
         readResponseShape(method, member, args[4], constants, diagnostics, api, endpoint);
+        if (diagnostics !== null && operation === 'read' && declaresAdditive(args[4])) {
+            diagnostics.recordAdditiveRead(api, name, endpoint);
+        }
         if (QUEUED_KINDS.includes(method.kind)) {
             method.queueName = queueNameOf(member, api, name, constants, diagnostics);
         }
@@ -417,6 +431,18 @@ function declaredVoidProblem(declaresNone: boolean, returnsVoid: boolean): VoidR
     if (declaresNone && !returnsVoid) return VoidResponseProblem.NONE_WITHOUT_VOID;
     if (!declaresNone && returnsVoid) return VoidResponseProblem.VOID_WITHOUT_NONE;
     return null;
+}
+
+/** `additive` written at all in `@Endpoint`'s options (#1423) — any value, since a READ may state none. */
+// webpieces-disable no-function-outside-class -- pure AST accessor, matching the sibling helpers
+export function declaresAdditive(options: ts.Expression | undefined): boolean {
+    if (options === undefined || !ts.isObjectLiteralExpression(options)) return false;
+    return options.properties.some(
+        (property: ts.ObjectLiteralElementLike) =>
+            (ts.isPropertyAssignment(property) || ts.isShorthandPropertyAssignment(property)) &&
+            ts.isIdentifier(property.name) &&
+            property.name.text === 'additive',
+    );
 }
 
 /** Required side-effect declaration; no inference from GET/POST is permitted. */

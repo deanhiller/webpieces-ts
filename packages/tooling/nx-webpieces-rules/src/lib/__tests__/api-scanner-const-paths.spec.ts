@@ -28,6 +28,7 @@ import {
     describeNonLiteralDecoratorArgs,
 } from '../api-usage/api-scanner';
 import {
+    AdditiveReadEndpointError,
     EmptiedApiContractError,
     MissingBasePathError,
     UndeclaredEndpointOperationError,
@@ -294,6 +295,46 @@ export abstract class MissingOperationApi {
     );
 }
 
+/** A READ declaring `{ additive: true }` beside the shapes that are legal (#1423). */
+function writeAdditiveReadApiLib(): void {
+    write(
+        'libraries/additive-api/src/index.ts',
+        `import { ApiPath, Endpoint } from './decorators';
+
+@ApiPath('/notes')
+export abstract class NotesApi {
+    @Endpoint(POST, '/add', WRITE, RPC, { additive: true, responseBody: NONE })
+    abstract add(): Promise<void>;
+
+    @Endpoint(POST, '/wipe', WRITE_IDEMPOTENT, RPC, { responseBody: NONE })
+    abstract wipe(): Promise<void>;
+
+    @Endpoint(POST, '/peek', READ, RPC, { responseBody: NONE })
+    abstract peek(): Promise<void>;
+
+    @Endpoint(POST, '/bad', READ, RPC, { additive: true, responseBody: NONE })
+    abstract bad(): Promise<void>;
+}
+`,
+    );
+    write(
+        'libraries/additive-api/tsconfig.json',
+        JSON.stringify({
+            compilerOptions: { moduleResolution: 'node', experimentalDecorators: true },
+            include: ['src/**/*.ts'],
+        }),
+    );
+}
+
+function additiveProjects(): Map<string, ProjectInfo> {
+    const infos = new Map<string, ProjectInfo>();
+    infos.set(
+        'additive-api',
+        new ProjectInfo('additive-api', 'libraries/additive-api', ['role:lib']),
+    );
+    return infos;
+}
+
 /**
  * ONLY the good lib. cross-api now lives in its own map because an unreadable @Endpoint path FAILS
  * generation — mixing it in would make every "the good class still works" assertion below throw for
@@ -354,6 +395,7 @@ beforeAll(() => {
     writeEmptiedApiLib();
     writeNoBasePathApiLib();
     writeMissingOperationApiLib();
+    writeAdditiveReadApiLib();
 });
 
 afterAll(() => {
@@ -552,5 +594,24 @@ describe('apiContracts schema — every endpoint declares its operation', () => 
         expect(() => buildApiContracts(scan)).toThrow(
             /Do not infer operation semantics from the HTTP verb/,
         );
+    });
+});
+
+describe('apiContracts schema — a READ endpoint cannot be additive (#1423)', () => {
+    it('FAILS on additive on a READ, naming only that method', () => {
+        const scan = new ApiUsageScanner(root, additiveProjects()).scan();
+        expect(methodNames(scan.apiIndex.get('NotesApi')!.methods)).toEqual([
+            'add',
+            'wipe',
+            'peek',
+            'bad',
+        ]);
+        expect(scan.additiveReads).toHaveLength(1);
+        expect(scan.additiveReads[0]).toMatchObject({ api: 'NotesApi', method: 'bad' });
+        expect(scan.additiveReads[0]!.at).toMatch(/libraries\/additive-api\/src\/index\.ts:\d+/);
+
+        expect(() => buildApiContracts(scan)).toThrow(AdditiveReadEndpointError);
+        expect(() => buildApiContracts(scan)).toThrow(/NotesApi\.bad/);
+        expect(() => buildApiContracts(scan)).toThrow(/nothing to be additive about/);
     });
 });
