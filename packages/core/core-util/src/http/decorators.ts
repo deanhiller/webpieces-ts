@@ -13,6 +13,7 @@ import {
     EndpointOptions,
     ExternalEndpointOptions,
     NoResponseBodyOptionEndpointOptions,
+    OperationEffectOptions,
     READ,
     WRITE_IDEMPOTENT,
     WRITE,
@@ -21,7 +22,7 @@ import { HTTP_METHODS, HttpMethod, isHttpMethod } from './HttpContract';
 import { AuthorizationDeclaration, AuthorizationType, AUTHORIZATION_METHODS_KEY, getAuthorization } from './authorization';
 import { HTTP_PARAMETERS_METADATA_KEY } from './http-parameter-decorators';
 
-export type { EndpointOptions, ExternalEndpointOptions, NoResponseBodyOptionEndpointOptions } from './HttpEndpointOptions';
+export type { EndpointOptions, ExternalEndpointOptions, NoResponseBodyOptionEndpointOptions, OperationEffectOptions } from './HttpEndpointOptions';
 export type { EndpointOperation } from './HttpEndpointOptions';
 export { READ, WRITE_IDEMPOTENT, WRITE, NONE } from './HttpEndpointOptions';
 export type { ResponseBodyKind } from './HttpEndpointOptions';
@@ -123,28 +124,28 @@ export function ApiPath(basePath: string): ClassDecorator {
  * Each classification rides a parallel metadata map while ENDPOINTS remains method-name -> path.
  */
 // webpieces-disable no-function-outside-class -- decorator factory; decorators are inherently module-scope
-export function Endpoint(
+export function Endpoint<TOperation extends EndpointOperation>(
     httpMethod: HttpMethod,
     path: string,
-    operation: EndpointOperation,
+    operation: TOperation,
     kind: typeof EXTERNAL_INBOUND,
-    options: ExternalEndpointOptions,
+    options: ExternalEndpointOptions & OperationEffectOptions<TOperation>,
 ): MethodDecorator;
 // webpieces-disable no-function-outside-class -- decorator factory; decorators are inherently module-scope
-export function Endpoint(
+export function Endpoint<TOperation extends EndpointOperation>(
     httpMethod: HttpMethod,
     path: string,
-    operation: EndpointOperation,
+    operation: TOperation,
     kind: typeof CLOUDTASKS | typeof CRON | typeof EXTERNAL_OUTBOUND,
-    options?: NoResponseBodyOptionEndpointOptions,
+    options?: NoResponseBodyOptionEndpointOptions & OperationEffectOptions<TOperation>,
 ): MethodDecorator;
 // webpieces-disable no-function-outside-class -- decorator factory; decorators are inherently module-scope
-export function Endpoint(
+export function Endpoint<TOperation extends EndpointOperation>(
     httpMethod: HttpMethod,
     path: string,
-    operation: EndpointOperation,
+    operation: TOperation,
     kind: typeof RPC,
-    options?: EndpointOptions,
+    options?: EndpointOptions & OperationEffectOptions<TOperation>,
 ): MethodDecorator;
 // webpieces-disable no-function-outside-class -- decorator factory; decorators are inherently module-scope
 export function Endpoint(

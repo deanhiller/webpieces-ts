@@ -62,7 +62,8 @@ Everything else is read off the contract by `@webpieces/api-doc-model` at BUILD 
 | `title` / `annotations.title` | the method's `@summary` JSDoc tag — the OpenAPI operation's `summary` |
 | `description` | the method's JSDoc body, or its `@mcp` tag — the same words the partner reads in OpenAPI |
 | `inputSchema` / `outputSchema` | the declared request and response types, with each field's JSDoc as its description; `inputSchema.description` is the request DTO's JSDoc and `outputSchema.description` is the method's `@returns` — the sentence OpenAPI publishes as the success response's description (#1292) |
-| `readOnlyHint` / `destructiveHint` / `idempotentHint` | `@Endpoint`'s `operation` — `READ`, `WRITE_IDEMPOTENT` or `WRITE` |
+| `readOnlyHint` / `idempotentHint` | `@Endpoint`'s `operation` — `READ`, `WRITE_IDEMPOTENT` or `WRITE` |
+| `destructiveHint` | `false` on a `READ`; on a write, `true` (MCP's safe default) unless `@Endpoint` declares `{ additive: true }` — it only ever adds — which makes it `false` (#1422). `additive` on a `READ` does not compile |
 | `openWorldHint` | `@Endpoint`'s `openWorld` option |
 | `x-mcp-header` | the field's `@mcpHeader <token>` JSDoc tag |
 
@@ -198,14 +199,73 @@ through to another mode.
 ### `WpMcpRemote`: the client for the internal door
 
 ```ts
-const client = await WpMcpRemote.connect('https://svc-b.example.com/mcp/user', oidcSameProject(), gcpOidc);
+const client = await WpMcpRemote.connect(
+    'https://svc-b.example.com/mcp/user',
+    oidcSameProject(),
+    gcpOidc,
+    new WpMcpRemoteOptions(hostApprovalHook), // REQUIRED; McpApprovalHooks.ALLOW_ALL runs every tool
+);
 ```
 
-An MCP SDK `Client` whose transport, PER POST, mints an OIDC ID token for the callee origin (as
-`http-client-node` does — `gcpOidc` is `GcpOidc` from `@webpieces/gcp-identity`) and forwards the current
-`RequestContext`'s transferable keys, trusted ones included, so the callee's `@WpAuthorization` judges the
-user on whose behalf THIS call is made. Per POST for the same cached-client reason as in-memory; it
-caches no response either.
+A `WpMcpClient` — the MCP SDK `Client`, with every method unchanged except `callTool` — whose
+transport, PER POST, mints an OIDC ID token for the callee origin (as `http-client-node` does — `gcpOidc`
+is `GcpOidc` from `@webpieces/gcp-identity`) and forwards the current `RequestContext`'s transferable
+keys, trusted ones included, so the callee's `@WpAuthorization` judges the user on whose behalf THIS call
+is made. Per POST for the same cached-client reason as in-memory; it caches no response either.
+
+#### The approval hook: the HOST decides which calls a person must approve (#1422)
+
+`WpMcpRemoteOptions.approvalHook` is required, so every host makes a conscious choice. On EVERY
+`callTool`, the client builds an `McpRemoteToolCall` — the tool's name, its `operation` (`READ`, `WRITE`,
+`WRITE_IDEMPOTENT` from `@webpieces/core-util`, or `UNKNOWN_OPERATION`), its annotations as the server
+sent them, title, description, `inputSchema`, the exact `args` that would be sent, and the `remoteUrl` —
+and awaits `hook.check(call)` inside the caller's `RequestContext`:
+
+| decision | what the client does |
+|---|---|
+| `McpApprovalDecision.allow()` | sends the call, exactly as the SDK client does |
+| `McpApprovalDecision.requireApproval(summary?)` | sends NOTHING; returns a RESULT (not an error) — text `Waiting for approval: <summary or tool>`, `structuredContent: { status: 'approval_required', tool, args, summary }`, `_meta: { 'webpieces/approvalRequired': true }` — so a model reads "waiting", not "failed". `McpApprovalRequired.from(result)` recognises it (and returns `undefined` for any other result) |
+| `McpApprovalDecision.deny(reason, summary?)` | sends NOTHING; returns `isError: true` with `reason` as the text and `structuredContent: { status: 'denied', tool, reason, summary }` |
+| the hook throws | sends NOTHING; the error propagates (fail closed) |
+
+`operation` is reversed from the tool's `readOnlyHint` / `idempotentHint` by `operationForMcpHints`,
+beside `mcpHintsForOperation` in `@webpieces/core-util` (`destructiveHint` is not read, so an `additive`
+write is still a `WRITE`). The client keeps a per-client map of tool metadata, filled by every
+`listTools`; a name it has not seen triggers ONE `listTools` (all pages), and a name the server still does
+not list reaches the hook as `UNKNOWN_OPERATION` with empty annotations — the hook decides, and the
+server refuses an unknown tool anyway if the hook allows it. `McpApprovalHooks.ALLOW_ALL` looks up nothing,
+so a host that chose it sends exactly the bytes it sent before the hook existed.
+
+**The hook runs on every call.** It must be cheap, and it must not depend on approval state webpieces
+keeps — webpieces keeps NONE. What counts as approved, expiry, audit, single use and the card are the
+app's; the app hands state to its hook through its own `RequestContext` keys.
+
+**A worked host pattern** (an example, not a webpieces feature):
+
+1. When the model calls a WRITE tool, the hook returns `requireApproval(...)`.
+2. The host's client wrapper sees `McpApprovalRequired.from(result)`. It stores `{tool, args}` under an id
+   and shows a card. The model is told "waiting".
+3. When the person approves, the HOST's own code — not the model — loads the stored request, sets a
+   host-defined, NON-transferable context key (`ContextKey.untrusted<string>('approvedTool')`, no HTTP
+   header), calls `callTool`, and removes the key in `finally`.
+4. The hook allows the call when that key is present and names the same tool.
+5. Only then is the model run, with the result, so it never runs while the key is set.
+
+```ts
+class HostApprovalHook implements McpApprovalHook {
+    check(call: McpRemoteToolCall): McpApprovalDecision {
+        if (call.tool.operation === READ) return McpApprovalDecision.allow();
+        if (RequestContext.getUntrusted(APPROVED_TOOL) === call.tool.name) return McpApprovalDecision.allow();
+        return McpApprovalDecision.requireApproval(`Run ${call.tool.title ?? call.tool.name}`);
+    }
+}
+```
+
+**Residual risk:** the gate lives in the host. A host built with `McpApprovalHooks.ALLOW_ALL`, or rolled
+back to before its hook existed, runs every tool it is given. That is inherent to host-side approval, and
+it is the same for Claude Code. There is deliberately no check in the MCP server or `McpApiDispatcher`:
+one server is called by coding agents that run their own approval UI and by an app's chat service that
+shows its own cards, and a server-side gate would break the hosts that approve their own way.
 
 ## Endpoints need NO new auth for MCP
 

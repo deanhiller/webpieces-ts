@@ -37,9 +37,10 @@ export class McpToolDefinition {
          */
         readonly description: string,
         /**
-         * All four hints. Three are COMPUTED from `@Endpoint`'s `operation` by
-         * `mcpHintsForOperation`, which is the one place that mapping lives; `openWorldHint` comes
-         * from `@Endpoint`'s `openWorld` option.
+         * All four hints, written as computed and read back verbatim. Three are COMPUTED from
+         * `@Endpoint`'s `operation` and `additive` option by `mcpHintsForOperation`, which is the one
+         * place that mapping lives (`additive: true` on a write is what makes `destructiveHint`
+         * false, #1422); `openWorldHint` comes from `@Endpoint`'s `openWorld` option.
          */
         readonly hints: WpMcpToolHints,
         readonly inputSchema: ApiJsonSchema,

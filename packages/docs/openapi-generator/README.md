@@ -307,7 +307,9 @@ the Claude Connectors Directory refuses a longer one (#1296). The title is the m
 beside the operation's own `summary`. The decorator's former title argument is gone; passing one is a
 compile error. `readOnlyHint`, `destructiveHint` and
 `idempotentHint` are computed from the endpoint's declared `operation`; `openWorldHint` comes from
-`{ openWorld: true }` on the endpoint.
+`{ openWorld: true }` on the endpoint. Every write is `destructiveHint: true` (MCP's safe default)
+unless it declares `{ additive: true }` — it only ever adds, never overwrites or deletes — which
+publishes `destructiveHint: false` (#1422). A READ cannot state `additive`; it does not compile.
 
 The catalog carries the same descriptions the OpenAPI documents do (#1292): the method's `@returns`
 is `outputSchema.description`, the request DTO's JSDoc is `inputSchema.description`, every field's

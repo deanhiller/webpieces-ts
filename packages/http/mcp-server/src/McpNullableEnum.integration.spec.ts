@@ -125,7 +125,7 @@ function catalogOf(nullInEnum: boolean): McpToolCatalog {
         'Get format',
         'format',
         'Reads the chosen résumé format.',
-        mcpHintsForOperation(READ, false),
+        mcpHintsForOperation(READ, false, false),
         new ObjectSchemaBuilder().required('query', query).build(),
         outputSchema(nullInEnum),
         [Mcp.DEFAULT],

@@ -212,6 +212,9 @@ const SWEPT_TOOLS: readonly string[] = [
     // `{@link}` resolved to published names (#1284).
     'LinksApi/fetch_menu',
     'LinksApi/publish_menu',
+    'McpAdditiveApi/notes_add',
+    'McpAdditiveApi/notes_save_draft',
+    'McpAdditiveApi/notes_replace',
     // String enums in every position, and discriminators spelled with enum members and with a
     // union of values on one branch (#1023).
     'McpEnumApi/write_story',
@@ -287,6 +290,7 @@ describe('every @WpMcpTool in this repo, read by the compiler', () => {
             'packages/docs/api-doc-model/src/__tests__/fixtures/BrokenLinksApi.ts',
             'packages/docs/api-doc-model/src/__tests__/fixtures/ExampleApi.ts',
             'packages/docs/api-doc-model/src/__tests__/fixtures/LinksApi.ts',
+            'packages/docs/api-doc-model/src/__tests__/fixtures/McpAdditiveApi.ts',
             'packages/docs/api-doc-model/src/__tests__/fixtures/McpEnumApi.ts',
             'packages/docs/api-doc-model/src/__tests__/fixtures/McpEquivalenceApi.ts',
             'packages/docs/api-doc-model/src/__tests__/fixtures/McpUnionApi.ts',

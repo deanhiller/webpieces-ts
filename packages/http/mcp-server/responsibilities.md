@@ -17,8 +17,9 @@ normal endpoint filter chain, DTO validation, and safe error boundary.
   the same hooks `AuthFilter` uses), refuse overlapping / unverifiable / caller-less modes at bind, and
   emit `WWW-Authenticate` discovery only for `mcpOAuth(...)`.
 - Validate resource-bound `mcpOAuth(...)` access tokens through an application verifier.
-- Provide the MCP CLIENTS webpieces itself needs: `WpMcpRemote.connect(url, oidcSameProject(), minter)`
-  (per-POST OIDC minting and trusted-context propagation) and `McpClientSet.merge([...])` (one flat tool
+- Provide the MCP CLIENTS webpieces itself needs: `WpMcpRemote.connect(url, oidcSameProject(), minter, new WpMcpRemoteOptions(approvalHook))`
+  (per-POST OIDC minting and trusted-context propagation, and the host's REQUIRED approval hook asked on
+  every `callTool` — ALLOW / REQUIRE_APPROVAL / DENY, holding no approval state) and `McpClientSet.merge([...])` (one flat tool
   namespace across clients, duplicates refused).
 - Use the receiving router's common `AuthorizationService` for tool/schema visibility and invocation policy.
 - Bind the application-selected MCP path through the official MCP v2 HTTP/JSON-RPC implementation,
@@ -55,5 +56,5 @@ normal endpoint filter chain, DTO validation, and safe error boundary.
 - Issuing OAuth tokens: applications may use any authorization server, while this package describes
   the protected resource and verifies tokens at the resource boundary.
 - Forwarding external MCP bearer tokens or browser JWTs to application endpoints.
-- Approval UX for write tools (app-owned; `destructiveHint` / `readOnlyHint` and surface `llm` are there to key off).
+- Approval UX and approval state for write tools (app-owned: the app's `McpApprovalHook` on `WpMcpRemote` decides, keyed off the tool's operation, `destructiveHint` and its own `RequestContext` keys; webpieces stores nothing about what was approved).
 - Durable/replayable event delivery; MCP list/resource notifications are cache invalidations.

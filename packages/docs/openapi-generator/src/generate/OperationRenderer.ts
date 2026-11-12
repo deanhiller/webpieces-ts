@@ -268,7 +268,8 @@ export class OperationRenderer {
      * states whether repeating the call is safe; a hand-declared hint would be a second answer to a
      * question the contract has answered, and the two could disagree. `openWorldHint` is the only one
      * a human declares, because it is a judgement about the world rather than a consequence of the
-     * operation.
+     * operation. The one refinement is `@Endpoint`'s `additive` option, which a write states when it
+     * only ever adds: it lowers `destructiveHint` to false, still through `mcpHintsForOperation` (#1422).
      *
      * ## The title is the operation's `summary`, published as the Tool's `title` AND `annotations.title`
  *
@@ -287,7 +288,11 @@ export class OperationRenderer {
         if (!this.includeMcp || endpoint.mcpTool === undefined) {
             return operation;
         }
-        const hints = mcpHintsForOperation(this.operationOf(endpoint), endpoint.openWorld);
+        const hints = mcpHintsForOperation(
+            this.operationOf(endpoint),
+            endpoint.openWorld,
+            endpoint.additive,
+        );
         return operation
             .set('x-mcp-tool', endpoint.mcpTool.name)
             .set('x-mcp-title', endpoint.summary)

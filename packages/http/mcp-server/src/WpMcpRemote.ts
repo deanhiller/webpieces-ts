@@ -1,13 +1,14 @@
 import {
     CacheEntry,
     CacheKey,
-    Client,
     FetchLike,
     ResponseCacheStore,
     StreamableHTTPClientTransport,
 } from '@modelcontextprotocol/client';
 import { DestinationTrust, OidcAuthMethod } from '@webpieces/core-util';
 import { RequestContext, RequestContextHeaders } from '@webpieces/core-context';
+import { McpApprovalHook } from './McpApproval';
+import { WpMcpClient } from './WpMcpClient';
 
 /** What mints an OIDC ID token for a callee: `GcpOidc` from `@webpieces/gcp-identity` (or a test double). */
 export interface McpIdTokenMinter {
@@ -73,11 +74,26 @@ class McpOidcPost {
 }
 
 /**
- * The client for the HTTP transport's internal door: an official MCP SDK `Client` that calls another
- * service's `WpMcpServer` whose `setAuth([...])` admits `oidcSameProject()` / `oidcSvcs([...])`.
+ * The options of {@link WpMcpRemote.connect}. `approvalHook` is REQUIRED on purpose, so that every
+ * host makes a conscious choice about which remote calls a model may make without a person (#1422);
+ * `McpApprovalHooks.ALLOW_ALL` is the choice "all of them".
+ */
+export class WpMcpRemoteOptions {
+    constructor(public readonly approvalHook: McpApprovalHook) {}
+}
+
+/**
+ * The client for the HTTP transport's internal door: an official MCP SDK `Client` ({@link WpMcpClient})
+ * that calls another service's `WpMcpServer` whose `setAuth([...])` admits `oidcSameProject()` /
+ * `oidcSvcs([...])`.
  *
  * ```ts
- * const client = await WpMcpRemote.connect('https://svc-b.example.com/mcp/user', oidcSameProject(), gcpOidc);
+ * const client = await WpMcpRemote.connect(
+ *     'https://svc-b.example.com/mcp/user',
+ *     oidcSameProject(),
+ *     gcpOidc,
+ *     new WpMcpRemoteOptions(myApprovalHook), // or McpApprovalHooks.ALLOW_ALL
+ * );
  * ```
  *
  * PER POST, never at connect: each request mints its own OIDC ID token (audience = the callee origin)
@@ -85,6 +101,9 @@ class McpOidcPost {
  * user on whose behalf THIS call is made. Apps cache one client per process, and a connect-time capture
  * would run user B's call as user A — the same reason the in-memory transport reads the caller per
  * request. No response is cached, for the same reason.
+ *
+ * PER CALL, the host's approval hook: every `callTool` asks `options.approvalHook` first, and sends
+ * nothing unless it answers ALLOW. See {@link WpMcpClient}.
  */
 export class WpMcpRemote {
     // webpieces-disable no-function-outside-class -- explicit public factory of a connected SDK client
@@ -92,7 +111,8 @@ export class WpMcpRemote {
         url: string,
         auth: OidcAuthMethod,
         minter: McpIdTokenMinter,
-    ): Promise<Client> {
+        options: WpMcpRemoteOptions,
+    ): Promise<WpMcpClient> {
         if (!URL.canParse(url))
             throw new Error(`WpMcpRemote.connect(...) requires an absolute URL, got '${url}'.`);
         if (auth?.kind !== 'oidc') {
@@ -105,9 +125,11 @@ export class WpMcpRemote {
         const send: FetchLike = (target: string | URL, init?: RequestInit): Promise<Response> =>
             post.send(target, init);
         const transport = new StreamableHTTPClientTransport(endpoint, { fetch: send });
-        const client = new Client(
+        const client = new WpMcpClient(
             { name: 'webpieces-remote-client', version: '1.0.0' },
             { responseCacheStore: new McpNoResponseCache() },
+            options.approvalHook,
+            url,
         );
         await client.connect(transport);
         return client;

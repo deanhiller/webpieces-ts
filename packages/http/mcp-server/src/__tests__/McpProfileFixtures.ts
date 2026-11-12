@@ -119,7 +119,7 @@ export const PROFILE_CATALOG = new McpToolCatalog(
                     `Profile ${tool.name} tool`,
                     tool.methodName,
                     'Profile fixture',
-                    mcpHintsForOperation(READ, false),
+                    mcpHintsForOperation(READ, false, false),
                     schema.inputSchema,
                     schema.outputSchema,
                     tool.profiles,

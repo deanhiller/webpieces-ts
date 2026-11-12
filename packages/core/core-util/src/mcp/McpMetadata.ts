@@ -59,7 +59,8 @@ export class WpMcpToolMetadata {
  * | `name` | this decorator — the stable protocol identity, independent of the method name because renaming a method must not break a saved agent workflow. 1-64 characters of `[A-Za-z0-9_-]` ({@link McpToolName}) |
  * | `title` | the method's REQUIRED `@summary` JSDoc tag — the same line OpenAPI publishes as the operation's `summary`; published as BOTH `Tool.title` and `annotations.title` |
  * | `description` | the method's JSDoc body, or its `@mcp` tag — the same words the partner reads |
- * | `readOnlyHint` / `destructiveHint` / `idempotentHint` | `@Endpoint`'s `operation`, via {@link mcpHintsForOperation} |
+ * | `readOnlyHint` / `idempotentHint` | `@Endpoint`'s `operation`, via {@link mcpHintsForOperation} |
+ * | `destructiveHint` | `@Endpoint`'s `operation` and its `additive` option (a write is destructive unless `additive: true`), via {@link mcpHintsForOperation} |
  * | `openWorldHint` | `@Endpoint`'s `openWorld` option |
  * | `inputSchema` / `outputSchema` | the declared request and response types |
  *
@@ -181,20 +182,88 @@ export function getInvalidEndpointsForMcp(apiClass: Function): InvalidEndpointFo
     return Object.values(excluded);
 }
 
-/** The one mapping from endpoint side effects to MCP advisory annotations. */
+/**
+ * The one mapping from endpoint side effects to MCP advisory annotations, and {@link operationForMcpHints}
+ * beside it is the one mapping back. The two are tested against each other.
+ *
+ * | `@Endpoint` operation | `additive` | readOnly | destructive | idempotent |
+ * |---|---|---|---|---|
+ * | READ | (cannot be stated) | true | false | true |
+ * | WRITE_IDEMPOTENT | absent | false | true | true |
+ * | WRITE_IDEMPOTENT | `true` | false | **false** | true |
+ * | WRITE | absent | false | true | false |
+ * | WRITE | `true` | false | **false** | false |
+ *
+ * `openWorldHint` is `@Endpoint`'s `openWorld` option, verbatim. `destructiveHint: true` is the MCP
+ * specification's safe default for a write; only an author who declared `additive: true` lowers it
+ * (#1422). `@Endpoint` refuses `additive` on a READ at compile time; this function throws for it too,
+ * because a generator reads the options from SOURCE and must not publish a hint the type forbade.
+ */
 // webpieces-disable no-function-outside-class -- pure metadata mapping shared by MCP registration
 export function mcpHintsForOperation(
     operation: EndpointOperation,
     openWorldHint: boolean,
+    additive: boolean,
 ): WpMcpToolHints {
     switch (operation) {
         case READ:
+            if (additive) {
+                throw new Error(
+                    '`additive: true` is meaningful only on a WRITE or WRITE_IDEMPOTENT endpoint; a ' +
+                        'READ changes nothing. Remove `additive` from the READ endpoint.',
+                );
+            }
             return new WpMcpToolHints(true, false, true, openWorldHint);
         case WRITE_IDEMPOTENT:
-            return new WpMcpToolHints(false, true, true, openWorldHint);
+            return new WpMcpToolHints(false, !additive, true, openWorldHint);
         case WRITE:
-            return new WpMcpToolHints(false, true, false, openWorldHint);
+            return new WpMcpToolHints(false, !additive, false, openWorldHint);
     }
+}
+
+/** Nominal backing for {@link UNKNOWN_OPERATION}. */
+enum McpUnknownOperationValue {
+    UNKNOWN = 'unknown',
+}
+
+/**
+ * The operation of a tool whose server sent no annotations, or that the server does not list — the
+ * fourth answer {@link operationForMcpHints} can give besides READ, WRITE and WRITE_IDEMPOTENT.
+ */
+export const UNKNOWN_OPERATION = McpUnknownOperationValue.UNKNOWN;
+
+/** What a remote tool is known to do: an `@Endpoint` operation, or {@link UNKNOWN_OPERATION}. */
+export type McpToolOperation = EndpointOperation | typeof UNKNOWN_OPERATION;
+
+/**
+ * The two annotations {@link operationForMcpHints} reads. A structural view, never constructed:
+ * both {@link WpMcpToolHints} and the MCP SDK's `ToolAnnotations` (as a server sent them, every field
+ * optional) satisfy it, so the reverse mapping needs no dependency on the SDK.
+ */
+export interface McpOperationHints {
+    readonly readOnlyHint?: boolean;
+    readonly idempotentHint?: boolean;
+}
+
+/**
+ * The reverse of {@link mcpHintsForOperation}: which `@Endpoint` operation produced these hints.
+ *
+ * | `readOnlyHint` | `idempotentHint` | operation |
+ * |---|---|---|
+ * | true | any | READ |
+ * | false | true | WRITE_IDEMPOTENT |
+ * | false | false / absent | WRITE |
+ * | absent (or no annotations at all) | | {@link UNKNOWN_OPERATION} |
+ *
+ * Only `readOnlyHint` and `idempotentHint` are read. `destructiveHint` is not, so an `additive`
+ * write reverses to the same operation as a destructive one. An MCP host (`WpMcpRemote`'s approval
+ * hook) uses this to tell a READ from a WRITE without a hard-coded list of tool names (#1422).
+ */
+// webpieces-disable no-function-outside-class -- pure metadata mapping paired with mcpHintsForOperation
+export function operationForMcpHints(hints: McpOperationHints | undefined): McpToolOperation {
+    if (hints === undefined || typeof hints.readOnlyHint !== 'boolean') return UNKNOWN_OPERATION;
+    if (hints.readOnlyHint) return READ;
+    return hints.idempotentHint === true ? WRITE_IDEMPOTENT : WRITE;
 }
 
 /** Returns only methods explicitly opted in through {@link WpMcpTool}. */

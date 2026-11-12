@@ -41,7 +41,7 @@ const tools = new McpSchemaRenderer(models[0]).render();
 tools[0].name; // the stable protocol name from @WpMcpTool
 tools[0].title; // the REQUIRED human-readable title: the method's @summary JSDoc tag (#1296)
 tools[0].description; // the method's JSDoc body, or its `@mcp` tag
-tools[0].hints; // three computed from `operation`, openWorldHint from @Endpoint's options
+tools[0].hints; // three computed from `operation` (+ `additive`), openWorldHint from @Endpoint's options
 tools[0].inputSchema; // ApiJsonSchema — what tools/list publishes and the server validates against
 
 // The whole build's tools, ONE catalog per contract, as `wp-openapi` writes them to
