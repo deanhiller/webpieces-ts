@@ -1,4 +1,4 @@
-import { CallToolResult, Tool, ToolAnnotations } from '@modelcontextprotocol/client';
+import { CallToolRequestParams, CallToolResult, Tool, ToolAnnotations } from '@modelcontextprotocol/client';
 import { McpToolOperation, operationForMcpHints, UNKNOWN_OPERATION } from '@webpieces/core-util';
 
 /**
@@ -7,6 +7,9 @@ import { McpToolOperation, operationForMcpHints, UNKNOWN_OPERATION } from '@webp
  * {@link McpApprovalRequired.from} reads it.
  */
 export const MCP_APPROVAL_REQUIRED_META_KEY = 'webpieces/approvalRequired';
+
+/** A `tools/call`'s arguments, exactly as the SDK `Client.callTool` takes them (arbitrary JSON). */
+export type McpToolArguments = NonNullable<CallToolRequestParams['arguments']>;
 
 /** Nominal backing for {@link McpApprovalDecision.kind}. */
 export enum McpApprovalDecisionKind {
@@ -100,7 +103,7 @@ export class McpRemoteToolCall {
     constructor(
         public readonly tool: McpRemoteToolInfo,
         /** Exactly the arguments that will be sent if the hook allows the call. */
-        public readonly args: Record<string, unknown>,
+        public readonly args: McpToolArguments,
         /** The remote MCP endpoint `WpMcpRemote.connect` was given. */
         public readonly remoteUrl: string,
     ) {}
@@ -147,7 +150,7 @@ export class McpApprovalPendingContent {
 
     constructor(
         public readonly tool: string,
-        public readonly args: Record<string, unknown>,
+        public readonly args: McpToolArguments,
         public readonly summary: string | undefined,
     ) {}
 }
@@ -171,7 +174,7 @@ export class McpApprovalDeniedContent {
 export class McpApprovalRequired {
     private constructor(
         public readonly tool: string,
-        public readonly args: Record<string, unknown>,
+        public readonly args: McpToolArguments,
         public readonly summary: string | undefined,
     ) {}
 
@@ -182,23 +185,22 @@ export class McpApprovalRequired {
         // Read structurally, not by instanceof: a host may have passed the result through JSON.
         const content = result.structuredContent;
         if (typeof content !== 'object' || content === null) return undefined;
-        // webpieces-disable no-any-unknown -- structuredContent is the SDK's unknown JSON value
-        const record = content as Record<string, unknown>;
-        const tool = record['tool'];
-        const args = record['args'];
-        const summary = record['summary'];
+        // The fields are CHECKED below; the cast only names what they should be.
+        const record = content as McpApprovalPendingContent;
+        const tool = record.tool;
+        const args = record.args;
+        const summary = record.summary;
         if (typeof tool !== 'string' || typeof args !== 'object' || args === null) return undefined;
-        return new McpApprovalRequired(
-            tool,
-            // webpieces-disable no-any-unknown -- the call's arguments are arbitrary JSON
-            args as Record<string, unknown>,
-            typeof summary === 'string' ? summary : undefined,
-        );
+        return new McpApprovalRequired(tool, args, typeof summary === 'string' ? summary : undefined);
     }
 
     /** The result WpMcpClient answers in place of sending the call: a result, not an error. */
     // webpieces-disable no-function-outside-class -- the one builder of the approval-required result
-    static result(tool: string, args: Record<string, unknown>, summary: string | undefined): CallToolResult {
+    static result(
+        tool: string,
+        args: McpToolArguments,
+        summary: string | undefined,
+    ): CallToolResult {
         return {
             content: [{ type: 'text', text: `Waiting for approval: ${summary ?? tool}` }],
             structuredContent: new McpApprovalPendingContent(tool, args, summary),
