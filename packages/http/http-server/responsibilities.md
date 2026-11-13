@@ -7,6 +7,7 @@ Server runtime that assembles the HTTP layer: bootstraps the Inversify DI contai
 - Server bootstrap and lifecycle (`WebpiecesServer`, `WebpiecesFactory`, `WebpiecesServerImpl`)
 - Express integration and request dispatch (`WebpiecesMiddleware`, `WebpiecesRouteCreator`, CORS), including symmetric path/query/body binding for GET, JSON POST, and form POST plus complete `HttpResponseDto` status/header/body emission
 - Obtaining request body bytes (`RequestBodyReader`: `StreamBodyReader` default, opt-in `PreConsumedBodyReader` for hosts such as Cloud Functions gen2 that consume the stream first and keep `req.rawBody`), chosen via `WebpiecesExpressRouter.setBodyReader`
+- Capping the inbound request body (default 10 MiB, `MAX_BODY_BYTES`), chosen per router via `WebpiecesExpressRouter.setMaxBodyBytes`
 - DI container/module wiring (`WebpiecesModule`) binding framework singletons
 - Built-in concrete filters: `ContextFilter`, `LogApiFilter`, `RecordingFilter` (service-to-service `oidcSameProject()`/`oidcSvcs(...)`/`sharedSecret(...)` enforcement on Cloud Tasks / cross-service delivery is http-routing's `AuthFilter`)
 - In-process (HTTP-less) client factory for tests (`InProcessApiClientFactory`)

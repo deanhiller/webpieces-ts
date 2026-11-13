@@ -226,6 +226,9 @@ export class WebpiecesMiddleware {
      * @param bodyReader - Where the body bytes come from (the router's choice, see
      *   `WebpiecesExpressRouter.setBodyReader`). Required so the router's choice can never be
      *   silently dropped on the way to the wrapper.
+     * @param maxBodyBytes - The inbound body cap in bytes (the router's choice, see
+     *   `WebpiecesExpressRouter.setMaxBodyBytes`; default 10 MiB). Required for the same reason as
+     *   `bodyReader`: no route may silently fall back to a different number.
      * @returns ExpressWrapper instance
      */
     createExpressWrapper(
@@ -233,6 +236,7 @@ export class WebpiecesMiddleware {
         clientMethod: (...args: unknown[]) => Promise<unknown>,
         route: RouteMetadata,
         bodyReader: RequestBodyReader,
+        maxBodyBytes: number,
     ): ExpressWrapper {
         return new ExpressWrapper(
             clientMethod,
@@ -240,7 +244,7 @@ export class WebpiecesMiddleware {
             this.headers,
             route.formPost,
             route.rawBody,
-            undefined,
+            maxBodyBytes,
             route,
             bodyReader,
         );

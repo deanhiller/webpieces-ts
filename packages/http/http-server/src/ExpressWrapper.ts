@@ -34,14 +34,11 @@ import { StreamBodyReader } from './body/StreamBodyReader';
  * construction, so the endpoint most likely to be flooded was also the one that held on to the flood.
  * 10 MiB is comfortably above any api DTO and well under Cloud Run's own 32 MiB request limit.
  *
- * Read this as FRAMEWORK-FIXED, because today an app has no knob for it. The only seam that accepts a
- * different number is the {@link ExpressWrapper} constructor parameter, and nothing production reaches
- * it: `WebpiecesMiddleware.createExpressWrapper` forwards no such argument, and neither
- * `ExpressWrapper` nor this constant is exported from this package's barrel (`src/index.ts`), so the
- * only caller that can vary the cap is a spec inside this package. An app that legitimately needs to
- * accept a larger body therefore cannot unblock itself and has to open an issue. Making it tunable is a
- * code change, not a config one — a follow-up has to thread a value through `createExpressWrapper` and
- * decide where an app declares it (per-route, most likely, since that is the granularity the need has).
+ * This is the DEFAULT. An app that legitimately needs a different cap sets it once, when it starts
+ * webpieces, with `WebpiecesExpressRouter.setMaxBodyBytes(bytes)` before `bindExpress(app)` (issue
+ * #1426); the router threads that value through `WebpiecesMiddleware.createExpressWrapper` into every
+ * route it mounts. It is one value per router — there is no per-route override. Streaming
+ * (`application/x-webpieces-jsonl`) routes are not governed by it: they cap each JSONL record instead.
  */
 export const MAX_BODY_BYTES = 10 * 1024 * 1024;
 
@@ -86,12 +83,10 @@ export class ExpressWrapper {
         /**
          * The inbound body cap for this route. See {@link MAX_BODY_BYTES}.
          *
-         * No production caller passes this — `WebpiecesMiddleware.createExpressWrapper` builds every
-         * wrapper without it, so every live route runs on the default. The parameter exists so the
-         * refusal path can be tested against a small cap instead of a 10 MiB fixture, and the specs in
-         * this package are its only callers; it is not an app-facing tuning point, since the class is
-         * not exported from `src/index.ts`. If a route ever needs a different cap, thread it through
-         * `createExpressWrapper` rather than reaching around the middleware to construct a wrapper.
+         * Production wrappers get it from `WebpiecesMiddleware.createExpressWrapper`, which is handed
+         * the router's value (`WebpiecesExpressRouter.setMaxBodyBytes`, default {@link MAX_BODY_BYTES}).
+         * The default here only serves the focused specs in this package that construct a wrapper
+         * directly; the class is not exported from `src/index.ts`.
          */
         private maxBodyBytes: number = MAX_BODY_BYTES,
         /** Exact shared contract route; omitted only by focused legacy wrapper unit tests. */

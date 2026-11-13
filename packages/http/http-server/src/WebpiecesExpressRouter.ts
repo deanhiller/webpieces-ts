@@ -4,6 +4,7 @@ import { LogManager, RouteMetadata } from '@webpieces/core-util';
 import { WebpiecesMiddleware, ExpressRouteHandler } from './WebpiecesMiddleware';
 import { RequestBodyReader } from './body/RequestBodyReader';
 import { StreamBodyReader } from './body/StreamBodyReader';
+import { MAX_BODY_BYTES } from './ExpressWrapper';
 
 const log = LogManager.getLogger('WebpiecesExpressRouter');
 
@@ -35,7 +36,9 @@ export class WebpiecesExpressRouter {
     private readonly middleware = new WebpiecesMiddleware();
     /** Where every mounted route reads its body bytes from. See {@link setBodyReader}. */
     private bodyReader: RequestBodyReader = new StreamBodyReader();
-    /** Set by {@link bindExpress}; a body reader chosen after that would reach no route. */
+    /** The inbound body cap every mounted route enforces. See {@link setMaxBodyBytes}. */
+    private maxBodyBytes: number = MAX_BODY_BYTES;
+    /** Set by {@link bindExpress}; a body reader or cap chosen after that would reach no route. */
     private bound = false;
 
     constructor(private readonly apiFactory: ApiFactory) {}
@@ -60,6 +63,34 @@ export class WebpiecesExpressRouter {
             );
         }
         this.bodyReader = bodyReader;
+    }
+
+    /**
+     * Choose the inbound request body cap, in bytes, for every route this router mounts (issue #1426).
+     * Call it BEFORE {@link bindExpress}: each route captures the cap when it is mounted.
+     *
+     * The default is 10 MiB (`MAX_BODY_BYTES`), comfortably above any api DTO and well under Cloud
+     * Run's own 32 MiB request limit. A body over the cap is refused with a 400 ("Request body exceeds
+     * the N byte limit") the moment it crosses the line, so raise it only as far as the app's largest
+     * legitimate body needs: every route, including a public webhook, accepts up to this many bytes.
+     * Streaming (`application/x-webpieces-jsonl`) routes are not governed by it; they cap each record.
+     *
+     * @throws Error when called after {@link bindExpress}, or with a value that is not a positive integer.
+     */
+    setMaxBodyBytes(bytes: number): void {
+        if (this.bound) {
+            throw new Error(
+                'setMaxBodyBytes() was called after bindExpress(); the mounted routes already captured ' +
+                    'their body cap. Call setMaxBodyBytes() before bindExpress(app).',
+            );
+        }
+        if (!Number.isSafeInteger(bytes) || bytes <= 0) {
+            throw new Error(
+                `setMaxBodyBytes(${bytes}) needs a positive whole number of bytes, ` +
+                    `e.g. setMaxBodyBytes(20 * 1024 * 1024).`,
+            );
+        }
+        this.maxBodyBytes = bytes;
     }
 
     /**
@@ -171,6 +202,7 @@ export class WebpiecesExpressRouter {
                       apiClient.client[route.methodName],
                       route,
                       this.bodyReader,
+                      this.maxBodyBytes,
                   );
             this.registerHandler(app, route.httpMethod, path, wrapper.execute.bind(wrapper));
             count++;
