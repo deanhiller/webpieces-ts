@@ -9,7 +9,7 @@ import {
     toError,
 } from '@webpieces/core-util';
 import { HttpRequest, RequestContext, RequestContextHeaders } from '@webpieces/core-context';
-import { ExpressWrapper } from './ExpressWrapper';
+import { ExpressWrapper, MAX_BODY_BYTES } from './ExpressWrapper';
 import { JsonlDuplexExpressCall, JsonlResponseWriter } from './JsonlDuplexExpressCall';
 
 /** Express adapter for the three typed application/x-webpieces-jsonl contract forms. */
@@ -23,13 +23,15 @@ export class StreamExpressWrapper {
         private readonly route: RouteMetadata,
         private readonly headers: RequestContextHeaders,
     ) {
+        // This wrapper only maps pre-open failures to the ordinary HTTP error response; it never reads
+        // a body, so the cap it carries is inert. A streaming route caps each JSONL record instead.
         this.ordinaryErrors = new ExpressWrapper(
             clientMethod,
             route.path,
             headers,
             false,
             false,
-            undefined,
+            MAX_BODY_BYTES,
             route,
         );
     }

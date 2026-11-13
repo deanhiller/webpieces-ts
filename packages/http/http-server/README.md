@@ -38,6 +38,23 @@ was consumed and there is no `req.rawBody`, it fails fast. It never re-serialize
 mount your own body parser ahead of webpieces, either mount webpieces first or keep the bytes with
 `express.json({ verify: (req, _res, buf) => { req.rawBody = buf; } })`.
 
+## The inbound body cap
+
+Every route refuses a request body larger than **10 MiB** with a 400, the moment the body crosses the
+limit (nothing past it is buffered). An app that legitimately needs a different cap sets it once,
+before binding the routes:
+
+```typescript
+const router = new WebpiecesExpressRouter(apiFactory);
+router.setMaxBodyBytes(20 * 1024 * 1024);
+router.bindExpress(app);
+```
+
+It applies to every route the router mounts, public webhooks included — there is no per-route
+override. Calling it after `bindExpress(app)`, or with anything but a positive whole number of bytes,
+throws. Streaming (`application/x-webpieces-jsonl`) routes cap each record instead and are not governed
+by it.
+
 ## End-user errors, and the caller SURFACE that decides their status
 
 An `ApiEndUserError` is answered with **266** by default: the call succeeded and a GUI (or the next
