@@ -79,6 +79,17 @@ Setting `circularDeps.enabled: false` in the plugin options removes the target
 entirely (rather than toggling it via config). Prefer `mode: "OFF"` instead — it
 keeps the target present so any `dependsOn` references don't dangle.
 
+## Compact markdown views of the graphs (#1429)
+
+`architecture:generate` also writes two committed views beside the JSON, rendered from it alone:
+`architecture/build-deps.md` (one line per project, deepest level first:
+`<dir> [<role> L<level>]: <deps>`) and `architecture/runtime-deps.md` (service calls, cron / external
+triggers, the outbound calls not modelled here, and each service's implemented APIs, with every `*Via`
+provenance string left out). They cost a few thousand tokens where the JSON costs ~100k on a large repo,
+so agents read them first; the JSON stays the source for queries. `validate-architecture-unchanged`
+fails when either one differs from the render of the committed JSON. Never hand-edit or hand-merge
+them: run `pnpm nx run architecture:generate`.
+
 ## View saved architecture and refresh explicitly
 
 `pnpm arch:visualize` and `pnpm arch:visualize-runtime` open saved generated

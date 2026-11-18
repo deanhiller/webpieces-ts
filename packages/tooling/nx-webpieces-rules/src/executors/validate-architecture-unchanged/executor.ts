@@ -24,6 +24,7 @@ import type { ApiContractFileRefs } from '../../lib/api-contract-files';
 import type { RemoteServices } from '../../lib/remote-services';
 import { RuleGate } from '../../lib/rule-gate';
 import { CurrentArchitecture, CurrentGraphBuilder } from '../../lib/current-architecture';
+import { ArchitectureMarkdownFiles } from '../../lib/architecture-markdown';
 import { toError } from '../../toError';
 
 export interface ValidateArchitectureUnchangedOptions {
@@ -223,6 +224,9 @@ export default async function runExecutor(
             reportMismatch(tableDrift, workspaceRoot);
             return { success: false };
         }
+
+        // Step 7: the committed .md views (#1429) must be exactly the render of the committed JSON.
+        new ArchitectureMarkdownFiles().assertMatchesCommitted(workspaceRoot, graphPath);
 
         console.log('✅ Architecture unchanged - current graph matches saved graph');
         return { success: true };

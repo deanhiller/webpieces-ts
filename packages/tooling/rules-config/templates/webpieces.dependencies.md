@@ -6,10 +6,16 @@ A clean dependency graph keeps you out of huge trouble later.
 
 If you are a human, simply run these commands:
 * nx run architecture:visualize - to see the new dependencies and validate that change is desired
-* nx run architecture:generate - updates the dep graph (also regenerates the committed, clickable `architecture/dependencies.html`)
-* git diff architecture/dependencies.json - to see the deps changes you made
+* nx run architecture:generate - updates the dep graph, its committed compact views `architecture/build-deps.md` /
+  `architecture/runtime-deps.md`, and the clickable `architecture/dependencies.html`
+* git diff architecture/dependencies.json architecture/build-deps.md - to see the deps changes you made
 
-The committed `architecture/dependencies.html` is a clickable map: each box with a
+To READ the graphs, start with `architecture/build-deps.md` (every project: its directory, level and
+dependencies) and `architecture/runtime-deps.md` (service calls, triggers, outbound calls) — a few
+thousand tokens instead of the JSON. They are generated: never hand-edit or hand-merge them, and
+`validate-architecture-unchanged` fails when they do not match the committed JSON.
+
+`architecture/dependencies.html` is a clickable map: each box with a
 generated DI design links to that project's `design.html` (regenerated next to its
 `design.json`/`design.md`), so you can click into any module to see the exact DI graph
 the AI sees.

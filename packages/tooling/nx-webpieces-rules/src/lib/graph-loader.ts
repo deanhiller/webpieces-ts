@@ -52,7 +52,10 @@ export const DEFAULT_GRAPH_PATH = 'architecture/dependencies.json';
  * the per-project metadata fields.
  */
 export const AI_INSTRUCTIONS =
-    "Each project's shortDescription is only a summary. BEFORE adding code to a project, " +
+    'READ FIRST: build-deps.md (every project, its directory, level and dependencies) and ' +
+    'runtime-deps.md (service calls, triggers, outbound calls), beside this file — compact views ' +
+    'of this file and runtime-dependencies.json, generated from them. This JSON stays the source ' +
+    "for queries. Each project's shortDescription is only a summary. BEFORE adding code to a project, " +
     'read its responsibilitiesFile for the full responsibilities (what belongs in that ' +
     'project and what does not), and read its designFile to understand the DI design ' +
     'before reading the code. Use the entries in `commands` to regenerate these files ' +
@@ -80,7 +83,8 @@ export type CommandMap = Record<string, string>;
 export const GRAPH_COMMANDS: CommandMap = {
     regenerateArchitecture:
         'pnpm nx run architecture:generate — rewrites architecture/dependencies.json, ' +
-        'architecture/apis/<ApiName>.json and architecture/runtime-dependencies.json; run after ' +
+        'architecture/apis/<ApiName>.json, architecture/runtime-dependencies.json and their views ' +
+        'architecture/build-deps.md and architecture/runtime-deps.md (never hand-edit or hand-merge them); run after ' +
         'reviewing project runtime-deps.json and API contract candidates into architecture/apis; generation reads approvals and never approves endpoint changes',
     visualizeArchitecture:
         'pnpm nx run architecture:visualize — opens the monorepo dependency graph (this file) ' +

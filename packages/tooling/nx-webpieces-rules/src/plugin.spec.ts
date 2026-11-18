@@ -2,7 +2,7 @@ import { specTempDirs } from '@webpieces/tooling-testkit';
 import { describe, it, expect } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
-import { isInsideNestedGitRepo, createCiTarget, createHotfixCiTarget, createNodesV2 } from './plugin';
+import { isInsideNestedGitRepo, createCiTarget, createGenerateTarget, createHotfixCiTarget, createNodesV2 } from './plugin';
 import type { CreateNodesContextV2, CreateNodesResultV2 } from '@nx/devkit';
 import { BRANCH_IDENTITY_INPUTS } from './branch-identity-inputs';
 import { ValidationTargets } from './validation-targets';
@@ -67,6 +67,19 @@ describe('createCiTarget', () => {
         expect(withArch.dependsOn).toContain('architecture:validate-complete');
         const withoutArch = createCiTarget(['validate-no-file-import-cycles'], false);
         expect(withoutArch.dependsOn).not.toContain('architecture:validate-complete');
+    });
+});
+
+describe('createGenerateTarget', () => {
+    it('declares every committed file architecture:generate writes, including the two markdown views (#1429)', () => {
+        expect(createGenerateTarget('architecture/dependencies.json').outputs).toEqual([
+            '{workspaceRoot}/architecture/dependencies.json',
+            '{workspaceRoot}/architecture/dependencies.html',
+            '{workspaceRoot}/architecture/apis',
+            '{workspaceRoot}/architecture/runtime-dependencies.json',
+            '{workspaceRoot}/architecture/build-deps.md',
+            '{workspaceRoot}/architecture/runtime-deps.md',
+        ]);
     });
 });
 
