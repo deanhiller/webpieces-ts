@@ -41,11 +41,16 @@ export class BranchStateGuardConfig extends BaseRuleConfig {
     // Maximum cached commit distance tolerated on local main. Required so every repo consciously
     // carries the policy; 5 means 0..5 are allowed and stale-main blocks starting at 6.
     maxCommitsBehind!: number;
+    // Maximum cached distance (HEAD..origin/main) tolerated on a FEATURE branch before Write/Edit are
+    // blocked (L2 row 15, issue #1431). Required, with no code default: it decides whether a branch is
+    // blocked, so every repo states it (.claude/rules/no-rule-defaults.md). 20 means 0..20 are allowed.
+    featureBranchMaxCommitsBehind!: number;
 
     static readonly SCHEMA: SchemaShape<BranchStateGuardConfig> = {
         mode: new FieldDef('string', ON_OFF_MODES),
         branchNamingConvention: FieldDef.optional('string'),
         hangTimeoutMinutes: FieldDef.optional('number'),
         maxCommitsBehind: new FieldDef('number'),
+        featureBranchMaxCommitsBehind: new FieldDef('number'),
     };
 }

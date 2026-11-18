@@ -682,6 +682,12 @@
         "optional": false,
         "nullable": false,
         "nonEmpty": false
+      },
+      "featureBranchMaxCommitsBehind": {
+        "type": "number",
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
       }
     },
     "no-file-import-cycles": {
@@ -1765,7 +1771,8 @@
       "mode": "ON",
       "turnOffRuleUntilEpoch": 0,
       "turnOffRuleWhileOnBranch": null,
-      "maxCommitsBehind": 5
+      "maxCommitsBehind": 5,
+      "featureBranchMaxCommitsBehind": 20
     },
     "no-file-import-cycles": {
       "mode": "RUN_EVERY_TIME",

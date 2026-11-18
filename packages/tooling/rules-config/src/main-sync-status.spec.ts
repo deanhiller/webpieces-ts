@@ -87,6 +87,8 @@ class RepoState {
     untracked: string[] = [];
     mainChanged: string[] = [];
     commitsBehind = 0;
+    // How many origin/main commits the feature tip lacks (HEAD..origin/main); null = git cannot count.
+    headCommitsBehind: number | null = 0;
     // What a `git fetch` of origin/main brings in, applied when the program fetches.
     fetchedOriginMain: string | null = null;
 
@@ -106,6 +108,7 @@ class RepoState {
         if (line === 'ls-files --others --exclude-standard') return this.files(this.untracked);
         if (line === `diff --name-only ${FORK} origin/main`) return this.files(this.mainChanged);
         if (line === `rev-list --count ${this.localMain}..${this.originMain}`) return this.ok(String(this.commitsBehind));
+        if (line === `rev-list --count ${this.head}..${this.originMain}` && this.headCommitsBehind !== null) return this.ok(String(this.headCommitsBehind));
         return new GitResultDto(1, '', `unscripted git ${line}`);
     }
 
@@ -161,6 +164,22 @@ describe('computeMainSyncStatus (integration)', () => {
 
         expect((await computeMainSyncStatus(work)).commitsBehind).toBe(1);
         expect(feature.git.commandLines()).toContain('git rev-list --count old-main-sha..upstream-sha');
+    });
+
+    it('caches how far the FEATURE tip is behind origin/main, apart from local main (#1431)', async () => {
+        repo.originMain = 'upstream-sha';
+        repo.localMain = 'upstream-sha';
+        repo.headCommitsBehind = 23;
+
+        const status = await computeMainSyncStatus(work);
+        expect(status.headCommitsBehind).toBe(23);
+        expect(status.commitsBehind).toBe(0);
+        expect(feature.git.commandLines()).toContain('git rev-list --count feature-sha..upstream-sha');
+    });
+
+    it('records an unknown feature distance as null, which the guard reads as allow', async () => {
+        repo.headCommitsBehind = null;
+        expect((await computeMainSyncStatus(work)).headCommitsBehind).toBeNull();
     });
 
     it('flags conflict=true when main and the branch touched the same file', async () => {

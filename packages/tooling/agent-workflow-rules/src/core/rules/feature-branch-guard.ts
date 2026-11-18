@@ -18,6 +18,7 @@ import { TargetTreeResolver } from '@webpieces/hook-runtime';
 import { MergedBranchMessage } from './merged-branch-message';
 import { JudgedTree } from './judged-tree';
 import { TreeRecovery } from './tree-recovery';
+import { findUnvalidatedMerge } from './merge-in-progress-guard';
 
 /**
  * Comprehensive "are you on a proper feature branch?" guard — the single rule that blocks edits when
@@ -26,7 +27,9 @@ import { TreeRecovery } from './tree-recovery';
  *   2. Branch already merged into main (merged PR)   → block: your work is in main, branch off fresh.
  *   3. No fork point with origin/main                → block: squash onto a new branch.
  *   4. origin/main moved & touches your files        → block: merge main first.
- * States 2–4 are PRECOMPUTED into `.webpieces/main-sync-status.json` by the detached refresher, so
+ *   5. Branch more than `featureBranchMaxCommitsBehind` commits behind origin/main → block: update
+ *      from main (L2 row 15, issue #1431). Exempt while a 3-point merge is being resolved (row 3).
+ * States 2–5 are PRECOMPUTED into `.webpieces/main-sync-status.json` by the detached refresher, so
  * this check does NO network git (only a fast local `git rev-parse` for state 1). On every call it
  * fire-and-forget spawns the refresher so the NEXT call is fresh. Runs in the GUARDS hook (it's a
  * hookGuard); file-scoped, so only Write/Edit/MultiEdit are guarded — Bash passes through so the AI
@@ -96,7 +99,7 @@ export class FeatureBranchGuardRule extends FileRuleBase<BranchStateGuardConfig>
         'You must be on a clean, up-to-date feature branch to edit code. Pick one:',
         [
             new Option('On main → create a feature branch. Already merged → branch off fresh main.', true),
-            new Option('main moved/conflicts, NO PR yet → `pnpm wp-start-update` (merge), `/wp-merge` (resolve), `pnpm wp-finish-update`. An OPEN PR? then you MUST use `pnpm wp-start-upsert-pr` → `/wp-merge` → `pnpm wp-finish-upsert-pr` (the merge rewrites the branch, so the PR must be re-pointed in the same run). Never mix a start from one pair with a finish from the other.'),
+            new Option('main moved/conflicts, or the branch is too far behind main, NO PR yet → `pnpm wp-start-update` (merge), `/wp-merge` (resolve), `pnpm wp-finish-update`. An OPEN PR? then you MUST use `pnpm wp-start-upsert-pr` → `/wp-merge` → `pnpm wp-finish-upsert-pr` (the merge rewrites the branch, so the PR must be re-pointed in the same run). Never mix a start from one pair with a finish from the other.'),
             new Option('Disable in webpieces.config.json under hookGuards → branch-state-guard (mode OFF) if intentional — that one key governs the Write, Read and Bash halves of this policy together.'),
         ],
     );
@@ -160,6 +163,9 @@ export class FeatureBranchGuardRule extends FileRuleBase<BranchStateGuardConfig>
         if (status.conflict) {
             return this.block(ctx, branch, 'main-moved-conflict', this.conflictMessage(judged, status.conflictFiles, status.openPr), cache);
         }
+        // State 5: the branch itself is too far behind origin/main (L2 row 15). `null` = keep judging.
+        const tooFarBehind = this.judgeBranchDistance(ctx, judged, status, cache);
+        if (tooFarBehind !== null) return tooFarBehind;
         // NOT-MERGED, or NOT-ASKED? `branchAlreadyMerged: false` is produced both by "this branch has
         // no merged PR" and by "the forge could not be reached" (`gh` missing, unauthenticated,
         // rate-limited, offline). Same allow either way — never block on data you could not establish
@@ -170,6 +176,52 @@ export class FeatureBranchGuardRule extends FileRuleBase<BranchStateGuardConfig>
         // forge downgrades this to an abstention rather than leaving it a clean approval.
         if (!status.forgeReachable) return this.failOpen(ctx, branch, 'no-forge', cache);
         return this.allow(ctx, branch, 'clean-feature-branch', cache);
+    }
+
+    /**
+     * L2 ROW 15 (issue #1431): a FEATURE branch more than `featureBranchMaxCommitsBehind` commits behind
+     * origin/main. Without it a branch could go stale for its whole life — old `@webpieces` pins, old
+     * generated graphs, old neighbouring code — and only meet main at PR time, when the merge is as large
+     * as it can get. Only Write/Edit are stopped (this guard is file-scoped and never sees Read or Bash),
+     * so the agent can still look around and run the cure.
+     *
+     * Returns null when this row does not decide the call, so check() keeps judging (the healthy-branch
+     * tail). An UNKNOWN distance — an older cache, or git could not count — also returns null: never
+     * block on data that was not established, and the tail still logs the call.
+     *
+     * The threshold is read straight from config, with NO fallback: the field is schema-required, so a
+     * config without it never loaded (.claude/rules/no-rule-defaults.md).
+     */
+    private judgeBranchDistance(ctx: FileContext, judged: JudgedTree, status: MainSyncStatus, cache: string): readonly Violation[] | null {
+        const behind = status.headCommitsBehind;
+        const max = this.config.featureBranchMaxCommitsBehind;
+        if (behind === null || behind <= max) return null;
+        const distance = `${cache} behind=${String(behind)} max=${String(max)}`;
+        // Row 3: a 3-point merge is being resolved in this tree. The update this row demands is the
+        // thing in progress, so blocking the edits that finish it would wedge the cure.
+        if (findUnvalidatedMerge(judged.root) !== null) return this.exempt(ctx, judged.branch, 'merge-in-progress (L4 owns this state)', distance);
+        return this.block(ctx, judged.branch, 'feature-branch-too-far-behind', this.tooFarBehindMessage(judged, behind, max, status.openPr), distance);
+    }
+
+    /**
+     * The row-15 cure, told for the PR state the cache knows. An open PR removes the choice:
+     * `wp-start-update` refuses there, so only the PR flow is printed. With no PR KNOWN (`openPr` is ''
+     * both for "none" and for "the forge could not be asked") both are printed, with the condition.
+     */
+    private tooFarBehindMessage(judged: JudgedTree, behind: number, max: number, openPr: string): string {
+        const lines = [
+            judged.header(),
+            `Blocked: \`${judged.branch}\` is ${String(behind)} commits behind origin/main, more than`
+                + ` branch-state-guard.featureBranchMaxCommitsBehind=${String(max)}. Update from main before editing`
+                + ' further, so you build and test against current code. Reads and Bash are still allowed.',
+        ];
+        if (openPr !== '') {
+            lines.push(`An open PR (#${openPr}) tracks this branch, so update through the PR flow: ${judged.pnpmCure('wp-start-upsert-pr')}`);
+        } else {
+            lines.push(`No PR tracks this branch: ${judged.pnpmCure('wp-start-update')}`);
+            lines.push(`If a PR does track it, use ${judged.pnpmCure('wp-start-upsert-pr')} instead (wp-start-update refuses there).`);
+        }
+        return lines.join('\n');
     }
 
     /**

@@ -228,10 +228,10 @@ function fieldErrors(
             if (capError) errors.push(capError);
         } else if (
             ruleName === 'branch-state-guard' &&
-            key === 'maxCommitsBehind' &&
+            (key === 'maxCommitsBehind' || key === 'featureBranchMaxCommitsBehind') &&
             (!Number.isInteger(value) || (value as number) < 0)
         ) {
-            errors.push('[branch-state-guard] "maxCommitsBehind" must be a non-negative integer.');
+            errors.push(`[branch-state-guard] "${key}" must be a non-negative integer.`);
         }
     }
     return errors;

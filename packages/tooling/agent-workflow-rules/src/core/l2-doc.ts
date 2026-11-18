@@ -207,6 +207,12 @@ function renderTable(): string[] {
         'numbers are identity — they are logged as `row=` and cited here — so renumbering 6-10 to slot it in',
         'would silently re-point every reference. L1 does the same with its row 8.',
         '',
+        'Row 15 is the FEATURE-branch twin of rows 6/7 (issue #1431): the refresher caches how far the',
+        'branch tip is behind `origin/main` (`headCommitsBehind`), and above the REQUIRED',
+        '`branch-state-guard.featureBranchMaxCommitsBehind` (seeded 20) Write/Edit are blocked — Read and',
+        'Bash stay open so the cure runs. Unknown distance allows; a `/hotfix/` branch is exempt by row 14,',
+        'an unvalidated merge marker by row 3, and `main` itself belongs to rows 5-7.',
+        '',
     ];
 }
 

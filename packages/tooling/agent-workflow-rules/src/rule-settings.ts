@@ -25,6 +25,7 @@ export const recommendedSeeds: Readonly<Record<string, ConfigObject>> = {
         "mode": "ON",
         "turnOffRuleUntilEpoch": 0,
         "turnOffRuleWhileOnBranch": null,
-        "maxCommitsBehind": 5
+        "maxCommitsBehind": 5,
+        "featureBranchMaxCommitsBehind": 20
     }
 };

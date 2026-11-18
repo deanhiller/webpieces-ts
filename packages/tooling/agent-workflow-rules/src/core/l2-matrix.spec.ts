@@ -47,15 +47,15 @@ function reasonLiteralsIn(source: string): readonly string[] {
 }
 
 describe('L2 rows — the table itself', () => {
-    it('has fourteen rows with unique numbers, in first-match order', () => {
-        expect(L2_ROWS).toHaveLength(14);
+    it('has fifteen rows with unique numbers, in first-match order', () => {
+        expect(L2_ROWS).toHaveLength(15);
         // The design's 1-5, then the name-only hotfix exemption (14), then the cache divider, then the
         // two composition rows, then 6-10. The divider is numbered 11, the composition rows 12/13 and
         // the hotfix row 14, all PRINTED in position, because row
         // numbers are identity: they are logged as `row=` and cited in the doc, so renumbering to slot
         // them in would silently re-point every reference.
-        expect(L2_ROWS.map((r: L2Row): number => r.num)).toEqual([1, 2, 3, 4, 5, 14, 11, 12, 13, 6, 7, 8, 9, 10]);
-        expect(new Set(L2_ROWS.map((r: L2Row): number => r.num)).size).toBe(14);
+        expect(L2_ROWS.map((r: L2Row): number => r.num)).toEqual([1, 2, 3, 4, 5, 14, 11, 12, 13, 6, 7, 8, 9, 15, 10]);
+        expect(new Set(L2_ROWS.map((r: L2Row): number => r.num)).size).toBe(15);
     });
 
     it('puts the on-main block ABOVE the cache divider — the most load-bearing order in the table', () => {
@@ -87,7 +87,7 @@ describe('L2 rows — the table itself', () => {
     it('gives every blocking row a LITERAL cure, and every allowing row none', () => {
         for (const row of L2_ROWS) {
             const blocking = row.action.kind === 'block';
-            expect(blocking, `row ${row.num}`).toBe([2, 5, 6, 8, 9, 13].includes(row.num));
+            expect(blocking, `row ${row.num}`).toBe([2, 5, 6, 8, 9, 13, 15].includes(row.num));
             if (blocking) {
                 // A cure that points at documentation cannot be tested for reachability — see L0's
                 // cure-reachability discipline, which caught a fault prescribing a renamed-away bin.

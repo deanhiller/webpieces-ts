@@ -2,7 +2,7 @@
 // L2 — the BRANCH-STATE layer, as data.
 //
 // L2 answers one question: *may I work here, and is what I read current?* Drawn as a decision matrix
-// that is THIRTEEN ordered rows plus one terminal fail-open row, first match wins.
+// that is FOURTEEN ordered rows plus one terminal fail-open row, first match wins.
 //
 // This module holds those rows, l2-doc.ts renders them into guards/L2-branch-state.md, and a unit test
 // (l2-matrix.spec.ts) locks that file byte-identical to the renderer — the same mechanism that already
@@ -41,10 +41,10 @@ export {
 } from './l2-row';
 
 /**
- * THE FOURTEEN L2 ROWS, in first-match-wins order.
+ * THE FIFTEEN L2 ROWS, in first-match-wins order.
  *
  * Rows 1-5 need NO cache and fire on call #1: rows 1, 2 and 4 are text matches, row 3 is a marker-file
- * scan, row 5 is one `git rev-parse`. Row 11 is the cache divider. Rows 6-10 all read the cache.
+ * scan, row 5 is one `git rev-parse`. Row 11 is the cache divider. Rows 6-10 and 15 all read the cache.
  *
  * THE ORDER OF ROW 5 IS THE MOST LOAD-BEARING THING IN THIS TABLE. Put "on main" BELOW the divider and
  * WRITES on `main` are permitted for the whole first call of every session — and permanently in a
@@ -94,6 +94,12 @@ export const L2_ROWS: readonly L2Row[] = [
             'EXEMPT: everything is permitted, which is exactly what lets row 9 be strict',
             'Resolve the conflicts, then `pnpm wp-finish-upsert-pr`',
             NO_ROW_EXIT),
+        new L2UseCase(35,
+            'Editing conflicted files during the update that row 15 demanded, while the branch is still counted far behind `origin/main`',
+            'merge marker unvalidated in this tree, and cached `headCommitsBehind` above `featureBranchMaxCommitsBehind`',
+            'EXEMPT, logged `ALLOW_EXEMPT`: the update row 15 asks for is the thing in progress, so blocking its edits would wedge the cure',
+            'Resolve the conflicts, then finish the merge',
+            'merge-in-progress (L4 owns this state)'),
     ]),
     new L2Row(4, ['B'], 'on the **skip list** — it gets you OUT, or tells you where you are', L2_ALLOW, '—', [
         new L2UseCase(6,
@@ -272,6 +278,23 @@ export const L2_ROWS: readonly L2Row[] = [
             '`pnpm wp-start-update`, resolve, `pnpm wp-finish-upsert-pr`',
             'main-moved-conflict'),
     ]),
+    // ROW 15 (issue #1431) sits between the collision row and the healthy row: a feature branch with a
+    // fork point and no collision can still be too far behind `origin/main`. `E` only — Read and Bash stay
+    // open so the agent can look around and run the cure. Numbered 15 because numbers are identity.
+    new L2Row(15, ['E'], 'on a feature branch farther behind `origin/main` than `featureBranchMaxCommitsBehind`', L2_BLOCK, '`pnpm wp-start-update`, or `pnpm wp-start-upsert-pr` when a PR is open', [
+        new L2UseCase(33,
+            'An Edit on a branch cut weeks ago, 40 commits behind `origin/main`, with no PR yet',
+            'feature branch, cached `headCommitsBehind` above `featureBranchMaxCommitsBehind` (seeded 20), no open PR',
+            'BLOCK Write/Edit only: building and testing against old pins, old generated graphs and old neighbouring code is how a branch meets main at PR time with the largest possible merge. An unknown distance allows',
+            '`pnpm wp-start-update`',
+            'feature-branch-too-far-behind'),
+        new L2UseCase(34,
+            'The same Edit on a branch whose PR is already open',
+            'feature branch beyond the threshold, an open PR tracks it',
+            'BLOCK, and the message prints ONLY the PR flow, because `pnpm wp-start-update` refuses when a PR tracks the branch',
+            '`pnpm wp-start-upsert-pr`',
+            'feature-branch-too-far-behind'),
+    ]),
     new L2Row(10, ['B', 'R', 'E'], 'healthy feature branch', L2_ALLOW, '—', [
         new L2UseCase(22,
             'Ordinary work on a branch cut from a current `origin/main`',
@@ -335,6 +358,10 @@ const EXACT_REASON_ROWS: Record<string, number> = {
     // Row 9 — the two unhealthy-fork states.
     'no-fork-point': 9,
     'main-moved-conflict': 9,
+    // Row 15 — a feature branch too far behind origin/main (#1431), and its merge-resolution exemption,
+    // which is row 3's state judged from the merge marker.
+    'feature-branch-too-far-behind': 15,
+    'merge-in-progress (L4 owns this state)': 3,
     // Row 10 — healthy, and the state-B guard's "this is not my state" hand-off, which is the same
     // verdict about the same tree.
     'clean-feature-branch': 10,

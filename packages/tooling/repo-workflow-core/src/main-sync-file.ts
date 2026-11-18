@@ -45,6 +45,11 @@ export class MainSyncStatus {
     // Computed by the detached refresher as local main..origin/main. Null means an older cache or git
     // could not establish the distance; stale-main threshold checks fail open in that state.
     commitsBehind: number | null = null;
+    // Computed by the detached refresher as HEAD..origin/main in the tree that has THIS branch checked
+    // out: how many origin/main commits the branch itself lacks. Distinct from `commitsBehind`, which is
+    // about LOCAL main. Read by feature-branch-guard's `featureBranchMaxCommitsBehind` (L2 row 15). Null
+    // means an older cache or git could not establish it, and that guard then fails open.
+    headCommitsBehind: number | null = null;
     /**
      * Did the forge answer when this entry was computed? See PullRequestIndex.forgeReachable.
      *
@@ -175,6 +180,7 @@ interface RawStatus {
     openPr?: string;
     localMain?: string;
     commitsBehind?: number | null;
+    headCommitsBehind?: number | null;
     forgeReachable?: boolean;
 }
 
@@ -367,11 +373,14 @@ export class MainSyncFileStore {
         );
         status.openPr = raw.openPr ?? '';
         status.localMain = raw.localMain ?? '';
-        status.commitsBehind = typeof raw.commitsBehind === 'number'
-            && Number.isInteger(raw.commitsBehind) && raw.commitsBehind >= 0
-            ? raw.commitsBehind
-            : null;
+        status.commitsBehind = this.distanceOrNull(raw.commitsBehind);
+        status.headCommitsBehind = this.distanceOrNull(raw.headCommitsBehind);
         status.forgeReachable = raw.forgeReachable ?? true;
         return status;
+    }
+
+    // A cached commit distance is trusted only as a non-negative integer; anything else reads as unknown.
+    private distanceOrNull(raw: number | null | undefined): number | null {
+        return typeof raw === 'number' && Number.isInteger(raw) && raw >= 0 ? raw : null;
     }
 }

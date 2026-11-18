@@ -76,7 +76,7 @@ function findMarkerUnder(dir: string, depth: number): string | null {
 }
 
 // webpieces-disable no-function-outside-class -- module-level guard helper, matches the rest of this file
-function findUnvalidatedMerge(workspaceRoot: string): string | null {
+export function findUnvalidatedMerge(workspaceRoot: string): string | null {
     // LOCAL scope: the merge this guard blocks on is the one THIS worktree started. Another
     // worktree's in-flight merge must not block commits here — that was never the intent, and under a
     // shared merge-info dir it would be the behaviour.

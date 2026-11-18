@@ -102,7 +102,7 @@ const CODE_RULE_NAMES = [
 // Required fields beyond `mode` (the escape-hatch fields are all optional). Kept as data so adding
 // another required field is a one-line fixture change rather than a hunt through every test.
 const EXTRA_REQUIRED: Record<string, Record<string, unknown>> = {
-    'branch-state-guard': { maxCommitsBehind: 5 },
+    'branch-state-guard': { maxCommitsBehind: 5, featureBranchMaxCommitsBehind: 20 },
     // Schema-required so unattended branch deletion is never a silent default — see rule-configs.ts.
     // Schema-required (#1017): both are BEHAVIOUR, so a config states them rather than inheriting one.
     'branch-creation-guard': { autoReapMergedBranches: false, subBranchNaming: 'feature/<t>/<d>' },
