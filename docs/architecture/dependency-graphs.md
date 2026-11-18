@@ -150,6 +150,7 @@ processes (which service serves the API another service calls).
 |---|---|
 | Compile graph (source of truth) | `architecture/dependencies.json` |
 | Inferred runtime graph | `architecture/runtime-dependencies.json` |
+| Compact views for agents to read (#1429) | `architecture/build-deps.md`, `architecture/runtime-deps.md` — generated from the two JSON files by `architecture:generate` (`nx-webpieces-rules/src/lib/architecture-markdown.ts`), committed, and checked against them by `validate-architecture-unchanged` |
 | Runtime derivation | `nx-webpieces-rules/src/lib/runtime-graph.ts` |
 | Runtime visualization | `nx-webpieces-rules/src/lib/runtime-visualizer.ts`, `executors/visualize-runtime/` |
 | Per-process DI DAG | `nx-webpieces-rules/src/lib/di-graph/analyzer.ts`, `model.ts` |

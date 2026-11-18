@@ -35,6 +35,7 @@ import type { RuntimeGraph } from '../../lib/runtime-graph-model';
 import * as path from 'path';
 import { deriveRuntimeGraphReport, saveRuntimeGraph } from '../../lib/runtime-graph';
 import { printAutoHiddenServers } from '../../lib/runtime-participant-resolver';
+import { ArchitectureMarkdownFiles } from '../../lib/architecture-markdown';
 import { toError } from '../../toError';
 
 export interface GenerateExecutorOptions {
@@ -233,6 +234,11 @@ export class ArchitectureGenerator {
             scanned.externalSystems,
             scanned.remoteServices,
         );
+
+        // Step 5b: the compact, committed markdown views (#1429), rendered from the JSON just written —
+        // the same render validate-architecture-unchanged checks them against.
+        for (const written of new ArchitectureMarkdownFiles().write(workspaceRoot, graphPath ?? DEFAULT_GRAPH_PATH))
+            console.log(`✅ Wrote ${written}`);
 
         await this.refreshImpact(path.dirname(vizPaths.htmlPath), workspaceRoot, new LiveGraphs(enhancedGraph, runtimeGraph));
 

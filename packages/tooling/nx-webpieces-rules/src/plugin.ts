@@ -471,7 +471,8 @@ function createWorkspaceTargetsWithoutPrefix(
     return targets;
 }
 
-function createGenerateTarget(graphPath: string): TargetConfiguration {
+// webpieces-disable no-function-outside-class -- Nx inference plugin target factory, exported for plugin.spec.ts like createCiTarget
+export function createGenerateTarget(graphPath: string): TargetConfiguration {
     return {
         executor: '@webpieces/nx-webpieces-rules:generate',
         cache: false,
@@ -480,12 +481,14 @@ function createGenerateTarget(graphPath: string): TargetConfiguration {
             '{workspaceRoot}/architecture/dependencies.html',
             '{workspaceRoot}/architecture/apis',
             '{workspaceRoot}/architecture/runtime-dependencies.json',
+            '{workspaceRoot}/architecture/build-deps.md',
+            '{workspaceRoot}/architecture/runtime-deps.md',
         ],
         options: { graphPath },
         metadata: {
             technologies: ['nx'],
             description:
-                'Generate the architecture dependency graph (+ clickable dependencies.html) and the runtime microservice graph',
+                'Generate the architecture dependency graph (+ clickable dependencies.html), the runtime microservice graph, and their compact build-deps.md / runtime-deps.md views',
         },
     };
 }

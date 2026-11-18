@@ -54,6 +54,8 @@ tests into a byproduct of running the app.
 is *derived*: it distinguishes **`implements`** from **`uses`** per API, then infers runtime edges
 that don't exist at compile time (service Z `uses` api Y, service X `implements` Y ⇒ a runtime edge
 Z→X). `visualize-runtime` draws it, rendering pub-sub as a producer → queue-cylinder → consumer.
+`architecture/build-deps.md` and `architecture/runtime-deps.md` are compact, committed views of the
+two files (one line per project / per call) — what an agent reads first.
 
 ---
 

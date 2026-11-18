@@ -131,6 +131,8 @@ describe('the fallback table classifies what the webpieces nx plugin declares as
         expect(matchesAnyGlob('architecture/dependencies.json', FALLBACK_GENERATED_PATHS)).toBe(true);
         expect(matchesAnyGlob('architecture/runtime-dependencies.json', FALLBACK_GENERATED_PATHS)).toBe(true);
         expect(matchesAnyGlob('architecture/apis/SaveApi.json', FALLBACK_GENERATED_PATHS)).toBe(true);
+        expect(matchesAnyGlob('architecture/build-deps.md', FALLBACK_GENERATED_PATHS)).toBe(true);
+        expect(matchesAnyGlob('architecture/runtime-deps.md', FALLBACK_GENERATED_PATHS)).toBe(true);
     });
 
     it('does NOT match ordinary source or a hand-written doc under architecture/', async () => {

@@ -1,15 +1,19 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { dotWebpieces, GitProcessApi, NativeProcessApi } from '@webpieces/tooling-common';
-import { CliExitError, SyncFlowGuidance, MERGE_PROCESS_DOC, MergeProcessText, MergeRun, loadTemplate } from '@webpieces/rules-config';
+import { CliExitError, matchesAnyGlob, SyncFlowGuidance, MERGE_PROCESS_DOC, MergeProcessText, MergeRun, loadTemplate } from '@webpieces/rules-config';
 import { MutationVerb, BranchMutationEvent, logBranchMutation } from '@webpieces/repo-workflow-core';
 import { injectable, bindingScopeValues } from 'inversify';
 import { GatherInfo } from '../git-gatherInfo';
 import { BranchNaming } from './branch-naming';
 import { GitExec } from './git-exec';
 import { MergeState, MergeMarker } from './merge-state';
+import { FALLBACK_GENERATED_PATHS } from './generated-artifact-registry';
 
 const SEP = '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n';
+// architecture/* is generated (#1429): regenerating is the resolution, a hand merge is a guess.
+export const ARCHITECTURE_CONFLICT_HINT =
+    "architecture/* conflicts: don't hand-merge — run pnpm nx run architecture:generate, then git add architecture/";
 
 interface HashPoints {
     hashForkPoint: string;
@@ -232,6 +236,10 @@ export class MergeStart {
         process.stdout.write(`   3. run  pnpm ${finishCommand}  — it validates, commits, and finalizes (do NOT git commit/push yourself)\n\n`);
         process.stdout.write('Conflicted files:\n');
         for (const file of conflictedFiles) process.stdout.write(`  - ${file}\n`);
+        // Only the GENERATED architecture files: a hand-written doc under architecture/ is merged by hand.
+        const generated = FALLBACK_GENERATED_PATHS.filter((p: string): boolean => p.startsWith('architecture/'));
+        if (conflictedFiles.some((file: string): boolean => matchesAnyGlob(file, generated)))
+            process.stdout.write(`\n${ARCHITECTURE_CONFLICT_HINT}\n`);
         process.stdout.write('\n' + SEP);
     }
 
