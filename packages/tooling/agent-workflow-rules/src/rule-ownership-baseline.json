@@ -150,6 +150,12 @@
         "nullable": false,
         "nonEmpty": false
       },
+      "featureBranchMaxCommitsBehind": {
+        "type": "number",
+        "optional": false,
+        "nullable": false,
+        "nonEmpty": false
+      },
       "turnOffRuleUntilEpoch": {
         "type": "number",
         "optional": false,
@@ -180,7 +186,8 @@
       "mode": "ON",
       "turnOffRuleUntilEpoch": 0,
       "turnOffRuleWhileOnBranch": null,
-      "maxCommitsBehind": 5
+      "maxCommitsBehind": 5,
+      "featureBranchMaxCommitsBehind": 20
     }
   }
 }

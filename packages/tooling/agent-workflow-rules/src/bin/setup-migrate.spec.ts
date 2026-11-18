@@ -213,6 +213,8 @@ describe('migrate', () => {
             branchNamingConvention: '{whoami}/{feature}',
             hangTimeoutMinutes: 9,
             maxCommitsBehind: 5,
+            // A required field the legacy keys never carried arrives as its reviewed seed (#1431).
+            featureBranchMaxCommitsBehind: 20,
             turnOffRuleUntilEpoch: 0,
             turnOffRuleWhileOnBranch: null,
         });

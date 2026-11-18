@@ -227,6 +227,8 @@ export class MainSyncStatusService {
         status.openPr = openPr;
         status.localMain = localMain;
         status.commitsBehind = await this.commitDistance(repoRoot, localMain, originMain.out);
+        // How far THIS branch's tip is behind origin/main — feature-branch-guard's L2 row 15.
+        status.headCommitsBehind = await this.commitDistance(repoRoot, featureHead, originMain.out);
         return status;
     }
 
@@ -266,6 +268,7 @@ export class MainSyncStatusService {
             );
             status.localMain = await this.localMainHash(repoRoot);
             status.commitsBehind = 0;
+            status.headCommitsBehind = 0;
             this.writeMainSyncStatus(repoRoot, status);
         } catch (err: unknown) {
             const error = toError(err);
@@ -319,10 +322,11 @@ export class MainSyncStatusService {
         return result.ok ? result.out : '';
     }
 
+    // `from..originMain`: how many origin/main commits `from` (local main, or a branch tip) lacks.
     // Slow-path only: the detached refresher calls this after fetching. Guards never count commits.
-    private async commitDistance(repoRoot: string, localMain: string, originMain: string): Promise<number | null> {
-        if (localMain === '' || originMain === '') return null;
-        const result = await this.git(repoRoot, ['rev-list', '--count', `${localMain}..${originMain}`]);
+    private async commitDistance(repoRoot: string, from: string, originMain: string): Promise<number | null> {
+        if (from === '' || originMain === '') return null;
+        const result = await this.git(repoRoot, ['rev-list', '--count', `${from}..${originMain}`]);
         if (!result.ok || !/^\d+$/.test(result.out)) return null;
         return Number(result.out);
     }

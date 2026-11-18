@@ -103,6 +103,7 @@ the interval, so neither can launch a refresh on every call.
 | 7 | `B R` | on `main`, current or within `maxCommitsBehind` | 1 allow | — |
 | 8 | `B R E` | on a branch whose PR is **already merged** | 4 block | `git fetch origin main && git checkout -b <new> origin/main` |
 | 9 | `B R E` | no fork point with `origin/main`, or `origin/main` moved and collided with your files | 4 block | `pnpm wp-start-update`, or `pnpm wp-start-upsert-pr` when a PR is open |
+| 15 | `E` | on a feature branch farther behind `origin/main` than `featureBranchMaxCommitsBehind` | 4 block | `pnpm wp-start-update`, or `pnpm wp-start-upsert-pr` when a PR is open |
 | 10 | `B R E` | healthy feature branch | 1 allow | — |
 
 Rows 1-5 need **no cache** and fire on call #1: rows 1, 2 and 4 are text matches, row 3 is a
@@ -113,6 +114,12 @@ another branch, or the forge could not be reached, evaluation STOPS at row 11 an
 Row 11 is numbered after row 10 and PRINTED between 5 and 6, and that is not a mistake. Row
 numbers are identity — they are logged as `row=` and cited here — so renumbering 6-10 to slot it in
 would silently re-point every reference. L1 does the same with its row 8.
+
+Row 15 is the FEATURE-branch twin of rows 6/7 (issue #1431): the refresher caches how far the
+branch tip is behind `origin/main` (`headCommitsBehind`), and above the REQUIRED
+`branch-state-guard.featureBranchMaxCommitsBehind` (seeded 20) Write/Edit are blocked — Read and
+Bash stay open so the cure runs. Unknown distance allows; a `/hotfix/` branch is exempt by row 14,
+an unvalidated merge marker by row 3, and `main` itself belongs to rows 5-7.
 
 ### The one rule that explains the tool column
 
@@ -199,6 +206,7 @@ under. So a case whose row is wrong fails the build rather than misinforming a r
 | 3 | `git checkout main` after a merge, to start the next piece of work | about to land on whatever local `main` you last had — 157 commits behind, in the incident | BLOCK: decided from command TEXT alone, before the checkout, because the only `main` this could measure is the one it is about to leave | `pnpm wp-sync-main` — checkout, pull, reap dead branches/worktrees, sweep orphan directories, in one command (hand-rolled, the pull must be in the SAME command as the checkout) |
 | 4 | The same command inside a linked worktree, where `git checkout main` fatals anyway | linked worktree — `main` is already checked out in the primary clone | BLOCK, and the message prints the worktree form rather than a cure git would refuse | `git fetch origin main`, then work off `origin/main` |
 | 5 | Reading and editing conflicted files during a 3-point merge, on a branch row 9 would block | merge markers on disk — `pnpm wp-start-update` has run and not finished | EXEMPT: everything is permitted, which is exactly what lets row 9 be strict | Resolve the conflicts, then `pnpm wp-finish-upsert-pr` |
+| 35 | Editing conflicted files during the update that row 15 demanded, while the branch is still counted far behind `origin/main` | merge marker unvalidated in this tree, and cached `headCommitsBehind` above `featureBranchMaxCommitsBehind` | EXEMPT, logged `ALLOW_EXEMPT`: the update row 15 asks for is the thing in progress, so blocking its edits would wedge the cure | Resolve the conflicts, then finish the merge |
 | 6 | `git status` / `gh pr view` while blocked, to work out where you are | any state — orientation is never "working here" | ALLOW: metadata tells you where you are without putting stale file CONTENT in context | None needed |
 | 7 | `git stash` when `git checkout -b <new> origin/main` refuses because `origin/main` touched the same files you edited | on a stale `main` or a merged branch, dirty tree, with an overlapping upstream change | ALLOW: the cure for the row that blocked you must itself never be blocked — and this is the residual step that makes rows 6 and 8 safe to block on a dirty tree | None needed — then re-run the checkout and `git stash pop` |
 | 28 | `gh pr close 123`, `gh pr comment`, `gh api …` or a `curl` while parked on a stale `main` or a merged branch | blocked state, running something that touches GitHub or a URL and nothing in this tree | ALLOW: the skip list asks one question — does this read or write repo CONTENT? `gh` talks to GitHub and `curl`/`wget` talk to a network, so the branch state has nothing to say about them. The forms that write a local file (`gh repo clone`, `gh pr checkout`, `curl -o`, any `> file`) are excluded, and `gh pr create`/`merge` remain governed by their own guards | None needed |
@@ -224,6 +232,8 @@ under. So a case whose row is wrong fails the build rather than misinforming a r
 | 19 | A shell-only session sails through on a merged branch | merged branch, Bash only — both FILE guards are file-scoped, so Bash reached neither | BLOCK: `merged-branch-bash-guard` exists because `branchAlreadyMerged` was being computed and logged on that very path, then thrown away | `git fetch origin main && git checkout -b <new> origin/main` |
 | 20 | Your branch and `origin/main` share no merge base — usually a branch cut from a squashed-away tip | no fork point | BLOCK: nothing built on this branch can be reasoned about relative to main | `pnpm wp-start-update`, or `pnpm wp-start-upsert-pr` when a PR is open |
 | 21 | `origin/main` moved and changed the same files you edited | main-moved collision | BLOCK — and row 3 then exempts everything once the merge starts, which is what makes this safe | `pnpm wp-start-update`, resolve, `pnpm wp-finish-upsert-pr` |
+| 33 | An Edit on a branch cut weeks ago, 40 commits behind `origin/main`, with no PR yet | feature branch, cached `headCommitsBehind` above `featureBranchMaxCommitsBehind` (seeded 20), no open PR | BLOCK Write/Edit only: building and testing against old pins, old generated graphs and old neighbouring code is how a branch meets main at PR time with the largest possible merge. An unknown distance allows | `pnpm wp-start-update` |
+| 34 | The same Edit on a branch whose PR is already open | feature branch beyond the threshold, an open PR tracks it | BLOCK, and the message prints ONLY the PR flow, because `pnpm wp-start-update` refuses when a PR tracks the branch | `pnpm wp-start-upsert-pr` |
 | 22 | Ordinary work on a branch cut from a current `origin/main` | healthy feature branch | ALLOW — the state every other row exists to push you back into | None needed |
 | 23 | `stale-main-bash-guard` sees a feature branch and hands off | not on `main` — state B belongs to `merged-branch-bash-guard` | ALLOW: the same verdict about the same tree, logged by the guard that is not responsible for it | None needed |
 
