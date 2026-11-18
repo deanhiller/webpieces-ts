@@ -1218,6 +1218,29 @@ def _ct_marker(cmd):
     return None
 
 
+def ct_subagent_branch_marks(agent, first, session, marks):
+    """Open a worktree subagent's cycle at its SPAWN, not at a `git checkout -b` it never runs.
+
+    A `/full-cycle` worker's branch (`worktree-agent-<id>`) is created by the Claude Code harness
+    (isolation:"worktree"), so its transcript carries no branch marker and phase 1 went missing.
+    Its sidecar `agent-<id>.meta.json` names the worktree (`worktreePath` / `worktreeBranch`), and
+    its first transcript row IS the moment that branch came into being. So: a synthetic `branch`
+    mark at that first timestamp, and any explicit `branch` mark before the subagent's first other
+    stage is dropped (a worker that renames its branch with `checkout -b` is still in phase 1).
+    Main-agent sessions, reviewers and non-worktree subagents are returned unchanged.
+    """
+    if (not agent or agent.get("is_reviewer") or first is None
+            or not (agent.get("worktree") or agent.get("worktree_branch"))):
+        return marks
+    ordered = sorted(marks, key=lambda m: m["ts"])
+    first_other = next((m["ts"] for m in ordered if m["stage"] != "branch"), None)
+    kept = [m for m in ordered
+            if not (m["stage"] == "branch" and (first_other is None or m["ts"] < first_other))]
+    spawn = {"ts": first.timestamp(), "stage": "branch", "session": session,
+             "source": "subagent-spawn", "branch": agent.get("worktree_branch")}
+    return [spawn] + kept
+
+
 def _ct_close(ct, repo, session, harness, first, last, ct_iv, ct_marks):
     """Hand one finished session to the accumulator. No-op when `cycletime` was not asked for."""
     if ct is None:
@@ -1825,6 +1848,7 @@ def audit_transcripts(repos, hours, max_sessions=400, ret=None, ct=None):
                 "model": meta.get("model"),
                 "description": (meta.get("description") or "")[:80],
                 "worktree": meta.get("worktreePath"),
+                "worktree_branch": meta.get("worktreeBranch"),
                 "spawn_depth": meta.get("spawnDepth"),
             }
             sub = _scan_session(repo, path.parent, path, since, tool_hist, blocked_rules,
@@ -2148,6 +2172,7 @@ def _scan_session(repo, d, path, since, tool_hist, blocked_rules, ret=None, ct=N
 
     if first is None or last is None:
         return None
+    ct_marks = ct_subagent_branch_marks(agent, first, path.stem, ct_marks)
     _ct_close(ct, repo, path.stem, AI_CLAUDE, first, last, ct_iv, ct_marks)
     # attribute redundant-build time by average build duration
     avg_build = (build_seconds / builds) if builds else 0.0
