@@ -128,6 +128,49 @@ export class ApiJsonSchema {
         const extra = schema.additionalProperties;
         return extra === false || (typeof extra === 'object' && extra !== null);
     }
+
+    /**
+     * A copy of `schema` with every `additionalProperties: false` REMOVED, at every depth — the form
+     * an MCP tool's `outputSchema` is PUBLISHED in (#1441). Strict in, tolerant out:
+     *
+     * - An MCP client (Claude Code, claude.ai, a ChatGPT connector) caches a tool's `outputSchema`
+     *   when it connects and validates every `structuredContent` against that cached copy. A CLOSED
+     *   output schema therefore turns ADDING a response field into a break for every client already
+     *   connected: the server sends the new key and the cached schema refuses it. Open, adding a
+     *   field is additive and safe; removing, renaming or narrowing one is still a break.
+     * - An `inputSchema` is NEVER opened. Refusing an unknown request key catches a caller's typo.
+     * - A typed map (`additionalProperties: <schema>`) stays a typed map — only its value schema is
+     *   opened, like every other nested object.
+     *
+     * The input is not modified. The server keeps validating its OWN result against the schema it
+     * was handed, and {@link ApiJsonSchemaValidator} refuses an undeclared key whether or not the
+     * schema says `additionalProperties: false`, so opening what is published loosens nothing the
+     * server checks.
+     */
+    // webpieces-disable no-function-outside-class -- static transform of this class (see baseTypeOf)
+    static openForClients(schema: ApiJsonSchema): ApiJsonSchema {
+        const open = Object.assign(new ApiJsonSchema(schema.type), schema);
+        const extra = schema.additionalProperties;
+        if (extra === false) {
+            delete open.additionalProperties;
+        } else if (typeof extra === 'object' && extra !== null) {
+            open.additionalProperties = ApiJsonSchema.openForClients(extra);
+        }
+        if (schema.properties !== undefined) {
+            const properties: Record<string, ApiJsonSchema> = {};
+            for (const [name, child] of Object.entries(schema.properties)) {
+                properties[name] = ApiJsonSchema.openForClients(child);
+            }
+            open.properties = properties;
+        }
+        if (schema.items !== undefined) open.items = ApiJsonSchema.openForClients(schema.items);
+        if (schema.oneOf !== undefined) {
+            open.oneOf = schema.oneOf.map((branch: ApiJsonSchema) =>
+                ApiJsonSchema.openForClients(branch),
+            );
+        }
+        return open;
+    }
 }
 
 /**
@@ -325,6 +368,10 @@ export class ApiJsonSchemaValidator {
                 | ApiJsonSchema
                 | undefined;
             if (declared === undefined) {
+                // An undeclared key is refused unless the schema is a TYPED MAP — also when the
+                // schema is OPEN (no `additionalProperties`). That is deliberate (#1441): a tool's
+                // published outputSchema is opened for clients by `ApiJsonSchema.openForClients`,
+                // and the server still checks its OWN result exactly against what it declared.
                 if (typeof extra !== 'object' || extra === null) {
                     return new DtoValidationFailure(
                         `${path}.${key}`,

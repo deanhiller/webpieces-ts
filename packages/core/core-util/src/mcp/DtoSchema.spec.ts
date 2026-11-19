@@ -39,6 +39,42 @@ describe('ApiJsonSchema', () => {
     });
 });
 
+describe('ApiJsonSchema.openForClients (#1441)', () => {
+    it('removes additionalProperties:false at every depth, keeps typed maps, and leaves the input closed', () => {
+        const branch = new ObjectSchemaBuilder().required('kind', stringSchema()).build();
+        const union = new ApiJsonSchema();
+        union.oneOf = [branch];
+        const item = new ObjectSchemaBuilder().required('window', union).build();
+        const list = new ApiJsonSchema('array');
+        list.items = item;
+        const map = new ApiJsonSchema('object');
+        map.additionalProperties = new ObjectSchemaBuilder().required('n', stringSchema()).build();
+        const closed = new ObjectSchemaBuilder()
+            .required('orders', list)
+            .optional('byLocale', map)
+            .build();
+
+        const open = ApiJsonSchema.openForClients(closed);
+
+        expect(JSON.stringify(open)).not.toContain('"additionalProperties":false');
+        expect(open.required).toEqual(['orders']);
+        const openMap = open.properties!['byLocale'];
+        expect(ApiJsonSchema.isClosed(openMap)).toBe(true);
+        expect((openMap.additionalProperties as ApiJsonSchema).properties).toHaveProperty('n');
+        expect(open.properties!['orders'].items!.properties!['window'].oneOf![0].required).toEqual([
+            'kind',
+        ]);
+        // The schema the server validates against is untouched.
+        expect(closed.additionalProperties).toBe(false);
+        expect(branch.additionalProperties).toBe(false);
+        // The validator still refuses an undeclared key against the OPENED schema: opening what is
+        // published loosens nothing the server checks of its own result.
+        expect(messageOf(validator.validate(open, { orders: [], extra: 1 }))).toBe(
+            '$.extra is not allowed',
+        );
+    });
+});
+
 describe('ObjectSchemaBuilder', () => {
     it('builds a closed object, listing only the required names', () => {
         const schema = new ObjectSchemaBuilder()

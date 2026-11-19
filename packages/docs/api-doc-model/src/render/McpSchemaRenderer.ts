@@ -292,7 +292,11 @@ export class McpSchemaRenderer {
                 endpoint.additive,
             ),
             this.rootSchema(endpoint.request, where, 'request', undefined),
-            this.rootSchema(endpoint.response, where, 'response', endpoint.returnsDescription),
+            // OPEN for clients (#1441): a client caches the outputSchema at connect and validates
+            // every result against it, so a closed one made ADDING a response field a break.
+            ApiJsonSchema.openForClients(
+                this.rootSchema(endpoint.response, where, 'response', endpoint.returnsDescription),
+            ),
             endpoint.mcpTool!.profiles,
         );
     }
@@ -323,7 +327,8 @@ export class McpSchemaRenderer {
     }
 
     /**
-     * A tool's input/output schema: always a CLOSED OBJECT, because MCP publishes objects — and
+     * A tool's input/output schema: always an OBJECT, rendered CLOSED (the published `outputSchema` is
+     * then opened by {@link tool}, #1441), because MCP publishes objects — and
      * because a union at the ROOT of a tool schema is refused by the function-calling APIs that
      * consume it. Both OpenAI and Anthropic reject a top-level `oneOf`/`anyOf`/`allOf`, and a server
      * sends its WHOLE tool list on every request, so one such tool makes every request 400 and bricks
@@ -401,7 +406,8 @@ export class McpSchemaRenderer {
 
     /**
      * One object DTO. CLOSED (`additionalProperties: false`), with `required` written only when it is
-     * non-empty, so an all-optional DTO carries no empty list.
+     * non-empty, so an all-optional DTO carries no empty list. Closed is what an `inputSchema`
+     * publishes; an `outputSchema` is opened at every depth by `ApiJsonSchema.openForClients` (#1441).
      *
      * The cycle stop is `parents`, and it THROWS rather than truncating: an inline schema cannot
      * express a recursive DTO, and one that silently stopped a level down would publish a shape the

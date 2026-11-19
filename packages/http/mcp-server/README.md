@@ -73,6 +73,32 @@ refuses them for OpenAPI (#1292). The server serves the catalog's descriptions v
 `McpServedDescriptions.integration.spec.ts` boots it on the partner-api golden catalog and reads them
 back through `tools/list`.
 
+### `inputSchema` is closed, `outputSchema` is open (#1441)
+
+Strict in, tolerant out. Every object in an `inputSchema` carries `additionalProperties: false`, so a
+caller's misspelled argument is refused instead of silently ignored. No object in a PUBLISHED
+`outputSchema` does, at any depth — not the response, not a nested DTO, not a union branch, not a
+typed map's value object (a `Record<string, V>` keeps `additionalProperties: <V's schema>`). The
+generator writes the catalog's `outputSchema` that way (`ApiJsonSchema.openForClients`), and
+`tools/list` and `projectCallToolResult` publish `RegisteredMcpTool.publishedOutputSchema`, opened the
+same way, whatever catalog the toolset was handed.
+
+Why: MCP clients — Claude Code, claude.ai, ChatGPT and other connectors — cache a tool's
+`outputSchema` when they connect and validate every `structuredContent` against that cached copy, and
+provider-hosted connectors do not reliably refresh it. A closed output schema made adding any response
+field a break for every session already connected. So the compatibility rule for a tool's response is:
+
+- **Adding a response field is additive and safe.** A client holding the old schema accepts it.
+- **Removing, renaming or narrowing one is breaking** (dropping a field, making a required field
+  optional or nullable, removing an enum value, changing a type). Treat it like any other breaking
+  contract change.
+
+The server itself stays strict: before sending a result it validates it against the catalog schema
+with `ApiJsonSchemaValidator`, which refuses a key the contract never declared whether or not the
+published schema is open — so a controller leaking an internal field still fails as an
+implementation error. `McpOpenOutputSchema.feature.spec.ts` proves both halves with the official SDK
+`Client`.
+
 Every `@Endpoint` declares one enum-backed operation, independent of its required HTTP verb
 argument: a GET may deliberately write and a POST may be a read.
 

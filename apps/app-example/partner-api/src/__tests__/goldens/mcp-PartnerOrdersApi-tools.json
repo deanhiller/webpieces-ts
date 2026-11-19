@@ -97,8 +97,7 @@
                     "required": [
                       "kind",
                       "from"
-                    ],
-                    "additionalProperties": false
+                    ]
                   },
                   {
                     "type": "object",
@@ -118,8 +117,7 @@
                     "required": [
                       "kind",
                       "estimateMinutes"
-                    ],
-                    "additionalProperties": false
+                    ]
                   }
                 ],
                 "discriminator": {
@@ -145,8 +143,7 @@
               "placedAt",
               "window",
               "labels"
-            ],
-            "additionalProperties": false
+            ]
           }
         },
         "nextFrom": {
@@ -156,8 +153,7 @@
       },
       "required": [
         "orders"
-      ],
-      "additionalProperties": false
+      ]
     },
     "profiles": [
       "default"

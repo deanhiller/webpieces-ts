@@ -27,6 +27,7 @@ normal endpoint filter chain, DTO validation, and safe error boundary.
 - Invoke local APIs through the ordinary proxy/filter chain with a target-bound, request-scoped `InvocationAuthentication` proof of verified ingress.
 - Invoke remote APIs through generated Node clients using OIDC plus trusted delegated user context.
 - Coordinate bounded list caches, request-scoped subscriptions, shutdown, and a pluggable event bus.
+- Publish every tool's `outputSchema` OPEN at every depth (`RegisteredMcpTool.publishedOutputSchema`, #1441) on tools/list and `projectCallToolResult`, while `inputSchema` stays closed and the server still validates its own result strictly — adding a response field is additive and safe for a client that cached the old schema.
 - Validate input/output DTO shapes and map every failure through the one `WpMcpErrorTranslator`,
   which has one method per boundary — `toBearerBoundaryResponse`, `toListError`, `toToolCallResult`
   (shared `ApiErrorBoundary.encode` classification and published text, requestId on every reply).
