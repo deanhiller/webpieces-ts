@@ -342,7 +342,6 @@ describe('WpMcpServer error boundary (WpMcpErrorTranslator)', () => {
                         type: 'object',
                         additionalProperties: {
                             type: 'object',
-                            additionalProperties: false,
                             properties: {
                                 translations: {
                                     type: 'object',
@@ -354,6 +353,8 @@ describe('WpMcpServer error boundary (WpMcpErrorTranslator)', () => {
                 },
             },
         });
+        // The map's VALUE object is published OPEN, like every response object (#1441).
+        expect(JSON.stringify(tool!['outputSchema'])).not.toContain('"additionalProperties":false');
         const result = await callTool('passages_find', { minWordsByLocale: { es: 3 } });
         const badInput = await callTool('passages_find', { minWordsByLocale: { es: 'three' } });
         const badOutput = await callTool('passages_find', { minWordsByLocale: { xx: 1 } });

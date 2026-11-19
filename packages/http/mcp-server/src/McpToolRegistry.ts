@@ -43,9 +43,24 @@ export class RegisteredMcpTool {
         public readonly authorization: AuthorizationRequirement<unknown>,
         public readonly binding: McpApiBinding,
         public readonly inputSchema: ApiJsonSchema,
+        /**
+         * The response schema exactly as the catalog holds it. The server validates its OWN result
+         * against this before sending it — never published; see {@link publishedOutputSchema}.
+         */
         public readonly outputSchema: ApiJsonSchema,
         public readonly profiles: readonly string[],
-    ) {}
+    ) {
+        this.publishedOutputSchema = ApiJsonSchema.openForClients(outputSchema);
+    }
+
+    /**
+     * What `tools/list` and `projectCallToolResult` publish as the tool's `outputSchema`: OPEN at every
+     * depth (#1441). A client caches it at connect and validates every result against it, so a closed
+     * copy made adding a response field a break for every connected session. Opened HERE, at the one
+     * wire boundary, so the invariant holds whatever catalog the toolset was handed — the generator
+     * already writes it open.
+     */
+    public readonly publishedOutputSchema: ApiJsonSchema;
 }
 
 /**

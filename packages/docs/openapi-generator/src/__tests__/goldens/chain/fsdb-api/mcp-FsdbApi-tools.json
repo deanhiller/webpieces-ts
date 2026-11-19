@@ -56,8 +56,7 @@
               "required": [
                 "voiceId",
                 "gender"
-              ],
-              "additionalProperties": false
+              ]
             },
             "narrator": {
               "type": "string",
@@ -72,8 +71,7 @@
             "passageId",
             "voice",
             "narrator"
-          ],
-          "additionalProperties": false
+          ]
         },
         "descriptions": {
           "type": "object",
@@ -86,15 +84,13 @@
           },
           "required": [
             "key"
-          ],
-          "additionalProperties": false
+          ]
         }
       },
       "required": [
         "passage",
         "descriptions"
-      ],
-      "additionalProperties": false
+      ]
     },
     "profiles": [
       "default"

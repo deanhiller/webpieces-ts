@@ -254,7 +254,7 @@ export class McpToolset {
             title: tool.title,
             description: tool.description,
             inputSchema: tool.inputSchema as Tool['inputSchema'],
-            outputSchema: tool.outputSchema as Tool['outputSchema'],
+            outputSchema: tool.publishedOutputSchema as Tool['outputSchema'],
             annotations: new McpPublishedToolAnnotations(tool),
             _meta: { webpiecesRegistryRevision: this.revision },
         };
@@ -285,7 +285,7 @@ export class McpToolset {
             result._meta = this.translator.resultMeta(McpCorrelation.requestId());
             return server.server.projectCallToolResult(
                 result,
-                tool.outputSchema as Record<string, DtoValue>,
+                tool.publishedOutputSchema as Record<string, DtoValue>,
             );
         }) as Promise<CallToolResult>;
     }

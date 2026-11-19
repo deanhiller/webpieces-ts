@@ -44,8 +44,7 @@
       },
       "required": [
         "phase"
-      ],
-      "additionalProperties": false
+      ]
     },
     "profiles": [
       "admin"
@@ -194,8 +193,7 @@
               "phase",
               "totalCents",
               "externalId"
-            ],
-            "additionalProperties": false
+            ]
           }
         },
         "nextCursor": {
@@ -205,8 +203,7 @@
       },
       "required": [
         "orders"
-      ],
-      "additionalProperties": false
+      ]
     },
     "profiles": [
       "default"
@@ -248,8 +245,7 @@
       },
       "required": [
         "itemsRead"
-      ],
-      "additionalProperties": false
+      ]
     },
     "profiles": [
       "admin",

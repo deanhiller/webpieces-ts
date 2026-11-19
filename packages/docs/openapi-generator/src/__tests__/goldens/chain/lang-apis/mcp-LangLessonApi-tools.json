@@ -75,8 +75,7 @@
                 "required": [
                   "voiceId",
                   "gender"
-                ],
-                "additionalProperties": false
+                ]
               },
               "narrator": {
                 "type": "string",
@@ -91,8 +90,7 @@
               "passageId",
               "voice",
               "narrator"
-            ],
-            "additionalProperties": false
+            ]
           }
         },
         "descriptions": {
@@ -111,8 +109,7 @@
           "required": [
             "learner",
             "teacher"
-          ],
-          "additionalProperties": false
+          ]
         },
         "translations": {
           "type": "object",
@@ -129,16 +126,14 @@
           },
           "required": [
             "en"
-          ],
-          "additionalProperties": false
+          ]
         }
       },
       "required": [
         "passages",
         "descriptions",
         "translations"
-      ],
-      "additionalProperties": false
+      ]
     },
     "profiles": [
       "default"
