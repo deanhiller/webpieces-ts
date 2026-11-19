@@ -1,3 +1,11 @@
+---
+paths:
+  - "**/*Api.ts"
+  - "**/openapi.manifest.json"
+  - "packages/docs/**"
+  - "apps/app-example/partner-api/**"
+---
+
 # API documents: opted into with a tag, generated into the build, never committed
 
 Read this when you change a contract (`*Api.ts`, an `@ApiType`, a `{ hidden: true }`), an

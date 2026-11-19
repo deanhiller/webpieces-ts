@@ -1,3 +1,10 @@
+---
+paths:
+  - "**/package.json"
+  - "pnpm-workspace.yaml"
+  - "scripts/publish-packages.sh"
+---
+
 # Packaging: bins and the umbrella
 
 Moved verbatim out of `CLAUDE.md`. Read this when you touch a `package.json` `bin` / `publishConfig`,

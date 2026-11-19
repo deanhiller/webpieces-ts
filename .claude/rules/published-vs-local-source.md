@@ -1,3 +1,11 @@
+---
+paths:
+  - "packages/tooling/**"
+  - "webpieces.config.json"
+  - ".webpieces-config/**"
+  - "pnpm-workspace.yaml"
+---
+
 # Published vs local source (the one-release lag)
 
 Moved verbatim out of `CLAUDE.md`. Read this when you change anything in `packages/tooling/**`, when a

@@ -1,3 +1,10 @@
+---
+paths:
+  - "packages/tooling/**"
+  - "webpieces.config.json"
+  - ".webpieces-config/**"
+---
+
 # Experiments: ONLY A HUMAN ENDS ONE
 
 Moved verbatim out of `CLAUDE.md`. Read this when your diff touches an `experimental.*` flag, its read
