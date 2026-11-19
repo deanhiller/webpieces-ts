@@ -31,14 +31,69 @@ from collections import Counter, defaultdict
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-PROJECTS = Path.home() / ".claude" / "projects"
+# A machine can run SEVERAL Claude Code accounts, each with its own config dir selected by
+# CLAUDE_CONFIG_DIR (e.g. `~/.claude` and `~/.claude-work`). Hard-coding `~/.claude/projects`
+# audited only one of them and reported the other CLEAN — a run that scanned nothing looked
+# exactly like a healthy one (issue #1439). So every reader below iterates ALL roots, and the
+# report header names them (`claude_config_roots`).
+CONFIG_ROOTS = None  # resolved lazily by config_roots(); a test may assign a list directly
+
+
+def claude_config_roots():
+    """Every Claude Code config dir on this machine, deduplicated by realpath, in a stable order:
+    `$CLAUDE_CONFIG_DIR` (when set), `~/.claude`, then each `~/.claude-*` that has a `projects/`
+    subdir. A path that does not exist is skipped, not reported as empty."""
+    home = Path.home()
+    cands = []
+    env = os.environ.get("CLAUDE_CONFIG_DIR")
+    if env:
+        cands.append(Path(os.path.expanduser(env)))
+    cands.append(home / ".claude")
+    try:
+        cands += sorted(d for d in home.glob(".claude-*") if (d / "projects").is_dir())
+    except OSError:
+        pass
+    out, seen = [], set()
+    for c in cands:
+        if not c.is_dir():
+            continue
+        real = os.path.realpath(c)
+        if real in seen:
+            continue
+        seen.add(real)
+        out.append(c)
+    return out
+
+
+def config_roots():
+    global CONFIG_ROOTS
+    if CONFIG_ROOTS is None:
+        CONFIG_ROOTS = claude_config_roots()
+    return CONFIG_ROOTS
+
+
+def projects_dirs():
+    """Each root's `projects/` dir, deduplicated by realpath (two roots may share one via a
+    symlink — reading it twice would double-count every session in it)."""
+    out, seen = [], set()
+    for r in config_roots():
+        p = r / "projects"
+        if not p.is_dir():
+            continue
+        real = os.path.realpath(p)
+        if real not in seen:
+            seen.add(real)
+            out.append(p)
+    return out
+
+
 # Codex transcripts are flat BY DATE with no per-project directory — the repo is named by
 # `session_meta.payload.cwd` inside each file, which is why the reader below has to open every
 # rollout in the window instead of globbing a sanitized path the way the Claude reader can.
 CODEX_SESSIONS = Path.home() / ".codex" / "sessions"
 
 # A SUBAGENT does not write into the session transcript. It gets its OWN file at
-# `~/.claude/projects/<repo>/<sessionId>/subagents/agent-<id>.jsonl`, beside an
+# `<config root>/projects/<repo>/<sessionId>/subagents/agent-<id>.jsonl`, beside an
 # `agent-<id>.meta.json` carrying `agentType`, `model`, `description` and `worktreePath`. Reading
 # only `<sessionId>.jsonl` therefore misses every reviewer and every `/full-cycle` worker — which
 # on one measured 4-day window was 72% of the fleet's tokens, invisible while the `cycletime`
@@ -212,16 +267,25 @@ def sanitized(repo: Path) -> str:
 
 
 def transcript_dirs_for(repo: Path):
-    """The repo's own project dir plus any linked-worktree project dirs."""
+    """The repo's own project dir plus any linked-worktree project dirs, in EVERY config root."""
     base = sanitized(repo)
-    out = []
-    if not PROJECTS.is_dir():
-        return out
-    for d in PROJECTS.iterdir():
-        if not d.is_dir():
+    out, seen = [], set()
+    for projects in projects_dirs():
+        try:
+            entries = sorted(projects.iterdir())
+        except OSError:
             continue
-        if d.name == base or d.name.startswith(base + "--"):
-            out.append(d)
+        for d in entries:
+            if not d.is_dir():
+                continue
+            if d.name == base or d.name.startswith(base + "--"):
+                # The SAME project dir name exists in every root that ever ran in this repo;
+                # each is a different account's sessions, so all are kept. Only a dir reached
+                # twice through a symlink is dropped.
+                real = os.path.realpath(d)
+                if real not in seen:
+                    seen.add(real)
+                    out.append(d)
     return out
 
 
@@ -2801,10 +2865,16 @@ def _read_doc(repo: Path, doc: Path, tracked: set):
 def audit_docdrift(repos):
     findings, log_claims = [], []
     scanned = 0
-    user_docs = [Path.home() / ".claude" / "CLAUDE.md"]
-    user_docs += sorted((Path.home() / ".claude" / "skills").rglob("SKILL.md"))
+    roots = config_roots()
+    user_docs = []
+    for root in roots:
+        user_docs.append(root / "CLAUDE.md")
+        user_docs += sorted((root / "skills").rglob("SKILL.md"))
 
-    # A user-level doc (~/.claude/**) is repo-agnostic: scanning it once per repo would
+    def is_user_doc(doc):
+        return any(Path(doc) == r or r in Path(doc).parents for r in roots)
+
+    # A user-level doc (<config root>/**) is repo-agnostic: scanning it once per repo would
     # report the same relative path N times. Judge those separately, at the end.
     user_missing = defaultdict(set)
     doc_sources = {}
@@ -2851,7 +2921,7 @@ def audit_docdrift(repos):
                     continue
                 if re.search(r"\.(log|json|md|ts|js|yaml|yml|html|sh|txt)$", cand) or cand.startswith(".webpieces/"):
                     missing.append(cand)
-            if missing and str(doc).startswith(str(Path.home() / ".claude")):
+            if missing and is_user_doc(doc):
                 for m in missing:
                     user_missing[str(doc)].add(m)
                 continue
@@ -3303,7 +3373,11 @@ def main():
 
     res = {"repos": [str(r) for r in repos], "generated": datetime.now(timezone.utc).isoformat(),
            "window_start_utc": (WINDOW_START or cutoff(args.hours)).isoformat(),
-           "window_end_utc": (WINDOW_END or datetime.now(timezone.utc)).isoformat()}
+           "window_end_utc": (WINDOW_END or datetime.now(timezone.utc)).isoformat(),
+           # Which Claude config dirs were read — so "nothing found" can be told apart from
+           # "scanned nothing" (issue #1439).
+           "claude_config_roots": [str(r) for r in config_roots()],
+           "claude_projects_dirs": [str(p) for p in projects_dirs()]}
     if args.cmd in ("guards", "all"):
         res["guards"] = audit_guards(repos, args.hours)
     if args.cmd in ("isolation", "all"):

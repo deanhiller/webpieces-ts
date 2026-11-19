@@ -123,7 +123,7 @@ Two further sources, both already covered by `wp_audit.py` but worth naming beca
   `merges` subcommand parses both. Note branch-mutation rows are thin: a `wpN`→`wpN+1` rename is
   recorded with no reason, so a mid-work conflict is not distinguishable from a routine update.
 - **Per-agent time** — `<repo>/.webpieces/logs/L0-shim/`, `L1-location/`, `L2-decisions/` join to
-  `~/.claude/projects/<sanitized-repo>/<sessionId>.jsonl` on session id (guard filenames are
+  `<config root>/projects/<sanitized-repo>/<sessionId>.jsonl` on session id (guard filenames are
   `<sessionId>-<callId>-guards.log`). That join is what turns a block count into "here is the
   session, and here is the 7 minutes it then spent". **Still never read a transcript wholesale** —
   the `transcripts` subcommand aggregates them; open one only to quote a line you already located.
@@ -132,7 +132,7 @@ Two further sources, both already covered by `wp_audit.py` but worth naming beca
 
 | Area | Signal | Where it comes from |
 |---|---|---|
-| Wasted time | active hours, blocked-call seconds, **builds with no intervening file edit**, repeated identical commands, tool histogram | Claude transcripts `~/.claude/projects/<sanitized-repo>/*.jsonl` **plus every subagent transcript at `<sanitized-repo>/<sessionId>/subagents/agent-*.jsonl`**; Codex rollouts `~/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl` |
+| Wasted time | active hours, blocked-call seconds, **builds with no intervening file edit**, repeated identical commands, tool histogram | Claude transcripts `<config root>/projects/<sanitized-repo>/*.jsonl` in **every** config root (see below) **plus every subagent transcript at `<sanitized-repo>/<sessionId>/subagents/agent-*.jsonl`**; Codex rollouts `~/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl` |
 | Token spend | **EXACT** counts from `message.usage` (Claude) and `token_usage_record` (Codex), split `main-agent` / `subagent-reviewer` / `subagent-other`, plus `by_agent_type`, the cache_read share, and an Opus-list-price `est_cost` weighting. Alongside it, `subagents`: runs, reviewer runs, **repeat reviewer runs** (same reviewer, same parent session) and their cost | the same transcripts — the counts are already recorded, so this needs no instrumentation and is strictly better than `retbytes`'s `chars // 4` |
 | Codex parity | per-surface `claude_hits` vs `codex_hits` across all five streams, and the whole-harness verdict. **A rule with Claude traffic and ZERO Codex traffic is a coverage hole** — the detector for a tool-name mapping we got wrong | all five guard streams' `ai=` field |
 | Guard cycles | block rate, **consecutive blocks on one rule in one session**, **same cure prescribed ≥4×**, non-`-` fault codes | `<repo>/.webpieces/logs/L2-decisions/`, `rejections/` |
@@ -152,13 +152,22 @@ Two further sources, both already covered by `wp_audit.py` but worth naming beca
 **A subagent does not write into the session transcript.** It gets its own file:
 
 ```
-~/.claude/projects/<sanitized-repo>/<sessionId>.jsonl              <- the main agent
-~/.claude/projects/<sanitized-repo>/<sessionId>/subagents/
+<config root>/projects/<sanitized-repo>/<sessionId>.jsonl              <- the main agent
+<config root>/projects/<sanitized-repo>/<sessionId>/subagents/
         agent-<id>.jsonl        <- one subagent's whole run: its usage, its tools, its output
         agent-<id>.meta.json    <- agentType, model, description, toolUseId, spawnDepth,
                                    worktreePath, worktreeBranch
-~/.claude/projects/<sanitized-repo>/<sessionId>/tool-results/*.txt <- spilled large tool results
+<config root>/projects/<sanitized-repo>/<sessionId>/tool-results/*.txt <- spilled large tool results
 ```
+
+**`<config root>` is a LIST, not `~/.claude`.** A machine can run several Claude Code accounts, each
+selected by `CLAUDE_CONFIG_DIR` (e.g. `~/.claude` and `~/.claude-work`). The collector reads ALL of
+them in one run: `$CLAUDE_CONFIG_DIR` (when set) ∪ `~/.claude` ∪ every `~/.claude-*` that has a
+`projects/` subdir, deduplicated by realpath, with missing dirs skipped. The same list feeds the
+user-level doc-drift scan (`<config root>/CLAUDE.md`, `<config root>/skills/**/SKILL.md`). The
+report header carries `claude_config_roots` / `claude_projects_dirs` (and the digest prints them):
+an empty list means the audit **scanned nothing**, which is not the same as a clean audit — say so
+instead of reporting clean (issue #1439).
 
 The `Agent`/`Task` `tool_use` in the parent is only the SPAWN CALL — a few hundred bytes of prompt.
 Reading just `<sessionId>.jsonl` therefore misses every reviewer and every `/full-cycle` worker.
