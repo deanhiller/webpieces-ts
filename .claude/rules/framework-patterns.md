@@ -1,3 +1,10 @@
+---
+paths:
+  - "packages/http/**"
+  - "packages/core/**"
+  - "apps/**"
+---
+
 # Framework patterns (webpieces-ts)
 
 Moved verbatim out of `CLAUDE.md`. Read this when you are writing a filter, a controller, a `Routes`

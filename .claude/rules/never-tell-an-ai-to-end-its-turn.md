@@ -1,3 +1,9 @@
+---
+paths:
+  - "packages/tooling/**"
+  - ".claude/**"
+---
+
 # Never tell an AI to end its turn
 
 Read this when you are writing or editing ANY string webpieces prints at an agent — a gate banner, a

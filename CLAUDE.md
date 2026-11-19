@@ -7,7 +7,8 @@ only the rules you must obey without being prompted to go and read something —
 principles, the one-line build rule, the one-line finish-the-feature rule, and the list of failure
 modes. Everything with a long rationale, a matrix, an incident narrative or a worked example lives in a
 topic file under `.claude/rules/`, moved there **verbatim**. Read the row that matches what you are
-about to do; skip the rest.
+about to do; skip the rest. Most rule files now carry a `paths:` frontmatter and load automatically
+when you open a matching file; the table says when to read one yourself.
 
 | Read this | When |
 |---|---|

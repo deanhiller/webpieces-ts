@@ -1,3 +1,9 @@
+---
+paths:
+  - "**/project.json"
+  - "nx.json"
+---
+
 # Framework and role tags are TRUE, and the machine says so
 
 Read this when you add or change a `framework:*`, `role:*` or `product:*` nx tag, the framework lattice,

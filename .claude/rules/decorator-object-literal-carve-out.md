@@ -1,3 +1,10 @@
+---
+paths:
+  - "packages/**"
+  - "apps/**"
+  - "libraries/**"
+---
+
 # The one carve-out to "no anonymous object literals"
 
 Moved verbatim out of `CLAUDE.md` section "3. No Anonymous Object Literals". Read this when you are

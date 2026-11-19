@@ -1,3 +1,10 @@
+---
+paths:
+  - "packages/tooling/**"
+  - "webpieces.config.json"
+  - ".webpieces-config/**"
+---
+
 # A RULE MUST NOT HAVE A DEFAULT — the consumer decides, explicitly
 
 Read this when your diff adds or changes a webpieces RULE: an owner manifest/schema entry, an `optionalTuning`

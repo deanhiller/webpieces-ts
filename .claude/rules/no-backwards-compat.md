@@ -1,3 +1,11 @@
+---
+paths:
+  - "packages/**"
+  - "libraries/**"
+  - "webpieces.config.json"
+  - ".webpieces-config/**"
+---
+
 # NO webpieces surface is released backwards-compatible
 
 Moved verbatim out of `CLAUDE.md`. Read this when you change ANY surface -- a decorator, an `*Api.ts`,

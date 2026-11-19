@@ -1,3 +1,8 @@
+---
+paths:
+  - "**/*.spec.ts"
+---
+
 # Feature tests: the whole DAG, mocked edges, no real processes, no real time
 
 Read this BEFORE you write or change any `*.spec.ts` — for a server, a `wp-*` command, a hook, or a
