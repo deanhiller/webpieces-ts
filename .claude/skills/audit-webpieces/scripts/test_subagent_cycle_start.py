@@ -6,7 +6,7 @@ phase was missing. The audit now opens the cycle at the subagent transcript's fi
 joined with `agent-<id>.meta.json` (`worktreePath` / `worktreeBranch`). A main-agent session still
 opens on its own `git checkout -b`.
 
-Synthetic fixtures only, in a temp dir standing in for ~/.claude/projects — never real transcripts.
+Synthetic fixtures only, in a temp dir standing in for <config root>/projects — never real transcripts.
 """
 import importlib.util
 import json
@@ -48,7 +48,7 @@ def transcript(first_minute, calls):
 
 def run(projects, repo):
     """Exactly the two loops `scan_transcripts` runs, with the cycle-time accumulator on."""
-    wp.PROJECTS = projects
+    wp.CONFIG_ROOTS = [projects.parent]
     since = T0 - timedelta(hours=1)
     ct = wp.ct_new()
     for d in wp.transcript_dirs_for(repo):

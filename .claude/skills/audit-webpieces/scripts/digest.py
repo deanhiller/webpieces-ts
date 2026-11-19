@@ -440,6 +440,7 @@ def main():
     hc = harness_compare(raw)
     if "--json" in sys.argv:
         json.dump({"repos": raw.get("repos"), "generated": raw.get("generated"),
+                   "claude_config_roots": raw.get("claude_config_roots"),
                    "versions": versions(raw), "harnesses": hc,
                    "retbytes": raw.get("retbytes"), "cycletime": raw.get("cycletime"),
                    "major": items},
@@ -448,6 +449,10 @@ def main():
         return
     v = versions(raw)
     print(f"# repos: {len(raw.get('repos', []))}   generated: {raw.get('generated')}")
+    # Name the Claude config dirs the collector read, so an empty audit is distinguishable from
+    # one that scanned nothing (issue #1439).
+    roots = raw.get("claude_config_roots")
+    print(f"# claude config roots scanned: {', '.join(roots) if roots else 'NONE - no transcripts read'}")
     print(f"# @webpieces npm latest: {v['npm_latest']}")
     print("# repo versions (installed / pinned / worktrees / behind-main):")
     for r in v["repos"]:
