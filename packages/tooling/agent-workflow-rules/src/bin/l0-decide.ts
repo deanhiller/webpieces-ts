@@ -1,12 +1,9 @@
-import { isRootManifest } from '@webpieces/hook-runtime';
-import * as fs from 'fs';
 import * as path from 'path';
 
-import { ConfigRepairAccess, RepoRootFinder } from '@webpieces/rules-config';
+import { ConfigRepairAccess } from '@webpieces/rules-config';
 
 import { AiType } from '@webpieces/hook-runtime';
 import { L0_ALLOW_JS } from './l0-allowlist';
-import { MANIFEST_FILENAMES } from '@webpieces/rules-config';
 import { L0_CODEX_ALLOW_JS } from './l0-codex-read';
 import { L0_IGNORED_TOOLS } from './l0-ignored-tools';
 
@@ -61,16 +58,16 @@ export function isAllowed(
     // Nothing to judge — see L0_IGNORED_TOOLS. `pass`, never `allow`: L0 declines to be terminal, so on
     // a healthy tree the call still falls through to whatever runs next.
     if (L0_IGNORED_TOOLS.has(toolName)) return 'pass';
-    if (
-        ['Write', 'Edit', 'MultiEdit'].includes(toolName) &&
-        filePath &&
-        new ConfigRepairAccess().isRepairFile(
-            new RepoRootFinder().resolveRepoRoot(path.dirname(path.resolve(filePath))),
-            filePath,
-        )
-    )
-        return 'pass';
-    if (isRootManifest(filePath)) return 'pass';
+    // THE EDIT ESCAPE — one predicate for every edit-tool spelling (Claude Write/Edit/MultiEdit, Codex
+    // apply_patch incl. a namespace-qualified name), the SAME compiled class the sh half runs through
+    // `node -e`, so the two halves of L0 cannot disagree about an edit (issue #1448). A relative patch
+    // path resolves against this process's cwd, which is the harness cwd the hook was launched in.
+    const edit = new ConfigRepairAccess().recoveryVerdict(
+        filePath ? path.dirname(path.resolve(filePath)) : process.cwd(), toolName, filePath, command);
+    if (edit[0] === 'config' || edit[0] === 'manifest') return 'pass';
+    // An edit that is NOT a recovery edit is never a cure either — its patch text must not be grepped
+    // against the Bash allowlist below.
+    if (edit[0] === 'refused') return null;
     if (L0_ALLOW_JS.test(command.trim())) return 'allow';
     // The HARNESS-GATED tail of the list, and the only place `aiType` is consulted. Codex has no `Read`
     // tool, so a read arrives here as a Bash command; without this it is denied under every L0 fault and
@@ -79,21 +76,3 @@ export function isAllowed(
     if (aiType === 'codex' && L0_CODEX_ALLOW_JS.test(command.trim())) return 'pass';
     return null;
 }
-
-/**
- * Is `filePath` the `package.json` / `pnpm-workspace.yaml` at the ROOT OF A GOVERNED TREE — the only two
- * files the version cure ever edits?
- *
- * AS WIDE AS THE CURE AND NO WIDER. A basename match would put EVERY project, app and library
- * `package.json` on the L0 allowlist, and at L0 that is worse than it sounds: the sh half treats a hit
- * as TERMINAL (`exit 0`, the guard bin never runs), so each of those would be editable under fault
- * D/X/U/K with nothing downstream judging it. BUT IT MUST ADMIT EVERY TREE, not one — a worktree
- * agent's cure edits ITS OWN root manifest, and the shim's `$ROOT` names whichever tree supplied the
- * shim (governingShimRoot's straddle), so neither a basename nor a fixed root is the right test.
- *
- * The test is: its own directory must ALSO hold a `webpieces.config.json`. That file is TRACKED, so the
- * main clone has one and every linked worktree has its own — the same definition `runner.ts` uses
- * (`dirname(configPath)`), without knowing which tree you stand in. A project manifest deep under
- * `packages/` has no config beside it and is excluded. The sh twin is one `[ -f ... ]` test.
- */
-// webpieces-disable no-function-outside-class -- pure fs+path predicate beside isAllowed in the dependency-free shim module

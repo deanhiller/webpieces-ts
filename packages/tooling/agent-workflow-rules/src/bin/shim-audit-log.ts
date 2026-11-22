@@ -70,8 +70,8 @@ export const SHIM_LOG_VERDICTS: readonly ShimLogVerdict[] = [
     new ShimLogVerdict('ALLOW-CODEX-READ',
         'the harness-gated entry: a read-shaped Bash command on CODEX, which has no Read tool — PASS, terminal here. '
         + 'It cannot appear on a claude-code line; if one ever does, the sh harness test (AI_TYPE_SH) misread the payload'),
-    new ShimLogVerdict('ALLOW-CONFIG', 'allowlist entry 2 (a Write/Edit of webpieces.config.json) — PASS, terminal here'),
-    new ShimLogVerdict('ALLOW-MANIFEST', 'allowlist entry 3 (a Write/Edit of pnpm-workspace.yaml or package.json) — PASS, terminal here'),
+    new ShimLogVerdict('ALLOW-CONFIG', 'the config-repair edit entry (a Write/Edit/MultiEdit or Codex apply_patch whose every target is webpieces.config.json or a .webpieces-config/ file) — PASS, terminal here'),
+    new ShimLogVerdict('ALLOW-MANIFEST', 'the manifest edit entry (a Write/Edit/MultiEdit or Codex apply_patch whose every target is a repair file or a tree-root pnpm-workspace.yaml / package.json) — PASS, terminal here'),
     new ShimLogVerdict('ALLOW-CURE', 'a Bash entry of the allowlist matched — ALLOW'),
     new ShimLogVerdict('DENY', 'fault X, not on the allowlist — BLOCK_AI_CURE'),
     new ShimLogVerdict('DENY-UNDECLARED', 'fault U, not on the allowlist — BLOCK_AI_CURE'),

@@ -26,7 +26,7 @@ import {
     HOOK_PKG,
 } from './l0-allowlist';
 import { WORKSPACE_MANIFEST, PACKAGE_MANIFEST } from '@webpieces/rules-config';
-import { CODEX_READ_STILL_ALLOWED } from '@webpieces/rules-config';
+import { CODEX_READ_STILL_ALLOWED, RECOVERY_EDIT_STILL_ALLOWED } from '@webpieces/rules-config';
 import { L0_CODEX_ALLOW_ERE_SH } from './l0-codex-read';
 import { L0_IGNORED_TOOLS_SH } from './l0-ignored-tools';
 import { AI_TYPE_SH } from '@webpieces/hook-runtime/harness-vocabulary';
@@ -165,7 +165,7 @@ fi`;
 const ESCAPES_SH = `BS='\\'                      # one literal backslash, so no \\u001b / \\n escape sits in this source
 ESC="\${BS}u001b"           # the 6 chars: backslash u 0 0 1 b — Claude Code parses \\u001b → ESC
 NL="\${BS}n"                # the 2 chars: backslash n — parsed as a real newline inside the JSON string
-WP_STILL_ALLOWED="Still allowed while this block is up:\${NL}  - any Read, and ${CODEX_READ_STILL_ALLOWED}\${NL}  - any Write/Edit whose target is ${CONFIG_FILENAME}, ${WORKSPACE_MANIFEST} or ${PACKAGE_MANIFEST}\${NL}  - every command on the L0 allowlist, including the Fix Options below\${NL}  THIS IS NOT A DEADLOCK - run one YOURSELF now; do not hand it back to the human."`;
+WP_STILL_ALLOWED="Still allowed while this block is up:\${NL}  - any Read, and ${CODEX_READ_STILL_ALLOWED}\${NL}  - ${RECOVERY_EDIT_STILL_ALLOWED}\${NL}  - every command on the L0 allowlist, including the Fix Options below\${NL}  THIS IS NOT A DEADLOCK - run one YOURSELF now; do not hand it back to the human."`;
 
 // Shell fragment: run the installed guard bin and INSPECT its outcome, instead of exec'ing it.
 //
@@ -289,23 +289,30 @@ case "\$TOOL" in
     wp_log "\$WP_FAULT" ALLOW-IGNORED
     exit 0 ;;
 esac
-# The same compiled Node probe is used by the live runner; it requires no installed package.
-if printf '%s' "\$PAYLOAD" | node -e '${new ConfigRepairBootstrap().callScript().replaceAll("'", "'\\''")}' "\$WP_CWD" >/dev/null 2>&1; then
-  wp_log "\$WP_FAULT" ALLOW-CONFIG
+# THE EDIT ESCAPE (issue #1448) — ONE compiled Node probe for every edit-tool spelling: Claude's
+# Write/Edit/MultiEdit (file_path) and Codex's apply_patch (the patch rides in command; the name may be
+# namespace-qualified). It needs no installed package. Every path the edit touches must be a repair file
+# or the ${PACKAGE_MANIFEST} / ${WORKSPACE_MANIFEST} at a governed tree ROOT (a ${CONFIG_FILENAME} beside
+# it) — a nested project manifest, a Delete, a .. segment or a Move out of scope refuses the WHOLE edit.
+# This arm is TERMINAL (exit 0, the bin never runs), which is why the scope is that narrow. The JS half
+# (isAllowed) calls the same class, so the two halves cannot disagree. Exit 0 = permitted (stdout names
+# the label), 1 = not an edit, 3 = an edit refused (stdout: one line per offending path, for the deny).
+WP_EDIT_REFUSED=""
+WP_EDIT="\$(printf '%s' "\$PAYLOAD" | node -e '${new ConfigRepairBootstrap().callScript().replaceAll("'", "'\\''")}' "\$WP_CWD" 2>/dev/null)"
+WP_EDIT_RC=\$?
+if [ "\$WP_EDIT_RC" = 0 ]; then
+  if [ "\$WP_EDIT" = manifest ]; then
+    wp_log "\$WP_FAULT" ALLOW-MANIFEST  # the pin / patch registration must be editable from inside the block
+  else
+    wp_log "\$WP_FAULT" ALLOW-CONFIG
+  fi
   exit 0
 fi
-case "\$FILE" in
-  */${WORKSPACE_MANIFEST}|${WORKSPACE_MANIFEST}|*/${PACKAGE_MANIFEST}|${PACKAGE_MANIFEST})
-    # A manifest AT THE ROOT OF A GOVERNED TREE, which is the only place the version pin lives. The test
-    # is the sibling ${CONFIG_FILENAME} — TRACKED, so the main clone has one and every worktree has its
-    # own — and NOT \$ROOT, which names whichever tree supplied this shim and would deny the other's.
-    # Basename alone would be far worse here than in the JS half: this arm is TERMINAL (exit 0, the bin
-    # never runs), so every packages/**/package.json would be editable with nothing judging it.
-    if [ -f "\$(dirname -- "\$FILE")/${CONFIG_FILENAME}" ]; then
-      wp_log "\$WP_FAULT" ALLOW-MANIFEST  # raising the pin must be typable from inside the block
-      exit 0
-    fi ;;
-esac
+if [ "\$WP_EDIT_RC" = 3 ]; then
+  # One deny line per offending path. tr strips the bytes a JSON string may not carry raw.
+  WP_EDIT_REFUSED="\$(printf '%s\\n' "\$WP_EDIT" | tr -d '"\\\\\\t\\r' | while IFS= read -r WP_L; do printf '%s      - %s' "\$NL" "\$WP_L"; done)"
+  WP_STILL_ALLOWED="Your \$TOOL edit was REFUSED as a whole - not every file it touches is a recovery edit:\${WP_EDIT_REFUSED}\${NL}\${NL}\${WP_STILL_ALLOWED}"
+fi
 if printf '%s' "\$CMD" | grep -Eq '${L0_ALLOW_ERE_SH}'; then
   wp_log "\$WP_FAULT" ALLOW-CURE   # record the self-heal we let through (re-enables the guards)
   exit 0                     # allow the cure so the assistant can break the deadlock
@@ -402,7 +409,7 @@ elif [ -n "\$DRIFT_PKG" ]; then
   if [ "\$DRIFT_DIR" = older ]; then
     # The HEADLINE, kept in its own variable so DENY_EMIT_SH can paint ONLY it red (see there).
     WP_HEAD="❌ webpieces ai-hooks blocked this call: webpieces version drift."
-    REASON="\$WP_HEAD\${NL}\${NL}${l0GuardHeader(L0_FAULT_DRIFT, '1 violation')}\${NL}  package.json pins \$DRIFT_PKG@\$DRIFT_DECLARED but node_modules has \$DRIFT_INSTALLED\${NL}    → node_modules is OLDER, so the pin is what you want. Every OTHER tool call is BLOCKED until the two agree.\${NL}    → ${l0MatrixCitation(L0_FAULT_DRIFT)}\${NL}\${NL}\${WP_STILL_ALLOWED}\${NL}\${NL}  Fix Option 1: (preferred) the only cure - it makes node_modules match the pin\${NL}    run EXACTLY: 'pnpm install'\${NL}\${NL}${NO_CHAINING_RULE}"
+    REASON="\$WP_HEAD\${NL}\${NL}${l0GuardHeader(L0_FAULT_DRIFT, '1 violation')}\${NL}  package.json pins \$DRIFT_PKG@\$DRIFT_DECLARED but node_modules has \$DRIFT_INSTALLED\${NL}    → node_modules is OLDER, so the pin is what you want. Every OTHER tool call is BLOCKED until the two agree.\${NL}    → ${l0MatrixCitation(L0_FAULT_DRIFT)}\${NL}\${NL}\${WP_STILL_ALLOWED}\${NL}\${NL}  Fix Option 1: (preferred) it makes node_modules match the pin\${NL}    run EXACTLY: 'pnpm install'\${NL}  Fix Option 2: 'pnpm install' itself FAILED (the pinned version is not on the registry yet, or ERR_PNPM_UNUSED_PATCH from a stale patchedDependencies entry)? Re-running it fails the same way. Repair the manifests instead - roll the pin in \$ROOT/${WORKSPACE_MANIFEST} back to \$DRIFT_INSTALLED, or fix the patchedDependencies entry in \$ROOT/${PACKAGE_MANIFEST} or \$ROOT/${WORKSPACE_MANIFEST} - with Write/Edit (Claude Code) or apply_patch (Codex); that edit is ALLOWED while this block is up. Then run 'pnpm install' again.\${NL}\${NL}${NO_CHAINING_RULE}"
   else
     # NEWER, or undecidable — the same choices apply either way, so the only thing the ambiguous
     # case changes is the claim about which side is stale.

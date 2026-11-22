@@ -46,7 +46,9 @@ function isAllowedEdit(filePath: string): 'pass' | 'allow' | null {
 
 /** Every `/repo/...` sample path, rewritten onto the staged root above. Bash calls carry no path. */
 function real(call: L0Call): L0Call {
-    return new L0Call(call.toolName, call.command, call.filePath.replace(/^\/repo/, SAMPLE_ROOT));
+    // An apply_patch sample names its paths INSIDE the patch, so those are rewritten too (#1448).
+    const command = call.toolName.endsWith('apply_patch') ? call.command.replace(/\/repo\//g, `${SAMPLE_ROOT}/`) : call.command;
+    return new L0Call(call.toolName, command, call.filePath.replace(/^\/repo/, SAMPLE_ROOT));
 }
 
 // Calls that are on NO entry of the list — the BLOCK row of the matrix.
@@ -68,6 +70,13 @@ const NOT_ALLOWED: readonly L0Call[] = [
     new L0Call('Bash', 'git status && rm -rf /', ''),
     new L0Call('Bash', 'git -c core.pager=evil status', ''),
     new L0Call('Edit', '', '/repo/src/index.ts'),
+    // The Codex spelling of the same edits: a nested manifest, a mixed patch smuggling code beside a
+    // manifest, a Delete of a manifest, and a Move of code onto one — each refused as a whole (#1448).
+    new L0Call('apply_patch', '*** Begin Patch\n*** Update File: /repo/packages/lib/package.json\n@@\n-a\n+b\n*** End Patch', ''),
+    new L0Call('apply_patch', '*** Begin Patch\n*** Update File: /repo/package.json\n@@\n-a\n+b\n*** Add File: /repo/src/evil.ts\n+x\n*** End Patch', ''),
+    new L0Call('apply_patch', '*** Begin Patch\n*** Delete File: /repo/package.json\n*** End Patch', ''),
+    new L0Call('apply_patch', '*** Begin Patch\n*** Update File: /repo/src/index.ts\n*** Move to: /repo/package.json\n@@\n-a\n+b\n*** End Patch', ''),
+    new L0Call('apply_patch', '*** Begin Patch\n*** Update File: /repo/../package.json\n@@\n-a\n+b\n*** End Patch', ''),
     // `/repo/package.json` used to sit here. It is a MANIFEST now — one of the two files a @webpieces
     // pin lives in — and L1 row 8's report has always promised that editing it stays possible while a
     // block is up. The promise had no carve-out behind it; it does now, so the call belongs on the

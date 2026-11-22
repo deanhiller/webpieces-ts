@@ -98,6 +98,21 @@ export function run(
     return runInternal(toolKind, input, cwd, mode);
 }
 
+// The pre-config pass: an edit whose every path — BOTH sides of a Move — is a repair file, a root
+// manifest or the home config. Checking the source is what stops a rename of ordinary code ONTO a
+// recovery file from deleting that code with nothing judging it (#1448).
+// webpieces-disable no-function-outside-class -- sibling of runInternal in this module-scope runner
+function isPreConfigRecoveryEdit(toolKind: ToolKind, input: NormalizedToolInput, cwd: string): boolean {
+    if (toolKind === 'Delete') return false;
+    const root = new RepoRootFinder().resolveRepoRoot(cwd);
+    return [input.filePath, input.sourcePath].every(
+        (target: string): boolean =>
+            new ConfigRepairAccess().isRepairFile(root, target) ||
+            isRootManifest(target) ||
+            new HomeConfigService().isHomeConfigPath(target),
+    );
+}
+
 // webpieces-disable no-function-outside-class -- existing stateless module helper moved intact with its callers; ownership extraction preserves its functional API
 function runInternal(
     toolKind: ToolKind,
@@ -105,38 +120,26 @@ function runInternal(
     cwd: string,
     mode: HookMode,
 ): BlockedResult | null {
-    if (
-        toolKind !== 'Delete' &&
-        (new ConfigRepairAccess().isRepairFile(
-            new RepoRootFinder().resolveRepoRoot(cwd),
-            input.filePath,
-        ) ||
-            isRootManifest(input.filePath) ||
-            new HomeConfigService().isHomeConfigPath(input.filePath))
-    )
-        return null;
+    if (isPreConfigRecoveryEdit(toolKind, input, cwd)) return null;
     const loaded = loadAndValidate(cwd);
     if (loaded.configPath === null) return configMissingBlock(cwd);
 
     const workspaceRoot = path.dirname(loaded.configPath);
 
-    // Always allow edits to webpieces.config.json — it's the fix target when out of sync
-    if (path.resolve(input.filePath) === path.resolve(loaded.configPath)) {
-        return null;
-    }
-
-    // …and the same PASS for the machine-local `~/.webpieces/config.json` (a bad key there fails a `wp-*`
-    // command with an instruction to edit it, so blocking the edit would wedge the agent inside the
-    // failure) and for the two ROOT MANIFESTS a pin lives in — L1 row 8 PROMISED that edit and its cure IS
-    // it. isRootManifest, never a basename: this returns EARLY, so basename would unrule every
-    // package.json in the repo. It admits any tree's root (the config sits beside it), which is what a
-    // worktree's own cure needs — the same tree `workspaceRoot` above already names.
+    // Always allow edits to webpieces.config.json — it's the fix target when out of sync — and the same
+    // PASS for the machine-local `~/.webpieces/config.json` (a bad key there fails a `wp-*` command with
+    // an instruction to edit it, so blocking the edit would wedge the agent inside the failure) and for
+    // the two ROOT MANIFESTS a pin lives in — L1 row 8 PROMISED that edit and its cure IS it.
+    // isRootManifest, never a basename: this returns EARLY, so basename would unrule every package.json
+    // in the repo. It admits any tree's root (the config sits beside it), which is what a worktree's own
+    // cure needs. IN PLACE ONLY: a Move onto one of these still deletes its source, which is judged (#1448).
     if (
-        isRootManifest(input.filePath) ||
-        new HomeConfigService().isHomeConfigPath(input.filePath)
-    ) {
+        input.sourcePath === input.filePath &&
+        (path.resolve(input.filePath) === path.resolve(loaded.configPath) ||
+            isRootManifest(input.filePath) ||
+            new HomeConfigService().isHomeConfigPath(input.filePath))
+    )
         return null;
-    }
 
     // Built-in/custom rules PLUS the client-authored match-rules (content guards). Match-rules run only
     // in the file-edit path (they are code-style, so filterByMode keeps them out of the bash/guards path).

@@ -95,8 +95,8 @@ that denied `rm -rf node_modules && pnpm install` while allowing a bare `pnpm in
 |---|---|---|
 | 1 | any Read | PASS |
 | 2 | a Codex tool with nothing to judge: webrun, collaborationspawn_agent, collaborationwait_agent, view_image, update_plan | PASS |
-| 3 | a Write/Edit whose target is webpieces.config.json | PASS |
-| 4 | a Write/Edit whose target is a tree ROOT's pnpm-workspace.yaml or package.json - the version pin | PASS |
+| 3 | a Write/Edit/MultiEdit or Codex apply_patch of ONLY webpieces.config.json or a .webpieces-config/ file | PASS |
+| 4 | a Write/Edit/MultiEdit or Codex apply_patch of ONLY a tree ROOT's pnpm-workspace.yaml or package.json - the version pin and patchedDependencies | PASS |
 | 5 | pnpm|npm install | ALLOW |
 | 6 | rm -rf node_modules && pnpm install - the cure for a CORRUPT node_modules | ALLOW |
 | 7 | git fetch - a bare git pull and git merge are NOT on the list | ALLOW |

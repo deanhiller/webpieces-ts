@@ -11,6 +11,26 @@ export const CODEX_READ_STILL_ALLOWED =
     `on CODEX (no Read tool): a bare read command - ${[...READ_COMMANDS].join('/')} <file>, `
     + `or ${CODEX_READ_CMD} - with nothing piped, redirected or chained onto it`;
 
+/**
+ * THE EDIT ESCAPE, named for BOTH harnesses' edit tools (issue #1448). Every L0 deny used to promise
+ * "any Write/Edit", which a Codex agent cannot type: its only edit tool is `apply_patch`. Each phrase is
+ * exactly what `ConfigRepairProbe.recoveryVerdict()` admits on that fault's path, so the message cannot
+ * promise an edit the installed entrypoint then refuses. No double quotes and no backslashes: the shim
+ * splices these into a JSON string.
+ */
+export const EDIT_TOOLS_PHRASE = 'a Write/Edit/MultiEdit or Codex apply_patch of ONLY';
+
+/**
+ * Faults D/X/U/K/S: the config repair files AND the two root manifests a version pin and a
+ * patchedDependencies registration live in. One other file in the same patch, or any Delete, refuses
+ * the whole patch.
+ */
+export const RECOVERY_EDIT_STILL_ALLOWED =
+    `${EDIT_TOOLS_PHRASE} ${CONFIG_FILENAME}, .webpieces-config/ files, or a tree-root ${PACKAGE_MANIFEST} / ${WORKSPACE_MANIFEST}`;
+
+/** Fault C: there is no config yet, so no tree root exists either - only creating the config is a repair. */
+export const CONFIG_EDIT_STILL_ALLOWED = `${EDIT_TOOLS_PHRASE} ${CONFIG_FILENAME}`;
+
 export const CONFIG_MISSING_REPORT = [
     `❌ webpieces ai-hooks blocked this call: ${CONFIG_FILENAME} not found.`,
     '',
@@ -21,7 +41,7 @@ export const CONFIG_MISSING_REPORT = [
     '',
     'Still allowed while this block is up:',
     `  - any Read, and ${CODEX_READ_STILL_ALLOWED}`,
-    `  - any Write/Edit whose target is ${CONFIG_FILENAME}`,
+    `  - ${CONFIG_EDIT_STILL_ALLOWED}`,
     '  - every command on the L0 allowlist, including the Fix Options below',
     '  THIS IS NOT A DEADLOCK - run one YOURSELF now; do not hand it back to the human.',
     '',
