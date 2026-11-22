@@ -217,6 +217,95 @@ describe('ApiJsonSchemaValidator', () => {
 });
 
 /**
+ * A `type` ARRAY of several non-null types, and an EXPLICITLY open object (#1447) — the two schema
+ * features the recursive JSON marker `JsonValueDto` publishes, so a server can validate a free-form
+ * JSON payload without a consumer-side patch.
+ */
+describe('ApiJsonSchemaValidator over multi-type and explicitly open schemas (#1447)', () => {
+    function openJson(): ApiJsonSchema {
+        const schema = new ApiJsonSchema(['string', 'number', 'boolean', 'object', 'array', 'null']);
+        schema.additionalProperties = true;
+        return schema;
+    }
+
+    function holding(field: string, value: ApiJsonSchema): ApiJsonSchema {
+        return new ObjectSchemaBuilder().required(field, value).build();
+    }
+
+    it('accepts every JSON value, nested to any depth, under the open JSON schema', () => {
+        const nested = { a: [1, 'two', true, null, { b: { c: [[], {}] } }], d: { e: null } };
+        for (const value of ['text', 3.5, false, null, [1, [2, [3]]], nested]) {
+            expect(validator.validate(holding('value', openJson()), { value })).toBeUndefined();
+        }
+    });
+
+    it('accepts a whole number where integer is listed and refuses a fraction', () => {
+        const schema = holding('value', new ApiJsonSchema(['integer', 'string']));
+
+        expect(validator.validate(schema, { value: 4 })).toBeUndefined();
+        expect(validator.validate(schema, { value: 'four' })).toBeUndefined();
+        expect(messageOf(validator.validate(schema, { value: 4.5 }))).toBe(
+            '$.value must be one of: integer, string',
+        );
+    });
+
+    it('refuses a value of a type the array does not list, and null unless listed', () => {
+        const schema = holding('value', new ApiJsonSchema(['string', 'number']));
+
+        expect(messageOf(validator.validate(schema, { value: [1] }))).toBe(
+            '$.value must be one of: string, number',
+        );
+        expect(messageOf(validator.validate(schema, { value: { a: 1 } }))).toBe(
+            '$.value must be one of: string, number',
+        );
+        expect(messageOf(validator.validate(schema, { value: null }))).toBe('$.value must not be null');
+        const nullable = holding('value', new ApiJsonSchema(['string', 'number', 'null']));
+        expect(validator.validate(nullable, { value: null })).toBeUndefined();
+    });
+
+    it('still validates the matched member: an object branch obeys its own properties', () => {
+        const branch = new ApiJsonSchema(['string', 'object']);
+        branch.properties = { id: new ApiJsonSchema('integer') };
+        branch.required = ['id'];
+
+        expect(validator.validate(holding('value', branch), { value: { id: 2 } })).toBeUndefined();
+        expect(messageOf(validator.validate(holding('value', branch), { value: { id: 'x' } }))).toBe(
+            '$.value.id must be a number',
+        );
+        expect(messageOf(validator.validate(holding('value', branch), { value: {} }))).toBe(
+            '$.value.id is required',
+        );
+    });
+
+    it('accepts any key only where additionalProperties is EXPLICITLY true', () => {
+        const open = new ApiJsonSchema('object');
+        open.additionalProperties = true;
+        const absent = new ApiJsonSchema('object');
+
+        expect(validator.validate(open, { anything: { deep: [1] } })).toBeUndefined();
+        // An ordinary DTO schema with NO additionalProperties stays strict (#1441).
+        expect(messageOf(validator.validate(absent, { anything: 1 }))).toBe('$.anything is not allowed');
+    });
+
+    it('keeps a typed map typing every value beside the open JSON marker', () => {
+        const map = new ApiJsonSchema('object');
+        map.additionalProperties = new ApiJsonSchema('integer');
+        const schema = new ObjectSchemaBuilder()
+            .required('counts', map)
+            .required('extra', openJson())
+            .build();
+
+        expect(validator.validate(schema, { counts: { a: 1 }, extra: { free: 'form' } })).toBeUndefined();
+        expect(messageOf(validator.validate(schema, { counts: { a: 'one' }, extra: 1 }))).toBe(
+            '$.counts.a must be a number',
+        );
+        expect(messageOf(validator.validate(schema, { counts: {}, extra: 1, surprise: true }))).toBe(
+            '$.surprise is not allowed',
+        );
+    });
+});
+
+/**
  * The union half of the validator (#1009). A discriminated union is narrowed the way the SOURCE
  * narrows it — read the discriminator, pick the branch — so a bad value is reported as the wrong
  * FIELD with the legal values beside it, instead of an undifferentiated "no branch matched".

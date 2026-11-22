@@ -209,6 +209,9 @@ const SWEPT_TOOLS: readonly string[] = [
     // `$ref` to close a loop with, so there is no shape to publish. The same fixture also
     // carries `Mixed`, an un-narrowable union, for the reason above.
     "ExampleApi/save_customer: recursive DTO 'TreeNode' cannot use an inline MCP schema (TreeNode)",
+    // Recursive JSON DATA, declared with the `JsonValueDto` marker (#1447), RENDERS: it is the open
+    // JSON schema, not a recursive DTO to inline.
+    'JsonMarkerApi/json_save',
     // `{@link}` resolved to published names (#1284).
     'LinksApi/fetch_menu',
     'LinksApi/publish_menu',
@@ -252,6 +255,8 @@ const SWEPT_TOOLS: readonly string[] = [
     // Field-level `@hidden` (#1246): MCP keeps a hidden field, as it keeps a hidden method.
     'OrdersApi/fetch_orders',
     'OrdersApi/get_order',
+    // `JsonValueDto` and `@InvalidEndpointForMcp` in the generated documents (#1447).
+    'SettingsApi/save_settings',
     // `{@link}` resolved to published names in every generated output (#1284).
     'MenusApi/fetch_menu',
     'MenusApi/publish_menu',
@@ -297,6 +302,7 @@ describe('every @WpMcpTool in this repo, read by the compiler', () => {
             'apps/app-example/partner-api/src/PartnerOrdersApi.ts',
             'packages/docs/api-doc-model/src/__tests__/fixtures/BrokenLinksApi.ts',
             'packages/docs/api-doc-model/src/__tests__/fixtures/ExampleApi.ts',
+            'packages/docs/api-doc-model/src/__tests__/fixtures/JsonMarkerApi.ts',
             'packages/docs/api-doc-model/src/__tests__/fixtures/LinksApi.ts',
             'packages/docs/api-doc-model/src/__tests__/fixtures/McpAdditiveApi.ts',
             'packages/docs/api-doc-model/src/__tests__/fixtures/McpEnumApi.ts',
@@ -313,6 +319,7 @@ describe('every @WpMcpTool in this repo, read by the compiler', () => {
             'packages/docs/openapi-generator/src/__tests__/fixtures/docrules/McpOnlyUndocumentedApi.ts',
             'packages/docs/openapi-generator/src/__tests__/fixtures/docrules/PrivateRemarksApi.ts',
             'packages/docs/openapi-generator/src/__tests__/fixtures/hidden/OrdersApi.ts',
+            'packages/docs/openapi-generator/src/__tests__/fixtures/json/SettingsApi.ts',
             'packages/docs/openapi-generator/src/__tests__/fixtures/links/MenusApi.ts',
             'packages/docs/openapi-generator/src/__tests__/fixtures/summary/LongToolNameApi.ts',
             'packages/docs/openapi-generator/src/__tests__/fixtures/summary/ShelvesApi.ts',

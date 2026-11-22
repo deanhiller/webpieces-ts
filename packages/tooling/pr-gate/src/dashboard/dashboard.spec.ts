@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { GateDefinition, PrSummary } from '@webpieces/rules-config';
-import { Dashboard, DashboardInput, GateResult, DisableCounts, ChecklistRow } from './dashboard';
+import { Dashboard, DashboardInput, GateResult, DisableCounts, ChecklistRow, ORANGE_FIXED_COMPACT } from './dashboard';
 import { CK_PASS, CK_WARN, CK_OVERRIDDEN, CK_ORANGE_FIXED, CK_FAIL, CK_MISSING } from '@webpieces/rules-config';
 import { ChecklistCommentRenderer } from './checklist-comment-renderer';
 import { ChecklistCommentRow } from './checklist-comment-row';
@@ -401,12 +401,43 @@ describe('renderDetailComment checklists — ONE rolled-up row', () => {
 
     // Issue #1053: an ORANGE whose fix the author recorded ships, stamped with its resolution, and reads as
     // orange (never green) on BOTH the dashboard row and the squash-commit body.
-    it('stamps an author-fixed ORANGE with its resolution, and never renders it green', () => {
+    it('renders an author-fixed ORANGE orange (never green) on the dashboard row and the commit body', () => {
         const stamp = 'orange at aaaaaaaa, author-fixed in bbbbbbbb, not re-reviewed: backfilled before NOT NULL';
         const rows = [new ChecklistRow('db-reviewer', CK_ORANGE_FIXED, stamp)];
         expect(dashboardWith(rows)).toContain('**Checklists:** 🟠 1 ran — 1 orange, author-fixed (not re-reviewed) (db-reviewer)');
         const input = new DashboardInput('My PR', computeGateResults([], []), countAddedDisables(''), true, 'a', 'b', 'c', review(), rows, 'pnpm nx affected --target=ci', 0, AUTHOR, false);
-        expect(renderPrBody(input, '')).toContain(`Checklist — db-reviewer: 🟠 ${stamp}`);
+        expect(renderPrBody(input, '')).toContain(`Checklist — db-reviewer: ${ORANGE_FIXED_COMPACT}`);
+    });
+
+    // Issue #1447: the author-fixed detail is the whole immutable round audit. It stays, verbatim, in the
+    // reviewer checklist comment; the compact PR description (= the squash commit) carries only the status
+    // and the pointer, and never claims a re-review happened.
+    it('keeps the author-fixed round audit out of the commit body and whole in the checklist comment', () => {
+        const audit = [
+            '#### Round 1 (head aaaaaaaa)',
+            'ORANGE: rethrowing loses the file path; wrap it',
+            '#### Author fix (bbbbbbbb)',
+            'wrapped the error with the path, per the reviewer',
+            '',
+            '#### Final state',
+            'orange at aaaaaaaa, author-fixed in bbbbbbbb, not re-reviewed: wrapped the error with the path',
+        ].join('\n');
+        const rows = [new ChecklistRow('error-reviewer', CK_ORANGE_FIXED, audit)];
+        const input = new DashboardInput('My PR', computeGateResults([], []), countAddedDisables(''), true, 'a', 'b', 'c', review(), rows, 'pnpm nx affected --target=ci', 0, AUTHOR, false);
+
+        const body = renderPrBody(input, '');
+        expect(body).toContain(`Checklist — error-reviewer: ${ORANGE_FIXED_COMPACT}`);
+        expect(body).toContain('NOT re-reviewed');
+        for (const line of ['Round 1', 'rethrowing loses the file path', 'wrapped the error', 'Final state']) {
+            expect(body, line).not.toContain(line);
+        }
+
+        const comment = renderChecklistComment(
+            [new ChecklistCommentRow('webpieces-reviewer', 'opus', 'error-reviewer', CK_ORANGE_FIXED, audit, true, ['**/*.ts'], ['**/*.ts'], ['src/a.ts'], 1)],
+            true,
+        );
+        expect(comment).toContain(audit);
+        expect(comment).toContain('ORANGE on the final round — author-fixed, NOT re-reviewed');
     });
 
     // Issue #1053, section A: a checklist a later commit newly triggered is named on ONE non-blocking line.

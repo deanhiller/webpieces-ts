@@ -75,6 +75,13 @@ export class LogApiCall {
      */
     static readonly NODE_DEFAULT_MAX_BODY_CHARS = 50000;
 
+    /**
+     * What a log line carries in place of a body nested too deeply to serialize (#1447). Fixed text:
+     * it names neither the body nor the exception, either of which may hold a masked value.
+     */
+    static readonly NESTING_LIMIT_PLACEHOLDER =
+        '[API body omitted: JSON serialization nesting limit exceeded]';
+
     /** The default for the runtime this module was loaded in, decided once. */
     static readonly RUNTIME_DEFAULT_MAX_BODY_CHARS = LogApiCall.defaultMaxBodyChars(
         LogApiCall.isNodeRuntime(),
@@ -378,7 +385,19 @@ export class LogApiCallImpl {
         dto: unknown,
         methodInfo: ApiMethodInfo,
     ): string | undefined {
-        return methodInfo.mask ? methodInfo.mask.stringify(dto) : JSON.stringify(dto);
+        // eslint-disable-next-line @webpieces/no-unmanaged-exceptions -- only the nesting RangeError is absorbed; every other error is rethrown
+        try {
+            return methodInfo.mask ? methodInfo.mask.stringify(dto) : JSON.stringify(dto);
+        } catch (err: unknown) {
+            const error = toError(err);
+            // A body nested deeper than the engine's stack overflows the serializer with a RangeError.
+            // That must not PREEMPT the API's own bounded-JSON validation, which runs inside the call
+            // and refuses the body with a proper error (#1447) — so the log line says only that it
+            // was omitted. Never the body, never the exception text: either may hold a masked value.
+            if (!(err instanceof RangeError)) throw err;
+            void error;
+            return LogApiCall.NESTING_LIMIT_PLACEHOLDER;
+        }
     }
 
     /**

@@ -573,9 +573,29 @@ export class McpSchemaRenderer {
         return schema;
     }
 
-    /** `T` -> `[T, "null"]`, refusing a field with no type at all rather than publishing `["null"]`. */
+    /**
+     * `JsonValueDto` (#1447): any JSON value, nested to any depth. `additionalProperties: true` is
+     * EXPLICIT on purpose — `ApiJsonSchemaValidator` refuses an undeclared key on an object whose
+     * `additionalProperties` is merely absent, which is what keeps every ordinary DTO strict.
+     */
+    // webpieces-disable no-function-outside-class -- private static mapping of this class
+    private static openJson(): ApiJsonSchema {
+        const schema = new ApiJsonSchema(['string', 'number', 'boolean', 'object', 'array', 'null']);
+        schema.additionalProperties = true;
+        return schema;
+    }
+
+    /**
+     * `T` -> `[T, "null"]`, refusing a field with no type at all rather than publishing `["null"]`.
+     * A type that is already a LIST (`JsonValueDto`'s) keeps every member and gains `null` once —
+     * collapsing it to its first member would silently narrow "any JSON" to "a string".
+     */
     // webpieces-disable no-function-outside-class -- private static mapping of this class
     private static nullable(schema: ApiJsonSchema, where: string): readonly ApiJsonSchemaType[] {
+        const listed = schema.type;
+        if (listed !== undefined && typeof listed !== 'string' && listed.length > 1) {
+            return listed.includes('null') ? listed : [...listed, 'null'];
+        }
         const base = ApiJsonSchema.baseTypeOf(schema);
         if (base === undefined) {
             throw new McpRenderError(
@@ -666,6 +686,9 @@ export class McpSchemaRenderer {
 
     // webpieces-disable no-function-outside-class -- private static mapping of this class
     private static primitive(ref: TypeRef, where: string): ApiJsonSchema {
+        if (ref.primitive === 'json') {
+            return McpSchemaRenderer.openJson();
+        }
         if (ref.primitive === 'string' || ref.primitive === 'boolean') {
             return new ApiJsonSchema(ref.primitive);
         }

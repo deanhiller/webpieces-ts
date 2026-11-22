@@ -67,7 +67,11 @@ The earlier "no import, so it works on any upstream project" justification was w
 
 The same reasoning governs the FIXTURES, which now import the real decorators too. They used to declare stubs — and one of them had drifted to `@WpMcpTool({name, readOnly, idempotent})`, a shape the real decorator has never accepted, with nothing able to notice. A fixture that cannot be wrong about the thing it is a fixture FOR is not testing that thing.
 
-`Integer` is the one name still matched as a literal, because it is a type alias and a type has no runtime symbol whose `.name` could be read.
+`Integer` and `JsonValueDto` are the two names still matched as literals, because each is a type alias and a type has no runtime symbol whose `.name` could be read.
+
+## `JsonValueDto` — the explicit recursive JSON marker (#1447)
+
+`JsonValueDto` (exported by `@webpieces/core-util`) is `string | number | boolean | null | JsonValueDto[] | { [key: string]: JsonValueDto }`. A reference that resolves to a TYPE ALIAS of that name — matched on the declaration, so an import alias still counts, and a consumer's own alias of the same name works too — becomes `TypeRef.primitiveOf('json')`, and every renderer publishes it as `{ "type": ["string","number","boolean","object","array","null"], "additionalProperties": true }`. The self-referencing union is never walked, because no schema walk can expand it. A CLASS or INTERFACE named `JsonValueDto` is NOT the marker: it is resolved as the named DTO it is, since publishing it as "any JSON" would silently drop every field it declares. `additionalProperties: true` is explicit because `ApiJsonSchemaValidator` refuses undeclared keys when it is merely absent — which is what keeps every ordinary DTO strict.
 
 Failures throw `ApiDocExtractionError` and not `RuleFailError` because that type lives in `@webpieces/rules-config` — the TOOLING stream, which a repo pins one release behind on purpose, while this package publishes with the SERVER libs. It is still a structured throw carrying `location` and `cure` as fields, and it hand-numbers nothing — the caller's renderer owns that (`.claude/review/error-output.md`).
 

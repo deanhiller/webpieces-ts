@@ -1,0 +1,9 @@
+{
+    "title": "Settings API",
+    "summary": "Save settings that carry free-form JSON values.",
+    "operationIds": "method",
+    "version": "1.0.0",
+    "apisWhy": "JsonValueDto publishes the open JSON schema; @InvalidEndpointForMcp leaves the MCP document only (#1447).",
+    "apis": [{ "entry": "SettingsApi.ts", "tag": "Settings" }],
+    "securitySchemeNames": []
+}

@@ -84,6 +84,7 @@ export { QueryParams } from './http/QueryParams';
 export type { QueryParamValue } from './http/QueryParams';
 export { WpInt, WpMin, WpMax, NUMERIC_METADATA_KEYS } from './http/numeric-field-decorators';
 export type { Integer } from './http/numeric-field-decorators';
+export type { JsonValueDto } from './http/JsonValueDto';
 export {
     ApiType,
     SVC_TO_SVC,
