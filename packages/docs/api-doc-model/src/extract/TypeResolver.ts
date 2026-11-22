@@ -42,6 +42,15 @@ const MAX_DECORATOR = WpMax.name;
 const INTEGER_ALIAS = 'Integer';
 
 /**
+ * The type-alias name that DECLARES free-form, recursive JSON data (#1447) — `JsonValueDto` in
+ * `@webpieces/core-util`. A literal for the same reason {@link INTEGER_ALIAS} is one: a type alias has
+ * no runtime symbol to read a name off. Unlike `Integer` it is honoured only when the reference
+ * resolves to a TYPE ALIAS — a class or interface that happens to share the name is an ordinary DTO,
+ * and silently publishing it as "any JSON" would drop every field it declares.
+ */
+const JSON_VALUE_ALIAS = 'JsonValueDto';
+
+/**
  * Resolve declared TypeScript types into {@link TypeRef}s, registering every NAMED type it meets as
  * a {@link DocumentedType} a renderer can `$ref`.
  *
@@ -353,6 +362,14 @@ export class TypeResolver {
         );
         if (declaration === undefined) {
             return this.recordUnmapped(node, `no declaration found for '${name}'`);
+        }
+        if (
+            ts.isTypeAliasDeclaration(declaration) &&
+            declaration.name.text === JSON_VALUE_ALIAS
+        ) {
+            // Checked on the DECLARATION's name, so `import { JsonValueDto as Settings }` is still
+            // the marker. Its self-referencing union is never walked: no schema could expand it.
+            return TypeRef.primitiveOf('json');
         }
         return this.resolveDeclaration(
             TypeResolver.declaredName(declaration, name),

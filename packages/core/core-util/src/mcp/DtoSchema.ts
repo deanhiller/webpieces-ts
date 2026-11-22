@@ -253,7 +253,61 @@ export class ApiJsonSchemaValidator {
         if (schema.oneOf !== undefined) {
             return this.validateUnion(schema, value, path);
         }
-        switch (ApiJsonSchema.baseTypeOf(schema)) {
+        const types = ApiJsonSchemaValidator.nonNullTypesOf(schema);
+        if (types.length > 1) {
+            return this.validateMultiType(schema, types, value, path);
+        }
+        return this.validateAs(types[0], schema, value, path);
+    }
+
+    /**
+     * A `type` ARRAY naming two or more non-null types — `["string","number","object"]`, the open
+     * JSON schema `JsonValueDto` publishes (#1447). JSON Schema accepts the value when ANY listed type
+     * matches it, so the value's own JSON type selects the one to validate against; `integer` matches
+     * a whole number only. A value matching none is refused naming every accepted type.
+     */
+    private validateMultiType(
+        schema: ApiJsonSchema,
+        types: readonly ApiJsonSchemaType[],
+        value: DtoValue,
+        path: string,
+    ): DtoValidationFailure | undefined {
+        const matched = types.find((type: ApiJsonSchemaType) =>
+            ApiJsonSchemaValidator.isOfType(type, value),
+        );
+        if (matched === undefined) {
+            return new DtoValidationFailure(path, `${path} must be one of: ${types.join(', ')}`);
+        }
+        return this.validateAs(matched, schema, value, path);
+    }
+
+    /** True when `value`'s JSON type is `type`; `integer` is a whole `number`. */
+    // webpieces-disable no-function-outside-class -- private static predicate of this validator
+    private static isOfType(type: ApiJsonSchemaType, value: DtoValue): boolean {
+        if (type === 'array') return Array.isArray(value);
+        if (type === 'object') return typeof value === 'object' && value !== null && !Array.isArray(value);
+        if (type === 'integer') return typeof value === 'number' && Number.isInteger(value);
+        if (type === 'number') return typeof value === 'number' && Number.isFinite(value);
+        if (type === 'null') return value === null;
+        return typeof value === type;
+    }
+
+    /** Every member of `type` except `null`, in declaration order — empty when `type` is absent. */
+    // webpieces-disable no-function-outside-class -- private static reader of a schema
+    private static nonNullTypesOf(schema: ApiJsonSchema): readonly ApiJsonSchemaType[] {
+        if (schema.type === undefined) return [];
+        if (typeof schema.type === 'string') return [schema.type];
+        return schema.type.filter((one: ApiJsonSchemaType) => one !== 'null');
+    }
+
+    /** Validate `value` as ONE JSON type of `schema` — `undefined` (no type) accepts anything. */
+    private validateAs(
+        type: ApiJsonSchemaType | undefined,
+        schema: ApiJsonSchema,
+        value: DtoValue,
+        path: string,
+    ): DtoValidationFailure | undefined {
+        switch (type) {
             case 'object':
                 return this.validateObject(schema, value, path);
             case 'array':
@@ -262,7 +316,7 @@ export class ApiJsonSchemaValidator {
                 return this.validateString(schema, value, path);
             case 'number':
             case 'integer':
-                return this.validateNumber(schema, value, path);
+                return this.validateNumber(type, schema, value, path);
             case 'boolean':
                 return typeof value === 'boolean'
                     ? undefined
@@ -368,6 +422,10 @@ export class ApiJsonSchemaValidator {
                 | ApiJsonSchema
                 | undefined;
             if (declared === undefined) {
+                // `additionalProperties: true` is an EXPLICITLY open object — the JSON payload
+                // `JsonValueDto` publishes (#1447) — and accepts any key holding any JSON value. It is
+                // not the same as an ABSENT `additionalProperties`, which stays strict below.
+                if (extra === true) continue;
                 // An undeclared key is refused unless the schema is a TYPED MAP — also when the
                 // schema is OPEN (no `additionalProperties`). That is deliberate (#1441): a tool's
                 // published outputSchema is opened for clients by `ApiJsonSchema.openForClients`,
@@ -428,6 +486,7 @@ export class ApiJsonSchemaValidator {
     }
 
     private validateNumber(
+        type: 'number' | 'integer',
         schema: ApiJsonSchema,
         value: DtoValue,
         path: string,
@@ -435,7 +494,7 @@ export class ApiJsonSchemaValidator {
         if (typeof value !== 'number' || !Number.isFinite(value)) {
             return new DtoValidationFailure(path, `${path} must be a number`);
         }
-        if (ApiJsonSchema.baseTypeOf(schema) === 'integer' && !Number.isInteger(value)) {
+        if (type === 'integer' && !Number.isInteger(value)) {
             return new DtoValidationFailure(path, `${path} must be an integer`);
         }
         if (schema.minimum !== undefined && value < schema.minimum) {

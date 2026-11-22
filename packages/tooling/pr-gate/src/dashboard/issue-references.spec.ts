@@ -22,7 +22,21 @@ function body(summary: string, issues: AddressedIssue[]): string {
 }
 
 describe('addressesIssues in the PR body = the squash-commit body (issue #1310)', () => {
-    it.each([CK_ORANGE_FIXED, CK_OVERRIDDEN])('keeps %s commentary from closing the delivery issue (#1368)', (status: string) => {
+    // An author-fixed ORANGE's commentary never reaches the body at all (#1447): only the comment has it.
+    it('keeps author-fixed commentary out of the body entirely, and whole in the checklist comment (#1447)', () => {
+        const prose = 'Deploy after merge, then close #955 only when verification succeeds.';
+        const value = input('Add startup diagnostics.', [new AddressedIssue(GITHUB, false)]);
+        value.checklists = [new ChecklistRow('issue-reviewer', CK_ORANGE_FIXED, prose)];
+        const rendered = dash.renderPrBody(value, PR_URL);
+        expect(rendered).not.toContain('#955 only when verification succeeds');
+        expect(rendered).toContain(`Part of ${GITHUB}`);
+        const comment = new ChecklistCommentRenderer().render([
+            new ChecklistCommentRow('codex', 'unknown', 'issue-reviewer', CK_ORANGE_FIXED, prose, true, [], [], ['src/a.ts'], 1),
+        ], true, true, 0, false);
+        expect(comment).toContain(prose);
+    });
+
+    it.each([CK_OVERRIDDEN])('keeps %s commentary from closing the delivery issue (#1368)', (status: string) => {
         const prose = 'Deploy after merge, then close #955 only when verification succeeds.';
         const value = input('Add startup diagnostics.', [new AddressedIssue(GITHUB, false)]);
         value.checklists = [new ChecklistRow('issue-reviewer', status, prose)];

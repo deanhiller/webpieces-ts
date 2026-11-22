@@ -288,6 +288,10 @@ export class SchemaRenderer {
             }
             return schema.set('type', [declared, 'null']);
         }
+        if (Array.isArray(declared)) {
+            // A type that is already a LIST (`JsonValueDto`'s, #1447) gains `null` once, in place.
+            return declared.includes('null') ? schema : schema.set('type', [...declared, 'null']);
+        }
         return new JsonObject().set('anyOf', [schema, new JsonObject().set('type', 'null')]);
     }
 
@@ -344,6 +348,13 @@ export class SchemaRenderer {
     }
 
     private primitive(ref: TypeRef): JsonObject {
+        if (ref.primitive === 'json') {
+            // `JsonValueDto` (#1447): any JSON value, nested to any depth — the same open schema the
+            // MCP catalogs publish, with `additionalProperties: true` stated rather than implied.
+            return new JsonObject()
+                .set('type', ['string', 'number', 'boolean', 'object', 'array', 'null'])
+                .set('additionalProperties', true);
+        }
         if (ref.primitive === 'unknown') {
             // No `type` at all: JSON Schema's honest spelling of "any shape". It is only ever reached
             // by a `void` return, which is why it is not the unmapped refusal.

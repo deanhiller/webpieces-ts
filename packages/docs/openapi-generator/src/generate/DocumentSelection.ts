@@ -184,9 +184,17 @@ export class DocumentSelection {
      * exists nowhere any reader of any of these documents could call it. Publishing it even in the
      * private one would document a route that does not exist in any deployed environment — worse
      * than omitting it, because a reader would reasonably try to call it.
+     *
+     * `@InvalidEndpointForMcp` subtracts a method from the MCP document ONLY (#1447). The method is
+     * declared permanently unusable as an agent tool — typically because its shape cannot be an MCP
+     * schema at all — so the agent-facing projection must not carry it, while the private and
+     * customer documents still publish it exactly as before.
      */
     acceptsEndpoint(endpoint: DocumentedEndpoint): boolean {
         if (endpoint.localOnly) {
+            return false;
+        }
+        if (this.apiType === MCP && endpoint.invalidForMcp !== undefined) {
             return false;
         }
         return !this.dropHidden || !endpoint.hidden;

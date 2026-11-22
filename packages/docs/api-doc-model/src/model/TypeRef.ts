@@ -10,8 +10,13 @@
  */
 export type TypeRefKind = 'primitive' | 'ref' | 'array' | 'openMap' | 'enum' | 'union' | 'unmapped';
 
-/** The scalar kinds a renderer can emit without any further lookup. */
-export type PrimitiveKind = 'string' | 'number' | 'boolean' | 'null' | 'unknown';
+/**
+ * The kinds a renderer can emit without any further lookup. `json` is ANY JSON value — scalar,
+ * object, array or `null`, nested to any depth — declared by writing `JsonValueDto` (#1447). It is
+ * not `unknown`: `unknown` is "no shape at all" and is refused on an MCP tool, where `json` is a
+ * deliberate, published "free-form JSON data" and renders as the open JSON schema.
+ */
+export type PrimitiveKind = 'string' | 'number' | 'boolean' | 'null' | 'unknown' | 'json';
 
 export class TypeRef {
     private constructor(
