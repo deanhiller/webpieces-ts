@@ -8,15 +8,23 @@ Each section below is one root's dependency tree: Level 0 is the root
 downward through Levels 1, 2, … A dependency shared by multiple roots
 appears in each root's tree.
 
-## ClientHttpBrowserFactory — api-impl, Level 0…1
+## ClientHttpBrowserFactory — api-impl, Level 0…2
 
 ```mermaid
 graph TD
     ClientHttpBrowserFactory["ClientHttpBrowserFactory"]:::apiImpl
+    DeadlineScheduler{{"DeadlineScheduler ?"}}:::unresolved
+    HttpClientRuntime["HttpClientRuntime"]:::many
+    HttpFetch{{"HttpFetch ?"}}:::unresolved
+    HttpRuntimeKind{{"HttpRuntimeKind ?"}}:::unresolved
     MutableContextStore["MutableContextStore"]:::many
     RequestLifecycleListener{{"RequestLifecycleListener ?"}}:::unresolved
+    ClientHttpBrowserFactory --> HttpClientRuntime
     ClientHttpBrowserFactory --> MutableContextStore
     ClientHttpBrowserFactory --> RequestLifecycleListener
+    HttpClientRuntime --> DeadlineScheduler
+    HttpClientRuntime --> HttpFetch
+    HttpClientRuntime --> HttpRuntimeKind
     classDef controller fill:#1f6feb,color:#ffffff,stroke:#0d419d
     classDef apiImpl fill:#0d9488,color:#ffffff,stroke:#0f766e
     classDef component fill:#2da44e,color:#ffffff,stroke:#1a7f37

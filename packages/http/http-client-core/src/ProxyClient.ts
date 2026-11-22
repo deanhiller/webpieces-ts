@@ -34,6 +34,7 @@ import { StreamingCapabilityError } from './StreamingCapabilityError';
 import { ByteReadableStream } from './ByteStream';
 import { ResponseStreamingCall } from './ResponseStreamingCall';
 import { DuplexStreamingCall } from './DuplexStreamingCall';
+import { HttpClientRuntime, HttpFetchInit } from './HttpClientRuntime';
 
 /**
  * ProxyClient - the HTTP call engine behind one API contract's client proxy.
@@ -101,8 +102,15 @@ export abstract class ProxyClient {
      *   (node: RequestContextApiCallContext; browser: BrowserApiCallContext). REQUIRED, with no
      *   default: core-util cannot construct either one, and a default here would have to reach for a
      *   process-global — which is exactly the throw-on-first-call this parameter deleted.
+     * @param runtime - this client's transport ({@link HttpClientRuntime.fetch}) and deadline clock
+     *   ({@link HttpClientRuntime.deadlines}), handed down by its factory (#1445). REQUIRED for the
+     *   same reason: a default here would be a process-wide fallback a React Native client could
+     *   silently land on.
      */
-    constructor(protected readonly logApiCall: LogApiCallImpl) {}
+    constructor(
+        protected readonly logApiCall: LogApiCallImpl,
+        private readonly runtime: HttpClientRuntime,
+    ) {}
 
     // ---------------------------------------------------------------- environment hooks
 
@@ -469,6 +477,7 @@ export abstract class ProxyClient {
                     CallDeadline.run(
                         timeoutMs,
                         callContext,
+                        this.runtime.deadlines,
                         async (deadlineSignal: AbortSignal) => {
                             const call = new DuplexStreamingCall(
                                 this.apiName,
@@ -499,6 +508,7 @@ export abstract class ProxyClient {
                         },
                     ),
                 new TransportDefault(30_000),
+                this.runtime.deadlines,
             );
             this.readResponseContext(route, response);
             this.onRequestEnd(
@@ -548,7 +558,7 @@ export abstract class ProxyClient {
                 callContext,
                 (timeoutMs: number) => {
                     response = undefined;
-                    return CallDeadline.run(timeoutMs, callContext, async (signal: AbortSignal) => {
+                    return CallDeadline.run(timeoutMs, callContext, this.runtime.deadlines, async (signal: AbortSignal) => {
                         const request = await this.prepareRequest(route, args);
                         CallDeadline.throwIfAborted(signal);
                         const received = await this.chain.execute(request, () =>
@@ -565,6 +575,7 @@ export abstract class ProxyClient {
                     });
                 },
                 new TransportDefault(30_000),
+                this.runtime.deadlines,
             );
         } catch (err: unknown) {
             const error = toError(err);
@@ -611,7 +622,9 @@ export abstract class ProxyClient {
     }
 
     /**
-     * ONE transmission — the bottom of the filter chain, and the only place `fetch` is called.
+     * ONE transmission — the bottom of the filter chain, and the only place the client's
+     * {@link HttpClientRuntime.fetch} is called. That is the factory's injected transport (#1445), or
+     * the platform `fetch` by default; never a global looked up behind the factory's back.
      *
      * Everything it sends comes off the {@link ClientRequest} as the chain left it, so a filter's
      * edits to the url, the headers or the serialized body are exactly what goes on the wire. It may
@@ -623,23 +636,17 @@ export abstract class ProxyClient {
      */
     protected async sendOnce(request: ClientRequest, signal: AbortSignal): Promise<Response> {
         CallDeadline.throwIfAborted(signal);
-        const options: RequestInit = {
-            method: request.route.httpMethod,
+        const options = new HttpFetchInit(
+            request.route.httpMethod,
+            request.headersAsRecord(),
             signal,
-            headers: request.headersAsRecord(),
-            redirect:
-                request.route.responseType === 'full' || !request.followRedirects
-                    ? 'manual'
-                    : 'follow',
-        };
-        if (request.body !== undefined) {
-            options.body = request.body;
-        }
+            request.route.responseType === 'full' || !request.followRedirects ? 'manual' : 'follow',
+            request.body,
+        );
         // webpieces-disable no-unmanaged-exceptions -- classify a network reject, then rethrow it typed
         // eslint-disable-next-line @webpieces/no-unmanaged-exceptions
         try {
-            // webpieces-disable no-fetch -- this IS the generated-client implementation the rule points everyone to
-            return await fetch(this.transportUrl(request), options);
+            return await this.runtime.fetch(this.transportUrl(request), options);
         } catch (err: unknown) {
             const error = toError(err);
             throw this.networkRejectClassifier.toNetworkError(error, request.url);

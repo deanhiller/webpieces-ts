@@ -13,6 +13,7 @@ import {
     ApiPrototype,
     ByteReadableStream,
     ClientRequest,
+    HttpClientRuntime,
     ProxyClient,
     RequestOutcome,
     StreamingCapabilityError,
@@ -51,12 +52,14 @@ export class BrowserProxyClient extends ProxyClient {
 
     constructor(
         private readonly contextMgr: ContextMgr,
+        runtime: HttpClientRuntime,
         private readonly lifecycleListener?: RequestLifecycleListener,
     ) {
         // The browser's ApiCallContext, constructed here rather than installed at startup: its store
         // is static, so every instance stamps into the one slot BrowserApiCallContext.snapshot()
-        // reads — which is how a browser logger folds the `api` tag into each line.
-        super(new LogApiCallImpl(new BrowserApiCallContext()));
+        // reads — which is how a browser logger folds the `api` tag into each line. The runtime is
+        // the factory's (#1445): platform fetch + JS timers, or the app's native-backed pair.
+        super(new LogApiCallImpl(new BrowserApiCallContext()), runtime);
     }
 
     /** Bind this client to one API contract + base URL. */

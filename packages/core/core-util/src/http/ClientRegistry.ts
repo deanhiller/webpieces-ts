@@ -1,6 +1,7 @@
 import { Attempt, CallContext, CallStrategy } from './CallStrategy';
 import { CallDeadline } from './CallDeadline';
 import { TransportDefault } from './TransportDefault';
+import { DeadlineScheduler } from './DeadlineScheduler';
 import { ApiRegistry } from './ApiRegistry';
 import { CallOutcome } from './ErrorClassifier';
 import { ApiMethodInfo } from './ApiMethodInfo';
@@ -261,6 +262,9 @@ export class ClientRegistry {
      *
      * Every attempt is wrapped so a retried TRANSIENT failure logs one
      * `WARN [API-client-attempt-TRANSIENT]` line (see {@link LoggedAttempts}).
+     *
+     * `deadlines` is the calling client's {@link DeadlineScheduler}, handed to whichever strategy
+     * runs so its backoff waits on the same clock the attempt deadlines use (#1445).
      */
     // webpieces-disable no-function-outside-class -- transport-independent policy execution
     static async execute<T>(
@@ -268,6 +272,7 @@ export class ClientRegistry {
         context: CallContext,
         attempt: Attempt<T>,
         fallback: TransportDefault,
+        deadlines: DeadlineScheduler,
     ): Promise<T> {
         const scoped =
             context.contract === api
@@ -277,14 +282,14 @@ export class ClientRegistry {
         const rungs = ClientRegistry.policies.rungs(api, scoped.methodName);
         const strategy = rungs.find((p: CallPolicy) => p.strategy !== undefined)?.strategy;
         if (strategy !== undefined) {
-            return (await strategy(logged, scoped)) as T;
+            return (await strategy(logged, scoped, deadlines)) as T;
         }
         const timeoutMs = rungs.find((p: CallPolicy) => p.timeoutMs !== undefined)?.timeoutMs;
         if (timeoutMs !== undefined) {
             return logged(timeoutMs);
         }
         if (fallback.strategy !== undefined) {
-            return (await fallback.strategy(logged, scoped)) as T;
+            return (await fallback.strategy(logged, scoped, deadlines)) as T;
         }
         return logged(fallback.timeoutMs);
     }

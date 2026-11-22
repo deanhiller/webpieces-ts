@@ -20,6 +20,7 @@ import {
     CallContext,
     RetryStrategy,
     TransportDefault,
+    TimerDeadlineScheduler,
     WRITE_IDEMPOTENT,
     toError,
 } from '@webpieces/core-util';
@@ -84,6 +85,12 @@ export class TaskProxyClient {
         30_000,
         new RetryStrategy(5_000, 3, 500, 2, 4_000).run,
     );
+
+    /**
+     * A server-side enqueue keeps standard JS timers: Node never pauses them the way a backgrounded
+     * React Native host does, so the injectable clock (#1445) is fixed here rather than configured.
+     */
+    private readonly deadlines = new TimerDeadlineScheduler();
 
     /** Path B's safety cap when no timeout is registered: caller-owned gax timing still ends. */
     static readonly ENQUEUE_SAFETY_CAP_MS = 30_000;
@@ -187,13 +194,13 @@ export class TaskProxyClient {
         await this.logApiCall.execute(info, requestDto, async () => {
             const callContext = new CallContext(this.apiName, methodName, WRITE_IDEMPOTENT, this.apiClass);
             const attempt = (timeoutMs: number): Promise<JobReference> =>
-                CallDeadline.run(timeoutMs, callContext, (signal: AbortSignal) =>
+                CallDeadline.run(timeoutMs, callContext, this.deadlines, (signal: AbortSignal) =>
                     this.attempt(plan, enqueuePlan, frame.info, requestDto, timeoutMs, signal),
                 );
             // Only the winning attempt may publish the reference. A late enqueue cannot overwrite it.
             frame.jobRef = await this.dedupAware(methodName, () =>
                 enqueuePlan.gax === undefined
-                    ? ClientRegistry.execute(this.apiClass, callContext, attempt, TaskProxyClient.ENQUEUE_TRANSPORT_DEFAULT)
+                    ? ClientRegistry.execute(this.apiClass, callContext, attempt, TaskProxyClient.ENQUEUE_TRANSPORT_DEFAULT, this.deadlines)
                     : attempt(ClientRegistry.resolveTimeout(this.apiClass, methodName, TaskProxyClient.ENQUEUE_SAFETY_CAP_MS)),
             );
             // Fire-and-forget: the enqueue ack is not a meaningful response, but it is non-null so

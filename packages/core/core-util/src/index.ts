@@ -311,6 +311,9 @@ export { CallScope, CallScopeLadder } from './http/CallScope';
 export { TransportDefault } from './http/TransportDefault';
 export { RetryStrategy } from './http/RetryStrategy';
 export { CallDeadline } from './http/CallDeadline';
+// #1445: the injectable clock behind every call deadline and retry backoff.
+export { TimerDeadlineScheduler } from './http/DeadlineScheduler';
+export type { DeadlineScheduler, DeadlineTimer } from './http/DeadlineScheduler';
 export { CallContext } from './http/CallStrategy';
 export type { Attempt, CallStrategy } from './http/CallStrategy';
 export { ApiCallTimeoutError } from './http/ApiCallTimeoutError';

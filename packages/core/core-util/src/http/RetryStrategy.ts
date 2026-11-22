@@ -1,5 +1,6 @@
 import { Attempt, CallContext, CallStrategy } from './CallStrategy';
 import { CallDeadline } from './CallDeadline';
+import { DeadlineScheduler } from './DeadlineScheduler';
 import { ApiRegistry } from './ApiRegistry';
 import { CallOutcome } from './ErrorClassifier';
 import { ApiMethodInfo } from './ApiMethodInfo';
@@ -19,7 +20,11 @@ import { toError } from '../lib/errorUtils';
  *   registered at ALL: a transient error on a non-idempotent write may already have happened.
  *
  * Each attempt gets its own `attemptTimeoutMs` deadline. Between attempts it waits
- * `initialDelayMs`, then multiplies by `delayMultiplier`, capped at `maxDelayMs`.
+ * `initialDelayMs`, then multiplies by `delayMultiplier`, capped at `maxDelayMs`. The wait is
+ * scheduled on the calling client's {@link DeadlineScheduler} — never a bare `setTimeout` — so a
+ * React Native client with a native-backed scheduler does not stall between attempts while its JS
+ * timers are paused (#1445). The backoff never resets or extends an attempt's own deadline: each
+ * attempt is a fresh `CallDeadline.run` with exactly `attemptTimeoutMs`.
  *
  * When it RETRIED and ran out, it throws {@link ApiRetriesExhaustedError} (`cause` = the last
  * attempt's error), which is classified FAILURE so no layer above retries again. A call that made a
@@ -45,11 +50,23 @@ export class RetryStrategy {
             throw new RangeError('delayMultiplier must be finite and at least 1');
         }
         // webpieces-disable no-any-unknown -- registry strategies span heterogeneous response DTOs
-        this.run = (call: Attempt<unknown>, ctx: CallContext): Promise<unknown> => this.execute(call, ctx);
+        this.run = (
+            // webpieces-disable no-any-unknown -- registry strategies span heterogeneous response DTOs
+            call: Attempt<unknown>,
+            ctx: CallContext,
+            deadlines: DeadlineScheduler,
+            // webpieces-disable no-any-unknown -- registry strategies span heterogeneous response DTOs
+        ): Promise<unknown> => this.execute(call, ctx, deadlines);
     }
 
     // webpieces-disable no-any-unknown -- registry strategies span heterogeneous response DTOs
-    private async execute(call: Attempt<unknown>, ctx: CallContext): Promise<unknown> {
+    private async execute(
+        // webpieces-disable no-any-unknown -- registry strategies span heterogeneous response DTOs
+        call: Attempt<unknown>,
+        ctx: CallContext,
+        deadlines: DeadlineScheduler,
+        // webpieces-disable no-any-unknown -- registry strategies span heterogeneous response DTOs
+    ): Promise<unknown> {
         const methodInfo = new ApiMethodInfo(
             'client',
             ctx.apiName,
@@ -78,7 +95,7 @@ export class RetryStrategy {
                     }
                     throw new ApiRetriesExhaustedError(attempt, error);
                 }
-                await RetryStrategy.sleep(delayMs);
+                await RetryStrategy.sleep(deadlines, delayMs);
                 delayMs = Math.min(delayMs * this.delayMultiplier, this.maxDelayMs);
             }
         }
@@ -91,8 +108,11 @@ export class RetryStrategy {
         }
     }
 
+    /** The backoff wait, on the client's scheduler. Its timer has fired, so there is nothing to cancel. */
     // webpieces-disable no-function-outside-class -- backoff timer
-    private static sleep(ms: number): Promise<void> {
-        return new Promise<void>((resolve: () => void) => setTimeout(resolve, ms));
+    private static sleep(deadlines: DeadlineScheduler, ms: number): Promise<void> {
+        return new Promise<void>((resolve: () => void) => {
+            deadlines.schedule(ms, resolve);
+        });
     }
 }

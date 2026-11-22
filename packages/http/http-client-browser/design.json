@@ -6,7 +6,7 @@
             "root": "ClientHttpBrowserFactory",
             "rootKind": "apiImplementation",
             "file": "packages/http/http-client-browser/src/ClientHttpBrowserFactory.ts",
-            "maxLevel": 1,
+            "maxLevel": 2,
             "nodes": [
                 {
                     "id": "ClientHttpBrowserFactory",
@@ -15,6 +15,38 @@
                     "scope": "transient",
                     "file": "packages/http/http-client-browser/src/ClientHttpBrowserFactory.ts",
                     "level": 0
+                },
+                {
+                    "id": "DeadlineScheduler",
+                    "className": "DeadlineScheduler",
+                    "kind": "unresolved",
+                    "scope": "transient",
+                    "file": "packages/http/http-client-core/src/HttpClientRuntime.ts",
+                    "level": 2
+                },
+                {
+                    "id": "HttpClientRuntime",
+                    "className": "HttpClientRuntime",
+                    "kind": "class",
+                    "scope": "transient",
+                    "file": "packages/http/http-client-core/src/HttpClientRuntime.ts",
+                    "level": 1
+                },
+                {
+                    "id": "HttpFetch",
+                    "className": "HttpFetch",
+                    "kind": "unresolved",
+                    "scope": "transient",
+                    "file": "packages/http/http-client-core/src/HttpClientRuntime.ts",
+                    "level": 2
+                },
+                {
+                    "id": "HttpRuntimeKind",
+                    "className": "HttpRuntimeKind",
+                    "kind": "unresolved",
+                    "scope": "transient",
+                    "file": "packages/http/http-client-core/src/HttpClientRuntime.ts",
+                    "level": 2
                 },
                 {
                     "id": "MutableContextStore",
@@ -36,6 +68,15 @@
             "edges": [
                 {
                     "from": "ClientHttpBrowserFactory",
+                    "to": "HttpClientRuntime",
+                    "injection": "type",
+                    "token": "HttpClientRuntime",
+                    "tokenKey": "class:packages/http/http-client-core/src/HttpClientRuntime.ts#HttpClientRuntime",
+                    "paramName": "runtime",
+                    "paramType": "HttpClientRuntime"
+                },
+                {
+                    "from": "ClientHttpBrowserFactory",
                     "to": "MutableContextStore",
                     "injection": "type",
                     "token": "MutableContextStore",
@@ -51,9 +92,39 @@
                     "tokenKey": "type:RequestLifecycleListener",
                     "paramName": "lifecycleListener",
                     "paramType": "RequestLifecycleListener"
+                },
+                {
+                    "from": "HttpClientRuntime",
+                    "to": "DeadlineScheduler",
+                    "injection": "type",
+                    "token": "DeadlineScheduler",
+                    "tokenKey": "type:DeadlineScheduler",
+                    "paramName": "deadlines",
+                    "paramType": "DeadlineScheduler"
+                },
+                {
+                    "from": "HttpClientRuntime",
+                    "to": "HttpFetch",
+                    "injection": "type",
+                    "token": "HttpFetch",
+                    "tokenKey": "type:HttpFetch",
+                    "paramName": "fetch",
+                    "paramType": "HttpFetch"
+                },
+                {
+                    "from": "HttpClientRuntime",
+                    "to": "HttpRuntimeKind",
+                    "injection": "type",
+                    "token": "HttpRuntimeKind",
+                    "tokenKey": "type:HttpRuntimeKind",
+                    "paramName": "kind",
+                    "paramType": "HttpRuntimeKind"
                 }
             ],
             "unresolved": [
+                "DeadlineScheduler",
+                "HttpFetch",
+                "HttpRuntimeKind",
                 "RequestLifecycleListener"
             ]
         }

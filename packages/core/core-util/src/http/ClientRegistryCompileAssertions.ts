@@ -2,6 +2,8 @@ import { ClientRegistry } from './ClientRegistry';
 import { CallScope } from './CallScope';
 import { CallContext } from './CallStrategy';
 import { WRITE } from './HttpEndpointOptions';
+import { TransportDefault } from './TransportDefault';
+import { TimerDeadlineScheduler } from './DeadlineScheduler';
 
 /** An abstract SDK-wrapping `XxxApi` — the shape an api-client keys its policies by. */
 abstract class AbstractTargetApi {
@@ -67,6 +69,19 @@ class ClientRegistryCompileAssertions {
             (ms: number) => Promise.resolve(ms),
             // @ts-expect-error execute(..., defaultMs: number) became execute(..., fallback: TransportDefault)
             30_000,
+            new TimerDeadlineScheduler(),
+        );
+    }
+
+    /** The client's clock is REQUIRED: no call path may silently fall back to a global timer (#1445). */
+    deadlinesAreRequired(): void {
+        const context = new CallContext('Api', 'work', WRITE, ClientRegistryCompileAssertions);
+        // @ts-expect-error execute(...) takes the calling client's DeadlineScheduler as its last argument
+        void ClientRegistry.execute(
+            ClientRegistryCompileAssertions,
+            context,
+            (ms: number) => Promise.resolve(ms),
+            new TransportDefault(30_000),
         );
     }
 }

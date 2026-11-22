@@ -1,4 +1,5 @@
 import { EndpointOperation } from './HttpEndpointOptions';
+import { DeadlineScheduler } from './DeadlineScheduler';
 
 /** One bounded attempt. Only an explicitly registered strategy may retry it. */
 export type Attempt<T> = (timeoutMs: number) => Promise<T>;
@@ -36,5 +37,15 @@ export class CallContext {
     }
 }
 
-/** Owns all timing and retry decisions. No public cancellation signal. */
-export type CallStrategy<T> = (call: Attempt<T>, ctx: CallContext) => Promise<T>;
+/**
+ * Owns all timing and retry decisions. No public cancellation signal.
+ *
+ * `deadlines` is the calling CLIENT's clock (#1445): a strategy that waits between attempts waits
+ * through it, never through a bare `setTimeout`, so a React Native client configured with a
+ * native-backed scheduler is not left parked on a paused JS timer between attempts.
+ */
+export type CallStrategy<T> = (
+    call: Attempt<T>,
+    ctx: CallContext,
+    deadlines: DeadlineScheduler,
+) => Promise<T>;

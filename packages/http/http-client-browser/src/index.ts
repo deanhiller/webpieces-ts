@@ -42,6 +42,16 @@ export type { RequestLifecycleListener } from './RequestLifecycleListener';
 
 // The isomorphic engine, re-exported so a browser app needs one import.
 export { ProxyClient, ClientErrorTranslator, RequestOutcome } from '@webpieces/http-client-core';
+// #1445: the factory's runtime collaborator — injected fetch + deadline clock, required in React Native.
+export {
+    HttpClientRuntime,
+    HttpFetchInit,
+    HttpRuntimeKind,
+    ReactNativeRuntimeConfigError,
+} from '@webpieces/http-client-core';
+export type { HttpFetch } from '@webpieces/http-client-core';
+export { TimerDeadlineScheduler } from '@webpieces/core-util';
+export type { DeadlineScheduler, DeadlineTimer } from '@webpieces/core-util';
 export type { ApiPrototype } from '@webpieces/http-client-core';
 export { StreamingCapabilityError } from '@webpieces/http-client-core';
 

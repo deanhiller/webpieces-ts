@@ -4,6 +4,9 @@ import { CallScope } from '../CallScope';
 import { CallContext } from '../CallStrategy';
 import { TransportDefault } from '../TransportDefault';
 import { READ } from '../HttpEndpointOptions';
+import { TimerDeadlineScheduler } from '../DeadlineScheduler';
+
+const timers = new TimerDeadlineScheduler();
 
 /** The context's own contract; `execute` re-keys it onto whichever class it is given. */
 class SameApi {}
@@ -22,13 +25,13 @@ describe('ClientRegistry identity and configuration', () => {
         expect(first.name).toBe(second.name);
         ClientRegistry.setTimeout(10, CallScope.method(first, 'work'));
         const attempt = (ms: number): Promise<number> => Promise.resolve(ms);
-        expect(await ClientRegistry.execute(first, work, attempt, new TransportDefault(30_000))).toBe(10);
-        expect(await ClientRegistry.execute(second, work, attempt, new TransportDefault(30_000))).toBe(
+        expect(await ClientRegistry.execute(first, work, attempt, new TransportDefault(30_000), timers)).toBe(10);
+        expect(await ClientRegistry.execute(second, work, attempt, new TransportDefault(30_000), timers)).toBe(
             30_000,
         );
         ClientRegistry.setStrategy(() => Promise.resolve(99), CallScope.api(first));
-        expect(await ClientRegistry.execute(first, work, attempt, new TransportDefault(30_000))).toBe(99);
-        expect(await ClientRegistry.execute(second, work, attempt, new TransportDefault(5_000))).toBe(
+        expect(await ClientRegistry.execute(first, work, attempt, new TransportDefault(30_000), timers)).toBe(99);
+        expect(await ClientRegistry.execute(second, work, attempt, new TransportDefault(5_000), timers)).toBe(
             5_000,
         );
     });
