@@ -71,3 +71,80 @@ progress bar. Every failure it rejects with carries `err.callMode === CallMode.B
 "log + report, no dialog" with no app-side bookkeeping. The error's class is unchanged — every
 `instanceof` keeps working — and the property is non-enumerable, so it never reaches JSON or a log
 record. A client bound with `Binder.createRpcClientAndBind` is FOREGROUND.
+
+## React Native
+
+The same typed client runs in React Native JavaScript, but there it needs an explicit runtime (#1445).
+React Native's default `fetch` (whatwg-fetch over XHR, which settles through `setTimeout(..., 0)`) and
+its JS timers can stop progressing while an Android phone is locked, while native-delivered callbacks
+keep running. A call deadline built on JS timers therefore cannot fire either. So each React Native
+factory takes an `HttpClientRuntime` with two native-backed collaborators:
+
+```ts
+import { fetch as expoFetch } from 'expo/fetch';
+import { ClientHttpBrowserFactory, HttpClientRuntime, MutableContextStore } from '@webpieces/http-client-browser';
+
+// once, at startup — and pass the SAME runtime to EVERY React Native factory you build
+const runtime = HttpClientRuntime.reactNative(expoFetch, nativeDeadlineScheduler);
+const factory = new ClientHttpBrowserFactory(store, lifecycleListener, runtime);
+```
+
+- **`fetch`** — any `HttpFetch`: `(url: string, init: HttpFetchInit) => Promise<Response>`. Expo SDK 55's
+  `expo/fetch` (whose `FetchResponse` implements `Response`) is accepted as-is, with no cast; so is any
+  other native-backed transport with that shape. It receives exactly the URL, method, headers (context and
+  JWT included), serialized body, redirect mode and abort signal the platform `fetch` would have.
+- **`deadlines`** — a `DeadlineScheduler` (`@webpieces/core-util`):
+  `schedule(delayMs, onExpire): DeadlineTimer` (with `cancel()`) and `now(): number`. Every call
+  deadline and every `RetryStrategy` backoff is scheduled through it; nothing on the call path touches a
+  JS timer. It must be **native-backed** — wrapping `setTimeout`, or `AbortSignal.timeout`, is the very
+  thing that stalls. `now()` should be a clock that keeps counting while the device sleeps (Android
+  `SystemClock.elapsedRealtime()`): when a result arrives after the budget and the native callback never
+  got through, the call still fails with `ApiCallTimeoutError` instead of returning late.
+
+webpieces ships no native module and no Expo/React Native dependency — the scheduler is the app's. The
+tested integration example is
+[`src/__tests__/fixtures/NativeDeadlineScheduler.ts`](src/__tests__/fixtures/NativeDeadlineScheduler.ts):
+a `NativeTimerModule` bridge (`start(id, delayMs)`, `cancel(id)`, a synchronous `elapsedRealtimeMs()`, and
+one "fired" event the app forwards to `scheduler.deliver(id)`) plus the ~40-line adapter over it.
+`InjectedRuntime.spec.ts` drives it with JS timers frozen and proves the deadline still aborts a stalled
+transport, a transport that ignores abort, and a body that never finishes.
+
+Guarantees, per call: the deadline covers URL resolution, filters, serialization, the send and the
+response body — the same end-to-end budget as before, not just time-to-headers. It is cancelled exactly
+once on every outcome; a late native callback after the call settled is ignored; the deadline's typed
+`ApiCallTimeoutError` wins over the abort-induced transport rejection; each retry attempt gets a fresh
+deadline and the backoff never extends one.
+
+### How React Native is detected — and what is refused
+
+The factory checks for the React Native **JavaScript runtime**, via `navigator.product === 'ReactNative'`
+(set by React Native's `Libraries/Core/setUpNavigator.js`; verified on 0.83.10). In that runtime,
+`new ClientHttpBrowserFactory(store)` — and passing `HttpClientRuntime.platformDefaults()` — throws
+`ReactNativeRuntimeConfigError` at construction, naming the missing `fetch` / `deadlines` and linking
+here. Nothing is sent first. `HttpClientRuntime.reactNative(...)` itself refuses a missing collaborator
+(for plain-JavaScript callers the types cannot stop).
+
+- **Browsers and WebView pages are unaffected.** A website inside a React Native WebView runs on the
+  browser engine's fetch and timers; `window.ReactNativeWebView` does not count as React Native, and
+  neither does `window` / `document` presence (React Native has window-like globals). No user-agent
+  sniffing, and no `react-native` import.
+- **Node, SSR, workers and tests** (no `navigator`, or no `product`) keep the platform defaults and never
+  throw on a missing global.
+- **Detection limits.** A runtime that hides or rewrites `navigator.product` is not detected — declare it
+  by passing `HttpClientRuntime.reactNative(...)`, which works with or without the marker. And no check
+  can PROVE a function is background-safe: `reactNative(fetch, deadlines)` is your explicit
+  acknowledgement, not an identity test of `expoFetch`.
+- **What no runtime can promise.** If the OS suspends or kills the process, no JavaScript runs at all —
+  the native side must cancel its own network request, and the JS deadline rejects promptly on resumption.
+  Browsers throttle timers in background tabs; that is unchanged.
+
+### Migration (breaking behavior change)
+
+Before #1445, a React Native app that built `new ClientHttpBrowserFactory(store)` silently got the default
+`fetch` and JS timers — and stalled while locked. It now **fails at startup** with
+`ReactNativeRuntimeConfigError`. Fix every React Native factory (auth, heartbeat, log shipping, …) by
+passing one shared `HttpClientRuntime.reactNative(fetch, deadlines)` as the third argument. Browser and
+WebView code needs no change. A custom `CallStrategy` that waited with `setTimeout` should wait on its
+new third argument, `deadlines` (see [client timeouts](../../../docs/client-timeouts.md)). Direct
+`fetch` calls outside the typed client (e.g. media byte-range downloads) are not covered — wire the
+same native transport into them yourself.

@@ -33,6 +33,7 @@ import {
     ByteReadableStream,
     ClientRequest,
     ClientFilterDefinition,
+    HttpClientRuntime,
     ProxyClient,
 } from '@webpieces/http-client-core';
 import { AddressResolver } from './AddressResolver';
@@ -206,7 +207,12 @@ export class NodeProxyClient extends ProxyClient {
         // This package is node-only and already depends on core-context, so it builds the
         // RequestContext-backed ApiCallContext itself. No startup install, and therefore nothing a
         // non-webpieces host (plain NestJS/Express) can forget.
-        super(new LogApiCallImpl(new RequestContextApiCallContext()));
+        // A server keeps the platform runtime: Node's fetch and timers do not pause the way a
+        // backgrounded React Native host's do (#1445), and its streaming uses node:http below.
+        super(
+            new LogApiCallImpl(new RequestContextApiCallContext()),
+            HttpClientRuntime.platformDefaults(),
+        );
     }
 
     /**

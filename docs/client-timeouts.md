@@ -67,12 +67,14 @@ The line for attempt N is written when attempt N+1 starts, so the last failure i
 ```ts
 import { Attempt, CallScope, CallStrategy, ClientRegistry, ApiCallTimeoutError } from '@webpieces/core-util';
 
-const patientRetry: CallStrategy<unknown> = async (call, ctx) => {
+const patientRetry: CallStrategy<unknown> = async (call, ctx, deadlines) => {
     try {
         return await call(30_000);
     } catch (err) {
         if (!(err instanceof ApiCallTimeoutError)) throw err;
-        await new Promise<void>(resolve => setTimeout(resolve, 60_000));
+        // Wait on the CALLING client's clock, not setTimeout: a React Native client's native-backed
+        // scheduler keeps working while the phone is locked; its JS timers do not (#1445).
+        await new Promise<void>(resolve => { deadlines.schedule(60_000, resolve); });
         return call(20_000);
     }
 };
@@ -82,8 +84,9 @@ ClientRegistry.setStrategy(patientRetry, CallScope.method(CatalogApi, 'upload'))
 ```
 
 `Attempt<T>` is `(timeoutMs: number) => Promise<T>`.
-`CallStrategy<T>` is `(call: Attempt<T>, ctx: CallContext) => Promise<T>`.
-Context has readonly `apiName`, `methodName` and `operation` — the endpoint's declared `@Endpoint` operation (`READ`, `WRITE_IDEMPOTENT` or `WRITE`), so a strategy can decide whether repeating the call is safe. IPC contracts declare no operation, so an IPC deadline reports the conservative `WRITE`. `ClientRegistry.execute(api, context, attempt, fallback: TransportDefault)` takes that same `CallContext`. `ApiCallTimeoutError` carries `timeoutMs` and `context`. Whatever a strategy throws reaches the caller unchanged, preserving error identity and `instanceof` checks.
+`CallStrategy<T>` is `(call: Attempt<T>, ctx: CallContext, deadlines: DeadlineScheduler) => Promise<T>`.
+`deadlines` is the calling client's `DeadlineScheduler` — the same clock its attempt deadlines run on (standard JS timers by default; the app's native-backed scheduler in React Native, see [http-client-browser](../packages/http/http-client-browser/README.md#react-native)). `RetryStrategy` waits out its backoff through it.
+Context has readonly `apiName`, `methodName` and `operation` — the endpoint's declared `@Endpoint` operation (`READ`, `WRITE_IDEMPOTENT` or `WRITE`), so a strategy can decide whether repeating the call is safe. IPC contracts declare no operation, so an IPC deadline reports the conservative `WRITE`. `ClientRegistry.execute(api, context, attempt, fallback: TransportDefault, deadlines: DeadlineScheduler)` takes that same `CallContext`, and hands `deadlines` to whichever strategy runs. `ApiCallTimeoutError` carries `timeoutMs` and `context`. Whatever a strategy throws reaches the caller unchanged, preserving error identity and `instanceof` checks.
 
 ## Showing a timeout to an end user
 

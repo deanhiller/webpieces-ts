@@ -5,6 +5,7 @@ The browser-side HTTP client: generates type-safe clients from the SAME API cont
 ## In Scope
 
 - `ClientHttpBrowserFactory` — a plain class the app provides through whatever DI it already has (Angular `useFactory`, a React context, a module-level `const`)
+- Selecting each factory's `HttpClientRuntime` (#1445): the platform fetch + JS timers by default, and REFUSING to build in the React Native JS runtime (`ReactNativeRuntimeDetector`: `navigator.product === 'ReactNative'`, never `window` or `ReactNativeWebView`) unless the app passed `HttpClientRuntime.reactNative(fetch, deadlines)`
 - `ClientConfig` — per-client state: the svcName, the `ClientRole`, the per-call `CallMode` (a BACKGROUND client hides progress and stamps `err.callMode` on every failure, #1293), and the `ServiceWorkerRouting` (#1293)
 - Bypassing Angular's service worker on every RPC (`ngsw-bypass=true` query parameter) and re-typing ngsw's synthetic 504 (`ServiceWorkerSyntheticResponse`) as `ApiConnectionError`, so a dropped connection is never shown as a gateway timeout
 - Applying the SAME received-status rule as `http-client-node` — one `WebpiecesDefaultErrorTranslator`, no browser-specific branch. A browser that received a 404 called a path that does not exist, which is the CLIENT's bug (`ApiImplementationError`), not an answer to show a user; a 5xx is the server's (`ApiDependencyError`). The one genuinely user-facing outcome has its own channel and always did: 266 / `ApiEndUserError`

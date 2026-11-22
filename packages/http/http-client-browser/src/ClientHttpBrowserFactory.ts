@@ -1,9 +1,16 @@
 import { assertNotInternalApi, ContextMgr, DocumentDesign } from '@webpieces/core-util';
-import { ApiPrototype, buildClientProxy } from '@webpieces/http-client-core';
+import {
+    ApiPrototype,
+    buildClientProxy,
+    HttpClientRuntime,
+    HttpRuntimeKind,
+    ReactNativeRuntimeConfigError,
+} from '@webpieces/http-client-core';
 import { BrowserProxyClient } from './BrowserProxyClient';
 import { ClientConfig } from './ClientConfig';
 import { MutableContextStore } from './MutableContextStore';
 import { RequestLifecycleListener } from './RequestLifecycleListener';
+import { ReactNativeRuntimeDetector } from './ReactNativeRuntimeDetector';
 
 /**
  * ClientHttpBrowserFactory - builds type-safe HTTP clients for a BROWSER from API prototypes
@@ -32,16 +39,57 @@ import { RequestLifecycleListener } from './RequestLifecycleListener';
  *
  * A browser cannot hold service credentials, so a contract with an oidcSameProject() / oidcSvcs(...) or sharedSecret(...)
  * endpoint throws in `createRpcClient`, not on the first call.
+ *
+ * **Runtime (#1445).** The optional third argument is this factory's {@link HttpClientRuntime}: the
+ * fetch every client it builds sends through and the clock their deadlines use. Omitted, a browser or
+ * WebView page gets the platform fetch and JS timers, exactly as before. In the React Native JS
+ * runtime (detected by `navigator.product === 'ReactNative'`) omitting it — or passing
+ * `HttpClientRuntime.platformDefaults()` — THROWS {@link ReactNativeRuntimeConfigError} here, before
+ * any request, because React Native's default fetch and JS timers can stop while a phone is locked:
+ *
+ * ```typescript
+ * import { fetch as expoFetch } from 'expo/fetch';
+ * const factory = new ClientHttpBrowserFactory(
+ *     store,
+ *     listener,
+ *     HttpClientRuntime.reactNative(expoFetch, nativeDeadlineScheduler),
+ * );
+ * ```
  */
 @DocumentDesign()
 export class ClientHttpBrowserFactory {
     private readonly contextMgr: ContextMgr;
+    private readonly runtime: HttpClientRuntime;
 
     constructor(
         store: MutableContextStore,
         private readonly lifecycleListener?: RequestLifecycleListener,
+        runtime?: HttpClientRuntime,
     ) {
         this.contextMgr = new ContextMgr(store);
+        this.runtime = ClientHttpBrowserFactory.selectRuntime(
+            runtime,
+            new ReactNativeRuntimeDetector(),
+        );
+    }
+
+    /**
+     * The supplied runtime, else the platform defaults — unless this is the React Native JS runtime,
+     * where only an explicit {@link HttpClientRuntime.reactNative} is accepted.
+     */
+    // webpieces-disable no-function-outside-class -- pure construction-time selection
+    private static selectRuntime(
+        runtime: HttpClientRuntime | undefined,
+        detector: ReactNativeRuntimeDetector,
+    ): HttpClientRuntime {
+        const selected = runtime ?? HttpClientRuntime.platformDefaults();
+        if (selected.kind !== HttpRuntimeKind.REACT_NATIVE && detector.isReactNative()) {
+            throw new ReactNativeRuntimeConfigError(
+                ['fetch', 'deadlines'],
+                'new ClientHttpBrowserFactory(...)',
+            );
+        }
+        return selected;
     }
 
     /**
@@ -52,7 +100,11 @@ export class ClientHttpBrowserFactory {
      */
     createRpcClient<T extends object>(apiPrototype: ApiPrototype<T>, config: ClientConfig): T {
         assertNotInternalApi(apiPrototype, 'ClientHttpBrowserFactory');
-        const proxyClient = new BrowserProxyClient(this.contextMgr, this.lifecycleListener);
+        const proxyClient = new BrowserProxyClient(
+            this.contextMgr,
+            this.runtime,
+            this.lifecycleListener,
+        );
         proxyClient.init(apiPrototype, config);
         return buildClientProxy(apiPrototype, proxyClient);
     }

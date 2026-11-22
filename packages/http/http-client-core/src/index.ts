@@ -40,6 +40,14 @@ export { ResponseBodyReader } from './ResponseBodyReader';
 // @webpieces/core-util, shared with the server's inbound chain.
 export { ClientRequest } from './ClientRequest';
 export type { HttpTransport } from './HttpTransport';
+// #1445: the per-factory runtime — the fetch a client sends through and the clock its deadlines use.
+export {
+    HttpClientRuntime,
+    HttpFetchInit,
+    HttpRuntimeKind,
+    ReactNativeRuntimeConfigError,
+} from './HttpClientRuntime';
+export type { HttpFetch } from './HttpClientRuntime';
 export { ClientFilterDefinition } from './ClientFilter';
 export type { ClientFilter } from './ClientFilter';
 // Generic streaming wire adapters: NDJSON uploads, request-scoped SSE downloads, and a typed

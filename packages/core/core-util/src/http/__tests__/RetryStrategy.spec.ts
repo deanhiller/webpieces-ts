@@ -5,6 +5,7 @@ import { ApiRegistry } from '../ApiRegistry';
 import { CallScope } from '../CallScope';
 import { CallContext } from '../CallStrategy';
 import { TransportDefault } from '../TransportDefault';
+import { TimerDeadlineScheduler } from '../DeadlineScheduler';
 import { CallOutcome, ErrorClassifier } from '../ErrorClassifier';
 import { ApiMethodInfo } from '../ApiMethodInfo';
 import { ApiErrorHttpStatus } from '../ApiErrorHttpStatus';
@@ -66,6 +67,7 @@ const original = LogManager.getFactory();
 const context = (operation: EndpointOperation): CallContext =>
     new CallContext('CatalogApi', 'list', operation, CatalogApi);
 const strategy = new RetryStrategy(5_000, 3, 500, 2, 4_000);
+const timers = new TimerDeadlineScheduler();
 
 beforeAll(() => {
     if (!HeaderRegistry.isConfigured()) HeaderRegistry.configure([], /*platformHeaders*/ false);
@@ -90,6 +92,7 @@ async function run(scripted: ScriptedAttempts, operation: EndpointOperation): Pr
         context(operation),
         scripted.attempt,
         new TransportDefault(30_000),
+        timers,
     );
     pending.catch(() => undefined);
     await vi.runAllTimersAsync();
@@ -150,6 +153,7 @@ describe('RetryStrategy', () => {
             context(READ),
             scripted.attempt,
             new TransportDefault(30_000),
+            timers,
         );
         const settled = pending.then(
             () => undefined,
@@ -188,6 +192,7 @@ describe('RetryStrategy', () => {
             context(READ),
             scripted.attempt,
             new TransportDefault(30_000),
+            timers,
         );
         await vi.advanceTimersByTimeAsync(3_000);
         expect(scripted.timeouts).toHaveLength(2);
@@ -208,6 +213,7 @@ describe('RetryStrategy', () => {
                 context(READ),
                 scripted.attempt,
                 new TransportDefault(30_000),
+                timers,
             ),
         ).rejects.toBe(failure);
     });
@@ -241,6 +247,7 @@ describe('RetryStrategy', () => {
             context(WRITE),
             scripted.attempt,
             new TransportDefault(30_000),
+            timers,
         );
         expect(capturing.lines).toEqual([
             '[API-client-attempt-TRANSIENT] CatalogApi.list attempt 1 errorType=ApiUnavailableError error=flaky',
@@ -268,6 +275,7 @@ describe('TransportDefault', () => {
             context(WRITE_IDEMPOTENT),
             retried.attempt,
             fallback,
+            timers,
         );
         await vi.runAllTimersAsync();
         expect(await pending).toBe('ok');
@@ -276,7 +284,7 @@ describe('TransportDefault', () => {
         ClientRegistry.setTimeout(700, CallScope.api(CatalogApi));
         const single = new ScriptedAttempts(['ok']);
         expect(
-            await ClientRegistry.execute(CatalogApi, context(WRITE_IDEMPOTENT), single.attempt, fallback),
+            await ClientRegistry.execute(CatalogApi, context(WRITE_IDEMPOTENT), single.attempt, fallback, timers),
         ).toBe('ok');
         expect(single.timeouts).toEqual([700]);
     });
@@ -289,6 +297,7 @@ describe('TransportDefault', () => {
                 context(READ),
                 scripted.attempt,
                 new TransportDefault(30_000),
+                timers,
             ),
         ).toBe('ok');
         expect(scripted.timeouts).toEqual([30_000]);
