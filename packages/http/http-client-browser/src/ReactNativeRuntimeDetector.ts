@@ -1,6 +1,6 @@
 /** The one navigator field the detector reads. Typed locally: this package ships no DOM assumption. */
 interface NavigatorProduct {
-    readonly product?: unknown;
+    readonly product?: string;
 }
 
 /** `globalThis` as the detector reads it — `navigator` may be absent (Node, SSR, some workers). */

@@ -102,7 +102,7 @@ export class CallDeadline {
                     run.expireIfOverdue();
                     return value;
                 },
-                (err: unknown): never => {
+                (err: Error): never => {
                     run.expireIfOverdue();
                     // eslint-disable-next-line @webpieces/no-unmanaged-exceptions -- rethrows the work's own failure unchanged
                     throw err;
