@@ -2,7 +2,7 @@ import { claudeEnv } from '@webpieces/rules-config';
 
 import { L0_FAULT_SHIM_STALE, l0GuardHeader, l0MatrixCitation } from '@webpieces/rules-config';
 import { INSTALL_HOOKS_CMD, RESTORE_SHIM_CMD, UPGRADE_SHIM_CMD } from './l0-allowlist';
-import { CODEX_READ_STILL_ALLOWED } from '@webpieces/rules-config';
+import { CODEX_READ_STILL_ALLOWED, RECOVERY_EDIT_STILL_ALLOWED } from '@webpieces/rules-config';
 import { BASH_CWD_ENV_KEY, BASH_CWD_ENV_VALUE } from './managed-env';
 import { NEIGHBOUR_SURFACE_SUFFIX } from './neighbour-hooks';
 import { REVIEWER_AGENT_MARKER } from './reviewer-agent';
@@ -205,9 +205,9 @@ class ShimStaleDeny {
         return [
             'Still allowed while this block is up:',
             `  - any Read, and ${CODEX_READ_STILL_ALLOWED}`,
-            '  - any Write/Edit whose target is webpieces.config.json',
+            `  - ${RECOVERY_EDIT_STILL_ALLOWED}`,
             '  - every command on the L0 allowlist, including both Fix Options below',
-            '  THIS IS NOT A DEADLOCK: both options are explicitly ALLOWED through, so run one YOURSELF now - do not hand it back to the human. Every OTHER tool call is blocked until every managed surface matches again.',
+            '  THIS IS NOT A DEADLOCK: both options are ALLOWED through, so run one YOURSELF now - do not hand it back to the human.',
             '',
         ];
     }

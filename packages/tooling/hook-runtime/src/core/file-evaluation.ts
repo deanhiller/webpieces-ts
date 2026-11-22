@@ -23,10 +23,12 @@ export class HookFileEvaluation {
         contributions: HookRuleSet,
     ): BlockedResult | null {
         if (loaded.configPath === null) return null;
+        // In-place only: a Move ONTO an exempt file still deletes its source, which must be judged (#1448).
         if (
-            path.resolve(input.filePath) === path.resolve(loaded.configPath) ||
-            isRootManifest(input.filePath) ||
-            new HomeConfigService().isHomeConfigPath(input.filePath)
+            input.sourcePath === input.filePath &&
+            (path.resolve(input.filePath) === path.resolve(loaded.configPath) ||
+                isRootManifest(input.filePath) ||
+                new HomeConfigService().isHomeConfigPath(input.filePath))
         )
             return null;
         const root = path.dirname(loaded.configPath);

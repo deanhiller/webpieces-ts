@@ -1,4 +1,4 @@
-import { RepoRootFinder } from '@webpieces/rules-config';
+import { ConfigRepairAccess, RepoRootFinder } from '@webpieces/rules-config';
 
 import { AgentPayload } from './agent-payload';
 import { AgentHookEvent, AgentEventKind } from '../protocol';
@@ -50,7 +50,10 @@ export class CodexAdapter {
 
     private kindOf(toolName: string): AgentEventKind {
         if (toolName === CODEX_BASH) return 'Bash';
-        if (toolName === CODEX_APPLY_PATCH) return 'File';
+        // A namespace-qualified spelling (`functions.apply_patch`, `tools.apply_patch`) is the SAME edit
+        // tool — mapping it to `Ignored` would wave a write past every guard on a healthy tree. One
+        // canonicalizer, shared with L0's edit escape, so the two cannot recognise different names.
+        if (new ConfigRepairAccess().canonicalTool(toolName) === CODEX_APPLY_PATCH) return 'File';
         return 'Ignored';
     }
 }

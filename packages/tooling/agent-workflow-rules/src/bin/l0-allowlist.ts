@@ -1,7 +1,7 @@
 import { MIGRATE_DIRS_COMMAND } from '@webpieces/tooling-common';
 import { PACKAGE_MANIFEST } from '@webpieces/rules-config';
 import { WORKSPACE_MANIFEST } from '@webpieces/rules-config';
-import { CONFIG_FILENAME, PRUNE_UNKNOWN_COMMAND } from '@webpieces/rules-config';
+import { CONFIG_FILENAME, EDIT_TOOLS_PHRASE, PRUNE_UNKNOWN_COMMAND } from '@webpieces/rules-config';
 
 // The shape of ONE entry, in its own module so the LIST below is not crowded out by the types that
 // describe it. `./shim` stars both, so consumers see no seam.
@@ -490,14 +490,18 @@ export const L0_ALLOWLIST: readonly L0AllowEntry[] = [
         new L0Call('update_plan', '', ''),
         [new L0Call('view_image', '', ''), new L0Call('webrun', '', '')],
     ),
+    // EDIT-SHAPED, for BOTH harnesses' edit tools (#1448): Codex has no Write/Edit, so its only spelling
+    // of this cure is an `apply_patch` — pinned below as a sample, including the namespace-qualified
+    // name, so the entry cannot again promise an edit the entrypoint refuses.
     new L0AllowEntry(
-        `a Write/Edit whose target is ${CONFIG_FILENAME}`,
+        `${EDIT_TOOLS_PHRASE} ${CONFIG_FILENAME} or a .webpieces-config/ file`,
         'pass',
         false,
         null,
         null,
         EVERY_HARNESS,
         new L0Call('Edit', '', `/repo/${CONFIG_FILENAME}`),
+        [new L0Call('apply_patch', `*** Begin Patch\n*** Update File: /repo/${CONFIG_FILENAME}\n@@\n-{}\n+{}\n*** End Patch`, '')],
     ),
     // THE MANIFEST ESCAPE, and it is an escape L1 row 8 already PROMISED before it existed. Its report
     // says "STILL ALLOWED HERE: ... edits to pnpm-workspace.yaml / package.json / webpieces.config.json"
@@ -516,14 +520,18 @@ export const L0_ALLOWLIST: readonly L0AllowEntry[] = [
     // webpieces.config.json pass). Scoped by isRootManifest, so it admits the root of the MAIN tree and
     // of every worktree — and no other package.json in the repo.
     new L0AllowEntry(
-        `a Write/Edit whose target is a tree ROOT's ${WORKSPACE_MANIFEST} or ${PACKAGE_MANIFEST} - the version pin`,
+        `${EDIT_TOOLS_PHRASE} a tree ROOT's ${WORKSPACE_MANIFEST} or ${PACKAGE_MANIFEST} - the version pin and patchedDependencies`,
         'pass',
         false,
         null,
         null,
         EVERY_HARNESS,
         new L0Call('Edit', '', `/repo/${WORKSPACE_MANIFEST}`),
-        [new L0Call('Write', '', `/repo/${PACKAGE_MANIFEST}`)],
+        [
+            new L0Call('Write', '', `/repo/${PACKAGE_MANIFEST}`),
+            new L0Call('apply_patch', `*** Begin Patch\n*** Update File: /repo/${WORKSPACE_MANIFEST}\n@@\n-a\n+b\n*** End Patch`, ''),
+            new L0Call('functions.apply_patch', `*** Begin Patch\n*** Update File: /repo/${PACKAGE_MANIFEST}\n@@\n-a\n+b\n*** Update File: /repo/${WORKSPACE_MANIFEST}\n@@\n-a\n+b\n*** End Patch`, ''),
+        ],
     ),
     new L0AllowEntry('pnpm|npm install', 'allow', true, INSTALLER_BODY_ERE, INSTALLER_BODY_JS,
         EVERY_HARNESS, new L0Call('Bash', 'pnpm install', '')),

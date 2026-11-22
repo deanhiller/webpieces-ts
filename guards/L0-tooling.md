@@ -71,8 +71,8 @@ the same coordinates every L0 deny opens with, so a deny, a log line and this ta
 |---|---|---|---|
 | 1 | any Read | PASS | no — it repairs nothing, so L1 still judges it |
 | 2 | a Codex tool with nothing to judge: webrun, collaborationspawn_agent, collaborationwait_agent, view_image, update_plan | PASS | no — it repairs nothing, so L1 still judges it |
-| 3 | a Write/Edit whose target is webpieces.config.json | PASS | no — it repairs nothing, so L1 still judges it |
-| 4 | a Write/Edit whose target is a tree ROOT's pnpm-workspace.yaml or package.json - the version pin | PASS | no — it repairs nothing, so L1 still judges it |
+| 3 | a Write/Edit/MultiEdit or Codex apply_patch of ONLY webpieces.config.json or a .webpieces-config/ file | PASS | no — it repairs nothing, so L1 still judges it |
+| 4 | a Write/Edit/MultiEdit or Codex apply_patch of ONLY a tree ROOT's pnpm-workspace.yaml or package.json - the version pin and patchedDependencies | PASS | no — it repairs nothing, so L1 still judges it |
 | 5 | pnpm\|npm install | ALLOW | yes — it REPAIRS the tooling |
 | 6 | rm -rf node_modules && pnpm install - the cure for a CORRUPT node_modules | ALLOW | yes — it REPAIRS the tooling |
 | 7 | git fetch - a bare git pull and git merge are NOT on the list | ALLOW | yes — it REPAIRS the tooling |
@@ -161,8 +161,8 @@ to carry the first.
 | `ALLOW-READ` | allowlist entry 1 (any Read) — PASS, but terminal here (the bin never ran) |
 | `ALLOW-IGNORED` | a Codex tool with nothing to judge (L0_IGNORED_TOOLS) — PASS, terminal here |
 | `ALLOW-CODEX-READ` | the harness-gated entry: a read-shaped Bash command on CODEX, which has no Read tool — PASS, terminal here. It cannot appear on a claude-code line; if one ever does, the sh harness test (AI_TYPE_SH) misread the payload |
-| `ALLOW-CONFIG` | allowlist entry 2 (a Write/Edit of webpieces.config.json) — PASS, terminal here |
-| `ALLOW-MANIFEST` | allowlist entry 3 (a Write/Edit of pnpm-workspace.yaml or package.json) — PASS, terminal here |
+| `ALLOW-CONFIG` | the config-repair edit entry (a Write/Edit/MultiEdit or Codex apply_patch whose every target is webpieces.config.json or a .webpieces-config/ file) — PASS, terminal here |
+| `ALLOW-MANIFEST` | the manifest edit entry (a Write/Edit/MultiEdit or Codex apply_patch whose every target is a repair file or a tree-root pnpm-workspace.yaml / package.json) — PASS, terminal here |
 | `ALLOW-CURE` | a Bash entry of the allowlist matched — ALLOW |
 | `DENY` | fault X, not on the allowlist — BLOCK_AI_CURE |
 | `DENY-UNDECLARED` | fault U, not on the allowlist — BLOCK_AI_CURE |

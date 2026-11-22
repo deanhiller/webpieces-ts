@@ -53,14 +53,16 @@ export function run(
     mode: HookMode = 'rules',
 ): BlockedResult | null {
     if (mode === 'guards') return null;
+    // A Move (apply_patch `*** Move to:`) is exempt only when its SOURCE is exempt too: otherwise a
+    // rename of ordinary code ONTO a recovery file would delete that code with nothing judging it (#1448).
     if (
         toolKind !== 'Delete' &&
-        (new ConfigRepairAccess().isRepairFile(
-            new RepoRootFinder().resolveRepoRoot(cwd),
-            input.filePath,
-        ) ||
-            isRootManifest(input.filePath) ||
-            new HomeConfigService().isHomeConfigPath(input.filePath))
+        [input.filePath, input.sourcePath].every(
+            (target: string): boolean =>
+                new ConfigRepairAccess().isRepairFile(new RepoRootFinder().resolveRepoRoot(cwd), target) ||
+                isRootManifest(target) ||
+                new HomeConfigService().isHomeConfigPath(target),
+        )
     )
         return null;
     const loaded = loadAndValidate(cwd);

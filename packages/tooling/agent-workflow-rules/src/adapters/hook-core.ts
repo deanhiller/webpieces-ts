@@ -170,7 +170,8 @@ function handleOneFile(event: AgentHookEvent, file: FileOperation, cwd: string, 
     // Always allow edits to webpieces.config.json — it's the fix target when the config is broken.
     // This returns BEFORE run(), so feature-branch-guard never sees a config edit; record that so the
     // audit trail explains why a config edit on a bad branch was not blocked (see decision-log.ts).
-    if (path.basename(input.filePath) === CONFIG_FILENAME) {
+    // In place only: a Codex `*** Move to: webpieces.config.json` still deletes its source (#1448).
+    if (input.sourcePath === input.filePath && path.basename(input.filePath) === CONFIG_FILENAME) {
         if (mode !== 'rules') {
             // `.webpieces/` (the decision log + sync cache these two calls write) lives at the repo
             // root, not the AI's cwd — resolve it so a config edit from a subdir doesn't create a
