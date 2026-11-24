@@ -23,6 +23,7 @@ import {
 import { DiffBasis } from '../workflow/diff-basis';
 import { MergeOutcome, MERGE_RESULT_LEFT_TO_HUMAN } from '../workflow/pr-merger';
 import { PrBodyDraft, PublishedPr } from '../workflow/gated-pr-publisher';
+import { FinishBanner } from '../workflow/finish-banner';
 
 const state = vi.hoisted(() => ({ head: 'feature-head', config: {} }));
 
@@ -91,6 +92,12 @@ class Fixture {
     mergeState = { mergeDirFor: () => '', findActiveMergeRunDir: () => null };
     buildGate = { runBuildGate: this.build, resolveBuildCommand: () => 'spec-build' };
     scanner = { scan: () => this.scan };
+    // Stubbed by default; the ticket-reminder specs swap in the real banner to assert on what is printed.
+    banner: object = { render: () => '', linkDirective: () => '' };
+
+    said(): string {
+        return this.console.say.mock.calls.map((call: unknown[]): string => String(call[0])).join('');
+    }
 
     setup(): void {
         state.head = 'feature-head';
@@ -160,7 +167,7 @@ class Fixture {
             new GateTokenService(),
             seam({ enforce: () => ({ evidence: [] }), archiveRecord: vi.fn() }),
             this.receipts,
-            seam({ render: () => '', linkDirective: () => '' }),
+            seam(this.banner),
             seam({ write: () => '', remove: vi.fn() }),
             seam({ upsert: vi.fn() }),
             seam({ ensure: vi.fn() }),
@@ -271,5 +278,63 @@ describe('create path — the predicted self-link (#1418)', () => {
         const edits = await createPr(f, '', '78');
         expect(edits).toHaveLength(1);
         expect(edits[0]).toContain(urlOf('78'));
+    });
+});
+
+/**
+ * The "update your ticket" next action (#1453): printed after a successful create AND a successful update,
+ * carrying the REAL PR URL the command resolved and the summary.json addressesIssues URLs — and absent
+ * when no PR exists, so a failed run never reads as a posted one.
+ */
+describe('ticket-link reminder after the PR is posted (#1453)', () => {
+    const ISSUE = 'https://github.com/deanhiller/webpieces-ts/issues/1114';
+
+    function withRealBanner(): Fixture {
+        const f = new Fixture();
+        f.banner = new FinishBanner();
+        return f;
+    }
+
+    it('on UPDATE of an existing PR, names the resolved PR URL, the ticket, and keeps earlier PR links', async () => {
+        const f = withRealBanner();
+        f.setup();
+        await f.finish().run();
+        const out = f.said();
+        expect(out).toContain('UPDATE YOUR TICKET (Linear, Jira, GitHub issue, or another tracker) with a link');
+        expect(out).toContain('to this PR: https://github.test/o/r/pull/77');
+        expect(out).toContain('Keep the links to earlier PRs');
+        expect(out).toContain(`       ${ISSUE}\n`);
+        // Never claims the tracker was touched.
+        expect(out).toContain('webpieces did NOT update any ticket');
+    });
+
+    it('on CREATE, names the URL GitHub actually assigned — never the predicted one', async () => {
+        const f = withRealBanner();
+        const gh = new MockNativeProcessApi();
+        gh.respondToPrefix('gh', ['pr', 'view'], gh.fail(1, 'no pull requests found'));
+        gh.respondToPrefix('gh', ['pr', 'view'], gh.ok('78\thttps://github.test/o/r/pull/78\n'));
+        gh.respondToPrefix('gh', ['pr', 'edit'], gh.ok());
+        f.gh = gh;
+        f.publish.mockImplementation((_base: string, _title: string, draft: PrBodyDraft) =>
+            new PublishedPr('', false, draft.render('https://github.test/o/r/pull/77'), '77'));
+        f.setup();
+        await f.finish().run();
+        const out = f.said();
+        expect(out).toContain('to this PR: https://github.test/o/r/pull/78');
+        expect(out).not.toContain('pull/77');
+    });
+
+    it('prints NO reminder when gh pr create failed — there is no PR to link', async () => {
+        const f = withRealBanner();
+        const gh = new MockNativeProcessApi();
+        gh.respondToPrefix('gh', ['pr', 'view'], gh.fail(1, 'no pull requests found'));
+        f.gh = gh;
+        f.publish.mockImplementation((_base: string, _title: string, draft: PrBodyDraft) =>
+            new PublishedPr('', true, draft.body, ''));
+        f.setup();
+        await f.finish().run();
+        const out = f.said();
+        expect(out).toContain('PR NOT FINISHED');
+        expect(out).not.toContain('UPDATE YOUR TICKET');
     });
 });

@@ -1,6 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import { loadAndValidate, prDirFor, summaryJsonPath, PrSummary, RequiredChecklist, ChecklistVerdict, writeTemplate, RepoRootFinder, ReviewJsonService, GateTokenService } from '@webpieces/rules-config';
+import { loadAndValidate, prDirFor, summaryJsonPath, PrSummary, AddressedIssue, RequiredChecklist, ChecklistVerdict, writeTemplate, RepoRootFinder, ReviewJsonService, GateTokenService } from '@webpieces/rules-config';
 import { GitProcessApi, InformAiError, NativeProcessApi } from '@webpieces/tooling-common';
 import { toError } from '@webpieces/tooling-common/to-error';
 import { injectable, bindingScopeValues } from 'inversify';
@@ -224,7 +224,9 @@ export class FinishUpsertPrCommand {
         // The closing recap + the clickable-link directive, BOTH derived from the real merge outcome.
         // Nothing here may hard-code success: a stranded PR under a green checkmark is how PRs got
         // abandoned (see FinishBanner).
-        const bannerInput = new FinishBannerInput(result.prNumber, result.prUrl, title, base, result.merge);
+        // The addressesIssues URLs make the banner's "update your ticket" reminder concrete (issue #1453).
+        const ticketUrls = review.addressesIssues.map((issue: AddressedIssue): string => issue.url);
+        const bannerInput = new FinishBannerInput(result.prNumber, result.prUrl, title, base, result.merge, ticketUrls);
         // `say`: the PR link and what is still owed are the whole reason a caller ran this command, and a
         // not-done outcome carries the commands that fix it. Neither may end up only in a log file.
         this.stageConsole.say(this.banner.render(bannerInput));

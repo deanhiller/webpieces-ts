@@ -9,10 +9,10 @@ import {
 const banner = new FinishBanner();
 
 const render = (outcome: MergeOutcome): string =>
-    banner.render(new FinishBannerInput('511', 'https://github.com/o/r/pull/511', 'My PR title', 'dean/feature', outcome));
+    banner.render(new FinishBannerInput('511', 'https://github.com/o/r/pull/511', 'My PR title', 'dean/feature', outcome, []));
 
 const directive = (outcome: MergeOutcome): string =>
-    banner.linkDirective(new FinishBannerInput('511', 'https://github.com/o/r/pull/511', 'My PR title', 'dean/feature', outcome));
+    banner.linkDirective(new FinishBannerInput('511', 'https://github.com/o/r/pull/511', 'My PR title', 'dean/feature', outcome, []));
 
 const MERGED = new MergeOutcome(true, false, 'squash-merged the PR as: "My PR title (#511)"', MERGE_RESULT_MERGED);
 const QUEUED = new MergeOutcome(false, true, 'enabled auto-merge — it will squash-merge when the checks pass', MERGE_RESULT_AUTO_QUEUED);
@@ -205,6 +205,45 @@ describe('the closing link directive on a healthy run', () => {
     });
 
     it('is omitted entirely when the PR could not be resolved', () => {
-        expect(banner.linkDirective(new FinishBannerInput('', '', 'My PR title', 'dean/feature', FAILED))).toBe('');
+        expect(banner.linkDirective(new FinishBannerInput('', '', 'My PR title', 'dean/feature', FAILED, []))).toBe('');
+    });
+});
+
+/**
+ * The ticket-link next action (#1453). The PR body links the PR TO its ticket; this asks the caller to link
+ * the ticket back to the PR, keeping links to earlier PRs, and never claims webpieces did it.
+ */
+describe('the "update your ticket" reminder', () => {
+    const ISSUE = 'https://github.com/o/r/issues/42';
+    const withTickets = (outcome: MergeOutcome, tickets: string[]): string =>
+        banner.render(new FinishBannerInput('511', 'https://github.com/o/r/pull/511', 'My PR title', 'dean/feature', outcome, tickets));
+
+    it('names the real PR URL and the addressesIssues tickets on every outcome where the PR exists', () => {
+        for (const outcome of [MERGED, QUEUED, HUMAN, BEHIND, CONFLICTING, UNKNOWN_BEHIND, FAILED]) {
+            const out = withTickets(outcome, [ISSUE]);
+            expect(out).toContain('UPDATE YOUR TICKET (Linear, Jira, GitHub issue, or another tracker)');
+            expect(out).toContain('to this PR: https://github.com/o/r/pull/511');
+            expect(out).toContain('Keep the links to earlier PRs so the ticket lists every PR associated with the work.');
+            expect(out).toContain(`       ${ISSUE}\n`);
+            expect(out).toContain('webpieces did NOT update any ticket');
+        }
+    });
+
+    it('says the PR is NOT merged when the merge did not happen, and not otherwise', () => {
+        expect(withTickets(FAILED, [])).toContain('The PR is open but NOT merged');
+        expect(withTickets(BEHIND, [])).toContain('The PR is open but NOT merged');
+        expect(withTickets(MERGED, [])).not.toContain('NOT merged');
+    });
+
+    it('still applies with no addressesIssues — the tracker may be external', () => {
+        const out = withTickets(QUEUED, []);
+        expect(out).toContain('UPDATE YOUR TICKET');
+        expect(out).toContain('summary.json names no addressesIssues ticket');
+    });
+
+    it('is omitted when the PR URL could not be resolved — never an invented link', () => {
+        const out = banner.render(new FinishBannerInput('', '', 'My PR title', 'dean/feature', FAILED, [ISSUE]));
+        expect(out).not.toContain('UPDATE YOUR TICKET');
+        expect(out).not.toContain(ISSUE);
     });
 });
