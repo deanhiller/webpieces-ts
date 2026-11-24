@@ -39,7 +39,7 @@ const offends = (text: string): boolean => PRESCRIBES_ENDING.test(text.replace(N
 
 const banner = new FinishBanner();
 const input = (outcome: MergeOutcome): FinishBannerInput =>
-    new FinishBannerInput('902', 'https://github.com/o/r/pull/902', 'My PR title', 'dean/feature', outcome);
+    new FinishBannerInput('902', 'https://github.com/o/r/pull/902', 'My PR title', 'dean/feature', outcome, []);
 
 const OUTCOMES = new Map<string, MergeOutcome>([
     ['merged', new MergeOutcome(true, false, 'squash-merged', MERGE_RESULT_MERGED)],

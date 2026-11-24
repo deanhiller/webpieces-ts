@@ -8,20 +8,23 @@ const SEP = '━━━━━━━━━━━━━━━━━━━━━━�
 
 // Everything the closing block of wp-finish-upsert-pr needs to describe what actually happened. Both
 // `prNumber` and `prUrl` are '' when the PR could not be resolved (e.g. `gh pr create` failed).
+// `ticketUrls` are summary.json's `addressesIssues` URLs, in order — [] when it names none.
 export class FinishBannerInput {
     prNumber: string;
     prUrl: string;
     title: string;
     base: string;
     merge: MergeOutcome;
+    ticketUrls: string[];
 
     // eslint-disable-next-line @typescript-eslint/max-params
-    constructor(prNumber: string, prUrl: string, title: string, base: string, merge: MergeOutcome) {
+    constructor(prNumber: string, prUrl: string, title: string, base: string, merge: MergeOutcome, ticketUrls: string[]) {
         this.prNumber = prNumber;
         this.prUrl = prUrl;
         this.title = title;
         this.base = base;
         this.merge = merge;
+        this.ticketUrls = ticketUrls;
     }
 }
 
@@ -51,7 +54,42 @@ export class FinishBanner {
             `   3. force-pushed your work to origin/${input.base} (after the body, so CI reads the right token)\n` +
             `   4. ${input.merge.message}\n` +
             `   You are on  ${input.base}  — same name as the remote branch and the PR head.\n` +
+            this.ticketReminder(input) +
             this.whatIsOwed(input) + '\n';
+    }
+
+    /**
+     * The "link this PR FROM its ticket" next action (issue #1453).
+     *
+     * The PR body's `Fixes <url>` / `Part of <url>` line links the PR TO its ticket; nothing links the
+     * ticket back to the PR, and on a tracker outside GitHub (Linear, Jira) nothing ever will unless the
+     * caller does it. One ticket often spans several PRs, so the reminder says to ADD the link, keeping the
+     * earlier ones — and it says plainly that webpieces updated no ticket, because it contacts no tracker.
+     *
+     * Printed only when the command holds the PR's REAL resolved URL — '' (a failed `gh pr create`, an
+     * unresolvable PR) prints nothing rather than a link that is not real. On a not-done outcome the PR
+     * still exists, so the reminder still applies, but it says the PR is NOT merged instead of implying a
+     * finished run.
+     */
+    private ticketReminder(input: FinishBannerInput): string {
+        if (input.prUrl === '') return '';
+        const state = this.isDone(input.merge)
+            ? ''
+            : '   (The PR is open but NOT merged — see step 4. The link is still correct to add now.)\n';
+        return '\n' + SEP +
+            `📌 NEXT ACTION — UPDATE YOUR TICKET (Linear, Jira, GitHub issue, or another tracker) with a link\n` +
+            `   to this PR: ${input.prUrl}\n` + state +
+            '   Keep the links to earlier PRs so the ticket lists every PR associated with the work.\n' +
+            '   webpieces did NOT update any ticket — it contacts no tracker. Adding the link is yours to do.\n' +
+            this.ticketList(input.ticketUrls);
+    }
+
+    private ticketList(ticketUrls: string[]): string {
+        if (ticketUrls.length === 0) {
+            return '   summary.json names no addressesIssues ticket — use the ticket in your tracker this work belongs to.\n';
+        }
+        return '   Ticket(s) this PR addresses (summary.json addressesIssues):\n' +
+            ticketUrls.map((url: string): string => `       ${url}\n`).join('');
     }
 
     // TRUE only for the outcomes where nothing further is owed: merged, queued behind green-able checks,
@@ -182,7 +220,8 @@ export class FinishBanner {
     // reading a queued PR does not go hunting for work that is not owed.
     private doneNote(merge: MergeOutcome): string {
         if (merge.result === MERGE_RESULT_AUTO_QUEUED) {
-            return '   Nothing else is owed: GitHub lands it when the checks go green. You can stop here.\n' +
+            return '   Once the ticket links this PR, nothing else is owed: GitHub lands it when the checks go\n' +
+                '   green. You can stop here.\n' +
                 this.watchOffer();
         }
         if (merge.result === MERGE_RESULT_LEFT_TO_HUMAN) {
