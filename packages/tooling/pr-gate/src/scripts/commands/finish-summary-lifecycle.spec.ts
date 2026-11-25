@@ -24,6 +24,7 @@ import { DiffBasis } from '../workflow/diff-basis';
 import { MergeOutcome, MERGE_RESULT_LEFT_TO_HUMAN } from '../workflow/pr-merger';
 import { PrBodyDraft, PublishedPr } from '../workflow/gated-pr-publisher';
 import { FinishBanner } from '../workflow/finish-banner';
+import { TicketReminder } from '../workflow/ticket-reminder';
 
 const state = vi.hoisted(() => ({ head: 'feature-head', config: {} }));
 
@@ -291,7 +292,7 @@ describe('ticket-link reminder after the PR is posted (#1453)', () => {
 
     function withRealBanner(): Fixture {
         const f = new Fixture();
-        f.banner = new FinishBanner();
+        f.banner = new FinishBanner(new TicketReminder());
         return f;
     }
 

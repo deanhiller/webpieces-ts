@@ -1,12 +1,13 @@
 import { describe, it, expect } from 'vitest';
 import { FinishBanner, FinishBannerInput } from './finish-banner';
+import { TicketReminder } from './ticket-reminder';
 import {
     MergeOutcome, MERGE_RESULT_MERGED, MERGE_RESULT_AUTO_QUEUED, MERGE_RESULT_LEFT_TO_HUMAN,
     MERGE_RESULT_BEHIND_CLEAN, MERGE_RESULT_BEHIND_CONFLICTING, MERGE_RESULT_BEHIND_UNKNOWN,
     MERGE_RESULT_FAILED,
 } from './pr-merger';
 
-const banner = new FinishBanner();
+const banner = new FinishBanner(new TicketReminder());
 
 const render = (outcome: MergeOutcome): string =>
     banner.render(new FinishBannerInput('511', 'https://github.com/o/r/pull/511', 'My PR title', 'dean/feature', outcome, []));

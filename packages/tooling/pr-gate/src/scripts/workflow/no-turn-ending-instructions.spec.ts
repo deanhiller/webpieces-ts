@@ -6,6 +6,7 @@ import { ReviewReport, ReviewReportInput } from './review-report';
 import { ReviewRoundText } from './review-round-text';
 import { STANDING_CURRENT, STANDING_REJECTED, STANDING_STALE, VerdictStanding } from './verdict-provenance';
 import { FinishBanner, FinishBannerInput } from './finish-banner';
+import { LandedTickets, TicketLink, TicketReminder, TICKET_SOURCE_NONE, TICKET_SOURCE_PR_BODY, TICKET_SOURCE_SUMMARY } from './ticket-reminder';
 import { HotfixRedirect } from './hotfix-redirect';
 import {
     MergeOutcome, MERGE_RESULT_MERGED, MERGE_RESULT_AUTO_QUEUED, MERGE_RESULT_LEFT_TO_HUMAN,
@@ -37,7 +38,8 @@ const PRESCRIBES_ENDING = /\bend(?:ing|s)? (?:your|the|its) turn\b/i;
 
 const offends = (text: string): boolean => PRESCRIBES_ENDING.test(text.replace(NEGATED, ''));
 
-const banner = new FinishBanner();
+const reminder = new TicketReminder();
+const banner = new FinishBanner(reminder);
 const input = (outcome: MergeOutcome): FinishBannerInput =>
     new FinishBannerInput('902', 'https://github.com/o/r/pull/902', 'My PR title', 'dean/feature', outcome, []);
 
@@ -76,6 +78,12 @@ const emitted = (): Map<string, string> => {
         rendered.set(`finish-banner: ${name}`, banner.render(input(outcome)));
         rendered.set(`finish-banner link directive: ${name}`, banner.linkDirective(input(outcome)));
     }
+    // wp-land-pr's reminder (issue #1456), for every place its tickets can come from.
+    const landedUrl = 'https://github.com/o/r/pull/902';
+    const tickets = [new TicketLink('https://github.com/o/r/issues/1', true), new TicketLink('https://linear.app/x/issue/X-2', false)];
+    rendered.set('land-pr ticket reminder: summary.json', reminder.forLandedPr(landedUrl, new LandedTickets(tickets, TICKET_SOURCE_SUMMARY)));
+    rendered.set('land-pr ticket reminder: PR body', reminder.forLandedPr(landedUrl, new LandedTickets(tickets, TICKET_SOURCE_PR_BODY)));
+    rendered.set('land-pr ticket reminder: none', reminder.forLandedPr(landedUrl, new LandedTickets([], TICKET_SOURCE_NONE)));
     rendered.set('review-report: no checklists', report.render(reviewInput(0, 0, [])));
     rendered.set('review-report: nothing matched', report.render(reviewInput(3, 0, [])));
     rendered.set('review-report: one owed reviewer', report.render(reviewInput(1, 1, [owedReviewer()])));
@@ -114,7 +122,7 @@ const emitted = (): Map<string, string> => {
 describe('no string the gate prints tells an AI to end its turn', () => {
     it('renders something for every case, so an empty map cannot pass this file', () => {
         const rendered = emitted();
-        expect(rendered.size).toBe(OUTCOMES.size * 2 + 10);
+        expect(rendered.size).toBe(OUTCOMES.size * 2 + 13);
         expect([...rendered.values()].filter((text: string): boolean => text.length > 0).length)
             .toBeGreaterThan(OUTCOMES.size);
     });
