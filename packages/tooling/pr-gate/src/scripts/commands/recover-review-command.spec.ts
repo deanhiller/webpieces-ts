@@ -226,6 +226,67 @@ describe('recover an existing published review through the shipped program', () 
             output.stop();
         }
     });
+    it('preserves the pending Squash transaction, current phase and A/B/C refs byte-for-byte', async () => {
+        const f = await fixture();
+        checkoutLayout.primary(f.root, 'dean/featureSquash');
+        const merge = path.join(f.root, '.webpieces/merge-info/staged', SLUG, 'merge-1');
+        fs.mkdirSync(merge, { recursive: true });
+        const marker = JSON.stringify({
+            currentBranch: 'dean/feature',
+            squashBranch: 'dean/featureSquash',
+            backupBranch: 'dean/featurePreMerge2',
+            prNumber: '42',
+            conflictedFiles: ['feature.ts'],
+            validated: false,
+        });
+        const hashes = JSON.stringify({
+            hashForkPoint: '1'.repeat(40),
+            hashFeatureHead: '2'.repeat(40),
+            hashMainHead: '3'.repeat(40),
+        });
+        fs.writeFileSync(path.join(merge, 'merge-in-progress.json'), marker);
+        fs.writeFileSync(path.join(merge, 'updatemain-hashes.json'), hashes);
+        const phase = path.join(f.destination, 'stages/stage1-start.json');
+        fs.mkdirSync(path.dirname(phase), { recursive: true });
+        fs.writeFileSync(phase, 'current pending Squash phase');
+        f.write('stages/stage1-start.json', {
+            historicalPhase: 'original finished PR',
+            head: HEAD,
+        });
+        const gitHead = fs.readFileSync(path.join(f.root, '.git/HEAD'));
+        await f.run();
+        expect(fs.readFileSync(path.join(merge, 'merge-in-progress.json'), 'utf8')).toBe(marker);
+        expect(fs.readFileSync(path.join(merge, 'updatemain-hashes.json'), 'utf8')).toBe(hashes);
+        expect(fs.readFileSync(path.join(f.root, '.git/HEAD'))).toEqual(gitHead);
+        expect(fs.readFileSync(phase, 'utf8')).toBe('current pending Squash phase');
+        expect(
+            fs.readFileSync(
+                path.join(f.destination, 'recovered-original-state/stages/stage1-start.json'),
+            ),
+        ).toEqual(fs.readFileSync(path.join(f.source, 'stages/stage1-start.json')));
+        expect(
+            f.feature.git
+                .commandLines()
+                .every((line) => !/commit|checkout|reset|update-ref/.test(line)),
+        ).toBe(true);
+    });
+    it('refuses a differing active receipt before installing evidence and preserves its current identity', async () => {
+        const f = await fixture();
+        fs.mkdirSync(f.destination, { recursive: true });
+        const current = JSON.stringify({
+            headSha: 'e'.repeat(40),
+            buildHeadSha: 'e'.repeat(40),
+            mergeValidated: false,
+            round: 0,
+            phase: 'current Squash transaction',
+        });
+        fs.writeFileSync(path.join(f.destination, 'review-stage.json'), current);
+        await expect(f.run()).rejects.toThrow('destination conflict: review-stage.json');
+        expect(fs.readFileSync(path.join(f.destination, 'review-stage.json'), 'utf8')).toBe(
+            current,
+        );
+        expect(fs.readdirSync(f.destination)).toEqual(['review-stage.json']);
+    });
     it('defaults to read-only validation with explicit audit hashes', async () => {
         const f = await fixture();
         expect(await f.run(false)).toContain('Validated (dry run)');
