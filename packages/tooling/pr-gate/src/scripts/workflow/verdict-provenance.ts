@@ -15,7 +15,7 @@ const WHAT_THIS_IS =
     'WHO submitted that verdict (harness, session, agent — as the harness reported them to the PreToolUse ' +
     'hook), WHICH commit and in-scope diff the reviewer was briefed on, and a hash of the verdict itself. ' +
     'wp-finish-upsert-pr rejects a verdict with no provenance, or one edited after submission. Do not ' +
-    'hand-edit or copy it: that is forging a review.';
+    'hand-edit or copy it: that is forging a review. For authentic published-state relocation, use the validated tool-owned wp-recover-review command; do not copy it yourself.';
 
 /** A verdict exactly as `wp-write-review` accepts it — the five fields and nothing else. Data-only. */
 export class SubmittedVerdict {

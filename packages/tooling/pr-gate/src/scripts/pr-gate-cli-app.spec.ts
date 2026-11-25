@@ -99,6 +99,15 @@ describe('PrGateCliApp — published command boundary', () => {
         },
     );
 
+    it('routes recovery dry-run and apply flags through the published command boundary', async (): Promise<void> => {
+        const call = vi.spyOn(PrGateApp.prototype, 'recoverReview').mockResolvedValue(undefined);
+        const result = await driver.run('wp-recover-review', ['--from', '/original/dean-feature', '--pr', '42', '--apply']);
+        expect(result.exit.code).toBeNull();
+        expect(call.mock.calls[0][0]).toMatchObject({ source: '/original/dean-feature', pr: '42', apply: true, cwd: '/fixture/repo' });
+        await driver.run('wp-recover-review', ['--from', '/original/dean-feature', '--pr', '42']);
+        expect(call.mock.calls[1][0].apply).toBe(false);
+    });
+
     it('routes wp-start-push-dev to PrGateApp.startPushDev, with no flags', async (): Promise<void> => {
         const call = vi.spyOn(PrGateApp.prototype, 'startPushDev').mockResolvedValue(undefined);
         const result = await driver.run('wp-start-push-dev');

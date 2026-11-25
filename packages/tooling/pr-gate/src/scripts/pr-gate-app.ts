@@ -1,3 +1,4 @@
+import { RecoverReviewCommand, RecoverReviewOptions } from './commands/recover-review-command';
 import { DocumentDesign } from '@webpieces/rules-config';
 import { injectable, bindingScopeValues } from 'inversify';
 import { StartUpdateCommand } from './commands/start-update-command';
@@ -13,8 +14,15 @@ import { ReviewUpsertPrCommand } from './commands/review-upsert-pr-command';
 import { ReapWorktreeCommand } from './commands/reap-worktree-command';
 import { BuildCommand, BuildOptions } from './commands/build-command';
 import { AwaitReviewsCommand } from './commands/await-reviews-command';
-import { ReviewBudgetCheckOptions, WriteReviewCommand, WriteReviewOptions } from './commands/write-review-command';
-import { WriteReviewFixesCommand, WriteReviewFixesOptions } from './commands/write-review-fixes-command';
+import {
+    ReviewBudgetCheckOptions,
+    WriteReviewCommand,
+    WriteReviewOptions,
+} from './commands/write-review-command';
+import {
+    WriteReviewFixesCommand,
+    WriteReviewFixesOptions,
+} from './commands/write-review-fixes-command';
 import { AwaitChecksCommand, AwaitChecksOptions } from './commands/await-checks-command';
 import { StartPushDevCommand } from './commands/start-push-dev-command';
 import { BuildPushDevCommand, BuildPushDevOptions } from './commands/build-push-dev-command';
@@ -34,6 +42,7 @@ import { RepoRootFinder } from '@webpieces/rules-config';
 @injectable(bindingScopeValues.Singleton)
 export class PrGateApp {
     constructor(
+        private readonly recoverReviewCommand: RecoverReviewCommand,
         private readonly startUpdateCommand: StartUpdateCommand,
         private readonly finishUpdateCommand: FinishUpdateCommand,
         private readonly startUpsertPrCommand: StartUpsertPrCommand,
@@ -57,6 +66,10 @@ export class PrGateApp {
         private readonly pushDevStateStore: PushDevStateStore,
         private readonly repoRootFinder: RepoRootFinder,
     ) {}
+
+    recoverReview(options: RecoverReviewOptions): Promise<void> {
+        return this.recoverReviewCommand.run(options);
+    }
 
     /**
      * Refuse `command` while a `wp-build-push-dev` conflict resolution is half-finished.

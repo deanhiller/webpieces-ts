@@ -1,0 +1,333 @@
+import 'reflect-metadata';
+import * as fs from 'fs';
+import * as path from 'path';
+import { createHash } from 'crypto';
+import { describe, expect, it, vi } from 'vitest';
+import { checkoutLayout } from '@webpieces/tooling-testkit';
+import { RepoConfigFixture } from '../workflow/repo-config-testkit';
+import { specTempDirs } from '@webpieces/tooling-testkit';
+import { PrGateFeature, CapturedOutput } from '../../__tests__/feature-harness';
+import { PrGateApp } from '../pr-gate-app';
+import { RecoverReviewOptions } from './recover-review-command';
+
+const HEAD = 'b'.repeat(40);
+const PUBLISHED = 'c'.repeat(40);
+const SCOPE = 'd'.repeat(64);
+const SLUG = 'dean-feature';
+const URL = 'https://github.com/example/repo/pull/42';
+
+class RecoveryFixture {
+    branch = 'dean/featureSquash';
+    readonly root = specTempDirs.make('wp-recovery-destination-');
+    readonly source = path.join(specTempDirs.make('wp-recovery-source-'), SLUG);
+    readonly destination = path.join(this.root, '.webpieces/pr-review', SLUG);
+    constructor(readonly feature: PrGateFeature) {
+        fs.mkdirSync(this.source, { recursive: true });
+        fs.writeFileSync(path.join(this.root, 'webpieces.config.json'), '{}');
+        fs.writeFileSync(path.join(this.source, 'pr-body.md'), URL + '\n');
+        this.write('review-stage.json', {
+            headSha: HEAD,
+            buildHeadSha: HEAD,
+            buildPassedAt: '2026-01-01',
+            mergeValidated: true,
+            buildCommand: 'pnpm build',
+            reviewersBriefed: ['security', 'requirements'],
+            optionalBriefed: [],
+            scopeHashes: { security: SCOPE, requirements: SCOPE },
+            round: 1,
+            maxReviewerRounds: 1,
+        });
+        this.write('stages/stage2-review.json', { head: HEAD, base: 'a'.repeat(40) });
+        this.write('stages/stage3-finish.json', { head: PUBLISHED });
+        this.write('pr-context.json', { head: HEAD, base: 'a'.repeat(40) });
+        this.verdict('security', 'green');
+        this.verdict('requirements', 'orange');
+        this.write('review-round1-fixes.json', {
+            fromHead: HEAD,
+            toHead: PUBLISHED,
+            responses: [
+                {
+                    checklistId: 'requirements',
+                    resolution: 'Added missing regression',
+                    files: ['feature.ts'],
+                },
+            ],
+        });
+        feature.git.respond(
+            ['branch', '--show-current'],
+            (): ReturnType<typeof feature.git.ok> => feature.git.ok(this.branch),
+        );
+        feature.git.respond(['merge-base', '--is-ancestor', HEAD, PUBLISHED], feature.git.ok());
+        feature.processes.respond(
+            'gh',
+            ['pr', 'view', '42', '--json', 'url,headRefName,headRefOid,state'],
+            feature.processes.ok(
+                JSON.stringify({
+                    url: URL,
+                    headRefName: 'dean/feature',
+                    headRefOid: PUBLISHED,
+                    state: 'OPEN',
+                }),
+            ),
+        );
+    }
+    write(name: string, value: object): void {
+        fs.mkdirSync(path.dirname(path.join(this.source, name)), { recursive: true });
+        fs.writeFileSync(path.join(this.source, name), JSON.stringify(value, null, 2) + '\n');
+    }
+    private verdict(id: string, status: string): void {
+        const fields = [id, status, 'codex', 'test', 'Verified original change'];
+        this.write(`review-round1-${id}.json`, {
+            id,
+            status,
+            agent: 'codex',
+            model: 'test',
+            output: fields[4],
+        });
+        this.write(`review-round1-${id}.provenance.json`, {
+            writer: 'wp-write-review',
+            checklistId: id,
+            round: 1,
+            status,
+            harness: 'codex',
+            agentId: 'original-agent',
+            sessionId: 'original-session',
+            headSha: HEAD,
+            scopeHash: SCOPE,
+            verdictHash: createHash('sha256').update(JSON.stringify(fields)).digest('hex'),
+        });
+    }
+    async run(apply = true): Promise<string> {
+        const output = CapturedOutput.start();
+        try {
+            await this.feature.container
+                .get(PrGateApp)
+                .recoverReview(new RecoverReviewOptions(this.source, '42', apply, this.root));
+            return output.stdout;
+        } finally {
+            output.stop();
+        }
+    }
+}
+async function fixture(): Promise<RecoveryFixture> {
+    return new RecoveryFixture(await PrGateFeature.create());
+}
+
+describe('recover an existing published review through the shipped program', () => {
+    it('preserves original final-round verdict/provenance/fixes and requires a fresh build', async () => {
+        const f = await fixture();
+        fs.mkdirSync(f.destination, { recursive: true });
+        fs.writeFileSync(path.join(f.destination, 'summary.json'), 'current summary');
+        fs.writeFileSync(path.join(f.destination, 'pr-context.json'), 'current source context');
+        const output = await f.run();
+        for (const name of [
+            'review-round1-security.json',
+            'review-round1-security.provenance.json',
+            'review-round1-requirements.json',
+            'review-round1-fixes.json',
+        ])
+            expect(fs.readFileSync(path.join(f.destination, name))).toEqual(
+                fs.readFileSync(path.join(f.source, name)),
+            );
+        const receipt = JSON.parse(
+            fs.readFileSync(path.join(f.destination, 'review-stage.json'), 'utf8'),
+        );
+        expect(receipt).toMatchObject({
+            headSha: HEAD,
+            round: 1,
+            maxReviewerRounds: 1,
+            reviewersBriefed: ['security', 'requirements'],
+            buildHeadSha: '',
+            buildPassedAt: '',
+            mergeValidated: false,
+        });
+        expect(
+            fs.readFileSync(path.join(f.destination, 'recovered-original-review-stage.json')),
+        ).toEqual(fs.readFileSync(path.join(f.source, 'review-stage.json')));
+        expect(fs.readFileSync(path.join(f.destination, 'summary.json'), 'utf8')).toBe(
+            'current summary',
+        );
+        expect(fs.readFileSync(path.join(f.destination, 'pr-context.json'), 'utf8')).toBe(
+            'current source context',
+        );
+        expect(
+            fs.readFileSync(path.join(f.destination, 'recovered-original-state/pr-context.json')),
+        ).toEqual(fs.readFileSync(path.join(f.source, 'pr-context.json')));
+        expect(output).toContain('Fresh normal pnpm wp-review-upsert-pr build REQUIRED');
+        expect(f.feature.processes.commandLines()).toHaveLength(1);
+    });
+    it('the normal review stage builds current source and carries the frozen final round without re-briefing', async () => {
+        const f = await fixture();
+        const configFixture = new RepoConfigFixture();
+        const config = configFixture.load();
+        const gate = (config['commands'] as Record<string, Record<string, unknown>>)['pr-gate'];
+        gate['buildCommand'] = 'echo mocked-fresh-build';
+        gate['maxReviewerRounds'] = 1;
+        gate['reviewerAgents'] = 1;
+        gate['checklists'] = ['security', 'requirements', 'later-checklist'].map((id) => ({
+            id,
+            required: true,
+            doc: `checklists/${id}.md`,
+            patterns: ['**'],
+        }));
+        for (const id of ['security', 'requirements', 'later-checklist']) {
+            fs.mkdirSync(path.join(f.root, 'checklists'), { recursive: true });
+            fs.writeFileSync(path.join(f.root, 'checklists', `${id}.md`), 'Inspect the change');
+        }
+        configFixture.writeTo(f.root, config);
+        checkoutLayout.primary(f.root, 'dean/featureSquash');
+        await f.run();
+        const git = f.feature.git;
+        git.respond(['status', '--porcelain'], git.ok());
+        git.respond(['status', '--porcelain', '--untracked-files=all'], git.ok());
+        git.respond(['rev-parse', 'HEAD'], git.ok('e'.repeat(40)));
+        git.respond(['rev-parse', 'origin/main'], git.ok('a'.repeat(40)));
+        git.respond(['merge-base', 'origin/main', 'HEAD'], git.ok('a'.repeat(40)));
+        git.respondToPrefix(['diff'], (call) =>
+            git.ok(
+                call.args.includes('--name-only')
+                    ? 'feature.ts\n'
+                    : 'diff --git a/feature.ts b/feature.ts\n+changed\n',
+            ),
+        );
+        git.respond(['ls-files', '--others', '--exclude-standard'], git.ok());
+        git.respondToPrefix(['-C'], git.ok('dean/featureSquash'));
+        f.feature.processes.respondToShell(
+            'echo mocked-fresh-build',
+            f.feature.processes.exited(0, 'fresh build passed\n'),
+        );
+        const output = CapturedOutput.start();
+        const cwd = vi.spyOn(process, 'cwd').mockReturnValue(f.root);
+        try {
+            await f.feature.container.get(PrGateApp).reviewUpsertPr();
+            const saved = JSON.parse(
+                fs.readFileSync(path.join(f.destination, 'review-stage.json'), 'utf8'),
+            );
+            expect(saved).toMatchObject({
+                headSha: HEAD,
+                round: 1,
+                maxReviewerRounds: 1,
+                buildHeadSha: 'e'.repeat(40),
+                reviewersBriefed: ['security', 'requirements'],
+            });
+            expect(f.feature.processes.shellCalls).toHaveLength(1);
+            expect(output.stdout).toContain('carried');
+            expect(output.stdout).not.toContain('SPAWN');
+            expect(fs.existsSync(path.join(f.destination, 'review-round2-security.json'))).toBe(
+                false,
+            );
+            expect(
+                fs.readFileSync(path.join(f.destination, 'review-round1-security.provenance.json')),
+            ).toEqual(
+                fs.readFileSync(path.join(f.source, 'review-round1-security.provenance.json')),
+            );
+        } finally {
+            cwd.mockRestore();
+            output.stop();
+        }
+    });
+    it('defaults to read-only validation with explicit audit hashes', async () => {
+        const f = await fixture();
+        expect(await f.run(false)).toContain('Validated (dry run)');
+        expect(fs.existsSync(f.destination)).toBe(false);
+    });
+    it('is idempotent and resumes a partial restore without overwriting history', async () => {
+        const f = await fixture();
+        fs.mkdirSync(f.destination, { recursive: true });
+        fs.copyFileSync(
+            path.join(f.source, 'review-round1-security.json'),
+            path.join(f.destination, 'review-round1-security.json'),
+        );
+        await f.run();
+        const before = fs.readFileSync(path.join(f.destination, 'review-recovery.json'));
+        await f.run();
+        expect(fs.readFileSync(path.join(f.destination, 'review-recovery.json'))).toEqual(before);
+    });
+    it.each([
+        'verdict',
+        'provenance',
+        'scope',
+        'missing',
+        'orange',
+        'round',
+        'published',
+        'repository',
+        'branch',
+    ])('refuses %s mismatch without installing state', async (problem) => {
+        const f = await fixture();
+        if (problem === 'verdict')
+            f.write('review-round1-security.json', {
+                id: 'security',
+                status: 'green',
+                agent: 'codex',
+                model: 'test',
+                output: 'edited',
+            });
+        if (problem === 'provenance')
+            fs.unlinkSync(path.join(f.source, 'review-round1-security.provenance.json'));
+        if (problem === 'scope') {
+            const name = 'review-round1-security.provenance.json';
+            const record = JSON.parse(fs.readFileSync(path.join(f.source, name), 'utf8'));
+            record.scopeHash = 'e'.repeat(64);
+            f.write(name, record);
+        }
+        if (problem === 'missing')
+            fs.unlinkSync(path.join(f.source, 'review-round1-security.json'));
+        if (problem === 'orange') fs.unlinkSync(path.join(f.source, 'review-round1-fixes.json'));
+        if (problem === 'round') {
+            const record = JSON.parse(
+                fs.readFileSync(path.join(f.source, 'review-stage.json'), 'utf8'),
+            );
+            record.round = 2;
+            f.write('review-stage.json', record);
+        }
+        if (problem === 'published') f.write('stages/stage3-finish.json', { head: HEAD });
+        if (problem === 'repository')
+            fs.writeFileSync(
+                path.join(f.source, 'pr-body.md'),
+                'https://github.com/other/repo/pull/42',
+            );
+        if (problem === 'branch') f.branch = 'other/feature';
+        await expect(f.run()).rejects.toThrow();
+        expect(fs.existsSync(f.destination)).toBe(false);
+    });
+    it('preflights every destination conflict before installing any historical file', async () => {
+        const f = await fixture();
+        fs.mkdirSync(f.destination, { recursive: true });
+        fs.writeFileSync(
+            path.join(f.destination, 'review-round1-requirements.json'),
+            'different review',
+        );
+        await expect(f.run()).rejects.toThrow('destination conflict');
+        expect(fs.readdirSync(f.destination)).toEqual(['review-round1-requirements.json']);
+    });
+    it('refuses orphaned provenance even when it would expand the round budget', async () => {
+        const f = await fixture();
+        f.write('review-round2-orphan.provenance.json', { round: 2 });
+        await expect(f.run()).rejects.toThrow('frozen round budget');
+        expect(fs.existsSync(f.destination)).toBe(false);
+    });
+    it('also preflights destination conflicts in dry-run mode', async () => {
+        const f = await fixture();
+        fs.mkdirSync(f.destination, { recursive: true });
+        fs.writeFileSync(path.join(f.destination, 'review-stage.json'), 'different state');
+        await expect(f.run(false)).rejects.toThrow('destination conflict');
+        expect(fs.readdirSync(f.destination)).toEqual(['review-stage.json']);
+    });
+    it('refuses linked destination ancestors without writing outside the checkout', async () => {
+        const f = await fixture();
+        const elsewhere = specTempDirs.make('wp-recovery-linked-');
+        fs.symlinkSync(elsewhere, path.join(f.root, '.webpieces'), 'dir');
+        await expect(f.run()).rejects.toThrow('linked or non-directory');
+        expect(fs.readdirSync(elsewhere)).toEqual([]);
+    });
+    it('refuses a symlink in the source', async () => {
+        const f = await fixture();
+        fs.symlinkSync(
+            path.join(f.source, 'pr-body.md'),
+            path.join(f.source, 'review-round1-linked.json'),
+        );
+        await expect(f.run()).rejects.toThrow('non-file');
+        expect(fs.existsSync(f.destination)).toBe(false);
+    });
+});
