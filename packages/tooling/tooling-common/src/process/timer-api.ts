@@ -1,3 +1,5 @@
+import { ProcessEdgeCopies } from './process-edge-copies';
+
 /**
  * Work handed to the clock: what it is (for a reader of `getScheduledTasks()` in a test, and for a log)
  * and the action to run when its delay elapses. Data only.
@@ -39,9 +41,14 @@ export class ScheduledTaskDto {
  * sees every requested delay, and runs the scheduled work itself — no real time passes in a test.
  */
 export abstract class TimerApi {
+    constructor() {
+        ProcessEdgeCopies.refuseUnbound(new.target, TimerApi);
+    }
+
     /** Run `task` once, after `delayMs`. */
     abstract schedule(delayMs: number, task: TaskDto): ScheduledTaskDto;
 
     /** Milliseconds since the epoch. */
     abstract now(): number;
 }
+ProcessEdgeCopies.register(TimerApi);

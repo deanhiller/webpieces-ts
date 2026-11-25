@@ -1,3 +1,5 @@
+import { ProcessEdgeCopies } from './process-edge-copies';
+
 /**
  * What one program invocation produced. Data only (CLAUDE.md rule 1).
  *
@@ -43,6 +45,10 @@ export class ShellTerminationDto {
  * `@webpieces/tooling-testkit`) before resolving the program.
  */
 export abstract class NativeProcessApi {
+    constructor() {
+        ProcessEdgeCopies.refuseUnbound(new.target, NativeProcessApi);
+    }
+
     /**
      * Run `program` with stdout and stderr CAPTURED. When `signal` aborts, the program is killed and the
      * result is {@link PROCESS_KILLED} — the deadline itself is scheduled by the caller through `TimerApi`.
@@ -59,3 +65,4 @@ export abstract class NativeProcessApi {
      */
     abstract runShellToFile(command: string, cwd: string, outputFd: number): Promise<ShellTerminationDto>;
 }
+ProcessEdgeCopies.register(NativeProcessApi);
