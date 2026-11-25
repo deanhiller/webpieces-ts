@@ -1,3 +1,7 @@
+import {
+    ReviewRecoveryEvidence,
+    RecoveryEvidenceBinding,
+} from '../workflow/review-recovery-evidence';
 import * as fs from 'fs';
 import * as path from 'path';
 import { bindingScopeValues, injectable } from 'inversify';
@@ -25,6 +29,7 @@ export class ReviewRecoveryAudit {
         readonly round: number,
         readonly maxReviewerRounds: number,
         readonly files: RecoveryFileHash[],
+        readonly evidence: RecoveryEvidenceBinding[],
     ) {}
 }
 export class RecoveryFileHash {
@@ -45,6 +50,7 @@ export class RecoverReviewCommand {
         private readonly reviews: ReviewJsonService,
         private readonly files: ReviewRecoveryFiles,
         private readonly validation: ReviewRecoveryValidation,
+        private readonly evidence: ReviewRecoveryEvidence,
     ) {}
 
     async run(options: RecoverReviewOptions): Promise<void> {
@@ -91,14 +97,14 @@ export class RecoverReviewCommand {
             throw new InformAiError('Recovery source belongs to a different repository or PR');
         const receipt = this.validation.receipt(source);
         const published = this.validation.object(source, 'stages/stage3-finish.json');
-        const reviewed = this.validation.object(source, 'stages/stage2-review.json');
-        if (published['head'] !== pr.headRefOid || reviewed['head'] !== receipt['headSha'])
+        if (published['head'] !== pr.headRefOid)
             throw new InformAiError(
                 'Recovery source does not match the published PR head and historical briefing',
             );
         await this.assertHistory(root, this.validation.text(receipt, 'headSha'), pr.headRefOid);
         const files = this.files.collect(source);
         this.validation.verdicts(source, files, receipt);
+        const bindings = await this.evidence.validate(root, slug, files, pr.headRefOid, receipt);
         const audit = new ReviewRecoveryAudit(
             source,
             pr.url,
@@ -106,6 +112,7 @@ export class RecoverReviewCommand {
             Number(receipt['round']),
             Number(receipt['maxReviewerRounds']),
             files.map((file): RecoveryFileHash => new RecoveryFileHash(file.name, file.hash())),
+            bindings,
         );
         const restoredFiles = this.restoredFiles(destination, files, receipt, audit);
         this.files.preflight(root, destination, restoredFiles);

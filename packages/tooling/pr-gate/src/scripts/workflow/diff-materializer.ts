@@ -221,7 +221,7 @@ export class DiffMaterializer {
      * Truncate to the cap WITH a footer. Never silently: a truncated diff that looks whole is how a reviewer
      * reports "reviewed" on a tenth of a change — the same trap `formatFileList` states its dropped count for.
      */
-    private capped(raw: string, file: string, base: string): string {
+    capped(raw: string, file: string, base: string): string {
         if (raw.length <= FILE_DIFF_MAX_BYTES) return raw;
         return `${raw.slice(0, FILE_DIFF_MAX_BYTES)}\n` +
             `\n… TRUNCATED at ${FILE_DIFF_MAX_BYTES} bytes (full diff is ${raw.length} bytes).\n` +
@@ -262,7 +262,7 @@ export class DiffMaterializer {
      * The "this combined view is NOT the whole change" notice, at the TOP (see {@link writeAllDiff}). Emitted
      * only when something really is missing — a header on every diff trains a reader to skip the header.
      */
-    private allDiffHeader(manifest: DiffManifest): string {
+    allDiffHeader(manifest: DiffManifest): string {
         const truncated = manifest.entries.filter((e: DiffManifestEntry): boolean => e.truncated);
         if (manifest.omittedFromAllDiff.length === 0 && truncated.length === 0) return '';
         const lines = ['=== ⚠️  THIS COMBINED VIEW IS INCOMPLETE — read this notice before the diff below ==='];

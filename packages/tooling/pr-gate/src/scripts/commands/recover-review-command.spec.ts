@@ -9,12 +9,47 @@ import { specTempDirs } from '@webpieces/tooling-testkit';
 import { PrGateFeature, CapturedOutput } from '../../__tests__/feature-harness';
 import { PrGateApp } from '../pr-gate-app';
 import { RecoverReviewOptions } from './recover-review-command';
+import { PrGateCliApp } from '../pr-gate-cli-app';
+import {
+    PrGateCliInvocation,
+    PrGateCliStdin,
+    PrGateCliOutput,
+    PrGateCliExit,
+} from '../pr-gate-cli-invocation';
 
 const HEAD = 'b'.repeat(40);
 const PUBLISHED = 'c'.repeat(40);
-const SCOPE = 'd'.repeat(64);
+const BASE = 'a'.repeat(40);
+const PATCH =
+    'diff --git a/feature.ts b/feature.ts\n--- a/feature.ts\n+++ b/feature.ts\n@@ -1 +1 @@\n-old\n+new\n';
+const SCOPE = '7a071cb1f77693354d3070442a9232d37f3f0222b3d025d6ab2901332f16de84';
 const SLUG = 'dean-feature';
 const URL = 'https://github.com/example/repo/pull/42';
+
+class RecoveryTestInput extends PrGateCliStdin {
+    override read(): string {
+        return '';
+    }
+}
+class RecoveryTestOutput extends PrGateCliOutput {
+    bytes = '';
+    override write(bytes: string): void {
+        this.bytes += bytes;
+    }
+}
+class RecoveryTestExit extends PrGateCliExit {
+    code = 0;
+    override exit(code: number): void {
+        this.code = code;
+    }
+}
+class RecoveryCliResult {
+    constructor(
+        readonly code: number,
+        readonly error: string,
+        readonly output: string,
+    ) {}
+}
 
 class RecoveryFixture {
     branch = 'dean/featureSquash';
@@ -37,9 +72,7 @@ class RecoveryFixture {
             round: 1,
             maxReviewerRounds: 1,
         });
-        this.write('stages/stage2-review.json', { head: HEAD, base: 'a'.repeat(40) });
         this.write('stages/stage3-finish.json', { head: PUBLISHED });
-        this.write('pr-context.json', { head: HEAD, base: 'a'.repeat(40) });
         this.verdict('security', 'green');
         this.verdict('requirements', 'orange');
         this.write('review-round1-fixes.json', {
@@ -57,7 +90,30 @@ class RecoveryFixture {
             ['branch', '--show-current'],
             (): ReturnType<typeof feature.git.ok> => feature.git.ok(this.branch),
         );
-        feature.git.respond(['merge-base', '--is-ancestor', HEAD, PUBLISHED], feature.git.ok());
+        feature.git.respondToPrefix(['merge-base', '--is-ancestor'], (call) =>
+            call.args.includes('f'.repeat(40)) ? feature.git.fail(1) : feature.git.ok(),
+        );
+        feature.git.respondToPrefix(
+            ['show'],
+            feature.git.ok(
+                JSON.stringify({
+                    commands: {
+                        'pr-gate': {
+                            checklists: [
+                                { id: 'security', patterns: ['**'], required: true },
+                                { id: 'requirements', patterns: ['**'], required: true },
+                            ],
+                        },
+                    },
+                }),
+            ),
+        );
+        feature.git.respondToPrefix(['diff', BASE], (call) =>
+            feature.git.ok(
+                call.args.includes('--name-only') ? 'feature.ts\n' : this.patch(call.args[2]),
+            ),
+        );
+        this.evidence();
         feature.processes.respond(
             'gh',
             ['pr', 'view', '42', '--json', 'url,headRefName,headRefOid,state'],
@@ -70,6 +126,54 @@ class RecoveryFixture {
                 }),
             ),
         );
+    }
+    patch(head: string): string {
+        return head === HEAD ? PATCH : PATCH.replace('+new', '+author-fixed');
+    }
+    evidence(head = HEAD): void {
+        const body = this.patch(head);
+        this.write('stages/stage2-review.json', {
+            head,
+            base: BASE,
+            dirty: false,
+            changedFiles: ['feature.ts'],
+        });
+        this.write('pr-context.json', {
+            head,
+            base: BASE,
+            dirty: false,
+            changedFiles: ['feature.ts'],
+        });
+        const relative = `.webpieces/pr-review/${SLUG}/diff/files/feature.ts.diff`;
+        this.write('diff/manifest.json', {
+            base: BASE,
+            head,
+            hashForkPoint: BASE,
+            hashFeatureHead: head,
+            dirty: false,
+            entries: [
+                {
+                    file: 'feature.ts',
+                    diffFile: relative,
+                    status: 'M',
+                    bytes: body.length,
+                    truncated: false,
+                },
+            ],
+            excluded: [],
+            omittedFromAllDiff: [],
+            allDiffBytes: body.length,
+            allDiffLines: body.split('\n').length,
+        });
+        fs.mkdirSync(path.join(this.source, 'diff/files'), { recursive: true });
+        fs.writeFileSync(path.join(this.source, 'diff/files/feature.ts.diff'), body);
+        fs.writeFileSync(path.join(this.source, 'diff/ALL.diff'), body);
+        fs.mkdirSync(path.join(this.source, 'instructions'), { recursive: true });
+        for (const id of ['security', 'requirements'])
+            fs.writeFileSync(
+                path.join(this.source, `instructions/${id}.instructions.md`),
+                `# Checklist \`${id}\`\nGlobal reviewer round 1 of 1.\nfork point (A) ${BASE}\nfeature head (B) ${head}\n${relative.replace('files/feature.ts.diff', 'manifest.json')}\n| \`feature.ts\` | \`M\` | diff | full source |\n`,
+            );
     }
     write(name: string, value: object): void {
         fs.mkdirSync(path.dirname(path.join(this.source, name)), { recursive: true });
@@ -96,6 +200,29 @@ class RecoveryFixture {
             scopeHash: SCOPE,
             verdictHash: createHash('sha256').update(JSON.stringify(fields)).digest('hex'),
         });
+    }
+    async cli(): Promise<RecoveryCliResult> {
+        const error = new RecoveryTestOutput();
+        const exit = new RecoveryTestExit();
+        const captured = CapturedOutput.start();
+        try {
+            await this.feature.container
+                .get(PrGateCliApp)
+                .run(
+                    new PrGateCliInvocation(
+                        'wp-recover-review',
+                        ['--from', this.source, '--pr', '42'],
+                        this.root,
+                        new RecoveryTestInput(),
+                        new RecoveryTestOutput(),
+                        error,
+                        exit,
+                    ),
+                );
+            return new RecoveryCliResult(exit.code, error.bytes, captured.stdout);
+        } finally {
+            captured.stop();
+        }
     }
     async run(apply = true): Promise<string> {
         const output = CapturedOutput.start();
@@ -286,6 +413,100 @@ describe('recover an existing published review through the shipped program', () 
             current,
         );
         expect(fs.readdirSync(f.destination)).toEqual(['review-stage.json']);
+    });
+    it('authenticates later author-fix materialization without relabeling the original reviewed scope', async () => {
+        const f = await fixture();
+        f.evidence(PUBLISHED);
+        const result = await f.cli();
+        expect(result.code).toBe(0);
+        expect(result.output).toContain(`"historicalReviewedSha": "${HEAD}"`);
+        expect(result.output).toContain(`"head": "${PUBLISHED}"`);
+        expect(fs.existsSync(f.destination)).toBe(false);
+    });
+    it.each([
+        'pr-context.json',
+        'stages/stage2-review.json',
+        'diff/manifest.json',
+        'diff/ALL.diff',
+        'diff/files/feature.ts.diff',
+        'instructions/security.instructions.md',
+    ])('the published CLI refuses missing promised artifact %s without writing', async (name) => {
+        const f = await fixture();
+        fs.unlinkSync(path.join(f.source, name));
+        const result = await f.cli();
+        expect(result.code).toBe(1);
+        expect(result.error).toContain('Missing required historical artifact');
+        expect(fs.existsSync(f.destination)).toBe(false);
+    });
+    it.each([
+        'context-lineage',
+        'stage2-inventory',
+        'manifest-lineage',
+        'manifest-inventory',
+        'patch-content',
+        'combined-content',
+        'instruction-identity',
+        'instruction-lineage',
+        'instruction-scope',
+        'consistent-false-scope',
+    ])('the published CLI refuses contradictory %s before any write', async (problem) => {
+        const f = await fixture();
+        if (problem === 'context-lineage')
+            f.write('pr-context.json', {
+                base: BASE,
+                head: 'f'.repeat(40),
+                dirty: false,
+                changedFiles: ['feature.ts'],
+            });
+        if (problem === 'stage2-inventory')
+            f.write('stages/stage2-review.json', {
+                base: BASE,
+                head: HEAD,
+                dirty: false,
+                changedFiles: ['invented.ts'],
+            });
+        if (problem === 'manifest-lineage' || problem === 'manifest-inventory') {
+            const value = JSON.parse(
+                fs.readFileSync(path.join(f.source, 'diff/manifest.json'), 'utf8'),
+            );
+            if (problem === 'manifest-lineage') value.head = value.hashFeatureHead = 'f'.repeat(40);
+            else value.entries = [];
+            f.write('diff/manifest.json', value);
+        }
+        if (problem === 'patch-content')
+            fs.writeFileSync(
+                path.join(f.source, 'diff/files/feature.ts.diff'),
+                PATCH.replace('+new', '+bad'),
+            );
+        if (problem === 'combined-content')
+            fs.writeFileSync(path.join(f.source, 'diff/ALL.diff'), PATCH.replace('+new', '+bad'));
+        if (problem.startsWith('instruction-')) {
+            const name = path.join(f.source, 'instructions/security.instructions.md');
+            let body = fs.readFileSync(name, 'utf8');
+            if (problem === 'instruction-identity')
+                body = body.replace('# Checklist `security`', '# Checklist `other`');
+            if (problem === 'instruction-lineage') body = body.replace(HEAD, 'f'.repeat(40));
+            if (problem === 'instruction-scope')
+                body = body.replace('`feature.ts`', '`invented.ts`');
+            fs.writeFileSync(name, body);
+        }
+        if (problem === 'consistent-false-scope') {
+            const receipt = JSON.parse(
+                fs.readFileSync(path.join(f.source, 'review-stage.json'), 'utf8'),
+            );
+            receipt.scopeHashes.security = receipt.scopeHashes.requirements = 'e'.repeat(64);
+            f.write('review-stage.json', receipt);
+            for (const id of ['security', 'requirements']) {
+                const name = `review-round1-${id}.provenance.json`;
+                const record = JSON.parse(fs.readFileSync(path.join(f.source, name), 'utf8'));
+                record.scopeHash = 'e'.repeat(64);
+                f.write(name, record);
+            }
+        }
+        const result = await f.cli();
+        expect(result.code).toBe(1);
+        expect(result.output).not.toContain('Validated');
+        expect(fs.existsSync(f.destination)).toBe(false);
     });
     it('defaults to read-only validation with explicit audit hashes', async () => {
         const f = await fixture();

@@ -3,20 +3,33 @@ import * as path from 'path';
 import { createHash } from 'crypto';
 import { bindingScopeValues, injectable } from 'inversify';
 import { InformAiError } from '@webpieces/tooling-common';
+import { toError } from '@webpieces/tooling-common/to-error';
 import { RecoveryFile } from './review-recovery-files';
 
 /** Untrusted archived JSON is inspected before any file is admitted into active workflow state. */
 @injectable(bindingScopeValues.Singleton)
 export class ReviewRecoveryValidation {
-    // webpieces-disable no-any-unknown -- parse boundary for archived JSON, each consumer narrows fields
+    // webpieces-disable no-any-unknown -- parse boundary for archived JSON; consumers narrow fields
     object(source: string, name: string): Record<string, unknown> {
         const target = path.join(source, name);
-        if (!fs.lstatSync(target).isFile())
-            throw new InformAiError(`Not a regular recovery file: ${name}`);
-        // webpieces-disable no-any-unknown -- JSON is opaque until the shape check below
-        const value: unknown = JSON.parse(fs.readFileSync(target, 'utf8'));
+        if (!fs.existsSync(target) || !fs.lstatSync(target).isFile())
+            throw new InformAiError(`Missing or non-regular recovery artifact: ${name}`);
+        return this.parse(fs.readFileSync(target, 'utf8'), name);
+    }
+    // webpieces-disable no-any-unknown -- untrusted archived or Git JSON is narrowed before consumption
+    parse(bytes: string, label: string): Record<string, unknown> {
+        // eslint-disable-next-line @webpieces/no-unmanaged-exceptions -- invalid evidence becomes an actionable recovery refusal, preserving its cause
+        try {
+            return this.record(JSON.parse(bytes), label);
+        } catch (err: unknown) {
+            const error = toError(err);
+            throw new InformAiError(`Invalid recovery JSON: ${label}`, { cause: error });
+        }
+    }
+    // webpieces-disable no-any-unknown -- narrow an opaque JSON object, rejecting arrays and null
+    record(value: unknown, label: string): Record<string, unknown> {
         if (!value || typeof value !== 'object' || Array.isArray(value))
-            throw new InformAiError(`Invalid recovery JSON: ${name}`);
+            throw new InformAiError(`Invalid recovery object: ${label}`);
         return value as Record<string, unknown>;
     }
     // webpieces-disable no-any-unknown -- a single archived field, narrowed to nonempty string

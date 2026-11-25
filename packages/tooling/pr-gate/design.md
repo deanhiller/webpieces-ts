@@ -110,6 +110,7 @@ graph TD
     ReviewIdentityStampService["ReviewIdentityStampService"]
     ReviewJsonService["ReviewJsonService"]
     ReviewProvenanceService["ReviewProvenanceService"]
+    ReviewRecoveryEvidence["ReviewRecoveryEvidence"]
     ReviewRecoveryFiles["ReviewRecoveryFiles"]
     ReviewRecoveryValidation["ReviewRecoveryValidation"]
     ReviewReport["ReviewReport"]
@@ -417,6 +418,7 @@ graph TD
     RecoverReviewCommand --> NativeProcessApi
     RecoverReviewCommand --> RepoRootFinder
     RecoverReviewCommand --> ReviewJsonService
+    RecoverReviewCommand --> ReviewRecoveryEvidence
     RecoverReviewCommand --> ReviewRecoveryFiles
     RecoverReviewCommand --> ReviewRecoveryValidation
     RepoRootFinder --> DotWebpieces
@@ -425,6 +427,10 @@ graph TD
     ReviewIdentityStampService --> DotWebpieces
     ReviewJsonService --> ChecklistOverrideService
     ReviewJsonService --> DotWebpieces
+    ReviewRecoveryEvidence --> ChecklistScopeHasher
+    ReviewRecoveryEvidence --> DiffMaterializer
+    ReviewRecoveryEvidence --> GitProcessApi
+    ReviewRecoveryEvidence --> ReviewRecoveryValidation
     ReviewReport --> ChecklistInstructionsService
     ReviewReport --> ChecklistNotice
     ReviewReport --> ReviewRoundText

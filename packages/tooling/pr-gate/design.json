@@ -793,6 +793,14 @@
                     "level": 3
                 },
                 {
+                    "id": "ReviewRecoveryEvidence",
+                    "className": "ReviewRecoveryEvidence",
+                    "kind": "class",
+                    "scope": "singleton",
+                    "file": "packages/tooling/pr-gate/src/scripts/workflow/review-recovery-evidence.ts",
+                    "level": 2
+                },
+                {
                     "id": "ReviewRecoveryFiles",
                     "className": "ReviewRecoveryFiles",
                     "kind": "class",
@@ -806,7 +814,7 @@
                     "kind": "class",
                     "scope": "singleton",
                     "file": "packages/tooling/pr-gate/src/scripts/workflow/review-recovery-validation.ts",
-                    "level": 2
+                    "level": 3
                 },
                 {
                     "id": "ReviewReport",
@@ -3526,6 +3534,15 @@
                 },
                 {
                     "from": "RecoverReviewCommand",
+                    "to": "ReviewRecoveryEvidence",
+                    "injection": "type",
+                    "token": "ReviewRecoveryEvidence",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/review-recovery-evidence.ts#ReviewRecoveryEvidence",
+                    "paramName": "evidence",
+                    "paramType": "ReviewRecoveryEvidence"
+                },
+                {
+                    "from": "RecoverReviewCommand",
                     "to": "ReviewRecoveryFiles",
                     "injection": "type",
                     "token": "ReviewRecoveryFiles",
@@ -3595,6 +3612,42 @@
                     "tokenKey": "class:packages/tooling/tooling-common/src/state-dir.ts#DotWebpieces",
                     "paramName": "dotDir",
                     "paramType": "DotWebpieces"
+                },
+                {
+                    "from": "ReviewRecoveryEvidence",
+                    "to": "ChecklistScopeHasher",
+                    "injection": "type",
+                    "token": "ChecklistScopeHasher",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/checklist-scope-hasher.ts#ChecklistScopeHasher",
+                    "paramName": "scopes",
+                    "paramType": "ChecklistScopeHasher"
+                },
+                {
+                    "from": "ReviewRecoveryEvidence",
+                    "to": "DiffMaterializer",
+                    "injection": "type",
+                    "token": "DiffMaterializer",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/diff-materializer.ts#DiffMaterializer",
+                    "paramName": "materializer",
+                    "paramType": "DiffMaterializer"
+                },
+                {
+                    "from": "ReviewRecoveryEvidence",
+                    "to": "GitProcessApi",
+                    "injection": "type",
+                    "token": "GitProcessApi",
+                    "tokenKey": "class:packages/tooling/tooling-common/src/process/git-process-api.ts#GitProcessApi",
+                    "paramName": "git",
+                    "paramType": "GitProcessApi"
+                },
+                {
+                    "from": "ReviewRecoveryEvidence",
+                    "to": "ReviewRecoveryValidation",
+                    "injection": "type",
+                    "token": "ReviewRecoveryValidation",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/review-recovery-validation.ts#ReviewRecoveryValidation",
+                    "paramName": "validation",
+                    "paramType": "ReviewRecoveryValidation"
                 },
                 {
                     "from": "ReviewReport",
