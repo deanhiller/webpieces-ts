@@ -1,3 +1,5 @@
+import { ProcessEdgeCopies } from './process-edge-copies';
+
 /**
  * What one `git` invocation produced. Data only (CLAUDE.md rule 1).
  *
@@ -26,6 +28,10 @@ export class GitResultDto {
  * before resolving the program, so no test that is not about git itself ever starts a git process.
  */
 export abstract class GitProcessApi {
+    constructor() {
+        new ProcessEdgeCopies().refuseUnbound(new.target, GitProcessApi);
+    }
+
     /**
      * Run git with stdout and stderr CAPTURED. Never interactive: a credential prompt fails instead of hanging.
      *
@@ -49,3 +55,4 @@ export abstract class GitProcessApi {
      */
     abstract passThrough(args: string[], cwd?: string): Promise<GitResultDto>;
 }
+new ProcessEdgeCopies().register(GitProcessApi);

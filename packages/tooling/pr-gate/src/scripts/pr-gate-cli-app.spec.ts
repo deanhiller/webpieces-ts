@@ -1,9 +1,9 @@
 import 'reflect-metadata';
-import { Container } from 'inversify';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { RepoRootFinder } from '@webpieces/rules-config';
 
 import { PrGateApp } from './pr-gate-app';
+import { PrGateContainer } from './pr-gate-container';
 import { BuildAffected } from './workflow/build-affected';
 import { PrGateCliApp } from './pr-gate-cli-app';
 import {
@@ -53,7 +53,7 @@ class CliFeatureDriver {
         const stdout = new CapturedOutput();
         const stderr = new CapturedOutput();
         const exit = new RecordedExit();
-        const container = new Container({ autobind: true });
+        const container = new PrGateContainer().create();
         await container
             .get(PrGateCliApp)
             .run(
