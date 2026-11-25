@@ -144,15 +144,6 @@
         .wp-foot { margin-top: auto; padding: 10px 18px 0; border-top: 1px solid var(--wp-side-line); display: flex; gap: 14px; flex-wrap: wrap; }
         .wp-side input[type="search"] { width: 100%; box-sizing: border-box; background: var(--wp-side-control); color: var(--wp-side-fg);
             border: 1px solid var(--wp-side-line); border-radius: 8px; padding: 7px 10px; font: inherit; font-size: 13px; }
-        .wp-toggle { all: unset; box-sizing: border-box; cursor: pointer; display: flex; justify-content: space-between;
-            align-items: center; padding: 6px 10px; border-radius: 8px; font-size: 13px; }
-        .wp-toggle:hover { background: var(--wp-side-hover); }
-        .wp-toggle:disabled { cursor: not-allowed; opacity: 0.45; }
-        .wp-sw { width: 30px; height: 18px; border-radius: 9px; background: #3a3d4a; position: relative; transition: background 0.15s; }
-        .wp-sw::after { content: ""; position: absolute; top: 2px; left: 2px; width: 14px; height: 14px; border-radius: 50%;
-            background: #fff; transition: transform 0.15s; }
-        .wp-toggle[aria-pressed="true"] .wp-sw { background: var(--wp-accent); }
-        .wp-toggle[aria-pressed="true"] .wp-sw::after { transform: translateX(12px); }
         .wp-link { all: unset; cursor: pointer; color: var(--wp-side-muted); font-size: 12px; text-decoration: underline; }
         .wp-link:hover { color: var(--wp-side-fg); }
         .wp-icon { all: unset; box-sizing: border-box; cursor: pointer; display: inline-grid; place-items: center; flex: none;
@@ -162,8 +153,36 @@
         .wp-icon-mini { width: 24px; height: 24px; font-size: 12px; }
         .wp-icon-dark { background: transparent; border-color: var(--wp-side-line); color: var(--wp-side-fg); }
         .wp-mode:focus-visible, .wp-pill-trigger:focus-visible, .wp-filter-btn:focus-visible, .wp-chip:focus-visible,
-        .wp-primary:focus-visible, .wp-pill button:focus-visible, .wp-toggle:focus-visible, .wp-side input:focus-visible, .wp-icon:focus-visible,
+        .wp-primary:focus-visible, .wp-pill button:focus-visible, .wp-multi-trigger:focus-visible, .wp-multi-chip button:focus-visible, .wp-side input:focus-visible, .wp-icon:focus-visible,
         .wp-link:focus-visible { outline: 2px solid var(--wp-accent-hover); outline-offset: 2px; }
+        .wp-multi { position: relative; margin-bottom: 6px; }
+        .wp-multi-field { box-sizing: border-box; cursor: pointer; display: flex; align-items: center; gap: 6px; min-height: 34px;
+            padding: 4px 4px 4px 8px; border-radius: 8px; border: 1px solid var(--wp-side-line); background: var(--wp-side-control); }
+        .wp-multi-field:hover { border-color: var(--wp-accent-hover); }
+        .wp-multi-chips { flex: 1 1 auto; min-width: 0; display: flex; flex-wrap: wrap; gap: 4px; }
+        .wp-multi-none { color: var(--wp-side-muted); font-size: 12.5px; padding: 2px 0; }
+        .wp-multi-chip { display: inline-flex; align-items: center; gap: 3px; max-width: 100%; padding: 1px 2px 1px 8px; border-radius: 999px;
+            background: #2a2333; border: 1px solid var(--wp-accent); font-size: 12px; overflow-wrap: anywhere; }
+        .wp-multi-chip small { color: var(--wp-side-muted); font-size: 10.5px; }
+        .wp-multi-chip-hidden { border-style: dashed; opacity: 0.7; }
+        .wp-multi-chip button { all: unset; cursor: pointer; flex: none; width: 16px; height: 16px; display: inline-grid; place-items: center;
+            border-radius: 50%; font-size: 10px; }
+        .wp-multi-chip button:hover { background: var(--wp-side-hover); }
+        .wp-multi-trigger { all: unset; cursor: pointer; flex: none; padding: 2px 6px; border-radius: 6px; }
+        .wp-multi-pop { position: absolute; z-index: 36; left: 0; right: 0; top: calc(100% + 4px); display: grid; gap: 6px; padding: 8px;
+            background: var(--wp-side-control); border: 1px solid var(--wp-side-line); border-radius: 10px; box-shadow: 0 10px 28px #0008; }
+        .wp-multi-list { max-height: 260px; overflow-y: auto; display: grid; gap: 1px; }
+        .wp-multi-option { display: flex; align-items: center; gap: 8px; padding: 4px 6px; border-radius: 6px; cursor: pointer; }
+        .wp-multi-option:hover { background: var(--wp-side-hover); }
+        .wp-multi-option.wp-multi-active { background: var(--wp-side-hover); box-shadow: inset 0 0 0 1px var(--wp-accent-hover); }
+        .wp-multi-option input { flex: none; margin: 0; accent-color: var(--wp-accent); pointer-events: none; }
+        .wp-multi-name { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
+        .wp-multi-name mark { background: #5b3a91; color: #fff; border-radius: 2px; }
+        .wp-multi-sub { flex: none; color: var(--wp-side-muted); font-size: 11.5px; }
+        .wp-multi-empty { margin: 0; color: var(--wp-side-muted); font-size: 12px; }
+        .wp-multi-pop footer { display: flex; justify-content: space-between; align-items: center; padding-top: 6px;
+            border-top: 1px solid var(--wp-side-line); color: var(--wp-side-muted); font-size: 12px; }
+        .wp-multi-pop .wp-text-btn { color: var(--wp-side-fg); }
         .wp-main { position: relative; min-width: 0; height: 100vh; display: flex; flex-direction: column; }
         .wp-topbar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 7px 12px;
             border-bottom: 1px solid var(--wp-line); background: var(--wp-surface); }
@@ -256,10 +275,32 @@
             <button type="button" class="wp-filter-btn" id="wp-filter-open" aria-controls="wp-filter-pop" aria-expanded="false"><span>Filter</span><span class="wp-badge" id="wp-filter-badge" hidden>0</span></button>
         </div>
         <div class="wp-group">
-            <label class="wp-label" for="wp-lock">Focus</label>
-            <input type="search" id="wp-lock" list="wp-lock-options" placeholder="Lock a project…  ( / )" autocomplete="off" spellcheck="false"><datalist id="wp-lock-options"><option value="app-example-e2e">L9 · app-example-e2e</option><option value="webpieces-tooling">L9 · webpieces-tooling</option><option value="angular-site">L8 · angular-site</option><option value="client-server">L8 · client-server</option><option value="legacy-server">L8 · legacy-server</option><option value="pr-gate">L8 · pr-gate</option><option value="server2">L8 · server2</option><option value="company-svc-core">L6 · company-svc-core</option><option value="mcp-server">L6 · mcp-server</option><option value="agent-workflow-rules">L5 · agent-workflow-rules</option><option value="ai-hook-rules">L5 · ai-hook-rules</option><option value="http-server">L5 · http-server</option><option value="nx-webpieces-rules">L5 · nx-webpieces-rules</option><option value="code-rules">L4 · code-rules</option><option value="eslint-rules">L4 · eslint-rules</option><option value="hook-runtime">L4 · hook-runtime</option><option value="http-routing">L4 · http-routing</option><option value="cloudtasks-client">L3 · cloudtasks-client</option><option value="http-client-node">L3 · http-client-node</option><option value="partner-api">L3 · partner-api</option><option value="rules-config">L3 · rules-config</option><option value="bunyan">L2 · bunyan</option><option value="gcp-identity">L2 · gcp-identity</option><option value="http-client-browser">L2 · http-client-browser</option><option value="openapi-generator">L2 · openapi-generator</option><option value="repo-workflow-core">L2 · repo-workflow-core</option><option value="winston">L2 · winston</option><option value="api-doc-model">L1 · api-doc-model</option><option value="client-server-api">L1 · client-server-api</option><option value="company-core">L1 · company-core</option><option value="core-context">L1 · core-context</option><option value="http-client-core">L1 · http-client-core</option><option value="ipc-bridge">L1 · ipc-bridge</option><option value="openapi-import">L1 · openapi-import</option><option value="server2-api">L1 · server2-api</option><option value="browser-storage-api">L0 · browser-storage-api</option><option value="core-mock">L0 · core-mock</option><option value="core-util">L0 · core-util</option><option value="docs-site">L0 · docs-site</option><option value="rules-sdk">L0 · rules-sdk</option><option value="tooling-common">L0 · tooling-common</option></datalist>
-            <button type="button" class="wp-toggle" id="wp-lock-toggle" aria-pressed="false">Lock <span class="wp-sw" aria-hidden="true"></span></button>
-            <button type="button" class="wp-toggle" id="wp-filter-toggle" aria-pressed="false">Hide unconnected <span class="wp-sw" aria-hidden="true"></span></button>
+            <div class="wp-label" id="wp-keep-label">Keep connected to</div>
+            <div class="wp-multi" id="wp-keep" data-wp-multi="keep">
+                <div class="wp-multi-field" id="wp-keep-field">
+                    <span class="wp-multi-chips" id="wp-keep-chips"><span class="wp-multi-none">None (off)</span></span>
+                    <button type="button" class="wp-multi-trigger" id="wp-keep-trigger" aria-haspopup="listbox" aria-controls="wp-keep-pop" aria-expanded="false" aria-label="Choose Keep connected to"><span class="wp-caret" aria-hidden="true">▾</span></button>
+                </div>
+                <div class="wp-multi-pop" id="wp-keep-pop" hidden>
+                    <input type="search" class="wp-multi-search" id="wp-keep-search" placeholder="Search…" autocomplete="off" spellcheck="false" aria-label="Search Keep connected to" aria-controls="wp-keep-list">
+                    <div class="wp-multi-list" id="wp-keep-list" role="listbox" aria-multiselectable="true" aria-label="Keep connected to"><div class="wp-multi-option" role="option" aria-selected="false" data-wp-option="agent-workflow-rules"><input type="checkbox" tabindex="-1" aria-hidden="true"><span class="wp-multi-name">agent-workflow-rules</span><span class="wp-multi-sub">L5</span></div><div class="wp-multi-option" role="option" aria-selected="false" data-wp-option="ai-hook-rules"><input type="checkbox" tabindex="-1" aria-hidden="true"><span class="wp-multi-name">ai-hook-rules</span><span class="wp-multi-sub">L5</span></div><div class="wp-multi-option" role="option" aria-selected="false" data-wp-option="angular-site"><input type="checkbox" tabindex="-1" aria-hidden="true"><span class="wp-multi-name">angular-site</span><span class="wp-multi-sub">L8</span></div><div class="wp-multi-option" role="option" aria-selected="false" data-wp-option="api-doc-model"><input type="checkbox" tabindex="-1" aria-hidden="true"><span class="wp-multi-name">api-doc-model</span><span class="wp-multi-sub">L1</span></div><div class="wp-multi-option" role="option" aria-selected="false" data-wp-option="app-example-e2e"><input type="checkbox" tabindex="-1" aria-hidden="true"><span class="wp-multi-name">app-example-e2e</span><span class="wp-multi-sub">L9</span></div><div class="wp-multi-option" role="option" aria-selected="false" data-wp-option="browser-storage-api"><input type="checkbox" tabindex="-1" aria-hidden="true"><span class="wp-multi-name">browser-storage-api</span><span class="wp-multi-sub">L0</span></div><div class="wp-multi-option" role="option" aria-selected="false" data-wp-option="bunyan"><input type="checkbox" tabindex="-1" aria-hidden="true"><span class="wp-multi-name">bunyan</span><span class="wp-multi-sub">L2</span></div><div class="wp-multi-option" role="option" aria-selected="false" data-wp-option="client-server"><input type="checkbox" tabindex="-1" aria-hidden="true"><span class="wp-multi-name">client-server</span><span class="wp-multi-sub">L8</span></div><div class="wp-multi-option" role="option" aria-selected="false" data-wp-option="client-server-api"><input type="checkbox" tabindex="-1" aria-hidden="true"><span class="wp-multi-name">client-server-api</span><span class="wp-multi-sub">L1</span></div><div class="wp-multi-option" role="option" aria-selected="false" data-wp-option="cloudtasks-client"><input type="checkbox" tabindex="-1" aria-hidden="true"><span class="wp-multi-name">cloudtasks-client</span><span class="wp-multi-sub">L3</span></div><div class="wp-multi-option" role="option" aria-selected="false" data-wp-option="code-rules"><input type="checkbox" tabindex="-1" aria-hidden="true"><span class="wp-multi-name">code-rules</span><span class="wp-multi-sub">L4</span></div><div class="wp-multi-option" role="option" aria-selected="false" data-wp-option="company-core"><input type="checkbox" tabindex="-1" aria-hidden="true"><span class="wp-multi-name">company-core</span><span class="wp-multi-sub">L1</span></div><div class="wp-multi-option" role="option" aria-selected="false" data-wp-option="company-svc-core"><input type="checkbox" tabindex="-1" aria-hidden="true"><span class="wp-multi-name">company-svc-core</span><span class="wp-multi-sub">L6</span></div><div class="wp-multi-option" role="option" aria-selected="false" data-wp-option="core-context"><input type="checkbox" tabindex="-1" aria-hidden="true"><span class="wp-multi-name">core-context</span><span class="wp-multi-sub">L1</span></div><div class="wp-multi-option" role="option" aria-selected="false" data-wp-option="core-mock"><input type="checkbox" tabindex="-1" aria-hidden="true"><span class="wp-multi-name">core-mock</span><span class="wp-multi-sub">L0</span></div><div class="wp-multi-option" role="option" aria-selected="false" data-wp-option="core-util"><input type="checkbox" tabindex="-1" aria-hidden="true"><span class="wp-multi-name">core-util</span><span class="wp-multi-sub">L0</span></div><div class="wp-multi-option" role="option" aria-selected="false" data-wp-option="docs-site"><input type="checkbox" tabindex="-1" aria-hidden="true"><span class="wp-multi-name">docs-site</span><span class="wp-multi-sub">L0</span></div><div class="wp-multi-option" role="option" aria-selected="false" data-wp-option="eslint-rules"><input type="checkbox" tabindex="-1" aria-hidden="true"><span class="wp-multi-name">eslint-rules</span><span class="wp-multi-sub">L4</span></div><div class="wp-multi-option" role="option" aria-selected="false" data-wp-option="gcp-identity"><input type="checkbox" tabindex="-1" aria-hidden="true"><span class="wp-multi-name">gcp-identity</span><span class="wp-multi-sub">L2</span></div><div class="wp-multi-option" role="option" aria-selected="false" data-wp-option="hook-runtime"><input type="checkbox" tabindex="-1" aria-hidden="true"><span class="wp-multi-name">hook-runtime</span><span class="wp-multi-sub">L4</span></div><div class="wp-multi-option" role="option" aria-selected="false" data-wp-option="http-client-browser"><input type="checkbox" tabindex="-1" aria-hidden="true"><span class="wp-multi-name">http-client-browser</span><span class="wp-multi-sub">L2</span></div><div class="wp-multi-option" role="option" aria-selected="false" data-wp-option="http-client-core"><input type="checkbox" tabindex="-1" aria-hidden="true"><span class="wp-multi-name">http-client-core</span><span class="wp-multi-sub">L1</span></div><div class="wp-multi-option" role="option" aria-selected="false" data-wp-option="http-client-node"><input type="checkbox" tabindex="-1" aria-hidden="true"><span class="wp-multi-name">http-client-node</span><span class="wp-multi-sub">L3</span></div><div class="wp-multi-option" role="option" aria-selected="false" data-wp-option="http-routing"><input type="checkbox" tabindex="-1" aria-hidden="true"><span class="wp-multi-name">http-routing</span><span class="wp-multi-sub">L4</span></div><div class="wp-multi-option" role="option" aria-selected="false" data-wp-option="http-server"><input type="checkbox" tabindex="-1" aria-hidden="true"><span class="wp-multi-name">http-server</span><span class="wp-multi-sub">L5</span></div><div class="wp-multi-option" role="option" aria-selected="false" data-wp-option="ipc-bridge"><input type="checkbox" tabindex="-1" aria-hidden="true"><span class="wp-multi-name">ipc-bridge</span><span class="wp-multi-sub">L1</span></div><div class="wp-multi-option" role="option" aria-selected="false" data-wp-option="legacy-server"><input type="checkbox" tabindex="-1" aria-hidden="true"><span class="wp-multi-name">legacy-server</span><span class="wp-multi-sub">L8</span></div><div class="wp-multi-option" role="option" aria-selected="false" data-wp-option="mcp-server"><input type="checkbox" tabindex="-1" aria-hidden="true"><span class="wp-multi-name">mcp-server</span><span class="wp-multi-sub">L6</span></div><div class="wp-multi-option" role="option" aria-selected="false" data-wp-option="nx-webpieces-rules"><input type="checkbox" tabindex="-1" aria-hidden="true"><span class="wp-multi-name">nx-webpieces-rules</span><span class="wp-multi-sub">L5</span></div><div class="wp-multi-option" role="option" aria-selected="false" data-wp-option="openapi-generator"><input type="checkbox" tabindex="-1" aria-hidden="true"><span class="wp-multi-name">openapi-generator</span><span class="wp-multi-sub">L2</span></div><div class="wp-multi-option" role="option" aria-selected="false" data-wp-option="openapi-import"><input type="checkbox" tabindex="-1" aria-hidden="true"><span class="wp-multi-name">openapi-import</span><span class="wp-multi-sub">L1</span></div><div class="wp-multi-option" role="option" aria-selected="false" data-wp-option="partner-api"><input type="checkbox" tabindex="-1" aria-hidden="true"><span class="wp-multi-name">partner-api</span><span class="wp-multi-sub">L3</span></div><div class="wp-multi-option" role="option" aria-selected="false" data-wp-option="pr-gate"><input type="checkbox" tabindex="-1" aria-hidden="true"><span class="wp-multi-name">pr-gate</span><span class="wp-multi-sub">L8</span></div><div class="wp-multi-option" role="option" aria-selected="false" data-wp-option="repo-workflow-core"><input type="checkbox" tabindex="-1" aria-hidden="true"><span class="wp-multi-name">repo-workflow-core</span><span class="wp-multi-sub">L2</span></div><div class="wp-multi-option" role="option" aria-selected="false" data-wp-option="rules-config"><input type="checkbox" tabindex="-1" aria-hidden="true"><span class="wp-multi-name">rules-config</span><span class="wp-multi-sub">L3</span></div><div class="wp-multi-option" role="option" aria-selected="false" data-wp-option="rules-sdk"><input type="checkbox" tabindex="-1" aria-hidden="true"><span class="wp-multi-name">rules-sdk</span><span class="wp-multi-sub">L0</span></div><div class="wp-multi-option" role="option" aria-selected="false" data-wp-option="server2"><input type="checkbox" tabindex="-1" aria-hidden="true"><span class="wp-multi-name">server2</span><span class="wp-multi-sub">L8</span></div><div class="wp-multi-option" role="option" aria-selected="false" data-wp-option="server2-api"><input type="checkbox" tabindex="-1" aria-hidden="true"><span class="wp-multi-name">server2-api</span><span class="wp-multi-sub">L1</span></div><div class="wp-multi-option" role="option" aria-selected="false" data-wp-option="tooling-common"><input type="checkbox" tabindex="-1" aria-hidden="true"><span class="wp-multi-name">tooling-common</span><span class="wp-multi-sub">L0</span></div><div class="wp-multi-option" role="option" aria-selected="false" data-wp-option="webpieces-tooling"><input type="checkbox" tabindex="-1" aria-hidden="true"><span class="wp-multi-name">webpieces-tooling</span><span class="wp-multi-sub">L9</span></div><div class="wp-multi-option" role="option" aria-selected="false" data-wp-option="winston"><input type="checkbox" tabindex="-1" aria-hidden="true"><span class="wp-multi-name">winston</span><span class="wp-multi-sub">L2</span></div></div>
+                    <p class="wp-multi-empty" id="wp-keep-empty" hidden>No match</p>
+                    <footer><span id="wp-keep-count">0 selected</span><button type="button" class="wp-text-btn" id="wp-keep-clear">Clear all</button></footer>
+                </div>
+            </div>
+            <div class="wp-label" id="wp-focus-label">Focus</div>
+            <div class="wp-multi" id="wp-focus" data-wp-multi="focus">
+                <div class="wp-multi-field" id="wp-focus-field">
+                    <span class="wp-multi-chips" id="wp-focus-chips"><span class="wp-multi-none">None (off)</span></span>
+                    <button type="button" class="wp-multi-trigger" id="wp-focus-trigger" aria-haspopup="listbox" aria-controls="wp-focus-pop" aria-expanded="false" aria-label="Choose Focus"><span class="wp-caret" aria-hidden="true">▾</span></button>
+                </div>
+                <div class="wp-multi-pop" id="wp-focus-pop" hidden>
+                    <input type="search" class="wp-multi-search" id="wp-focus-search" placeholder="Search…" autocomplete="off" spellcheck="false" aria-label="Search Focus" aria-controls="wp-focus-list">
+                    <div class="wp-multi-list" id="wp-focus-list" role="listbox" aria-multiselectable="true" aria-label="Focus"><div class="wp-multi-option" role="option" aria-selected="false" data-wp-option="agent-workflow-rules"><input type="checkbox" tabindex="-1" aria-hidden="true"><span class="wp-multi-name">agent-workflow-rules</span><span class="wp-multi-sub">L5</span></div><div class="wp-multi-option" role="option" aria-selected="false" data-wp-option="ai-hook-rules"><input type="checkbox" tabindex="-1" aria-hidden="true"><span class="wp-multi-name">ai-hook-rules</span><span class="wp-multi-sub">L5</span></div><div class="wp-multi-option" role="option" aria-selected="false" data-wp-option="angular-site"><input type="checkbox" tabindex="-1" aria-hidden="true"><span class="wp-multi-name">angular-site</span><span class="wp-multi-sub">L8</span></div><div class="wp-multi-option" role="option" aria-selected="false" data-wp-option="api-doc-model"><input type="checkbox" tabindex="-1" aria-hidden="true"><span class="wp-multi-name">api-doc-model</span><span class="wp-multi-sub">L1</span></div><div class="wp-multi-option" role="option" aria-selected="false" data-wp-option="app-example-e2e"><input type="checkbox" tabindex="-1" aria-hidden="true"><span class="wp-multi-name">app-example-e2e</span><span class="wp-multi-sub">L9</span></div><div class="wp-multi-option" role="option" aria-selected="false" data-wp-option="browser-storage-api"><input type="checkbox" tabindex="-1" aria-hidden="true"><span class="wp-multi-name">browser-storage-api</span><span class="wp-multi-sub">L0</span></div><div class="wp-multi-option" role="option" aria-selected="false" data-wp-option="bunyan"><input type="checkbox" tabindex="-1" aria-hidden="true"><span class="wp-multi-name">bunyan</span><span class="wp-multi-sub">L2</span></div><div class="wp-multi-option" role="option" aria-selected="false" data-wp-option="client-server"><input type="checkbox" tabindex="-1" aria-hidden="true"><span class="wp-multi-name">client-server</span><span class="wp-multi-sub">L8</span></div><div class="wp-multi-option" role="option" aria-selected="false" data-wp-option="client-server-api"><input type="checkbox" tabindex="-1" aria-hidden="true"><span class="wp-multi-name">client-server-api</span><span class="wp-multi-sub">L1</span></div><div class="wp-multi-option" role="option" aria-selected="false" data-wp-option="cloudtasks-client"><input type="checkbox" tabindex="-1" aria-hidden="true"><span class="wp-multi-name">cloudtasks-client</span><span class="wp-multi-sub">L3</span></div><div class="wp-multi-option" role="option" aria-selected="false" data-wp-option="code-rules"><input type="checkbox" tabindex="-1" aria-hidden="true"><span class="wp-multi-name">code-rules</span><span class="wp-multi-sub">L4</span></div><div class="wp-multi-option" role="option" aria-selected="false" data-wp-option="company-core"><input type="checkbox" tabindex="-1" aria-hidden="true"><span class="wp-multi-name">company-core</span><span class="wp-multi-sub">L1</span></div><div class="wp-multi-option" role="option" aria-selected="false" data-wp-option="company-svc-core"><input type="checkbox" tabindex="-1" aria-hidden="true"><span class="wp-multi-name">company-svc-core</span><span class="wp-multi-sub">L6</span></div><div class="wp-multi-option" role="option" aria-selected="false" data-wp-option="core-context"><input type="checkbox" tabindex="-1" aria-hidden="true"><span class="wp-multi-name">core-context</span><span class="wp-multi-sub">L1</span></div><div class="wp-multi-option" role="option" aria-selected="false" data-wp-option="core-mock"><input type="checkbox" tabindex="-1" aria-hidden="true"><span class="wp-multi-name">core-mock</span><span class="wp-multi-sub">L0</span></div><div class="wp-multi-option" role="option" aria-selected="false" data-wp-option="core-util"><input type="checkbox" tabindex="-1" aria-hidden="true"><span class="wp-multi-name">core-util</span><span class="wp-multi-sub">L0</span></div><div class="wp-multi-option" role="option" aria-selected="false" data-wp-option="docs-site"><input type="checkbox" tabindex="-1" aria-hidden="true"><span class="wp-multi-name">docs-site</span><span class="wp-multi-sub">L0</span></div><div class="wp-multi-option" role="option" aria-selected="false" data-wp-option="eslint-rules"><input type="checkbox" tabindex="-1" aria-hidden="true"><span class="wp-multi-name">eslint-rules</span><span class="wp-multi-sub">L4</span></div><div class="wp-multi-option" role="option" aria-selected="false" data-wp-option="gcp-identity"><input type="checkbox" tabindex="-1" aria-hidden="true"><span class="wp-multi-name">gcp-identity</span><span class="wp-multi-sub">L2</span></div><div class="wp-multi-option" role="option" aria-selected="false" data-wp-option="hook-runtime"><input type="checkbox" tabindex="-1" aria-hidden="true"><span class="wp-multi-name">hook-runtime</span><span class="wp-multi-sub">L4</span></div><div class="wp-multi-option" role="option" aria-selected="false" data-wp-option="http-client-browser"><input type="checkbox" tabindex="-1" aria-hidden="true"><span class="wp-multi-name">http-client-browser</span><span class="wp-multi-sub">L2</span></div><div class="wp-multi-option" role="option" aria-selected="false" data-wp-option="http-client-core"><input type="checkbox" tabindex="-1" aria-hidden="true"><span class="wp-multi-name">http-client-core</span><span class="wp-multi-sub">L1</span></div><div class="wp-multi-option" role="option" aria-selected="false" data-wp-option="http-client-node"><input type="checkbox" tabindex="-1" aria-hidden="true"><span class="wp-multi-name">http-client-node</span><span class="wp-multi-sub">L3</span></div><div class="wp-multi-option" role="option" aria-selected="false" data-wp-option="http-routing"><input type="checkbox" tabindex="-1" aria-hidden="true"><span class="wp-multi-name">http-routing</span><span class="wp-multi-sub">L4</span></div><div class="wp-multi-option" role="option" aria-selected="false" data-wp-option="http-server"><input type="checkbox" tabindex="-1" aria-hidden="true"><span class="wp-multi-name">http-server</span><span class="wp-multi-sub">L5</span></div><div class="wp-multi-option" role="option" aria-selected="false" data-wp-option="ipc-bridge"><input type="checkbox" tabindex="-1" aria-hidden="true"><span class="wp-multi-name">ipc-bridge</span><span class="wp-multi-sub">L1</span></div><div class="wp-multi-option" role="option" aria-selected="false" data-wp-option="legacy-server"><input type="checkbox" tabindex="-1" aria-hidden="true"><span class="wp-multi-name">legacy-server</span><span class="wp-multi-sub">L8</span></div><div class="wp-multi-option" role="option" aria-selected="false" data-wp-option="mcp-server"><input type="checkbox" tabindex="-1" aria-hidden="true"><span class="wp-multi-name">mcp-server</span><span class="wp-multi-sub">L6</span></div><div class="wp-multi-option" role="option" aria-selected="false" data-wp-option="nx-webpieces-rules"><input type="checkbox" tabindex="-1" aria-hidden="true"><span class="wp-multi-name">nx-webpieces-rules</span><span class="wp-multi-sub">L5</span></div><div class="wp-multi-option" role="option" aria-selected="false" data-wp-option="openapi-generator"><input type="checkbox" tabindex="-1" aria-hidden="true"><span class="wp-multi-name">openapi-generator</span><span class="wp-multi-sub">L2</span></div><div class="wp-multi-option" role="option" aria-selected="false" data-wp-option="openapi-import"><input type="checkbox" tabindex="-1" aria-hidden="true"><span class="wp-multi-name">openapi-import</span><span class="wp-multi-sub">L1</span></div><div class="wp-multi-option" role="option" aria-selected="false" data-wp-option="partner-api"><input type="checkbox" tabindex="-1" aria-hidden="true"><span class="wp-multi-name">partner-api</span><span class="wp-multi-sub">L3</span></div><div class="wp-multi-option" role="option" aria-selected="false" data-wp-option="pr-gate"><input type="checkbox" tabindex="-1" aria-hidden="true"><span class="wp-multi-name">pr-gate</span><span class="wp-multi-sub">L8</span></div><div class="wp-multi-option" role="option" aria-selected="false" data-wp-option="repo-workflow-core"><input type="checkbox" tabindex="-1" aria-hidden="true"><span class="wp-multi-name">repo-workflow-core</span><span class="wp-multi-sub">L2</span></div><div class="wp-multi-option" role="option" aria-selected="false" data-wp-option="rules-config"><input type="checkbox" tabindex="-1" aria-hidden="true"><span class="wp-multi-name">rules-config</span><span class="wp-multi-sub">L3</span></div><div class="wp-multi-option" role="option" aria-selected="false" data-wp-option="rules-sdk"><input type="checkbox" tabindex="-1" aria-hidden="true"><span class="wp-multi-name">rules-sdk</span><span class="wp-multi-sub">L0</span></div><div class="wp-multi-option" role="option" aria-selected="false" data-wp-option="server2"><input type="checkbox" tabindex="-1" aria-hidden="true"><span class="wp-multi-name">server2</span><span class="wp-multi-sub">L8</span></div><div class="wp-multi-option" role="option" aria-selected="false" data-wp-option="server2-api"><input type="checkbox" tabindex="-1" aria-hidden="true"><span class="wp-multi-name">server2-api</span><span class="wp-multi-sub">L1</span></div><div class="wp-multi-option" role="option" aria-selected="false" data-wp-option="tooling-common"><input type="checkbox" tabindex="-1" aria-hidden="true"><span class="wp-multi-name">tooling-common</span><span class="wp-multi-sub">L0</span></div><div class="wp-multi-option" role="option" aria-selected="false" data-wp-option="webpieces-tooling"><input type="checkbox" tabindex="-1" aria-hidden="true"><span class="wp-multi-name">webpieces-tooling</span><span class="wp-multi-sub">L9</span></div><div class="wp-multi-option" role="option" aria-selected="false" data-wp-option="winston"><input type="checkbox" tabindex="-1" aria-hidden="true"><span class="wp-multi-name">winston</span><span class="wp-multi-sub">L2</span></div></div>
+                    <p class="wp-multi-empty" id="wp-focus-empty" hidden>No match</p>
+                    <footer><span id="wp-focus-count">0 selected</span><button type="button" class="wp-text-btn" id="wp-focus-clear">Clear all</button></footer>
+                </div>
+            </div>
         </div>
         <div class="wp-group">
             <div class="wp-label wp-label-row">Legend <button type="button" class="wp-icon wp-icon-mini wp-icon-dark" id="wp-legend-pop" title="Pop the legend out over the graph" aria-label="Pop the legend out over the graph">⇱</button></div>
@@ -279,7 +320,7 @@
             <button type="button" class="wp-icon" id="wp-collapse" aria-label="Toggle the controls drawer" aria-controls="wp-side" aria-expanded="true">☰</button>
             <div class="wp-crumb" id="wp-crumb">Mode: <b>Runtime</b></div>
             <div class="wp-pills" id="wp-filter-pills" aria-label="Active filters"></div>
-            <p id="wp-filter-status" hidden>Filtering: <strong id="wp-filter-anchor"></strong> <button id="wp-filter-off" type="button">Turn off Filter</button></p><p id="wp-graph-error" role="alert" hidden></p>
+            <p id="wp-filter-status" hidden>Keep connected to: <strong id="wp-filter-anchor"></strong> <button id="wp-filter-off" type="button">Clear Keep connected</button></p><p id="wp-graph-error" role="alert" hidden></p>
             <button type="button" class="wp-icon" id="wp-help-btn" aria-label="How to read this graph" aria-controls="wp-help" aria-expanded="false">?</button>
         </div>
         <div id="graph"></div>
@@ -290,11 +331,12 @@
         <div class="wp-pop wp-help" id="wp-help" role="dialog" aria-label="How to read this graph" hidden>
             <header><span>Reading the graph</span><button type="button" class="wp-icon wp-icon-mini" id="wp-help-close" aria-label="Close help">✕</button></header>
             <p>Every row is one dependency level: the HIGHEST level is the top row and L0, the foundation libraries, is always the bottom row. Servers, clients and apps always form the top row (a bundle sits above the apps it aggregates). Transitive dependencies are allowed but not drawn.</p>
-            <p>💡 <strong>Click any box</strong> for its menu: <strong>View Design</strong> (only where the project has a generated <strong>design.html</strong>, i.e. what the AI sees inside it), <strong>Lock/Unlock</strong> (the same lock as the Focus field), <strong>Filter Unconnected</strong> (removes unrelated boxes, keeping each L-number row).</p>
+            <p>💡 <strong>Click any box</strong> for its menu: <strong>View Design</strong> (only where the project has a generated <strong>design.html</strong>, i.e. what the AI sees inside it), <strong>Add to Focus</strong> / <strong>Remove from Focus</strong> (the same picks as the Focus pulldown), <strong>Keep connected</strong> / <strong>Stop keeping connected</strong> (the same picks as Keep connected to).</p>
+            <p><strong>Keep connected to</strong> keeps only the picked boxes plus every ancestor and dependency of each (several picks are the UNION, so adding one never shrinks the graph), keeping each L-number row. <strong>Focus</strong> then pins the chains of the picked boxes in the foreground and dims the rest, without moving anything. Both pulldowns search anywhere in a name; Clear all turns each off.</p>
             <p><strong>Filter</strong> narrows the graph by what changed on this branch or in the last commit, by runtime, by role and by product; the groups combine. A product keeps its servers, clients and apps plus everything they depend on, so <strong>Product</strong> + <strong>Changed + dependents + dependencies</strong> is exactly what this branch builds that can affect that product. Every box keeps its own L-row, and a level left empty shows as a thin labeled band.</p>
             <p>🔦 <strong>Hover any box</strong> to trace its <em>entire</em> dependency chain — every ancestor above it and every dependency below it, with the lines between — while the rest of the graph dims.</p>
             <p><strong>Runtime</strong>: a box may depend on a box carrying every color it has. <strong>Architecture</strong>: what each box is in the system. <strong>Impact</strong>: what changed on this branch or in the last commit (amber), its dependents (amber outline), and what nx marked for another reason: an input glob (violet hatch) or a root file (teal). Click an affected box for why; with both available, a toggle picks which. <strong>Product</strong>: which products each box belongs to. Toggle products in the legend (the first two are ON on every load): one ON product is its color, several ON are stripes, only OFF products are light grey, neutral means every product while all are ON, and a dashed white box belongs to none.</p>
-            <p><kbd>/</kbd> focus the lock search · <kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd> <kbd>4</kbd> switch mode · <kbd>Esc</kbd> unlock</p>
+            <p><kbd>/</kbd> open the Focus search · <kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd> <kbd>4</kbd> switch mode · <kbd>Esc</kbd> close a pulldown, else clear Focus</p>
         </div>
         <div class="wp-pop wp-filter-pop" id="wp-filter-pop" role="dialog" aria-label="Filter projects" hidden>
             <header><span>Filter</span><button type="button" class="wp-icon wp-icon-mini" id="wp-filter-close" aria-label="Close the filter">✕</button></header>
@@ -396,16 +438,19 @@
 <h5>In Scope</h5>
 <ul>
 <li>Bin commands shipped from <code>src/scripts/*</code>: <code>wp-start-upsert-pr</code>, <code>wp-finish-upsert-pr</code>, <code>wp-start-update</code> (update from main; clean → finalizes, conflict → hand off), <code>wp-finish-update</code> (finalize after resolving conflicts). The full-update composition (<code>runUpdateFromMain</code>) and 3-point merge-info gathering (<code>gatherInfo</code>) are internal <code>workflow/</code> functions, not bins.</li>
-<li><code>wp-build</code> — the ONE way anybody verifies a change. It runs <code>commands.pr-gate.buildCommand</code> VERBATIM through <code>BuildAffected.runBuildGate</code>, the same shared gate stage ② and stage ③ use, so it inherits one resolver (<code>resolveBuildCommand</code>), one announce line, one capture path (<code>BuildGateLog</code>) and one failure rendering — only its <code>BuildGateOptions</code> differ, by <code>BUILD_STAGE</code>, which selects the fixed <code>.webpieces/build.log</code> rather than the PR flow's per-commit files under <code>logs/</code>. Its console contract IS the pointer at that file: the build's stdout+stderr are redirected there in full, the console gets a heartbeat every 10s and then <code>Build success</code> / <code>Build Failed:</code> plus the absolute <code>FullLog :</code> path, and every run first rotates the previous log to <code>.webpieces/build.log.bak</code> so the last TWO builds are on disk. That exists because an agent that could only read the console re-ran the whole build to see a different slice of it — 23.9 minutes across nine runs in one measured session, five with no code change between them. It composes nothing else on purpose: a per-repo verify chain is what drifted into building the world three times per inner loop, and anything that must run on every build belongs inside <code>buildCommand</code> where the gate runs it too. <code>whole-repo-build-guard</code> (ai-hook-rules) names this bin in its refusal.</li>
+<li><code>wp-build</code> — the ONE way anybody verifies a change. It runs <code>commands.pr-gate.buildCommand</code> VERBATIM through <code>BuildAffected.runBuildGate</code>, the same shared gate stage ② and stage ③ use, so it inherits one resolver (<code>resolveBuildCommand</code>), one announce line, one capture path (<code>BuildGateLog</code>) and one failure rendering — only its <code>BuildGateOptions</code> differ, by <code>BUILD_STAGE</code>, which selects the fixed <code>.webpieces/logs/build.log</code> rather than the PR flow's per-commit files beside it. Its console contract IS the pointer at that file: the build's stdout+stderr are redirected there in full, the FIRST stdout line is <code>FullLog : &lt;absolute path&gt;</code> (printed before any work, so a backgrounded run still knows where to read — issue #1393), the console then gets a heartbeat every 10s and then <code>Build success</code> / <code>Build Failed:</code> plus the same <code>FullLog :</code> path, and every run first rotates the previous log to <code>build.log.bak</code> so the last TWO builds are on disk. That exists because an agent that could only read the console re-ran the whole build to see a different slice of it — 23.9 minutes across nine runs in one measured session, five with no code change between them. It composes nothing else on purpose: a per-repo verify chain is what drifted into building the world three times per inner loop, and anything that must run on every build belongs inside <code>buildCommand</code> where the gate runs it too. <code>whole-repo-build-guard</code> (ai-hook-rules) names this bin in its refusal.</li>
+<li><code>wp-start-push-dev</code> — dev-deploy stage ① (#1403): fetches <code>origin/main</code> (<code>MainFreshness</code>) and, ONLY when the branch does not contain it, runs the same 3-point merge as <code>wp-start-update</code> / <code>wp-start-upsert-pr</code> (<code>RunUpdate</code>, verb <code>wp-start-push-dev</code>, finish command <code>wp-build-push-dev</code>). It pushes the rewrite to <code>origin/&lt;feature&gt;</code> only when no PR is open (<code>OpenPrCheck</code>); with a PR open it stays local for the PR flow's one reviewed push. Refuses a <code>/hotfix/</code> branch.</li>
+<li><code>wp-build-push-dev</code> — dev-deploy stage ②, the gate (#1397, #1403, #1405): finalizes any 3-point merge stage ① left for <code>/wp-merge</code> (<code>MergeEnd</code>), refuses a branch behind <code>origin/main</code>, runs <code>commands.pr-gate.buildCommand</code> on the feature branch alone (<code>BuildAffected.runBuildGate</code>, <code>PUSH_DEV_MAIN_BUILD_STAGE</code>) so the code rules judge only what will land on main, then <code>DevResolveRunner</code> merges <code>origin/&lt;devBranch&gt;</code> into the throwaway <code>&lt;branch&gt;DevResolve</code>; on a conflict <code>LandedCopyResolver</code> takes the publisher's side on every file whose dev side comes only from copies already on main (merged PR, or main holds the copy's content — <code>DevCopyOnMain</code>) and names the copies it overrode, and the runner halts on whatever remains (state file <code>PushDevStateStore</code>; re-running the command resumes, <code>--abort</code> ends it), runs <code>pnpm install</code> on the merged tree, runs <code>commands.push-dev.buildCommand</code> (compile + tests only, no code rules) through the same <code>BuildAffected</code> gate (<code>DevBuild</code>, <code>DEV_BUILD_STAGE</code>, fixed <code>.webpieces/logs/build-dev.log</code>), then <code>recordResolution</code> moves the throwaway back to the feature head plus ONE commit holding only the resolved files, keeps that copy reachable under <code>refs/webpieces/push-dev/&lt;branch&gt;</code> and records it (<code>VerifiedDevCopyStore</code>). Publishes nothing. The build key has no default: <code>DevBuild.command</code> refuses, naming the key, before any git write.</li>
+<li><code>wp-finish-push-dev</code> — dev-deploy stage ③ (#1403): publishes ONLY the copy stage ② recorded, refusing when HEAD moved since; force-pushes it to <code>&lt;namespace&gt;/&lt;branch&gt;</code> leased against the sha stage ② saw, so the push event carries the previous copy. <code>--list</code> prints the pool; <code>--remove</code> deletes the copy and pushes the <code>&lt;removeNamespace&gt;/&lt;branch&gt;</code> marker (refused when the copy is already on main, <code>DevCopyOnMain</code>).</li>
 <li><code>wp-upsert-hotfix-pr</code> — the ONE command for a <code>/hotfix/</code> branch (issue #1057). A hotfix branch is cut from the production sha, so it must never take main: the command refuses a non-<code>/hotfix/</code> branch, requires a clean tree and <code>summary.json</code>, runs only <code>hotfix-ci</code>, never merges main or rewrites the branch, pushes once fast-forward only (<code>HotfixPrPublisher</code>), upserts the audit-bannered PR, and never enables auto-merge. On a <code>/hotfix/</code> branch the three PR stages refuse up front via <code>HotfixRedirect</code> and name it.</li>
 <li>The 3-point squash-merge / merge-validation gate workflow (<code>src/scripts/workflow</code>).</li>
 <li>The red/yellow/green PR dashboard (<code>src/dashboard/dashboard.ts</code>): <code>computeGateResults</code>, <code>countAddedDisables</code>, and its <code>GateResult</code>/<code>DisableCounts</code>/<code>DashboardInput</code> data classes. THREE renderings, one per surface: <code>renderPrBody</code> (the PR description, which is byte-identical to the squash-merge commit body — see <code>pr-body-is-merge-body.spec.ts</code>), <code>renderDetailComment</code> (the 1st PR comment: full dashboard, all rows, hash points), and <code>ChecklistCommentRenderer.render</code> in its own file (the 2nd comment: per-reviewer output). Both comments are upserted by hidden marker via <code>PrCommentUpserter</code>. <code>SquashSettingsEnforcer</code> keeps GitHub's <code>squash_merge_commit_title</code>/<code>squash_merge_commit_message</code> pinned to <code>PR_TITLE</code>/<code>PR_BODY</code> so a UI merge copies the description into <code>git log</code> — server-side settings no config key can express, repaired on every stage ③ run.</li>
 </ul>
 <ul>
-<li>Build-gate log capture (<code>BuildGateLog</code>) — ONE implementation, ONE durable file, every caller. <code>wp-build</code>, stage ② and stage ③ all redirect the build's full stdout+stderr to a file and hand back a <code>FullLog :</code> pointer; stage ② and stage ③ use <code>.webpieces/logs/build-gate-&lt;stage&gt;-&lt;branch&gt;-&lt;shortSha&gt;.log</code> (per-commit, because review and finish can both run against ONE commit). It was briefly selectable, behind <code>experimental.buildGateLogCapture</code> in the machine-local <code>~/.webpieces/config.json</code> — a file essentially nobody has, so essentially every gate build streamed to the terminal and every failure said &quot;run this command again yourself&quot;. Both halves of that were the defect, and the key is deleted rather than defaulted: an accepted shape is never migrated. AI-facing calls never stream or <code>tee</code>; only a human who answers Y inside <code>wp-human-post-pr</code> follows that same file live until completion.</li>
+<li>Build-gate log capture (<code>BuildGateLog</code>) — ONE implementation, ONE durable file, every caller. <code>wp-build</code>, stage ② and stage ③ all redirect the build's full stdout+stderr to a file and hand back a <code>FullLog :</code> pointer; stage ② and stage ③ use <code>.webpieces/logs/build-gate-&lt;stage&gt;-&lt;branch&gt;-&lt;shortSha&gt;.log</code>, and the gate prints its <code>FullLog :</code> line before the build starts (per-commit, because review and finish can both run against ONE commit). It was briefly selectable, behind <code>experimental.buildGateLogCapture</code> in the machine-local <code>~/.webpieces/config.json</code> — a file essentially nobody has, so essentially every gate build streamed to the terminal and every failure said &quot;run this command again yourself&quot;. Both halves of that were the defect, and the key is deleted rather than defaulted: an accepted shape is never migrated. AI-facing calls never stream or <code>tee</code>; only a human who answers Y inside <code>wp-human-post-pr</code> follows that same file live until completion.</li>
 </ul>
 <ul>
-<li>Stage console capture (<code>StageOutputLog</code>) — the same treatment for what the STAGES themselves print. <code>wp-review-upsert-pr</code> and <code>wp-finish-upsert-pr</code> run their body with stdout intercepted into <code>.webpieces/logs/wp-&lt;command&gt;.log</code>, and only what the caller must act on immediately is <code>say</code>-ed through to the terminal: the build heartbeat and result, stage ②'s reviewer/<code>summary.json</code> instruction block, and stage ③'s PR link and follow-ups. That exists because agents pipe these commands to bound them, a pipe withholds every byte until the command exits, and the harness kills a command silent for 600 seconds — after a full build. <code>build-output-pipe-guard</code> (ai-hook-rules) refuses the pipe; this is what makes refusing it reasonable. <code>GateLogFile</code> is the one place that knows WHERE any of these logs go (under the PRIMARY clone, namespaced by worktree, so history outlives a reaped worktree) and keeps exactly one previous generation as <code>.bak</code>.</li>
+<li>Stage console capture (<code>StageOutputLog</code>) — the same treatment for what the STAGES themselves print. <code>wp-review-upsert-pr</code> and <code>wp-finish-upsert-pr</code> run their body with stdout intercepted into <code>.webpieces/logs/wp-&lt;command&gt;.log</code>, and only what the caller must act on immediately is <code>say</code>-ed through to the terminal: the build heartbeat and result, stage ②'s reviewer/<code>summary.json</code> instruction block, and stage ③'s PR link and follow-ups. That exists because agents pipe these commands to bound them, a pipe withholds every byte until the command exits, and the harness kills a command silent for 600 seconds — after a full build. <code>build-output-pipe-guard</code> (ai-hook-rules) refuses the pipe; this is what makes refusing it reasonable. Each stage's FIRST stdout line is <code>FullLog : &lt;its console log&gt;</code>, before any work. <code>GateLogFile</code> is the one place that knows WHERE any of these logs go — <code>&lt;tree&gt;/.webpieces/logs/</code> through <code>DotWebpieces.aiFacing()</code>, i.e. inside the checkout the command ran in, a linked worktree's own root included, because an agent confined to its worktree may be refused a read anywhere else (issue #1393) — and keeps exactly one previous generation as <code>.bak</code>.</li>
 </ul>
 <ul>
 <li>Incomplete reviewer-round recovery (issue #1087): sanctioned main updates and squash rewrites do not consume a review round. Stage ② continues the original fixed roster against its original materialized diff and briefing SHA, and prints the remaining required checklist instructions. Accepted GREEN/YELLOW verdicts keep their historical provenance; only the existing RED follow-up policy starts another round, and the final-round ORANGE policy remains author remediation without re-review. The receipt's <code>buildHeadSha</code> tracks current build evidence independently of the historical <code>headSha</code>. Stage failure logs include the normalized terminal failure before capture closes.</li>
@@ -459,8 +504,29 @@
 <h5>In scope</h5>
 <ul>
 <li>Load the build's generated MCP tool catalogs — ONE <code>mcp-&lt;ContractClass&gt;-tools.json</code> per contract — with <code>McpToolCatalog.fromPackages([...], __dirname)</code>, from a built/published package (files beside its <code>package.json</code>) or a workspace source directory (its <code>project.json</code> → the outputPath of the target <code>openapi-generate</code> dependsOn, via core-util's <code>GeneratedApiDocsLayout</code>).</li>
-<li>Resolve <code>@WpMcpTool</code> API metadata against the catalog of each bound contract (<code>McpBindOptions.toolCatalogs</code>) into registered MCP tools, FAILING FAST at boot — naming every directory searched — when a bound contract has no catalog, a catalog's contract is not bound, a tool name is duplicated, a registered tool is absent from its catalog, its catalog method/profiles differ from the declaration, or a catalog contains an extra stale tool. The title is NOT compared: it is the method's <code>@summary</code> JSDoc tag, which the contract carries no runtime trace of, so the catalog is its one runtime source (#1296). Validate the complete catalogs before projecting each bound instance's fixed profile groups; discovery, schema lookup and calls share that restricted authorized view. The schemas, the description and the title are read from the catalog, never rebuilt here — see the README. <code>McpToolRegistry</code> also calls <code>assertApiTypeMatchesMcpTools</code>, so <code>@ApiType(..., MCP)</code> and <code>@WpMcpTool</code> presence cannot disagree at runtime.</li>
-<li>Validate resource-bound access tokens through an application verifier.</li>
+<li>Resolve <code>@WpMcpTool</code> API metadata against the catalog of each bound contract (the <code>McpToolset</code> catalogs) into registered MCP tools, FAILING FAST at boot — naming every directory searched — when a bound contract has no catalog, a catalog's contract is not bound, a tool name is duplicated, a registered tool is absent from its catalog, its catalog method/profiles differ from the declaration, or a catalog contains an extra stale tool. The title is NOT compared: it is the method's <code>@summary</code> JSDoc tag, which the contract carries no runtime trace of, so the catalog is its one runtime source (#1296). Validate the complete catalogs before projecting each bound instance's fixed profile groups; discovery, schema lookup and calls share that restricted authorized view. The schemas, the description and the title are read from the catalog, never rebuilt here — see the README. <code>McpToolRegistry</code> also calls <code>assertApiTypeMatchesMcpTools</code>, so <code>@ApiType(..., MCP)</code> and <code>@WpMcpTool</code> presence cannot disagree at runtime.</li>
+<li>Own the shared <code>McpToolset</code>: registry, per-caller <code>AuthorizedMcpTools</code> projection, schema validation,</li>
+</ul>
+<p>dispatch and error translation, reading the caller ONLY from the current <code>RequestContext</code>.</p>
+<ul>
+<li>Serve a toolset over two transports: <code>WpMcpInMemory.connect(toolset)</code> (an SDK <code>Client</code> over the linked</li>
+</ul>
+<p>in-memory pair, the caller read per request from the calling code's <code>RequestContext</code>) and <code>WpMcpServer</code></p>
+<p>(HTTP, one path per toolset).</p>
+<ul>
+<li>Authenticate the HTTP door with an OR-set of the existing <code>@WpAuth</code> modes plus <code>mcpOAuth(...)</code>:</li>
+</ul>
+<p>classify from unverified surface facts, verify with exactly ONE verifier (<code>router.credentialVerifiers()</code>,</p>
+<p>the same hooks <code>AuthFilter</code> uses), refuse overlapping / unverifiable / caller-less modes at bind, and</p>
+<p>emit <code>WWW-Authenticate</code> discovery only for <code>mcpOAuth(...)</code>.</p>
+<ul>
+<li>Validate resource-bound <code>mcpOAuth(...)</code> access tokens through an application verifier.</li>
+<li>Provide the MCP CLIENTS webpieces itself needs: <code>WpMcpRemote.connect(url, oidcSameProject(), minter, new WpMcpRemoteOptions(approvalHook))</code></li>
+</ul>
+<p>(per-POST OIDC minting and trusted-context propagation, and the host's REQUIRED approval hook asked on</p>
+<p>every <code>callTool</code> — ALLOW / REQUIRE_APPROVAL / DENY, holding no approval state) and <code>McpClientSet.merge([...])</code> (one flat tool</p>
+<p>namespace across clients, duplicates refused).</p>
+<ul>
 <li>Use the receiving router's common <code>AuthorizationService</code> for tool/schema visibility and invocation policy.</li>
 <li>Bind the application-selected MCP path through the official MCP v2 HTTP/JSON-RPC implementation,</li>
 </ul>
@@ -469,6 +535,7 @@
 <li>Invoke local APIs through the ordinary proxy/filter chain with a target-bound, request-scoped <code>InvocationAuthentication</code> proof of verified ingress.</li>
 <li>Invoke remote APIs through generated Node clients using OIDC plus trusted delegated user context.</li>
 <li>Coordinate bounded list caches, request-scoped subscriptions, shutdown, and a pluggable event bus.</li>
+<li>Publish every tool's <code>outputSchema</code> OPEN at every depth (<code>RegisteredMcpTool.publishedOutputSchema</code>, #1441) on tools/list and <code>projectCallToolResult</code>, while <code>inputSchema</code> stays closed and the server still validates its own result strictly — adding a response field is additive and safe for a client that cached the old schema.</li>
 <li>Validate input/output DTO shapes and map every failure through the one <code>WpMcpErrorTranslator</code>,</li>
 </ul>
 <p>which has one method per boundary — <code>toBearerBoundaryResponse</code>, <code>toListError</code>, <code>toToolCallResult</code></p>
@@ -481,9 +548,10 @@
 <p>so <code>toToolCallResult</code> makes ONE unconditional call — the same shape <code>ApiRegistry</code> gives HTTP and</p>
 <p><code>IpcRegistry</code> gives IPC.</p>
 <ul>
-<li>Have <code>toWire</code> and NO <code>fromWire</code>: webpieces is never the MCP client, so there is no return path to</li>
+<li>Have <code>toWire</code> and NO <code>fromWire</code>: the MCP clients here (<code>WpMcpInMemory</code>, <code>WpMcpRemote</code>) are the SDK's</li>
 </ul>
-<p>translate. Documented on <code>McpErrorTranslator</code> so it does not read as an oversight.</p>
+<p>own <code>Client</code>, which hands the agent the tool result as-is, so there is no return path to translate.</p>
+<p>Documented on <code>McpErrorTranslator</code> so it does not read as an oversight.</p>
 <ul>
 <li>Keep the pre-SDK boundary OFF the HTTP <code>ErrorTranslator</code> even though both return <code>HttpResponseDto</code>:</li>
 </ul>
@@ -510,6 +578,7 @@
 <p>the protected resource and verifies tokens at the resource boundary.</p>
 <ul>
 <li>Forwarding external MCP bearer tokens or browser JWTs to application endpoints.</li>
+<li>Approval UX and approval state for write tools (app-owned: the app's <code>McpApprovalHook</code> on <code>WpMcpRemote</code> decides, keyed off the tool's operation, <code>destructiveHint</code> and its own <code>RequestContext</code> keys; webpieces stores nothing about what was approved).</li>
 <li>Durable/replayable event delivery; MCP list/resource notifications are cache invalidations.</li>
 </ul></div></details>
 <details class="wp-resp-card" data-node="agent-workflow-rules"><summary><span class="wp-resp-level">L5</span> <strong>agent-workflow-rules</strong> — Workflow guard policy and hook installation for AI coding agents, contributed independently to the shared hook runtime.</summary><div class="wp-resp-body"><h4>Responsibilities — agent-workflow-rules</h4>
@@ -554,6 +623,7 @@
 <li>Server bootstrap and lifecycle (<code>WebpiecesServer</code>, <code>WebpiecesFactory</code>, <code>WebpiecesServerImpl</code>)</li>
 <li>Express integration and request dispatch (<code>WebpiecesMiddleware</code>, <code>WebpiecesRouteCreator</code>, CORS), including symmetric path/query/body binding for GET, JSON POST, and form POST plus complete <code>HttpResponseDto</code> status/header/body emission</li>
 <li>Obtaining request body bytes (<code>RequestBodyReader</code>: <code>StreamBodyReader</code> default, opt-in <code>PreConsumedBodyReader</code> for hosts such as Cloud Functions gen2 that consume the stream first and keep <code>req.rawBody</code>), chosen via <code>WebpiecesExpressRouter.setBodyReader</code></li>
+<li>Capping the inbound request body (default 10 MiB, <code>MAX_BODY_BYTES</code>), chosen per router via <code>WebpiecesExpressRouter.setMaxBodyBytes</code></li>
 <li>DI container/module wiring (<code>WebpiecesModule</code>) binding framework singletons</li>
 <li>Built-in concrete filters: <code>ContextFilter</code>, <code>LogApiFilter</code>, <code>RecordingFilter</code> (service-to-service <code>oidcSameProject()</code>/<code>oidcSvcs(...)</code>/<code>sharedSecret(...)</code> enforcement on Cloud Tasks / cross-service delivery is http-routing's <code>AuthFilter</code>)</li>
 <li>In-process (HTTP-less) client factory for tests (<code>InProcessApiClientFactory</code>)</li>
@@ -661,6 +731,14 @@
 <p>package (<code>@angular/*</code>, <code>react</code>, <code>express</code>, <code>firebase-admin</code>, …) in a project any of whose framework tags</p>
 <p>its entry does not allow. Both THROW one <code>RuleFailError</code>; every behavioural field is required.</p>
 <ul>
+<li>The four <code>@webpieces/ipc-bridge</code> guard rules (#1389), under <code>src/ipc/</code> with validators beside the others:</li>
+</ul>
+<p><code>ipc-boundary</code> and <code>ipc-contract-shape</code> judge one file at a time from its syntax tree (the scope modes</p>
+<p>pick the files); <code>ipc-pairing</code> and <code>ipc-protocol-fingerprint</code> judge the configured IPC file set when a</p>
+<p>project owning one is touched, reading the contract through a <code>ts.Program</code> rooted at <code>contractPaths</code></p>
+<p>ONLY and the endpoint files syntactically. The <code>wp-ipc-record-protocol</code> bin re-records the fingerprint</p>
+<p>manifest exactly as the rule computes it. Every path, module and refusal list is required config.</p>
+<ul>
 <li>CLI entry points and orchestration: <code>wp-validate-code</code> and the <code>wp-ci</code> gate runner, reporting (<code>rule-reporter</code>), mode resolution.</li>
 <li>Standalone <code>CodeValidator</code> executor consumable without the Nx toolchain.</li>
 </ul>
@@ -727,12 +805,21 @@
 <li>Turning API decorators into invokable GET/POST/PUT/PATCH/DELETE routes (<code>ApiRoutingFactory</code>, <code>RouteHandler</code>, <code>MethodMeta</code>) with the same explicit path/query/body argument metadata used by generated HTTP clients — including SKIPPING an <code>@WpLocalOnly</code> route entirely when <code>RuntimeLocality</code> says this process is not a developer machine, so the endpoint does not exist off-local</li>
 <li>Refusing to BOOT when a served route declares an auth mode nothing bound can verify (<code>AuthFilter.assertRouteVerifiable</code>, called by route registration; <code>UnverifiableAuthModeError</code> names the endpoint, the mode and the <code>binder.bind(...)</code> line; STRICT over every declared alternative; a verifier must list the route's vendor in its pure <code>supportedVendorNames()</code>) (#1362)</li>
 <li>Enforcing every auth mode at request time (<code>AuthFilter</code>: <code>@WpAuthPublic</code>, <code>jwt()</code>, <code>oidcSameProject()</code>, <code>oidcSvcs(...)</code>, <code>sharedSecret(...)</code>, <code>vendorAuth(...)</code>, <code>apiKey(...)</code>, <code>@WpLocalOnly</code>), and declaring the process's locality at startup from <code>RuntimeSetupOptions.locality</code></li>
-<li>The four app-implemented auth seams (<code>JwtHook</code>, <code>OidcHook</code>, <code>VendorAuthVerifier</code> — the INBOUND vendor role, defined in core-context beside its independent outbound twin <code>VendorAuthMinter</code>, which this router never depends on — <code>ApiKeyHook</code>) and their optional DI tokens — bind one to turn on the endpoints that need it; a SERVED route needing an unbound one fails startup, never open. Every method on all four is ASYNC, because an app's verification strategy reaches the network, and all four share ONE shape: <code>verify&lt;Thing&gt;</code>/<code>parseJwt</code> takes the credential regime plus what it needs to read it, and every AUTHENTICATING one returns an <code>AuthenticatedCaller</code> (<code>parseJwt</code>, <code>verifyApiKey</code>, <code>VendorAuthVerifier.verify</code>). <code>verifyOidc</code> returns an <code>AuthenticatedMachineIdentity</code> — it is caller-VERIFIED and has a framework default (<code>DefaultOidcVerifier</code>)</li>
-<li>The <code>AuthenticatedCaller</code> an authenticator proved (userId, roles, claims, the trusted <code>entries</code> to seed) and <code>AUTHENTICATED_CALLER_KEY</code>, the trusted <code>ContextKey</code> the <code>AuthFilter</code> stamps it under</li>
+<li>The four app-implemented auth seams (<code>JwtHook</code>, <code>OidcHook</code>, <code>VendorAuthVerifier</code> — the INBOUND vendor role, defined in core-context beside its independent outbound twin <code>VendorAuthMinter</code>, which this router never depends on — <code>ApiKeyHook</code>) and their optional DI tokens — bind one to turn on the endpoints that need it; a SERVED route needing an unbound one fails startup, never open. Every method on all four is ASYNC, because an app's verification strategy reaches the network, and all four share ONE shape: <code>verify&lt;Thing&gt;</code>/<code>parseJwt</code> takes the credential regime plus what it needs to read it, and every AUTHENTICATING one returns an <code>AuthenticatedCaller</code> (<code>parseJwt</code>, <code>verifyApiKey</code>, <code>VendorAuthVerifier.verify</code>). <code>verifyOidc</code> returns an <code>AuthenticatedMachineIdentity</code> — it is caller-VERIFIED and has a framework default (<code>DefaultOidcVerifier</code>) — and <code>OidcHook.originatingServiceRoles</code> grants a service account the roles it holds when it ORIGINATES a call (asked only when no caller was forwarded; with no hook bound no service has a role) (#1420)</li>
+<li>The <code>AuthenticatedCaller</code> an authenticator proved (userId, roles, claims, the trusted <code>entries</code> to seed) and <code>AUTHENTICATED_CALLER_KEY</code>, the trusted <code>ContextKey</code> the <code>AuthFilter</code> stamps it under. A service / AI agent is a caller with roles and NO user id (#1420): <code>AuthenticatedCallerContext</code> publishes <code>USER_ROLES</code> for every caller (user or machine, <code>[]</code> included) and <code>USER_ID</code> only for a user; a caller-verified hop (OIDC, shared secret) that RELAYS a forwarded caller contributes no role of its own (<code>publishVerifiedService</code>)</li>
+<li>The standard <code>@WpAuthorization</code> branches (<code>AuthorizationService</code>): <code>ROLES</code> reads <code>USER_ROLES</code> alone, so it admits a role-bearing user OR service; <code>ALL_USERS</code> still requires <code>USER_ID</code>; <code>SERVICE_ONLY</code> / <code>USERS_OR_SERVICES</code> read current-hop machine evidence</li>
 <li>The Node wiring surface: <code>BindModule</code> (the Node alias of http-client-core's <code>BindModule&lt;B&gt;</code>), the Node-only <code>RouteModule</code>, <code>Wiring</code>/<code>AppWiring</code> (<code>getBindModules()</code>/<code>getRouteModules()</code>/<code>getWirings()</code>), and the Node <code>Binder</code> every <code>BindModule.configure</code> receives — <code>bind</code>, <code>createRpcClientAndBind</code> / <code>createPubSubClientAndBind</code> (with <code>ClientBindOptions</code> / <code>PubSubBindOptions</code>), and <code>bindExternal</code></li>
 <li>Matching filters to routes by controller filepath glob (<code>FilterMatcher</code>, <code>minimatch</code>)</li>
 <li>Request-scoped context reading and server config types (<code>RequestContextReader</code>, <code>WebpiecesConfig</code>)</li>
 </ul>
+<ul>
+<li>First-use <code>LazyController</code> registration through the same <code>addRoutes</code>/filter/dispatch path: eager</li>
+</ul>
+<p>security metadata, explicit application-container or isolated-private-binding implementation results,</p>
+<p>shared singleton preservation, detached initialization,</p>
+<p>one retained per-router outcome, bounded asynchronous initialization and explicit separate-process</p>
+<p>build validation (<code>validateLazyRoutesForBuild</code>). It owns no new process signal hook or unary</p>
+<p>disconnect-cancellation protocol.</p>
 <h5>Out of Scope</h5>
 <ul>
 <li>The <code>Filter</code> / <code>Service</code> / <code>FilterChain</code> abstraction itself → <code>core-util</code>. This package owns the INBOUND chain built on it — <code>WpResponse</code>, <code>FilterMatcher</code>, <code>FilterDefinition</code>, and the framework filters — while the client's outbound chain (<code>http-client-core</code>) is the same abstraction pointed the other way</li>
@@ -920,6 +1007,7 @@
 <h5>In Scope</h5>
 <ul>
 <li><code>ClientHttpBrowserFactory</code> — a plain class the app provides through whatever DI it already has (Angular <code>useFactory</code>, a React context, a module-level <code>const</code>)</li>
+<li>Selecting each factory's <code>HttpClientRuntime</code> (#1445): the platform fetch + JS timers by default, and REFUSING to build in the React Native JS runtime (<code>ReactNativeRuntimeDetector</code>: <code>navigator.product === 'ReactNative'</code>, never <code>window</code> or <code>ReactNativeWebView</code>) unless the app passed <code>HttpClientRuntime.reactNative(fetch, deadlines)</code></li>
 <li><code>ClientConfig</code> — per-client state: the svcName, the <code>ClientRole</code>, the per-call <code>CallMode</code> (a BACKGROUND client hides progress and stamps <code>err.callMode</code> on every failure, #1293), and the <code>ServiceWorkerRouting</code> (#1293)</li>
 <li>Bypassing Angular's service worker on every RPC (<code>ngsw-bypass=true</code> query parameter) and re-typing ngsw's synthetic 504 (<code>ServiceWorkerSyntheticResponse</code>) as <code>ApiConnectionError</code>, so a dropped connection is never shown as a gateway timeout</li>
 <li>Applying the SAME received-status rule as <code>http-client-node</code> — one <code>WebpiecesDefaultErrorTranslator</code>, no browser-specific branch. A browser that received a 404 called a path that does not exist, which is the CLIENT's bug (<code>ApiImplementationError</code>), not an answer to show a user; a 5xx is the server's (<code>ApiDependencyError</code>). The one genuinely user-facing outcome has its own channel and always did: 266 / <code>ApiEndUserError</code></li>
@@ -1056,7 +1144,7 @@
 <li>Per contract: <code>@ApiType(...)</code>, defaulting to <code>SVC_TO_SVC</code> alone — fail-closed, so a contract whose author typed nothing about who reads it reaches nobody but us</li>
 <li>Per field: the <code>@hidden</code> JSDoc tag as <code>DocumentedField.hidden</code>, its text as <code>hiddenReason</code> (#1246) — a renderer decides which audience omits the field; the tag and its reason never reach any description</li>
 <li>Per method: the request BODY is the one argument with no <code>@PathParam</code> / <code>@QueryParam</code> — the same rule the router uses, so a single-argument contract is unchanged — and every URL-bound argument is a <code>DocumentedParameter</code> (<code>in</code> path or query, wire name, required, type) for a renderer's OpenAPI <code>parameters</code> (#1339)</li>
-<li>Per method: HTTP verb, path, <code>EndpointOperation</code>, <code>EndpointKind</code>, the <code>hidden</code> and <code>openWorld</code> booleans from <code>@Endpoint</code>'s options (the reason a method is hidden goes in its JSDoc, where the rest of its documentation already lives), the <code>EndpointOptions</code> a document cares about (<code>formPost</code>, <code>calledBy</code>, <code>callerKind</code>), the <code>@WpAuth*</code> declaration, the <code>@WpMcpTool</code> NAME, REQUIRED TITLE, and optional profile membership (omission selects only <code>Mcp.DEFAULT</code>), <code>@WpAuthorization</code>, <code>@MaskLog</code></li>
+<li>Per method: HTTP verb, path, <code>EndpointOperation</code>, <code>EndpointKind</code>, the <code>hidden</code>, <code>openWorld</code> and <code>additive</code> booleans from <code>@Endpoint</code>'s options (the reason a method is hidden goes in its JSDoc, where the rest of its documentation already lives), the <code>EndpointOptions</code> a document cares about (<code>formPost</code>, <code>calledBy</code>, <code>callerKind</code>), the <code>@WpAuth*</code> declaration, the <code>@WpMcpTool</code> NAME, REQUIRED TITLE, and optional profile membership (omission selects only <code>Mcp.DEFAULT</code>), <code>@WpAuthorization</code>, <code>@MaskLog</code></li>
 <li><strong>The MCP biconditional</strong>: <code>MCP</code> in <code>@ApiType</code> requires <code>@WpMcpTool</code> somewhere on the contract, and <code>@WpMcpTool</code> on a contract that does not declare <code>MCP</code> is a build failure. Membership declared in two places can disagree, and each declaration is individually valid, so the disagreement would be invisible</li>
 <li><code>apiKey(regime, credentials)</code> is PARSED into a regime plus its ordered credentials, alone among the auth decorators, because it is the one whose argument a renderer must turn into a STRUCTURE — an OpenAPI <code>securityScheme</code> is <code>{type: apiKey, in, name}</code> or <code>{type: http, scheme: bearer}</code>, and those are different documents. Every other decorator's argument is prose or a role list a document quotes verbatim. A header credential's name is read off the <code>ContextKey</code> its <code>key</code> names — followed through imports, <code>!</code>, <code>as</code>, a class's <code>static readonly</code> or an object's property to the <code>ContextKey.trusted(...)</code> / <code>ContextKey.untrusted(...)</code> call, whose <code>httpHeader</code> is folded (#1249). An unresolvable key is refused, quoting the expression</li>
 <li>Per DTO: named types become model entries a renderer can <code>$ref</code>; primitives, arrays, <strong>string enums</strong> (<code>enum SpeakerGender { FEMALE = 'female' }</code> → a named <code>enum</code> of the member VALUES, in every position: a field, an array element, a <code>Record</code> value, a nested DTO, a request or response root) and string-literal unions → enum; ONE enum member as a type (<code>mode: VoiceMode.RANDOM</code>) → a one-value enum, and a union of members / literals → an enum of all their values (#1023). The generator keeps supporting literal unions; the <code>one-enum-spelling-in-api-lib</code> rule in <code>@webpieces/code-rules</code> is what forbids new ones in an api library, <strong>optional vs nullable distinguished</strong> (<code>{}</code> and <code>{x: null}</code> are different wire documents), nested objects, index signature → open map</li>
@@ -1098,7 +1186,9 @@
 <p>Rename <code>@WpMcpTool</code> in <code>core-util</code> with the literal spelling and nothing stops compiling: the literal matches nothing, zero MCP tools are found, the MCP document is correctly not written because it has no tools in it, and THE BUILD IS GREEN. A customer-facing document silently loses a section with nothing red anywhere. That is issue #1001, and it is the exact class of defect this epic exists to remove, sitting inside the package whose job is to remove it.</p>
 <p>The earlier &quot;no import, so it works on any upstream project&quot; justification was wrong: a contract that uses <code>@Endpoint</code> depends on <code>core-util</code> by definition, so there is no such project to protect. The import is build-time only, creates no cycle, and costs a browser bundle nothing, because nothing in a bundle imports this package. The direction that WOULD be fatal is <code>core-util</code> depending on the TypeScript compiler, and that is not this.</p>
 <p>The same reasoning governs the FIXTURES, which now import the real decorators too. They used to declare stubs — and one of them had drifted to <code>@WpMcpTool({name, readOnly, idempotent})</code>, a shape the real decorator has never accepted, with nothing able to notice. A fixture that cannot be wrong about the thing it is a fixture FOR is not testing that thing.</p>
-<p><code>Integer</code> is the one name still matched as a literal, because it is a type alias and a type has no runtime symbol whose <code>.name</code> could be read.</p>
+<p><code>Integer</code> and <code>JsonValueDto</code> are the two names still matched as literals, because each is a type alias and a type has no runtime symbol whose <code>.name</code> could be read.</p>
+<h5><code>JsonValueDto</code> — the explicit recursive JSON marker (#1447)</h5>
+<p><code>JsonValueDto</code> (exported by <code>@webpieces/core-util</code>) is <code>string | number | boolean | null | JsonValueDto[] | { [key: string]: JsonValueDto }</code>. A reference that resolves to a TYPE ALIAS of that name — matched on the declaration, so an import alias still counts, and a consumer's own alias of the same name works too — becomes <code>TypeRef.primitiveOf('json')</code>, and every renderer publishes it as <code>{ &quot;type&quot;: [&quot;string&quot;,&quot;number&quot;,&quot;boolean&quot;,&quot;object&quot;,&quot;array&quot;,&quot;null&quot;], &quot;additionalProperties&quot;: true }</code>. The self-referencing union is never walked, because no schema walk can expand it. A CLASS or INTERFACE named <code>JsonValueDto</code> is NOT the marker: it is resolved as the named DTO it is, since publishing it as &quot;any JSON&quot; would silently drop every field it declares. <code>additionalProperties: true</code> is explicit because <code>ApiJsonSchemaValidator</code> refuses undeclared keys when it is merely absent — which is what keeps every ordinary DTO strict.</p>
 <p>Failures throw <code>ApiDocExtractionError</code> and not <code>RuleFailError</code> because that type lives in <code>@webpieces/rules-config</code> — the TOOLING stream, which a repo pins one release behind on purpose, while this package publishes with the SERVER libs. It is still a structured throw carrying <code>location</code> and <code>cure</code> as fields, and it hand-numbers nothing — the caller's renderer owns that (<code>.claude/review/error-output.md</code>).</p>
 <h5><code>Integer</code> AND <code>@WpInt()</code> — both spellings, deliberately</h5>
 <p>TypeScript has one numeric type, so integer-ness is genuinely not derivable and must be declared. Two spellings are accepted and produce IDENTICAL model output:</p>
@@ -1206,6 +1296,7 @@
 <h5>In Scope</h5>
 <ul>
 <li><code>ProxyClient</code> — @ApiPath validation, the route map built from @ApiPath/@Endpoint/@Auth* metadata, shared path/query/body mapping for explicit GET/POST/PUT/PATCH/DELETE contracts, bodyless GET and DELETE requests (<code>verbCarriesBody</code>), JSON/form serialization, full-response/manual-redirect calls, the <code>fetch</code> call, logging via the <code>LogApiCallImpl</code> its subclass's package constructs (required constructor argument — no global), and test-case recording. Two-phase: collaborators on the constructor, per-client state on <code>init()</code></li>
+<li><code>HttpClientRuntime</code> (#1445) — the per-factory runtime every <code>ProxyClient</code> requires: the <code>HttpFetch</code> it sends through (<code>HttpFetchInit</code> is the one options shape; platform <code>fetch</code> and <code>expo/fetch</code> both fit) and the <code>DeadlineScheduler</code> its attempt deadlines and retry backoff run on. <code>platformDefaults()</code> or <code>reactNative(fetch, deadlines)</code>; <code>ReactNativeRuntimeConfigError</code> names a missing collaborator</li>
 <li>The per-call <code>CallMode</code> (#1293): <code>ProxyClient.callMode()</code> (FOREGROUND unless a subclass answers otherwise) stamps every route with <code>RouteMetadata.withCallMode</code> — a BACKGROUND call also gets <code>hideProgress</code> — and every failure with <code>err.callMode</code> via <code>CallModeMarker</code>, rethrowing the SAME instance. <code>ProxyClient.transportUrl()</code> is the hook an environment uses to add a transport-only url marker without re-pointing the <code>ClientRequest</code></li>
 <li><code>buildClientProxy</code> — the typed <code>Proxy</code> trap (including the framework-inspection whitelist) shared by both environment factories</li>
 <li>The OUTBOUND filter chain: <code>ClientRequest</code> (the mutable per-call request a filter edits — url, headers, and the EXACT serialized body), <code>ClientFilter</code> / <code>ClientFilterDefinition</code> (one filter at one priority; highest runs outermost, matching the server's <code>FilterMatcher</code>), and running it around the single <code>sendOnce</code>. Serialization happens BEFORE the chain, which is what lets a filter sign the exact bytes transmitted instead of forcing the caller to hand-serialize. A filter may invoke the rest of the chain more than once (a validated redirect) or not at all</li>
@@ -1345,14 +1436,16 @@
 <li><code>ContextKey</code> — typed key for non-HTTP context values stored in RequestContext.</li>
 <li>Canonical authentication and authorization declarations on an api contract — <code>@WpAuth</code> with nonempty credential alternatives or <code>@WpAuthPublic(reason)</code>, mandatory <code>@WpAuthorization</code> with typed policy branches, and independent <code>@WpLocalOnly</code> availability. Shared <code>AuthMeta</code> and <code>AuthorizationRequirement</code> metadata drive every transport.</li>
 <li>Typed HTTP contract metadata shared by every transport: <code>@Endpoint</code>'s GET/POST/PUT/PATCH/DELETE verbs (with the one <code>verbCarriesBody</code> rule) and full-response options, explicit <code>@PathParam</code> / <code>@QueryParam</code> wire names, <code>RouteMetadataFactory</code>, and the symmetric <code>HttpContractMapper</code>. The mapper URL-encodes values, omits nullish query values, repeats array keys, and converts incoming scalar values without trusting compiled JavaScript parameter names.</li>
-<li>The API JSON Schema VOCABULARY every transport publishes and validates against: <code>ApiJsonSchema</code> (whose <code>type</code> carries <code>[T, &quot;null&quot;]</code> for a nullable field), <code>ApiJsonSchema.isClosed</code> — the one closure gate, accepting both <code>additionalProperties: false</code> and a typed-map value schema — <code>ObjectSchemaBuilder</code> for the boundaries that construct one by hand, and <code>ApiJsonSchemaValidator</code>, the single runtime narrowing boundary. A schema is BUILT at build time from the contract source by <code>@webpieces/api-doc-model</code> and READ here; #984 deleted the second, reflect-metadata spelling of it (<code>@WpDto</code>, <code>@WpDtoField</code>, <code>WpDtoFieldOptions</code>, <code>WpDtoMapFieldOptions</code>, <code>WpMcpHeader</code>, <code>@WpResponseDto</code>, <code>DtoSchemaBuilder</code>) because #983 measured the compiler reproducing every one of its arguments.</li>
+<li>The API JSON Schema VOCABULARY every transport publishes and validates against: <code>ApiJsonSchema</code> (whose <code>type</code> carries <code>[T, &quot;null&quot;]</code> for a nullable field), <code>ApiJsonSchema.isClosed</code> — the one closure gate, accepting both <code>additionalProperties: false</code> and a typed-map value schema — <code>ApiJsonSchema.openForClients</code>, the one transform that publishes an MCP tool's <code>outputSchema</code> OPEN at every depth (#1441), <code>ObjectSchemaBuilder</code> for the boundaries that construct one by hand, and <code>ApiJsonSchemaValidator</code>, the single runtime narrowing boundary. A schema is BUILT at build time from the contract source by <code>@webpieces/api-doc-model</code> and READ here; #984 deleted the second, reflect-metadata spelling of it (<code>@WpDto</code>, <code>@WpDtoField</code>, <code>WpDtoFieldOptions</code>, <code>WpDtoMapFieldOptions</code>, <code>WpMcpHeader</code>, <code>@WpResponseDto</code>, <code>DtoSchemaBuilder</code>) because #983 measured the compiler reproducing every one of its arguments.</li>
 <li><code>McpToolDefinition</code> / <code>McpToolCatalogFile</code> — one generated MCP tool with its REQUIRED <code>title</code> and profile membership (stale artifacts missing either are refused with a regeneration cure), and the browser-safe codec of ONE contract's <code>mcp-&lt;ContractClass&gt;-tools.json</code> a server boots from (reading them off disk is <code>McpToolCatalog.fromPackages</code> in <code>@webpieces/mcp-server</code>). They live here, not in the extractor package, because both ends need them and only one end may depend on the TypeScript compiler API.</li>
+<li><code>mcpHintsForOperation(operation, openWorld, additive)</code> and its reverse <code>operationForMcpHints(hints)</code> — the ONE mapping between <code>@Endpoint</code>'s operation (plus its <code>openWorld</code> / <code>additive</code> options) and MCP's advisory annotations, in both directions, side by side so they are tested against each other (#1422). <code>additive: true</code> on a write lowers <code>destructiveHint</code>; on a READ it does not compile.</li>
 <li><code>GeneratedApiDocsLayout</code> — the ONE lookup of where an api library's generated documents live: the <code>outputPath</code> of the target its <code>openapi-generate</code> dependsOn. The nx executor writes with it and <code>McpToolCatalog.fromPackages</code> reads a workspace source directory with it, so the two cannot disagree. Pure; the caller owns the filesystem.</li>
 <li><code>HttpResponseDto</code> — the transport-neutral full status/header/body result for endpoints that explicitly own protocol responses, with headers kept as a list so repetitions are not lost.</li>
 <li>DECLARING where a partner credential rides, on the contract: <code>apiKey(...)</code>'s ordered, non-empty <code>ApiKeyCredential[]</code> (<code>{in: 'header', key}</code> naming the <code>ContextKey</code> whose <code>httpHeader</code> it rides under — never a header-name string — or <code>{in: 'bearer'}</code>, each with an optional <code>description</code>). It is description, not handling — the framework extracts no header; <code>ApiKeyHook</code> still owns the pair-check. It exists so a spec generator can DERIVE <code>components.securitySchemes</code> plus one ANDed security requirement instead of a human hand-writing them into a manifest that then drifts from the hook's header constants with no build signal.</li>
 <li><code>RuntimeLocality</code> — the startup-declared <code>'local' | 'deployed'</code> token that <code>@WpLocalOnly</code> enforcement reads. A SEAM, not a detector: the framework never reads <code>process.env</code> and never names a cloud provider's variable; undeclared reads as <code>'deployed'</code> so the answer fails safe.</li>
 <li><code>CallMode</code> / <code>CallModeMarker</code> (#1293) — whether the user waits on ONE api client call (FOREGROUND / BACKGROUND), parked on the call's failure as a non-enumerable <code>err.callMode</code> (typed on <code>ApiError</code>) without changing the error's class, and <code>RouteMetadata.withCallMode</code>, which gives a BACKGROUND call <code>hideProgress</code>. Per call, not per endpoint: the same method is foreground behind a button and background behind a poll timer.</li>
 <li><code>RetryStrategy</code> — THE stock retry for every client (browser, node, React Native, Cloud Tasks enqueue): transient failures only (<code>ApiConnectionError</code>, <code>ApiCallTimeoutError</code>, …), never a <code>WRITE</code>. There is deliberately no second &quot;retry-safe operations&quot; strategy (#1293).</li>
+<li><code>MCP_INVOCATION_CONTEXT</code>, <code>McpInvocationContext</code> and <code>McpProgressReporter</code> — trusted context-only invocation metadata. The MCP dispatcher stamps the existing RequestContext; lower shared readers need no MCP server or SDK dependency. No HTTP header, serialization or second storage scope.</li>
 <li>Small, dependency-free helpers usable in both browser and Node.</li>
 </ul>
 <h5>Out of Scope</h5>
@@ -1745,12 +1838,18 @@ class WpFilteredDot {
         return dot;
     }
 }
-/** Page-owned state survives replacements; rendering failures leave the usable SVG intact. */
+/**
+ * Page-owned state survives replacements; rendering failures leave the usable SVG intact.
+ *
+ * Two independent multi-selects (#1385): `keep` ("Keep connected to") decides which boxes are DRAWN —
+ * the union of each pick's complete incoming and outgoing chains, so adding a pick never shrinks the
+ * graph — and `focused` ("Focus") decides which drawn boxes are LIT, without a relayout.
+ */
 class WpFilterPage {
     model;
     chain;
-    locked = null;
-    anchor = null;
+    focused = new Set();
+    keep = new Set();
     retained;
     viz = null;
     constructor(model) {
@@ -1761,27 +1860,27 @@ class WpFilterPage {
     /**
      * Swap the drawn topology — the runtime page's Goal vs Current overlay and its own graph (#1239) —
      * so a mode switch genuinely changes which boxes and arrows exist, and switching back leaves none of
-     * the overlay's removed-only boxes behind. A Hide-unconnected anchor the new topology lacks is
-     * dropped rather than filtering everything away; a Lock survives and relights when its box exists.
+     * the overlay's removed-only boxes behind. A Keep-connected pick the new topology lacks is dropped
+     * rather than filtering everything away; a Focus pick survives and relights when its box exists.
      */
     useModel(model) {
         if (model === this.model)
             return;
         this.model = model;
         this.chain = new WpGraphChain(model);
-        this.retained = new Set(model.nodes.map((node) => node.id));
-        if (this.anchor !== null && !model.nodes.some((node) => node.id === this.anchor))
-            this.anchor = null;
+        const ids = new Set(model.nodes.map((node) => node.id));
+        this.retained = new Set(ids);
+        this.keep = new Set([...this.keep].filter((id) => ids.has(id)));
     }
     render() {
         document
             .getElementById('wp-filter-off')
-            ?.addEventListener('click', () => this.filter(null));
+            ?.addEventListener('click', () => this.draw(new Set()));
         this.wireControls();
         Viz.instance()
             .then((viz) => {
             this.viz = viz;
-            this.filter(null);
+            this.draw(new Set());
         })
             // webpieces-disable no-any-unknown -- promise rejections may carry any JavaScript value
             .catch((err) => this.error(err instanceof Error ? err : new Error(String(err))));
@@ -1804,7 +1903,7 @@ class WpFilterPage {
         return true;
     }
     /**
-     * The page's own filter on top of "Hide unconnected": the architecture page intersects the set
+     * The page's own filter on top of "Keep connected to": the architecture page intersects the set
      * with its Filter popover (changes, runtime, role). Everything, by default.
      */
     narrow(retained) {
@@ -1814,44 +1913,74 @@ class WpFilterPage {
     keepsEmptyLevels() {
         return false;
     }
-    /**
-     * Draw again with the current filter — after a color-mode switch. A control outside the graph
-     * (a drawer button) keeps keyboard focus; the redraw would otherwise move it into the graph.
-     */
+    /** What "Keep connected to" keeps: the UNION of every pick's complete chains; everything when empty. */
+    kept(keep) {
+        if (keep.size === 0)
+            return new Set(this.model.nodes.map((node) => node.id));
+        const kept = new Set();
+        for (const id of keep) {
+            for (const node of this.chain.nodes(id))
+                kept.add(node);
+        }
+        return kept;
+    }
+    /** Draw again with the current picks — after a color-mode or filter change. */
     redraw() {
+        this.drawKeeping(this.keep);
+    }
+    /**
+     * Draw with a "Keep connected to" set. A control outside the graph (a drawer button, a pulldown's
+     * search box) keeps keyboard focus; the redraw would otherwise move it into the graph.
+     */
+    drawKeeping(keep) {
         const active = document.activeElement;
         const host = document.getElementById('graph');
         const outside = active instanceof HTMLElement && host !== null && !host.contains(active);
-        this.filter(this.anchor);
+        this.draw(keep);
         if (outside && active.isConnected)
             active.focus({ preventScroll: true });
     }
-    filterItem(name) {
-        return new WpNodeMenuItem(this.anchor === null ? 'Filter Unconnected' : 'Turn off Filter', () => this.filter(this.anchor === null ? name : null));
+    keepSelection() {
+        return this.keep;
     }
-    filter(anchor) {
+    /** A box's menu item: "Keep connected" adds the box to Keep connected to; the other removes it. */
+    keepItem(name) {
+        const kept = this.keep.has(name);
+        return new WpNodeMenuItem(kept ? 'Stop keeping connected' : 'Keep connected', () => this.toggleKeep(name));
+    }
+    toggleKeep(id) {
+        const next = new Set(this.keep);
+        if (next.has(id))
+            next.delete(id);
+        else
+            next.add(id);
+        this.drawKeeping(next);
+    }
+    clearKeep() {
+        if (this.keep.size > 0)
+            this.drawKeeping(new Set());
+    }
+    draw(keep) {
         if (this.viz === null)
             return;
         const host = document.getElementById('graph');
         if (host === null)
             return;
-        const retained = this.narrow(anchor === null
-            ? new Set(this.model.nodes.map((node) => node.id))
-            : this.chain.nodes(anchor));
-        const previousAnchor = this.anchor;
+        const retained = this.narrow(this.kept(keep));
+        const previousKeep = this.keep;
         const previousRetained = this.retained;
         const previousSvg = host.querySelector('svg');
         const focusName = WpNodeMenu.focusedName(previousSvg);
         const rollback = this.captureBinding(previousSvg);
         // eslint-disable-next-line @webpieces/no-unmanaged-exceptions -- browser transaction restores the previous usable graph on failure
         try {
-            const dot = anchor === null && this.usesFullDot()
+            const dot = keep.size === 0 && this.usesFullDot()
                 ? this.model.fullDot
                 : new WpFilteredDot(this.model).render(retained, (node) => this.nodeDot(node), this.keepsEmptyLevels(), (edge) => this.edgeDot(edge));
             const svg = this.viz.renderSVGElement(dot);
             this.prepareSvg(svg);
             WpNodeMenu.close();
-            this.anchor = anchor;
+            this.keep = keep;
             this.retained = retained;
             host.replaceChildren(svg);
             this.wireSvg(svg);
@@ -1862,7 +1991,7 @@ class WpFilterPage {
         }
         catch (err) {
             //const error = toError(err);
-            this.anchor = previousAnchor;
+            this.keep = previousKeep;
             this.retained = previousRetained;
             if (previousSvg !== null)
                 host.replaceChildren(previousSvg);
@@ -1878,10 +2007,10 @@ class WpFilterPage {
         const status = document.getElementById('wp-filter-status');
         const label = document.getElementById('wp-filter-anchor');
         if (status !== null)
-            status.hidden = this.anchor === null;
+            status.hidden = this.keep.size === 0;
         if (label !== null)
-            label.textContent = this.anchor;
-        if (this.anchor !== null)
+            label.textContent = [...this.keep].sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase())).join(', ');
+        if (this.keep.size > 0)
             document.getElementById('wp-filter-off')?.focus();
         else
             document.querySelector('#graph g.wp-node-clickable')?.focus();
@@ -1894,7 +2023,7 @@ class WpFilterPage {
         el.textContent =
             err === null
                 ? ''
-                : `Graph rendering failed: ${err.message}. Try Turn off Filter or reload the page.`;
+                : `Graph rendering failed: ${err.message}. Try Clear all in Keep connected to, or reload the page.`;
     }
 }
 //# sourceMappingURL=graph-filter.client.js.map</script>
@@ -1998,6 +2127,7 @@ class WpModeState {
     hasProducts;
     viewer;
     goalUnavailable;
+    goalNote;
     /** `goal` (Goal vs Current, #1239) exists on runtime pages only; the shell renders it nowhere else. */
     static MODES = ['runtime', 'architecture', 'impact', 'product', 'goal'];
     static NAMES = ['Runtime', 'Architecture', 'Impact', 'Product', 'Goal vs Current'];
@@ -2014,11 +2144,14 @@ class WpModeState {
     /**
      * @param hasProducts some box belongs to a product, so the Product mode has something to show
      * @param goalUnavailable '' when Goal vs Current can be shown, else why not (#1239)
+     * @param goalNote the line shown under the dimmed Goal vs Current item, e.g.
+     *        "runtime-dependencies-goal.json does not exist" (#1373); '' when it can be shown
      */
-    constructor(hasProducts, viewer, goalUnavailable) {
+    constructor(hasProducts, viewer, goalUnavailable, goalNote = goalUnavailable) {
         this.hasProducts = hasProducts;
         this.viewer = viewer;
         this.goalUnavailable = goalUnavailable;
+        this.goalNote = goalNote;
         this.kind = this.initialKind();
         this.mode = this.initial();
     }
@@ -2034,6 +2167,10 @@ class WpModeState {
     /** '' when Goal vs Current can be shown, else why not (a missing or unusable input, never "no differences"). */
     goalReason() {
         return this.goalUnavailable;
+    }
+    /** The Goal vs Current item's second line: its subtitle, or the short reason it is dimmed (#1373). */
+    goalSubtitle() {
+        return this.goalUnavailable === '' ? this.subtitle('goal') : this.goalNote;
     }
     /** The active scan; null when the page has no Impact data. */
     get impact() {
@@ -2684,6 +2821,227 @@ class WpProductToggles {
     }
 }
 //# sourceMappingURL=graph-product-paint.client.js.map"use strict";
+/*
+ * The multi-select pulldown with search behind the drawer's "Keep connected to" and "Focus" (#1385).
+ *
+ * Prepended to graph-visualizer.client.js like graph-mode-state.client.ts, so both viewers (the
+ * architecture page and the runtime page) run the ONE implementation. It knows nothing about graphs:
+ * each instance reads and changes its picks through a WpMultiSource the page supplies.
+ */
+/**
+ * One multi-select pulldown with search (#1385) — ONE implementation, two instances: "Keep connected
+ * to" and "Focus". Its markup is graph-page-shell.ts `multiSelect()`; this owns the behaviour:
+ *  - one checkbox row per option, alphabetical (the shell's order);
+ *  - the search matches ANYWHERE in the name, case-insensitively, and highlights the match;
+ *  - ↑/↓ move, Enter toggles (Space too while the query is empty), and the query stays after a toggle
+ *    so several matches can be picked in a row;
+ *  - the closed field shows the picks as removable chips, or "None (off)";
+ *  - the footer says "N selected", and Clear all turns the pulldown off.
+ * It holds no picks of its own: every change goes to the page, and `sync()` repaints from it.
+ */
+class WpMultiSelect {
+    key;
+    source;
+    activeId = null;
+    constructor(key, source) {
+        this.key = key;
+        this.source = source;
+    }
+    wire() {
+        // No stopPropagation: the page's outside-click handler closes every OTHER open pulldown.
+        this.byId('field')?.addEventListener('click', () => {
+            if (this.isOpen())
+                this.close(false);
+            else
+                this.open();
+        });
+        this.byId('clear')?.addEventListener('click', () => {
+            this.source.clear();
+            this.search()?.focus({ preventScroll: true });
+        });
+        const search = this.search();
+        search?.addEventListener('input', () => {
+            this.activeId = null;
+            this.paint();
+        });
+        search?.addEventListener('keydown', (ev) => this.onKey(ev));
+        for (const row of this.rows()) {
+            // Keep keyboard focus in the search box, so a click pick works like an Enter pick.
+            row.addEventListener('mousedown', (ev) => ev.preventDefault());
+            row.addEventListener('click', () => {
+                this.activeId = this.idOf(row);
+                this.source.toggle(this.activeId);
+            });
+        }
+    }
+    isOpen() {
+        return this.pop()?.hidden === false;
+    }
+    /** Open with the cursor in an EMPTY search box: the query lasts while it is open, not across opens. */
+    open() {
+        const pop = this.pop();
+        if (pop === null)
+            return;
+        const search = this.search();
+        if (search !== null)
+            search.value = '';
+        this.activeId = null;
+        pop.hidden = false;
+        this.byId('trigger')?.setAttribute('aria-expanded', 'true');
+        this.paint();
+        this.search()?.focus({ preventScroll: true });
+    }
+    /** Close; `returnFocus` puts the keyboard back on the pulldown's own button. */
+    close(returnFocus) {
+        const pop = this.pop();
+        if (pop === null || pop.hidden)
+            return;
+        pop.hidden = true;
+        const trigger = this.byId('trigger');
+        trigger?.setAttribute('aria-expanded', 'false');
+        if (returnFocus)
+            trigger?.focus({ preventScroll: true });
+    }
+    /**
+     * Whether a click happened inside this pulldown: an outside click closes it. Read from the event's
+     * PATH, not from the target's ancestors — a pick repaints the row it was clicked on, so by the time
+     * the click reaches the document its target (the old `<mark>`) is no longer in the page.
+     */
+    clicked(ev) {
+        const root = document.getElementById(`wp-${this.key}`);
+        return root !== null && ev.composedPath().includes(root);
+    }
+    /** Repaint the chips, the footer and (while open) the rows from the page's picks. */
+    sync() {
+        this.chips();
+        const count = this.byId('count');
+        if (count !== null)
+            count.textContent = `${this.source.selected().size} selected`;
+        if (this.isOpen())
+            this.paint();
+    }
+    onKey(ev) {
+        const query = this.search()?.value ?? '';
+        if (ev.key === 'ArrowDown' || ev.key === 'ArrowUp') {
+            ev.preventDefault();
+            this.move(ev.key === 'ArrowDown' ? 1 : -1);
+            return;
+        }
+        const toggles = ev.key === 'Enter' || (ev.key === ' ' && query === '');
+        if (!toggles)
+            return;
+        ev.preventDefault();
+        const shown = this.shownRows();
+        const active = shown.find((row) => this.idOf(row) === this.activeId) ?? shown[0];
+        if (active === undefined)
+            return;
+        this.activeId = this.idOf(active);
+        this.source.toggle(this.activeId);
+    }
+    move(step) {
+        const shown = this.shownRows();
+        if (shown.length === 0)
+            return;
+        const index = shown.findIndex((row) => this.idOf(row) === this.activeId);
+        const next = index < 0 ? (step > 0 ? 0 : shown.length - 1) : Math.min(shown.length - 1, Math.max(0, index + step));
+        this.activeId = this.idOf(shown[next]);
+        this.paint();
+        shown[next].scrollIntoView({ block: 'nearest' });
+    }
+    /** Show the rows the query and the page allow, highlight the match, and tick the picks. */
+    paint() {
+        const query = (this.search()?.value ?? '').trim().toLowerCase();
+        const selected = this.source.selected();
+        let shown = 0;
+        for (const row of this.rows()) {
+            const id = this.idOf(row);
+            const at = id.toLowerCase().indexOf(query);
+            row.hidden = at < 0 || !this.source.available(id);
+            const picked = selected.has(id);
+            row.setAttribute('aria-selected', String(picked));
+            const box = row.querySelector('input');
+            if (box !== null)
+                box.checked = picked;
+            row.classList.toggle('wp-multi-active', !row.hidden && id === this.activeId);
+            if (row.hidden)
+                continue;
+            shown++;
+            this.highlight(row, id, at, query.length);
+        }
+        const empty = this.byId('empty');
+        if (empty !== null)
+            empty.hidden = shown > 0;
+    }
+    /** The name with its matched part in a `<mark>`, built from text nodes so no name is parsed as HTML. */
+    highlight(row, id, at, length) {
+        const name = row.querySelector('.wp-multi-name');
+        if (name === null)
+            return;
+        if (length === 0) {
+            name.replaceChildren(id);
+            return;
+        }
+        const mark = document.createElement('mark');
+        mark.textContent = id.slice(at, at + length);
+        name.replaceChildren(id.slice(0, at), mark, id.slice(at + length));
+    }
+    /** One removable chip per pick, alphabetical; a pick that is not drawn right now says "hidden". */
+    chips() {
+        const host = this.byId('chips');
+        if (host === null)
+            return;
+        const picks = [...this.source.selected()].sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()));
+        if (picks.length === 0) {
+            const none = document.createElement('span');
+            none.className = 'wp-multi-none';
+            none.textContent = 'None (off)';
+            host.replaceChildren(none);
+            return;
+        }
+        host.replaceChildren(...picks.map((id) => this.chip(id)));
+    }
+    chip(id) {
+        const chip = document.createElement('span');
+        chip.className = 'wp-multi-chip';
+        chip.dataset['wpPick'] = id;
+        chip.append(id);
+        if (!this.source.available(id)) {
+            chip.classList.add('wp-multi-chip-hidden');
+            const note = document.createElement('small');
+            note.textContent = 'hidden';
+            chip.append(' ', note);
+        }
+        const remove = document.createElement('button');
+        remove.type = 'button';
+        remove.textContent = '✕';
+        remove.setAttribute('aria-label', `Remove ${id}`);
+        remove.addEventListener('click', (ev) => {
+            ev.stopPropagation();
+            this.source.toggle(id);
+        });
+        chip.append(remove);
+        return chip;
+    }
+    shownRows() {
+        return this.rows().filter((row) => !row.hidden);
+    }
+    rows() {
+        return Array.from(document.querySelectorAll(`#wp-${this.key}-list .wp-multi-option`));
+    }
+    idOf(row) {
+        return row.dataset['wpOption'] ?? '';
+    }
+    search() {
+        return this.byId('search');
+    }
+    pop() {
+        return this.byId('pop');
+    }
+    byId(part) {
+        return document.getElementById(`wp-${this.key}-${part}`);
+    }
+}
+//# sourceMappingURL=graph-multi-select.client.js.map"use strict";
 /**
  * One state of the Filter popover: a change scope plus the selected Runtime, Role and Product chips.
  * The page holds the APPLIED one; the popover edits a copy until "Show N projects".
@@ -2783,7 +3141,7 @@ class WpProjectFilter {
         return selected.size === 0 || carried.some((value) => selected.has(value));
     }
 }
-/** Architecture interactions bind to each new SVG; logical Lock/Filter state belongs to the page. */
+/** Architecture interactions bind to each new SVG; logical Focus/Keep state belongs to the page. */
 class GraphHighlighter {
     svg;
     chain;
@@ -2815,13 +3173,16 @@ class GraphHighlighter {
             el.classList.remove('wp-focus', 'wp-neighbor', 'wp-hl', 'wp-locked');
         });
     }
+    /**
+     * Light the UNION of every focused box's chains, plus the hovered box's. A focused box that is not
+     * drawn right now is suspended, its otherwise visible relatives included, until it is drawn again.
+     */
     relight() {
         this.clear();
-        const locked = this.page.lockSelection();
-        if (locked !== null)
-            this.nodeByName.get(locked)?.classList.add('wp-locked');
-        // A filtered-out Lock is suspended, including its otherwise visible relatives.
-        const anchors = [locked, this.hovered].filter((name) => name !== null && this.nodeByName.has(name));
+        const focused = [...this.page.focusSelection()].filter((name) => this.nodeByName.has(name));
+        for (const name of focused)
+            this.nodeByName.get(name)?.classList.add('wp-locked');
+        const anchors = this.hovered !== null && this.nodeByName.has(this.hovered) ? [...focused, this.hovered] : focused;
         if (anchors.length === 0)
             return;
         const lit = new Set();
@@ -2862,9 +3223,9 @@ class GraphHighlighter {
             const href = designs.get(name);
             if (href !== undefined)
                 items.push(new WpNodeMenuItem('View Design', () => window.open(href, '_blank')));
-            const locked = this.page.lockSelection() === name;
-            items.push(new WpNodeMenuItem(locked ? 'Unlock' : 'Lock', () => locked ? this.page.clearSelection() : this.page.setLock(name)));
-            items.push(this.page.filterItem(name));
+            const focused = this.page.focusSelection().has(name);
+            items.push(new WpNodeMenuItem(focused ? 'Remove from Focus' : 'Add to Focus', () => this.page.toggleFocus(name)));
+            items.push(this.page.keepItem(name));
             items.unshift(...this.page.impactItems(name, node));
             const implemented = window.__WP_RUNTIME__?.implementsItem(name, node);
             if (implemented)
@@ -2986,17 +3347,21 @@ class GraphDrawer {
     page;
     popover;
     openers = new Map();
+    /** The two multi-selects (#1385): one implementation, two instances. */
+    keep;
+    focus;
     constructor(page) {
         this.page = page;
         this.popover = new GraphFilterPopover(page);
+        this.keep = new WpMultiSelect('keep', new WpKeepSource(page));
+        this.focus = new WpMultiSelect('focus', new WpFocusSource(page));
     }
     wire() {
         this.wireModeMenu();
         this.popover.wire();
         this.wireImpactKinds();
-        this.wireLock();
-        this.byId('wp-lock-toggle')?.addEventListener('click', () => this.page.toggleLock());
-        this.byId('wp-filter-toggle')?.addEventListener('click', () => this.page.toggleFilter());
+        this.keep.wire();
+        this.focus.wire();
         this.toggles('wp-collapse', 'wp-shell', true);
         this.toggles('wp-help-btn', 'wp-help', false);
         this.toggles('wp-help-close', 'wp-help', false);
@@ -3008,6 +3373,10 @@ class GraphDrawer {
         window.addEventListener('keydown', (ev) => this.onKey(ev), true);
         window.addEventListener('hashchange', () => this.page.setMode(location.hash.slice(1)));
         document.addEventListener('click', (ev) => {
+            for (const multi of [this.keep, this.focus]) {
+                if (multi.isOpen() && !multi.clicked(ev))
+                    multi.close(false);
+            }
             const target = ev.target;
             if (target instanceof Node && this.byId('wp-mode-menu')?.parentElement?.contains(target))
                 return;
@@ -3075,38 +3444,11 @@ class GraphDrawer {
         if (returnFocus)
             trigger?.focus({ preventScroll: true });
     }
-    /** Type-to-search lock: an exact project id (or a unique short name) locks, empty or Esc unlocks. */
-    wireLock() {
-        const input = this.lockInput();
-        if (input === null)
-            return;
-        input.addEventListener('input', () => {
-            const value = input.value.trim();
-            if (value === '')
-                this.page.clearSelection();
-            else if (this.page.hasNode(value))
-                this.page.setLock(value);
-        });
-        input.addEventListener('change', () => {
-            const match = this.page.resolveName(input.value.trim());
-            if (match !== null)
-                this.page.setLock(match);
-            else
-                input.value = this.page.lockSelection() ?? '';
-        });
-        input.addEventListener('keydown', (ev) => {
-            if (ev.key !== 'Escape')
-                return;
-            ev.preventDefault();
-            input.value = '';
-            this.page.clearSelection();
-            input.blur();
-        });
-    }
     /**
      * Page keys, in the CAPTURE phase so the open/closed state of the node menu is read before the
      * menu's own Escape handler closes it: Esc with a menu open only closes the menu. Esc closes an
-     * open Color-by menu or Filter popover first, too.
+     * open Color-by menu, Filter popover or Keep/Focus pulldown first, too; with nothing open it clears
+     * Focus. `/` opens Focus with the cursor in its search.
      */
     onKey(ev) {
         if (ev.altKey || ev.ctrlKey || ev.metaKey)
@@ -3119,6 +3461,12 @@ class GraphDrawer {
             this.popover.close();
             return;
         }
+        const pulldown = [this.keep, this.focus].find((multi) => multi.isOpen());
+        if (ev.key === 'Escape' && pulldown !== undefined) {
+            ev.preventDefault();
+            pulldown.close(true);
+            return;
+        }
         if (ev.key === 'Escape' && this.dismissOverlay())
             return;
         const target = ev.target;
@@ -3129,7 +3477,8 @@ class GraphDrawer {
             this.byId('wp-shell')?.classList.remove('wp-collapsed');
             this.byId('wp-collapse')?.setAttribute('aria-expanded', 'true');
             ev.preventDefault();
-            this.lockInput()?.focus();
+            this.keep.close(false);
+            this.focus.open();
             return;
         }
         const index = ['1', '2', '3', '4', '5'].indexOf(ev.key);
@@ -3137,8 +3486,8 @@ class GraphDrawer {
             this.page.setMode(WpModeState.MODES[index]);
             return;
         }
-        if (ev.key === 'Escape' && !menuOpen && this.page.lockSelection() !== null)
-            this.page.setLock(null);
+        if (ev.key === 'Escape' && !menuOpen && this.page.focusSelection().size > 0)
+            this.page.clearFocus();
     }
     /** `button` shows/hides `target`; for the drawer itself it toggles the collapsed class instead. */
     toggles(buttonId, targetId, collapse) {
@@ -3192,7 +3541,7 @@ class GraphDrawer {
         }
     }
     /** Repaint every control from the page's state. */
-    sync(modes, locked, filtering, filter) {
+    sync(modes, filter) {
         const reason = modes.impactReason();
         document.querySelectorAll('.wp-mode[data-wp-mode]').forEach((button) => {
             const mode = button.dataset['wpMode'] ?? '';
@@ -3207,7 +3556,7 @@ class GraphDrawer {
                 button.title = modes.goalReason() === '' ? 'Key 5' : modes.goalReason();
                 const sub = button.querySelector('.wp-mode-sub');
                 if (sub !== null)
-                    sub.textContent = modes.goalReason() === '' ? modes.subtitle(mode) : `Unavailable: ${modes.goalReason()}`;
+                    sub.textContent = modes.goalSubtitle();
             }
         });
         this.text('wp-mode-current', modes.name(modes.mode));
@@ -3231,26 +3580,10 @@ class GraphDrawer {
         const title = this.byId('wp-legend-pop-title');
         if (title !== null)
             title.textContent = `Legend · ${modes.name(modes.mode)}`;
-        const input = this.lockInput();
-        if (input !== null && document.activeElement !== input)
-            input.value = this.page.focusSelection() ?? '';
-        const lockToggle = this.byId('wp-lock-toggle');
-        if (lockToggle !== null) {
-            lockToggle.setAttribute('aria-pressed', String(locked !== null));
-            lockToggle.disabled = locked === null && this.page.focusSelection() === null;
-            lockToggle.title = lockToggle.disabled ? 'Select a node in Focus first' : '';
-        }
-        this.syncFilterToggle(locked, filtering);
+        this.keep.sync();
+        this.focus.sync();
         this.syncFilter(filter);
-        this.crumb(modes.name(modes.mode), locked);
-    }
-    syncFilterToggle(locked, filtering) {
-        const toggle = this.byId('wp-filter-toggle');
-        if (toggle === null)
-            return;
-        toggle.setAttribute('aria-pressed', String(filtering));
-        toggle.disabled = !filtering && locked === null;
-        toggle.title = toggle.disabled ? 'Lock a project first' : '';
+        this.crumb(modes.name(modes.mode), this.page.focusSelection());
     }
     /** The drawer button's count badge, and one removable pill per active filter in the top bar. */
     syncFilter(filter) {
@@ -3320,8 +3653,8 @@ class GraphDrawer {
         const named = files.slice(0, 2).join(', ') + (files.length > 2 ? ` and ${files.length - 2} more` : '');
         return `${who}: ${named} changed (workspace-global input${files.length > 1 ? 's' : ''})`;
     }
-    /** "Mode: <b>Runtime</b> · Locked: <b>x</b>", built with text nodes so no name is parsed as HTML. */
-    crumb(mode, locked) {
+    /** "Mode: <b>Runtime</b> · Focus: <b>a</b>, <b>b</b> +N", built with text nodes so no name is parsed as HTML. */
+    crumb(mode, focused) {
         const crumb = this.byId('wp-crumb');
         if (crumb === null)
             return;
@@ -3331,8 +3664,14 @@ class GraphDrawer {
             return b;
         };
         const parts = ['Mode: ', bold(mode)];
-        if (locked !== null)
-            parts.push(' · Locked: ', bold(locked));
+        const names = [...focused].sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()));
+        if (names.length > 0)
+            parts.push(' · Focus: ');
+        names.slice(0, 2).forEach((name, index) => {
+            parts.push(...(index === 0 ? [] : [', ']), bold(name));
+        });
+        if (names.length > 2)
+            parts.push(` +${names.length - 2}`);
         crumb.replaceChildren(...parts);
     }
     text(id, value) {
@@ -3340,19 +3679,37 @@ class GraphDrawer {
         if (el !== null)
             el.textContent = value;
     }
-    lockInput() {
-        return document.getElementById('wp-lock');
-    }
     byId(id) {
         return document.getElementById(id);
     }
 }
+/** "Focus": lights the picks' chains; offers only the boxes drawn after Filter and Keep connected to. */
+class WpFocusSource {
+    page;
+    constructor(page) {
+        this.page = page;
+    }
+    selected() { return this.page.focusSelection(); }
+    available(id) { return this.page.isDrawn(id); }
+    toggle(id) { this.page.toggleFocus(id); }
+    clear() { this.page.clearFocus(); }
+}
+/** "Keep connected to": redraws with the union of the picks' chains; offers every box of the graph. */
+class WpKeepSource {
+    page;
+    constructor(page) {
+        this.page = page;
+    }
+    selected() { return this.page.keepSelection(); }
+    available(id) { return this.page.hasNode(id); }
+    toggle(id) { this.page.toggleKeep(id); }
+    clear() { this.page.clearKeep(); }
+}
 class GraphPage extends WpFilterPage {
     highlighter = null;
-    selected = null;
     /** The page's own graph; Goal vs Current swaps in its overlay and back (#1239). */
     base = this.model;
-    modes = new WpModeState(this.model.nodes.some((node) => node.products.length > 0), this.model.viewer ?? 'architecture', this.goalUnavailable());
+    modes = new WpModeState(this.model.nodes.some((node) => node.products.length > 0), this.model.viewer ?? 'architecture', this.goalUnavailable(), this.model.comparison?.menuNote || this.goalUnavailable());
     projects = new WpProjectFilter(this.model, this.modes);
     applied = new WpFilterChoice();
     drawer = new GraphDrawer(this);
@@ -3455,43 +3812,39 @@ class GraphPage extends WpFilterPage {
         this.filterCards();
         this.syncControls();
         svg.querySelectorAll('g.node').forEach((node) => {
-            if (node.querySelector('title')?.textContent === this.anchor)
+            if (this.keep.has(node.querySelector('title')?.textContent ?? ''))
                 node.classList.add('wp-filter-anchor');
         });
     }
-    lockSelection() {
-        return this.locked;
+    focusSelection() {
+        return this.focused;
+    }
+    /** Whether `id` is drawn right now: what Focus may offer, and a focused box's chip is not "hidden". */
+    isDrawn(id) {
+        return this.retained.has(id) && this.hasNode(id);
+    }
+    toggleFocus(id) {
+        if (this.focused.has(id))
+            this.focused.delete(id);
+        else
+            this.focused.add(id);
+        this.refocus();
+    }
+    clearFocus() {
+        this.focused.clear();
+        this.refocus();
     }
     hasNode(id) {
         return this.model.nodes.some((node) => node.id === id);
     }
     noun() { return this.model.viewer === 'runtime' ? 'service' : 'project'; }
     projectCount() { return this.model.nodes.filter(node => this.projects.isService(node)).length; }
-    focusSelection() { return this.selected; }
-    toggleLock() {
-        if (this.locked !== null)
-            this.setLock(null);
-        else if (this.selected !== null)
-            this.setLock(this.selected);
-    }
-    /** An exact id, else the one id whose short name (after any scope) is `text`; null if none or several. */
-    resolveName(text) {
-        if (text === '')
-            return null;
-        if (this.hasNode(text))
-            return text;
-        const matches = this.model.nodes.filter((node) => node.id.split('/').pop() === text);
-        return matches.length === 1 ? matches[0].id : null;
-    }
-    setLock(name) {
-        this.locked = name;
-        if (name !== null)
-            this.selected = name;
+    /** Focus changed: relight, refilter the cards, and repaint the drawer — no relayout. */
+    refocus() {
         this.highlighter?.relight();
         this.filterCards();
         this.syncControls();
     }
-    clearSelection() { this.selected = null; this.setLock(null); }
     setMode(mode) {
         if (mode === this.modes.mode || !this.modes.set(mode))
             return;
@@ -3517,13 +3870,6 @@ class GraphPage extends WpFilterPage {
         this.syncControls();
         this.redraw();
     }
-    /** The drawer's "Hide unconnected": filter to the locked box's chain, or turn the filter off. */
-    toggleFilter() {
-        if (this.anchor !== null)
-            this.filter(null);
-        else if (this.locked !== null)
-            this.filter(this.locked);
-    }
     appliedFilter() {
         return this.applied;
     }
@@ -3538,12 +3884,9 @@ class GraphPage extends WpFilterPage {
         choice.scope = scope;
         return this.preview(choice);
     }
-    /** How many boxes `choice` would show, with the current Hide-unconnected chain. */
+    /** How many boxes `choice` would show, with the current "Keep connected to" picks. */
     preview(choice) {
-        const base = this.anchor === null
-            ? new Set(this.model.nodes.map((node) => node.id))
-            : this.chain.nodes(this.anchor);
-        const kept = this.projects.apply(base, choice);
+        const kept = this.projects.apply(this.kept(this.keep), choice);
         return this.model.nodes.filter(node => kept.has(node.id) && this.projects.isService(node)).length;
     }
     applyFilter(choice) {
@@ -3564,7 +3907,7 @@ class GraphPage extends WpFilterPage {
     }
     syncControls() {
         document.body.dataset['wpMode'] = this.modes.mode;
-        this.drawer.sync(this.modes, this.locked, this.anchor !== null, this.applied);
+        this.drawer.sync(this.modes, this.applied);
         this.toggles.sync(this.productsOn);
         const count = this.model.nodes.filter(node => this.retained.has(node.id) && this.projects.isService(node)).length;
         const empty = document.getElementById('wp-empty');
@@ -3583,8 +3926,9 @@ class GraphPage extends WpFilterPage {
                 (group === 'runtime' ? (value === 'unknown' ? node.tags !== null && node.tags.frameworks.length === 0 : node.tags?.frameworks.includes(value)) : group === 'role' ? node.tags?.role === value : node.products.includes(value)));
         });
     }
+    /** The cards of the drawn boxes, narrowed by Focus to the union of the focused boxes' chains. */
     filterCards() {
-        const lit = this.locked === null ? this.retained : this.chain.nodes(this.locked);
+        const lit = this.focused.size === 0 ? this.retained : this.kept(this.focused);
         document.querySelectorAll('.wp-resp-card').forEach((card) => {
             const name = card.getAttribute('data-node');
             card.classList.toggle('wp-hidden', name === null || !this.retained.has(name) || !lit.has(name));
