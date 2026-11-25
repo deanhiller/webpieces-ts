@@ -3,6 +3,7 @@ import {
     MergeOutcome, MERGE_RESULT_MERGED, MERGE_RESULT_AUTO_QUEUED, MERGE_RESULT_LEFT_TO_HUMAN,
     MERGE_RESULT_BEHIND_CONFLICTING, MERGE_RESULT_BEHIND_UNKNOWN,
 } from './pr-merger';
+import { TicketReminder } from './ticket-reminder';
 
 const SEP = '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n';
 
@@ -44,6 +45,8 @@ export class FinishBannerInput {
  */
 @injectable(bindingScopeValues.Singleton)
 export class FinishBanner {
+    constructor(private readonly tickets: TicketReminder) {}
+
     // The full closing recap: header keyed to the real outcome, the four things this command did, and —
     // when the PR is not done — what must happen next.
     render(input: FinishBannerInput): string {
@@ -59,37 +62,11 @@ export class FinishBanner {
     }
 
     /**
-     * The "link this PR FROM its ticket" next action (issue #1453).
-     *
-     * The PR body's `Fixes <url>` / `Part of <url>` line links the PR TO its ticket; nothing links the
-     * ticket back to the PR, and on a tracker outside GitHub (Linear, Jira) nothing ever will unless the
-     * caller does it. One ticket often spans several PRs, so the reminder says to ADD the link, keeping the
-     * earlier ones — and it says plainly that webpieces updated no ticket, because it contacts no tracker.
-     *
-     * Printed only when the command holds the PR's REAL resolved URL — '' (a failed `gh pr create`, an
-     * unresolvable PR) prints nothing rather than a link that is not real. On a not-done outcome the PR
-     * still exists, so the reminder still applies, but it says the PR is NOT merged instead of implying a
-     * finished run.
+     * The "link this PR FROM its ticket" next action (issue #1453). Its wording lives in TicketReminder,
+     * which `wp-land-pr` shares (issue #1456), so the two commands cannot drift into two spellings.
      */
     private ticketReminder(input: FinishBannerInput): string {
-        if (input.prUrl === '') return '';
-        const state = this.isDone(input.merge)
-            ? ''
-            : '   (The PR is open but NOT merged — see step 4. The link is still correct to add now.)\n';
-        return '\n' + SEP +
-            `📌 NEXT ACTION — UPDATE YOUR TICKET (Linear, Jira, GitHub issue, or another tracker) with a link\n` +
-            `   to this PR: ${input.prUrl}\n` + state +
-            '   Keep the links to earlier PRs so the ticket lists every PR associated with the work.\n' +
-            '   webpieces did NOT update any ticket — it contacts no tracker. Adding the link is yours to do.\n' +
-            this.ticketList(input.ticketUrls);
-    }
-
-    private ticketList(ticketUrls: string[]): string {
-        if (ticketUrls.length === 0) {
-            return '   summary.json names no addressesIssues ticket — use the ticket in your tracker this work belongs to.\n';
-        }
-        return '   Ticket(s) this PR addresses (summary.json addressesIssues):\n' +
-            ticketUrls.map((url: string): string => `       ${url}\n`).join('');
+        return this.tickets.forPostedPr(input.prUrl, this.isDone(input.merge), input.ticketUrls);
     }
 
     // TRUE only for the outcomes where nothing further is owed: merged, queued behind green-able checks,

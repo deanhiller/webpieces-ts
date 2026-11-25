@@ -5,18 +5,20 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { BranchArchiver } from '@webpieces/repo-workflow-core';
 import { GitProcessApi, GitResultDto, InformAiError, NativeProcessApi, ProcessResultDto } from '@webpieces/tooling-common';
 import { toError } from '@webpieces/tooling-common/to-error';
-import { RepoRootFinder } from '@webpieces/rules-config';
+import { RepoRootFinder, ReviewJsonService } from '@webpieces/rules-config';
 import { MockNativeProcessApi, ProcessCallDto } from '@webpieces/tooling-testkit';
 
 import { LandPrCommand, LandPrRequest } from './land-pr-command';
 import { RepoConfigFixture } from '../workflow/repo-config-testkit';
 import { AiBranchName } from '../workflow/git-readAiBranchName';
 import { BranchNaming } from '../workflow/branch-naming';
+import { LandedTicketResolver } from '../workflow/landed-ticket-resolver';
 import { LandedTreeResolver } from '../workflow/landed-tree-resolver';
 import { LandedWorktreeReaper } from '../workflow/landed-worktree-reaper';
 import { MergeBodyTempFile } from '../workflow/merge-body-temp-file';
 import { MergeInfoIndex } from '../workflow/merge-info-index';
 import { PrMerger } from '../workflow/pr-merger';
+import { TicketReminder } from '../workflow/ticket-reminder';
 import { PrGateFeature } from '../../__tests__/feature-harness';
 
 /**
@@ -125,6 +127,8 @@ let savedCwd = '';
 let prBody = PR_DESCRIPTION;
 let prHeadOid = '';
 let prJson: string | null = null;
+// When true, GitHub refuses the merge (and the repo has no auto-merge queue), so nothing lands.
+let mergeRefused = false;
 let feature: PrGateFeature;
 let gh: MockNativeProcessApi;
 const savedInitCwd = process.env['INIT_CWD'];
@@ -187,7 +191,9 @@ function scriptGitHub(): void {
         if (call.args.join(' ').includes('mergeable')) return gh.ok('MERGEABLE\tCLEAN\tOPEN\n');
         return prJson === null ? gh.fail(1, 'no pull requests found') : gh.ok(prJson);
     });
+    gh.respondToPrefix('gh', ['api'], gh.ok('false\n'));
     gh.respondToPrefix('gh', ['pr', 'merge'], (call: ProcessCallDto): ProcessResultDto => {
+        if (mergeRefused) return gh.fail(1, 'Pull request #604 is not mergeable: the base branch policy prohibits the merge.');
         const at = call.args.indexOf('--body-file');
         if (at >= 0) landed = fs.readFileSync(call.args[at + 1], 'utf8');
         return gh.ok('merged\n');
@@ -256,6 +262,8 @@ function build(): LandPrCommand {
         container.get(LandedTreeResolver),
         container.get(GitProcessApi),
         container.get(NativeProcessApi),
+        container.get(LandedTicketResolver),
+        container.get(TicketReminder),
     );
 }
 
@@ -311,6 +319,7 @@ beforeEach(async (): Promise<void> => {
     // realpath: git reports worktree paths resolved (/private/var/… on macOS), so the model does too.
     tmp = fs.realpathSync(policyFixture.makeRepo('wp-land-pr-'));
     landed = '';
+    mergeRefused = false;
     clones.length = 0;
     feature = await PrGateFeature.create();
     gh = feature.processes;
@@ -588,5 +597,85 @@ describe('wp-land-pr — refusals', () => {
      */
     it('has exactly one knob, and it selects the PR rather than the commit body', (): void => {
         expect(Object.keys(new LandPrRequest(true, '604'))).toEqual(['prFlagPresent', 'prNumber']);
+    });
+});
+
+/**
+ * The "update your ticket" reminder, repeated at LAND time (issue #1456). wp-finish-upsert-pr printed it
+ * once when it posted the PR; by the time the PR lands that is many turns old. Landing is also when a
+ * Linear or Jira ticket moves to Done. Every URL printed must have been found written down — never invented.
+ */
+describe('wp-land-pr — the "update your ticket" reminder after landing', () => {
+    const PR_URL = 'https://github.com/acme/widgets/pull/604';
+    const GH_ISSUE = 'https://github.com/acme/widgets/issues/7';
+    const LINEAR = 'https://linear.app/acme/issue/W-9';
+
+    // summary.json as wp-finish-upsert-pr left it in `treeRoot` — finish snapshots it but leaves it in place.
+    function writeSummary(treeRoot: string, addressesIssues: object[]): void {
+        const file = feature.container.get(ReviewJsonService).summaryJsonPath(treeRoot, 'dean-feature');
+        fs.mkdirSync(path.dirname(file), { recursive: true });
+        fs.writeFileSync(file, JSON.stringify({ title: 'Land the thing', summary: 'Fixes #7', addressesIssues }));
+    }
+
+    it('names the LANDED PR and the summary.json addressesIssues tickets, and says when to move to Done', async (): Promise<void> => {
+        writeSummary(primary, [{ url: GH_ISSUE, closesIssue: true }, { url: LINEAR, closesIssue: false }]);
+
+        const out = await land(primary);
+
+        expect(out).toContain('📌 NEXT ACTION — UPDATE YOUR TICKET (Linear, Jira, GitHub issue, or another tracker)');
+        expect(out).toContain(`to this LANDED (merged) PR: ${PR_URL}`);
+        expect(out).toContain('move a Linear or Jira ticket to Done');
+        expect(out).toContain('Ticket(s) this PR addresses (summary.json addressesIssues):');
+        expect(out).toContain(`       ${GH_ISSUE}   (Fixes — this PR completes it)\n`);
+        expect(out).toContain(`       ${LINEAR}   (Part of — more PRs are owed; leave it open)\n`);
+        expect(out).toContain('Keep the links to earlier PRs');
+        expect(out).toContain('webpieces did NOT update any ticket — it contacts no tracker.');
+        // Landed wording only: the stage-③ "open but NOT merged" line must not leak in.
+        expect(out).not.toContain('open but NOT merged');
+        // Printed AFTER the landing recap.
+        expect(out.indexOf('UPDATE YOUR TICKET')).toBeGreaterThan(out.indexOf('✅ Landed'));
+    });
+
+    it('finds summary.json in the AGENT worktree when a coordinator lands --pr <n> from the primary clone', async (): Promise<void> => {
+        const agent = path.join(primary, '.claude', 'worktrees', 'agent-t');
+        addWorktreeHoldingBranch(agent);
+        writeSummary(agent, [{ url: GH_ISSUE, closesIssue: true }]);
+
+        const out = await landFrom(primary, primary, new LandPrRequest(true, '604'));
+
+        expect(out).toContain('(summary.json addressesIssues)');
+        expect(out).toContain(GH_ISSUE);
+    });
+
+    it('falls back to the PR body\'s Fixes / Part of lines when summary.json is not on disk', async (): Promise<void> => {
+        ghPrSays(`${PR_URL}\n\nRisk: green\n\nSummary.\n\nFixes ${GH_ISSUE}\nPart of ${LINEAR}\n`, prHeadOid);
+
+        const out = await land(primary);
+
+        expect(out).toContain(`to this LANDED (merged) PR: ${PR_URL}`);
+        expect(out).toContain('Ticket(s) this PR addresses (the PR body\'s "Fixes <url>" / "Part of <url>" lines):');
+        expect(out).toContain(`       ${GH_ISSUE}   (Fixes — this PR completes it)\n`);
+        expect(out).toContain(`       ${LINEAR}   (Part of — more PRs are owed; leave it open)\n`);
+    });
+
+    it('with no ticket anywhere, points at the caller\'s own tracker and names no invented URL', async (): Promise<void> => {
+        const out = await land(primary);
+
+        expect(out).toContain(`to this LANDED (merged) PR: ${PR_URL}`);
+        expect(out).toContain('No ticket URL found in summary.json addressesIssues or in the PR body');
+        expect(out).toContain('use the ticket in your\n   tracker this work belongs to.');
+        expect(out).not.toContain('Ticket(s) this PR addresses');
+        expect(out).not.toContain('/issues/');
+    });
+
+    it('prints NO reminder when the PR did not land', async (): Promise<void> => {
+        writeSummary(primary, [{ url: GH_ISSUE, closesIssue: true }]);
+        mergeRefused = true;
+
+        const out = await land(primary);
+
+        expect(out).toContain('Not landed yet');
+        expect(out).not.toContain('UPDATE YOUR TICKET');
+        expect(out).not.toContain(GH_ISSUE);
     });
 });

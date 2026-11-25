@@ -5,11 +5,13 @@ import { BranchArchiver, BRANCH_RETENTION_ARCHIVE_TAG, BRANCH_RETENTION_KEEP } f
 import { injectable, bindingScopeValues } from 'inversify';
 import { AiBranchName } from '../workflow/git-readAiBranchName';
 import { BranchNaming } from '../workflow/branch-naming';
+import { LandedTicketResolver } from '../workflow/landed-ticket-resolver';
 import { LandedTree, LandedTreeResolver, LANDED_TREE_ABSENT } from '../workflow/landed-tree-resolver';
 import { LandedWorktreeReaper, WorktreeReapHandoff } from '../workflow/landed-worktree-reaper';
 import { MergeBodyTempFile } from '../workflow/merge-body-temp-file';
 import { ArchiveRecord, MergeInfoIndex } from '../workflow/merge-info-index';
 import { MergeIntent, PrMerger } from '../workflow/pr-merger';
+import { TicketReminder } from '../workflow/ticket-reminder';
 
 const SEP = '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n';
 
@@ -78,6 +80,8 @@ export class LandPrCommand {
         private readonly landedTree: LandedTreeResolver,
         private readonly git: GitProcessApi,
         private readonly processes: NativeProcessApi,
+        private readonly landedTickets: LandedTicketResolver,
+        private readonly ticketReminder: TicketReminder,
     ) {}
 
     /**
@@ -131,8 +135,15 @@ export class LandPrCommand {
             base, `${ref.title} (#${ref.number})`, mergeBodyFile, new MergeIntent(policy ?? '', true),
         );
 
-        const bookkeeping = outcome.merged
-            ? await this.bookkeeping(repoRoot, base, ref, config.landPr.branchRetention, cwd)
+        // Everything below the merge happens ONLY when it landed: a PR that did not land gets no archive,
+        // no reap and no "update your ticket" reminder (issue #1456).
+        const tree = outcome.merged ? await this.landedTree.resolve(repoRoot, base, ref.headRefOid) : null;
+        // Read BEFORE the bookkeeping, which may reap the very worktree holding summary.json.
+        const tickets = tree !== null
+            ? this.landedTickets.resolve(this.summaryTree(repoRoot, tree), this.featureName(base), ref.body)
+            : null;
+        const bookkeeping = tree !== null
+            ? await this.bookkeeping(repoRoot, base, ref, tree, config.landPr.branchRetention, cwd)
             : '';
         process.stdout.write(
             '\n' + SEP + (outcome.merged ? '✅ Landed\n' : 'ℹ️  Not landed yet\n') + SEP + '\n' +
@@ -143,6 +154,24 @@ export class LandPrCommand {
                 : `   (pr-gate.mergeMode is ${policy} — wp-finish-upsert-pr publishes PRs without attempting a merge.)\n`) +
             '\n',
         );
+        // The same reminder wp-finish-upsert-pr printed when it posted the PR, repeated now that the work
+        // has reached main — the stage-③ copy is many turns old by the time a PR lands (issue #1456).
+        if (tickets !== null) process.stdout.write(this.ticketReminder.forLandedPr(ref.url, tickets) + '\n');
+    }
+
+    /**
+     * Where `wp-finish-upsert-pr` wrote summary.json: the linked worktree holding the landed commit when
+     * there is one (a coordinator landing `--pr <n>` from the primary clone is not standing in it), else
+     * the tree this command was invoked in.
+     */
+    private summaryTree(repoRoot: string, tree: LandedTree): string {
+        return tree.worktree !== null ? tree.worktree.path : repoRoot;
+    }
+
+    // summary.json's directory is keyed by the branch with `/` flattened — AiBranchName.getFeatureName's
+    // form, computed from the PR's head branch rather than from whatever directory pnpm hoisted us into.
+    private featureName(base: string): string {
+        return this.branchNaming.baseBranchName(base).replace(/\//g, '-');
     }
 
     /**
@@ -293,9 +322,8 @@ export class LandPrCommand {
      * archive it, and a tree that has committed further work since finish ran correctly declines.
      */
     private async bookkeeping(
-        repoRoot: string, base: string, ref: PrIdentity, retention: string, cwd: string,
+        repoRoot: string, base: string, ref: PrIdentity, tree: LandedTree, retention: string, cwd: string,
     ): Promise<string> {
-        const tree = await this.landedTree.resolve(repoRoot, base, ref.headRefOid);
         if (!tree.bookkeepingAllowed) return this.notTheLandedTipNotice(base, tree, ref);
         return await this.archiveAndPromote(repoRoot, base, ref, retention)
             + await this.nextStep(repoRoot, tree, cwd);
