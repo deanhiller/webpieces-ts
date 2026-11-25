@@ -42,7 +42,7 @@ export class ScheduledTaskDto {
  */
 export abstract class TimerApi {
     constructor() {
-        ProcessEdgeCopies.refuseUnbound(new.target, TimerApi);
+        new ProcessEdgeCopies().refuseUnbound(new.target, TimerApi);
     }
 
     /** Run `task` once, after `delayMs`. */
@@ -51,4 +51,4 @@ export abstract class TimerApi {
     /** Milliseconds since the epoch. */
     abstract now(): number;
 }
-ProcessEdgeCopies.register(TimerApi);
+new ProcessEdgeCopies().register(TimerApi);

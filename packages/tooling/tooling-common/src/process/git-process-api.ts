@@ -29,7 +29,7 @@ export class GitResultDto {
  */
 export abstract class GitProcessApi {
     constructor() {
-        ProcessEdgeCopies.refuseUnbound(new.target, GitProcessApi);
+        new ProcessEdgeCopies().refuseUnbound(new.target, GitProcessApi);
     }
 
     /**
@@ -55,4 +55,4 @@ export abstract class GitProcessApi {
      */
     abstract passThrough(args: string[], cwd?: string): Promise<GitResultDto>;
 }
-ProcessEdgeCopies.register(GitProcessApi);
+new ProcessEdgeCopies().register(GitProcessApi);

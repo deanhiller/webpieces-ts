@@ -24,16 +24,16 @@ declare global {
  */
 export class ProcessEdgeCopies {
     /** Called once per edge class, at its module's load. */
-    static register(edge: ProcessEdgeClass): void {
-        const registry = ProcessEdgeCopies.registry();
+    register(edge: ProcessEdgeClass): void {
+        const registry = this.registry();
         const copies = registry.get(edge.name) ?? [];
         copies.push(edge);
         registry.set(edge.name, copies);
     }
 
     /** Every loaded copy of `edge` OTHER than `edge` itself. Empty when exactly one copy is installed. */
-    static otherCopiesOf(edge: ProcessEdgeClass): ProcessEdgeClass[] {
-        const copies = ProcessEdgeCopies.registry().get(edge.name) ?? [];
+    otherCopiesOf(edge: ProcessEdgeClass): ProcessEdgeClass[] {
+        const copies = this.registry().get(edge.name) ?? [];
         return copies.filter((copy: ProcessEdgeClass): boolean => copy !== edge);
     }
 
@@ -42,7 +42,7 @@ export class ProcessEdgeCopies {
      * only ever happens when an `autobind` container found no binding for that copy — so fail at resolution,
      * naming what is missing, rather than hand back an object whose every method is undefined.
      */
-    static refuseUnbound(constructed: ProcessEdgeClass, edge: ProcessEdgeClass): void {
+    refuseUnbound(constructed: ProcessEdgeClass, edge: ProcessEdgeClass): void {
         if (constructed !== edge) return;
         throw new InformAiError(
             `${edge.name} was resolved with no binding, so the container constructed the abstract process edge itself. ` +
@@ -51,7 +51,7 @@ export class ProcessEdgeCopies {
         );
     }
 
-    private static registry(): Map<string, ProcessEdgeClass[]> {
+    private registry(): Map<string, ProcessEdgeClass[]> {
         globalThis.webpiecesProcessEdgeCopies ??= new Map<string, ProcessEdgeClass[]>();
         return globalThis.webpiecesProcessEdgeCopies;
     }

@@ -46,7 +46,7 @@ export class ShellTerminationDto {
  */
 export abstract class NativeProcessApi {
     constructor() {
-        ProcessEdgeCopies.refuseUnbound(new.target, NativeProcessApi);
+        new ProcessEdgeCopies().refuseUnbound(new.target, NativeProcessApi);
     }
 
     /**
@@ -65,4 +65,4 @@ export abstract class NativeProcessApi {
      */
     abstract runShellToFile(command: string, cwd: string, outputFd: number): Promise<ShellTerminationDto>;
 }
-ProcessEdgeCopies.register(NativeProcessApi);
+new ProcessEdgeCopies().register(NativeProcessApi);

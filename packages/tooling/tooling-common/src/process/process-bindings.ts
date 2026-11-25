@@ -31,7 +31,7 @@ export class ProcessBindings {
     }
 
     private aliasOtherCopies(container: Container, edge: ProcessEdgeClass): void {
-        for (const copy of ProcessEdgeCopies.otherCopiesOf(edge)) {
+        for (const copy of new ProcessEdgeCopies().otherCopiesOf(edge)) {
             container.bind(copy).toService(edge);
         }
     }
