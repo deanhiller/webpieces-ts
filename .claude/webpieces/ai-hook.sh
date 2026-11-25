@@ -19,7 +19,7 @@ ROOT="$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)"
 BS='\'                      # one literal backslash, so no \u001b / \n escape sits in this source
 ESC="${BS}u001b"           # the 6 chars: backslash u 0 0 1 b — Claude Code parses \u001b → ESC
 NL="${BS}n"                # the 2 chars: backslash n — parsed as a real newline inside the JSON string
-WP_STILL_ALLOWED="Still allowed while this block is up:${NL}  - any Read, and on CODEX (no Read tool): a bare read command - cat/head/tail/less/more/bat <file>, or sed -n '1,240p' package.json - with nothing piped, redirected or chained onto it${NL}  - any Write/Edit whose target is webpieces.config.json, pnpm-workspace.yaml or package.json${NL}  - every command on the L0 allowlist, including the Fix Options below${NL}  THIS IS NOT A DEADLOCK - run one YOURSELF now; do not hand it back to the human."
+WP_STILL_ALLOWED="Still allowed while this block is up:${NL}  - any Read, and on CODEX (no Read tool): a bare read command - cat/head/tail/less/more/bat <file>, or sed -n '1,240p' package.json - with nothing piped, redirected or chained onto it${NL}  - a Write/Edit/MultiEdit or Codex apply_patch of ONLY webpieces.config.json, .webpieces-config/ files, or a tree-root package.json / pnpm-workspace.yaml${NL}  - every command on the L0 allowlist, including the Fix Options below${NL}  THIS IS NOT A DEADLOCK - run one YOURSELF now; do not hand it back to the human."
 # The BIN is resolved by walking UP from ROOT (as Node does), and BIN_ROOT records which tree supplied
 # it — the version-drift guard below compares THIS tree's pin against THAT tree's installed version.
 BIN_ROOT="$ROOT"
@@ -384,13 +384,39 @@ case "$TOOL" in
     wp_log "$WP_FAULT" ALLOW-IGNORED
     exit 0 ;;
 esac
-# The same compiled Node probe is used by the live runner; it requires no installed package.
-if printf '%s' "$PAYLOAD" | node -e '/**
- * Self-contained Node probe: serialized into the POSIX shim so repairs work with missing packages.
+# THE EDIT ESCAPE (issue #1448) — ONE compiled Node probe for every edit-tool spelling: Claude's
+# Write/Edit/MultiEdit (file_path) and Codex's apply_patch (the patch rides in command; the name may be
+# namespace-qualified). It needs no installed package. Every path the edit touches must be a repair file
+# or the package.json / pnpm-workspace.yaml at a governed tree ROOT (a webpieces.config.json beside
+# it) — a nested project manifest, a Delete, a .. segment or a Move out of scope refuses the WHOLE edit.
+# This arm is TERMINAL (exit 0, the bin never runs), which is why the scope is that narrow. The JS half
+# (isAllowed) calls the same class, so the two halves cannot disagree. Exit 0 = permitted (stdout names
+# the label), 1 = not an edit, 3 = an edit refused (stdout: one line per offending path, for the deny).
+WP_EDIT_REFUSED=""
+WP_EDIT="$(printf '%s' "$PAYLOAD" | node -e '/**
+ * Self-contained Node probe: serialized into the POSIX shim so recovery edits work with missing packages.
  *
  * A REPAIR FILE is one a config-repair deny can tell the agent to edit, so it is permitted while the
  * config is invalid: the root `webpieces.config.json`, `.gitignore`, everything under `.webpieces-config/`,
  * and any owner file `rulePacks` declares elsewhere. Nothing that resolves outside the repository counts.
+ *
+ * A RECOVERY MANIFEST is the `package.json` / `pnpm-workspace.yaml` at the ROOT of a governed tree (a
+ * `webpieces.config.json` sits beside it) — the only two files a version pin or a `patchedDependencies`
+ * registration lives in. Every OTHER `package.json` in the repo is ordinary code and is NOT one.
+ *
+ * THE ONE EDIT ESCAPE (issue #1448). Every L0 deny promises that an edit of webpieces.config.json,
+ * pnpm-workspace.yaml or package.json is still allowed. `recoveryVerdict()` is the single predicate
+ * behind that promise, for EVERY edit-tool spelling: Claude'\''s Write/Edit/MultiEdit (`file_path`) and
+ * Codex'\''s `apply_patch` (`command` holds the patch; the name may arrive namespace-qualified, e.g.
+ * `functions.apply_patch`). The sh half of L0 runs this compiled class through `node -e` and the JS half
+ * calls it directly, so the two halves cannot answer differently. It used to be answered three ways — a
+ * `file_path` scrape in sh, a config-only patch check here, and a `file_path`-only JS predicate — and a
+ * Codex rollback of `pnpm-workspace.yaml` matched none of them.
+ *
+ * ATOMIC: a patch is permitted only when EVERY path it touches is permitted. A Delete is never a
+ * recovery edit. A Move is judged on BOTH its source and its destination. A raw path carrying a `..`
+ * segment is refused outright (a recovery edit never needs one), and a symlink that resolves outside the
+ * repository is refused by `canonical()`.
  */
 class ConfigRepairProbe {
     rootFor(cwd) {
@@ -404,20 +430,117 @@ class ConfigRepairProbe {
         }
         return directory;
     }
-    isRepairPatch(root, patch) {
-        const lines = patch.trim().split('\''\n'\'');
-        if (lines[0] !== '\''*** Begin Patch'\'' || lines.at(-1) !== '\''*** End Patch'\'')
-            return false;
-        let targets = 0;
+    /**
+     * `functions.apply_patch`, `tools.apply_patch`, `codex:apply_patch` → `apply_patch`. Only the Codex
+     * edit tool is canonicalized: every other name is returned untouched, so this can never turn an
+     * unknown tool into one L0 trusts.
+     */
+    canonicalTool(toolName) {
+        return /^(?:[A-Za-z0-9_-]+[.:/])+apply_patch$/.test(toolName) ? '\''apply_patch'\'' : toolName;
+    }
+    /**
+     * The one question both L0 halves ask about an edit. Returns:
+     *   - `['\''not-an-edit'\'']`            → not an edit tool; L0 has no edit-escape opinion.
+     *   - `['\''config'\'']` / `['\''manifest'\'']` → every touched path is permitted (`manifest` when at least one
+     *                                     is a root manifest — the audit label).
+     *   - `['\''refused'\'', ...lines]`       → an edit that is NOT permitted, one line per offending path.
+     */
+    recoveryVerdict(cwd, toolName, filePath, command) {
+        const tool = this.canonicalTool(toolName);
+        let targets;
+        if (['\''Write'\'', '\''Edit'\'', '\''MultiEdit'\''].includes(tool)) {
+            if (filePath === '\'''\'')
+                return ['\''refused'\'', '\''the edit names no file_path'\''];
+            targets = [['\''Edit'\'', filePath]];
+        }
+        else if (tool === '\''apply_patch'\'') {
+            const parsed = this.patchTargets(command);
+            if (typeof parsed === '\''string'\'')
+                return ['\''refused'\'', parsed];
+            targets = parsed;
+        }
+        else {
+            return ['\''not-an-edit'\''];
+        }
+        const refusals = [];
+        let manifest = false;
+        for (const target of targets) {
+            const op = target[0];
+            const raw = target[1];
+            const kind = this.targetKind(cwd, op, raw);
+            if (kind === '\''manifest'\'')
+                manifest = true;
+            else if (kind !== '\''config'\'')
+                refusals.push(`${op} ${raw}: ${kind}`);
+        }
+        if (refusals.length > 0)
+            return ['\''refused'\'', ...refusals];
+        return [manifest ? '\''manifest'\'' : '\''config'\''];
+    }
+    /**
+     * Every `[op, rawPath]` an `apply_patch` envelope touches — Add, Update, Delete, and BOTH sides of a
+     * Move — or a string saying why the envelope could not be read (fail closed: an envelope this does
+     * not understand is never partially judged).
+     */
+    patchTargets(patch) {
+        const lines = patch.replace(/\r\n/g, '\''\n'\'').trim().split('\''\n'\'');
+        if (lines[0]?.trim() !== '\''*** Begin Patch'\'' || lines.at(-1)?.trim() !== '\''*** End Patch'\'')
+            return '\''the patch has no *** Begin Patch / *** End Patch envelope'\'';
+        const targets = [];
         for (const line of lines.slice(1, -1)) {
             if (!line.startsWith('\''*** '\''))
                 continue;
-            const match = /^\*\*\* (?:Add|Update) File: (.+)$/.exec(line);
-            if (!match || !this.isRepairFile(root, match[1]))
-                return false;
-            targets += 1;
+            const match = /^\*\*\* (Add|Update|Delete) File: (.+)$/.exec(line) ?? /^\*\*\* (Move) to: (.+)$/.exec(line);
+            if (match) {
+                targets.push([match[1], match[2].trim()]);
+                continue;
+            }
+            if (line.trim() === '\''*** End of File'\'')
+                continue;
+            return `unrecognised patch directive ${line.trim()}`;
         }
-        return targets > 0;
+        return targets.length > 0 ? targets : '\''the patch names no file'\'';
+    }
+    /** `config`, `manifest`, or the reason this one path is not a recovery target. */
+    targetKind(cwd, op, raw) {
+        const path = require('\''node:path'\'');
+        if (op === '\''Delete'\'')
+            return '\''a Delete is never a recovery edit'\'';
+        if (raw === '\'''\'' || raw.includes('\''\0'\''))
+            return '\''an empty or malformed path'\'';
+        if (raw.split(/[\\/]/).includes('\''..'\''))
+            return '\''a .. path segment is refused - name the file directly'\'';
+        const fs = require('\''node:fs'\'');
+        const absolute = path.resolve(cwd, raw);
+        // The governed tree the FILE sits in (main clone or any worktree); with none above it, the
+        // session'\''s own tree — so a path outside every governed tree is judged against, and contained
+        // by, the repository the call came from.
+        const own = this.rootFor(path.dirname(absolute));
+        const root = fs.existsSync(path.join(own, '\''webpieces.config.json'\'')) ? own : this.rootFor(cwd);
+        if (this.isRepairFile(root, absolute))
+            return '\''config'\'';
+        if (this.isRecoveryManifest(root, absolute))
+            return '\''manifest'\'';
+        return '\''not webpieces.config.json, a .webpieces-config/ file, or the package.json / pnpm-workspace.yaml at a governed tree root'\'';
+    }
+    /** The root `package.json` / `pnpm-workspace.yaml` of a governed tree, resolved inside the repository. */
+    isRecoveryManifest(root, filename) {
+        const toError = this.error;
+        // eslint-disable-next-line @webpieces/no-unmanaged-exceptions -- bootstrap cannot trust package imports; an unresolvable path is simply not a manifest
+        try {
+            const fs = require('\''node:fs'\''), path = require('\''node:path'\'');
+            const target = this.canonical(root, path.resolve(root, filename));
+            if (!['\''package.json'\'', '\''pnpm-workspace.yaml'\''].includes(path.basename(target)))
+                return false;
+            return fs.existsSync(path.join(path.dirname(target), '\''webpieces.config.json'\''));
+            // webpieces-disable catch-must-propagate -- a path that escapes the repository IS the refusal verdict; the error carries nothing a caller could act on
+            // webpieces-disable no-any-unknown -- a path that escapes the repository throws from canonical()
+        }
+        catch (err) {
+            const error = toError(err);
+            void error;
+            return false;
+        }
     }
     isRepairFile(root, filename) {
         const toError = this.error;
@@ -445,6 +568,7 @@ class ConfigRepairProbe {
                     return true;
             }
             return false;
+            // webpieces-disable catch-must-propagate -- an escaping path or malformed declaration IS the refusal verdict; the error carries nothing a caller could act on
             // webpieces-disable no-any-unknown -- external JSON or runtime exports are validated before policy execution
         }
         catch (err) {
@@ -474,22 +598,21 @@ class ConfigRepairProbe {
         return err instanceof Error ? err : new Error(String(err));
     }
 }
- const probe = new ConfigRepairProbe(); const root = probe.rootFor(process.argv[1]); const payload = JSON.parse(require('\''node:fs'\'').readFileSync(0, '\''utf8'\'')); const input = payload.tool_input; const tool = payload.tool_name; const allowed = ['\''Write'\'','\''Edit'\'','\''MultiEdit'\''].includes(tool) && input && typeof input.file_path === '\''string'\'' ? probe.isRepairFile(root, input.file_path) : tool === '\''apply_patch'\'' && input && typeof input.command === '\''string'\'' && probe.isRepairPatch(root, input.command); if (!allowed) process.exitCode = 1;' "$WP_CWD" >/dev/null 2>&1; then
-  wp_log "$WP_FAULT" ALLOW-CONFIG
+ const payload = JSON.parse(require('\''node:fs'\'').readFileSync(0, '\''utf8'\'')); const input = payload.tool_input || {}; const verdict = new ConfigRepairProbe().recoveryVerdict(typeof payload.cwd === '\''string'\'' && payload.cwd !== '\'''\'' ? payload.cwd : process.argv[1], String(payload.tool_name || '\'''\''), typeof input.file_path === '\''string'\'' ? input.file_path : '\'''\'', typeof input.command === '\''string'\'' ? input.command : '\'''\''); if (verdict[0] === '\''not-an-edit'\'') process.exitCode = 1; else if (verdict[0] === '\''refused'\'') { process.stdout.write(verdict.slice(1).join('\''\n'\'')); process.exitCode = 3; } else process.stdout.write(verdict[0]);' "$WP_CWD" 2>/dev/null)"
+WP_EDIT_RC=$?
+if [ "$WP_EDIT_RC" = 0 ]; then
+  if [ "$WP_EDIT" = manifest ]; then
+    wp_log "$WP_FAULT" ALLOW-MANIFEST  # the pin / patch registration must be editable from inside the block
+  else
+    wp_log "$WP_FAULT" ALLOW-CONFIG
+  fi
   exit 0
 fi
-case "$FILE" in
-  */pnpm-workspace.yaml|pnpm-workspace.yaml|*/package.json|package.json)
-    # A manifest AT THE ROOT OF A GOVERNED TREE, which is the only place the version pin lives. The test
-    # is the sibling webpieces.config.json — TRACKED, so the main clone has one and every worktree has its
-    # own — and NOT $ROOT, which names whichever tree supplied this shim and would deny the other's.
-    # Basename alone would be far worse here than in the JS half: this arm is TERMINAL (exit 0, the bin
-    # never runs), so every packages/**/package.json would be editable with nothing judging it.
-    if [ -f "$(dirname -- "$FILE")/webpieces.config.json" ]; then
-      wp_log "$WP_FAULT" ALLOW-MANIFEST  # raising the pin must be typable from inside the block
-      exit 0
-    fi ;;
-esac
+if [ "$WP_EDIT_RC" = 3 ]; then
+  # One deny line per offending path. tr strips the bytes a JSON string may not carry raw.
+  WP_EDIT_REFUSED="$(printf '%s\n' "$WP_EDIT" | tr -d '"\\\t\r' | while IFS= read -r WP_L; do printf '%s      - %s' "$NL" "$WP_L"; done)"
+  WP_STILL_ALLOWED="Your $TOOL edit was REFUSED as a whole - not every file it touches is a recovery edit:${WP_EDIT_REFUSED}${NL}${NL}${WP_STILL_ALLOWED}"
+fi
 if printf '%s' "$CMD" | grep -Eq '^(cd[[:space:]]+([A-Za-z0-9._/@~+-]+|'\''[^'\'']+'\'')[[:space:]]*&&[[:space:]]*)?((pnpm|npm)[[:space:]]+(install|i)([[:space:]]+--[A-Za-z][A-Za-z0-9=._/@:-]*)*|rm[[:space:]]+-rf[[:space:]]+(\./)?node_modules/?([[:space:]]*&&[[:space:]]*(pnpm|npm)[[:space:]]+(install|i)([[:space:]]+--[A-Za-z][A-Za-z0-9=._/@:-]*)*)?|git[[:space:]]+fetch([[:space:]]+(--)?[A-Za-z0-9][A-Za-z0-9=._/@:-]*)*|git[[:space:]]+checkout[[:space:]]+main[[:space:]]*&&[[:space:]]*git[[:space:]]+pull[[:space:]]+origin[[:space:]]+main|(pnpm|npm|npx)([[:space:]]+(exec|run))?[[:space:]]+wp-upgrade-shim|cp[[:space:]]+(\./)?node_modules/@webpieces/agent-workflow-rules/templates/ai-hook\.sh[[:space:]]+(\./)?\.claude/webpieces/ai-hook\.sh|(pnpm|npm|npx)([[:space:]]+(exec|run))?[[:space:]]+wp-prune-unknown-config|(pnpm|npm|npx)([[:space:]]+(exec|run))?[[:space:]]+wp-migrate-dirs([[:space:]]+--stage)?|(pnpm|npm|npx)([[:space:]]+(exec|run))?[[:space:]]+wp-install-ai-hooks([[:space:]]+--[A-Za-z][A-Za-z0-9=._/@:-]*)*|(pnpm|npm)[[:space:]]+add([[:space:]]+(-[A-Za-z]|--[A-Za-z][A-Za-z0-9=._/@:-]*))*[[:space:]]+@webpieces/agent-workflow-rules(@[A-Za-z0-9._+-]+)?([[:space:]]+(-[A-Za-z]|--[A-Za-z][A-Za-z0-9=._/@:-]*))*|(pwd|git[[:space:]]+(status|log|diff|show|branch|rev-parse)|git[[:space:]]+worktree[[:space:]]+list)([[:space:]]+(--)?[A-Za-z0-9][A-Za-z0-9=._/@:-]*)*)([[:space:]]+2>(&1|/dev/null))?([[:space:]]*\|[[:space:]]*(tail|head)([[:space:]]+-(n[[:space:]]+)?[0-9]+)?)?[[:space:]]*$'; then
   wp_log "$WP_FAULT" ALLOW-CURE   # record the self-heal we let through (re-enables the guards)
   exit 0                     # allow the cure so the assistant can break the deadlock
@@ -554,7 +677,7 @@ elif [ -n "$DRIFT_PKG" ]; then
   if [ "$DRIFT_DIR" = older ]; then
     # The HEADLINE, kept in its own variable so DENY_EMIT_SH can paint ONLY it red (see there).
     WP_HEAD="❌ webpieces ai-hooks blocked this call: webpieces version drift."
-    REASON="$WP_HEAD${NL}${NL}[version-drift] (layer=L0 fault=D row=3, 1 violation)${NL}  package.json pins $DRIFT_PKG@$DRIFT_DECLARED but node_modules has $DRIFT_INSTALLED${NL}    → node_modules is OLDER, so the pin is what you want. Every OTHER tool call is BLOCKED until the two agree.${NL}    → matrix row 3: fault=D present / on the allowlist? no -> BLOCK. Those are the same coordinates the audit line carries (layer=L0 row=3 fault=D) and the same row webpieces.guard-matrix.md prints.${NL}${NL}${WP_STILL_ALLOWED}${NL}${NL}  Fix Option 1: (preferred) the only cure - it makes node_modules match the pin${NL}    run EXACTLY: 'pnpm install'${NL}${NL}Run it EXACTLY as written - the allowlist matches the whole command, so appending anything (even && git status) makes it a different command and it is rejected; that is not the guard blocking its own cure. Only these may be added: a leading cd <dir> && (single-quote a path containing spaces), a trailing 2>&1, and | tail -N."
+    REASON="$WP_HEAD${NL}${NL}[version-drift] (layer=L0 fault=D row=3, 1 violation)${NL}  package.json pins $DRIFT_PKG@$DRIFT_DECLARED but node_modules has $DRIFT_INSTALLED${NL}    → node_modules is OLDER, so the pin is what you want. Every OTHER tool call is BLOCKED until the two agree.${NL}    → matrix row 3: fault=D present / on the allowlist? no -> BLOCK. Those are the same coordinates the audit line carries (layer=L0 row=3 fault=D) and the same row webpieces.guard-matrix.md prints.${NL}${NL}${WP_STILL_ALLOWED}${NL}${NL}  Fix Option 1: (preferred) it makes node_modules match the pin${NL}    run EXACTLY: 'pnpm install'${NL}  Fix Option 2: 'pnpm install' itself FAILED (the pinned version is not on the registry yet, or ERR_PNPM_UNUSED_PATCH from a stale patchedDependencies entry)? Re-running it fails the same way. Repair the manifests instead - roll the pin in $ROOT/pnpm-workspace.yaml back to $DRIFT_INSTALLED, or fix the patchedDependencies entry in $ROOT/package.json or $ROOT/pnpm-workspace.yaml - with Write/Edit (Claude Code) or apply_patch (Codex); that edit is ALLOWED while this block is up. Then run 'pnpm install' again.${NL}${NL}Run it EXACTLY as written - the allowlist matches the whole command, so appending anything (even && git status) makes it a different command and it is rejected; that is not the guard blocking its own cure. Only these may be added: a leading cd <dir> && (single-quote a path containing spaces), a trailing 2>&1, and | tail -N."
   else
     # NEWER, or undecidable — the same choices apply either way, so the only thing the ambiguous
     # case changes is the claim about which side is stale.
