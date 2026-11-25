@@ -745,6 +745,14 @@
                     "level": 1
                 },
                 {
+                    "id": "RecoverReviewCommand",
+                    "className": "RecoverReviewCommand",
+                    "kind": "class",
+                    "scope": "singleton",
+                    "file": "packages/tooling/pr-gate/src/scripts/commands/recover-review-command.ts",
+                    "level": 1
+                },
+                {
                     "id": "RepoRootFinder",
                     "className": "RepoRootFinder",
                     "kind": "class",
@@ -783,6 +791,22 @@
                     "scope": "singleton",
                     "file": "packages/tooling/rules-config/src/review-provenance.ts",
                     "level": 3
+                },
+                {
+                    "id": "ReviewRecoveryFiles",
+                    "className": "ReviewRecoveryFiles",
+                    "kind": "class",
+                    "scope": "singleton",
+                    "file": "packages/tooling/pr-gate/src/scripts/workflow/review-recovery-files.ts",
+                    "level": 2
+                },
+                {
+                    "id": "ReviewRecoveryValidation",
+                    "className": "ReviewRecoveryValidation",
+                    "kind": "class",
+                    "scope": "singleton",
+                    "file": "packages/tooling/pr-gate/src/scripts/workflow/review-recovery-validation.ts",
+                    "level": 2
                 },
                 {
                     "id": "ReviewReport",
@@ -3241,6 +3265,15 @@
                 },
                 {
                     "from": "PrGateApp",
+                    "to": "RecoverReviewCommand",
+                    "injection": "type",
+                    "token": "RecoverReviewCommand",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/commands/recover-review-command.ts#RecoverReviewCommand",
+                    "paramName": "recoverReviewCommand",
+                    "paramType": "RecoverReviewCommand"
+                },
+                {
+                    "from": "PrGateApp",
                     "to": "RepoRootFinder",
                     "injection": "type",
                     "token": "RepoRootFinder",
@@ -3445,6 +3478,69 @@
                     "tokenKey": "class:packages/tooling/repo-workflow-core/src/worktrees.ts#WorktreeService",
                     "paramName": "worktrees",
                     "paramType": "WorktreeService"
+                },
+                {
+                    "from": "RecoverReviewCommand",
+                    "to": "BranchNaming",
+                    "injection": "type",
+                    "token": "BranchNaming",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/branch-naming.ts#BranchNaming",
+                    "paramName": "names",
+                    "paramType": "BranchNaming"
+                },
+                {
+                    "from": "RecoverReviewCommand",
+                    "to": "GitProcessApi",
+                    "injection": "type",
+                    "token": "GitProcessApi",
+                    "tokenKey": "class:packages/tooling/tooling-common/src/process/git-process-api.ts#GitProcessApi",
+                    "paramName": "git",
+                    "paramType": "GitProcessApi"
+                },
+                {
+                    "from": "RecoverReviewCommand",
+                    "to": "NativeProcessApi",
+                    "injection": "type",
+                    "token": "NativeProcessApi",
+                    "tokenKey": "class:packages/tooling/tooling-common/src/process/native-process-api.ts#NativeProcessApi",
+                    "paramName": "processes",
+                    "paramType": "NativeProcessApi"
+                },
+                {
+                    "from": "RecoverReviewCommand",
+                    "to": "RepoRootFinder",
+                    "injection": "type",
+                    "token": "RepoRootFinder",
+                    "tokenKey": "class:packages/tooling/rules-config/src/repo-root.ts#RepoRootFinder",
+                    "paramName": "roots",
+                    "paramType": "RepoRootFinder"
+                },
+                {
+                    "from": "RecoverReviewCommand",
+                    "to": "ReviewJsonService",
+                    "injection": "type",
+                    "token": "ReviewJsonService",
+                    "tokenKey": "class:packages/tooling/rules-config/src/review-json.ts#ReviewJsonService",
+                    "paramName": "reviews",
+                    "paramType": "ReviewJsonService"
+                },
+                {
+                    "from": "RecoverReviewCommand",
+                    "to": "ReviewRecoveryFiles",
+                    "injection": "type",
+                    "token": "ReviewRecoveryFiles",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/review-recovery-files.ts#ReviewRecoveryFiles",
+                    "paramName": "files",
+                    "paramType": "ReviewRecoveryFiles"
+                },
+                {
+                    "from": "RecoverReviewCommand",
+                    "to": "ReviewRecoveryValidation",
+                    "injection": "type",
+                    "token": "ReviewRecoveryValidation",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/review-recovery-validation.ts#ReviewRecoveryValidation",
+                    "paramName": "validation",
+                    "paramType": "ReviewRecoveryValidation"
                 },
                 {
                     "from": "RepoRootFinder",

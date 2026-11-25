@@ -104,11 +104,14 @@ graph TD
     PushDevStateStore["PushDevStateStore"]
     ReapOutcomeSignal["ReapOutcomeSignal"]
     ReapWorktreeCommand["ReapWorktreeCommand"]
+    RecoverReviewCommand["RecoverReviewCommand"]
     RepoRootFinder["RepoRootFinder"]
     RepoScratchDirs["RepoScratchDirs"]
     ReviewIdentityStampService["ReviewIdentityStampService"]
     ReviewJsonService["ReviewJsonService"]
     ReviewProvenanceService["ReviewProvenanceService"]
+    ReviewRecoveryFiles["ReviewRecoveryFiles"]
+    ReviewRecoveryValidation["ReviewRecoveryValidation"]
     ReviewReport["ReviewReport"]
     ReviewRoundStateService["ReviewRoundStateService"]
     ReviewRoundText["ReviewRoundText"]
@@ -385,6 +388,7 @@ graph TD
     PrGateApp --> LandPrCommand
     PrGateApp --> PushDevStateStore
     PrGateApp --> ReapWorktreeCommand
+    PrGateApp --> RecoverReviewCommand
     PrGateApp --> RepoRootFinder
     PrGateApp --> ReviewUpsertPrCommand
     PrGateApp --> StartPushDevCommand
@@ -408,6 +412,13 @@ graph TD
     ReapWorktreeCommand --> RepoRootFinder
     ReapWorktreeCommand --> WorktreeCleanupSection
     ReapWorktreeCommand --> WorktreeService
+    RecoverReviewCommand --> BranchNaming
+    RecoverReviewCommand --> GitProcessApi
+    RecoverReviewCommand --> NativeProcessApi
+    RecoverReviewCommand --> RepoRootFinder
+    RecoverReviewCommand --> ReviewJsonService
+    RecoverReviewCommand --> ReviewRecoveryFiles
+    RecoverReviewCommand --> ReviewRecoveryValidation
     RepoRootFinder --> DotWebpieces
     RepoScratchDirs --> DotWebpieces
     ReviewIdentityStampService --> AtomicFile
