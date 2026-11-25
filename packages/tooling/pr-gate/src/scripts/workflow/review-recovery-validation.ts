@@ -90,12 +90,12 @@ export class ReviewRecoveryValidation {
             this.verdict(source, file, round, id, receipt);
         }
     }
-    // webpieces-disable no-any-unknown -- canonical review fields, not arbitrary re-serialized input
     private verdict(
         source: string,
         file: RecoveryFile,
         round: number,
         id: string,
+        // webpieces-disable no-any-unknown -- untrusted archived receipt fields are narrowed and compared to canonical provenance
         receipt: Record<string, unknown>,
     ): void {
         const verdict = this.object(source, file.name);
