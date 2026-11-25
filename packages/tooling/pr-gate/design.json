@@ -521,6 +521,14 @@
                     "level": 3
                 },
                 {
+                    "id": "LandedTicketResolver",
+                    "className": "LandedTicketResolver",
+                    "kind": "class",
+                    "scope": "singleton",
+                    "file": "packages/tooling/pr-gate/src/scripts/workflow/landed-ticket-resolver.ts",
+                    "level": 2
+                },
+                {
                     "id": "LandedTreeResolver",
                     "className": "LandedTreeResolver",
                     "kind": "class",
@@ -919,6 +927,14 @@
                     "scope": "singleton",
                     "file": "packages/tooling/pr-gate/src/scripts/commands/sync-main-command.ts",
                     "level": 1
+                },
+                {
+                    "id": "TicketReminder",
+                    "className": "TicketReminder",
+                    "kind": "class",
+                    "scope": "singleton",
+                    "file": "packages/tooling/pr-gate/src/scripts/workflow/ticket-reminder.ts",
+                    "level": 3
                 },
                 {
                     "id": "TimerApi",
@@ -1901,6 +1917,15 @@
                     "paramType": "StateDirMigrator"
                 },
                 {
+                    "from": "FinishBanner",
+                    "to": "TicketReminder",
+                    "injection": "type",
+                    "token": "TicketReminder",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/ticket-reminder.ts#TicketReminder",
+                    "paramName": "tickets",
+                    "paramType": "TicketReminder"
+                },
+                {
                     "from": "FinishPushDevCommand",
                     "to": "DevCopyOnMain",
                     "injection": "type",
@@ -2595,6 +2620,15 @@
                 },
                 {
                     "from": "LandPrCommand",
+                    "to": "LandedTicketResolver",
+                    "injection": "type",
+                    "token": "LandedTicketResolver",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/landed-ticket-resolver.ts#LandedTicketResolver",
+                    "paramName": "landedTickets",
+                    "paramType": "LandedTicketResolver"
+                },
+                {
+                    "from": "LandPrCommand",
                     "to": "LandedTreeResolver",
                     "injection": "type",
                     "token": "LandedTreeResolver",
@@ -2657,6 +2691,15 @@
                     "paramType": "RepoRootFinder"
                 },
                 {
+                    "from": "LandPrCommand",
+                    "to": "TicketReminder",
+                    "injection": "type",
+                    "token": "TicketReminder",
+                    "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/ticket-reminder.ts#TicketReminder",
+                    "paramName": "ticketReminder",
+                    "paramType": "TicketReminder"
+                },
+                {
                     "from": "LandedCopyResolver",
                     "to": "DevCopyOnMain",
                     "injection": "type",
@@ -2682,6 +2725,15 @@
                     "tokenKey": "class:packages/tooling/pr-gate/src/scripts/workflow/git-exec.ts#GitExec",
                     "paramName": "gitExec",
                     "paramType": "GitExec"
+                },
+                {
+                    "from": "LandedTicketResolver",
+                    "to": "ReviewJsonService",
+                    "injection": "type",
+                    "token": "ReviewJsonService",
+                    "tokenKey": "class:packages/tooling/rules-config/src/review-json.ts#ReviewJsonService",
+                    "paramName": "reviewJson",
+                    "paramType": "ReviewJsonService"
                 },
                 {
                     "from": "LandedTreeResolver",

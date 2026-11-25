@@ -76,6 +76,7 @@ graph TD
     HumanPostPrCommand["HumanPostPrCommand"]
     LandPrCommand["LandPrCommand"]
     LandedCopyResolver["LandedCopyResolver"]
+    LandedTicketResolver["LandedTicketResolver"]
     LandedTreeResolver["LandedTreeResolver"]
     LandedWorktreeReaper["LandedWorktreeReaper"]
     MainCheckout["MainCheckout"]
@@ -126,6 +127,7 @@ graph TD
     StateDirMigrator["StateDirMigrator"]
     SubagentProvenanceService["SubagentProvenanceService"]
     SyncMainCommand["SyncMainCommand"]
+    TicketReminder["TicketReminder"]
     TimerApi["TimerApi"]
     TmpScratchSweeper["TmpScratchSweeper"]
     UpsertHotfixPrCommand["UpsertHotfixPrCommand"]
@@ -236,6 +238,7 @@ graph TD
     DiffScope --> GitProcessApi
     DotWebpieces --> GitCheckout
     DotWebpieces --> StateDirMigrator
+    FinishBanner --> TicketReminder
     FinishPushDevCommand --> DevCopyOnMain
     FinishPushDevCommand --> DevDeployRefs
     FinishPushDevCommand --> DevDeployWatchHints
@@ -313,6 +316,7 @@ graph TD
     LandPrCommand --> BranchArchiver
     LandPrCommand --> BranchNaming
     LandPrCommand --> GitProcessApi
+    LandPrCommand --> LandedTicketResolver
     LandPrCommand --> LandedTreeResolver
     LandPrCommand --> LandedWorktreeReaper
     LandPrCommand --> MergeBodyTempFile
@@ -320,9 +324,11 @@ graph TD
     LandPrCommand --> NativeProcessApi
     LandPrCommand --> PrMerger
     LandPrCommand --> RepoRootFinder
+    LandPrCommand --> TicketReminder
     LandedCopyResolver --> DevCopyOnMain
     LandedCopyResolver --> DevDeployRefs
     LandedCopyResolver --> GitExec
+    LandedTicketResolver --> ReviewJsonService
     LandedTreeResolver --> GitProcessApi
     LandedTreeResolver --> WorktreeService
     LandedWorktreeReaper --> NativeProcessApi
