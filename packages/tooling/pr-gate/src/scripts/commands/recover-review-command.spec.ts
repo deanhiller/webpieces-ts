@@ -86,6 +86,23 @@ class RecoveryFixture {
                 },
             ],
         });
+        this.gitEvidence();
+        this.evidence();
+        feature.processes.respond(
+            'gh',
+            ['pr', 'view', '42', '--json', 'url,headRefName,headRefOid,state'],
+            feature.processes.ok(
+                JSON.stringify({
+                    url: URL,
+                    headRefName: 'dean/feature',
+                    headRefOid: PUBLISHED,
+                    state: 'OPEN',
+                }),
+            ),
+        );
+    }
+    private gitEvidence(): void {
+        const feature = this.feature;
         feature.git.respond(
             ['branch', '--show-current'],
             (): ReturnType<typeof feature.git.ok> => feature.git.ok(this.branch),
@@ -111,19 +128,6 @@ class RecoveryFixture {
         feature.git.respondToPrefix(['diff', BASE], (call) =>
             feature.git.ok(
                 call.args.includes('--name-only') ? 'feature.ts\n' : this.patch(call.args[2]),
-            ),
-        );
-        this.evidence();
-        feature.processes.respond(
-            'gh',
-            ['pr', 'view', '42', '--json', 'url,headRefName,headRefOid,state'],
-            feature.processes.ok(
-                JSON.stringify({
-                    url: URL,
-                    headRefName: 'dean/feature',
-                    headRefOid: PUBLISHED,
-                    state: 'OPEN',
-                }),
             ),
         );
     }
