@@ -120,14 +120,15 @@ deadline and the backoff never extends one.
 The factory checks for the React Native **JavaScript runtime**, via `navigator.product === 'ReactNative'`
 (set by React Native's `Libraries/Core/setUpNavigator.js`; verified on 0.83.10). In that runtime,
 `new ClientHttpBrowserFactory(store)` — and passing `HttpClientRuntime.platformDefaults()` — throws
-`ReactNativeRuntimeConfigError` at construction, naming the missing `fetch` / `deadlines` and linking
-here. Nothing is sent first. `HttpClientRuntime.reactNative(...)` itself refuses a missing collaborator
+`ReactNativeRuntimeConfigError` at construction, naming the missing `fetch` / `deadlines` and linking to
+[#1463](https://github.com/deanhiller/webpieces-ts/issues/1463). Nothing is sent first. `HttpClientRuntime.reactNative(...)` itself refuses a missing collaborator
 (for plain-JavaScript callers the types cannot stop).
 
-- **Browsers and WebView pages are unaffected.** A website inside a React Native WebView runs on the
-  browser engine's fetch and timers; `window.ReactNativeWebView` does not count as React Native, and
-  neither does `window` / `document` presence (React Native has window-like globals). No user-agent
-  sniffing, and no `react-native` import.
+- **Standalone browsers are unaffected**, including Chrome/Safari on phones. A generic
+  `window.ReactNativeWebView.postMessage` (or `globalThis.ReactNativeWebView.postMessage`) is a
+  WebView hint, not proof of Expo or native capabilities. Its presence now **refuses browser defaults**
+  until the shell is explicitly configured as described below. No user-agent sniffing or mandatory
+  `react-native`/Expo import.
 - **Node, SSR, workers and tests** (no `navigator`, or no `product`) keep the platform defaults and never
   throw on a missing global.
 - **Detection limits.** A runtime that hides or rewrites `navigator.product` is not detected — declare it
@@ -143,8 +144,93 @@ here. Nothing is sent first. `HttpClientRuntime.reactNative(...)` itself refuses
 Before #1445, a React Native app that built `new ClientHttpBrowserFactory(store)` silently got the default
 `fetch` and JS timers — and stalled while locked. It now **fails at startup** with
 `ReactNativeRuntimeConfigError`. Fix every React Native factory (auth, heartbeat, log shipping, …) by
-passing one shared `HttpClientRuntime.reactNative(fetch, deadlines)` as the third argument. Browser and
-WebView code needs no change. A custom `CallStrategy` that waited with `setTimeout` should wait on its
+passing one shared `HttpClientRuntime.reactNative(fetch, deadlines)` as the third argument. Standalone browser code needs no change. Embedded WebView code must also migrate as described below. A custom `CallStrategy` that waited with `setTimeout` should wait on its
 new third argument, `deadlines` (see [client timeouts](../../../docs/client-timeouts.md)). Direct
 `fetch` calls outside the typed client (e.g. media byte-range downloads) are not covered — wire the
 same native transport into them yourself.
+
+
+## Websites inside Expo / React Native WebViews (#1463)
+
+The website is a **different JavaScript runtime** from RN. Importing `expo/fetch` in the website
+selects its web fallback; it does not reach native HTTP. `http-client-browser` and
+`http-client-core` therefore depend on neither Expo nor React Native. Both an Expo adapter and a
+future replacement adapter can implement the existing shared `HttpFetch` + `DeadlineScheduler` API.
+There is no process-global registration, fetch patch, or magic truthy `EXPO_CLIENT` flag.
+
+Complete shell bootstrap **before constructing the factory**. The shell must explicitly acknowledge
+its host kind, protocol version, current document/session identity and all three native capabilities.
+After receiving that acknowledgement over the application's existing trusted bootstrap channel:
+
+```ts
+import {
+    ClientHttpBrowserFactory, HttpClientRuntime, MobileWebViewHost,
+} from '@webpieces/http-client-browser';
+
+// Values below come from the shell's completed bootstrap negotiation, not guessed page globals.
+// Forward these same identities to the app's adapter so the native side checks each request/reply.
+const host = new MobileWebViewHost(
+    'expo-webview', // or 'react-native-webview' for a different native shell
+    1,
+    bootstrap.documentId,
+    bootstrap.sessionId,
+    bootstrap.nativeHttp,         // must be true
+    bootstrap.nativeDeadlines,    // must be true
+    bootstrap.nativeCancellation, // must be true
+);
+const runtime = HttpClientRuntime.mobileWebView(shellFetch, shellDeadlines, host);
+const factory = new ClientHttpBrowserFactory(store, lifecycleListener, runtime);
+```
+
+`host` may also be the deserialized JSON acknowledgement: no class prototype or `instanceof` is
+required. `mobileWebView` validates it immediately and snapshots/freezes the identity. A missing
+transport/scheduler, false/missing capability, unknown host/version or empty identity throws
+`MobileWebViewRuntimeConfigError`, with the missing fields, the remedy and the issue link. It is a
+configuration error for bootstrap to handle, not a remote HTTP 500 or an application server-bug modal.
+It also works without a WebView marker, for shells that deliberately hide that marker.
+
+A marker-present **undeclared/older shell is refused at factory construction**. Passing platform
+defaults, or an RN runtime without a WebView acknowledgement, does not bypass it. Upgrade the shell
+and bootstrap the page before building clients; do not catch the error and rebuild with browser
+fetch. A marker installed between factory and client construction is checked again at client binding.
+A shell hiding every marker must supply the explicit runtime: ordinary browser APIs cannot discover
+an otherwise invisible embedding. A marker is configuration only, never an authorization boundary.
+
+### Adapter obligations and delivery boundary
+
+This package supplies **the portable injection contract and construction checks**, not an Expo
+module, a universal native URL proxy, or a consumer-specific IPC bridge. The application supplies
+`shellFetch` and `shellDeadlines`. A declaration cannot prove their implementation is native or that
+its live bridge remains available. The adapter must:
+
+- Route through native HTTP and a native end-to-end deadline covering IPC handoff, network and body
+  completion. Native timeout/cancellation must close the request and release bounded pending work
+  even while page JS is asleep. `now()` must advance during sleep; a late result is rejected on resume.
+  A WebView `setTimeout`, including one hidden behind a scheduler, does not satisfy the contract.
+- Enforce approved service routes/origins and redirect destinations **natively**, with bounded request,
+  response and concurrent-call limits. Do not grant page-provided URLs, headers or tokens unrestricted
+  authority. The native side owns credentials; define which untrusted context headers the page may
+  forward. Native bearer authentication does not inherit the page's cookies/CORS rules.
+- Bind every pending request/reply to native account, document and session epochs. On navigation,
+  logout, account change or bridge loss, cancel/reject pending work, ignore stale replies and negotiate
+  a fresh runtime before new clients. The frozen host is an acknowledgement, not a live session monitor.
+- Preserve HTTP status, headers and body when reconstructing `Response`. Keep transport failures
+  separate from HTTP responses: native connection rejection must become the fetch-compatible network
+  rejection, deadline/cancel must retain their semantics, and unexpected implementation errors must
+  remain errors. Generic IPC RPC error translation attributes a peer's local connection failure to
+  the peer (`ApiDependencyError`); wrapping native fetch in such an RPC without a transport-specific
+  outcome codec loses `ApiConnectionError`. Verify the adapter through real JSON serialization.
+- Explicitly reject unsupported bodies/responses. `HttpFetchInit` sends an optional serialized string
+  body and abort signal; buffered JSON RPC is the initial proven use case. A `Response` facade does
+  not imply support for streaming, binary or media. Those need their own bounded adapter design;
+  do not base64-buffer whole downloads through IPC or silently fall back to page fetch. Adapters
+  must test response-body failures as well as headers. No default retries are introduced here;
+  native queues must not amplify the configured typed client's retries.
+
+The reproduction and its limitations live in [#1463](https://github.com/deanhiller/webpieces-ts/issues/1463):
+a physical Pixel's page HTTP stalled during screen lock while native HTTP and audio continued;
+delegating through RN's Expo fetch/native deadlines avoided the stall in the comparison. It tested
+transport and deadlines together, not each independently. These portable tests verify construction,
+injected transport and deadlines with page timers frozen; they are not a physical Android/iOS
+background-execution certification. The consumer must verify its actual bridge, native resource
+cleanup, credential/session enforcement and locked-device behavior on each supported platform.

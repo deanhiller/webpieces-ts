@@ -5,6 +5,7 @@ import {
     HttpClientRuntime,
     HttpRuntimeKind,
     ReactNativeRuntimeConfigError,
+    MobileWebViewRuntimeConfigError,
 } from '@webpieces/http-client-core';
 import { BrowserProxyClient } from './BrowserProxyClient';
 import { ClientConfig } from './ClientConfig';
@@ -41,8 +42,8 @@ import { ReactNativeRuntimeDetector } from './ReactNativeRuntimeDetector';
  * endpoint throws in `createRpcClient`, not on the first call.
  *
  * **Runtime (#1445).** The optional third argument is this factory's {@link HttpClientRuntime}: the
- * fetch every client it builds sends through and the clock their deadlines use. Omitted, a browser or
- * WebView page gets the platform fetch and JS timers, exactly as before. In the React Native JS
+ * fetch every client it builds sends through and the clock their deadlines use. Omitted, a
+ * standalone browser gets the platform fetch and JS timers. In the React Native JS
  * runtime (detected by `navigator.product === 'ReactNative'`) omitting it — or passing
  * `HttpClientRuntime.platformDefaults()` — THROWS {@link ReactNativeRuntimeConfigError} here, before
  * any request, because React Native's default fetch and JS timers can stop while a phone is locked:
@@ -75,21 +76,40 @@ export class ClientHttpBrowserFactory {
 
     /**
      * The supplied runtime, else the platform defaults — unless this is the React Native JS runtime,
-     * where only an explicit {@link HttpClientRuntime.reactNative} is accepted.
+     * where only an explicit {@link HttpClientRuntime.reactNative} is accepted. An embedded RN
+     * WebView separately requires {@link HttpClientRuntime.mobileWebView} and shell capabilities.
      */
     // webpieces-disable no-function-outside-class -- pure construction-time selection
     private static selectRuntime(
         runtime: HttpClientRuntime | undefined,
         detector: ReactNativeRuntimeDetector,
     ): HttpClientRuntime {
-        const selected = runtime ?? HttpClientRuntime.platformDefaults();
-        if (selected.kind !== HttpRuntimeKind.REACT_NATIVE && detector.isReactNative()) {
+        if (runtime?.kind !== HttpRuntimeKind.REACT_NATIVE && detector.isReactNative()) {
             throw new ReactNativeRuntimeConfigError(
                 ['fetch', 'deadlines'],
                 'new ClientHttpBrowserFactory(...)',
             );
         }
-        return selected;
+        if (runtime?.kind !== HttpRuntimeKind.MOBILE_WEBVIEW && detector.isWebView()) {
+            throw new MobileWebViewRuntimeConfigError([
+                'declared shell host',
+                'nativeHttp',
+                'nativeDeadlines',
+                'nativeCancellation',
+            ]);
+        }
+        // Revalidate at the library boundary too: untyped callers can assemble a runtime object
+        // without ever calling its named constructor. A kind/marker alone is not a capability.
+        if (runtime?.kind === HttpRuntimeKind.MOBILE_WEBVIEW) {
+            if (!runtime.host) {
+                throw new MobileWebViewRuntimeConfigError(['shell host capabilities']);
+            }
+            return HttpClientRuntime.mobileWebView(runtime.fetch, runtime.deadlines, runtime.host);
+        }
+        if (runtime?.kind === HttpRuntimeKind.REACT_NATIVE) {
+            return HttpClientRuntime.reactNative(runtime.fetch, runtime.deadlines);
+        }
+        return runtime ?? HttpClientRuntime.platformDefaults();
     }
 
     /**
@@ -99,6 +119,8 @@ export class ClientHttpBrowserFactory {
      * @param config - This client's state (its baseUrl)
      */
     createRpcClient<T extends object>(apiPrototype: ApiPrototype<T>, config: ClientConfig): T {
+        // Also catch a shell marker installed after the factory, before binding a client.
+        ClientHttpBrowserFactory.selectRuntime(this.runtime, new ReactNativeRuntimeDetector());
         assertNotInternalApi(apiPrototype, 'ClientHttpBrowserFactory');
         const proxyClient = new BrowserProxyClient(
             this.contextMgr,

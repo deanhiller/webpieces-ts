@@ -48,6 +48,8 @@ export {
     HttpFetchInit,
     HttpRuntimeKind,
     ReactNativeRuntimeConfigError,
+    MobileWebViewHost,
+    MobileWebViewRuntimeConfigError,
 } from '@webpieces/http-client-core';
 export type { HttpFetch } from '@webpieces/http-client-core';
 export { TimerDeadlineScheduler } from '@webpieces/core-util';
@@ -106,7 +108,12 @@ export type { Wiring, AppWiring, BindModule } from './Wiring';
 export { Binder, ClientBindOptions, BrowserWiringProviders } from './Wiring';
 export { ExternalImpl, UseClass, UseExisting } from './ExternalImpl';
 export type { ExternalClassType, ExternalExistingType } from './ExternalImpl';
-export { BrowserValueProvider, BrowserClassProvider, BrowserExistingProvider, BrowserFactoryProvider } from './BrowserProviders';
+export {
+    BrowserValueProvider,
+    BrowserClassProvider,
+    BrowserExistingProvider,
+    BrowserFactoryProvider,
+} from './BrowserProviders';
 export type { BrowserProvider, BrowserToken, BrowserType } from './BrowserProviders';
 
 export { WiringPolicy } from '@webpieces/http-client-core';

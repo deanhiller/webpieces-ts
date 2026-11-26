@@ -1,5 +1,6 @@
 import { DeadlineScheduler, TimerDeadlineScheduler } from '@webpieces/core-util';
 import { HttpClientRuntime, HttpFetch } from './HttpClientRuntime';
+import { MobileWebViewHost } from './MobileWebViewHost';
 
 /**
  * The shape of Expo SDK 55's `expo/fetch` (`build/winter/fetch/fetch.d.ts` + `fetch.types.d.ts`),
@@ -43,6 +44,25 @@ class HttpClientRuntimeCompileAssertions {
         void HttpClientRuntime.reactNative(expoShapedFetch);
         // @ts-expect-error the runtime is built by platformDefaults() / reactNative(...), never `new`
         void new HttpClientRuntime();
+    }
+
+    webViewRequiresNegotiatedNativeCapabilities(): void {
+        const host = new MobileWebViewHost(
+            'expo-webview',
+            1,
+            'document',
+            'session',
+            true,
+            true,
+            true,
+        );
+        void HttpClientRuntime.mobileWebView(expoShapedFetch, nativeDeadlines, host);
+        // @ts-expect-error a WebView runtime requires a shell acknowledgement
+        void HttpClientRuntime.mobileWebView(expoShapedFetch, nativeDeadlines);
+        // @ts-expect-error unsupported bootstrap versions must be negotiated before client construction
+        void new MobileWebViewHost('expo-webview', 2, 'document', 'session', true, true, true);
+        // @ts-expect-error native deadlines cannot be omitted/disabled in a declared mobile host
+        void new MobileWebViewHost('expo-webview', 1, 'document', 'session', true, false, true);
     }
 }
 void HttpClientRuntimeCompileAssertions;

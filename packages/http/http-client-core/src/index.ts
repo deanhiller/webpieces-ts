@@ -48,6 +48,7 @@ export {
     ReactNativeRuntimeConfigError,
 } from './HttpClientRuntime';
 export type { HttpFetch } from './HttpClientRuntime';
+export { MobileWebViewHost, MobileWebViewRuntimeConfigError } from './MobileWebViewHost';
 export { ClientFilterDefinition } from './ClientFilter';
 export type { ClientFilter } from './ClientFilter';
 // Generic streaming wire adapters: NDJSON uploads, request-scoped SSE downloads, and a typed
