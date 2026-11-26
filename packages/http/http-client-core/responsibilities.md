@@ -14,6 +14,8 @@ The isomorphic engine of the webpieces HTTP client: reads an API contract's deco
 - Deciding whether a response body may be parsed at all, from its `content-type` (`ResponseBodyReader`) — an infra 502/503/504 serving HTML becomes a status-derived API error rather than a `SyntaxError`.
 - Attaching outbound delivery auth per the endpoint's `AuthMode` (oidcSameProject()/oidcSvcs(...) bearer via the injected `IdTokenMinter`, sharedSecret(...) value from the bound `Secrets`)
 
+- Environment-aware credential selection is shared by startup capability checks and invocation. Node may select app-relayed JWT/API-key credentials supplied by a per-client filter; browser selection refuses credentials it cannot hold. The shared engine must not override that decision with a second blanket API-key refusal.
+
 ## Out of Scope
 
 - The `Filter` / `Service` / `FilterChain` abstraction the outbound chain is built from → `core-util`, shared with the server's inbound chain so the two are ONE concept
