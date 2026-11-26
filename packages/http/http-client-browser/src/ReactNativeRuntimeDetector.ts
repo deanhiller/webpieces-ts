@@ -1,11 +1,21 @@
-/** The one navigator field the detector reads. Typed locally: this package ships no DOM assumption. */
-interface NavigatorProduct {
+/** Only the fields used for environment hints; no DOM or RN dependency. */
+class NavigatorProduct {
     readonly product?: string;
 }
 
-/** `globalThis` as the detector reads it — `navigator` may be absent (Node, SSR, some workers). */
-interface GlobalWithNavigator {
+class WebViewBridge {
+    readonly postMessage?: (message: string) => void;
+}
+
+class WebViewWindow {
+    readonly ReactNativeWebView?: WebViewBridge | null;
+}
+
+/** These globals may be absent in Node, SSR and workers. */
+class GlobalWithNavigator {
     readonly navigator?: NavigatorProduct | null;
+    readonly ReactNativeWebView?: WebViewBridge | null;
+    readonly window?: WebViewWindow | null;
 }
 
 /**
@@ -15,9 +25,11 @@ interface GlobalWithNavigator {
  * `Libraries/Core/setUpNavigator.js` (verified on 0.83.10). Deliberately NOT used:
  * - `window` / `document` presence — React Native defines window-like globals, and a WebView page's
  *   JavaScript has a real `window`; neither tells the two apart.
- * - `window.ReactNativeWebView` — present in a WebView PAGE, which runs on the browser engine's fetch
- *   and timers and must keep the browser defaults.
  * - the user agent, or importing `react-native` — this package must stay importable without it.
+ *
+ * `isWebView()` separately recognizes the generic RN WebView hint. It triggers fail-closed
+ * configuration, never claims Expo or native capabilities. Shells without that hint must explicitly
+ * supply HttpClientRuntime.mobileWebView(...) before constructing factories.
  *
  * Reads are guarded so Node, SSR, workers and tests (no `navigator`, or one without `product`) are
  * simply "not React Native". A runtime that hides this marker is covered by declaring it explicitly
@@ -31,5 +43,14 @@ export class ReactNativeRuntimeDetector {
         const navigator = (globalThis as GlobalWithNavigator).navigator;
         if (typeof navigator !== 'object' || navigator === null) return false;
         return navigator.product === ReactNativeRuntimeDetector.REACT_NATIVE_PRODUCT;
+    }
+
+    isWebView(): boolean {
+        if (typeof globalThis === 'undefined') return false;
+        const globals = globalThis as GlobalWithNavigator;
+        return (
+            typeof globals.ReactNativeWebView?.postMessage === 'function' ||
+            typeof globals.window?.ReactNativeWebView?.postMessage === 'function'
+        );
     }
 }

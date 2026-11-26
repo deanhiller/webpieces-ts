@@ -34,6 +34,8 @@ import {
     HttpFetch,
     HttpFetchInit,
     ReactNativeRuntimeConfigError,
+    MobileWebViewHost,
+    MobileWebViewRuntimeConfigError,
     RequestOutcome,
 } from '@webpieces/http-client-core';
 import { ClientConfig } from '../ClientConfig';
@@ -85,7 +87,9 @@ class StreamInput {
 class StreamOutput {
     result!: string;
 }
-const inputSchema = new ObjectSchemaBuilder().required('value', new ApiJsonSchema('string')).build();
+const inputSchema = new ObjectSchemaBuilder()
+    .required('value', new ApiJsonSchema('string'))
+    .build();
 const outputSchema = new ObjectSchemaBuilder()
     .required('result', new ApiJsonSchema('string'))
     .build();
@@ -211,15 +215,14 @@ describe('runtime selection at factory creation', () => {
         expect(globalFetch).toHaveBeenCalledTimes(1);
     });
 
-    it('a WebView PAGE (ReactNativeWebView present) is not React Native and keeps browser defaults', async () => {
+    it('an undeclared WebView refuses browser defaults before any request', () => {
         vi.stubGlobal('navigator', { product: 'Gecko' });
         vi.stubGlobal('ReactNativeWebView', { postMessage: (): void => undefined });
         vi.stubGlobal('window', globalThis);
-        const client = new ClientHttpBrowserFactory(new MutableContextStore()).createRpcClient(
-            RuntimeApi,
-            config(),
+        expect(() => new ClientHttpBrowserFactory(new MutableContextStore())).toThrow(
+            MobileWebViewRuntimeConfigError,
         );
-        await expect(client.read(new Payload())).resolves.toEqual(new Payload('from-global'));
+        expect(globalFetch).not.toHaveBeenCalled();
     });
 
     it.each([
@@ -421,7 +424,9 @@ describe('the injected deadline while ordinary JS timers are frozen', () => {
     beforeEach(() => {
         // A locked Android phone: JS timers stop. They are faked and NEVER advanced in this block,
         // so any deadline that still fires was delivered through the injected scheduler.
-        vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval'] });
+        vi.useFakeTimers({
+            toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval'],
+        });
     });
 
     it('a native-delivered deadline rejects a stalled transport that ignores abort', async () => {
@@ -439,7 +444,10 @@ describe('the injected deadline while ordinary JS timers are frozen', () => {
         h.fireFirst();
 
         expect(await outcome).toEqual(
-            new ApiCallTimeoutError(30_000, new CallContext('RuntimeApi', 'write', WRITE, RuntimeApi)),
+            new ApiCallTimeoutError(
+                30_000,
+                new CallContext('RuntimeApi', 'write', WRITE, RuntimeApi),
+            ),
         );
         expect(transport.sent[0].init.signal.aborted).toBe(true);
         expect(h.lifecycle.ends).toHaveLength(1);
@@ -541,7 +549,9 @@ describe('deadline races, settled exactly once', () => {
     });
 
     it('a retry backs off on the injected scheduler, each attempt with its own fresh deadline', async () => {
-        vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval'] });
+        vi.useFakeTimers({
+            toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval'],
+        });
         ClientRegistry.setStrategy(
             new RetryStrategy(1_000, 1, 500, 2, 500).run,
             CallScope.method(RuntimeApi, 'read'),
@@ -568,5 +578,142 @@ describe('deadline races, settled exactly once', () => {
         expect(deadlines.scheduled[2].cancelCount).toBe(1);
         expect(transport.sent).toHaveLength(2);
         expect(transport.sent[0].init.signal).not.toBe(transport.sent[1].init.signal);
+    });
+});
+
+/** The shell acknowledgement crosses a REAL JSON boundary; it has no class prototype in the page. */
+function shellHost(): MobileWebViewHost {
+    return JSON.parse(
+        JSON.stringify(
+            new MobileWebViewHost('expo-webview', 1, 'document-7', 'session-3', true, true, true),
+        ),
+    ) as MobileWebViewHost;
+}
+
+function webViewClient(transport: ScriptedTransport, deadlines: ManualDeadlines): RuntimeApi {
+    return new ClientHttpBrowserFactory(
+        new MutableContextStore(),
+        undefined,
+        HttpClientRuntime.mobileWebView(transport.fetch, deadlines, shellHost()),
+    ).createRpcClient(RuntimeApi, config());
+}
+
+describe('#1463 negotiated native HTTP in an embedded website', () => {
+    it.each(['iPhone Safari', 'Android Chrome'])(
+        '%s retains standalone browser defaults',
+        async (userAgent) => {
+            vi.stubGlobal('navigator', { product: 'Gecko', userAgent });
+            const client = new ClientHttpBrowserFactory(new MutableContextStore()).createRpcClient(
+                RuntimeApi,
+                config(),
+            );
+            await expect(client.read(new Payload())).resolves.toEqual(new Payload('from-global'));
+        },
+    );
+
+    it('a marker on window alone requires explicit shell capabilities, even with an RN runtime', () => {
+        vi.stubGlobal('window', { ReactNativeWebView: { postMessage: (): void => undefined } });
+        const transport = new ScriptedTransport();
+        expect(
+            () =>
+                new ClientHttpBrowserFactory(
+                    new MutableContextStore(),
+                    undefined,
+                    HttpClientRuntime.reactNative(transport.fetch, new ManualDeadlines()),
+                ),
+        ).toThrow(MobileWebViewRuntimeConfigError);
+        expect(globalFetch).not.toHaveBeenCalled();
+        expect(transport.sent).toHaveLength(0);
+    });
+
+    it('also refuses a marker installed between factory and client construction', () => {
+        const factory = new ClientHttpBrowserFactory(new MutableContextStore());
+        vi.stubGlobal('window', { ReactNativeWebView: { postMessage: (): void => undefined } });
+        expect(() => factory.createRpcClient(RuntimeApi, config())).toThrow(
+            MobileWebViewRuntimeConfigError,
+        );
+        expect(globalFetch).not.toHaveBeenCalled();
+    });
+
+    it.each([
+        ['nativeHttp', false],
+        ['nativeDeadlines', false],
+        ['nativeCancellation', false],
+        ['protocolVersion', 2],
+        ['documentId', ''],
+        ['sessionId', ''],
+        ['kind', 'browser'],
+    ])('refuses missing/incompatible %s from a serialized shell before HTTP', (key, value) => {
+        const host = shellHost();
+        Reflect.set(host, key, value);
+        const transport = new ScriptedTransport();
+        expect(() =>
+            HttpClientRuntime.mobileWebView(transport.fetch, new ManualDeadlines(), host),
+        ).toThrow(MobileWebViewRuntimeConfigError);
+        expect(() =>
+            HttpClientRuntime.mobileWebView(transport.fetch, new ManualDeadlines(), host),
+        ).toThrow(key === 'kind' ? 'host kind' : key);
+        expect(transport.sent).toHaveLength(0);
+        expect(globalFetch).not.toHaveBeenCalled();
+    });
+
+    it('refuses absent shell, fetch and deadlines from untyped callers with an actionable issue link', () => {
+        expect(() =>
+            HttpClientRuntime.mobileWebView(
+                undefined as unknown as HttpFetch,
+                undefined as unknown as ManualDeadlines,
+                undefined as unknown as MobileWebViewHost,
+            ),
+        ).toThrow(/fetch, deadlines, shell host capabilities/);
+        vi.stubGlobal('ReactNativeWebView', { postMessage: (): void => undefined });
+        expect(() => new ClientHttpBrowserFactory(new MutableContextStore())).toThrow(
+            MobileWebViewRuntimeConfigError.ISSUE_URL,
+        );
+    });
+
+    it('a declared shell works without a marker and never sends through the page fetch', async () => {
+        const transport = new ScriptedTransport();
+        const client = webViewClient(transport, new ManualDeadlines());
+        await expect(client.read(new Payload('through-shell'))).resolves.toEqual(
+            new Payload('from-transport'),
+        );
+        expect(transport.sent[0].init.body).toBe(JSON.stringify(new Payload('through-shell')));
+        expect(globalFetch).not.toHaveBeenCalled();
+    });
+
+    it('a configured marked WebView sends through its injected transport', async () => {
+        vi.stubGlobal('window', { ReactNativeWebView: { postMessage: (): void => undefined } });
+        const transport = new ScriptedTransport();
+        await expect(
+            webViewClient(transport, new ManualDeadlines()).read(new Payload()),
+        ).resolves.toEqual(new Payload('from-transport'));
+        expect(globalFetch).not.toHaveBeenCalled();
+    });
+
+    it('native deadlines abort a stalled WebView body with page timers frozen', async () => {
+        vi.useFakeTimers();
+        const deadlines = new ManualDeadlines();
+        const transport = new ScriptedTransport();
+        transport.respond = () => Promise.resolve(new Response(new ReadableStream<Uint8Array>()));
+        const pending = webViewClient(transport, deadlines).read(new Payload());
+        const failed = expect(pending).rejects.toBeInstanceOf(ApiCallTimeoutError);
+        await settle();
+        deadlines.scheduled[0].fire();
+        await failed;
+        expect(transport.sent[0].init.signal.aborted).toBe(true);
+        expect(deadlines.scheduled[0].cancelCount).toBe(1);
+        expect(vi.getTimerCount()).toBe(0);
+    });
+
+    it('copies the negotiated identity so mutation of bootstrap data cannot retarget existing clients', () => {
+        const host = shellHost();
+        const runtime = HttpClientRuntime.mobileWebView(
+            new ScriptedTransport().fetch,
+            new ManualDeadlines(),
+            host,
+        );
+        Reflect.set(host, 'sessionId', 'another-account');
+        expect(runtime.host?.sessionId).toBe('session-3');
+        expect(Object.isFrozen(runtime.host)).toBe(true);
     });
 });
