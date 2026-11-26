@@ -349,32 +349,6 @@ export abstract class ProxyClient {
     // ---------------------------------------------------------------- the call
 
     /**
-     * FAIL FAST, PER METHOD, at call time: some endpoints exist for a caller that is not us, and this
-     * proxy could only ever build a request they are obliged to reject. Refusing here rather than at
-     * bind time means an api that MIXES such endpoints with normal ones still yields a working client
-     * for the normal ones; only calling the un-callable method throws.
-     *
-     * @throws Error naming the endpoint, what it declared, and who its real caller is.
-     */
-    private refuseEndpointNoClientCanCall(route: RouteMetadata): void {
-        const authMode = route.authMeta?.methods[0];
-        // apiKey(...): the credential is a CUSTOMER-held key, and the header carrying it is the app's
-        // ApiKeyHook's choice, so this client has nothing to send and the call is a guaranteed 401.
-        if (authMode?.kind === 'apikey') {
-            throw new Error(
-                `${this.apiName}.${route.methodName} is apiKey('${authMode.regime}') — only the partner ` +
-                    `holding that api key can call it, and the header carrying it is the app's ApiKeyHook's choice, ` +
-                    `so a webpieces client has no credential to send.`,
-            );
-        }
-        // vendorAuth(...) is DELIBERATELY absent from this list: `vendorAuth(name)` names a vendor's
-        // credential SCHEME, not a direction. When WE call the vendor (or a partner's webhook), the
-        // environment's outbound-auth filter asks the bound VendorAuthMinter to `mint` the credential —
-        // the mirror of the `verify` the server's independent VendorAuthVerifier runs when the vendor
-        // calls us. Two DI roles, never one binding (#1358).
-    }
-
-    /**
      * One generated-client call. The route is cloned per call with the selected credential and this
      * client's {@link callMode}; a failure is rethrown as the SAME instance, carrying that mode as
      * `err.callMode`, so the error's class is never changed.
@@ -397,8 +371,9 @@ export abstract class ProxyClient {
 
     // webpieces-disable no-any-unknown -- request and response DTOs are erased at the proxy boundary
     private async makeModeRequest(route: RouteMetadata, args: unknown[]): Promise<unknown> {
+        // The environment selects the same sendable credential at creation and invocation.
+        // Node app-relayed keys are supplied by this client's outbound filters, not minted here.
         route = route.withSelectedAuth(this.selectAuthMethod(route));
-        this.refuseEndpointNoClientCanCall(route);
         if (route.streaming) return this.makeStreamingRequest(route, args);
         const mapped = HttpContractMapper.toWire(
             route.path,
