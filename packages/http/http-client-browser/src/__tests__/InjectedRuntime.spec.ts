@@ -33,6 +33,7 @@ import {
     HttpClientRuntime,
     HttpFetch,
     HttpFetchInit,
+    HttpRuntimeKind,
     ReactNativeRuntimeConfigError,
     MobileWebViewHost,
     MobileWebViewRuntimeConfigError,
@@ -599,6 +600,19 @@ function webViewClient(transport: ScriptedTransport, deadlines: ManualDeadlines)
 }
 
 describe('#1463 negotiated native HTTP in an embedded website', () => {
+    it('a runtime kind alone cannot bypass construction-time capability validation', () => {
+        vi.stubGlobal('ReactNativeWebView', { postMessage: (): void => undefined });
+        const runtime = HttpClientRuntime.reactNative(
+            new ScriptedTransport().fetch,
+            new ManualDeadlines(),
+        );
+        Reflect.set(runtime, 'kind', HttpRuntimeKind.MOBILE_WEBVIEW);
+        expect(
+            () => new ClientHttpBrowserFactory(new MutableContextStore(), undefined, runtime),
+        ).toThrow('shell host capabilities');
+        expect(globalFetch).not.toHaveBeenCalled();
+    });
+
     it.each(['iPhone Safari', 'Android Chrome'])(
         '%s retains standalone browser defaults',
         async (userAgent) => {

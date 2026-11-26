@@ -98,6 +98,17 @@ export class ClientHttpBrowserFactory {
                 'nativeCancellation',
             ]);
         }
+        // Revalidate at the library boundary too: untyped callers can assemble a runtime object
+        // without ever calling its named constructor. A kind/marker alone is not a capability.
+        if (runtime?.kind === HttpRuntimeKind.MOBILE_WEBVIEW) {
+            if (!runtime.host) {
+                throw new MobileWebViewRuntimeConfigError(['shell host capabilities']);
+            }
+            return HttpClientRuntime.mobileWebView(runtime.fetch, runtime.deadlines, runtime.host);
+        }
+        if (runtime?.kind === HttpRuntimeKind.REACT_NATIVE) {
+            return HttpClientRuntime.reactNative(runtime.fetch, runtime.deadlines);
+        }
         return runtime ?? HttpClientRuntime.platformDefaults();
     }
 
