@@ -1,7 +1,6 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { loadAndValidate, RuleFailError, Option } from '@webpieces/rules-config';
-import { InformAiError } from '@webpieces/tooling-common';
 import { BuildPolicyResult } from '@webpieces/rules-sdk';
 import { DependencyWorkspace, DependencyOwner, DependencyManifest } from './dependency-workspace';
 import { DependencyImports, DependencyImport } from './dependency-imports';
@@ -331,11 +330,15 @@ export class ConfiguredDependencyPolicies {
         const freeze = rules.get('root-runtime-freeze');
         const ownership = rules.get('dependency-ownership');
         if (!catalog || !freeze || !ownership)
-            throw new InformAiError('Declare all three dependency policies in their owning pack');
+            throw new RuleFailError(
+                'dependency-catalog',
+                'Declare all three dependency policies in their owning pack',
+            );
         const list = (rule: typeof freeze, field: string): string[] => {
             const value = rule.options[field] as string[];
             if (!Array.isArray(value) || value.some((item: string) => typeof item !== 'string'))
-                throw new InformAiError(
+                throw new RuleFailError(
+                    'dependency-ownership',
                     `Explicit dependency policy field ${field} must be a string array`,
                 );
             return value as string[];
