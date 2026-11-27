@@ -225,6 +225,9 @@ describe('explicit workspace dependency policies', () => {
             'import type { Shape } from "vendor"; export type Result = Shape;',
         );
         expect(fixture.run().join('\n')).toContain('package.json dependencies');
+        fixture.put('packages/app/index.d.ts', 'export type { Shape } from "vendor";');
+        fixture.put('packages/app/src/main.ts', 'export {};');
+        expect(fixture.run().join('\n')).toContain('index.d.ts:1: vendor');
         fixture.json('packages/app/package.json', {
             name: '@sample/app',
             private: true,

@@ -162,7 +162,7 @@ export class DependencyPolicies {
     ): void {
         for (const file of workspace.files) {
             if (file.endsWith('/project.json')) this.assets(workspace, options, file, errors);
-            if (!/\.[cm]?[jt]sx?$/u.test(file) || file.endsWith('.d.ts')) continue;
+            if (!/\.[cm]?[jt]sx?$/u.test(file)) continue;
             if (workspace.matches(file, options.artifactProbePaths)) continue;
             const owner = workspace.owner(file);
             const isTool = workspace.matches(file, options.rootToolPaths);
