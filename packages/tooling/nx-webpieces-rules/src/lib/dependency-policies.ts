@@ -333,6 +333,14 @@ export class ConfiguredDependencyPolicies {
             throw new RuleFailError(
                 'dependency-catalog',
                 'Declare all three dependency policies in their owning pack',
+                undefined,
+                undefined,
+                [
+                    new Option(
+                        'Upgrade the owning rule pack and declare its explicit policy entries',
+                        true,
+                    ),
+                ],
             );
         const list = (rule: typeof freeze, field: string): string[] => {
             const value = rule.options[field] as string[];
@@ -340,6 +348,9 @@ export class ConfiguredDependencyPolicies {
                 throw new RuleFailError(
                     'dependency-ownership',
                     `Explicit dependency policy field ${field} must be a string array`,
+                    undefined,
+                    undefined,
+                    [new Option(`Set ${field} to an explicitly reviewed array of strings`, true)],
                 );
             return value as string[];
         };
