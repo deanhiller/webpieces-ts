@@ -20,6 +20,7 @@ import * as path from 'path';
 import { RuleGate } from '../../lib/rule-gate';
 import { DependencyWorkspace, DependencyOwner } from '../../lib/dependency-workspace';
 import { DependencyVersion } from '../../lib/dependency-policies';
+import { RuleFailError, Option } from '@webpieces/rules-config';
 
 export interface ValidateVersionsLockedOptions {
     // No options needed
@@ -118,8 +119,20 @@ class VersionsLockedExecutor {
                 }
             }
         }
-        for (const error of errors) console.error(error);
-        return { success: errors.length === 0 };
+        if (errors.length)
+            throw new RuleFailError(
+                'validate-versions-locked',
+                errors.join('\n'),
+                undefined,
+                undefined,
+                [
+                    new Option(
+                        'Use exact consistent direct versions or exact catalogue pins; preserve workspace:* for internal owners',
+                        true,
+                    ),
+                ],
+            );
+        return { success: true };
     }
 }
 

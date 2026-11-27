@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { specTempDirs } from '@webpieces/tooling-testkit';
+import { RuleFailError } from '@webpieces/rules-config';
 import { DependencyPolicies, DependencyPolicyOptions } from '../dependency-policies';
 import { ValidationTargets } from '../../validation-targets';
 
@@ -9,6 +10,7 @@ const directories: string[] = [];
 
 class Fixture {
     readonly root = specTempDirs.make('dependency-policy-');
+    readonly dynamicImports: string[] = [];
 
     constructor() {
         directories.push(this.root);
@@ -41,7 +43,17 @@ class Fixture {
     run(): string[] {
         return new DependencyPolicies().validate(
             this.root,
-            new DependencyPolicyOptions(true, true, true, ['old'], ['tools/**'], [], [], []),
+            new DependencyPolicyOptions(
+                true,
+                true,
+                true,
+                ['old'],
+                ['tools/**'],
+                [],
+                [],
+                [],
+                this.dynamicImports,
+            ),
         );
     }
 }
@@ -52,6 +64,18 @@ afterEach(() => {
 });
 
 describe('explicit workspace dependency policies', () => {
+    it('reports violations through the structured rule failure channel', () => {
+        const fixture = new Fixture();
+        fixture.json('packages/app/package.json', { name: '@sample/app' });
+        fixture.put('packages/app/src/main.ts', 'export { value } from "vendor";');
+        const options = new DependencyPolicyOptions(false, false, true, [], [], [], [], [], []);
+        const run = (): void => {
+            new DependencyPolicies().enforce(fixture.root, options);
+        };
+        expect(run).toThrow(RuleFailError);
+        expect(run).toThrow('[dependency-ownership]');
+    });
+
     it('accepts exact catalogue owners and ordinary transitive/peer package trees without flattening them', () => {
         const fixture = new Fixture();
         fixture.put(
@@ -79,7 +103,7 @@ describe('explicit workspace dependency policies', () => {
         const fixture = new Fixture();
         fixture.json('package.json', { devDependencies: { vendor: 'catalog:' } });
         expect(fixture.run()).toEqual([]);
-        const options = new DependencyPolicyOptions(true, true, false, [], [], [], [], []);
+        const options = new DependencyPolicyOptions(true, true, false, [], [], [], [], [], []);
         fixture.json('package.json', { dependencies: { old: 'catalog:' } });
         expect(new DependencyPolicies().validate(fixture.root, options).join('\n')).toContain(
             'new root runtime name',
@@ -210,13 +234,17 @@ describe('explicit workspace dependency policies', () => {
         expect(fixture.run()).toEqual([]);
     });
 
-    it('does not mistake an artifact probe for a dependency of its test runner', () => {
+    it('requires an explicit exact artifact expression review rather than inventing a runner dependency', () => {
         const fixture = new Fixture();
         fixture.put(
             'packages/app/src/probe.spec.ts',
             'import { createRequire } from "node:module"; const probe = createRequire("/tmp/image/owner.js"); probe("vendor");',
         );
         fixture.json('packages/app/package.json', { name: '@sample/app' });
+        expect(fixture.run().join('\n')).toContain('unclassified dependency expression');
+        fixture.dynamicImports.push(
+            'packages/app/src/probe.spec.ts::artifact-anchored createRequire: probe("vendor")::',
+        );
         expect(fixture.run()).toEqual([]);
     });
 });

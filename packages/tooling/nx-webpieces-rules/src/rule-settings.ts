@@ -40,6 +40,7 @@ export const recommendedSeeds: Readonly<Record<string, ConfigObject>> = {
         testPaths: [],
         artifactProbePaths: [],
         toolProviders: [],
+        dynamicImports: [],
         turnOffRuleUntilEpoch: 0,
         turnOffRuleWhileOnBranch: null,
     },

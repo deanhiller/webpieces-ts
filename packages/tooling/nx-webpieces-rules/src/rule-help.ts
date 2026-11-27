@@ -12,7 +12,7 @@ export const ruleHelp: Readonly<Record<string, RuleHelp>> = {
     ),
     'dependency-ownership': new RuleHelp(
         'Require declarations at the importing source owner.',
-        'Declare emitted production imports in owner dependencies, optionalDependencies or peers. Test/build/erased-type imports may use owner devDependencies. Explicitly classify root tool files and artifact probes; toolProviders records exact umbrella-provided imports. Root hoisting never excuses a runtime owner.',
+        'Declare emitted production imports in owner dependencies, optionalDependencies or peers. Test/build/erased-type imports may use owner devDependencies. Explicitly classify root tool files and artifact probes; toolProviders records exact umbrella-provided imports. Review dynamicImports as file::normalized expression::package-list mappings; an empty list means a verified local/artifact expression. Root hoisting never excuses a runtime owner.',
     ),
     'wiring-format': new RuleHelp(
         'Check every canonical wiring.ts: its Wiring/AppWiring class plus the BindModule/RouteModule classes it selects, with their actual registrations.',

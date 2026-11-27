@@ -1,6 +1,6 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { loadAndValidate } from '@webpieces/rules-config';
+import { loadAndValidate, RuleFailError, InformAiError, Option } from '@webpieces/rules-config';
 import { BuildPolicyResult } from '@webpieces/rules-sdk';
 import { DependencyWorkspace, DependencyOwner, DependencyManifest } from './dependency-workspace';
 import { DependencyImports, DependencyImport } from './dependency-imports';
@@ -57,6 +57,7 @@ export class DependencyPolicyOptions {
         readonly testPaths: string[],
         readonly artifactProbePaths: string[],
         readonly toolProviders: string[],
+        readonly dynamicImports: string[],
     ) {}
 }
 
@@ -69,10 +70,30 @@ export class DependencyPolicies {
     validate(root: string, options: DependencyPolicyOptions): string[] {
         const workspace = new DependencyWorkspace(root);
         const errors: string[] = [];
-        if (options.catalog) this.catalog(workspace, errors);
-        if (options.freeze) this.freeze(workspace, options, errors);
-        if (options.ownership) this.ownership(workspace, options, errors);
+        const catalogue: string[] = [];
+        const freeze: string[] = [];
+        const ownership: string[] = [];
+        if (options.catalog) this.catalog(workspace, catalogue);
+        if (options.freeze) this.freeze(workspace, options, freeze);
+        if (options.ownership) this.ownership(workspace, options, ownership);
+        errors.push(...catalogue.map((message: string) => `[dependency-catalog] ${message}`));
+        errors.push(...freeze.map((message: string) => `[root-runtime-freeze] ${message}`));
+        errors.push(...ownership.map((message: string) => `[dependency-ownership] ${message}`));
         return [...new Set(errors)].sort();
+    }
+
+    enforce(root: string, options: DependencyPolicyOptions): BuildPolicyResult {
+        const errors = this.validate(root, options);
+        if (errors.length) {
+            const firstRule = errors[0].slice(1, errors[0].indexOf(']'));
+            throw new RuleFailError(firstRule, errors.join('\n'), undefined, undefined, [
+                new Option(
+                    'Repair each named importing owner or reviewed policy entry; keep runtime names local and direct versions in the catalogue',
+                    true,
+                ),
+            ]);
+        }
+        return new BuildPolicyResult(true);
     }
 
     private catalog(workspace: DependencyWorkspace, errors: string[]): void {
@@ -147,13 +168,43 @@ export class DependencyPolicies {
             const isTool = workspace.matches(file, options.rootToolPaths);
             const text = fs.readFileSync(path.join(workspace.root, file), 'utf8');
             for (const entry of this.imports.read(text, file)) {
-                if (entry.unresolved)
-                    console.warn(
-                        `${file}:${entry.line}: dependency expression requires review: ${entry.unresolved}`,
-                    );
+                if (entry.unresolved) {
+                    this.dynamic(workspace, options, owner, file, entry, isTool, errors);
+                    continue;
+                }
                 this.declaration(workspace, options, owner, file, entry, isTool, errors);
             }
         }
+    }
+
+    private dynamic(
+        workspace: DependencyWorkspace,
+        options: DependencyPolicyOptions,
+        owner: DependencyOwner,
+        file: string,
+        entry: DependencyImport,
+        isTool: boolean,
+        errors: string[],
+    ): void {
+        const expression = entry.unresolved.replace(/\s+/gu, ' ').trim();
+        const key = `${file}::${expression}::`;
+        const reviewed = options.dynamicImports.find((item: string) => item.startsWith(key));
+        if (reviewed === undefined) {
+            errors.push(
+                `${file}:${entry.line}: unclassified dependency expression ${expression}; review its actual package names and declare the exact file::expression::package-list mapping in dependency-ownership.dynamicImports (empty package-list only for a verified local/artifact expression)`,
+            );
+            return;
+        }
+        for (const specifier of reviewed.slice(key.length).split(',').filter(Boolean))
+            this.declaration(
+                workspace,
+                options,
+                owner,
+                file,
+                new DependencyImport(specifier, entry.line, entry.runtime),
+                isTool,
+                errors,
+            );
     }
 
     private assets(
@@ -279,11 +330,13 @@ export class ConfiguredDependencyPolicies {
         const freeze = rules.get('root-runtime-freeze');
         const ownership = rules.get('dependency-ownership');
         if (!catalog || !freeze || !ownership)
-            throw new Error('Declare all three dependency policies in their owning pack');
+            throw new InformAiError('Declare all three dependency policies in their owning pack');
         const list = (rule: typeof freeze, field: string): string[] => {
             const value = rule.options[field] as string[];
             if (!Array.isArray(value) || value.some((item: string) => typeof item !== 'string'))
-                throw new Error(`Explicit dependency policy field ${field} must be a string array`);
+                throw new InformAiError(
+                    `Explicit dependency policy field ${field} must be a string array`,
+                );
             return value as string[];
         };
         const gate = new RuleGate();
@@ -296,9 +349,8 @@ export class ConfiguredDependencyPolicies {
             list(ownership, 'testPaths'),
             list(ownership, 'artifactProbePaths'),
             list(ownership, 'toolProviders'),
+            list(ownership, 'dynamicImports'),
         );
-        const errors = new DependencyPolicies().validate(root, options);
-        for (const error of errors) console.error(error);
-        return new BuildPolicyResult(errors.length === 0);
+        return new DependencyPolicies().enforce(root, options);
     }
 }

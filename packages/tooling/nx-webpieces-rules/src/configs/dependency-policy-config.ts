@@ -23,11 +23,13 @@ export class DependencyOwnershipConfig extends BaseRuleConfig {
     testPaths?: string[];
     artifactProbePaths?: string[];
     toolProviders?: string[];
+    dynamicImports?: string[];
     static readonly SCHEMA: SchemaShape<DependencyOwnershipConfig> = {
         mode: new FieldDef('string', STRUCTURAL_MODES),
         rootToolPaths: new FieldDef('string[]'),
         testPaths: new FieldDef('string[]'),
         artifactProbePaths: new FieldDef('string[]'),
         toolProviders: new FieldDef('string[]'),
+        dynamicImports: new FieldDef('string[]'),
     };
 }

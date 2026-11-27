@@ -29,8 +29,11 @@ consumers. Project `build.options.polyfills` and `styles` package paths are runt
 root-hoisting exemptions. `toolProviders` entries use `imported-name=declared-umbrella-name` only for
 root tools that consume an installation bundle. Source imports, reexports, package subpaths,
 literal dynamic imports/requires and source-anchored createRequire aliases are checked. Dynamic
-expressions and artifact-anchored require calls are printed for review rather than invented as npm
-dependencies. Review those diagnostics and the exact probe paths when adopting the policy.
+expressions and artifact-anchored require calls fail with structured diagnostics until explicitly
+reviewed in `dynamicImports`. Each entry is `file::normalized expression::package1,package2`;
+whitespace in the expression is normalized. An empty package list means that exact expression
+was verified local/artifact-only, never a blanket dynamic-import exemption. Named packages still
+require the importing owner's appropriate declaration. Review exact probe paths when adopting.
 
 These policies share one native build scan and run through the declared build policy contribution.
 The catalogue, policy files, source, aliases and manifests invalidate the dependency validation cache.
