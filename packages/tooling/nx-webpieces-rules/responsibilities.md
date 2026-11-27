@@ -42,3 +42,10 @@ Nx inference plugin that auto-wires webpieces build gates with no manual project
 Gates are wired into the build via `nx.json` `targetDefaults.dependsOn` (e.g. `validate-no-file-import-cycles` before `@nx/js:tsc`), so `nx affected`/`run-many` run them. `madge` is a pinned dependency to avoid runtime `npx` fetches. On/off + dated grace windows come from `webpieces.config.json`.
 
 Nx-native policy schemas, concrete mode enums, optional tuning, reviewed seeds, and native field retirements belong here. Source and Code contributions refer to canonical owners without copying their schemas.
+
+`dependency-catalog`, `root-runtime-freeze` and `dependency-ownership` share one native workspace
+scan. They govern authored workspace declarations and importing owners, never third-party package
+trees. Explicit root-tool/probe/provider classifications preserve build tooling while deployed
+runtime imports remain owner-local; erased types and tests can use devDependencies, public
+declaration dependencies remain available to consumers. Catalogue/policy/source/alias inputs
+participate in cache invalidation. New policy settings must be declared explicitly after publication.

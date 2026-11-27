@@ -36,6 +36,10 @@ export class ValidationTargets {
             inputs: [
                 '{workspaceRoot}/**/project.json',
                 '{workspaceRoot}/**/package.json',
+                '{workspaceRoot}/pnpm-workspace.yaml',
+                '{workspaceRoot}/.webpieces-config/**/*.json',
+                '{workspaceRoot}/**/*.{ts,tsx,mts,cts,js,jsx,mjs,cjs}',
+                '{workspaceRoot}/**/tsconfig*.json',
                 ...BRANCH_IDENTITY_INPUTS,
             ],
             metadata: {
@@ -87,7 +91,13 @@ export class ValidationTargets {
         return {
             executor: '@webpieces/nx-webpieces-rules:validate-versions-locked',
             cache: true,
-            inputs: ['{workspaceRoot}/**/package.json', ...BRANCH_IDENTITY_INPUTS],
+            inputs: [
+                '{workspaceRoot}/**/package.json',
+                '{workspaceRoot}/pnpm-workspace.yaml',
+                '{workspaceRoot}/.webpieces-config/**/*.json',
+                '{workspaceRoot}/webpieces.config.json',
+                ...BRANCH_IDENTITY_INPUTS,
+            ],
             metadata: {
                 technologies: ['nx'],
                 description:

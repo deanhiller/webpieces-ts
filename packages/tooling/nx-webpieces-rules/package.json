@@ -25,6 +25,8 @@
         "@webpieces/eslint-rules": "workspace:*",
         "@webpieces/rules-config": "workspace:*",
         "madge": "8.0.0",
+        "yaml": "2.8.2",
+        "minimatch": "10.0.1",
         "@webpieces/rules-sdk": "workspace:*"
     },
     "peerDependencies": {

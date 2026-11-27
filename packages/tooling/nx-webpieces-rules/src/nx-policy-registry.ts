@@ -23,6 +23,11 @@ import {
 } from './configs/tag-truth-configs';
 import { NativeActions, NativeAction } from './native-actions';
 import { WiringFormatConfig } from './configs/wiring-format-config';
+import {
+    DependencyCatalogConfig,
+    RootRuntimeFreezeConfig,
+    DependencyOwnershipConfig,
+} from './configs/dependency-policy-config';
 
 export class NxPolicy {
     constructor(
@@ -34,8 +39,51 @@ export class NxPolicy {
 const actions = new NativeActions();
 export const NX_POLICIES: readonly NxPolicy[] = [
     new NxPolicy(
-        new OwnedRuleDefinition('wiring-format', WiringFormatConfig.SCHEMA, RULE_SCHEMA_API_VERSION,
-            optionalTuning['wiring-format'], recommendedSeeds['wiring-format'], 'rules', ruleHelp['wiring-format']),
+        new OwnedRuleDefinition(
+            'dependency-catalog',
+            DependencyCatalogConfig.SCHEMA,
+            RULE_SCHEMA_API_VERSION,
+            optionalTuning['dependency-catalog'],
+            recommendedSeeds['dependency-catalog'],
+            'rules',
+            ruleHelp['dependency-catalog'],
+        ),
+        actions.dependencies,
+    ),
+    new NxPolicy(
+        new OwnedRuleDefinition(
+            'root-runtime-freeze',
+            RootRuntimeFreezeConfig.SCHEMA,
+            RULE_SCHEMA_API_VERSION,
+            optionalTuning['root-runtime-freeze'],
+            recommendedSeeds['root-runtime-freeze'],
+            'rules',
+            ruleHelp['root-runtime-freeze'],
+        ),
+        actions.dependencies,
+    ),
+    new NxPolicy(
+        new OwnedRuleDefinition(
+            'dependency-ownership',
+            DependencyOwnershipConfig.SCHEMA,
+            RULE_SCHEMA_API_VERSION,
+            optionalTuning['dependency-ownership'],
+            recommendedSeeds['dependency-ownership'],
+            'rules',
+            ruleHelp['dependency-ownership'],
+        ),
+        actions.dependencies,
+    ),
+    new NxPolicy(
+        new OwnedRuleDefinition(
+            'wiring-format',
+            WiringFormatConfig.SCHEMA,
+            RULE_SCHEMA_API_VERSION,
+            optionalTuning['wiring-format'],
+            recommendedSeeds['wiring-format'],
+            'rules',
+            ruleHelp['wiring-format'],
+        ),
         actions.wiringFormat,
     ),
     new NxPolicy(
