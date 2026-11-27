@@ -1,14 +1,14 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import * as fs from 'node:fs';
-import * as os from 'node:os';
 import * as path from 'node:path';
+import { specTempDirs } from '@webpieces/tooling-testkit';
 import { DependencyPolicies, DependencyPolicyOptions } from '../dependency-policies';
 import { ValidationTargets } from '../../validation-targets';
 
 const directories: string[] = [];
 
 class Fixture {
-    readonly root = fs.mkdtempSync(path.join(os.tmpdir(), 'dependency-policy-'));
+    readonly root = specTempDirs.make('dependency-policy-');
 
     constructor() {
         directories.push(this.root);
