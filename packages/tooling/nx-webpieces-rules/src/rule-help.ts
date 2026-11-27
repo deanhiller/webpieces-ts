@@ -2,7 +2,22 @@ import { RuleHelp } from '@webpieces/rules-sdk';
 
 /** Owner-authored guidance consumed by the registry catalog. */
 export const ruleHelp: Readonly<Record<string, RuleHelp>> = {
-    'wiring-format': new RuleHelp('Check every canonical wiring.ts: its Wiring/AppWiring class plus the BindModule/RouteModule classes it selects, with their actual registrations.', 'Declare each owner\'s Wiring/AppWiring class beside its named BindModule/RouteModule classes and their registrations (binder.createRpcClientAndBind, binder.createPubSubClientAndBind, binder.bindExternal, binder.bind chains, browser binder.provide recipes, addRoutes, addFilter) in its src/wiring.ts; select them with literal getBindModules/getRouteModules/getWirings return arrays. An AppWiring may also select a BindModule declared in a library owner\'s canonical src/wiring.ts, and only an AppWiring selects library Wirings. Keep constructors as prepared-input storage, keep configuration building, environment discovery and initializer/factory bodies in imported implementations, use direct service strings and explicit WiringPolicy declarations. Set maxLines explicitly (agreed upstream limit: 400).'),
+    'dependency-catalog': new RuleHelp(
+        'Centralize directly authored external versions in the pnpm catalogue.',
+        'Declare each external dependency with catalog: and an exact version in pnpm-workspace.yaml. Internal owners use workspace:*. This policy never overrides third-party transitive dependencies.',
+    ),
+    'root-runtime-freeze': new RuleHelp(
+        'Prevent growth of root runtime dependency names.',
+        'Keep the reviewed allowedNames baseline for root dependencies, optionalDependencies and peerDependencies. New build/admin tools belong in root devDependencies; runtime imports belong to their module.',
+    ),
+    'dependency-ownership': new RuleHelp(
+        'Require declarations at the importing source owner.',
+        'Declare emitted production imports in owner dependencies, optionalDependencies or peers. Test/build/erased-type imports may use owner devDependencies. Explicitly classify root tool files and artifact probes; toolProviders records exact umbrella-provided imports. Review dynamicImports as file::normalized expression::package-list mappings; an empty list means a verified local/artifact expression. Root hoisting never excuses a runtime owner.',
+    ),
+    'wiring-format': new RuleHelp(
+        'Check every canonical wiring.ts: its Wiring/AppWiring class plus the BindModule/RouteModule classes it selects, with their actual registrations.',
+        "Declare each owner's Wiring/AppWiring class beside its named BindModule/RouteModule classes and their registrations (binder.createRpcClientAndBind, binder.createPubSubClientAndBind, binder.bindExternal, binder.bind chains, browser binder.provide recipes, addRoutes, addFilter) in its src/wiring.ts; select them with literal getBindModules/getRouteModules/getWirings return arrays. An AppWiring may also select a BindModule declared in a library owner's canonical src/wiring.ts, and only an AppWiring selects library Wirings. Keep constructors as prepared-input storage, keep configuration building, environment discovery and initializer/factory bodies in imported implementations, use direct service strings and explicit WiringPolicy declarations. Set maxLines explicitly (agreed upstream limit: 400).",
+    ),
     'no-file-import-cycles': new RuleHelp(
         'Keep each project free of circular file imports.',
         'Apply this policy in source, or review its explicit settings in {configFile}. An intentional opt-out requires complete OFF settings.',
@@ -25,7 +40,7 @@ export const ruleHelp: Readonly<Record<string, RuleHelp>> = {
     ),
     'validate-architecture-unchanged': new RuleHelp(
         'Keep the committed architecture graph aligned with current dependencies.',
-        'In src/wiring.ts register clients through the BindModule\'s Binder: binder.createRpcClientAndBind(Api, deployment, new ClientBindOptions(token?, filters?)) and binder.createPubSubClientAndBind(Api, deployment, new PubSubBindOptions(token?)) from @webpieces/http-routing, binder.bindExternal(Api, VendorImpl) for vendor contracts, and the browser binder.createRpcClientAndBind(Api, deployment) and binder.bindExternal(Api, new UseClass(Vendor) | new UseExisting(Token)) from @webpieces/http-client-browser. wiring-format checks canonical wiring.ts in all participating owners; preserve tokens and filters. Review graph changes and runtime-deps.json candidates explicitly.',
+        "In src/wiring.ts register clients through the BindModule's Binder: binder.createRpcClientAndBind(Api, deployment, new ClientBindOptions(token?, filters?)) and binder.createPubSubClientAndBind(Api, deployment, new PubSubBindOptions(token?)) from @webpieces/http-routing, binder.bindExternal(Api, VendorImpl) for vendor contracts, and the browser binder.createRpcClientAndBind(Api, deployment) and binder.bindExternal(Api, new UseClass(Vendor) | new UseExisting(Token)) from @webpieces/http-client-browser. wiring-format checks canonical wiring.ts in all participating owners; preserve tokens and filters. Review graph changes and runtime-deps.json candidates explicitly.",
     ),
     'validate-no-architecture-cycles': new RuleHelp(
         'Keep the project dependency architecture free of cycles.',

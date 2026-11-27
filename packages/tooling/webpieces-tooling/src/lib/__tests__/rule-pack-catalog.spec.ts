@@ -62,7 +62,8 @@ describe('complete compatibility pack catalog', () => {
             expect(registry.schemaFor(id)).toEqual({ ...frozen, ...BASE_RULE_SCHEMA });
         }
         expect(registry.ruleIds().filter(id => !Object.hasOwn(RULE_SCHEMAS, id)).sort()).toEqual([
-            'enforce-architecture', 'no-json-property-primitive-type', 'no-mat-cell-def', 'require-typed-template', 'wiring-format',
+            'dependency-catalog', 'dependency-ownership', 'enforce-architecture', 'no-json-property-primitive-type',
+            'no-mat-cell-def', 'require-typed-template', 'root-runtime-freeze', 'wiring-format',
         ]);
     });
 

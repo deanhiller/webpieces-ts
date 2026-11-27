@@ -6,6 +6,38 @@ without any manual `project.json` wiring.
 
 Install `@webpieces/webpieces-tooling` for the complete toolchain. This package implements the Nx plugin and executors; it does not aggregate hook or PR workflow packages.
 
+## Direct dependency ownership
+
+After installing a release containing these policies, explicitly configure `dependency-catalog`,
+`root-runtime-freeze` and `dependency-ownership` in the Nx policy pack. They are independent choices;
+new policy entries are required even when deliberately OFF. Setup seeds OFF entries for review,
+never silently enables enforcement. Do not enable unreleased keys in the source-change PR.
+
+`dependency-catalog` requires `catalog:` (or a named catalogue) for external entries in all four
+manifest dependency sections and verifies exact semver values centrally. Internal packages use
+`workspace:*`. Only pnpm-managed source manifests are governed; third-party dependency ranges,
+duplicate versions and peer contexts remain the package manager's responsibility.
+
+`root-runtime-freeze.allowedNames` is the committed name baseline for root dependencies, optional
+dependencies and peers. Remove a name from that baseline when its removal should be permanent.
+Root devDependencies are permitted and still catalogue-governed.
+
+`dependency-ownership` requires production imports in the importing owner's production declarations.
+Erased types and tests can use devDependencies; public declaration dependencies must be available to
+consumers. Project `build.options.polyfills` and `styles` package paths are runtime inputs too.
+`rootToolPaths`, `testPaths` and `artifactProbePaths` are explicit file classifications, not blanket
+root-hoisting exemptions. `toolProviders` entries use `imported-name=declared-umbrella-name` only for
+root tools that consume an installation bundle. Source imports, reexports, package subpaths,
+literal dynamic imports/requires and source-anchored createRequire aliases are checked. Dynamic
+expressions and artifact-anchored require calls fail with structured diagnostics until explicitly
+reviewed in `dynamicImports`. Each entry is `file::normalized expression::package1,package2`;
+whitespace in the expression is normalized. An empty package list means that exact expression
+was verified local/artifact-only, never a blanket dynamic-import exemption. Named packages still
+require the importing owner's appropriate declaration. Review exact probe paths when adopting.
+
+These policies share one native build scan and run through the declared build policy contribution.
+The catalogue, policy files, source, aliases and manifests invalidate the dependency validation cache.
+
 Add it to `nx.json`:
 
 ```jsonc
