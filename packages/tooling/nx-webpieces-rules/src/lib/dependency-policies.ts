@@ -1,6 +1,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { loadAndValidate, RuleFailError, InformAiError, Option } from '@webpieces/rules-config';
+import { loadAndValidate, RuleFailError, Option } from '@webpieces/rules-config';
+import { InformAiError } from '@webpieces/tooling-common';
 import { BuildPolicyResult } from '@webpieces/rules-sdk';
 import { DependencyWorkspace, DependencyOwner, DependencyManifest } from './dependency-workspace';
 import { DependencyImports, DependencyImport } from './dependency-imports';
