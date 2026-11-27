@@ -73,49 +73,55 @@ export function findPackageJsonFiles(dir: string, basePath = ''): string[] {
 }
 
 /** Resolve catalogue pins before comparing authored direct versions. Published peers remain ranges. */
-export default async function runExecutor(
-    _options: ValidateVersionsLockedOptions,
-    context: ExecutorContext,
-): Promise<ExecutorResult> {
-    if (new RuleGate().isDisabled(context.root, 'validate-versions-locked', true))
-        return { success: true };
-    const workspace = new DependencyWorkspace(context.root);
-    const owners = [new DependencyOwner('.', workspace.rootManifest), ...workspace.owners];
-    const versions = new Map<string, string>();
-    const errors: string[] = [];
-    for (const owner of owners) {
-        if (!owner.manifest) continue;
-        for (const section of [
-            'dependencies',
-            'devDependencies',
-            'optionalDependencies',
-        ] as const) {
-            for (const declaration of Object.entries(owner.manifest[section] ?? {})) {
-                const name = declaration[0];
-                const specifier = declaration[1];
-                if (specifier.startsWith('workspace:') || specifier.startsWith('file:')) continue;
-                const catalog = specifier.slice('catalog:'.length);
-                const pin = specifier.startsWith('catalog:')
-                    ? (catalog
-                          ? workspace.catalog.catalogs?.[catalog]
-                          : workspace.catalog.catalog)?.[name]
-                    : specifier;
-                const where = `${owner.directory}/package.json ${section}.${name}`;
-                if (!pin || !DependencyVersion.isExact(pin)) {
-                    errors.push(
-                        `${where}: ${specifier} must resolve to an exact locked version, found ${String(pin)}`,
-                    );
-                    continue;
+class VersionsLockedExecutor {
+    async run(
+        _options: ValidateVersionsLockedOptions,
+        context: ExecutorContext,
+    ): Promise<ExecutorResult> {
+        if (new RuleGate().isDisabled(context.root, 'validate-versions-locked', true))
+            return { success: true };
+        const workspace = new DependencyWorkspace(context.root);
+        const owners = [new DependencyOwner('.', workspace.rootManifest), ...workspace.owners];
+        const versions = new Map<string, string>();
+        const errors: string[] = [];
+        for (const owner of owners) {
+            if (!owner.manifest) continue;
+            for (const section of [
+                'dependencies',
+                'devDependencies',
+                'optionalDependencies',
+            ] as const) {
+                for (const declaration of Object.entries(owner.manifest[section] ?? {})) {
+                    const name = declaration[0];
+                    const specifier = declaration[1];
+                    if (specifier.startsWith('workspace:') || specifier.startsWith('file:'))
+                        continue;
+                    const catalog = specifier.slice('catalog:'.length);
+                    const pin = specifier.startsWith('catalog:')
+                        ? (catalog
+                              ? workspace.catalog.catalogs?.[catalog]
+                              : workspace.catalog.catalog)?.[name]
+                        : specifier;
+                    const where = `${owner.directory}/package.json ${section}.${name}`;
+                    if (!pin || !new DependencyVersion().isExact(pin)) {
+                        errors.push(
+                            `${where}: ${specifier} must resolve to an exact locked version, found ${String(pin)}`,
+                        );
+                        continue;
+                    }
+                    const previous = versions.get(name);
+                    if (previous && previous !== pin)
+                        errors.push(
+                            `${where}: conflicting direct version ${pin}, already declared ${previous}`,
+                        );
+                    versions.set(name, pin);
                 }
-                const previous = versions.get(name);
-                if (previous && previous !== pin)
-                    errors.push(
-                        `${where}: conflicting direct version ${pin}, already declared ${previous}`,
-                    );
-                versions.set(name, pin);
             }
         }
+        for (const error of errors) console.error(error);
+        return { success: errors.length === 0 };
     }
-    for (const error of errors) console.error(error);
-    return { success: errors.length === 0 };
 }
+
+const executor = new VersionsLockedExecutor();
+export default executor.run.bind(executor);

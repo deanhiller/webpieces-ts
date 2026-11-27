@@ -23,8 +23,12 @@ class AliasFile {
     compilerOptions?: CompilerAliases;
 }
 
+class StyleAsset {
+    input?: string;
+}
+
 class BuildAssets {
-    styles?: unknown[];
+    styles?: (string | StyleAsset)[];
     polyfills?: string[];
 }
 
@@ -37,7 +41,7 @@ class ProjectAssets {
 }
 
 export class DependencyVersion {
-    static isExact(version: string): boolean {
+    isExact(version: string): boolean {
         return EXACT.test(version);
     }
 }
@@ -59,6 +63,7 @@ export class DependencyPolicyOptions {
 /** The public workspace feature: declarations, catalogue, and source ownership share one scan. */
 export class DependencyPolicies {
     private readonly imports = new DependencyImports();
+    private readonly version = new DependencyVersion();
     private readonly aliases = new Map<string, AliasFile>();
 
     validate(root: string, options: DependencyPolicyOptions): string[] {
@@ -101,7 +106,7 @@ export class DependencyPolicies {
                         ? workspace.catalog.catalogs?.[catalogName]
                         : workspace.catalog.catalog;
                     const pin = pins?.[name];
-                    if (typeof pin !== 'string' || !DependencyVersion.isExact(pin))
+                    if (typeof pin !== 'string' || !this.version.isExact(pin))
                         errors.push(
                             `${where}: ${specifier} must resolve to an exact version in pnpm-workspace.yaml (found ${String(pin)})`,
                         );
@@ -163,8 +168,8 @@ export class DependencyPolicies {
         const build = project.targets?.['build']?.options;
         const names = [...(build?.polyfills ?? [])];
         for (const asset of build?.styles ?? []) {
-            if (typeof asset !== 'string' || !asset.startsWith('node_modules/')) continue;
-            names.push(asset.slice('node_modules/'.length));
+            const input = typeof asset === 'string' ? asset : asset.input;
+            if (input?.startsWith('node_modules/')) names.push(input.slice('node_modules/'.length));
         }
         for (const name of names)
             this.declaration(
@@ -276,8 +281,8 @@ export class ConfiguredDependencyPolicies {
         if (!catalog || !freeze || !ownership)
             throw new Error('Declare all three dependency policies in their owning pack');
         const list = (rule: typeof freeze, field: string): string[] => {
-            const value = rule.options[field];
-            if (!Array.isArray(value) || value.some((item: unknown) => typeof item !== 'string'))
+            const value = rule.options[field] as string[];
+            if (!Array.isArray(value) || value.some((item: string) => typeof item !== 'string'))
                 throw new Error(`Explicit dependency policy field ${field} must be a string array`);
             return value as string[];
         };

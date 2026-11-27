@@ -64,10 +64,11 @@ export class DependencyImports {
             : specifier.split('/')[0];
     }
 
-    private specifiers(source: ts.SourceFile): DependencyImport[] {
-        const result: DependencyImport[] = [];
-        const aliases = new Set(['require']);
-        const artifactAliases = new Set<string>();
+    private collectAliases(
+        source: ts.SourceFile,
+        aliases: Set<string>,
+        artifactAliases: Set<string>,
+    ): void {
         const collect = (node: ts.Node): void => {
             if (
                 ts.isVariableDeclaration(node) &&
@@ -84,6 +85,13 @@ export class DependencyImports {
             ts.forEachChild(node, collect);
         };
         collect(source);
+    }
+
+    private specifiers(source: ts.SourceFile): DependencyImport[] {
+        const result: DependencyImport[] = [];
+        const aliases = new Set(['require']);
+        const artifactAliases = new Set<string>();
+        this.collectAliases(source, aliases, artifactAliases);
         const add = (node: ts.Node | undefined): void => {
             if (!node) return;
             if (!ts.isStringLiteralLike(node)) {
