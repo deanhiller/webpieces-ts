@@ -60,7 +60,6 @@ export class Verdict {
     ) {}
 }
 
-
 /** Method name -> the line its declaration starts on, for one contract class. */
 export class ContractLines {
     constructor(
@@ -74,7 +73,6 @@ export class ContractLines {
         return this.byMethod.get(methodName) ?? this.classLine;
     }
 }
-
 
 /**
  * The cure for an `unknown` value, for whichever rule is REPORTING it.
@@ -235,25 +233,27 @@ export function toolFailures(
     model: ApiDocModel,
 ): readonly Verdict[] {
     const found: Verdict[] = [];
-    const toolName = endpoint.mcpTool!.name;
-    const claimed = toolNames.get(toolName);
-    if (claimed === undefined) {
-        toolNames.set(toolName, `${model.contractName}.${endpoint.methodName}`);
-    } else {
-        found.push(
-            new Verdict(
-                `tool name '${toolName}' is already declared by ${claimed}`,
-                'Tool names are the protocol identity and are globally unique — rename one of the ' +
-                    'two @WpMcpTool declarations.',
-            ),
-        );
+    for (const identity of endpoint.mcpTools) {
+        const toolName = identity.name;
+        const claimed = toolNames.get(toolName);
+        if (claimed === undefined) {
+            toolNames.set(toolName, `${model.contractName}.${endpoint.methodName}`);
+        } else {
+            found.push(
+                new Verdict(
+                    `tool name '${toolName}' is already declared by ${claimed}`,
+                    'Tool names are the protocol identity and are globally unique — rename one of the ' +
+                        'two @WpMcpTool declarations.',
+                ),
+            );
+        }
     }
     if (endpoint.kind !== RPC_KIND) {
         found.push(
             new Verdict(
                 `an MCP tool is declared on a '${endpoint.kind}' endpoint`,
                 'Only an RPC endpoint can be a tool — a cloudtasks, cron or external-inbound endpoint is ' +
-                    'driven by something other than a caller, and an external-outbound one is an outside system\'s. Make it RPC, or drop the @WpMcpTool.',
+                    "driven by something other than a caller, and an external-outbound one is an outside system's. Make it RPC, or drop the @WpMcpTool.",
             ),
         );
     }
@@ -301,7 +301,7 @@ function renderFailure(
 ): Verdict | undefined {
     // eslint-disable-next-line @webpieces/no-unmanaged-exceptions -- the render refusal IS the verdict
     try {
-        renderer.tool(endpoint);
+        for (const identity of endpoint.mcpTools) renderer.tool(endpoint, identity);
         return undefined;
     } catch (err: unknown) {
         //const error = toError(err);

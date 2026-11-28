@@ -45,7 +45,14 @@
                     }
                 },
                 "security": [],
-                "x-mcp-tool": "list_passages",
+                "x-mcp-tools": [
+                    {
+                        "name": "list_passages",
+                        "profiles": [
+                            "default"
+                        ]
+                    }
+                ],
                 "x-mcp-title": "List passages",
                 "x-mcp-hints": {
                     "title": "List passages",

@@ -34,7 +34,7 @@ export function assertApiTypeMatchesMcpTools(
     apiTypes: readonly string[],
     endpoints: readonly DocumentedEndpoint[],
 ): void {
-    const tools = endpoints.filter((e: DocumentedEndpoint) => e.mcpTool !== undefined);
+    const tools = endpoints.filter((e: DocumentedEndpoint) => e.mcpTools.length > 0);
     const excluded = endpoints.filter((e: DocumentedEndpoint) => e.invalidForMcp !== undefined);
     const declaresMcp = apiTypes.includes(MCP);
     assertNoToolIsAlsoExcluded(contract, tools);

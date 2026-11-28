@@ -598,7 +598,7 @@ describe('prose', () => {
         const written = harness.run('single.manifest.json');
         const mcp = harness.document(written, 'mcp-openapi.json');
         const published = harness.document(written, 'public-openapi.json');
-        expect(harness.at(mcp, 'paths./widgets/list.post.x-mcp-tool')).toBe('list_widgets');
+        expect(harness.at(mcp, 'paths./widgets/list.post.x-mcp-tools')).toEqual([{ name: 'list_widgets', profiles: ['default'] }]);
         // The title is the @summary line, as Tool.title and as annotations.title (#1296).
         expect(harness.at(mcp, 'paths./widgets/list.post.x-mcp-title')).toBe('List widgets');
         // The three side-effect hints are COMPUTED from `operation` by core-util's own mapping; only
@@ -613,7 +613,7 @@ describe('prose', () => {
         expect(harness.at(mcp, 'paths./widgets/list.post.x-mcp-description')).toMatch(/Read-only/);
         expect(harness.at(mcp, 'paths./widgets/list.post.x-webpieces-authorization')).toContain('agent');
         // A published document says what a customer must send; our agent-side roles are not that.
-        expect(harness.at(published, 'paths./widgets/list.post.x-mcp-tool')).toBeUndefined();
+        expect(harness.at(published, 'paths./widgets/list.post.x-mcp-tools')).toBeUndefined();
     });
 
     it('gives the agent the SAME description the human reads, byte for byte', () => {

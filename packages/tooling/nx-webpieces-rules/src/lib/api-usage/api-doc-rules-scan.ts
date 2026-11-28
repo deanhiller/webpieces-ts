@@ -471,7 +471,7 @@ export class ApiDocRulesScan {
                 );
                 continue;
             }
-            if (endpoint.mcpTool === undefined) continue;
+            if (endpoint.mcpTools.length === 0) continue;
             const site = new Site(source.fileName, lines.lineOf(endpoint.methodName));
             for (const failure of toolFailures(endpoint, renderer, toolNames, model)) {
                 sink.mcpOnly(

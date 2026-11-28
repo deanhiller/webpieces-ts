@@ -27,16 +27,17 @@ export class McpToolNameGuard {
                 continue;
             }
             for (const endpoint of contract.model.endpoints) {
-                const tool = endpoint.mcpTool;
-                if (tool === undefined || !selection.acceptsEndpoint(endpoint)) {
+                if (!selection.acceptsEndpoint(endpoint)) {
                     continue;
                 }
-                const problem = McpToolName.problemWith(tool.name);
-                if (problem !== undefined) {
-                    offenders.push(
-                        `${contract.model.contractName}.${endpoint.methodName}: tool name ` +
-                            `'${tool.name}' ${problem} (${contract.file})`,
-                    );
+                for (const tool of endpoint.mcpTools) {
+                    const problem = McpToolName.problemWith(tool.name);
+                    if (problem !== undefined) {
+                        offenders.push(
+                            `${contract.model.contractName}.${endpoint.methodName}: tool name ` +
+                                `'${tool.name}' ${problem} (${contract.file})`,
+                        );
+                    }
                 }
             }
         }

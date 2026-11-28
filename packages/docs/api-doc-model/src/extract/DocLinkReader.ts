@@ -1,16 +1,17 @@
 import * as ts from 'typescript';
-import { ApiPath, Endpoint, WpMcpTool } from '@webpieces/core-util';
+import { ApiPath, Endpoint } from '@webpieces/core-util';
 import { DocLink, DocLinkKind, DocLinkText } from '../model/DocLink';
 import { SchemaNames } from '../model/SchemaNames';
 import { ConstantFolder } from './ConstantFolder';
 import { FieldDecorators } from './FieldDecorators';
 import { SourceLocation } from './SourceLocation';
+import { McpIdentities } from './McpIdentities';
+import { DocumentedMcpTool } from '../model/ApiDocModel';
 import { TypeRegistry } from './TypeRegistry';
 
 /** The decorator names, from the REAL SYMBOLS — see `ApiDocExtractor`'s constants (#1001). */
 const API_PATH = ApiPath.name;
 const ENDPOINT = Endpoint.name;
-const MCP_TOOL = WpMcpTool.name;
 
 /** `https://…`, `mailto:` and friends: a link to the web, not to a declaration. */
 const URL_TARGET = /^[a-z][a-z0-9+.-]*:\S*/i;
@@ -167,7 +168,7 @@ export class DocLinkReader {
                 `it names a member of contract ${contract.name?.text ?? '<anonymous>'} that is not an @${ENDPOINT} method`,
             );
         }
-        const tool = FieldDecorators.decoratorCall(member, MCP_TOOL)?.arguments[0];
+        const tools = new McpIdentities().read(member, this.folder);
         return new DocLink(
             DocLinkKind.OPERATION,
             written,
@@ -176,7 +177,9 @@ export class DocLinkReader {
             contract.name?.text ?? '<anonymous>',
             member.name.getText(),
             '',
-            tool === undefined ? undefined : this.folder.tryFoldString(tool),
+            tools.length === 0
+                ? undefined
+                : tools.map((tool: DocumentedMcpTool) => tool.name).join(' / '),
             '',
         );
     }

@@ -79,16 +79,15 @@ class Sweep {
     /** Every tool of one contract, and whether its schemas render. */
     private sweepContract(model: ApiDocModel): void {
         for (const endpoint of model.endpoints) {
-            if (endpoint.mcpTool === undefined) {
-                continue;
+            for (const identity of endpoint.mcpTools) {
+                this.tools.push(
+                    new ToolOutcome(
+                        model.contractName,
+                        identity.name,
+                        Sweep.renderFailure(model, endpoint),
+                    ),
+                );
             }
-            this.tools.push(
-                new ToolOutcome(
-                    model.contractName,
-                    endpoint.mcpTool.name,
-                    Sweep.renderFailure(model, endpoint),
-                ),
-            );
         }
     }
 
@@ -270,6 +269,10 @@ const SWEPT_TOOLS: readonly string[] = [
     'NotesApi/notes_list',
     'NotesApi/notes_add',
     'NotesApi/notes_put',
+    'RenamedApi/aideveloper_list_issues',
+    'RenamedApi/bugfixer_list_issues',
+    'RenamedApi/aideveloper_inspect_issues',
+    'RenamedApi/bugfixer_inspect_issues',
     'ProfileApi/learner',
     'ProfileApi/admin',
     'ProfileApi/shared',
@@ -325,6 +328,7 @@ describe('every @WpMcpTool in this repo, read by the compiler', () => {
             'packages/docs/openapi-generator/src/__tests__/fixtures/summary/ShelvesApi.ts',
             'packages/docs/openapi-generator/src/__tests__/fixtures/summary/UnsummarizedApi.ts',
             'packages/http/mcp-server/src/__tests__/McpApprovalFixtures.ts',
+            'packages/http/mcp-server/src/__tests__/McpIdentityFixtures.ts',
             'packages/http/mcp-server/src/__tests__/McpProfileFixtures.ts',
             'packages/http/mcp-server/src/__tests__/McpRemoteFixtures.ts',
             'packages/http/mcp-server/src/__tests__/McpTransportFixtures.ts',

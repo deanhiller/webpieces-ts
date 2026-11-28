@@ -1,6 +1,7 @@
 import {
     DocumentedAuthMethod,
     DocumentedEndpoint,
+    DocumentedMcpTool,
     DocumentedParameter,
     OperationIds,
     OperationIdStyle,
@@ -65,7 +66,7 @@ export class ResponseContract {
  *
  * ## The MCP extensions ride HERE, on the operation
  *
- * `x-mcp-tool`, `x-mcp-hints`, `x-mcp-description` and `x-mcp-auth` are stamped on every operation
+ * `x-mcp-tools`, `x-mcp-hints`, `x-mcp-description` and `x-mcp-auth` are stamped on every operation
  * carrying the tool decorator, hidden or not: an internal endpoint that is an agent tool is a
  * legitimate agent tool, and requiring it to be published to partners in order to be one would be
  * exactly the wrong coupling.
@@ -278,20 +279,20 @@ export class OperationRenderer {
      * only ever adds: it lowers `destructiveHint` to false, still through `mcpHintsForOperation` (#1422).
      *
      * ## The title is the operation's `summary`, published as the Tool's `title` AND `annotations.title`
- *
- * `x-mcp-title` and `x-mcp-hints.title` carry the `@summary` line exactly as `tools/list` serves it:
- * `Tool.title` for clients on the 2025-06-18+ spec and `annotations.title` (the block `x-mcp-hints`
- * mirrors) for older clients and the Claude Connectors Directory (#1296). One source, so they cannot
- * differ from the operation's own `summary`.
- *
- * ## There is no separate MCP description
+     *
+     * `x-mcp-title` and `x-mcp-hints.title` carry the `@summary` line exactly as `tools/list` serves it:
+     * `Tool.title` for clients on the 2025-06-18+ spec and `annotations.title` (the block `x-mcp-hints`
+     * mirrors) for older clients and the Claude Connectors Directory (#1296). One source, so they cannot
+     * differ from the operation's own `summary`.
+     *
+     * ## There is no separate MCP description
      *
      * The agent reads the operation's `description` — the method's JSDoc — byte-identical to what the
      * partner reads. `x-mcp-description` appears ONLY when the author wrote an explicit `@mcp` JSDoc
      * tag, which is a deliberate act rather than a second copy of the same paragraph.
      */
     private withMcp(operation: JsonObject, endpoint: DocumentedEndpoint): JsonObject {
-        if (!this.includeMcp || endpoint.mcpTool === undefined) {
+        if (!this.includeMcp || endpoint.mcpTools.length === 0) {
             return operation;
         }
         const hints = mcpHintsForOperation(
@@ -300,7 +301,12 @@ export class OperationRenderer {
             endpoint.additive,
         );
         return operation
-            .set('x-mcp-tool', endpoint.mcpTool.name)
+            .set(
+                'x-mcp-tools',
+                endpoint.mcpTools.map((tool: DocumentedMcpTool) =>
+                    new JsonObject().set('name', tool.name).set('profiles', tool.profiles),
+                ),
+            )
             .set('x-mcp-title', endpoint.summary)
             .set(
                 'x-mcp-hints',

@@ -246,7 +246,7 @@ describe('the contract itself', () => {
         expect(save.auth?.methods.map((method) => method.kind)).toEqual(['jwt']);
         // The NAME is all the model takes from @WpMcpTool: `description` duplicates the JSDoc, and
         // the three side-effect hints are computed from `operation` by mcpHintsForOperation.
-        expect(save.mcpTool?.name).toBe('save_customer');
+        expect(save.mcpTools[0]?.name).toBe('save_customer');
         expect(save.authorizationText).toContain('admin');
         expect(save.maskLog.get('secretToken')).toBe('full');
 

@@ -709,6 +709,62 @@ Identifiers match `[a-z][a-z0-9-]{0,63}` (1–64 lowercase ASCII letters, digits
 with a letter). `Mcp.DEFAULT` reserves `default` for the base group. Empty lists, duplicates, unknown
 option keys, whitespace, paths, and invalid identifiers are rejected. Lists are snapshotted and sorted.
 
+### Different names for the same method (#1466)
+
+Repeat `@WpMcpTool` on the existing endpoint to give each connection its own product name:
+
+```ts
+/**
+ * List the caller's issues.
+ * @summary List issues
+ */
+@WpAuth([jwt()])
+@WpAuthorization({ authType: AuthorizationType.ALL_USERS })
+@Endpoint(POST, '/issues/list', READ, RPC)
+@WpMcpTool('bugfixer_list_issues', { profiles: [Mcp.DEFAULT] })
+@WpMcpTool('aideveloper_list_issues', { profiles: ['aideveloper'] })
+listIssues(request: ListIssuesRequest): Promise<ListIssuesResponse> {
+    throw new Error('contract only');
+}
+```
+
+The `[Mcp.DEFAULT]` toolset lists and accepts only `bugfixer_list_issues`; the
+`['aideveloper']` toolset lists and accepts only `aideveloper_list_issues`. Selecting
+`[Mcp.DEFAULT, 'aideveloper']` explicitly serves both names, sorted by name, invoking the same method.
+Distinct names may also share a profile when the application explicitly wants both identities there.
+Decorator order changes neither the identities nor their per-method name ordering. Existing single
+`@WpMcpTool` declarations retain their existing names and default membership.
+
+Each name may be declared **once**, even when two declarations use disjoint profiles. To put one
+name in several profiles, give its single declaration the combined profiles array. Duplicate names
+across methods or contracts are refused before projection, including when the names would be in
+different profile selections. Invalid names and profiles are refused as before. Every identity gets
+its title, description, DTO schemas, hints, endpoint operation and authorization from the original
+method. No identity grants a role. JSDoc links to a method name all its tool identities in sorted order.
+`McpInvocationContext.toolName` records the identity actually invoked, so existing endpoint diagnostics
+can measure legacy usage. Cached calls using the legacy name still work on the legacy connection.
+
+HTTP and `WpMcpInMemory.connect(...)` use the same mechanism; each request's schema lookup,
+list and call use its own profile-and-authorization projection. Regenerate the API library's catalogs
+with `pnpm nx run <api-lib>:openapi-generate` after adding or changing identities. Every identity must
+appear in its generated `mcp-<Contract>-tools.json`; an excluded identity with a stale or missing entry
+still prevents startup. Do not hand-edit catalogs.
+
+Consumers need a published release containing #1466 for `@webpieces/core-util`,
+`@webpieces/api-doc-model`, `@webpieces/openapi-generator` and `@webpieces/mcp-server`, with their
+Webpieces tooling upgraded to the same release before regenerating and publishing the API library.
+Upgrading only the server cannot recover identities an older generator discarded. For tooling that
+reads the document model directly, `DocumentedEndpoint.mcpTools` is now the full identity array, and
+`McpSchemaRenderer.tool(endpoint, identity)` takes the selected identity. The MCP OpenAPI document
+publishes `x-mcp-tools: [{ name, profiles }, ...]` for every operation; the singular `x-mcp-tool`
+extension is replaced. The MCP wire tool shape and catalog entry shape are unchanged.
+The delivery report on #1466 records the actual published version consumers can install.
+
+The application still owns allowlisted fixed resources and hosts, organization routing and
+permissions, OAuth discovery and grants, and connection migration. Configure the legacy and new
+surfaces explicitly in the same deployment; never construct an OAuth audience from an unchecked
+Host header. Framework support does not retire legacy connections or change DNS, cloud IDs or data.
+
 Configure one independent `WpMcpServer` per mount, each over its own `McpToolset` with the same
 bindings, complete catalogs, and receiving router's `AuthorizationService` — the profiles are the
 toolset's REQUIRED fourth argument:
