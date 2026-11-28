@@ -104,11 +104,15 @@ graph TD
     PushDevStateStore["PushDevStateStore"]
     ReapOutcomeSignal["ReapOutcomeSignal"]
     ReapWorktreeCommand["ReapWorktreeCommand"]
+    RecoverReviewCommand["RecoverReviewCommand"]
     RepoRootFinder["RepoRootFinder"]
     RepoScratchDirs["RepoScratchDirs"]
     ReviewIdentityStampService["ReviewIdentityStampService"]
     ReviewJsonService["ReviewJsonService"]
     ReviewProvenanceService["ReviewProvenanceService"]
+    ReviewRecoveryEvidence["ReviewRecoveryEvidence"]
+    ReviewRecoveryFiles["ReviewRecoveryFiles"]
+    ReviewRecoveryValidation["ReviewRecoveryValidation"]
     ReviewReport["ReviewReport"]
     ReviewRoundStateService["ReviewRoundStateService"]
     ReviewRoundText["ReviewRoundText"]
@@ -385,6 +389,7 @@ graph TD
     PrGateApp --> LandPrCommand
     PrGateApp --> PushDevStateStore
     PrGateApp --> ReapWorktreeCommand
+    PrGateApp --> RecoverReviewCommand
     PrGateApp --> RepoRootFinder
     PrGateApp --> ReviewUpsertPrCommand
     PrGateApp --> StartPushDevCommand
@@ -408,12 +413,24 @@ graph TD
     ReapWorktreeCommand --> RepoRootFinder
     ReapWorktreeCommand --> WorktreeCleanupSection
     ReapWorktreeCommand --> WorktreeService
+    RecoverReviewCommand --> BranchNaming
+    RecoverReviewCommand --> GitProcessApi
+    RecoverReviewCommand --> NativeProcessApi
+    RecoverReviewCommand --> RepoRootFinder
+    RecoverReviewCommand --> ReviewJsonService
+    RecoverReviewCommand --> ReviewRecoveryEvidence
+    RecoverReviewCommand --> ReviewRecoveryFiles
+    RecoverReviewCommand --> ReviewRecoveryValidation
     RepoRootFinder --> DotWebpieces
     RepoScratchDirs --> DotWebpieces
     ReviewIdentityStampService --> AtomicFile
     ReviewIdentityStampService --> DotWebpieces
     ReviewJsonService --> ChecklistOverrideService
     ReviewJsonService --> DotWebpieces
+    ReviewRecoveryEvidence --> ChecklistScopeHasher
+    ReviewRecoveryEvidence --> DiffMaterializer
+    ReviewRecoveryEvidence --> GitProcessApi
+    ReviewRecoveryEvidence --> ReviewRecoveryValidation
     ReviewReport --> ChecklistInstructionsService
     ReviewReport --> ChecklistNotice
     ReviewReport --> ReviewRoundText

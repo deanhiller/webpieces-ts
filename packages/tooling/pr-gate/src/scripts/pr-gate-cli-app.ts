@@ -1,6 +1,15 @@
+import { RecoverReviewOptions } from './commands/recover-review-command';
 import * as path from 'path';
 
-import { CliArgs, CliArgSet, CliExitError, CliFlag, CliUsage, RuleFailError, renderRuleFailForHuman } from '@webpieces/rules-config';
+import {
+    CliArgs,
+    CliArgSet,
+    CliExitError,
+    CliFlag,
+    CliUsage,
+    RuleFailError,
+    renderRuleFailForHuman,
+} from '@webpieces/rules-config';
 import { toError } from '@webpieces/tooling-common/to-error';
 import { bindingScopeValues, injectable } from 'inversify';
 
@@ -210,7 +219,11 @@ export class PrGateCliApp {
             return true;
         }
         if (binName === 'wp-start-push-dev') {
-            await this.noArgs(invocation, this.startPushDevUsage(), (): Promise<void> => this.app.startPushDev());
+            await this.noArgs(
+                invocation,
+                this.startPushDevUsage(),
+                (): Promise<void> => this.app.startPushDev(),
+            );
             return true;
         }
         if (binName === 'wp-build-push-dev') {
@@ -249,6 +262,29 @@ export class PrGateCliApp {
             const json = this.writeReviewInput.read(args.value(FILE), invocation.stdin);
             await this.app.writeReview(
                 new WriteReviewOptions(args.value(CHECKLIST), json, invocation.cwd),
+            );
+            return true;
+        }
+        if (binName === 'wp-recover-review') {
+            const args = this.parse(
+                invocation,
+                new CliUsage(
+                    'wp-recover-review',
+                    'Validate original published review state; --apply restores it without old build approval.',
+                    [
+                        new CliFlag('--from', 'Original review directory', true),
+                        new CliFlag(PR, 'Existing PR number', true),
+                        new CliFlag('--apply', 'Restore validated historical state'),
+                    ],
+                ),
+            );
+            await this.app.recoverReview(
+                new RecoverReviewOptions(
+                    args.value('--from'),
+                    args.value(PR),
+                    args.has('--apply'),
+                    invocation.cwd,
+                ),
             );
             return true;
         }
@@ -376,8 +412,8 @@ export class PrGateCliApp {
                 new CliFlag(LIST, 'List published dev copies.'),
                 new CliFlag(
                     REMOVE,
-                    "Delete this branch's dev copy, then push the <removeNamespace>/<branch> marker"
-                        + ' (default dev-remove) that triggers the dev rebuild.',
+                    "Delete this branch's dev copy, then push the <removeNamespace>/<branch> marker" +
+                        ' (default dev-remove) that triggers the dev rebuild.',
                 ),
             ],
         );

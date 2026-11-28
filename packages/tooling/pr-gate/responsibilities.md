@@ -19,6 +19,8 @@ Standalone CLIs for the gated PR workflow — start/finish-upsert-pr, start/fini
 
 - Incomplete reviewer-round recovery (issue #1087): sanctioned main updates and squash rewrites do not consume a review round. Stage ② continues the original fixed roster against its original materialized diff and briefing SHA, and prints the remaining required checklist instructions. Accepted GREEN/YELLOW verdicts keep their historical provenance; only the existing RED follow-up policy starts another round, and the final-round ORANGE policy remains author remediation without re-review. The receipt's `buildHeadSha` tracks current build evidence independently of the historical `headSha`. Stage failure logs include the normalized terminal failure before capture closes.
 
+- `wp-recover-review`: validates and restores published historical reviews from an explicit original directory after checkout consolidation. Preserves immutable verdict/provenance bytes, roster/budget and author fixes, audits relocation and requires a fresh normal build. Never creates reviewer verdicts or spends another review round.
+
 ## Out of Scope
 
 - The actual code-quality gates being counted/rendered — implemented as ESLint rules in `eslint-rules` and Nx `validate-*` executors in `nx-webpieces-rules`.
