@@ -43,6 +43,31 @@ describe('MCP profile declarations', () => {
         expect(Object.isFrozen(getWpMcpTools(ProfileApi)[3].profiles)).toBe(true);
     });
 
+    it.each(['default', 'other'])('rejects redeclaring one identity instead of overwriting it: %s', (profile: string) => {
+        expect(() => {
+            abstract class DuplicateApi {
+                @WpMcpTool('same')
+                @WpMcpTool('same', { profiles: [profile] })
+                run(_request: object): Promise<object> { throw new Error('contract'); }
+            }
+            return DuplicateApi;
+        }).toThrow(/Duplicate @WpMcpTool name 'same'.*Declare each identity once/);
+    });
+
+    it('keeps inherited metadata isolated while retaining every name on the original method', () => {
+        abstract class BaseApi {
+            @WpMcpTool('legacy')
+            @WpMcpTool('renamed', { profiles: ['new'] })
+            run(_request: object): Promise<object> { throw new Error('contract'); }
+        }
+        abstract class ChildApi extends BaseApi {
+            @WpMcpTool('child', { profiles: ['child'] })
+            override run(_request: object): Promise<object> { throw new Error('contract'); }
+        }
+        expect(getWpMcpTools(BaseApi).map((tool: WpMcpToolMetadata) => tool.name)).toEqual(['legacy', 'renamed']);
+        expect(getWpMcpTools(ChildApi).map((tool: WpMcpToolMetadata) => tool.name)).toEqual(['child', 'legacy', 'renamed']);
+    });
+
     it.each([[], [''], [' '], ['Admin'], ['/admin'], ['admin', 'admin'], ['x'.repeat(65)]])(
         'rejects invalid membership %j',
         (profiles: string[]) => {

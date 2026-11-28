@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { Client } from '@modelcontextprotocol/client';
 import {
     InMemoryTransport,
@@ -8,7 +9,7 @@ import {
 import { ApiImplementationError } from '@webpieces/core-util';
 import { RequestContext } from '@webpieces/core-context';
 import { McpToolRequest, McpToolset } from './McpToolset';
-import { RegisteredMcpTool } from './McpToolRegistry';
+import { AuthorizedMcpTools, RegisteredMcpTool } from './McpToolRegistry';
 
 /** In-memory MCP has no socket to lose, so its disconnect signal never fires; cancellation is the SDK's. */
 const NEVER_DISCONNECTED = new AbortController().signal;
@@ -21,7 +22,10 @@ const NEVER_DISCONNECTED = new AbortController().signal;
  * still runs in the SENDER's async context — which is what lets the toolset read the caller per request.
  */
 class McpWireCopyTransport implements Transport {
-    constructor(private readonly inner: InMemoryTransport) {}
+    constructor(
+        private readonly inner: InMemoryTransport,
+        private readonly projection?: McpInMemoryProjection,
+    ) {}
 
     get onmessage(): Transport['onmessage'] {
         return this.inner.onmessage;
@@ -56,7 +60,28 @@ class McpWireCopyTransport implements Transport {
     }
 
     send(message: JSONRPCMessage, options?: TransportSendOptions): Promise<void> {
-        return this.inner.send(JSON.parse(JSON.stringify(message)) as JSONRPCMessage, options);
+        const send = (): Promise<void> =>
+            this.inner.send(JSON.parse(JSON.stringify(message)) as JSONRPCMessage, options);
+        return this.projection === undefined ? send() : this.projection.run(send);
+    }
+}
+
+/** One authorized view per SDK message, scoped to this connection and its caller's async execution. */
+class McpInMemoryProjection {
+    private readonly views = new AsyncLocalStorage<AuthorizedMcpTools>();
+
+    constructor(private readonly toolset: McpToolset) {}
+
+    async run(send: () => Promise<void>): Promise<void> {
+        // The SDK's handshake needs no caller. Requests outside a caller still reach the toolset's
+        // normal refusal boundary, which translates that wiring error consistently.
+        if (!RequestContext.isActive()) return send();
+        const tools = await this.toolset.authorizedTools();
+        return this.views.run(tools, send);
+    }
+
+    current(): AuthorizedMcpTools | undefined {
+        return this.views.getStore();
     }
 }
 
@@ -89,6 +114,7 @@ export class WpMcpInMemory {
     // webpieces-disable no-function-outside-class -- explicit public factory of a connected SDK client
     static async connect(toolset: McpToolset): Promise<Client> {
         const pair = InMemoryTransport.createLinkedPair();
+        const projection = new McpInMemoryProjection(toolset);
         const server = toolset.createSdkServer(
             { name: 'webpieces-mcp-toolset', version: toolset.revision },
             { capabilities: { tools: { listChanged: true } } },
@@ -99,16 +125,19 @@ export class WpMcpInMemory {
                             'the in-memory transport reads the caller from it on every request.',
                     );
                 }
-                return new McpToolRequest(await toolset.authorizedTools(), NEVER_DISCONNECTED);
+                return new McpToolRequest(
+                    projection.current() ?? (await toolset.authorizedTools()),
+                    NEVER_DISCONNECTED,
+                );
             },
-            (name: string): RegisteredMcpTool | undefined => toolset.registry.find(name),
+            (name: string): RegisteredMcpTool | undefined => projection.current()?.find(name),
         );
         await server.connect(new McpWireCopyTransport(pair[1]));
         const client = new Client({
             name: 'webpieces-in-memory-client',
             version: toolset.revision,
         });
-        await client.connect(new McpWireCopyTransport(pair[0]));
+        await client.connect(new McpWireCopyTransport(pair[0], projection));
         return client;
     }
 }

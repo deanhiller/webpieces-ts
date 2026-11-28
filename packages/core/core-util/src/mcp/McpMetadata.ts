@@ -51,6 +51,10 @@ export class WpMcpToolMetadata {
  * @WpMcpTool('learner_get_passages')
  * ```
  *
+ * Repeat this decorator for different names in different profiles on the same method. Each name
+ * must be declared once; combine its memberships in one profiles array. Identities of one method
+ * are ordered by name, independent of decorator order.
+ *
  * The optional second argument selects profiles; omission selects only Mcp.DEFAULT. The name is the
  * one fact the source cannot otherwise state:
  *
@@ -103,10 +107,21 @@ export function WpMcpTool(name: string, options?: McpToolProfilesOptions): WpMcp
         _descriptor: ExactOneMethodDescriptor<TMethod>,
     ): void => {
         const apiClass = target.constructor;
-        const tools: Record<string, WpMcpToolMetadata> =
-            Reflect.getMetadata(METADATA_KEYS.MCP_TOOLS, apiClass) ?? {};
+        const tools: Record<string, readonly WpMcpToolMetadata[]> = {
+            ...(Reflect.getMetadata(METADATA_KEYS.MCP_TOOLS, apiClass) ?? {}),
+        };
         const methodName = String(propertyKey);
-        tools[methodName] = new WpMcpToolMetadata(methodName, name, profiles);
+        const identities = tools[methodName] ?? [];
+        if (identities.some((tool: WpMcpToolMetadata) => tool.name === name)) {
+            throw new Error(
+                `Duplicate @WpMcpTool name '${name}' on ${apiClass.name}.${methodName}. ` +
+                    'Declare each identity once, with all its profiles in one profiles array.',
+            );
+        }
+        tools[methodName] = [
+            ...identities,
+            Object.freeze(new WpMcpToolMetadata(methodName, name, profiles)),
+        ].sort((a: WpMcpToolMetadata, b: WpMcpToolMetadata) => a.name.localeCompare(b.name));
         Reflect.defineMetadata(METADATA_KEYS.MCP_TOOLS, tools, apiClass);
     };
 }
@@ -269,7 +284,7 @@ export function operationForMcpHints(hints: McpOperationHints | undefined): McpT
 /** Returns only methods explicitly opted in through {@link WpMcpTool}. */
 // webpieces-disable no-function-outside-class -- metadata reader paired with the decorator
 export function getWpMcpTools(apiClass: Function): WpMcpToolMetadata[] {
-    const tools: Record<string, WpMcpToolMetadata> =
+    const tools: Record<string, readonly WpMcpToolMetadata[]> =
         Reflect.getMetadata(METADATA_KEYS.MCP_TOOLS, apiClass) ?? {};
-    return Object.values(tools);
+    return Object.values(tools).flat();
 }

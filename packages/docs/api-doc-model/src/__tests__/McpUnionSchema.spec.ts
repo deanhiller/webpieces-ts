@@ -148,7 +148,7 @@ function rootUnionCure(): string {
     )!;
     // webpieces-disable no-unmanaged-exceptions -- the throw IS the measurement, and its `cure` field is the sentence an author reads
     try {
-        new McpSchemaRenderer(model, OPERATION_IDS).tool(moving);
+        new McpSchemaRenderer(model, OPERATION_IDS).tool(moving, moving.mcpTools[0]);
     } catch (err: unknown) {
         const error = toError(err);
         if (error instanceof McpRenderError) return error.cure;
@@ -255,7 +255,7 @@ function endpoint(summary: string | undefined, name: string): DocumentedEndpoint
         false,
         new DocumentedEndpointOptions(false, undefined, undefined),
         undefined,
-        new DocumentedMcpTool(name, [Mcp.DEFAULT]),
+        [new DocumentedMcpTool(name, [Mcp.DEFAULT])],
         undefined,
         undefined,
         new Map<string, string>(),

@@ -329,7 +329,7 @@ export class DocumentedEndpoint {
         readonly additive: boolean,
         readonly options: DocumentedEndpointOptions,
         readonly auth: DocumentedAuth | undefined,
-        readonly mcpTool: DocumentedMcpTool | undefined,
+        readonly mcpTools: readonly DocumentedMcpTool[],
         /**
          * `@InvalidEndpointForMcp('<reason>')`'s reason, when the method carries one — this endpoint
          * is PERMANENTLY outside MCP and was never a tool candidate.

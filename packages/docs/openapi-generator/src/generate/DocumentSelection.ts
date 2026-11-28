@@ -90,7 +90,7 @@ export class DocumentSelection {
          * levels, and a second flag could only ever disagree with the first.
          */
         readonly dropHidden: boolean,
-        /** Stamp `x-mcp-tool` and its siblings. Only the MCP document has a reader for them. */
+        /** Stamp `x-mcp-tools` and its siblings. Only the MCP document has a reader for them. */
         readonly includeMcpExtensions: boolean,
         /**
          * Prepend {@link INTERNAL_ONLY_LINE} to `info.description`, and say what TRIGGERS each

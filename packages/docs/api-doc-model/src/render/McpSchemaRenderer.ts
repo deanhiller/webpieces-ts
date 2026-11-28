@@ -16,6 +16,7 @@ import {
     ApiDocModel,
     DocumentedEndpoint,
     DocumentedField,
+    DocumentedMcpTool,
     DocumentedType,
 } from '../model/ApiDocModel';
 import { DocLink, DocLinkKind, DocLinkNaming, DocLinkProblem, DocLinkText } from '../model/DocLink';
@@ -136,8 +137,8 @@ export class McpSchemaRenderer {
     render(): readonly McpToolDefinition[] {
         const tools: McpToolDefinition[] = [];
         for (const endpoint of this.model.endpoints) {
-            if (endpoint.mcpTool !== undefined) {
-                tools.push(this.tool(endpoint));
+            for (const identity of endpoint.mcpTools) {
+                tools.push(this.tool(endpoint, identity));
             }
         }
         return tools;
@@ -177,18 +178,17 @@ export class McpSchemaRenderer {
             const renderer = new McpSchemaRenderer(model, operationIds);
             const tools: McpToolDefinition[] = [];
             for (const endpoint of model.endpoints) {
-                if (endpoint.mcpTool === undefined) {
-                    continue;
-                }
-                // eslint-disable-next-line @webpieces/no-unmanaged-exceptions -- a per-tool render refusal is REPORTED, see the docstring
-                try {
-                    tools.push(renderer.tool(endpoint));
-                } catch (err: unknown) {
-                    //const error = toError(err);
-                    if (!(err instanceof McpRenderError)) throw err;
-                    skipped.push(
-                        new SkippedMcpTool(endpoint.mcpTool.name, model.contractName, err.message),
-                    );
+                for (const identity of endpoint.mcpTools) {
+                    // eslint-disable-next-line @webpieces/no-unmanaged-exceptions -- a per-tool render refusal is REPORTED, see the docstring
+                    try {
+                        tools.push(renderer.tool(endpoint, identity));
+                    } catch (err: unknown) {
+                        //const error = toError(err);
+                        if (!(err instanceof McpRenderError)) throw err;
+                        skipped.push(
+                            new SkippedMcpTool(identity.name, model.contractName, err.message),
+                        );
+                    }
                 }
             }
             McpSchemaRenderer.claimNames(owners, model.contractName, tools);
@@ -234,7 +234,7 @@ export class McpSchemaRenderer {
     ): void {
         for (const tool of tools) {
             const owner = owners.get(tool.name);
-            if (owner !== undefined && owner !== contractName) {
+            if (owner !== undefined) {
                 throw new McpToolCatalogError(
                     `Duplicate MCP tool name '${tool.name}': declared by both ${owner} and ${contractName}.`,
                     'Tool names are the protocol identity and must be globally unique — rename one ' +
@@ -246,7 +246,7 @@ export class McpSchemaRenderer {
     }
 
     /** ONE tool. Visible to {@link catalogOf}, which renders tool by tool so it can report one. */
-    tool(endpoint: DocumentedEndpoint): McpToolDefinition {
+    tool(endpoint: DocumentedEndpoint, identity: DocumentedMcpTool): McpToolDefinition {
         const where = `${this.model.contractName}.${endpoint.methodName}`;
         const description = endpoint.mcpDescription ?? endpoint.description;
         if (description.trim() === '') {
@@ -273,16 +273,16 @@ export class McpSchemaRenderer {
                     '(#1296); it is never derived from the tool name.',
             );
         }
-        const nameProblem = McpToolName.problemWith(endpoint.mcpTool!.name);
+        const nameProblem = McpToolName.problemWith(identity.name);
         if (nameProblem !== undefined) {
             throw new McpRenderError(
-                `the MCP tool name '${endpoint.mcpTool!.name}' ${nameProblem}`,
+                `the MCP tool name '${identity.name}' ${nameProblem}`,
                 where,
                 McpToolName.cure(),
             );
         }
         return new McpToolDefinition(
-            endpoint.mcpTool!.name,
+            identity.name,
             this.prose(endpoint.summary!),
             endpoint.methodName,
             this.prose(description),
@@ -297,7 +297,7 @@ export class McpSchemaRenderer {
             ApiJsonSchema.openForClients(
                 this.rootSchema(endpoint.response, where, 'response', endpoint.returnsDescription),
             ),
-            endpoint.mcpTool!.profiles,
+            identity.profiles,
         );
     }
 
@@ -580,7 +580,14 @@ export class McpSchemaRenderer {
      */
     // webpieces-disable no-function-outside-class -- private static mapping of this class
     private static openJson(): ApiJsonSchema {
-        const schema = new ApiJsonSchema(['string', 'number', 'boolean', 'object', 'array', 'null']);
+        const schema = new ApiJsonSchema([
+            'string',
+            'number',
+            'boolean',
+            'object',
+            'array',
+            'null',
+        ]);
         schema.additionalProperties = true;
         return schema;
     }

@@ -187,7 +187,7 @@ export class McpToolset {
     /**
      * A fresh SDK server whose tools/list and tools/call are this toolset's. `request` establishes, per
      * MCP request, what the caller may see; `schemaView` answers the SDK's input-schema lookup (the HTTP
-     * transport passes the request's projection, the in-memory one the full registry).
+     * and in-memory transports both pass the current request's authorized projection).
      */
     createSdkServer(
         info: Implementation,

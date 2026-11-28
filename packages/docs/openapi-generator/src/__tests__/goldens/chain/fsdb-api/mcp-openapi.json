@@ -45,7 +45,14 @@
                     }
                 },
                 "security": [],
-                "x-mcp-tool": "read_passage",
+                "x-mcp-tools": [
+                    {
+                        "name": "read_passage",
+                        "profiles": [
+                            "default"
+                        ]
+                    }
+                ],
                 "x-mcp-title": "Read a passage",
                 "x-mcp-hints": {
                     "title": "Read a passage",

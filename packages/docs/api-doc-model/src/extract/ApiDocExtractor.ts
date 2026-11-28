@@ -1,5 +1,6 @@
+import { CanonicalDecorator } from './CanonicalDecorator';
 import { SchemaNames } from '../model/SchemaNames';
-import { McpProfiles } from './McpProfiles';
+import { McpIdentities } from './McpIdentities';
 import * as ts from 'typescript';
 import {
     ApiPath,
@@ -24,7 +25,6 @@ import {
     MCP,
     SVC_TO_SVC,
     InvalidEndpointForMcp,
-    WpMcpTool,
 } from '@webpieces/core-util';
 import {
     ApiComponentsModel,
@@ -35,7 +35,6 @@ import {
     DocumentedAuthMethod,
     DocumentedEndpoint,
     DocumentedEndpointOptions,
-    DocumentedMcpTool,
     DocumentedParameter,
 } from '../model/ApiDocModel';
 import { TypeRef } from '../model/TypeRef';
@@ -76,7 +75,6 @@ import { StreamingSignature } from './StreamingSignature';
 const API_PATH = ApiPath.name;
 const ENDPOINT = Endpoint.name;
 const MASK_LOG = MaskLog.name;
-const MCP_TOOL = WpMcpTool.name;
 const MCP_INVALID = InvalidEndpointForMcp.name;
 const AUTHORIZATION = WpAuthorization.name;
 const API_KEY_AUTH = apiKey.name;
@@ -446,7 +444,7 @@ export class ApiDocExtractor {
             options !== undefined && ts.isObjectLiteralExpression(options) ? options : undefined;
 
         const doc = resolver.readDoc(member);
-        const mcpTool = ApiDocExtractor.mcpToolOf(member, folder);
+        const mcpTools = new McpIdentities().read(member, folder);
         const streaming = new StreamingSignature().read(member, folder, resolver);
         return new DocumentedEndpoint(
             methodName,
@@ -463,7 +461,7 @@ export class ApiDocExtractor {
                 ApiDocExtractor.stringProperty(literal, 'callerKind', folder),
             ),
             ApiDocExtractor.authOf(member, folder),
-            mcpTool,
+            mcpTools,
             ApiDocExtractor.invalidForMcpOf(member, folder),
             ApiDocExtractor.decoratorCall(member, AUTHORIZATION)?.arguments[0]?.getText(),
             ApiDocExtractor.maskLogOf(member),
@@ -646,18 +644,7 @@ export class ApiDocExtractor {
 
     // webpieces-disable no-function-outside-class -- canonical import-aware AST name resolution
     static canonicalCallName(expression: ts.Expression): string | undefined {
-        for (const statement of expression.getSourceFile().statements) {
-            if (!ts.isImportDeclaration(statement) || !ts.isStringLiteral(statement.moduleSpecifier)) continue;
-            const module = statement.moduleSpecifier.text;
-            if (!['@webpieces/core-util', '@webpieces/http-routing', '@webpieces/http-client-browser'].includes(module) && !module.endsWith('/core-util/src/http/decorators') && !module.endsWith('/core-util/src/http/auth-mode') && !module.endsWith('/core-util/src/http/authorization')) continue;
-            const bindings = statement.importClause?.namedBindings;
-            if (bindings && ts.isNamedImports(bindings) && ts.isIdentifier(expression)) {
-                const imported = bindings.elements.find((entry: ts.ImportSpecifier) => entry.name.text === expression.text);
-                if (imported) return imported.propertyName?.text ?? imported.name.text;
-            }
-            if (bindings && ts.isNamespaceImport(bindings) && ts.isPropertyAccessExpression(expression) && ts.isIdentifier(expression.expression) && expression.expression.text === bindings.name.text) return expression.name.text;
-        }
-        return undefined;
+        return CanonicalDecorator.nameOf(expression);
     }
 
     /**
@@ -752,32 +739,6 @@ export class ApiDocExtractor {
             key,
             ContextKeyHeaderSlot.REQUEST,
             "the apiKey(...) header credential's key",
-        );
-    }
-
-    /**
-     * `@WpMcpTool('search_stores')` — the stable protocol name, the one fact the source cannot
-     * otherwise state. The tool's title is the method's `@summary` JSDoc tag (#1296), read with the rest
-     * of its prose; the decorator carries none.
-     *
-     * Profile membership is read from the optional second argument (#1187). Otherwise, the method's JSDoc
-     * is the description for the agent and the partner alike, the three side-effect hints are computed
-     * from the endpoint's `operation`, and `openWorldHint` is `@Endpoint`'s `openWorld`. See
-     * {@link DocumentedMcpTool}.
-     */
-    // webpieces-disable no-function-outside-class -- private static reader of this class
-    private static mcpToolOf(
-        member: ts.Node,
-        folder: ConstantFolder,
-    ): DocumentedMcpTool | undefined {
-        const call = ApiDocExtractor.decoratorCall(member, MCP_TOOL);
-        const argument = call?.arguments[0];
-        if (argument === undefined) {
-            return undefined;
-        }
-        return new DocumentedMcpTool(
-            folder.tryFoldString(argument) ?? '',
-            new McpProfiles().read(call?.arguments[1], folder),
         );
     }
 

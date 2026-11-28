@@ -203,8 +203,10 @@ describe('the acceptance contract — rules pass, THEN @ApiType generates', () =
         const renderer = new McpSchemaRenderer(model, OPERATION_IDS);
 
         for (const endpoint of model.endpoints as readonly DocumentedEndpoint[]) {
-            if (endpoint.mcpTool === undefined) continue;
-            expect(() => renderer.tool(endpoint)).not.toThrow();
+            if (endpoint.mcpTools.length === 0) continue;
+            for (const identity of endpoint.mcpTools) {
+                expect(() => renderer.tool(endpoint, identity)).not.toThrow();
+            }
         }
     });
 });

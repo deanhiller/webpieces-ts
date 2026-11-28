@@ -1,0 +1,186 @@
+[
+  {
+    "name": "aideveloper_inspect_issues",
+    "title": "Inspect issues",
+    "methodName": "inspect",
+    "description": "Inspect protected issues with the same permission under either name.",
+    "hints": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false
+    },
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "query": {
+          "type": "string",
+          "description": "Search text",
+          "x-mcp-header": "query"
+        }
+      },
+      "required": [
+        "query"
+      ],
+      "additionalProperties": false
+    },
+    "outputSchema": {
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "description": "Authenticated user"
+        },
+        "result": {
+          "type": "string",
+          "description": "Search result"
+        }
+      },
+      "required": [
+        "userId",
+        "result"
+      ]
+    },
+    "profiles": [
+      "aideveloper"
+    ]
+  },
+  {
+    "name": "aideveloper_list_issues",
+    "title": "List issues",
+    "methodName": "list",
+    "description": "List the caller's issues.",
+    "hints": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false
+    },
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "query": {
+          "type": "string",
+          "description": "Search text",
+          "x-mcp-header": "query"
+        }
+      },
+      "required": [
+        "query"
+      ],
+      "additionalProperties": false
+    },
+    "outputSchema": {
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "description": "Authenticated user"
+        },
+        "result": {
+          "type": "string",
+          "description": "Search result"
+        }
+      },
+      "required": [
+        "userId",
+        "result"
+      ]
+    },
+    "profiles": [
+      "aideveloper"
+    ]
+  },
+  {
+    "name": "bugfixer_inspect_issues",
+    "title": "Inspect issues",
+    "methodName": "inspect",
+    "description": "Inspect protected issues with the same permission under either name.",
+    "hints": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false
+    },
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "query": {
+          "type": "string",
+          "description": "Search text",
+          "x-mcp-header": "query"
+        }
+      },
+      "required": [
+        "query"
+      ],
+      "additionalProperties": false
+    },
+    "outputSchema": {
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "description": "Authenticated user"
+        },
+        "result": {
+          "type": "string",
+          "description": "Search result"
+        }
+      },
+      "required": [
+        "userId",
+        "result"
+      ]
+    },
+    "profiles": [
+      "default"
+    ]
+  },
+  {
+    "name": "bugfixer_list_issues",
+    "title": "List issues",
+    "methodName": "list",
+    "description": "List the caller's issues.",
+    "hints": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false
+    },
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "query": {
+          "type": "string",
+          "description": "Search text",
+          "x-mcp-header": "query"
+        }
+      },
+      "required": [
+        "query"
+      ],
+      "additionalProperties": false
+    },
+    "outputSchema": {
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "description": "Authenticated user"
+        },
+        "result": {
+          "type": "string",
+          "description": "Search result"
+        }
+      },
+      "required": [
+        "userId",
+        "result"
+      ]
+    },
+    "profiles": [
+      "default"
+    ]
+  }
+]
