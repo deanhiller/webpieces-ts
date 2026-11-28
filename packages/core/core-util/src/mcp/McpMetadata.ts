@@ -107,21 +107,23 @@ export function WpMcpTool(name: string, options?: McpToolProfilesOptions): WpMcp
         _descriptor: ExactOneMethodDescriptor<TMethod>,
     ): void => {
         const apiClass = target.constructor;
-        const tools: Record<string, readonly WpMcpToolMetadata[]> = {
-            ...(Reflect.getMetadata(METADATA_KEYS.MCP_TOOLS, apiClass) ?? {}),
-        };
+        const tools = new Map<string, readonly WpMcpToolMetadata[]>(
+            Reflect.getMetadata(METADATA_KEYS.MCP_TOOLS, apiClass),
+        );
         const methodName = String(propertyKey);
-        const identities = tools[methodName] ?? [];
+        const identities = tools.get(methodName) ?? [];
         if (identities.some((tool: WpMcpToolMetadata) => tool.name === name)) {
             throw new Error(
                 `Duplicate @WpMcpTool name '${name}' on ${apiClass.name}.${methodName}. ` +
                     'Declare each identity once, with all its profiles in one profiles array.',
             );
         }
-        tools[methodName] = [
-            ...identities,
-            Object.freeze(new WpMcpToolMetadata(methodName, name, profiles)),
-        ].sort((a: WpMcpToolMetadata, b: WpMcpToolMetadata) => a.name.localeCompare(b.name));
+        tools.set(
+            methodName,
+            [...identities, Object.freeze(new WpMcpToolMetadata(methodName, name, profiles))].sort(
+                (a: WpMcpToolMetadata, b: WpMcpToolMetadata) => a.name.localeCompare(b.name),
+            ),
+        );
         Reflect.defineMetadata(METADATA_KEYS.MCP_TOOLS, tools, apiClass);
     };
 }
@@ -284,7 +286,7 @@ export function operationForMcpHints(hints: McpOperationHints | undefined): McpT
 /** Returns only methods explicitly opted in through {@link WpMcpTool}. */
 // webpieces-disable no-function-outside-class -- metadata reader paired with the decorator
 export function getWpMcpTools(apiClass: Function): WpMcpToolMetadata[] {
-    const tools: Record<string, readonly WpMcpToolMetadata[]> =
-        Reflect.getMetadata(METADATA_KEYS.MCP_TOOLS, apiClass) ?? {};
-    return Object.values(tools).flat();
+    const tools: ReadonlyMap<string, readonly WpMcpToolMetadata[]> =
+        Reflect.getMetadata(METADATA_KEYS.MCP_TOOLS, apiClass) ?? new Map();
+    return [...tools.values()].flat();
 }

@@ -68,6 +68,16 @@ describe('MCP profile declarations', () => {
         expect(getWpMcpTools(ChildApi).map((tool: WpMcpToolMetadata) => tool.name)).toEqual(['child', 'legacy', 'renamed']);
     });
 
+    it('accepts ordinary method names that also exist on Object.prototype', () => {
+        abstract class NamedMethodsApi {
+            @WpMcpTool('stringify')
+            toString(_request: object): Promise<object> { throw new Error('contract'); }
+            @WpMcpTool('prototype')
+            __proto__(_request: object): Promise<object> { throw new Error('contract'); }
+        }
+        expect(getWpMcpTools(NamedMethodsApi).map((tool: WpMcpToolMetadata) => tool.name)).toEqual(['stringify', 'prototype']);
+    });
+
     it.each([[], [''], [' '], ['Admin'], ['/admin'], ['admin', 'admin'], ['x'.repeat(65)]])(
         'rejects invalid membership %j',
         (profiles: string[]) => {

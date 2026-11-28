@@ -723,7 +723,9 @@ Repeat `@WpMcpTool` on the existing endpoint to give each connection its own pro
 @Endpoint(POST, '/issues/list', READ, RPC)
 @WpMcpTool('bugfixer_list_issues', { profiles: [Mcp.DEFAULT] })
 @WpMcpTool('aideveloper_list_issues', { profiles: ['aideveloper'] })
-listIssues(request: ListIssuesRequest): Promise<ListIssuesResponse>;
+listIssues(request: ListIssuesRequest): Promise<ListIssuesResponse> {
+    throw new Error('contract only');
+}
 ```
 
 The `[Mcp.DEFAULT]` toolset lists and accepts only `bugfixer_list_issues`; the

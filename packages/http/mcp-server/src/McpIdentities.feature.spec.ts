@@ -343,6 +343,10 @@ describe('one API method with isolated MCP product identities', () => {
                     ),
             ).toThrow(/catalog|rebuild/i);
         }
+    });
+
+    it('refuses missing, unbound and duplicate catalogs and conflicting names before projection', () => {
+        const original = CATALOG.file.tools;
         expect(
             () =>
                 new McpToolset(

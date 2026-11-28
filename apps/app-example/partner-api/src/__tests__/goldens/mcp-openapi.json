@@ -114,7 +114,14 @@
                         }
                     }
                 },
-                "x-mcp-tool": "fetch_orders",
+                "x-mcp-tools": [
+                    {
+                        "name": "fetch_orders",
+                        "profiles": [
+                            "default"
+                        ]
+                    }
+                ],
                 "x-mcp-title": "Fetch your orders",
                 "x-mcp-hints": {
                     "title": "Fetch your orders",
